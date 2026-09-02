@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starlink Internet in Sudan — Plans, Kits &amp; Installation | DishNet</title>
+    <meta name="description" content="Starlink internet for Sudan: five Priority plans from $112/month, kits from $350, professional installation for $50. Order on WhatsApp — instant answers.">
+    <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg"><link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+    <link rel="stylesheet" href="/assets/fonts/fonts.css?v=e1e98933">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #FAFAF8;
+            --surface: #FFFFFF;
+            --surface-alt: #F3F2EE;
+            --text: #1A1A1A;
+            --text-secondary: #5A5A58;
+            --accent: #C8102E;
+            --accent-dark: #A00D24;
+            --accent-glow: rgba(200, 16, 46, 0.12);
+            --border: #E5E4E0;
+            --dark-bg: #111111;
+            --dark-surface: #1A1A1A;
+            --radius: 14px;
+            --radius-sm: 8px;
+            --radius-pill: 100px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.10);
+            --font-display: 'Outfit', sans-serif;
+            --font-body: 'DM Sans', sans-serif;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        html { scroll-behavior: smooth; }
+        /* The header is fixed, so an anchor jump used to land under it. */
+        section[id], [id] { scroll-margin-top: 96px; }
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+        img { max-width: 100%; display: block; }
+        a { text-decoration: none; color: inherit; }
+        button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+        /* ── Utility ── */
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+        .section { padding: 100px 0; }
+        .section-sm { padding: 70px 0; }
+        .badge-label {
+            display: inline-block;
+            font-family: var(--font-display);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--accent);
+            background: var(--accent-glow);
+            padding: 6px 16px;
+            border-radius: var(--radius-pill);
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-family: var(--font-display);
+            font-size: clamp(28px, 4vw, 44px);
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+        .section-subtitle {
+            font-size: 17px;
+            color: var(--text-secondary);
+            max-width: 560px;
+            line-height: 1.7;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 15px;
+            padding: 14px 28px;
+            border-radius: var(--radius-pill);
+            transition: var(--transition);
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-primary:hover { background: var(--accent-dark); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(200,16,46,0.3); }
+        .btn-outline {
+            border: 1.5px solid var(--border);
+            color: var(--text);
+            background: var(--surface);
+        }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-white {
+            background: #fff;
+            color: var(--text);
+        }
+        .btn-white:hover { background: #f5f5f5; transform: translateY(-1px); }
+
+        /* ── Animations ── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .fade-up { animation: fadeUp 0.7s ease-out both; }
+        .fade-up-d1 { animation-delay: 0.1s; }
+        .fade-up-d2 { animation-delay: 0.2s; }
+        .fade-up-d3 { animation-delay: 0.3s; }
+        .fade-up-d4 { animation-delay: 0.4s; }
+
+        /* ── Header ── */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 16px 0;
+            transition: var(--transition);
+        }
+        .header.scrolled {
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 0;
+        }
+        .header-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo img { height: 42px; }
+        .nav { display: flex; align-items: center; gap: 32px; }
+        .nav a {
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text);
+            transition: var(--transition);
+            position: relative;
+        }
+        .nav a:hover { color: var(--accent); }
+        .nav-actions { display: flex; align-items: center; gap: 12px; }
+        .header-cta {
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 600;
+            padding: 10px 22px;
+            border-radius: var(--radius-pill);
+            background: var(--accent);
+            color: #fff;
+            transition: var(--transition);
+        }
+        .header-cta:hover { background: var(--accent-dark); }
+        .mobile-toggle { display: none; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
+        .mobile-toggle span {
+            display: block; width: 22px; height: 2px; background: var(--text);
+            position: relative; transition: var(--transition);
+        }
+        .mobile-toggle span::before, .mobile-toggle span::after {
+            content: ''; position: absolute; left: 0; width: 100%; height: 2px; background: var(--text); transition: var(--transition);
+        }
+        .mobile-toggle span::before { top: -7px; }
+        .mobile-toggle span::after { top: 7px; }
+
+        /* ── Mobile Nav ── */
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.98);
+            backdrop-filter: blur(20px);
+            z-index: 200;
+            flex-direction: column;
+            padding: 100px 32px 32px;
+            gap: 8px;
+        }
+        .mobile-nav.open { display: flex; }
+        .mobile-nav a {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 600;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .mobile-nav-close {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            width: 40px;
+            height: 40px;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ── Hero ── */
+        .hero {
+            padding: 160px 0 100px;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(160deg, #fff 0%, var(--surface-alt) 100%);
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            top: -200px;
+            right: -200px;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+        .hero-content { position: relative; z-index: 2; }
+        .hero-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-pill);
+            padding: 6px 16px 6px 8px;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 28px;
+            color: var(--text-secondary);
+        }
+        .hero-tag-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #22C55E;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(36px, 5vw, 56px);
+            font-weight: 800;
+            line-height: 1.08;
+            margin-bottom: 24px;
+            letter-spacing: -0.02em;
+        }
+        .hero h1 .accent { color: var(--accent); }
+        .hero-desc {
+            font-size: 18px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 36px;
+            max-width: 480px;
+        }
+        .hero-actions { display: flex; gap: 12px; margin-bottom: 48px; flex-wrap: wrap; }
+        .hero-stats {
+            display: flex;
+            gap: 40px;
+        }
+        .hero-stat-value {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .hero-stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .hero-visual {
+            position: relative;
+            z-index: 2;
+        }
+        .hero-img-wrap { background:#FFFFFF;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            aspect-ratio: 4/3;
+            background: var(--surface-alt);
+        }
+        .hero-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .hero-float-card {
+            position: absolute;
+            bottom: -20px;
+            left: -30px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: fadeUp 0.7s 0.5s ease-out both;
+        }
+        .hero-float-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: var(--accent-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hero-float-icon svg { width: 22px; height: 22px; color: var(--accent); }
+        .hero-float-text span { display: block; font-weight: 600; font-size: 15px; }
+        .hero-float-text small { font-size: 12px; color: var(--text-secondary); }
+
+        /* ── Products ── */
+        .products { background: var(--surface); }
+        .products-header { text-align: center; margin-bottom: 56px; }
+        .products-header .section-subtitle { margin: 0 auto; }
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        .product-card {
+            background: var(--bg);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: var(--transition);
+            border: 1px solid var(--border);
+        }
+        .product-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+            border-color: transparent;
+        }
+        .product-img {
+            background: #FFFFFF;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .product-img img { width: 100%; height: 100%; object-fit: cover; transition: var(--transition); }
+        .product-card:hover .product-img img { transform: scale(1.05); }
+        .product-info { padding: 20px; }
+        .product-name {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .product-price {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+        .product-price small {
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--text-secondary);
+        }
+        .product-btn {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            background: var(--text);
+            color: #fff;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+        .product-btn:hover { background: var(--accent); }
+
+        /* ── Plans ── */
+        .plans-header { text-align: center; margin-bottom: 20px; }
+        .plans-header .section-subtitle { margin: 0 auto; }
+        .plan-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            background: var(--surface-alt);
+            border-radius: var(--radius-pill);
+            padding: 4px;
+            margin: 0 auto 48px;
+            width: fit-content;
+        }
+        .plan-tab {
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 500;
+            padding: 10px 24px;
+            border-radius: var(--radius-pill);
+            color: var(--text-secondary);
+            transition: var(--transition);
+        }
+        .plan-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+        .plan-tab:hover:not(.active) { color: var(--text); }
+        .plans-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .plan-group-hidden { display: none; }
+        .plan-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            transition: var(--transition);
+            position: relative;
+        }
+        .plan-card:hover { border-color: var(--accent); box-shadow: 0 8px 30px var(--accent-glow); }
+        .plan-card.featured {
+            border-color: var(--accent);
+            background: linear-gradient(180deg, #fff 0%, rgba(200,16,46,0.03) 100%);
+        }
+        .plan-card.featured::before {
+            content: 'Most Popular';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: #fff;
+            font-family: var(--font-display);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 4px 16px;
+            border-radius: var(--radius-pill);
+        }
+        .plan-name {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .plan-data { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+        .plan-price {
+            font-family: var(--font-display);
+            font-size: 36px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+        .plan-price small { font-size: 15px; font-weight: 400; color: var(--text-secondary); }
+        .plan-ssp { font-size: 13px; color: var(--text-secondary); margin-bottom: 24px; }
+        .plan-features { list-style: none; margin-bottom: 28px; }
+        .plan-features li {
+            font-size: 14px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--surface-alt);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .plan-features li::before {
+            content: '';
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #22C55E20;
+            flex-shrink: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2322C55E'%3E%3Cpath d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+            background-size: 14px;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        .plan-btn {
+            display: block;
+            width: 100%;
+            text-align: center;
+            padding: 14px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 15px;
+            transition: var(--transition);
+            border: 1.5px solid var(--border);
+            color: var(--text);
+        }
+        .plan-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .plan-card.featured .plan-btn {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .plan-card.featured .plan-btn:hover { background: var(--accent-dark); }
+
+        /* ── Why DishNet ── */
+        .why { background: var(--surface); }
+        .why-header { text-align: center; margin-bottom: 56px; }
+        .why-header .section-subtitle { margin: 0 auto; }
+        .why-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .why-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            transition: var(--transition);
+        }
+        .why-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: transparent; }
+        .why-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: var(--accent-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .why-icon svg { width: 24px; height: 24px; color: var(--accent); }
+        .why-card h3 {
+            font-family: var(--font-display);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .why-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+
+        /* ── Fiber CTA ── */
+        .fiber-cta {
+            background: var(--dark-bg);
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+        }
+        .fiber-cta::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            background: radial-gradient(ellipse at 80% 50%, rgba(200,16,46,0.15) 0%, transparent 60%);
+            pointer-events: none;
+        }
+        .fiber-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+        .fiber-cta h2 {
+            font-family: var(--font-display);
+            font-size: clamp(28px, 3.5vw, 42px);
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 20px;
+        }
+        .fiber-cta p {
+            font-size: 17px;
+            color: rgba(255,255,255,0.7);
+            line-height: 1.7;
+            margin-bottom: 32px;
+            max-width: 460px;
+        }
+        .fiber-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .fiber-stat {
+            text-align: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius);
+            padding: 28px 16px;
+        }
+        .fiber-stat-value {
+            font-family: var(--font-display);
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .fiber-stat-label { font-size: 13px; color: rgba(255,255,255,0.5); }
+
+        /* ── How to Order ── */
+        .order-header { text-align: center; margin-bottom: 56px; }
+        .order-header .section-subtitle { margin: 0 auto; }
+        .order-steps {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+        }
+        .order-step {
+            text-align: center;
+            padding: 32px 20px;
+            border-radius: var(--radius);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            position: relative;
+        }
+        .step-num {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+        }
+        .order-step h3 {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .order-step p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+        /* ── FAQ ── */
+        .faq { background: var(--surface); }
+        .faq-header { text-align: center; margin-bottom: 48px; }
+        .faq-header .section-subtitle { margin: 0 auto; }
+        .faq-list { max-width: 760px; margin: 0 auto; }
+        .faq-item {
+            border-bottom: 1px solid var(--border);
+        }
+        .faq-q {
+            width: 100%;
+            text-align: left;
+            padding: 20px 0;
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        .faq-q::after {
+            content: '+';
+            font-size: 22px;
+            font-weight: 300;
+            color: var(--text-secondary);
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        .faq-item.open .faq-q::after { content: '−'; color: var(--accent); }
+        .faq-a {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s ease;
+        }
+        .faq-a-inner {
+            padding-bottom: 20px;
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .faq-item.open .faq-a { max-height: 300px; }
+
+        /* ── Contact ── */
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+        .contact-info h2 {
+            font-family: var(--font-display);
+            font-size: clamp(28px, 3.5vw, 40px);
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 20px;
+        }
+        .contact-info > p {
+            font-size: 16px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 36px;
+        }
+        .contact-detail {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .contact-detail-icon {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            background: var(--accent-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .contact-detail-icon svg { width: 20px; height: 20px; color: var(--accent); }
+        .contact-detail-text span { display: block; font-size: 13px; color: var(--text-secondary); }
+        .contact-detail-text strong { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+        .contact-form {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 36px;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block;
+            font-family: var(--font-display);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: var(--font-body);
+            font-size: 15px;
+            transition: var(--transition);
+            background: var(--bg);
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        .form-group textarea { resize: vertical; min-height: 100px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        /* ── Footer ── */
+        .footer {
+            background: var(--dark-bg);
+            color: rgba(255,255,255,0.7);
+            padding: 60px 0 0;
+        }
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 40px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .footer-brand p {
+            font-size: 14px;
+            line-height: 1.7;
+            margin-top: 16px;
+            max-width: 320px;
+        }
+        .footer-brand img { height: 40px; margin-bottom: 4px; filter: brightness(10); }
+        .footer h4 {
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        .footer-links { list-style: none; }
+        .footer-links li { margin-bottom: 10px; }
+        .footer-links a {
+            font-size: 14px;
+            transition: var(--transition);
+        }
+        .footer-links a:hover { color: #fff; }
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 0;
+            font-size: 13px;
+        }
+        .footer-social { display: flex; gap: 12px; }
+        .footer-social a {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+        .footer-social a:hover { border-color: var(--accent); background: var(--accent); color: #fff; }
+        .footer-social svg { width: 16px; height: 16px; }
+
+        /* ── WhatsApp Float ── */
+        .wa-float {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 90;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #25D366;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 16px rgba(37,211,102,0.4);
+            transition: var(--transition);
+        }
+        .wa-float:hover { transform: scale(1.1); }
+        .wa-float svg { width: 28px; height: 28px; fill: #fff; }
+
+        /* ── Responsive ── */
+        @media (max-width: 1024px) {
+            .products-grid { grid-template-columns: repeat(2, 1fr); }
+            .plans-grid { grid-template-columns: 1fr; max-width: 420px; margin-left: auto; margin-right: auto; }
+            .why-grid { grid-template-columns: repeat(2, 1fr); }
+            .order-steps { grid-template-columns: repeat(2, 1fr); }
+            .fiber-grid { grid-template-columns: 1fr; }
+            .fiber-stats { margin-top: 40px; }
+            .contact-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .nav, .nav-actions { display: none; }
+            .mobile-toggle { display: flex; }
+            .hero { padding: 130px 0 60px; }
+            .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+            .hero-visual { order: -1; }
+            .hero-float-card { display: none; }
+            .section { padding: 60px 0; }
+            .section-sm { padding: 48px 0; }
+            .products-grid { grid-template-columns: 1fr 1fr; }
+            .why-grid { grid-template-columns: 1fr; }
+            .order-steps { grid-template-columns: 1fr 1fr; }
+            .footer-grid { grid-template-columns: 1fr 1fr; }
+            .footer-bottom { flex-direction: column; gap: 16px; text-align: center; }
+            .form-row { grid-template-columns: 1fr; }
+            .hero-stats { gap: 24px; }
+        }
+        @media (max-width: 480px) {
+            .products-grid { grid-template-columns: 1fr; max-width: 360px; margin: 0 auto; }
+            .order-steps { grid-template-columns: 1fr; }
+            .footer-grid { grid-template-columns: 1fr; }
+        }
+    .logo-text{font-family:var(--font-display),sans-serif;font-weight:800;font-size:26px;color:#C8102E;letter-spacing:-1px;line-height:1;display:inline-flex;align-items:baseline;}.logo-text small{font-size:10px;letter-spacing:.22em;font-weight:700;color:var(--text-secondary);margin-left:8px;}
+</style>
+<link rel="canonical" href="https://dishnetsudan.com/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Starlink Internet in Sudan — Plans, Kits &amp; Installation | DishNet">
+<meta property="og:description" content="Starlink internet for Sudan: five Priority plans from $112/month, kits from $350, professional installation for $50. Order on WhatsApp — instant answers.">
+<meta property="og:image" content="https://dishnetsudan.com/assets/img/og-dishnet.png">
+<meta property="og:url" content="https://dishnetsudan.com/">
+<meta property="og:site_name" content="DishNet Sudan">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Starlink Internet in Sudan — Plans, Kits &amp; Installation | DishNet">
+<meta name="twitter:description" content="Starlink internet for Sudan: five Priority plans from $112/month, kits from $350, professional installation for $50. Order on WhatsApp — instant answers.">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="geo.region" content="SD">
+<meta name="geo.placename" content="Sudan">
+<link rel="alternate" hreflang="en" href="https://dishnetsudan.com/">
+<link rel="alternate" hreflang="ar" href="https://dishnetsudan.com/ar/">
+<link rel="alternate" hreflang="x-default" href="https://dishnetsudan.com/">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"LocalBusiness",
+"name":"DishNet Africa Ltd — Sudan","url":"https://dishnetsudan.com/",
+"image":"https://dishnetsudan.com/assets/img/og-dishnet.png",
+"email":"info@dishnetafrica.com",
+"address":{"@type":"PostalAddress","addressCountry":"SD"},
+"areaServed":"SD",
+"description":"Starlink satellite internet for homes, businesses and organisations across Sudan."}
+</script>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header" id="header">
+    <div class="container">
+        <div class="header-inner">
+            <a href="index.html" class="logo">
+                <span class="logo-text">DishNet<small>SUDAN</small></span>
+            </a>
+            <nav class="nav"><a href="index.html#products">Products</a><a href="services.html">Services</a><a href="coverage.html">Coverage</a><a href="about.html">About</a><a href="tutorials/index.html">Tutorials</a><a href="get-the-app.html">App</a><a href="contact.html">Contact</a></nav>
+            <div class="nav-actions">
+                <a href="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login" class="btn-outline btn" style="padding:10px 20px;font-size:14px;">Customer Login</a>
+                <a href="https://wa.me/249900083481" class="header-cta">Get a Quote</a>
+            </div>
+            <button class="mobile-toggle" onclick="document.getElementById('mobileNav').classList.add('open')">
+                <span></span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- Mobile Nav -->
+<div class="mobile-nav" id="mobileNav">
+    <button class="mobile-nav-close" onclick="this.parentElement.classList.remove('open')">&times;</button><a href="index.html">Home</a><a href="services.html">Services</a><a href="coverage.html">Coverage</a><a href="about.html">About</a><a href="tutorials/index.html">Tutorials</a><a href="get-the-app.html">App</a><a href="contact.html">Contact</a><a href="faq.html">FAQ</a><a href="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login">Customer Login</a></div>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-grid">
+            <div class="hero-content fade-up">
+                <div class="hero-tag">
+                    <span class="hero-tag-dot"></span>
+                    Starlink Sales &amp; Installation — Sudan
+                </div>
+                <h1>Fast Internet,<br><span class="accent">Anywhere</span> in<br>Sudan</h1>
+                <p class="hero-desc">DishNet delivers Starlink satellite internet with professional installation and 24/7 local support.</p>
+                <div class="hero-actions">
+                    <a href="#products" class="btn btn-primary">Shop Starlink Kits</a>
+                    <a href="https://wa.me/249900083481" class="btn btn-outline">Talk to an Expert</a>
+                </div>
+                <div class="hero-stats fade-up fade-up-d3">
+                    <div>
+                        <div class="hero-stat-value">12+</div>
+                        <div class="hero-stat-label">Years in East Africa</div>
+                    </div>
+                    <div>
+                        <div class="hero-stat-value">250</div>
+                        <div class="hero-stat-label">Mbps Peak Speeds*</div>
+                    </div>
+                    <div>
+                        <div class="hero-stat-value">18</div>
+                        <div class="hero-stat-label">States Reachable</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual fade-up fade-up-d2">
+                <div class="hero-img-wrap">
+                    <img src="assets/img/products/standard-kit.webp" alt="Starlink dish connecting to satellites over Sudan" width="1100" height="704" loading="lazy" decoding="async" style="width:100%;height:auto;max-width:440px;display:block;margin:0 auto;">
+                </div>
+                <div class="hero-float-card">
+                    <div class="hero-float-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <div class="hero-float-text">
+                        <span>Fast Setup</span>
+                        <small>Mounted, aligned and tested</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Products -->
+<section class="products section" id="products">
+    <div class="container">
+        <div class="products-header">
+            <span class="badge-label">Our Hardware</span>
+            <h2 class="section-title">Starlink Kits</h2>
+            <p class="section-subtitle">Genuine Starlink hardware, professional installation, and support on WhatsApp.</p>
+        </div>
+        <div class="products-grid">
+            <div class="product-card">
+                <div class="product-img">
+                    <img src="assets/img/products/mini-kit.webp" alt="Starlink Mini: compact dish with built-in WiFi" width="1100" height="640" loading="lazy" decoding="async" style="width:100%;height:190px;object-fit:contain;display:block;margin:2px auto 16px;">
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Starlink Mini</h3>
+                    <div class="product-price">$350 <small>one-time</small></div>
+                    <a href="starlink-mini-kit-sudan.html" class="product-btn">View details</a>
+                </div>
+            </div>
+            <div class="product-card">
+                <div class="product-img">
+                    <img src="assets/img/products/standard-kit.webp" alt="Starlink Standard kit: dish and WiFi router" width="1100" height="704" loading="lazy" decoding="async" style="width:100%;height:190px;object-fit:contain;display:block;margin:2px auto 16px;">
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Starlink Standard</h3>
+                    <div class="product-price">$600 <small>one-time</small></div>
+                    <a href="starlink-standard-kit-sudan.html" class="product-btn">View details</a>
+                </div>
+            </div>
+            
+            
+        </div>
+    </div>
+</section>
+
+<!-- Plans -->
+<section class="section-sm" id="plans">
+    <div class="container">
+        <div class="plans-header">
+            <span class="badge-label">Monthly Plans</span>
+            <h2 class="section-title">Priority Plans</h2>
+            <p class="section-subtitle">Priority data for consistent speeds when it matters, unlimited standard data after your allowance. Prices in USD.</p>
+        </div>
+        <div class="plans-grid" id="plans-priority">
+            <div class="plan-card">
+                <h3 class="plan-name">Priority 500GB</h3>
+                <p class="plan-data">500GB Priority + Unlimited Standard</p>
+                <div class="plan-price">$112 <small>/mo</small></div>
+                <ul class="plan-features"><li>500GB priority data</li><li>Unlimited standard after</li><li>Faster peak speeds</li><li>30-day cycle</li></ul>
+                <a href="https://wa.me/249900083481?text=*Starlink%20Plan%20Request*%0A*Plan:*%20Priority%20500GB%20$112/mo%0A*Name:*%20%0A*Phone:*%20" class="plan-btn" target="_blank">Choose Plan</a>
+            </div>
+            <div class="plan-card featured">
+                <h3 class="plan-name">Priority 1TB</h3>
+                <p class="plan-data">1TB Priority + Unlimited Standard</p>
+                <div class="plan-price">$189 <small>/mo</small></div>
+                <ul class="plan-features"><li>1TB priority data</li><li>Unlimited standard after</li><li>Faster peak speeds</li><li>Ideal for businesses</li></ul>
+                <a href="https://wa.me/249900083481?text=*Starlink%20Plan%20Request*%0A*Plan:*%20Priority%201TB%20$189/mo%0A*Name:*%20%0A*Phone:*%20" class="plan-btn" target="_blank">Choose Plan</a>
+            </div>
+            <div class="plan-card">
+                <h3 class="plan-name">Priority 2TB</h3>
+                <p class="plan-data">2TB Priority + Unlimited Standard</p>
+                <div class="plan-price">$336 <small>/mo</small></div>
+                <ul class="plan-features"><li>2TB priority data</li><li>Unlimited standard after</li><li>Best for heavy use</li><li>30-day cycle</li></ul>
+                <a href="https://wa.me/249900083481?text=*Starlink%20Plan%20Request*%0A*Plan:*%20Priority%202TB%20$336/mo%0A*Name:*%20%0A*Phone:*%20" class="plan-btn" target="_blank">Choose Plan</a>
+            </div>
+            <div class="plan-card">
+                <h3 class="plan-name">Priority 3TB</h3>
+                <p class="plan-data">3TB Priority + Unlimited Standard</p>
+                <div class="plan-price">$483 <small>/mo</small></div>
+                <ul class="plan-features"><li>3TB priority data</li><li>Unlimited standard after</li><li>Multi-user offices</li><li>30-day cycle</li></ul>
+                <a href="https://wa.me/249900083481?text=*Starlink%20Plan%20Request*%0A*Plan:*%20Priority%203TB%20$483/mo%0A*Name:*%20%0A*Phone:*%20" class="plan-btn" target="_blank">Choose Plan</a>
+            </div>
+            <div class="plan-card">
+                <h3 class="plan-name">Priority 5TB</h3>
+                <p class="plan-data">5TB Priority + Unlimited Standard</p>
+                <div class="plan-price">$784 <small>/mo</small></div>
+                <ul class="plan-features"><li>5TB priority data</li><li>Unlimited standard after</li><li>Organisations & NGOs</li><li>30-day cycle</li></ul>
+                <a href="https://wa.me/249900083481?text=*Starlink%20Plan%20Request*%0A*Plan:*%20Priority%205TB%20$784/mo%0A*Name:*%20%0A*Phone:*%20" class="plan-btn" target="_blank">Choose Plan</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+
+<style>
+
+</style>
+
+<!-- Why DishNet -->
+<section class="why section" id="why">
+    <div class="container">
+        <div class="why-header">
+            <span class="badge-label">Why Us</span>
+            <h2 class="section-title">Why Choose DishNet Africa</h2>
+            <p class="section-subtitle">Starlink supply and professional installation, backed by over a decade of connectivity experience in East Africa.</p>
+        </div>
+        <div class="why-grid">
+            <div class="why-card">
+                <div class="why-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                </div>
+                <h3>Supplier &amp; Installer</h3>
+                <p>Genuine Starlink hardware, supplied and professionally installed, with local support.</p>
+            </div>
+            <div class="why-card">
+                <div class="why-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                </div>
+                <h3>Local Delivery</h3>
+                <p>Equipment dispatched locally. No waiting for international shipping.</p>
+            </div>
+            <div class="why-card">
+                <div class="why-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                </div>
+                <h3>Professional Installation</h3>
+                <p>our technicians ensure perfect dish alignment, cable routing, and network setup at your location.</p>
+            </div>
+            <div class="why-card">
+                <div class="why-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                </div>
+                <h3>Flexible Payments</h3>
+                <p>Plans are priced in USD. Ask us on WhatsApp about local payment options.</p>
+            </div>
+            <div class="why-card">
+                <div class="why-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <h3>12-Month Warranty</h3>
+                <p>Full hardware warranty with local replacement. No need to ship equipment internationally for repairs.</p>
+            </div>
+            <div class="why-card">
+                <div class="why-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                </div>
+                <h3>24/7 Local Support</h3>
+                <p>Our support team is available around the clock via WhatsApp, phone, and in-person visits.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- How to Order -->
+<section class="section-sm" id="order">
+    <div class="container">
+        <div class="order-header">
+            <span class="badge-label">Getting Started</span>
+            <h2 class="section-title">How to Order</h2>
+            <p class="section-subtitle">From first contact to connected — here's how it works.</p>
+        </div>
+        <div class="order-steps">
+            <div class="order-step">
+                <div class="step-num">1</div>
+                <h3>Choose Your Kit</h3>
+                <p>Browse our Starlink kits and select the hardware that fits your needs and budget.</p>
+            </div>
+            <div class="order-step">
+                <div class="step-num">2</div>
+                <h3>Place Your Order</h3>
+                <p>Message us on WhatsApp and we confirm your order and the payment details with you.</p>
+            </div>
+            <div class="order-step">
+                <div class="step-num">3</div>
+                <h3>We Install</h3>
+                <p>Our our technicians visit your location, install the dish, and optimize your signal.</p>
+            </div>
+            <div class="order-step">
+                <div class="step-num">4</div>
+                <h3>Get Online</h3>
+                <p>You're connected! Choose a monthly plan and enjoy fast internet with ongoing local support.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq section" id="faq">
+    <div class="container">
+        <div class="faq-header">
+            <span class="badge-label">Support</span>
+            <h2 class="section-title">Frequently Asked Questions</h2>
+            <p class="section-subtitle">Quick answers to the most common questions about our services.</p>
+        </div>
+        <div class="faq-list">
+            <div class="faq-item">
+                <button class="faq-q" onclick="toggleFaq(this)">What is Starlink and how does it work?</button>
+                <div class="faq-a"><div class="faq-a-inner">Starlink is a satellite internet constellation operated by SpaceX. It uses thousands of low-orbit satellites to deliver high-speed, low-latency internet anywhere with a clear view of the sky. DishNet supplies and professionally installs Starlink in Sudan.</div></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-q" onclick="toggleFaq(this)">What speeds can I expect?</button>
+                <div class="faq-a"><div class="faq-a-inner">Typical download speeds range from 100 to 250 Mbps per Starlink&rsquo;s specification sheets, with lower speeds possible in busy periods. Latency is typically well under 100&nbsp;ms, which is suitable for video calls, streaming, and online gaming.</div></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-q" onclick="toggleFaq(this)">Do I need professional installation?</button>
+                <div class="faq-a"><div class="faq-a-inner">Starlink kits are designed for self-installation. However, we offer professional installation to ensure optimal dish placement, proper cable routing, and the best possible signal. This is especially recommended for business locations and permanent setups.</div></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-q" onclick="toggleFaq(this)">Can I pay in Sudanese pounds?</button>
+                <div class="faq-a"><div class="faq-a-inner">Our plans are priced in US dollars. Message us on WhatsApp to ask about paying in Sudanese pounds and which payment methods are available in your city.</div></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-q" onclick="toggleFaq(this)">Where do you deliver?</button>
+                <div class="faq-a"><div class="faq-a-inner">Yes. We deliver and install across Sudan . Contact us for details on your location.</div></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-q" onclick="toggleFaq(this)">What if my hardware has issues?</button>
+                <div class="faq-a"><div class="faq-a-inner">All kits come with a 12-month warranty. If you experience any hardware issues, contact our support team and we'll arrange a local replacement or repair — no need to ship equipment internationally.</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Contact -->
+<section class="section" id="contact">
+    <div class="container">
+        <div class="contact-grid">
+            <div class="contact-info">
+                <span class="badge-label">Get In Touch</span>
+                <h2>Let's Connect<br>Your World</h2>
+                <p>Whether you need Starlink for your home or for a business site, our team is ready to help.</p>
+                <div class="contact-detail">
+                    <div class="contact-detail-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </div>
+                    <div class="contact-detail-text">
+                        <span>Phone / WhatsApp</span>
+                        <strong>+249 900 083 481</strong>
+                    </div>
+                </div>
+                <div class="contact-detail">
+                    <div class="contact-detail-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    </div>
+                    <div class="contact-detail-text">
+                        <span>Email</span>
+                        <strong>info@dishnetafrica.com</strong>
+                    </div>
+                </div>
+                <div class="contact-detail">
+                    <div class="contact-detail-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    </div>
+                    <div class="contact-detail-text">
+                        <span>Service area</span>
+<strong>All of Sudan</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="contact-form">
+                <h3 style="font-family:var(--font-display);font-size:20px;font-weight:600;margin-bottom:24px;">Request a Callback</h3>
+                <form onsubmit="return false;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input type="text" id="hcName" placeholder="Your name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="hcPhone" placeholder="+249 ..." required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="hcEmail" placeholder="your@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Interested In</label>
+                        <select id="hcService">
+                            <option value="">Select a service...</option>
+                              <option value="priority-500gb">Starlink Priority 500GB</option>
+                              <option value="priority-1tb">Starlink Priority 1TB</option>
+                              <option value="priority-2tb">Starlink Priority 2TB</option>
+                              <option value="priority-3tb">Starlink Priority 3TB</option>
+                              <option value="priority-5tb">Starlink Priority 5TB</option>
+                              <option value="hardware">Starlink kit &amp; installation</option>
+                              <option value="business">Business / organisation</option>
+                              <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Message</label>
+                        <textarea id="hcMsg" placeholder="Tell us about your needs..."></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;" onclick="sendHomeContactWA()">Send via WhatsApp</button>
+                    <p style="font-size:11px;color:var(--text-secondary);margin-top:8px;text-align:center;">Opens WhatsApp with your details pre-filled</p>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Explore More -->
+<section class="section-sm" style="background:var(--surface);">
+    <div class="container">
+        <div style="text-align:center;margin-bottom:40px;">
+            <span class="badge-label">Explore</span>
+            <h2 class="section-title">More from DishNet</h2>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;">
+            <a href="coverage.html" style="display:flex;align-items:center;gap:12px;padding:18px 20px;background:var(--bg);border:1px solid var(--border);border-radius:14px;transition:all 0.3s;font-family:var(--font-display);font-size:14px;font-weight:600;">
+                <span style="font-size:22px;">📍</span> Coverage Map
+            </a>
+            <a href="blog.html" style="display:flex;align-items:center;gap:12px;padding:18px 20px;background:var(--bg);border:1px solid var(--border);border-radius:14px;transition:all 0.3s;font-family:var(--font-display);font-size:14px;font-weight:600;">
+                <span style="font-size:22px;">📰</span> Blog &amp; News
+            </a>
+            <a href="guides.html" style="display:flex;align-items:center;gap:12px;padding:18px 20px;background:var(--bg);border:1px solid var(--border);border-radius:14px;transition:all 0.3s;font-family:var(--font-display);font-size:14px;font-weight:600;">
+                <span style="font-size:22px;">📚</span> Help Guides
+            </a>
+            <a href="careers.html" style="display:flex;align-items:center;gap:12px;padding:18px 20px;background:var(--bg);border:1px solid var(--border);border-radius:14px;transition:all 0.3s;font-family:var(--font-display);font-size:14px;font-weight:600;">
+                <span style="font-size:22px;">💼</span> Careers
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<section class="section-sm" id="explore"><div class="container">
+  <h2 class="section-title" style="font-size:22px;">Starlink in Sudan — start here</h2>
+  <p style="max-width:70ch;color:var(--text-secondary);">
+    <a href="starlink-price-sudan.html">Starlink prices in Sudan</a> &middot;
+    <a href="starlink-plans-sudan.html">all five Priority plans compared</a> &middot;
+    <a href="starlink-priority-1tb-sudan.html">the 1TB plan</a> &middot;
+    <a href="starlink-kits.html">Mini and Standard kits</a> &middot;
+    <a href="starlink-installation-sudan.html">professional installation for $50</a> &middot;
+    <a href="coverage.html">cities we serve</a> &middot;
+    <a href="starlink-home-sudan.html">Starlink for homes</a> &middot;
+    <a href="starlink-business-sudan.html">for business</a> &middot;
+    <a href="starlink-for-ngos-sudan.html">for NGOs</a> &middot;
+    <a href="starlink-rural-sudan.html">for rural areas</a> &middot;
+    <a href="guide-how-to-order.html">how ordering works</a> &middot;
+    <a href="ar/" lang="ar">النسخة العربية</a> &middot;
+    <a href="faq.html">frequently asked questions</a></p>
+</div></section>
+<footer class="footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><span class="logo-text">DishNet<small>SUDAN</small></span><p>Starlink satellite internet for Sudan &mdash; supply, professional installation and support.</p></div><div><h4>Services</h4><ul class="footer-links"><li><a href="index.html#products">Starlink Kits</a></li><li><a href="services.html">All Services</a></li><li><a href="coverage.html">Coverage Map</a></li></ul></div><div><h4>Company</h4><ul class="footer-links"><li><a href="about.html">About Us</a></li><li><a href="contact.html">Contact</a></li><li><a href="faq.html">FAQ</a></li><li><a href="blog.html">Blog</a></li><li><a href="careers.html">Careers</a></li></ul></div><div><h4>Support & Legal</h4><ul class="footer-links"><li><a href="get-the-app.html">Get the App</a></li><li><a href="tutorials/index.html">App Tutorials</a></li><li><a href="guides.html">Help Guides</a></li><li><a href="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login">Customer Login</a></li><li><a href="https://wa.me/249900083481">WhatsApp Support</a></li><li><a href="terms.html">Terms of Use</a></li><li><a href="privacy.html">Privacy Policy</a></li></ul></div></div><div class="footer-bottom"><span>&copy; 2026 DishNet Africa Ltd. All rights reserved.</span></div></div></footer>
+
+<!-- WhatsApp Float -->
+<a href="https://wa.me/249900083481" class="wa-float" target="_blank" aria-label="WhatsApp">
+    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+<script>
+// Header scroll
+window.addEventListener('scroll', () => {
+    document.getElementById('header').classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// Plan tabs
+function showPlans(tab, el) {
+    document.querySelectorAll('[id^="plans-"]').forEach(g => g.classList.add('plan-group-hidden'));
+    document.getElementById('plans-' + tab).classList.remove('plan-group-hidden');
+    document.querySelectorAll('.plan-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+}
+
+// FAQ accordion
+function toggleFaq(btn) {
+    const item = btn.parentElement;
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+    if (!wasOpen) item.classList.add('open');
+}
+
+// Homepage contact form → WhatsApp
+function sendHomeContactWA() {
+    const n = document.getElementById('hcName').value;
+    const p = document.getElementById('hcPhone').value;
+    const e = document.getElementById('hcEmail').value;
+    const s = document.getElementById('hcService').options[document.getElementById('hcService').selectedIndex].text;
+    const m = document.getElementById('hcMsg').value;
+    const msg = `*Contact Request*\n\n*Name:* ${n}\n*Phone:* ${p}\n*Email:* ${e}\n*Service:* ${s}\n*Message:* ${m}`;
+    window.open('https://api.whatsapp.com/send/?phone=249900083481&text=' + encodeURIComponent(msg), '_blank');
+}
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+});
+</script>
+
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"DishNet Africa Ltd","url":"https://dishnetsudan.com","logo":"https://dishnetsudan.com/assets/img/og-dishnet.png","description":"Starlink internet supply and professional installation across Sudan.","telephone":"+249900083481","email":"info@dishnetafrica.com","address":{"@type":"PostalAddress","addressCountry":"SD"},"sameAs":["https://www.facebook.com/dishnetafrica/","https://www.linkedin.com/company/dishnetafrica","https://x.com/dishnet_africa"]}</script>
+<script src="assets/js/chat.js" data-endpoint="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="249900083481" data-privacy="privacy.html" defer></script>
+</body>
+</html>
