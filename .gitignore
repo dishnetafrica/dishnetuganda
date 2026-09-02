@@ -1,0 +1,30 @@
+# Inspection output may contain hostnames, container names and near-miss
+# secrets that pattern-based redaction did not catch. Never commit it.
+reports/
+*.tar.gz
+*.bak
+
+# Config snapshots taken by scripts/backup-configs.sh
+dishnet-backups/
+
+# Never commit these, whatever the path
+*.key
+*.pem
+acme.json
+unms.conf
+
+# Plugin runtime data — created at boot, never committed
+dishnet-ai/data/*
+!dishnet-ai/data/.gitkeep
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+config.json.migrated
+dishnet-hybrid-sudan/data/*
+!dishnet-hybrid-sudan/data/.gitkeep
+
+# Runtime data written beside the plugin dir by bootstrap_data.php fallback — never committed
+.dishnet-hybrid-sudan-data/
+
+# Python build-tool caches
+__pycache__/

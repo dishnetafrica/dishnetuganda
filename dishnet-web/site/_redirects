@@ -1,0 +1,20 @@
+/device /index.html#products 301
+/device/1/view /starlink-kits.html 301
+/device/2/view /starlink-kits.html 301
+/device/4/view /starlink-kits.html 301
+/device/6/view /starlink-kits.html 301
+/business /index.html#order 301
+/faqs /faq.html 301
+/about-us /about.html 301
+/contact-us /contact.html 301
+/terms-of-use /terms.html 301
+/services /services.html 301
+/fiber /starlink-plans-sudan.html 301
+/application /contact.html 301
+
+# Block directory listing on demo subfolders
+
+# Block directory listing on demo root
+
+# Catch-all 404 -> home
+/* /index.html 200

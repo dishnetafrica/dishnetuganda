@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Running Starlink on Solar and Inverter Power | DishNet Sudan</title>
+<meta name="description" content="Starlink through Sudan power cuts: real wattage from the spec sheets, and honest arithmetic for running the Mini or Standard kit on solar or inverters.">
+<link rel="canonical" href="https://dishnetsudan.com/guide-starlink-power-solar.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DishNet Sudan">
+<meta property="og:title" content="Running Starlink on Solar and Inverter Power | DishNet Sudan">
+<meta property="og:description" content="Starlink through Sudan power cuts: real wattage from the spec sheets, and honest arithmetic for running the Mini or Standard kit on solar or inverters.">
+<meta property="og:url" content="https://dishnetsudan.com/guide-starlink-power-solar.html">
+<meta property="og:image" content="https://dishnetsudan.com/assets/img/og-dishnet.png">
+<meta property="og:locale" content="en_SD">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Running Starlink on Solar and Inverter Power | DishNet Sudan">
+<meta name="twitter:description" content="Starlink through Sudan power cuts: real wattage from the spec sheets, and honest arithmetic for running the Mini or Standard kit on solar or inverters.">
+<link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg"><link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+<link rel="stylesheet" href="/assets/fonts/fonts.css?v=e1e98933">
+<link rel="stylesheet" href="styles.css?v=547a6148">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd \u2014 Sudan", "url": "https://dishnetsudan.com", "logo": "https://portal.dishnetss.com/uploads/images/1727669803.png", "image": "https://portal.dishnetss.com/uploads/images/1727669803.png",  "email": "info@dishnetafrica.com", "address": {"@type": "PostalAddress", "addressCountry": "SD"}, "areaServed": "SD", "description": "Starlink satellite internet for homes, businesses and organisations across Sudan.", "sameAs": ["https://dishnetsudan.com"]}</script>
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="geo.region" content="SD">
+<meta name="geo.placename" content="Sudan">
+<link rel="alternate" hreflang="en" href="https://dishnetsudan.com/guide-starlink-power-solar.html">
+<link rel="alternate" hreflang="x-default" href="https://dishnetsudan.com/guide-starlink-power-solar.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://dishnetsudan.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://dishnetsudan.com/guides.html"},{"@type":"ListItem","position":3,"name":"Starlink on solar and inverters"}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Starlink when the power goes out","author":{"@type":"Organization","name":"DishNet Africa Ltd"},"publisher":{"@type":"Organization","name":"DishNet Africa Ltd"},"mainEntityOfPage":"https://dishnetsudan.com/guide-starlink-power-solar.html"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can the Mini really run from a power bank?","acceptedAnswer":{"@type":"Answer","text":"Yes — with the right cable for its 12–48 V DC input, a capable power bank runs it for hours. Ask us for the cable details for your power bank."}},{"@type":"Question","name":"Does a power cut break the connection?","acceptedAnswer":{"@type":"Answer","text":"Only if the dish loses power. Keep the dish and router fed and the link stays up — the satellite side never went anywhere."}},{"@type":"Question","name":"Which kit for a solar-only site?","acceptedAnswer":{"@type":"Answer","text":"The Mini, almost always — 25–40 W is the difference between a small panel and a serious array. The remote-sites page covers this world."}}]}</script>
+</head>
+<body>
+<div class="brand-strip"></div>
+<header class="header" id="header" style="top:4px;">
+  <div class="container">
+    <div class="header-inner">
+      <a href="index.html" class="logo logo-lockup">
+        <span class="logo-text">DishNet<small>SUDAN</small></span>
+        <span class="ug-tag">SUDAN</span>
+      </a>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="services.html">Internet</a>
+        
+        <a href="coverage.html">Coverage</a>
+        <a href="get-the-app.html">App</a>
+        <a href="contact.html">Contact</a>
+      </nav>
+      <div class="nav-actions">
+        <a href="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login" class="btn btn-outline" style="padding:10px 20px;font-size:14px;">Customer Login</a>
+        <a href="https://wa.me/249900083481" class="header-cta">Get Connected</a>
+      </div>
+      <button class="mobile-toggle" onclick="document.getElementById('mobileNav').classList.add('open')" aria-label="Menu"><span></span></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-nav" id="mobileNav">
+  <button class="mobile-nav-close" onclick="this.parentElement.classList.remove('open')">&times;</button>
+  <a href="index.html">Home</a><a href="services.html">Internet Services</a><a href="starlink-kits.html">Starlink Kits</a>
+  
+  <a href="coverage.html">Coverage</a><a href="get-the-app.html">Get the App</a><a href="tutorials/index.html">App Tutorials</a>
+  <a href="faq.html">FAQ</a><a href="about.html">About</a><a href="contact.html">Contact</a>
+  <a href="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login">Customer Login</a>
+</div>
+
+<section class="ug-hero" style="padding:150px 0 44px;">
+  <div class="container">
+    <nav aria-label="Breadcrumb" style="font-size:13px;margin:0 0 14px;"><a href="/" style="color:var(--text-secondary)">Home</a> <span style="opacity:.45">›</span> <a href="guides.html" style="color:var(--text-secondary)">Guides</a> <span style="opacity:.45">›</span> <span>Starlink on solar and inverters</span></nav>
+    <span class="badge-label badge-accent">Guide</span>
+    <h1>Starlink when the power goes out</h1>
+    <p style="max-width:640px;">The dish does not care about the grid — only about its watts. Spec-sheet numbers and honest sizing arithmetic for keeping Starlink alive on solar and battery power.</p>
+    <div style="margin-top:22px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="https://wa.me/249900083481?text=Hello%20DishNet,%20I%20need%20Starlink%20on%20solar%20power." class="btn btn-primary">Ask about power setups on WhatsApp</a>
+      <a href="starlink-kits.html" class="btn btn-ghost">See the kits</a>
+    </div>
+  </div>
+</section>
+<section class="section-sm"><div class="container">
+<h2 style="margin-top:30px;">The two numbers that matter</h2>
+<p style="max-width:70ch;">From Starlink&rsquo;s specification sheets: the <a href="starlink-kits.html">Mini</a> averages 25&ndash;40&nbsp;W on a 12&ndash;48&nbsp;V DC input; the Standard kit averages 75&ndash;100&nbsp;W on mains power. Everything below is arithmetic on those figures.</p>
+<h2 style="margin-top:30px;">Sizing, worked honestly</h2>
+<p style="max-width:70ch;">A 40&nbsp;W average draw is roughly 1&nbsp;kWh per 24 hours — a modest power bank runs a Mini for hours, and a small solar-plus-battery setup runs it continuously. The Standard kit at ~100&nbsp;W wants the household inverter-and-battery systems many Sudanese homes and offices already run. These are sizing estimates from the spec-sheet wattages, not guarantees — your installer confirms the final setup.</p>
+<h2 style="margin-top:30px;">What we do about it</h2>
+<p style="max-width:70ch;">Tell us your power situation when you order and we size the backup power with the kit — it is part of the <a href="starlink-installation-sudan.html">installation</a> conversation, not an afterthought.</p>
+</div></section>
+<section class="section-sm"><div class="container">
+    <h2>Quick answers</h2>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Can the Mini really run from a power bank?</button>
+      <div class="faq-a"><div class="faq-a-inner">Yes — with the right cable for its 12–48 V DC input, a capable power bank runs it for hours. Ask us for the cable details for your power bank.</div></div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Does a power cut break the connection?</button>
+      <div class="faq-a"><div class="faq-a-inner">Only if the dish loses power. Keep the dish and router fed and the link stays up — the satellite side never went anywhere.</div></div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Which kit for a solar-only site?</button>
+      <div class="faq-a"><div class="faq-a-inner">The Mini, almost always — 25–40 W is the difference between a small panel and a serious array. The remote-sites page covers this world.</div></div></div>
+  </div></section><footer class="footer"><div class="container"><div class="footer-grid">
+  <div class="footer-brand"><span class="logo-text">DishNet<small>SUDAN</small></span><p>Connecting Sudan — Starlink satellite internet with professional installation.</p></div>
+  <div><h4>Services</h4><ul class="footer-links">
+    <li><a href="starlink-kits.html">Starlink Kits</a></li>
+    <li><a href="services.html">All Services</a></li>
+    <li><a href="coverage.html">Coverage by Town</a></li>
+    <li><a href="why-dishnet.html">Why DishNet</a></li>
+  </ul></div>
+  <div><h4>Company</h4><ul class="footer-links">
+    <li><a href="about.html">About Us</a></li>
+    <li><a href="contact.html">Contact</a></li>
+    <li><a href="faq.html">FAQ</a></li>
+    <li><a href="blog.html">Blog</a></li>
+    <li><a href="careers.html">Careers</a></li>
+    <li><a href="https://dishnetsudan.com">DishNet Sudan</a></li>
+  </ul></div>
+  <div><h4>Support &amp; Legal</h4><ul class="footer-links">
+    <li><a href="get-the-app.html">Get the App</a></li>
+    <li><a href="tutorials/index.html">App Tutorials</a></li>
+    <li><a href="guides.html">Help Guides</a></li>
+    <li><a href="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login">Customer Login</a></li>
+    <li><a href="whatsapp.html">Chat on WhatsApp</a></li>
+    <li><a href="terms.html">Terms of Use</a></li>
+    <li><a href="privacy.html">Privacy Policy</a></li>
+  </ul></div>
+</div><div class="footer-bottom"><span>&copy; 2026 DishNet Africa Ltd — Sudan. All rights reserved.</span></div></div></footer>
+<a href="https://wa.me/249900083481" class="wa-float" target="_blank" aria-label="WhatsApp"><svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+<script>
+window.addEventListener('scroll',()=>{const h=document.getElementById('header');if(h)h.classList.toggle('scrolled',window.scrollY>10);});
+</script>
+<script>
+function toggleFaq(btn) {
+  const item = btn.parentElement;
+  const wasOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+  if (!wasOpen) item.classList.add('open');
+}
+</script>
+<script src="assets/js/chat.js" data-endpoint="https://crm.dishnetsudan.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="249900083481" data-privacy="privacy.html" defer></script>
+</body>
+</html>
