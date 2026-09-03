@@ -22,6 +22,7 @@
   if (!script) return;
   var ENDPOINT = script.getAttribute('data-endpoint') || '';
   var WA = (script.getAttribute('data-whatsapp') || '').replace(/\D/g, '');
+  var FEATURED = (script.getAttribute('data-featured') || 'DishNet Home').toLowerCase();
   if (!ENDPOINT) return;
 
   function fmt(cur, n) {
@@ -50,9 +51,10 @@
     if (grid && (data.plans || []).length) {
       grid.innerHTML = data.plans.map(function (p) {
         var flex = /flex/i.test(p.name);
-        var best = /flex\s*24/i.test(p.name);
+        var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
-          (best ? '<span class="price-pill">Best value</span>' : (flex ? '<span class="price-pill price-pill-soft">UGX 0 upfront</span>' : '')) +
+          (best ? '<span class="price-pill">Best value</span>' : '') +
+          (!best && flex ? '<span class="price-pill price-pill-soft">UGX 0 upfront</span>' : '') +
           '<h3>' + esc(p.name) + '</h3>' +
           '<div class="price-amount">' + fmt(cur, p.price) + '<small>/' + (p.period || 'month') + '</small></div>' +
           (flex ? '<p class="price-desc">UGX 0 hardware upfront — Starlink Mini + connectivity + professional installation + DishNet support.</p>'
