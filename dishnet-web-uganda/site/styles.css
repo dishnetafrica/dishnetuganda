@@ -288,5 +288,5 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 /* Text wordmark beside the mark — stands in until the real logo file lands. */
-.logo-lockup .wordmark { font-family: var(--font-display); font-weight: 700; font-size: 21px; letter-spacing: -0.3px; color: var(--text); line-height: 1; }
-.footer-brand .wordmark { font-family: var(--font-display); font-weight: 700; font-size: 19px; color: inherit; display: block; margin: 8px 0 2px; }
+.logo-lockup .wordmark { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -0.6px; color: var(--accent); line-height: 1; }
+.footer-brand .wordmark { font-family: var(--font-display); font-weight: 800; font-size: 21px; letter-spacing: -0.4px; color: #fff; display: block; margin: 0 0 2px; }
