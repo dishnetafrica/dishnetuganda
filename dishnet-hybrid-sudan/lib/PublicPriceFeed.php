@@ -26,11 +26,12 @@ class PublicPriceFeed
 
         $plans = [];
         foreach ($servicePlans as $p) {
-            $name = trim((string)($p['name'] ?? ''));
-            if ($name === '' || ($p['price'] ?? null) === null || !$keep($name)) continue;
+            $name  = trim((string)($p['name'] ?? ''));
+            $price = self::planPrice($p);
+            if ($name === '' || $price === null || !$keep($name)) continue;
             $plans[] = [
                 'name'        => $name,
-                'price'       => round((float)$p['price'], 2),
+                'price'       => round($price, 2),
                 'period'      => 'month',
                 'speed'       => (string)($p['downloadSpeed'] ?? $p['download_speed'] ?? ''),
                 'description' => mb_substr(trim((string)($p['invoiceLabel'] ?? '')), 0, 200),
@@ -58,6 +59,24 @@ class PublicPriceFeed
             'hardware'   => $hardware,
             'updated_at' => gmdate('c'),
         ];
+    }
+
+    /**
+     * uCRM keeps a service plan's price inside its periods array, not at the
+     * top level. Prefer the enabled 1-month period (the price the card was
+     * built on); otherwise the cheapest enabled period; a plain price field
+     * (tests, future API shapes) still works.
+     */
+    public static function planPrice(array $p): ?float
+    {
+        if (isset($p['price']) && is_numeric($p['price'])) return (float)$p['price'];
+        $best = null;
+        foreach ((array)($p['periods'] ?? []) as $per) {
+            if (empty($per['enabled']) || !isset($per['price']) || !is_numeric($per['price'])) continue;
+            if ((int)($per['period'] ?? 0) === 1) return (float)$per['price'];
+            $best = $best === null ? (float)$per['price'] : min($best, (float)$per['price']);
+        }
+        return $best;
     }
 
     /** The origins allowed to read the feed from a browser. */
