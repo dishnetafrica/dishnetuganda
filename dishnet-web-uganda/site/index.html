@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="styles.css?v=7afbb55c">
+<link rel="stylesheet" href="styles.css?v=ff457a2e">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd \u2014 Uganda", "url": "https://dishnetuganda.com", "logo": "https://dishnetuganda.com/assets/img/og-uganda.png", "image": "https://dishnetuganda.com/assets/img/og-uganda.png", "telephone": "+256 705 993 348", "email": "uganda@dishnetafrica.com", "address": {"@type": "PostalAddress", "addressLocality": "Kampala", "addressCountry": "UG"}, "areaServed": ["Kampala", "Entebbe", "Wakiso", "Mukono", "Masaka", "Mityana", "Mubende", "Luwero", "Kayunga", "Mpigi", "Jinja", "Mbale", "Soroti", "Tororo", "Iganga", "Busia", "Kumi", "Kapchorwa", "Pallisa", "Bugiri", "Gulu", "Lira", "Arua", "Kitgum", "Adjumani", "Moyo", "Nebbi", "Pader", "Apac", "Koboko", "Mbarara", "Fort Portal", "Hoima", "Kasese", "Kabale", "Masindi", "Bushenyi", "Ntungamo", "Rukungiri", "Kisoro"], "description": "Starlink satellite internet, fiber, managed WiFi zones, CCTV and network security across Uganda.", "sameAs": ["https://dishnetafrica.com"]}</script>
 </head>
 <body>
@@ -115,6 +115,19 @@
   </div>
 </section>
 
+<section class="section" id="pricing">
+  <div class="container">
+    <span class="badge-label badge-accent">Plans &amp; Pricing</span>
+    <h2 class="section-title">Simple monthly plans</h2>
+    <p class="section-subtitle">Live prices, straight from our billing system — what you see is what you pay.</p>
+    <div class="plans-grid" data-dishnet-plans>
+      <p class="price-desc">For today's plans and prices, message us on WhatsApp —
+        <a href="https://wa.me/256705993348" style="color:var(--accent);font-weight:600">chat now</a>.</p>
+    </div>
+    <p style="margin-top:22px;font-size:14px"><a href="starlink-kits.html" style="color:var(--accent);font-weight:600">See Starlink hardware &amp; installation packages →</a></p>
+  </div>
+</section>
+
 <section class="section-sm" style="background:var(--surface-alt);">
   <div class="container">
     <span class="badge-label badge-blue">Coverage</span>
@@ -182,5 +195,6 @@
 <script>
 window.addEventListener('scroll',()=>{const h=document.getElementById('header');if(h)h.classList.toggle('scrolled',window.scrollY>10);});
 </script>
+<script src="assets/js/prices.js" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/prices.php" data-whatsapp="256705993348"></script>
 </body>
 </html>

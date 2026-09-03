@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="styles.css?v=7afbb55c">
+<link rel="stylesheet" href="styles.css?v=ff457a2e">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd \u2014 Uganda", "url": "https://dishnetuganda.com", "logo": "https://dishnetuganda.com/assets/img/og-uganda.png", "image": "https://dishnetuganda.com/assets/img/og-uganda.png", "telephone": "+256 705 993 348", "email": "uganda@dishnetafrica.com", "address": {"@type": "PostalAddress", "addressLocality": "Kampala", "addressCountry": "UG"}, "areaServed": ["Kampala", "Entebbe", "Wakiso", "Mukono", "Masaka", "Mityana", "Mubende", "Luwero", "Kayunga", "Mpigi", "Jinja", "Mbale", "Soroti", "Tororo", "Iganga", "Busia", "Kumi", "Kapchorwa", "Pallisa", "Bugiri", "Gulu", "Lira", "Arua", "Kitgum", "Adjumani", "Moyo", "Nebbi", "Pader", "Apac", "Koboko", "Mbarara", "Fort Portal", "Hoima", "Kasese", "Kabale", "Masindi", "Bushenyi", "Ntungamo", "Rukungiri", "Kisoro"], "description": "Starlink satellite internet, fiber, managed WiFi zones, CCTV and network security across Uganda.", "sameAs": ["https://dishnetafrica.com"]}</script>
 </head>
 <body>
@@ -62,7 +62,7 @@
   <div class="container">
     <span class="badge-label badge-accent">Starlink Kits</span>
     <h2 class="section-title">Choose your Starlink</h2>
-    <p class="section-subtitle" >Genuine Starlink hardware, delivered anywhere in Uganda and installed by certified technicians. Message us for current prices — they change with Starlink promotions.</p>
+    <p class="section-subtitle" >Genuine Starlink hardware, delivered anywhere in Uganda and installed by certified technicians. Package prices below include the kit, delivery, professional installation and your first month of service — live from our billing system. Kit-only and self-install options on WhatsApp.</p>
   </div>
 </section>
 <section class="section-sm">
@@ -72,6 +72,7 @@
         <img src="assets/img/products/mini-kit.webp" alt="Starlink Mini kit" loading="lazy" style="width:100%;border-radius:10px;margin-bottom:14px">
         <span class="badge-label badge-accent">Portable</span>
         <h3 style="font-size:20px;">Starlink Mini</h3>
+        <div class="live-price" data-live-price="Starlink Mini Package"></div>
         <p style="line-height:1.7;">Fits in a backpack, powers from USB-C or a solar power bank. Perfect for field teams, safari lodges, boda-mounted demos, and anyone on the move.</p>
         <ul style="margin:16px 0 0 18px;font-size:14px;color:var(--text-secondary);line-height:2;"><li>Speeds up to ~100 Mbps</li><li>Built-in WiFi router</li><li>Very low power draw</li></ul>
       </div>
@@ -79,6 +80,7 @@
         <img src="assets/img/products/standard-kit.webp" alt="Starlink Standard kit" loading="lazy" style="width:100%;border-radius:10px;margin-bottom:14px">
         <span class="badge-label badge-accent">Most popular</span>
         <h3 style="font-size:20px;">Starlink Standard</h3>
+        <div class="live-price" data-live-price="Starlink Standard Package"></div>
         <p style="line-height:1.7;">The kit for homes, offices, and WiFi zones. Fast, reliable, and simple — our technicians mount it, align it, and connect your whole compound.</p>
         <ul style="margin:16px 0 0 18px;font-size:14px;color:var(--text-secondary);line-height:2;"><li>Typical speeds 50–200+ Mbps</li><li>Unlimited data plans</li><li>Runs on solar setups</li></ul>
       </div>
@@ -136,5 +138,6 @@
 <script>
 window.addEventListener('scroll',()=>{const h=document.getElementById('header');if(h)h.classList.toggle('scrolled',window.scrollY>10);});
 </script>
+<script src="assets/js/prices.js" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/prices.php" data-whatsapp="256705993348"></script>
 </body>
 </html>
