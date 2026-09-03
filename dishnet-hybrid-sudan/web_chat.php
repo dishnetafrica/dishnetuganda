@@ -265,6 +265,8 @@ if (!$gate['ok']) {
          'handoff' => $handoff, 'retry_in' => $gate['retry_in'], 'session' => $session], 200);
 }
 
+require_once __DIR__ . '/lib/KnowledgeBase.php';
+$config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
 $brain = new DishNetAiBrain($config);
 if (!$brain->isConfigured()) {
     // The visitor gets a courteous fallback; the operator needs to know which

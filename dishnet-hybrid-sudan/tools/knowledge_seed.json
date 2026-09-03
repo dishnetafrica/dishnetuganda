@@ -1,0 +1,106 @@
+{
+  "_readme": [
+    "Seed knowledge for the DishNet Uganda deployment. Loaded by",
+    "tools/seed_knowledge.php — idempotent: existing item_keys are never",
+    "overwritten, so operator edits in the admin tab always win.",
+    "Facts here are only ones the owner has approved in writing."
+  ],
+  "items": [
+    {
+      "item_key": "OFFICE_LOCATION",
+      "kind": "fact",
+      "title": "Where is the DishNet Uganda office",
+      "answer": "Our DishNet Uganda office is located on Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda. Customers are welcome to visit; offer to share the directions/location pin.",
+      "wa_answer": "📍 DishNet Uganda Office — Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda 🇺🇬 You're welcome to visit us at our office. Would you like us to share the directions/location pin?"
+    },
+    {
+      "item_key": "COMPANY_IDENTITY",
+      "kind": "fact",
+      "title": "What is DishNet / is DishNet the same as Starlink",
+      "answer": "DishNet Africa Ltd is an East African internet company operating since 2013, with operations in South Sudan, Sudan and Uganda. Starlink is the satellite network (SpaceX); DishNet is the local service company that supplies genuine Starlink hardware, installs it professionally, supports customers 24/7 on WhatsApp, and bills in Ugandan shillings including mobile money."
+    },
+    {
+      "item_key": "GENUINE_STARLINK",
+      "kind": "fact",
+      "title": "Is this genuine Starlink",
+      "answer": "Yes — genuine Starlink hardware on the genuine Starlink network. DishNet purchases directly from Starlink in Uganda and every invoice carries an official URA EFRIS fiscal code the customer can verify."
+    },
+    {
+      "item_key": "COVERAGE_UGANDA",
+      "kind": "fact",
+      "title": "Where does it work in Uganda",
+      "answer": "Starlink covers all of Uganda — every district, town and village in all four regions. The only site requirement is a clear view of the sky, which our technician confirms at survey. Never name any Ugandan place as not covered."
+    },
+    {
+      "item_key": "WEATHER_HONESTY",
+      "kind": "fact",
+      "title": "What happens in rain",
+      "answer": "Normal rain and clouds are fine. Very heavy storms can cause brief slowdowns or short interruptions that recover by themselves — that is honest satellite reality and we say it plainly."
+    },
+    {
+      "item_key": "RULE_NO_SPEED_GUARANTEE",
+      "kind": "rule",
+      "title": "Never guarantee speed",
+      "answer": "Never guarantee a specific speed, uptime percentage or latency. Speeds are 'up to' figures; real speed varies with network load and weather."
+    },
+    {
+      "item_key": "RULE_NO_DATE_PROMISES",
+      "kind": "rule",
+      "title": "Never promise unconfirmed dates",
+      "answer": "Never promise an installation or delivery date unless the installation team has confirmed it. Say the date is confirmed at scheduling."
+    },
+    {
+      "item_key": "RULE_FLEX_GATE",
+      "kind": "rule",
+      "title": "Flex is quoted, not signed",
+      "answer": "DishNet Flex plans may be quoted and interest registered, but no Flex customer may be activated or contract promised until management confirms — collect their details and escalate (<<ESCALATE flex signup>>)."
+    },
+    {
+      "item_key": "RULE_DISCOUNTS_TO_SALES",
+      "kind": "rule",
+      "title": "Discounts go to Sales",
+      "answer": "Prices are the same for everyone and you have no authority to discount. Any discount or special-deal request: take details and escalate to sales."
+    },
+    {
+      "item_key": "RULE_PAYMENT_SAFETY",
+      "kind": "rule",
+      "title": "Official payment channels only",
+      "answer": "Never direct a customer to pay to any personal phone number or personal account. Payments only via the official DishNet payment details on the invoice. If a customer reports paying someone claiming to be DishNet, treat it as possible fraud and escalate immediately."
+    },
+    {
+      "item_key": "TBC_REFUND_POLICY",
+      "kind": "tbc",
+      "title": "refund policy"
+    },
+    {
+      "item_key": "TBC_WARRANTY_DAMAGE",
+      "kind": "tbc",
+      "title": "warranty, damaged, lost or stolen equipment terms"
+    },
+    {
+      "item_key": "TBC_FLEX_TERMS",
+      "kind": "tbc",
+      "title": "Flex contract termination, pause and equipment-return terms"
+    },
+    {
+      "item_key": "TBC_REGULATORY",
+      "kind": "tbc",
+      "title": "regulatory, licensing or legality questions"
+    },
+    {
+      "item_key": "TBC_CROSS_BORDER",
+      "kind": "tbc",
+      "title": "using the service across borders or while travelling abroad"
+    },
+    {
+      "item_key": "TBC_SLA_STATIC_IP",
+      "kind": "tbc",
+      "title": "business SLA terms and public/static IP availability"
+    },
+    {
+      "item_key": "TBC_RELOCATION",
+      "kind": "tbc",
+      "title": "relocation fees and account transfer process"
+    }
+  ]
+}

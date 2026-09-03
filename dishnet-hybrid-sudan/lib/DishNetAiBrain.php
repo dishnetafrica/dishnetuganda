@@ -212,6 +212,15 @@ class DishNetAiBrain
         // operation's catalogue as if it covered Juba. Two countries, two
         // operations, two price lists -- mixing them is the cross-border
         // failure everything else here works to prevent.
+        // The central knowledge base (KnowledgeBase::promptBlock, passed in as
+        // config['knowledge_block']) carries this deployment's country facts,
+        // conduct rules and open topics — the same block for every channel.
+        // It SUPERSEDES the legacy hardcoded Sudan facts below, which remain
+        // only for installs that have not seeded a knowledge base.
+        $kb = trim((string)($this->config['knowledge_block'] ?? ''));
+        if ($kb !== '') {
+            $p .= "\n" . $kb . "\n";
+        } else {
         $p .= "\nWHERE WE OPERATE:\n";
         $p .= "- This is DishNet SUDAN. If the customer's location is in South Sudan "
             . "(for example Juba, Gudele, Wau, Malakal, Bor), do not quote plans or claim "
@@ -252,6 +261,7 @@ class DishNetAiBrain
             . "not say we have none: every Priority plan already includes unlimited Standard "
             . "data after its allowance. We do not sell a separate unlimited-only plan, and "
             . "never state a specific fallback speed.\n";
+        }
 
         // ── Transport rules ─────────────────────────────────────────────
         // A website visitor is anonymous. There is no phone number, so there
@@ -275,6 +285,15 @@ class DishNetAiBrain
                 $p .= "- When they want to order, or when the answer needs a real person, offer to "
                     . "have someone follow up and " . $this->markerHint(self::MARKER_ESCALATE) . ".\n";
             }
+        }
+
+        // Cross-channel memory: the same person, met again on another channel.
+        if (!empty($ctx['webchat_lead']) && is_array($ctx['webchat_lead'])) {
+            $wl = $ctx['webchat_lead'];
+            $p .= "\nPRIOR CONTACT: this phone previously chatted on our WEBSITE"
+                . (!empty($wl['name'])  ? " as \"" . $wl['name'] . "\"" : '')
+                . (!empty($wl['topic']) ? ", about: " . mb_substr((string)$wl['topic'], 0, 160) : '')
+                . ". Greet them as a returning contact and continue from what they already told us — do not make them repeat it.\n";
         }
 
         // ── Markers ─────────────────────────────────────────────────────

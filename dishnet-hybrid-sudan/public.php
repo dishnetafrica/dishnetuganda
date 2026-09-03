@@ -2058,6 +2058,7 @@ else:
         ['id'=>'all_leads',      'label'=>'All Leads (Admin View)',   'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'wa_leads',       'label'=>'WA Leads',                'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_orders','label'=>'Starlink Orders',         'icon'=>'[Orders]',   'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'knowledge_base', 'label'=>'AI Knowledge Base',       'icon'=>'[Brain]',    'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'ceo_dashboard',  'label'=>'CEO Dashboard',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'all_apps',       'label'=>'All Orders',               'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'retailers_mgmt', 'label'=>'Manage Retailers / Staff', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2419,6 +2420,7 @@ $_tabFiles = [
     'leads'              => 'tabs/sales/leads.php',
     'wa_leads'           => 'tabs/sales/wa_leads.php',
     'starlink_orders'    => 'tabs/sales/starlink_orders.php',
+    'knowledge_base'     => 'tabs/admin/knowledge_base.php',
     'collect_payment'    => 'tabs/sales/collect_payment.php',
     'applications'       => 'tabs/sales/applications.php',
     'wallet'             => 'tabs/sales/wallet.php',
@@ -2610,6 +2612,7 @@ $_tabPerms = [
     'engage_failed_queue'  => ['support_dash', '*admin'],
     'engage_wa_leads'      => ['support_dash', '*admin'],
     'starlink_orders'      => '*admin',
+    'knowledge_base'       => '*admin',
     'lifecycle'            => ['support_dash', '*admin'],
     // Admin
     'ceo_dashboard'    => '*admin',
