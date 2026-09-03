@@ -110,41 +110,54 @@ fi
 
 # ── 3. Traefik route for the domain ──────────────────────────────────────────
 head2 "3. Traefik route for $DOMAIN"
-DYN=/etc/easypanel/traefik/dynamic
+# Verified against the live droplet on 2026-09-03: this EasyPanel's Traefik
+# watches config/ (not dynamic/), and its entrypoints are named http/https
+# (not web/websecure — a router naming websecure is dropped with
+# "ERR EntryPoint doesn't exist" and never activates).
+DYN=""
+for d in config dynamic; do
+  [ -d "/etc/easypanel/traefik/$d" ] && DYN="/etc/easypanel/traefik/$d" && break
+done
 RESOLVER=$(grep -A6 -i certificatesResolvers /etc/easypanel/traefik/traefik.yml 2>/dev/null \
            | grep -oE '^\s{2,}[a-zA-Z0-9_-]+:' | head -1 | tr -d ' :')
-say "dynamic dir : $([ -d "$DYN" ] && echo "$DYN" || echo 'NOT FOUND')"
-say "certResolver: ${RESOLVER:-could not read}"
+say "dynamic dir : ${DYN:-NOT FOUND}"
+say "certResolver: ${RESOLVER:-letsencrypt (EasyPanel default, static config not readable)}"
 
 if [ "$FIX_TRAEFIK" = "1" ]; then
-  if [ ! -d "$DYN" ]; then
-    say "!! $DYN does not exist — not writing blind. Find it with:"
+  if [ -z "$DYN" ]; then
+    say "!! no dynamic config dir under /etc/easypanel/traefik — not writing blind. Find it with:"
     say "   docker inspect $TRAEFIK_CT --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'"
+  elif grep -Rqs "Host(\`$DOMAIN\`)" "$DYN"/; then
+    say "a route for $DOMAIN already exists in $DYN — not writing a duplicate."
+    say "   (multi-domain routing lives in one rule: Host(\`a\`) || Host(\`b\`))"
   else
     GW=$(ip -4 addr show docker0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1)
     GW="${GW:-172.17.0.1}"
-    cat > "$DYN/uisp.yml" <<YAML
+    cat > "$DYN/uisp-crm.yml" <<YAML
 # Routes $DOMAIN to UISP on 8443 so it gets a real certificate.
 # Devices keep using :8443 directly — only browsers and webhooks come here.
+# Names are suffixed -crm so they never collide with an earlier uisp.yaml
+# in this directory. priority 10 outranks EasyPanel's catch-all error page.
 http:
   routers:
-    uisp:
+    uisp-crm:
       rule: "Host(\`$DOMAIN\`)"
-      entryPoints: ["websecure"]
-      service: uisp
+      entryPoints: ["https"]
+      priority: 10
+      service: uisp-crm
       tls:
         certResolver: ${RESOLVER:-letsencrypt}
   services:
-    uisp:
+    uisp-crm:
       loadBalancer:
         servers:
           - url: "https://$GW:8443"
-        serversTransport: uisp-selfsigned
+        serversTransport: uisp-crm-selfsigned
   serversTransports:
-    uisp-selfsigned:
+    uisp-crm-selfsigned:
       insecureSkipVerify: true
 YAML
-    say "wrote $DYN/uisp.yml (backend https://$GW:8443, resolver ${RESOLVER:-letsencrypt})"
+    say "wrote $DYN/uisp-crm.yml (backend https://$GW:8443, resolver ${RESOLVER:-letsencrypt})"
     say "Traefik reloads dynamic config by itself. Give it ~30s, then re-run."
     sleep 20
   fi

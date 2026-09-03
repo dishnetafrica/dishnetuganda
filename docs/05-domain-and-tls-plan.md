@@ -37,27 +37,32 @@ touching the UISP installation.
 **Exactly what changes:**
 
 1. DNS: A record `uisp.yourdomain.com` → `178.62.83.12`.
-2. One new file in Traefik's dynamic configuration directory — the path comes
-   from the inspection report, commonly `/etc/easypanel/traefik/dynamic/`:
+2. One new file in Traefik's dynamic configuration directory. **Observed on
+   the live EasyPanel (dishnetuganda droplet, 3 Sep 2026):** the watched
+   directory is `/etc/easypanel/traefik/config/` — not `dynamic/` — the
+   entrypoints are named `http`/`https`, and the resolver is `letsencrypt`.
+   This exact shape carried `crm.dishnetuganda.com` to a valid certificate and
+   a 200 on the first correct attempt:
 
 ```yaml
-# uisp.yml -- routes the browser UI only. Devices still use :8443 directly.
+# uisp-crm.yml -- routes the browser UI only. Devices still use :8443 directly.
 http:
   routers:
-    uisp:
-      rule: "Host(`uisp.yourdomain.com`)"
-      entryPoints: ["websecure"]
-      service: uisp
+    uisp-crm:
+      rule: "Host(`uisp.yourdomain.com`)"    # several names: Host(`a`) || Host(`b`)
+      entryPoints: ["https"]
+      priority: 10                     # outranks EasyPanel's catch-all error page
+      service: uisp-crm
       tls:
-        certResolver: letsencrypt      # use the resolver name EasyPanel already defines
+        certResolver: letsencrypt
   services:
-    uisp:
+    uisp-crm:
       loadBalancer:
         servers:
           - url: "https://172.17.0.1:8443"   # docker bridge gateway = the host
-        serversTransport: uisp-selfsigned
+        serversTransport: uisp-crm-selfsigned
   serversTransports:
-    uisp-selfsigned:
+    uisp-crm-selfsigned:
       insecureSkipVerify: true         # UISP's own cert is self-signed; this hop is host-local
 ```
 
@@ -73,7 +78,11 @@ http:
   Inventing a new one will silently fail to issue a certificate.
 - `insecureSkipVerify` is acceptable here and only here: the hop is host-local
   and UISP's certificate is self-signed by design.
-- Entrypoint names (`websecure`) vary. Copy the ones EasyPanel actually uses.
+- Entrypoint names vary by install. This EasyPanel uses `http`/`https`; a
+  router naming a nonexistent entrypoint (e.g. `websecure`) is dropped with
+  `ERR EntryPoint doesn't exist` in `docker service logs easypanel-traefik`
+  and simply never routes — the symptom is a 404 served by
+  `https-error-page@file` while the certificate may still issue.
 
 **Effect on UISP:** none. No UISP file, container or setting is touched in
 steps 1–2. UISP keeps serving `8443` exactly as it does now, and continues to
