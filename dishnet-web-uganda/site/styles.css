@@ -286,3 +286,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
     .ug-hero-stats { grid-template-columns: 1fr 1fr; }
     .cta-band { padding: 40px 28px; }
 }
+
+/* Text wordmark beside the mark — stands in until the real logo file lands. */
+.logo-lockup .wordmark { font-family: var(--font-display); font-weight: 700; font-size: 21px; letter-spacing: -0.3px; color: var(--text); line-height: 1; }
+.footer-brand .wordmark { font-family: var(--font-display); font-weight: 700; font-size: 19px; color: inherit; display: block; margin: 8px 0 2px; }
