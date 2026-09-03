@@ -1,16 +1,26 @@
-# DishNet Mail — mail.dishnetuganda.com
+# DishNet Mail — mail.dishnetuganda.com, running ON THE APP DROPLET
+# (209.97.137.203) alongside UISP and EasyPanel, per the owner's decision to
+# keep one server and resize it instead of adding a mail droplet.
 #
-# Runs on its OWN 2 GB droplet, never on the UISP/EasyPanel box. Two
-# containers: Stalwart (SMTP + IMAP + JMAP + spam filter + admin/REST API on
-# one TLS listener) and Roundcube webmail. Webmail TLS is terminated by the
-# EXISTING Traefik on the app droplet (see traefik-webmail.yml); Stalwart
-# does its own ACME on 443 here.
+# Port map on this host is already crowded, so the mail stack takes ONLY the
+# four mail ports the box has free (25/465/587/993). Everything HTTP —
+# Stalwart's JMAP + management API + admin UI, and Roundcube — is published on
+# the docker bridge gateway address only (172.17.0.1) and served to the world
+# by the EXISTING Traefik on 443, via traefik-mail.yml. Nothing here touches
+# 80, 443, 3000, 8080, 8089 or 8443.
+#
+# TLS for the non-HTTP ports (SMTP/IMAP) cannot come through Traefik, and
+# Stalwart cannot run its own ACME (80/443 are Traefik's). So Traefik stays
+# the ONE certificate owner: its router for mail.dishnetuganda.com makes it
+# obtain the LE certificate, and the certs-dumper sidecar exports that cert
+# from acme.json for Stalwart's SMTP/IMAP listeners. Disable Stalwart's own
+# ACME in its settings (README §3).
 #
 # First run prints the admin password to the container log unless
 # STALWART_ADMIN is set in .env (copy .env.example — .env is gitignored).
 #
 # Outbound mail leaves through an SES/Brevo smarthost configured inside
-# Stalwart (see README-DEPLOY.md §6) — this host never needs outbound port 25.
+# Stalwart (README §6) — this host never sends on port 25 directly.
 
 services:
   stalwart:
@@ -18,14 +28,16 @@ services:
     container_name: stalwart
     restart: unless-stopped
     ports:
-      - "25:25"        # inbound MX (STARTTLS)
-      - "465:465"      # submission over TLS (uCRM mailer, staff clients)
-      - "587:587"      # submission (STARTTLS)
-      - "993:993"      # IMAP over TLS (Roundcube, staff/customer clients)
-      - "443:443"      # HTTPS: JMAP + management REST API + admin UI + ACME
-      - "127.0.0.1:8080:8080"   # emergency local admin only — never public
+      - "25:25"                   # inbound MX (STARTTLS)
+      - "465:465"                 # submission over TLS (uCRM mailer, staff clients)
+      - "587:587"                 # submission (STARTTLS)
+      - "993:993"                 # IMAP over TLS (Roundcube, staff/customer clients)
+      - "172.17.0.1:8090:8080"    # HTTP: JMAP + management API + admin UI —
+                                  # reachable only via Traefik (traefik-mail.yml)
+                                  # or an SSH tunnel; never published publicly.
     volumes:
       - ./data/stalwart:/opt/stalwart
+      - ./data/certs:/opt/stalwart-certs:ro   # from certs-dumper (Traefik's LE cert)
     environment:
       - STALWART_RECOVERY_ADMIN=${STALWART_ADMIN:-}
     healthcheck:
@@ -34,6 +46,21 @@ services:
       timeout: 5s
       start_period: 20s
 
+  # Watches Traefik's ACME store and keeps PEM files current for Stalwart's
+  # SMTP/IMAP TLS. Confirm the acme.json path on this install first:
+  #   ls -la /etc/easypanel/traefik/*.json     (adjust the mount if it differs)
+  certs-dumper:
+    image: ldez/traefik-certs-dumper:v2.8.3
+    container_name: mail-certs-dumper
+    restart: unless-stopped
+    entrypoint: sh -c 'while [ ! -s /traefik/acme.json ]; do sleep 5; done;
+      traefik-certs-dumper file --version v2 --watch
+      --source /traefik/acme.json --dest /certs
+      --domain-subdir --crt-name=fullchain --crt-ext=.pem --key-name=privkey --key-ext=.pem'
+    volumes:
+      - /etc/easypanel/traefik/acme.json:/traefik/acme.json:ro
+      - ./data/certs:/certs
+
   roundcube:
     image: roundcube/roundcubemail:1.6.11-apache
     container_name: roundcube
@@ -41,8 +68,7 @@ services:
     depends_on:
       - stalwart
     ports:
-      - "8081:80"      # DO cloud firewall restricts this to the app droplet's
-                       # IP; Traefik there serves it as webmail.dishnetuganda.com
+      - "172.17.0.1:8081:80"      # served as webmail.dishnetuganda.com by Traefik
     environment:
       - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mail.dishnetuganda.com
       - ROUNDCUBEMAIL_DEFAULT_PORT=993

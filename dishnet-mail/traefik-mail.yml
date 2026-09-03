@@ -1,0 +1,35 @@
+# Drop into /etc/easypanel/traefik/config/ on this same droplet — the proven
+# mechanism from uisp.yaml. Two jobs:
+#
+#   webmail.dishnetuganda.com  → Roundcube        (172.17.0.1:8081)
+#   mail.dishnetuganda.com     → Stalwart HTTP    (172.17.0.1:8090)
+#                                 JMAP + management API + admin UI
+#
+# The mail.dishnetuganda.com router is ALSO what makes Traefik obtain the
+# Let's Encrypt certificate that certs-dumper then exports for Stalwart's
+# SMTP/IMAP listeners. Do not remove it even if the admin UI is unused.
+http:
+  routers:
+    webmail:
+      rule: "Host(`webmail.dishnetuganda.com`)"
+      entryPoints: ["https"]
+      priority: 10
+      service: webmail
+      tls:
+        certResolver: letsencrypt
+    stalwart-http:
+      rule: "Host(`mail.dishnetuganda.com`)"
+      entryPoints: ["https"]
+      priority: 10
+      service: stalwart-http
+      tls:
+        certResolver: letsencrypt
+  services:
+    webmail:
+      loadBalancer:
+        servers:
+          - url: "http://172.17.0.1:8081"
+    stalwart-http:
+      loadBalancer:
+        servers:
+          - url: "http://172.17.0.1:8090"
