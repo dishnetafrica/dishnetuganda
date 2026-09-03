@@ -460,6 +460,29 @@ switch ($changeType) {
             }
         }
 
+        // ── DishNet email identity: reserve + queue provisioning ─────────
+        // Fast local work only (one SQLite insert). The identity worker does
+        // the slow parts — mail server + CRM write-back — on its schedule.
+        // Every client-creation path (KYC, manual, portal) lands here, which
+        // is exactly why the hook lives on this webhook.
+        if (!empty($config['identity_enabled'])) {
+            try {
+                require_once __DIR__ . '/lib/MailProviderInterface.php';
+                require_once __DIR__ . '/lib/StalwartProvider.php';
+                require_once __DIR__ . '/lib/CustomerIdentityService.php';
+                $idSvc = new CustomerIdentityService(
+                    $store->getPdo(), $config, new StalwartProvider($config),
+                    null, new EventBus($store->getPdo())
+                );
+                $idRes = $idSvc->reserveForClient($clientId, $name, 'customer' . $clientId);
+                whLog($changeType, $idRes['ok']
+                    ? "Identity reserved: {$idRes['data']}"
+                    : "Identity reserve failed: {$idRes['error']}", ['crm_id' => $clientId]);
+            } catch (\Throwable $e) {
+                whLog($changeType, 'Identity reserve error: ' . $e->getMessage(), ['crm_id' => $clientId]);
+            }
+        }
+
         whResp(200, 'client.add processed.');
     }
 
@@ -2760,7 +2783,27 @@ switch ($changeType) {
     case 'invoice.add_draft':
     case 'client.invite':
     case 'client.delete':
-    case 'client.archive':
+    case 'client.archive': {
+        // Retention, not deletion: the customer's DishNet identity mailbox
+        // goes into a suspended hold (login off, every message kept). Actual
+        // mailbox deletion is a manual admin act under the retention policy —
+        // never automatic, never from a webhook.
+        if (!empty($config['identity_enabled']) && $entityId) {
+            try {
+                require_once __DIR__ . '/lib/MailProviderInterface.php';
+                require_once __DIR__ . '/lib/StalwartProvider.php';
+                require_once __DIR__ . '/lib/CustomerIdentityService.php';
+                $idSvc = new CustomerIdentityService($store->getPdo(), $config, new StalwartProvider($config));
+                $idRes = $idSvc->requestSuspend((int)$entityId, $changeType);
+                whLog($changeType, $idRes['ok'] ? 'Identity suspension queued' : ('Identity: ' . $idRes['error']),
+                      ['entity_id' => $entityId]);
+            } catch (\Throwable $e) {
+                whLog($changeType, 'Identity suspend error: ' . $e->getMessage(), ['entity_id' => $entityId]);
+            }
+        }
+        whResp(200, "{$changeType} acknowledged.");
+    }
+
     case 'service.edit':
     case 'credit_card.add': {
         whLog($changeType, "Known event — no action configured", ['entity_id' => $entityId]);

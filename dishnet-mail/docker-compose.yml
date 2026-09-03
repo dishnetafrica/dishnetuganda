@@ -1,0 +1,54 @@
+# DishNet Mail — mail.dishnetuganda.com
+#
+# Runs on its OWN 2 GB droplet, never on the UISP/EasyPanel box. Two
+# containers: Stalwart (SMTP + IMAP + JMAP + spam filter + admin/REST API on
+# one TLS listener) and Roundcube webmail. Webmail TLS is terminated by the
+# EXISTING Traefik on the app droplet (see traefik-webmail.yml); Stalwart
+# does its own ACME on 443 here.
+#
+# First run prints the admin password to the container log unless
+# STALWART_ADMIN is set in .env (copy .env.example — .env is gitignored).
+#
+# Outbound mail leaves through an SES/Brevo smarthost configured inside
+# Stalwart (see README-DEPLOY.md §6) — this host never needs outbound port 25.
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:latest   # pin to the pulled digest after first deploy (README §2)
+    container_name: stalwart
+    restart: unless-stopped
+    ports:
+      - "25:25"        # inbound MX (STARTTLS)
+      - "465:465"      # submission over TLS (uCRM mailer, staff clients)
+      - "587:587"      # submission (STARTTLS)
+      - "993:993"      # IMAP over TLS (Roundcube, staff/customer clients)
+      - "443:443"      # HTTPS: JMAP + management REST API + admin UI + ACME
+      - "127.0.0.1:8080:8080"   # emergency local admin only — never public
+    volumes:
+      - ./data/stalwart:/opt/stalwart
+    environment:
+      - STALWART_RECOVERY_ADMIN=${STALWART_ADMIN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+
+  roundcube:
+    image: roundcube/roundcubemail:1.6.11-apache
+    container_name: roundcube
+    restart: unless-stopped
+    depends_on:
+      - stalwart
+    ports:
+      - "8081:80"      # DO cloud firewall restricts this to the app droplet's
+                       # IP; Traefik there serves it as webmail.dishnetuganda.com
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mail.dishnetuganda.com
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=ssl://mail.dishnetuganda.com
+      - ROUNDCUBEMAIL_SMTP_PORT=465
+      - ROUNDCUBEMAIL_SKIN=elastic
+      - ROUNDCUBEMAIL_PRODUCT_NAME=DishNet Webmail
+    volumes:
+      - ./data/roundcube:/var/roundcube/db

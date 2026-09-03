@@ -228,7 +228,19 @@ foreach ($events as $event) {
 
             // ── Unknown event type ───────────────────────────────────────
             default:
-                // Don't fail — just ack and log
+                // Types owned by dedicated workers must NOT be acked here.
+                // consume() claims unfiltered batches, so acking an unknown
+                // type swallows the owning worker's job — on the exec()-less
+                // fallback path an ai.reply claimed by this 30s loop would
+                // silently drop a customer's message before AiReplyWorker's
+                // 60s run ever saw it. Release the claim instead, exactly as
+                // WorkerBase::consumeFiltered() releases unmatched events.
+                if (in_array($type, ['ai.reply'], true)) {
+                    $pdo->prepare("UPDATE events SET status='pending', locked_by=NULL, locked_at=NULL WHERE id=?")
+                        ->execute([$eid]);
+                    break;
+                }
+                // Everything else: don't fail — just ack and log
                 error_log("event_processor: unknown event type '{$type}' (event #{$eid})");
                 $bus->ack($eid);
                 $processed++;

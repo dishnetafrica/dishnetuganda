@@ -26,11 +26,15 @@ class PluginConfig
         'openai_api_key',
         'ai_tools_token',
         'shopbot_ai_token',
+        'stalwart_api_token',
+        'starlink_mail_password',
     ];
 
     const BOOL_KEYS = [
         'ai_enabled',
         'tools_legacy_phone_match',
+        'identity_enabled',
+        'starlink_mail_enabled',
     ];
 
     public static function load(string $pluginRoot, string $dataDir): array
