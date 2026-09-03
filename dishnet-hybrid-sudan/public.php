@@ -666,6 +666,17 @@ if ($page === 'web_chat') {
     exit;
 }
 
+// ── Public price feed for the website ────────────────────────────────
+// Public and unauthenticated by design: it serves only what a customer may
+// see (names, customer prices, public descriptions) via PublicPriceFeed,
+// which structurally cannot carry costs or margins. Routed through here
+// because uCRM only exposes public.php, not arbitrary plugin files.
+if ($page === 'prices') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/prices.php';
+    exit;
+}
+
 //  Evolution API Webhook 
 // URL: public.php?page=evo_webhook
 if ($page === 'evo_webhook') {
