@@ -1,4 +1,10 @@
 <?php
+// Currency label for every money figure on this screen. The Sudan/SS
+// builds hardcoded '$'; the amounts themselves are whatever currency the
+// uCRM organisation bills in, so the label now follows config.
+$curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: 'UGX'))) . ' ';
+?>
+<?php
 // Tab: subscription_plans
 // Extracted from public.php on 2026-03-15
         $allPlans = $store->load('subscription_plans.json');
@@ -20,20 +26,20 @@
     <div class="stat-card teal">
         <div class="stat-label">Starlink Plans</div>
         <div class="stat-value"><?= count($byType['starlink']) ?></div>
-        <div style="font-size:11px;color:#64748b;margin-top:4px;">$<?= number_format(array_sum(array_map(fn($p)=>$p['profit']??0,$byType['starlink'])),2) ?> profit/mo</div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;"><?= $curSym ?><?= number_format(array_sum(array_map(fn($p)=>$p['profit']??0,$byType['starlink'])),2) ?> profit/mo</div>
     </div>
     <div class="stat-card green">
         <div class="stat-label">Fiber Plans</div>
         <div class="stat-value"><?= count($byType['fiber']) ?></div>
-        <div style="font-size:11px;color:#64748b;margin-top:4px;">$<?= number_format(array_sum(array_map(fn($p)=>$p['profit']??0,$byType['fiber'])),2) ?> profit/mo</div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;"><?= $curSym ?><?= number_format(array_sum(array_map(fn($p)=>$p['profit']??0,$byType['fiber'])),2) ?> profit/mo</div>
     </div>
     <div class="stat-card orange">
         <?php /* SIM Plans stat hidden */ ?>
-        <div style="font-size:11px;color:#64748b;margin-top:4px;">$<?= number_format(array_sum(array_map(fn($p)=>$p['profit']??0,$byType['sim'])),2) ?> profit/mo</div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;"><?= $curSym ?><?= number_format(array_sum(array_map(fn($p)=>$p['profit']??0,$byType['sim'])),2) ?> profit/mo</div>
     </div>
     <div class="stat-card blue">
         <div class="stat-label">Total Monthly Profit</div>
-        <div class="stat-value">$<?= number_format($totalProfit, 2) ?></div>
+        <div class="stat-value"><?= $curSym ?><?= number_format($totalProfit, 2) ?></div>
         <div style="font-size:11px;color:#64748b;margin-top:4px;"><?= $activePlans ?> active plans • <?php $mgs=array_filter(array_map(fn($p)=>$p['margin']??0,$allPlans)); echo $mgs ? round(array_sum($mgs)/count($mgs),1) : 0; ?>% avg margin</div>
     </div>
 </div>
@@ -62,8 +68,8 @@
                 <div>
                     <label class="form-label" id="costLabel">Your Cost *</label>
                     <div style="position:relative;">
-                        <span style="position:absolute;left:10px;top:9px;color:#6b7280;font-weight:700;">$</span>
-                        <input type="number" name="starlink_cost" class="form-control" step="0.01" min="0" style="padding-left:24px;"
+                        <span style="position:absolute;left:10px;top:9px;color:#6b7280;font-weight:700;font-size:11px;"><?= $curSym ?></span>
+                        <input type="number" name="starlink_cost" class="form-control" step="0.01" min="0" style="padding-left:46px;"
                                value="<?= $editPlan['starlink_cost'] ?? '' ?>" required placeholder="0.00" oninput="calcPlanProfit()">
                     </div>
                     <div style="font-size:10px;color:#9ca3af;margin-top:2px;" id="costHint">What Starlink charges you</div>
@@ -71,8 +77,8 @@
                 <div>
                     <label class="form-label">Customer Price *</label>
                     <div style="position:relative;">
-                        <span style="position:absolute;left:10px;top:9px;color:#6b7280;font-weight:700;">$</span>
-                        <input type="number" name="customer_price" class="form-control" step="0.01" min="0" style="padding-left:24px;"
+                        <span style="position:absolute;left:10px;top:9px;color:#6b7280;font-weight:700;font-size:11px;"><?= $curSym ?></span>
+                        <input type="number" name="customer_price" class="form-control" step="0.01" min="0" style="padding-left:46px;"
                                value="<?= $editPlan['customer_price'] ?? '' ?>" required placeholder="0.00" oninput="calcPlanProfit()">
                     </div>
                     <div style="font-size:10px;color:#9ca3af;margin-top:2px;">What you charge customer</div>
@@ -88,7 +94,7 @@
                     <input type="text" name="plan_supplier" class="form-control" value="<?= h($editPlan['supplier'] ?? '') ?>" placeholder="e.g. 4G Telecom, Starlink">
                 </div>
                 <div id="planProfitPreview" style="padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px;font-weight:600;">
-                    Profit: <span id="ppProfit" style="color:#28a745;">$0.00</span> /mo
+                    Profit: <span id="ppProfit" style="color:#28a745;"><?= $curSym ?>0.00</span> /mo
                     &nbsp;|&nbsp; Margin: <span id="ppMargin" style="color:#D41C1C;">0%</span>
                 </div>
                 <div>
@@ -185,9 +191,9 @@
                     </td>
                     <td style="font-size:12px;font-weight:600;"><?= h($pl['speed'] ?? '-') ?></td>
                     <td style="font-size:12px;color:#6b7280;"><?= h($pl['supplier'] ?? '-') ?></td>
-                    <td style="text-align:right;font-weight:600;<?= ($pl['starlink_cost']??0) > 0 ? 'color:#dc3545;background:#fef2f2;' : 'color:#d1d5db;' ?>"><?= ($pl['starlink_cost']??0) > 0 ? '$'.number_format($pl['starlink_cost'],2) : '-' ?></td>
-                    <td style="text-align:right;font-weight:600;color:#28a745;background:#f0fdf4;">$<?= number_format($pl['customer_price'] ?? 0, 2) ?></td>
-                    <td style="text-align:right;font-weight:800;color:<?= $profit >= 0 ? '#28a745' : '#dc3545' ?>;">$<?= number_format($profit, 2) ?></td>
+                    <td style="text-align:right;font-weight:600;<?= ($pl['starlink_cost']??0) > 0 ? 'color:#dc3545;background:#fef2f2;' : 'color:#d1d5db;' ?>"><?= ($pl['starlink_cost']??0) > 0 ? $curSym.number_format($pl['starlink_cost'],2) : '-' ?></td>
+                    <td style="text-align:right;font-weight:600;color:#28a745;background:#f0fdf4;"><?= $curSym ?><?= number_format($pl['customer_price'] ?? 0, 2) ?></td>
+                    <td style="text-align:right;font-weight:800;color:<?= $profit >= 0 ? '#28a745' : '#dc3545' ?>;"><?= $curSym ?><?= number_format($profit, 2) ?></td>
                     <td style="text-align:center;">
                         <div style="position:relative;display:inline-block;">
                             <span style="font-size:12px;font-weight:700;"><?= $margin ?>%</span>
@@ -251,11 +257,12 @@ function planTypeChanged() {
     document.getElementById('costHint').textContent = l[1];
 }
 function calcPlanProfit() {
+    const CUR = <?= json_encode($curSym) ?>;
     const cost = parseFloat(document.querySelector('input[name="starlink_cost"]')?.value) || 0;
     const price = parseFloat(document.querySelector('input[name="customer_price"]')?.value) || 0;
     const profit = price - cost;
     const margin = price > 0 ? ((profit / price) * 100).toFixed(1) : 0;
-    document.getElementById('ppProfit').textContent = '$' + profit.toFixed(2);
+    document.getElementById('ppProfit').textContent = CUR + profit.toFixed(2);
     document.getElementById('ppProfit').style.color = profit >= 0 ? '#28a745' : '#dc3545';
     document.getElementById('ppMargin').textContent = margin + '%';
     document.getElementById('ppMargin').style.color = profit >= 0 ? '#1565C0' : '#dc3545';
