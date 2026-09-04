@@ -141,6 +141,37 @@
       return state.hw;
     }
 
+    // Starlink-receipt-style order lines: [label, amount-or-"Included"], plus totals.
+    function receipt() {
+      var kit = kits.filter(function (k) { return k.name === state.hw; })[0] || null;
+      var rows = [], today = 0, monthly = state.plan.price, recurNote;
+      if (kit) {
+        rows.push([kit.name, fmt(cur, kit.price)]);
+        rows.push(['Delivery & professional installation', 'Included']);
+        rows.push(['First month of internet', 'Included']);
+        today = kit.price;
+        recurNote = 'Then ' + fmt(cur, monthly) + '/month from month 2';
+      } else if (state.hw === '__flex') {
+        rows.push([disp(state.plan) + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
+        rows.push(['Hardware upfront', fmt(cur, 0)]);
+        today = monthly;
+        recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
+      } else {
+        rows.push([disp(state.plan) + ' — first month', fmt(cur, monthly)]);
+        rows.push(['Connecting your own Starlink kit', 'Our team confirms']);
+        today = monthly;
+        recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
+      }
+      return '<div class="of-receipt">' +
+        rows.map(function (r) {
+          return '<div class="of-rrow' + (r[1] === 'Included' || r[1] === 'Our team confirms' ? ' inc' : '') + '">' +
+            '<span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></div>';
+        }).join('') +
+        '<div class="of-rrow total"><span>Total today</span><span>' + esc(fmt(cur, today)) + '</span></div>' +
+        '<div class="of-rnote">' + esc(recurNote) + ' · ' + esc(data.vat_note || 'All prices VAT inclusive') + '</div>' +
+        '</div>';
+    }
+
     function paint() {
       var html =
         '<div class="of-step">Step 1</div><div class="of-title">Choose your hardware</div>' +
@@ -153,12 +184,13 @@
       html +=
         '<div class="of-summary">' +
           '<div class="of-sumtext" data-of-sum>' +
-            (state.hw ? '<b>' + esc(hwLabel()) + '</b>' + (state.plan ? ' + <b>' + esc(disp(state.plan)) + '</b> at ' + esc(fmt(cur, state.plan.price)) + '/month' : ' — now choose a plan') :
+            (state.hw && state.plan ? receipt() :
+              state.hw ? '<b>' + esc(hwLabel()) + '</b> — now choose a plan' :
               'Pick your hardware to get started — prices are live from our billing system.') +
           '</div>' +
           '<button type="button" class="of-wa" data-of-wa' + (state.hw && state.plan ? '' : ' disabled') + '>Complete order on WhatsApp</button>' +
         '</div>' +
-        '<p class="of-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + ' · A team member confirms everything on WhatsApp before you pay.</p>';
+        '<p class="of-vat">A team member confirms everything on WhatsApp before you pay — the total shown is the total invoiced.</p>';
       host.innerHTML = html;
       Array.prototype.forEach.call(host.querySelectorAll('[data-hw]'), function (el) {
         if (state.hw && el.getAttribute('data-hw') === state.hw) el.classList.add('sel');
@@ -189,10 +221,13 @@
       }
       var wa = t.closest('[data-of-wa]');
       if (wa && state.hw && state.plan) {
+        var kit = kits.filter(function (k) { return k.name === state.hw; })[0] || null;
+        var today = kit ? kit.price : state.plan.price;
         var extra = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
         var txt = 'Hello DishNet, I would like to order Starlink.' +
           '\nHardware: ' + hwLabel() +
           '\nPlan: ' + disp(state.plan) + (disp(state.plan) !== state.plan.name ? ' (' + state.plan.name + ')' : '') +
+          '\nTotal today: ' + fmt(cur, today) + ' · then ' + fmt(cur, state.plan.price) + '/month' +
           (extra ? '\n' + extra : '');
         window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(txt), '_blank');
       }

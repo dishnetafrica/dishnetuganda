@@ -355,3 +355,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .of-addr .of-geo, .of-addr .of-go { flex: 1 1 auto; padding: 12px 14px; }
   .of-summary { flex-direction: column; align-items: stretch; text-align: center; }
 }
+
+/* Receipt-style order summary (Starlink email format: lines + bold total) */
+.of-summary .of-sumtext { flex: 1; min-width: 260px; }
+.of-receipt { width: 100%; }
+.of-rrow { display: flex; justify-content: space-between; gap: 18px; font-size: 14.5px; color: var(--text);
+  padding: 7px 0; border-bottom: 1px solid var(--surface-alt); }
+.of-rrow.inc span:last-child { color: #16A34A; font-weight: 600; }
+.of-rrow.total { border-bottom: none; border-top: 2px solid var(--border); margin-top: 4px; padding-top: 10px;
+  font-size: 16.5px; font-weight: 800; }
+.of-rnote { font-size: 12.5px; color: var(--text-secondary); margin-top: 8px; }
