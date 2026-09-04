@@ -53,16 +53,11 @@ function mask(string $v): string {
     return 'SET (…' . substr($v, -4) . ', ' . strlen($v) . ' chars)';
 }
 
-// The five plans the website sells. Names must match uCRM exactly; prices are
-// what the customer pays. If uCRM changes, this preflight fails loudly and the
-// website must be updated in the same breath — that is the point of the check.
-$EXPECTED = [
-    'Starlink Priority 500GB' => 112.0,
-    'Starlink Priority 1TB'   => 189.0,
-    'Starlink Priority 2TB'   => 336.0,
-    'Starlink Priority 3TB'   => 483.0,
-    'Starlink Priority 5TB'   => 784.0,
-];
+// The catalogue is read live from uCRM and judged on its own terms — no plan
+// names or prices are hard-coded here. The checks are: the endpoint answers,
+// every plan the AI will offer carries a real price, and every plan reaches
+// the model's prompt. The website reads the same feed, so uCRM stays the one
+// source of truth for every install.
 
 $manifest = @json_decode((string)@file_get_contents(__DIR__ . '/manifest.json'), true);
 echo "DishNet production preflight — plugin v" . ($manifest['information']['version'] ?? '?')
@@ -349,21 +344,18 @@ if (!($prod['ok'] ?? false)) {
     bad('getProducts failed: ' . (string)($prod['error'] ?? '?') . ' — the AI cannot quote any price');
 } else {
     $plans = $prod['data']['products'] ?? [];
-    ok('service-plans endpoint answered, ' . count($plans) . ' active plan(s)');
-    $byName = [];
+    count($plans) > 0
+        ? ok('service-plans endpoint answered, ' . count($plans) . ' active plan(s)')
+        : bad('service-plans endpoint answered but the catalogue is EMPTY — the AI cannot quote any plan');
     foreach ($plans as $p) {
-        $byName[(string)($p['name'] ?? '')] = $p;
         printf("    %-28s price=%s period=%s\n",
             (string)($p['name'] ?? '?'),
             $p['price'] === null ? 'NULL' : number_format((float)$p['price'], 2),
             $p['period_months'] === null ? '?' : $p['period_months'] . 'mo');
-    }
-    foreach ($EXPECTED as $name => $price) {
-        if (!isset($byName[$name])) { bad("expected plan missing from uCRM: {$name}"); continue; }
-        $got = (float)($byName[$name]['price'] ?? -1);
-        abs($got - $price) < 0.005
-            ? ok("{$name} = \${$price}")
-            : bad("{$name}: uCRM says \${$got}, website says \${$price} — CUSTOMERS SEE TWO PRICES");
+        if ($p['price'] === null || (float)$p['price'] <= 0.0) {
+            warn("plan '" . (string)($p['name'] ?? '?') . "' has no price — the AI will offer it "
+               . 'without a figure; set a price or archive it in uCRM');
+        }
     }
     $hw = $prod['data']['hardware'] ?? [];
     if ($hw) {
@@ -378,15 +370,6 @@ if (!($prod['ok'] ?? false)) {
     }
     if (!empty($prod['data']['hardware_error'])) {
         warn('hardware lookup error: ' . (string)$prod['data']['hardware_error']);
-    }
-    foreach ($byName as $name => $p) {
-        if (isset($EXPECTED[$name])) continue;
-        $price = (float)($p['price'] ?? 0);
-        if ($price <= 0.0) {
-            warn("plan '{$name}' at \$0 is in the catalogue THE AI SEES — archive it in uCRM");
-        } else {
-            warn("unexpected plan '{$name}' (\${$price}) will be offered by the AI — intended?");
-        }
     }
 }
 
@@ -412,10 +395,13 @@ if ($plansPos === false) {
     echo "  ── PLANS section, verbatim from the live prompt ──\n";
     foreach (explode("\n", trim($section)) as $l) echo '    ' . $l . "\n";
     $allIn = true;
-    foreach ($EXPECTED as $name => $price) {
-        if (strpos($prompt, $name) === false) { bad("'{$name}' absent from the prompt"); $allIn = false; }
+    foreach ($plans as $p) {
+        $name = (string)($p['name'] ?? '');
+        if ($name !== '' && strpos($prompt, $name) === false) {
+            bad("'{$name}' absent from the prompt"); $allIn = false;
+        }
     }
-    if ($allIn && $plans) ok('all five plans reach the model, live from uCRM — nothing hard-coded');
+    if ($allIn && $plans) ok('all ' . count($plans) . ' plans reach the model, live from uCRM — nothing hard-coded');
     if (!$plans) bad('prompt correctly says PLANS unavailable — but that means the AI cannot sell');
 }
 
