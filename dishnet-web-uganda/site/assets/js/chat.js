@@ -41,6 +41,9 @@
     '.dnc-lead{background:#fff;border:1px solid #E5E4E0;border-radius:12px;padding:10px;align-self:stretch}' +
     '.dnc-lead p{margin:0 0 8px;font-size:13px;color:#5A5A58}' +
     '.dnc-lead input{width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;border:1px solid #E5E4E0;border-radius:8px;font-size:13px}' +
+    '.dnc-lead select{box-sizing:border-box;margin-bottom:6px;padding:8px 6px;border:1px solid #E5E4E0;border-radius:8px;font-size:13px;background:#fff;max-width:120px}' +
+    '.dnc-lead .dnc-phone{display:flex;gap:6px}' +
+    '.dnc-lead .dnc-phone input{margin-bottom:6px}' +
     '.dnc-lead .dnc-row{display:flex;gap:6px}' +
     '.dnc-lead button{flex:1;padding:8px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer}' +
     '.dnc-lead .dnc-save{background:#C8102E;color:#fff}' +
@@ -121,17 +124,37 @@
     var card = el('div', 'dnc-lead');
     card.appendChild(el('p', '', 'Want our team to follow up? Leave your WhatsApp number (optional).'));
     var name = el('input'); name.placeholder = 'Name';
-    var phone = el('input'); phone.placeholder = 'WhatsApp number e.g. 07xx…'; phone.type = 'tel';
+    var codes = [['+256', '🇺🇬 +256'], ['+254', '🇰🇪 +254'], ['+255', '🇹🇿 +255'],
+                 ['+250', '🇷🇼 +250'], ['+211', '🇸🇸 +211'], ['+243', '🇨🇩 +243'],
+                 ['+257', '🇧🇮 +257'], ['+251', '🇪🇹 +251'], ['+249', '🇸🇩 +249'],
+                 ['other', 'Other']];
+    var cc = el('select');
+    cc.setAttribute('aria-label', 'Country code');
+    for (var ci = 0; ci < codes.length; ci++) {
+      var o = el('option', '', codes[ci][1]); o.value = codes[ci][0]; cc.appendChild(o);
+    }
+    var phone = el('input'); phone.placeholder = '7xx xxx xxx'; phone.type = 'tel';
+    cc.onchange = function () {
+      phone.placeholder = cc.value === 'other' ? 'Full number e.g. +44 7…' : '7xx xxx xxx';
+    };
+    var pr = el('div', 'dnc-phone');
+    pr.appendChild(cc); pr.appendChild(phone);
     var row = el('div', 'dnc-row');
     var save = el('button', 'dnc-save', 'Send');
     var skip = el('button', 'dnc-skip', 'No thanks');
     row.appendChild(save); row.appendChild(skip);
-    card.appendChild(name); card.appendChild(phone); card.appendChild(row);
+    card.appendChild(name); card.appendChild(pr); card.appendChild(row);
     log.appendChild(card); scroll();
     skip.onclick = function () { card.remove(); };
     save.onclick = function () {
-      if (!phone.value.trim() && !name.value.trim()) { card.remove(); return; }
-      post('', { name: name.value.trim(), phone: phone.value.trim() });
+      var raw = phone.value.trim();
+      if (!raw && !name.value.trim()) { card.remove(); return; }
+      var full = raw;
+      if (raw && cc.value !== 'other') {
+        // National part: digits only, without the trunk 0 people dial locally.
+        full = cc.value + raw.replace(/\D+/g, '').replace(/^0+/, '');
+      }
+      post('', { name: name.value.trim(), phone: full });
       haveLead = true; store.set('dn_chat_lead', '1');
       card.remove(); bot('Thank you! Our team will reach out.');
     };
