@@ -149,7 +149,7 @@ if ($_cfgBase !== '') {
     }
 }
 if ($portalCrmBaseUrl === '') {
-    $portalCrmBaseUrl = 'https://crm.dishnetafrica.com/crm';
+    $portalCrmBaseUrl = dn_crm_web($config) . '/crm';
 }
 
 // v4.20.9.1 — Normalize: ucrm.json's ucrmPublicUrl on this install is

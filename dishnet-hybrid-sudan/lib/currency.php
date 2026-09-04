@@ -34,3 +34,4 @@ if (!function_exists('dn_cur')) {
         return preg_match('/^[A-Z]{3}$/', $s) ? $s : 'UGX';
     }
 }
+require_once __DIR__ . '/crm_url.php';

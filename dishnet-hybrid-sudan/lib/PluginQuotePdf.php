@@ -235,10 +235,10 @@ class PluginQuotePdf
             'token' => $pdfToken, 'created' => time(), 'quote' => $quoteNum, 'filename' => $filename,
         ]));
 
-        $siteUrl = rtrim($this->config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
+        $siteUrl = dn_crm_web($this->config);
         $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
         $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-        $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+        $pdfUrl  = dn_plugin_public($this->config)
             . '?page=api&action=serve_quote_pdf'
             . '&file=' . urlencode(basename($pdfFile))
             . '&token=' . urlencode($pdfToken);

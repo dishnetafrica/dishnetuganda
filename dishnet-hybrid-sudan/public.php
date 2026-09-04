@@ -410,7 +410,7 @@ $rbac     = new RbacService($store->getPdo());
 $config = $store->load('kyc_config.json');
 if (empty($config)) {
     $config = [
-        'crm_base_url'   => 'https://crm.dishnetafrica.com/crm/api/v2.1',
+        'crm_base_url'   => '',
         'crm_auth_token' => '',
         'magma_host'             => '',
         'magma_network_id'       => '',
@@ -1495,7 +1495,7 @@ $packages=$store->load('kyc_packages.json');
 <meta name="theme-color" content="#D41C1C">
 <?php if (!empty($retailer['api_token'])): ?>
 <meta name="dishnet-token"  content="<?= h($retailer['api_token']) ?>">
-<meta name="dishnet-server" content="<?= h(rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/')) ?>">
+<meta name="dishnet-server" content="<?= h(rtrim(($config['crm_base_url'] ?? '') ?: dn_crm_web($config), '/')) ?>">
 <meta name="dishnet-agent"  content="<?= h($retailer['name'] ?? '') ?>" data-agent-name="<?= h($retailer['name'] ?? '') ?>">
 <?php endif; ?>
 <link rel="manifest" href="?page=app_manifest">
@@ -2296,7 +2296,7 @@ if ($_quoteCreated && $_lastQuoteId && $flash && $flash['type'] === 'success'):
     unset($_SESSION['last_kyc_quote_id'], $_SESSION['last_kyc_crm_id'], $_SESSION['last_kyc_quote_created'],
           $_SESSION['last_kyc_payment_id'], $_SESSION['last_kyc_payment_created'],
           $_SESSION['last_kyc_photo_uploaded'], $_SESSION['last_kyc_id_uploaded']);
-    $_crmHostQ = rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')),'/');
+    $_crmHostQ = dn_crm_web($config);
 ?>
 <div style="background:linear-gradient(135deg,#1B5E20,#2E7D32);color:#fff;border-radius:14px;
             padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">

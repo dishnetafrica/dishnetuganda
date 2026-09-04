@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/../lib/crm_url.php';
 // Note: No strict_types - included from master.php
 date_default_timezone_set('Africa/Juba');
 
@@ -185,7 +186,7 @@ foreach ($staff as $person) {
         }
 
         $msg .= "\n🔍 *Full details & updates:*\n";
-        $msg .= "🔗 https://crm.dishnetafrica.com/_plugins/dishnet-hybrid-telecom/public.php?tab=scheduling\n";
+        $msg .= "🔗 " . dn_plugin_public($config) . "?tab=scheduling\n";
         $msg .= "\nPlease start with pending jobs and work through your list systematically.\n";
         $msg .= "Have a productive day! 🛠\n";
         $msg .= "Need support? 📞 +211 921 443 002\n";
@@ -209,7 +210,7 @@ if (!empty($unmapped)) {
         . "did NOT receive today's job summary:\n\n"
         . implode("\n", array_map(fn($n) => "  • {$n}", $unmapped)) . "\n\n"
         . "Fix: Plugin → Manage Retailers → Edit each person → set UCRM User ID.\n"
-        . "Find IDs at: crm.dishnetafrica.com/nms/settings/users";
+        . "Find IDs at: " . dn_crm_web($config) . "/nms/settings/users";
     $notify->sendAdmin($adminMsg, 'staff_jobs_unmapped_alert');
     log_msg("Admin alert sent — unmapped staff: {$names}");
 }

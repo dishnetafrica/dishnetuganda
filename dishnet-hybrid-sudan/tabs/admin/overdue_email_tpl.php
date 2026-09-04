@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['tpl_action'] ?? '') === 'p
         'amount'         => '$50.00',
         'due_date'       => '9 Apr 2026',
         'days_overdue'   => (string)$pvDays,
-        'invoice_url'    => 'https://crm.dishnetafrica.com/crm/client/1260',
+        'invoice_url'    => dn_crm_link($config, 'client/1260'),
         'accounts_phone' => $globalPhone,
         'accounts_email' => $globalEmail,
         '_hero_sub'      => $pvSub,

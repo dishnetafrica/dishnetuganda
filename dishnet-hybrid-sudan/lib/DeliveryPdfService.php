@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/crm_url.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains'))  { function str_contains(string $h, string $n): bool  { return $n===''||strpos($h,$n)!==false; } }
@@ -249,10 +250,10 @@ class DeliveryPdfService
         ], JSON_PRETTY_PRINT));
 
         // ── 6. Build public URL ────────────────────────────────────────────
-        $siteUrl = rtrim($this->config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
+        $siteUrl = dn_crm_web($this->config);
         $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
         $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-        $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+        $pdfUrl  = dn_plugin_public($this->config)
                  . '?page=api&action=serve_delivery_pdf'
                  . '&file=' . urlencode($pdfFile)
                  . '&token=' . urlencode($pdfToken);

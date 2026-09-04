@@ -343,7 +343,7 @@ foreach ($allInvoices as $inv) {
 
     $amtFmt     = dn_cur($config) . number_format($amtDue, 2);
     $dueFmt     = $dueDate->format('d M Y');
-    $invoiceUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/') . "/crm/client/{$clientId}";
+    $invoiceUrl = dn_crm_link($config, "client/{$clientId}");
     $payUrl     = $freshInv['proformaInvoiceLink'] ?? $invoiceUrl;
     $ok         = false;
     $error      = '';

@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='sync_org7_r
                 'balance'     => (float)($c['accountBalance'] ?? 0),
                 'is_active'   => (bool)($c['isActive'] ?? true),
                 'is_lead'     => (bool)($c['isLead'] ?? false),
-                'crm_url'     => rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/').'/crm/client/' . (int)($c['id'] ?? 0),
+                'crm_url'     => dn_crm_web($config).'/crm/client/' . (int)($c['id'] ?? 0),
                 'org_id'      => $org7OrgId,
                 'synced_at'   => date('Y-m-d H:i:s'),
             ];
@@ -856,7 +856,7 @@ if (($_GET['action'] ?? '') === 'download_backup') {
 
     // ── 6. BACKUP MANIFEST ───────────────────────────────────────────────
     $manifest = json_encode([
-        'plugin'      => 'dishnet-hybrid-telecom',
+        'plugin'      => basename(dirname(__DIR__, 2)),
         'version'     => $pluginVer,
         'type'        => 'full_deployable',
         'created_at'  => date('Y-m-d H:i:s'),
@@ -937,7 +937,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
 
     if ($isTypeA) {
         $manifest = json_decode($zip->getFromIndex($zip->locateName('BACKUP_MANIFEST.json')), true);
-        if (!in_array($manifest['plugin'] ?? '', ['kyc-customer-application', 'dishnet-hybrid-telecom'], true)) {
+        if (!in_array($manifest['plugin'] ?? '', ['kyc-customer-application', 'dishnet-hybrid-telecom', basename(dirname(__DIR__, 2))], true)) {
             flash('Backup is from a different plugin — restore cancelled.', 'danger');
             $zip->close();
             redirect('?page=dashboard&tab=backup');
@@ -962,7 +962,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
                 $preZip->addFile($_preDbPath, $_preDb);
             }
         }
-        $preZip->addFromString('BACKUP_MANIFEST.json', json_encode(['plugin'=>'dishnet-hybrid-telecom','version'=>'auto-pre-restore','created_at'=>date('Y-m-d H:i:s'),'note'=>'Auto-backup before restore.'], JSON_PRETTY_PRINT));
+        $preZip->addFromString('BACKUP_MANIFEST.json', json_encode(['plugin'=>basename(dirname(__DIR__, 2)),'version'=>'auto-pre-restore','created_at'=>date('Y-m-d H:i:s'),'note'=>'Auto-backup before restore.'], JSON_PRETTY_PRINT));
         $preZip->close();
     }
 
@@ -1166,7 +1166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resto
                 $preZip->addFile($_preDbPath, $_preDb);
             }
         }
-        $preZip->addFromString('BACKUP_MANIFEST.json', json_encode(['plugin'=>'dishnet-hybrid-telecom','version'=>'auto-pre-gdrive-restore','created_at'=>date('Y-m-d H:i:s'),'note'=>'Auto-backup before Google Drive restore.'], JSON_PRETTY_PRINT));
+        $preZip->addFromString('BACKUP_MANIFEST.json', json_encode(['plugin'=>basename(dirname(__DIR__, 2)),'version'=>'auto-pre-gdrive-restore','created_at'=>date('Y-m-d H:i:s'),'note'=>'Auto-backup before Google Drive restore.'], JSON_PRETTY_PRINT));
         $preZip->close();
     }
 

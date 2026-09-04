@@ -99,7 +99,7 @@
     <table class="kyc-table">
     <tr><td style="font-weight:700;">WhatsApp</td><td>+211 XX XXX XXXX</td></tr>
     <tr><td style="font-weight:700;">Email</td><td>support@dishnetafrica.com</td></tr>
-    <tr><td style="font-weight:700;">CRM Portal</td><td><a href="https://crm.dishnetafrica.com" target="_blank">crm.dishnetafrica.com</a></td></tr>
+    <tr><td style="font-weight:700;">CRM Portal</td><td><a href="<?= h(dn_crm_web($config)) ?>" target="_blank"><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></a></td></tr>
     </table>
     </div></div>
 

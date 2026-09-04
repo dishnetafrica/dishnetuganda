@@ -183,7 +183,7 @@
     <div class="screen-dot" style="background:#ff5f56;"></div>
     <div class="screen-dot" style="background:#ffbd2e;"></div>
     <div class="screen-dot" style="background:#27c93f;"></div>
-    <div class="screen-url">crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php</div>
+    <div class="screen-url"><?= h(preg_replace('#^https?://#', '', dn_plugin_public($config))) ?></div>
   </div>
   <div class="screen-body" style="color:#ccc;font-size:13px;">
     Enter your <strong style="color:#fff;">username</strong> and <strong style="color:#fff;">password</strong> → Click <strong style="color:#D41C1C;">Login</strong>

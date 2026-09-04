@@ -211,7 +211,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                     </td>
                     <td style="text-align:center;">
                         <?php if (!empty($pl['ucrm_product_id'])): ?>
-                            <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$pl['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$pl['ucrm_product_id'] ?> 🔗</a>
+                            <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$pl['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$pl['ucrm_product_id'] ?> 🔗</a>
                         <?php else: ?>
                             <button onclick="syncPlan(<?= (int)$pl['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                         <?php endif; ?>
@@ -285,7 +285,7 @@ function syncPlan(planId, btn) {
     .then(function(r){ return r.json(); })
     .then(function(d){
         if (d.data && d.data.ucrm_product_id) {
-            btn.outerHTML = '<a href="https://crm.dishnetafrica.com/crm/system/items/products/' + d.data.ucrm_product_id + '" target="_blank" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#' + d.data.ucrm_product_id + ' 🔗</a>';
+            btn.outerHTML = '<a href="' + <?= json_encode(dn_crm_web($config) . '/crm/system/items/products/') ?> + d.data.ucrm_product_id + '" target="_blank" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#' + d.data.ucrm_product_id + ' 🔗</a>';
         } else {
             btn.textContent = '❌'; btn.disabled = false;
             alert('Sync failed: ' + (d.message || 'Unknown error'));

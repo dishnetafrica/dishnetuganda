@@ -609,8 +609,8 @@ if ($page === 'app_manifest') {
     header('Content-Type: application/manifest+json');
     $scheme    = (isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http';
     $host      = $_SERVER['HTTP_HOST'];
-    $scriptPath= $_SERVER['SCRIPT_NAME']; // e.g. /crm/_plugins/dishnet-hybrid-telecom/public.php
-    $pluginDir = dirname($scriptPath);    // e.g. /crm/_plugins/dishnet-hybrid-telecom
+    $scriptPath= $_SERVER['SCRIPT_NAME']; // e.g. /crm/_plugins/dishnet-hybrid-sudan/public.php
+    $pluginDir = dirname($scriptPath);    // e.g. /crm/_plugins/dishnet-hybrid-sudan
     $pluginUrl = $scheme.'://'.$host.$scriptPath;
     // start_url and scope must be same-origin as the manifest URL (?page=app_manifest)
     // Scope = the directory containing public.php, so all ?page= URLs are in scope
@@ -1117,7 +1117,7 @@ if ($page === 'receipt') {
     '.(!empty($col['note']) ? '<div class="row"><span>Note</span><span>'.h($col['note']).'</span></div>' : '').'
     <div class="footer">
         <p>Thank you for your payment!</p>
-        <p style="margin-top:6px;">DishNet Africa Ltd | crm.dishnetafrica.com</p>
+        <p style="margin-top:6px;">'.h(preg_replace('#^https?://#', '', dn_crm_web($config))).'</p>
     </div>
     <script>window.onload=function(){window.print();}</script>
     </body></html>';

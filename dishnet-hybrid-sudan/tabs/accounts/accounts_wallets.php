@@ -56,7 +56,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
     $roleColor = ['admin'=>'#1565C0','support'=>'#7B1FA2','support_leader'=>'#4527A0','accountant'=>'#E65100','sales'=>'#2E7D32','field_agent'=>'#E65100'][$roleStr] ?? '#6b7280';
     $urgency  = $debt >= 5000 ? '#c0392b' : ($debt >= 1000 ? '#E65100' : '#F57F17');
     $crmId    = (int)($r['ftth_crm_client_id'] ?? 0);
-    $crmUrl   = $crmId ? h(rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/').'/crm/client/'.$crmId) : '';
+    $crmUrl   = $crmId ? h(dn_crm_web($config).'/crm/client/'.$crmId) : '';
     $lastSync = $r['wallet_crm_synced_at'] ?? null;
 ?>
 <div style="background:#fff;border-radius:12px;padding:13px 14px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.04);border-left:4px solid <?= $urgency ?>;">

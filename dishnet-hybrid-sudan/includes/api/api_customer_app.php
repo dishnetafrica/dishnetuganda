@@ -502,7 +502,7 @@ if (!function_exists('ca_send_otp_email')) {
 // ═══════════════════════════════════════════════════════════════════
 if ($act === 'app_health_app' && $met === 'GET') {
     $ok2([
-        'plugin'  => 'dishnet-hybrid-telecom',
+        'plugin'  => basename(dirname(__DIR__, 2)),
         'feature' => 'customer-app-api',
         'version' => 'v4.11.45+debug',
         'time'    => gmdate('c'),
@@ -2321,10 +2321,9 @@ if (!function_exists('ca_site_dish_resolve')) {
         // admin session cookie isn't available (e.g. customer-app bearer only),
         // the call may 401 — that's handled by the 'infrastructure' branch.
         //
-        // URL is hardcoded to crm.dishnetafrica.com rather than pulled from
-        // $config — $config isn't in this helper function's scope, and this
-        // is an internal loopback call where the hostname is stable anyway.
-        $drUrl = 'https://crm.dishnetafrica.com/crm/_plugins/dishnet-data-report/public.php'
+        // dn_crm_web() needs no $config — it reads this install's ucrm.json,
+        // so the loopback call always targets the local CRM hostname.
+        $drUrl = dn_crm_web() . '/crm/_plugins/dishnet-data-report/public.php'
                . '?action=dr_wifi_get_status&router_id=' . urlencode($routerId);
 
         $ch = curl_init($drUrl);
@@ -3153,7 +3152,7 @@ if (!function_exists('ca_hotspot_generate_password')) {
  */
 if (!function_exists('ca_hotspot_dr_call')) {
     function ca_hotspot_dr_call(string $action, array $params, string $method = 'GET'): ?array {
-        $base = 'https://crm.dishnetafrica.com/crm/_plugins/dishnet-data-report/public.php';
+        $base = dn_crm_web() . '/crm/_plugins/dishnet-data-report/public.php';
         $ch = null;
         try {
             if ($method === 'POST') {
@@ -4640,10 +4639,10 @@ if ($act === 'app_invoice_send_whatsapp' && $met === 'POST') {
     ]));
 
     // Build URL
-    $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
+    $siteUrl = dn_crm_web($config);
     $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
     $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-    $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+    $pdfUrl  = dn_plugin_public($config)
              . '?page=api&action=serve_temp_pdf'
              . '&file=' . urlencode($pdfFile)
              . '&token=' . urlencode($pdfToken);

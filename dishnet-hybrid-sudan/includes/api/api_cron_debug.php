@@ -1119,7 +1119,7 @@
         $pluginUrl = rtrim($config['crm_base_url'] ?? '', '/');
         $pluginUrl = preg_replace('#/api/v[0-9.]+$#', '', $pluginUrl);
         $pluginUrl = preg_replace('#/crm$#', '', $pluginUrl);
-        $expectedUrl = $pluginUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php?page=webhook';
+        $expectedUrl = dn_plugin_public($config) . '?page=webhook';
 
         // Find matching webhook
         $found = null;
@@ -1158,7 +1158,7 @@
         $pluginUrl = rtrim($config['crm_base_url'] ?? '', '/');
         $pluginUrl = preg_replace('#/api/v[0-9.]+$#', '', $pluginUrl);
         $pluginUrl = preg_replace('#/crm$#', '', $pluginUrl);
-        $webhookUrl = $pluginUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php?page=webhook';
+        $webhookUrl = dn_plugin_public($config) . '?page=webhook';
 
         // Check if already exists
         $existing = $crm->getWebhooks();

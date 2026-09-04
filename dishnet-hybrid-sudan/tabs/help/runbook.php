@@ -102,11 +102,11 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
     <div class="rb-emergency">
         <h3>🚨 Plugin crashed / System Error?</h3>
         <p><strong>Step 1 — Try the emergency repair URL first:</strong></p>
-        <p style="font-size:12px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;word-break:break-all;">https://crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php?page=emergency_repair&key=DISHNET_REPAIR</p>
+        <p style="font-size:12px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;word-break:break-all;"><?= h(dn_plugin_public($config)) ?>?page=emergency_repair&amp;key=DISHNET_REPAIR</p>
         <p style="font-size:12px;margin-top:6px;color:rgba(255,255,255,.7);">This works even when the plugin is completely broken. It deletes stale database files and self-heals.</p>
         <p><strong>Step 2 — If that doesn't work:</strong> UCRM Admin → System → Plugins → Upload new plugin ZIP (works even when plugin shows error)</p>
         <p><strong>Step 3 — SSH (last resort):</strong></p>
-        <p style="font-size:11px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;">rm -f /data/ucrm/data/plugins/dishnet-hybrid-telecom/data/plugin.sqlite3-wal<br>rm -f /data/ucrm/data/plugins/dishnet-hybrid-telecom/data/plugin.sqlite3-shm</p>
+        <p style="font-size:11px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;">rm -f /data/ucrm/data/plugins/<?= h(basename(dirname(__DIR__, 2))) ?>/data/plugin.sqlite3-wal<br>rm -f /data/ucrm/data/plugins/<?= h(basename(dirname(__DIR__, 2))) ?>/data/plugin.sqlite3-shm</p>
         <p><strong>Never do a full server restore for a plugin issue. Data is always safe in plugin.sqlite3.</strong></p>
         <div class="contacts">
             <a href="tel:+211921443002">📞 Aida (CTO)</a>
@@ -158,7 +158,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">If the payment is in the cashbook but the customer's CRM invoice is still unpaid, the CRM sync may be delayed. Wait 10 minutes and check again.</div></div>
 
             <strong>If a CRM payment is missing:</strong>
-            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Log into UCRM directly: <a href="https://crm.dishnetafrica.com/crm" target="_blank" class="rb-check-btn">crm.dishnetafrica.com/crm</a>. Go to Billing → Payments and search for the payment.</div></div>
+            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Log into UCRM directly: <a href="<?= h(dn_crm_link($config, '')) ?>" target="_blank" class="rb-check-btn"><?= h(preg_replace('#^https?://#', '', dn_crm_link($config, ''))) ?></a>. Go to Billing → Payments and search for the payment.</div></div>
             <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">If the payment exists in UCRM but not in the plugin, the webhook may have failed. Go to <strong>Admin → Maintenance</strong> and look for recent webhook errors.</div></div>
 
             <div class="rb-alert danger">🚨 If 5+ payments are missing in the same day, this is a webhook failure. Escalate to Aida immediately — there may be a UCRM webhook configuration issue.</div>
@@ -177,7 +177,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t"><strong>Account deactivated:</strong> Check <strong>Admin → Users</strong> — make sure the account shows <span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:4px;font-size:11px;">Active</span>. If not, click Edit and re-activate.</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t"><strong>Rate limited:</strong> After 5 wrong password attempts, the account is locked for 15 minutes. Just wait, or an admin can clear the lockout from the Users page.</div></div>
             <div class="rb-step"><div class="rb-step-n">4</div><div class="rb-step-t"><strong>Android app blank screen:</strong> Close the app completely, clear the app cache (Settings → Apps → DishNet → Clear Cache), and reopen. If still blank, check internet connection.</div></div>
-            <div class="rb-step"><div class="rb-step-n">5</div><div class="rb-step-t"><strong>iPhone PWA blank screen:</strong> Force-close Safari, reopen the PWA. If still blank, delete the PWA from home screen and re-add it from <code>crm.dishnetafrica.com</code>.</div></div>
+            <div class="rb-step"><div class="rb-step-n">5</div><div class="rb-step-t"><strong>iPhone PWA blank screen:</strong> Force-close Safari, reopen the PWA. If still blank, delete the PWA from home screen and re-add it from <code><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></code>.</div></div>
         </div>
     </div>
 
@@ -251,7 +251,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
 
             <strong>All cron jobs are triggered by one master URL:</strong>
             <div style="background:#f1f5f9;border-radius:8px;padding:10px 14px;font-family:'Courier New',monospace;font-size:11px;color:#1e293b;word-break:break-all;margin:8px 0;">
-                https://crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/cron/master.php
+                <?= h(dn_plugin_file($config, 'cron/master.php')) ?>
             </div>
 
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Log into <a href="https://cron-job.org" target="_blank" class="rb-check-btn">cron-job.org</a> and check the master cron job. It should run every 1-2 minutes.</div></div>
@@ -418,7 +418,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">WhatsApp notification shows both file names and sizes when complete.</div></div>
             <strong>To restore on new CRM:</strong>
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Download CODE zip from Drive → Upload to UCRM → Plugins (no data/ inside, UCRM accepts it)</div></div>
-            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Download DATA zip → SCP to server → <code>cd /data/ucrm/data/plugins/dishnet-hybrid-telecom/ && unzip -o DATA.zip && chown -R 33:33 data/</code></div></div>
+            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Download DATA zip → SCP to server → <code>cd /data/ucrm/data/plugins/<?= h(basename(dirname(__DIR__, 2))) ?>/ && unzip -o DATA.zip && chown -R 33:33 data/</code></div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">Update CRM token in Settings → Run Full Sync from UCRM Data tab.</div></div>
             <strong>Force test:</strong>
             <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t"><code>?page=api&action=force_cron_job&job=gdrive_backup</code></div></div>
@@ -630,8 +630,8 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
         </div>
         <div class="rb-card-body">
             <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;width:35%;">CRM (UCRM)</td><td style="padding:8px;border:1px solid #e2e8f0;">crm.dishnetafrica.com</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">Plugin Dashboard</td><td style="padding:8px;border:1px solid #e2e8f0;">crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php</td></tr>
+                <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;width:35%;">CRM (UCRM)</td><td style="padding:8px;border:1px solid #e2e8f0;"><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">Plugin Dashboard</td><td style="padding:8px;border:1px solid #e2e8f0;"><?= h(preg_replace('#^https?://#', '', dn_plugin_public($config))) ?></td></tr>
                 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">Standalone Scanner</td><td style="padding:8px;border:1px solid #e2e8f0;">...public.php?page=scanner</td></tr>
                 <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">WhatsML Server</td><td style="padding:8px;border:1px solid #e2e8f0;">wa.dishnetafrica.com (134.199.215.120)</td></tr>
                 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">BlueCard Server</td><td style="padding:8px;border:1px solid #e2e8f0;">162.241.149.144 (WHM/cPanel)</td></tr>

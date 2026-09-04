@@ -577,7 +577,7 @@ $roleColors = [
   $isActive = $r['is_active'] ?? true;
   $initials = strtoupper(substr($r['name'] ?? '?', 0, 1) . (strpos($r['name'],' ') !== false ? substr(strrchr($r['name'],' '),1,1) : ''));
   $hasCrm   = !empty($r['ftth_crm_client_id']);
-  $crmUrl   = $hasCrm ? h(rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/').'/crm/client/'.(int)$r['ftth_crm_client_id']) : '';
+  $crmUrl   = $hasCrm ? h(dn_crm_web($config).'/crm/client/'.(int)$r['ftth_crm_client_id']) : '';
   $dataAttrs = 'data-name="'.h(strtolower($r['name']??'')).'" data-email="'.h(strtolower($r['email']??'')).'" data-phone="'.h(strtolower($r['phone']??'')).'" data-role="'.h($role).'" data-status="'.($isActive?'active':'inactive').'" data-crm="'.($hasCrm?'linked':'unlinked').'"';
 ?>
 <div class="rt-card <?= $isSelf?'self':'' ?> <?= !$isActive?'inactive':'' ?>" <?= $dataAttrs ?>>
@@ -1161,7 +1161,7 @@ function crToggleComm(val) {
   <tbody>
   <?php foreach ($org7Clients as $c7):
     $isLinked   = !empty($c7['linked_plugin_id']);
-    $crmUrl     = h(rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/').'/crm/client/' . $c7['id']);
+    $crmUrl     = h(dn_crm_web($config).'/crm/client/' . $c7['id']);
     $matchKey   = strtolower($c7['email'] ?? '');
     $emailMatch = $matchKey ? ($pluginByEmail[$matchKey] ?? null) : null;
     $linkStatus = $isLinked ? 'linked' : ($emailMatch ? 'match' : 'unlinked');

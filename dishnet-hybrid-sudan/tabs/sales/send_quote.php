@@ -408,7 +408,7 @@ async function previewMsg(ctx) {
   previewEl.textContent = 'Loading preview…';
   previewEl.style.display = 'block';
   try {
-    const resp = await fetch('?plugin=dishnet-hybrid-telecom&api=1', {
+    const resp = await fetch('?plugin=' + <?= json_encode(basename(dirname(__DIR__, 2))) ?> + '&api=1', {
           credentials:'same-origin',
           method: 'POST',
       headers: {'Content-Type':'application/json'},

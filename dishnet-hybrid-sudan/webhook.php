@@ -169,10 +169,8 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
             'token' => $pdfToken, 'created' => time(), 'invoice' => $invoNum,
         ]));
 
-        $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-        $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
-        $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-        $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+        $siteUrl = dn_crm_web($config);
+        $pdfUrl  = dn_plugin_public($config)
                  . '?page=api&action=serve_temp_pdf'
                  . '&file=' . urlencode($pdfFile)
                  . '&token=' . urlencode($pdfToken);
@@ -439,7 +437,7 @@ switch ($changeType) {
                           . "This phone already belongs to:\n"
                           . "*" . ($dupFound['name'] ?? 'Unknown') . "* (CRM #" . ($dupFound['id'] ?? '?') . ")\n\n"
                           . "Please review and merge if duplicate.\n"
-                          . "crm.dishnetafrica.com/crm/client/{$clientId}";
+                          . dn_crm_web($config) . "/crm/client/{$clientId}";
 
                 $notify->sendAdmin($alertMsg, 'ops_dup_alert');
                 whLog($changeType, "Duplicate phone alert sent — new #{$clientId} matches existing #" . ($dupFound['id'] ?? '?'));
@@ -1904,7 +1902,7 @@ switch ($changeType) {
                     . "📍 Address: " . ($address ?: 'See job details') . "\n"
                     . "📅 Date: {$dateFormatted}\n"
                     . ($timeFormatted ? "⏰ Time: {$timeFormatted}\n" : "")
-                    . "\n🔗 View in CRM: crm.dishnetafrica.com\n\n"
+                    . "\n🔗 View in CRM: " . dn_crm_web($config) . "\n\n"
                     . "— DishNet Support";
                 
                 $notify->sendRaw($techPhone, $message, 'job_assigned');
@@ -2292,10 +2290,8 @@ switch ($changeType) {
 
                         // Build public URL for WASender to fetch
                         // crm_base_url may include /api/v2.1 - strip it to get site root
-                        $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-                        $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);   // strip /api/v2.1
-                        $siteUrl = preg_replace('#/crm$#', '', $siteUrl);             // strip trailing /crm
-                        $pdfServeUrl = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+                        $siteUrl = dn_crm_web($config);
+                        $pdfServeUrl = dn_plugin_public($config)
                                  . '?page=api&action=serve_quote_pdf'
                                  . '&file=' . urlencode($pdfFile)
                                  . '&token=' . urlencode($pdfToken);

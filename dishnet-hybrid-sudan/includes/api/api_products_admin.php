@@ -301,7 +301,7 @@
                     'ucrm_id'       => $ucrmId,
                     'ucrm_name'     => $up['name'],
                     'ucrm_price'    => $up['price'] ?? 0,
-                    'ucrm_url'      => 'https://crm.dishnetafrica.com/crm/system/items/products/' . $ucrmId,
+                    'ucrm_url'      => dn_crm_web($config) . '/crm/system/items/products/' . $ucrmId,
                     'name_match'    => $nameMatch,
                     'price_match'   => $priceMatch,
                     'status'        => ($nameMatch && $priceMatch) ? '✅ synced' : '⚠️ mismatch',

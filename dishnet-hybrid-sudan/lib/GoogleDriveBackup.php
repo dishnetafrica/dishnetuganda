@@ -730,7 +730,7 @@ class GoogleDriveBackup
             "Created: " . date('Y-m-d H:i:s') . "\n\n" .
             "Step 1: Upload the CODE zip via UCRM Plugins\n" .
             "Step 2: SCP this DATA zip to server\n" .
-            "Step 3: cd /data/ucrm/data/plugins/dishnet-hybrid-telecom/\n" .
+            "Step 3: cd /data/ucrm/data/plugins/" . basename(dirname(__DIR__)) . "/\n" .
             "        unzip -o /tmp/dishnet-DATA-*.zip\n" .
             "        chown -R 33:33 data/\n" .
             "Step 4: Settings -> Update CRM token\n" .

@@ -251,7 +251,7 @@ if (!$_sbmCanView) {
 
 <script>
 (function () {
-  const HYB_API = '<?= htmlspecialchars($_SERVER['SCRIPT_NAME'] ?? '/crm/_plugins/dishnet-hybrid-telecom/public.php') ?>?page=api&action=';
+  const HYB_API = '<?= htmlspecialchars($_SERVER['SCRIPT_NAME'] ?? '/crm/_plugins/' . basename(dirname(__DIR__, 2)) . '/public.php') ?>?page=api&action=';
   const DR_BASE  = '/crm/_plugins/dishnet-data-report/public.php?action=';
   const canBlock = <?= $_sbmCanBlock ? 'true' : 'false' ?>; // false for accountant/support_leader
 

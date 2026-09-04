@@ -635,8 +635,7 @@
             <div style="font-size:10px;color:#374151;line-height:1.5;">
               In Tasker/MacroDroid, configure HTTP POST:<br>
               <code style="background:#dcfce7;padding:1px 4px;border-radius:3px;font-size:9px;word-break:break-all;">
-                <?= h(rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')
-                    ?:'https://crm.dishnetafrica.com') ?>/crm/_plugins/dishnet-hybrid-telecom/public.php?page=api&action=upload_call_recording
+                <?= h(dn_plugin_public($config)) ?>?page=api&action=upload_call_recording
               </code><br>
               Fields: <code style="background:#dcfce7;padding:1px 4px;border-radius:3px;">recording</code> (file), <code style="background:#dcfce7;padding:1px 4px;border-radius:3px;">phone</code> (caller number), <code style="background:#dcfce7;padding:1px 4px;border-radius:3px;">direction</code> (inbound/outbound)<br>
               Header: <code style="background:#dcfce7;padding:1px 4px;border-radius:3px;">Authorization: Bearer {agent_token}</code>
@@ -662,7 +661,7 @@
   Folder: /storage/emulated/0/BCR/ (or check BCR settings for exact path)
   
 Action: HTTP Request
-  URL: <?= h(rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/'))?>/crm/_plugins/dishnet-hybrid-telecom/public.php?page=api&action=upload_call_recording
+  URL: <?= h(dn_plugin_public($config))?>?page=api&action=upload_call_recording
   Method: POST
   Content-Type: multipart/form-data
   Fields:
@@ -694,7 +693,7 @@ Note: Each agent uses their own API token from Operations Hub → My Wallet → 
             if (file_exists($recPath)):
             ?>
             <audio controls style="height:24px;flex:1;min-width:100px;" preload="none"
-              src="<?= h($_crmBaseW??"") ?>/crm/_plugins/dishnet-hybrid-telecom/public.php?page=api&action=get_call_recording&file=<?= urlencode(basename($rec['file']??'')) ?>&token=<?= h($retailer['api_token']??"") ?>">
+              src="<?= h(dn_plugin_public($config)) ?>?page=api&action=get_call_recording&file=<?= urlencode(basename($rec['file']??'')) ?>&token=<?= h($retailer['api_token']??"") ?>">
             </audio>
             <?php else: ?><span style="color:#9ca3af;font-size:10px;">file missing</span><?php endif; ?>
           </div>
@@ -710,7 +709,7 @@ Note: Each agent uses their own API token from Operations Hub → My Wallet → 
     btn.disabled = true; btn.textContent = '⏳ Running…';
     var res = document.getElementById('cronRunResult');
     res.textContent = 'Running cron…';
-    fetch('<?= h($_crmBaseW??"") ?>/crm/_plugins/dishnet-hybrid-telecom/public.php?page=api&action=run_leads_cron', {
+    fetch('<?= h(dn_plugin_public($config)) ?>?page=api&action=run_leads_cron', {
           credentials:'same-origin',
           method: 'POST',
       headers: { 'Authorization': 'Bearer <?= h($retailer['api_token'] ?? "") ?>' }

@@ -337,10 +337,8 @@ class QuotePdfService
         ], JSON_PRETTY_PRINT));
 
         // ── 7. Build public URL ──────────────────────────────────────────
-        $siteUrl  = rtrim($this->config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-        $siteUrl  = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
-        $siteUrl  = preg_replace('#/crm$#', '', $siteUrl);
-        $publicUrl = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+        $siteUrl  = dn_crm_web($this->config);
+        $publicUrl = dn_plugin_public($this->config)
                    . '?page=api&action=serve_quote_pdf'
                    . '&file=' . urlencode($pdfFile)
                    . '&token=' . urlencode($pdfToken);

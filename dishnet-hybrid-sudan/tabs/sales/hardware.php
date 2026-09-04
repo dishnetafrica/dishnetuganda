@@ -111,7 +111,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                 <td style="text-align:right;font-weight:600;"><?= $curSym ?><?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
                 <td style="text-align:center;">
                     <?php if (!empty($hw['ucrm_product_id'])): ?>
-                        <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
+                        <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
                     <?php else: ?>
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
@@ -149,7 +149,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
             <div>
                 <?php $_instProdId = (int)($config['fiber_install_product_id'] ?? 244); ?>
                 <?php if ($_instProdId > 0): ?>
-                <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= $_instProdId ?>" target="_blank" style="font-family:monospace;font-size:12px;background:#eff6ff;color:#1d4ed8;padding:6px 12px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">
+                <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= $_instProdId ?>" target="_blank" style="font-family:monospace;font-size:12px;background:#eff6ff;color:#1d4ed8;padding:6px 12px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">
                     #<?= $_instProdId ?> 🔗 View in CRM
                 </a>
                 <?php endif; ?>
@@ -183,7 +183,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                 <td style="text-align:right;font-weight:600;"><?= $curSym ?><?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
                 <td style="text-align:center;">
                     <?php if (!empty($hw['ucrm_product_id'])): ?>
-                        <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
+                        <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
                     <?php else: ?>
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
@@ -217,7 +217,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                 <td style="text-align:right;font-weight:600;"><?= $curSym ?><?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
                 <td style="text-align:center;">
                     <?php if (!empty($hw['ucrm_product_id'])): ?>
-                        <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
+                        <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
                     <?php else: ?>
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
@@ -248,7 +248,7 @@ function syncHw(hwId, btn) {
     .then(function(r){ return r.json(); })
     .then(function(d){
         if (d.data && d.data.ucrm_product_id) {
-            btn.outerHTML = '<a href="https://crm.dishnetafrica.com/crm/system/items/products/' + d.data.ucrm_product_id + '" target="_blank" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#' + d.data.ucrm_product_id + ' 🔗</a>';
+            btn.outerHTML = '<a href="' + <?= json_encode(dn_crm_web($config) . '/crm/system/items/products/') ?> + d.data.ucrm_product_id + '" target="_blank" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#' + d.data.ucrm_product_id + ' 🔗</a>';
         } else {
             btn.textContent = '❌'; btn.disabled = false;
             alert('Sync failed: ' + (d.message || 'Unknown error'));

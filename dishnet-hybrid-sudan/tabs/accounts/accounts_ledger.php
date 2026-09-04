@@ -303,8 +303,7 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
   $_perPage    = 20;
 
   // Build CRM base URL
-  $_crmBase = rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/');
-  if (empty($_crmBase)) $_crmBase = 'https://crm.dishnetafrica.com';
+  $_crmBase = dn_crm_web($config);
 
   // ── Month-wise breakdown (all apps for this retailer)
   $_monthBreakdown = []; // ['2026-03' => ['count'=>X, 'active'=>X, 'pending'=>X, 'charged'=>X]]
@@ -417,7 +416,7 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
     <span style="font-size:10px;color:#9ca3af;">showing top <?= min(10,$_ucrmCount) ?> of <?= $_ucrmCount ?></span>
   </div>
   <?php
-  $_crmBase2 = rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/');
+  $_crmBase2 = dn_crm_web($config);
   foreach (array_slice($_spClients,0,10) as $_uc):
     $_ucBal = (float)($_uc['balance']??0);
   ?>

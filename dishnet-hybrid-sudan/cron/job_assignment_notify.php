@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/../lib/crm_url.php';
 // Note: No strict_types - included from master.php
 date_default_timezone_set('Africa/Juba');
 
@@ -139,11 +140,7 @@ foreach ($allJobs as $jobId => $job) {
     $dateLabel  = ($jobDate === $today) ? 'Today' : date('D d M', strtotime($jobDate ?: 'today'));
     
     // UCRM job action links
-    // Use configured CRM base URL (not hardcoded ucrm.dishnetafrica.com)
-    $_crmRaw = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-    $_crmRaw = preg_replace('#/api/v[0-9.]+$#', '', $_crmRaw);
-    $ucrmBase = rtrim($_crmRaw, '/crm') ?: 'https://crm.dishnetafrica.com';
-    $ucrmBase = rtrim($ucrmBase, '/');
+    $ucrmBase = dn_crm_web($config);
     $acceptLink    = "{$ucrmBase}/crm/scheduling/job/{$jobId}";
     $completeLink  = "{$ucrmBase}/crm/scheduling/job/{$jobId}";
     $reschedLink   = "{$ucrmBase}/crm/scheduling/job/{$jobId}";

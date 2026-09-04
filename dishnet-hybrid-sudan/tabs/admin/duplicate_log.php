@@ -97,7 +97,7 @@ $reviewed = array_filter($log, fn($e) => ($e['review_status'] ?? 'pending') !== 
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <?php if ($e['existing_crm_id']): ?>
-        <a href="https://crm.dishnetafrica.com/crm/client/<?= (int)$e['existing_crm_id'] ?>" target="_blank"
+        <a href="<?= dn_crm_web($config) ?>/crm/client/<?= (int)$e['existing_crm_id'] ?>" target="_blank"
            style="background:#1d4ed8;color:#fff;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;text-decoration:none;">
             View CRM #<?= (int)$e['existing_crm_id'] ?>
         </a>
