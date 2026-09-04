@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="styles.css?v=ff457a2e">
+<link rel="stylesheet" href="styles.css?v=bee29d33">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd \u2014 Uganda", "url": "https://dishnetuganda.com", "logo": "https://dishnetuganda.com/assets/img/og-uganda.png", "image": "https://dishnetuganda.com/assets/img/og-uganda.png", "telephone": "+256 705 993 348", "email": "uganda@dishnetafrica.com", "address": {"@type": "PostalAddress", "streetAddress": "Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market", "addressLocality": "Kampala", "addressCountry": "UG"}, "areaServed": ["Kampala", "Entebbe", "Wakiso", "Mukono", "Masaka", "Mityana", "Mubende", "Luwero", "Kayunga", "Mpigi", "Jinja", "Mbale", "Soroti", "Tororo", "Iganga", "Busia", "Kumi", "Kapchorwa", "Pallisa", "Bugiri", "Gulu", "Lira", "Arua", "Kitgum", "Adjumani", "Moyo", "Nebbi", "Pader", "Apac", "Koboko", "Mbarara", "Fort Portal", "Hoima", "Kasese", "Kabale", "Masindi", "Bushenyi", "Ntungamo", "Rukungiri", "Kisoro"], "description": "Starlink satellite internet, fiber, managed WiFi zones, CCTV and network security across Uganda.", "sameAs": ["https://dishnetafrica.com"]}</script>
 </head>
 <body>
@@ -62,13 +62,16 @@
   <div class="container">
     <div class="ug-hero-grid">
       <div class="fade-up">
-        <span class="ug-hero-tag"><span class="ug-hero-tag-dot"></span>Now connecting Uganda — all four regions</span>
-        <h1>Fast Internet,<br><span class="accent">Anywhere</span> in Uganda</h1>
-        <p class="ug-hero-desc">From Kampala to Kisoro, Gulu to Busia — DishNet delivers Starlink satellite internet, fiber, managed WiFi zones, and professional CCTV &amp; network security, installed and supported by a local team.</p>
-        <div class="ug-hero-actions">
-          <a href="coverage.html" class="btn btn-primary">Check Your Town</a>
-          <a href="https://wa.me/256705993348" class="btn btn-outline">Talk to Us on WhatsApp</a>
+        <span class="ug-hero-tag"><span class="ug-hero-tag-dot"></span>Available now across all of Uganda</span>
+        <h1>Starlink Internet,<br><span class="accent">Installed &amp; Supported</span> For&nbsp;You</h1>
+        <p class="ug-hero-desc">Genuine Starlink hardware, professional installation, mobile-money billing and a local support team — one price, nothing hidden.</p>
+        <div class="of-addr" id="order">
+          <input type="text" id="ofAddr" placeholder="Enter your address or town — e.g. Ntinda, Kampala" autocomplete="street-address">
+          <button type="button" class="of-geo" id="ofGeo" aria-label="Detect my location">&#128205; Detect</button>
+          <button type="button" class="of-go" id="ofGo">Order Now</button>
         </div>
+        <p class="of-note">Starlink covers every district of Uganda — your address helps us plan delivery and installation.
+          Prefer chatting? <a href="https://wa.me/256705993348" style="color:var(--accent);font-weight:600;">Talk to us on WhatsApp</a>.</p>
       </div>
       <div class="ug-hero-stats fade-up fd2">
         <img src="assets/img/products/standard-kit.webp" alt="Starlink Standard kit — dish and WiFi router, installed by DishNet" width="1100" height="704" decoding="async" style="grid-column:1/-1;width:100%;height:auto;border-radius:14px;box-shadow:var(--shadow-md)">
@@ -77,6 +80,16 @@
         <div class="ug-stat"><b>24/7</b><span>Local support on WhatsApp &amp; phone</span></div>
         <div class="ug-stat"><b>2013</b><span>Serving East Africa since</span></div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="section of-panel" id="orderFlow" hidden>
+  <div class="container">
+    <span class="badge-label badge-accent" id="ofWhere">Good news — you're covered</span>
+    <div data-dishnet-order-flow>
+      <p class="section-subtitle" style="margin-top:10px;">For today's hardware options and plans, message us on WhatsApp —
+        <a href="https://wa.me/256705993348" style="color:var(--accent);font-weight:600">chat now</a>.</p>
     </div>
   </div>
 </section>
@@ -194,7 +207,44 @@
 <a href="https://wa.me/256705993348" class="wa-float" target="_blank" aria-label="WhatsApp"><svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
 <script>
 window.addEventListener('scroll',()=>{const h=document.getElementById('header');if(h)h.classList.toggle('scrolled',window.scrollY>10);});
+(function(){
+  var pin='';
+  var input=document.getElementById('ofAddr');
+  // The order flow (prices.js) calls this to carry the address into WhatsApp.
+  window.DN_ADDR=function(){
+    var t=(input&&input.value||'').trim(); var l=[];
+    if(t&&t.indexOf('My location pin')!==0)l.push('My address: '+t);
+    if(pin)l.push('My pin: https://maps.google.com/?q='+pin);
+    return l.join('\n');
+  };
+  function reveal(){
+    var p=document.getElementById('orderFlow');
+    if(!p)return;
+    p.hidden=false;
+    var t=(input&&input.value||'').trim();
+    var w=document.getElementById('ofWhere');
+    if(w&&t&&t.indexOf('My location pin')!==0)w.textContent='Good news — '+t+' is covered';
+    p.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  var geo=document.getElementById('ofGeo');
+  if(geo)geo.addEventListener('click',function(){
+    if(!navigator.geolocation){geo.textContent='No GPS on this device';return;}
+    geo.textContent='Locating…';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      pin=pos.coords.latitude.toFixed(6)+','+pos.coords.longitude.toFixed(6);
+      geo.textContent='📍 Pin saved';
+      if(input&&!input.value)input.value='My location pin ('+pin+')';
+      reveal();
+    },function(){
+      geo.textContent='📍 Detect';
+      alert('Could not read your location — please type your address or town instead.');
+    },{enableHighAccuracy:true,timeout:12000});
+  });
+  var go=document.getElementById('ofGo');
+  if(go)go.addEventListener('click',reveal);
+  if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter')reveal();});
+})();
 </script>
-<script src="assets/js/prices.js?v=64182b77" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=prices" data-whatsapp="256705993348"></script>
+<script src="assets/js/prices.js?v=a9194f5c" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=prices" data-whatsapp="256705993348" data-name-map='{"DishNet Lite":"Residential Lite","DishNet Home":"Residential","DishNet Flex 24":"Flex 24","DishNet Flex 12":"Flex 12"}'></script>
 </body>
 </html>

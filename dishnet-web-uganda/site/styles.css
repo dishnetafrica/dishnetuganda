@@ -306,3 +306,52 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .live-price { margin: 6px 0 12px; }
 .live-price .lp-amount { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -0.4px; display: block; }
 .live-price .lp-note { font-size: 11.5px; color: var(--text-secondary); }
+
+/* ── Address-first order flow (homepage, light theme) ── */
+.of-addr { display: flex; gap: 8px; max-width: 620px; margin: 26px 0 0; background: #fff;
+  border: 1px solid var(--border); border-radius: 14px; padding: 7px; box-shadow: var(--shadow-md); }
+.of-addr input { flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 15px; font-family: inherit; padding: 10px 6px 10px 12px; }
+.of-addr input::placeholder { color: #9AA0A6; }
+.of-addr .of-geo { flex: 0 0 auto; background: #fff; border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.of-addr .of-go { flex: 0 0 auto; background: var(--accent); color: #fff; border: none; border-radius: 9px;
+  padding: 12px 22px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.of-addr .of-go:hover { background: var(--accent-dark); }
+.of-note { font-size: 13px; color: var(--text-secondary); margin-top: 10px; }
+.of-panel { background: var(--surface); border-top: 1px solid var(--border); }
+.of-step { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--accent); margin: 34px 0 6px; }
+.of-step:first-child { margin-top: 0; }
+.of-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; margin-bottom: 16px; }
+.of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.of-card { position: relative; text-align: left; background: #fff; border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 18px; cursor: pointer; transition: var(--transition); font-family: inherit; }
+.of-card:hover { border-color: #cfcdc7; box-shadow: var(--shadow-md); }
+.of-card.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow), var(--shadow-md); }
+.of-card.sel::after { content: '✓'; position: absolute; top: 12px; right: 14px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--accent); color: #fff; font-size: 14px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; }
+.of-card img { width: 100%; height: 96px; object-fit: contain; margin-bottom: 10px; }
+.of-card h4 { font-family: var(--font-display); font-size: 16.5px; font-weight: 700; margin: 0 0 3px; }
+.of-card .of-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; margin-bottom: 10px; }
+.of-card .of-price { font-size: 17px; font-weight: 800; color: var(--text); }
+.of-card .of-price small { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.of-card .of-tag { display: inline-block; background: var(--accent-glow); color: var(--accent);
+  border-radius: 100px; font-size: 11px; font-weight: 700; padding: 3px 10px; margin-bottom: 8px; }
+.of-summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  margin-top: 30px; background: #fff; border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px 20px; box-shadow: var(--shadow-md); }
+.of-summary .of-sumtext { font-size: 14.5px; color: var(--text-secondary); line-height: 1.5; }
+.of-summary .of-sumtext b { color: var(--text); }
+.of-wa { background: #22C55E; color: #fff; border: none; border-radius: 10px; padding: 14px 26px;
+  font-size: 15.5px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.of-wa:hover { background: #16A34A; }
+.of-wa[disabled] { background: #cfcdc7; cursor: not-allowed; }
+.of-vat { font-size: 12.5px; color: var(--text-secondary); margin-top: 12px; }
+@media (max-width: 700px) {
+  .of-addr { flex-wrap: wrap; }
+  .of-addr input { flex: 1 1 100%; }
+  .of-addr .of-geo, .of-addr .of-go { flex: 1 1 auto; padding: 12px 14px; }
+  .of-summary { flex-direction: column; align-items: stretch; text-align: center; }
+}

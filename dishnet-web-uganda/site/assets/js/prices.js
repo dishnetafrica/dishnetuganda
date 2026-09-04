@@ -13,8 +13,16 @@
  *           data-whatsapp="256705993348"></script>
  *
  * Renders into:
- *   <div data-dishnet-plans></div>       the monthly plans grid
- *   <span data-live-price="NAME"></span> one product's price, by uCRM name
+ *   <div data-dishnet-plans></div>        the monthly plans grid
+ *   <div data-dishnet-order-flow></div>   address-first order flow (homepage):
+ *                                         step 1 hardware, step 2 plan, then a
+ *                                         WhatsApp checkout carrying the
+ *                                         visitor's address/pin (window.DN_ADDR)
+ *   <span data-live-price="NAME"></span>  one product's price, by uCRM name
+ *
+ * data-name-map on the script tag maps uCRM plan names to the display names
+ * customers researched on starlink.com (e.g. "DishNet Home" -> "Residential").
+ * uCRM names stay the billing truth; the label changes, the invoice doesn't.
  */
 (function () {
   'use strict';
@@ -66,6 +74,131 @@
           '</article>';
       }).join('') + '<p class="price-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + '</p>';
     }
+
+    renderOrderFlow(data, cur);
+  }
+
+  // ── Address-first order flow (Starlink-style: hardware, then plan) ──
+  function renderOrderFlow(data, cur) {
+    var host = document.querySelector('[data-dishnet-order-flow]');
+    if (!host || !(data.plans || []).length) return;
+    var MAP = {};
+    try { MAP = JSON.parse(script.getAttribute('data-name-map') || '{}'); } catch (e) {}
+
+    var kits = (data.hardware || []).filter(function (h) { return /package/i.test(h.name); });
+    var flexPlans = data.plans.filter(function (p) { return /flex/i.test(p.name); });
+    var stdPlans  = data.plans.filter(function (p) { return !/flex/i.test(p.name); });
+    var state = { hw: null, plan: null };
+
+    function kitImg(name) {
+      if (/mini/i.test(name)) return 'assets/img/products/mini-kit.webp';
+      if (/standard/i.test(name)) return 'assets/img/products/standard-kit.webp';
+      return '';
+    }
+    function disp(p) { return MAP[p.name] || p.name; }
+
+    function hwCards() {
+      var h = kits.map(function (k) {
+        return '<button type="button" class="of-card" data-hw="' + esc(k.name) + '">' +
+          (kitImg(k.name) ? '<img src="' + kitImg(k.name) + '" alt="' + esc(k.name) + '" loading="lazy">' : '') +
+          '<h4>' + esc(k.name) + '</h4>' +
+          '<div class="of-sub">' + esc(k.description || 'Kit + delivery + professional installation + first month of internet included.') + '</div>' +
+          '<div class="of-price">' + esc(fmt(cur, k.price)) + ' <small>one-time, VAT inclusive</small></div>' +
+          '</button>';
+      }).join('');
+      if (flexPlans.length) {
+        h += '<button type="button" class="of-card" data-hw="__flex">' +
+          '<span class="of-tag">' + esc(cur) + ' 0 upfront</span>' +
+          '<h4>Rent with Flex</h4>' +
+          '<div class="of-sub">No kit to buy — Starlink Mini, installation and internet in one monthly price.</div>' +
+          '<div class="of-price">Pay monthly <small>choose your plan next</small></div>' +
+          '</button>';
+      }
+      h += '<button type="button" class="of-card" data-hw="__own">' +
+        '<h4>I already have a kit</h4>' +
+        '<div class="of-sub">Bring your own Starlink — we connect it to a DishNet plan with local support and mobile-money billing.</div>' +
+        '<div class="of-price">No hardware needed</div>' +
+        '</button>';
+      return h;
+    }
+
+    function planCards() {
+      var list = state.hw === '__flex' ? flexPlans : stdPlans;
+      return list.map(function (p) {
+        var d = disp(p);
+        return '<button type="button" class="of-card" data-plan="' + esc(p.name) + '">' +
+          '<h4>' + esc(d) + '</h4>' +
+          (d !== p.name ? '<div class="of-sub">' + esc(p.name) + ' plan</div>' : '<div class="of-sub">Monthly, cancel anytime</div>') +
+          '<div class="of-price">' + esc(fmt(cur, p.price)) + ' <small>/' + esc(p.period || 'month') + '</small></div>' +
+          (p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
+          '</button>';
+      }).join('');
+    }
+
+    function hwLabel() {
+      if (state.hw === '__flex') return 'Flex (kit included, ' + cur + ' 0 upfront)';
+      if (state.hw === '__own') return 'Using my own Starlink kit';
+      return state.hw;
+    }
+
+    function paint() {
+      var html =
+        '<div class="of-step">Step 1</div><div class="of-title">Choose your hardware</div>' +
+        '<div class="of-grid" data-of-hw>' + hwCards() + '</div>';
+      if (state.hw) {
+        html +=
+          '<div class="of-step">Step 2</div><div class="of-title">Choose your plan</div>' +
+          '<div class="of-grid" data-of-plan>' + planCards() + '</div>';
+      }
+      html +=
+        '<div class="of-summary">' +
+          '<div class="of-sumtext" data-of-sum>' +
+            (state.hw ? '<b>' + esc(hwLabel()) + '</b>' + (state.plan ? ' + <b>' + esc(disp(state.plan)) + '</b> at ' + esc(fmt(cur, state.plan.price)) + '/month' : ' — now choose a plan') :
+              'Pick your hardware to get started — prices are live from our billing system.') +
+          '</div>' +
+          '<button type="button" class="of-wa" data-of-wa' + (state.hw && state.plan ? '' : ' disabled') + '>Complete order on WhatsApp</button>' +
+        '</div>' +
+        '<p class="of-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + ' · A team member confirms everything on WhatsApp before you pay.</p>';
+      host.innerHTML = html;
+      Array.prototype.forEach.call(host.querySelectorAll('[data-hw]'), function (el) {
+        if (state.hw && el.getAttribute('data-hw') === state.hw) el.classList.add('sel');
+      });
+      Array.prototype.forEach.call(host.querySelectorAll('[data-plan]'), function (el) {
+        if (state.plan && el.getAttribute('data-plan') === state.plan.name) el.classList.add('sel');
+      });
+    }
+
+    host.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target : null;
+      if (!t) return;
+      var hw = t.closest('[data-hw]');
+      if (hw) {
+        state.hw = hw.getAttribute('data-hw');
+        state.plan = null;
+        paint();
+        var p2 = host.querySelector('[data-of-plan]');
+        if (p2) p2.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+      var pl = t.closest('[data-plan]');
+      if (pl) {
+        var name = pl.getAttribute('data-plan');
+        state.plan = (state.hw === '__flex' ? flexPlans : stdPlans).filter(function (p) { return p.name === name; })[0] || null;
+        paint();
+        return;
+      }
+      var wa = t.closest('[data-of-wa]');
+      if (wa && state.hw && state.plan) {
+        var extra = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
+        var txt = 'Hello DishNet, I would like to order Starlink.' +
+          '\nHardware: ' + hwLabel() +
+          '\nPlan: ' + disp(state.plan) + (disp(state.plan) !== state.plan.name ? ' (' + state.plan.name + ')' : '') +
+          (extra ? '\n' + extra : '');
+        window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(txt), '_blank');
+      }
+    });
+
+    paint();
   }
 
   function esc(s) {
