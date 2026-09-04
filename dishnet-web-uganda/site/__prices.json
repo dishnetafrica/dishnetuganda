@@ -1,9 +1,0 @@
-{"currency":"UGX","vat_note":"All prices VAT inclusive — the price shown is the price invoiced.",
- "plans":[
-  {"name":"DishNet Lite","price":215000,"period":"month","speed":100},
-  {"name":"DishNet Home","price":299000,"period":"month","speed":400},
-  {"name":"DishNet Flex 24","price":339000,"period":"month"},
-  {"name":"DishNet Flex 12","price":435000,"period":"month"}],
- "hardware":[
-  {"name":"Starlink Mini Package","price":2399000},
-  {"name":"Starlink Standard Package","price":2749000}]}
