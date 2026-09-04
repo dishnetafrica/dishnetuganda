@@ -135,8 +135,7 @@ $totalInvoiced = ($fiberCounts['invoiced'] ?? 0) + ($ucrmCounts['invoiced'] ?? 0
 $totalSkipped  = ($fiberCounts['cancelled'] ?? 0) + ($ucrmCounts['skipped'] ?? 0);
 
 // CRM base URL for links
-$_crmBase = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com/crm', '/api/v2.1');
-$_crmBase = preg_replace('#/api/v[0-9.]+$#', '', $_crmBase);
+$_crmBase = dn_crm_web($config);
 
 ?>
 <style>
@@ -274,7 +273,7 @@ $_crmBase = preg_replace('#/api/v[0-9.]+$#', '', $_crmBase);
             <?php if ($fjPhone): ?><span>📞 <?= h($fjPhone) ?></span><?php endif; ?>
             <span>📍 <?= h($fjArea) ?></span>
             <span>📶 <?= h($fjPlan) ?></span>
-            <span style="font-weight:700;color:#059669;">💵 $<?= number_format($fjAmt, 2) ?></span>
+            <span style="font-weight:700;color:#059669;">💵 <?= dn_cur($config) ?><?= number_format($fjAmt, 2) ?></span>
             <span>🕐 <?= $fjCreated ?></span>
           </div>
         </div>

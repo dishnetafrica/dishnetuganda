@@ -28,3 +28,7 @@ dishnet-hybrid-sudan/data/*
 
 # Python build-tool caches
 __pycache__/
+
+# Mail droplet secrets and runtime data — never committed
+dishnet-mail/.env
+dishnet-mail/data/

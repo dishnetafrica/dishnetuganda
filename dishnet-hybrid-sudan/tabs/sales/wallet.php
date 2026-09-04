@@ -251,7 +251,7 @@ foreach ($fr_cashin as $i) {
             'amount'    => (float)($i['usd_given'] ?? 0),
             'ssp_amount'=> 0,
             'category'  => 'Exchange',
-            'desc'      => 'USD→SSP exchange: $'.number_format($i['usd_given'] ?? 0,2).' @ '.number_format($i['rate'] ?? 0,0),
+            'desc'      => 'USD→SSP exchange: ' . dn_cur($config) . number_format($i['usd_given'] ?? 0,2).' @ '.number_format($i['rate'] ?? 0,0),
             'status'    => $i['status'] ?? 'approved',
             'source'    => 'cash_in',
             'id'        => 'CINE-'.($i['id'] ?? ''),
@@ -547,11 +547,11 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
       <div style="background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.25);border-radius:14px;padding:12px 10px;">
         <div style="font-size:9px;font-weight:800;color:#fdba74;text-transform:uppercase;letter-spacing:.8px;">🇸🇸 SSP Bag</div>
         <div style="font-size:26px;font-weight:900;color:#fb923c;letter-spacing:-1px;margin-top:2px;"><?php echo number_format($fr_ssp_holding, 0); ?></div>
-        <?php if ($fr_ssp_holding > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ $<?php echo number_format($fr_ssp_usd_eq, 2); ?> @ <?php echo number_format($fr_rate, 0); ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">no SSP received</div><?php endif; ?>
+        <?php if ($fr_ssp_holding > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ <?= dn_cur($config) ?><?php echo number_format($fr_ssp_usd_eq, 2); ?> @ <?php echo number_format($fr_rate, 0); ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">no SSP received</div><?php endif; ?>
       </div>
       <div style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.25);border-radius:14px;padding:12px 10px;">
         <div style="font-size:9px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.8px;">💵 USD Cash</div>
-        <div style="font-size:26px;font-weight:900;color:<?php echo $fr_usd_in_bag > 0 ? '#4ade80' : '#475569'; ?>;letter-spacing:-1px;margin-top:2px;">$<?php echo number_format($fr_usd_in_bag, 0); ?></div>
+        <div style="font-size:26px;font-weight:900;color:<?php echo $fr_usd_in_bag > 0 ? '#4ade80' : '#475569'; ?>;letter-spacing:-1px;margin-top:2px;"><?= dn_cur($config) ?><?php echo number_format($fr_usd_in_bag, 0); ?></div>
         <div style="font-size:10px;color:#94a3b8;margin-top:2px;"><?php echo $fr_usd_in_bag > 0 ? 'in bag' : 'settled'; ?></div>
       </div>
     </div>
@@ -589,19 +589,19 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
 
     <?php if ($fr_usd_is_negative): ?>
     <!-- Company owes Diko — show amount as her balance -->
-    <div style="font-size:36px;font-weight:900;color:#f59e0b;letter-spacing:-2px;line-height:1;">$<?php echo number_format($fr_owed_by_company, 2); ?></div>
+    <div style="font-size:36px;font-weight:900;color:#f59e0b;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($fr_owed_by_company, 2); ?></div>
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:20px;padding:4px 12px;margin-top:8px;">
       <span style="font-size:11px;font-weight:700;color:#fbbf24;">💡 Rupesh owes you this amount</span>
     </div>
     <?php elseif ($fr_usd_in_bag > 0): ?>
     <!-- Diko has USD cash -->
-    <div style="font-size:36px;font-weight:900;color:#4ade80;letter-spacing:-2px;line-height:1;">$<?php echo number_format($fr_usd_in_bag, 2); ?></div>
+    <div style="font-size:36px;font-weight:900;color:#4ade80;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($fr_usd_in_bag, 2); ?></div>
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(74,222,128,.12);border-radius:20px;padding:4px 12px;margin-top:8px;">
       <span style="font-size:11px;font-weight:700;color:#4ade80;">💵 USD cash in your bag</span>
     </div>
     <?php else: ?>
     <!-- All settled -->
-    <div style="font-size:36px;font-weight:900;color:#94a3b8;letter-spacing:-2px;line-height:1;">$0.00</div>
+    <div style="font-size:36px;font-weight:900;color:#94a3b8;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?>0.00</div>
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(148,163,184,.1);border-radius:20px;padding:4px 12px;margin-top:8px;">
       <span style="font-size:11px;font-weight:700;color:#94a3b8;">✅ All settled — no cash pending</span>
     </div>
@@ -618,10 +618,10 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
       <div style="text-align:center;">
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:2px;">Today</div>
         <?php if ($fr_today_collected > 0): ?>
-        <div style="font-size:16px;font-weight:900;color:#4ade80;">+$<?php echo number_format($fr_today_collected,0); ?></div>
+        <div style="font-size:16px;font-weight:900;color:#4ade80;">+<?= dn_cur($config) ?><?php echo number_format($fr_today_collected,0); ?></div>
         <div style="font-size:9px;color:#64748b;">received</div>
         <?php elseif ($fr_today_handovers > 0): ?>
-        <div style="font-size:16px;font-weight:900;color:#f87171;">-$<?php echo number_format($fr_today_handovers,0); ?></div>
+        <div style="font-size:16px;font-weight:900;color:#f87171;">-<?= dn_cur($config) ?><?php echo number_format($fr_today_handovers,0); ?></div>
         <div style="font-size:9px;color:#64748b;">handed</div>
         <?php else: ?>
         <div style="font-size:14px;font-weight:700;color:#475569;">—</div>
@@ -631,10 +631,10 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
       <div style="text-align:center;">
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:2px;">Yesterday</div>
         <?php if ($fr_yest_collected > 0): ?>
-        <div style="font-size:16px;font-weight:900;color:#4ade80;">+$<?php echo number_format($fr_yest_collected,0); ?></div>
+        <div style="font-size:16px;font-weight:900;color:#4ade80;">+<?= dn_cur($config) ?><?php echo number_format($fr_yest_collected,0); ?></div>
         <div style="font-size:9px;color:#64748b;">received</div>
         <?php elseif ($fr_yest_handovers > 0): ?>
-        <div style="font-size:16px;font-weight:900;color:#f87171;">-$<?php echo number_format($fr_yest_handovers,0); ?></div>
+        <div style="font-size:16px;font-weight:900;color:#f87171;">-<?= dn_cur($config) ?><?php echo number_format($fr_yest_handovers,0); ?></div>
         <div style="font-size:9px;color:#64748b;">handed</div>
         <?php else: ?>
         <div style="font-size:14px;font-weight:700;color:#475569;">—</div>
@@ -643,7 +643,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
       </div>
       <div style="text-align:center;">
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:2px;">This Week</div>
-        <div style="font-size:16px;font-weight:900;color:#60a5fa;">$<?php echo number_format($fr_week_collected,0); ?></div>
+        <div style="font-size:16px;font-weight:900;color:#60a5fa;"><?= dn_cur($config) ?><?php echo number_format($fr_week_collected,0); ?></div>
         <div style="font-size:9px;color:#64748b;"><?php echo $fr_week_collections; ?> collections</div>
       </div>
     </div>
@@ -654,7 +654,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
   <div class="fr3-bal-card fr3-bal-ssp">
     <div class="fr3-bal-lbl">🇸🇸 SSP — Cash in Bag</div>
     <div class="fr3-bal-val"><?php echo number_format($fr_ssp_holding, 0); ?> <span style="font-size:16px;font-weight:700;color:rgba(255,255,255,.45);">SSP</span></div>
-    <div class="fr3-bal-sub">≈ $<?php echo number_format($fr_ssp_usd_eq, 2); ?> USD at <?php echo number_format($fr_rate,0); ?> rate</div>
+    <div class="fr3-bal-sub">≈ <?= dn_cur($config) ?><?php echo number_format($fr_ssp_usd_eq, 2); ?> USD at <?php echo number_format($fr_rate,0); ?> rate</div>
   </div>
   <?php endif; ?>
 
@@ -711,7 +711,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
   $stat  = $row['status'] ?? 'approved';
   $amtDisplay = $isSsp
     ? number_format($row['ssp_amount'] ?? 0, 0).' SSP'
-    : '$'.number_format($row['amount'], 2);
+    : dn_cur($config) . number_format($row['amount'], 2);
   $catIcons = ['Collection'=>'💰','Expense'=>'🧾','Handover'=>'🤝',
     'SSP Received'=>'🇸🇸','Exchange'=>'🔄','Staff Payment'=>'👤',
     'Advance Received'=>'💵','Advance Given'=>'💸','Fuel'=>'⛽','Transport'=>'🚗','Vehicle'=>'🚗'];
@@ -781,7 +781,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     $typ = $isHov ? 'Handover' : (($row['currency']??'USD')==='SSP'?'SSP Expense':'USD Expense');
     $amt = ($row['currency']??'USD')==='SSP'
       ? number_format($row['ssp_amount']??0,0).' SSP'
-      : '$'.number_format($row['amount']??0,2);
+      : dn_cur($config) . number_format($row['amount']??0,2);
   ?>
   <div class="fr3-lc pend">
     <div class="fr3-lc-ic out">⏳</div>
@@ -817,23 +817,23 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
     <div class="fr3-sum-card">
       <div class="fr3-sum-lbl">Total IN</div>
-      <div class="fr3-sum-val g">$<?php echo number_format($fr_sum_usd_in,2); ?></div>
+      <div class="fr3-sum-val g"><?= dn_cur($config) ?><?php echo number_format($fr_sum_usd_in,2); ?></div>
     </div>
     <div class="fr3-sum-card">
       <div class="fr3-sum-lbl">Total OUT</div>
-      <div class="fr3-sum-val r">$<?php echo number_format($fr_sum_usd_out,2); ?></div>
+      <div class="fr3-sum-val r"><?= dn_cur($config) ?><?php echo number_format($fr_sum_usd_out,2); ?></div>
     </div>
   </div>
   <div class="fr3-sum-card" style="margin-bottom:14px;">
     <div class="fr3-sum-lbl">📊 Net Flow</div>
     <div class="fr3-sum-val <?php echo ($fr_sum_usd_in-$fr_sum_usd_out)>=0?'g':'r'; ?>">
-      $<?php echo number_format($fr_sum_usd_in-$fr_sum_usd_out,2); ?>
+      <?= dn_cur($config) ?><?php echo number_format($fr_sum_usd_in-$fr_sum_usd_out,2); ?>
       <?php echo ($fr_sum_usd_in-$fr_sum_usd_out)>=0?'▲':'▼'; ?>
     </div>
   </div>
   <div class="fr3-sum-card" style="margin-bottom:20px;">
     <div class="fr3-sum-lbl">🏦 Current USD Holding</div>
-    <div class="fr3-sum-val b">$<?php echo number_format($fr_usd_holding,2); ?></div>
+    <div class="fr3-sum-val b"><?= dn_cur($config) ?><?php echo number_format($fr_usd_holding,2); ?></div>
   </div>
 
   <!-- SSP summary -->
@@ -851,7 +851,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
   <div class="fr3-sum-card">
     <div class="fr3-sum-lbl">🏦 Current SSP Holding</div>
     <div class="fr3-sum-val b"><?php echo number_format($fr_ssp_holding,0); ?> SSP</div>
-    <div class="fr3-sum-sub">≈ $<?php echo number_format($fr_ssp_usd_eq,2); ?> USD @ <?php echo number_format($fr_rate,0); ?> SSP/USD</div>
+    <div class="fr3-sum-sub">≈ <?= dn_cur($config) ?><?php echo number_format($fr_ssp_usd_eq,2); ?> USD @ <?php echo number_format($fr_rate,0); ?> SSP/USD</div>
   </div>
 </div>
 <?php endif; ?>
@@ -882,7 +882,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     <div class="fr3-curr-row">
       <div class="fr3-cpill" id="fr3PillUSD" onclick="fr3SetCurr('USD')">
         <div class="fr3-cpill-lbl">💵 USD</div>
-        <div class="fr3-cpill-bal" id="fr3PillUSDbal">$<?php echo number_format($fr_usd_holding,2); ?></div>
+        <div class="fr3-cpill-bal" id="fr3PillUSDbal"><?= dn_cur($config) ?><?php echo number_format($fr_usd_holding,2); ?></div>
       </div>
       <div class="fr3-cpill sel" id="fr3PillSSP" onclick="fr3SetCurr('SSP')">
         <div class="fr3-cpill-lbl">🇸🇸 SSP</div>
@@ -1034,7 +1034,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
       <div class="fr3-fg" id="fr3UsdGivenWrap" style="display:none;">
         <label class="fr3-lbl">USD YOU GAVE</label>
         <div class="fr3-aw">
-          <span class="fr3-as">$</span>
+          <span class="fr3-as"><?= trim(dn_cur($config)) ?></span>
           <input type="number" class="fr3-inp fr3-ai" id="fr3UsdGiven" name="usd_given" placeholder="0.00" step="0.01" min="0" oninput="fr3CalcRate()">
         </div>
       </div>
@@ -1043,7 +1043,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
       <div class="fr3-fg" id="fr3AmtWrap">
         <label class="fr3-lbl" id="fr3AmtLbl">AMOUNT (USD)</label>
         <div class="fr3-aw">
-          <span class="fr3-as" id="fr3AmtPrefix">$</span>
+          <span class="fr3-as" id="fr3AmtPrefix"><?= trim(dn_cur($config)) ?></span>
           <input type="number" class="fr3-inp fr3-ai" id="fr3Amt" name="amount" placeholder="0.00" step="0.01" min="0" oninput="fr3UpdateSave();fr3CalcRate()">
         </div>
       </div>
@@ -1053,10 +1053,10 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
 
       <!-- Handover breakdown strip -->
       <div id="fr3HovStrip" style="display:none;" class="fr3-hov-strip">
-        <div class="fr3-hov-row"><span>Collections</span><span>$<?php echo number_format($fr_usd_collected,2); ?></span></div>
-        <div class="fr3-hov-row"><span>Expenses paid</span><span>-$<?php echo number_format($fr_usd_exp_approv,2); ?></span></div>
-        <div class="fr3-hov-row"><span>Already handed over</span><span>-$<?php echo number_format($fr_usd_hov_conf,2); ?></span></div>
-        <div class="fr3-hov-row total"><span>Holding (to hand over)</span><span>$<?php echo number_format($fr_usd_holding,2); ?></span></div>
+        <div class="fr3-hov-row"><span>Collections</span><span><?= dn_cur($config) ?><?php echo number_format($fr_usd_collected,2); ?></span></div>
+        <div class="fr3-hov-row"><span>Expenses paid</span><span>-<?= dn_cur($config) ?><?php echo number_format($fr_usd_exp_approv,2); ?></span></div>
+        <div class="fr3-hov-row"><span>Already handed over</span><span>-<?= dn_cur($config) ?><?php echo number_format($fr_usd_hov_conf,2); ?></span></div>
+        <div class="fr3-hov-row total"><span>Holding (to hand over)</span><span><?= dn_cur($config) ?><?php echo number_format($fr_usd_holding,2); ?></span></div>
       </div>
 
       <!-- Recipient picker (handover + give advance) -->
@@ -1230,7 +1230,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     <div class="fr3-fg">
       <label class="fr3-lbl" id="frExchAmtLbl">USD AMOUNT (YOU ARE GIVING)</label>
       <div class="fr3-aw">
-        <span class="fr3-as">$</span>
+        <span class="fr3-as"><?= trim(dn_cur($config)) ?></span>
         <input type="number" class="fr3-inp fr3-ai" id="frExchAmt" placeholder="0.00" step="0.01" min="0.01" oninput="frExchCalc()">
       </div>
     </div>
@@ -1255,7 +1255,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:10px 14px;margin-bottom:14px;">
       <div style="font-size:10px;font-weight:800;color:#94a3b8;letter-spacing:.5px;margin-bottom:6px;">YOUR CURRENT BALANCES</div>
       <div style="display:flex;gap:16px;">
-        <div><span style="font-size:11px;color:#64748b;">USD</span><br><span style="font-size:15px;font-weight:900;color:#16a34a;">$<?php echo number_format($fr_usd_holding, 2); ?></span></div>
+        <div><span style="font-size:11px;color:#64748b;">USD</span><br><span style="font-size:15px;font-weight:900;color:#16a34a;"><?= dn_cur($config) ?><?php echo number_format($fr_usd_holding, 2); ?></span></div>
         <div><span style="font-size:11px;color:#64748b;">SSP</span><br><span style="font-size:15px;font-weight:900;color:#f97316;"><?php echo number_format($fr_ssp_holding, 0); ?></span></div>
       </div>
     </div>
@@ -1414,14 +1414,14 @@ function frExchCalc() {
   if (amt > 0 && rate > 0) {
     var ssp = Math.round(amt * rate);
     if (_frExchType === 'usd_to_ssp') {
-      res.textContent = '✅ You give $' + amt.toFixed(2) + ' → You receive ' + ssp.toLocaleString() + ' SSP  (rate: ' + rate.toLocaleString() + ')';
+      res.textContent = '✅ You give ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' → You receive ' + ssp.toLocaleString() + ' SSP  (rate: ' + rate.toLocaleString() + ')';
     } else {
-      res.textContent = '✅ You give ' + ssp.toLocaleString() + ' SSP → You receive $' + amt.toFixed(2) + '  (rate: ' + rate.toLocaleString() + ')';
+      res.textContent = '✅ You give ' + ssp.toLocaleString() + ' SSP → You receive ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + '  (rate: ' + rate.toLocaleString() + ')';
     }
     res.style.display = '';
     btn.textContent = _frExchType === 'usd_to_ssp'
-      ? 'Save Exchange · $' + amt.toFixed(2) + ' → ' + ssp.toLocaleString() + ' SSP'
-      : 'Save Exchange · ' + ssp.toLocaleString() + ' SSP → $' + amt.toFixed(2);
+      ? 'Save Exchange · ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' → ' + ssp.toLocaleString() + ' SSP'
+      : 'Save Exchange · ' + ssp.toLocaleString() + ' SSP → ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2);
     btn.style.opacity = '1'; btn.style.pointerEvents = '';
   } else {
     res.style.display = 'none';
@@ -1711,7 +1711,7 @@ function fr3CalcRate() {
   if (usd > 0 && ssp > 0) {
     var rate = Math.round(ssp / usd);
     rateEl.style.display = '';
-    rateEl.textContent = '✅ Rate: $'+usd.toFixed(2)+' = '+ssp.toLocaleString()+' SSP  (1 USD = '+rate.toLocaleString()+' SSP)';
+    rateEl.textContent = '✅ Rate: ' + <?= json_encode(dn_cur($config)) ?> +usd.toFixed(2)+' = '+ssp.toLocaleString()+' SSP  (1 USD = '+rate.toLocaleString()+' SSP)';
   } else {
     rateEl.style.display = 'none';
   }
@@ -1814,7 +1814,7 @@ function fr3UpdateSave() {
   var btn  = document.getElementById('fr3SaveBtn');
   var amt  = parseFloat(document.getElementById('fr3Amt').value) || 0;
   var cur  = (_fr3Cat==='SSP Received'||_fr3Curr==='SSP') ? 'SSP' : 'USD';
-  var disp = cur==='SSP' ? Math.round(amt).toLocaleString()+' SSP' : '$'+amt.toFixed(2);
+  var disp = cur==='SSP' ? Math.round(amt).toLocaleString()+' SSP' : <?= json_encode(dn_cur($config)) ?> +amt.toFixed(2);
   var ready = _fr3Cat !== '' && amt > 0;
   if (_fr3Cat === 'Exchange') {
     var usd = parseFloat(document.getElementById('fr3UsdGiven').value) || 0;
@@ -1900,7 +1900,7 @@ function fr3Submit() {
     document.getElementById('fr3fInUsdGiven').value  = usd;
     document.getElementById('fr3fInRate').value      = rate;
     document.getElementById('fr3fInAmount').value    = usd; // store USD given as amount
-    document.getElementById('fr3fInDesc').value      = desc || ('Exchange $'+usd.toFixed(2)+' @ '+rate+' SSP');
+    document.getElementById('fr3fInDesc').value      = desc || ('Exchange ' + <?= json_encode(dn_cur($config)) ?> +usd.toFixed(2)+' @ '+rate+' SSP');
     document.getElementById('fr3FormIn').submit();
 
   } else if (_fr3Cat === 'SSP Received') {

@@ -149,7 +149,7 @@ if ($_cfgBase !== '') {
     }
 }
 if ($portalCrmBaseUrl === '') {
-    $portalCrmBaseUrl = 'https://crm.dishnetafrica.com/crm';
+    $portalCrmBaseUrl = dn_crm_web($config) . '/crm';
 }
 
 // v4.20.9.1 — Normalize: ucrm.json's ucrmPublicUrl on this install is
@@ -230,7 +230,7 @@ if (!$portalAuthError) {
             'number' => $inv['number'] ?? ('INV-' . (int)$inv['id']),
             'total' => $total,
             'due' => max(0, $total - $paid),
-            'currency' => $inv['currencyCode'] ?? 'USD',
+            'currency' => $inv['currencyCode'] ?? dn_code($config),
             'status' => $st,
             'created' => $inv['createdDate'] ?? null,
             'due_date' => $inv['dueDate'] ?? null,
@@ -834,7 +834,7 @@ if ($view === 'invoice_detail' && !$portalAuthError) {
                     'total' => $total,
                     'paid' => $paid,
                     'due' => max(0, $total - $paid),
-                    'currency' => $inv['currencyCode'] ?? 'USD',
+                    'currency' => $inv['currencyCode'] ?? dn_code($config),
                     'status' => $st,
                     'created' => $inv['createdDate'] ?? null,
                     'due_date' => $inv['dueDate'] ?? null,
@@ -1023,4 +1023,4 @@ if ($portalNextBill) {
 // HTML escape helper
 function pe($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 // Money fmt
-function pm($v, $cur = 'USD') { return '$' . number_format((float)$v, 0); }
+function pm($v, $cur = 'USD') { return dn_cur($config) . number_format((float)$v, 0); }

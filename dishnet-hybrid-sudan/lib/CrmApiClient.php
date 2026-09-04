@@ -563,7 +563,7 @@ class CrmApiClient
         
         // Build the correct webhook URL - must go through public.php
         // UCRM only exposes public.php, not webhook.php directly
-        $webhookUrl = $publicUrl . '/_plugins/dishnet-hybrid-telecom/public.php?page=webhook';
+        $webhookUrl = $publicUrl . '/_plugins/' . basename(dirname(__DIR__)) . '/public.php?page=webhook';
         
         // Default events if not specified
         if (empty($events)) {
@@ -580,7 +580,7 @@ class CrmApiClient
         }
         
         // Check if webhook already exists (search for our plugin)
-        $existing = $this->findWebhookByUrl('dishnet-hybrid-telecom');
+        $existing = $this->findWebhookByUrl('/_plugins/' . basename(dirname(__DIR__)) . '/');
         
         if ($existing) {
             // Update existing webhook

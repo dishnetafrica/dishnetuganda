@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='log_expense
         $_posCheck = new DualReadCashPosition($store, $store->getPdo(), $dataDir ?? '');
         $usdInHand = $_posCheck->getCashInHand($rid);
         if ($rawAmount > $usdInHand + 0.01) {
-            flash('Expense ($'.number_format($rawAmount,2).') exceeds your USD cash in hand ($'.number_format(max(0,$usdInHand),2).'). You cannot log an expense for more than you are holding.', 'danger');
+            flash('Expense (' . dn_cur($config) . number_format($rawAmount,2).') exceeds your USD cash in hand (' . dn_cur($config) . number_format(max(0,$usdInHand),2).'). You cannot log an expense for more than you are holding.', 'danger');
             redirect('?page=dashboard&tab=wallet');
         }
     }
@@ -204,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='log_expense
     }
     $label = $currency === 'SSP'
         ? number_format($rawAmount,0).' SSP'
-        : '$'.number_format($rawAmount,2);
+        : dn_cur($config) . number_format($rawAmount,2);
     logActivity($dataDir, 'expense_logged', $autoApprove ? 'Expense auto-approved' : 'Field expense submitted',
         $label.' — '.$category.' by '.$retailer['name']);
 
@@ -347,7 +347,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cancel_expe
     $cur   = $expenses[array_search($expId, array_column($expenses, 'id'))]['currency'] ?? 'USD';
     $amt   = $cur === 'SSP'
         ? number_format((float)($expenses[array_search($expId, array_column($expenses, 'id'))]['ssp_amount'] ?? 0), 0).' SSP'
-        : '$'.number_format((float)($expenses[array_search($expId, array_column($expenses, 'id'))]['amount'] ?? 0), 2);
+        : dn_cur($config) . number_format((float)($expenses[array_search($expId, array_column($expenses, 'id'))]['amount'] ?? 0), 2);
     logActivity($dataDir, 'expense_cancelled', 'Expense cancelled by staff', $amt.' — '.$retailer['name']);
     flash('Expense cancelled ('.$amt.').', 'success');
     redirect('?page=dashboard&tab=wallet');
@@ -502,7 +502,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_ad
                 }
                 logActivity($dataDir, 'cashbook_auto_link',
                     "Auto-created Cash IN for {$matchedName}: {$cbCurrency} " .
-                    ($cbCurrency === 'SSP' ? number_format($cbSspAmt, 0) : '$'.number_format($cbAmount, 2)) .
+                    ($cbCurrency === 'SSP' ? number_format($cbSspAmt, 0) : dn_cur($config) . number_format($cbAmount, 2)) .
                     " (cb_ref: {$cbSr})", '');
 
                 // WhatsApp notification to receiving staff
@@ -787,8 +787,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
         // Entry 2: SSP side (opposite direction)
         $sspDir = ($exchType === 'usd_to_ssp') ? 'in' : 'out';
         $sspDesc = ($exchType === 'usd_to_ssp')
-            ? 'SSP received from exchange: $' . number_format($usdAmt, 2) . ' @ ' . number_format($rate, 0)
-            : 'SSP given for exchange: $' . number_format($usdAmt, 2) . ' @ ' . number_format($rate, 0);
+            ? 'SSP received from exchange: ' . dn_cur($config) . number_format($usdAmt, 2) . ' @ ' . number_format($rate, 0)
+            : 'SSP given for exchange: ' . dn_cur($config) . number_format($usdAmt, 2) . ' @ ' . number_format($rate, 0);
         if ($person) $sspDesc .= ' By ' . $person;
         $sspEntry = [
             'project'           => $project,
@@ -1004,7 +1004,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
                     }
                     logActivity($dataDir, 'cashbook_auto_link',
                         "Auto-created Cash IN for {$matchedName}: {$cbCurrency} " .
-                        ($cbCurrency === 'SSP' ? number_format($cbSspAmt, 0) : '$'.number_format($cbAmount, 2)) .
+                        ($cbCurrency === 'SSP' ? number_format($cbSspAmt, 0) : dn_cur($config) . number_format($cbAmount, 2)) .
                         " (cb_ref: {$cbSr})", '');
                     $flashMsg .= ' · Auto-linked to ' . $matchedName . "'s field register.";
 
@@ -1117,8 +1117,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='backfill
         // Opposite direction
         $sspDir = ($e['direction'] === 'out') ? 'in' : 'out';
         $sspDesc = ($sspDir === 'in')
-            ? 'SSP received from exchange: $' . number_format($usd, 2) . ' @ ' . number_format($rate, 0)
-            : 'SSP given for exchange: $' . number_format($usd, 2) . ' @ ' . number_format($rate, 0);
+            ? 'SSP received from exchange: ' . dn_cur($config) . number_format($usd, 2) . ' @ ' . number_format($rate, 0)
+            : 'SSP given for exchange: ' . dn_cur($config) . number_format($usd, 2) . ' @ ' . number_format($rate, 0);
 
         // Extract person from "By Name"
         $person = trim($e['person'] ?? '');

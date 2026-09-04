@@ -344,7 +344,7 @@ function buildReceiveForm(){
         + '<div id="sioRcvSerialWrap"><div class="sio-field"><label>Serial Number *</label><input id="sioRcvSerial" placeholder="Scan or type serial..."></div></div>'
         + '<div id="sioRcvQtyWrap" style="display:none;"><div class="sio-field"><label>Quantity *</label><input id="sioRcvQty" type="number" value="1" min="1"></div></div>'
         + '<div class="sio-row">'
-        + '<div class="sio-field"><label>Cost (USD)</label><input id="sioRcvCost" type="number" step="0.01"></div>'
+        + '<div class="sio-field"><label>Cost (<?= dn_code($config) ?>)</label><input id="sioRcvCost" type="number" step="0.01"></div>'
         + '<div class="sio-field"><label>Condition</label><select id="sioRcvCond"><option value="new">New</option><option value="good">Good</option></select></div>'
         + '</div>'
         + '<div class="sio-field"><label>Supplier / Source</label><input id="sioRcvSupplier" placeholder="Starlink, TP-Link..."></div>'

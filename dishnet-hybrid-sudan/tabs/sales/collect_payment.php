@@ -39,7 +39,7 @@ function cnSearchCustomer(q) {
     matches.forEach(function(c) {
         var div = document.createElement('div');
         div.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;';
-        div.innerHTML = '<strong>' + c.name + '</strong> <span style="color:#94a3b8;font-size:11px;">CRM #' + c.id + (c.bal ? ' · $' + c.bal : '') + '</span>';
+        div.innerHTML = '<strong>' + c.name + '</strong> <span style="color:#94a3b8;font-size:11px;">CRM #' + c.id + (c.bal ? ' · ' + <?= json_encode(dn_cur($config)) ?> + c.bal : '') + '</span>';
         div.addEventListener('mousedown', function() { cnSelectCustomer(c.id, c.name); });
         div.addEventListener('mouseover', function() { this.style.background = '#f8fafc'; });
         div.addEventListener('mouseout',  function() { this.style.background = '#fff'; });
@@ -108,7 +108,7 @@ function cnSubmit() {
     .then(function(d) {
         btn.style.display = 'none';
         if (d.status === 'success') {
-            var msg = 'Credit note #' + d.data.credit_note_num + ' ($' + d.data.amount.toFixed(2) + ') for ' + d.data.client_name;
+            var msg = 'Credit note #' + d.data.credit_note_num + ' (' + <?= json_encode(dn_cur($config)) ?> + d.data.amount.toFixed(2) + ') for ' + d.data.client_name;
             if (d.data.wa_sent) msg += ' · WA sent ✅';
             if (d.data.cashbook_ref) msg += ' · Cashbook: ' + d.data.cashbook_ref;
             document.getElementById('cnSuccessMsg').textContent = msg;
@@ -150,8 +150,8 @@ function cnSubmit() {
                 <div style="font-size:48px;margin-bottom:12px;">⛔</div>
                 <div style="font-size:18px;font-weight:800;color:#991b1b;margin-bottom:8px;">Collection Blocked</div>
                 <div style="font-size:14px;color:#b91c1c;line-height:1.6;margin-bottom:16px;">
-                    You are holding <strong>$<?= number_format($_cpExposure, 2) ?></strong> in company cash.<br>
-                    The carry limit is <strong>$<?= number_format($_cpCarryLimit, 2) ?></strong>.<br><br>
+                    You are holding <strong><?= dn_cur($config) ?><?= number_format($_cpExposure, 2) ?></strong> in company cash.<br>
+                    The carry limit is <strong><?= dn_cur($config) ?><?= number_format($_cpCarryLimit, 2) ?></strong>.<br><br>
                     Please hand over cash to the office before collecting more payments.
                 </div>
                 <a href="?page=dashboard&tab=my_account&v=handover" style="display:inline-block;background:#dc2626;color:#fff;padding:14px 28px;border-radius:12px;font-size:14px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(220,38,38,.3);">🏦 Hand Over Cash Now</a>
@@ -285,27 +285,27 @@ function cnSubmit() {
 <!-- Hero Stats -->
 <div class="cp-hero">
     <div class="cp-hero-bal">Wallet Balance</div>
-    <div class="cp-hero-amt">$<?= number_format($myWallet['balance'], 2) ?></div>
+    <div class="cp-hero-amt"><?= dn_cur($config) ?><?= number_format($myWallet['balance'], 2) ?></div>
     <div class="cp-hero-row">
         <div class="cp-hero-pill">
             <div class="cp-hero-pill-label">Today</div>
-            <div class="cp-hero-pill-val">$<?= number_format($todayTotal, 2) ?></div>
+            <div class="cp-hero-pill-val"><?= dn_cur($config) ?><?= number_format($todayTotal, 2) ?></div>
         </div>
         <div class="cp-hero-pill">
             <div class="cp-hero-pill-label">Month</div>
-            <div class="cp-hero-pill-val">$<?= number_format($monthTotal, 2) ?></div>
+            <div class="cp-hero-pill-val"><?= dn_cur($config) ?><?= number_format($monthTotal, 2) ?></div>
         </div>
         <?php if (empty($retailer['is_employee'])): ?>
         <div class="cp-hero-pill">
             <div class="cp-hero-pill-label">Earned</div>
-            <div class="cp-hero-pill-val" style="color:#69f0ae;">+$<?= number_format($monthComm, 2) ?></div>
+            <div class="cp-hero-pill-val" style="color:#69f0ae;">+<?= dn_cur($config) ?><?= number_format($monthComm, 2) ?></div>
         </div>
         <?php endif; ?>
     </div>
     <?php if ($monthTarget > 0): ?>
     <div class="cp-target">
         <div class="cp-target-bar"><div class="cp-target-fill" style="width:<?= $targetPct ?>%;background:<?= $targetPct>=100?'#69f0ae':'#64B5F6' ?>;"></div></div>
-        <div class="cp-target-text"><span><?= $targetPct ?>% target</span><span>$<?= number_format($monthTotal,0) ?> / $<?= number_format($monthTarget,0) ?></span></div>
+        <div class="cp-target-text"><span><?= $targetPct ?>% target</span><span><?= dn_cur($config) ?><?= number_format($monthTotal,0) ?> / <?= dn_cur($config) ?><?= number_format($monthTarget,0) ?></span></div>
     </div>
     <?php endif; ?>
 </div>
@@ -337,7 +337,7 @@ function cnSubmit() {
 
     <!-- Amount -->
     <div style="margin-bottom:12px;">
-      <label style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">Credit Amount (USD)</label>
+      <label style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">Credit Amount (<?= dn_code($config) ?>)</label>
       <input id="cnAmount" type="number" step="0.01" min="0.01" placeholder="0.00"
              style="width:100%;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px;font-size:18px;font-weight:700;box-sizing:border-box;"/>
     </div>
@@ -571,9 +571,9 @@ window._indexSize = <?= count($_compactIdx) ?>;
             <input type="number" name="amount" id="cpAmount" class="cp-amount-input" step="0.01" min="1" required placeholder="0.00">
             <div style="text-align:center;font-size:11px;color:#6b7280;margin-top:4px;">
                 <?php if (empty($retailer['is_employee'])): ?>
-                You earn <?= $commRate ?>% = <strong id="cpCommPreview">$0.00</strong> commission
+                You earn <?= $commRate ?>% = <strong id="cpCommPreview"><?= dn_cur($config) ?>0.00</strong> commission
                 <?php else: ?>
-                <span id="cpCommPreview" style="display:none;">$0.00</span>
+                <span id="cpCommPreview" style="display:none;"><?= dn_cur($config) ?>0.00</span>
                 <?php endif; ?>
             </div>
         </div>
@@ -599,7 +599,7 @@ window._indexSize = <?= count($_compactIdx) ?>;
         <!-- Quick Amounts -->
         <div class="cp-amounts">
             <?php foreach ([25, 40, 50, 65, 75, 80, 100, 110, 120, 200, 250, 300, 500, 875] as $qa): ?>
-            <button type="button" class="cp-amt-btn" onclick="cpSetAmount(<?= $qa ?>)">$<?= $qa ?></button>
+            <button type="button" class="cp-amt-btn" onclick="cpSetAmount(<?= $qa ?>)"><?= dn_cur($config) ?><?= $qa ?></button>
             <?php endforeach; ?>
         </div>
 
@@ -773,7 +773,7 @@ foreach ($_retryQueue as $_rq) {
             <?php if (!empty($col['location'])): ?> · <?= h($col['location']) ?><?php endif; ?>
             <?php if ($hasInv): ?> · Inv #<?= h($col['invoice_id']) ?><?php endif; ?>
             · <?= h(substr($col['created_at']??'', 0, $isToday ? 16 : 10)) ?>
-            <?php if (($col['commission']??0) > 0 && empty($retailer['is_employee'])): ?> · <span style="color:#28a745;">+$<?= number_format($col['commission'],2) ?></span><?php endif; ?>
+            <?php if (($col['commission']??0) > 0 && empty($retailer['is_employee'])): ?> · <span style="color:#28a745;">+<?= dn_cur($config) ?><?= number_format($col['commission'],2) ?></span><?php endif; ?>
         </div>
         <?php if (!empty($col['invoice_note'])): ?>
         <div style="font-size:10px;color:#6b7280;margin-top:2px;">📝 <?= h($col['invoice_note']) ?></div>
@@ -783,7 +783,7 @@ foreach ($_retryQueue as $_rq) {
         <?php endif; ?>
     </div>
     <div class="cp-col-right">
-        <div class="cp-col-amt">$<?= number_format($col['amount']??0, 2) ?></div>
+        <div class="cp-col-amt"><?= dn_cur($config) ?><?= number_format($col['amount']??0, 2) ?></div>
         <div class="cp-col-status" style="font-size:10px;"><?= $crmStatusHtml ?></div>
         <a href="?page=receipt&id=<?= $col['id'] ?>" target="_blank" class="cp-col-receipt"><i class="bi bi-printer"></i> Receipt</a>
     </div>
@@ -813,13 +813,13 @@ function cpSwitchTab(tab, el) {
 // Commission preview
 document.getElementById('cpAmount')?.addEventListener('input', function() {
     const comm = (parseFloat(this.value||0) * <?= $commRate ?> / 100).toFixed(2);
-    document.getElementById('cpCommPreview').textContent = '$' + comm;
+    document.getElementById('cpCommPreview').textContent = <?= json_encode(dn_cur($config)) ?> + comm;
 });
 
 function cpSetAmount(amt) {
     document.getElementById('cpAmount').value = amt;
     const comm = (amt * <?= $commRate ?> / 100).toFixed(2);
-    document.getElementById('cpCommPreview').textContent = '$' + comm;
+    document.getElementById('cpCommPreview').textContent = <?= json_encode(dn_cur($config)) ?> + comm;
 }
 
 var _cpCurrency = 'USD';
@@ -940,7 +940,7 @@ function crmInstantSearch(raw) {
     var html = '';
     matches.forEach(function(c, i) {
         var balColor = c.bal > 0 ? '#DC2626' : '#16A34A';
-        var balLabel = c.bal > 0 ? '-$'+Math.abs(c.bal).toFixed(2)+' owes' : c.bal < 0 ? '+$'+Math.abs(c.bal).toFixed(2)+' credit' : '$0.00';
+        var balLabel = c.bal > 0 ? '-' + <?= json_encode(dn_cur($config)) ?> +Math.abs(c.bal).toFixed(2)+' owes' : c.bal < 0 ? '+' + <?= json_encode(dn_cur($config)) ?> +Math.abs(c.bal).toFixed(2)+' credit' : <?= json_encode(dn_cur($config)) ?> + '0.00';
         // Service type badge
         var svcBadge = '';
         var pl = (c.plans||'').toLowerCase();
@@ -1001,7 +1001,7 @@ function cpSelectCustomer(id, name, balance) {
     var isLte = String(id).indexOf('LTE-') === 0;
     document.getElementById('cpCustIdDisplay').textContent = isLte ? '📶 LTE Customer' : 'CRM ID: ' + id;
     const balColor = balance > 0 ? '#dc3545' : '#28a745';
-    document.getElementById('cpCustBalDisplay').innerHTML = 'Account Balance: <span style="color:'+balColor+';font-weight:800;">$' + balance.toFixed(2) + '</span>' + (balance > 0 ? ' <span style="color:#dc3545;font-size:11px;">(owes)</span>' : '');
+    document.getElementById('cpCustBalDisplay').innerHTML = 'Account Balance: <span style="color:'+balColor+';font-weight:800;">' + <?= json_encode(dn_cur($config)) ?> + balance.toFixed(2) + '</span>' + (balance > 0 ? ' <span style="color:#dc3545;font-size:11px;">(owes)</span>' : '');
     document.getElementById('cpCustCard').classList.add('show');
     document.getElementById('crmSearchResults').innerHTML = '';
 
@@ -1062,7 +1062,7 @@ function cpRenderInvoices(unpaid, totalDue, container, payments) {
     // Cache payments for history lookup
     cpPaymentsCache = payments || [];
     
-    let html = '<div style="font-size:11px;font-weight:700;color:#dc3545;margin-bottom:8px;">&#9888; ' + unpaid.length + ' item(s) — Total due: $' + parseFloat(totalDue||0).toFixed(2) + '</div>';
+    let html = '<div style="font-size:11px;font-weight:700;color:#dc3545;margin-bottom:8px;">&#9888; ' + unpaid.length + ' item(s) — Total due: ' + <?= json_encode(dn_cur($config)) ?> + parseFloat(totalDue||0).toFixed(2) + '</div>';
     unpaid.forEach((inv, idx) => {
         const remaining = parseFloat(inv.amountToPay || inv.total || 0).toFixed(2);
         const total     = parseFloat(inv.total || inv.amountToPay || 0).toFixed(2);
@@ -1086,9 +1086,9 @@ function cpRenderInvoices(unpaid, totalDue, container, payments) {
         
         // Show original total and paid for partial invoices
         const amtDisplay = isPartial && !isVirt ?
-            '<div class="cp-inv-amt" style="color:#dc3545;">$' + remaining + '</div>' +
-            '<div style="font-size:9px;color:#6b7280;">of $' + total + ' (paid $' + paid + ')</div>' :
-            '<div class="cp-inv-amt">$' + remaining + '</div>';
+            '<div class="cp-inv-amt" style="color:#dc3545;">' + <?= json_encode(dn_cur($config)) ?> + remaining + '</div>' +
+            '<div style="font-size:9px;color:#6b7280;">of ' + <?= json_encode(dn_cur($config)) ?> + total + ' (paid ' + <?= json_encode(dn_cur($config)) ?> + paid + ')</div>' :
+            '<div class="cp-inv-amt">' + <?= json_encode(dn_cur($config)) ?> + remaining + '</div>';
         
         // History button for partial invoices
         const histBtn = isPartial && !isVirt ?
@@ -1105,7 +1105,7 @@ function cpRenderInvoices(unpaid, totalDue, container, payments) {
     const td = parseFloat(totalDue||0).toFixed(2);
     html += '<button onclick="cpSetAmount(' + td + ');document.getElementById(\'cpNote\').value=\'Full payment — '+unpaid.length+' invoice(s)\'" ' +
         'style="width:100%;padding:10px;background:#FFEBEE;color:#dc3545;border:1.5px solid #FFCDD2;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px;">' +
-        '&#128176; Pay All — $' + td + '</button>';
+        '&#128176; Pay All — ' + <?= json_encode(dn_cur($config)) ?> + td + '</button>';
     container.innerHTML = html;
 }
 
@@ -1137,7 +1137,7 @@ function cpShowPaymentHistory(invoiceId, invoiceNum) {
             
             html += '<div style="padding:10px;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;">';
             html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-            html += '<div style="font-weight:600;color:#22c55e;font-size:14px;">+$' + amt.toFixed(2) + '</div>';
+            html += '<div style="font-weight:600;color:#22c55e;font-size:14px;">+' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + '</div>';
             html += '<div style="font-size:11px;color:#6b7280;">' + dt + '</div></div>';
             html += '<div style="font-size:11px;color:#374151;margin-top:4px;">💳 ' + method + '</div>';
             html += '<div style="font-size:10px;color:#6b7280;margin-top:2px;">👤 ' + collector + '</div>';
@@ -1145,7 +1145,7 @@ function cpShowPaymentHistory(invoiceId, invoiceNum) {
         });
         html += '<div style="padding:10px;background:#f0fdf4;border-radius:10px;margin-top:4px;">';
         html += '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;">';
-        html += '<span>Total Paid</span><span style="color:#22c55e;">$' + totalPaid.toFixed(2) + '</span></div></div>';
+        html += '<span>Total Paid</span><span style="color:#22c55e;">' + <?= json_encode(dn_cur($config)) ?> + totalPaid.toFixed(2) + '</span></div></div>';
         html += '</div>';
     }
     
@@ -1192,7 +1192,7 @@ function cpSelectInvoice(el, invId, amt, invLabel) {
     var displayLabel = invLabel || (invId ? 'Invoice #' + invId : 'Balance');
     document.getElementById('cpNote').value = 'Invoice #' + displayLabel;
     const comm = (amt * <?= $commRate ?> / 100).toFixed(2);
-    document.getElementById('cpCommPreview').textContent = '$' + comm;
+    document.getElementById('cpCommPreview').textContent = <?= json_encode(dn_cur($config)) ?> + comm;
 }
 </script>
 

@@ -228,7 +228,7 @@ $tagColors = ['STARLINK'=>['#f5f3ff','#7C3AED'], 'FIBER'=>['#dbeafe','#1d4ed8'],
     </form>
 </div>
 <script>
-var _t={STARLINK:'Hello {{n}}! Starlink Mini now available from DishNet Africa.\n\n🛰️ Kit: $299 | Monthly: $80\n\nReply YES to order.',FIBER:'Hello {{n}}! Fiber internet now in more Juba areas.\n\n📡 Install: $150 | Monthly: $50\n\nReply YES to check your area.',PRICE:'Hello {{n}}! DishNet packages:\n\n🛰️ Starlink: $299+$80/mo\n📡 Fiber: $150+$50/mo\n\nReply STARLINK or FIBER.',DEFAULT:'Hello {{n}}! DishNet Africa has new internet offers.\n\nReply YES to learn more.'};
+var _t={STARLINK:'Hello {{n}}! Starlink Mini now available from DishNet Africa.\n\n🛰️ Reply YES for today's prices and to order.',FIBER:'Hello {{n}}! Fiber internet is available in more areas.\n\n📡 Reply YES to check your area and current plans.',PRICE:'Hello {{n}}! DishNet packages:\n\n🛰️ Starlink kits + monthly plans\n📡 Fiber plans for your area\n\nReply STARLINK or FIBER for current prices.',DEFAULT:'Hello {{n}}! DishNet Africa has new internet offers.\n\nReply YES to learn more.'};
 function fu(id,ph,nm,tg){document.getElementById('fu_id').value=id;document.getElementById('fu_ph').value=ph;document.getElementById('fu_nm').textContent=nm||ph;var k='DEFAULT';if(tg&&tg.indexOf('STARLINK')>=0)k='STARLINK';else if(tg&&tg.indexOf('FIBER')>=0)k='FIBER';else if(tg&&tg.indexOf('PRICE')>=0)k='PRICE';document.getElementById('fu_tx').value=_t[k].replace(/\{\{n\}\}/g,nm||'there');document.getElementById('fuM').style.display='flex';}
 </script>
 

@@ -29,10 +29,10 @@
             <?php endif; ?>
         </div>
         <div style="font-size:24px;font-weight:900;color:#EA580C;min-width:100px;text-align:right;">
-            $<?= number_format((float)($pc['amount']??0), 2) ?>
+            <?= dn_cur($config) ?><?= number_format((float)($pc['amount']??0), 2) ?>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
-            <form method="POST" onsubmit="return confirm('Approve $<?= number_format((float)($pc['amount']??0),2) ?> from <?= h(addslashes($pc['customer_name']??'')) ?>?')">
+            <form method="POST" onsubmit="return confirm('Approve <?= dn_cur($config) ?><?= number_format((float)($pc['amount']??0),2) ?> from <?= h(addslashes($pc['customer_name']??'')) ?>?')">
                 <?= csrfField() ?>
                 <input type="hidden" name="action" value="approve_large_collection">
                 <input type="hidden" name="pending_collection_id" value="<?= (int)($pc['id']??0) ?>">
@@ -95,7 +95,7 @@
             <label class="form-label">Select Retailer</label>
             <select name="retailer_id" class="form-control" required>
                 <?php foreach ($allRetailers as $r): ?>
-                <option value="<?= $r['id'] ?>"><?= h($r['name']) ?> ($<?= number_format($r['wallet']??0,2) ?>)</option>
+                <option value="<?= $r['id'] ?>"><?= h($r['name']) ?> (<?= dn_cur($config) ?><?= number_format($r['wallet']??0,2) ?>)</option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -168,8 +168,8 @@
             <td><?= $i+1 ?></td>
             <td><?= h($rName) ?></td>
             <td><span class="badge-<?= $isCredit8?'credit':'debit' ?>"><?= $isCredit8?'Credit':'Debit' ?></span></td>
-            <td><?= $isCredit8?'+':'-' ?>$<?= number_format($p['amount']??0,2) ?></td>
-            <td>$<?= number_format($p['curr_balance']??0,2) ?></td>
+            <td><?= $isCredit8?'+':'-' ?><?= dn_cur($config) ?><?= number_format($p['amount']??0,2) ?></td>
+            <td><?= dn_cur($config) ?><?= number_format($p['curr_balance']??0,2) ?></td>
             <td><?= h($p['description']??'') ?></td>
             <td><?= h(substr($p['created_at']??'',0,16)) ?></td>
             <td>
@@ -219,7 +219,7 @@ function voidPayment(colId, desc, amount) {
     document.getElementById('voidColId').value = colId;
     document.getElementById('voidReason').value = '';
     document.getElementById('voidDetails').innerHTML = 
-        '<strong>Amount:</strong> $' + amount.toFixed(2) + '<br>' +
+        '<strong>Amount:</strong> ' + <?= json_encode(dn_cur($config)) ?> + amount.toFixed(2) + '<br>' +
         '<strong>Description:</strong> ' + desc;
     document.getElementById('voidModal').style.display = 'flex';
 }
@@ -249,7 +249,7 @@ function confirmVoid() {
     .then(r => r.json())
     .then(d => {
         if (d.status === 'success') {
-            alert('✅ Payment voided successfully!\n\nWallet credited: $' + (d.data.amount || 0).toFixed(2));
+            alert('✅ Payment voided successfully!\n\nWallet credited: ' + <?= json_encode(dn_cur($config)) ?> + (d.data.amount || 0).toFixed(2));
             location.reload();
         } else {
             alert('❌ Error: ' + (d.message || 'Failed to void payment'));

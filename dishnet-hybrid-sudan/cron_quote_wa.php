@@ -21,6 +21,7 @@
  */
 
 declare(strict_types=1);
+require_once __DIR__ . '/lib/crm_url.php';
 
 if (!function_exists('str_contains'))   { function str_contains(string $h, string $n): bool  { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_starts_with')){ function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
@@ -637,10 +638,10 @@ foreach ($receiptQueue as $idx => &$rq) {
     ]));
 
     // Build serve URL
-    $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
+    $siteUrl = dn_crm_web($config);
     $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
     $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-    $pdfServeUrl = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+    $pdfServeUrl = dn_plugin_public($config)
         . '?page=api&action=serve_receipt_pdf&file=' . urlencode($pdfFilename)
         . '&token=' . urlencode($pdfToken);
 
@@ -779,10 +780,10 @@ function _qwa_fetchAndStorePdf(
             'filename' => "Quote-{$quoteRef}.pdf",
         ]));
 
-        $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
+        $siteUrl = dn_crm_web($config);
         $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
         $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-        $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+        $pdfUrl  = dn_plugin_public($config)
                  . '?page=api&action=serve_quote_pdf'
                  . '&file=' . urlencode($pdfFile)
                  . '&token=' . urlencode($pdfToken);

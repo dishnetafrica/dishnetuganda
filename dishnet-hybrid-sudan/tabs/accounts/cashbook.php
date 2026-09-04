@@ -273,12 +273,12 @@ $_alerts = [];
 $overduePend = array_filter($pendingDisbs, fn($d) => ($d['days_pending']??0) > 14);
 if (count($overduePend) > 0) {
     $_alerts[] = ['level'=>'red','icon'=>'⏰','title'=>count($overduePend).' disbursement(s) with no receipt >14 days',
-        'detail'=>'Staff received cash but no voucher received. Oldest: '.(reset($overduePend)['date']??'').' — '.htmlspecialchars(reset($overduePend)['person']??'').' $'.number_format(reset($overduePend)['amount'],0),
+        'detail'=>'Staff received cash but no voucher received. Oldest: '.(reset($overduePend)['date']??'').' — '.htmlspecialchars(reset($overduePend)['person']??'').' ' . dn_cur($config) . number_format(reset($overduePend)['amount'],0),
         'link'=>'?'.http_build_query(array_merge($_GET,['cb_view'=>'pending']))];
 }
 // Alert 2: Negative balance
 if ($projBal < 0) {
-    $_alerts[] = ['level'=>'red','icon'=>'🚨','title'=>'Cash balance is NEGATIVE: $'.number_format($projBal,2),
+    $_alerts[] = ['level'=>'red','icon'=>'🚨','title'=>'Cash balance is NEGATIVE: ' . dn_cur($config) . number_format($projBal,2),
         'detail'=>'Outflows exceed inflows. Check for missing receipts or unrecorded bank withdrawals.','link'=>null];
 }
 // Alert 3: Duplicate SRs in ledger
@@ -291,7 +291,7 @@ if (!empty($_dupCheck)) {
 $largePend = array_filter($pendingDisbs, fn($d) => $d['amount'] >= 500);
 if (count($largePend) > 0) {
     $_alerts[] = ['level'=>'amber','icon'=>'💸','title'=>count($largePend).' large disbursement(s) ≥$500 without receipt',
-        'detail'=>'Total: $'.number_format(array_sum(array_column(array_values($largePend),'amount')),0).' pending','link'=>'?'.http_build_query(array_merge($_GET,['cb_view'=>'pending']))];
+        'detail'=>'Total: ' . dn_cur($config) . number_format(array_sum(array_column(array_values($largePend),'amount')),0).' pending','link'=>'?'.http_build_query(array_merge($_GET,['cb_view'=>'pending']))];
 }
 // Alert 5: CRM sync stale
 $_cbMeta = $cb->getMeta();
@@ -956,23 +956,23 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
 <div style="background:#fff;border-bottom:1px solid var(--border);">
   <div style="padding:14px 18px 10px;border-bottom:1px solid var(--border);">
     <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--mute);margin-bottom:3px;">My Cash In Hand</div>
-    <div style="font-size:28px;font-weight:800;letter-spacing:-.5px;color:<?php echo $fa_cih>0?'var(--red)':'var(--mute)'; ?>;line-height:1;">$<?php echo number_format($fa_cih,2); ?></div>
+    <div style="font-size:28px;font-weight:800;letter-spacing:-.5px;color:<?php echo $fa_cih>0?'var(--red)':'var(--mute)'; ?>;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($fa_cih,2); ?></div>
     <div style="font-size:10px;color:var(--mute);margin-top:3px;"><?php echo date('d M Y'); ?> · My ledger only</div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;">
     <div style="padding:10px 14px;border-right:1px solid var(--border);">
       <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin-bottom:2px;">Today</div>
-      <div style="font-size:18px;font-weight:900;color:var(--green);">$<?php echo number_format($fa_todayAmt,0); ?></div>
+      <div style="font-size:18px;font-weight:900;color:var(--green);"><?= dn_cur($config) ?><?php echo number_format($fa_todayAmt,0); ?></div>
       <div style="font-size:9px;color:var(--mute);"><?php echo count($fa_todayCols); ?> collections</div>
     </div>
     <div style="padding:10px 14px;border-right:1px solid var(--border);">
       <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin-bottom:2px;">Pending HOV</div>
-      <div style="font-size:18px;font-weight:900;color:<?php echo $fa_pendAmt>0?'var(--amber)':'var(--mute)'; ?>;">$<?php echo number_format($fa_pendAmt,0); ?></div>
+      <div style="font-size:18px;font-weight:900;color:<?php echo $fa_pendAmt>0?'var(--amber)':'var(--mute)'; ?>;"><?= dn_cur($config) ?><?php echo number_format($fa_pendAmt,0); ?></div>
       <div style="font-size:9px;color:var(--mute);">awaiting Rupesh</div>
     </div>
     <div style="padding:10px 14px;background:#f8f8f5;">
       <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin-bottom:2px;">Total Handed</div>
-      <div style="font-size:18px;font-weight:900;color:var(--blue);">$<?php echo number_format($fa_hovAmt,0); ?></div>
+      <div style="font-size:18px;font-weight:900;color:var(--blue);"><?= dn_cur($config) ?><?php echo number_format($fa_hovAmt,0); ?></div>
       <div style="font-size:9px;color:var(--mute);">confirmed</div>
     </div>
   </div>
@@ -1018,11 +1018,11 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   <div style="background:#1a6b3a;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
     <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">💵 USD BALANCE</div>
-    <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;">$<?php echo number_format($projBal,2); ?></div>
+    <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
     <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;"><?php echo date('d M Y'); ?> &nbsp;·&nbsp; <?php echo number_format($seedCount); ?> entries &nbsp;·&nbsp; <?php echo $proj==='4g'?'4G':'Fiber&SL'; ?></div>
     <?php if($pendingCount>0): ?>
     <div style="margin-top:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.25);border-radius:20px;padding:4px 10px;cursor:pointer;" onclick="location.href='?<?php echo htmlspecialchars(http_build_query(array_merge($_GET,['cb_view'=>'pending']))); ?>'">
-      <span style="font-size:9px;font-weight:800;color:#fcd34d;">⚠ <?php echo $pendingCount; ?> pending · $<?php echo number_format($pendingTotal,0); ?></span>
+      <span style="font-size:9px;font-weight:800;color:#fcd34d;">⚠ <?php echo $pendingCount; ?> pending · <?= dn_cur($config) ?><?php echo number_format($pendingTotal,0); ?></span>
     </div>
     <?php endif; ?>
   </div>
@@ -1034,7 +1034,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
     <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">🇸🇸 SSP BALANCE</div>
     <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?php echo number_format($sspBal,0); ?> <span style="font-size:16px;font-weight:700;color:rgba(255,255,255,.45);">SSP</span></div>
-    <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;">Separate from USD &middot; <?php echo date("d M Y"); ?><?php if($sspBal!=0 && $xRate>0): ?> &nbsp;·&nbsp; ≈ $<?php echo number_format($sspBal/$xRate,2); ?> USD<?php endif; ?></div>
+    <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;">Separate from USD &middot; <?php echo date("d M Y"); ?><?php if($sspBal!=0 && $xRate>0): ?> &nbsp;·&nbsp; ≈ <?= dn_cur($config) ?><?php echo number_format($sspBal/$xRate,2); ?> USD<?php endif; ?></div>
   </div>
   <?php endif; ?>
 
@@ -1043,7 +1043,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   <div style="background:#0f0f0f;border-radius:16px;padding:18px 20px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
     <div>
       <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.35);margin-bottom:6px;">COMBINED (USD EQUIVALENT)</div>
-      <div style="font-size:38px;font-weight:900;color:#4ade80;letter-spacing:-2px;line-height:1;">$<?php echo number_format($combinedUsd,2); ?></div>
+      <div style="font-size:38px;font-weight:900;color:#4ade80;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($combinedUsd,2); ?></div>
     </div>
     <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:6px 12px;text-align:center;">
       <div style="font-size:10px;color:rgba(255,255,255,.4);font-weight:700;">1 USD =</div>
@@ -1336,12 +1336,12 @@ if ($isAdmin || ($retailer['role'] ?? '') === 'accountant') {
             <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:4px;">⚠️ Double-Counted Handovers Found</div>
             <div style="font-size:12px;color:#92400e;">
                 <?php echo count($_hovDupes); ?> handover receipt<?php echo count($_hovDupes) > 1 ? 's' : ''; ?> totalling
-                <strong>$<?php echo number_format(array_sum(array_column($_hovDupes, 'amount')), 2); ?></strong>
+                <strong><?= dn_cur($config) ?><?php echo number_format(array_sum(array_column($_hovDupes, 'amount')), 2); ?></strong>
                 are inflating your cashbook. These collections were already posted by CRM — the handover is an internal transfer, not new revenue.
             </div>
             <div style="margin-top:8px;font-size:11px;color:#b45309;">
                 <?php foreach ($_hovDupes as $_hd): ?>
-                <div style="padding:2px 0;"><?php echo htmlspecialchars($_hd['date'] . ' · ' . $_hd['validation_ref'] . ' · ' . $_hd['person']); ?> — <strong>$<?php echo number_format((float)$_hd['amount'], 2); ?></strong></div>
+                <div style="padding:2px 0;"><?php echo htmlspecialchars($_hd['date'] . ' · ' . $_hd['validation_ref'] . ' · ' . $_hd['person']); ?> — <strong><?= dn_cur($config) ?><?php echo number_format((float)$_hd['amount'], 2); ?></strong></div>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -1356,7 +1356,7 @@ if ($isAdmin || ($retailer['role'] ?? '') === 'accountant') {
 </div>
 <script>
 function cbHovReconcile() {
-    if (!confirm('This will void <?php echo count($_hovDupes); ?> duplicate handover entries ($<?php echo number_format(array_sum(array_column($_hovDupes, 'amount')), 2); ?>). Continue?')) return;
+    if (!confirm('This will void <?php echo count($_hovDupes); ?> duplicate handover entries (<?= dn_cur($config) ?><?php echo number_format(array_sum(array_column($_hovDupes, 'amount')), 2); ?>). Continue?')) return;
     var btn = document.getElementById('hovFixBtn');
     var msg = document.getElementById('hovFixMsg');
     btn.disabled = true; btn.textContent = '⏳ Fixing...';
@@ -1550,9 +1550,9 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="cb3-card-amt <?php echo $isIn?'in':'out'; ?>"><?php
         if (($e['currency']??'USD')==='SSP' && !empty($e['ssp_amount'])):
           echo ($isIn?'+':'-') . number_format((float)$e['ssp_amount'],0) . ' <span style="font-size:10px;font-weight:800;background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 5px;">SSP</span>';
-          if (!empty($e['ssp_rate'])): ?><div style="font-size:9px;color:#92400e;margin-top:2px;">≈ $<?php echo number_format($e['amount'],2); ?> @<?php echo number_format($e['ssp_rate'],0); ?></div><?php endif;
+          if (!empty($e['ssp_rate'])): ?><div style="font-size:9px;color:#92400e;margin-top:2px;">≈ <?= dn_cur($config) ?><?php echo number_format($e['amount'],2); ?> @<?php echo number_format($e['ssp_rate'],0); ?></div><?php endif;
         else:
-          echo ($isIn?'+':'-') . '$' . number_format($e['amount'],2);
+          echo ($isIn?'+':'-') . dn_cur($config) . number_format($e['amount'],2);
         endif; ?></div>
     </div>
     <div class="cb3-card-meta">
@@ -1602,16 +1602,16 @@ document.addEventListener('DOMContentLoaded', function() {
       if ($_cw2 && $_cw2 !== 'Office' && $isIn): ?> <span style="background:#fef2f2;color:#dc2626;border-radius:8px;padding:1px 5px;font-size:9px;font-weight:800;">💰<?= htmlspecialchars($_cw2) ?></span><?php
       elseif ($_cw2 === 'Office' && $isIn): ?> <span style="background:#dcfce7;color:#166534;border-radius:8px;padding:1px 5px;font-size:9px;font-weight:800;">✅</span><?php
       endif; ?></td>
-    <?php $_isSsp = ($e['currency']??'USD')==='SSP'; $_sspAmt = !empty($e['ssp_amount']) ? number_format((float)$e['ssp_amount'],0).' SSP' : '$'.number_format($e['amount'],2); ?>
-    <td class="cbv2-in"><?php echo $isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : '$'.number_format($e['amount'],2)) : ''; ?></td>
-    <td class="cbv2-out"><?php echo !$isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : '$'.number_format($e['amount'],2)) : ''; ?></td>
+    <?php $_isSsp = ($e['currency']??'USD')==='SSP'; $_sspAmt = !empty($e['ssp_amount']) ? number_format((float)$e['ssp_amount'],0).' SSP' : dn_cur($config) . number_format($e['amount'],2); ?>
+    <td class="cbv2-in"><?php echo $isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : dn_cur($config) . number_format($e['amount'],2)) : ''; ?></td>
+    <td class="cbv2-out"><?php echo !$isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : dn_cur($config) . number_format($e['amount'],2)) : ''; ?></td>
     <td style="font-family:monospace;font-size:11px;"><?php
       if ($e['running_balance'] !== null) {
           // v4.9.18: Use _bal_currency to show correct format (SSP vs USD)
           if ($filterCurr === 'SSP' || ($e['_bal_currency'] ?? '') === 'SSP') {
               echo number_format($e['running_balance'], 0) . ' <span style="color:#92400e;font-size:9px;">SSP</span>';
           } else {
-              echo '$' . number_format($e['running_balance'], 2);
+              echo dn_cur($config) . number_format($e['running_balance'], 2);
           }
       } else { echo '—'; }
     ?></td>
@@ -1671,7 +1671,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="cbSettleAllBox" style="display:none;background:#fff8f0;border:1.5px solid #fed7aa;border-radius:10px;padding:16px;margin-bottom:14px;">
     <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:10px;">&#128204; Settle All <?php echo $pendingCount; ?> Pending Items</div>
     <p style="font-size:12px;color:#78350f;margin-bottom:12px;line-height:1.5;">
-      This will mark all <strong><?php echo $pendingCount; ?> items</strong> ($<?php echo number_format($pendingTotal,2); ?>) as settled with the note below.<br>
+      This will mark all <strong><?php echo $pendingCount; ?> items</strong> (<?= dn_cur($config) ?><?php echo number_format($pendingTotal,2); ?>) as settled with the note below.<br>
       Use this to close out historical items from the Excel import and start fresh from today (11 Mar 2026).
     </p>
     <form method="POST">
@@ -1695,7 +1695,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="cbv2-sc-name"><div class="cbv2-dot <?php echo $s['status']; ?>"></div><?php echo htmlspecialchars($s['person']); ?></div>
       <div style="font-size:10px;color:#94a3b8;margin-top:2px;"><?php echo $s['cnt']; ?> items</div>
       <div style="display:flex;gap:10px;margin-top:8px;">
-        <div><div style="font-size:15px;font-weight:900;color:#dc2626;">$<?php echo number_format($s['total'],0); ?></div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8;">Unreceipted</div></div>
+        <div><div style="font-size:15px;font-weight:900;color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format($s['total'],0); ?></div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8;">Unreceipted</div></div>
         <div><div style="font-size:15px;font-weight:900;color:<?php echo $s['days_oldest']>60?'#dc2626':'#d97706'; ?>;"><?php echo $s['days_oldest']; ?>d</div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8;">Oldest</div></div>
       </div>
     </div>
@@ -1712,7 +1712,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="cbv2-disb-person"><?php echo $d['days_pending']>30?'&#128308; ':'&#128993; '; echo htmlspecialchars($d['person']?:'(no person)'); ?></div>
           <div class="cbv2-disb-desc"><?php echo htmlspecialchars(mb_strimwidth($d['description'],0,120,'…')); ?></div>
         </div>
-        <div class="cbv2-disb-amt">$<?php echo number_format($d['amount'],2); ?></div>
+        <div class="cbv2-disb-amt"><?= dn_cur($config) ?><?php echo number_format($d['amount'],2); ?></div>
       </div>
       <div class="cbv2-disb-meta">
         <span class="cbv2-disb-tag"><?php echo htmlspecialchars($d['sr']); ?></span>
@@ -1741,7 +1741,7 @@ $grand = $totS+$totT+$totF+$totO;
 ?>
 <div class="cbv2-tb">
   <input type="month" class="cbv2-fi" value="<?php echo $payMonth; ?>" onchange="cbv2F('cb_pm',this.value)">
-  <span style="font-size:12px;color:#94a3b8;">Total: <strong>$<?php echo number_format($grand,2); ?></strong></span>
+  <span style="font-size:12px;color:#94a3b8;">Total: <strong><?= dn_cur($config) ?><?php echo number_format($grand,2); ?></strong></span>
 </div>
 <div style="overflow-x:auto;background:#fff;">
 <table class="cbv2-tbl">
@@ -1754,22 +1754,22 @@ $grand = $totS+$totT+$totF+$totO;
     $rowT = $r['salary']+$r['transport']+$r['food']+$r['other']; ?>
   <tr>
     <td style="font-weight:700;"><?php echo htmlspecialchars($r['person']); ?></td>
-    <td class="cbv2-out"><?php echo $r['salary']  ? '$'.number_format($r['salary'],0)    : '—'; ?></td>
-    <td class="cbv2-out"><?php echo $r['transport']? '$'.number_format($r['transport'],0) : '—'; ?></td>
-    <td class="cbv2-out"><?php echo $r['food']     ? '$'.number_format($r['food'],0)      : '—'; ?></td>
-    <td class="cbv2-out"><?php echo $r['other']    ? '$'.number_format($r['other'],0)     : '—'; ?></td>
-    <td style="font-weight:900;font-size:13px;">$<?php echo number_format($rowT,0); ?></td>
+    <td class="cbv2-out"><?php echo $r['salary']  ? dn_cur($config) . number_format($r['salary'],0)    : '—'; ?></td>
+    <td class="cbv2-out"><?php echo $r['transport']? dn_cur($config) . number_format($r['transport'],0) : '—'; ?></td>
+    <td class="cbv2-out"><?php echo $r['food']     ? dn_cur($config) . number_format($r['food'],0)      : '—'; ?></td>
+    <td class="cbv2-out"><?php echo $r['other']    ? dn_cur($config) . number_format($r['other'],0)     : '—'; ?></td>
+    <td style="font-weight:900;font-size:13px;"><?= dn_cur($config) ?><?php echo number_format($rowT,0); ?></td>
     <td style="font-size:10px;color:#94a3b8;"><?php echo htmlspecialchars(substr($r['voucher_ref']??'',0,15)); ?></td>
   </tr>
   <?php endforeach; ?>
   <?php endif; ?>
   </tbody>
   <tfoot><tr style="background:#f8fafc;font-weight:900;"><td>TOTAL</td>
-    <td class="cbv2-out">$<?php echo number_format($totS,0); ?></td>
-    <td class="cbv2-out">$<?php echo number_format($totT,0); ?></td>
-    <td class="cbv2-out">$<?php echo number_format($totF,0); ?></td>
-    <td class="cbv2-out">$<?php echo number_format($totO,0); ?></td>
-    <td style="font-size:14px;">$<?php echo number_format($grand,0); ?></td>
+    <td class="cbv2-out"><?= dn_cur($config) ?><?php echo number_format($totS,0); ?></td>
+    <td class="cbv2-out"><?= dn_cur($config) ?><?php echo number_format($totT,0); ?></td>
+    <td class="cbv2-out"><?= dn_cur($config) ?><?php echo number_format($totF,0); ?></td>
+    <td class="cbv2-out"><?= dn_cur($config) ?><?php echo number_format($totO,0); ?></td>
+    <td style="font-size:14px;"><?= dn_cur($config) ?><?php echo number_format($grand,0); ?></td>
     <td></td>
   </tr></tfoot>
 </table>
@@ -1803,7 +1803,7 @@ $today=date('Y-m-d');
   <tr>
     <td style="font-weight:700;"><?php echo htmlspecialchars(preg_replace('/^(Power-|Site Rent-|Rent-)/i','',$s['site_name'])); ?></td>
     <td style="color:#94a3b8;"><?php echo $s['cnt']; ?>&times;</td>
-    <td style="font-weight:700;">$<?php echo number_format($s['total_paid'] ?? 0,0); ?></td>
+    <td style="font-weight:700;"><?= dn_cur($config) ?><?php echo number_format($s['total_paid'] ?? 0,0); ?></td>
     <td style="font-family:monospace;font-size:11px;color:#64748b;"><?php echo $s['last_date']; ?></td>
     <td style="font-size:12px;font-weight:700;color:<?php echo $dSince>45?'#dc2626':($dSince>30?'#d97706':'#374151'); ?>;"><?php echo $dSince; ?>d</td>
     <td style="font-size:11px;font-weight:700;color:<?php echo $sStatus==='paid'?'#059669':($sStatus==='pending'?'#d97706':'#dc2626'); ?>;">
@@ -1824,9 +1824,9 @@ $icOut=array_sum(array_column(array_filter($interco,fn($r)=>$r['direction']==='o
 ?>
 <div class="cbv2-panel">
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
-    <div class="cbv2-iccard"><div class="cbv2-iclbl">Africa &#8594; 4G (Loaned)</div><div class="cbv2-icval" style="color:#f87171;">$<?php echo number_format($icOut,2); ?></div></div>
-    <div class="cbv2-iccard"><div class="cbv2-iclbl">4G &#8594; Africa (Repaid)</div><div class="cbv2-icval" style="color:#4ade80;">$<?php echo number_format($icIn,2); ?></div></div>
-    <div class="cbv2-iccard"><div class="cbv2-iclbl">Net 4G Owes</div><div class="cbv2-icval" style="color:#fbbf24;">$<?php echo number_format(abs($icOut-$icIn),2); ?></div></div>
+    <div class="cbv2-iccard"><div class="cbv2-iclbl">Africa &#8594; 4G (Loaned)</div><div class="cbv2-icval" style="color:#f87171;"><?= dn_cur($config) ?><?php echo number_format($icOut,2); ?></div></div>
+    <div class="cbv2-iccard"><div class="cbv2-iclbl">4G &#8594; Africa (Repaid)</div><div class="cbv2-icval" style="color:#4ade80;"><?= dn_cur($config) ?><?php echo number_format($icIn,2); ?></div></div>
+    <div class="cbv2-iccard"><div class="cbv2-iclbl">Net 4G Owes</div><div class="cbv2-icval" style="color:#fbbf24;"><?= dn_cur($config) ?><?php echo number_format(abs($icOut-$icIn),2); ?></div></div>
   </div>
   <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:#78350f;">
     <strong>Flow:</strong> Rupesh transfers from Africa book when 4G needs funds. BBC &amp; Yogibhai repay via collections. Tagged <em>DishNet Africa Ltd-Loan Return</em>.
@@ -1845,7 +1845,7 @@ $icOut=array_sum(array_column(array_filter($interco,fn($r)=>$r['direction']==='o
         else echo '<span style="background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:800;">Fiber&SL</span>';
       ?></td>
       <td><?php echo $e['direction']==='in'?'<span style="color:#059669;font-weight:700;">&#8592; Received</span>':'<span style="color:#dc2626;font-weight:700;">&#8594; Sent</span>'; ?></td>
-      <td style="font-weight:800;font-size:13px;">$<?php echo number_format($e['amount'],2); ?></td>
+      <td style="font-weight:800;font-size:13px;"><?= dn_cur($config) ?><?php echo number_format($e['amount'],2); ?></td>
       <td style="font-size:12px;color:#374151;"><?php echo htmlspecialchars(mb_strimwidth($e['description'],0,60,'…')); ?></td>
       <td><?php echo cbValBadge($e['validation_status']); ?></td>
     </tr>
@@ -1870,26 +1870,26 @@ $outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9
     <option value="<?php echo $yr; ?>" <?php echo $sumYear===$yr?'selected':''; ?>><?php echo $yr; ?></option>
     <?php endforeach; ?>
   </select>
-  <span style="font-size:12px;color:#94a3b8;">IN: <strong style="color:#059669;">$<?php echo number_format($summary['total_in'],0); ?></strong> &nbsp; OUT: <strong style="color:#dc2626;">$<?php echo number_format($summary['total_out'],0); ?></strong> &nbsp; Net: <strong style="color:<?php echo $summary['balance']>=0?'#059669':'#dc2626'; ?>;">$<?php echo number_format($summary['balance'],0); ?></strong></span>
+  <span style="font-size:12px;color:#94a3b8;">IN: <strong style="color:#059669;"><?= dn_cur($config) ?><?php echo number_format($summary['total_in'],0); ?></strong> &nbsp; OUT: <strong style="color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format($summary['total_out'],0); ?></strong> &nbsp; Net: <strong style="color:<?php echo $summary['balance']>=0?'#059669':'#dc2626'; ?>;"><?= dn_cur($config) ?><?php echo number_format($summary['balance'],0); ?></strong></span>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#e5e5e0;">
   <div style="background:#fff;padding:18px;">
-    <div style="font-size:13px;font-weight:800;color:#059669;margin-bottom:14px;">&#128176; Cash IN &mdash; $<?php echo number_format($summary['total_in'],0); ?></div>
+    <div style="font-size:13px;font-weight:800;color:#059669;margin-bottom:14px;">&#128176; Cash IN &mdash; <?= dn_cur($config) ?><?php echo number_format($summary['total_in'],0); ?></div>
     <?php $i=0; foreach($summary['in'] as $cat=>$d): $col=$inColors[$i%count($inColors)]; $i++; ?>
     <div class="cbv2-sum-row">
       <div class="cbv2-sum-label"><?php echo cbCatIcon($cat).' '.htmlspecialchars($cat); ?></div>
       <div class="cbv2-sum-bw"><div class="cbv2-sum-b" style="width:<?php echo round($d['total']/$maxIn*100); ?>%;background:<?php echo $col; ?>;"></div></div>
-      <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;">$<?php echo number_format($d['total'],0); ?></div>
+      <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;"><?= dn_cur($config) ?><?php echo number_format($d['total'],0); ?></div>
     </div>
     <?php endforeach; ?>
   </div>
   <div style="background:#fff;padding:18px;">
-    <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:14px;">&#128184; Cash OUT &mdash; $<?php echo number_format($summary['total_out'],0); ?></div>
+    <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:14px;">&#128184; Cash OUT &mdash; <?= dn_cur($config) ?><?php echo number_format($summary['total_out'],0); ?></div>
     <?php $i=0; foreach($summary['out'] as $cat=>$d): $col=$outColors[$i%count($outColors)]; $i++; ?>
     <div class="cbv2-sum-row">
       <div class="cbv2-sum-label"><?php echo cbCatIcon($cat).' '.htmlspecialchars($cat); ?></div>
       <div class="cbv2-sum-bw"><div class="cbv2-sum-b" style="width:<?php echo round($d['total']/$maxOut*100); ?>%;background:<?php echo $col; ?>;"></div></div>
-      <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;">$<?php echo number_format($d['total'],0); ?></div>
+      <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;"><?= dn_cur($config) ?><?php echo number_format($d['total'],0); ?></div>
     </div>
     <?php endforeach; ?>
   </div>
@@ -1955,7 +1955,7 @@ $outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9
       <div style="margin-top:8px;"><span style="color:#D41C1C;font-weight:700;">⚠ Categories recorded in unexpected direction:</span>
         <div style="margin-top:4px;font-size:11px;">
         <?php foreach($wrongDir as $w): ?>
-          <div style="padding:3px 0;border-bottom:1px solid #e5e5e0;"><?php echo htmlspecialchars($w['category']); ?> as <?php echo strtoupper($w['direction']); ?> — <?php echo $w['cnt']; ?> entries totalling $<?php echo number_format($w['total'],0); ?></div>
+          <div style="padding:3px 0;border-bottom:1px solid #e5e5e0;"><?php echo htmlspecialchars($w['category']); ?> as <?php echo strtoupper($w['direction']); ?> — <?php echo $w['cnt']; ?> entries totalling <?= dn_cur($config) ?><?php echo number_format($w['total'],0); ?></div>
         <?php endforeach; ?>
         </div>
       </div>
@@ -1964,7 +1964,7 @@ $outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9
       <div style="margin-top:8px;"><span style="color:#D97706;font-weight:700;">⚠ Person not recorded on salary/expense entries:</span>
         <div style="margin-top:4px;font-size:11px;">
         <?php foreach($missingPerson as $mp): ?>
-          <div style="padding:3px 0;border-bottom:1px solid #e5e5e0;"><?php echo htmlspecialchars($mp['category']); ?> — <?php echo $mp['cnt']; ?> entries &nbsp;$<?php echo number_format($mp['total'],0); ?> with no person name</div>
+          <div style="padding:3px 0;border-bottom:1px solid #e5e5e0;"><?php echo htmlspecialchars($mp['category']); ?> — <?php echo $mp['cnt']; ?> entries &nbsp;<?= dn_cur($config) ?><?php echo number_format($mp['total'],0); ?> with no person name</div>
         <?php endforeach; ?>
         </div>
       </div>
@@ -2128,11 +2128,11 @@ function cbCatRow(grp, idx, cat) {
   var u = cbCatUsage(cat.id);
   var dotColor = u ? '#16a34a' : '#cbd5e1';
   var usageHtml = u
-    ? '<span class="cbcat-usage" title="' + u.count + ' entries">' + u.count + 'x&nbsp;$' + Math.round(u.total).toLocaleString() + '</span>'
+    ? '<span class="cbcat-usage" title="' + u.count + ' entries">' + u.count + 'x&nbsp;' + <?= json_encode(dn_cur($config)) ?> + Math.round(u.total).toLocaleString() + '</span>'
     : '<span class="cbcat-usage" style="color:#e2e8f0;">–</span>';
 
   return '<div class="cbcat-row">' +
-    '<span class="cbcat-dot" style="background:' + dotColor + ';" title="' + (u?u.count+' entries, $'+Math.round(u.total):'Never used') + '"></span>' +
+    '<span class="cbcat-dot" style="background:' + dotColor + ';" title="' + (u?u.count+' entries, ' + <?= json_encode(dn_cur($config)) ?> +Math.round(u.total):'Never used') + '"></span>' +
     '<input class="cbcat-ic" type="text" value="' + cbEsc(cat.ic||'📦') + '" ' +
       'onchange="cbCatUpdate(\'' + grp + '\',' + idx + ',\'ic\',this.value)" maxlength="4" title="Emoji">' +
     '<input class="cbcat-name" type="text" value="' + cbEsc(cat.id) + '" ' +
@@ -2169,7 +2169,7 @@ function cbCatShowOrphans() {
       cbEscJs(o.name) + ',\'' + grp + '\')" title="Click to add to ' + grp + '">' +
       '📦 ' + cbEsc(o.name) +
       ' <span style="background:#fde68a;border-radius:4px;padding:1px 5px;font-size:9px;">' +
-        o.count + 'x · $' + Math.round(o.total).toLocaleString() +
+        o.count + 'x · ' + <?= json_encode(dn_cur($config)) ?> + Math.round(o.total).toLocaleString() +
       '</span>' +
       ' <span style="color:#16a34a;font-size:13px;">＋</span>' +
     '</div>';
@@ -2211,7 +2211,7 @@ function cbCatRemove(grp, idx) {
   var name = _cbCatData[grp][idx].id || 'this category';
   var u = cbCatUsage(name);
   var msg = u
-    ? 'Remove "' + name + '"?\n\n⚠️ This category has ' + u.count + ' entries ($' + Math.round(u.total).toLocaleString() + ') in the ledger.\nExisting entries will NOT be deleted, but it will disappear from the form.'
+    ? 'Remove "' + name + '"?\n\n⚠️ This category has ' + u.count + ' entries (' + <?= json_encode(dn_cur($config)) ?> + Math.round(u.total).toLocaleString() + ') in the ledger.\nExisting entries will NOT be deleted, but it will disappear from the form.'
     : 'Remove "' + name + '"?';
   if (!confirm(msg)) return;
   _cbCatData[grp].splice(idx, 1);
@@ -2293,7 +2293,7 @@ if (document.readyState === 'loading') {
     <div class="cb4-curr-row">
       <div class="cb4-cpill sel" id="cb4PillUSD" onclick="cb4SetCurr('USD')">
         <div class="cb4-cpill-lbl">💵 USD</div>
-        <div class="cb4-cpill-bal" id="cb4PillUSDbal">$<?php echo number_format($projBal,2); ?></div>
+        <div class="cb4-cpill-bal" id="cb4PillUSDbal"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
       </div>
       <div class="cb4-cpill" id="cb4PillSSP" onclick="cb4SetCurr('SSP')">
         <div class="cb4-cpill-lbl">🇸🇸 SSP</div>
@@ -2373,7 +2373,7 @@ if (document.readyState === 'loading') {
     <div class="cb4-fg" id="cb4AmtWrapOuter">
       <label class="cb4-lbl" id="cb4AmtLbl">AMOUNT (USD)</label>
       <div class="cb4-aw">
-        <span class="cb4-as" id="cb4AmtSym">$</span>
+        <span class="cb4-as" id="cb4AmtSym"><?= trim(dn_cur($config)) ?></span>
         <input type="number" class="cb4-inp cb4-ai" id="cb4Amt" placeholder="0.00" step="0.01" min="0.01" oninput="cb4Update()">
       </div>
     </div>
@@ -2526,7 +2526,7 @@ if (document.readyState === 'loading') {
       </div>
       <div class="cb4-fg">
         <label class="cb4-lbl" id="cb4ExchAmtLbl">USD AMOUNT (giving out)</label>
-        <div class="cb4-aw"><span class="cb4-as">$</span>
+        <div class="cb4-aw"><span class="cb4-as"><?= trim(dn_cur($config)) ?></span>
           <input type="number" class="cb4-inp cb4-ai" id="cb4ExchAmt" placeholder="0.00" step="0.01" min="0.01" oninput="cb4ExchCalc()">
         </div>
       </div>
@@ -2603,7 +2603,7 @@ if (document.readyState === 'loading') {
     <div class="cbv2-fg"><label class="cbv2-lbl">Voucher Number</label>
       <input type="text" name="voucher_no" class="cbv2-inp" placeholder="Voucher No-A0399" required></div>
     <div class="cbv2-fg"><label class="cbv2-lbl">Change Returned USD (0 if none)</label>
-      <div class="cbv2-aw"><span class="cbv2-as">$</span>
+      <div class="cbv2-aw"><span class="cbv2-as"><?= trim(dn_cur($config)) ?></span>
         <input type="number" name="return_amount" class="cbv2-inp" style="padding-left:24px;" value="0" min="0" step="0.01"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
@@ -2765,7 +2765,7 @@ function cb4SetCurr(c) {
   document.getElementById('cb4PillUSD').classList.toggle('sel', c==='USD');
   document.getElementById('cb4PillSSP').classList.toggle('sel', c==='SSP');
   document.getElementById('cb4AmtLbl').textContent = c==='SSP' ? 'AMOUNT (SSP)' : 'AMOUNT (USD)';
-  document.getElementById('cb4AmtSym').textContent = c==='SSP' ? '' : '$';
+  document.getElementById('cb4AmtSym').textContent = c==='SSP' ? '' : <?= json_encode(trim(dn_cur($config))) ?>;
   document.getElementById('cb4RateWrap').style.display = c==='SSP' ? '' : 'none';
   if (_cb4Dir) { cb4RenderCats(); _cb4Cat=''; document.getElementById('cb4NextWrap').style.display='none'; }
   cb4UpdateHeader();
@@ -3014,7 +3014,7 @@ function cb4CalcRate() {
   var ssp = parseFloat(document.getElementById('cb4Amt').value) || 0;
   var rate = parseFloat(document.getElementById('cb4Rate').value) || 0;
   var calc = document.getElementById('cb4RateCalc');
-  if (ssp>0 && rate>0) { calc.textContent = '≈ $'+(ssp/rate).toFixed(2)+' USD equivalent'; }
+  if (ssp>0 && rate>0) { calc.textContent = '≈ ' + <?= json_encode(dn_cur($config)) ?> +(ssp/rate).toFixed(2)+' USD equivalent'; }
   else { calc.textContent = ''; }
 }
 
@@ -3117,7 +3117,7 @@ function cb4ExchUpdateSave() {
   btn.disabled = !(amt > 0 && rate > 0);
   if (amt > 0 && rate > 0) {
     var ssp = Math.round(amt * rate);
-    btn.textContent = 'Save Exchange · $' + amt.toFixed(2) + ' ↔ ' + ssp.toLocaleString() + ' SSP';
+    btn.textContent = 'Save Exchange · ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' ↔ ' + ssp.toLocaleString() + ' SSP';
   } else {
     btn.textContent = 'Save Exchange';
   }
@@ -3509,7 +3509,7 @@ function cb4ReorderPersonDrop(cat) {
   // Re-append in new order
   items.forEach(function(el) { drop.appendChild(el); });
 }
-function cbv2OS(id,sr,person,amt){document.getElementById('cbv2SID').value=id;document.getElementById('cbv2ST').textContent='Settle: '+sr;document.getElementById('cbv2SS').textContent='Given to '+person+' — $'+amt.toFixed(2);document.getElementById('cbv2SettleO').classList.add('open');document.body.style.overflow='hidden';}
+function cbv2OS(id,sr,person,amt){document.getElementById('cbv2SID').value=id;document.getElementById('cbv2ST').textContent='Settle: '+sr;document.getElementById('cbv2SS').textContent='Given to '+person+' — ' + <?= json_encode(dn_cur($config)) ?> +amt.toFixed(2);document.getElementById('cbv2SettleO').classList.add('open');document.body.style.overflow='hidden';}
 function cbv2CS(){document.getElementById('cbv2SettleO').classList.remove('open');document.body.style.overflow='';}
 function cbv2OE(id){cbCrud(id,null);}
 

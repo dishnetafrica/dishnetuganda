@@ -81,7 +81,7 @@
             <td><?= h($a['customer_type']??'—') ?></td>
             <td><?= h($a['connectivity_type']??'—') ?></td>
             <td><?= h($a['sales_type']??'—') ?></td>
-            <td><?= $a['amount_charged']>0 ? '$'.number_format($a['amount_charged'],2) : '—' ?></td>
+            <td><?= $a['amount_charged']>0 ? dn_cur($config) . number_format($a['amount_charged'],2) : '—' ?></td>
             <td><span class="badge-<?= h($a['status']??'new') ?>"><?= h($a['status']??'') ?></span></td>
             <td><?= h(substr($a['submitted_at']??'',0,10)) ?></td>
             <td>

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains')) { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
@@ -118,7 +119,7 @@ class ExpenseAdvanceService
     {
         $amount = round((float)($data['amount'] ?? 0), 2);
         if ($amount <= 0 || $amount > self::MAX_ADVANCE) {
-            return ['ok' => false, 'error' => 'Amount must be between $0.01 and $' . number_format(self::MAX_ADVANCE)];
+            return ['ok' => false, 'error' => 'Amount must be between ' . dn_cur() . '0.01 and ' . dn_cur() . number_format(self::MAX_ADVANCE)];
         }
 
         $recipientId   = (int)($data['recipient_id'] ?? 0);
@@ -581,7 +582,7 @@ class ExpenseAdvanceService
                 $_bgAdvBal = max(0, round((float)$_bgAdvStmt->fetchColumn(), 2));
             } catch (\Throwable $e) { $_bgAdvBal = 0; }
             if ($amount > 0 && $_bgUsdInAmt <= 0 && $_bgAdvBal <= 0) {
-                return ['ok' => false, 'error' => 'Cannot submit $' . number_format($amount, 2)
+                return ['ok' => false, 'error' => 'Cannot submit ' . dn_cur() . number_format($amount, 2)
                     . ' USD — you have no USD cash. Switch to SSP if you have SSP.'];
             }
         }

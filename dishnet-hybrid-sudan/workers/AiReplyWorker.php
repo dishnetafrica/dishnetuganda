@@ -35,9 +35,14 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/DishNetTools.php';
         require_once $root . '/lib/ConversationService.php';
         require_once $root . '/lib/DishNetAiBrain.php';
+        require_once $root . '/lib/KnowledgeBase.php';
 
         $this->evo   = new EvolutionApiService($config);
         $this->tools = new DishNetTools($store, $config, $root);
+        // One brain, one knowledge base: the same approved answers the website
+        // chat uses ride into the shared system prompt. Empty (legacy) when
+        // migration 064 has not been seeded.
+        $config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
         $this->brain = new DishNetAiBrain($config);
 
         $dataDir = getDataDir($root);
@@ -157,6 +162,28 @@ class AiReplyWorker extends WorkerBase
             // Several customers share this number's last digits. Say so rather
             // than picking one — the AI must ask a verifying question.
             $ctx['identity_ambiguous'] = true;
+        }
+
+        // Cross-channel memory: an anonymous phone that previously chatted on
+        // the website (web_chat_leads) is greeted as a returning contact
+        // instead of being asked everything again.
+        if (!$identified) {
+            try {
+                $digits = preg_replace('/\D+/', '', $phone) ?? '';
+                $last9  = strlen($digits) >= 9 ? substr($digits, -9) : $digits;
+                if ($last9 !== '') {
+                    foreach (($this->store->load('web_chat_leads.json') ?? []) as $wl) {
+                        $lp = preg_replace('/\D+/', '', (string)($wl['phone'] ?? '')) ?? '';
+                        if (strlen($lp) >= 9 && substr($lp, -9) === $last9) {
+                            $ctx['webchat_lead'] = [
+                                'name'  => (string)($wl['name'] ?? ''),
+                                'topic' => (string)($wl['note'] ?? ($wl['topic'] ?? ($wl['message'] ?? ''))),
+                            ];
+                            break;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) { /* memory is a bonus, never a blocker */ }
         }
 
         switch ($channel) {

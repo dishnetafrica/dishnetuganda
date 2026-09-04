@@ -15,7 +15,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 
 <div style="background:#F3E5F5;border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;">
     <div style="font-size:10px;font-weight:700;color:#7B1FA2;text-transform:uppercase;">Total Approved Recharges</div>
-    <div style="font-size:28px;font-weight:800;color:#7B1FA2;">$<?= number_format($approvedTotal,2) ?></div>
+    <div style="font-size:28px;font-weight:800;color:#7B1FA2;"><?= dn_cur($config) ?><?= number_format($approvedTotal,2) ?></div>
 </div>
 
 <?php foreach (array_slice($allRecharges2, 0, 50) as $rr):
@@ -30,7 +30,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
         <?php if($rr['reference']??''): ?><div style="font-size:10px;color:#6b7280;">Ref: <?= h($rr['reference']) ?></div><?php endif; ?>
     </div>
     <div style="text-align:right;">
-        <div style="font-size:16px;font-weight:800;color:<?= $rrC[1] ?>;">$<?= number_format($rr['amount']??0,2) ?></div>
+        <div style="font-size:16px;font-weight:800;color:<?= $rrC[1] ?>;"><?= dn_cur($config) ?><?= number_format($rr['amount']??0,2) ?></div>
         <span style="background:<?= $rrC[0] ?>;color:<?= $rrC[1] ?>;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;"><?= ucfirst($rrSt) ?></span>
     </div>
 </div>

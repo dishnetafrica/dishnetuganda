@@ -1409,7 +1409,7 @@ $webhooks = $crm->getWebhooks();
 $ourWebhook = null;
 $otherWebhooks = [];
 foreach ($webhooks as $wh) {
-    if (strpos($wh['url'] ?? '', 'dishnet-hybrid-telecom') !== false) {
+    if (strpos($wh['url'] ?? '', '/_plugins/' . basename(dirname(__DIR__, 2)) . '/') !== false) {
         $ourWebhook = $wh;
     } else {
         $otherWebhooks[] = $wh;
@@ -1424,7 +1424,7 @@ foreach ([__DIR__ . '/ucrm.json', __DIR__ . '/data/ucrm.json', $dataDir . '/ucrm
         if (is_array($c) && !empty($c)) { $ucrmConfig = $c; break; }
     }
 }
-$expectedUrl = rtrim($ucrmConfig['ucrmPublicUrl'] ?? '', '/') . '/_plugins/dishnet-hybrid-telecom/public.php?page=webhook';
+$expectedUrl = dn_plugin_public($config) . '?page=webhook';
 $urlCorrect = $ourWebhook && ($ourWebhook['url'] ?? '') === $expectedUrl;
 
 // Recent webhook log

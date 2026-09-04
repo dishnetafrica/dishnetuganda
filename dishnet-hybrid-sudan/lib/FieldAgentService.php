@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains')) { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
@@ -91,7 +92,7 @@ class FieldAgentService
 
         $amount = round((float)($post['amount'] ?? 0), 2);
         if ($amount <= 0 || $amount > self::MAX_COLLECTION) {
-            return ['success' => false, 'message' => "Amount must be between \$0.01 and \$" . number_format(self::MAX_COLLECTION)];
+            return ['success' => false, 'message' => "Amount must be between " . dn_cur() . "0.01 and " . dn_cur() . number_format(self::MAX_COLLECTION)];
         }
 
         $type = trim($post['collection_type'] ?? 'other');
@@ -126,13 +127,13 @@ class FieldAgentService
         $this->log(
             'collection_logged',
             $agent['name'],
-            "Collected \${$amount} ({$type}) from {$customerName}" . ($reference ? " [Ref: {$reference}]" : ''),
+            "Collected " . dn_cur() . "{$amount} ({$type}) from {$customerName}" . ($reference ? " [Ref: {$reference}]" : ''),
             $record['id']
         );
 
         return [
             'success' => true,
-            'message' => "\${$amount} collection logged successfully.",
+            'message' => "" . dn_cur() . "{$amount} collection logged successfully.",
             'data'    => [
                 'collection_id' => $record['id'],
                 'cash_balance'  => $this->getCashBalance((int)$agent['id']),
@@ -189,7 +190,7 @@ class FieldAgentService
         if ($amount > $cashBalance) {
             return [
                 'success' => false,
-                'message' => "Cannot remit \${$amount}. Your current cash balance is \$" . number_format($cashBalance, 2) . '.',
+                'message' => "Cannot remit " . dn_cur() . "{$amount}. Your current cash balance is " . dn_cur() . number_format($cashBalance, 2) . '.',
             ];
         }
 
@@ -216,13 +217,13 @@ class FieldAgentService
         $this->log(
             'remittance_submitted',
             $agent['name'],
-            "Submitted remittance of \${$amount} to {$remittedTo}",
+            "Submitted remittance of " . dn_cur() . "{$amount} to {$remittedTo}",
             $record['id']
         );
 
         return [
             'success' => true,
-            'message' => "Remittance of \${$amount} to {$remittedTo} submitted. Awaiting approval.",
+            'message' => "Remittance of " . dn_cur() . "{$amount} to {$remittedTo} submitted. Awaiting approval.",
             'data'    => [
                 'remittance_id' => $record['id'],
                 'cash_balance'  => $cashBalance, // balance not yet reduced; reduced on approval
@@ -263,13 +264,13 @@ class FieldAgentService
         $this->log(
             'remittance_approved',
             $admin['name'],
-            "Approved remittance #{$remittanceId} — \${$req['amount']} from {$req['agent_name']} to {$req['remitted_to']}",
+            "Approved remittance #{$remittanceId} — " . dn_cur() . "{$req['amount']} from {$req['agent_name']} to {$req['remitted_to']}",
             $remittanceId
         );
 
         return [
             'success' => true,
-            'message' => "\${$req['amount']} remittance from {$req['agent_name']} approved.",
+            'message' => "" . dn_cur() . "{$req['amount']} remittance from {$req['agent_name']} approved.",
             'data'    => [
                 'remittance_id' => $remittanceId,
                 'agent_cash_balance' => $this->getCashBalance((int)$req['agent_id']),

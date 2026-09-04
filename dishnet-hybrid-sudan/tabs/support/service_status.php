@@ -35,7 +35,7 @@ function supCheckService() {
 
         var html = '<div style="background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:12px;">';
         html += '<div style="font-size:18px;font-weight:800;">'+name+'</div>';
-        html += '<div style="font-size:12px;color:#6b7280;">CRM #'+cid+' &middot; Balance: <span style="color:'+(bal<0?'#dc3545':'#28a745')+';font-weight:700;">$'+bal.toFixed(2)+'</span></div></div>';
+        html += '<div style="font-size:12px;color:#6b7280;">CRM #'+cid+' &middot; Balance: <span style="color:'+(bal<0?'#dc3545':'#28a745')+';font-weight:700;">' + <?= json_encode(dn_cur($config)) ?> +bal.toFixed(2)+'</span></div></div>';
 
         // Services with color-coded status
         html += '<div style="font-size:13px;font-weight:800;color:#1e293b;margin-bottom:8px;">Services ('+svcs.length+')</div>';
@@ -66,7 +66,7 @@ function supCheckService() {
             var overdue = dueDate && new Date(dueDate) < new Date();
             html += '<div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:4px;box-shadow:0 1px 3px rgba(0,0,0,.03);">';
             html += '<div><div style="font-size:12px;font-weight:700;">#'+(inv.number||inv.id)+'</div><div style="font-size:10px;color:#9ca3af;">'+invDate+(dueDate?' &middot; Due: '+dueDate:'')+'</div></div>';
-            html += '<div style="text-align:right;"><div style="font-weight:800;color:#dc3545;">$'+due.toFixed(2)+'</div>';
+            html += '<div style="text-align:right;"><div style="font-weight:800;color:#dc3545;">' + <?= json_encode(dn_cur($config)) ?> +due.toFixed(2)+'</div>';
             if (overdue) html += '<div style="font-size:9px;color:#dc3545;font-weight:700;">OVERDUE</div>';
             html += '</div></div>';
         });

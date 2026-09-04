@@ -463,7 +463,7 @@ function wizBuildReview() {
     return (f.value || '').trim();
   }
   function fmt(v) { return v || '<span style="color:#9ca3af;font-style:italic;">—</span>'; }
-  function money(n) { return '$' + parseFloat(n || 0).toFixed(2); }
+  function money(n) { return <?= json_encode(dn_cur($config)) ?> + parseFloat(n || 0).toFixed(2); }
 
   // ── Collect values ────────────────────────────────────────────────────
   // BUG FIX: read directly from checked radio, NOT val('customer_type') which
@@ -674,7 +674,7 @@ function wizBuildReview() {
             (d.data||[]).filter(p=>p.active!==false).forEach(function(p){
                 var opt=document.createElement('option');
                 opt.value=p.id;
-                opt.textContent=p.name+' — $'+parseFloat(p.price).toFixed(2)+'/'+p.duration_days+'d';
+                opt.textContent=p.name+' — ' + <?= json_encode(dn_cur($config)) ?> +parseFloat(p.price).toFixed(2)+'/'+p.duration_days+'d';
                 sel.appendChild(opt);
             });
         }).catch(function(){});
@@ -707,7 +707,7 @@ function wizBuildReview() {
 <!-- Wallet warning -->
 <div id="cashWarning" class="kyc-alert warning" style="display:none;">
     <i class="bi bi-wallet2"></i>
-    <div><strong>Cash payment.</strong> Wallet: <strong>$<?= number_format($myWallet['balance'], 2) ?></strong> will be deducted.
+    <div><strong>Cash payment.</strong> Wallet: <strong><?= dn_cur($config) ?><?= number_format($myWallet['balance'], 2) ?></strong> will be deducted.
     <?php if ($myWallet['balance'] <= 0): ?><br><span style="color:#dc3545;">Wallet empty — ask admin to top up.</span><?php endif; ?>
     </div>
 </div>
@@ -966,7 +966,7 @@ var _kycFiberInstallFee = <?= json_encode((float)($config['fiber_install_fee'] ?
 <div id="osBar" style="background:linear-gradient(135deg,#1A1A1A,#2A2A2A);border-radius:14px 14px 0 0;padding:14px 16px 12px;color:#fff;position:sticky;top:0;z-index:10;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
     <span style="font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;opacity:.8;">🛒 Order</span>
-    <span id="osTotalBadge" style="background:rgba(255,255,255,.18);border-radius:20px;padding:4px 14px;font-size:15px;font-weight:900;letter-spacing:-.3px;">$0.00</span>
+    <span id="osTotalBadge" style="background:rgba(255,255,255,.18);border-radius:20px;padding:4px 14px;font-size:15px;font-weight:900;letter-spacing:-.3px;"><?= dn_cur($config) ?>0.00</span>
   </div>
   <div id="osLines" style="display:flex;flex-direction:column;gap:4px;">
     <div style="font-size:12px;opacity:.55;font-style:italic;">← select hardware &amp; plan below</div>
@@ -998,7 +998,7 @@ var _kycFiberInstallFee = <?= json_encode((float)($config['fiber_install_fee'] ?
       <div style="font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= h($d['title']) ?></div>
       <div style="font-size:11px;color:#94a3b8;margin-top:1px;text-transform:capitalize;"><?= h($dtype) ?><?= !empty($d['sku'])?' · '.$d['sku']:'' ?></div>
     </div>
-    <div style="font-weight:800;color:#D41C1C;font-size:14px;white-space:nowrap;margin-right:2px;">$<?= number_format($dnum,0) ?></div>
+    <div style="font-weight:800;color:#D41C1C;font-size:14px;white-space:nowrap;margin-right:2px;"><?= dn_cur($config) ?><?= number_format($dnum,0) ?></div>
     <div style="width:32px;height:32px;background:#D41C1C;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;font-weight:300;pointer-events:none;">+</div>
   </div>
   <?php endforeach; ?>
@@ -1271,7 +1271,7 @@ function smartKitScan() {
       </div>
     </div>
     <div style="text-align:right;flex-shrink:0;">
-      <div style="font-size:16px;font-weight:900;color:#0D47A1;">$<?= number_format($spPrice,2) ?></div>
+      <div style="font-size:16px;font-weight:900;color:#0D47A1;"><?= dn_cur($config) ?><?= number_format($spPrice,2) ?></div>
       <div style="font-size:9px;color:#94a3b8;font-weight:600;">/month</div>
     </div>
   </div>
@@ -1532,14 +1532,14 @@ function renderCart() {
     html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid #DBEAFE;">'
       + '<div style="flex:1;min-width:0;">'
         + '<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + item.title + '</div>'
-        + '<div style="font-size:11px;color:#6b7280;margin-top:1px;">$' + item.price.toFixed(2) + ' each</div>'
+        + '<div style="font-size:11px;color:#6b7280;margin-top:1px;">' + <?= json_encode(dn_cur($config)) ?> + item.price.toFixed(2) + ' each</div>'
       + '</div>'
       + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">'
         + '<button type="button" onclick="hwQty(' + idx + ',-1)" class="hw-qty-btn" style="border:1.5px solid #cbd5e1;background:#f8fafc;border-radius:7px;font-size:20px;cursor:pointer;line-height:1;font-weight:600;color:#374151;">−</button>'
         + '<span style="min-width:24px;text-align:center;font-weight:800;font-size:14px;">' + item.qty + '</span>'
         + '<button type="button" onclick="hwQty(' + idx + ',1)" class="hw-qty-btn" style="border:1.5px solid #D41C1C;background:#fff5f5;color:#D41C1C;border-radius:7px;font-size:20px;cursor:pointer;line-height:1;font-weight:700;">+</button>'
       + '</div>'
-      + '<div style="font-weight:800;color:#0D47A1;font-size:14px;min-width:54px;text-align:right;">$' + lt.toFixed(2) + '</div>'
+      + '<div style="font-weight:800;color:#0D47A1;font-size:14px;min-width:54px;text-align:right;">' + <?= json_encode(dn_cur($config)) ?> + lt.toFixed(2) + '</div>'
       + '<button type="button" onclick="hwRemove(' + idx + ')" style="width:24px;height:24px;background:#FEE2E2;color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>'
     + '</div>';
   });
@@ -1552,7 +1552,7 @@ function renderCart() {
         + '<div style="font-size:13px;font-weight:700;color:#15803d;">🔧 Installation Fee</div>'
         + '<div style="font-size:11px;color:#6b7280;margin-top:1px;">Fixed — included in all Fiber quotes</div>'
       + '</div>'
-      + '<div style="font-weight:800;color:#15803d;font-size:14px;min-width:54px;text-align:right;">$' + _kycFiberInstallFee.toFixed(2) + '</div>'
+      + '<div style="font-weight:800;color:#15803d;font-size:14px;min-width:54px;text-align:right;">' + <?= json_encode(dn_cur($config)) ?> + _kycFiberInstallFee.toFixed(2) + '</div>'
     + '</div>';
   }
 
@@ -1581,33 +1581,33 @@ function renderSummary() {
     hwCart.forEach(function(item){
       html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">'
         + '<span style="opacity:.88;">📦 ' + item.title + (item.qty > 1 ? ' ×' + item.qty : '') + '</span>'
-        + '<span style="font-weight:800;">$' + (item.price*item.qty).toFixed(2) + '</span>'
+        + '<span style="font-weight:800;">' + <?= json_encode(dn_cur($config)) ?> + (item.price*item.qty).toFixed(2) + '</span>'
       + '</div>';
     });
     if (selPlan) {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:2px;">'
         + '<span style="opacity:.88;">📶 ' + selPlan.name + '</span>'
-        + '<span style="font-weight:800;">$' + plT.toFixed(2) + '/mo</span>'
+        + '<span style="font-weight:800;">' + <?= json_encode(dn_cur($config)) ?> + plT.toFixed(2) + '/mo</span>'
       + '</div>';
     }
     if (instFee > 0) {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:2px;">'
         + '<span style="opacity:.88;">🔧 Installation Fee</span>'
-        + '<span style="font-weight:800;">$' + instFee.toFixed(2) + '</span>'
+        + '<span style="font-weight:800;">' + <?= json_encode(dn_cur($config)) ?> + instFee.toFixed(2) + '</span>'
       + '</div>';
     }
     if (hwT > 0 && (plT > 0 || instFee > 0)) {
       html += '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;border-top:1px solid rgba(255,255,255,.22);margin-top:7px;padding-top:7px;">'
-        + '<span>Today Total</span><span>$' + tot.toFixed(2) + '</span></div>';
+        + '<span>Today Total</span><span>' + <?= json_encode(dn_cur($config)) ?> + tot.toFixed(2) + '</span></div>';
     }
   }
 
   linesEl.innerHTML = html;
-  totEl.textContent = '$' + tot.toFixed(2);
+  totEl.textContent = <?= json_encode(dn_cur($config)) ?> + tot.toFixed(2);
 
   if (plT > 0) {
     recEl.style.display = 'block';
-    recEl.textContent   = '↻ Then $' + plT.toFixed(2) + '/month recurring';
+    recEl.textContent   = '↻ Then ' + <?= json_encode(dn_cur($config)) ?> + plT.toFixed(2) + '/month recurring';
   } else {
     recEl.style.display = 'none';
   }
@@ -1843,7 +1843,7 @@ function kycFormSubmit() {
     var instFee = (curType === 'fiber' && typeof _kycFiberInstallFee !== 'undefined') ? _kycFiberInstallFee : 0;
     var orderTotal = hwTotal + planPrice + instFee;
     if (orderTotal > 0 && _kycWalletBalance < orderTotal) {
-      alert('Insufficient wallet balance.\n\nRequired: $' + orderTotal.toFixed(2) + '\nAvailable: $' + _kycWalletBalance.toFixed(2) + '\n\nPlease recharge your wallet or switch to Credit sale.');
+      alert('Insufficient wallet balance.\n\nRequired: ' + <?= json_encode(dn_cur($config)) ?> + orderTotal.toFixed(2) + '\nAvailable: ' + <?= json_encode(dn_cur($config)) ?> + _kycWalletBalance.toFixed(2) + '\n\nPlease recharge your wallet or switch to Credit sale.');
       return false;
     }
   }

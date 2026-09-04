@@ -21,6 +21,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 declare(strict_types=1);
+require_once __DIR__ . '/lib/currency.php';
 // v4.21.73: bumped from 300 to 1800 — Run Now via fastcgi_finish_request can
 // run as long as PHP-FPM allows. 30 minutes is enough for ~500 invoices at
 // 0.5s throttle. The tab handler also sets 1800; this is belt-and-suspenders
@@ -340,9 +341,9 @@ foreach ($allInvoices as $inv) {
         olog("SKIP {$invNum} — just paid"); $skipped++; continue;
     }
 
-    $amtFmt     = '$' . number_format($amtDue, 2);
+    $amtFmt     = dn_cur($config) . number_format($amtDue, 2);
     $dueFmt     = $dueDate->format('d M Y');
-    $invoiceUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/') . "/crm/client/{$clientId}";
+    $invoiceUrl = dn_crm_link($config, "client/{$clientId}");
     $payUrl     = $freshInv['proformaInvoiceLink'] ?? $invoiceUrl;
     $ok         = false;
     $error      = '';
@@ -487,7 +488,7 @@ if (!empty($adminSummary)) {
         $msg  = "📨 *Overdue dunning run complete*\n";
         $msg .= "_" . date('D, d M Y H:i') . "_\n\n";
         $msg .= "*Summary:* sent {$sent}, errors {$errors}, skipped {$skipped}\n";
-        $msg .= "*Total chased:* $" . number_format($totalAmt, 2) . "\n";
+        $msg .= "*Total chased:* " . dn_cur($config) . number_format($totalAmt, 2) . "\n";
         $msg .= "*Clients contacted:* " . count($byClient) . "\n\n";
 
         // Top 20 clients by amount, most consequential first
@@ -507,7 +508,7 @@ if (!empty($adminSummary)) {
             }
             // Truncate very long client names
             $cn = mb_strlen($clientName) > 35 ? mb_substr($clientName, 0, 32) . '...' : $clientName;
-            $msg .= "• *{$cn}* — $" . number_format($bucket['total'], 2) . "\n";
+            $msg .= "• *{$cn}* — " . dn_cur($config) . number_format($bucket['total'], 2) . "\n";
             $msg .= "   " . implode(' · ', $invSummary) . "\n";
             $shown++;
         }

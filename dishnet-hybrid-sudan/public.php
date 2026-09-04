@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib/error_handler.php'; // Global fatal/exception catch  prevents blank pages
+require_once __DIR__ . '/lib/currency.php';      // dn_cur()/dn_code() — config-driven money rendering
 ob_start(); // buffer all output -- ensures redirect() works even if a warning fires early
 chdir(__DIR__);
 
@@ -409,7 +410,7 @@ $rbac     = new RbacService($store->getPdo());
 $config = $store->load('kyc_config.json');
 if (empty($config)) {
     $config = [
-        'crm_base_url'   => 'https://crm.dishnetafrica.com/crm/api/v2.1',
+        'crm_base_url'   => '',
         'crm_auth_token' => '',
         'magma_host'             => '',
         'magma_network_id'       => '',
@@ -663,6 +664,17 @@ if ($page === 'ai_tools') {
 if ($page === 'web_chat') {
     while (ob_get_level() > 0) ob_end_clean();
     require __DIR__ . '/web_chat.php';
+    exit;
+}
+
+// ── Public price feed for the website ────────────────────────────────
+// Public and unauthenticated by design: it serves only what a customer may
+// see (names, customer prices, public descriptions) via PublicPriceFeed,
+// which structurally cannot carry costs or margins. Routed through here
+// because uCRM only exposes public.php, not arbitrary plugin files.
+if ($page === 'prices') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/prices.php';
     exit;
 }
 
@@ -1483,7 +1495,7 @@ $packages=$store->load('kyc_packages.json');
 <meta name="theme-color" content="#D41C1C">
 <?php if (!empty($retailer['api_token'])): ?>
 <meta name="dishnet-token"  content="<?= h($retailer['api_token']) ?>">
-<meta name="dishnet-server" content="<?= h(rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/')) ?>">
+<meta name="dishnet-server" content="<?= h(rtrim(($config['crm_base_url'] ?? '') ?: dn_crm_web($config), '/')) ?>">
 <meta name="dishnet-agent"  content="<?= h($retailer['name'] ?? '') ?>" data-agent-name="<?= h($retailer['name'] ?? '') ?>">
 <?php endif; ?>
 <link rel="manifest" href="?page=app_manifest">
@@ -2046,6 +2058,8 @@ else:
         // Admin group
         ['id'=>'all_leads',      'label'=>'All Leads (Admin View)',   'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'wa_leads',       'label'=>'WA Leads',                'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'starlink_orders','label'=>'Starlink Orders',         'icon'=>'[Orders]',   'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'knowledge_base', 'label'=>'AI Knowledge Base',       'icon'=>'[Brain]',    'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'ceo_dashboard',  'label'=>'CEO Dashboard',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'all_apps',       'label'=>'All Orders',               'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'retailers_mgmt', 'label'=>'Manage Retailers / Staff', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2218,10 +2232,10 @@ if ($isAdmin || ($retailer['role'] ?? '') === 'support_leader') {
 <div class="mobile-wallet-hero">
     <div class="mwh-card">
         <div class="mwh-label">Wallet Balance</div>
-        <div class="mwh-amount">$<?= number_format($myWallet['balance'] ?? 0, 2) ?></div>
+        <div class="mwh-amount"><?= dn_cur($config) ?><?= number_format($myWallet['balance'] ?? 0, 2) ?></div>
         <div class="mwh-stats">
-            <span><i class="bi bi-arrow-down-circle"></i> In: $<?= number_format($myWallet['total_credit'] ?? 0, 2) ?></span>
-            <span><i class="bi bi-arrow-up-circle"></i> Out: $<?= number_format($myWallet['total_debit'] ?? 0, 2) ?></span>
+            <span><i class="bi bi-arrow-down-circle"></i> In: <?= dn_cur($config) ?><?= number_format($myWallet['total_credit'] ?? 0, 2) ?></span>
+            <span><i class="bi bi-arrow-up-circle"></i> Out: <?= dn_cur($config) ?><?= number_format($myWallet['total_debit'] ?? 0, 2) ?></span>
         </div>
     </div>
     <div class="mwh-quick">
@@ -2262,7 +2276,7 @@ if ($_cwShow):
 <div style="background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border-radius:12px;padding:12px 18px;margin-bottom:12px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 14px rgba(220,38,38,.3);">
     <span style="font-size:24px;"></span>
     <div style="flex:1;font-size:12px;line-height:1.5;">
-        <strong>You are holding $<?= number_format($_cwExposure, 2) ?> in company cash</strong> (limit $<?= number_format($_cwLimit, 2) ?>).<br>
+        <strong>You are holding <?= dn_cur($config) ?><?= number_format($_cwExposure, 2) ?> in company cash</strong> (limit <?= dn_cur($config) ?><?= number_format($_cwLimit, 2) ?>).<br>
         Hand over to office immediately. Collections are blocked.
     </div>
     <a href="?page=dashboard&tab=my_account&v=handover" style="background:#fff;color:#dc2626;font-weight:800;padding:8px 14px;border-radius:10px;font-size:11px;text-decoration:none;white-space:nowrap;">Hand Over</a>
@@ -2282,7 +2296,7 @@ if ($_quoteCreated && $_lastQuoteId && $flash && $flash['type'] === 'success'):
     unset($_SESSION['last_kyc_quote_id'], $_SESSION['last_kyc_crm_id'], $_SESSION['last_kyc_quote_created'],
           $_SESSION['last_kyc_payment_id'], $_SESSION['last_kyc_payment_created'],
           $_SESSION['last_kyc_photo_uploaded'], $_SESSION['last_kyc_id_uploaded']);
-    $_crmHostQ = rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')),'/');
+    $_crmHostQ = dn_crm_web($config);
 ?>
 <div style="background:linear-gradient(135deg,#1B5E20,#2E7D32);color:#fff;border-radius:14px;
             padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
@@ -2406,6 +2420,8 @@ $_tabFiles = [
     'more_menu'          => 'tabs/sales/more_menu.php',
     'leads'              => 'tabs/sales/leads.php',
     'wa_leads'           => 'tabs/sales/wa_leads.php',
+    'starlink_orders'    => 'tabs/sales/starlink_orders.php',
+    'knowledge_base'     => 'tabs/admin/knowledge_base.php',
     'collect_payment'    => 'tabs/sales/collect_payment.php',
     'applications'       => 'tabs/sales/applications.php',
     'wallet'             => 'tabs/sales/wallet.php',
@@ -2596,6 +2612,8 @@ $_tabPerms = [
     'wa_inbox'             => 'customer_lookup',
     'engage_failed_queue'  => ['support_dash', '*admin'],
     'engage_wa_leads'      => ['support_dash', '*admin'],
+    'starlink_orders'      => '*admin',
+    'knowledge_base'       => '*admin',
     'lifecycle'            => ['support_dash', '*admin'],
     // Admin
     'ceo_dashboard'    => '*admin',

@@ -820,7 +820,7 @@
             )->execute($ids);
 
             logActivity($dataDir, 'handover_reconcile', 'Voided double-counted handover entries',
-                count($rows) . ' entries totalling $' . number_format($totalAmount, 2) . ' voided by ' . ($me2['name'] ?? 'Admin'));
+                count($rows) . ' entries totalling ' . dn_cur($config) . number_format($totalAmount, 2) . ' voided by ' . ($me2['name'] ?? 'Admin'));
         }
 
         $ok2([
@@ -829,8 +829,8 @@
             'total_amount'   => round($totalAmount, 2),
             'voided'         => $voided,
             'message'        => $dryRun
-                ? count($rows) . ' handover entries found totalling $' . number_format($totalAmount, 2) . '. Run again with dry_run=false to void them.'
-                : count($rows) . ' entries voided. $' . number_format($totalAmount, 2) . ' removed from cashbook.',
+                ? count($rows) . ' handover entries found totalling ' . dn_cur($config) . number_format($totalAmount, 2) . '. Run again with dry_run=false to void them.'
+                : count($rows) . ' entries voided. ' . dn_cur($config) . number_format($totalAmount, 2) . ' removed from cashbook.',
         ]);
     }
 
@@ -1119,7 +1119,7 @@
         $pluginUrl = rtrim($config['crm_base_url'] ?? '', '/');
         $pluginUrl = preg_replace('#/api/v[0-9.]+$#', '', $pluginUrl);
         $pluginUrl = preg_replace('#/crm$#', '', $pluginUrl);
-        $expectedUrl = $pluginUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php?page=webhook';
+        $expectedUrl = dn_plugin_public($config) . '?page=webhook';
 
         // Find matching webhook
         $found = null;
@@ -1158,7 +1158,7 @@
         $pluginUrl = rtrim($config['crm_base_url'] ?? '', '/');
         $pluginUrl = preg_replace('#/api/v[0-9.]+$#', '', $pluginUrl);
         $pluginUrl = preg_replace('#/crm$#', '', $pluginUrl);
-        $webhookUrl = $pluginUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php?page=webhook';
+        $webhookUrl = dn_plugin_public($config) . '?page=webhook';
 
         // Check if already exists
         $existing = $crm->getWebhooks();

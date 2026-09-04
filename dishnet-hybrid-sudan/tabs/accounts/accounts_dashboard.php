@@ -284,22 +284,22 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
   </div>
   <div class="d2-bal">
     <div class="d2-bal-lbl">Total Cash Position</div>
-    <div class="d2-bal-val">$<?= number_format($cbTotalBal,2) ?></div>
+    <div class="d2-bal-val"><?= dn_cur($config) ?><?= number_format($cbTotalBal,2) ?></div>
     <div class="d2-bal-split">
-      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">Fiber & Starlink</span><span class="d2-bal-chip-val">$<?= number_format($cbDishBal,2) ?></span></div>
-      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">DishNet 4G</span><span class="d2-bal-chip-val">$<?= number_format($cb4gBal,2) ?></span></div>
-      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">BlueCARD</span><span class="d2-bal-chip-val">$<?= number_format($cbBcBal,2) ?></span></div>
+      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">Fiber & Starlink</span><span class="d2-bal-chip-val"><?= dn_cur($config) ?><?= number_format($cbDishBal,2) ?></span></div>
+      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">DishNet 4G</span><span class="d2-bal-chip-val"><?= dn_cur($config) ?><?= number_format($cb4gBal,2) ?></span></div>
+      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">BlueCARD</span><span class="d2-bal-chip-val"><?= dn_cur($config) ?><?= number_format($cbBcBal,2) ?></span></div>
     </div>
   </div>
   <div class="d2-today">
     <div>
       <div class="d2-today-lbl">Today · <?= date('d M') ?></div>
-      <div class="d2-today-val">$<?= number_format($todayTotal,2) ?></div>
+      <div class="d2-today-val"><?= dn_cur($config) ?><?= number_format($todayTotal,2) ?></div>
       <div style="font-size:10px;color:rgba(255,255,255,.35);"><?= count($todayCols) ?> payments · <?= count($todayApps) ?> new KYC</div>
     </div>
     <div class="d2-today-sub">
       <?= date('M Y') ?><br>
-      Net $<?= number_format($monthTotal-$monthComm,0) ?><br>
+      Net <?= dn_cur($config) ?><?= number_format($monthTotal-$monthComm,0) ?><br>
       <?= count($monthApps) ?> KYC
     </div>
   </div>
@@ -316,7 +316,7 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
 <?php if ($cbPendCount > 0): ?>
 <a class="d2-alert" href="?page=dashboard&tab=cashbook&cb_view=pending">
   <span style="font-size:22px;flex-shrink:0;">⏳</span>
-  <div class="d2-alert-tx"><strong><?= $cbPendCount ?> unreceipted — $<?= number_format($cbPendAmt,2) ?></strong><span>Cash out awaiting voucher. Tap to settle.</span></div>
+  <div class="d2-alert-tx"><strong><?= $cbPendCount ?> unreceipted — <?= dn_cur($config) ?><?= number_format($cbPendAmt,2) ?></strong><span>Cash out awaiting voucher. Tap to settle.</span></div>
   <div class="d2-alert-arr"><i class="bi bi-chevron-right"></i></div>
 </a>
 <?php endif; ?>
@@ -339,7 +339,7 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
     <?php if ($_adHqPend > 0): ?>
     <a href="?page=dashboard&tab=handover_queue" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:#fef2f2;border-radius:10px;text-decoration:none;color:#991b1b;margin-bottom:6px;">
       <span style="font-size:20px;">💵</span>
-      <div style="flex:1;font-size:13px;font-weight:700;"><?= $_adHqPend ?> handover<?= $_adHqPend>1?'s':'' ?> to confirm <span style="color:#dc2626;">$<?= number_format($_adHqAmt,2) ?></span></div>
+      <div style="flex:1;font-size:13px;font-weight:700;"><?= $_adHqPend ?> handover<?= $_adHqPend>1?'s':'' ?> to confirm <span style="color:#dc2626;"><?= dn_cur($config) ?><?= number_format($_adHqAmt,2) ?></span></div>
       <i class="bi bi-chevron-right" style="color:#fca5a5;"></i>
     </a>
     <?php endif; ?>
@@ -360,7 +360,7 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
     <?php if ($_paFiberPend > 0): ?>
     <a href="?page=dashboard&tab=fiber_costs" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:#eff6ff;border-radius:10px;text-decoration:none;color:#1e40af;margin-bottom:6px;">
       <span style="font-size:20px;">🔧</span>
-      <div style="flex:1;font-size:13px;font-weight:700;"><?= $_paFiberPend ?> fiber install<?= $_paFiberPend>1?'s':'' ?> need CRM invoice <span style="color:#dc2626;">$<?= number_format($_paFiberAmt,2) ?></span></div>
+      <div style="flex:1;font-size:13px;font-weight:700;"><?= $_paFiberPend ?> fiber install<?= $_paFiberPend>1?'s':'' ?> need CRM invoice <span style="color:#dc2626;"><?= dn_cur($config) ?><?= number_format($_paFiberAmt,2) ?></span></div>
       <i class="bi bi-chevron-right" style="color:#93c5fd;"></i>
     </a>
     <?php endif; ?>
@@ -374,17 +374,17 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
 <div class="d2-kpi">
   <div class="d2-kpi-card">
     <div class="d2-kpi-lbl">Agent Float</div>
-    <div class="d2-kpi-val" style="color:#dc2626;">$<?= number_format($totalWalletBal,0) ?></div>
+    <div class="d2-kpi-val" style="color:#dc2626;"><?= dn_cur($config) ?><?= number_format($totalWalletBal,0) ?></div>
     <div class="d2-kpi-sub"><?= $activeCount ?> agents</div>
   </div>
   <div class="d2-kpi-card">
     <div class="d2-kpi-lbl">Field Cash</div>
-    <div class="d2-kpi-val" style="color:#7c3aed;">$<?= number_format($totalFieldCash,0) ?></div>
+    <div class="d2-kpi-val" style="color:#7c3aed;"><?= dn_cur($config) ?><?= number_format($totalFieldCash,0) ?></div>
     <div class="d2-kpi-sub"><?= count($_cpByStaff) ?> collectors</div>
   </div>
   <div class="d2-kpi-card">
     <div class="d2-kpi-lbl">Mth Recharge</div>
-    <div class="d2-kpi-val" style="color:#2563eb;">$<?= number_format($monthRechargeAmt,0) ?></div>
+    <div class="d2-kpi-val" style="color:#2563eb;"><?= dn_cur($config) ?><?= number_format($monthRechargeAmt,0) ?></div>
     <div class="d2-kpi-sub"><?= count($monthRecharges) ?> approved</div>
   </div>
   <div class="d2-kpi-card">
@@ -477,7 +477,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
       <?php if (!empty($_fsTotalDue) && $_fsTotalDue > 0): ?>
       <div class="d2-row">
         <span>🔴 Fiber revenue at risk</span>
-        <strong style="color:#dc2626;">$<?= number_format($_fsTotalDue, 0) ?></strong>
+        <strong style="color:#dc2626;"><?= dn_cur($config) ?><?= number_format($_fsTotalDue, 0) ?></strong>
       </div>
       <?php endif; ?>
     </div>
@@ -497,7 +497,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
     <span>
       <i class="bi bi-geo-alt-fill icon" style="color:#059669;"></i> Money Locations
       <?php if ($totalFieldCash > 0): ?>
-        <span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;">$<?= number_format($totalFieldCash,0) ?> in field</span>
+        <span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;"><?= dn_cur($config) ?><?= number_format($totalFieldCash,0) ?> in field</span>
       <?php endif; ?>
       <?php if ($agentsOverLimit): ?><span class="d2-badge" style="background:#dc2626;"><?= count($agentsOverLimit) ?> over</span><?php endif; ?>
       <?php if (!empty($agentsAging)): ?><span class="d2-badge" style="background:#d97706;">⏱ <?= count($agentsAging) ?></span><?php endif; ?>
@@ -510,7 +510,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
       <span style="font-size:24px;">🏢</span>
       <div style="flex:1;">
         <div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;">Office (Rupesh)</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:#059669;">$<?= number_format(max(0,$_cpOffice),2) ?></div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:#059669;"><?= dn_cur($config) ?><?= number_format(max(0,$_cpOffice),2) ?></div>
       </div>
       <span style="font-size:20px;">✅</span>
     </div>
@@ -536,23 +536,23 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
         </div>
         <div style="height:3px;background:#e2e8f0;border-radius:2px;margin:4px 0;overflow:hidden;"><div style="height:100%;width:<?= number_format($pct,1) ?>%;background:<?= $barCol ?>;border-radius:2px;"></div></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <?php if($pos['collections']>0): ?><span style="font-size:9px;background:#ecfdf5;color:#059669;border-radius:4px;padding:1px 5px;font-weight:700;">Col $<?= number_format($pos['collections'],0) ?></span><?php endif; ?>
-          <?php if(!empty($pos['advance_balance'])&&$pos['advance_balance']>0): ?><span style="font-size:9px;background:#f5f3ff;color:#7c3aed;border-radius:4px;padding:1px 5px;font-weight:700;">Adv $<?= number_format($pos['advance_balance'],0) ?></span><?php endif; ?>
+          <?php if($pos['collections']>0): ?><span style="font-size:9px;background:#ecfdf5;color:#059669;border-radius:4px;padding:1px 5px;font-weight:700;">Col <?= dn_cur($config) ?><?= number_format($pos['collections'],0) ?></span><?php endif; ?>
+          <?php if(!empty($pos['advance_balance'])&&$pos['advance_balance']>0): ?><span style="font-size:9px;background:#f5f3ff;color:#7c3aed;border-radius:4px;padding:1px 5px;font-weight:700;">Adv <?= dn_cur($config) ?><?= number_format($pos['advance_balance'],0) ?></span><?php endif; ?>
           <?php if($ageH!==null): ?><span style="font-size:9px;background:<?= $ageOver?'#fee2e2':'#f1f5f9' ?>;color:<?= $ageOver?'#dc2626':'#64748b' ?>;border-radius:4px;padding:1px 5px;font-weight:700;"><?= $ageOver?'⏱ ':'🕐 ' ?><?= $ageDisplay ?><?= $ageOver?' ⚠':'' ?></span><?php endif; ?>
         </div>
       </div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;color:<?= $barCol ?>;text-align:right;flex-shrink:0;">$<?= number_format(max(0,$exp),2) ?></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;color:<?= $barCol ?>;text-align:right;flex-shrink:0;"><?= dn_cur($config) ?><?= number_format(max(0,$exp),2) ?></div>
     </div>
     <?php endforeach; ?>
     <?php if (!empty($_cpByStaff)): ?>
     <div style="display:flex;justify-content:space-between;padding:8px 12px;border-top:2px solid #e5e7eb;margin-top:6px;font-size:12px;font-weight:800;color:#374151;">
-      <span>Total in field</span><span style="color:#7c3aed;">$<?= number_format($totalFieldCash,2) ?></span>
+      <span>Total in field</span><span style="color:#7c3aed;"><?= dn_cur($config) ?><?= number_format($totalFieldCash,2) ?></span>
     </div>
     <?php endif; ?>
     <?php if (empty($_cpByStaff)): ?>
     <div style="padding:8px 12px;font-size:12px;color:#6b7280;font-style:italic;">All cash is in office — no field holdings.</div>
     <?php endif; ?>
-    <div style="font-size:10px;color:#94a3b8;padding-top:6px;">Limit $<?= number_format($carryLimitCfg,0) ?> · <a href="?page=dashboard&tab=staff_cash_control" style="color:#7c3aed;text-decoration:none;">Full view →</a></div>
+    <div style="font-size:10px;color:#94a3b8;padding-top:6px;">Limit <?= dn_cur($config) ?><?= number_format($carryLimitCfg,0) ?> · <a href="?page=dashboard&tab=staff_cash_control" style="color:#7c3aed;text-decoration:none;">Full view →</a></div>
   </div>
 </div>
 
@@ -575,7 +575,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
   <div class="d2-section-body">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
       <div style="text-align:center;padding:10px 4px;background:#fef3c7;border-radius:10px;">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#d97706;">$<?= number_format($_expSummary['total_usd']??0,0) ?></div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#d97706;"><?= dn_cur($config) ?><?= number_format($_expSummary['total_usd']??0,0) ?></div>
         <div style="font-size:9px;font-weight:700;color:#6b7280;">USD Total</div>
       </div>
       <div style="text-align:center;padding:10px 4px;background:#fef3c7;border-radius:10px;">
@@ -596,7 +596,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
     <?php foreach ($_expSummary['by_category'] as $_cat => $_catAmt): ?>
     <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f8fafc;font-size:12px;">
       <span style="color:#6b7280;"><?= h($_cat) ?></span>
-      <span style="font-weight:700;color:#374151;">$<?= number_format($_catAmt,2) ?></span>
+      <span style="font-weight:700;color:#374151;"><?= dn_cur($config) ?><?= number_format($_catAmt,2) ?></span>
     </div>
     <?php endforeach; endif; ?>
   </div>
@@ -624,7 +624,7 @@ function d2Toggle(hd){
     var chartData=<?= json_encode($chartDays) ?>;
     var ctx=document.getElementById('revenueTrendChart');
     if(!ctx||!chartData.length) return;
-    new Chart(ctx,{type:'bar',data:{labels:chartData.map(function(d){return d.date;}),datasets:[{data:chartData.map(function(d){return d.amount;}),backgroundColor:'rgba(212,28,28,.12)',borderColor:'#D41C1C',borderWidth:2,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return' $'+c.raw.toFixed(2);}}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8,font:{size:9}}},y:{grid:{color:'rgba(0,0,0,.04)'},ticks:{callback:function(v){return'$'+v;},font:{size:9}}}}}});
+    new Chart(ctx,{type:'bar',data:{labels:chartData.map(function(d){return d.date;}),datasets:[{data:chartData.map(function(d){return d.amount;}),backgroundColor:'rgba(212,28,28,.12)',borderColor:'#D41C1C',borderWidth:2,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return' ' + <?= json_encode(dn_cur($config)) ?> +c.raw.toFixed(2);}}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8,font:{size:9}}},y:{grid:{color:'rgba(0,0,0,.04)'},ticks:{callback:function(v){return<?= json_encode(dn_cur($config)) ?> +v;},font:{size:9}}}}}});
   }
 }
 </script>

@@ -216,7 +216,7 @@ if (!function_exists('h')) { function h(string $s): string { return htmlspecialc
             <?php $_sspDisp = (float)($exp['ssp_amount'] ?? 0) > 0 ? (float)$exp['ssp_amount'] : (float)($exp['amount'] ?? 0); ?>
             <?= number_format($_sspDisp, 0) ?> <span style="font-size:12px;font-weight:600;color:#64748b;">SSP</span>
           <?php else: ?>
-            $<?= number_format((float)$exp['amount'], 2) ?> <span style="font-size:12px;font-weight:600;color:#64748b;">USD</span>
+            <?= dn_cur($config) ?><?= number_format((float)$exp['amount'], 2) ?> <span style="font-size:12px;font-weight:600;color:#64748b;"><?= dn_code($config) ?></span>
           <?php endif; ?>
         </div>
         <div style="margin-top:4px;">

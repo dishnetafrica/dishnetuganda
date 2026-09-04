@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($tab === 'whatsapp' || $tab === 'w
         if ($evoUrl && $evoKey && $evoInst) {
             require_once dirname(__DIR__, 2) . '/lib/EvolutionApiClient.php';
             $evo = new EvolutionApiClient($evoUrl, $evoKey, $evoInst);
-            $webhookUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/') . '/_plugins/dishnet-hybrid-telecom/evo_webhook.php';
+            $webhookUrl = dn_plugin_file($config, 'evo_webhook.php');
             $result = $evo->setWebhook($webhookUrl);
             if (empty($result['error'])) {
                 flash("Webhook configured: {$webhookUrl}", 'success');
@@ -768,7 +768,7 @@ $splynxStatus = $splynx->isConfigured() ? $splynx->testConnection() : ['ok' => f
                     echo '<div style="background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:#4f46e5;font-weight:600;">'
                        . '📊 Last 30 days: <strong>' . number_format((int)$_aiStats['calls']) . ' AI replies</strong> · '
                        . number_format((int)$_aiStats['in_tok'] + (int)$_aiStats['out_tok']) . ' tokens · '
-                       . '$' . number_format((float)$_aiStats['total_cost'], 4) . ' cost</div>';
+                       . dn_cur($config) . number_format((float)$_aiStats['total_cost'], 4) . ' cost</div>';
                 }
             } catch (Throwable $e) {}
             ?>
@@ -1340,9 +1340,9 @@ REPLY STYLE
         <li>Go to <strong>UCRM → System → Webhooks → Add Webhook</strong></li>
         <li>URL:
             <code style="background:#f8fafc;padding:3px 8px;border-radius:6px;font-size:11px;border:1px solid #e2e8f0;">
-                <?= h('https://crm.dishnetafrica.com/_plugins/dishnet-hybrid-telecom/webhook.php') ?>
+                <?= h(dn_plugin_file($config, 'webhook.php')) ?>
             </code>
-            <button onclick="navigator.clipboard.writeText('https://crm.dishnetafrica.com/_plugins/dishnet-hybrid-telecom/webhook.php');this.textContent='✓';setTimeout(()=>this.textContent='Copy',2000)"
+            <button onclick="navigator.clipboard.writeText(<?= json_encode(dn_plugin_file($config, 'webhook.php')) ?>);this.textContent='✓';setTimeout(()=>this.textContent='Copy',2000)"
                 style="margin-left:6px;background:#075e54;color:#fff;border:none;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;">Copy</button>
         </li>
         <li>Events: <code>client.add</code>, <code>invoice.add</code>, <code>payment.add</code>, <code>service.suspend</code>, <code>service.unsuspend</code>, <code>service.end</code>, <code>quote.approve</code>, <code>ticket.add</code></li>

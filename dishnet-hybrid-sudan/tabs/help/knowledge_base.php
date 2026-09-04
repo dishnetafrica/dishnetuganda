@@ -63,21 +63,21 @@
     <h4 style="margin:0 0 8px;color:#D41C1C;">&#128225; Starlink Plans</h4>
     <table class="kyc-table" style="margin-bottom:16px;"><thead><tr><th>Plan</th><th style="text-align:right;">Customer Price</th></tr></thead><tbody>
     <?php foreach ($store->load('subscription_plans.json') as $pl): if (($pl['type']??'')!=='starlink'||empty($pl['is_active'])) continue; ?>
-    <tr><td style="font-weight:600;"><?= h($pl['name']) ?></td><td style="text-align:right;font-weight:700;">$<?= number_format($pl['customer_price']??0, 2) ?>/mo</td></tr>
+    <tr><td style="font-weight:600;"><?= h($pl['name']) ?></td><td style="text-align:right;font-weight:700;"><?= dn_cur($config) ?><?= number_format($pl['customer_price']??0, 2) ?>/mo</td></tr>
     <?php endforeach; ?>
     </tbody></table>
 
     <h4 style="margin:0 0 8px;color:#2E7D32;">&#128268; Fiber Plans</h4>
     <table class="kyc-table" style="margin-bottom:16px;"><thead><tr><th>Plan</th><th>Speed</th><th style="text-align:right;">Price</th></tr></thead><tbody>
     <?php foreach ($store->load('subscription_plans.json') as $pl): if (($pl['type']??'')!=='fiber'||empty($pl['is_active'])) continue; ?>
-    <tr><td style="font-weight:600;"><?= h($pl['name']) ?></td><td><?= h($pl['speed']??'-') ?></td><td style="text-align:right;font-weight:700;">$<?= number_format($pl['customer_price']??0, 2) ?>/mo</td></tr>
+    <tr><td style="font-weight:600;"><?= h($pl['name']) ?></td><td><?= h($pl['speed']??'-') ?></td><td style="text-align:right;font-weight:700;"><?= dn_cur($config) ?><?= number_format($pl['customer_price']??0, 2) ?>/mo</td></tr>
     <?php endforeach; ?>
     </tbody></table>
 
     <h4 style="margin:0 0 8px;color:#E65100;">&#128241; SIM / Data Network Plans</h4>
     <table class="kyc-table"><thead><tr><th>Plan</th><th>Validity</th><th style="text-align:right;">Price</th></tr></thead><tbody>
     <?php foreach ($store->load('subscription_plans.json') as $pl): if (($pl['type']??'')!=='sim'||empty($pl['is_active'])) continue; ?>
-    <tr><td style="font-weight:600;"><?= h($pl['name']) ?></td><td><?= h($pl['validity']??'30 days') ?></td><td style="text-align:right;font-weight:700;">$<?= number_format($pl['customer_price']??0, 2) ?></td></tr>
+    <tr><td style="font-weight:600;"><?= h($pl['name']) ?></td><td><?= h($pl['validity']??'30 days') ?></td><td style="text-align:right;font-weight:700;"><?= dn_cur($config) ?><?= number_format($pl['customer_price']??0, 2) ?></td></tr>
     <?php endforeach; ?>
     </tbody></table>
     </div></div>
@@ -98,8 +98,8 @@
     <p>Contact your admin or DishNet support:</p>
     <table class="kyc-table">
     <tr><td style="font-weight:700;">WhatsApp</td><td>+211 XX XXX XXXX</td></tr>
-    <tr><td style="font-weight:700;">Email</td><td>support@dishnetafrica.com</td></tr>
-    <tr><td style="font-weight:700;">CRM Portal</td><td><a href="https://crm.dishnetafrica.com" target="_blank">crm.dishnetafrica.com</a></td></tr>
+    <tr><td style="font-weight:700;">Email</td><td>info@dishnetafrica.com</td></tr>
+    <tr><td style="font-weight:700;">CRM Portal</td><td><a href="<?= h(dn_crm_web($config)) ?>" target="_blank"><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></a></td></tr>
     </table>
     </div></div>
 

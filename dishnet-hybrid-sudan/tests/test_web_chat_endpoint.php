@@ -49,14 +49,40 @@ function writeConfig(string $tmp, array $extra = []): void {
 }
 writeConfig($tmp);
 
-$port = 8912 + (getmypid() % 300);
-$srv  = proc_open(sprintf('php -S 127.0.0.1:%d -t %s', $port, escapeshellarg($tmp)),
-                  [1 => ['file','/dev/null','w'], 2 => ['file','/dev/null','w']], $pipes);
-for ($i = 0; $i < 60; $i++) {
-    $c = @fsockopen('127.0.0.1', $port, $e, $s, 0.2);
-    if ($c) { fclose($c); break; }
-    usleep(100000);
+// A crashed earlier run can leave its dev server alive on the pid-derived
+// port; php -S then fails to bind SILENTLY and every request goes to the
+// zombie's stale tree — one such collision failed 35 assertions at once.
+// So prove the server answering the port is ours: it must serve a nonce
+// written into this run's tree, or we abandon the port and take the next.
+$nonce = bin2hex(random_bytes(8));
+file_put_contents($tmp . '/__nonce.txt', $nonce);
+$probe = function (string $url): ?string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 2, CURLOPT_PROXY => '']);
+    $r = curl_exec($ch);
+    $c = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($r === false || $c !== 200) ? null : (string)$r;
+};
+$srv = null; $port = 0;
+foreach (range(0, 9) as $slot) {
+    $cand = 8912 + ((getmypid() + $slot * 37) % 300);
+    // exec, so proc_terminate reaches php -S itself and not a sh wrapper —
+    // otherwise every run leaks a listening server for later runs to hit.
+    $p = proc_open(sprintf('exec php -S 127.0.0.1:%d -t %s', $cand, escapeshellarg($tmp)),
+                   [1 => ['file','/dev/null','w'], 2 => ['file','/dev/null','w']], $pipes);
+    $ours = false;
+    for ($i = 0; $i < 60; $i++) {
+        $got = $probe("http://127.0.0.1:{$cand}/__nonce.txt");
+        if ($got !== null) { $ours = trim($got) === $nonce; break; }
+        usleep(100000);
+    }
+    if ($ours) { $srv = $p; $port = $cand; break; }
+    proc_terminate($p);
+    proc_close($p);
 }
+@unlink($tmp . '/__nonce.txt');
+if ($port === 0) { fwrite(STDERR, "could not claim a clean port for the dev server\n"); exit(1); }
 $base = "http://127.0.0.1:$port/public.php?page=web_chat";
 
 /** @return array{code:int,headers:array,body:array|string} */
@@ -299,13 +325,21 @@ file_put_contents($guardFile, str_replace('declare(strict_types=1);',
     $orig, $count));
 t('noise injected into the boot path', $count, 1);
 
-$r = call($base, 'POST', '{"message":"how much is the mini?"}', [$OK, $JSON]);
+// Under load the dev server can keep serving requests off its stat cache for
+// several seconds before the rewritten guard file is visible — retry until the
+// injected noise actually executes, then assert on that request's outcome.
+// 1.5s was measured to still lose roughly one full-suite run in three.
+$logged = '';
+for ($try = 0; $try < 24; $try++) {
+    $r = call($base, 'POST', '{"message":"how much is the mini?"}', [$OK, $JSON]);
+    $logged = @file_get_contents($tmp . '/data/ai_platform.log') ?: '';
+    if (str_contains($logged, 'something noisy happened')) break;
+    usleep(250000);
+}
 t('still returns 200', $r['code'], 200);
 t('and the body is still valid JSON', is_array($r['body']), true);
 t('and carries something for the visitor',
   is_array($r['body']) && ($r['body']['reply'] ?? '') !== '', true);
-
-$logged = @file_get_contents($tmp . '/data/ai_platform.log') ?: '';
 t('the stray output is in the log instead of the body',
   str_contains($logged, 'stray output before the response'), true);
 t('and the log names what it was', str_contains($logged, 'something noisy happened'), true);

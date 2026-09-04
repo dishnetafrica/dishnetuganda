@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/lib/currency.php';
 // Note: No strict_types - included from master.php
 date_default_timezone_set('Africa/Juba');
 
@@ -585,7 +586,7 @@ try {
             $invId      = (int)($inv['id'] ?? 0);
             $dueDate    = $inv['dueDate'] ?? '';
             $total      = (float)($inv['amountToPay'] ?? $inv['total'] ?? 0);
-            $currency   = $inv['currencyCode'] ?? 'USD';
+            $currency   = $inv['currencyCode'] ?? dn_code($config);
             $clientId   = (int)($inv['clientId'] ?? 0);
 
             if (!$dueDate || !$clientId || $total <= 0) { $skippedP++; continue; }
@@ -804,10 +805,8 @@ try {
                         'invoice' => $invoiceNum,
                     ]));
 
-                    $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-        $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
-        $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-                    $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+                    $siteUrl = dn_crm_web($config);
+                    $pdfUrl  = dn_plugin_public($config)
                              . '?page=api&action=serve_temp_pdf'
                              . '&file=' . urlencode($pdfFile)
                              . '&token=' . urlencode($pdfToken);
@@ -878,7 +877,7 @@ try {
             $invId      = (int)($inv['id'] ?? 0);
             $dueDate    = $inv['dueDate'] ?? '';
             $total      = (float)($inv['amountToPay'] ?? $inv['total'] ?? 0);
-            $currency   = $inv['currencyCode'] ?? 'USD';
+            $currency   = $inv['currencyCode'] ?? dn_code($config);
             $clientId   = (int)($inv['clientId'] ?? 0);
 
             if (!$dueDate || !$clientId || $total <= 0) { $skipped++; continue; }
@@ -1024,7 +1023,7 @@ try {
 
         $notify->sendRaw($phone,
             "📢 *Cash Handover Reminder*\n\n"
-            . "Hi {$name}, you are holding *\$" . number_format($cih, 2) . "* in collected cash.\n\n"
+            . "Hi {$name}, you are holding *" . dn_cur($config) . number_format($cih, 2) . "* in collected cash.\n\n"
             . "Please submit your handover in the DishNet app:\n"
             . "Cashbook → Submit Handover\n\n"
             . "— DishNet Accounts",
@@ -1102,7 +1101,7 @@ try {
             $pos2 = $cpSvc2->getPosition((int)$r['id']);
             $cih2 = (float)($pos2['cash_in_hand'] ?? 0);
             if ($cih2 > 0.01) {
-                $agentLines[] = "  • {$r['name']}: \$" . number_format($cih2, 2);
+                $agentLines[] = "  • {$r['name']}: " . dn_cur($config) . number_format($cih2, 2);
             }
         }
 
@@ -1113,16 +1112,16 @@ try {
 
         // Build message
         $msg = "📊 *Cashbook Daily Summary — {$todayStr2}*\n\n"
-             . "💰 *Cash IN:*  \$" . number_format($totalIn, 2) . " ({$countIn} entries)\n"
-             . "💸 *Cash OUT:* \$" . number_format($totalOut, 2) . " ({$countOut} entries)\n"
-             . "📈 *Net Flow:* \$" . number_format($netFlow, 2) . "\n";
+             . "💰 *Cash IN:*  " . dn_cur($config) . number_format($totalIn, 2) . " ({$countIn} entries)\n"
+             . "💸 *Cash OUT:* " . dn_cur($config) . number_format($totalOut, 2) . " ({$countOut} entries)\n"
+             . "📈 *Net Flow:* " . dn_cur($config) . number_format($netFlow, 2) . "\n";
 
         if (!empty($agentLines)) {
             $msg .= "\n👥 *Cash Held by Agents:*\n" . implode("\n", $agentLines) . "\n";
         }
 
         if (count($pendingHov) > 0) {
-            $msg .= "\n⏳ *Pending Handovers:* " . count($pendingHov) . " (\$" . number_format($pendAmt, 2) . ")\n";
+            $msg .= "\n⏳ *Pending Handovers:* " . count($pendingHov) . " (" . dn_cur($config) . number_format($pendAmt, 2) . ")\n";
         }
 
         $msg .= "\n— DishNet Hybrid";

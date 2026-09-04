@@ -414,7 +414,7 @@ async function owbFetchJson(url, opts = {}) {
   }
   return r.json();
 }
-function owbFmtMoney(n) { return '$' + (Math.round((n||0)*100)/100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function owbFmtMoney(n) { return <?= json_encode(dn_cur($config)) ?> + (Math.round((n||0)*100)/100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function owbFmtDate(s) { if (!s) return '—'; return s.length > 10 ? s.substring(0, 16).replace('T', ' ') : s; }
 function owbBucketClass(b) { return { '1-14':'b1','15-30':'b2','31-60':'b3','61-90':'b4','91-180':'b5','180+':'b6' }[b] || ''; }
 function owbStageLabel(s, lbl) {

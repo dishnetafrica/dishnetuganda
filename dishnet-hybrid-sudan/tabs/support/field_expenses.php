@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['fe_action'])) {
         $purpose = trim($_POST['purpose'] ?? '');
         $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
         if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
-        $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP' : '$' . number_format($amount, 2);
+        $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP' : dn_cur($config) . number_format($amount, 2);
         if ($amount > 0 && $purpose) {
             $store->appendWithId('activity_log.json', [
                 'event'   => 'advance_request',
@@ -91,9 +91,9 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
 <div class="fe-stats" style="grid-template-columns:repeat(2,1fr);">
     <div class="fe-stat" style="background:#f0fdf4;border-color:#bbf7d0;">
         <div class="fe-stat-label">💵 USD Balance</div>
-        <div class="fe-stat-value" style="color:<?= ($cur['USD']['balance'] ?? 0) > 0 ? '#15803d' : '#991b1b' ?>;">$<?= number_format($cur['USD']['balance'] ?? 0, 2) ?></div>
+        <div class="fe-stat-value" style="color:<?= ($cur['USD']['balance'] ?? 0) > 0 ? '#15803d' : '#991b1b' ?>;"><?= dn_cur($config) ?><?= number_format($cur['USD']['balance'] ?? 0, 2) ?></div>
         <?php if (($cur['USD']['pending'] ?? 0) > 0): ?>
-        <div style="font-size:10px;color:#f59e0b;">$<?= number_format($cur['USD']['pending'], 2) ?> pending</div>
+        <div style="font-size:10px;color:#f59e0b;"><?= dn_cur($config) ?><?= number_format($cur['USD']['pending'], 2) ?> pending</div>
         <?php endif; ?>
     </div>
     <div class="fe-stat" style="background:#eff6ff;border-color:#bfdbfe;">
@@ -190,7 +190,7 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
         <select name="advance_id" class="fe-select">
             <option value="">— No advance —</option>
             <?php foreach ($advances as $adv): ?>
-            <option value="<?= $adv['id'] ?>"><?= h($adv['advance_no']) ?> — $<?= number_format($adv['balance'], 2) ?> remaining</option>
+            <option value="<?= $adv['id'] ?>"><?= h($adv['advance_no']) ?> — <?= dn_cur($config) ?><?= number_format($adv['balance'], 2) ?> remaining</option>
             <?php endforeach; ?>
         </select>
         <?php endif; ?>
@@ -222,7 +222,7 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
             <div style="font-size:13px;font-weight:700;color:#1e293b;">
                 <?= $catIcons[$exp['category']] ?? '📦' ?>
                 <?php $ec = strtoupper($exp['currency'] ?? 'USD'); ?>
-                <?= $ec === 'SSP' ? number_format((float)$exp['amount']) . ' SSP' : '$' . number_format((float)$exp['amount'], 2) ?>
+                <?= $ec === 'SSP' ? number_format((float)$exp['amount']) . ' SSP' : dn_cur($config) . number_format((float)$exp['amount'], 2) ?>
                 <span style="background:<?= $sc[0] ?>;color:<?= $sc[1] ?>;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:800;margin-left:4px;"><?= ucfirst($exp['status']) ?></span>
             </div>
             <div style="font-size:11px;color:#6b7280;"><?= h($exp['description'] ?? '') ?></div>
@@ -249,8 +249,8 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
         </div>
         <div style="text-align:right;">
             <?php $ac = strtoupper($adv['currency'] ?? 'USD'); ?>
-            <div style="font-size:15px;font-weight:900;color:<?= $adv['balance'] > 0 ? '#15803d' : '#991b1b' ?>;"><?= $ac === 'SSP' ? number_format($adv['balance']) . ' SSP' : '$' . number_format($adv['balance'], 2) ?></div>
-            <div style="font-size:10px;color:#9ca3af;">of <?= $ac === 'SSP' ? number_format((float)$adv['amount']) . ' SSP' : '$' . number_format((float)$adv['amount'], 2) ?></div>
+            <div style="font-size:15px;font-weight:900;color:<?= $adv['balance'] > 0 ? '#15803d' : '#991b1b' ?>;"><?= $ac === 'SSP' ? number_format($adv['balance']) . ' SSP' : dn_cur($config) . number_format($adv['balance'], 2) ?></div>
+            <div style="font-size:10px;color:#9ca3af;">of <?= $ac === 'SSP' ? number_format((float)$adv['amount']) . ' SSP' : dn_cur($config) . number_format((float)$adv['amount'], 2) ?></div>
         </div>
     </div>
     <?php endforeach; ?>

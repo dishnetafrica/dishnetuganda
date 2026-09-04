@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
 error_reporting(E_ALL);
@@ -168,10 +169,8 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
             'token' => $pdfToken, 'created' => time(), 'invoice' => $invoNum,
         ]));
 
-        $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-        $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
-        $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-        $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+        $siteUrl = dn_crm_web($config);
+        $pdfUrl  = dn_plugin_public($config)
                  . '?page=api&action=serve_temp_pdf'
                  . '&file=' . urlencode($pdfFile)
                  . '&token=' . urlencode($pdfToken);
@@ -438,7 +437,7 @@ switch ($changeType) {
                           . "This phone already belongs to:\n"
                           . "*" . ($dupFound['name'] ?? 'Unknown') . "* (CRM #" . ($dupFound['id'] ?? '?') . ")\n\n"
                           . "Please review and merge if duplicate.\n"
-                          . "crm.dishnetafrica.com/crm/client/{$clientId}";
+                          . dn_crm_web($config) . "/crm/client/{$clientId}";
 
                 $notify->sendAdmin($alertMsg, 'ops_dup_alert');
                 whLog($changeType, "Duplicate phone alert sent — new #{$clientId} matches existing #" . ($dupFound['id'] ?? '?'));
@@ -457,6 +456,29 @@ switch ($changeType) {
                 whLog($changeType, "Welcome sent to {$name} ({$phone})", ['crm_id' => $clientId]);
             } else {
                 whLog($changeType, "KYC-registered client — welcome already sent by plugin", ['crm_id' => $clientId]);
+            }
+        }
+
+        // ── DishNet email identity: reserve + queue provisioning ─────────
+        // Fast local work only (one SQLite insert). The identity worker does
+        // the slow parts — mail server + CRM write-back — on its schedule.
+        // Every client-creation path (KYC, manual, portal) lands here, which
+        // is exactly why the hook lives on this webhook.
+        if (!empty($config['identity_enabled'])) {
+            try {
+                require_once __DIR__ . '/lib/MailProviderInterface.php';
+                require_once __DIR__ . '/lib/StalwartProvider.php';
+                require_once __DIR__ . '/lib/CustomerIdentityService.php';
+                $idSvc = new CustomerIdentityService(
+                    $store->getPdo(), $config, new StalwartProvider($config),
+                    null, new EventBus($store->getPdo())
+                );
+                $idRes = $idSvc->reserveForClient($clientId, $name, 'customer' . $clientId);
+                whLog($changeType, $idRes['ok']
+                    ? "Identity reserved: {$idRes['data']}"
+                    : "Identity reserve failed: {$idRes['error']}", ['crm_id' => $clientId]);
+            } catch (\Throwable $e) {
+                whLog($changeType, 'Identity reserve error: ' . $e->getMessage(), ['crm_id' => $clientId]);
             }
         }
 
@@ -1880,7 +1902,7 @@ switch ($changeType) {
                     . "📍 Address: " . ($address ?: 'See job details') . "\n"
                     . "📅 Date: {$dateFormatted}\n"
                     . ($timeFormatted ? "⏰ Time: {$timeFormatted}\n" : "")
-                    . "\n🔗 View in CRM: crm.dishnetafrica.com\n\n"
+                    . "\n🔗 View in CRM: " . dn_crm_web($config) . "\n\n"
                     . "— DishNet Support";
                 
                 $notify->sendRaw($techPhone, $message, 'job_assigned');
@@ -2268,10 +2290,8 @@ switch ($changeType) {
 
                         // Build public URL for WASender to fetch
                         // crm_base_url may include /api/v2.1 - strip it to get site root
-                        $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
-                        $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);   // strip /api/v2.1
-                        $siteUrl = preg_replace('#/crm$#', '', $siteUrl);             // strip trailing /crm
-                        $pdfServeUrl = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+                        $siteUrl = dn_crm_web($config);
+                        $pdfServeUrl = dn_plugin_public($config)
                                  . '?page=api&action=serve_quote_pdf'
                                  . '&file=' . urlencode($pdfFile)
                                  . '&token=' . urlencode($pdfToken);
@@ -2337,7 +2357,7 @@ switch ($changeType) {
                 // $0 quote — notify ops team (plan may be misconfigured)
                 whLog($changeType, "Quote #{$quoteNum} has \$0 amount — plan may not have pricing", ['client_id' => $clientId, 'client' => $name]);
                 $notify->sendAdmin(
-                    "⚠️ *Quote #{$quoteNum}* created with \$0 for {$name} ({$phone}).\n"
+                    "⚠️ *Quote #{$quoteNum}* created with " . dn_cur($config) . "0 for {$name} ({$phone}).\n"
                     . "No quotation sent to customer — plan may be missing pricing.\n"
                     . "Please check and send manually if needed.",
                     'ops_quote_zero'
@@ -2438,7 +2458,7 @@ switch ($changeType) {
         $total      = (float)($invoice['total'] ?? 0);
         $amountPaid = (float)($invoice['amountPaid'] ?? 0);
         $dueDate    = substr($invoice['dueDate'] ?? $invoice['maturityDate'] ?? '', 0, 10);
-        $currency   = $invoice['currencyCode'] ?? 'USD';
+        $currency   = $invoice['currencyCode'] ?? dn_code($config);
         $invStatus  = (int)($invoice['status'] ?? 0);
 
         if (!$clientId || $total <= 0) whResp(200, 'near_due — skipped (no client or zero amount).');
@@ -2506,7 +2526,7 @@ switch ($changeType) {
         $total      = (float)($invoice['total'] ?? 0);
         $amountPaid = (float)($invoice['amountPaid'] ?? 0);
         $dueDate    = substr($invoice['dueDate'] ?? $invoice['maturityDate'] ?? '', 0, 10);
-        $currency   = $invoice['currencyCode'] ?? 'USD';
+        $currency   = $invoice['currencyCode'] ?? dn_code($config);
         $invStatus  = (int)($invoice['status'] ?? 0); // 0=draft, 1=unpaid, 2=partial, 3=paid, 4=void
 
         if (!$clientId || $total <= 0) whResp(200, 'overdue — skipped (no client or zero amount).');
@@ -2760,7 +2780,27 @@ switch ($changeType) {
     case 'invoice.add_draft':
     case 'client.invite':
     case 'client.delete':
-    case 'client.archive':
+    case 'client.archive': {
+        // Retention, not deletion: the customer's DishNet identity mailbox
+        // goes into a suspended hold (login off, every message kept). Actual
+        // mailbox deletion is a manual admin act under the retention policy —
+        // never automatic, never from a webhook.
+        if (!empty($config['identity_enabled']) && $entityId) {
+            try {
+                require_once __DIR__ . '/lib/MailProviderInterface.php';
+                require_once __DIR__ . '/lib/StalwartProvider.php';
+                require_once __DIR__ . '/lib/CustomerIdentityService.php';
+                $idSvc = new CustomerIdentityService($store->getPdo(), $config, new StalwartProvider($config));
+                $idRes = $idSvc->requestSuspend((int)$entityId, $changeType);
+                whLog($changeType, $idRes['ok'] ? 'Identity suspension queued' : ('Identity: ' . $idRes['error']),
+                      ['entity_id' => $entityId]);
+            } catch (\Throwable $e) {
+                whLog($changeType, 'Identity suspend error: ' . $e->getMessage(), ['entity_id' => $entityId]);
+            }
+        }
+        whResp(200, "{$changeType} acknowledged.");
+    }
+
     case 'service.edit':
     case 'credit_card.add': {
         whLog($changeType, "Known event — no action configured", ['entity_id' => $entityId]);

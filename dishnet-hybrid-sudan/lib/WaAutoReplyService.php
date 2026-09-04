@@ -3,6 +3,7 @@ declare(strict_types=1);
 if (!function_exists('str_contains'))    { function str_contains(string $h, string $n): bool    { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_ends_with'))   { function str_ends_with(string $h, string $n): bool   { return $n===''||substr($h,-strlen($n))===$n; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
+require_once __DIR__ . '/currency.php';
 
 /**
  * WaAutoReplyService — Unified WhatsApp Auto-Reply (v4.11.3)
@@ -529,7 +530,7 @@ class WaAutoReplyService
 
         $name     = $client['name'] ?? 'Customer';
         $balance  = (float)($client['accountBalance'] ?? $client['balance'] ?? 0);
-        $balStr   = '$' . number_format(abs($balance), 2);
+        $balStr   = dn_cur($this->config) . number_format(abs($balance), 2);
 
         // Get active services
         $services = $this->getClientServices($client['id']);
@@ -571,7 +572,7 @@ class WaAutoReplyService
         if (!$payment) {
             $reply = "Hey {$name}, I don't see any recent payments on your account. If you've paid recently, it can take up to 24 hours to show up.\n\nSend 4 if you'd like to talk to our accounts team about this.";
         } else {
-            $amt  = '$' . number_format((float)($payment['amount'] ?? 0), 2);
+            $amt  = dn_cur($this->config) . number_format((float)($payment['amount'] ?? 0), 2);
             $date = substr($payment['createdDate'] ?? $payment['created_at'] ?? '', 0, 10);
             $method = $payment['methodName'] ?? 'Unknown';
             $note = substr($payment['note'] ?? '', 0, 60);
@@ -602,7 +603,7 @@ class WaAutoReplyService
         if (!$invoice) {
             $reply = "Good news {$name} — no unpaid invoices on your account. You're all up to date!";
         } else {
-            $amt = '$' . number_format((float)($invoice['total'] ?? 0), 2);
+            $amt = dn_cur($this->config) . number_format((float)($invoice['total'] ?? 0), 2);
             $num = $invoice['number'] ?? $invoice['id'];
             $due = substr($invoice['dueDate'] ?? $invoice['maturityDate'] ?? '', 0, 10);
             $status = ['0' => 'Draft', '1' => 'Unpaid', '2' => 'Partially paid', '3' => 'Paid'];
@@ -1151,6 +1152,7 @@ class WaAutoReplyService
             if ($client) {
                 $ctx['name']         = $client['name'] ?? null;
                 $ctx['balance']      = $client['balance'] ?? null;
+                $ctx['currency']     = dn_cur($this->config);
                 $ctx['status']       = $client['isLead'] ?? false ? 'Lead' : ($client['isActive'] ?? true ? 'Active' : 'Suspended');
                 // Try to get service info
                 $services = $this->getClientServices((int)($client['id'] ?? 0));
@@ -1166,7 +1168,7 @@ class WaAutoReplyService
                 // Last payment
                 $lastPay = $this->getLastPayment((int)($client['id'] ?? 0));
                 if ($lastPay) {
-                    $ctx['last_payment'] = '$' . number_format((float)($lastPay['amount'] ?? 0), 2)
+                    $ctx['last_payment'] = dn_cur($this->config) . number_format((float)($lastPay['amount'] ?? 0), 2)
                         . ' on ' . substr($lastPay['createdDate'] ?? '', 0, 10);
                 }
             }

@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
         $pCols[$pcIdx]['reject_note'] = trim($_POST['reject_note'] ?? 'Rejected by admin');
         $store->save('pending_collections.json', $pCols);
         logActivity($dataDir,'large_txn_rejected','Large payment rejected',
-            '$'.number_format($pc['amount'],2).' for '.($pc['customer_name']??'').' by '.$admin['name']);
+            dn_cur($config) . number_format($pc['amount'],2).' for '.($pc['customer_name']??'').' by '.$admin['name']);
         flash('Payment rejected.', 'success');
         redirect('?page=dashboard&tab=wallet_admin');
     }
@@ -80,9 +80,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
     StaffLedgerWriter::onCollection($store->getPdo(), array_merge($collection, ['client_name'=>$custName,'collected_at'=>date('Y-m-d H:i:s')]));
     $store->appendWithId('activity_log.json',['event'=>'large_txn_approved','actor'=>$admin['name'],'action'=>'APPROVE+DEBIT',
         'customer'=>$custName,'amount'=>$amount,'balance_before'=>round($balanceBefore,2),'balance_after'=>round($balanceAfter,2),
-        'detail'=>'Admin approved $'.number_format($amount,2).' from '.$custName.' | $'.number_format($balanceBefore,2).' -> $'.number_format($balanceAfter,2),
+        'detail'=>'Admin approved ' . dn_cur($config) . number_format($amount,2).' from '.$custName.' | ' . dn_cur($config) . number_format($balanceBefore,2).' -> ' . dn_cur($config) . number_format($balanceAfter,2),
         'created_at'=>date('Y-m-d H:i:s')]);
-    logActivity($dataDir,'large_txn_approved','Large payment approved','$'.number_format($amount,2).' for '.$custName.' by '.$admin['name']);
+    logActivity($dataDir,'large_txn_approved','Large payment approved',dn_cur($config) . number_format($amount,2).' for '.$custName.' by '.$admin['name']);
     $pCols[$pcIdx]['status']='approved'; $pCols[$pcIdx]['reviewed_by']=$admin['name'];
     $pCols[$pcIdx]['reviewed_at']=date('Y-m-d H:i:s'); $pCols[$pcIdx]['collection_id']=$collection['id'];
     $store->save('pending_collections.json',$pCols);
@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
         }
     } catch (\Throwable $waErr) { /* non-fatal */ }
 
-    flash('Payment of $'.number_format($amount,2).' approved and processed.','success');
+    flash('Payment of ' . dn_cur($config) . number_format($amount,2).' approved and processed.','success');
     redirect('?page=dashboard&tab=wallet_admin');
 }
 
@@ -218,8 +218,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='approve_rechar
             $notify->sendAdmin(
                 "✅ *Recharge Approved*\n"
                 . "Retailer: {$retailer['name']}\n"
-                . "Amount: \$" . number_format((float)($req['amount'] ?? 0), 2) . "\n"
-                . "New Balance: \$" . number_format($newBalance, 2) . "\n"
+                . "Amount: " . dn_cur($config) . number_format((float)($req['amount'] ?? 0), 2) . "\n"
+                . "New Balance: " . dn_cur($config) . number_format($newBalance, 2) . "\n"
                 . "Approved by: {$admin['name']}"
                 . $invoiceRef,
                 'ops_recharge_approved_admin'

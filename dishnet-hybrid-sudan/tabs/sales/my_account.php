@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
             $_bgUsdHov = round(array_sum(array_column(array_values(array_filter($_bgHandovers, fn($h) => ($h['status'] ?? '') === 'confirmed' && ($h['currency'] ?? 'USD') === 'USD')), 'amount')), 2);
             $_bgUsdBal = max(0, (float)($_bgPos['advance_balance'] ?? 0) + (float)($_bgPos['collections'] ?? 0) + $_bgUsdIn - $_bgUsdExp - $_bgUsdHov);
             if ($_exAmt > 0 && $_bgUsdBal <= 0 && (float)($_bgPos['advance_balance'] ?? 0) <= 0 && (float)($_bgPos['collections'] ?? 0) <= 0 && $_bgUsdIn <= 0) {
-                flash("Cannot submit \$" . number_format($_exAmt, 2) . " USD — you have no USD cash. Switch to SSP if you have SSP.", 'danger');
+                flash("Cannot submit " . dn_cur($config) . number_format($_exAmt, 2) . " USD — you have no USD cash. Switch to SSP if you have SSP.", 'danger');
                 redirect('?page=dashboard&tab=my_account&v=expense');
             }
         }
@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
                     // WhatsApp to receiver
                     if ($_mPhone) {
                         try {
-                            $_lbl = $_expCurrency==='SSP' ? number_format($_expSspAmt,0).' SSP' : '$'.number_format($_expAmount,2);
+                            $_lbl = $_expCurrency==='SSP' ? number_format($_expSspAmt,0).' SSP' : dn_cur($config) . number_format($_expAmount,2);
                             $notify = svc('notify');
                             $notify->sendVia('accounts', $_mPhone,
                                 "💰 *Cash Received*\n\nFrom: *{$retailer['name']}*\nAmount: *{$_lbl}*\nFor: {$_expCategory}" . ($_expDesc?" — {$_expDesc}":'') . "\nTime: ".date('d M Y H:i')."\n\nThis is now in your cash balance.\n— DishNet",
@@ -149,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
         $purpose = trim($_POST['purpose'] ?? '');
         $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
         if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
-        $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP' : '$' . number_format($amount, 2);
+        $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP' : dn_cur($config) . number_format($amount, 2);
         if ($amount > 0 && $purpose) {
             $store->appendWithId('activity_log.json', [
                 'event'      => 'advance_request',
@@ -213,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
         ], $retailer);
 
         if ($result['ok']) {
-            flash('✅ $' . number_format($amount, 2) . ' advance issued to ' . ($recipient['name'] ?? '') . ' — ' . $result['advance_no'], 'success');
+            flash('✅ ' . dn_cur($config) . number_format($amount, 2) . ' advance issued to ' . ($recipient['name'] ?? '') . ' — ' . $result['advance_no'], 'success');
         } else {
             flash('❌ ' . ($result['error'] ?? 'Failed.'), 'danger');
         }
@@ -238,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
             $_hovAgentPos = (new DualReadCashPosition($store, $store->getPdo(), $dataDir ?? ''))->getPosition($agentId);
             $_hovAgentMax = round((float)($_hovAgentPos['cash_exposure'] ?? 0), 2);
             if ($hovAmount > $_hovAgentMax + 0.01 && $_hovAgentMax > 0) {
-                flash("Amount \$" . number_format($hovAmount, 2) . " exceeds your cash position of \$" . number_format($_hovAgentMax, 2) . ".", 'danger');
+                flash("Amount " . dn_cur($config) . number_format($hovAmount, 2) . " exceeds your cash position of " . dn_cur($config) . number_format($_hovAgentMax, 2) . ".", 'danger');
                 redirect('?page=dashboard&tab=my_account');
             }
             $hovProject = trim($_POST['hov_project'] ?? 'dishnet');
@@ -303,9 +303,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
             $sspReceived = round($excAmt * $excRate, 0);
             // Unified description — same string on both USD OUT and SSP IN sides
             if ($excSource === 'customer_ssp' && $excClient) {
-                $desc = $excNote ?: ('Client paid SSP: ' . $excClient . ' — $' . number_format($excAmt, 2) . ' @ ' . number_format($excRate, 0) . ' — ' . $agentName);
+                $desc = $excNote ?: ('Client paid SSP: ' . $excClient . ' — ' . dn_cur($config) . number_format($excAmt, 2) . ' @ ' . number_format($excRate, 0) . ' — ' . $agentName);
             } else {
-                $desc = $excNote ?: ('Exchange $' . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' — ' . $agentName);
+                $desc = $excNote ?: ('Exchange ' . dn_cur($config) . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' — ' . $agentName);
             }
             // SSP in
             $cinRecord = $store->appendWithId('cash_ins.json', [
@@ -380,11 +380,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
                     'source'            => 'field_exchange',
                 ]);
             }
-            flash('✅ Exchange: $' . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0), 'success');
+            flash('✅ Exchange: ' . dn_cur($config) . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0), 'success');
         } else {
             // SSP → USD
             $usdReceived = round($excAmt / $excRate, 2);
-            $desc = $excNote ?: ('Exchange ' . number_format($excAmt, 0) . ' SSP → $' . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0));
+            $desc = $excNote ?: ('Exchange ' . number_format($excAmt, 0) . ' SSP → ' . dn_cur($config) . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0));
             // USD in
             $cinRecord = $store->appendWithId('cash_ins.json', [
                 'collector_id' => $agentId, 'collector_name' => $agentName,
@@ -419,7 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
                 );
             } catch (\Throwable $e) { /* non-fatal */ }
 
-            flash('✅ Exchange: ' . number_format($excAmt, 0) . ' SSP → $' . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0), 'success');
+            flash('✅ Exchange: ' . number_format($excAmt, 0) . ' SSP → ' . dn_cur($config) . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0), 'success');
         }
         redirect('?page=dashboard&tab=my_account');
     }
@@ -601,23 +601,23 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div style="background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:14px;padding:14px 12px;">
             <div style="font-size:9px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.8px;">💵 Today</div>
-            <div style="font-size:28px;font-weight:900;color:#4ade80;letter-spacing:-1px;margin-top:2px;">$<?= number_format($_mcTodayCollected, 0) ?></div>
+            <div style="font-size:28px;font-weight:900;color:#4ade80;letter-spacing:-1px;margin-top:2px;"><?= dn_cur($config) ?><?= number_format($_mcTodayCollected, 0) ?></div>
             <div style="font-size:10px;color:#94a3b8;margin-top:2px;">collected today</div>
         </div>
         <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:14px 12px;">
             <div style="font-size:9px;font-weight:800;color:#60a5fa;text-transform:uppercase;letter-spacing:.8px;">🇸🇸 SSP</div>
             <div style="font-size:28px;font-weight:900;color:#60a5fa;letter-spacing:-1px;margin-top:2px;"><?= number_format($_mcSspBal, 0) ?></div>
-            <?php if ($_mcSspBal > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ $<?= number_format($_mcSspUsd, 2) ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">in bag</div><?php endif; ?>
+            <?php if ($_mcSspBal > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ <?= dn_cur($config) ?><?= number_format($_mcSspUsd, 2) ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">in bag</div><?php endif; ?>
         </div>
     </div>
 
     <!-- Month + status pills -->
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);border-radius:20px;padding:5px 14px;margin-bottom:6px;">
-        <span style="font-size:11px;font-weight:700;color:#60a5fa;">📅 <?= $_mcMonthName ?>: $<?= number_format($_mcMonthCollected, 0) ?> (<?= $_mcMonthCount ?> collections)</span>
+        <span style="font-size:11px;font-weight:700;color:#60a5fa;">📅 <?= $_mcMonthName ?>: <?= dn_cur($config) ?><?= number_format($_mcMonthCollected, 0) ?> (<?= $_mcMonthCount ?> collections)</span>
     </div>
     <?php if ($_mcOwed > 0): ?>
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:20px;padding:5px 14px;">
-        <span style="font-size:11px;font-weight:700;color:#fbbf24;">💡 Rupesh owes you $<?= number_format($_mcOwed, 2) ?></span>
+        <span style="font-size:11px;font-weight:700;color:#fbbf24;">💡 Rupesh owes you <?= dn_cur($config) ?><?= number_format($_mcOwed, 2) ?></span>
     </div>
     <?php endif; ?>
 </div>
@@ -752,11 +752,11 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
         <div style="background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.25);border-radius:14px;padding:14px 12px;">
             <div style="font-size:9px;font-weight:800;color:#fdba74;text-transform:uppercase;letter-spacing:.8px;">🇸🇸 SSP Bag</div>
             <div style="font-size:28px;font-weight:900;color:#fb923c;letter-spacing:-1px;margin-top:2px;"><?= number_format($_mcSspBal2, 0) ?></div>
-            <?php if ($_mcSspBal2 > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ $<?= number_format($_mcSspUsd2, 2) ?> @ <?= number_format($_mcRate2, 0) ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">no SSP received</div><?php endif; ?>
+            <?php if ($_mcSspBal2 > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ <?= dn_cur($config) ?><?= number_format($_mcSspUsd2, 2) ?> @ <?= number_format($_mcRate2, 0) ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">no SSP received</div><?php endif; ?>
         </div>
         <div style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.25);border-radius:14px;padding:14px 12px;">
             <div style="font-size:9px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.8px;">💵 USD Cash</div>
-            <div style="font-size:28px;font-weight:900;color:<?= $_mcUsdBal2 > 0 ? '#4ade80' : '#475569' ?>;letter-spacing:-1px;margin-top:2px;">$<?= number_format($_mcUsdBal2, 2) ?></div>
+            <div style="font-size:28px;font-weight:900;color:<?= $_mcUsdBal2 > 0 ? '#4ade80' : '#475569' ?>;letter-spacing:-1px;margin-top:2px;"><?= dn_cur($config) ?><?= number_format($_mcUsdBal2, 2) ?></div>
             <div style="font-size:10px;color:#94a3b8;margin-top:2px;"><?= $_mcUsdBal2 > 0 ? 'in hand' : ($_mcUsdIn2 > 0 ? 'settled' : 'no USD received') ?></div>
         </div>
     </div>
@@ -791,13 +791,13 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
 <!-- ══ Original USD hero ══ -->
 <div class="mc-hero">
     <div class="mc-hero-name"><?= h($agentName) ?> · <?= h($retailer['role'] ?? 'Staff') ?></div>
-    <div class="mc-hero-amt" style="color:<?= $exposure > 0 ? '#fca5a5' : ($exposure < 0 ? '#86efac' : '#94a3b8') ?>">$<?= number_format(abs($exposure), 2) ?></div>
+    <div class="mc-hero-amt" style="color:<?= $exposure > 0 ? '#fca5a5' : ($exposure < 0 ? '#86efac' : '#94a3b8') ?>"><?= dn_cur($config) ?><?= number_format(abs($exposure), 2) ?></div>
     <div class="mc-hero-label"><span style="background:<?= $exposure > 0 ? 'rgba(220,38,38,.2);color:#fca5a5' : ($exposure < 0 ? 'rgba(22,163,74,.2);color:#86efac' : 'rgba(148,163,184,.2);color:#94a3b8') ?>"><?= $oweText ?></span></div>
     <div class="mc-grid4">
-        <div><div class="v" style="color:#86efac">$<?= number_format($advBal,0) ?></div><div class="l">Advances</div></div>
-        <div><div class="v" style="color:#86efac">$<?= number_format($collections,0) ?></div><div class="l">Collected</div></div>
-        <div><div class="v" style="color:#fca5a5">$<?= number_format($expenses,0) ?></div><div class="l">Expenses</div></div>
-        <div><div class="v" style="color:#fca5a5">$<?= number_format($handovers,0) ?></div><div class="l">Handovers</div></div>
+        <div><div class="v" style="color:#86efac"><?= dn_cur($config) ?><?= number_format($advBal,0) ?></div><div class="l">Advances</div></div>
+        <div><div class="v" style="color:#86efac"><?= dn_cur($config) ?><?= number_format($collections,0) ?></div><div class="l">Collected</div></div>
+        <div><div class="v" style="color:#fca5a5"><?= dn_cur($config) ?><?= number_format($expenses,0) ?></div><div class="l">Expenses</div></div>
+        <div><div class="v" style="color:#fca5a5"><?= dn_cur($config) ?><?= number_format($handovers,0) ?></div><div class="l">Handovers</div></div>
     </div>
 </div>
 <?php endif; /* end support vs original hero */ ?>
@@ -864,21 +864,21 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
     <div class="mc-row total"><span class="k">🇸🇸 SSP balance</span><span class="v" style="color:#c2410c;font-weight:900;"><?= number_format($_mcSspBal2, 0) ?> SSP</span></div>
     <?php if ($_mcUsdIn2 > 0 || $_mcUsdExp2 > 0 || $_mcUsdHov2 > 0): ?>
     <div style="border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;">
-        <div class="mc-row"><span class="k"><span style="font-size:15px;">💵</span> USD received</span><span class="v mc-in">+$<?= number_format($_mcUsdIn2, 2) ?></span></div>
-        <div class="mc-row"><span class="k"><span style="font-size:15px;">🧾</span> USD expenses</span><span class="v mc-out">-$<?= number_format($_mcUsdExp2, 2) ?></span></div>
-        <?php if ($_mcUsdHov2 > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">🏦</span> USD returned to office</span><span class="v mc-out">-$<?= number_format($_mcUsdHov2, 2) ?></span></div><?php endif; ?>
-        <div class="mc-row total"><span class="k">💵 USD balance</span><span class="v" style="color:<?= $_mcUsdBal2 > 0 ? '#059669' : '#475569' ?>;font-weight:900;">$<?= number_format($_mcUsdBal2, 2) ?></span></div>
+        <div class="mc-row"><span class="k"><span style="font-size:15px;">💵</span> USD received</span><span class="v mc-in">+<?= dn_cur($config) ?><?= number_format($_mcUsdIn2, 2) ?></span></div>
+        <div class="mc-row"><span class="k"><span style="font-size:15px;">🧾</span> USD expenses</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($_mcUsdExp2, 2) ?></span></div>
+        <?php if ($_mcUsdHov2 > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">🏦</span> USD returned to office</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($_mcUsdHov2, 2) ?></span></div><?php endif; ?>
+        <div class="mc-row total"><span class="k">💵 USD balance</span><span class="v" style="color:<?= $_mcUsdBal2 > 0 ? '#059669' : '#475569' ?>;font-weight:900;"><?= dn_cur($config) ?><?= number_format($_mcUsdBal2, 2) ?></span></div>
     </div>
     <?php endif; ?>
     <?php else: ?>
     <!-- Non-support: original USD position -->
-    <div class="mc-row"><span class="k"><span style="font-size:15px;">📥</span> Advances from company</span><span class="v mc-in">+$<?= number_format($advBal, 2) ?></span></div>
-    <div class="mc-row"><span class="k"><span style="font-size:15px;">💳</span> Customer collections</span><span class="v mc-in">+$<?= number_format($collections, 2) ?></span></div>
-    <div class="mc-row"><span class="k"><span style="font-size:15px;">🧾</span> Approved expenses</span><span class="v mc-out">-$<?= number_format($expenses, 2) ?></span></div>
-    <div class="mc-row"><span class="k"><span style="font-size:15px;">🏦</span> Handovers to office</span><span class="v mc-out">-$<?= number_format($handovers, 2) ?></span></div>
-    <?php if ($trfSent > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">↗️</span> Transfers sent</span><span class="v mc-out">-$<?= number_format($trfSent, 2) ?></span></div><?php endif; ?>
-    <?php if ($trfRecv > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">↙️</span> Transfers received</span><span class="v mc-in">+$<?= number_format($trfRecv, 2) ?></span></div><?php endif; ?>
-    <div class="mc-row total"><span class="k"><?= $exposure >= 0 ? '🔴 You owe company' : '🟢 Company owes you' ?></span><span class="v" style="color:<?= $oweColor ?>">$<?= number_format(abs($exposure), 2) ?></span></div>
+    <div class="mc-row"><span class="k"><span style="font-size:15px;">📥</span> Advances from company</span><span class="v mc-in">+<?= dn_cur($config) ?><?= number_format($advBal, 2) ?></span></div>
+    <div class="mc-row"><span class="k"><span style="font-size:15px;">💳</span> Customer collections</span><span class="v mc-in">+<?= dn_cur($config) ?><?= number_format($collections, 2) ?></span></div>
+    <div class="mc-row"><span class="k"><span style="font-size:15px;">🧾</span> Approved expenses</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($expenses, 2) ?></span></div>
+    <div class="mc-row"><span class="k"><span style="font-size:15px;">🏦</span> Handovers to office</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($handovers, 2) ?></span></div>
+    <?php if ($trfSent > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">↗️</span> Transfers sent</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($trfSent, 2) ?></span></div><?php endif; ?>
+    <?php if ($trfRecv > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">↙️</span> Transfers received</span><span class="v mc-in">+<?= dn_cur($config) ?><?= number_format($trfRecv, 2) ?></span></div><?php endif; ?>
+    <div class="mc-row total"><span class="k"><?= $exposure >= 0 ? '🔴 You owe company' : '🟢 Company owes you' ?></span><span class="v" style="color:<?= $oweColor ?>"><?= dn_cur($config) ?><?= number_format(abs($exposure), 2) ?></span></div>
     <?php endif; ?>
 </div>
 <?php endif; /* not field_accountant */ ?>
@@ -964,7 +964,7 @@ usort($_ledgerUSD, fn($a,$b)=>strcmp($b['date'],$a['date']));
             <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars(substr($_lu['desc'],0,40)) ?></div>
         </div>
         <div style="text-align:right;">
-            <div style="font-size:11px;color:#374151;font-weight:600;">Bal: $<?= number_format(max(0,$_usdRun),2) ?></div>
+            <div style="font-size:11px;color:#374151;font-weight:600;">Bal: <?= dn_cur($config) ?><?= number_format(max(0,$_usdRun),2) ?></div>
             <div style="font-size:10px;color:#94a3b8;"><?= date('d M', strtotime($_lu['date'])) ?></div>
         </div>
     </div>
@@ -989,7 +989,7 @@ usort($_ledgerUSD, fn($a,$b)=>strcmp($b['date'],$a['date']));
             <div class="mc-txn-desc"><?= h(substr($tx['desc'], 0, 45)) ?></div>
             <div class="mc-txn-meta"><?= substr($tx['date']??'', 0, 10) ?><?php if ($tx['status']??''): ?><span class="mc-pill" style="background:<?= $stC[0] ?>;color:<?= $stC[1] ?>"><?= ucfirst($tx['status']) ?></span><?php endif; ?></div>
         </div>
-        <?php $_txIsSsp = (($tx["currency"]??"USD")==="SSP"||((float)($tx["ssp_amount"]??0))>0); $_txAmt = $_txIsSsp ? ((float)($tx["ssp_amount"]??0)>0?(float)$tx["ssp_amount"]:(float)$tx["amount"]) : (float)$tx["amount"]; ?><div class="mc-txn-amt <?= $tx["dir"]==="in"?"mc-in":"mc-out" ?>"><?= $tx["dir"]==="in"?"+":"-" ?><?= $_txIsSsp ? number_format($_txAmt,0)." SSP" : "$".number_format($_txAmt,2) ?></div>
+        <?php $_txIsSsp = (($tx["currency"]??"USD")==="SSP"||((float)($tx["ssp_amount"]??0))>0); $_txAmt = $_txIsSsp ? ((float)($tx["ssp_amount"]??0)>0?(float)$tx["ssp_amount"]:(float)$tx["amount"]) : (float)$tx["amount"]; ?><div class="mc-txn-amt <?= $tx["dir"]==="in"?"mc-in":"mc-out" ?>"><?= $tx["dir"]==="in"?"+":"-" ?><?= $_txIsSsp ? number_format($_txAmt,0)." SSP" : dn_cur($config) . number_format($_txAmt,2) ?></div>
     </div>
     <?php endforeach; ?>
     <?php if (count($txns) > 15): ?><div style="text-align:center;padding:10px;"><a href="?page=dashboard&tab=my_account&v=ledger" style="font-size:12px;color:#2563eb;font-weight:700;">View full ledger →</a></div><?php endif; ?>
@@ -1021,7 +1021,7 @@ usort($_ledgerUSD, fn($a,$b)=>strcmp($b['date'],$a['date']));
             <div class="mc-txn-desc"><?= h(substr($tx['desc'], 0, 45)) ?></div>
             <div class="mc-txn-meta"><?= ucfirst($tx['type']) ?><?php if ($tx['status']??''): ?><span class="mc-pill" style="background:<?= $stC[0] ?>;color:<?= $stC[1] ?>"><?= ucfirst($tx['status']) ?></span><?php endif; ?></div>
         </div>
-        <?php $_txIsSsp = (($tx["currency"]??"USD")==="SSP"||((float)($tx["ssp_amount"]??0))>0); $_txAmt = $_txIsSsp ? ((float)($tx["ssp_amount"]??0)>0?(float)$tx["ssp_amount"]:(float)$tx["amount"]) : (float)$tx["amount"]; ?><div class="mc-txn-amt <?= $tx["dir"]==="in"?"mc-in":"mc-out" ?>"><?= $tx["dir"]==="in"?"+":"-" ?><?= $_txIsSsp ? number_format($_txAmt,0)." SSP" : "$".number_format($_txAmt,2) ?></div>
+        <?php $_txIsSsp = (($tx["currency"]??"USD")==="SSP"||((float)($tx["ssp_amount"]??0))>0); $_txAmt = $_txIsSsp ? ((float)($tx["ssp_amount"]??0)>0?(float)$tx["ssp_amount"]:(float)$tx["amount"]) : (float)$tx["amount"]; ?><div class="mc-txn-amt <?= $tx["dir"]==="in"?"mc-in":"mc-out" ?>"><?= $tx["dir"]==="in"?"+":"-" ?><?= $_txIsSsp ? number_format($_txAmt,0)." SSP" : dn_cur($config) . number_format($_txAmt,2) ?></div>
     </div>
     <?php endforeach; ?>
     <?php endif; ?>
@@ -1323,7 +1323,7 @@ $_ubRows = array_reverse($_ubRows);
 
 <div style="background:linear-gradient(135deg,#059669,#047857);border-radius:16px;padding:16px;color:#fff;margin-bottom:12px;">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;opacity:.7;">💵 USD Cashbook — <?= h($agentName) ?></div>
-    <div style="font-size:32px;font-weight:900;margin-top:4px;">$<?= number_format(max(0,$_ubBal),2) ?></div>
+    <div style="font-size:32px;font-weight:900;margin-top:4px;"><?= dn_cur($config) ?><?= number_format(max(0,$_ubBal),2) ?></div>
     <div style="font-size:11px;opacity:.7;margin-top:2px;"><?= count($_ubRows) ?> transactions</div>
 </div>
 
@@ -1341,7 +1341,7 @@ $_ubRows = array_reverse($_ubRows);
     </div>
     <div style="text-align:right;">
         <div style="font-size:14px;font-weight:800;color:<?= $_ur['dir']==='IN'?'#059669':'#dc2626' ?>;"><?= $_ur['dir']==='IN'?'+$':'-$' ?><?= number_format((float)$_ur['amt'],2) ?></div>
-        <div style="font-size:10px;color:#64748b;">Bal: $<?= number_format(max(0,$_ur['bal']),2) ?></div>
+        <div style="font-size:10px;color:#64748b;">Bal: <?= dn_cur($config) ?><?= number_format(max(0,$_ur['bal']),2) ?></div>
     </div>
 </div>
 <?php endforeach; ?>
@@ -1406,7 +1406,7 @@ $_ubRows = array_reverse($_ubRows);
         <label class="mc-label">Link to Advance (optional)</label>
         <select name="advance_id" class="mc-input">
             <option value="">— No advance —</option>
-            <?php foreach ($activeAdvances as $adv): ?><option value="<?= $adv['id'] ?>"><?= h($adv['advance_no']) ?> — $<?= number_format($adv['balance'], 2) ?> left</option><?php endforeach; ?>
+            <?php foreach ($activeAdvances as $adv): ?><option value="<?= $adv['id'] ?>"><?= h($adv['advance_no']) ?> — <?= dn_cur($config) ?><?= number_format($adv['balance'], 2) ?> left</option><?php endforeach; ?>
         </select>
         <?php endif; ?>
 
@@ -1433,7 +1433,7 @@ $_ubRows = array_reverse($_ubRows);
     <div class="mc-txn">
         <div class="mc-txn-icon" style="background:#fef3c7"><?= $catIc ?></div>
         <div class="mc-txn-info">
-            <div class="mc-txn-desc"><?= $ec==='SSP' ? number_format((float)$exp['amount']).' SSP' : '$'.number_format((float)$exp['amount'],2) ?> · <?= h($exp['category']??'') ?></div>
+            <div class="mc-txn-desc"><?= $ec==='SSP' ? number_format((float)$exp['amount']).' SSP' : dn_cur($config) . number_format((float)$exp['amount'],2) ?> · <?= h($exp['category']??'') ?></div>
             <div class="mc-txn-meta"><?= h(substr($exp['expense_date']??$exp['submitted_at']??'',0,10)) ?> <span class="mc-pill" style="background:<?= $sc[0] ?>;color:<?= $sc[1] ?>"><?= ucfirst($exp['status']) ?></span></div>
         </div>
         <?php if (!empty($exp['receipt_path'])): ?><a href="javascript:void(0)" onclick="dnLbOpen('?page=api&action=expense_photo&id=<?= (int)$exp['id'] ?>')" style="font-size:16px;text-decoration:none;cursor:pointer;" title="View receipt photo">🧾</a><?php endif; ?>
@@ -1455,7 +1455,7 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
 
 <?php if ($pendTotal > 0): ?>
 <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:12px;font-weight:600;color:#92400e;">
-    ⏳ $<?= number_format($pendTotal, 2) ?> in <?= count($pendHov) ?> pending handover<?= count($pendHov)>1?'s':'' ?> (waiting confirmation)
+    ⏳ <?= dn_cur($config) ?><?= number_format($pendTotal, 2) ?> in <?= count($pendHov) ?> pending handover<?= count($pendHov)>1?'s':'' ?> (waiting confirmation)
 </div>
 <?php endif; ?>
 
@@ -1477,7 +1477,7 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
             <?php $_hovFirst = false; endforeach; ?>
         </div>
 
-        <label class="mc-label">Amount (USD)</label>
+        <label class="mc-label">Amount (<?= dn_code($config) ?>)</label>
         <input type="number" name="hov_amount" class="mc-input" placeholder="0.00" step="0.01" min="0.01" required style="font-size:20px;font-weight:800;text-align:center;">
 
         <label class="mc-label">Handing over to</label>
@@ -1562,7 +1562,7 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
     <div class="mc-txn">
         <div class="mc-txn-icon" style="background:#fef2f2">🏦</div>
         <div class="mc-txn-info">
-            <div class="mc-txn-desc">$<?= number_format((float)($h['amount']??0), 2) ?> to <?= h($h['to_name']??'Office') ?></div>
+            <div class="mc-txn-desc"><?= dn_cur($config) ?><?= number_format((float)($h['amount']??0), 2) ?> to <?= h($h['to_name']??'Office') ?></div>
             <div class="mc-txn-meta"><?= h(substr($h['created_at']??'',0,10)) ?> <span class="mc-pill" style="background:<?= $hsc[0] ?>;color:<?= $hsc[1] ?>"><?= ucfirst($h['status']??'') ?></span></div>
         </div>
     </div>
@@ -1587,8 +1587,8 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
             <div class="mc-txn-meta">Issued: <?= h(substr($adv['issued_at']??'',0,10)) ?></div>
         </div>
         <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:900;color:#15803d;"><?= $ac==='SSP' ? number_format($adv['balance']).' SSP' : '$'.number_format($adv['balance'],2) ?></div>
-            <div style="font-size:9px;color:#9ca3af;">of <?= $ac==='SSP' ? number_format((float)$adv['amount']).' SSP' : '$'.number_format((float)$adv['amount'],2) ?></div>
+            <div style="font-size:14px;font-weight:900;color:#15803d;"><?= $ac==='SSP' ? number_format($adv['balance']).' SSP' : dn_cur($config) . number_format($adv['balance'],2) ?></div>
+            <div style="font-size:9px;color:#9ca3af;">of <?= $ac==='SSP' ? number_format((float)$adv['amount']).' SSP' : dn_cur($config) . number_format((float)$adv['amount'],2) ?></div>
         </div>
     </div>
     <?php endforeach; ?>
@@ -1643,7 +1643,7 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
                 <div style="font-size:11px;color:#64748b;"><?= h($ia['advance_no'] ?? '') ?> · <?= substr($ia['issued_at'] ?? '', 0, 10) ?><?php if ($ia['purpose']??''): ?> · <?= h($ia['purpose']) ?><?php endif; ?></div>
             </div>
             <div style="text-align:right;">
-                <div style="font-size:14px;font-weight:800;color:#0f172a;">$<?= number_format((float)($ia['amount'] ?? 0), 2) ?></div>
+                <div style="font-size:14px;font-weight:800;color:#0f172a;"><?= dn_cur($config) ?><?= number_format((float)($ia['amount'] ?? 0), 2) ?></div>
                 <div style="font-size:10px;font-weight:700;background:<?= $iaBg ?>;color:<?= $iaClr ?>;padding:2px 7px;border-radius:6px;display:inline-block;"><?= ucfirst($iaStatus) ?></div>
             </div>
         </div>
@@ -1725,7 +1725,7 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
         });
         </script>
 
-        <label class="mc-label">Amount (USD)</label>
+        <label class="mc-label">Amount (<?= dn_code($config) ?>)</label>
         <input type="number" name="amount" class="mc-input" placeholder="0.00" step="0.01" min="1" required style="font-size:20px;font-weight:800;text-align:center;">
 
         <label class="mc-label">Purpose</label>
@@ -1765,12 +1765,12 @@ $_exPrefill = $_exLastR > 0 ? $_exLastR : $_exRate;
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
       <div>
         <div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.5px;">USD Bag</div>
-        <div style="font-size:22px;font-weight:900;">$<?= number_format($_exUsd, 2) ?></div>
+        <div style="font-size:22px;font-weight:900;"><?= dn_cur($config) ?><?= number_format($_exUsd, 2) ?></div>
       </div>
       <div>
         <div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.5px;">SSP Bag</div>
         <div style="font-size:22px;font-weight:900;"><?= number_format($_exSsp, 0) ?></div>
-        <div style="font-size:10px;opacity:.5;">≈ $<?= number_format($_exRate > 0 ? $_exSsp / $_exRate : 0, 2) ?></div>
+        <div style="font-size:10px;opacity:.5;">≈ <?= dn_cur($config) ?><?= number_format($_exRate > 0 ? $_exSsp / $_exRate : 0, 2) ?></div>
       </div>
     </div>
     <div style="margin-top:10px;font-size:11px;opacity:.65;">
@@ -1820,7 +1820,7 @@ $_exPrefill = $_exLastR > 0 ? $_exLastR : $_exRate;
     <!-- Amount -->
     <div style="margin-bottom:14px;">
       <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px;" id="exAmtLbl">
-        USD Amount to Give (max $<?= number_format($_exUsd, 2) ?>)
+        USD Amount to Give (max <?= dn_cur($config) ?><?= number_format($_exUsd, 2) ?>)
       </label>
       <div style="position:relative;">
         <span id="exPfx" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:22px;font-weight:900;color:#7c3aed;">$</span>
@@ -1968,7 +1968,7 @@ function exCalc() {
   } else if (banner) { banner.style.display = 'none'; }
 
   if (dir === 'usd_to_ssp') {
-    lbl.textContent = 'USD Amount to Give (max $' + _exUsd.toFixed(2) + ')';
+    lbl.textContent = 'USD Amount to Give (max ' + <?= json_encode(dn_cur($config)) ?> + _exUsd.toFixed(2) + ')';
     pfx.textContent = '$';
     lu2s.style.borderColor = '#7c3aed'; lu2s.style.background = '#faf5ff';
     ls2u.style.borderColor = '#e2e8f0'; ls2u.style.background = '#fff';
@@ -1976,7 +1976,7 @@ function exCalc() {
       var ssp = Math.round(amt * rate);
       var sspLast = _exLastRate > 0 ? Math.round(amt * _exLastRate) : 0;
       resA.textContent = ssp.toLocaleString() + ' SSP';
-      var formula = '$' + amt.toFixed(2) + ' × ' + Math.round(rate).toLocaleString() + ' = ' + ssp.toLocaleString() + ' SSP';
+      var formula = <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' × ' + Math.round(rate).toLocaleString() + ' = ' + ssp.toLocaleString() + ' SSP';
       if (_exLastRate > 0 && Math.abs(rate - _exLastRate) >= 10)
         formula += ' (vs ' + sspLast.toLocaleString() + ' at last rate)';
       resF.textContent = formula;
@@ -1990,8 +1990,8 @@ function exCalc() {
     lu2s.style.borderColor = '#e2e8f0'; lu2s.style.background = '#fff';
     if (amt > 0 && rate > 0) {
       var usd = (amt / rate).toFixed(2);
-      resA.textContent = '$' + usd;
-      resF.textContent = Math.round(amt).toLocaleString() + ' SSP ÷ ' + Math.round(rate).toLocaleString() + ' = $' + usd;
+      resA.textContent = <?= json_encode(dn_cur($config)) ?> + usd;
+      resF.textContent = Math.round(amt).toLocaleString() + ' SSP ÷ ' + Math.round(rate).toLocaleString() + ' = ' + <?= json_encode(dn_cur($config)) ?> + usd;
       res.style.display = 'block';
     } else res.style.display = 'none';
     warn.style.display = (amt > _exSsp + 1 && amt > 0) ? 'block' : 'none';

@@ -411,7 +411,7 @@ if (!$splynxApiError) {
                 <?php if ($row['plan_name']): ?>
                 <?= htmlspecialchars($row['plan_name']) ?>
                 <?php if ($row['amount']): ?>
-                <br><span style="color:#059669;font-weight:700;">$<?= number_format((float)$row['amount'], 0) ?>/mo</span>
+                <br><span style="color:#059669;font-weight:700;"><?= dn_cur($config) ?><?= number_format((float)$row['amount'], 0) ?>/mo</span>
                 <?php endif; ?>
                 <?php else: ?><span style="color:#d1d5db;">--</span>
                 <?php endif; ?>
@@ -429,7 +429,7 @@ if (!$splynxApiError) {
                          NOC
                     </a>
                     <?php if ($row['crm_client_id']): ?>
-                    <a href="https://crm.dishnetafrica.com/crm/client/<?= (int)$row['crm_client_id'] ?>/detail"
+                    <a href="<?= dn_crm_web($config) ?>/crm/client/<?= (int)$row['crm_client_id'] ?>/detail"
                        target="_blank"
                        style="font-size:10px;background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:6px;text-decoration:none;white-space:nowrap;">
                         CRM 
@@ -497,7 +497,7 @@ if (!$splynxApiError) {
             <td style="font-size:11px;">
                 <?= htmlspecialchars($row['plan_name'] ?? '--') ?>
                 <?php if ($row['amount']): ?>
-                <span style="color:#059669;font-weight:700;"> $<?= number_format((float)$row['amount'], 0) ?>/mo</span>
+                <span style="color:#059669;font-weight:700;"> <?= dn_cur($config) ?><?= number_format((float)$row['amount'], 0) ?>/mo</span>
                 <?php endif; ?>
             </td>
             <td>

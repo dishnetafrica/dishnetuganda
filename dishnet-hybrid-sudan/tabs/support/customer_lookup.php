@@ -220,7 +220,7 @@ var H={'Authorization':'Bearer '+TK,'Content-Type':'application/json'};
 function api(a,q){return fetch('?page=api&action='+a+(q||''),{credentials:'same-origin',headers:H}).then(function(r){return r.json()})}
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function d(v){return v?String(v).slice(0,10):'—'}
-function $(v){return '$'+parseFloat(v||0).toFixed(2)}
+function $(v){return <?= json_encode(dn_cur($config)) ?> +parseFloat(v||0).toFixed(2)}
 function I(n){return(n||'').split(' ').map(function(w){return w[0]||''}).slice(0,2).join('').toUpperCase()||'?'}
 function ta(v){if(!v)return'';var s=Math.floor((Date.now()-new Date(v).getTime())/1000);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d'}
 

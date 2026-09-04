@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains')) { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
@@ -1311,8 +1312,8 @@ class FiberPurchaseService
             'match'          => 'Invoice is within 2% of prediction. Acceptable.',
             'overcharged'    => 'OVERCHARGE DETECTED. ' . count($overcharges) . ' line(s) charged more than calculated.',
             'proration_risk' => 'PRORATION RISK. ' . count($prorationRisks) . ' cancelled service(s) may be charged full month.',
-            'over'           => 'Supplier charged $' . number_format(abs($variance), 2) . ' MORE than our calculation.',
-            'under'          => 'Supplier charged $' . number_format(abs($variance), 2) . ' LESS than our calculation.',
+            'over'           => 'Supplier charged ' . dn_cur($this->config) . number_format(abs($variance), 2) . ' MORE than our calculation.',
+            'under'          => 'Supplier charged ' . dn_cur($this->config) . number_format(abs($variance), 2) . ' LESS than our calculation.',
         ];
 
         return [

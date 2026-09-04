@@ -125,7 +125,7 @@
         $ours = null;
         $others = [];
         foreach ($webhooks as $wh) {
-            if (strpos($wh['url'] ?? '', 'dishnet-hybrid-telecom') !== false) {
+            if (strpos($wh['url'] ?? '', '/_plugins/' . basename(dirname(__DIR__, 2)) . '/') !== false) {
                 $ours = $wh;
             } else {
                 $others[] = [
@@ -144,7 +144,7 @@
                 if (is_array($c) && !empty($c)) { $ucrmConfig = $c; break; }
             }
         }
-        $expectedUrl = rtrim($ucrmConfig['ucrmPublicUrl'] ?? '', '/') . '/_plugins/dishnet-hybrid-telecom/webhook.php';
+        $expectedUrl = dn_plugin_file($config, 'webhook.php');
         
         $ok2([
             'configured' => $ours !== null,
@@ -173,7 +173,7 @@
         // Find all webhooks pointing to our plugin
         $ours = [];
         foreach ($webhooks as $wh) {
-            if (strpos($wh['url'] ?? '', 'dishnet-hybrid-telecom') !== false) {
+            if (strpos($wh['url'] ?? '', '/_plugins/' . basename(dirname(__DIR__, 2)) . '/') !== false) {
                 $ours[] = $wh;
             }
         }

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/lib/crm_url.php';
 /**
  * cron_paid_access.php — Auto-pause devices whose time-based access has expired.
  * DishNet Hybrid v4.20.0
@@ -93,7 +94,7 @@ $pauseFailures = 0;
 // Mirrors ca_hotspot_dr_call() but is duplicated here so the cron has
 // no dependency on the web-only api_customer_app.php.
 $drCall = function (string $action, array $params, string $method = 'POST'): ?array {
-    $base = 'https://crm.dishnetafrica.com/crm/_plugins/dishnet-data-report/public.php';
+    $base = dn_crm_web($config) . '/crm/_plugins/dishnet-data-report/public.php';
     $ch = null;
     try {
         if ($method === 'POST') {

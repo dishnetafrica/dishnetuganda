@@ -251,7 +251,7 @@ if (!$_sbmCanView) {
 
 <script>
 (function () {
-  const HYB_API = '<?= htmlspecialchars($_SERVER['SCRIPT_NAME'] ?? '/crm/_plugins/dishnet-hybrid-telecom/public.php') ?>?page=api&action=';
+  const HYB_API = '<?= htmlspecialchars($_SERVER['SCRIPT_NAME'] ?? '/crm/_plugins/' . basename(dirname(__DIR__, 2)) . '/public.php') ?>?page=api&action=';
   const DR_BASE  = '/crm/_plugins/dishnet-data-report/public.php?action=';
   const canBlock = <?= $_sbmCanBlock ? 'true' : 'false' ?>; // false for accountant/support_leader
 
@@ -312,7 +312,7 @@ if (!$_sbmCanView) {
 
   function sleep(ms) { return new Promise((res) => setTimeout(res, ms)); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  function fmtBal(n) { const v = Number(n) || 0; return (v < 0 ? '-' : '') + '$' + Math.abs(v).toFixed(2); }
+  function fmtBal(n) { const v = Number(n) || 0; return (v < 0 ? '-' : '') + <?= json_encode(dn_cur($config)) ?> + Math.abs(v).toFixed(2); }
   function fmtRelative(ts) {
     if (!ts) return '';
     const t = new Date(ts).getTime();
@@ -1273,7 +1273,7 @@ if (!$_sbmCanView) {
         html += '<tr data-router="' + esc(r.router_id) + '" data-cid="' + r.client_id + '">'
           + '<td><div class="sbm-name">' + esc(r.name || ('CRM #' + r.client_id)) + '</div><div class="sbm-name-sub">CRM #' + r.client_id + '</div></td>'
           + '<td>' + esc(fmtRelative(r.paid_at)) + '<br><span style="color:#94a3b8;font-size:10px;">' + esc(r.paid_at) + '</span></td>'
-          + '<td><span class="sbm-mono" style="color:#16a34a;font-weight:600;">$' + (Number(r.last_amount) || 0).toFixed(2) + '</span><br><span style="color:#94a3b8;font-size:10px;">' + esc(r.paid_method || '') + '</span></td>'
+          + '<td><span class="sbm-mono" style="color:#16a34a;font-weight:600;">' + <?= json_encode(dn_cur($config)) ?> + (Number(r.last_amount) || 0).toFixed(2) + '</span><br><span style="color:#94a3b8;font-size:10px;">' + esc(r.paid_method || '') + '</span></td>'
           + '<td>' + esc(fmtRelative(r.paused_since)) + '<br><span style="color:#94a3b8;font-size:10px;">' + esc(r.paused_since) + '</span></td>'
           + '<td><span style="font-size:11px;color:#64748b;">' + esc(r.paused_by) + '</span></td>'
           + '<td><span class="sbm-mono">' + esc(r.kit) + '</span><br><span class="sbm-router">' + esc(r.router_id) + '</span></td>'

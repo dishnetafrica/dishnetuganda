@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../lib/currency.php';
 /**
  * cron/kyc_crm_sync.php — v4.11.3
  *
@@ -157,7 +158,7 @@ foreach ($pending as $item) {
                 $payPayload = [
                     'clientId'     => (int)$crmClientId,
                     'amount'       => $amount,
-                    'currencyCode' => 'USD',
+                    'currencyCode' => dn_code($config),
                     'methodId'     => PaymentUuids::resolve('Cash'),
                     'note'         => 'Cash collected at registration (cron sync) | Agent: '
                                    . ($app['retailer_name'] ?? '') . ' | Ref: KYC-' . $crmClientId,

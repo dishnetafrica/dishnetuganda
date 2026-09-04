@@ -1,4 +1,10 @@
 <?php
+// Currency label for every money figure on this screen. The Sudan/SS
+// builds hardcoded '$'; the amounts themselves are whatever currency the
+// uCRM organisation bills in, so the label now follows config.
+$curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: 'UGX'))) . ' ';
+?>
+<?php
 // Tab: hardware
 // Extracted from public.php on 2026-03-15
         $allHW = $store->load('kyc_devices.json');
@@ -100,12 +106,12 @@
             ?>
             <tr>
                 <td style="font-weight:700;"><?= h($hw['title']) ?><?php if(!empty($hw['sku'])): ?> <span style="font-size:10px;background:#e8f4fd;color:#1565c0;padding:1px 5px;border-radius:3px;font-family:monospace;"><?= h($hw['sku']) ?></span><?php endif; ?><br><span style="font-size:11px;color:#6b7280;"><?= h($hw['price']??'') ?><?php if(!empty($hw['description'])): ?> — <?= h($hw['description']) ?><?php endif; ?></span></td>
-                <td style="text-align:right;color:#dc3545;">$<?= number_format($hw['buy_price']??0, 2) ?></td>
-                <td style="text-align:right;color:#28a745;font-weight:700;">$<?= number_format($hw['sell_price']??0, 2) ?></td>
-                <td style="text-align:right;font-weight:600;">$<?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
+                <td style="text-align:right;color:#dc3545;"><?= $curSym ?><?= number_format($hw['buy_price']??0, 2) ?></td>
+                <td style="text-align:right;color:#28a745;font-weight:700;"><?= $curSym ?><?= number_format($hw['sell_price']??0, 2) ?></td>
+                <td style="text-align:right;font-weight:600;"><?= $curSym ?><?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
                 <td style="text-align:center;">
                     <?php if (!empty($hw['ucrm_product_id'])): ?>
-                        <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
+                        <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
                     <?php else: ?>
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
@@ -143,7 +149,7 @@
             <div>
                 <?php $_instProdId = (int)($config['fiber_install_product_id'] ?? 244); ?>
                 <?php if ($_instProdId > 0): ?>
-                <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= $_instProdId ?>" target="_blank" style="font-family:monospace;font-size:12px;background:#eff6ff;color:#1d4ed8;padding:6px 12px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">
+                <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= $_instProdId ?>" target="_blank" style="font-family:monospace;font-size:12px;background:#eff6ff;color:#1d4ed8;padding:6px 12px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">
                     #<?= $_instProdId ?> 🔗 View in CRM
                 </a>
                 <?php endif; ?>
@@ -153,7 +159,7 @@
             </div>
         </form>
         <div style="font-size:11px;color:#64748b;margin-top:8px;">
-            Currently: <strong>$<?= number_format((float)($config['fiber_install_fee'] ?? 100), 2) ?></strong> added to every Fiber quote as "Installation Fee" line item.
+            Currently: <strong><?= $curSym ?><?= number_format((float)($config['fiber_install_fee'] ?? 100), 2) ?></strong> added to every Fiber quote as "Installation Fee" line item.
             UCRM Product #<?= (int)($config['fiber_install_product_id'] ?? 244) ?> is used for inventory/invoice linking.
         </div>
     </div>
@@ -172,12 +178,12 @@
             ?>
             <tr>
                 <td style="font-weight:700;"><?= h($hw['title']) ?><?php if(!empty($hw['sku'])): ?> <span style="font-size:10px;background:#e8f4fd;color:#1565c0;padding:1px 5px;border-radius:3px;font-family:monospace;"><?= h($hw['sku']) ?></span><?php endif; ?><br><span style="font-size:11px;color:#6b7280;"><?= h($hw['price']??'') ?><?php if(!empty($hw['description'])): ?> — <?= h($hw['description']) ?><?php endif; ?></span></td>
-                <td style="text-align:right;color:#dc3545;">$<?= number_format($hw['buy_price']??0, 2) ?></td>
-                <td style="text-align:right;color:#28a745;font-weight:700;">$<?= number_format($hw['sell_price']??0, 2) ?></td>
-                <td style="text-align:right;font-weight:600;">$<?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
+                <td style="text-align:right;color:#dc3545;"><?= $curSym ?><?= number_format($hw['buy_price']??0, 2) ?></td>
+                <td style="text-align:right;color:#28a745;font-weight:700;"><?= $curSym ?><?= number_format($hw['sell_price']??0, 2) ?></td>
+                <td style="text-align:right;font-weight:600;"><?= $curSym ?><?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
                 <td style="text-align:center;">
                     <?php if (!empty($hw['ucrm_product_id'])): ?>
-                        <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
+                        <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
                     <?php else: ?>
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
@@ -206,12 +212,12 @@
             ?>
             <tr>
                 <td style="font-weight:700;"><?= h($hw['title']) ?><?php if(!empty($hw['sku'])): ?> <span style="font-size:10px;background:#e8f4fd;color:#1565c0;padding:1px 5px;border-radius:3px;font-family:monospace;"><?= h($hw['sku']) ?></span><?php endif; ?><br><span style="font-size:11px;color:#6b7280;"><?= h($hw['price']??'') ?><?php if(!empty($hw['description'])): ?> — <?= h($hw['description']) ?><?php endif; ?></span></td>
-                <td style="text-align:right;color:#dc3545;">$<?= number_format($hw['buy_price']??0, 2) ?></td>
-                <td style="text-align:right;color:#28a745;font-weight:700;">$<?= number_format($hw['sell_price']??0, 2) ?></td>
-                <td style="text-align:right;font-weight:600;">$<?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
+                <td style="text-align:right;color:#dc3545;"><?= $curSym ?><?= number_format($hw['buy_price']??0, 2) ?></td>
+                <td style="text-align:right;color:#28a745;font-weight:700;"><?= $curSym ?><?= number_format($hw['sell_price']??0, 2) ?></td>
+                <td style="text-align:right;font-weight:600;"><?= $curSym ?><?= number_format($hwProfit, 2) ?> <span style="font-size:10px;color:#6b7280;">(<?= $hwMargin ?>%)</span></td>
                 <td style="text-align:center;">
                     <?php if (!empty($hw['ucrm_product_id'])): ?>
-                        <a href="https://crm.dishnetafrica.com/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
+                        <a href="<?= dn_crm_web($config) ?>/crm/system/items/products/<?= (int)$hw['ucrm_product_id'] ?>" target="_blank" title="View in UCRM" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#<?= (int)$hw['ucrm_product_id'] ?> 🔗</a>
                     <?php else: ?>
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
@@ -242,7 +248,7 @@ function syncHw(hwId, btn) {
     .then(function(r){ return r.json(); })
     .then(function(d){
         if (d.data && d.data.ucrm_product_id) {
-            btn.outerHTML = '<a href="https://crm.dishnetafrica.com/crm/system/items/products/' + d.data.ucrm_product_id + '" target="_blank" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#' + d.data.ucrm_product_id + ' 🔗</a>';
+            btn.outerHTML = '<a href="' + <?= json_encode(dn_crm_web($config) . '/crm/system/items/products/') ?> + d.data.ucrm_product_id + '" target="_blank" style="font-family:monospace;font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:5px;font-weight:700;text-decoration:none;">#' + d.data.ucrm_product_id + ' 🔗</a>';
         } else {
             btn.textContent = '❌'; btn.disabled = false;
             alert('Sync failed: ' + (d.message || 'Unknown error'));

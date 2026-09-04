@@ -166,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
                                 $store->save('cash_ins.json', $_geCashIns);
                                 logActivity($dataDir, 'expense_approve_auto_link',
                                     "Auto-created Cash IN for {$_geMatchName}: {$expCur} " .
-                                    ($expCur === 'SSP' ? number_format($sspAmt, 0) : '$'.number_format($usdAmount, 2)) .
+                                    ($expCur === 'SSP' ? number_format($sspAmt, 0) : dn_cur($config) . number_format($usdAmount, 2)) .
                                     " (cb_ref: {$_expRef})", '');
                                 // WhatsApp notification
                                 if ($_geMatchPhone) {
@@ -186,8 +186,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
                 logActivity($dataDir, 'cashbook_expense_post_failed', 'Cashbook expense OUT failed', $cbExpErr->getMessage());
             }
             $expLabel = $expCur === 'SSP'
-                ? number_format($sspAmt,0).' SSP = $'.number_format($usdAmount,2).' @'.number_format($sspRate,0)
-                : '$'.number_format($usdAmount,2);
+                ? number_format($sspAmt,0).' SSP = ' . dn_cur($config) . number_format($usdAmount,2).' @'.number_format($sspRate,0)
+                : dn_cur($config) . number_format($usdAmount,2);
             flash('\u2705 Expense approved -- '.$expLabel.' posted to Cashbook.', 'success');
             // v4.11.3 PERF: Invalidate nav badge caches after expense changes
             try { if (function_exists('invalidateNavCache')) invalidateNavCache($store->getPdo(), ['nav_badges', 'ledger_mismatch_count']); } catch (\Throwable $e) {}
@@ -305,7 +305,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='log_cash_in
     StaffLedgerWriter::onCashIn($store->getPdo(), $_newCin);
 
     if ($cat === 'Exchange') {
-        $msg = '✅ Exchange recorded: $'.number_format($usdGiven,2).' → '.number_format($sspAmt,0).' SSP @ '.number_format($rate,0);
+        $msg = '✅ Exchange recorded: ' . dn_cur($config) . number_format($usdGiven,2).' → '.number_format($sspAmt,0).' SSP @ '.number_format($rate,0);
     } elseif ($cat === 'SSP Received') {
         $msg = '✅ SSP Received: '.number_format($sspAmt,0).' SSP recorded.';
     } else {
@@ -337,7 +337,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='submit_hand
         $_cpPos     = $_cpSvc->getPosition($rid);
         $cashInHand = $_cpPos['cash_in_hand'];
         if ($amount > $cashInHand + 0.01) {
-            flash('Handover ($'.number_format($amount,2).') exceeds cash-in-hand ($'.number_format(max(0,$cashInHand),2).'). Check your register.', 'danger');
+            flash('Handover (' . dn_cur($config) . number_format($amount,2).') exceeds cash-in-hand (' . dn_cur($config) . number_format(max(0,$cashInHand),2).'). Check your register.', 'danger');
             redirect('?page=dashboard&tab=cashbook');
         }
     }
@@ -368,9 +368,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='submit_hand
         'created_at'   => date('Y-m-d H:i:s'),
     ]);
     logActivity($dataDir, 'handover_submitted', 'Cash handover submitted',
-        ($currency === 'SSP' ? number_format($amount).' SSP' : '$'.number_format($amount,2)).' from '.$retailer['name'].' to '.$toName);
+        ($currency === 'SSP' ? number_format($amount).' SSP' : dn_cur($config) . number_format($amount,2)).' from '.$retailer['name'].' to '.$toName);
     try { $notify->remittanceSubmitted($retailer, $amount, $toName ?: 'Accountant', $newHovId); } catch (\Throwable $e) {}
-    $amtDisp = $currency === 'SSP' ? number_format($amount).' SSP' : '$'.number_format($amount,2);
+    $amtDisp = $currency === 'SSP' ? number_format($amount).' SSP' : dn_cur($config) . number_format($amount,2);
     flash("✅ Handover of {$amtDisp} to {$toName} submitted — waiting for confirmation.", 'success');
     redirect('?page=dashboard&tab=cashbook');
 }
@@ -406,7 +406,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='field_give_
 
     if ($result['ok']) {
         $advNo = $result['advance_no'] ?? '';
-        $amtDisp = $currency === 'SSP' ? number_format($amount) . ' SSP' : '$' . number_format($amount, 2);
+        $amtDisp = $currency === 'SSP' ? number_format($amount) . ' SSP' : dn_cur($config) . number_format($amount, 2);
         // Also log as cashbook OUT
         // v4.9.9: fixed 'reference' → 'validation_ref' + dedup guard
         try {
@@ -482,7 +482,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='confirm_han
             'Cash handover confirmed by '.$retailer['name'],
             $retailer['name'], 'HOV-'.$hovId, 'handover_credit');
         logActivity($dataDir, 'handover_confirmed', 'Cash handover confirmed',
-            '$'.number_format($hov['amount'],2).' from '.$hov['from_name'].' confirmed by '.$retailer['name']);
+            dn_cur($config) . number_format($hov['amount'],2).' from '.$hov['from_name'].' confirmed by '.$retailer['name']);
 
         // ── POST Cash IN to cashbook (cleaner flow — no pending entry to approve) ──
         // ── CASHBOOK: handover is INTERNAL cash transfer (Diko→Rupesh) ────────
@@ -492,7 +492,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='confirm_han
         // company cashbook. (Fixed v4.9.8)
         $cbReceiptNo = 'HOV-' . $hovId; // reference only, no cashbook entry
         logActivity($dataDir, 'handover_confirmed', 'Internal cash transfer confirmed (no cashbook entry)',
-            '$'.number_format($hov['amount'],2).' from '.$hov['from_name'].' HOV-'.$hovId);
+            dn_cur($config) . number_format($hov['amount'],2).' from '.$hov['from_name'].' HOV-'.$hovId);
         
         // ── Update cash_with on cashbook entries — cash has reached office ──
         try {
@@ -536,7 +536,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='confirm_han
                 
                 $structuredNote = "Collected by {$hov['from_name']} via DishNet | @ {$location}\n" .
                     "────────────────────────────────\n" .
-                    "CASH RECEIVED     : \$" . number_format((float)$col['amount'], 2) . "\n" .
+                    "CASH RECEIVED     : " . dn_cur($config) . number_format((float)$col['amount'], 2) . "\n" .
                     "CASH RECEIVED BY  : " . ($retailer['name']) . "\n" .
                     "CASH RECEIPT NO   : " . ($cbReceiptNo ?: 'HOV-'.$hovId) . "\n" .
                     "CASH LOCATION     : " . $location . "\n" .
@@ -573,7 +573,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='confirm_han
             $cashBalance = $_notifySvc->getCashInHand((int)$hov['from_id']);
             try { $notify->remittanceApproved($agentRetailer, (float)$hov['amount'], $cashBalance, $retailer['name']); } catch (\Throwable $e) {}
         }
-        flash('Handover of $'.number_format($hov['amount'],2).' from '.$hov['from_name'].' confirmed. Wallet credited.', 'success');
+        flash('Handover of ' . dn_cur($config) . number_format($hov['amount'],2).' from '.$hov['from_name'].' confirmed. Wallet credited.', 'success');
         // ── CRITICAL: save JSON BEFORE rebuild so snapshot reads confirmed status ──
         $store->save('cash_handovers.json', $handovers);
         $_hovSaved = true;
@@ -732,8 +732,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
         ];
         $store->appendWithId('pending_collections.json', $pending);
         logActivity($dataDir, 'large_txn_flagged', 'Large payment pending admin approval',
-            '$'.number_format($amount,2).' for '.$custName.' by '.$retailer['name']);
-        flash('⏳ Payment of $'.number_format($amount,2).' exceeds the $'.number_format($largeThreshold,2).' limit and has been sent to admin for approval.', 'warning');
+            dn_cur($config) . number_format($amount,2).' for '.$custName.' by '.$retailer['name']);
+        flash('⏳ Payment of ' . dn_cur($config) . number_format($amount,2).' exceeds the ' . dn_cur($config) . number_format($largeThreshold,2).' limit and has been sent to admin for approval.', 'warning');
         redirect('?page=dashboard&tab=collect_payment');
     }
 
@@ -749,7 +749,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
             && trim($_rc['crm_customer_id']??'') === $custId
             && (float)($_rc['amount']??0) === $amount
             && ($_rc['created_at']??'') >= $fiveMinAgo) {
-            flash('⚠️ Duplicate detected — this payment ($'.number_format($amount,2).' for '.$custName.') was already submitted '.
+            flash('⚠️ Duplicate detected — this payment (' . dn_cur($config) . number_format($amount,2).' for '.$custName.') was already submitted '.
                   human_time_diff(strtotime($_rc['created_at'])).' ago. If this is intentional, wait 5 minutes and try again.', 'warning');
             redirect('?page=dashboard&tab=collect_payment');
         }
@@ -758,7 +758,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
     // ── BALANCE CHECK ─────────────────────────────────────────────────────────
     $balanceBefore = $wallet->getBalance($rid);
     if ($balanceBefore < $amount) {
-        flash('Insufficient wallet balance ($' . number_format($balanceBefore, 2) . '). Top up first.', 'danger');
+        flash('Insufficient wallet balance (' . dn_cur($config) . number_format($balanceBefore, 2) . '). Top up first.', 'danger');
         redirect('?page=dashboard&tab=collect_payment');
     }
 
@@ -988,7 +988,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
             // Log so it appears in activity log and is visible to admin
             logActivity($dataDir, 'crm_payment_failed',
                 "CRM payment POST failed for {$custName} (CRM #{$custId})",
-                '$'.number_format($amount,2).' | Error: '.$crmError
+                dn_cur($config) . number_format($amount,2).' | Error: '.$crmError
             );
             // Queue for retry by cron_sync
             $store->appendWithId('crm_payment_retry.json', [
@@ -1075,16 +1075,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
         'commission'    => $commAmount,
         'idem_key'      => $idemKey,
         'crm_synced'    => $crmSuccess,
-        'detail'        => '$'.number_format($amount,2).' from '.$custName
-                           .' | wallet '.'$'.number_format($balanceBefore,2).' → '.'$'.number_format($balanceAfter,2)
-                           .' | commission $'.number_format($commAmount,2)
+        'detail'        => dn_cur($config) . number_format($amount,2).' from '.$custName
+                           .' | wallet '.dn_cur($config) . number_format($balanceBefore,2).' → '.dn_cur($config) . number_format($balanceAfter,2)
+                           .' | commission ' . dn_cur($config) . number_format($commAmount,2)
                            .' | CRM '.($crmSuccess?'synced':'pending'),
         'ref_id'        => $collection['id'],
         'created_at'    => date('Y-m-d H:i:s'),
     ]);
     logActivity($dataDir, 'payment_collected', 'Payment collected',
-        '$'.number_format($amount,2).' from '.$custName.' by '.$retailer['name']
-        .' | '.'$'.number_format($balanceBefore,2).' → '.'$'.number_format($balanceAfter,2));
+        dn_cur($config) . number_format($amount,2).' from '.$custName.' by '.$retailer['name']
+        .' | '.dn_cur($config) . number_format($balanceBefore,2).' → '.dn_cur($config) . number_format($balanceAfter,2));
 
     // ── CASHBOOK: Direct post to cb_ledger for instant visibility ───────────────
     // v4.11.3: Posts immediately so Rupesh sees it in the main cashbook without
@@ -1162,8 +1162,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
     }
 
 
-    $msg = "$" . number_format($amount, 2) . " collected from {$custName}.";
-    if ($commAmount > 0) $msg .= " Commission: +$" . number_format($commAmount, 2) . " ({$commRate}%).";
+    $msg = dn_cur($config) . number_format($amount, 2) . " collected from {$custName}.";
+    if ($commAmount > 0) $msg .= " Commission: +" . dn_cur($config) . number_format($commAmount, 2) . " ({$commRate}%).";
     if ($crmSuccess) {
         $msg .= " ✅ Payment posted to CRM (ID #{$crmResult['id']}).";
     } else if ($custId) {
@@ -1311,7 +1311,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='approve_sta
                         $store->save('cash_ins.json', $_spCashIns);
                         logActivity($dataDir, 'staff_payment_auto_link',
                             "Auto-created Cash IN for {$_spMatchName}: {$cur} " .
-                            ($cur === 'SSP' ? number_format($sspAmt, 0) : '$'.number_format($usdAmt, 2)) .
+                            ($cur === 'SSP' ? number_format($sspAmt, 0) : dn_cur($config) . number_format($usdAmt, 2)) .
                             " (cb_ref: {$_spRef})", '');
 
                         // WhatsApp notification to receiving staff
@@ -1428,7 +1428,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='batch_appro
                         $store->save('cash_ins.json', $_bCashIns);
                         logActivity($dataDir, 'staff_payment_auto_link',
                             "Batch: Auto-created Cash IN for {$_bMatchName}: {$cur} " .
-                            ($cur === 'SSP' ? number_format($sspAmt, 0) : '$'.number_format($usdAmt, 2)) .
+                            ($cur === 'SSP' ? number_format($sspAmt, 0) : dn_cur($config) . number_format($usdAmt, 2)) .
                             " (cb_ref: {$_bspRef})", '');
 
                         // WhatsApp notification to receiving staff
@@ -1450,7 +1450,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='batch_appro
     }
     unset($exp);
     $store->save('cash_expenses.json', $expenses);
-    $_SESSION['hq_flash'] = ['type'=>'success','msg'=>$approved.' staff payment(s) approved — $'.number_format($totalUsd,2).' posted to cashbook.'];
+    $_SESSION['hq_flash'] = ['type'=>'success','msg'=>$approved.' staff payment(s) approved — ' . dn_cur($config) . number_format($totalUsd,2).' posted to cashbook.'];
     header('Location: ?page=dashboard&tab=handover_queue&hq_section=staff&hq_sp_status=approved');
     exit;
 }

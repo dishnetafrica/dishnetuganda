@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/../lib/currency.php';
 /**
  * cron/cash_carry_reminder.php — DishNet Hybrid Telecom
  *
@@ -75,8 +76,8 @@ foreach ($allRetailers as $r) {
     if (!in_array($agentId, $state['reminded'] ?? [])) {
         $firstName = explode(' ', $name)[0];
         $msg  = "Hi *{$firstName}*, this is DishNet Africa.\n\n";
-        $msg .= "You are currently holding *\$" . number_format($exposure, 2) . "* in company cash.\n";
-        $msg .= "The carry limit is *\$" . number_format($agentLimit, 2) . "*.\n\n";
+        $msg .= "You are currently holding *" . dn_cur($config) . number_format($exposure, 2) . "* in company cash.\n";
+        $msg .= "The carry limit is *" . dn_cur($config) . number_format($agentLimit, 2) . "*.\n\n";
         $msg .= "Please hand over to the office today.\n";
         $msg .= "Your collection access will be blocked until you do.\n\n";
         $msg .= "If you have already handed over, please ignore this message.\n\n";
@@ -95,9 +96,9 @@ foreach ($allRetailers as $r) {
     // ── Notify admin when agent FIRST crosses limit (once per day per agent) ──
     if ($adminPhone && !in_array($agentId, $state['admin_notified'] ?? [])) {
         $adminMsg  = "Staff Cash Alert\n\n";
-        $adminMsg .= "*{$name}* is holding *\$" . number_format($exposure, 2) . "*\n";
-        $adminMsg .= "Carry limit: \$" . number_format($agentLimit, 2) . "\n";
-        $adminMsg .= "Excess: \$" . number_format($exposure - $agentLimit, 2) . "\n\n";
+        $adminMsg .= "*{$name}* is holding *" . dn_cur($config) . number_format($exposure, 2) . "*\n";
+        $adminMsg .= "Carry limit: " . dn_cur($config) . number_format($agentLimit, 2) . "\n";
+        $adminMsg .= "Excess: " . dn_cur($config) . number_format($exposure - $agentLimit, 2) . "\n\n";
 
         // Find last handover date
         $lastHov = '';

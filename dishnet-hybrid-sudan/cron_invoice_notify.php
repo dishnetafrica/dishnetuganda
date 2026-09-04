@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/lib/crm_url.php';
 /**
  * cron_invoice_notify.php — New Invoice Notification Scanner
  *
@@ -180,10 +181,10 @@ foreach ($recentInvoices as $inv) {
                 'invoice' => $invoiceNum,
             ]));
 
-            $siteUrl = rtrim($config['crm_base_url'] ?? 'https://crm.dishnetafrica.com', '/');
+            $siteUrl = dn_crm_web($config);
         $siteUrl = preg_replace('#/api/v[0-9.]+$#', '', $siteUrl);
         $siteUrl = preg_replace('#/crm$#', '', $siteUrl);
-            $pdfUrl  = $siteUrl . '/crm/_plugins/dishnet-hybrid-telecom/public.php'
+            $pdfUrl  = dn_plugin_public($config)
                      . '?page=api&action=serve_temp_pdf'
                      . '&file=' . urlencode($pdfFile)
                      . '&token=' . urlencode($pdfToken);

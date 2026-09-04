@@ -43,7 +43,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 <!-- Total + cache info -->
 <div style="background:linear-gradient(135deg,#B71C1C,#c0392b);border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;color:#fff;">
   <div style="font-size:10px;font-weight:700;text-transform:uppercase;opacity:.7;">Total Outstanding (from CRM)</div>
-  <div style="font-size:28px;font-weight:800;">$<?= number_format($totalDebt2,2) ?></div>
+  <div style="font-size:28px;font-weight:800;"><?= dn_cur($config) ?><?= number_format($totalDebt2,2) ?></div>
   <div style="font-size:11px;opacity:.7;"><?= count($debtRetailers) ?> retailers need to pay</div>
   <?php if ($_crmCheckedAt2): ?>
   <div style="font-size:10px;opacity:.55;margin-top:4px;">Last CRM check: <?= substr($_crmCheckedAt2,0,16) ?></div>
@@ -56,7 +56,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
     $roleColor = ['admin'=>'#1565C0','support'=>'#7B1FA2','support_leader'=>'#4527A0','accountant'=>'#E65100','sales'=>'#2E7D32','field_agent'=>'#E65100'][$roleStr] ?? '#6b7280';
     $urgency  = $debt >= 5000 ? '#c0392b' : ($debt >= 1000 ? '#E65100' : '#F57F17');
     $crmId    = (int)($r['ftth_crm_client_id'] ?? 0);
-    $crmUrl   = $crmId ? h(rtrim(preg_replace('#(/crm)?/api/v[^/]*/?$#','',rtrim($config['crm_base_url']??'https://crm.dishnetafrica.com','/')), '/').'/crm/client/'.$crmId) : '';
+    $crmUrl   = $crmId ? h(dn_crm_web($config).'/crm/client/'.$crmId) : '';
     $lastSync = $r['wallet_crm_synced_at'] ?? null;
 ?>
 <div style="background:#fff;border-radius:12px;padding:13px 14px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.04);border-left:4px solid <?= $urgency ?>;">
@@ -77,7 +77,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
       <?php endif; ?>
     </div>
     <div style="text-align:right;flex-shrink:0;">
-      <div style="font-size:20px;font-weight:800;color:<?= $urgency ?>;">$<?= number_format($debt,2) ?></div>
+      <div style="font-size:20px;font-weight:800;color:<?= $urgency ?>;"><?= dn_cur($config) ?><?= number_format($debt,2) ?></div>
       <div style="font-size:9px;color:#bbb;text-transform:uppercase;">owes DishNet</div>
     </div>
   </div>
@@ -140,7 +140,7 @@ function openDebtRecovery(id, name, outstanding) {
   document.getElementById('dr_amount').value      = outstanding.toFixed(2);
   document.getElementById('dr_amount').max        = outstanding.toFixed(2);
   document.getElementById('debtRecoveryInfo').innerHTML =
-    '<strong>' + name + '</strong><br>Outstanding: <strong style="color:#c0392b;">$' + outstanding.toFixed(2) + '</strong>';
+    '<strong>' + name + '</strong><br>Outstanding: <strong style="color:#c0392b;">' + <?= json_encode(dn_cur($config)) ?> + outstanding.toFixed(2) + '</strong>';
   document.getElementById('debtRecoveryModal').style.display = 'flex';
 }
 function closeDebtRecovery() {

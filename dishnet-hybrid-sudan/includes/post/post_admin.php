@@ -535,8 +535,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='topup_wallet')
         $newBalance = $trx['curr_balance'] ?? $wallet->getBalance($rId);
         // Audit trail  before/after
         logActivity($dataDir,'wallet_topup','Wallet topped up',
-            'Retailer #'.$rId.' | $'.number_format($balBeforeTopup,2).'  $'.number_format($newBalance,2)
-            .' (+$'.number_format($amt,2).') by '.$admin['name'].'  '.$note);
+            'Retailer #'.$rId.' | ' . dn_cur($config) . number_format($balBeforeTopup,2).'  ' . dn_cur($config) . number_format($newBalance,2)
+            .' (+' . dn_cur($config) . number_format($amt,2).') by '.$admin['name'].'  '.$note);
         $store->appendWithId('activity_log.json',[
             'event'         => 'wallet_topup',
             'actor'         => $admin['name'],
@@ -548,7 +548,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='topup_wallet')
             'balance_before'=> round($balBeforeTopup,2),
             'balance_after' => round($newBalance,2),
             'note'          => $note,
-            'detail'        => 'Top-up $'.number_format($amt,2).' | $'.number_format($balBeforeTopup,2).'  $'.number_format($newBalance,2),
+            'detail'        => 'Top-up ' . dn_cur($config) . number_format($amt,2).' | ' . dn_cur($config) . number_format($balBeforeTopup,2).'  ' . dn_cur($config) . number_format($newBalance,2),
             'created_at'    => date('Y-m-d H:i:s'),
         ]);
         $retailer   = $store->findOne('retailers.json','id',$rId);
@@ -561,7 +561,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='topup_wallet')
             $notify->walletToppedUp($retailer, $amt, $newBalance, $note);
         }
 
-        flash('$'.number_format($amt,2).' credited. CRM invoice created & WhatsApp sent.','success');
+        flash(dn_cur($config) . number_format($amt,2).' credited. CRM invoice created & WhatsApp sent.','success');
     } else flash('Invalid amount.','danger');
     redirect('?page=dashboard&tab=wallet_admin');
 }

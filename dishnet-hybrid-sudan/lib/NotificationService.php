@@ -5,6 +5,7 @@ declare(strict_types=1);
 if (!function_exists('str_contains')) { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
 if (!function_exists('str_ends_with')) { function str_ends_with(string $h, string $n): bool { return $n===''||substr($h,-strlen($n))===$n; } }
+require_once __DIR__ . '/currency.php';
 
 /**
  * NotificationService v2.0
@@ -48,12 +49,15 @@ class NotificationService
     private bool   $dryRunMode = false;
     private bool   $pdfEnabled = true;
     private string $dataDir = '';
+    /** Money prefix for message texts (config currency_symbol + space). */
+    private string $curSym = 'UGX ';
     /** @var float[] Timestamps of recent sends for rate limiting */
     private array  $sendTimestamps = [];
 
     public function __construct($store, array $config)
     {
         $this->store      = $store;
+        $this->curSym     = dn_cur($config);
         // wa_plugin_url = base URL of the WhatsApp server
         // e.g. http://wa.dishnetafrica.com  (NOT the UCRM plugin path)
         $this->pluginUrl  = rtrim(trim($config['wa_plugin_url'] ?? ''), '/');
@@ -430,7 +434,7 @@ class NotificationService
         $refunded     = number_format((float)($application['amount_charged'] ?? 0), 2);
         $appId        = $application['id'] ?? '-';
         $serviceType  = $application['customer_type'] ?? $application['connectivity_type'] ?? '';
-        $balanceLine  = $newBalance > 0 ? "\n💼 Your balance: \$" . number_format($newBalance, 2) : '';
+        $balanceLine  = $newBalance > 0 ? "\n💼 Your balance: " . $this->curSym . number_format($newBalance, 2) : '';
         $serviceLine  = $serviceType ? " | {$serviceType}" : '';
         
         // Parse common errors into helpful guidance
@@ -594,7 +598,7 @@ class NotificationService
     {
         $a = number_format($amount, 2);
         $leftoverLine = $creditRemaining > 0
-            ? "\n🏦 Remaining credit: *\$" . number_format($creditRemaining, 2) . "* (carried forward)"
+            ? "\n🏦 Remaining credit: *" . $this->curSym . number_format($creditRemaining, 2) . "* (carried forward)"
             : '';
         $serviceLine = $serviceName ? "\n📶 Service: {$serviceName}" : '';
 
@@ -649,7 +653,7 @@ class NotificationService
     {
         $a = number_format($amount, 2);
         $invoiceLine = $invoiceNum ? "\n🧾 Invoice: #{$invoiceNum}" : '';
-        $balanceLine = $newBalance != 0 ? "\n💼 Balance: \$" . number_format($newBalance, 2) : '';
+        $balanceLine = $newBalance != 0 ? "\n💼 Balance: " . $this->curSym . number_format($newBalance, 2) : '';
         
         $msg = "✅ *Payment Received*\n\n"
              . "Dear {$customerName},\n\n"
@@ -699,7 +703,7 @@ class NotificationService
         $area = $agent['area'] ?? '';
         $areaLine = $area ? " | 📍 {$area}" : '';
         $salesLine = $salesCount > 0 ? "\n📊 Sales count: {$salesCount}" : '';
-        $collectedLine = $cashCollected > 0 ? "\n💵 Cash collected: \$" . number_format($cashCollected, 2) : '';
+        $collectedLine = $cashCollected > 0 ? "\n💵 Cash collected: " . $this->curSym . number_format($cashCollected, 2) : '';
         
         $msg = "💵 *Cash Handover Submitted*\n\n"
              . "👤 {$agent['name']}{$areaLine}\n"
@@ -741,7 +745,7 @@ class NotificationService
     {
         $a = number_format($amount, 2);
         $refLine = $handoverId ? "🔖 Handover #{$handoverId}\n" : '';
-        $discLine = $discrepancy != 0 ? "\n📊 Discrepancy: \$" . number_format(abs($discrepancy), 2) : '';
+        $discLine = $discrepancy != 0 ? "\n📊 Discrepancy: " . $this->curSym . number_format(abs($discrepancy), 2) : '';
         
         $msg = "⚠️ *Handover Needs Review*\n\n"
              . "Hi {$agent['name']},\n\n"
@@ -772,7 +776,7 @@ class NotificationService
         if ($currency === 'SSP') {
             $amtDisp = number_format($sspAmount, 0) . ' SSP';
         } else {
-            $amtDisp = '$' . number_format($amount, 2);
+            $amtDisp = $this->curSym . number_format($amount, 2);
         }
         $refLine = $cbRef ? "\n🔖 Ref: {$cbRef}" : '';
 
@@ -1000,7 +1004,7 @@ class NotificationService
     public function serviceEnded(string $customerPhone, string $customerName, string $serviceName, string $serviceType = '', float $balance = 0): void
     {
         $typeLine = $serviceType ? "\n📶 Service: {$serviceType}" : '';
-        $balanceLine = $balance > 0 ? "\n💰 Account credit: \$" . number_format($balance, 2) : '';
+        $balanceLine = $balance > 0 ? "\n💰 Account credit: " . $this->curSym . number_format($balance, 2) : '';
         
         $msg = "👋 *Service Ended — DishNet Africa*\n\n"
              . "Hi {$customerName},\n\n"
@@ -1216,9 +1220,9 @@ class NotificationService
         
         $addressLine = $address ? "\n📍 {$address}" : '';
         $serviceLine = $serviceType ? "\n📶 {$serviceType}" : '';
-        $commLine = $commission > 0 ? "\n💰 *Commission: \$" . number_format($commission, 2) . "*" : '';
+        $commLine = $commission > 0 ? "\n💰 *Commission: " . $this->curSym . number_format($commission, 2) . "*" : '';
         $monthlyLine = ($monthlyJobs > 0 && $monthlyTotal > 0) 
-            ? "\n📊 March total: \$" . number_format($monthlyTotal, 2) . " ({$monthlyJobs} jobs)" 
+            ? "\n📊 March total: " . $this->curSym . number_format($monthlyTotal, 2) . " ({$monthlyJobs} jobs)" 
             : '';
         $notesLine = $notes ? "\n📝 {$notes}" : '';
         
@@ -2032,15 +2036,15 @@ class NotificationService
         string $component, string $period, float $totalPaid, float $netPay,
         string $voucherRef = ''): void
     {
-        $amtDisp = '$' . number_format($amount, 2);
-        $totalDisp = '$' . number_format($totalPaid, 2);
-        $netDisp   = '$' . number_format($netPay, 2);
+        $amtDisp = $this->curSym . number_format($amount, 2);
+        $totalDisp = $this->curSym . number_format($totalPaid, 2);
+        $netDisp   = $this->curSym . number_format($netPay, 2);
         $refLine = $voucherRef ? "\n🔖 Voucher: {$voucherRef}" : '';
 
         $remaining = $netPay - $totalPaid;
         $statusLine = $remaining <= 0.01
             ? '✅ Fully paid for this month'
-            : '⏳ Balance remaining: $' . number_format($remaining, 2);
+            : '⏳ Balance remaining: ' . $this->curSym . number_format($remaining, 2);
 
         $msg = "💼 *Salary Payment*\n\n"
              . "Hi {$name},\n\n"
@@ -2069,7 +2073,7 @@ class NotificationService
         $earnLines = [];
         foreach (($payslipData['earnings'] ?? []) as $label => $amt) {
             if ((float)$amt > 0) {
-                $earnLines[] = '   ' . str_pad($label, 22) . '$' . number_format((float)$amt, 2);
+                $earnLines[] = '   ' . str_pad($label, 22) . $this->curSym . number_format((float)$amt, 2);
             }
         }
         $earnBlock = implode("\n", $earnLines);
@@ -2077,17 +2081,17 @@ class NotificationService
         $dedLines = [];
         foreach (($payslipData['deductions'] ?? []) as $label => $amt) {
             if ((float)$amt > 0) {
-                $dedLines[] = '   ' . str_pad($label, 22) . '$' . number_format((float)$amt, 2);
+                $dedLines[] = '   ' . str_pad($label, 22) . $this->curSym . number_format((float)$amt, 2);
             }
         }
 
-        $gross = '$' . number_format((float)($payslipData['gross_pay'] ?? 0), 2);
-        $totalD = '$' . number_format((float)($payslipData['total_deductions'] ?? 0), 2);
-        $net   = '$' . number_format((float)($payslipData['net_pay'] ?? 0), 2);
+        $gross = $this->curSym . number_format((float)($payslipData['gross_pay'] ?? 0), 2);
+        $totalD = $this->curSym . number_format((float)($payslipData['total_deductions'] ?? 0), 2);
+        $net   = $this->curSym . number_format((float)($payslipData['net_pay'] ?? 0), 2);
 
         $payLines = [];
         foreach (($payslipData['disbursements'] ?? []) as $d) {
-            $dAmt  = '$' . number_format((float)($d['amount'] ?? 0), 2);
+            $dAmt  = $this->curSym . number_format((float)($d['amount'] ?? 0), 2);
             $dDate = $d['date'] ?? '';
             $payLines[] = "   Paid: {$dAmt} ({$dDate})";
         }
@@ -2095,7 +2099,7 @@ class NotificationService
 
         $status = (float)($payslipData['balance_due'] ?? 0) <= 0.01
             ? '✅ Fully Paid'
-            : '⏳ Balance: $' . number_format((float)($payslipData['balance_due'] ?? 0), 2);
+            : '⏳ Balance: ' . $this->curSym . number_format((float)($payslipData['balance_due'] ?? 0), 2);
 
         $msg = "💼 *Payslip — {$periodLabel}*\n\n"
              . "Hi {$name},\n\n"

@@ -1309,7 +1309,7 @@ if ($act === 'overdue_email_preview' && $met === 'POST') {
         'amount'         => '$50.00',
         'due_date'       => '9 Apr 2026',
         'days_overdue'   => (string)$previewDays,
-        'invoice_url'    => 'https://crm.dishnetafrica.com/crm/client/1260',
+        'invoice_url'    => dn_crm_link($config, 'client/1260'),
         'accounts_phone' => $globalPhone,
         'accounts_email' => $globalEmail,
     ];
@@ -4130,7 +4130,7 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
 
         $daysOverdue = (int)$today->diff($due)->days;
         $amtDue      = (float)($inv['amountToPay'] ?? $inv['total'] ?? 0);
-        $amtFmt      = '$' . number_format($amtDue, 2);
+        $amtFmt      = dn_cur($config) . number_format($amtDue, 2);
         $dueFmt      = $due->format('d M Y');
 
         // Stage selection
@@ -4396,7 +4396,7 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
             $msg .= "*Summary:* {$sentEmail} email, {$sentWa} WhatsApp\n";
             if ($skippedDedup > 0)       $msg .= "*Skipped:* {$skippedDedup} (already sent)\n";
             if (count($errors) > 0)      $msg .= "*Errors:* " . count($errors) . "\n";
-            $msg .= "*Total chased:* $" . number_format($totalAmt, 2) . "\n";
+            $msg .= "*Total chased:* " . dn_cur($config) . number_format($totalAmt, 2) . "\n";
             $msg .= "*Clients:* " . count($byClient) . "\n";
             $msg .= "*Elapsed:* {$elapsed}s\n\n";
 
@@ -4413,7 +4413,7 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
                     $invSummary[] = "{$r['invoice_number']} (s{$r['stage']}, {$r['days']}d) " . implode('', $chans);
                 }
                 $cn = mb_strlen($clientName) > 35 ? mb_substr($clientName, 0, 32) . '...' : $clientName;
-                $msg .= "• *{$cn}* — $" . number_format($bucket['total'], 2) . "\n";
+                $msg .= "• *{$cn}* — " . dn_cur($config) . number_format($bucket['total'], 2) . "\n";
                 $msg .= "   " . implode(' · ', $invSummary) . "\n";
                 $shown++;
             }

@@ -254,7 +254,7 @@ function loadDashboard(){
         $('shInStock').textContent = d.in_stock||0;
         $('shOut').textContent = d.checked_out||0;
         $('shInst').textContent = d.installed||0;
-        $('shVal').textContent = '$'+ Math.round(d.stock_value||0).toLocaleString();
+        $('shVal').textContent = <?= json_encode(dn_cur($config)) ?> + Math.round(d.stock_value||0).toLocaleString();
         // Alerts
         var alerts = d.low_stock_alerts||[];
         if(alerts.length){
@@ -709,7 +709,7 @@ function loadEquipment(){
         items.forEach(function(u){
             h+='<div class="sh-eq-card">';
             h+='<div class="sh-eq-serial">'+esc(u.serial_number||'—')+'</div>';
-            h+='<div class="sh-eq-meta">'+esc(u.category_name)+' · $'+parseFloat(u.purchase_cost||0).toFixed(2)+'</div>';
+            h+='<div class="sh-eq-meta">'+esc(u.category_name)+' · ' + <?= json_encode(dn_cur($config)) ?> +parseFloat(u.purchase_cost||0).toFixed(2)+'</div>';
             h+='<div class="sh-eq-actions">';
             h+='<button class="sh-eq-btn checkin" onclick="shEqAction('+u.id+',\'checkin\',\''+esc(u.serial_number)+'\')">↩️ Return</button>';
             h+='<button class="sh-eq-btn install" onclick="shEqAction('+u.id+',\'install\',\''+esc(u.serial_number)+'\')">🔧 Install</button>';
@@ -746,7 +746,7 @@ function loadHoldings(){
         agents.forEach(function(a){
             h+='<div class="sh-hold">';
             h+='<div class="sh-hold-name">👤 '+esc(a.name)+'</div>';
-            h+='<div class="sh-hold-meta">'+a.items.length+' items · $'+a.total_value.toFixed(0)+'</div>';
+            h+='<div class="sh-hold-meta">'+a.items.length+' items · ' + <?= json_encode(dn_cur($config)) ?> +a.total_value.toFixed(0)+'</div>';
             a.items.forEach(function(u){
                 h+='<div class="sh-hold-item"><span style="font-family:monospace;font-weight:700;">'+esc(u.serial_number)+'</span><span>'+esc(u.category_name)+'</span></div>';
             });

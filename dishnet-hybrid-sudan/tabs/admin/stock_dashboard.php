@@ -291,7 +291,7 @@ var _catCache = [];
 
 function esc(s){ return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
 function $(id){ return document.getElementById(id); }
-function fmt$(n){ return '$' + parseFloat(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+function fmt$(n){ return <?= json_encode(dn_cur($config)) ?> + parseFloat(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
 function fmtDate(d){ if(!d)return '—'; var dt=new Date(d.replace(' ','T')); return isNaN(dt)?d:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function fmtDateTime(d){ if(!d)return '—'; var dt=new Date(d.replace(' ','T')); return isNaN(dt)?d:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
 function pill(cls,txt){ return '<span class="stk-pill '+esc(cls)+'">'+esc(txt||cls).replace(/_/g,' ')+'</span>'; }

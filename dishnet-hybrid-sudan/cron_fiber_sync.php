@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/lib/currency.php';
 /**
  * cron_fiber_sync.php — Background Splynx + CRM sync for Fiber Finance
  *
@@ -116,7 +117,7 @@ if ($minutesSince >= $syncInterval) {
             $notify->sendAdmin(
                 "🔍 *Fiber Leakage Alert*\n\n"
                 . "{$leakage['count']} service(s) active in Splynx but NOT billing in CRM.\n"
-                . "Monthly exposure: \$" . number_format($leakage['total_monthly_loss'], 2) . "\n\n"
+                . "Monthly exposure: " . dn_cur($config) . number_format($leakage['total_monthly_loss'], 2) . "\n\n"
                 . "👉 Review in Plugin → Fiber Costs → Leakage",
                 'fiber_leakage_alert'
             );

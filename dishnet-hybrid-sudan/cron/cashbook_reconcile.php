@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once __DIR__ . '/../lib/currency.php';
 // Note: No strict_types - included from master.php
 date_default_timezone_set('Africa/Juba');
 
@@ -746,7 +747,7 @@ $lines[] = "  Advances:   Issued \${$totalIssued}  Spent \${$totalSpent}  Return
 $lines[] = "  Outstanding (math): \${$outstanding}";
 $lines[] = "  Outstanding (actual balances): \${$actualOutstanding}";
 if ($driftOk) {
-    $lines[] = '  ✅ Clean — drift within tolerance ($' . number_format($driftTol, 2) . ').';
+    $lines[] = '  ✅ Clean — drift within tolerance (' . dn_cur($config) . number_format($driftTol, 2) . ').';
 } else {
     $lines[] = "  ⚠️  DRIFT: \${$drift} — investigate immediately!";
     $lines[] = "  Possible cause: failed partial write, manual DB edit, or advance settled outside plugin.";

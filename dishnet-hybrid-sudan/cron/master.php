@@ -115,6 +115,8 @@ $_m_walletInterval = max(60, (int)($_m_config['wallet_sync_interval_minutes'] ??
 $_m_jobs = [
     // ── FAST & FREQUENT (run every cycle) ────────────────────────────────
     'event_processor'=> ['interval' => 30,                  'script' => __DIR__ . '/event_processor.php'],
+    'identity_worker'=> ['interval' => 60,                  'script' => __DIR__ . '/identity_worker.php'],
+    'starlink_mail'  => ['interval' => 300,                 'script' => __DIR__ . '/starlink_mail.php'],
     'wa_sync'       => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_wa_sync.php'],
     'crm_sync'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_sync.php'],
     // v4.20.0 — Time-based access expiry checker. LAZY-POLL pattern: only

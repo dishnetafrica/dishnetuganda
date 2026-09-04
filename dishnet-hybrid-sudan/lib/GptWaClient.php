@@ -207,7 +207,7 @@ class GptWaClient
     {
         $name     = $ctx['name']         ?? null;
         $service  = $ctx['service_type'] ?? null;
-        $balance  = isset($ctx['balance']) ? '$' . number_format((float)$ctx['balance'], 2) : null;
+        $balance  = isset($ctx['balance']) ? ($ctx['currency'] ?? '$ ') . number_format((float)$ctx['balance'], 2) : null;
         $status   = $ctx['status']        ?? null;
         $lastPaid = $ctx['last_payment']  ?? null;
         $plan     = $ctx['plan_name']     ?? null;

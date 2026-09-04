@@ -22,8 +22,8 @@ set_time_limit(300); // 5 minutes max
 ini_set('memory_limit', '256M');
 
 // Determine paths
-$pluginRoot = dirname(__DIR__);  // dishnet-hybrid-telecom/
-$dataDir = '/data/ucrm/data/plugins/dishnet-hybrid-telecom/data';
+$pluginRoot = dirname(__DIR__);
+$dataDir = '/data/ucrm/data/plugins/' . basename($pluginRoot) . '/data';
 
 // Check if running in dev environment
 if (!file_exists($dataDir)) {

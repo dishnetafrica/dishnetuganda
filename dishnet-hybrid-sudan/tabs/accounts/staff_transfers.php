@@ -54,7 +54,7 @@ $countToday = count(array_filter($transfers, fn($t) => $t['status'] === 'approve
     </p>
   </div>
   <div style="text-align:right;">
-    <div style="font-size:28px;font-weight:900;color:#0f172a;font-family:monospace;"><?= '$' . number_format($totalMoved, 2) ?></div>
+    <div style="font-size:28px;font-weight:900;color:#0f172a;font-family:monospace;"><?= dn_cur($config) . number_format($totalMoved, 2) ?></div>
     <div style="font-size:11px;color:#64748b;"><?= $countToday ?> transfer<?= $countToday !== 1 ? 's' : '' ?> today</div>
   </div>
 </div>
@@ -102,23 +102,23 @@ $countToday = count(array_filter($transfers, fn($t) => $t['status'] === 'approve
             <div style="font-weight:700;font-size:13px;color:#0f172a;"><?= htmlspecialchars($p['staff_name'] ?? '') ?></div>
           </td>
           <td style="padding:12px 8px;text-align:right;font-family:monospace;font-size:13px;color:#065f46;">
-            $<?= number_format((float)($p['collections'] ?? 0), 2) ?>
+            <?= dn_cur($config) ?><?= number_format((float)($p['collections'] ?? 0), 2) ?>
           </td>
           <td style="padding:12px 8px;text-align:right;font-family:monospace;font-size:13px;color:#b45309;">
-            $<?= number_format((float)($p['advance_balance'] ?? 0), 2) ?>
+            <?= dn_cur($config) ?><?= number_format((float)($p['advance_balance'] ?? 0), 2) ?>
           </td>
           <td style="padding:12px 8px;text-align:right;font-family:monospace;font-size:13px;color:#dc2626;">
-            <?= (float)($p['transfers_sent'] ?? 0) > 0 ? '−$' . number_format((float)$p['transfers_sent'], 2) : '—' ?>
+            <?= (float)($p['transfers_sent'] ?? 0) > 0 ? '−' . dn_cur($config) . number_format((float)$p['transfers_sent'], 2) : '—' ?>
           </td>
           <td style="padding:12px 8px;text-align:right;font-family:monospace;font-size:13px;color:#059669;">
-            <?= (float)($p['transfers_received'] ?? 0) > 0 ? '+$' . number_format((float)$p['transfers_received'], 2) : '—' ?>
+            <?= (float)($p['transfers_received'] ?? 0) > 0 ? '+' . dn_cur($config) . number_format((float)$p['transfers_received'], 2) : '—' ?>
           </td>
           <td style="padding:12px 8px;text-align:right;font-family:monospace;font-size:13px;color:#64748b;">
-            $<?= number_format((float)($p['expenses'] ?? 0), 2) ?>
+            <?= dn_cur($config) ?><?= number_format((float)($p['expenses'] ?? 0), 2) ?>
           </td>
           <td style="padding:12px 16px;text-align:right;">
             <span style="font-family:monospace;font-size:15px;font-weight:800;color:<?= $expColor ?>;">
-              $<?= number_format($exp, 2) ?>
+              <?= dn_cur($config) ?><?= number_format($exp, 2) ?>
             </span>
             <?php if ($exp > $carryLimit): ?>
               <div style="font-size:10px;color:#dc2626;font-weight:700;">OVER LIMIT</div>
@@ -133,7 +133,7 @@ $countToday = count(array_filter($transfers, fn($t) => $t['status'] === 'approve
             Total field cash (outside vault):
           </td>
           <td style="padding:12px 16px;text-align:right;font-family:monospace;font-size:16px;font-weight:900;color:#0f172a;">
-            $<?= number_format(array_sum(array_map(fn($p) => max(0, (float)($p['cash_exposure']??0)), $positions)), 2) ?>
+            <?= dn_cur($config) ?><?= number_format(array_sum(array_map(fn($p) => max(0, (float)($p['cash_exposure']??0)), $positions)), 2) ?>
           </td>
         </tr>
       </tfoot>
@@ -179,7 +179,7 @@ $countToday = count(array_filter($transfers, fn($t) => $t['status'] === 'approve
           <?php endif; ?>
         </div>
         <div style="font-family:monospace;font-size:18px;font-weight:800;color:<?= $isApproved ? '#0f172a' : '#94a3b8' ?>;">
-          $<?= number_format((float)($t['amount']??0), 2) ?>
+          <?= dn_cur($config) ?><?= number_format((float)($t['amount']??0), 2) ?>
         </div>
       </div>
 
@@ -203,11 +203,11 @@ $countToday = count(array_filter($transfers, fn($t) => $t['status'] === 'approve
         </div>
         <div>
           <span style="color:#64748b;">Before (sender): </span>
-          $<?= number_format((float)($t['sender_exposure_before']??0), 2) ?>
+          <?= dn_cur($config) ?><?= number_format((float)($t['sender_exposure_before']??0), 2) ?>
         </div>
         <div>
           <span style="color:#64748b;">Before (receiver): </span>
-          $<?= number_format((float)($t['receiver_exposure_before']??0), 2) ?>
+          <?= dn_cur($config) ?><?= number_format((float)($t['receiver_exposure_before']??0), 2) ?>
         </div>
         <?php if ($t['description']): ?>
         <div style="grid-column:1/-1;color:#475569;font-style:italic;">

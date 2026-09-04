@@ -102,8 +102,8 @@ function advStatusBadge(string $s): string {
     <div style="background:#fff;border:1.5px solid <?= (float)$s['balance'] > 50 ? '#fde68a' : '#e2e8f0' ?>;border-radius:14px;padding:14px;">
       <div style="font-size:13px;font-weight:800;color:#0f0f0f;"><?= htmlspecialchars($s['staff_name']) ?></div>
       <div style="font-size:11px;color:#64748b;margin-top:2px;"><?= (int)$s['advance_count'] ?> advance<?= $s['advance_count'] != 1 ? 's' : '' ?></div>
-      <div style="font-size:20px;font-weight:900;color:<?= (float)$s['balance'] > 0 ? '#d97706' : '#22c55e' ?>;margin-top:8px;">$<?= number_format((float)$s['balance'], 2) ?></div>
-      <div style="font-size:10px;color:#94a3b8;margin-top:2px;">remaining / $<?= number_format((float)$s['total_advanced'], 2) ?> total</div>
+      <div style="font-size:20px;font-weight:900;color:<?= (float)$s['balance'] > 0 ? '#d97706' : '#22c55e' ?>;margin-top:8px;"><?= dn_cur($config) ?><?= number_format((float)$s['balance'], 2) ?></div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:2px;">remaining / <?= dn_cur($config) ?><?= number_format((float)$s['total_advanced'], 2) ?> total</div>
     </div>
     <?php endforeach; ?>
   </div>
@@ -169,10 +169,10 @@ function advStatusBadge(string $s): string {
         <div style="font-size:11px;color:#64748b;margin-top:2px;"><?= htmlspecialchars(mb_strimwidth($adv['description'], 0, 40, '…')) ?></div>
         <?php endif; ?>
       </td>
-      <td style="padding:10px 14px;text-align:right;font-weight:700;">$<?= number_format((float)$adv['amount'], 2) ?></td>
-      <td style="padding:10px 14px;text-align:right;color:#dc2626;">$<?= number_format((float)$adv['amount_spent'], 2) ?></td>
+      <td style="padding:10px 14px;text-align:right;font-weight:700;"><?= dn_cur($config) ?><?= number_format((float)$adv['amount'], 2) ?></td>
+      <td style="padding:10px 14px;text-align:right;color:#dc2626;"><?= dn_cur($config) ?><?= number_format((float)$adv['amount_spent'], 2) ?></td>
       <td style="padding:10px 14px;text-align:right;font-weight:800;color:<?= $overspent ? '#dc2626' : ($balance > 0 ? '#d97706' : '#22c55e') ?>;">
-        <?= $overspent ? '<span title="Overspent">⚠️ ' : '' ?>$<?= number_format(abs($balance), 2) ?><?= $overspent ? '</span>' : '' ?>
+        <?= $overspent ? '<span title="Overspent">⚠️ ' : '' ?><?= dn_cur($config) ?><?= number_format(abs($balance), 2) ?><?= $overspent ? '</span>' : '' ?>
       </td>
       <td style="padding:10px 14px;"><?= advStatusBadge($adv['status']) ?></td>
       <td style="padding:10px 14px;color:#64748b;font-size:12px;"><?= date('d M', strtotime($adv['issued_at'])) ?><br><span style="color:#94a3b8;"><?= htmlspecialchars($adv['issued_by_name']) ?></span></td>
@@ -472,7 +472,7 @@ document.querySelector('form[method="POST"] button[type="submit"]').addEventList
 function openSettle(id, no, balance) {
     document.getElementById('settleAdvId').value = id;
     document.getElementById('settleAdvNo').textContent = no;
-    document.getElementById('settleBalance').textContent = '$' + balance.toFixed(2);
+    document.getElementById('settleBalance').textContent = <?= json_encode(dn_cur($config)) ?> + balance.toFixed(2);
     document.getElementById('settleReturnAmt').value = balance > 0 ? balance.toFixed(2) : '0.00';
     document.getElementById('settleReturnAmt').max = balance > 0 ? balance.toFixed(2) : '0.00';
     document.getElementById('advSettleModal').style.display = 'flex';

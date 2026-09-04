@@ -127,7 +127,7 @@ $pendingLeave = $leave->pendingCount();
                     <div class="emp-name"><?= htmlspecialchars($e['name'] ?? '') ?></div>
                     <div class="emp-role"><?= htmlspecialchars($e['employee_code'] ?? '') ?> · <?= htmlspecialchars(ucfirst($e['department'] ?? '')) ?></div>
                 </div>
-                <div class="emp-sal"><?= $e['gross_salary'] > 0 ? '$'.number_format($e['gross_salary'], 0) : '—' ?></div>
+                <div class="emp-sal"><?= $e['gross_salary'] > 0 ? dn_cur($config) . number_format($e['gross_salary'], 0) : '—' ?></div>
             </a>
             <?php endforeach; ?>
         </div>
@@ -198,13 +198,13 @@ $pendingLeave = $leave->pendingCount();
             ?>
             <div class="sal-row">
                 <label><?= $label ?></label>
-                <span class="cur">$</span>
+                <span class="cur"><?= trim(dn_cur($config)) ?></span>
                 <input type="number" name="<?= $key ?>" value="<?= $val > 0 ? $val : '' ?>" placeholder="0" step="0.01" min="0">
             </div>
             <?php endforeach; ?>
             <div class="sal-row" style="font-weight:700;border-top:1px solid #d1d5db;padding-top:8px;margin-top:8px;">
                 <label>Gross Monthly</label>
-                <span class="cur">$</span>
+                <span class="cur"><?= trim(dn_cur($config)) ?></span>
                 <span style="font-size:16px;color:#059669"><?= number_format($grossTotal, 2) ?></span>
             </div>
             <div class="sal-row">
@@ -247,7 +247,7 @@ $pendingLeave = $leave->pendingCount();
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
             <?php if ($_empAdvUsd > 0): ?>
             <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 16px;font-size:13px;">
-                <strong>USD Outstanding:</strong> <span style="color:#dc2626;font-weight:700;">$<?= number_format($_empAdvUsd, 2) ?></span>
+                <strong>USD Outstanding:</strong> <span style="color:#dc2626;font-weight:700;"><?= dn_cur($config) ?><?= number_format($_empAdvUsd, 2) ?></span>
             </div>
             <?php endif; ?>
             <?php if ($_empAdvSsp > 0): ?>
@@ -257,7 +257,7 @@ $pendingLeave = $leave->pendingCount();
             <?php endif; ?>
             <?php if ($_empPendCnt > 0): ?>
             <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 16px;font-size:13px;">
-                <strong>Pending Claims:</strong> <?= $_empPendCnt ?><?php if ($_empPendUsd > 0) echo ' ($'.number_format($_empPendUsd, 2).')'; ?><?php if ($_empPendSsp > 0) echo ' ('.number_format($_empPendSsp, 0).' SSP)'; ?>
+                <strong>Pending Claims:</strong> <?= $_empPendCnt ?><?php if ($_empPendUsd > 0) echo ' (' . dn_cur($config) . number_format($_empPendUsd, 2).')'; ?><?php if ($_empPendSsp > 0) echo ' ('.number_format($_empPendSsp, 0).' SSP)'; ?>
             </div>
             <?php endif; ?>
         </div>
@@ -337,12 +337,12 @@ $pendingLeave = $leave->pendingCount();
             ?>
             <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;min-width:110px;">
                 <div style="font-size:11px;color:#6b7280;"><?= $l[0] ?> <?= $l[1] ?></div>
-                <div style="font-size:16px;font-weight:700;color:#1E293B;">$<?= number_format($amt, 0) ?></div>
+                <div style="font-size:16px;font-weight:700;color:#1E293B;"><?= dn_cur($config) ?><?= number_format($amt, 0) ?></div>
             </div>
             <?php endforeach; ?>
             <div style="background:#1E293B;border-radius:8px;padding:10px 14px;min-width:110px;">
                 <div style="font-size:11px;color:#94A3B8;">Total Compensation</div>
-                <div style="font-size:16px;font-weight:700;color:#fff;">$<?= number_format($_compGrand, 0) ?></div>
+                <div style="font-size:16px;font-weight:700;color:#fff;"><?= dn_cur($config) ?><?= number_format($_compGrand, 0) ?></div>
             </div>
         </div>
 
@@ -362,12 +362,12 @@ $pendingLeave = $leave->pendingCount();
             <?php foreach ($_compByYear as $yr => $d): ?>
             <tr style="border-bottom:1px solid #f3f4f6;">
                 <td style="padding:6px 8px;font-weight:600;"><?= $yr ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['salary'] > 0 ? '$'.number_format($d['salary'],0) : '—' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['food'] > 0 ? '$'.number_format($d['food'],0) : '—' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['transport'] > 0 ? '$'.number_format($d['transport'],0) : '—' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['commission'] > 0 ? '$'.number_format($d['commission'],0) : '—' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= ($d['bonus']+$d['benefit']+$d['housing']) > 0 ? '$'.number_format($d['bonus']+$d['benefit']+$d['housing'],0) : '—' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;font-weight:700;">$<?= number_format($d['total'],0) ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['salary'] > 0 ? dn_cur($config) . number_format($d['salary'],0) : '—' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['food'] > 0 ? dn_cur($config) . number_format($d['food'],0) : '—' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['transport'] > 0 ? dn_cur($config) . number_format($d['transport'],0) : '—' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= $d['commission'] > 0 ? dn_cur($config) . number_format($d['commission'],0) : '—' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;"><?= ($d['bonus']+$d['benefit']+$d['housing']) > 0 ? dn_cur($config) . number_format($d['bonus']+$d['benefit']+$d['housing'],0) : '—' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;font-weight:700;"><?= dn_cur($config) ?><?= number_format($d['total'],0) ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>
@@ -379,9 +379,9 @@ $pendingLeave = $leave->pendingCount();
         <!-- Loan Summary -->
         <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:14px 18px;margin-bottom:12px;">
             <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
-                <div><span style="font-size:12px;color:#991B1B;">Loan Given:</span><br><strong style="font-size:18px;">$<?= number_format((float)$_empLoan['total_given'], 2) ?></strong></div>
-                <div><span style="font-size:12px;color:#065F46;">Repaid:</span><br><strong style="font-size:18px;color:#059669;">$<?= number_format((float)$_empLoan['total_repaid'], 2) ?></strong></div>
-                <div><span style="font-size:12px;color:#991B1B;">Balance Owed:</span><br><strong style="font-size:22px;color:#dc2626;">$<?= number_format((float)$_empLoan['balance'], 2) ?></strong></div>
+                <div><span style="font-size:12px;color:#991B1B;">Loan Given:</span><br><strong style="font-size:18px;"><?= dn_cur($config) ?><?= number_format((float)$_empLoan['total_given'], 2) ?></strong></div>
+                <div><span style="font-size:12px;color:#065F46;">Repaid:</span><br><strong style="font-size:18px;color:#059669;"><?= dn_cur($config) ?><?= number_format((float)$_empLoan['total_repaid'], 2) ?></strong></div>
+                <div><span style="font-size:12px;color:#991B1B;">Balance Owed:</span><br><strong style="font-size:22px;color:#dc2626;"><?= dn_cur($config) ?><?= number_format((float)$_empLoan['balance'], 2) ?></strong></div>
             </div>
         </div>
 
@@ -403,9 +403,9 @@ $pendingLeave = $leave->pendingCount();
                 <td style="padding:6px 8px;color:#6b7280;"><?= $_ll['txn_date'] ? date('d M Y', strtotime($_ll['txn_date'])) : '' ?></td>
                 <td style="padding:6px 8px;font-size:11px;"><?= htmlspecialchars(substr($_ll['narration'] ?: ($_ll['direction']==='paid' ? 'Loan disbursed' : 'Repayment received'), 0, 50)) ?></td>
                 <td style="padding:6px 8px;font-size:11px;color:#6b7280;"><?= htmlspecialchars($_ll['voucher_type'] ?? '') ?> <?= htmlspecialchars($_ll['voucher_no'] ?? '') ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;color:#dc2626;"><?= $_ll['direction']==='paid' ? '$'.number_format((float)$_ll['amount'],2) : '' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;color:#059669;"><?= $_ll['direction']==='received' ? '$'.number_format((float)$_ll['amount'],2) : '' ?></td>
-                <td style="padding:6px 8px;text-align:right;font-family:monospace;font-weight:600;color:<?= $_ll['running_balance'] > 0 ? '#dc2626' : '#059669' ?>;">$<?= number_format((float)$_ll['running_balance'], 2) ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;color:#dc2626;"><?= $_ll['direction']==='paid' ? dn_cur($config) . number_format((float)$_ll['amount'],2) : '' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;color:#059669;"><?= $_ll['direction']==='received' ? dn_cur($config) . number_format((float)$_ll['amount'],2) : '' ?></td>
+                <td style="padding:6px 8px;text-align:right;font-family:monospace;font-weight:600;color:<?= $_ll['running_balance'] > 0 ? '#dc2626' : '#059669' ?>;"><?= dn_cur($config) ?><?= number_format((float)$_ll['running_balance'], 2) ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

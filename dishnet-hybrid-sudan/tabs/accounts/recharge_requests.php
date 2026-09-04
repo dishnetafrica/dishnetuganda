@@ -30,7 +30,7 @@
     <div class="stat-card orange"><div class="stat-label">Pending</div><div class="stat-value"><?= $cntPending ?></div><div class="stat-sub">Awaiting review</div></div>
     <div class="stat-card green"><div class="stat-label">Approved</div><div class="stat-value"><?= $cntApproved ?></div></div>
     <div class="stat-card red"><div class="stat-label">Rejected</div><div class="stat-value"><?= $cntRejected ?></div></div>
-    <div class="stat-card teal"><div class="stat-label">Total Approved $</div><div class="stat-value" style="font-size:20px;">$<?= number_format($totalApproved, 0) ?></div></div>
+    <div class="stat-card teal"><div class="stat-label">Total Approved $</div><div class="stat-value" style="font-size:20px;"><?= dn_cur($config) ?><?= number_format($totalApproved, 0) ?></div></div>
 </div>
 <div class="kyc-card">
     <div class="kyc-card-header"><i class="bi bi-cash-coin"></i>Wallet Recharge Requests (<?= count($allRecharges) ?>)</div>
@@ -54,7 +54,7 @@
                 <?php endif; ?>
             </td>
             <td style="font-size:11px;color:#666;"><?= h($r['retailer_email']??'') ?></td>
-            <td><strong style="font-size:15px;color:#1a7a3e;">$<?= number_format($r['amount'],2) ?></strong></td>
+            <td><strong style="font-size:15px;color:#1a7a3e;"><?= dn_cur($config) ?><?= number_format($r['amount'],2) ?></strong></td>
             <td>
                 <?php if($r['payment_proof']): ?>
                     <?php $ext=strtolower(pathinfo($r['payment_proof'],PATHINFO_EXTENSION)); ?>
@@ -109,7 +109,7 @@
             <td style="min-width:130px;">
                 <?php if ($r['status'] === 'pending'): ?>
                 <div style="display:flex;flex-direction:column;gap:5px;">
-                    <form method="POST" onsubmit="return confirm('Approve $<?= number_format($r['amount'],2) ?> for <?= h(addslashes($r['retailer_name'])) ?>?')">
+                    <form method="POST" onsubmit="return confirm('Approve <?= dn_cur($config) ?><?= number_format($r['amount'],2) ?> for <?= h(addslashes($r['retailer_name'])) ?>?')">
                     <?= csrfField() ?>
                         <input type="hidden" name="action" value="approve_recharge">
                         <input type="hidden" name="request_id" value="<?= $r['id'] ?>">

@@ -25,7 +25,7 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 
 <div style="background:#FFF3E0;border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;">
     <div style="font-size:10px;font-weight:700;color:#E65100;text-transform:uppercase;">Total Commission — <?= date('M Y', strtotime($filterMonth.'-01')) ?></div>
-    <div style="font-size:28px;font-weight:800;color:#E65100;">$<?= number_format($totalComm,2) ?></div>
+    <div style="font-size:28px;font-weight:800;color:#E65100;"><?= dn_cur($config) ?><?= number_format($totalComm,2) ?></div>
 </div>
 
 <?php
@@ -40,10 +40,10 @@ foreach ($allRetailers2 as $r):
 <div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.03);border:1px solid #f1f5f9;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div style="font-weight:700;font-size:14px;"><?= h($r['name']) ?></div>
-        <div style="font-size:18px;font-weight:800;color:#E65100;">$<?= number_format($rComm,2) ?></div>
+        <div style="font-size:18px;font-weight:800;color:#E65100;"><?= dn_cur($config) ?><?= number_format($rComm,2) ?></div>
     </div>
     <div style="display:flex;gap:8px;font-size:11px;color:#6b7280;">
-        <span>Collected: <strong style="color:#28a745;">$<?= number_format($rColAmt,2) ?></strong></span>
+        <span>Collected: <strong style="color:#28a745;"><?= dn_cur($config) ?><?= number_format($rColAmt,2) ?></strong></span>
         <span>Payments: <strong><?= count($rCols) ?></strong></span>
         <span>Rate: <strong><?= $config['commission_rate']??5 ?>%</strong></span>
     </div>
