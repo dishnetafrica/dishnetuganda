@@ -38,6 +38,23 @@
     return cur + ' ' + n.toLocaleString('en-US', { maximumFractionDigits: whole ? 0 : 2 });
   }
 
+  // Headline plans first (data-name-map order), then everything else in feed
+  // order — so adding plans in uCRM (e.g. Business tiers) never reshuffles
+  // the familiar trio at the front.
+  var NAMEMAP = {};
+  try { NAMEMAP = JSON.parse(script.getAttribute('data-name-map') || '{}'); } catch (e) {}
+  function headlineFirst(plans) {
+    var keys = Object.keys(NAMEMAP);
+    if (!keys.length) return plans;
+    var head = [], rest = plans.slice();
+    keys.forEach(function (k) {
+      for (var i = 0; i < rest.length; i++) {
+        if (rest[i].name === k) { head.push(rest.splice(i, 1)[0]); break; }
+      }
+    });
+    return head.concat(rest);
+  }
+
   function render(data) {
     var cur = data.currency || 'UGX';
 
@@ -57,7 +74,7 @@
     // Monthly plans grid
     var grid = document.querySelector('[data-dishnet-plans]');
     if (grid && (data.plans || []).length) {
-      grid.innerHTML = data.plans.map(function (p) {
+      grid.innerHTML = headlineFirst(data.plans).map(function (p) {
         var flex = /flex/i.test(p.name);
         var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
@@ -87,7 +104,7 @@
 
     var kits = (data.hardware || []).filter(function (h) { return /package/i.test(h.name); });
     var flexPlans = data.plans.filter(function (p) { return /flex/i.test(p.name); });
-    var stdPlans  = data.plans.filter(function (p) { return !/flex/i.test(p.name); });
+    var stdPlans  = headlineFirst(data.plans.filter(function (p) { return !/flex/i.test(p.name); }));
     var state = { hw: null, plan: null };
 
     function kitImg(name) {
