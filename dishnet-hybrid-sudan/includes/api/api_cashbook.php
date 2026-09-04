@@ -56,7 +56,7 @@
             if ($excDir === 'usd_to_ssp') {
                 // Staff gives USD, receives SSP
                 $sspReceived = round($excAmt * $excRate, 0);
-                $desc = $excNote ?: ('Exchange $' . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' — ' . $excStaffName);
+                $desc = $excNote ?: ('Exchange ' . dn_cur($config) . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' — ' . $excStaffName);
 
                 // ── Side 1: SSP IN ──────────────────────────────────────────
                 // Write to cash_ins.json (source of truth for SSP IN display)
@@ -173,7 +173,7 @@
                 // Staff gives SSP, receives USD
                 $sspGiven    = round($excAmt * $excRate, 0); // excAmt = USD amount to receive
                 $usdReceived = $excAmt;
-                $desc = $excNote ?: ('Exchange ' . number_format($sspGiven, 0) . ' SSP → $' . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0));
+                $desc = $excNote ?: ('Exchange ' . number_format($sspGiven, 0) . ' SSP → ' . dn_cur($config) . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0));
 
                 // ── Side 1: USD IN ──────────────────────────────────────────
                 // Write to cash_ins.json as 'USD Received' (onCashIn handles this correctly)

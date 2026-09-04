@@ -168,15 +168,15 @@ $refreshedAt = date('Y-m-d H:i:s');
   <!-- Context cards -->
   <div class="bi-cards">
     <div class="bi-card">
-      <div class="bi-card-v">$<?= number_format($vaultIn, 2) ?></div>
+      <div class="bi-card-v"><?= dn_cur($config) ?><?= number_format($vaultIn, 2) ?></div>
       <div class="bi-card-l">Ledger Total IN</div>
     </div>
     <div class="bi-card">
-      <div class="bi-card-v" style="color:#DC2626;">$<?= number_format($vaultOut, 2) ?></div>
+      <div class="bi-card-v" style="color:#DC2626;"><?= dn_cur($config) ?><?= number_format($vaultOut, 2) ?></div>
       <div class="bi-card-l">Ledger Total OUT</div>
     </div>
     <div class="bi-card <?= $pendingHov > 0 ? 'warn' : '' ?>">
-      <div class="bi-card-v">$<?= number_format($pendingHov, 2) ?></div>
+      <div class="bi-card-v"><?= dn_cur($config) ?><?= number_format($pendingHov, 2) ?></div>
       <div class="bi-card-l">Pending Handovers</div>
     </div>
   </div>
@@ -188,13 +188,13 @@ $refreshedAt = date('Y-m-d H:i:s');
     <div class="bi-row">
       <div class="bi-sym"> </div>
       <div class="bi-label">🏦 Vault cash <span style="font-size:11px;color:#94a3b8;">(cb_ledger net)</span></div>
-      <div class="bi-val <?= $vaultNet >= 0 ? 'green' : 'red' ?>">$<?= number_format($vaultNet, 2) ?></div>
+      <div class="bi-val <?= $vaultNet >= 0 ? 'green' : 'red' ?>"><?= dn_cur($config) ?><?= number_format($vaultNet, 2) ?></div>
     </div>
 
     <div class="bi-row">
       <div class="bi-sym">+</div>
       <div class="bi-label">👐 Field cash <span style="font-size:11px;color:#94a3b8;">(agent exposure: col + adv − exp − hov)</span></div>
-      <div class="bi-val <?= $fieldCash >= 0 ? 'amber' : 'red' ?>">$<?= number_format($fieldCash, 2) ?></div>
+      <div class="bi-val <?= $fieldCash >= 0 ? 'amber' : 'red' ?>"><?= dn_cur($config) ?><?= number_format($fieldCash, 2) ?></div>
     </div>
 
     <hr class="bi-divider">
@@ -202,17 +202,17 @@ $refreshedAt = date('Y-m-d H:i:s');
     <div class="bi-total">
       <div class="bi-total-label">= Total accountable cash</div>
       <div class="bi-total-val <?= $totalAccountable >= 0 ? 'green' : 'red' ?>">
-        $<?= number_format($totalAccountable, 2) ?>
+        <?= dn_cur($config) ?><?= number_format($totalAccountable, 2) ?>
       </div>
     </div>
 
     <div style="margin-top:16px;padding:14px 16px;background:#F0FDF4;border-radius:10px;font-size:12px;color:#166534;line-height:1.6;">
       <strong>What this means:</strong> At this moment, DishNet can account for
-      <strong>$<?= number_format($totalAccountable, 2) ?></strong> in cash.
-      <?= $vaultNet > 0 ? '<strong>$'.number_format($vaultNet,2).'</strong> is confirmed in the company account.' : '' ?>
-      <?= $fieldCash > 0 ? ' <strong>$'.number_format($fieldCash,2).'</strong> is currently in field agents\' hands.' : '' ?>
+      <strong><?= dn_cur($config) ?><?= number_format($totalAccountable, 2) ?></strong> in cash.
+      <?= $vaultNet > 0 ? '<strong>' . dn_cur($config) . number_format($vaultNet,2).'</strong> is confirmed in the company account.' : '' ?>
+      <?= $fieldCash > 0 ? ' <strong>' . dn_cur($config) . number_format($fieldCash,2).'</strong> is currently in field agents\' hands.' : '' ?>
       <?php if ($pendingHov > 0): ?>
-      <br>⏳ <strong>$<?= number_format($pendingHov, 2) ?></strong> in pending handovers will move from field cash to vault once Rupesh confirms.
+      <br>⏳ <strong><?= dn_cur($config) ?><?= number_format($pendingHov, 2) ?></strong> in pending handovers will move from field cash to vault once Rupesh confirms.
       <?php endif; ?>
     </div>
   </div>
@@ -225,7 +225,7 @@ $refreshedAt = date('Y-m-d H:i:s');
     <div class="bi-agent-row">
       <span class="bi-agent-name"><?= htmlspecialchars($f['name']) ?></span>
       <span class="bi-agent-val" style="color:<?= $f['exposure'] > 0 ? '#B45309' : '#15803D' ?>;">
-        $<?= number_format($f['exposure'], 2) ?>
+        <?= dn_cur($config) ?><?= number_format($f['exposure'], 2) ?>
       </span>
     </div>
     <?php endforeach; ?>
@@ -248,7 +248,7 @@ $refreshedAt = date('Y-m-d H:i:s');
         </span>
       </span>
       <span class="bi-ledger-amt <?= ($e['type']??'') === 'IN' ? 'bi-in' : 'bi-out' ?>">
-        $<?= number_format((float)($e['amount'] ?? 0), 2) ?>
+        <?= dn_cur($config) ?><?= number_format((float)($e['amount'] ?? 0), 2) ?>
       </span>
     </div>
     <?php endforeach; ?>

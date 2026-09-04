@@ -42,7 +42,7 @@ $_rchView = $_GET['rv'] ?? 'request'; // 'request' or 'history'
 <!-- Balance box -->
 <div class="recharge-balance-box" style="margin-bottom:14px;">
     <div class="rbb-label"><i class="bi bi-wallet2 mr-1"></i> Current Wallet Balance</div>
-    <div class="rbb-value">$<?= number_format($myWallet['balance'], 2) ?></div>
+    <div class="rbb-value"><?= dn_cur($config) ?><?= number_format($myWallet['balance'], 2) ?></div>
     <div style="font-size:12px;color:#2d6a4f;margin-top:6px;">Balance updates after admin approval.</div>
 </div>
 
@@ -54,13 +54,13 @@ $_rchView = $_GET['rv'] ?? 'request'; // 'request' or 'history'
         <?= csrfField() ?>
             <input type="hidden" name="action" value="submit_recharge">
             <div class="form-group">
-                <label class="form-label">Load Amount (USD) *</label>
+                <label class="form-label">Load Amount (<?= trim(dn_cur($config)) ?>) *</label>
                 <div class="input-group">
-                    <div class="input-group-prepend"><span class="input-group-text">$</span></div>
+                    <div class="input-group-prepend"><span class="input-group-text"><?= trim(dn_cur($config)) ?></span></div>
                     <input type="number" name="amount" class="form-control" step="0.01" min="1" max="100000"
                            placeholder="0.00" required>
                 </div>
-                <div class="form-hint">Min: $1.00 | Max: $100,000.00</div>
+                <div class="form-hint">Min: <?= dn_cur($config) ?>1.00 | Max: <?= dn_cur($config) ?>100,000.00</div>
             </div>
             <div class="form-group">
                 <label class="form-label">Payment Proof <small style="color:#999;font-weight:400;">(Optional — JPG/PNG/PDF, max 5MB)</small></label>
@@ -99,7 +99,7 @@ $_rchView = $_GET['rv'] ?? 'request'; // 'request' or 'history'
 <?php foreach ($myRecharges as $r): ?>
 <div class="rch-card">
     <div class="rch-card-top">
-        <div class="rch-card-amt">$<?= number_format($r['amount'],2) ?></div>
+        <div class="rch-card-amt"><?= dn_cur($config) ?><?= number_format($r['amount'],2) ?></div>
         <?php if($r['status']==='pending'): ?>
         <span class="badge-pending">⏳ Pending</span>
         <?php elseif($r['status']==='approved'): ?>

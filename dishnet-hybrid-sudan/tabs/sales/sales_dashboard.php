@@ -249,22 +249,22 @@ window.sdLogOutcome = function(outcome) {
   <div class="sd-stats">
     <div class="sd-stat">
       <div class="sd-stat-lbl">Today Collected</div>
-      <div class="sd-stat-val" style="color:#4ade80;">$<?= number_format($todayAmount, 0) ?></div>
+      <div class="sd-stat-val" style="color:#4ade80;"><?= dn_cur($config) ?><?= number_format($todayAmount, 0) ?></div>
       <div class="sd-stat-sub"><?= $todayCount ?> payment<?= $todayCount !== 1 ? 's' : '' ?></div>
     </div>
     <div class="sd-stat">
       <div class="sd-stat-lbl">Cash in Hand</div>
-      <div class="sd-stat-val" style="color:<?= $cashInHand > 0 ? '#f87171' : '#4ade80' ?>;">$<?= number_format(max(0, $cashInHand), 0) ?></div>
+      <div class="sd-stat-val" style="color:<?= $cashInHand > 0 ? '#f87171' : '#4ade80' ?>;"><?= dn_cur($config) ?><?= number_format(max(0, $cashInHand), 0) ?></div>
       <div class="sd-stat-sub"><?= $cashInHand > 0 ? 'Needs handover' : 'All clear' ?></div>
     </div>
     <div class="sd-stat">
       <div class="sd-stat-lbl">This Month</div>
-      <div class="sd-stat-val" style="color:#60a5fa;">$<?= number_format($monthAmount, 0) ?></div>
+      <div class="sd-stat-val" style="color:#60a5fa;"><?= dn_cur($config) ?><?= number_format($monthAmount, 0) ?></div>
       <div class="sd-stat-sub"><?= $monthCount ?> payments</div>
     </div>
     <div class="sd-stat">
       <div class="sd-stat-lbl">Wallet Float</div>
-      <div class="sd-stat-val" style="color:<?= $walletBal > 100 ? '#fbbf24' : '#f87171' ?>;">$<?= number_format($walletBal, 0) ?></div>
+      <div class="sd-stat-val" style="color:<?= $walletBal > 100 ? '#fbbf24' : '#f87171' ?>;"><?= dn_cur($config) ?><?= number_format($walletBal, 0) ?></div>
       <div class="sd-stat-sub"><?= $walletBal < 100 ? 'Low — recharge!' : 'Ready' ?></div>
     </div>
   </div>
@@ -274,13 +274,13 @@ window.sdLogOutcome = function(outcome) {
   <div class="sd-target">
     <div style="display:flex;justify-content:space-between;font-size:11px;">
       <span style="color:rgba(255,255,255,.5);font-weight:700;">Monthly Target</span>
-      <span style="color:#fff;font-weight:800;">$<?= number_format($monthAmount, 0) ?> / $<?= number_format($monthTarget, 0) ?></span>
+      <span style="color:#fff;font-weight:800;"><?= dn_cur($config) ?><?= number_format($monthAmount, 0) ?> / <?= dn_cur($config) ?><?= number_format($monthTarget, 0) ?></span>
     </div>
     <div class="sd-target-bar">
       <div class="sd-target-fill" style="width:<?= $targetPct ?>%;background:<?= $targetPct >= 100 ? '#4ade80' : ($targetPct >= 50 ? '#fbbf24' : '#f87171') ?>;"></div>
     </div>
     <div style="text-align:right;font-size:10px;color:rgba(255,255,255,.35);margin-top:3px;">
-      <?= $targetPct ?>% — <?= $targetPct >= 100 ? 'Target reached!' : ($monthTarget - $monthAmount > 0 ? '$'.number_format($monthTarget - $monthAmount, 0).' to go' : '') ?>
+      <?= $targetPct ?>% — <?= $targetPct >= 100 ? 'Target reached!' : ($monthTarget - $monthAmount > 0 ? dn_cur($config) . number_format($monthTarget - $monthAmount, 0).' to go' : '') ?>
     </div>
   </div>
   <?php endif; ?>
@@ -296,7 +296,7 @@ window.sdLogOutcome = function(outcome) {
 <?php if ($cashInHand > 50): ?>
 <a href="?page=dashboard&tab=wallet" class="sd-alert" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;">
   <span style="font-size:20px;">💵</span>
-  <div style="flex:1;font-size:13px;font-weight:700;">$<?= number_format($cashInHand, 2) ?> cash in hand — hand over to Diko or Rupesh</div>
+  <div style="flex:1;font-size:13px;font-weight:700;"><?= dn_cur($config) ?><?= number_format($cashInHand, 2) ?> cash in hand — hand over to Diko or Rupesh</div>
   <i class="bi bi-chevron-right" style="color:#fca5a5;"></i>
 </a>
 <?php endif; ?>
@@ -304,7 +304,7 @@ window.sdLogOutcome = function(outcome) {
 <?php if ($walletBal < 100): ?>
 <a href="?page=dashboard&tab=wallet_recharge" class="sd-alert" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">
   <span style="font-size:20px;">⚠️</span>
-  <div style="flex:1;font-size:13px;font-weight:700;">Wallet low ($<?= number_format($walletBal, 2) ?>) — recharge to continue collecting</div>
+  <div style="flex:1;font-size:13px;font-weight:700;">Wallet low (<?= dn_cur($config) ?><?= number_format($walletBal, 2) ?>) — recharge to continue collecting</div>
   <i class="bi bi-chevron-right" style="color:#fcd34d;"></i>
 </a>
 <?php endif; ?>
@@ -312,7 +312,7 @@ window.sdLogOutcome = function(outcome) {
 <?php if (count($myPendHovs) > 0): ?>
 <a href="?page=dashboard&tab=wallet" class="sd-alert" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;">
   <span style="font-size:20px;">⏳</span>
-  <div style="flex:1;font-size:13px;font-weight:700;"><?= count($myPendHovs) ?> handover<?= count($myPendHovs) > 1 ? 's' : '' ?> pending ($<?= number_format($pendHovAmt, 2) ?>)</div>
+  <div style="flex:1;font-size:13px;font-weight:700;"><?= count($myPendHovs) ?> handover<?= count($myPendHovs) > 1 ? 's' : '' ?> pending (<?= dn_cur($config) ?><?= number_format($pendHovAmt, 2) ?>)</div>
   <i class="bi bi-chevron-right" style="color:#93c5fd;"></i>
 </a>
 <?php endif; ?>
@@ -375,7 +375,7 @@ window.sdLogOutcome = function(outcome) {
         <div style="font-size:13px;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars($rc['customer_name'] ?? 'Customer') ?></div>
         <div style="font-size:11px;color:#94a3b8;"><?= $rcIsToday ? 'Today' : date('d M', strtotime($rcDate)) ?> · <?= $rc['method'] ?? 'Cash' ?></div>
       </div>
-      <div style="font-size:16px;font-weight:900;color:#059669;flex-shrink:0;">$<?= number_format((float)($rc['amount'] ?? 0), 2) ?></div>
+      <div style="font-size:16px;font-weight:900;color:#059669;flex-shrink:0;"><?= dn_cur($config) ?><?= number_format((float)($rc['amount'] ?? 0), 2) ?></div>
     </div>
     <?php endforeach; ?>
   </div>

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/lib/currency.php';
 /**
  * cron_crm_payment_gap.php — Catch missed CRM webhook payments
  * DishNet Hybrid v4.9.18

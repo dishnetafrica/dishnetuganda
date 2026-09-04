@@ -1599,7 +1599,7 @@ if ($act === 'app_me' && $met === 'GET') {
         'is_paused' => $isPaused,
         'paused_message' => $isPaused
             ? ($unpaidTotal > 0
-                ? "Your internet is paused. Pay \$" . number_format($unpaidTotal, 0)
+                ? "Your internet is paused. Pay " . dn_cur($config) . number_format($unpaidTotal, 0)
                   . " to restore service — your dish reconnects automatically within seconds of payment."
                 : "Your internet is paused. Pay your outstanding balance to restore service — your dish reconnects automatically within seconds of payment.")
             : '',
@@ -4654,8 +4654,8 @@ if ($act === 'app_invoice_send_whatsapp' && $met === 'POST') {
     $dueDateLabel = $dueDate ? date('d M Y', strtotime($dueDate)) : 'See invoice';
 
     $caption = "📄 Invoice {$invNum}\n"
-             . 'Total: $' . number_format($total, 2) . "\n"
-             . ($due > 0 ? 'Due: $' . number_format($due, 2) . ' by ' . $dueDateLabel : 'Status: PAID')
+             . 'Total: ' . dn_cur($config) . number_format($total, 2) . "\n"
+             . ($due > 0 ? 'Due: ' . dn_cur($config) . number_format($due, 2) . ' by ' . $dueDateLabel : 'Status: PAID')
              . "\n\n— DishNet Africa";
 
     try {

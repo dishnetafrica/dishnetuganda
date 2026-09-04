@@ -408,7 +408,7 @@ function updateItemList(){
         h += '<div class="scn-item">';
         h += '<span class="idx">'+(i+1)+'</span>';
         h += '<span class="serial">'+esc(it.serial)+'</span>';
-        h += '<span style="color:#94A3B8;font-size:12px;margin-left:auto;margin-right:8px;">$'+(it.cost||0).toFixed(2)+'</span>';
+        h += '<span style="color:#94A3B8;font-size:12px;margin-left:auto;margin-right:8px;">' + <?= json_encode(dn_cur($config)) ?> +(it.cost||0).toFixed(2)+'</span>';
         h += '<button class="remove" onclick="scnRemoveItem('+i+')" title="Remove">✕</button>';
         h += '</div>';
     });
@@ -424,7 +424,7 @@ function buildReview(){
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px;">';
     h += '<div><strong>Category:</strong> '+esc(_selectedCat.title)+'</div>';
     h += '<div><strong>Items:</strong> '+_scannedItems.length+'</div>';
-    h += '<div><strong>Total Cost:</strong> $'+totalCost.toFixed(2)+'</div>';
+    h += '<div><strong>Total Cost:</strong> ' + <?= json_encode(dn_cur($config)) ?> +totalCost.toFixed(2)+'</div>';
     h += '<div><strong>Location:</strong> '+esc(_scannedItems[0]?.location||'Warehouse')+'</div>';
     h += '</div></div>';
 
@@ -433,7 +433,7 @@ function buildReview(){
         h += '<div class="scn-item">';
         h += '<span class="idx">'+(i+1)+'</span>';
         h += '<span class="serial">'+esc(it.serial)+'</span>';
-        h += '<span style="color:#94A3B8;font-size:12px;margin-left:auto;">$'+(it.cost||0).toFixed(2)+' · '+esc(it.condition)+'</span>';
+        h += '<span style="color:#94A3B8;font-size:12px;margin-left:auto;">' + <?= json_encode(dn_cur($config)) ?> +(it.cost||0).toFixed(2)+' · '+esc(it.condition)+'</span>';
         h += '</div>';
     });
     h += '</div>';

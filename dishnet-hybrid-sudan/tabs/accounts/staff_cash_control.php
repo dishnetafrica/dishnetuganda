@@ -91,15 +91,15 @@ $refreshedAt       = date('H:i:s');
   <!-- Summary stats -->
   <div class="scc-stats">
     <div class="scc-stat<?= $overLimitCount > 0 ? ' danger' : '' ?>">
-      <div class="scc-stat-v">$<?= number_format($totalExposure, 2) ?></div>
+      <div class="scc-stat-v"><?= dn_cur($config) ?><?= number_format($totalExposure, 2) ?></div>
       <div class="scc-stat-l">Total Field Cash Exposure</div>
     </div>
     <div class="scc-stat">
-      <div class="scc-stat-v">$<?= number_format($totalCollections, 2) ?></div>
+      <div class="scc-stat-v"><?= dn_cur($config) ?><?= number_format($totalCollections, 2) ?></div>
       <div class="scc-stat-l">Customer Collections Held</div>
     </div>
     <div class="scc-stat">
-      <div class="scc-stat-v">$<?= number_format($totalAdvances, 2) ?></div>
+      <div class="scc-stat-v"><?= dn_cur($config) ?><?= number_format($totalAdvances, 2) ?></div>
       <div class="scc-stat-l">Advance Cash in Field</div>
     </div>
     <div class="scc-stat<?= $overLimitCount > 0 ? ' danger' : ($floatLowCount > 0 ? ' warn' : '') ?>">
@@ -159,7 +159,7 @@ $refreshedAt       = date('H:i:s');
         <td>
           <div class="scc-name"><?= htmlspecialchars($pos['staff_name']) ?></div>
           <?php if ($exp > $_posLimit): ?>
-          <div class="scc-sub" style="color:#DC2626;font-weight:700;">⚠ $<?= number_format($exp - $_posLimit, 2) ?> over limit<?= $_posLimit !== $globalCarryLimit ? ' (limit $'.number_format($_posLimit,0).')' : '' ?></div>
+          <div class="scc-sub" style="color:#DC2626;font-weight:700;">⚠ <?= dn_cur($config) ?><?= number_format($exp - $_posLimit, 2) ?> over limit<?= $_posLimit !== $globalCarryLimit ? ' (limit ' . dn_cur($config) . number_format($_posLimit,0).')' : '' ?></div>
           <?php elseif ($pos['float_balance'] < $floatWarn): ?>
           <div class="scc-sub" style="color:#B45309;">🔋 Float low</div>
           <?php else: ?>
@@ -167,14 +167,14 @@ $refreshedAt       = date('H:i:s');
           <?php endif; ?>
         </td>
         <td>
-          <span class="scc-float <?= $floatClass ?>">$<?= number_format($pos['float_balance'], 2) ?></span>
+          <span class="scc-float <?= $floatClass ?>"><?= dn_cur($config) ?><?= number_format($pos['float_balance'], 2) ?></span>
         </td>
-        <td style="color:#3B82F6;font-weight:700;">$<?= number_format($pos['collections'], 2) ?></td>
-        <td style="color:#8B5CF6;font-weight:700;">$<?= number_format($pos['advance_balance'], 2) ?></td>
-        <td style="color:#F59E0B;font-weight:600;">−$<?= number_format($pos['expenses'], 2) ?></td>
-        <td style="color:#10B981;font-weight:600;">−$<?= number_format($pos['handovers'], 2) ?></td>
+        <td style="color:#3B82F6;font-weight:700;"><?= dn_cur($config) ?><?= number_format($pos['collections'], 2) ?></td>
+        <td style="color:#8B5CF6;font-weight:700;"><?= dn_cur($config) ?><?= number_format($pos['advance_balance'], 2) ?></td>
+        <td style="color:#F59E0B;font-weight:600;">−<?= dn_cur($config) ?><?= number_format($pos['expenses'], 2) ?></td>
+        <td style="color:#10B981;font-weight:600;">−<?= dn_cur($config) ?><?= number_format($pos['handovers'], 2) ?></td>
         <td>
-          <span class="scc-exp <?= $chip ?>">$<?= number_format($cih, 2) ?></span>
+          <span class="scc-exp <?= $chip ?>"><?= dn_cur($config) ?><?= number_format($cih, 2) ?></span>
         </td>
         <td>
           <div class="scc-bar-wrap" title="Blue=collections Purple=advances Amber=exp Green=handovers">
@@ -192,18 +192,18 @@ $refreshedAt       = date('H:i:s');
       <tr style="background:#f8f8f8;font-weight:800;">
         <td>Total</td>
         <td>—</td>
-        <td style="color:#3B82F6;">$<?= number_format($totalCollections, 2) ?></td>
-        <td style="color:#8B5CF6;">$<?= number_format($totalAdvances, 2) ?></td>
-        <td style="color:#F59E0B;">−$<?= number_format(array_sum(array_column($positions,'expenses')), 2) ?></td>
-        <td style="color:#10B981;">−$<?= number_format(array_sum(array_column($positions,'handovers')), 2) ?></td>
-        <td><span class="scc-exp <?= $totalExposure > ($globalCarryLimit * count($positions)) ? 'danger' : ($totalExposure > 0 ? 'warn' : 'ok') ?>">$<?= number_format(max(0,$totalExposure), 2) ?></span></td>
+        <td style="color:#3B82F6;"><?= dn_cur($config) ?><?= number_format($totalCollections, 2) ?></td>
+        <td style="color:#8B5CF6;"><?= dn_cur($config) ?><?= number_format($totalAdvances, 2) ?></td>
+        <td style="color:#F59E0B;">−<?= dn_cur($config) ?><?= number_format(array_sum(array_column($positions,'expenses')), 2) ?></td>
+        <td style="color:#10B981;">−<?= dn_cur($config) ?><?= number_format(array_sum(array_column($positions,'handovers')), 2) ?></td>
+        <td><span class="scc-exp <?= $totalExposure > ($globalCarryLimit * count($positions)) ? 'danger' : ($totalExposure > 0 ? 'warn' : 'ok') ?>"><?= dn_cur($config) ?><?= number_format(max(0,$totalExposure), 2) ?></span></td>
         <td>—</td>
       </tr>
     </tfoot>
   </table>
 
   <div style="margin-top:12px;font-size:11px;color:#94a3b8;text-align:right;">
-    Default carry limit: $<?= number_format($globalCarryLimit, 2) ?> (per-agent overrides apply) · Float warn threshold: $<?= number_format($floatWarn, 2) ?> ·
+    Default carry limit: <?= dn_cur($config) ?><?= number_format($globalCarryLimit, 2) ?> (per-agent overrides apply) · Float warn threshold: <?= dn_cur($config) ?><?= number_format($floatWarn, 2) ?> ·
     <a href="?page=dashboard&tab=settings" style="color:#94a3b8;">Change in Settings</a>
   </div>
 

@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib/error_handler.php'; // Global fatal/exception catch  prevents blank pages
+require_once __DIR__ . '/lib/currency.php';      // dn_cur()/dn_code() — config-driven money rendering
 ob_start(); // buffer all output -- ensures redirect() works even if a warning fires early
 chdir(__DIR__);
 
@@ -2231,10 +2232,10 @@ if ($isAdmin || ($retailer['role'] ?? '') === 'support_leader') {
 <div class="mobile-wallet-hero">
     <div class="mwh-card">
         <div class="mwh-label">Wallet Balance</div>
-        <div class="mwh-amount">$<?= number_format($myWallet['balance'] ?? 0, 2) ?></div>
+        <div class="mwh-amount"><?= dn_cur($config) ?><?= number_format($myWallet['balance'] ?? 0, 2) ?></div>
         <div class="mwh-stats">
-            <span><i class="bi bi-arrow-down-circle"></i> In: $<?= number_format($myWallet['total_credit'] ?? 0, 2) ?></span>
-            <span><i class="bi bi-arrow-up-circle"></i> Out: $<?= number_format($myWallet['total_debit'] ?? 0, 2) ?></span>
+            <span><i class="bi bi-arrow-down-circle"></i> In: <?= dn_cur($config) ?><?= number_format($myWallet['total_credit'] ?? 0, 2) ?></span>
+            <span><i class="bi bi-arrow-up-circle"></i> Out: <?= dn_cur($config) ?><?= number_format($myWallet['total_debit'] ?? 0, 2) ?></span>
         </div>
     </div>
     <div class="mwh-quick">
@@ -2275,7 +2276,7 @@ if ($_cwShow):
 <div style="background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border-radius:12px;padding:12px 18px;margin-bottom:12px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 14px rgba(220,38,38,.3);">
     <span style="font-size:24px;"></span>
     <div style="flex:1;font-size:12px;line-height:1.5;">
-        <strong>You are holding $<?= number_format($_cwExposure, 2) ?> in company cash</strong> (limit $<?= number_format($_cwLimit, 2) ?>).<br>
+        <strong>You are holding <?= dn_cur($config) ?><?= number_format($_cwExposure, 2) ?> in company cash</strong> (limit <?= dn_cur($config) ?><?= number_format($_cwLimit, 2) ?>).<br>
         Hand over to office immediately. Collections are blocked.
     </div>
     <a href="?page=dashboard&tab=my_account&v=handover" style="background:#fff;color:#dc2626;font-weight:800;padding:8px 14px;border-radius:10px;font-size:11px;text-decoration:none;white-space:nowrap;">Hand Over</a>

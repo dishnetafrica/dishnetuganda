@@ -174,7 +174,7 @@ $deptColors = [
         <p>Active Employees</p>
     </div>
     <div class="hrm-card green">
-        <h3>$<?= number_format($stats['monthly_payroll_est'], 0) ?></h3>
+        <h3><?= dn_cur($config) ?><?= number_format($stats['monthly_payroll_est'], 0) ?></h3>
         <p>Monthly Payroll (Est.)</p>
     </div>
     <div class="hrm-card amber">
@@ -211,9 +211,9 @@ $deptColors = [
     <h2>Latest Payroll — <?= htmlspecialchars($latestPeriod['period']) ?></h2>
     <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
         <div><span class="payroll-status <?= $latestPeriod['status'] ?>"><?= strtoupper($latestPeriod['status']) ?></span></div>
-        <div><strong>Gross:</strong> $<?= number_format((float)$latestPeriod['total_gross'], 2) ?></div>
-        <div><strong>Net:</strong> $<?= number_format((float)$latestPeriod['total_net'], 2) ?></div>
-        <div><strong>Disbursed:</strong> $<?= number_format((float)$latestPeriod['total_disbursed'], 2) ?></div>
+        <div><strong>Gross:</strong> <?= dn_cur($config) ?><?= number_format((float)$latestPeriod['total_gross'], 2) ?></div>
+        <div><strong>Net:</strong> <?= dn_cur($config) ?><?= number_format((float)$latestPeriod['total_net'], 2) ?></div>
+        <div><strong>Disbursed:</strong> <?= dn_cur($config) ?><?= number_format((float)$latestPeriod['total_disbursed'], 2) ?></div>
         <div><strong>Staff:</strong> <?= $latestPeriod['employee_count'] ?></div>
         <a href="?page=dashboard&tab=hrm_payroll&period=<?= urlencode($latestPeriod['period']) ?>" style="color:#2563eb;font-size:13px;">View details →</a>
     </div>
@@ -224,7 +224,7 @@ $deptColors = [
 <div class="hrm-section">
     <h2>💸 Outstanding Advances & Loans</h2>
     <div style="display:flex;gap:20px;margin-bottom:12px;flex-wrap:wrap;">
-        <?php if ($_advTotalUsd > 0): ?><div style="font-size:13px;"><strong>Total USD:</strong> <span style="color:#dc2626;font-weight:700;">$<?= number_format($_advTotalUsd, 2) ?></span></div><?php endif; ?>
+        <?php if ($_advTotalUsd > 0): ?><div style="font-size:13px;"><strong>Total USD:</strong> <span style="color:#dc2626;font-weight:700;"><?= dn_cur($config) ?><?= number_format($_advTotalUsd, 2) ?></span></div><?php endif; ?>
         <?php if ($_advTotalSsp > 0): ?><div style="font-size:13px;"><strong>Total SSP:</strong> <span style="color:#dc2626;font-weight:700;"><?= number_format($_advTotalSsp, 0) ?> SSP</span></div><?php endif; ?>
     </div>
     <div style="overflow-x:auto;">
@@ -240,7 +240,7 @@ $deptColors = [
         <tr>
             <td style="font-weight:600;"><?= htmlspecialchars($_as['name']) ?></td>
             <td style="text-transform:capitalize;color:#6b7280;"><?= htmlspecialchars($_as['dept']) ?></td>
-            <td class="adv-cur <?= $_as['usd'] > 0 ? 'adv-warn' : 'adv-ok' ?>"><?= $_as['usd'] > 0 ? '$'.number_format($_as['usd'], 2) : '—' ?></td>
+            <td class="adv-cur <?= $_as['usd'] > 0 ? 'adv-warn' : 'adv-ok' ?>"><?= $_as['usd'] > 0 ? dn_cur($config) . number_format($_as['usd'], 2) : '—' ?></td>
             <td class="adv-cur <?= $_as['ssp'] > 0 ? 'adv-warn' : 'adv-ok' ?>"><?= $_as['ssp'] > 0 ? number_format($_as['ssp'], 0).' SSP' : '—' ?></td>
             <td style="text-align:right;"><?php if ($_as['pending'] > 0): ?><span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;"><?= $_as['pending'] ?> pending</span><?php else: ?>—<?php endif; ?></td>
         </tr>
@@ -268,15 +268,15 @@ $deptColors = [
         <?php $_bkLoanTotal = 0; foreach ($_bkLoans as $_bl): $_bkLoanTotal += (float)$_bl['balance']; ?>
         <tr>
             <td style="font-weight:600;"><?= htmlspecialchars($_bl['employee_name']) ?></td>
-            <td style="text-align:right;font-family:monospace;">$<?= number_format((float)$_bl['total_given'], 2) ?></td>
-            <td style="text-align:right;font-family:monospace;color:#059669;">$<?= number_format((float)$_bl['total_repaid'], 2) ?></td>
-            <td style="text-align:right;font-family:monospace;font-weight:700;color:<?= $_bl['balance'] > 0 ? '#dc2626' : '#059669' ?>;">$<?= number_format((float)$_bl['balance'], 2) ?></td>
+            <td style="text-align:right;font-family:monospace;"><?= dn_cur($config) ?><?= number_format((float)$_bl['total_given'], 2) ?></td>
+            <td style="text-align:right;font-family:monospace;color:#059669;"><?= dn_cur($config) ?><?= number_format((float)$_bl['total_repaid'], 2) ?></td>
+            <td style="text-align:right;font-family:monospace;font-weight:700;color:<?= $_bl['balance'] > 0 ? '#dc2626' : '#059669' ?>;"><?= dn_cur($config) ?><?= number_format((float)$_bl['balance'], 2) ?></td>
             <td style="color:#6b7280;font-size:12px;"><?= $_bl['last_txn_date'] ? date('d M Y', strtotime($_bl['last_txn_date'])) : '—' ?></td>
         </tr>
         <?php endforeach; ?>
         <tr style="border-top:2px solid #1E293B;font-weight:700;">
             <td>TOTAL</td><td></td><td></td>
-            <td style="text-align:right;font-family:monospace;color:#dc2626;">$<?= number_format($_bkLoanTotal, 2) ?></td>
+            <td style="text-align:right;font-family:monospace;color:#dc2626;"><?= dn_cur($config) ?><?= number_format($_bkLoanTotal, 2) ?></td>
             <td></td>
         </tr>
         </tbody>

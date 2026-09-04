@@ -64,9 +64,9 @@ $curriculum = [
          'steps'=>[
             ['head'=>'When to collect','body'=>'When an existing customer wants to pay their monthly bill or renew their plan. You collect the cash/transfer from them and process it here.'],
             ['head'=>'Step 1 — Search the customer','body'=>'Go to Collect Payment. Type the customer name or CRM ID in the search box. Results come from the CRM system live.'],
-            ['head'=>'Step 2 — Select & enter amount','body'=>'Tap the customer to select them. Use the quick amount buttons ($40, $80, $110...) or type a custom amount. Choose payment method: Cash, Bank Transfer, or Mobile Money.'],
+            ['head'=>'Step 2 — Select & enter amount','body'=>'Tap the customer to select them. Use the quick amount buttons or type a custom amount. Choose payment method: Cash, Bank Transfer, or Mobile Money.'],
             ['head'=>'Step 3 — Confirm','body'=>'Tap "Collect Payment" and confirm. Your wallet is debited. The payment posts to UCRM automatically and UCRM sends the customer an email receipt. You can also send them a WhatsApp receipt directly from the app.'],
-            ['head'=>'Important warning','body'=>'Your wallet MUST have enough balance BEFORE you collect. If the customer pays you $110, you need $110 in your wallet. If your wallet is low, go to Recharge Wallet first.'],
+            ['head'=>'Important warning','body'=>'Your wallet MUST have enough balance BEFORE you collect. If the customer pays you an amount, you need that same amount available in your wallet. If your wallet is low, go to Recharge Wallet first.'],
          ]],
         ['id'=>'s5','icon'=>'💰','title'=>'Managing Your Wallet',
          'duration'=>'3 min','link'=>'?page=dashboard&tab=wallet',
@@ -219,7 +219,7 @@ $curriculum = [
          'duration'=>'3 min','link'=>null,
          'steps'=>[
             ['head'=>'How it works','body'=>'When Bidal completes a fiber installation and creates the service in Splynx, the system automatically creates a job for you: "Create CRM invoice for [Customer Name]."'],
-            ['head'=>'Dashboard notification','body'=>'You see it in Needs Attention: "🔧 2 fiber installs need CRM invoice $178". Tap to see customer details, plan, and amount.'],
+            ['head'=>'Dashboard notification','body'=>'You see it in Needs Attention: "🔧 2 fiber installs need CRM invoice". Tap to see customer details, plan, and amount.'],
             ['head'=>'Your action','body'=>'Go to CRM → find the customer → create the invoice manually. Then mark the job as done in the plugin. The technician later collects payment using the normal Collect Payment flow.'],
             ['head'=>'WhatsApp alerts','body'=>'You also receive a WhatsApp message with full details: customer name, phone, area, plan, and amount. So you can act even without opening the plugin.'],
          ]],
@@ -861,7 +861,7 @@ var scenariosByRole = {
     ],
     'admin': [
         {q:'A brand new DishNet office is opening. How do you set up the plugin from scratch?',
-         steps:['Go to Settings tab','Set CRM Base URL (e.g. https://crm.dishnetafrica.com/crm/api/v2.1)','Set CRM Auth Token (from UCRM: User Profile → API Token)','Set WhatsApp Webhook URL (your n8n automation endpoint)','Go to Subscription Plans tab — add all plans (Starlink $65, $80, $112, etc.)','Go to Hardware tab — add all kits (Starlink Standard, Flat, etc.)','Go to Retailers tab — create accounts for all staff (set roles correctly)','Test: create a demo KYC submission and verify it appears in CRM Sync Queue']},
+         steps:['Go to Settings tab','Set CRM Base URL (e.g. https://crm.dishnetafrica.com/crm/api/v2.1)','Set CRM Auth Token (from UCRM: User Profile → API Token)','Set WhatsApp Webhook URL (your n8n automation endpoint)','Go to Subscription Plans tab — add all plans (as priced in uCRM)','Go to Hardware tab — add all kits (Starlink Standard, Flat, etc.)','Go to Retailers tab — create accounts for all staff (set roles correctly)','Test: create a demo KYC submission and verify it appears in CRM Sync Queue']},
         {q:'Three KYC applications have been in "failed" status for 2 days.',
          steps:['Go to Sync Queue tab','Find the 3 failed jobs — read the error messages','Common errors: duplicate phone/email, invalid plan ID, CRM token expired','If token expired: go to Settings → update CRM Auth Token','If duplicate: go to All Applications → find the app → note which field has the duplicate','Fix option 1: ask the agent to submit a new KYC with corrected details','Fix option 2: manually update the application data and re-queue','Confirm wallets were refunded (check agent passbook — they should see reversal entries)']},
         {q:'An agent says they were double-charged — their wallet was debited twice for one KYC.',

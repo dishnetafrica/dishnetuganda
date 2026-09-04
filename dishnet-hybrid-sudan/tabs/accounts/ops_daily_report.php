@@ -41,7 +41,7 @@
 (function(){
 var TK='<?= $apiTok2 ?>';
 var currentReport=null;
-function money(v){return '$'+parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function money(v){return <?= json_encode(dn_cur($config)) ?> +parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function renderReport(r, container){
@@ -136,7 +136,7 @@ window.showReport = function(r){
 window.printReport = function(){
     if(!currentReport) return;
     var r=currentReport;
-    function money(v){return '$'+parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2});}
+    function money(v){return <?= json_encode(dn_cur($config)) ?> +parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2});}
     var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DishNet Daily Report '+r.date+'</title>'
         +'<style>body{font-family:Arial,sans-serif;font-size:13px;padding:32px 40px;}h2{color:#0F172A;}table{width:100%;border-collapse:collapse;margin:12px 0;}th{background:#0F172A;color:#fff;padding:6px 10px;text-align:left;}td{padding:6px 10px;border-bottom:1px solid #e5e7eb;}.sect{font-weight:700;color:#2563EB;margin:14px 0 6px;font-size:12px;text-transform:uppercase;}.total{font-size:18px;font-weight:900;color:#059669;}</style>'
         +'<scr'+'ipt>window.onload=function(){window.print();}<\/script></head><body>'
@@ -158,7 +158,7 @@ window.printReport = function(){
 window.waReport = function(){
     if(!currentReport) return;
     var r=currentReport;
-    function money(v){return '$'+parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2});}
+    function money(v){return <?= json_encode(dn_cur($config)) ?> +parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2});}
     var msg='📊 *DishNet Daily Report — '+r.date+'*\n\n'
         +'📶 *LTE* — '+((r.lte?.renewals)||0)+' renewals · '+money(r.lte?.revenue||0)+'\n'
         +'💵 *Collections* — '+((r.collections?.count)||0)+' · '+money(r.collections?.revenue||0)+'\n'

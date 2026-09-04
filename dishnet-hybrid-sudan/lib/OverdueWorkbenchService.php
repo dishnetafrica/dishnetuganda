@@ -24,6 +24,7 @@
 //   close_reason='paid'. Idempotent; no-op if no matching row.
 // ═══════════════════════════════════════════════════════════════════════════
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 if (!function_exists('str_contains'))    { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
@@ -268,7 +269,7 @@ class OverdueWorkbenchService
             'last_action_by'    => (string)($by['name'] ?? ''),
             'last_action_at'    => date('Y-m-d H:i:s'),
         ]);
-        $detail = "Promised by {$isoDate}" . ($amount !== null ? " for \$" . number_format($amount, 2) : '');
+        $detail = "Promised by {$isoDate}" . ($amount !== null ? " for " . dn_cur($this->config) . number_format($amount, 2) : '');
         if ($note) $detail .= " — {$note}";
         $this->logAction($invoiceNumber, (int)($row['client_id'] ?? 0), 'promise', $detail, $oldPromise, $isoDate, $by);
         return ['ok' => true];

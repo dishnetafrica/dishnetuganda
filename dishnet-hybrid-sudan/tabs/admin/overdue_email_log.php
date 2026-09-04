@@ -255,7 +255,7 @@ $stageLabels = [
     </div>
     <div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:16px;">
         <div style="font-size:11px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Total Chased</div>
-        <div style="font-size:28px;font-weight:900;color:#0f172a;margin-top:4px;">$<?= number_format($totalRevenue, 0) ?></div>
+        <div style="font-size:28px;font-weight:900;color:#0f172a;margin-top:4px;"><?= dn_cur($config) ?><?= number_format($totalRevenue, 0) ?></div>
     </div>
 </div>
 
@@ -313,7 +313,7 @@ $stageLabels = [
         <div style="font-size:11px;color:#94a3b8;"><?= htmlspecialchars($r['client_email']) ?></div>
     </td>
     <td style="padding:10px 14px;font-weight:700;color:#1e293b;"><?= htmlspecialchars($r['invoice_number']) ?></td>
-    <td style="padding:10px 14px;text-align:right;font-weight:700;color:#dc2626;">$<?= number_format($r['amount_due'],2) ?></td>
+    <td style="padding:10px 14px;text-align:right;font-weight:700;color:#dc2626;"><?= dn_cur($config) ?><?= number_format($r['amount_due'],2) ?></td>
     <td style="padding:10px 14px;text-align:center;">
         <span style="background:<?= $stageColors[$r['stage']] ?? '#94a3b8' ?>20;color:<?= $stageColors[$r['stage']] ?? '#94a3b8' ?>;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;">
             Stage <?= (int)$r['stage'] ?>

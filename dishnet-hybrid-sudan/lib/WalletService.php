@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 /**
  * WalletService v3.0 — Idempotent, locked, typed transactions.
@@ -96,8 +97,8 @@ class WalletService
                     $balance = (float)($r['wallet'] ?? 0);
                     if ($amount > $balance) {
                         throw new \RuntimeException(
-                            'Insufficient wallet balance. Required: $' . number_format($amount, 2) .
-                            ', Available: $' . number_format($balance, 2)
+                            'Insufficient wallet balance. Required: ' . dn_cur() . number_format($amount, 2) .
+                            ', Available: ' . dn_cur() . number_format($balance, 2)
                         );
                     }
                     $prevBalance   = $balance;

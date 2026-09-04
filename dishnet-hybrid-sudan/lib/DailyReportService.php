@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 /**
  * DailyReportService — morning cashbook summary + CSV for all projects.
@@ -164,9 +165,9 @@ class DailyReportService
             $rows .= "<tr>"
                 . "<td style='padding:10px 14px;border-bottom:1px solid #eee;font-weight:600;'>{$s['name']}</td>"
                 . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:center;'>{$s['entries']}</td>"
-                . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:right;color:#059669;font-weight:600;'>$" . number_format($s['total_in'], 2) . "</td>"
-                . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:right;color:#EF4444;font-weight:600;'>$" . number_format($s['total_out'], 2) . "</td>"
-                . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:right;color:{$nc};font-weight:700;'>$" . number_format($s['net'], 2) . "{$sspLine}</td>"
+                . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:right;color:#059669;font-weight:600;'>" . dn_cur($this->config) . number_format($s['total_in'], 2) . "</td>"
+                . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:right;color:#EF4444;font-weight:600;'>" . dn_cur($this->config) . number_format($s['total_out'], 2) . "</td>"
+                . "<td style='padding:10px 14px;border-bottom:1px solid #eee;text-align:right;color:{$nc};font-weight:700;'>" . dn_cur($this->config) . number_format($s['net'], 2) . "{$sspLine}</td>"
                 . "</tr>";
         }
 
@@ -200,9 +201,9 @@ class DailyReportService
 <tr style='background:#f8f8f8;font-weight:800;'>
 <td style='padding:12px 14px;border-top:2px solid #D41C1C;'>TOTAL</td>
 <td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:center;'>{$tEntries}</td>
-<td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:right;color:#059669;'>$" . number_format($gIn, 2) . "</td>
-<td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:right;color:#EF4444;'>$" . number_format($gOut, 2) . "</td>
-<td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:right;color:{$gnc};font-size:15px;'>$" . number_format($gNet, 2) . "</td>
+<td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:right;color:#059669;'>" . dn_cur($this->config) . number_format($gIn, 2) . "</td>
+<td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:right;color:#EF4444;'>" . dn_cur($this->config) . number_format($gOut, 2) . "</td>
+<td style='padding:12px 14px;border-top:2px solid #D41C1C;text-align:right;color:{$gnc};font-size:15px;'>" . dn_cur($this->config) . number_format($gNet, 2) . "</td>
 </tr></tbody></table></div>
 
 <div style='padding:14px 24px;background:#f8f8f8;border-top:1px solid #eee;font-size:11px;color:#999;'>

@@ -219,8 +219,8 @@ $statusText  = $mismatchCount === 0 ? '✅ All balances match' : "⚠️ {$misma
             <tr>
                 <th>ID</th>
                 <th>Staff</th>
-                <th style="text-align:right;">Ledger (USD)</th>
-                <th style="text-align:right;">JSON (USD)</th>
+                <th style="text-align:right;">Ledger (<?= dn_code($config) ?>)</th>
+                <th style="text-align:right;">JSON (<?= dn_code($config) ?>)</th>
                 <th style="text-align:right;">Delta</th>
                 <th>Status</th>
             </tr>
@@ -230,9 +230,9 @@ $statusText  = $mismatchCount === 0 ? '✅ All balances match' : "⚠️ {$misma
             <tr class="<?= $r['match'] ? '' : 'lh-diff' ?>">
                 <td><?= $r['id'] ?></td>
                 <td><?= htmlspecialchars($r['name']) ?></td>
-                <td style="text-align:right; font-family:monospace;">$<?= number_format($r['ledger'], 2) ?></td>
-                <td style="text-align:right; font-family:monospace;">$<?= number_format($r['json'], 2) ?></td>
-                <td style="text-align:right; font-family:monospace;">$<?= number_format($r['delta'], 2) ?></td>
+                <td style="text-align:right; font-family:monospace;"><?= dn_cur($config) ?><?= number_format($r['ledger'], 2) ?></td>
+                <td style="text-align:right; font-family:monospace;"><?= dn_cur($config) ?><?= number_format($r['json'], 2) ?></td>
+                <td style="text-align:right; font-family:monospace;"><?= dn_cur($config) ?><?= number_format($r['delta'], 2) ?></td>
                 <td>
                     <?php if ($r['match']): ?>
                         <span class="lh-match">✓ Match</span>
@@ -262,9 +262,9 @@ $statusText  = $mismatchCount === 0 ? '✅ All balances match' : "⚠️ {$misma
             <tr>
                 <td style="font-size:12px;"><?= $m['detected_at'] ?? '' ?></td>
                 <td><?= htmlspecialchars($m['staff_name'] ?? '') ?></td>
-                <td style="text-align:right;font-family:monospace;">$<?= number_format((float)($m['ledger'] ?? 0), 2) ?></td>
-                <td style="text-align:right;font-family:monospace;">$<?= number_format((float)($m['json'] ?? 0), 2) ?></td>
-                <td style="text-align:right;font-family:monospace;color:#dc2626;">$<?= number_format((float)($m['delta'] ?? 0), 2) ?></td>
+                <td style="text-align:right;font-family:monospace;"><?= dn_cur($config) ?><?= number_format((float)($m['ledger'] ?? 0), 2) ?></td>
+                <td style="text-align:right;font-family:monospace;"><?= dn_cur($config) ?><?= number_format((float)($m['json'] ?? 0), 2) ?></td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;"><?= dn_cur($config) ?><?= number_format((float)($m['delta'] ?? 0), 2) ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
@@ -282,7 +282,7 @@ $statusText  = $mismatchCount === 0 ? '✅ All balances match' : "⚠️ {$misma
             <tr>
                 <td style="font-family:monospace;"><?= htmlspecialchars($key) ?></td>
                 <td style="text-align:right;"><?= number_format($val['count']) ?></td>
-                <td style="text-align:right;font-family:monospace;">$<?= number_format($val['total'], 2) ?></td>
+                <td style="text-align:right;font-family:monospace;"><?= dn_cur($config) ?><?= number_format($val['total'], 2) ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>

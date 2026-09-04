@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
     }
 
     $actionOk = empty($errors);
-    $actionMsg = "✅ Reversed {$reversed} entries — \$" . number_format($revTotal, 2) . " clawed back from employee wallets.";
+    $actionMsg = "✅ Reversed {$reversed} entries — " . dn_cur($config) . number_format($revTotal, 2) . " clawed back from employee wallets.";
     if (!empty($errors)) {
         $actionMsg .= " ⚠️ " . count($errors) . " failed: " . implode('; ', array_slice($errors, 0, 3));
     }
@@ -163,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
 
 <?php if (isset($_GET['done'])): ?>
 <div class="cc-ok">
-    ✅ Reversed <?php echo (int)$_GET['done']; ?> commission entries — $<?php echo number_format((float)($_GET['amt'] ?? 0), 2); ?> clawed back. Wallet balances updated.
+    ✅ Reversed <?php echo (int)$_GET['done']; ?> commission entries — <?= dn_cur($config) ?><?php echo number_format((float)($_GET['amt'] ?? 0), 2); ?> clawed back. Wallet balances updated.
 </div>
 <?php endif; ?>
 
@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
 <!-- ── Summary Cards ───────────────────────────────────── -->
 <div class="cc-cards">
     <div class="cc-card red">
-        <div class="cc-card-v" style="color:#dc2626;">$<?php echo number_format($totalWrongComm, 2); ?></div>
+        <div class="cc-card-v" style="color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format($totalWrongComm, 2); ?></div>
         <div class="cc-card-l">Wrong Commission</div>
     </div>
     <div class="cc-card amber">
@@ -196,16 +196,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
     <span style="font-size:24px;">✅</span><br>
     <strong style="font-size:14px;">All clean — no unreversed employee commissions found.</strong>
     <?php if ($alreadyReversed > 0): ?>
-    <br><span style="font-size:11px;color:#64748b;"><?php echo $alreadyReversed; ?> entries were previously reversed ($<?php echo number_format($alreadyReversedAmt, 2); ?>).</span>
+    <br><span style="font-size:11px;color:#64748b;"><?php echo $alreadyReversed; ?> entries were previously reversed (<?= dn_cur($config) ?><?php echo number_format($alreadyReversedAmt, 2); ?>).</span>
     <?php endif; ?>
 </div>
 <?php else: ?>
 
 <!-- ── Reverse All Button ──────────────────────────────── -->
-<form method="POST" style="margin:14px 0;" onsubmit="return confirm('This will DEBIT $<?php echo number_format($totalWrongComm, 2); ?> back from <?php echo count($empSummary); ?> employee wallets (<?php echo count($empCommissions); ?> entries).\n\nThis is safe — uses idempotent reversal, cannot double-debit.\n\nWallet balances will decrease.\n\nContinue?');">
+<form method="POST" style="margin:14px 0;" onsubmit="return confirm('This will DEBIT <?= dn_cur($config) ?><?php echo number_format($totalWrongComm, 2); ?> back from <?php echo count($empSummary); ?> employee wallets (<?php echo count($empCommissions); ?> entries).\n\nThis is safe — uses idempotent reversal, cannot double-debit.\n\nWallet balances will decrease.\n\nContinue?');">
     <?php echo csrfField(); ?>
     <input type="hidden" name="cc_action" value="reverse_all">
-    <button type="submit" class="cc-btn">🔄 Reverse All <?php echo count($empCommissions); ?> Commission Credits — $<?php echo number_format($totalWrongComm, 2); ?></button>
+    <button type="submit" class="cc-btn">🔄 Reverse All <?php echo count($empCommissions); ?> Commission Credits — <?= dn_cur($config) ?><?php echo number_format($totalWrongComm, 2); ?></button>
 </form>
 
 <!-- ── Per-Employee Summary ─────────────────────────────── -->
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
 <tr>
     <td style="font-weight:700;"><?php echo htmlspecialchars($es['name']); ?></td>
     <td style="text-align:center;"><?php echo $es['count']; ?></td>
-    <td style="text-align:right;font-weight:700;color:#dc2626;">$<?php echo number_format($es['total'], 2); ?></td>
+    <td style="text-align:right;font-weight:700;color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format($es['total'], 2); ?></td>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
 <tr>
     <td>TOTAL</td>
     <td style="text-align:center;"><?php echo count($empCommissions); ?></td>
-    <td style="text-align:right;color:#dc2626;">$<?php echo number_format($totalWrongComm, 2); ?></td>
+    <td style="text-align:right;color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format($totalWrongComm, 2); ?></td>
 </tr>
 </tfoot>
 </table>
@@ -245,10 +245,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['cc_action'] ?? '') === 're
     <td style="font-size:11px;white-space:nowrap;"><?php echo substr($p['created_at'] ?? '', 0, 10); ?></td>
     <td style="font-weight:600;"><?php echo htmlspecialchars($staffNames[(int)($p['retailer_id'] ?? 0)] ?? 'Unknown'); ?></td>
     <td style="font-size:11px;color:#64748b;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars($p['description'] ?? ''); ?></td>
-    <td style="text-align:right;font-weight:700;color:#dc2626;">$<?php echo number_format((float)($p['amount'] ?? 0), 2); ?></td>
+    <td style="text-align:right;font-weight:700;color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format((float)($p['amount'] ?? 0), 2); ?></td>
     <td style="font-family:monospace;font-size:9px;color:#94a3b8;"><?php echo htmlspecialchars(substr($trxNo, 0, 20)); ?></td>
     <td>
-        <form method="POST" style="margin:0;display:inline;" onsubmit="return confirm('Reverse this $<?php echo number_format((float)($p['amount'] ?? 0), 2); ?> commission?');">
+        <form method="POST" style="margin:0;display:inline;" onsubmit="return confirm('Reverse this <?= dn_cur($config) ?><?php echo number_format((float)($p['amount'] ?? 0), 2); ?> commission?');">
             <?php echo csrfField(); ?>
             <input type="hidden" name="cc_action" value="reverse_one">
             <input type="hidden" name="trx_no" value="<?php echo htmlspecialchars($trxNo); ?>">

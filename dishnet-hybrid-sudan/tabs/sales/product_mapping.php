@@ -172,7 +172,7 @@ function buildTable(title, items) {
       ? '<span class="pm-id">#' + item.ucrm_product_id + '</span>'
       : '<span class="pm-none">— not mapped</span>';
     var price = (item.customer_price || item.amount || item.price)
-      ? '<span class="pm-price">$' + parseFloat(item.customer_price || item.amount || item.price || 0).toFixed(2) + '</span>'
+      ? '<span class="pm-price">' + <?= json_encode(dn_cur($config)) ?> + parseFloat(item.customer_price || item.amount || item.price || 0).toFixed(2) + '</span>'
       : '<span class="pm-none">—</span>';
     var active = (item.is_active !== undefined)
       ? (item.is_active ? '<span style="color:#16a34a;">●</span>' : '<span style="color:#94a3b8;">●</span>')
@@ -187,7 +187,7 @@ function buildUcrmTable(products) {
   if (!products || !products.length) return '';
   var rows = products.slice(0, 30).map(function(p) {
     return '<tr><td><span class="pm-id">#' + p.id + '</span></td><td>' + (p.name || '—') + '</td>'
-      + '<td><span class="pm-price">$' + parseFloat(p.price || 0).toFixed(2) + '</span></td>'
+      + '<td><span class="pm-price">' + <?= json_encode(dn_cur($config)) ?> + parseFloat(p.price || 0).toFixed(2) + '</span></td>'
       + '<td>' + (p.unit || '—') + '</td></tr>';
   }).join('');
   return '<div class="pm-card"><div class="pm-card-hd"><h3>📦 UCRM Products (live)</h3>'
@@ -213,7 +213,7 @@ function pushProducts(dryRun) {
           log('\n[' + k + ']');
           (cat.items || []).forEach(function(i) {
             var r = i.result || {};
-            log('  ' + i.name + ' ($' + i.price + ') → ' + (r.dry_run ? 'would create' : (r.id ? 'ID #' + r.id : 'FAILED: ' + JSON.stringify(r.error))));
+            log('  ' + i.name + ' (' + <?= json_encode(dn_cur($config)) ?> + i.price + ') → ' + (r.dry_run ? 'would create' : (r.id ? 'ID #' + r.id : 'FAILED: ' + JSON.stringify(r.error))));
           });
         }
       });

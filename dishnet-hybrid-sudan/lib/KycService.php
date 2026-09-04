@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 /**
  * KycService
@@ -131,8 +132,8 @@ class KycService
                 $bal = $this->wallet->getBalance($retailer['id']);
                 return [
                     'success' => false,
-                    'message' => "Insufficient wallet balance. Required: \$" . number_format($checkAmount, 2) .
-                                 ", Available: \$" . number_format($bal, 2) . ".",
+                    'message' => "Insufficient wallet balance. Required: " . dn_cur() . number_format($checkAmount, 2) .
+                                 ", Available: " . dn_cur() . number_format($bal, 2) . ".",
                 ];
             }
         }
@@ -359,7 +360,7 @@ class KycService
             : "Application saved. Please notify admin to create the service manually.";
 
         if ($walletDebited) {
-            $successMsg .= " Wallet debited \$" . number_format($checkAmount, 2) . ".";
+            $successMsg .= " Wallet debited " . dn_cur() . number_format($checkAmount, 2) . ".";
         }
 
         return [
@@ -567,8 +568,8 @@ class KycService
             $bal = $this->wallet->getBalance($retailer['id']);
             return [
                 'success' => false,
-                'message' => "Insufficient wallet balance. Required: $" . number_format($checkAmount, 2) .
-                             ", Available: $" . number_format($bal, 2),
+                'message' => "Insufficient wallet balance. Required: " . dn_cur() . number_format($checkAmount, 2) .
+                             ", Available: " . dn_cur() . number_format($bal, 2),
             ];
         }
 

@@ -144,10 +144,10 @@ try {
     <div class="cd-bal">
         <div class="cd-bal-box" style="background:#fff;border:1px solid #e2e8f0;">
             <div class="cd-label">💵 USD</div>
-            <div style="font-size:11px;color:#6b7280;">Expected: $<?= number_format((float)$todayDecl['expected_usd'], 2) ?></div>
-            <div style="font-size:11px;color:#6b7280;">Declared: $<?= number_format((float)$todayDecl['declared_usd'], 2) ?></div>
+            <div style="font-size:11px;color:#6b7280;">Expected: <?= dn_cur($config) ?><?= number_format((float)$todayDecl['expected_usd'], 2) ?></div>
+            <div style="font-size:11px;color:#6b7280;">Declared: <?= dn_cur($config) ?><?= number_format((float)$todayDecl['declared_usd'], 2) ?></div>
             <?php if (abs((float)$todayDecl['diff_usd']) > 0.01): ?>
-            <div style="font-size:13px;font-weight:800;color:<?= (float)$todayDecl['diff_usd'] < 0 ? '#991b1b' : '#15803d' ?>;"><?= (float)$todayDecl['diff_usd'] >= 0 ? '+' : '' ?>$<?= number_format((float)$todayDecl['diff_usd'], 2) ?></div>
+            <div style="font-size:13px;font-weight:800;color:<?= (float)$todayDecl['diff_usd'] < 0 ? '#991b1b' : '#15803d' ?>;"><?= (float)$todayDecl['diff_usd'] >= 0 ? '+' : '' ?><?= dn_cur($config) ?><?= number_format((float)$todayDecl['diff_usd'], 2) ?></div>
             <?php else: ?>
             <div style="font-size:13px;font-weight:800;color:#15803d;">✓ Match</div>
             <?php endif; ?>
@@ -176,7 +176,7 @@ try {
     <div class="cd-bal">
         <div class="cd-bal-box" style="background:#f0fdf4;">
             <div class="cd-label">💵 Expected USD</div>
-            <div style="font-size:22px;font-weight:900;color:#15803d;">$<?= number_format((float)$pos['cash_in_hand'], 2) ?></div>
+            <div style="font-size:22px;font-weight:900;color:#15803d;"><?= dn_cur($config) ?><?= number_format((float)$pos['cash_in_hand'], 2) ?></div>
         </div>
         <div class="cd-bal-box" style="background:#eff6ff;">
             <div class="cd-label">🇸🇸 Expected SSP</div>
@@ -228,7 +228,7 @@ try {
         <div>
             <div style="font-size:12px;font-weight:700;color:#1e293b;"><?= h($d['declaration_date']) ?></div>
             <div style="font-size:10px;color:#6b7280;">
-                USD: $<?= number_format((float)$d['declared_usd'], 2) ?>
+                USD: <?= dn_cur($config) ?><?= number_format((float)$d['declared_usd'], 2) ?>
                 <?php if (abs((float)$d['diff_usd']) > 0.01): ?>
                 <span style="color:<?= (float)$d['diff_usd'] < 0 ? '#991b1b' : '#15803d' ?>;">(<?= (float)$d['diff_usd'] >= 0 ? '+' : '' ?><?= number_format((float)$d['diff_usd'], 2) ?>)</span>
                 <?php endif; ?>

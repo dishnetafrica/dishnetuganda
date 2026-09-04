@@ -293,13 +293,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='sync_org7_w
     if ($mode === 'apply') {
         flash(
             "Sync applied — <strong>{$updated}</strong> retailers updated. " .
-            "<strong>{$debtors}</strong> have outstanding debt totalling <strong>\$" . number_format($totalOwed, 2) . "</strong>.",
+            "<strong>{$debtors}</strong> have outstanding debt totalling <strong>" . dn_cur($config) . number_format($totalOwed, 2) . "</strong>.",
             $debtors > 0 ? 'warning' : 'success'
         );
     } else {
         flash(
             "Preview ready — <strong>{$changed}</strong> retailer(s) will change. " .
-            "<strong>{$debtors}</strong> owe a total of <strong>\$" . number_format($totalOwed, 2) . "</strong>. " .
+            "<strong>{$debtors}</strong> owe a total of <strong>" . dn_cur($config) . number_format($totalOwed, 2) . "</strong>. " .
             "Review below then click <strong>Apply</strong>.",
             $debtors > 0 ? 'warning' : 'success'
         );
@@ -589,7 +589,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_install_f
     $cfg['fiber_install_fee']        = max(0, (float)($_POST['fiber_install_fee'] ?? 100));
     $cfg['fiber_install_product_id'] = max(0, (int)($_POST['fiber_install_product_id'] ?? 244));
     $store->save('kyc_config.json', $cfg);
-    flash('✅ Fiber installation fee updated to $' . number_format($cfg['fiber_install_fee'], 2) . ' (UCRM Product #' . $cfg['fiber_install_product_id'] . ').', 'success');
+    flash('✅ Fiber installation fee updated to ' . dn_cur($config) . number_format($cfg['fiber_install_fee'], 2) . ' (UCRM Product #' . $cfg['fiber_install_product_id'] . ').', 'success');
     redirect('?page=dashboard&tab=hardware');
 }
 if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_plan'){

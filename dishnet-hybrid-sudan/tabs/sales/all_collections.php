@@ -21,8 +21,8 @@
     ?>
 
 <div class="stat-grid">
-    <div class="stat-card teal"><div class="stat-label"><?= ($colFDate||$colTDate||$colSearch||$colAgent)?'Filtered Total':'All-Time Total' ?></div><div class="stat-value">$<?= number_format($filteredTotal, 2) ?></div></div>
-    <div class="stat-card green"><div class="stat-label">Today</div><div class="stat-value">$<?= number_format($todayColTotal, 2) ?></div></div>
+    <div class="stat-card teal"><div class="stat-label"><?= ($colFDate||$colTDate||$colSearch||$colAgent)?'Filtered Total':'All-Time Total' ?></div><div class="stat-value"><?= dn_cur($config) ?><?= number_format($filteredTotal, 2) ?></div></div>
+    <div class="stat-card green"><div class="stat-label">Today</div><div class="stat-value"><?= dn_cur($config) ?><?= number_format($todayColTotal, 2) ?></div></div>
     <div class="stat-card blue"><div class="stat-label">CRM Synced</div><div class="stat-value"><?= $syncedCount ?>/<?= count($allCols) ?></div></div>
 </div>
 <?php $pendingCount = count($allCols) - $syncedCount; if ($pendingCount > 0 && $isAdmin): ?>
@@ -121,7 +121,7 @@
                 </td>
                 <td data-label="Customer" style="font-weight:700;"><?= h($col['customer_name']??'') ?></td>
                 <td data-label="CRM ID" style="font-size:12px;"><?= h($col['crm_customer_id']??'-') ?></td>
-                <td data-label="Amount" style="text-align:right;font-weight:800;color:#28a745;">$<?= number_format($col['amount']??0, 2) ?></td>
+                <td data-label="Amount" style="text-align:right;font-weight:800;color:#28a745;"><?= dn_cur($config) ?><?= number_format($col['amount']??0, 2) ?></td>
                 <td style="font-size:12px;"><?= h($col['method']??'Cash') ?><?php if($_colEdited): ?> <span title="Edited by <?= h($col['edited_by']??'') ?> at <?= h($col['edited_at']??'') ?>. <?= h($col['edit_note']??'') ?>" style="color:#f59e0b;font-size:10px;cursor:help;">✏️</span><?php endif; ?></td>
                 <td style="font-size:12px;color:#6b7280;max-width:150px;overflow:hidden;text-overflow:ellipsis;">
                     <?php if($_colKyc && !empty($col['kyc_app_id'])): ?>
@@ -203,7 +203,7 @@
         </select>
       </div>
       <div style="margin-bottom:14px;">
-        <label style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Amount (USD)</label>
+        <label style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Amount (<?= dn_code($config) ?>)</label>
         <input type="number" name="amount" id="editColAmount" step="0.01" min="0.01" required style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:700;box-sizing:border-box;">
       </div>
       <div style="margin-bottom:20px;">

@@ -133,7 +133,7 @@ usort($_fsClients, function($a, $b) {
             <div class="fs-kpi-lbl">Active</div>
         </div>
         <div class="fs-kpi">
-            <div class="fs-kpi-val" style="color:#ef4444;">$<?= number_format($_fsTotalDue, 0) ?></div>
+            <div class="fs-kpi-val" style="color:#ef4444;"><?= dn_cur($config) ?><?= number_format($_fsTotalDue, 0) ?></div>
             <div class="fs-kpi-lbl">Total Due</div>
         </div>
         <div class="fs-kpi">
@@ -174,7 +174,7 @@ usort($_fsClients, function($a, $b) {
                 <td style="font-size:11px;">#<?= $fc['crm_id'] ?></td>
                 <td><span class="fs-badge <?= $fc['is_active'] ? 'fs-badge-active' : 'fs-badge-inactive' ?>"><?= $fc['is_active'] ? 'Active' : 'Inactive' ?></span></td>
                 <td style="font-size:11px;"><?= $fc['invoice_count'] ?> inv<?= $fc['unpaid_count'] > 0 ? " ({$fc['unpaid_count']} unpaid)" : '' ?></td>
-                <td style="font-weight:700;color:<?= $fc['total_due'] > 0 ? '#dc2626' : '#10b981' ?>;"><?= $fc['total_due'] > 0 ? '$'.number_format($fc['total_due'], 0) : '—' ?></td>
+                <td style="font-weight:700;color:<?= $fc['total_due'] > 0 ? '#dc2626' : '#10b981' ?>;"><?= $fc['total_due'] > 0 ? dn_cur($config) . number_format($fc['total_due'], 0) : '—' ?></td>
             </tr>
             <?php endforeach; ?>
         </table>
@@ -183,7 +183,7 @@ usort($_fsClients, function($a, $b) {
 
     <?php if ($_fsTotalDue > 0): ?>
     <div style="margin-top:10px;padding:10px 14px;background:#fef2f2;border-radius:10px;border:1px solid #fecaca;">
-        <span style="font-size:13px;font-weight:800;color:#991b1b;">💰 Revenue at Risk: $<?= number_format($_fsTotalDue, 2) ?></span>
+        <span style="font-size:13px;font-weight:800;color:#991b1b;">💰 Revenue at Risk: <?= dn_cur($config) ?><?= number_format($_fsTotalDue, 2) ?></span>
         <span style="font-size:11px;color:#dc2626;margin-left:8px;">(<?= $_fsCounts['invoiced_unpaid'] ?> clients with unpaid invoices)</span>
     </div>
     <?php endif; ?>

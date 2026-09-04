@@ -132,7 +132,7 @@ function qTypeBadge(string $t): string {
           <td><?= qTypeBadge($q['type'] ?? '') ?></td>
           <td style="font-weight:600;"><?= htmlspecialchars($q['customer_name'] ?? '—') ?></td>
           <td style="color:#6b7280;"><?= htmlspecialchars($q['customer_phone'] ?? '—') ?></td>
-          <td style="font-weight:700;color:#059669;">$<?= number_format((float)($q['total'] ?? 0), 2) ?></td>
+          <td style="font-weight:700;color:#059669;"><?= dn_cur($config) ?><?= number_format((float)($q['total'] ?? 0), 2) ?></td>
           <td>
             <span title="WhatsApp" style="margin-right:4px;font-size:1rem;"><?= $waSent  ? '✅' : '❌' ?> WA</span>
             <span title="UCRM email"><?= $crmSent ? '✅' : '➖' ?> CRM</span>

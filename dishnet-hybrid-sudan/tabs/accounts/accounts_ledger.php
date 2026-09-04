@@ -170,10 +170,10 @@ $_crmDetailCache = [];
 <!-- Retailer Hero — only shown on Statement tab -->
 <div class="ldg-hero" style="background:linear-gradient(145deg,#1565C0,#1E88E5);">
     <div style="font-size:11px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;"><?= h($selR['name']) ?> &mdash; <?= date('F Y', strtotime($ledgerMonth.'-01')) ?></div>
-    <div style="font-size:24px;font-weight:800;margin-top:4px;">Wallet: $<?= number_format($rBalance,2) ?></div>
+    <div style="font-size:24px;font-weight:800;margin-top:4px;">Wallet: <?= dn_cur($config) ?><?= number_format($rBalance,2) ?></div>
     <div class="ldg-grid">
-        <div class="ldg-pill"><div class="ldg-pill-l">Month Collected</div><div class="ldg-pill-v">$<?= number_format($mCollTotal,2) ?></div></div>
-        <div class="ldg-pill"><div class="ldg-pill-l">Commission Earned</div><div class="ldg-pill-v" style="color:#ffab40;">$<?= number_format($mCommTotal,2) ?></div></div>
+        <div class="ldg-pill"><div class="ldg-pill-l">Month Collected</div><div class="ldg-pill-v"><?= dn_cur($config) ?><?= number_format($mCollTotal,2) ?></div></div>
+        <div class="ldg-pill"><div class="ldg-pill-l">Commission Earned</div><div class="ldg-pill-v" style="color:#ffab40;"><?= dn_cur($config) ?><?= number_format($mCommTotal,2) ?></div></div>
         <div class="ldg-pill"><div class="ldg-pill-l">Customers This Month</div><div class="ldg-pill-v" style="color:#69f0ae;"><?= $_mRegistered ?></div></div>
         <div class="ldg-pill"><div class="ldg-pill-l">Total Registered</div><div class="ldg-pill-v" style="color:#b2ebf2;"><?= $_totalRegistered ?></div></div>
     </div>
@@ -184,30 +184,30 @@ $_crmDetailCache = [];
 <!-- Account Summary Card -->
 <div class="ldg-card">
     <div style="font-size:13px;font-weight:800;color:#1e293b;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-calculator" style="color:#D41C1C;"></i> Account Summary (All Time)</div>
-    <div class="ldg-row"><span>Total Wallet Recharged</span><strong style="color:#28a745;">$<?= number_format($totalRecharged,2) ?></strong></div>
-    <div class="ldg-row"><span>Total Cash Collected</span><strong style="color:#D41C1C;">$<?= number_format($totalCollected,2) ?></strong></div>
-    <div class="ldg-row"><span>Total Commission Earned</span><strong style="color:#E65100;">$<?= number_format($totalCommission,2) ?></strong></div>
-    <div class="ldg-row"><span>Net Payable to DishNet</span><strong style="color:#dc3545;">$<?= number_format($netPayable,2) ?></strong></div>
-    <div class="ldg-row" style="border-top:2px solid #e2e8f0;padding-top:10px;"><span style="font-weight:700;">Current Wallet Balance</span><strong style="color:#D41C1C;font-size:16px;">$<?= number_format($rBalance,2) ?></strong></div>
-    <div class="ldg-row"><span>Cash-in-Hand Estimate</span><strong style="color:#6A1B9A;">$<?= number_format(max(0, $totalCollected - $totalRecharged),2) ?></strong></div>
+    <div class="ldg-row"><span>Total Wallet Recharged</span><strong style="color:#28a745;"><?= dn_cur($config) ?><?= number_format($totalRecharged,2) ?></strong></div>
+    <div class="ldg-row"><span>Total Cash Collected</span><strong style="color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($totalCollected,2) ?></strong></div>
+    <div class="ldg-row"><span>Total Commission Earned</span><strong style="color:#E65100;"><?= dn_cur($config) ?><?= number_format($totalCommission,2) ?></strong></div>
+    <div class="ldg-row"><span>Net Payable to DishNet</span><strong style="color:#dc3545;"><?= dn_cur($config) ?><?= number_format($netPayable,2) ?></strong></div>
+    <div class="ldg-row" style="border-top:2px solid #e2e8f0;padding-top:10px;"><span style="font-weight:700;">Current Wallet Balance</span><strong style="color:#D41C1C;font-size:16px;"><?= dn_cur($config) ?><?= number_format($rBalance,2) ?></strong></div>
+    <div class="ldg-row"><span>Cash-in-Hand Estimate</span><strong style="color:#6A1B9A;"><?= dn_cur($config) ?><?= number_format(max(0, $totalCollected - $totalRecharged),2) ?></strong></div>
 </div>
 
 <!-- Monthly Cash Flow Card -->
 <div class="ldg-card">
     <div style="font-size:13px;font-weight:800;color:#1e293b;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-arrow-left-right" style="color:#28a745;"></i> Cash Flow — <?= date('F Y', strtotime($ledgerMonth.'-01')) ?></div>
-    <div class="ldg-row"><span style="color:#28a745;">&#8593; Wallet Recharged</span><strong style="color:#28a745;">$<?= number_format($mRecharged,2) ?></strong></div>
-    <div class="ldg-row"><span style="color:#D41C1C;">&#8593; Commission Credited</span><strong style="color:#D41C1C;">$<?= number_format($mCommTotal,2) ?></strong></div>
-    <div class="ldg-row"><span style="color:#dc3545;">&#8595; Collections Debited</span><strong style="color:#dc3545;">$<?= number_format($mCollTotal,2) ?></strong></div>
+    <div class="ldg-row"><span style="color:#28a745;">&#8593; Wallet Recharged</span><strong style="color:#28a745;"><?= dn_cur($config) ?><?= number_format($mRecharged,2) ?></strong></div>
+    <div class="ldg-row"><span style="color:#D41C1C;">&#8593; Commission Credited</span><strong style="color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($mCommTotal,2) ?></strong></div>
+    <div class="ldg-row"><span style="color:#dc3545;">&#8595; Collections Debited</span><strong style="color:#dc3545;"><?= dn_cur($config) ?><?= number_format($mCollTotal,2) ?></strong></div>
     <?php
     $mKycDebits = array_sum(array_map(fn($p)=>(($p['trx_type']??'')==='order_payment'&&($p['entry_type']??'')==='debit')?($p['amount']??0):0, $mPassbook));
     $mSimDebits = array_sum(array_map(fn($p)=>(($p['trx_type']??'')==='sim_activation')?($p['amount']??0):0, $mPassbook));
     ?>
-    <?php if($mKycDebits>0): ?><div class="ldg-row"><span style="color:#9C27B0;">&#8595; KYC Payments</span><strong style="color:#9C27B0;">$<?= number_format($mKycDebits,2) ?></strong></div><?php endif; ?>
+    <?php if($mKycDebits>0): ?><div class="ldg-row"><span style="color:#9C27B0;">&#8595; KYC Payments</span><strong style="color:#9C27B0;"><?= dn_cur($config) ?><?= number_format($mKycDebits,2) ?></strong></div><?php endif; ?>
     <?php /* SIM Activations ledger line hidden */ ?>
     <div class="ldg-row" style="border-top:2px solid #e2e8f0;padding-top:10px;">
         <span style="font-weight:700;">Net Cash Flow</span>
         <?php $netFlow = $mRecharged + $mCommTotal - $mCollTotal - $mKycDebits - $mSimDebits; ?>
-        <strong style="color:<?= $netFlow>=0?'#28a745':'#dc3545' ?>;font-size:15px;"><?= $netFlow>=0?'+':'' ?>$<?= number_format($netFlow,2) ?></strong>
+        <strong style="color:<?= $netFlow>=0?'#28a745':'#dc3545' ?>;font-size:15px;"><?= $netFlow>=0?'+':'' ?><?= dn_cur($config) ?><?= number_format($netFlow,2) ?></strong>
     </div>
 </div>
 
@@ -263,18 +263,18 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
         <span style="font-weight:600;color:#1e293b;"><?= h($pe['description']??'Transaction') ?></span>
     </td>
     <td style="padding:8px 12px;font-family:monospace;font-size:10px;color:#9ca3af;"><?= h($pe['trx_no']??'') ?></td>
-    <td style="padding:8px 10px;text-align:right;font-weight:800;color:#16a34a;"><?= $pIsCredit ? '+$'.number_format($pe['amount']??0,2) : '' ?></td>
-    <td style="padding:8px 10px;text-align:right;font-weight:800;color:#dc3545;"><?= !$pIsCredit ? '-$'.number_format($pe['amount']??0,2) : '' ?></td>
-    <td style="padding:8px 10px;text-align:right;font-weight:800;color:<?= $pBal >= 0 ? '#1565C0' : '#dc3545' ?>;">$<?= number_format($pBal,2) ?></td>
+    <td style="padding:8px 10px;text-align:right;font-weight:800;color:#16a34a;"><?= $pIsCredit ? '+' . dn_cur($config) . number_format($pe['amount']??0,2) : '' ?></td>
+    <td style="padding:8px 10px;text-align:right;font-weight:800;color:#dc3545;"><?= !$pIsCredit ? '-' . dn_cur($config) . number_format($pe['amount']??0,2) : '' ?></td>
+    <td style="padding:8px 10px;text-align:right;font-weight:800;color:<?= $pBal >= 0 ? '#1565C0' : '#dc3545' ?>;"><?= dn_cur($config) ?><?= number_format($pBal,2) ?></td>
 </tr>
 <?php endforeach; ?>
 </tbody>
 <tfoot>
 <tr style="background:#f8fafc;border-top:2px solid #e2e8f0;font-weight:800;">
     <td colspan="3" style="padding:9px 12px;font-size:12px;color:#374151;">Period Totals (<?= count($pbRows) ?> entries)</td>
-    <td style="padding:9px 10px;text-align:right;color:#16a34a;">+$<?= number_format($pbCredit,2) ?></td>
-    <td style="padding:9px 10px;text-align:right;color:#dc3545;">-$<?= number_format($pbDebit,2) ?></td>
-    <td style="padding:9px 10px;text-align:right;color:#D41C1C;">$<?= number_format($rBalance,2) ?></td>
+    <td style="padding:9px 10px;text-align:right;color:#16a34a;">+<?= dn_cur($config) ?><?= number_format($pbCredit,2) ?></td>
+    <td style="padding:9px 10px;text-align:right;color:#dc3545;">-<?= dn_cur($config) ?><?= number_format($pbDebit,2) ?></td>
+    <td style="padding:9px 10px;text-align:right;color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($rBalance,2) ?></td>
 </tr>
 </tfoot>
 </table>
@@ -378,7 +378,7 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
     <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;">Pending Sync</div>
   </div>
   <div style="background:linear-gradient(135deg,#1B5E20,#388E3C);color:#fff;border-radius:12px;padding:14px;text-align:center;">
-    <div style="font-size:28px;font-weight:800;">$<?= number_format($_totalCharged, 0) ?></div>
+    <div style="font-size:28px;font-weight:800;"><?= dn_cur($config) ?><?= number_format($_totalCharged, 0) ?></div>
     <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;">Revenue Collected</div>
   </div>
 </div>
@@ -436,7 +436,7 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
     </div>
     <div style="text-align:right;flex-shrink:0;">
       <?php if ($_ucBal != 0): ?>
-      <div style="font-size:11px;font-weight:800;color:<?= $_ucBal<0?'#c0392b':'#2E7D32' ?>;">$<?= number_format(abs($_ucBal),2) ?></div>
+      <div style="font-size:11px;font-weight:800;color:<?= $_ucBal<0?'#c0392b':'#2E7D32' ?>;"><?= dn_cur($config) ?><?= number_format(abs($_ucBal),2) ?></div>
       <?php endif; ?>
       <a href="<?= h($_crmBase2) ?>/crm/client/<?= $_uc['id'] ?>" target="_blank" style="font-size:10px;color:#6A1B9A;font-weight:700;text-decoration:none;">#<?= $_uc['id'] ?> ↗</a>
     </div>
@@ -478,7 +478,7 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
       </td>
       <td style="padding:7px 8px;text-align:center;color:#2E7D32;font-weight:700;"><?= $mdata['active'] ?></td>
       <td style="padding:7px 8px;text-align:center;color:<?= $mdata['pending']>0?'#E65100':'#9ca3af' ?>;font-weight:700;"><?= $mdata['pending'] ?: '—' ?></td>
-      <td style="padding:7px 12px;text-align:right;font-weight:700;color:#1B5E20;">$<?= number_format($mdata['charged'],0) ?></td>
+      <td style="padding:7px 12px;text-align:right;font-weight:700;color:#1B5E20;"><?= dn_cur($config) ?><?= number_format($mdata['charged'],0) ?></td>
       <td style="padding:7px 8px;text-align:center;">
         <a href="<?= $_pageUrl ?>&cm=<?= urlencode($mo) ?>"
            style="font-size:10px;color:#D41C1C;font-weight:700;text-decoration:none;padding:2px 6px;background:#EFF6FF;border-radius:6px;">
@@ -602,14 +602,14 @@ $pbCredit= array_sum(array_map(fn($p)=>strtolower($p['entry_type']??'debit')==='
       <div class="crmc-meta" style="margin-top:3px;">
         <?php if ($_pkg): ?>📦 <?= h($_pkg) ?><?php endif; ?>
         <?php if ($_ref): ?> &middot; 📣 <?= h($_ref) ?><?php endif; ?>
-        <?php if ($_charged > 0): ?> &middot; 💵 $<?= number_format($_charged, 2) ?> charged<?php endif; ?>
+        <?php if ($_charged > 0): ?> &middot; 💵 <?= dn_cur($config) ?><?= number_format($_charged, 2) ?> charged<?php endif; ?>
       </div>
     </div>
     <!-- Right: CRM link + balance -->
     <div style="text-align:right;flex-shrink:0;min-width:70px;">
       <?php if ($_crmBal !== null): ?>
       <div style="font-size:12px;font-weight:800;color:<?= $_crmBal < 0 ?'#c0392b':'#2E7D32' ?>;">
-        $<?= number_format(abs($_crmBal), 2) ?>
+        <?= dn_cur($config) ?><?= number_format(abs($_crmBal), 2) ?>
         <div style="font-size:9px;color:#9ca3af;"><?= $_crmBal < 0 ? 'owes' : 'balance' ?></div>
       </div>
       <?php endif; ?>

@@ -274,7 +274,7 @@ $_crmBase = preg_replace('#/api/v[0-9.]+$#', '', $_crmBase);
             <?php if ($fjPhone): ?><span>📞 <?= h($fjPhone) ?></span><?php endif; ?>
             <span>📍 <?= h($fjArea) ?></span>
             <span>📶 <?= h($fjPlan) ?></span>
-            <span style="font-weight:700;color:#059669;">💵 $<?= number_format($fjAmt, 2) ?></span>
+            <span style="font-weight:700;color:#059669;">💵 <?= dn_cur($config) ?><?= number_format($fjAmt, 2) ?></span>
             <span>🕐 <?= $fjCreated ?></span>
           </div>
         </div>

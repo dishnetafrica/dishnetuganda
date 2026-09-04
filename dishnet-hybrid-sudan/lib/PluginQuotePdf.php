@@ -5,6 +5,8 @@
  * PHP 7.4 compatible.
  */
 
+require_once __DIR__ . '/currency.php';
+
 if (!function_exists('str_contains')) {
     function str_contains(string $h, string $n): bool { return $n === '' || strpos($h, $n) !== false; }
 }
@@ -52,8 +54,8 @@ class PluginQuotePdf
             $qty   = $item['quantity'] ?? 1;
             $unit  = $item['unit'] ?? '';
             $type  = $item['type'] ?? '';
-            $price = '$' . number_format((float)($item['price'] ?? 0), 2);
-            $total = '$' . number_format((float)($item['total'] ?? ((float)($item['quantity'] ?? 1) * (float)($item['price'] ?? 0))), 2);
+            $price = dn_cur($this->config) . number_format((float)($item['price'] ?? 0), 2);
+            $total = dn_cur($this->config) . number_format((float)($item['total'] ?? ((float)($item['quantity'] ?? 1) * (float)($item['price'] ?? 0))), 2);
 
             $unitLine = '';
             if ($unit) {
@@ -145,16 +147,16 @@ class PluginQuotePdf
 
         // ── Totals rows ──
         $totalsHtml = '<tr><td style="padding:6px 14px;font-size:11px;color:#6B6B6B;border-bottom:1px solid #eee;">Subtotal</td>'
-            . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">$' . number_format($subtotal, 2) . '</td></tr>';
+            . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">' . dn_cur($this->config) . number_format($subtotal, 2) . '</td></tr>';
 
         if (abs($total - $subtotal) > 0.01 && $total < $subtotal) {
             $discount = $subtotal - $total;
             $totalsHtml .= '<tr><td style="padding:6px 14px;font-size:11px;color:#059669;border-bottom:1px solid #eee;">Discount</td>'
-                . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">-$' . number_format($discount, 2) . '</td></tr>';
+                . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">-' . dn_cur($this->config) . number_format($discount, 2) . '</td></tr>';
         }
 
         $totalsHtml .= '<tr><td style="padding:9px 14px;font-size:15px;font-weight:800;color:#fff;background:#141414;">Total Due</td>'
-            . '<td style="padding:9px 14px;font-size:15px;font-weight:800;text-align:right;color:#fff;background:#141414;">$' . number_format($total, 2) . '</td></tr>';
+            . '<td style="padding:9px 14px;font-size:15px;font-weight:800;text-align:right;color:#fff;background:#141414;">' . dn_cur($this->config) . number_format($total, 2) . '</td></tr>';
 
         // ── Company line ──
         $companyLine = $companyName ? '<div style="font-size:10px;color:#6B6B6B;font-weight:600;">' . $companyName . '</div>' : '';
@@ -163,6 +165,7 @@ class PluginQuotePdf
         $html = $this->getTemplate();
         $replacements = [
             '{{QUOTE_NUM}}'      => htmlspecialchars($quoteNum),
+            '{{CURRENCY_CODE}}'  => dn_code($this->config),
             '{{CREATED_DATE}}'   => $createdDate,
             '{{PILL_HTML}}'      => $pillHtml,
             '{{CLIENT_NAME}}'    => $clientName,
@@ -296,7 +299,34 @@ class PluginQuotePdf
 
     private function buildTerms(bool $isStarlink, bool $isFiber): string
     {
-        if ($isStarlink) {
+        // The legacy blocks below are the South Sudan edition's contract terms
+        // (USD, 26% excise, RSS law). Any deployment with another currency gets
+        // neutral terms that promise nothing the operator hasn't decided yet —
+        // fee amounts and minimum periods come from the service agreement, not
+        // from this PDF.
+        if (dn_code($this->config) !== 'USD') {
+            $code  = dn_code($this->config);
+            $law   = trim((string)($this->config['governing_law'] ?? 'the Republic of Uganda'));
+            $title = $isStarlink ? 'STARLINK SERVICE — TERMS &amp; CONDITIONS'
+                   : ($isFiber   ? 'FIBER SERVICE — TERMS &amp; CONDITIONS'
+                                 : 'TERMS &amp; CONDITIONS');
+            $terms = [
+                ['1. Currency &amp; Pricing:', "All prices in {$code}, taxes included where applicable. Subject to change with 30 days notice."],
+                ['2. Payment:', 'Monthly fees payable in advance. Late payment may lead to suspension; any penalties or reconnection fees follow your service agreement.'],
+                ['3. Installation:', $isStarlink
+                    ? 'Professional installation as quoted. The dish needs a clear view of the sky; non-standard mounting (roof/pole) is quoted before work starts.'
+                    : 'Standard installation as quoted. Non-standard work (extra wiring, poles) is quoted before work starts.'],
+                ['4. Equipment:', 'Ownership follows your invoice: purchased equipment belongs to the customer; any leased equipment remains DishNet property and is returned on termination.'],
+                ['5. Service:', 'Service quality is best-effort on the underlying network. Support is available via the contacts on this quotation.'],
+                ['6. Fair Use:', 'Personal/business use only. No illegal content or unauthorised reselling.'],
+                ['7. Contract &amp; Refunds:', 'Commitment periods, cancellation and refunds follow your service agreement. Installation fees are non-refundable once work has begun.'],
+                ['8. Relocation:', 'Relocation available on request; any fee is quoted and agreed before the move.'],
+                ['9. Liability:', 'Not liable for indirect damages exceeding 3 months of fees.'],
+                ['10. Force Majeure:', 'Not liable for disruptions from natural disasters or infrastructure failures beyond our control.'],
+                ['11. Customer Duty:', 'Provide accurate information, a safe working environment, protect the equipment, and report faults within 24 hours.'],
+                ['12. Governing Law:', "The laws of {$law}."],
+            ];
+        } elseif ($isStarlink) {
             $title = 'STARLINK SERVICE — TERMS &amp; CONDITIONS';
             $terms = [
                 ['1. Currency &amp; Pricing:', 'All prices USD. Includes 26% Excise Duty. Subject to change with 30 days notice.'],

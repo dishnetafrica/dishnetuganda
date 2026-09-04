@@ -49,7 +49,7 @@
 (function(){
 var TK='<?= $apiTok2 ?>';
 var pendingSettle=null;
-function money(v){return '$'+parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function money(v){return <?= json_encode(dn_cur($config)) ?> +parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmt(d){return d?d.substring(0,10):'';}
 

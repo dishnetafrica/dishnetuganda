@@ -24,10 +24,10 @@
 </div>
 
 <div class="stat-grid">
-    <div class="stat-card teal"><div class="stat-label">Collections</div><div class="stat-value">$<?= number_format($dayColTotal, 2) ?></div><div style="font-size:10px;color:#6b7280;"><?= count($dayCols) ?> payments</div></div>
+    <div class="stat-card teal"><div class="stat-label">Collections</div><div class="stat-value"><?= dn_cur($config) ?><?= number_format($dayColTotal, 2) ?></div><div style="font-size:10px;color:#6b7280;"><?= count($dayCols) ?> payments</div></div>
     <div class="stat-card green"><div class="stat-label">New KYCs</div><div class="stat-value"><?= count($dayApps) ?></div></div>
-    <div class="stat-card orange"><div class="stat-label">Commission Paid</div><div class="stat-value">$<?= number_format($dayComm, 2) ?></div></div>
-    <div class="stat-card blue"><div class="stat-label">Net Revenue</div><div class="stat-value">$<?= number_format($dayColTotal - $dayComm, 2) ?></div></div>
+    <div class="stat-card orange"><div class="stat-label">Commission Paid</div><div class="stat-value"><?= dn_cur($config) ?><?= number_format($dayComm, 2) ?></div></div>
+    <div class="stat-card blue"><div class="stat-label">Net Revenue</div><div class="stat-value"><?= dn_cur($config) ?><?= number_format($dayColTotal - $dayComm, 2) ?></div></div>
 </div>
 
 <!-- Per-Retailer Breakdown -->
@@ -53,10 +53,10 @@
             ?>
             <tr>
                 <td style="font-weight:700;"><?= h($r['name']??'') ?></td>
-                <td style="text-align:right;font-weight:800;color:#28a745;">$<?= number_format($rColTotal, 2) ?></td>
+                <td style="text-align:right;font-weight:800;color:#28a745;"><?= dn_cur($config) ?><?= number_format($rColTotal, 2) ?></td>
                 <td style="text-align:center;"><?= count($rCols) ?></td>
                 <td style="text-align:center;"><?= count($rApps) ?></td>
-                <td style="text-align:right;color:#E65100;">$<?= number_format($rComm, 2) ?></td>
+                <td style="text-align:right;color:#E65100;"><?= dn_cur($config) ?><?= number_format($rComm, 2) ?></td>
                 <td>
                     <?php if ($target > 0): ?>
                     <div style="display:flex;align-items:center;gap:6px;">
@@ -65,7 +65,7 @@
                         </div>
                         <span style="font-size:11px;font-weight:700;<?= $pct>=100?'color:#28a745;':'' ?>"><?= $pct ?>%</span>
                     </div>
-                    <div style="font-size:10px;color:#9ca3af;">$<?= number_format($monthTotal,0) ?> / $<?= number_format($target,0) ?></div>
+                    <div style="font-size:10px;color:#9ca3af;"><?= dn_cur($config) ?><?= number_format($monthTotal,0) ?> / <?= dn_cur($config) ?><?= number_format($target,0) ?></div>
                     <?php else: ?>
                     <span style="color:#d1d5db;font-size:11px;">No target set</span>
                     <?php endif; ?>
@@ -95,7 +95,7 @@
                 <td style="font-size:11px;color:#6b7280;white-space:nowrap;"><?= substr($ev['time'],11,5) ?></td>
                 <td style="font-size:12px;"><?= h($ev['retailer']) ?></td>
                 <td style="font-weight:600;"><?= h($ev['customer']) ?></td>
-                <td style="text-align:right;font-weight:700;color:#28a745;"><?= $ev['amount']>0 ? '$'.number_format($ev['amount'],2) : '-' ?></td>
+                <td style="text-align:right;font-weight:700;color:#28a745;"><?= $ev['amount']>0 ? dn_cur($config) . number_format($ev['amount'],2) : '-' ?></td>
                 <td><span style="background:<?= str_starts_with($ev['type'],'KYC')?'#fff5f5':'#d4edda' ?>;color:<?= str_starts_with($ev['type'],'KYC')?'#D41C1C':'#28a745' ?>;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;"><?= h($ev['type']) ?></span></td>
             </tr>
             <?php endforeach; if(empty($dayEvents)): ?><tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px;">No activity on this day.</td></tr><?php endif; ?>

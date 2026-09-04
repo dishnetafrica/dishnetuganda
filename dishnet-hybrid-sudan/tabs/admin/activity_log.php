@@ -97,11 +97,11 @@
                 <?php if ($hasBal): ?>
                 <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
                     <span style="font-size:11px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:2px 8px;font-family:monospace;color:#64748B;">
-                        before <strong style="color:#1E293B;">$<?= number_format($balBefore,2) ?></strong>
+                        before <strong style="color:#1E293B;"><?= dn_cur($config) ?><?= number_format($balBefore,2) ?></strong>
                     </span>
                     <span style="color:#CBD5E1;">→</span>
                     <span style="font-size:11px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:2px 8px;font-family:monospace;color:#64748B;">
-                        after <strong style="color:#1E293B;">$<?= number_format($balAfter,2) ?></strong>
+                        after <strong style="color:#1E293B;"><?= dn_cur($config) ?><?= number_format($balAfter,2) ?></strong>
                     </span>
                     <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:6px;
                           background:<?= $balDelta < 0 ? '#FEF2F2' : '#F0FDF4' ?>;

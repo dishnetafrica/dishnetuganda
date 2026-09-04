@@ -1113,7 +1113,7 @@ if ($page === 'receipt') {
     <div class="row"><span>CRM ID</span><span>'.h($col['crm_customer_id']??'-').'</span></div>
     <div class="row"><span>Method</span><span>'.h($col['method']??'Cash').'</span></div>
     <div class="row"><span>Collected By</span><span>'.h($col['retailer_name']??'').'</span></div>
-    <div class="row total"><span>Amount Paid</span><span>$'.number_format($col['amount']??0, 2).'</span></div>
+    <div class="row total"><span>Amount Paid</span><span>' . dn_cur($config) . number_format($col['amount']??0, 2).'</span></div>
     '.(!empty($col['note']) ? '<div class="row"><span>Note</span><span>'.h($col['note']).'</span></div>' : '').'
     <div class="footer">
         <p>Thank you for your payment!</p>

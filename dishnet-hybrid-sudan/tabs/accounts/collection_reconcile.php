@@ -237,22 +237,22 @@ if ($doRun) {
 
 <div class="rc-cards">
     <div class="rc-card blue">
-        <div class="rc-card-v">$<?php echo number_format($results['crm_total'], 2); ?></div>
+        <div class="rc-card-v"><?= dn_cur($config) ?><?php echo number_format($results['crm_total'], 2); ?></div>
         <div class="rc-card-l">CRM Total</div>
         <div class="rc-card-s"><?php echo $results['crm_count']; ?> payments (all methods)</div>
     </div>
     <div class="rc-card green">
-        <div class="rc-card-v">$<?php echo number_format($results['matched_total'], 2); ?></div>
+        <div class="rc-card-v"><?= dn_cur($config) ?><?php echo number_format($results['matched_total'], 2); ?></div>
         <div class="rc-card-l">In Cashbook</div>
         <div class="rc-card-s"><?php echo $results['matched_count']; ?> matched</div>
     </div>
     <div class="rc-card <?php echo count($results['crm_only']) > 0 ? 'red' : 'green'; ?>">
         <div class="rc-card-v" style="color:<?php echo count($results['crm_only']) > 0 ? '#dc2626' : '#16a34a'; ?>;"><?php echo count($results['crm_only']); ?></div>
         <div class="rc-card-l">Missing from Cashbook</div>
-        <div class="rc-card-s">$<?php echo number_format($results['crm_only_total'], 2); ?></div>
+        <div class="rc-card-s"><?= dn_cur($config) ?><?php echo number_format($results['crm_only_total'], 2); ?></div>
     </div>
     <div class="rc-card slate">
-        <div class="rc-card-v">$<?php echo number_format($results['cb_all_in'], 2); ?></div>
+        <div class="rc-card-v"><?= dn_cur($config) ?><?php echo number_format($results['cb_all_in'], 2); ?></div>
         <div class="rc-card-l">Cashbook All IN</div>
         <div class="rc-card-s">Including exchanges, manual</div>
     </div>
@@ -287,7 +287,7 @@ if ($doRun) {
 ?>
 <tr>
     <td style="font-weight:700;"><span class="rc-chip <?php echo $isCash ? 'rc-chip-cash' : 'rc-chip-bank'; ?>"><?php echo htmlspecialchars($mName); ?></span></td>
-    <td style="text-align:right;font-weight:700;">$<?php echo number_format($m['crm'], 2); ?></td>
+    <td style="text-align:right;font-weight:700;"><?= dn_cur($config) ?><?php echo number_format($m['crm'], 2); ?></td>
     <td style="text-align:center;"><?php echo $m['count']; ?></td>
     <td style="text-align:center;color:#16a34a;font-weight:700;"><?php echo $m['matched']; ?></td>
     <td style="text-align:center;color:<?php echo $mMissing > 0 ? '#dc2626' : '#16a34a'; ?>;font-weight:700;"><?php echo $mMissing; ?></td>
@@ -300,7 +300,7 @@ if ($doRun) {
 <?php endif; ?>
 
 <?php if (!empty($results['crm_only'])): ?>
-<div class="rc-sec"><span style="color:#dc2626;">❌</span> In CRM but NOT in Cashbook (<?php echo count($results['crm_only']); ?> — $<?php echo number_format($results['crm_only_total'], 2); ?>)</div>
+<div class="rc-sec"><span style="color:#dc2626;">❌</span> In CRM but NOT in Cashbook (<?php echo count($results['crm_only']); ?> — <?= dn_cur($config) ?><?php echo number_format($results['crm_only_total'], 2); ?>)</div>
 <div style="font-size:10px;color:#94a3b8;margin:-4px 0 8px;">These CRM payments haven't posted to the cashbook yet. Nightly sync may catch them, or they need manual entry.</div>
 <div class="rc-tbl-wrap">
 <table class="rc-tbl">
@@ -312,7 +312,7 @@ if ($doRun) {
     <td style="font-size:11px;"><?php echo $co['date']; ?></td>
     <td style="font-weight:600;"><?php echo htmlspecialchars($co['client_name']); ?></td>
     <td><span class="rc-chip <?php echo ($co['method_id'] === PaymentUuids::CASH) ? 'rc-chip-cash' : 'rc-chip-bank'; ?>"><?php echo htmlspecialchars($co['method']); ?></span></td>
-    <td style="text-align:right;font-weight:700;color:#dc2626;">$<?php echo number_format($co['amount'], 2); ?></td>
+    <td style="text-align:right;font-weight:700;color:#dc2626;"><?= dn_cur($config) ?><?php echo number_format($co['amount'], 2); ?></td>
     <td style="font-size:11px;"><?php echo htmlspecialchars($co['agent_name'] ?: '—'); ?></td>
     <td style="font-size:10px;color:#64748b;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars(substr($co['note'], 0, 50)); ?></td>
 </tr>
@@ -335,7 +335,7 @@ if ($doRun) {
     <td style="font-size:11px;"><?php echo $co['date'] ?? ''; ?></td>
     <td style="font-weight:600;"><?php echo htmlspecialchars($co['person'] ?? ''); ?></td>
     <td><?php echo htmlspecialchars($co['category'] ?? ''); ?></td>
-    <td style="text-align:right;font-weight:700;">$<?php echo number_format((float)($co['amount'] ?? 0), 2); ?></td>
+    <td style="text-align:right;font-weight:700;"><?= dn_cur($config) ?><?php echo number_format((float)($co['amount'] ?? 0), 2); ?></td>
     <td style="font-family:monospace;font-size:10px;"><?php echo htmlspecialchars($co['validation_ref'] ?? ''); ?></td>
     <td style="font-size:10px;"><?php echo htmlspecialchars($co['source'] ?? ''); ?></td>
 </tr>
@@ -358,7 +358,7 @@ if ($doRun) {
     <td style="font-size:11px;"><?php echo substr($v['collected_at'] ?? $v['created_at'] ?? '', 0, 10); ?></td>
     <td style="font-weight:600;"><?php echo htmlspecialchars($v['retailer_name'] ?? ''); ?></td>
     <td><?php echo htmlspecialchars($v['customer_name'] ?? ''); ?></td>
-    <td style="text-align:right;font-weight:700;color:#dc2626;text-decoration:line-through;">$<?php echo number_format((float)($v['amount'] ?? 0), 2); ?></td>
+    <td style="text-align:right;font-weight:700;color:#dc2626;text-decoration:line-through;"><?= dn_cur($config) ?><?php echo number_format((float)($v['amount'] ?? 0), 2); ?></td>
     <td style="font-size:11px;color:#64748b;"><?php echo htmlspecialchars($v['voided_by'] ?? ''); ?></td>
     <td style="font-size:11px;color:#64748b;"><?php echo $v['voided_at'] ?? ''; ?></td>
 </tr>

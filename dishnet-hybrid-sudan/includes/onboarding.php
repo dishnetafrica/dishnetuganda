@@ -413,7 +413,7 @@ a.ops-hub-btn:hover{background:linear-gradient(135deg,#E82020,#C01818)!important
         </button>
         <?php if(!$isSupport&&!$isAccountant): ?>
         <div class="wallet-badge" style="background:rgba(212,28,28,.15);border:1px solid rgba(212,28,28,.25);color:#FF6B6B;">
-            <i class="bi bi-wallet2"></i><span class="wlabel">&nbsp;$<?= number_format($myWallet['balance'], 2) ?></span>
+            <i class="bi bi-wallet2"></i><span class="wlabel">&nbsp;<?= dn_cur($config) ?><?= number_format($myWallet['balance'], 2) ?></span>
         </div>
         <?php endif; ?>
         <div class="user-badge" style="min-width:0;">

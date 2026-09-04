@@ -37,16 +37,16 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 <div style="display:flex;gap:8px;margin-bottom:12px;align-items:stretch;flex-wrap:wrap;">
     <div style="flex:1;min-width:80px;background:#E8F5E9;border-radius:10px;padding:10px;text-align:center;">
         <div style="font-size:10px;font-weight:700;color:#2E7D32;">Total</div>
-        <div style="font-size:18px;font-weight:800;color:#2E7D32;">$<?= number_format($fTotal,2) ?></div>
+        <div style="font-size:18px;font-weight:800;color:#2E7D32;"><?= dn_cur($config) ?><?= number_format($fTotal,2) ?></div>
         <div style="font-size:10px;color:#888;"><?= count($filteredCols) ?> payments</div>
     </div>
     <div style="flex:1;min-width:80px;background:#FFF3E0;border-radius:10px;padding:10px;text-align:center;">
         <div style="font-size:10px;font-weight:700;color:#E65100;">Commission</div>
-        <div style="font-size:18px;font-weight:800;color:#E65100;">$<?= number_format($fComm,2) ?></div>
+        <div style="font-size:18px;font-weight:800;color:#E65100;"><?= dn_cur($config) ?><?= number_format($fComm,2) ?></div>
     </div>
     <div style="flex:1;min-width:80px;background:#E3F2FD;border-radius:10px;padding:10px;text-align:center;">
         <div style="font-size:10px;font-weight:700;color:#D41C1C;">Net</div>
-        <div style="font-size:18px;font-weight:800;color:#D41C1C;">$<?= number_format($fTotal-$fComm,2) ?></div>
+        <div style="font-size:18px;font-weight:800;color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($fTotal-$fComm,2) ?></div>
     </div>
     <form method="POST" style="display:flex;align-items:center;">
         <?= csrfField() ?>
@@ -98,9 +98,9 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
     <td style="padding:9px 12px;">
         <span style="background:<?= $mBadge[0] ?>;color:<?= $mBadge[1] ?>;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;"><?= $mBadge[2] ?> <?= h($mth) ?></span>
     </td>
-    <td style="padding:9px 12px;text-align:right;font-weight:800;color:#16a34a;font-size:13px;">$<?= number_format($col['amount']??0,2) ?></td>
-    <td style="padding:9px 12px;text-align:right;color:#E65100;font-size:12px;font-weight:700;"><?= ($col['commission']??0)>0 ? '-$'.number_format($col['commission'],2) : '—' ?></td>
-    <td style="padding:9px 12px;text-align:right;font-weight:800;color:#D41C1C;">$<?= number_format($net,2) ?></td>
+    <td style="padding:9px 12px;text-align:right;font-weight:800;color:#16a34a;font-size:13px;"><?= dn_cur($config) ?><?= number_format($col['amount']??0,2) ?></td>
+    <td style="padding:9px 12px;text-align:right;color:#E65100;font-size:12px;font-weight:700;"><?= ($col['commission']??0)>0 ? '-' . dn_cur($config) . number_format($col['commission'],2) : '—' ?></td>
+    <td style="padding:9px 12px;text-align:right;font-weight:800;color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($net,2) ?></td>
     <td style="padding:9px 4px;text-align:center;font-size:11px;"><?= $isSynced ? '<span style="color:#16a34a;">✓</span>' : '<span style="color:#f59e0b;">⏳</span>' ?></td>
     <td style="padding:9px 8px;text-align:center;font-size:10px;">
         <?php if (($col['status'] ?? '') === 'voided'): ?>
@@ -122,9 +122,9 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 <tfoot>
 <tr style="background:#f8fafc;border-top:2px solid #e2e8f0;font-weight:800;">
     <td colspan="4" style="padding:10px 12px;font-size:12px;color:#374151;">Totals (<?= count($filteredCols) ?> records)</td>
-    <td style="padding:10px 12px;text-align:right;color:#16a34a;">$<?= number_format($fTotal,2) ?></td>
-    <td style="padding:10px 12px;text-align:right;color:#E65100;">-$<?= number_format($fComm,2) ?></td>
-    <td style="padding:10px 12px;text-align:right;color:#D41C1C;">$<?= number_format($fTotal-$fComm,2) ?></td>
+    <td style="padding:10px 12px;text-align:right;color:#16a34a;"><?= dn_cur($config) ?><?= number_format($fTotal,2) ?></td>
+    <td style="padding:10px 12px;text-align:right;color:#E65100;">-<?= dn_cur($config) ?><?= number_format($fComm,2) ?></td>
+    <td style="padding:10px 12px;text-align:right;color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($fTotal-$fComm,2) ?></td>
     <td></td>
     <td></td>
 </tr>

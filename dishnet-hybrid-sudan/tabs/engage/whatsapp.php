@@ -768,7 +768,7 @@ $splynxStatus = $splynx->isConfigured() ? $splynx->testConnection() : ['ok' => f
                     echo '<div style="background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:#4f46e5;font-weight:600;">'
                        . '📊 Last 30 days: <strong>' . number_format((int)$_aiStats['calls']) . ' AI replies</strong> · '
                        . number_format((int)$_aiStats['in_tok'] + (int)$_aiStats['out_tok']) . ' tokens · '
-                       . '$' . number_format((float)$_aiStats['total_cost'], 4) . ' cost</div>';
+                       . dn_cur($config) . number_format((float)$_aiStats['total_cost'], 4) . ' cost</div>';
                 }
             } catch (Throwable $e) {}
             ?>

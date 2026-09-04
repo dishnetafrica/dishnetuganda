@@ -179,7 +179,7 @@
         
         $structuredNote = "Collected by {$handover['from_name']} via DishNet | @ {$location}\n" .
             "────────────────────────────────\n" .
-            "CASH RECEIVED     : \$" . number_format((float)$collection['amount'], 2) . "\n" .
+            "CASH RECEIVED     : " . dn_cur($config) . number_format((float)$collection['amount'], 2) . "\n" .
             "CASH RECEIVED BY  : " . $confirmedBy . "\n" .
             "CASH RECEIPT NO   : " . $cbReceipt . "\n" .
             "CASH LOCATION     : " . $location . "\n" .

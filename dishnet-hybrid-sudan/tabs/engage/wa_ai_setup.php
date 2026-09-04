@@ -548,8 +548,8 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
     <span><?= (int)$_wcStats['month'] ?> message(s),
       <?= number_format((int)$_wcStats['tokens_in_month'] + (int)$_wcStats['tokens_out_month']) ?> tokens<?php
       if ($_wcStats['spent_month_usd'] !== null): ?>,
-        $<?= number_format((float)$_wcStats['spent_month_usd'], 2) ?> of
-        $<?= number_format((float)$_wcStats['budget_usd'], 2) ?><?php endif; ?>.
+        <?= dn_cur($config) ?><?= number_format((float)$_wcStats['spent_month_usd'], 2) ?> of
+        <?= dn_cur($config) ?><?= number_format((float)$_wcStats['budget_usd'], 2) ?><?php endif; ?>.
       <?= (int)$_wcStats['today'] ?> today.</span>
   </div>
   <?php endif; ?>

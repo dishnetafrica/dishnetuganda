@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'notif
         flash("Agent {$agent['name']} has no phone number configured.", 'danger');
     } else {
         $notify->commissionSummary($agent, $month, $newCust, $commission, $bonus, $payDate);
-        logActivity($dataDir, 'notify_commission', "Commission summary sent to {$agent['name']}", "Month:{$month} Total:\$".number_format($commission+$bonus,2));
+        logActivity($dataDir, 'notify_commission', "Commission summary sent to {$agent['name']}", "Month:{$month} Total:" . dn_cur($config) . number_format($commission+$bonus,2));
         flash("✅ Commission summary for {$month} sent to {$agent['name']}");
     }
     redirect('?page=dashboard&tab=notify');

@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'component'      => 'base_salary',
             'payment_type'   => $_POST['payment_type'] ?? 'salary',
         ]);
-        $msg = ($res['ok'] ?? false) ? "Paid \$" . number_format($amount, 2) . ". Balance: \$" . number_format($res['balance_due'] ?? 0, 2) : ($res['error'] ?? 'Error');
+        $msg = ($res['ok'] ?? false) ? "Paid " . dn_cur($config) . number_format($amount, 2) . ". Balance: " . dn_cur($config) . number_format($res['balance_due'] ?? 0, 2) : ($res['error'] ?? 'Error');
         if (!($res['ok'] ?? false)) $msgType = 'error';
         // Send WA notification
         if (($res['ok'] ?? false)) {
@@ -202,10 +202,10 @@ table.pay tfoot td{font-weight:700;border-top:2px solid #e5e7eb;background:#f9fa
 <?php if ($selPeriod && !empty($selLines)): ?>
 
 <div class="summary-row">
-    <div class="summary-item">Gross: <strong>$<?= number_format($tGross, 2) ?></strong></div>
-    <div class="summary-item">Net: <strong>$<?= number_format($tNet, 2) ?></strong></div>
-    <div class="summary-item">Disbursed: <strong style="color:#059669">$<?= number_format($tDisb, 2) ?></strong></div>
-    <div class="summary-item">Balance: <strong style="color:<?= $tBal > 0 ? '#DC2626' : '#059669' ?>">$<?= number_format($tBal, 2) ?></strong></div>
+    <div class="summary-item">Gross: <strong><?= dn_cur($config) ?><?= number_format($tGross, 2) ?></strong></div>
+    <div class="summary-item">Net: <strong><?= dn_cur($config) ?><?= number_format($tNet, 2) ?></strong></div>
+    <div class="summary-item">Disbursed: <strong style="color:#059669"><?= dn_cur($config) ?><?= number_format($tDisb, 2) ?></strong></div>
+    <div class="summary-item">Balance: <strong style="color:<?= $tBal > 0 ? '#DC2626' : '#059669' ?>"><?= dn_cur($config) ?><?= number_format($tBal, 2) ?></strong></div>
     <div class="summary-item">✅ <?= $countPaid ?> paid · ⏳ <?= $countPartial ?> partial · ⏸ <?= $countPending ?> pending<?= $countHeld ? " · 🚫 {$countHeld} held" : '' ?></div>
 </div>
 
@@ -218,14 +218,14 @@ table.pay tfoot td{font-weight:700;border-top:2px solid #e5e7eb;background:#f9fa
 <?php foreach ($selLines as $l): ?>
 <tr>
     <td><strong><?= htmlspecialchars($l['employee_name']) ?></strong><br><span style="font-size:11px;color:#6b7280"><?= htmlspecialchars($l['employee_code'] ?? '') ?></span></td>
-    <td class="r">$<?= number_format((float)$l['base_salary'], 0) ?></td>
-    <td class="r">$<?= number_format((float)$l['transport'], 0) ?></td>
-    <td class="r">$<?= number_format((float)$l['food'], 0) ?></td>
-    <td class="r"><strong>$<?= number_format((float)$l['gross_pay'], 0) ?></strong></td>
-    <td class="r"><?= (float)$l['total_deductions'] > 0 ? '-$'.number_format((float)$l['total_deductions'], 0) : '—' ?></td>
-    <td class="r"><strong>$<?= number_format((float)$l['net_pay'], 0) ?></strong></td>
-    <td class="r" style="color:#059669">$<?= number_format((float)$l['total_disbursed'], 0) ?></td>
-    <td class="r" style="color:<?= (float)$l['balance_due'] > 0 ? '#DC2626' : '#059669' ?>">$<?= number_format((float)$l['balance_due'], 0) ?></td>
+    <td class="r"><?= dn_cur($config) ?><?= number_format((float)$l['base_salary'], 0) ?></td>
+    <td class="r"><?= dn_cur($config) ?><?= number_format((float)$l['transport'], 0) ?></td>
+    <td class="r"><?= dn_cur($config) ?><?= number_format((float)$l['food'], 0) ?></td>
+    <td class="r"><strong><?= dn_cur($config) ?><?= number_format((float)$l['gross_pay'], 0) ?></strong></td>
+    <td class="r"><?= (float)$l['total_deductions'] > 0 ? '-' . dn_cur($config) . number_format((float)$l['total_deductions'], 0) : '—' ?></td>
+    <td class="r"><strong><?= dn_cur($config) ?><?= number_format((float)$l['net_pay'], 0) ?></strong></td>
+    <td class="r" style="color:#059669"><?= dn_cur($config) ?><?= number_format((float)$l['total_disbursed'], 0) ?></td>
+    <td class="r" style="color:<?= (float)$l['balance_due'] > 0 ? '#DC2626' : '#059669' ?>"><?= dn_cur($config) ?><?= number_format((float)$l['balance_due'], 0) ?></td>
     <td><span class="pstatus <?= $l['disbursement_status'] ?>"><?= strtoupper($l['disbursement_status']) ?></span></td>
     <td>
         <?php if (in_array($selPeriod['status'], ['approved','calculated']) && $l['disbursement_status'] !== 'paid' && $l['disbursement_status'] !== 'held'): ?>
@@ -236,7 +236,7 @@ table.pay tfoot td{font-weight:700;border-top:2px solid #e5e7eb;background:#f9fa
 <?php endforeach; ?>
 </tbody>
 <tfoot>
-<tr><td>TOTAL (<?= count($selLines) ?> staff)</td><td></td><td></td><td></td><td class="r">$<?= number_format($tGross, 0) ?></td><td></td><td class="r">$<?= number_format($tNet, 0) ?></td><td class="r" style="color:#059669">$<?= number_format($tDisb, 0) ?></td><td class="r">$<?= number_format($tBal, 0) ?></td><td></td><td></td></tr>
+<tr><td>TOTAL (<?= count($selLines) ?> staff)</td><td></td><td></td><td></td><td class="r"><?= dn_cur($config) ?><?= number_format($tGross, 0) ?></td><td></td><td class="r"><?= dn_cur($config) ?><?= number_format($tNet, 0) ?></td><td class="r" style="color:#059669"><?= dn_cur($config) ?><?= number_format($tDisb, 0) ?></td><td class="r"><?= dn_cur($config) ?><?= number_format($tBal, 0) ?></td><td></td><td></td></tr>
 </tfoot>
 </table>
 </div>

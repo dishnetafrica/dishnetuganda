@@ -618,7 +618,7 @@
             $items = $quote['items'] ?? [];
             $itemLines = '';
             foreach ($items as $qi) {
-                $itemLines .= "\n  • " . ($qi['label'] ?? 'Item') . ' — $' . number_format((float)($qi['total'] ?? $qi['price'] ?? 0), 2);
+                $itemLines .= "\n  • " . ($qi['label'] ?? 'Item') . ' — ' . dn_cur($config) . number_format((float)($qi['total'] ?? $qi['price'] ?? 0), 2);
             }
 
             $textQuote = "📄 *Quote #{$quoteNum}*\n\n"

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../lib/currency.php';
 // Note: No strict_types — this file is included from master.php
 /**
  * cron/payment_catchup_sync.php
@@ -133,7 +134,7 @@ foreach ($orphaned as $idx => $c) {
         'clientId'     => $custId,
         'methodId'     => PaymentUuids::resolve($method),
         'amount'       => $amount,
-        'currencyCode' => 'USD',
+        'currencyCode' => dn_code($config),
         'note'         => 'Collected by ' . ($c['retailer_name'] ?? 'agent') . ' via DishNet PWA'
                         . (!empty($c['invoice_id']) ? " (Inv #{$c['invoice_id']})" : '')
                         . (!empty($c['note']) ? " — {$c['note']}" : '')

@@ -82,7 +82,7 @@ window.meqRefresh = function(){
         items.forEach(function(u){ totalVal += parseFloat(u.purchase_cost||0); });
 
         $('meqStats').innerHTML = '<div class="meq-stat"><div class="num">'+items.length+'</div><div class="lbl">Items Held</div></div>'
-            + '<div class="meq-stat"><div class="num">$'+totalVal.toFixed(2)+'</div><div class="lbl">Total Value</div></div>';
+            + '<div class="meq-stat"><div class="num">' + <?= json_encode(dn_cur($config)) ?> +totalVal.toFixed(2)+'</div><div class="lbl">Total Value</div></div>';
 
         if(!items.length){
             $('meqList').innerHTML = '<div class="meq-empty"><div class="icon">✅</div><strong>No equipment checked out</strong><br>All clear! You have no items assigned to you.</div>';
@@ -95,7 +95,7 @@ window.meqRefresh = function(){
             h += '<div class="cat">'+esc(u.category_name)+' <span class="meq-pill '+esc(u.service_type)+'">'+esc(u.service_type)+'</span></div>';
             h += '<div class="meta">';
             h += '<span>📦 '+esc(u.condition_grade||'good')+'</span>';
-            h += '<span>💰 $'+parseFloat(u.purchase_cost||0).toFixed(2)+'</span>';
+            h += '<span>💰 ' + <?= json_encode(dn_cur($config)) ?> +parseFloat(u.purchase_cost||0).toFixed(2)+'</span>';
             if(u.updated_at) h += '<span>📅 '+esc(u.updated_at.slice(0,10))+'</span>';
             h += '</div>';
             h += '<div class="meq-actions">';

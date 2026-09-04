@@ -8,6 +8,7 @@ declare(strict_types=1);
 chdir(dirname(__DIR__));
 
 require_once __DIR__ . '/../lib/bootstrap_data.php';
+require_once __DIR__ . '/../lib/currency.php';
 $dataDir = getDataDir(dirname(__DIR__));
 if (!is_dir($dataDir)) @mkdir($dataDir, 0755, true);
 
@@ -549,7 +550,7 @@ if ($action === 'convert_to_customer') {
         $payResp = $crm->post('payments', [
             'clientId'     => (int)$crmClientId,
             'amount'       => $amount,
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_code($config),
             'methodId'     => 2,  // 2=Cash, 3=Bank Transfer, 4=Credit Card, 6=Mobile Money
             'note'         => 'Payment received — Lead converted to Regular Customer.'
                             . ($paymentRef ? ' Ref: ' . $paymentRef : '')

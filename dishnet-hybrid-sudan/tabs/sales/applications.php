@@ -73,7 +73,7 @@ $totalC  = count($myApps);
         <span style="color:<?= $tc ?>;font-weight:700;"><?= h($stype) ?></span>
         <span><i class="bi bi-telephone"></i> <?= h($a['mobile']??'-') ?></span>
         <?php if (!empty($a['amount_charged']) && $a['amount_charged'] > 0): ?>
-        <span><i class="bi bi-cash"></i> $<?= number_format($a['amount_charged'],2) ?></span>
+        <span><i class="bi bi-cash"></i> <?= dn_cur($config) ?><?= number_format($a['amount_charged'],2) ?></span>
         <?php endif; ?>
         <?php if (!empty($a['crm_client_id'])): ?>
         <span><i class="bi bi-cloud-check"></i> CRM: <?= h($a['crm_client_id']) ?></span>
@@ -450,7 +450,7 @@ $totalC  = count($myApps);
         </label>
       </div>
       <div id="refundAmtRow" style="display:none;margin-bottom:12px;">
-        <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px;">Refund amount (USD)</label>
+        <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px;">Refund amount (<?= dn_code($config) ?>)</label>
         <input type="number" name="refund_amount" step="0.01" min="0" placeholder="0.00"
           style="width:100%;padding:10px;border:1.5px solid #fca5a5;border-radius:10px;font-size:16px;font-weight:700;text-align:center;box-sizing:border-box;">
       </div>

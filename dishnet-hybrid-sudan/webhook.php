@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
 error_reporting(E_ALL);
@@ -2360,7 +2361,7 @@ switch ($changeType) {
                 // $0 quote — notify ops team (plan may be misconfigured)
                 whLog($changeType, "Quote #{$quoteNum} has \$0 amount — plan may not have pricing", ['client_id' => $clientId, 'client' => $name]);
                 $notify->sendAdmin(
-                    "⚠️ *Quote #{$quoteNum}* created with \$0 for {$name} ({$phone}).\n"
+                    "⚠️ *Quote #{$quoteNum}* created with " . dn_cur($config) . "0 for {$name} ({$phone}).\n"
                     . "No quotation sent to customer — plan may be missing pricing.\n"
                     . "Please check and send manually if needed.",
                     'ops_quote_zero'
@@ -2461,7 +2462,7 @@ switch ($changeType) {
         $total      = (float)($invoice['total'] ?? 0);
         $amountPaid = (float)($invoice['amountPaid'] ?? 0);
         $dueDate    = substr($invoice['dueDate'] ?? $invoice['maturityDate'] ?? '', 0, 10);
-        $currency   = $invoice['currencyCode'] ?? 'USD';
+        $currency   = $invoice['currencyCode'] ?? dn_code($config);
         $invStatus  = (int)($invoice['status'] ?? 0);
 
         if (!$clientId || $total <= 0) whResp(200, 'near_due — skipped (no client or zero amount).');
@@ -2529,7 +2530,7 @@ switch ($changeType) {
         $total      = (float)($invoice['total'] ?? 0);
         $amountPaid = (float)($invoice['amountPaid'] ?? 0);
         $dueDate    = substr($invoice['dueDate'] ?? $invoice['maturityDate'] ?? '', 0, 10);
-        $currency   = $invoice['currencyCode'] ?? 'USD';
+        $currency   = $invoice['currencyCode'] ?? dn_code($config);
         $invStatus  = (int)($invoice['status'] ?? 0); // 0=draft, 1=unpaid, 2=partial, 3=paid, 4=void
 
         if (!$clientId || $total <= 0) whResp(200, 'overdue — skipped (no client or zero amount).');

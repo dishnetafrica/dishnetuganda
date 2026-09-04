@@ -411,7 +411,7 @@ if (!$splynxApiError) {
                 <?php if ($row['plan_name']): ?>
                 <?= htmlspecialchars($row['plan_name']) ?>
                 <?php if ($row['amount']): ?>
-                <br><span style="color:#059669;font-weight:700;">$<?= number_format((float)$row['amount'], 0) ?>/mo</span>
+                <br><span style="color:#059669;font-weight:700;"><?= dn_cur($config) ?><?= number_format((float)$row['amount'], 0) ?>/mo</span>
                 <?php endif; ?>
                 <?php else: ?><span style="color:#d1d5db;">--</span>
                 <?php endif; ?>
@@ -497,7 +497,7 @@ if (!$splynxApiError) {
             <td style="font-size:11px;">
                 <?= htmlspecialchars($row['plan_name'] ?? '--') ?>
                 <?php if ($row['amount']): ?>
-                <span style="color:#059669;font-weight:700;"> $<?= number_format((float)$row['amount'], 0) ?>/mo</span>
+                <span style="color:#059669;font-weight:700;"> <?= dn_cur($config) ?><?= number_format((float)$row['amount'], 0) ?>/mo</span>
                 <?php endif; ?>
             </td>
             <td>

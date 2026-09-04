@@ -219,12 +219,12 @@ $syncAgo=$lastSync?human_time_diff_ceo((int)strtotime($lastSync)):'Unknown';
 
 // ── Alerts ───────────────────────────────────────────────────────────
 $alerts=[];
-if(count($pendSalesDiko)) $alerts[]=['🔴',count($pendSalesDiko).' unconfirmed handover'.(count($pendSalesDiko)>1?'s':'').' from sales staff ($'.number_format($pendSalesAmt,0).') — Diko needs to confirm','red'];
-if(count($pendRelays))    $alerts[]=['🟠',count($pendRelays).' relay'.(count($pendRelays)>1?'s':'').' from Diko pending ($'.number_format($pendRelayAmt,0).') — Rupesh to confirm','amber'];
+if(count($pendSalesDiko)) $alerts[]=['🔴',count($pendSalesDiko).' unconfirmed handover'.(count($pendSalesDiko)>1?'s':'').' from sales staff (' . dn_cur($config) . number_format($pendSalesAmt,0).') — Diko needs to confirm','red'];
+if(count($pendRelays))    $alerts[]=['🟠',count($pendRelays).' relay'.(count($pendRelays)>1?'s':'').' from Diko pending (' . dn_cur($config) . number_format($pendRelayAmt,0).') — Rupesh to confirm','amber'];
 if($declMissing>0)        $alerts[]=['🟡',"{$declMissing} staff member".($declMissing>1?'s':'')." haven't submitted today's cash declaration",'amber'];
-if($overdue>500)          $alerts[]=['💸','$'.number_format($overdue,0).' overdue balance across customers','amber'];
+if($overdue>500)          $alerts[]=['💸',dn_cur($config) . number_format($overdue,0).' overdue balance across customers','amber'];
 if($fiberDnMissing>0)     $alerts[]=['📄',"{$fiberDnMissing} fiber installation".($fiberDnMissing>1?'s':'')." missing delivery note PDF",'amber'];
-if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).' total cash in field (high exposure)','amber'];
+if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fieldExposure,0).' total cash in field (high exposure)','amber'];
 ?>
 
 <div class="cd-page">
@@ -244,18 +244,18 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;">
         <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;">Today's Cash</div>
-            <div style="font-size:26px;font-weight:900;color:#10b981;letter-spacing:-1px;">$<?= number_format($revenueToday) ?></div>
+            <div style="font-size:26px;font-weight:900;color:#10b981;letter-spacing:-1px;"><?= dn_cur($config) ?><?= number_format($revenueToday) ?></div>
             <div style="font-size:11px;color:#64748b;"><?= count($todayCols) ?> payments</div>
         </div>
         <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;"><?= date('M') ?> Revenue</div>
-            <div style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-1px;">$<?= number_format($revenueMonth) ?></div>
+            <div style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-1px;"><?= dn_cur($config) ?><?= number_format($revenueMonth) ?></div>
             <div style="font-size:11px;color:<?= $revGrowth>=0?'#10b981':'#f87171' ?>;"><?= $revGrowth>=0?'↑':'↓' ?><?= abs($revGrowth) ?>% vs <?= date('M',strtotime('-1 month')) ?></div>
         </div>
         <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;">MRR</div>
-            <div style="font-size:26px;font-weight:900;color:#a78bfa;letter-spacing:-1px;">$<?= number_format($mrr) ?></div>
-            <div style="font-size:11px;color:#64748b;">ARPU $<?= $activeClients>0?number_format($mrr/$activeClients,0):'0' ?></div>
+            <div style="font-size:26px;font-weight:900;color:#a78bfa;letter-spacing:-1px;"><?= dn_cur($config) ?><?= number_format($mrr) ?></div>
+            <div style="font-size:11px;color:#64748b;">ARPU <?= dn_cur($config) ?><?= $activeClients>0?number_format($mrr/$activeClients,0):'0' ?></div>
         </div>
     </div>
 </div>
@@ -272,7 +272,7 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
 <div class="cd-today">
     <div class="cd-today-g">
         <div class="cd-today-tile"><div class="cd-today-num"><?= $todaySalesTotal ?></div><div class="cd-today-lbl">Total KYC</div><div class="cd-today-sub"><?= count($monthApps) ?> /mo</div></div>
-        <div class="cd-today-tile"><div class="cd-today-num" style="color:#10b981;"><?= $todayCash ?></div><div class="cd-today-lbl">💵 Cash</div><div class="cd-today-sub">$<?= number_format($todayCashAmt,0) ?></div></div>
+        <div class="cd-today-tile"><div class="cd-today-num" style="color:#10b981;"><?= $todayCash ?></div><div class="cd-today-lbl">💵 Cash</div><div class="cd-today-sub"><?= dn_cur($config) ?><?= number_format($todayCashAmt,0) ?></div></div>
         <div class="cd-today-tile"><div class="cd-today-num" style="color:#60a5fa;"><?= $todayCredit ?></div><div class="cd-today-lbl">📋 Credit</div><div class="cd-today-sub">CRM leads</div></div>
         <div class="cd-today-tile"><div class="cd-today-num" style="color:#fbbf24;"><?= $todayLeads ?></div><div class="cd-today-lbl">🎯 Leads</div><div class="cd-today-sub"><?= $openLeads ?> open</div></div>
     </div>
@@ -283,7 +283,7 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
             <div style="font-size:16px;"><?= $ic ?></div>
             <div style="font-size:20px;font-weight:900;color:<?= $cl ?>;"><?= $svcBreak[$k]['c'] ?></div>
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;"><?= strtoupper($k) ?></div>
-            <?php if($svcBreak[$k]['a']>0): ?><div style="font-size:10px;color:#64748b;">$<?= number_format($svcBreak[$k]['a'],0) ?></div><?php endif; ?>
+            <?php if($svcBreak[$k]['a']>0): ?><div style="font-size:10px;color:#64748b;"><?= dn_cur($config) ?><?= number_format($svcBreak[$k]['a'],0) ?></div><?php endif; ?>
         </div>
         <?php endforeach; ?>
     </div>
@@ -293,19 +293,19 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
 <div class="cd-section">🏦 Cashbook — DishNet</div>
 <div class="cd-g4">
     <div class="cd-k <?= $cbUsd<0?'cd-alert-red':'cd-alert-green' ?>">
-        <div class="cd-kv" style="color:<?= $cbUsd>=0?'#15803d':'#991b1b' ?>;">$<?= number_format($cbUsd,0) ?></div>
+        <div class="cd-kv" style="color:<?= $cbUsd>=0?'#15803d':'#991b1b' ?>;"><?= dn_cur($config) ?><?= number_format($cbUsd,0) ?></div>
         <div class="cd-kl">USD Balance</div><div class="cd-ks">Running total</div>
     </div>
     <div class="cd-k cd-alert-purple">
         <div class="cd-kv" style="color:#7c3aed;font-size:18px;"><?= number_format($cbSsp,0) ?> SSP</div>
-        <div class="cd-kl">SSP Balance</div><div class="cd-ks">≈$<?= number_format($cbSsp/6000,0) ?></div>
+        <div class="cd-kl">SSP Balance</div><div class="cd-ks">≈<?= dn_cur($config) ?><?= number_format($cbSsp/6000,0) ?></div>
     </div>
     <div class="cd-k cd-alert-blue">
-        <div class="cd-kv" style="color:#1d4ed8;">$<?= number_format($cbIn,0) ?></div>
+        <div class="cd-kv" style="color:#1d4ed8;"><?= dn_cur($config) ?><?= number_format($cbIn,0) ?></div>
         <div class="cd-kl">IN <?= date('M') ?></div><div class="cd-ks">Cash received</div>
     </div>
     <div class="cd-k cd-alert-amber">
-        <div class="cd-kv" style="color:#92400e;">$<?= number_format($cbOut,0) ?></div>
+        <div class="cd-kv" style="color:#92400e;"><?= dn_cur($config) ?><?= number_format($cbOut,0) ?></div>
         <div class="cd-kl">OUT <?= date('M') ?></div><div class="cd-ks">Expenses</div>
     </div>
 </div>
@@ -320,7 +320,7 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
     <div class="cd-chain" style="border-left:3px solid #f87171;">
         <span style="color:#f87171;">⏳</span>
         <strong><?= h($ph['from_name']??'?') ?></strong> → <?= h($ph['to_name']??'Diko') ?>
-        <span class="cd-chain-amt" style="color:#f87171;margin-left:auto;">$<?= number_format((float)($ph['amount']??0),0) ?></span>
+        <span class="cd-chain-amt" style="color:#f87171;margin-left:auto;"><?= dn_cur($config) ?><?= number_format((float)($ph['amount']??0),0) ?></span>
         <span style="font-size:10px;color:#94a3b8;"><?= substr($ph['created_at']??'',11,5) ?></span>
     </div>
     <?php endforeach; ?>
@@ -329,14 +329,14 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
         <span style="color:#f59e0b;">⛓</span>
         <strong><?= h($rel['from_name']??'Diko') ?></strong> → <?= h($rel['to_name']??'Rupesh') ?>
         <span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;">RELAY</span>
-        <span class="cd-chain-amt" style="color:#f59e0b;margin-left:auto;">$<?= number_format((float)($rel['amount']??0),0) ?></span>
+        <span class="cd-chain-amt" style="color:#f59e0b;margin-left:auto;"><?= dn_cur($config) ?><?= number_format((float)($rel['amount']??0),0) ?></span>
     </div>
     <?php endforeach; ?>
     <?php endif; ?>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;text-align:center;">
         <div><div style="font-size:18px;font-weight:900;color:#f87171;"><?= count($pendSalesDiko) ?></div><div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;">Sales→Diko</div></div>
         <div><div style="font-size:18px;font-weight:900;color:#f59e0b;"><?= count($pendRelays) ?></div><div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;">Diko→Rupesh</div></div>
-        <div><div style="font-size:18px;font-weight:900;color:<?= $fieldExposure>2000?'#991b1b':'#15803d' ?>;">$<?= number_format($fieldExposure,0) ?></div><div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;">Field Exposure</div></div>
+        <div><div style="font-size:18px;font-weight:900;color:<?= $fieldExposure>2000?'#991b1b':'#15803d' ?>;"><?= dn_cur($config) ?><?= number_format($fieldExposure,0) ?></div><div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;">Field Exposure</div></div>
     </div>
 </div>
 
@@ -364,8 +364,8 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
                 <?php if($ap['pend']>0): ?><span style="background:#fee2e2;color:#991b1b;font-size:9px;font-weight:700;border-radius:4px;padding:1px 5px;margin-left:4px;">⏳<?= $ap['pend'] ?></span><?php endif; ?>
             </div>
             <div style="text-align:right;">
-                <div style="font-size:13px;font-weight:800;color:#15803d;">$<?= number_format($ap['rev'],0) ?></div>
-                <?php if($ap['exp']>0): ?><div style="font-size:10px;color:#f59e0b;">$<?= number_format($ap['exp'],0) ?> holding</div><?php endif; ?>
+                <div style="font-size:13px;font-weight:800;color:#15803d;"><?= dn_cur($config) ?><?= number_format($ap['rev'],0) ?></div>
+                <?php if($ap['exp']>0): ?><div style="font-size:10px;color:#f59e0b;"><?= dn_cur($config) ?><?= number_format($ap['exp'],0) ?> holding</div><?php endif; ?>
             </div>
         </div>
         <?php endforeach; ?>
@@ -389,7 +389,7 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
     <div class="cd-k <?= $fiberPending>0?'cd-alert-amber':'' ?>"><div class="cd-kv" style="color:<?= $fiberPending>0?'#92400e':'#15803d' ?>;"><?= $fiberPending ?></div><div class="cd-kl">Pending Invoice</div><div class="cd-ks">Collection jobs</div></div>
     <div class="cd-k <?= $fiberDnMissing>0?'cd-alert-red':'' ?>"><div class="cd-kv" style="color:<?= $fiberDnMissing>0?'#991b1b':'#15803d' ?>"><?= $fiberDnSent ?></div><div class="cd-kl">Notes Sent</div><div class="cd-ks"><?= $fiberDnMissing ?> missing</div></div>
     <div class="cd-k"><div class="cd-kv" style="color:#15803d;"><?= $fiberClosed ?></div><div class="cd-kl">Tickets Closed</div><div class="cd-ks">Auto-Splynx</div></div>
-    <div class="cd-k cd-alert-red"><div class="cd-kv" style="color:#991b1b;">$<?= number_format($overdue,0) ?></div><div class="cd-kl">Overdue</div><div class="cd-ks">All customers</div></div>
+    <div class="cd-k cd-alert-red"><div class="cd-kv" style="color:#991b1b;"><?= dn_cur($config) ?><?= number_format($overdue,0) ?></div><div class="cd-kl">Overdue</div><div class="cd-ks">All customers</div></div>
 </div>
 
 <!-- AI BOT -->
@@ -398,7 +398,7 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
     <div class="cd-k cd-alert-purple"><div class="cd-kv" style="color:#7c3aed;"><?= $aiCallsToday ?></div><div class="cd-kl">AI Replies Today</div><div class="cd-ks"><?= $aiCallsMonth ?> this month</div></div>
     <div class="cd-k"><div class="cd-kv"><?= $aiConvsActive ?></div><div class="cd-kl">Active Convos</div><div class="cd-ks">Last 24h</div></div>
     <div class="cd-k"><div class="cd-kv"><?= $waMsgToday ?></div><div class="cd-kl">WA Sent Today</div><div class="cd-ks"><?= number_format($waMsgMonth) ?> this month</div></div>
-    <div class="cd-k cd-alert-amber"><div class="cd-kv" style="color:#92400e;font-size:18px;">$<?= number_format($aiCostMonth,3) ?></div><div class="cd-kl">AI Cost <?= date('M') ?></div></div>
+    <div class="cd-k cd-alert-amber"><div class="cd-kv" style="color:#92400e;font-size:18px;"><?= dn_cur($config) ?><?= number_format($aiCostMonth,3) ?></div><div class="cd-kl">AI Cost <?= date('M') ?></div></div>
 </div>
 
 <!-- OPS -->
@@ -422,7 +422,7 @@ if($fieldExposure>2000)   $alerts[]=['💼','$'.number_format($fieldExposure,0).
     <div class="cd-k <?= $hrmHead>0?'':'cd-alert-blue' ?>">
         <?php if($hrmHead>0): ?>
         <div class="cd-kv"><?= $hrmHead ?></div><div class="cd-kl">Active Staff</div>
-        <?php if($hrmPay>0): ?><div class="cd-ks">Payroll $<?= number_format($hrmPay,0) ?></div><?php endif; ?>
+        <?php if($hrmPay>0): ?><div class="cd-ks">Payroll <?= dn_cur($config) ?><?= number_format($hrmPay,0) ?></div><?php endif; ?>
         <?php else: ?>
         <div class="cd-kv" style="font-size:14px;"><?= $syncAgo ?></div>
         <div class="cd-kl">Last Sync</div>

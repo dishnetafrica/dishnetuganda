@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'rever
 
         // 6. Log
         logActivity($dataDir, 'handover_reverted', 'Cash handover reverted',
-            '$' . number_format($hovAmt, 2) . ' from ' . $fromName .
+            dn_cur($config) . number_format($hovAmt, 2) . ' from ' . $fromName .
             ' (HOV-' . $hovId . ') reverted by ' . $retailer['name'] . ' — ' . $reason);
 
         // 7. Notify agent via WhatsApp
@@ -133,16 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'rever
             if ($agR && !empty($agR['phone'])) {
                 $notify->sendRaw($agR['phone'],
                     "⚠️ *Handover Reverted*\n\n"
-                    . "Your handover of \$" . number_format($hovAmt, 2) . " (HOV-{$hovId}) has been *reverted* by " . $retailer['name'] . ".\n\n"
+                    . "Your handover of " . dn_cur($config) . number_format($hovAmt, 2) . " (HOV-{$hovId}) has been *reverted* by " . $retailer['name'] . ".\n\n"
                     . "Reason: " . $reason . "\n\n"
-                    . "Your wallet has been debited by \$" . number_format($hovAmt, 2) . ".\n"
+                    . "Your wallet has been debited by " . dn_cur($config) . number_format($hovAmt, 2) . ".\n"
                     . "Please contact admin if you have questions.\n\n"
                     . "_DishNet Africa_",
                     'handover_reverted');
             }
         } catch (\Throwable $e) {}
 
-        flash('↩ Handover HOV-' . $hovId . ' of $' . number_format($hovAmt, 2) . ' from ' . $fromName . ' has been reverted. Wallet debited.', 'success');
+        flash('↩ Handover HOV-' . $hovId . ' of ' . dn_cur($config) . number_format($hovAmt, 2) . ' from ' . $fromName . ' has been reverted. Wallet debited.', 'success');
         $reverted = true;
         break;
     }
@@ -229,21 +229,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'admin
     } catch (\Throwable $e) {}
 
     logActivity($dataDir, 'admin_handover_recorded', 'Admin recorded handover',
-        '$' . number_format($amount, 2) . ' from ' . $agentName . ' by ' . $retailer['name']);
+        dn_cur($config) . number_format($amount, 2) . ' from ' . $agentName . ' by ' . $retailer['name']);
 
     // 4. Notify agent via WhatsApp
     try {
         $agR = $store->findOne('retailers.json', 'id', $agentId);
         if ($agR && !empty($agR['phone'])) {
             $notify->sendRaw($agR['phone'],
-                "✅ Cash handover of \$" . number_format($amount, 2) . " has been recorded by " . $retailer['name'] . ".\n\n"
+                "✅ Cash handover of " . dn_cur($config) . number_format($amount, 2) . " has been recorded by " . $retailer['name'] . ".\n\n"
                 . "Receipt: HOV-{$newHovId}\n"
                 . "_DishNet Africa_",
                 'admin_handover_recorded');
         }
     } catch (\Throwable $e) {}
 
-    $amtDisp = $currency === 'SSP' ? number_format($amount) . ' SSP' : '$' . number_format($amount, 2);
+    $amtDisp = $currency === 'SSP' ? number_format($amount) . ' SSP' : dn_cur($config) . number_format($amount, 2);
     flash("✅ Handover of {$amtDisp} from {$agentName} recorded and confirmed.", 'success');
     header('Location: ?page=dashboard&tab=handover_queue');
     exit;
@@ -264,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'nudge
                 $holdingLine  = $holdingSince ? " (holding for {$holdingSince})" : '';
                 $notify->sendRaw($agR['phone'],
                     "📢 *Cash Handover Reminder*\n\n"
-                    . "Hi {$firstName}, you have *\$" . number_format($cashAmt, 2) . "*{$holdingLine} in cash that needs to be handed over.\n\n"
+                    . "Hi {$firstName}, you have *" . dn_cur($config) . number_format($cashAmt, 2) . "*{$holdingLine} in cash that needs to be handed over.\n\n"
                     . "Please bring it to the office or submit in the DishNet app:\n"
                     . "My Wallet → Submit Handover\n\n"
                     . "Requested by: " . ($retailer['name'] ?? 'Rupesh') . "\n"
@@ -645,11 +645,11 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
     <div class="hq-stat-l">Waiting for You</div>
   </div>
   <div class="hq-stat">
-    <div class="hq-stat-v" style="color:#D41C1C;">$<?= number_format($totalPendingAmt,0) ?></div>
+    <div class="hq-stat-v" style="color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($totalPendingAmt,0) ?></div>
     <div class="hq-stat-l">Cash Coming In</div>
   </div>
   <div class="hq-stat">
-    <div class="hq-stat-v" style="color:#059669;">$<?= number_format($totalAgentCash,0) ?></div>
+    <div class="hq-stat-v" style="color:#059669;"><?= dn_cur($config) ?><?= number_format($totalAgentCash,0) ?></div>
     <div class="hq-stat-l">Diko Holding</div>
   </div>
 </div>
@@ -692,15 +692,15 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
       <div class="hq-ac-neg-badge">⚠ Company owes <?= h(explode(' ',$s['name'])[0]) ?></div>
       <?php endif; ?>
       <div class="hq-ac-bal" style="color:<?= $isNeg?'#DC2626':($s['cash_in_hand']>0.01?'#D41C1C':'#94a3b8') ?>;">
-        $<?= number_format(abs($s['cash_in_hand']),2) ?>
+        <?= dn_cur($config) ?><?= number_format(abs($s['cash_in_hand']),2) ?>
       </div>
       <div class="hq-ac-meta">
-        <?php if ($s['collections'] > 0): ?>Col $<?= number_format($s['collections'],0) ?><?php endif; ?>
-        <?php if ($s['expenses'] > 0): ?> · Exp $<?= number_format($s['expenses'],0) ?><?php endif; ?>
-        <?php if ($s['advance_balance'] > 0): ?> · Adv $<?= number_format($s['advance_balance'],0) ?><?php endif; ?>
+        <?php if ($s['collections'] > 0): ?>Col <?= dn_cur($config) ?><?= number_format($s['collections'],0) ?><?php endif; ?>
+        <?php if ($s['expenses'] > 0): ?> · Exp <?= dn_cur($config) ?><?= number_format($s['expenses'],0) ?><?php endif; ?>
+        <?php if ($s['advance_balance'] > 0): ?> · Adv <?= dn_cur($config) ?><?= number_format($s['advance_balance'],0) ?><?php endif; ?>
       </div>
       <?php if ($hasPend): ?>
-      <div class="hq-ac-chip">⏳ $<?= number_format($s['pending_amt'],2) ?> pending</div>
+      <div class="hq-ac-chip">⏳ <?= dn_cur($config) ?><?= number_format($s['pending_amt'],2) ?> pending</div>
       <?php endif; ?>
       <?php if ($isNeg): ?>
       <div class="hq-ac-neg-note">Reimbursement outstanding — check with Rupesh</div>
@@ -714,7 +714,7 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
         <input type="hidden" name="action" value="admin_record_handover">
         <input type="hidden" name="agent_id" value="<?= $aid ?>">
         <input type="hidden" name="agent_name" value="<?= h($s['name']) ?>">
-        <span style="font-size:12px;font-weight:700;color:#64748b;">$</span>
+        <span style="font-size:12px;font-weight:700;color:#64748b;"><?= trim(dn_cur($config)) ?></span>
         <input type="number" name="amount" value="<?= $s['cash_in_hand'] ?>" step="0.01" min="0.01" max="<?= $s['cash_in_hand'] ?>"
           style="flex:1;min-width:0;padding:5px 7px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:700;text-align:right;background:#f8fafc;color:#1e293b;">
         <button type="button" onclick="hqConfirmRecord('hof_<?= $aid ?>','<?= h(addslashes($s['name'])) ?>')"
@@ -838,7 +838,7 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
                 $_srcSummary = [];
                 foreach ($allHov as $_sh2) {
                     if (in_array((int)($_sh2['id'] ?? 0), $_srcIds, true)) {
-                        $_srcSummary[] = ($_sh2['from_name'] ?? 'Staff') . ' $' . number_format((float)($_sh2['amount'] ?? 0), 0);
+                        $_srcSummary[] = ($_sh2['from_name'] ?? 'Staff') . ' ' . dn_cur($config) . number_format((float)($_sh2['amount'] ?? 0), 0);
                     }
                 }
           ?>
@@ -855,7 +855,7 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
       </div>
     </td>
     <td>
-      <div class="hq-amt">$<?= number_format($amount,2) ?></div>
+      <div class="hq-amt"><?= dn_cur($config) ?><?= number_format($amount,2) ?></div>
       <?php if ($todayCols2): ?><div class="hq-colcount"><?= count($todayCols2) ?> collections today</div><?php endif; ?>
     </td>
     <td>
@@ -891,7 +891,7 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
           onclick="openDrawer(<?= $hid ?>,<?= htmlspecialchars(json_encode($h['from_name']??''),ENT_QUOTES) ?>,<?= $amount ?>,<?= $todayCols2Json ?>)">👁</button>
         <!-- Quick Confirm -->
         <form method="POST" style="display:inline;"
-          onsubmit="return confirm('Confirm receipt of $<?= number_format($amount,2) ?> from <?= $fname ?>?\nThis will confirm receipt and refill their wallet.')">
+          onsubmit="return confirm('Confirm receipt of <?= dn_cur($config) ?><?= number_format($amount,2) ?> from <?= $fname ?>?\nThis will confirm receipt and refill their wallet.')">
           <input type="hidden" name="action" value="confirm_handover">
           <input type="hidden" name="handover_id" value="<?= $hid ?>">
           <?= csrfField() ?>
@@ -917,7 +917,7 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
 <?php $gt = array_sum(array_map(fn($h)=>(float)($h['amount']??0), $filtered)); ?>
 <div class="hq-footer">
   <?= count($filtered) ?> record<?= count($filtered)!==1?'s':'' ?> &nbsp;·&nbsp;
-  <strong style="color:#0f0f0f;">Total: $<?= number_format($gt,2) ?></strong>
+  <strong style="color:#0f0f0f;">Total: <?= dn_cur($config) ?><?= number_format($gt,2) ?></strong>
 </div>
 <?php endif; ?>
 </div>
@@ -996,10 +996,10 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
       // Display amount
       $eAmtDisplay = $ecur === 'SSP'
           ? 'SSP '.number_format($eSSP, 0)
-          : '$'.number_format($eAmt, 2);
+          : dn_cur($config) . number_format($eAmt, 2);
       // USD equivalent for approved SSP (rate known after approval)
       $eUsdLabel = ($ecur==='SSP' && $eRate > 0 && $eStat==='approved')
-          ? ' = $'.number_format($eAmt,2).' @'.number_format($eRate,0)
+          ? ' = ' . dn_cur($config) . number_format($eAmt,2).' @'.number_format($eRate,0)
           : '';
     ?>
     <tr>
@@ -1121,8 +1121,8 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
       $eApproveRate = $eExcRate > 0 ? (int)$eExcRate : $_hqRatePre;
       [$avBgE2, $avFgE2] = hqAvColor($eAgtId, $_avPairs);
       $initE2  = strtoupper(substr($exp['collector_name'] ?? 'A', 0, 1));
-      $eAmtDisplay = $ecur === 'SSP' ? 'SSP '.number_format($eSSP, 0) : '$'.number_format($eAmt, 2);
-      $eUsdLabel = ($ecur==='SSP' && $eRate > 0 && $eStat==='approved') ? ' = $'.number_format($eAmt,2).' @'.number_format($eRate,0) : '';
+      $eAmtDisplay = $ecur === 'SSP' ? 'SSP '.number_format($eSSP, 0) : dn_cur($config) . number_format($eAmt, 2);
+      $eUsdLabel = ($ecur==='SSP' && $eRate > 0 && $eStat==='approved') ? ' = ' . dn_cur($config) . number_format($eAmt,2).' @'.number_format($eRate,0) : '';
     ?>
     <tr>
       <td style="color:#b0b0b0;font-size:11px;font-weight:700;">#<?= $eid ?></td>
@@ -1215,14 +1215,14 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
 ?>
 <div style="padding:12px 16px;background:#fef3c7;border-left:4px solid #d97706;margin:12px 0;border-radius:0 10px 10px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
   <div>
-    <div style="font-size:13px;font-weight:800;color:#92400e;">⏳ <?= $pendingStaffCount ?> payments pending — $<?= number_format($batchTotal,2) ?> total</div>
+    <div style="font-size:13px;font-weight:800;color:#92400e;">⏳ <?= $pendingStaffCount ?> payments pending — <?= dn_cur($config) ?><?= number_format($batchTotal,2) ?> total</div>
     <div style="font-size:11px;color:#b45309;margin-top:2px;">Review entries below then batch-approve or approve individually</div>
   </div>
-  <form method="POST" action="?page=dashboard&tab=handover_queue&hq_section=staff" onsubmit="return confirm('Approve ALL <?= $pendingStaffCount ?> pending staff payments ($<?= number_format($batchTotal,2) ?>)? This will post them to Rupesh's cashbook.');">
+  <form method="POST" action="?page=dashboard&tab=handover_queue&hq_section=staff" onsubmit="return confirm('Approve ALL <?= $pendingStaffCount ?> pending staff payments (<?= dn_cur($config) ?><?= number_format($batchTotal,2) ?>)? This will post them to Rupesh's cashbook.');">
     <?= csrfField() ?>
     <input type="hidden" name="action" value="batch_approve_staff">
     <button type="submit" style="background:#059669;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:800;cursor:pointer;">
-      ✅ Batch Approve All ($<?= number_format($batchTotal,2) ?>)
+      ✅ Batch Approve All (<?= dn_cur($config) ?><?= number_format($batchTotal,2) ?>)
     </button>
   </form>
 </div>
@@ -1242,11 +1242,11 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
     </div>
     <div style="flex:1;">
       <div style="font-size:14px;font-weight:800;color:#0f0f0f;"><?= htmlspecialchars($sn) ?></div>
-      <div style="font-size:11px;color:#64748b;"><?= count($sg['entries']) ?> entries · $<?= number_format($sg['all_total'],2) ?> total</div>
+      <div style="font-size:11px;color:#64748b;"><?= count($sg['entries']) ?> entries · <?= dn_cur($config) ?><?= number_format($sg['all_total'],2) ?> total</div>
     </div>
     <?php if (!empty($sgPending)): ?>
     <span style="background:#fef3c7;color:#92400e;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:800;">
-      ⏳ $<?= number_format($sg['pending_total'],2) ?> pending
+      ⏳ <?= dn_cur($config) ?><?= number_format($sg['pending_total'],2) ?> pending
     </span>
     <?php endif; ?>
   </div>
@@ -1255,7 +1255,7 @@ $totalAgentCash    = array_sum(array_column(array_values($agentSummary), 'cash_i
     $spAmt = (float)($sp['amount']??0);
     $spCur = $sp['currency'] ?? 'USD';
     $spSsp = (float)($sp['ssp_amount']??0);
-    $dispAmt = $spCur==='SSP' ? number_format($spSsp,0).' SSP' : '$'.number_format($spAmt,2);
+    $dispAmt = $spCur==='SSP' ? number_format($spSsp,0).' SSP' : dn_cur($config) . number_format($spAmt,2);
     $spStatus = $sp['status'] ?? 'pending';
     $spType   = $sp['staff_payment_type'] ?? ($sp['expense_type'] ?? $sp['category'] ?? 'Payment');
     $spDate   = substr($sp['submitted_at'] ?? $sp['created_at'] ?? '',0,10);
@@ -1375,7 +1375,7 @@ function openReject(rid, name, amount) {
   document.getElementById('hqmSub').textContent = 'Handover #' + rid + ' from ' + name;
   document.getElementById('hqmInfo').innerHTML =
     '<div class="hqm-row"><span class="hqm-lbl">Agent</span><span class="hqm-val">' + esc(name) + '</span></div>' +
-    '<div class="hqm-row"><span class="hqm-lbl">Amount</span><span class="hqm-val" style="color:#D41C1C;">$' + parseFloat(amount).toFixed(2) + '</span></div>';
+    '<div class="hqm-row"><span class="hqm-lbl">Amount</span><span class="hqm-val" style="color:#D41C1C;">' + <?= json_encode(dn_cur($config)) ?> + parseFloat(amount).toFixed(2) + '</span></div>';
   document.getElementById('hqmReason').value = '';
   document.getElementById('hqmOv').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -1396,8 +1396,8 @@ function openRevert(rid, name, amount) {
   document.getElementById('hqmRevSub').textContent = 'HOV-' + rid + ' from ' + name;
   document.getElementById('hqmRevInfo').innerHTML =
     '<div class="hqm-row"><span class="hqm-lbl">Agent</span><span class="hqm-val">' + esc(name) + '</span></div>' +
-    '<div class="hqm-row"><span class="hqm-lbl">Amount</span><span class="hqm-val" style="color:#B45309;">$' + parseFloat(amount).toFixed(2) + '</span></div>' +
-    '<div class="hqm-row"><span class="hqm-lbl">Action</span><span class="hqm-val">Wallet will be debited $' + parseFloat(amount).toFixed(2) + '</span></div>';
+    '<div class="hqm-row"><span class="hqm-lbl">Amount</span><span class="hqm-val" style="color:#B45309;">' + <?= json_encode(dn_cur($config)) ?> + parseFloat(amount).toFixed(2) + '</span></div>' +
+    '<div class="hqm-row"><span class="hqm-lbl">Action</span><span class="hqm-val">Wallet will be debited ' + <?= json_encode(dn_cur($config)) ?> + parseFloat(amount).toFixed(2) + '</span></div>';
   document.getElementById('hqmRevReason').value = '';
   document.getElementById('hqmRevOv').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -1417,7 +1417,7 @@ document.getElementById('hqmOv').addEventListener('click', function(e){ if(e.tar
 // ── Collections panel (view only — confirm/reject on row) ─────────
 function openDrawer(rid, name, amount, cols) {
   document.getElementById('hqCpTitle').textContent = name + "'s Collections";
-  document.getElementById('hqCpSub').textContent = 'Handover #' + rid + ' · $' + parseFloat(amount).toFixed(2) + ' submitted';
+  document.getElementById('hqCpSub').textContent = 'Handover #' + rid + ' · ' + <?= json_encode(dn_cur($config)) ?> + parseFloat(amount).toFixed(2) + ' submitted';
   var html = '';
   if (!cols || cols.length === 0) {
     html = '<div style="padding:32px 0;text-align:center;color:#94a3b8;font-size:13px;">' +
@@ -1434,12 +1434,12 @@ function openDrawer(rid, name, amount, cols) {
           '<div style="font-size:11px;color:#94a3b8;">' + esc(col.service_type || col.payment_method || '') +
             (col.crm_customer_id ? ' · CRM #' + col.crm_customer_id : '') + '</div>' +
         '</div>' +
-        '<div style="font-size:14px;font-weight:800;color:#059669;">+$' + parseFloat(col.amount).toFixed(2) + '</div>' +
+        '<div style="font-size:14px;font-weight:800;color:#059669;">+' + <?= json_encode(dn_cur($config)) ?> + parseFloat(col.amount).toFixed(2) + '</div>' +
       '</div>';
     });
     html += '<div style="display:flex;justify-content:space-between;padding:12px 0;font-size:13px;font-weight:700;border-top:2px solid #f1f5f9;margin-top:4px;">' +
       '<span style="color:#64748b;">' + cols.length + ' collection' + (cols.length!==1?'s':'') + '</span>' +
-      '<span style="color:#059669;">Total $' + total.toFixed(2) + '</span>' +
+      '<span style="color:#059669;">Total ' + <?= json_encode(dn_cur($config)) ?> + total.toFixed(2) + '</span>' +
     '</div>';
   }
   document.getElementById('hqCpBody').innerHTML = html;
@@ -1469,7 +1469,7 @@ function openExpApprove(id, name, usd, ssp, cat, cur, prefillRate, lastRate, exc
       iHtml += '<div class="hqe-row"><span class="hqe-lbl">Exchange batch</span><span class="hqe-val" style="color:#7c3aed;font-size:11px;">'+esc(excRef)+'</span></div>';
     }
   } else {
-    iHtml += '<div class="hqe-row"><span class="hqe-lbl">Amount</span><span class="hqe-val" style="color:#059669;">$'+parseFloat(usd).toFixed(2)+'</span></div>';
+    iHtml += '<div class="hqe-row"><span class="hqe-lbl">Amount</span><span class="hqe-val" style="color:#059669;">' + <?= json_encode(dn_cur($config)) ?> +parseFloat(usd).toFixed(2)+'</span></div>';
   }
   document.getElementById('hqeInfo').innerHTML = iHtml;
 
@@ -1499,7 +1499,7 @@ function hqeUpdateUSD() {
   var r = parseFloat(document.getElementById('hqeRate').value) || 0;
   var usd = r > 0 ? (_eSSP / r) : 0;
   document.getElementById('hqeUSDPreview').textContent =
-    r > 0 ? 'SSP '+parseFloat(_eSSP).toLocaleString()+' ÷ '+r.toLocaleString()+' = $'+usd.toFixed(2)+' USD' : '—';
+    r > 0 ? 'SSP '+parseFloat(_eSSP).toLocaleString()+' ÷ '+r.toLocaleString()+' = ' + <?= json_encode(dn_cur($config)) ?> +usd.toFixed(2)+' USD' : '—';
 
   // Rate comparison banner
   var banner = document.getElementById('hqeRateBanner');
@@ -1532,7 +1532,7 @@ document.getElementById('hqeOv').addEventListener('click', function(e){ if(e.tar
 function openExpReject(id, name, amt, cur) {
   document.getElementById('hqerExpId').value = id;
   document.getElementById('hqerSub').textContent = 'Expense #'+id+' from '+name;
-  var disp = cur==='SSP' ? 'SSP '+parseFloat(amt).toLocaleString() : '$'+parseFloat(amt).toFixed(2);
+  var disp = cur==='SSP' ? 'SSP '+parseFloat(amt).toLocaleString() : <?= json_encode(dn_cur($config)) ?> +parseFloat(amt).toFixed(2);
   document.getElementById('hqerInfo').innerHTML =
     '<div class="hqm-row"><span class="hqm-lbl">Agent</span><span class="hqm-val">'+esc(name)+'</span></div>' +
     '<div class="hqm-row"><span class="hqm-lbl">Amount</span><span class="hqm-val" style="color:#D41C1C;">'+disp+'</span></div>';
@@ -1556,13 +1556,13 @@ function hqConfirmRecord(formId, name) {
     var form = document.getElementById(formId);
     var amt  = form.querySelector('[name=amount]').value;
     if (!amt || parseFloat(amt) <= 0) return;
-    if (confirm('Record handover of $' + parseFloat(amt).toFixed(2) + ' from ' + name + '?\n\nThis confirms receipt and refills their wallet.')) {
+    if (confirm('Record handover of ' + <?= json_encode(dn_cur($config)) ?> + parseFloat(amt).toFixed(2) + ' from ' + name + '?\n\nThis confirms receipt and refills their wallet.')) {
         form.submit();
     }
 }
 function hqConfirmNudge(formId, name, amt, holdingSince) {
     var first = name.split(' ')[0];
-    var preview = 'Hi ' + first + ', you have $' + amt + ' in cash';
+    var preview = 'Hi ' + first + ', you have ' + <?= json_encode(dn_cur($config)) ?> + amt + ' in cash';
     if (holdingSince) preview += ' (holding for ' + holdingSince + ')';
     preview += '. Please hand over to the office today.';
     if (confirm('Send WhatsApp reminder to ' + first + '?\n\nPreview:\n"' + preview + '"')) {

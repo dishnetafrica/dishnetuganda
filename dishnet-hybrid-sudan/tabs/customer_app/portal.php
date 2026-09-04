@@ -753,7 +753,7 @@ if ($view === 'home'):
     <div class="due-banner-ic"><svg class="ic"><use href="#i-clock"/></svg></div>
     <div class="due-banner-t">
       <div class="due-banner-tt"><?= $portalUnpaidCount ?> invoice<?= $portalUnpaidCount > 1 ? 's' : '' ?> due</div>
-      <div class="due-banner-ts">$<?= number_format($portalUnpaidTotal, 0) ?> · Pay to keep service active</div>
+      <div class="due-banner-ts"><?= dn_cur($config) ?><?= number_format($portalUnpaidTotal, 0) ?> · Pay to keep service active</div>
     </div>
     <span class="chev">›</span>
   </div>
@@ -907,7 +907,7 @@ if ($view === 'home'):
       <div class="list-t">
         <div class="list-tt">Invoices</div>
         <div class="list-ts">
-          <?= $portalTotalInvoiceCount ?> invoice<?= $portalTotalInvoiceCount !== 1 ? 's' : '' ?><?php if ($portalUnpaidCount): ?> · <span style="color:#FAC775"><?= $portalUnpaidCount ?> unpaid · $<?= number_format($portalUnpaidTotal, 0) ?></span><?php endif; ?>
+          <?= $portalTotalInvoiceCount ?> invoice<?= $portalTotalInvoiceCount !== 1 ? 's' : '' ?><?php if ($portalUnpaidCount): ?> · <span style="color:#FAC775"><?= $portalUnpaidCount ?> unpaid · <?= dn_cur($config) ?><?= number_format($portalUnpaidTotal, 0) ?></span><?php endif; ?>
         </div>
       </div>
       <span class="chev">›</span>
@@ -959,7 +959,7 @@ elseif ($view === 'plans'): ?>
       </div>
       <div class="plan-price">
         <div class="plan-price-v">
-          <span class="plan-price-cur">$</span>
+          <span class="plan-price-cur"><?= trim(dn_cur($config)) ?></span>
           <span class="plan-price-num"><?= number_format($portalPrice, 0) ?></span>
         </div>
         <div class="plan-price-per">/ month</div>
@@ -992,7 +992,7 @@ elseif ($view === 'invoices'): ?>
   </div>
   <div style="font-size:12px;color:rgba(255,255,255,.55);position:relative;z-index:2">
     <?= $portalTotalInvoiceCount ?> invoice<?= $portalTotalInvoiceCount === 1 ? '' : 's' ?>
-    <?php if ($portalUnpaidCount): ?> · <span style="color:#FAC775"><?= $portalUnpaidCount ?> unpaid · $<?= number_format($portalUnpaidTotal, 0) ?></span><?php endif; ?>
+    <?php if ($portalUnpaidCount): ?> · <span style="color:#FAC775"><?= $portalUnpaidCount ?> unpaid · <?= dn_cur($config) ?><?= number_format($portalUnpaidTotal, 0) ?></span><?php endif; ?>
   </div>
 </div>
 
@@ -1004,7 +1004,7 @@ elseif ($view === 'invoices'): ?>
     </div>
   <?php else: ?>
     <?php if ($portalUnpaidCount > 0): ?>
-      <div class="sec-lbl">Unpaid · $<?= number_format($portalUnpaidTotal, 0) ?></div>
+      <div class="sec-lbl">Unpaid · <?= dn_cur($config) ?><?= number_format($portalUnpaidTotal, 0) ?></div>
       <div class="list-card">
         <?php foreach ($portalInvoices as $inv): if ($inv['status'] === 'paid') continue; ?>
           <div class="inv-row" onclick="DishNet.openInvoice(<?= $inv['id'] ?>)">
@@ -1019,7 +1019,7 @@ elseif ($view === 'invoices'): ?>
               </div>
             </div>
             <div class="inv-r">
-              <div class="inv-amt">$<?= number_format($inv['due'], 0) ?></div>
+              <div class="inv-amt"><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?></div>
               <span class="pill <?= $inv['status'] === 'overdue' ? 'red' : 'amber' ?>" style="font-size:9px;padding:2px 6px;margin-top:3px"><?= pe($inv['status']) ?></span>
             </div>
           </div>
@@ -1043,7 +1043,7 @@ elseif ($view === 'invoices'): ?>
               </div>
             </div>
             <div class="inv-r">
-              <div class="inv-amt" style="color:var(--gray)">$<?= number_format($inv['total'], 0) ?></div>
+              <div class="inv-amt" style="color:var(--gray)"><?= dn_cur($config) ?><?= number_format($inv['total'], 0) ?></div>
               <span class="pill green">paid</span>
             </div>
           </div>
@@ -1297,7 +1297,7 @@ elseif ($view === 'invoice_detail'):
       <?= pe(strtoupper($inv['status'])) ?>
     </span>
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:42px;color:var(--dark);margin-top:12px;letter-spacing:-1px">
-      $<?= number_format($inv['status'] === 'paid' ? $inv['total'] : $inv['due'], 0) ?>
+      <?= dn_cur($config) ?><?= number_format($inv['status'] === 'paid' ? $inv['total'] : $inv['due'], 0) ?>
     </div>
     <div style="font-size:12px;color:var(--gray);margin-top:4px">
       <?php if ($inv['status'] === 'paid'): ?>
@@ -1317,10 +1317,10 @@ elseif ($view === 'invoice_detail'):
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;color:var(--dark)"><?= pe($item['label']) ?></div>
           <?php if ($item['qty'] != 1): ?>
-          <div style="font-size:11px;color:var(--gray-2);margin-top:2px"><?= $item['qty'] ?> × $<?= number_format($item['price'], 2) ?></div>
+          <div style="font-size:11px;color:var(--gray-2);margin-top:2px"><?= $item['qty'] ?> × <?= dn_cur($config) ?><?= number_format($item['price'], 2) ?></div>
           <?php endif; ?>
         </div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:var(--dark)">$<?= number_format($item['total'], 2) ?></div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:var(--dark)"><?= dn_cur($config) ?><?= number_format($item['total'], 2) ?></div>
       </div>
     </div>
     <?php endforeach; ?>
@@ -1334,27 +1334,27 @@ elseif ($view === 'invoice_detail'):
     <?php if ($inv['subtotal'] != $inv['total']): ?>
     <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:13px;color:var(--gray)">Subtotal</span>
-      <span style="font-size:13px;font-weight:600">$<?= number_format($inv['subtotal'], 2) ?></span>
+      <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['subtotal'], 2) ?></span>
     </div>
     <?php if ($inv['tax'] > 0): ?>
     <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:13px;color:var(--gray)">Tax</span>
-      <span style="font-size:13px;font-weight:600">$<?= number_format($inv['tax'], 2) ?></span>
+      <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['tax'], 2) ?></span>
     </div>
     <?php endif; ?>
     <?php endif; ?>
     <div style="padding:12px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:14px;font-weight:700;color:var(--dark)">Total</span>
-      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--dark)">$<?= number_format($inv['total'], 2) ?></span>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--dark)"><?= dn_cur($config) ?><?= number_format($inv['total'], 2) ?></span>
     </div>
     <?php if ($inv['paid'] > 0 && $inv['status'] !== 'paid'): ?>
     <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:13px;color:var(--green-mid)">Paid</span>
-      <span style="font-size:13px;font-weight:600;color:var(--green-mid)">-$<?= number_format($inv['paid'], 2) ?></span>
+      <span style="font-size:13px;font-weight:600;color:var(--green-mid)">-<?= dn_cur($config) ?><?= number_format($inv['paid'], 2) ?></span>
     </div>
     <div style="padding:12px 16px;display:flex;justify-content:space-between">
       <span style="font-size:14px;font-weight:700;color:var(--danger-text)">Amount due</span>
-      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--danger-text)">$<?= number_format($inv['due'], 2) ?></span>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--danger-text)"><?= dn_cur($config) ?><?= number_format($inv['due'], 2) ?></span>
     </div>
     <?php endif; ?>
   </div>
@@ -1413,7 +1413,7 @@ elseif ($view === 'invoice_detail'):
             var titleText = 'Receipt #' + p.id;
             html += '<div style="padding:12px 16px;border-bottom:1px solid var(--off-white);display:flex;justify-content:space-between;align-items:center;gap:10px">';
             html +=   '<div style="flex:1;min-width:0">';
-            html +=     '<div style="font-size:13px;font-weight:600;color:var(--dark)">$' + amt + ' <span style="font-size:11px;color:var(--gray-2);font-weight:400">· ' + DishNet._esc(method) + '</span></div>';
+            html +=     '<div style="font-size:13px;font-weight:600;color:var(--dark)">' + <?= json_encode(dn_cur($config)) ?> + amt + ' <span style="font-size:11px;color:var(--gray-2);font-weight:400">· ' + DishNet._esc(method) + '</span></div>';
             html +=     '<div style="font-size:11px;color:var(--gray-2);margin-top:2px">' + DishNet._esc(dStr) + ' · Payment #' + p.id + '</div>';
             html +=   '</div>';
             html +=   '<button onclick="DishNet.viewPdf(\'' + pdfUrl.replace(/\'/g, "\\'") + '\', \'' + titleText + '\')" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--off-white);border-radius:6px;font-size:11px;font-weight:700;color:var(--red);border:none;cursor:pointer">';
@@ -1442,7 +1442,7 @@ elseif ($view === 'invoice_detail'):
         Account: <b>DishNet Africa Ltd</b><br>
         Bank: <b>Stanbic Bank / Equity Bank</b><br>
         Reference: <b><?= pe($inv['number']) ?></b><br>
-        Amount: <b>$<?= number_format($inv['due'], 0) ?> USD</b>
+        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?> USD</b>
       </div>
     </div>
   </div>
@@ -4843,7 +4843,7 @@ elseif ($view === 'service_status'):
       <div style="flex:1;font-size:13px;color:#7A1010;font-weight:600;line-height:1.4">
         Your internet is paused.
         <?php if (($portalUnpaidTotal ?? 0) > 0): ?>
-        Pay <b>$<?= number_format((float)$portalUnpaidTotal, 0) ?></b> to restore service — reconnects automatically within seconds.
+        Pay <b><?= dn_cur($config) ?><?= number_format((float)$portalUnpaidTotal, 0) ?></b> to restore service — reconnects automatically within seconds.
         <?php else: ?>
         Pay your outstanding balance to restore service — reconnects automatically within seconds.
         <?php endif; ?>
@@ -5024,7 +5024,7 @@ elseif ($view === 'wifi_site'):
       <div style="font-size:12px;color:#7A1010;line-height:1.5">
         Your internet for <b><?= pe($wsLocation) ?></b> (<?= pe($wsKit) ?>) is currently paused due to an outstanding balance.
         <?php if (($portalUnpaidTotal ?? 0) > 0): ?>
-        <br><br><b>Pay $<?= number_format((float)$portalUnpaidTotal, 0) ?></b> to restore service — your dish will reconnect automatically within seconds.
+        <br><br><b>Pay <?= dn_cur($config) ?><?= number_format((float)$portalUnpaidTotal, 0) ?></b> to restore service — your dish will reconnect automatically within seconds.
         <?php else: ?>
         <br><br>Tap here to view your invoices.
         <?php endif; ?>
@@ -6706,7 +6706,7 @@ window.DishNet = {
     var msg = '✅ *Payment Notification*\n\n'
       + 'Customer: *' + name + '* (#' + clientId + ')\n'
       + 'Invoice: *' + number + '*\n'
-      + 'Amount: *$' + Math.round(amount) + ' USD*\n\n'
+      + 'Amount: *' + <?= json_encode(dn_cur($config)) ?> + Math.round(amount) + ' USD*\n\n'
       + 'The customer says they have paid. Please verify and confirm.';
     // Send to Bidal's number
     DishNet.openWhatsApp('+211921443002', msg);

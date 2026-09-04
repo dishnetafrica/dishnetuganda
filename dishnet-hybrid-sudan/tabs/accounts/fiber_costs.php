@@ -345,7 +345,7 @@ $priceChanges = $fpSvc->detectPriceChanges();
     <?php foreach(array_slice($priceChanges['changes'], 0, 3) as $ch): ?>
     <div style="margin-top:4px;padding-left:20px;">
         <?=$ch['change']>0?'🔴':'🟢'?> <strong><?=htmlspecialchars($ch['plan'])?></strong>:
-        $<?=number_format($ch['old_cost'],2)?> → $<?=number_format($ch['new_cost'],2)?>
+        <?= dn_cur($config) ?><?=number_format($ch['old_cost'],2)?> → <?= dn_cur($config) ?><?=number_format($ch['new_cost'],2)?>
         (<?=$ch['change_pct']>0?'+':''?><?=number_format($ch['change_pct'],1)?>%)
     </div>
     <?php endforeach; ?>
@@ -372,12 +372,12 @@ foreach ($trend as $t) {
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;">
             <div style="display:flex;gap:3px;align-items:flex-end;width:100%;justify-content:center;height:100%;">
                 <?php if($ePct > 0):?>
-                <div style="width:35%;background:#3b82f633;border:1px solid #3b82f666;border-radius:3px 3px 0 0;height:<?=$ePct?>%;" title="Expected: $<?=number_format($t['expected'],0)?>"></div>
+                <div style="width:35%;background:#3b82f633;border:1px solid #3b82f666;border-radius:3px 3px 0 0;height:<?=$ePct?>%;" title="Expected: <?= dn_cur($config) ?><?=number_format($t['expected'],0)?>"></div>
                 <?php endif;?>
-                <div style="width:35%;background:<?=$t['actual']>0?'#f59e0b':'#334155'?>;border-radius:3px 3px 0 0;height:<?=max($aPct,2)?>%;min-height:2px;" title="Actual: $<?=number_format($t['actual'],0)?>"></div>
+                <div style="width:35%;background:<?=$t['actual']>0?'#f59e0b':'#334155'?>;border-radius:3px 3px 0 0;height:<?=max($aPct,2)?>%;min-height:2px;" title="Actual: <?= dn_cur($config) ?><?=number_format($t['actual'],0)?>"></div>
             </div>
             <div style="font-size:10px;color:#64748b;margin-top:4px;white-space:nowrap;"><?=htmlspecialchars($t['label'])?></div>
-            <?php if($t['actual'] > 0):?><div style="font-size:9px;color:#f59e0b;">$<?=number_format($t['actual'],0)?></div><?php endif;?>
+            <?php if($t['actual'] > 0):?><div style="font-size:9px;color:#f59e0b;"><?= dn_cur($config) ?><?=number_format($t['actual'],0)?></div><?php endif;?>
         </div>
         <?php endforeach; ?>
     </div>
@@ -932,7 +932,7 @@ $anomalies = $ffEng->detectProfitAnomalies();
     <div class="fc-card"><div class="fc-card-num" style="color:#ef4444;font-size:22px;"><?=fc_fmt($prediction['service_total'])?></div><div class="fc-card-label">Service Cost</div>
         <div style="font-size:10px;color:#64748b;"><?=$prediction['active_line_count']?> active + <?=$prediction['disabled_line_count']?> prorated</div></div>
     <div class="fc-card"><div class="fc-card-num" style="color:#f59e0b;font-size:22px;"><?=fc_fmt($prediction['installation_total'])?></div><div class="fc-card-label">Installation</div>
-        <div style="font-size:10px;color:#64748b;"><?=$prediction['new_customer_count']?> new × $<?=number_format($prediction['installation_cost_per_svc'],0)?></div></div>
+        <div style="font-size:10px;color:#64748b;"><?=$prediction['new_customer_count']?> new × <?= dn_cur($config) ?><?=number_format($prediction['installation_cost_per_svc'],0)?></div></div>
     <div class="fc-card" style="border-color:#8b5cf666;"><div class="fc-card-num" style="color:#8b5cf6;font-size:22px;"><?=fc_fmt($prediction['grand_total'])?></div><div class="fc-card-label">Predicted Total</div>
         <div style="font-size:10px;color:#64748b;">What 4G Telecom should invoice</div></div>
     <div class="fc-card"><div class="fc-card-num" style="color:#60a5fa;font-size:22px;"><?=$prediction['service_line_count']?></div><div class="fc-card-label">Total Lines</div></div>
@@ -959,7 +959,7 @@ $anomalies = $ffEng->detectProfitAnomalies();
     <td>Service Subtotal</td><td><?=$prediction['active_line_count']?></td><td><?=$prediction['disabled_line_count']?></td><td></td><td><?=fc_fmt($prediction['service_total'])?></td>
 </tr>
 <tr style="background:#1e293b44;">
-    <td>Installation (<?=$prediction['new_customer_count']?> new × $<?=number_format($prediction['installation_cost_per_svc'],0)?>)</td><td colspan="3"></td><td style="font-weight:700;"><?=fc_fmt($prediction['installation_total'])?></td>
+    <td>Installation (<?=$prediction['new_customer_count']?> new × <?= dn_cur($config) ?><?=number_format($prediction['installation_cost_per_svc'],0)?>)</td><td colspan="3"></td><td style="font-weight:700;"><?=fc_fmt($prediction['installation_total'])?></td>
 </tr>
 <tr style="background:#8b5cf611;font-weight:700;color:#8b5cf6;">
     <td>Grand Total (Predicted Invoice)</td><td colspan="3"></td><td style="font-size:16px;"><?=fc_fmt($prediction['grand_total'])?></td>
@@ -1110,7 +1110,7 @@ $problemLines = array_filter($comparison['line_comparison'], function($l) {
     <td><span style="background:<?=$pl['service_status']==='active'?'#22c55e':'#f59e0b'?>22;color:<?=$pl['service_status']==='active'?'#22c55e':'#f59e0b'?>;padding:1px 6px;border-radius:4px;font-size:10px;"><?=htmlspecialchars($pl['service_status'])?></span></td>
     <td><?=$pl['our_days']?>/<?=$pl['days_in_month']?></td>
     <td><?=fc_fmt($pl['our_amount'])?></td>
-    <td style="color:<?=$diffColor?>;font-weight:700;"><?=$pl['supplier_amount']!==null?fc_fmt($pl['supplier_amount']):'~$'.number_format($pl['our_rate'],2)?></td>
+    <td style="color:<?=$diffColor?>;font-weight:700;"><?=$pl['supplier_amount']!==null?fc_fmt($pl['supplier_amount']):'~' . dn_cur($config) . number_format($pl['our_rate'],2)?></td>
     <td style="color:<?=$diffColor?>;font-weight:700;"><?=$pl['diff']!==null?($pl['diff']>=0?'+':'').fc_fmt($pl['diff']):'+'.fc_fmt($pl['our_rate']-$pl['our_amount'])?></td>
     <td>
         <form method="post" style="display:inline-flex;gap:3px;">

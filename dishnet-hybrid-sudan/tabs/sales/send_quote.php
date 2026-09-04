@@ -287,7 +287,7 @@ function addItem(ctx, label='', price=0, qty=1, unit='month') {
     <input type="text" placeholder="Description" value="${label}" oninput="recalc('${ctx}')" class="label">
     <input type="number" class="qty" placeholder="Qty" value="${qty}" min="1" oninput="recalc('${ctx}')">
     <input type="text" class="unit" placeholder="Unit" value="${unit}" title="e.g. month, piece, amount">
-    <span>$</span>
+    <span><?= trim(dn_cur($config)) ?></span>
     <input type="number" class="price" placeholder="Price" value="${price || ''}" min="0" step="0.01" oninput="recalc('${ctx}')">
     <button type="button" class="sq-remove" onclick="removeItem('${ctx}','${id}')" title="Remove">✕</button>
   `;
@@ -306,7 +306,7 @@ function showPlanSuggest(inp, ctx, id) {
   wrap.id = 'planSuggest_' + ctx + '_' + id;
   PLANS.forEach(p => {
     const opt = document.createElement('option');
-    opt.value = p.name + ' — $' + p.price + '/' + p.unit;
+    opt.value = p.name + ' — ' + <?= json_encode(dn_cur($config)) ?> + p.price + '/' + p.unit;
     opt.dataset.price = p.price;
     opt.dataset.unit  = p.unit;
     opt.dataset.name  = p.name;

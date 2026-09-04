@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/currency.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains'))  { function str_contains(string $h, string $n): bool  { return $n===''||strpos($h,$n)!==false; } }
@@ -157,8 +158,8 @@ class QuotePdfService
             }
             $itemsHtml .= '</td>';
             $itemsHtml .= '<td>' . $qty . '</td>';
-            $itemsHtml .= '<td>$' . number_format($price, 2) . $unitLabel . '</td>';
-            $itemsHtml .= '<td style="font-weight:700;">$' . number_format($lineTotal, 2) . '</td>';
+            $itemsHtml .= '<td>' . dn_cur($this->config) . number_format($price, 2) . $unitLabel . '</td>';
+            $itemsHtml .= '<td style="font-weight:700;">' . dn_cur($this->config) . number_format($lineTotal, 2) . '</td>';
             $itemsHtml .= '</tr>';
         }
 
@@ -166,25 +167,25 @@ class QuotePdfService
         $discount = (float)($quoteData['discount'] ?? 0);
         $discountLine = '';
         if ($discount > 0) {
-            $discountLine = '<div class="tl s"><span class="lb">Discount</span><span class="vl" style="color:#059669;">-$' . number_format($discount, 2) . '</span></div>';
+            $discountLine = '<div class="tl s"><span class="lb">Discount</span><span class="vl" style="color:#059669;">-' . dn_cur($this->config) . number_format($discount, 2) . '</span></div>';
         }
 
         $tax = (float)($quoteData['tax'] ?? 0);
         $taxLine = '';
         if ($tax > 0) {
-            $taxLine = '<div class="tl s"><span class="lb">Tax</span><span class="vl">$' . number_format($tax, 2) . '</span></div>';
+            $taxLine = '<div class="tl s"><span class="lb">Tax</span><span class="vl">' . dn_cur($this->config) . number_format($tax, 2) . '</span></div>';
         }
 
         $amountPaid = isset($quoteData['amount_paid']) ? (float)$quoteData['amount_paid'] : 0;
         $paidLine = '';
         if ($amountPaid > 0) {
-            $paidLine = '<div class="tl s"><span class="lb" style="color:#059669;">Paid</span><span class="vl" style="color:#059669;">$' . number_format($amountPaid, 2) . '</span></div>';
+            $paidLine = '<div class="tl s"><span class="lb" style="color:#059669;">Paid</span><span class="vl" style="color:#059669;">' . dn_cur($this->config) . number_format($amountPaid, 2) . '</span></div>';
         }
 
         $balance = isset($quoteData['balance']) ? (float)$quoteData['balance'] : 0;
         $balanceLine = '';
         if ($amountPaid > 0 && $balance > 0) {
-            $balanceLine = '<div class="tl" style="background:#fef2f2;"><span class="lb" style="color:#dc2626;font-weight:800;">Balance Due</span><span class="vl" style="color:#dc2626;font-weight:900;">$' . number_format($balance, 2) . '</span></div>';
+            $balanceLine = '<div class="tl" style="background:#fef2f2;"><span class="lb" style="color:#dc2626;font-weight:800;">Balance Due</span><span class="vl" style="color:#dc2626;font-weight:900;">' . dn_cur($this->config) . number_format($balance, 2) . '</span></div>';
         }
 
         $notes = trim($quoteData['notes'] ?? '');

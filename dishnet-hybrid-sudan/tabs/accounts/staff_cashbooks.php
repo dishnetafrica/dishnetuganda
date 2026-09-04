@@ -280,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                 $col['void_reason'] = $reason;
                 $col['audit_log']   = $col['audit_log'] ?? [];
                 $col['audit_log'][] = ['action'=>'void','by'=>$retailer['name'],'at'=>date('Y-m-d H:i:s'),'reason'=>$reason];
-                $scMsg = '✅ Collection #' . $colId . ' voided ($' . number_format($col['amount'] ?? 0, 2) . ').';
+                $scMsg = '✅ Collection #' . $colId . ' voided (' . dn_cur($config) . number_format($col['amount'] ?? 0, 2) . ').';
                 $scOk  = true;
                 // Also void matching cb_ledger entry
                 try {
@@ -317,13 +317,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                 $col['audit_log'][] = ['action'=>'correct','by'=>$retailer['name'],'at'=>date('Y-m-d H:i:s'),'old_amount'=>$oldAmt,'new_amount'=>$newAmt,'reason'=>$reason];
                 $col['corrected_by'] = $retailer['name'];
                 $col['corrected_at'] = date('Y-m-d H:i:s');
-                $scMsg = '✅ Collection #' . $colId . ' corrected: $' . number_format($oldAmt, 2) . ' → $' . number_format($newAmt, 2);
+                $scMsg = '✅ Collection #' . $colId . ' corrected: ' . dn_cur($config) . number_format($oldAmt, 2) . ' → ' . dn_cur($config) . number_format($newAmt, 2);
                 $scOk  = true;
                 // Update cb_ledger amount too
                 try {
                     $__cPdo = $store->getPdo();
                     $__cRef = ($col['crm_payment_id'] ?? null) ? 'PAY-' . $col['crm_payment_id'] : 'COL-' . $colId;
-                    $__cPdo->prepare("UPDATE cb_ledger SET amount=?, description=description||' [CORRECTED: '||?||' by '||?||']' WHERE validation_ref=? AND status!='voided'")->execute([$newAmt, '$'.number_format($oldAmt,2).'→$'.number_format($newAmt,2).': '.$reason, $retailer['name'], $__cRef]);
+                    $__cPdo->prepare("UPDATE cb_ledger SET amount=?, description=description||' [CORRECTED: '||?||' by '||?||']' WHERE validation_ref=? AND status!='voided'")->execute([$newAmt, dn_cur($config) . number_format($oldAmt,2).'→' . dn_cur($config) . number_format($newAmt,2).': '.$reason, $retailer['name'], $__cRef]);
                 } catch (\Throwable $e) {}
                 break;
             }
@@ -376,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                     'created_at'      => date('Y-m-d H:i:s'),
                 ]);
             }
-            $scMsg = '✅ Manual ' . ($manCur === 'SSP' ? 'SSP' : 'USD') . ' entry added: $' . number_format($manAmt, 2) . ' — ' . $manDesc;
+            $scMsg = '✅ Manual ' . ($manCur === 'SSP' ? 'SSP' : 'USD') . ' entry added: ' . dn_cur($config) . number_format($manAmt, 2) . ' — ' . $manDesc;
             $scOk  = true;
         }
     }
@@ -476,13 +476,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
             logActivity(
                 $dataDir,
                 'admin_writeoff_expense',
-                'Write-off ' . ($woCur === 'SSP' ? number_format($woAmt, 0) . ' SSP' : '$' . number_format($woAmt, 2))
+                'Write-off ' . ($woCur === 'SSP' ? number_format($woAmt, 0) . ' SSP' : dn_cur($config) . number_format($woAmt, 2))
                     . ' for ' . $woStaffName . ' (#' . $woStaff . '): ' . $woReason,
                 $retailer['name'] ?? 'Admin'
             );
 
             $scMsg = '✅ Write-off posted: '
-                   . ($woCur === 'SSP' ? number_format($woAmt, 0) . ' SSP' : '$' . number_format($woAmt, 2))
+                   . ($woCur === 'SSP' ? number_format($woAmt, 0) . ' SSP' : dn_cur($config) . number_format($woAmt, 2))
                    . ' against ' . $woStaffName . '. Reason: ' . $woReason;
             $scOk  = true;
         }
@@ -507,7 +507,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
             if ($excDir === 'usd_to_ssp') {
                 // ── Side A: SSP coming IN → cash_ins.json (category=Exchange) ──
                 $sspReceived = round($excAmt * $excRate, 0);
-                $desc = $excNote ?: ('Exchange $' . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' — ' . $excStaffName);
+                $desc = $excNote ?: ('Exchange ' . dn_cur($config) . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' — ' . $excStaffName);
                 $cinRecord = $store->appendWithId('cash_ins.json', [
                     'collector_id'   => $excStaff,
                     'collector_name' => $excStaffName,
@@ -576,13 +576,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                     ]);
                 }
 
-                $scMsg = '✅ Exchange recorded: $' . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' rate. Both sides posted.';
+                $scMsg = '✅ Exchange recorded: ' . dn_cur($config) . number_format($excAmt, 2) . ' → ' . number_format($sspReceived, 0) . ' SSP @ ' . number_format($excRate, 0) . ' rate. Both sides posted.';
                 $scOk  = true;
 
             } else {
                 // ── SSP to USD: SSP going OUT, USD coming IN ──
                 $usdReceived = round($excAmt / $excRate, 2);
-                $desc = $excNote ?: ('Exchange ' . number_format($excAmt, 0) . ' SSP → $' . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0));
+                $desc = $excNote ?: ('Exchange ' . number_format($excAmt, 0) . ' SSP → ' . dn_cur($config) . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0));
 
                 // ── Side A: USD coming IN → cash_ins.json (USD Received) ──
                 $cinRecord = $store->appendWithId('cash_ins.json', [
@@ -632,7 +632,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                     );
                 } catch (\Throwable $e) { /* non-fatal */ }
 
-                $scMsg = '✅ Exchange recorded: ' . number_format($excAmt, 0) . ' SSP → $' . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0) . ' rate. Both sides posted.';
+                $scMsg = '✅ Exchange recorded: ' . number_format($excAmt, 0) . ' SSP → ' . dn_cur($config) . number_format($usdReceived, 2) . ' @ ' . number_format($excRate, 0) . ' rate. Both sides posted.';
                 $scOk  = true;
             }
         }
@@ -840,7 +840,7 @@ uasort($staffSums, function($a, $b) {
     $bHas = ($b['usd'] != 0 || $b['ssp'] > 0 || $b['wallet'] > 0) ? 1 : 0;
     if ($aHas !== $bHas) return $bHas - $aHas;
     return strcmp($a['name'], $b['name']);
-});function scM(float $n):string{return($n<0?'-':'').'$'.number_format(abs($n),2);}
+});function scM(float $n):string{return($n<0?'-':'').dn_cur($config) . number_format(abs($n),2);}
 function scCatIc(string $c):string{$m=['Collection'=>'💰','Expense'=>'🧾','Handover'=>'🤝','SSP Received'=>'🇸🇸','Exchange'=>'🔄','Staff Payment'=>'👤','Fuel'=>'⛽','Transport'=>'🚗','Commission'=>'🤝','Refund'=>'↩️','Power'=>'⚡','Vehicle'=>'🚗'];return $m[$c]??'📝';}
 
 // Currency tab: usd (default) or ssp
@@ -1099,7 +1099,7 @@ function scApply(){
     $_uHovOut = array_sum(array_column(array_values(array_filter($uL, fn($r) => $r['cat'] === 'Handover' && $r['dir'] === 'out' && !in_array($r['status'], ['voided','cancelled','rejected','reverted']))), 'amt'));
     $_uCashWithStaff = $sc_usd;  // ALL-TIME from StaffCashPositionService (matches Diko's view)
   ?>
-  <div class="cb3-hero-bal"><span>$</span><?=number_format(abs($_uCashWithStaff),2)?></div>
+  <div class="cb3-hero-bal"><span><?= trim(dn_cur($config)) ?></span><?=number_format(abs($_uCashWithStaff),2)?></div>
   <div class="cb3-hero-sub"><?=$_uCashWithStaff>0?'⚠ Cash still with staff':'Cash settled'?> · <?=htmlspecialchars($selStaff['phone']??'')?></div>
   <?php endif; ?>
   <div class="cb3-hero-pills">
@@ -1182,7 +1182,7 @@ if (empty($activeL)): ?>
 <div class="cb3-cards">
 <?php foreach($activeL as $row):
   $isIn=$row['dir']==='in'; $st=$row['status']??'approved';
-  $ad=$isSSP?number_format($row['ssp']??0,0).' SSP':'$'.number_format($row['amt'],2);
+  $ad=$isSSP?number_format($row['ssp']??0,0).' SSP':dn_cur($config) . number_format($row['amt'],2);
   $isE=($row['src']==='expense'); $isP=($st==='pending'); $rid=(int)($row['rid']??0);
   $dead=in_array($st,['voided','cancelled','reverted']);
 ?>
@@ -1229,7 +1229,7 @@ if (empty($activeL)): ?>
   <tbody>
   <?php foreach($activeL as $row):
     $isIn=$row['dir']==='in'; $st=$row['status']??'approved';
-    $ad=$isSSP?number_format($row['ssp']??0,0).' SSP':'$'.number_format($row['amt'],2);
+    $ad=$isSSP?number_format($row['ssp']??0,0).' SSP':dn_cur($config) . number_format($row['amt'],2);
     $isE=($row['src']==='expense'); $isP=($st==='pending'); $rid=(int)($row['rid']??0);
     $dead=in_array($st,['voided','cancelled','reverted']);
   ?>
@@ -1349,7 +1349,7 @@ if (empty($activeL)): ?>
     <strong>⚠ Recent auto-recorded exchange(s) for <?= htmlspecialchars($_selStaffName ?? 'this staff') ?>:</strong>
     <?php foreach ($_scAutoExchanges as $_ae): ?>
     <div style="margin-top:4px;font-family:monospace;font-size:11px;">
-        💱 $<?= number_format((float)$_ae['amount'], 0) ?>
+        💱 <?= dn_cur($config) ?><?= number_format((float)$_ae['amount'], 0) ?>
         → <?= number_format((float)($_ae['ssp_amount'] ?? 0), 0) ?> SSP
         @ <?= number_format((float)($_ae['ssp_rate'] ?? 0), 0) ?>
         · <?= substr($_ae['created_at'] ?? '', 11, 5) ?> today
@@ -1373,7 +1373,7 @@ if (empty($activeL)): ?>
 
   <!-- Live position preview -->
   <div style="background:#f8f5ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 14px;margin:14px 0;display:flex;gap:16px;font-size:13px;flex-wrap:wrap;">
-    <div><span style="color:#64748b;">USD bag:</span> <strong id="scEx_usdBal">$<?= number_format($sc_usd, 2) ?></strong></div>
+    <div><span style="color:#64748b;">USD bag:</span> <strong id="scEx_usdBal"><?= dn_cur($config) ?><?= number_format($sc_usd, 2) ?></strong></div>
     <div><span style="color:#64748b;">SSP bag:</span> <strong id="scEx_sspBal"><?= number_format($sc_ssp, 0) ?> SSP</strong></div>
     <?php if ($_scLastRate > 0): ?>
     <div><span style="color:#64748b;">Last market rate:</span> <strong><?= number_format($_scLastRate, 0) ?> SSP/$</strong>
@@ -1412,7 +1412,7 @@ if (empty($activeL)): ?>
           oninput="scExCalc()"
           style="width:100%;padding:12px 12px 12px 36px;border:2px solid #ddd6fe;border-radius:10px;font-size:22px;font-weight:900;box-sizing:border-box;color:#1e293b;">
       </div>
-      <div style="font-size:11px;color:#94a3b8;margin-top:4px;" id="scEx_amtHint">Max available: $<?= number_format($sc_usd, 2) ?></div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px;" id="scEx_amtHint">Max available: <?= dn_cur($config) ?><?= number_format($sc_usd, 2) ?></div>
     </div>
 
     <!-- Rate — pre-filled from last actual market rate, not system rate -->
@@ -1538,13 +1538,13 @@ function scExCalc(){
   if (dir === 'usd_to_ssp') {
     lbl.textContent  = 'USD Amount to Give';
     pfx.textContent  = '$';
-    hint.textContent = 'Max available: $' + usdBal.toFixed(2);
+    hint.textContent = 'Max available: ' + <?= json_encode(dn_cur($config)) ?> + usdBal.toFixed(2);
     resLbl.textContent = 'You will receive';
     if (amt > 0 && rate > 0) {
       var ssp = Math.round(amt * rate);
       var sspAtLast = lastRate > 0 ? Math.round(amt * lastRate) : 0;
       resAmt.textContent = ssp.toLocaleString() + ' SSP';
-      var formula = '$' + amt.toFixed(2) + ' × ' + Math.round(rate).toLocaleString() + ' = ' + ssp.toLocaleString() + ' SSP';
+      var formula = <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' × ' + Math.round(rate).toLocaleString() + ' = ' + ssp.toLocaleString() + ' SSP';
       if (lastRate > 0 && Math.abs(rate - lastRate) >= 10) {
         formula += ' (vs ' + sspAtLast.toLocaleString() + ' at last rate)';
       }
@@ -1559,8 +1559,8 @@ function scExCalc(){
     resLbl.textContent = 'You will receive';
     if (amt > 0 && rate > 0) {
       var usd = amt / rate;
-      resAmt.textContent = '$' + usd.toFixed(2);
-      resFrm.textContent = Math.round(amt).toLocaleString() + ' SSP ÷ ' + Math.round(rate).toLocaleString() + ' = $' + usd.toFixed(2);
+      resAmt.textContent = <?= json_encode(dn_cur($config)) ?> + usd.toFixed(2);
+      resFrm.textContent = Math.round(amt).toLocaleString() + ' SSP ÷ ' + Math.round(rate).toLocaleString() + ' = ' + <?= json_encode(dn_cur($config)) ?> + usd.toFixed(2);
       res.style.display = 'block';
     } else { res.style.display = 'none'; }
     warn.style.display = (amt > sspBal && amt > 0) ? 'block' : 'none';

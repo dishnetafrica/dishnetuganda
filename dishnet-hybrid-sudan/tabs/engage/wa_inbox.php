@@ -336,8 +336,8 @@ function renderChat(conv, msgs, isNewConv, hasNew){
             var info=d.data;
             var bal=parseFloat(info.balance||0);
             var parts=[];
-            if(bal>0.01) parts.push('<span style="color:#dc2626;font-weight:700;">Owes $'+bal.toFixed(2)+'</span>');
-            else if(bal<-0.01) parts.push('<span style="color:#16a34a;">Credit $'+Math.abs(bal).toFixed(2)+'</span>');
+            if(bal>0.01) parts.push('<span style="color:#dc2626;font-weight:700;">Owes ' + <?= json_encode(dn_cur($config)) ?> +bal.toFixed(2)+'</span>');
+            else if(bal<-0.01) parts.push('<span style="color:#16a34a;">Credit ' + <?= json_encode(dn_cur($config)) ?> +Math.abs(bal).toFixed(2)+'</span>');
             else parts.push('<span style="color:#16a34a;">$0 — clear</span>');
             if(info.services) parts.push(esc(info.services));
             if(info.status) parts.push(info.status);

@@ -196,7 +196,7 @@ foreach ($epGroups as [$groupTitle, $eps]):
             <?php if(!$rActive): ?><span class="retailer-badge badge-inactive">Inactive</span><?php endif; ?>
         </div>
         <div class="retailer-card-email"><?= h($r['email']) ?></div>
-        <div class="retailer-card-row"><span class="retailer-card-label">Wallet</span><span class="retailer-card-val">$<?= number_format($r['wallet']??0,2) ?></span></div>
+        <div class="retailer-card-row"><span class="retailer-card-label">Wallet</span><span class="retailer-card-val"><?= dn_cur($config) ?><?= number_format($r['wallet']??0,2) ?></span></div>
         <div class="retailer-card-row"><span class="retailer-card-label">Role</span><span class="retailer-card-val"><?= h($r['role']??'sales') ?></span></div>
         <div class="retailer-card-row"><span class="retailer-card-label">API Token</span></div>
         <div class="retailer-card-token" id="rt_<?= $r['id'] ?>"><?= h($rToken) ?></div>

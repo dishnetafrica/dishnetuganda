@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['fa_action'] ?? '') === 're
                 $allHovForNotify = $store->load('cash_handovers.json') ?? [];
                 foreach ($allHovForNotify as $_hn) {
                     if (in_array((int)($_hn['id'] ?? 0), $srcIds, true)) {
-                        $_srcNames[] = ($_hn['from_name'] ?? 'Staff') . ' $' . number_format((float)($_hn['amount'] ?? 0), 0);
+                        $_srcNames[] = ($_hn['from_name'] ?? 'Staff') . ' ' . dn_cur($config) . number_format((float)($_hn['amount'] ?? 0), 0);
                     }
                 }
             }
@@ -279,15 +279,15 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
         <div class="fhq-stat-lbl">⏳ Pending Incoming</div>
     </div>
     <div class="fhq-stat">
-        <div class="fhq-stat-val" style="color:#16a34a;">$<?= number_format($totalReceived, 2) ?></div>
+        <div class="fhq-stat-val" style="color:#16a34a;"><?= dn_cur($config) ?><?= number_format($totalReceived, 2) ?></div>
         <div class="fhq-stat-lbl">✅ Total Received</div>
     </div>
     <div class="fhq-stat">
-        <div class="fhq-stat-val" style="color:#6366f1;">$<?= number_format($totalRelayed, 2) ?></div>
+        <div class="fhq-stat-val" style="color:#6366f1;"><?= dn_cur($config) ?><?= number_format($totalRelayed, 2) ?></div>
         <div class="fhq-stat-lbl">📤 Relayed to Office</div>
     </div>
     <div class="fhq-stat" style="border-color:<?= $dikoHolding > 0 ? '#fde68a' : '#bbf7d0' ?>;background:<?= $dikoHolding > 0 ? '#fffbeb' : '#f0fdf4' ?>;">
-        <div class="fhq-stat-val" style="color:<?= $dikoHolding > 0 ? '#92400e' : '#15803d' ?>;">$<?= number_format($dikoHolding, 2) ?></div>
+        <div class="fhq-stat-val" style="color:<?= $dikoHolding > 0 ? '#92400e' : '#15803d' ?>;"><?= dn_cur($config) ?><?= number_format($dikoHolding, 2) ?></div>
         <div class="fhq-stat-lbl">💼 Currently Holding</div>
     </div>
 </div>
@@ -330,18 +330,18 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
                 </div>
             </div>
             <div class="fhq-row-right">
-                <div class="fhq-row-amt">$<?= number_format($phAmt, 2) ?></div>
+                <div class="fhq-row-amt"><?= dn_cur($config) ?><?= number_format($phAmt, 2) ?></div>
                 <div class="fhq-row-status">HOV-<?= (int)($ph['id'] ?? 0) ?></div>
             </div>
             <!-- Confirm button — full width below row on mobile -->
             <div class="fhq-row-bottom">
             <form method="POST" action="?page=dashboard&tab=field_handover" style="margin:0;"
-                  onsubmit="return confirm('Confirm receipt of $<?= number_format($phAmt, 2) ?> from <?= addslashes($ph['from_name'] ?? '') ?>?');">
+                  onsubmit="return confirm('Confirm receipt of <?= dn_cur($config) ?><?= number_format($phAmt, 2) ?> from <?= addslashes($ph['from_name'] ?? '') ?>?');">
                 <?= csrfField() ?>
                 <input type="hidden" name="action" value="confirm_handover">
                 <input type="hidden" name="handover_id" value="<?= (int)($ph['id'] ?? 0) ?>">
                 <input type="hidden" name="confirm_notes" value="Confirmed by <?= h($_faName) ?>">
-                <button type="submit" class="fhq-confirm-btn">✅ Confirm Receipt · $<?= number_format($phAmt, 2) ?></button>
+                <button type="submit" class="fhq-confirm-btn">✅ Confirm Receipt · <?= dn_cur($config) ?><?= number_format($phAmt, 2) ?></button>
             </form>
             </div>
         </div>
@@ -354,7 +354,7 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
 <div class="fhq-section">
     <div class="fhq-sec-title">
         ✅ Received from Field (Confirmed)
-        <span class="fhq-badge fhq-badge-ok"><?= count($confirmedIncoming) ?> items · $<?= number_format($totalReceived, 2) ?></span>
+        <span class="fhq-badge fhq-badge-ok"><?= count($confirmedIncoming) ?> items · <?= dn_cur($config) ?><?= number_format($totalReceived, 2) ?></span>
     </div>
     <?php foreach (array_slice(array_reverse($confirmedIncoming), 0, 20) as $ch): ?>
     <?php
@@ -380,7 +380,7 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
             <div class="fhq-row-meta"><?= strtoupper($chProj) ?> · <?= $chDate ?></div>
         </div>
         <div style="text-align:right;">
-            <div class="fhq-row-amt">$<?= number_format($chAmt, 2) ?></div>
+            <div class="fhq-row-amt"><?= dn_cur($config) ?><?= number_format($chAmt, 2) ?></div>
             <div class="fhq-row-status"><?= $chRelayed ? '📤 Relayed' : '💼 Holding' ?> · HOV-<?= $chId ?></div>
         </div>
     </div>
@@ -399,7 +399,7 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
 
     <?php if ($dikoHolding > 0 || ($retailer['is_admin'] ?? false)): ?>
     <div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#475569;">
-        💡 You are holding <strong>$<?= number_format($dikoHolding, 2) ?></strong> in confirmed receipts not yet relayed.
+        💡 You are holding <strong><?= dn_cur($config) ?><?= number_format($dikoHolding, 2) ?></strong> in confirmed receipts not yet relayed.
         <?php if ($confirmedNotRelayedIds): ?>
         This relay will automatically link to <?= count($confirmedNotRelayed) ?> confirmed handover(s): 
         <?php foreach ($confirmedNotRelayed as $nr): ?>
@@ -408,7 +408,7 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
         <?php endif; ?>
     </div>
 
-    <form method="POST" action="?page=dashboard&tab=field_handover" onsubmit="return confirm('Relay $' + document.getElementById('relayAmt').value + ' to <?= addslashes($mainAcct['name'] ?? 'Main Accountant') ?>?');">
+    <form method="POST" action="?page=dashboard&tab=field_handover" onsubmit="return confirm('Relay ' + <?= json_encode(dn_cur($config)) ?> + document.getElementById('relayAmt').value + ' to <?= addslashes($mainAcct['name'] ?? 'Main Accountant') ?>?');">
         <?= csrfField() ?>
         <input type="hidden" name="fa_action" value="relay_to_rupesh">
         <input type="hidden" name="relay_to_id"   value="<?= (int)($mainAcct['id'] ?? 0) ?>">
@@ -519,7 +519,7 @@ input[type=number].fhq-input { font-size: 22px; text-align: center; font-weight:
             <?php endif; ?>
         </div>
         <div style="text-align:right;">
-            <div class="fhq-row-amt">$<?= number_format($relAmt, 2) ?></div>
+            <div class="fhq-row-amt"><?= dn_cur($config) ?><?= number_format($relAmt, 2) ?></div>
             <div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:<?= $scBg ?>;color:<?= $scTxt ?>;"><?= strtoupper($relStatus) ?></span></div>
         </div>
     </div>

@@ -130,11 +130,11 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 <!-- Settlement Hero -->
 <div class="stl-hero">
     <div style="font-size:11px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Settlement &mdash; <?= h($periodLabel) ?></div>
-    <div style="font-size:24px;font-weight:800;margin-top:4px;">$<?= number_format($grandCollected,2) ?> Collected</div>
+    <div style="font-size:24px;font-weight:800;margin-top:4px;"><?= dn_cur($config) ?><?= number_format($grandCollected,2) ?> Collected</div>
     <div class="stl-grid4">
-        <div class="stl-pill"><div class="stl-pill-l">Net Payable</div><div class="stl-pill-v" style="color:#69f0ae;">$<?= number_format($grandNet,2) ?></div></div>
-        <div class="stl-pill"><div class="stl-pill-l">Commission Paid</div><div class="stl-pill-v" style="color:#ffab40;">$<?= number_format($grandCommission,2) ?></div></div>
-        <div class="stl-pill"><div class="stl-pill-l">Wallet Recharges</div><div class="stl-pill-v">$<?= number_format($grandRecharged,2) ?></div></div>
+        <div class="stl-pill"><div class="stl-pill-l">Net Payable</div><div class="stl-pill-v" style="color:#69f0ae;"><?= dn_cur($config) ?><?= number_format($grandNet,2) ?></div></div>
+        <div class="stl-pill"><div class="stl-pill-l">Commission Paid</div><div class="stl-pill-v" style="color:#ffab40;"><?= dn_cur($config) ?><?= number_format($grandCommission,2) ?></div></div>
+        <div class="stl-pill"><div class="stl-pill-l">Wallet Recharges</div><div class="stl-pill-v"><?= dn_cur($config) ?><?= number_format($grandRecharged,2) ?></div></div>
         <div class="stl-pill"><div class="stl-pill-l">Active Agents</div><div class="stl-pill-v"><?= $totalAgents ?></div></div>
     </div>
 </div>
@@ -142,9 +142,9 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 <!-- Collection by Method -->
 <div class="stl-card">
     <div style="font-size:13px;font-weight:800;color:#1e293b;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-credit-card" style="color:#D41C1C;"></i> Collection by Method</div>
-    <div class="stl-row"><span>&#128181; Cash</span><strong style="color:#28a745;">$<?= number_format($cashTotal,2) ?></strong></div>
-    <div class="stl-row"><span>&#128241; Mobile Money</span><strong style="color:#D41C1C;">$<?= number_format($mobileTotal,2) ?></strong></div>
-    <div class="stl-row"><span>&#127974; Bank Transfer</span><strong style="color:#6A1B9A;">$<?= number_format($bankTotal,2) ?></strong></div>
+    <div class="stl-row"><span>&#128181; Cash</span><strong style="color:#28a745;"><?= dn_cur($config) ?><?= number_format($cashTotal,2) ?></strong></div>
+    <div class="stl-row"><span>&#128241; Mobile Money</span><strong style="color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($mobileTotal,2) ?></strong></div>
+    <div class="stl-row"><span>&#127974; Bank Transfer</span><strong style="color:#6A1B9A;"><?= dn_cur($config) ?><?= number_format($bankTotal,2) ?></strong></div>
     <?php if($grandCollected>0): ?>
     <div style="margin-top:10px;display:flex;height:8px;border-radius:4px;overflow:hidden;">
         <?php if($cashTotal>0): ?><div style="background:#28a745;width:<?= round($cashTotal/$grandCollected*100) ?>%;"></div><?php endif; ?>
@@ -157,15 +157,15 @@ if (!($retailer['is_admin'] ?? false) && ($retailer['role'] ?? '') !== 'accounta
 <!-- Reconciliation Check -->
 <div class="stl-card">
     <div style="font-size:13px;font-weight:800;color:#1e293b;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-check2-circle" style="color:#28a745;"></i> Reconciliation</div>
-    <div class="stl-row"><span>Total Collected from Customers</span><strong>$<?= number_format($grandCollected,2) ?></strong></div>
-    <div class="stl-row"><span>Commission Retained by Agents</span><strong style="color:#E65100;">- $<?= number_format($grandCommission,2) ?></strong></div>
-    <div class="stl-row" style="border-top:2px solid #e2e8f0;padding-top:10px;"><span style="font-weight:700;">Amount Due to DishNet</span><strong style="color:#28a745;font-size:16px;">$<?= number_format($grandNet,2) ?></strong></div>
-    <div class="stl-row"><span>Wallet Recharges (Deposits Received)</span><strong style="color:#D41C1C;">$<?= number_format($grandRecharged,2) ?></strong></div>
+    <div class="stl-row"><span>Total Collected from Customers</span><strong><?= dn_cur($config) ?><?= number_format($grandCollected,2) ?></strong></div>
+    <div class="stl-row"><span>Commission Retained by Agents</span><strong style="color:#E65100;">- <?= dn_cur($config) ?><?= number_format($grandCommission,2) ?></strong></div>
+    <div class="stl-row" style="border-top:2px solid #e2e8f0;padding-top:10px;"><span style="font-weight:700;">Amount Due to DishNet</span><strong style="color:#28a745;font-size:16px;"><?= dn_cur($config) ?><?= number_format($grandNet,2) ?></strong></div>
+    <div class="stl-row"><span>Wallet Recharges (Deposits Received)</span><strong style="color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($grandRecharged,2) ?></strong></div>
     <?php $shortfall = $grandNet - $grandRecharged; ?>
     <?php if($shortfall > 0.01): ?>
-    <div class="stl-row" style="background:#FFF3E0;margin:6px -16px -16px;padding:10px 16px;border-radius:0 0 14px 14px;"><span style="font-weight:700;color:#E65100;">&#9888; Outstanding (Cash Not Yet Deposited)</span><strong style="color:#E65100;font-size:15px;">$<?= number_format($shortfall,2) ?></strong></div>
+    <div class="stl-row" style="background:#FFF3E0;margin:6px -16px -16px;padding:10px 16px;border-radius:0 0 14px 14px;"><span style="font-weight:700;color:#E65100;">&#9888; Outstanding (Cash Not Yet Deposited)</span><strong style="color:#E65100;font-size:15px;"><?= dn_cur($config) ?><?= number_format($shortfall,2) ?></strong></div>
     <?php elseif($shortfall < -0.01): ?>
-    <div class="stl-row" style="background:#E8F5E9;margin:6px -16px -16px;padding:10px 16px;border-radius:0 0 14px 14px;"><span style="font-weight:700;color:#28a745;">&#9989; Over-deposited (Credit)</span><strong style="color:#28a745;font-size:15px;">$<?= number_format(abs($shortfall),2) ?></strong></div>
+    <div class="stl-row" style="background:#E8F5E9;margin:6px -16px -16px;padding:10px 16px;border-radius:0 0 14px 14px;"><span style="font-weight:700;color:#28a745;">&#9989; Over-deposited (Credit)</span><strong style="color:#28a745;font-size:15px;"><?= dn_cur($config) ?><?= number_format(abs($shortfall),2) ?></strong></div>
     <?php else: ?>
     <div class="stl-row" style="background:#E8F5E9;margin:6px -16px -16px;padding:10px 16px;border-radius:0 0 14px 14px;"><span style="font-weight:700;color:#28a745;">&#9989; Fully Settled</span><strong style="color:#28a745;">$0.00</strong></div>
     <?php endif; ?>
@@ -216,12 +216,12 @@ try {
   <div style="font-size:13px;color:#92400E;margin-bottom:4px;">
     <?php foreach (array_slice($_faPending, 0, 3) as $_fp): ?>
     <span style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;border-radius:8px;padding:3px 10px;margin:0 4px 4px 0;font-weight:700;">
-      <?= htmlspecialchars($_fp['agent_name']??'Agent') ?> — $<?= number_format((float)($_fp['amount']??0),2) ?>
+      <?= htmlspecialchars($_fp['agent_name']??'Agent') ?> — <?= dn_cur($config) ?><?= number_format((float)($_fp['amount']??0),2) ?>
     </span>
     <?php endforeach; ?>
     <?php if ($_faPendCnt > 3): ?><span style="font-size:12px;color:#B45309;">+<?= $_faPendCnt-3 ?> more</span><?php endif; ?>
   </div>
-  <div style="font-size:12px;color:#B45309;margin-bottom:12px;">Total: <strong>$<?= number_format($_faPendAmt,2) ?></strong></div>
+  <div style="font-size:12px;color:#B45309;margin-bottom:12px;">Total: <strong><?= dn_cur($config) ?><?= number_format($_faPendAmt,2) ?></strong></div>
   <a href="?page=dashboard&tab=handover_queue"
     style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:linear-gradient(135deg,#D97706,#B45309);color:#fff;border-radius:10px;font-size:13px;font-weight:800;text-decoration:none;">
     💵 Review <?= $_faPendCnt ?> pending <?= $_faPendCnt===1?'handover':'handovers' ?> →
@@ -286,11 +286,11 @@ usort($_custodyRows, fn($a,$b)=>$b['cih']<=>$a['cih']);
   ?>
   <tr style="border-bottom:1px solid #f1f5f9;">
     <td style="padding:9px 10px;font-weight:800;color:#1e293b;"><?= h($_cr['name']) ?></td>
-    <td style="padding:9px 10px;text-align:right;color:#374151;">$<?= number_format($_cr['collected'],2) ?></td>
-    <td style="padding:9px 10px;text-align:right;color:#c2410c;">$<?= number_format($_cr['expenses'],2) ?></td>
-    <td style="padding:9px 10px;text-align:right;color:#16a34a;">$<?= number_format($_cr['handedover'],2) ?></td>
+    <td style="padding:9px 10px;text-align:right;color:#374151;"><?= dn_cur($config) ?><?= number_format($_cr['collected'],2) ?></td>
+    <td style="padding:9px 10px;text-align:right;color:#c2410c;"><?= dn_cur($config) ?><?= number_format($_cr['expenses'],2) ?></td>
+    <td style="padding:9px 10px;text-align:right;color:#16a34a;"><?= dn_cur($config) ?><?= number_format($_cr['handedover'],2) ?></td>
     <td style="padding:9px 10px;text-align:right;font-weight:900;font-size:14px;color:<?= $_cr['cih']>0?'#c2410c':'#16a34a' ?>;">
-      $<?= number_format(abs($_cr['cih']),2) ?><?= $_cr['cih']<0?' (over)':'' ?>
+      <?= dn_cur($config) ?><?= number_format(abs($_cr['cih']),2) ?><?= $_cr['cih']<0?' (over)':'' ?>
     </td>
   </tr>
   <?php endforeach; ?>
@@ -313,29 +313,29 @@ usort($_custodyRows, fn($a,$b)=>$b['cih']<=>$a['cih']);
 <div class="stl-agent">
     <div class="stl-agent-head">
         <div class="stl-agent-name"><?= h($bd['name']) ?></div>
-        <span class="stl-agent-badge" style="background:#E3F2FD;color:#D41C1C;">Wallet: $<?= number_format($bd['balance'],2) ?></span>
+        <span class="stl-agent-badge" style="background:#E3F2FD;color:#D41C1C;">Wallet: <?= dn_cur($config) ?><?= number_format($bd['balance'],2) ?></span>
     </div>
     <div class="stl-agent-grid">
         <div class="stl-agent-stat">
-            <div class="stl-agent-stat-v" style="color:#28a745;">$<?= number_format($bd['collected'],2) ?></div>
+            <div class="stl-agent-stat-v" style="color:#28a745;"><?= dn_cur($config) ?><?= number_format($bd['collected'],2) ?></div>
             <div class="stl-agent-stat-l">Collected</div>
         </div>
         <div class="stl-agent-stat">
-            <div class="stl-agent-stat-v" style="color:#E65100;">$<?= number_format($bd['commission'],2) ?></div>
+            <div class="stl-agent-stat-v" style="color:#E65100;"><?= dn_cur($config) ?><?= number_format($bd['commission'],2) ?></div>
             <div class="stl-agent-stat-l">Commission</div>
         </div>
         <div class="stl-agent-stat">
-            <div class="stl-agent-stat-v" style="color:#D41C1C;">$<?= number_format($bd['net'],2) ?></div>
+            <div class="stl-agent-stat-v" style="color:#D41C1C;"><?= dn_cur($config) ?><?= number_format($bd['net'],2) ?></div>
             <div class="stl-agent-stat-l">Net Payable</div>
         </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
         <span style="font-size:10px;color:#6b7280;background:#f8fafc;padding:2px 8px;border-radius:6px;"><?= $bd['count'] ?> payments</span>
         <?php foreach ($bd['methods'] as $mName=>$mAmt): ?>
-        <span style="font-size:10px;color:#6b7280;background:#f8fafc;padding:2px 8px;border-radius:6px;"><?= h($mName) ?>: $<?= number_format($mAmt,2) ?></span>
+        <span style="font-size:10px;color:#6b7280;background:#f8fafc;padding:2px 8px;border-radius:6px;"><?= h($mName) ?>: <?= dn_cur($config) ?><?= number_format($mAmt,2) ?></span>
         <?php endforeach; ?>
         <?php if(($bd['recharged']??0)>0): ?>
-        <span style="font-size:10px;color:#28a745;background:#E8F5E9;padding:2px 8px;border-radius:6px;">Recharged: $<?= number_format($bd['recharged'],2) ?></span>
+        <span style="font-size:10px;color:#28a745;background:#E8F5E9;padding:2px 8px;border-radius:6px;">Recharged: <?= dn_cur($config) ?><?= number_format($bd['recharged'],2) ?></span>
         <?php endif; ?>
     </div>
     <?php
@@ -346,11 +346,11 @@ usort($_custodyRows, fn($a,$b)=>$b['cih']<=>$a['cih']);
     ?>
     <?php if($agentOwes > 0.01): ?>
     <div style="margin-top:8px;padding:6px 10px;background:#FFF3E0;border-radius:8px;font-size:11px;font-weight:700;color:#E65100;display:flex;justify-content:space-between;">
-        <span>&#9888; Owes DishNet</span><span>$<?= number_format($agentOwes,2) ?></span>
+        <span>&#9888; Owes DishNet</span><span><?= dn_cur($config) ?><?= number_format($agentOwes,2) ?></span>
     </div>
     <?php elseif($agentOwes < -0.01): ?>
     <div style="margin-top:8px;padding:6px 10px;background:#E8F5E9;border-radius:8px;font-size:11px;font-weight:700;color:#28a745;display:flex;justify-content:space-between;">
-        <span>&#9989; Over-deposited</span><span>$<?= number_format(abs($agentOwes),2) ?></span>
+        <span>&#9989; Over-deposited</span><span><?= dn_cur($config) ?><?= number_format(abs($agentOwes),2) ?></span>
     </div>
     <?php else: ?>
     <div style="margin-top:8px;padding:6px 10px;background:#E8F5E9;border-radius:8px;font-size:11px;font-weight:700;color:#28a745;text-align:center;">&#9989; Settled</div>

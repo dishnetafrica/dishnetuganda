@@ -372,6 +372,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <div class="toast" id="toast"></div>
 
 <script>
+const CUR = 'UGX ';  // display currency prefix for this deployment
+
 'use strict';
 // ═══════════════════════════════════════
 // STATE
@@ -763,7 +765,7 @@ async function loadCrmBar(cid) {
     const stEl = document.getElementById('crm-st');
     stEl.textContent = d.status || ''; stEl.className = 'crm-status '+(st==='active'?'active':st==='lead'?'lead':'suspended');
     const chips = [];
-    chips.push(`<span class="crm-chip ${bal>0?'red':'green'}">${bal>0?'⚠️ $'+Math.abs(bal).toFixed(2)+' owing':'✅ Clear'}</span>`);
+    chips.push(`<span class="crm-chip ${bal>0?'red':'green'}">${bal>0?'⚠️ '+CUR+Math.abs(bal).toFixed(2)+' owing':'✅ Clear'}</span>`);
     if (d.services) chips.push(`<span class="crm-chip">📡 ${esc(d.services)}</span>`);
     chips.push('<span class="crm-hint">Tap →</span>');
     document.getElementById('crm-chips').innerHTML = chips.join('');
@@ -1076,7 +1078,7 @@ async function showC360() {
     const d = res.data || res;
     const bal = parseFloat(d.balance||0);
     const balEl = document.getElementById('c360-bal');
-    if (balEl) { balEl.textContent = bal>0?'-$'+Math.abs(bal).toFixed(2):'$0.00'; balEl.className='c360-bal '+(bal>0?'red':'green'); }
+    if (balEl) { balEl.textContent = bal>0?'-'+CUR+Math.abs(bal).toFixed(2):CUR+'0.00'; balEl.className='c360-bal '+(bal>0?'red':'green'); }
     let info = `<div class="c360-sec"><h4>Account</h4>
       ${d.email?`<div class="c360-row"><span class="lbl">Email</span><span class="val">${esc(d.email)}</span></div>`:''}
       <div class="c360-row"><span class="lbl">Status</span><span class="val">${esc(d.status||'—')}</span></div>
@@ -1096,7 +1098,7 @@ async function showC360() {
       function svcRow(s) {
         const stCls  = (s.status||'other').toLowerCase();
         const stIcon = stCls === 'active' ? '🟢' : stCls === 'suspended' ? '🔴' : '⚪';
-        const price  = s.price > 0 ? '$' + parseFloat(s.price).toFixed(2) + '/mo' : '';
+        const price  = s.price > 0 ? CUR + parseFloat(s.price).toFixed(2) + '/mo' : '';
         const date   = s.active_from ? 'Since ' + s.active_from : '';
         return `<div class="svc-row">
           <div class="svc-row-left">
@@ -1141,7 +1143,7 @@ async function showC360() {
     }
     svcs += '</div>';
     let pays = '<div class="c360-sec"><h4>Last Payments</h4>';
-    if (d.payments?.length) pays += d.payments.map(p=>`<div class="pay-row"><span>${esc(p.date)} · ${esc(p.method)}</span><span style="font-weight:700;color:var(--green-dk)">$${parseFloat(p.amount||0).toFixed(2)}</span></div>`).join('');
+    if (d.payments?.length) pays += d.payments.map(p=>`<div class="pay-row"><span>${esc(p.date)} · ${esc(p.method)}</span><span style="font-weight:700;color:var(--green-dk)">${CUR}${parseFloat(p.amount||0).toFixed(2)}</span></div>`).join('');
     else pays += '<p class="c360-nd">No payments</p>';
     pays += '</div>';
     let tix = '<div class="c360-sec"><h4>Open Tickets</h4>';
