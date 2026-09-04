@@ -5,7 +5,7 @@ require_once __DIR__ . '/lib/error_handler.php';
 $GLOBALS['_DISHNET_ERROR_FORMAT'] = 'json';
 
 /**
- * web_chat.php — the AI chat on dishnetsudan.com.
+ * web_chat.php — the AI chat on the public website.
  *
  * A second door to the same brain. The WhatsApp worker and this endpoint both
  * call DishNetAiBrain::reply(), fed the same uCRM catalogue, so the website
@@ -255,7 +255,7 @@ if ($message === '') {
         out(['ok' => true, 'session' => $session, 'reply' => '',
              'lead_saved' => true, 'handoff' => $handoff]);
     }
-    bail('Ask me anything about Starlink in Sudan.', $handoff, 400, 'empty');
+    bail('Ask me anything about Starlink.', $handoff, 400, 'empty');
 }
 
 $guard = new WebChatGuard($store, $config);
