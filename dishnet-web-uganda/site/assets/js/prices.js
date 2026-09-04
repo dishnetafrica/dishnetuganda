@@ -20,9 +20,12 @@
  *                                         visitor's address/pin (window.DN_ADDR)
  *   <span data-live-price="NAME"></span>  one product's price, by uCRM name
  *
- * data-name-map on the script tag maps uCRM plan names to the display names
- * customers researched on starlink.com (e.g. "DishNet Home" -> "Residential").
- * uCRM names stay the billing truth; the label changes, the invoice doesn't.
+ * One naming system: the DishNet name from uCRM IS the display name on every
+ * channel (site, chat, WhatsApp, invoice). data-service-map on the script tag
+ * maps each plan to its underlying Starlink service (e.g. "DishNet Home" ->
+ * "Residential"), shown as a small transparency line — never as the headline,
+ * which would invite a straight price comparison with starlink.com instead of
+ * a comparison of the DishNet bundle.
  */
 (function () {
   'use strict';
@@ -38,11 +41,11 @@
     return cur + ' ' + n.toLocaleString('en-US', { maximumFractionDigits: whole ? 0 : 2 });
   }
 
-  // Headline plans first (data-name-map order), then everything else in feed
-  // order — so adding plans in uCRM (e.g. Business tiers) never reshuffles
-  // the familiar trio at the front.
-  var NAMEMAP = {};
-  try { NAMEMAP = JSON.parse(script.getAttribute('data-name-map') || '{}'); } catch (e) {}
+  // Headline plans first (data-service-map order), then everything else in
+  // feed order — so adding plans in uCRM (e.g. Business tiers) never
+  // reshuffles the familiar trio at the front.
+  var SVCMAP = {};
+  try { SVCMAP = JSON.parse(script.getAttribute('data-service-map') || '{}'); } catch (e) {}
   // "DishNet Business 500" -> "500 GB", "DishNet Business 1TB" -> "1 TB".
   // Business tiers are Starlink Local Priority: a priority-data block plus a
   // public IP, with unlimited standard data after — never call them unlimited.
@@ -53,7 +56,7 @@
   }
 
   function headlineFirst(plans) {
-    var keys = Object.keys(NAMEMAP);
+    var keys = Object.keys(SVCMAP);
     if (!keys.length) return plans;
     var head = [], rest = plans.slice();
     keys.forEach(function (k) {
@@ -97,6 +100,7 @@
            : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP — unlimited standard data after · for offices, CCTV &amp; heavy users.</p>'
                  : '<p class="price-desc">Unlimited data · professional installation available · DishNet local support.</p>') +
           (p.speed ? '<p class="price-speed">Up to ' + esc(String(p.speed)) + ' Mbps</p>' : '') +
+          (SVCMAP[p.name] ? '<p class="price-map">Starlink service: ' + esc(SVCMAP[p.name]) + '</p>' : '') +
           '<a class="btn btn-primary" href="https://wa.me/' + WA +
             '?text=' + encodeURIComponent('Hello DishNet, I would like to sign up for ' + p.name) +
           '">Get ' + esc(p.name.replace(/^DishNet\s*/i, '')) + '</a>' +
@@ -111,8 +115,6 @@
   function renderOrderFlow(data, cur) {
     var host = document.querySelector('[data-dishnet-order-flow]');
     if (!host || !(data.plans || []).length) return;
-    var MAP = {};
-    try { MAP = JSON.parse(script.getAttribute('data-name-map') || '{}'); } catch (e) {}
 
     var kits = (data.hardware || []).filter(function (h) { return /package/i.test(h.name); });
     var flexPlans = data.plans.filter(function (p) { return /flex/i.test(p.name); });
@@ -124,8 +126,6 @@
       if (/standard/i.test(name)) return 'assets/img/products/standard-kit.webp';
       return '';
     }
-    function disp(p) { return MAP[p.name] || p.name; }
-
     function hwCards() {
       var h = kits.map(function (k) {
         return '<button type="button" class="of-card" data-hw="' + esc(k.name) + '">' +
@@ -154,11 +154,10 @@
     function planCards() {
       var list = state.hw === '__flex' ? flexPlans : stdPlans;
       return list.map(function (p) {
-        var d = disp(p);
         var biz = /business/i.test(p.name);
         return '<button type="button" class="of-card" data-plan="' + esc(p.name) + '">' +
-          '<h4>' + esc(d) + '</h4>' +
-          (d !== p.name ? '<div class="of-sub">' + esc(p.name) + ' plan</div>'
+          '<h4>' + esc(p.name) + '</h4>' +
+          (SVCMAP[p.name] ? '<div class="of-sub">Starlink service: ' + esc(SVCMAP[p.name]) + '</div>'
            : biz ? '<div class="of-sub">' + esc(bizQty(p.name)) + ' priority data · public IP included</div>'
                  : '<div class="of-sub">Monthly, cancel anytime</div>') +
           '<div class="of-price">' + esc(fmt(cur, p.price)) + ' <small>/' + esc(p.period || 'month') + '</small></div>' +
@@ -185,12 +184,12 @@
         today = kit.price;
         recurNote = 'Then ' + fmt(cur, monthly) + '/month from month 2';
       } else if (state.hw === '__flex') {
-        rows.push([disp(state.plan) + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
+        rows.push([state.plan.name + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
         rows.push(['Hardware upfront', fmt(cur, 0)]);
         today = monthly;
         recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
       } else {
-        rows.push([disp(state.plan) + ' — first month', fmt(cur, monthly)]);
+        rows.push([state.plan.name + ' — first month', fmt(cur, monthly)]);
         rows.push(['Connecting your own Starlink kit', 'Our team confirms']);
         today = monthly;
         recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
@@ -259,7 +258,8 @@
         var extra = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
         var txt = 'Hello DishNet, I would like to order Starlink.' +
           '\nHardware: ' + hwLabel() +
-          '\nPlan: ' + disp(state.plan) + (disp(state.plan) !== state.plan.name ? ' (' + state.plan.name + ')' : '') +
+          '\nPlan: ' + state.plan.name +
+          (SVCMAP[state.plan.name] ? ' (Starlink ' + SVCMAP[state.plan.name] + ')' : '') +
           '\nTotal today: ' + fmt(cur, today) + ' · then ' + fmt(cur, state.plan.price) + '/month' +
           (extra ? '\n' + extra : '');
         window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(txt), '_blank');

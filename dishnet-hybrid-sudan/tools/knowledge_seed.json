@@ -121,6 +121,12 @@
    "kind": "rule",
    "title": "Cheapest plan must match the customer's use",
    "answer": "When someone asks for the cheapest plan, first match it to their use. For a home or personal customer the cheapest option is the cheapest RESIDENTIAL plan (DishNet Lite); never present a Business plan as the default cheapest choice for home use. Business plans cost less per month only because they carry a priority-data block (then standard data) and a public IP - they are designed for offices. If the use is unknown, ask one short question (home or business?) or state both clearly labelled. Always take names and prices from the live catalogue, never from memory."
+  },
+  {
+   "item_key": "PLAN_SERVICE_MAP",
+   "kind": "fact",
+   "title": "Which Starlink service is behind each DishNet plan",
+   "answer": "One naming system: always present the DishNet plan name first; the Starlink name is the underlying service, stated openly whenever a customer asks. Mapping: DishNet Lite = Starlink Residential Lite; DishNet Home = Starlink Residential; DishNet Flex 24 / Flex 12 = Starlink Residential on a 24- or 12-month DishNet package with the kit included; DishNet Business 50 / 500 / 1TB = Starlink Local Priority 50 GB / 500 GB / 1 TB with a public IP. DishNet packages run on the Starlink network while DishNet provides delivery, installation, mobile-money billing, warranty handling and local support; DishNet does not operate the satellite network itself. Never invent Starlink-branded plan names (there is no 'Starlink Home'). Prices always come from the live catalogue, never from this note."
   }
  ]
 }
