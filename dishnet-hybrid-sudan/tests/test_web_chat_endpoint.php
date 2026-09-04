@@ -299,13 +299,20 @@ file_put_contents($guardFile, str_replace('declare(strict_types=1);',
     $orig, $count));
 t('noise injected into the boot path', $count, 1);
 
-$r = call($base, 'POST', '{"message":"how much is the mini?"}', [$OK, $JSON]);
+// Under load the dev server can serve one more request off its stat cache
+// before the rewritten guard file is visible — retry briefly until the
+// injected noise actually executes, then assert on that request's outcome.
+$logged = '';
+for ($try = 0; $try < 6; $try++) {
+    $r = call($base, 'POST', '{"message":"how much is the mini?"}', [$OK, $JSON]);
+    $logged = @file_get_contents($tmp . '/data/ai_platform.log') ?: '';
+    if (str_contains($logged, 'something noisy happened')) break;
+    usleep(250000);
+}
 t('still returns 200', $r['code'], 200);
 t('and the body is still valid JSON', is_array($r['body']), true);
 t('and carries something for the visitor',
   is_array($r['body']) && ($r['body']['reply'] ?? '') !== '', true);
-
-$logged = @file_get_contents($tmp . '/data/ai_platform.log') ?: '';
 t('the stray output is in the log instead of the body',
   str_contains($logged, 'stray output before the response'), true);
 t('and the log names what it was', str_contains($logged, 'something noisy happened'), true);

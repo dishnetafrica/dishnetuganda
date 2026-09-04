@@ -98,7 +98,7 @@
     <p>Contact your admin or DishNet support:</p>
     <table class="kyc-table">
     <tr><td style="font-weight:700;">WhatsApp</td><td>+211 XX XXX XXXX</td></tr>
-    <tr><td style="font-weight:700;">Email</td><td>support@dishnetafrica.com</td></tr>
+    <tr><td style="font-weight:700;">Email</td><td>info@dishnetafrica.com</td></tr>
     <tr><td style="font-weight:700;">CRM Portal</td><td><a href="<?= h(dn_crm_web($config)) ?>" target="_blank"><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></a></td></tr>
     </table>
     </div></div>

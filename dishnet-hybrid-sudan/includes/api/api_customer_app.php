@@ -483,7 +483,7 @@ if (!function_exists('ca_send_otp_email')) {
 
         $mailer = new MailService($dataDir);
         $result = $mailer->send($toEmail, $name, $subject, $html, $text, [
-            'Reply-To' => 'support@dishnetafrica.com',
+            'Reply-To' => 'info@dishnetafrica.com',
         ]);
 
         if (!empty($result['ok'])) {

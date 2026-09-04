@@ -1087,11 +1087,11 @@ elseif ($view === 'support'): ?>
       </div>
       <span class="chev">›</span>
     </div>
-    <div class="list-row" onclick="DishNet.openEmail('support@dishnetafrica.com')">
+    <div class="list-row" onclick="DishNet.openEmail('info@dishnetafrica.com')">
       <div class="list-ic"><svg class="ic"><use href="#i-mail"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Email</div>
-        <div class="list-ts">support@dishnetafrica.com</div>
+        <div class="list-ts">info@dishnetafrica.com</div>
       </div>
       <span class="chev">›</span>
     </div>
