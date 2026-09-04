@@ -101,6 +101,20 @@
       "item_key": "TBC_RELOCATION",
       "kind": "tbc",
       "title": "relocation fees and account transfer process"
+    },
+    {
+      "item_key": "BUSINESS_PLANS",
+      "kind": "fact",
+      "title": "Business plans (priority data + public IP)",
+      "answer": "Our DishNet Business plans run on Starlink Local Priority: a monthly priority-data block (50 GB, 500 GB or 1 TB) plus a PUBLIC IP address and priority support. After the priority data is used, unlimited standard data continues. They are ideal for offices, CCTV/remote access, VPNs and heavy users. Always quote the current prices from the live price list.",
+      "wa_answer": "💼 DishNet Business = priority data (50GB/500GB/1TB) + public IP + priority support. Unlimited standard data after. Great for offices, CCTV & VPN. Want today's prices?"
+    },
+    {
+      "item_key": "OBJECTION_CHEAPER_KIT",
+      "kind": "fact",
+      "title": "Objection: another seller has a cheaper Starlink kit",
+      "answer": "Never criticise other sellers. Approved answer: some sellers offer imported kits at lower prices. Our kits are genuine Uganda-channel stock with warranty and a VAT receipt, and every package includes delivery, professional installation, your first month of internet and local support on WhatsApp. If upfront cost is the concern, offer the Flex plan: connected with UGX 0 upfront.",
+      "wa_answer": "Our kits are genuine Uganda stock with warranty + VAT receipt, and the package includes delivery, professional installation, your first month and local support. If upfront cost is the issue — our Flex plan gets you connected with UGX 0 upfront. 🙂"
     }
   ]
 }
