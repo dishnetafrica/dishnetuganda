@@ -28,6 +28,9 @@
     '.dnc-launch svg{width:26px;height:26px;fill:#fff}' +
     '.dnc-teaser{position:fixed;bottom:100px;right:92px;z-index:95;background:#fff;color:#1A1A1A;border:1px solid #E5E4E0;border-radius:12px;padding:10px 14px;font:14px/1.4 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.12);max-width:240px;cursor:pointer}' +
     '.dnc-panel{position:fixed;bottom:160px;right:24px;z-index:96;width:360px;max-width:calc(100vw - 32px);max-height:min(560px,calc(100vh - 180px));display:flex;flex-direction:column;background:#fff;border:1px solid #E5E4E0;border-radius:16px;box-shadow:0 12px 48px rgba(0,0,0,.18);overflow:hidden;font-family:system-ui,-apple-system,sans-serif}' +
+    /* display:flex above would otherwise beat the browser's [hidden] rule,
+       leaving the panel open forever — the close button must win. */
+    '.dnc-panel[hidden]{display:none!important}' +
     '.dnc-head{background:#0B1120;color:#fff;padding:14px 16px}' +
     '.dnc-head b{font-size:15px;display:block}' +
     '.dnc-head span{font-size:12px;opacity:.75}' +
