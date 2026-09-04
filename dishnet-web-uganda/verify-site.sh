@@ -71,6 +71,7 @@ for f in glob.glob(os.path.join(root,'site','**','*.html'),recursive=True):
     for m in pat.findall(open(f,encoding='utf-8',errors='ignore').read()):
         r=m.split('?')[0].split('#')[0]
         if not r or skip.match(r): continue
+        if r.endswith('.apk'): continue   # binaries are uploaded at deploy, not tracked in git
         u=r if r.startswith('/') else '/'+os.path.relpath(os.path.normpath(os.path.join(d,r)),os.path.join(root,'site'))
         if u.endswith('/'): u += 'index.html'   # a directory link means its index
         elif not u.rsplit('/',1)[-1].count('.'): u += '/index.html'
@@ -129,8 +130,10 @@ done
 # One WhatsApp number, everywhere.
 wa=$(grep -rhoE 'wa\.me/[0-9]+' "$HERE/site" --include='*.html' | sort -u)
 [ "$wa" = "wa.me/256705993348" ] || { echo "  unexpected WhatsApp target(s): $wa"; fail=1; }
-# One customer-portal URL, everywhere it appears.
-portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --include='*.html' | sort -u)
+# One customer-portal URL, everywhere it appears — plus the plugin's public
+# price feed, which legitimately lives on the same host.
+portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --include='*.html' | sort -u \
+         | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=prices$')
 [ "$portal" = "https://crm.dishnetuganda.com/crm" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
 [ $fail -eq 0 ] && echo "  no foreign-country remnants; one WhatsApp number; one portal URL"
 

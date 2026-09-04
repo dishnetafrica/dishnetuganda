@@ -13,8 +13,14 @@
  *           data-whatsapp="256705993348"></script>
  *
  * Renders into:
- *   <div data-dishnet-plans></div>       the monthly plans grid
- *   <span data-live-price="NAME"></span> one product's price, by uCRM name
+ *   <div data-dishnet-plans></div>        the monthly plans grid
+ *   <div data-dishnet-hero-plans></div>   the homepage hero cards (dark theme)
+ *   <span data-live-price="NAME"></span>  one product's price, by uCRM name
+ *
+ * data-name-map on the script tag maps uCRM plan names to the display names
+ * customers researched on starlink.com (e.g. "DishNet Home" -> "Residential").
+ * uCRM names stay the billing truth; only the label changes. Hero order
+ * buttons include the visitor's address/pin when window.DN_ADDR is present.
  */
 (function () {
   'use strict';
@@ -65,6 +71,56 @@
           '">Get ' + esc(p.name.replace(/^DishNet\s*/i, '')) + '</a>' +
           '</article>';
       }).join('') + '<p class="price-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + '</p>';
+    }
+
+    // Homepage hero cards (Starlink-style, price-first)
+    var hero = document.querySelector('[data-dishnet-hero-plans]');
+    if (hero && (data.plans || []).length) {
+      var MAP = {};
+      try { MAP = JSON.parse(script.getAttribute('data-name-map') || '{}'); } catch (e) {}
+      var flex12 = null;
+      data.plans.forEach(function (p) { if (/flex/i.test(p.name) && /12/.test(p.name)) flex12 = p; });
+      var list = data.plans.filter(function (p) { return p !== flex12; }).slice(0, 3);
+
+      hero.innerHTML = list.map(function (p) {
+        var flex = /flex/i.test(p.name);
+        var best = p.name.toLowerCase() === FEATURED;
+        var disp = MAP[p.name] || p.name;
+        var sub  = MAP[p.name] && MAP[p.name] !== p.name ? esc(p.name) + ' plan'
+                 : (flex ? 'Kit + internet + installation, monthly' : '');
+        var feats = flex ? [
+            'No kit to buy — Starlink Mini included',
+            'Professional installation included',
+            flex12 ? '24-month plan · 12-month at ' + esc(fmt(cur, flex12.price)) : '24-month plan'
+          ] : [
+            'Unlimited data' + (p.speed ? ' — up to ' + esc(String(p.speed)) + ' Mbps' : ''),
+            best ? 'Busy homes, offices, many devices' : 'Everyday streaming & WhatsApp',
+            (best ? 'Priority local support' : 'Local support') + ', VAT inclusive'
+          ];
+        var short = disp.replace(/^Residential\s*/i, '');
+        return '<div class="sl-plan' + (best ? ' best' : '') + '">' +
+          (best ? '<span class="sl-pill">Best value</span>'
+                : (flex ? '<span class="sl-pill soft">' + esc(cur) + ' 0 upfront</span>' : '')) +
+          '<div class="sl-pname">' + esc(disp) + '</div>' +
+          '<div class="sl-pmap">' + sub + '</div>' +
+          '<div class="sl-pprice"><span class="c">' + esc(cur) + '</span>' +
+            '<span class="n">' + Math.round(p.price).toLocaleString('en-US') + '</span>' +
+            '<span class="p">/' + esc(p.period || 'month') + '</span></div>' +
+          '<ul class="sl-feat"><li>' + feats.join('</li><li>') + '</li></ul>' +
+          '<a class="sl-cta' + (best ? '' : ' ghost') + '" data-order="' + esc(disp) +
+            (disp === p.name ? '' : ' (' + esc(p.name) + ')') + '" href="https://wa.me/' + WA + '">' +
+            (flex ? 'Check availability' : 'Order ' + esc(short || disp)) + '</a>' +
+          '</div>';
+      }).join('');
+
+      hero.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest ? e.target.closest('a[data-order]') : null;
+        if (!a) return;
+        var extra = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
+        var txt = 'Hello DishNet, I would like to order ' + a.getAttribute('data-order') + '.' +
+                  (extra ? '\n' + extra : '');
+        a.href = 'https://wa.me/' + WA + '?text=' + encodeURIComponent(txt);
+      });
     }
   }
 
