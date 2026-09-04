@@ -14,46 +14,8 @@ require_once dirname(__DIR__, 2) . '/lib/EvolutionApiService.php';
 require_once dirname(__DIR__, 2) . '/lib/EvoWebhookGuard.php';
 require_once dirname(__DIR__, 2) . '/lib/DishNetAiBrain.php';
 
-/**
- * Where Evolution should send messages.
- *
- * Deriving this from the request is unreliable: this page is normally loaded
- * inside the UISP admin iframe, so SCRIPT_NAME is not the plugin's own public
- * path, and UISP's public-URL layout differs between installs (/\_plugins/...
- * on one host, /crm/\_plugins/... on another). UISP prints the correct address
- * on the plugin's page in Settings, so we let the operator paste it and treat
- * that as authoritative. The derived value is only ever a suggestion.
- */
-function wa_ai_public_base(array $cfg): string
-{
-    $saved = rtrim(trim((string)($cfg['plugin_public_url'] ?? '')), '/');
-    if ($saved !== '') return $saved;
-
-    // uCRM terminates TLS and proxies to the plugin over plain HTTP, so
-    // $_SERVER['HTTPS'] is unset here even when the browser is on https.
-    // Trust the forwarded header, and otherwise assume https -- an http guess
-    // is always wrong for a uCRM install.
-    $fwd    = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-    $scheme = $fwd !== '' ? $fwd
-            : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'https');
-    return $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '')
-         . rtrim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
-}
-
-/**
- * The address Evolution must POST to.
- *
- * uCRM does NOT serve arbitrary PHP files from a plugin directory -- only
- * public.php. Asking for evo_webhook.php directly returns uCRM's own "Page not
- * found", which is why webhook registration appeared to work and then nothing
- * ever arrived. The original Hybrid plugin solved this the same way and says so
- * in public.php: routes go through public.php?page=... instead.
- */
-function wa_ai_webhook_url(array $cfg, string $secret): string
-{
-    return wa_ai_public_base($cfg)
-         . '/public.php?page=evo_webhook&token=' . rawurlencode($secret);
-}
+// wa_ai_public_base() / wa_ai_webhook_url() — shared with tools/wa_webhook_doctor.php
+require_once dirname(__DIR__, 2) . '/lib/wa_webhook_url.php';
 
 $_wRoot = dirname(__DIR__, 2);
 $_wData = $GLOBALS['dataDir'] ?? ($_wRoot . '/data');
@@ -275,6 +237,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
             $_wMsg = ['ok' => false, 'text' => 'No instance assigned to that number.'];
         } elseif ($secret === '') {
             $_wMsg = ['ok' => false, 'text' => 'Could not create a webhook secret — is the data directory writable?'];
+        } elseif (wa_ai_webhook_url($_wCfg, $secret) === '') {
+            $_wMsg = ['ok' => false, 'text' => 'Cannot work out this plugin\'s public address — paste the '
+                . 'public URL from UISP\'s plugin page into Configuration as plugin_public_url.'];
         } else {
             $r = $_wEvo->setWebhook($inst, wa_ai_webhook_url($_wCfg, $secret));
             $_wMsg = ['ok' => $r['ok'], 'text' => $r['ok']
