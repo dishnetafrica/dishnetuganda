@@ -43,6 +43,15 @@
   // the familiar trio at the front.
   var NAMEMAP = {};
   try { NAMEMAP = JSON.parse(script.getAttribute('data-name-map') || '{}'); } catch (e) {}
+  // "DishNet Business 500" -> "500 GB", "DishNet Business 1TB" -> "1 TB".
+  // Business tiers are Starlink Local Priority: a priority-data block plus a
+  // public IP, with unlimited standard data after — never call them unlimited.
+  function bizQty(name) {
+    var m = name.match(/business\s*(\d+\s*tb|\d+)/i);
+    if (!m) return '';
+    return /tb/i.test(m[1]) ? m[1].replace(/\s*tb/i, ' TB') : m[1] + ' GB';
+  }
+
   function headlineFirst(plans) {
     var keys = Object.keys(NAMEMAP);
     if (!keys.length) return plans;
@@ -76,14 +85,17 @@
     if (grid && (data.plans || []).length) {
       grid.innerHTML = headlineFirst(data.plans).map(function (p) {
         var flex = /flex/i.test(p.name);
+        var biz  = /business/i.test(p.name);
         var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
           (best ? '<span class="price-pill">Best value</span>' : '') +
           (!best && flex ? '<span class="price-pill price-pill-soft">UGX 0 upfront</span>' : '') +
+          (!best && biz ? '<span class="price-pill price-pill-soft">Public IP</span>' : '') +
           '<h3>' + esc(p.name) + '</h3>' +
           '<div class="price-amount">' + fmt(cur, p.price) + '<small>/' + (p.period || 'month') + '</small></div>' +
           (flex ? '<p class="price-desc">UGX 0 hardware upfront — Starlink Mini + connectivity + professional installation + DishNet support.</p>'
-                : '<p class="price-desc">Unlimited data · professional installation available · DishNet local support.</p>') +
+           : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP — unlimited standard data after · for offices, CCTV &amp; heavy users.</p>'
+                 : '<p class="price-desc">Unlimited data · professional installation available · DishNet local support.</p>') +
           (p.speed ? '<p class="price-speed">Up to ' + esc(String(p.speed)) + ' Mbps</p>' : '') +
           '<a class="btn btn-primary" href="https://wa.me/' + WA +
             '?text=' + encodeURIComponent('Hello DishNet, I would like to sign up for ' + p.name) +
@@ -143,11 +155,15 @@
       var list = state.hw === '__flex' ? flexPlans : stdPlans;
       return list.map(function (p) {
         var d = disp(p);
+        var biz = /business/i.test(p.name);
         return '<button type="button" class="of-card" data-plan="' + esc(p.name) + '">' +
           '<h4>' + esc(d) + '</h4>' +
-          (d !== p.name ? '<div class="of-sub">' + esc(p.name) + ' plan</div>' : '<div class="of-sub">Monthly, cancel anytime</div>') +
+          (d !== p.name ? '<div class="of-sub">' + esc(p.name) + ' plan</div>'
+           : biz ? '<div class="of-sub">' + esc(bizQty(p.name)) + ' priority data · public IP included</div>'
+                 : '<div class="of-sub">Monthly, cancel anytime</div>') +
           '<div class="of-price">' + esc(fmt(cur, p.price)) + ' <small>/' + esc(p.period || 'month') + '</small></div>' +
-          (p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
+          (biz ? '<div class="of-sub" style="margin-top:6px;">Unlimited standard data after priority data</div>'
+               : p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
           '</button>';
       }).join('');
     }
