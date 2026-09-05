@@ -34,12 +34,38 @@ $crm     = CrmApiClient::fromUcrm($root, $config);
 if (!$crm->isConfigured()) exit("uCRM API not configured\n");
 
 $arg = (string)($argv[1] ?? 'latest');
+$invoice = null;
 if ($arg === 'latest') {
-    $list = $crm->get('invoices?limit=1&order=createdDate&direction=DESC') ?? [];
-    $invoice = is_array($list) && isset($list[0]) ? $list[0] : null;
-    if ($invoice && !empty($invoice['id'])) {
-        // The list view can be abbreviated — always refetch the full record.
-        $invoice = $crm->get('invoices/' . (int)$invoice['id']) ?? $invoice;
+    // Different uCRM versions accept different list parameters — try from most
+    // specific to plainest, and say exactly what happened at each step.
+    $tries = [
+        'invoices?limit=1&order=createdDate&direction=DESC',
+        'invoices?limit=1',
+        'invoices',
+        'billing/invoices?limit=1',
+    ];
+    foreach ($tries as $path) {
+        $list = $crm->get($path);
+        if (!is_array($list)) {
+            $e = $crm->getLastError();
+            printf("  tried %-52s → API error: %s\n", $path,
+                json_encode($e ?: 'no response', JSON_UNESCAPED_SLASHES));
+            continue;
+        }
+        printf("  tried %-52s → %d invoice(s)\n", $path, count($list));
+        if (isset($list[0]) && is_array($list[0])) {
+            // Pick the highest id = newest; then refetch the full record,
+            // because list views can be abbreviated.
+            usort($list, fn($a, $b) => (int)($b['id'] ?? 0) <=> (int)($a['id'] ?? 0));
+            $invoice = $crm->get('invoices/' . (int)$list[0]['id']) ?? $list[0];
+            break;
+        }
+    }
+    if ($invoice === null) {
+        echo "\nNo invoice exists in this uCRM yet — that is the whole finding.\n";
+        echo "Create ONE test invoice in uCRM (any client, e.g. an 'EFRIS Test' client,\n";
+        echo "one line item such as DishNet Home, approve it), then run this again.\n";
+        exit(1);
     }
 } else {
     $invoice = $crm->get('invoices/' . (int)$arg) ?? $crm->get('billing/invoices/' . (int)$arg);
