@@ -48,6 +48,15 @@ class ConfigVault
         'shopbot_ai_url',
         'shopbot_ai_token',
         'ai_tools_token',
+        // EFRIS (Uganda e-invoicing): survive re-install like every other
+        // credential — losing the device binding mid-quarter is not an option.
+        'efris_environment',
+        'efris_auto_submit',
+        'efris_tin',
+        'efris_device_no',
+        'efris_test_api_url',
+        'efris_production_api_url',
+        'efris_private_key',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

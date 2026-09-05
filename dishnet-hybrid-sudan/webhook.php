@@ -516,6 +516,23 @@ switch ($changeType) {
             whLog($changeType, "Invoice has no number (likely draft) — notification deferred", ['invoice_id' => $invoiceId, 'status' => $invStatus]);
             whResp(200, 'No invoice number — likely draft, skipped.');
         }
+
+        // EFRIS: queue fiscalisation for approved invoices — test environment
+        // with auto-submit only, and never on the notification path's dime:
+        // any EFRIS trouble is logged and the customer notification proceeds.
+        try {
+            require_once __DIR__ . '/lib/PluginConfig.php';
+            require_once __DIR__ . '/lib/EfrisClient.php';
+            $_efCfg = PluginConfig::load(__DIR__, $dataDir);
+            if (strtolower(trim((string)($_efCfg['efris_environment'] ?? ''))) === EfrisClient::ENV_TEST
+                && PluginConfig::toBool($_efCfg['efris_auto_submit'] ?? false)) {
+                (new EventBus($store->getPdo()))->emit('efris.submit', 'invoice', $invoiceId,
+                    ['invoice_id' => $invoiceId, 'source' => 'webhook'], 4, 'webhook');
+                whLog($changeType, "EFRIS: queued invoice {$invoNum} for TEST fiscalisation");
+            }
+        } catch (\Throwable $_efE) {
+            whLog($changeType, 'EFRIS enqueue error: ' . $_efE->getMessage());
+        }
         if (!in_array($invStatus, [1, 2], true)) {
             whLog($changeType, "Invoice status={$invStatus} not unpaid/partial — skipped", ['invoice_id' => $invoiceId, 'number' => $invoNum]);
             whResp(200, "Invoice status {$invStatus} — not unpaid/partial, skipped.");
@@ -2757,6 +2774,27 @@ switch ($changeType) {
                 $clientId = (int)($pay['clientId'] ?? 0);
             }
         } catch (\Throwable $_) {}
+
+        // EFRIS: a fiscalised invoice that gets edited (or deleted) in uCRM
+        // can no longer match its fiscal record. Flag it for the credit/debit
+        // note flow — fiscal history is never silently rewritten.
+        if (in_array($changeType, ['invoice.edit', 'invoice.delete'], true) && $entId) {
+            try {
+                require_once __DIR__ . '/lib/EfrisStore.php';
+                $_efTx = new EfrisStore($store->getPdo());
+                $_efRow = $_efTx->find($entId);
+                if ($_efRow && $_efRow['status'] === 'FISCALISED') {
+                    $_efTx->update((int)$_efRow['id'], [
+                        'status'           => 'NEEDS_ADJUSTMENT',
+                        'response_message' => 'Invoice ' . $changeType . ' in uCRM after fiscalisation — '
+                            . 'issue a credit/debit note; the fiscal record is never edited.',
+                    ]);
+                    whLog($changeType, "EFRIS: invoice {$_efRow['invoice_number']} flagged NEEDS_ADJUSTMENT");
+                }
+            } catch (\Throwable $_efE) {
+                whLog($changeType, 'EFRIS adjust-flag error: ' . $_efE->getMessage());
+            }
+        }
 
         if ($clientId > 0) {
             try {

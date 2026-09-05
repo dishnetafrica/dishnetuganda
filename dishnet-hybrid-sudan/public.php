@@ -686,6 +686,14 @@ if ($page === 'evo_webhook') {
     exit;
 }
 
+//  EFRIS fiscal e-invoice PDF (HMAC-tokened link from the admin tab)
+// URL: public.php?page=efris_pdf&file=…&token=…
+if ($page === 'efris_pdf') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/efris_pdf.php';
+    exit;
+}
+
 // ── Customer Login: web-based OTP login for PWA access ───────────
 if ($page === 'customer_login') {
     while (ob_get_level() > 0) ob_end_clean();
@@ -2060,6 +2068,7 @@ else:
         ['id'=>'wa_leads',       'label'=>'WA Leads',                'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_orders','label'=>'Starlink Orders',         'icon'=>'[Orders]',   'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'knowledge_base', 'label'=>'AI Knowledge Base',       'icon'=>'[Brain]',    'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'efris',          'label'=>'EFRIS e-Invoicing',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'ceo_dashboard',  'label'=>'CEO Dashboard',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'all_apps',       'label'=>'All Orders',               'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'retailers_mgmt', 'label'=>'Manage Retailers / Staff', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2529,6 +2538,7 @@ $_tabFiles = [
     'maintenance'      => 'tabs/admin/maintenance.php',
     'settings'         => 'tabs/admin/settings.php',
     'system_health'    => 'tabs/admin/system_health.php',   // Sudan edition
+    'efris'            => 'tabs/admin/efris.php',            // Uganda e-invoicing
     'wa_ai_setup'      => 'tabs/engage/wa_ai_setup.php',    // Sudan edition
     'android_app'      => 'tabs/admin/android_app.php',
     'updater'          => 'tabs/admin/updater.php',

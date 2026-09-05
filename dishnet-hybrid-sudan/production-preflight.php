@@ -335,6 +335,35 @@ if (!$wcOn) {
         : warn('no provider key — the website chat will only offer WhatsApp');
 }
 
+// ══ 3c. EFRIS (Uganda e-invoicing) ══════════════════════════════════════
+echo "\n== efris ==\n";
+$efEnv = strtolower(trim((string)($config['efris_environment'] ?? '')));
+if (!in_array($efEnv, ['test', 'production'], true)) {
+    ok('EFRIS disabled — nothing submits (set efris_environment=test to begin)');
+} else {
+    $efEnv === 'production'
+        ? warn('efris_environment=production — this build REFUSES production submits (Phase-2 connector pending official URA spec)')
+        : ok('EFRIS environment: test');
+    (string)($config['efris_tin'] ?? '') !== ''
+        ? ok('seller TIN set') : bad('efris_tin missing');
+    (string)($config['efris_device_no'] ?? '') !== ''
+        ? ok('device number set') : warn('efris_device_no empty — URA issues it at onboarding');
+    (string)($config['efris_test_api_url'] ?? '') !== ''
+        ? ok('test endpoint configured') : warn('efris_test_api_url empty — point it at the test EFRIS server');
+    try {
+        require_once __DIR__ . '/lib/EfrisStore.php';
+        $efT = new EfrisStore($store->getPdo());
+        $efC = $efT->counts();
+        ok('efris_transactions: ' . (int)$efC['total'] . ' row(s)');
+        foreach (['REJECTED', 'ERROR', 'NEEDS_ADJUSTMENT'] as $bad_) {
+            $n = (int)($efC['by_status'][$bad_] ?? 0);
+            if ($n > 0) warn("{$n} transaction(s) in {$bad_} — see the EFRIS tab");
+        }
+    } catch (\Throwable $e) {
+        warn('EFRIS store check failed: ' . $e->getMessage());
+    }
+}
+
 // ══ 4. uCRM catalogue — the source of truth ═════════════════════════════
 echo "\n== uCRM catalogue (live) ==\n";
 $tools = new DishNetTools($store, $config, __DIR__);

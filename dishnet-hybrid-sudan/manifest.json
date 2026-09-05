@@ -126,6 +126,88 @@
             "description": "Leave OFF. Strict matching requires 9 digits to agree before a customer is identified. Turning this ON restores looser matching, which can identify the WRONG customer and disclose their balance. Only for emergency rollback.",
             "required": 0,
             "type": "checkbox"
+        },
+        {
+            "key": "efris_environment",
+            "label": "EFRIS environment",
+            "description": "disabled | test | production. Leave 'disabled' until the URA test setup is ready. 'production' REFUSES to run in this build — the Phase-2 connector needs the official URA specification and credentials.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_auto_submit",
+            "label": "EFRIS: submit invoices automatically",
+            "description": "OFF by default. When ON (and environment is 'test'), approved uCRM invoices are queued for fiscalisation automatically. Manual submission from the EFRIS tab always works.",
+            "required": 0,
+            "type": "checkbox"
+        },
+        {
+            "key": "efris_tin",
+            "label": "EFRIS: seller TIN",
+            "description": "DishNet Africa Limited TIN, e.g. 1059140632.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_device_no",
+            "label": "EFRIS: device number",
+            "description": "Issued by URA at system-to-system onboarding. Empty until URA provides it.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_legal_name",
+            "label": "EFRIS: seller legal name",
+            "description": "As registered with URA, e.g. DishNet Africa Limited.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_business_name",
+            "label": "EFRIS: business/trading name",
+            "description": "e.g. DishNet Uganda.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_address",
+            "label": "EFRIS: seller address",
+            "description": "Street and city as registered, e.g. Mawanda Road, Kampala.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_phone",
+            "label": "EFRIS: seller phone",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_email",
+            "label": "EFRIS: seller email",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_test_api_url",
+            "label": "EFRIS: TEST endpoint URL",
+            "description": "The fake/local EFRIS server for Phase 1, later the URA sandbox gateway.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_production_api_url",
+            "label": "EFRIS: PRODUCTION endpoint URL",
+            "description": "Unused in this build — the production connector arrives in Phase 2 with the official URA specification.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "efris_private_key",
+            "label": "EFRIS: taxpayer private key (PEM)",
+            "description": "SECRET. Issued at URA onboarding, used by the Phase-2 crypto (AES session key + RSA signature). Never shown anywhere and never sent to a browser.",
+            "required": 0,
+            "type": "textarea"
         }
     ]
 }

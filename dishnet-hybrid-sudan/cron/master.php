@@ -146,6 +146,7 @@ $_m_jobs = [
     // a worker the moment a message arrives, so replies are normally immediate.
     // This catches anything stranded when that spawn is unavailable.
     'ai_reply'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/run_worker.php'],
+    'efris'         => ['interval' => 120,                 'script' => __DIR__ . '/efris_sync.php'],
 
     // ── Website chat retention ───────────────────────────────────────────
     // Deletes leads and transcripts past web_chat_retention_days (default 90).
