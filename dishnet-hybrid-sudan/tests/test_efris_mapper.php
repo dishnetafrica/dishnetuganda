@@ -95,6 +95,65 @@ t('no line items blocked', has((new EfrisInvoiceMapper($cfg))->map($empty, $clie
 $noTin = (new EfrisInvoiceMapper(['efris_device_no' => 'D']))->map($invoice, $client);
 t('missing seller TIN blocks', has($noTin['errors'], 'Seller TIN'), true);
 
+echo "\nProbe-confirmed shape (the live Uganda install, invoice #1 verbatim)\n";
+$probeInvoice = [
+    'id' => 1, 'clientId' => 1, 'number' => '000001', 'status' => 1,
+    'createdDate' => '2026-09-05T18:19:10+0300', 'dueDate' => '2026-09-19T18:19:10+0300',
+    'taxableSupplyDate' => '2026-09-05T00:00:00+0300', 'currencyCode' => 'UGX',
+    'subtotal' => 2249000, 'taxes' => [], 'total' => 2249000, 'amountPaid' => 0,
+    'totalTaxAmount' => 0, 'amountToPay' => 2249000, 'totalDiscount' => -0.0,
+    'proforma' => false,
+    'items' => [[
+        'id' => 1, 'type' => 'product', 'label' => 'Starlink Mini Kit',
+        'price' => 2249000, 'quantity' => 1, 'total' => 2249000, 'unit' => 'Pc',
+        'tax1Id' => null, 'tax2Id' => null, 'tax3Id' => null,
+        'productId' => 1, 'discountTotal' => null,
+    ]],
+];
+$probeClient = [
+    'id' => 1, 'clientType' => 2, 'companyName' => 'Family Shoppers',
+    'companyRegistrationNumber' => null, 'companyTaxId' => null,
+    'firstName' => null, 'lastName' => null,
+    'contacts' => [['email' => null, 'phone' => null]],
+    'attributes' => [],
+];
+$mp = (new EfrisInvoiceMapper($cfg))->map($probeInvoice, $probeClient);
+t('live invoice maps ok', $mp['ok'], true);
+t('clientType 2 ⇒ business buyer', $mp['model']['buyer']['type'], 'business');
+t('dueDate read', $mp['model']['invoice']['due_date'], '2026-09-19');
+t('taxableSupplyDate carried', $mp['model']['invoice']['taxable_supply_date'], '2026-09-05');
+t('untaxed line: shape none recorded', $mp['model']['meta']['tax_shapes'], ['none']);
+t('subtotal from uCRM field', $mp['model']['totals']['subtotal'], 2249000.0);
+t('tax total from totalTaxAmount', $mp['model']['totals']['tax_total'], 0.0);
+
+echo "\nProbe shape with a tax attached (tax1Id + /taxes registry)\n";
+$taxed = $probeInvoice;
+$taxed['items'][0]['tax1Id'] = 1;
+$taxed['totalTaxAmount'] = 343067.8;   // whatever uCRM computes — read, never derived
+$mt = (new EfrisInvoiceMapper($cfg, [], ['vat 18%' => 'standard'],
+        [1 => ['name' => 'VAT 18%', 'rate' => 18.0]]))->map($taxed, $probeClient);
+t('tax1Id shape detected', $mt['model']['meta']['tax_shapes'], ['tax1Id']);
+t('name resolved from registry', $mt['model']['items'][0]['tax']['name'], 'VAT 18%');
+t('rate resolved from registry, not hard-coded', $mt['model']['items'][0]['tax']['rate'], 18.0);
+t('per-item amount left null (pricing-mode honest)', $mt['model']['items'][0]['tax']['amount'], null);
+t('category via registry name', $mt['model']['items'][0]['tax_category'], 'standard');
+t('invoice-level tax total is authoritative', $mt['model']['totals']['tax_total'], 343067.8);
+
+echo "\nNative uCRM tax-identity fields as fallback\n";
+$cWithTaxId = $probeClient;
+$cWithTaxId['companyTaxId'] = '1002003004';
+$cWithTaxId['companyRegistrationNumber'] = 'REG-42';
+$mf = (new EfrisInvoiceMapper($cfg))->map($probeInvoice, $cWithTaxId);
+t('TIN falls back to companyTaxId', $mf['model']['buyer']['tin'], '1002003004');
+t('BRN falls back to companyRegistrationNumber', $mf['model']['buyer']['brn'], 'REG-42');
+$cBoth = $cWithTaxId;
+$cBoth['attributes'] = [['key' => 'efrisTin', 'value' => '1000000001']];
+t('EFRIS attribute overrides companyTaxId',
+  (new EfrisInvoiceMapper($cfg))->map($probeInvoice, $cBoth)['model']['buyer']['tin'], '1000000001');
+
+$prof = $probeInvoice; $prof['proforma'] = true;
+t('proforma blocked', has((new EfrisInvoiceMapper($cfg))->map($prof, $probeClient)['errors'], 'PROFORMA'), true);
+
 echo "\nBuyer edge cases\n";
 $individual = $client;
 $individual['companyName'] = '';

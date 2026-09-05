@@ -84,12 +84,42 @@ class EfrisService
         return $map;
     }
 
+    /**
+     * uCRM's tax registry (GET /taxes): id => name + rate. Probe-confirmed:
+     * invoice items reference taxes by tax1Id only, so rates come from here —
+     * cached for an hour, and a fetch failure degrades to the stale copy.
+     */
+    public function taxRegistry(): array
+    {
+        $cached = $this->store->load('efris_tax_registry.json');
+        $fresh  = is_array($cached)
+               && (int)($cached['fetched_at'] ?? 0) > time() - 3600
+               && is_array($cached['taxes'] ?? null);
+        if (!$fresh && $this->crm->isConfigured()) {
+            $list = $this->crm->get('taxes');
+            if (is_array($list)) {
+                $cached = ['fetched_at' => time(), 'taxes' => []];
+                foreach ($list as $t) {
+                    if (!is_array($t) || empty($t['id'])) continue;
+                    $cached['taxes'][(string)(int)$t['id']] = [
+                        'name' => (string)($t['name'] ?? ''),
+                        'rate' => isset($t['rate']) ? (float)$t['rate'] : null,
+                    ];
+                }
+                $this->store->save('efris_tax_registry.json', $cached);
+            }
+        }
+        $out = [];
+        foreach ((array)($cached['taxes'] ?? []) as $id => $t) $out[(int)$id] = $t;
+        return $out;
+    }
+
     /** Map without sending — the admin "preview / validate" path and tests. */
     public function preview(int $ucrmInvoiceId): array
     {
         [$invoice, $client, $err] = $this->fetch($ucrmInvoiceId);
         if ($err !== '') return ['ok' => false, 'errors' => [$err], 'warnings' => [], 'model' => []];
-        $mapper = new EfrisInvoiceMapper($this->config, $this->commodityMap(), $this->taxMap());
+        $mapper = new EfrisInvoiceMapper($this->config, $this->commodityMap(), $this->taxMap(), $this->taxRegistry());
         return $mapper->map($invoice, $client);
     }
 
@@ -153,7 +183,7 @@ class EfrisService
         $txId = (int)$row['id'];
 
         // ── Validate + map ──
-        $mapper = new EfrisInvoiceMapper($this->config, $this->commodityMap(), $this->taxMap());
+        $mapper = new EfrisInvoiceMapper($this->config, $this->commodityMap(), $this->taxMap(), $this->taxRegistry());
         $m = $mapper->map($invoice, $client);
         if (!$m['ok']) {
             $msg = 'Validation failed: ' . implode('; ', $m['errors']);

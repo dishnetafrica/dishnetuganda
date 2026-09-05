@@ -21,12 +21,15 @@ class EfrisInvoiceMapper
     private array $config;
     private array $commodityMap;  // uCRM item label (lowercased) => URA goodsCategoryId (operator-entered, never guessed)
     private array $taxMap;        // uCRM tax name/id (lowercased) => category: standard|zero_rated|exempt|non_taxable|other
+    private array $taxRegistry;   // uCRM tax id => ['name' =>, 'rate' =>] from GET /taxes (probe-confirmed shape)
 
-    public function __construct(array $config, array $commodityMap = [], array $taxMap = [])
+    public function __construct(array $config, array $commodityMap = [], array $taxMap = [],
+                                array $taxRegistry = [])
     {
         $this->config = $config;
         $this->commodityMap = array_change_key_case($commodityMap, CASE_LOWER);
         $this->taxMap = array_change_key_case($taxMap, CASE_LOWER);
+        $this->taxRegistry = $taxRegistry;
     }
 
     /**
@@ -58,11 +61,18 @@ class EfrisInvoiceMapper
         if ($status === 0)  $errors[] = 'Invoice is a DRAFT — approve it in uCRM first';
         if ($status === 4)  $errors[] = 'Invoice is VOID in uCRM — a void invoice is never fiscalised';
 
+        if (!empty($invoice['proforma'])) {
+            $errors[] = 'This is a PROFORMA — only the final invoice is fiscalised';
+        }
+
         $currency = trim((string)($invoice['currencyCode'] ?? $invoice['currency'] ?? ''));
         if ($currency === '') $errors[] = 'Invoice has no currency code';
 
         $issued = substr((string)($invoice['createdDate'] ?? $invoice['createdAt'] ?? ''), 0, 19);
         $due    = substr((string)($invoice['maturityDate'] ?? $invoice['dueDate'] ?? ''), 0, 10);
+        // Probe-confirmed: this install carries taxableSupplyDate — the VAT
+        // time-of-supply, which EFRIS cares about more than the created date.
+        $supply = substr((string)($invoice['taxableSupplyDate'] ?? ''), 0, 10);
 
         $payStatus = $status === 3 ? 'paid' : ($status === 2 ? 'partial' : 'unpaid');
 
@@ -79,11 +89,20 @@ class EfrisInvoiceMapper
             if ($email === '' && !empty($c['email'])) $email = trim((string)$c['email']);
         }
 
-        $tin = $attrs['tin']; $brn = $attrs['brn']; $nin = $attrs['nin'];
+        // Probe-confirmed: uCRM natively stores a Tax ID and a registration
+        // number on the client — those are the primary source; the EFRIS
+        // custom attributes override them (and carry NIN, which uCRM lacks).
+        $tin = $attrs['tin'] !== '' ? $attrs['tin'] : trim((string)($client['companyTaxId'] ?? ''));
+        $brn = $attrs['brn'] !== '' ? $attrs['brn'] : trim((string)($client['companyRegistrationNumber'] ?? ''));
+        $nin = $attrs['nin'];
         if ($tin !== '' && !preg_match('/^\d{10}$/', $tin)) {
             $warnings[] = "Buyer TIN '{$tin}' is not 10 digits — confirm before production";
         }
-        $buyerType = ($tin !== '' || $company !== '') ? 'business' : 'individual';
+        // Probe-confirmed: clientType 1 = residential person, 2 = company.
+        $clientType = (int)($client['clientType'] ?? 0);
+        $buyerType = $clientType === 2 ? 'business'
+                   : ($clientType === 1 ? 'individual'
+                   : (($tin !== '' || $company !== '') ? 'business' : 'individual'));
 
         $buyer = [
             'type'          => $buyerType,
@@ -151,21 +170,30 @@ class EfrisInvoiceMapper
         $model = [
             'seller'  => $seller,
             'invoice' => [
-                'ucrm_id'        => $ucrmId,
-                'number'         => $number,
-                'issued_date'    => $issued,
-                'due_date'       => $due,
-                'currency'       => $currency,
-                'ucrm_status'    => $status,
-                'payment_status' => $payStatus,
-                'amount_paid'    => $paid,
+                'ucrm_id'             => $ucrmId,
+                'number'              => $number,
+                'issued_date'         => $issued,
+                'due_date'            => $due,
+                'taxable_supply_date' => $supply,
+                'currency'            => $currency,
+                'ucrm_status'         => $status,
+                'payment_status'      => $payStatus,
+                'amount_paid'         => $paid,
             ],
             'buyer'  => $buyer,
             'items'  => $items,
+            // Probe-confirmed: the invoice carries authoritative subtotal and
+            // totalTaxAmount — prefer uCRM's own arithmetic over re-summing,
+            // so pricing mode (tax-inclusive vs exclusive) can never skew us.
             'totals' => [
-                'subtotal'  => round($subtotal, 2),
-                'tax_total' => round($taxTotal, 2),
+                'subtotal'  => round(isset($invoice['subtotal']) ? (float)$invoice['subtotal'] : $subtotal, 2),
+                'tax_total' => round(isset($invoice['totalTaxAmount']) ? (float)$invoice['totalTaxAmount'] : $taxTotal, 2),
                 'grand'     => round($grand, 2),
+                'discount'  => round((float)($invoice['totalDiscount'] ?? 0), 2),
+                'tax_breakdown' => array_values(array_map(
+                    fn($t) => ['name' => (string)($t['name'] ?? ''),
+                               'amount' => (float)($t['totalValue'] ?? $t['amount'] ?? 0)],
+                    is_array($invoice['taxes'] ?? null) ? $invoice['taxes'] : [])),
             ],
             'meta' => [
                 'tax_shapes' => array_keys($shapes),
@@ -212,7 +240,26 @@ class EfrisInvoiceMapper
                 'ucrm_tax_id' => isset($t['id']) ? (int)$t['id'] : null,
             ], 'tax{}'];
         }
-        // Shape C: tax1..tax3 objects or ids
+        // Shape C (PROBE-CONFIRMED on this install): items carry only
+        // tax1Id/tax2Id/tax3Id references; name and rate live in uCRM's
+        // /taxes registry, passed in as $taxRegistry. The per-item tax AMOUNT
+        // is deliberately left null here — computing it needs the org's
+        // pricing mode (tax-inclusive vs exclusive) and the official EFRIS
+        // rounding rules, which is Phase-2 translation work. Invoice-level
+        // totalTaxAmount stays the authoritative total meanwhile.
+        foreach (['tax1Id', 'tax2Id', 'tax3Id'] as $k) {
+            if (!empty($it[$k])) {
+                $id  = (int)$it[$k];
+                $reg = $this->taxRegistry[$id] ?? [];
+                return [[
+                    'name'        => (string)($reg['name'] ?? ''),
+                    'rate'        => isset($reg['rate']) ? (float)$reg['rate'] : null,
+                    'amount'      => null,
+                    'ucrm_tax_id' => $id,
+                ], $k];
+            }
+        }
+        // Shape C-legacy: tax1..tax3 as embedded objects
         foreach (['tax1', 'tax2', 'tax3'] as $k) {
             if (!empty($it[$k])) {
                 $t = is_array($it[$k]) ? $it[$k] : ['id' => $it[$k]];

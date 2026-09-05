@@ -1,8 +1,34 @@
 # EFRIS field mapping — uCRM → internal model → official EFRIS
 
-Status: **internal model implemented (Phase 1); official column TBC until the
-URA specification arrives (Phase 2). The uCRM column freezes only after
-`tools/efris_invoice_probe.php` output from the live install is reviewed.**
+Status: **uCRM column FROZEN 2026-09-05 against live probe output (invoice
+#000001, Family Shoppers, Starlink Mini Kit). Official column stays TBC until
+the URA specification arrives (Phase 2).**
+
+## Probe results (2026-09-05, live install)
+
+1. **Item tax shape on this install: `tax1Id/tax2Id/tax3Id` integer
+   references** — name and rate resolve through uCRM's `/taxes` registry
+   (fetched and cached by `EfrisService::taxRegistry()`). Per-item tax
+   AMOUNTS are deliberately left null in the internal model: computing them
+   needs the organisation's pricing mode (tax-inclusive vs exclusive) plus
+   the official EFRIS rounding rules — Phase-2 translation work. The
+   invoice-level `totalTaxAmount` is authoritative meanwhile.
+2. **Native tax identity exists in uCRM**: `client.companyTaxId` (TIN home)
+   and `client.companyRegistrationNumber` (BRN) — now the primary source,
+   with the EFRIS custom attributes as override (and the only home for NIN).
+3. **`clientType`** (1 = residential person, 2 = company) decides buyer type;
+   the TIN/company heuristic is only the fallback.
+4. `dueDate` (full datetime) is this install's field; `maturityDate` remains
+   a fallback. **`taxableSupplyDate` exists** and is carried in the model —
+   the VAT time-of-supply EFRIS cares about.
+5. `subtotal`, `totalTaxAmount`, `totalDiscount`, `taxes[]` (breakdown) are
+   present at invoice level and preferred over re-summing items.
+6. `proforma` flag exists — proformas are refused (only final invoices
+   fiscalise).
+7. `taxes` was `[]` and every `taxNId` null: **no VAT is configured in this
+   uCRM yet**, consistent with VAT registration still being open with the
+   accountant. The mapper correctly reports the tax category as unresolved
+   until the operator maps it.
 
 The mapper (`lib/EfrisInvoiceMapper.php`) is deliberately two-stage: uCRM →
 internal model now, internal model → official T109 field names in Phase 2,
@@ -57,7 +83,7 @@ in production against this API; ? = confirm against the probe output.
 | items[].unit_price | `price` | goodsDetails[].unitPrice | ✔ |
 | items[].discount | `discountTotal` (fallback `discount`) | goodsDetails[].discount fields | ? |
 | items[].line_total | `total` (fallback qty×price) | goodsDetails[].total | ✔ |
-| items[].tax.{name,rate,amount,ucrm_tax_id} | tolerant reader: `taxes[]` → `tax{}` → `tax1..3` → `taxRate`/`taxAmount`; the shape found is recorded in meta.tax_shapes | goodsDetails[].taxRate / tax + taxDetails[] | **? — the probe decides which shape this install emits** |
+| items[].tax.{name,rate,amount,ucrm_tax_id} | **CONFIRMED: `tax1Id/2/3` reference + `/taxes` registry** (tolerant reader still accepts `taxes[]`, `tax{}`, embedded `tax1..3`, `taxRate`/`taxAmount` from other uCRM versions); shape recorded in meta.tax_shapes | goodsDetails[].taxRate / tax + taxDetails[] | ✔ probe 2026-09-05 |
 | items[].tax_category | operator map (uCRM tax name or `id:N` → standard/zero_rated/exempt/non_taxable/other; `__no_tax__` decides tax-free lines) | EFRIS tax category enums | TBC enum codes |
 | items[].commodity_code | operator map (uCRM item name → URA goods code) — **never guessed** | goodsDetails[].goodsCategoryId | codes from URA list |
 
