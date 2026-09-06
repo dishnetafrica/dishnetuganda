@@ -49,8 +49,7 @@
         $note     = trim($body['payment_note']    ?? '');
         $svcType  = trim($body['service_type']    ?? 'starlink');
         $invoiceId= trim($body['invoice_id']      ?? '');
-        $currency = strtoupper(trim($body['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD','SSP'], true)) $currency = 'USD';
+        $currency = dn_entry_currency($body['currency'] ?? '', $config ?? null);
 
         if (!$custName || $amount <= 0) $er2('Customer name and amount are required.', 422);
 
@@ -135,7 +134,7 @@
                 'clientId'     => (int)$custId,
                 'methodId'     => PaymentUuids::resolve($method),
                 'amount'       => $amount,
-                'currencyCode' => 'USD',
+                'currencyCode' => dn_payload_currency($currency, $config ?? null),
                 'note'         => "Collected by {$me2['name']} via DishNet PWA".($invoiceId?" (Inv #{$invoiceId})":"").($note?" — {$note}":"")." | Ref: {$paymentRef}",
             ];
             // v4.21.57 — apply payment to the SPECIFIC invoice the staff

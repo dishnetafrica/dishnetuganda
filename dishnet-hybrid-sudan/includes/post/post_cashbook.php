@@ -8,8 +8,7 @@
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='log_expense') {
     $retailer  = $auth->requireLogin();
     $rid       = (int)$retailer['id'];
-    $currency  = strtoupper(trim($_POST['expense_currency'] ?? $_POST['currency'] ?? 'USD'));
-    if (!in_array($currency, ['USD','SSP'], true)) $currency = 'USD';
+    $currency  = dn_entry_currency($_POST['expense_currency'] ?? $_POST['currency'] ?? '', $config ?? null);
     $rawAmount = round((float)($_POST['expense_amount'] ?? $_POST['amount'] ?? 0), 2);
     // SSP expenses store the amount in ssp_amount field, not amount
     if ($currency === 'SSP' && $rawAmount <= 0) {
@@ -365,13 +364,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_fi
     $sspOpening = round((float)($_POST['ssp_opening'] ?? 0), 2);
     $rate       = round((float)($_POST['rate'] ?? 0), 2);
 
-    if ($usdOpening >= 0) {
-        $r = $cb->setOpeningBalance('USD', $usdOpening, $retailer);
-        $msgs[] = $r['message'];
-    }
-    if ($sspOpening >= 0 && $sspOpening > 0) {
-        $r = $cb->setOpeningBalance('SSP', $sspOpening, $retailer);
-        $msgs[] = $r['message'];
+    if ($usdOpening > 0 || $sspOpening > 0) {
+        // The old setOpeningBalance() was a stub that reported success while
+        // writing nothing. Openings are per-account, typed rows now.
+        $msgs[] = 'Opening balances are recorded per account under Accounts → Opening Balances.';
     }
     if ($rate > 0) {
         $r = $cb->setExchangeRate($rate, $retailer);
@@ -673,15 +669,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_re
     redirect('?page=dashboard&tab=cashbook&cb_view=pending');
 }
 
-// ── Cashbook: Set Opening Balance (admin) ─────────────────────────────────
+// ── Cashbook: Set Opening Balance (admin) — retired ───────────────────────
+// The old setOpeningBalance() was a stub that reported success while writing
+// nothing. Openings are per-account, typed rows on the Opening Balances screen.
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_set_opening') {
-    $retailer = $auth->requireAdmin();
-    require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
-    $cb = new CashbookService($store, $dataDir);
-    $result = $cb->setOpeningBalance(strtoupper(trim($_POST['currency'] ?? '')), (float)($_POST['amount'] ?? 0), $retailer);
-    if ($result['success']) flash($result['message'], 'success');
-    else flash($result['message'], 'danger');
-    redirect('?page=dashboard&tab=cashbook');
+    $auth->requireAdmin();
+    flash('Opening balances are recorded per account under Accounts → Opening Balances.', 'warning');
+    redirect('?page=dashboard&tab=opening_balances');
 }
 
 // ── Cashbook: Set Exchange Rate (admin/accountant) ────────────────────────
@@ -712,7 +706,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
         'direction'  => trim($_POST['direction'] ?? 'out'),
         'category'   => trim($_POST['category'] ?? ''),
         'person'     => trim($_POST['person'] ?? ''),
-        'currency'   => strtoupper(trim($_POST['currency'] ?? 'USD')),
+        'currency'   => dn_entry_currency($_POST['currency'] ?? '', $config ?? null),
         'amount'     => (float)($_POST['amount'] ?? 0),
         'ssp_amount' => (float)($_POST['exch_ssp_amount'] ?? $_POST['ssp_amount'] ?? 0),
         'ssp_rate'   => (float)($_POST['ssp_rate'] ?? 0),
@@ -749,6 +743,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
 
     // v4.9.10: EXCHANGE DUAL-ENTRY — creates 2 rows (1 USD + 1 SSP)
     $exchType = trim($_POST['exchange_type'] ?? '');
+    if ($exchType !== '' && !dn_ssp_selectable($config ?? null)) {
+        flash('SSP flows are not enabled on this installation.', 'danger');
+        redirect('?page=dashboard&tab=cashbook');
+    }
     if ($exchType && in_array($exchType, ['usd_to_ssp','ssp_to_usd'])) {
         $usdAmt   = round((float)($_POST['amount'] ?? 0), 2);
         $sspAmt   = round((float)($_POST['exch_ssp_amount'] ?? 0), 0);
@@ -818,8 +816,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
     }
 
     // ── Regular (non-exchange) entry ──────────────────────────────────────
-    $currency  = strtoupper(trim($_POST['currency'] ?? 'USD'));
-    if (!in_array($currency, ['USD','SSP'], true)) $currency = 'USD';
+    // The wizard posts a code from dn_book_currencies(); honour it. This line
+    // used to be a ['USD','SSP'] whitelist that rewrote UGX to USD.
+    $currency  = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
     $rawAmount = (float)($_POST['amount'] ?? 0);
     $sspRate   = (float)($_POST['ssp_rate'] ?? 0);
 
@@ -1065,6 +1064,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='dismiss_
 // One-time fix: creates SSP Cash IN entries for all 300 old Exchange-category
 // entries that only had the USD side recorded.
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='backfill_exchange_ssp') {
+    if (!dn_ssp_selectable($config ?? null)) {
+        flash('SSP flows are not enabled on this installation.', 'danger');
+        redirect('?page=dashboard&tab=cashbook');
+    }
     $retailer = $auth->requireLogin();
     if (!($isAdmin ?? false)) { flash('Admin only.', 'danger'); redirect('?page=dashboard&tab=cashbook'); }
     if (!csrfCheck()) { flash('Security error.', 'danger'); redirect('?page=dashboard&tab=cashbook'); }
@@ -1399,6 +1402,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='reopen_exch
 // Accountant only. Creates cb_ledger SSP OUT (Rupesh) + SSP IN (staff).
 // Also writes two staff_ledger rows via StaffLedgerWriter::onSSPTransfer().
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='give_ssp_to_staff') {
+    if (!dn_ssp_selectable($config ?? null)) {
+        flash('SSP flows are not enabled on this installation.', 'danger');
+        redirect('?page=dashboard&tab=cashbook');
+    }
     $retailer = $auth->requireLogin();
     if (($retailer['role']??'')<>'accountant' && empty($retailer['is_admin'])) {
         flash('Accountant access required.','danger');
@@ -1491,6 +1498,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='give_ssp_to
 // ── Return SSP from Staff (Diko/BBC → Rupesh safe) ───────────────────────
 // Accountant only. Creates cb_ledger SSP OUT (staff) + SSP IN (Rupesh safe).
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='return_ssp_from_staff') {
+    if (!dn_ssp_selectable($config ?? null)) {
+        flash('SSP flows are not enabled on this installation.', 'danger');
+        redirect('?page=dashboard&tab=cashbook');
+    }
     $retailer = $auth->requireLogin();
     if (($retailer['role']??'')<>'accountant' && empty($retailer['is_admin'])) {
         flash('Accountant access required.','danger');

@@ -1023,4 +1023,11 @@ if ($portalNextBill) {
 // HTML escape helper
 function pe($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 // Money fmt
-function pm($v, $cur = 'USD') { return dn_cur($config) . number_format((float)$v, 0); }
+function pm($v, $cur = '') {
+    global $config;
+    $cur = strtoupper(trim((string)$cur));
+    if ($cur !== '' && $cur !== dn_code($config ?? null)) {
+        return htmlspecialchars($cur) . ' ' . number_format((float)$v, 0);
+    }
+    return dn_cur($config ?? null) . number_format((float)$v, 0);
+}

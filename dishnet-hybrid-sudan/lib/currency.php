@@ -109,5 +109,44 @@ if (!function_exists('dn_book_base')) {
         $c = strtoupper(trim((string)($payment['currencyCode'] ?? ($payment['currency'] ?? ''))));
         return preg_match('/^[A-Z]{3}$/', $c) ? $c : dn_book_base($config);
     }
+
+    /**
+     * Normalise an operator-entered ledger currency against the install's
+     * selectable list. A selectable code passes through unchanged; anything
+     * else falls to $default when that is itself selectable, else to the
+     * book base. This replaces every hard-coded ['USD','SSP'] whitelist —
+     * the exact pattern that silently rewrote a Uganda operator's UGX entry
+     * to USD. Sudan identity: with nothing configured the list is USD,SSP
+     * and the base is USD, so USD/SSP pass through and garbage still lands
+     * on USD, byte-for-byte the old behaviour.
+     */
+    function dn_entry_currency($posted, ?array $config, string $default = ''): string
+    {
+        $list = dn_book_currencies($config);
+        $c = strtoupper(trim((string)$posted));
+        if (in_array($c, $list, true)) return $c;
+        $d = strtoupper(trim($default));
+        if ($d !== '' && in_array($d, $list, true)) return $d;
+        return $list[0];
+    }
+
+    /** SSP flows (exchange legs, registers, backfills) exist only where SSP is bookable. */
+    function dn_ssp_selectable(?array $config): bool
+    {
+        return in_array('SSP', dn_book_currencies($config), true);
+    }
+
+    /**
+     * The currencyCode for a payment/quote the plugin CREATES inside uCRM:
+     * the currency the money was actually recorded in, else the book base.
+     * Deliberately NOT dn_code() — the display default is UGX, which would
+     * mint UGX payments on an unconfigured Sudan install; dn_book_base()
+     * defaults to USD there. No guessing beyond that one honest fallback.
+     */
+    function dn_payload_currency($recorded, ?array $config): string
+    {
+        $c = strtoupper(trim((string)$recorded));
+        return preg_match('/^[A-Z]{3}$/', $c) ? $c : dn_book_base($config);
+    }
 }
 require_once __DIR__ . '/crm_url.php';

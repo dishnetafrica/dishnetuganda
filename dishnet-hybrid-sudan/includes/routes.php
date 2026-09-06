@@ -197,8 +197,8 @@ if ($page === 'crm_debug') {
         $probe = ['payment_methods_found' => $methodList];
 
         // Step 3: try variants
-        $variants = ['no_method' => ['clientId'=>$clientId,'amount'=>0.01,'currencyCode'=>'USD','note'=>'API probe - ignore']];
-        if ($cashId) $variants = ['methodId_uuid' => ['clientId'=>$clientId,'amount'=>0.01,'currencyCode'=>'USD','note'=>'API probe - ignore','methodId'=>$cashId]] + $variants;
+        $variants = ['no_method' => ['clientId'=>$clientId,'amount'=>0.01,'currencyCode'=>dn_payload_currency('', $config ?? null),'note'=>'API probe - ignore']];
+        if ($cashId) $variants = ['methodId_uuid' => ['clientId'=>$clientId,'amount'=>0.01,'currencyCode'=>dn_payload_currency('', $config ?? null),'note'=>'API probe - ignore','methodId'=>$cashId]] + $variants;
 
         foreach ($variants as $label => $payload) {
             $result = $crm->post('payments', $payload);
@@ -288,13 +288,25 @@ if ($page === 'crm_debug') {
 }
 
 // ── Cashbook CSV export — must run before ob_start fills buffer with HTML ──
+// The ONE cashbook exporter (a config-driven twin inside the cashbook tab was
+// unreachable behind this route and has been removed): authenticated,
+// field-agent-scoped, currencies from configuration. On a USD+SSP (Sudan)
+// book the layout is byte-identical to the historical export; the Currency
+// column now always states the ROW's real currency.
 if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
+    $csvUser = $auth->requireLogin();
     require_once dirname(__DIR__) . '/lib/CashbookService.php';
     $cb2csv = new CashbookService($store, $dataDir);
     $proj2  = in_array($_GET['cb_proj'] ?? 'dishnet', ['dishnet','4g','bluecard']) ? $_GET['cb_proj'] : 'dishnet';
-    // v4.9.18: Currency-aware export — delegate to cashbook.php's CSV handler
-    $_csvCurr2 = in_array(strtoupper($_GET['cb_curr'] ?? ''), ['USD','SSP']) ? strtoupper($_GET['cb_curr']) : '';
-    $csvF2 = array_filter(['project'=>$proj2, 'date_from'=>$_GET['cb_from']??'', 'date_to'=>$_GET['cb_to']??'', 'currency'=>$_csvCurr2, 'limit'=>9999, 'offset'=>0]);
+    $_csvCurrs2 = dn_book_currencies($config ?? null);
+    $_csvBase2  = $_csvCurrs2[0];
+    $_hasSSP2   = in_array('SSP', $_csvCurrs2, true);
+    $_csvCurr2  = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_csvCurrs2, true) ? strtoupper($_GET['cb_curr']) : '';
+    // Field agents export only their own rows — same rule as the on-screen book.
+    $_csvIsField2 = in_array($csvUser['role'] ?? '', ['sales','sales_staff','field_agent','collection'], true)
+                    && empty($csvUser['is_admin']);
+    $_csvPerson2  = ($_csvIsField2 && !empty($csvUser['name'])) ? $csvUser['name'] : '';
+    $csvF2 = array_filter(['project'=>$proj2, 'date_from'=>$_GET['cb_from']??'', 'date_to'=>$_GET['cb_to']??'', 'person'=>$_csvPerson2, 'currency'=>$_csvCurr2, 'limit'=>9999, 'offset'=>0]);
     $rows2  = $cb2csv->getEntries($csvF2);
     $_isSSP2 = ($_csvCurr2 === 'SSP');
     $_isAll2 = ($_csvCurr2 === '');
@@ -304,30 +316,42 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     header('Content-Disposition: attachment; filename="'.$fname2.'"');
     header('Cache-Control: no-cache, no-store, must-revalidate');
     $out2 = fopen('php://output', 'w');
-    if ($_isAll2) {
-        fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Currency','Received USD','Payment USD','USD Balance','Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
+    if ($_isAll2 && $_hasSSP2) {
+        fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Currency','Received '.$_csvBase2,'Payment '.$_csvBase2,$_csvBase2.' Balance','Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
+    } elseif ($_isAll2) {
+        // Multi-currency book without SSP columns: every amount sits next to
+        // its own currency and the balance names the stream it belongs to.
+        fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
     } elseif ($_isSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
     } else {
-        fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received USD','Payment USD','USD Balance','Ref','Status','Source']);
+        fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
     }
     foreach ($rows2 as $e2) {
         $isIn2 = $e2['direction'] === 'in';
-        $_isSspRow2 = ($e2['currency'] ?? 'USD') === 'SSP';
+        $_isSspRow2 = ($e2['currency'] ?? '') === 'SSP';
         $uA2 = (float)$e2['amount']; $sA2 = (float)($e2['ssp_amount'] ?? 0);
         $bl2 = $e2['running_balance'] ?? '';
-        if ($_isAll2) {
+        $blCur2  = $e2['_bal_currency'] ?? ($_isSspRow2 ? 'SSP' : $_csvBase2);
+        $rowCur2 = strtoupper(trim((string)($e2['currency'] ?? ''))) ?: $_csvBase2;
+        if ($_isAll2 && $_hasSSP2) {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
-                $_isSspRow2?'SSP':'USD',
+                $rowCur2,
                 (!$_isSspRow2&&$isIn2)?$uA2:'', (!$_isSspRow2&&!$isIn2)?$uA2:'', (!$_isSspRow2)?$bl2:'',
                 ($_isSspRow2&&$isIn2)?$sA2:'', ($_isSspRow2&&!$isIn2)?$sA2:'', ($_isSspRow2)?$bl2:'',
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+        } elseif ($_isAll2) {
+            fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
+                $rowCur2, $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, ($bl2===''?'':$blCur2),
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } elseif ($_isSSP2) {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
-                $isIn2?$sA2:'', $isIn2?'':$sA2, $bl2, $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+                $isIn2?$sA2:'', $isIn2?'':$sA2, $bl2,
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } else {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
-                $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+                $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         }
     }
     fclose($out2);
@@ -362,7 +386,7 @@ if (($tab ?? '') === 'all_collections' && !empty($_GET['col_export']) && $_GET['
             $c3['customer_name'] ?? '',
             $c3['crm_customer_id'] ?? '',
             (float)($c3['amount'] ?? 0),
-            $c3['currency'] ?? 'USD',
+            $c3['currency'] ?? dn_book_base($config ?? null),
             $c3['method'] ?? 'Cash',
             $c3['note'] ?? '',
             !empty($c3['crm_synced']) ? 'Yes' : 'No',
@@ -394,7 +418,7 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
     $cins3 = array_filter($store->load('cash_ins.json') ?: [], fn($i) => (int)($i['collector_id']??0)===$selId3);
 
     $led3 = [];
-    foreach ($cols3 as $c) { $led3[] = ['date'=>substr($c['collected_at']??$c['created_at']??'',0,10),'dir'=>'IN','cur'=>'USD','usd'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved']; }
+    foreach ($cols3 as $c) { $led3[] = ['date'=>substr($c['collected_at']??$c['created_at']??'',0,10),'dir'=>'IN','cur'=>($c['currency'] ?? dn_book_base($config ?? null)),'usd'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved']; }
     foreach ($cins3 as $i) { $xc=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP'); $led3[]=['date'=>substr($i['created_at']??'',0,10),'dir'=>'IN','cur'=>$xc,'usd'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>$i['category']??'SSP Received','desc'=>$i['description']??'','status'=>$i['status']??'approved']; }
     foreach ($exps3 as $e) { $xc=$e['currency']??'USD'; $led3[]=['date'=>substr($e['submitted_at']??$e['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$e['category']??'Expense','desc'=>$e['description']??'','status'=>$e['status']??'pending']; }
     foreach ($hovs3 as $h) { $xc=strtoupper($h['currency']??'USD'); $led3[]=['date'=>substr($h['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending']; }
@@ -450,7 +474,7 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 
     $xFrom3 = $_GET['sc_from'] ?? date('Y-m-d', strtotime('-30 days'));
     $xTo3   = $_GET['sc_to'] ?? date('Y-m-d');
-    $xCur3  = strtoupper($_GET['sc_cur'] ?? 'USD');
+    $xCur3  = dn_entry_currency($_GET['sc_cur'] ?? '', $config ?? null);
     $led3 = array_filter($led3, fn($r) => $r['date'] >= $xFrom3 && $r['date'] <= $xTo3 && $r['cur'] === $xCur3);
     usort($led3, fn($a,$b) => strcmp($a['date'], $b['date']));
 
@@ -464,8 +488,8 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
     header('Cache-Control: no-cache, no-store, must-revalidate');
     $out3 = fopen('php://output', 'w');
     fputcsv($out3, ['Date','Time','Direction','Category','Description',
-        $isSSP3 ? 'Received (SSP)' : 'Received (USD)',
-        $isSSP3 ? 'Payment (SSP)' : 'Payment (USD)',
+        $isSSP3 ? 'Received (SSP)' : 'Received ('.$xCur3.')',
+        $isSSP3 ? 'Payment (SSP)' : 'Payment ('.$xCur3.')',
         'Status']);
     foreach ($led3 as $xr3) {
         $isIn3 = $xr3['dir'] === 'IN';
@@ -503,7 +527,7 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
         $dt = substr($e['submitted_at']??$e['created_at']??'',0,10);
         if ($fr_from && $dt < $fr_from) continue;
         if ($fr_to   && $dt > $fr_to)   continue;
-        $cur = $e['currency'] ?? 'USD';
+        $cur = $e['currency'] ?? dn_book_base($config ?? null);
         if ($fr_curr && $fr_curr !== $cur) continue;
         $rows[] = [$dt,'OUT',$cur,$e['amount']??0,$e['ssp_amount']??0,$e['category']??'Expense',$e['description']??'',$e['status']??'pending'];
     }

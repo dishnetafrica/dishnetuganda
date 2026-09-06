@@ -6,87 +6,7 @@ $cb      = new CashbookService($store, $dataDir);
 $meta    = $cb->getMeta();
 $isAdmin = in_array($userRole ?? '', ['admin','accountant','super_admin']) || ($isAdmin ?? false);
 
-// ── CSV EXPORT ──────────────────────────────────────────────────────────────
-if (!empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
-    $proj  = in_array($_GET['cb_proj'] ?? 'dishnet', ['dishnet','4g','bluecard']) ? $_GET['cb_proj'] : 'dishnet';
-    // Field agents can only export their own entries
-    $_csvIsField = in_array($userRole ?? '', ['sales','sales_staff','field_agent','collection']) && !($isAdmin ?? false);
-    $_csvPerson  = ($_csvIsField && !empty($retailer['name'])) ? $retailer['name'] : '';
-    $_csvCurrs = dn_book_currencies($config ?? ($GLOBALS['config'] ?? []));
-    $_csvBase  = $_csvCurrs[0];
-    $_csvCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_csvCurrs, true) ? strtoupper($_GET['cb_curr']) : '';
-    $csvFilters = array_filter(['project' => $proj, 'date_from' => $_GET['cb_from'] ?? '', 'date_to' => $_GET['cb_to'] ?? '', 'person' => $_csvPerson, 'currency' => $_csvCurr, 'limit' => 9999, 'offset' => 0]);
-    $rows  = $cb->getEntries($csvFilters);
-    $_csvIsSSP = ($_csvCurr === 'SSP');
-    $_csvIsAll = ($_csvCurr === '');
-    $fname = 'cashbook-'.strtoupper($proj).'-'.($_csvCurr ?: 'ALL').'-'.date('Y-m-d').'.csv';
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="'.$fname.'"');
-    $out = fopen('php://output','w');
-    // v4.9.18: Currency-separated CSV columns
-    $_csvHasSSP = in_array('SSP', $_csvCurrs, true);
-    if ($_csvIsAll && $_csvHasSSP) {
-        // Sudan layout — base there is USD, so this header is byte-identical.
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person','Currency',
-            'Received '.$_csvBase,'Payment '.$_csvBase,$_csvBase.' Balance',
-            'Received SSP','Payment SSP','SSP Balance',
-            'Ref','Status','Source']);
-    } elseif ($_csvIsAll) {
-        // Multi-currency book without SSP: every amount sits next to its own
-        // currency, and the running balance names the stream it belongs to.
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person','Currency',
-            'Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
-    } elseif ($_csvIsSSP) {
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person',
-            'Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
-    } else {
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person',
-            'Received '.$_csvCurr,'Payment '.$_csvCurr,$_csvCurr.' Balance','Ref','Status','Source']);
-    }
-    foreach ($rows as $e) {
-        $isIn = $e['direction']==='in';
-        $catDisplay = $e['category'];
-        $personVal  = trim($e['person'] ?? '');
-        if ($personVal !== '') $catDisplay .= '-' . $personVal;
-        $isSspRow = ($e['currency'] ?? 'USD') === 'SSP';
-        $usdAmt   = (float)$e['amount'];
-        $sspAmt   = (float)($e['ssp_amount'] ?? 0);
-        $bal      = $e['running_balance'] ?? '';
-        $balCurr  = $e['_bal_currency'] ?? ($isSspRow ? 'SSP' : $_csvBase);
-        $ref      = $e['validation_ref'] ?? '';
-        $status   = $e['validation_status'] ?? '';
-        $source   = $e['source'] ?? '';
-
-        $rowCur = strtoupper(trim((string)($e['currency'] ?? ''))) ?: $_csvBase;
-        if ($_csvIsAll && $_csvHasSSP) {
-            // Both base and SSP columns — fill the correct side
-            fputcsv($out, [
-                $e['sr'], $e['date'], $e['description'], $catDisplay, $personVal,
-                $rowCur,
-                // Base-currency columns
-                (!$isSspRow && $isIn)  ? $usdAmt : '',
-                (!$isSspRow && !$isIn) ? $usdAmt : '',
-                (!$isSspRow)           ? $bal     : '',
-                // SSP columns
-                ($isSspRow && $isIn)   ? $sspAmt  : '',
-                ($isSspRow && !$isIn)  ? $sspAmt  : '',
-                ($isSspRow)            ? $bal      : '',
-                $ref, $status, $source
-            ]);
-        } elseif ($_csvIsAll) {
-            fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
-                $rowCur, $isIn ? $usdAmt : '', $isIn ? '' : $usdAmt,
-                $bal, ($bal === '' ? '' : $balCurr), $ref, $status, $source]);
-        } elseif ($_csvIsSSP) {
-            fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
-                $isIn ? $sspAmt : '', $isIn ? '' : $sspAmt, $bal, $ref, $status, $source]);
-        } else {
-            fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
-                $isIn ? $usdAmt : '', $isIn ? '' : $usdAmt, $bal, $ref, $status, $source]);
-        }
-    }
-    fclose($out); exit;
-}
+// ── CSV EXPORT lives in includes/routes.php (runs before this tab loads) ──
 
 $seeded      = !empty($meta['seeded_at']);
 $seedCount   = (int)($meta['seeded_count'] ?? 0);
@@ -1083,7 +1003,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   <?php
   // ── Exchange SSP Backfill Banner (admin only) ─────────────────────────
   $_exchDismissed = !empty($meta['exchange_ssp_banner_dismissed']);
-  if ($isAdmin && !$_exchDismissed) {
+  if ($_cbSSP && $isAdmin && !$_exchDismissed) {
       $_exchUsdCount = $cb->query("SELECT COUNT(*) as n FROM cb_ledger WHERE category='Exchange' AND currency='USD'")[0]['n'] ?? 0;
       $_exchSspCount = $cb->query("SELECT COUNT(*) as n FROM cb_ledger WHERE category='Exchange' AND currency='SSP'")[0]['n'] ?? 0;
       $_exchMissing  = (int)$_exchUsdCount - (int)$_exchSspCount;

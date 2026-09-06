@@ -373,7 +373,7 @@ foreach ($quotes as $q) {
             'sent_via_crm'   => true,
             'has_pdf'        => !empty($pdfUrl),
             'sent_by'        => 'cron_quote_wa',
-            'currency'       => 'USD',
+            'currency'       => dn_code($config),
             'valid_until'    => date('Y-m-d', strtotime('+7 days')),
             'created_at'     => date('Y-m-d H:i:s'),
         ]);
@@ -647,7 +647,7 @@ foreach ($receiptQueue as $idx => &$rq) {
 
     // Send PDF via WhatsApp
     try {
-        $pdfCaption = "Receipt #PAY-{$rPayId} — USD " . number_format($rAmount, 2) . "\n— DishNet Africa";
+        $pdfCaption = "Receipt #PAY-{$rPayId} — " . dn_code($config) . " " . number_format($rAmount, 2) . "\n— DishNet Africa";
         $notify->sendDocument(
             NotificationService::ACCOUNTS,
             $rPhone,

@@ -578,22 +578,22 @@ window._indexSize = <?= count($_compactIdx) ?>;
             </div>
         </div>
 
-        <!-- Currency selector — shown when SSP selected, quick amounts update -->
+        <!-- Currency selector — options come from the install's configuration -->
+        <?php $_cpCurrs = dn_book_currencies($config ?? null); $_cpBase = $_cpCurrs[0];
+              $_cpEmoji = ['USD' => '💵', 'SSP' => '🇸🇸', 'UGX' => '🇺🇬']; ?>
         <div class="cp-row" style="margin-bottom:0;">
           <div class="cp-field" style="flex:1;">
             <label>Currency</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-              <button type="button" id="cpCurUSD" onclick="cpSetCurrency('USD')"
-                style="padding:10px;border-radius:10px;border:2px solid #D41C1C;background:#D41C1C;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">
-                💵 USD
+            <div style="display:grid;grid-template-columns:repeat(<?= count($_cpCurrs) ?>,1fr);gap:6px;">
+              <?php foreach ($_cpCurrs as $_cpC): $_cpOn = ($_cpC === $_cpBase); ?>
+              <button type="button" id="cpCur<?= $_cpC ?>" onclick="cpSetCurrency('<?= $_cpC ?>')"
+                style="padding:10px;border-radius:10px;border:2px solid <?= $_cpOn ? '#D41C1C' : '#e2e8f0' ?>;background:<?= $_cpOn ? '#D41C1C' : '#fff' ?>;color:<?= $_cpOn ? '#fff' : '#64748b' ?>;font-size:13px;font-weight:800;cursor:pointer;">
+                <?= $_cpEmoji[$_cpC] ?? '💰' ?> <?= $_cpC ?>
               </button>
-              <button type="button" id="cpCurSSP" onclick="cpSetCurrency('SSP')"
-                style="padding:10px;border-radius:10px;border:2px solid #e2e8f0;background:#fff;color:#64748b;font-size:13px;font-weight:800;cursor:pointer;">
-                🇸🇸 SSP
-              </button>
+              <?php endforeach; ?>
             </div>
           </div>
-          <input type="hidden" name="currency" id="cpCurrency" value="USD">
+          <input type="hidden" name="currency" id="cpCurrency" value="<?= htmlspecialchars($_cpBase) ?>">
         </div>
 
         <!-- Quick Amounts -->
@@ -822,32 +822,36 @@ function cpSetAmount(amt) {
     document.getElementById('cpCommPreview').textContent = <?= json_encode(dn_cur($config)) ?> + comm;
 }
 
-var _cpCurrency = 'USD';
+var _cpCurrs = <?= json_encode($_cpCurrs) ?>;
+var _cpBase  = <?= json_encode($_cpBase) ?>;
+var _cpCurrency = _cpBase;
 function cpSetCurrency(cur) {
     _cpCurrency = cur;
     document.getElementById('cpCurrency').value = cur;
-    var usdBtn = document.getElementById('cpCurUSD');
-    var sspBtn = document.getElementById('cpCurSSP');
+    _cpCurrs.forEach(function (c) {
+        var b = document.getElementById('cpCur' + c);
+        if (!b) return;
+        var on  = (c === cur);
+        var hot = (c === 'SSP') ? '#1A237E' : '#D41C1C';
+        b.style.background  = on ? hot : '#fff';
+        b.style.borderColor = on ? hot : '#e2e8f0';
+        b.style.color       = on ? '#fff' : '#64748b';
+    });
     var sspRow = document.getElementById('cpSspRow');
-    if (cur === 'USD') {
-        usdBtn.style.background = '#D41C1C'; usdBtn.style.borderColor = '#D41C1C'; usdBtn.style.color = '#fff';
-        sspBtn.style.background = '#fff';    sspBtn.style.borderColor = '#e2e8f0'; sspBtn.style.color = '#64748b';
+    if (cur === 'SSP') {
+        // Commission doesn't apply to SSP collections; track actual SSP cash.
+        document.getElementById('cpCommPreview').closest('div').style.display = 'none';
+        if (sspRow) sspRow.style.display = '';
+    } else {
         document.getElementById('cpCommPreview').closest('div').style.display = '';
         if (sspRow) sspRow.style.display = 'none';
-    } else {
-        sspBtn.style.background = '#1A237E'; sspBtn.style.borderColor = '#1A237E'; sspBtn.style.color = '#fff';
-        usdBtn.style.background = '#fff';    usdBtn.style.borderColor = '#e2e8f0'; usdBtn.style.color = '#64748b';
-        // Commission doesn't apply to SSP collections
-        document.getElementById('cpCommPreview').closest('div').style.display = 'none';
-        // Show SSP amount field for tracking actual cash received
-        if (sspRow) sspRow.style.display = '';
     }
 }
 
 function cpConfirmPay() {
     const amt   = document.getElementById('cpAmount').value;
     const name  = document.getElementById('cpCustName').value || 'customer';
-    const cur   = document.getElementById('cpCurrency').value || 'USD';
+    const cur   = document.getElementById('cpCurrency').value || _cpBase;
     if (!amt || parseFloat(amt) <= 0) { alert('Enter amount'); return false; }
     if (!name) { alert('Select or enter customer name'); return false; }
 

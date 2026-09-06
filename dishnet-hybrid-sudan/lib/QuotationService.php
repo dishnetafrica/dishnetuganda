@@ -29,6 +29,7 @@ require_once __DIR__ . '/CrmApiClient.php';
 class QuotationService
 {
     const LOG_FILE     = 'quotes_log.json';
+    // Historical constant; the live code derives the code from config.
     const CURRENCY     = 'USD';
     const VALIDITY_DAYS = 7;
 
@@ -422,22 +423,23 @@ class QuotationService
             $unit      = $item['unit'] ?? '';
             $unitLabel = $unit && $unit !== 'amount' ? " / {$unit}" : '';
             $label     = $item['label'] ?? 'Item';
+            $c = dn_cur($this->config);
             if ($qty > 1) {
                 $lines[] = "• {$label}";
-                $lines[] = "  {$qty} × \${$price}{$unitLabel} = *\${$lineTotal}*";
+                $lines[] = "  {$qty} × {$c}{$price}{$unitLabel} = *{$c}{$lineTotal}*";
             } else {
-                $lines[] = "• {$label}: *\${$lineTotal}{$unitLabel}*";
+                $lines[] = "• {$label}: *{$c}{$lineTotal}{$unitLabel}*";
             }
         }
         $lines[] = "";
         $lines[] = "━━━━━━━━━━━━━━━━━━━━━━";
-        $lines[] = "💰 *TOTAL: \${$total}*";
+        $lines[] = "💰 *TOTAL: " . dn_cur($this->config) . "{$total}*";
 
         // ── Payment info ────────────────────────────────────────────────────
         if ($amountPaid !== null) {
-            $lines[] = "✅ *Paid: \${$amountPaid}*";
+            $lines[] = "✅ *Paid: " . dn_cur($this->config) . "{$amountPaid}*";
             if ($balance !== null && $balance > 0) {
-                $lines[] = "⚠️ *Balance Due: \${$balance}*";
+                $lines[] = "⚠️ *Balance Due: " . dn_cur($this->config) . "{$balance}*";
             } elseif ($balance !== null && $balance <= 0) {
                 $lines[] = "✅ *Fully Paid*";
             }
@@ -620,7 +622,7 @@ class QuotationService
         $all[] = array_merge([
             'id'         => $maxId + 1,
             'created_at' => date('Y-m-d H:i:s'),
-            'currency'   => self::CURRENCY,
+            'currency'   => dn_code($this->config),
         ], $data);
         if (count($all) > 2000) $all = array_slice($all, -2000);
         $this->store->save(self::LOG_FILE, $all);

@@ -210,6 +210,20 @@
             "type": "textarea"
         },
         {
+            "key": "currency_symbol",
+            "label": "Display: currency symbol/prefix",
+            "description": "What customers SEE in front of amounts (e.g. UGX, $, KSh). Uganda: UGX (also the built-in default). Sudan: set $ — without it, screens fall back to the UGX default.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "currency_code",
+            "label": "Display: currency code",
+            "description": "3-letter code used in API payloads and messages where a code (not a symbol) is needed (e.g. UGX, USD). Usually matches the symbol; leave empty to derive it.",
+            "required": 0,
+            "type": "text"
+        },
+        {
             "key": "cashbook_base_currency",
             "label": "Cashbook: base (operating) currency",
             "description": "The ledger's operating currency. Leave EMPTY on the Sudan installation (defaults to USD, unchanged). Uganda: UGX.",

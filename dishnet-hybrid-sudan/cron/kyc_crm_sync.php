@@ -158,7 +158,7 @@ foreach ($pending as $item) {
                 $payPayload = [
                     'clientId'     => (int)$crmClientId,
                     'amount'       => $amount,
-                    'currencyCode' => dn_code($config),
+                    'currencyCode' => dn_payload_currency('', $config),
                     'methodId'     => PaymentUuids::resolve('Cash'),
                     'note'         => 'Cash collected at registration (cron sync) | Agent: '
                                    . ($app['retailer_name'] ?? '') . ' | Ref: KYC-' . $crmClientId,

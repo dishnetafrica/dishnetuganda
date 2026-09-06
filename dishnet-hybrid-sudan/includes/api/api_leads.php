@@ -55,7 +55,7 @@
             $payResp = $crm->post('payments', [
                 'clientId'     => (int)$crmClientId,
                 'amount'       => $amount,
-                'currencyCode' => 'USD',
+                'currencyCode' => dn_payload_currency('', $config ?? null),
                 'methodId'     => PaymentUuids::resolve($paymentMethod),
                 'note'         => 'Payment received — Lead converted to Regular Customer.'
                                 . ($paymentRef ? ' Ref: ' . $paymentRef : '')

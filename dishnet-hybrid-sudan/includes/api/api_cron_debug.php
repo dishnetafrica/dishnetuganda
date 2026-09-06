@@ -371,7 +371,7 @@
                 'clientId'     => (int)$first['crm_customer_id'],
                 'methodId'     => $first['method_uuid'],
                 'amount'       => (float)$first['amount'],
-                'currencyCode' => 'USD',
+                'currencyCode' => dn_payload_currency($first['currency'] ?? '', $config ?? null),
                 'note'         => 'TEST - Collected by '.$first['retailer_name'].' via DishNet PWA',
                 'applyToInvoicesAutomatically' => true,
             ];
@@ -422,7 +422,7 @@
             'clientId'     => $custId,
             'methodId'     => PaymentUuids::resolve($col['method'] ?? 'Cash'),
             'amount'       => (float)$col['amount'],
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($col['currency'] ?? '', $config ?? null),
             'note'         => 'Collected by '.($col['retailer_name']??'agent').' via DishNet PWA',
             'applyToInvoicesAutomatically' => true,
         ];
@@ -488,7 +488,7 @@
             'clientId'     => $custId,
             'methodId'     => PaymentUuids::resolve($col['method'] ?? 'Cash'),
             'amount'       => (float)$col['amount'],
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($col['currency'] ?? '', $config ?? null),
             'note'         => 'Collected by '.($col['retailer_name'] ?? 'agent')
                             . ' | Manual retry by '.($retailer['name'] ?? 'Admin')
                             . ' | Ref: RETRY-COL-' . $colId
@@ -1721,7 +1721,7 @@
                     $corrKey = $key . '-SSP-FIXED';
                     $exists  = $_fixPdo->query("SELECT id FROM staff_ledger WHERE idempotency_key=" . $_fixPdo->quote($corrKey))->fetchColumn();
                     if (!$exists) {
-                        $ledger->record(['staff_id'=>$staffId,'staff_name'=>$staffName,'direction'=>'in','currency'=>'SSP','amount'=>$ssp,'ssp_amount'=>$ssp,'category'=>'collection','subcategory'=>'SSP Received','description'=>($ci['description']??'').' [ledger-fix]','status'=>'active','source_type'=>'cash_ins','source_id'=>(string)$item['id'],'idempotency_key'=>$corrKey,'event_date'=>substr($ci['created_at']??date('Y-m-d'),0,10)]);
+                        $ledger->record(['staff_id'=>$staffId,'staff_name'=>$staffName,'direction'=>'in','currency'=>strtoupper($ci['currency'] ?? 'SSP'),'amount'=>$ssp,'ssp_amount'=>$ssp,'category'=>'collection','subcategory'=>'SSP Received','description'=>($ci['description']??'').' [ledger-fix]','status'=>'active','source_type'=>'cash_ins','source_id'=>(string)$item['id'],'idempotency_key'=>$corrKey,'event_date'=>substr($ci['created_at']??date('Y-m-d'),0,10)]);
                     }
                 }
                 $fixed++;

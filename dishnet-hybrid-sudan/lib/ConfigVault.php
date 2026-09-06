@@ -59,6 +59,8 @@ class ConfigVault
         'efris_private_key',
         // Ledger currency identity — losing it would silently re-book the
         // cashbook in the wrong base after a re-install.
+        'currency_symbol',
+        'currency_code',
         'cashbook_base_currency',
         'cashbook_currencies',
         'books_start_date',

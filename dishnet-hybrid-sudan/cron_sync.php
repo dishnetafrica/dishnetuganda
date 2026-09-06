@@ -364,7 +364,7 @@ if ($crm->isConfigured()) {
             'clientId'     => (int)$custId,
             'methodId'     => PaymentUuids::resolve($col['method'] ?? 'Cash'),
             'amount'       => (float)($col['amount'] ?? 0),
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($col['currency'] ?? '', $config ?? null),
             'note'         => "Collected by {$col['retailer_name']} via DishNet{$matchNote}",
             'applyToInvoicesAutomatically' => true,
         ];

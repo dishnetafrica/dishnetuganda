@@ -156,7 +156,7 @@ foreach ($recentInvoices as $inv) {
     }
 
     $notify->invoiceCreated($phone, $fullName, $invoiceNum, $total, $dueDate ?: 'See invoice', $svcName);
-    ilog("SENT: #{$invoiceNum} \${$total} → {$fullName} ({$phone})");
+    ilog("SENT: #{$invoiceNum} " . dn_code($config) . " {$total} → {$fullName} ({$phone})");
 
     // ── Send invoice PDF ─────────────────────────────────────────────────
     try {
@@ -194,7 +194,7 @@ foreach ($recentInvoices as $inv) {
                 $phone,
                 $pdfUrl,
                 "{$invoiceNum}.pdf",
-                "Invoice #{$invoiceNum} — \${$total} — Due: {$dueDate}\n— DishNet Africa",
+                "Invoice #{$invoiceNum} — " . dn_code($config) . " " . number_format((float)$total, 0) . " — Due: {$dueDate}\n— DishNet Africa",
                 'ops_invoice_pdf'
             );
             ilog("PDF sent: #{$invoiceNum}");

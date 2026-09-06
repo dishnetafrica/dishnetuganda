@@ -2196,19 +2196,20 @@ switch ($changeType) {
                 $iPrice = (float)($_qi['price'] ?? 0);
                 $iTotal = (float)($_qi['total'] ?? ($qty * $iPrice));
 
+                $qCur = dn_code($config);
                 if ($qty > 1) {
-                    $msg .= "📦 {$lbl} x{$qty} — USD " . number_format($iTotal, 0) . "\n";
+                    $msg .= "📦 {$lbl} x{$qty} — {$qCur} " . number_format($iTotal, 0) . "\n";
                 } else {
-                    $msg .= "📦 {$lbl} — USD " . number_format($iTotal, 0) . "\n";
+                    $msg .= "📦 {$lbl} — {$qCur} " . number_format($iTotal, 0) . "\n";
                 }
             }
 
             if ($hwTotal > 0 && $monthlyTotal > 0) {
-                $msg .= "💰 Hardware: USD " . number_format($hwTotal, 0) . "\n";
-                $msg .= "💰 Monthly: USD " . number_format($monthlyTotal, 0) . "\n";
+                $msg .= "💰 Hardware: " . dn_code($config) . " " . number_format($hwTotal, 0) . "\n";
+                $msg .= "💰 Monthly: " . dn_code($config) . " " . number_format($monthlyTotal, 0) . "\n";
             }
 
-            $msg .= "🏷️ *Total: USD " . number_format($amount, 0) . "*\n\n"
+            $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n\n"
                  . "💳 Cash / Transfer / Card\n"
                  . "✅ Reply *YES* to proceed.\n\n";
 
@@ -2323,7 +2324,7 @@ switch ($changeType) {
                         ]);
 
                         // 2. Then send PDF with short caption
-                        $pdfCaption = "Quote #{$quoteNum} — USD " . number_format($amount, 0) . "\n— DishNet Africa";
+                        $pdfCaption = "Quote #{$quoteNum} — " . dn_code($config) . " " . number_format($amount, 0) . "\n— DishNet Africa";
                         $notify->sendDocument('support', $phone, $pdfServeUrl, "DishNet-Quote-{$quoteNum}.pdf",
                             $pdfCaption,
                             'ops_quote_pdf');
@@ -2638,8 +2639,9 @@ switch ($changeType) {
                     'date'              => date('Y-m-d'),
                     'direction'         => 'out',
                     'amount'            => $originalAmt,
-                    'currency'          => $orig['currency'] ?? 'USD',
+                    'currency'          => dn_payment_currency(['currency' => $orig['currency'] ?? ''], $config ?? null),
                     'category'          => 'Refund',
+                    'txn_type'          => 'REFUND',
                     'category_raw'      => 'CRM Payment Deleted',
                     'person'            => $orig['person'] ?? '',
                     'description'       => 'AUTO-REVERSAL: CRM Payment #' . $paymentId . ' deleted — '

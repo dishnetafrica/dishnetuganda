@@ -41,27 +41,147 @@ t('Sudan fallback stays USD', dn_payment_currency([], []), 'USD');
 t('lowercase currencyCode normalised', dn_payment_currency(['currencyCode' => 'ugx'], []), 'UGX');
 t('garbage currencyCode falls back', dn_payment_currency(['currencyCode' => 'U$D'], []), 'USD');
 
-echo "\nNo hard-coded ledger currency remains in the write paths\n";
+echo "\nEntry/payload/SSP helpers (the lines that used to guess)\n";
+$ug = ['cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD'];
+t('Sudan: USD passes the handler', dn_entry_currency('USD', []), 'USD');
+t('Sudan: SSP passes the handler', dn_entry_currency('SSP', []), 'SSP');
+t('Sudan: missing falls to USD', dn_entry_currency('', []), 'USD');
+t('Sudan: garbage falls to USD', dn_entry_currency('EURO', []), 'USD');
+t('Sudan cash-in default stays SSP', dn_entry_currency('', [], 'SSP'), 'SSP');
+t('Uganda: UGX SURVIVES the handler', dn_entry_currency('UGX', $ug), 'UGX');
+t('Uganda: USD stays selectable', dn_entry_currency('usd', $ug), 'USD');
+t('Uganda: SSP is coerced to the base, never booked', dn_entry_currency('SSP', $ug), 'UGX');
+t('Uganda: missing falls to the base', dn_entry_currency('', $ug), 'UGX');
+t('Uganda cash-in default follows the base', dn_entry_currency('', $ug, 'SSP'), 'UGX');
+t('SSP selectable on Sudan', dn_ssp_selectable([]), true);
+t('SSP not selectable on Uganda', dn_ssp_selectable($ug), false);
+t('payload: the staff-recorded currency wins', dn_payload_currency('UGX', []), 'UGX');
+t('payload: missing falls to the book base (Uganda)', dn_payload_currency('', $ug), 'UGX');
+t('payload: missing falls to the book base (Sudan)', dn_payload_currency('', []), 'USD');
+t('payload: lowercase normalised', dn_payload_currency('ugx', []), 'UGX');
+
+echo "\naddEntry() books the CONFIGURED base when currency is omitted\n";
+require_once dirname(__DIR__) . '/lib/StoreInterface.php';
+require_once dirname(__DIR__) . '/lib/SqliteStore.php';
+require_once dirname(__DIR__) . '/lib/CashbookService.php';
+$tdU = sys_get_temp_dir() . '/cb_curr_defu_' . getmypid();
+@mkdir($tdU, 0777, true);
+$stU = SqliteStore::create($tdU);
+$svU = new CashbookService($stU, $tdU);
+file_put_contents($tdU . '/kyc_config.json', json_encode($ug));
+$rU = $svU->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 5.0,
+    'category' => 'Receipt', 'description' => 'no currency given'], ['name' => 't'], true);
+t('Uganda addEntry default is UGX, not USD',
+  $stU->getPdo()->query('SELECT currency FROM cb_ledger WHERE id=' . (int)$rU['id'])->fetchColumn(), 'UGX');
+$tdS = sys_get_temp_dir() . '/cb_curr_defs_' . getmypid();
+@mkdir($tdS, 0777, true);
+$stS = SqliteStore::create($tdS);
+$svS = new CashbookService($stS, $tdS);
+file_put_contents($tdS . '/kyc_config.json', json_encode(['cashbook_base_currency' => 'USD']));
+$rS = $svS->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 5.0,
+    'category' => 'Receipt', 'description' => 'no currency given'], ['name' => 't'], true);
+t('Sudan addEntry default stays USD',
+  $stS->getPdo()->query('SELECT currency FROM cb_ledger WHERE id=' . (int)$rS['id'])->fetchColumn(), 'USD');
+exec('rm -rf ' . escapeshellarg($tdU) . ' ' . escapeshellarg($tdS));
+
+echo "\nScanner v2 — the blind spots the audit proved are covered\n";
 $root = dirname(__DIR__);
+// Every file that creates money records or uCRM payments/quotes.
 $writePaths = [
-    'webhook.php',
-    'cron_sync.php',
-    'cron/payment_catchup_sync.php',
-    'lib/CashbookService.php',
+    'webhook.php', 'cron_sync.php', 'cron_crm_payment_gap.php', 'cron_quote_wa.php',
+    'cron/payment_catchup_sync.php', 'cron/kyc_crm_sync.php',
+    'lib/CashbookService.php', 'lib/KycService.php', 'lib/ExpenseAdvanceService.php',
+    'lib/QuotationService.php',
+    'includes/routes.php',
+    'includes/post/post_cashbook.php', 'includes/post/post_field.php',
+    'includes/post/post_sales.php', 'includes/post/post_kyc.php',
+    'includes/api/api_retailer.php', 'includes/api/api_leads.php',
+    'includes/api/api_cashbook.php', 'includes/api/api_payments_admin.php',
+    'includes/api/api_cron_debug.php',
+    'tabs/admin/settings.php', 'tabs/accounts/handover_queue.php',
+    'tabs/sales/my_account.php', 'tabs/accounts/staff_cashbooks.php',
+    'tabs/support/field_expenses.php', 'tabs/sales/collect_payment.php',
+    'api/index.php',
+];
+// Deliberate Sudan literals that REMAIN, all behind dn_ssp_selectable() guards
+// (exchange legs, SSP give/return). Counts are pinned: one new literal fails.
+$pinnedStamps = [
+    'includes/post/post_cashbook.php'   => ['USD' => 1, 'SSP' => 7],
+    'includes/api/api_cashbook.php'     => ['USD' => 5, 'SSP' => 5],
+    'tabs/accounts/staff_cashbooks.php' => ['USD' => 4, 'SSP' => 4],
+    'tabs/sales/my_account.php'         => ['USD' => 3, 'SSP' => 3],
 ];
 $viol = [];
 foreach ($writePaths as $rel) {
-    $src = (string)@file_get_contents($root . '/' . $rel);
-    foreach (explode("\n", $src) as $i => $line) {
+    $src   = (string)@file_get_contents($root . '/' . $rel);
+    $lines = explode("\n", $src);
+    $counts = ['USD' => 0, 'SSP' => 0, 'UGX' => 0];
+    foreach ($lines as $i => $line) {
         $trim = ltrim($line);
         if ($trim === '' || strpos($trim, '//') === 0 || strpos($trim, '*') === 0) continue;
-        if (preg_match("/'currency'\s*=>\s*'(USD|SSP|UGX)'/", $line)) {
-            $viol[] = "$rel:" . ($i + 1) . '  ' . trim(substr($line, 0, 100));
+        // (1) literal ledger stamps
+        if (preg_match("/'currency'\s*=>\s*'(USD|SSP|UGX)'/", $line, $m)) {
+            $counts[$m[1]]++;
+        }
+        // (2) literal uCRM payload currency
+        if (preg_match("/'currencyCode'\s*=>\s*'[A-Z]{3}'/", $line)) {
+            $viol[] = "$rel:" . ($i + 1) . '  payload literal  ' . trim(substr($line, 0, 90));
+        }
+        // (3) request-input currency guessing
+        if (preg_match("/\\\$_(POST|GET|REQUEST)\[['\"]currency['\"]\]\s*\?\?\s*'(USD|SSP)'/", $line)
+            || preg_match("/\\\$body\[['\"]currency['\"]\]\s*\?\?\s*'(USD|SSP)'/", $line)) {
+            $viol[] = "$rel:" . ($i + 1) . '  input guess  ' . trim(substr($line, 0, 90));
+        }
+        // (4) hard USD/SSP whitelist arrays
+        if (preg_match("/\[\s*'USD'\s*,\s*'SSP'\s*\]/", $line)) {
+            $viol[] = "$rel:" . ($i + 1) . '  whitelist  ' . trim(substr($line, 0, 90));
         }
     }
+    $pin = $pinnedStamps[$rel] ?? ['USD' => 0, 'SSP' => 0];
+    foreach (['USD', 'SSP'] as $c) {
+        if ($counts[$c] > ($pin[$c] ?? 0)) {
+            $viol[] = "$rel  {$c} stamps grew: {$counts[$c]} > " . ($pin[$c] ?? 0);
+        }
+    }
+    if ($counts['UGX'] > 0) $viol[] = "$rel  UGX literal stamp ({$counts['UGX']}) — Uganda literals corrupt Sudan";
+    if (isset($pinnedStamps[$rel]) && strpos($src, 'dn_ssp_selectable(') === false) {
+        $viol[] = "$rel  carries pinned SSP literals but no dn_ssp_selectable() guard";
+    }
 }
-t('zero literal currency stamps in ledger write paths', $viol, []);
+t('scanner v2: zero unpinned literals across ALL write paths', $viol, []);
 if ($viol) echo '    ' . implode("\n    ", $viol) . "\n";
+
+// CashbookService's remaining SQL currency literals are the Phase-C reader
+// debt (getBalance/getSummary/getLedger family). Pinned: may only shrink.
+$cbs = (string)file_get_contents($root . '/lib/CashbookService.php');
+t('reader-layer SQL literal debt did not grow (Phase C scope)',
+  substr_count($cbs, "currency='USD'") + substr_count($cbs, "currency = 'USD'")
+  + substr_count($cbs, "currency='SSP'") <= 12, true);
+t('KYC cash sale no longer bakes USD into SQL',
+  strpos((string)file_get_contents($root . '/lib/KycService.php'), "'in', ?, 'USD'") === false, true);
+
+echo "\nFixed paths use the helpers (spot welds)\n";
+$reads = [];
+foreach (['includes/post/post_field.php', 'cron_crm_payment_gap.php', 'webhook.php',
+          'includes/post/post_kyc.php', 'tabs/sales/collect_payment.php',
+          'lib/CashbookService.php'] as $rel) {
+    $reads[$rel] = (string)file_get_contents($root . '/' . $rel);
+}
+t('staff collection pushes the RECORDED currency to uCRM',
+  strpos($reads['includes/post/post_field.php'], 'dn_payload_currency($currency') !== false, true);
+t('gap-fill cron reads the payment currency', strpos($reads['cron_crm_payment_gap.php'], 'dn_payment_currency($payment') !== false, true);
+t('gap-fill cron respects the cash-only rule', strpos($reads['cron_crm_payment_gap.php'], 'PaymentUuids::CASH') !== false, true);
+t('gap-fill cron uses the payment date', strpos($reads['cron_crm_payment_gap.php'], "createdDate") !== false, true);
+t('payment-delete reversal is typed REFUND', strpos($reads['webhook.php'], "'txn_type'          => 'REFUND'") !== false, true);
+t('KYC-cancel refund actually posts (typed, ref-linked)',
+  strpos($reads['includes/post/post_kyc.php'], "'KYC-REFUND-'") !== false
+  && strpos($reads['includes/post/post_kyc.php'], 'createEntry') === false, true);
+t('collect-payment currency buttons come from configuration',
+  strpos($reads['tabs/sales/collect_payment.php'], 'dn_book_currencies($config') !== false
+  && strpos($reads['tabs/sales/collect_payment.php'], 'value="USD"') === false, true);
+t('the Uganda chart seeder refuses on a non-UGX base',
+  strpos($reads['lib/CashbookService.php'], "bookBase() !== 'UGX'") !== false, true);
+t('the do-nothing opening stub is gone', strpos($reads['lib/CashbookService.php'], 'setOpeningBalance') === false, true);
 
 echo "\nEntry forms are config-driven (SSP cannot appear on a UGX install)\n";
 $fe = (string)file_get_contents($root . '/tabs/support/field_expenses.php');
@@ -81,10 +201,20 @@ t('no cell prints the display symbol on a raw row amount',
   strpos($cb, "dn_cur(\$config) . number_format(\$e['amount']") === false, true);
 t('balance cell follows the balance-stream currency',
   strpos($cb, "\$e['_bal_currency'] ?? \$_cbBase") !== false, true);
-t('CSV headers carry the configured base, not a USD literal',
-  strpos($cb, "'Received USD'") === false, true);
-t('CSV currency filter is config-driven',
-  strpos($cb, "in_array(strtoupper(\$_GET['cb_curr'] ?? ''), \$_csvCurrs, true)") !== false, true);
+// The LIVE exporter is includes/routes.php — it intercepts cb_export=csv
+// before the tab loads. The audit found the tab-side twin unreachable; it
+// has been removed, so these guards aim at the code that actually runs.
+$routes = (string)file_get_contents($root . '/includes/routes.php');
+t('live CSV export authenticates', strpos($routes, '$csvUser = $auth->requireLogin();') !== false, true);
+t('live CSV headers carry the configured base, not a USD literal',
+  strpos($routes, "'Received USD'") === false, true);
+t('live CSV currency filter is config-driven',
+  strpos($routes, "in_array(strtoupper(\$_GET['cb_curr'] ?? ''), \$_csvCurrs2, true)") !== false, true);
+t('live CSV Currency column states the row currency',
+  strpos($routes, '$rowCur2') !== false && strpos($routes, "\$_isSspRow2?'SSP':'USD'") === false, true);
+t('the unreachable tab-side exporter is gone (links to the live one remain)',
+  strpos($cb, 'CSV EXPORT lives in includes/routes.php') !== false
+  && strpos($cb, '$_csvIsAll') === false && strpos($cb, 'fputcsv') === false, true);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

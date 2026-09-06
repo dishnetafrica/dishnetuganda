@@ -33,6 +33,7 @@
         // USD→SSP: SSP arrives in bag (+SSP), USD leaves bag (-USD)
         // SSP→USD: USD arrives in bag (+USD), SSP leaves bag (-SSP)
         if ($act === 'record_exchange' && $met === 'POST') {
+            if (!dn_ssp_selectable($config ?? null)) $er2('SSP flows are not enabled on this installation.', 422);
             $body2        = json_decode(file_get_contents('php://input'), true) ?? $_POST;
             $excDir       = trim($body2['exc_direction'] ?? 'usd_to_ssp');
             $excAmt       = round((float)($body2['exc_amount'] ?? 0), 2);  // always USD amount
@@ -349,7 +350,7 @@
         // GET cashbook_ledger — running balance ledger for one currency
         if ($act === 'cashbook_ledger' && $met === 'GET') {
             if (!$isAcct) $er2('Accountant/Admin only.', 403);
-            $currency = strtoupper($_GET['currency'] ?? 'USD');
+            $currency = dn_entry_currency($_GET['currency'] ?? '', $config ?? null);
             $ok2([
                 'ledger'  => $cb->getLedger($currency, $_GET['date_from'] ?? '', $_GET['date_to'] ?? ''),
                 'summary' => $cb->getSummary($currency, $_GET['date_from'] ?? '', $_GET['date_to'] ?? ''),
@@ -433,12 +434,9 @@
         // POST cashbook_set_opening — set opening balance (admin only)
         if ($act === 'cashbook_set_opening' && $met === 'POST') {
             if (!$isAdmin2) $er2('Admin only.', 403);
-            $body     = json_decode(file_get_contents('php://input'), true) ?? $_POST;
-            $currency = strtoupper(trim($body['currency'] ?? ''));
-            $amount   = round((float)($body['amount'] ?? 0), 2);
-            $result   = $cb->setOpeningBalance($currency, $amount, $me2);
-            if (!$result['success']) $er2($result['message'], 422);
-            $ok2($result);
+            // Retired: the old endpoint was wired to a stub that reported
+            // success while writing nothing. Openings are per-account now.
+            $er2('Opening balances are recorded per account on the Opening Balances screen.', 410);
         }
 
         // POST cashbook_set_rate — set USD→SSP exchange rate (admin/accountant)

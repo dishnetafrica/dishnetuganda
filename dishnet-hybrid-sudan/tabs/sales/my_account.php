@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
 
     if ($act === 'submit_expense') {
         // ── Balance guard: can't spend what you don't have ──────────────
-        $_exCur = strtoupper(trim($_POST['currency'] ?? 'USD'));
+        $_exCur = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
         $_exAmt = round((float)($_POST['amount'] ?? 0), 2);
         if ($_exCur === 'SSP') $_exAmt = round((float)($_POST['ssp_amount'] ?? $_POST['amount'] ?? 0), 0);
 
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
             // ── AUTO-LINK: Staff payment auto-approved → create cash_in for receiver ──
             $_staffName = trim($_POST['staff_name'] ?? $_POST['to_staff_name'] ?? '');
             $_isStaffPay = !empty($_staffName);
-            $_expCurrency = strtoupper(trim($_POST['currency'] ?? 'USD'));
+            $_expCurrency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
             $_expAmount = round((float)($_POST['amount'] ?? 0), 2);
             $_expSspAmt = round((float)($_POST['ssp_amount'] ?? $_POST['amount'] ?? 0), 0);
             $_expCategory = trim($_POST['category'] ?? '');
@@ -147,8 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
     if ($act === 'request_advance') {
         $amount  = round((float)($_POST['amount'] ?? 0), 2);
         $purpose = trim($_POST['purpose'] ?? '');
-        $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
+        $currency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
         $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP' : dn_cur($config) . number_format($amount, 2);
         if ($amount > 0 && $purpose) {
             $store->appendWithId('activity_log.json', [
@@ -178,8 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
         $amount        = round((float)($_POST['amount'] ?? 0), 2);
         $purpose       = trim($_POST['purpose'] ?? 'misc');
         $description   = trim($_POST['description'] ?? '');
-        $currency      = strtoupper(trim($_POST['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD','SSP'], true)) $currency = 'USD';
+        $currency      = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
 
         if ($amount <= 0 || !$recipientId) {
             flash('Select a staff member and enter an amount.', 'danger');
@@ -283,6 +281,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
 
     // ── record_exchange: atomic USD↔SSP conversion ─────────────────────
     if ($act === 'record_exchange') {
+        if (!dn_ssp_selectable($config ?? null)) {
+            flash('SSP flows are not enabled on this installation.', 'danger');
+            redirect('?page=dashboard&tab=my_account');
+        }
         require_once __DIR__ . '/../../lib/StaffLedgerWriter.php';
         require_once __DIR__ . '/../../lib/ExpenseAdvanceService.php';
         $excDir    = trim($_POST['exc_direction'] ?? 'usd_to_ssp');

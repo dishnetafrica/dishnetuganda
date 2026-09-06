@@ -550,7 +550,7 @@ if ($action === 'convert_to_customer') {
         $payResp = $crm->post('payments', [
             'clientId'     => (int)$crmClientId,
             'amount'       => $amount,
-            'currencyCode' => dn_code($config),
+            'currencyCode' => dn_payload_currency('', $config),
             'methodId'     => 2,  // 2=Cash, 3=Bank Transfer, 4=Credit Card, 6=Mobile Money
             'note'         => 'Payment received — Lead converted to Regular Customer.'
                             . ($paymentRef ? ' Ref: ' . $paymentRef : '')
@@ -2472,7 +2472,7 @@ if ($action === 'staff_ledger_balance') {
     require_once dirname(__DIR__) . '/lib/StaffLedgerService.php';
     $ledger   = new StaffLedgerService($store->getPdo());
     $staffId  = (int)($_GET['staff_id'] ?? $retailerId);
-    $currency = strtoupper($_GET['currency'] ?? 'USD');
+    $currency = dn_entry_currency($_GET['currency'] ?? '', $config ?? null);
     apiOk(['staff_id' => $staffId, 'currency' => $currency, 'balance' => $ledger->balance($staffId, $currency)]);
 }
 
@@ -2480,13 +2480,13 @@ if ($action === 'staff_ledger_position') {
     require_once dirname(__DIR__) . '/lib/StaffLedgerService.php';
     $ledger  = new StaffLedgerService($store->getPdo());
     $staffId = (int)($_GET['staff_id'] ?? $retailerId);
-    apiOk($ledger->position($staffId, strtoupper($_GET['currency'] ?? 'USD')));
+    apiOk($ledger->position($staffId, dn_entry_currency($_GET['currency'] ?? '', $config ?? null)));
 }
 
 if ($action === 'staff_ledger_positions') {
     require_once dirname(__DIR__) . '/lib/StaffLedgerService.php';
     $ledger = new StaffLedgerService($store->getPdo());
-    apiOk(['positions' => $ledger->allPositions(strtoupper($_GET['currency'] ?? 'USD'))]);
+    apiOk(['positions' => $ledger->allPositions(dn_entry_currency($_GET['currency'] ?? '', $config ?? null))]);
 }
 
 if ($action === 'staff_ledger_entries') {
@@ -2527,7 +2527,7 @@ if ($action === 'staff_ledger_summary') {
     $ledger  = new StaffLedgerService($store->getPdo());
     $staffId = (int)($_GET['staff_id'] ?? $retailerId);
     $month   = $_GET['month'] ?? date('Y-m');
-    apiOk($ledger->monthlySummary($staffId, $month, strtoupper($_GET['currency'] ?? 'USD')));
+    apiOk($ledger->monthlySummary($staffId, $month, dn_entry_currency($_GET['currency'] ?? '', $config ?? null)));
 }
 
 if ($action === 'staff_ledger_stats') {

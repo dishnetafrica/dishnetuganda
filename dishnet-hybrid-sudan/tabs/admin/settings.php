@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit_
             'clientId'     => (int)$custId,
             'methodId'     => PaymentUuids::resolve($newMethod),
             'amount'       => $newAmount,
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($orig['currency'] ?? '', $config ?? null),
             'note'         => "Collected by {$orig['retailer_name']} [EDITED by admin]  {$newNote}",
             'applyToInvoicesAutomatically' => true,
         ];
@@ -222,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'push_
             'clientId'     => $custId,
             'methodId'     => PaymentUuids::resolve($c['method'] ?? 'Cash'),
             'amount'       => $amount,
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($c['currency'] ?? '', $config ?? null),
             'note'         => 'Collected by '.($c['retailer_name']??'agent').' via DishNet PWA'
                             . ($c['invoice_id'] ? ' (Inv #'.$c['invoice_id'].')' : '')
                             . ($c['note'] ? '  '.$c['note'] : ''),
@@ -251,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'push_
                     'date'              => substr($c['created_at'] ?? date('Y-m-d'), 0, 10),
                     'direction'         => 'in',
                     'amount'            => $amount,
-                    'currency'          => 'USD',
+                    'currency'          => dn_payload_currency($c['currency'] ?? '', $config ?? null),
                     'category'          => 'Receipt',
                     'category_raw'      => 'Receipt',
                     'person'            => $c['retailer_name'] ?? '',

@@ -328,6 +328,12 @@ class GptWaClient
                          . trim($customInstructions) . "\n";
         }
 
+        require_once __DIR__ . '/currency.php';
+        $cfgAll        = dn_book_effective_config();
+        $payCurrencies = implode(' or ', dn_book_currencies($cfgAll));
+        $payPhone      = trim((string)($cfgAll['payments_phone'] ?? $cfgAll['alert_whatsapp'] ?? ''));
+        $payPhoneLine  = $payPhone !== '' ? " Details: {$payPhone}." : '';
+
         return <<<PROMPT
 You are a customer support agent for DishNet Africa, an internet service provider in Juba, South Sudan. You communicate via WhatsApp.
 
@@ -386,7 +392,7 @@ SOUTH SUDAN CONTEXT:
 - Overheating → router/dish in direct sun throttles and resets; advise ventilation
 
 COMMON QUESTIONS — ANSWER DIRECTLY:
-Q: How do I pay? → Cash (USD or SSP) at office, bank transfer, or mobile money. Details: +211 927 797 217.
+Q: How do I pay? → Cash ({$payCurrencies}) at office, bank transfer, or mobile money.{$payPhoneLine}
 Q: Where is the office? → Airport Road, Kololo Area, opposite the Ministries, Juba. 8 AM–8 PM daily.
 Q: How to renew? → Contact accounts: +211 927 797 217 or visit the office.
 Q: New connection? → Call sales: +211 923 400 000. They'll confirm coverage and walk you through it.

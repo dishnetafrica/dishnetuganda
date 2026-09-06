@@ -371,6 +371,10 @@ class CashbookService
      */
     public function seedStandardAccounts(): array
     {
+        if ($this->bookBase() !== 'UGX') {
+            return ['ok' => false, 'error' => 'The standard set is the Uganda (UGX-base) chart — this install books in '
+                . $this->bookBase() . '. Add accounts individually instead.'];
+        }
         if (count($this->accounts()) > 0) {
             return ['ok' => false, 'error' => 'Accounts already exist — add further accounts individually'];
         }
@@ -1286,7 +1290,8 @@ class CashbookService
         $project   = in_array($data['project'] ?? '', self::PROJECTS) ? $data['project'] : 'dishnet';
         $dir       = in_array($data['direction'] ?? '', ['in','out']) ? $data['direction'] : 'in';
         $amount    = round((float)($data['amount'] ?? 0), 2);
-        $currency  = strtoupper($data['currency'] ?? 'USD');
+        $currency  = strtoupper(trim((string)($data['currency'] ?? '')));
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) $currency = $this->bookBase();
         $cat       = trim($data['category'] ?? 'Receipt');
         $valStatus = array_key_exists($data['validation_status'] ?? '', self::VAL_STATUSES)
                      ? $data['validation_status'] : 'na';
@@ -1799,8 +1804,6 @@ class CashbookService
             [$reason,date('Y-m-d H:i:s'),$id]);
         return ['ok'=>true];
     }
-    // legacy opening balance stub
-    public function setOpeningBalance(string $currency, float $amount, array $admin): array { return ['ok'=>true]; }
 
     /**
      * Sync CRM payment_collections into cashbook as Cash IN (Receipt) entries.

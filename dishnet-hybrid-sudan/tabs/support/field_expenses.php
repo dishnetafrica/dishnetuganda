@@ -25,8 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['fe_action'])) {
     if ($act === 'request_advance') {
         $amount = round((float)($_POST['amount'] ?? 0), 2);
         $purpose = trim($_POST['purpose'] ?? '');
-        $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
+        $currency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
         $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP'
             : (($currency === dn_book_base($config) ? dn_cur($config) : $currency . ' ') . number_format($amount, 2));
         if ($amount > 0 && $purpose) {

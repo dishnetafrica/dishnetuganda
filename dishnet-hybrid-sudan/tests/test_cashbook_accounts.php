@@ -187,9 +187,24 @@ t('filtered rows labelled USD', $byDesc['USD spend']['_bal_currency'], 'USD');
 echo "\nStandard Uganda set\n";
 $t2 = sys_get_temp_dir() . '/cb_accounts_seed_' . getmypid();
 @mkdir($t2, 0777, true);
-$cb2 = new CashbookService(SqliteStore::create($t2), $t2);
+$st2 = SqliteStore::create($t2);
+$cb2 = new CashbookService($st2, $t2);
+// Explicit UGX base: the seeder refuses on any other base, and the config
+// must not depend on whatever a vault file happens to gap-fill.
+file_put_contents($t2 . '/kyc_config.json', json_encode([
+    'cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD']));
 $r = $cb2->seedStandardAccounts();
 t('seed creates six accounts', count($r['created'] ?? []), 6);
+
+// A USD-base install (Sudan) must never get the Uganda chart by accident.
+$t4 = sys_get_temp_dir() . '/cb_accounts_usdbase_' . getmypid();
+@mkdir($t4, 0777, true);
+$st4 = SqliteStore::create($t4);
+$cb4 = new CashbookService($st4, $t4);
+file_put_contents($t4 . '/kyc_config.json', json_encode(['cashbook_base_currency' => 'USD']));
+$r4 = $cb4->seedStandardAccounts();
+t('seed refused on a USD-base install', $r4['ok'], false);
+t('and the refusal names the reason', stripos((string)$r4['error'], 'UGX') !== false, true);
 $byName = [];
 foreach ($cb2->accounts() as $a) $byName[$a['name']] = $a;
 t('Ecobank USD account is USD', $byName['Ecobank Uganda – USD']['currency'] ?? '', 'USD');
@@ -200,6 +215,6 @@ t('txn types include the accounting set',
   in_array('DIRECTOR_FUNDING', CashbookService::TXN_TYPES, true)
   && in_array('OPENING_BALANCE', CashbookService::TXN_TYPES, true), true);
 
-exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($t2) . ' ' . escapeshellarg($t3));
+exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($t2) . ' ' . escapeshellarg($t3) . ' ' . escapeshellarg($t4));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

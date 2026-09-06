@@ -293,12 +293,24 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='kyc_admin_d
         try {
             require_once __DIR__ . '/../../lib/CashbookService.php';
             $cbSvc = new CashbookService($store, $dataDir);
-            $cbSvc->createEntry([
-                'direction' => 'out', 'amount' => $refundAmount, 'currency' => 'USD',
-                'category' => 'Customer Refund', 'description' => "Refund cancelled KYC #{$appId} - {$custName}",
-                'project' => 'dishnet', 'status' => 'approved', 'posted_by' => $admin['name'] ?? 'Admin',
+            $cbSvc->addEntryRaw([
+                'project'           => 'dishnet',
+                'date'              => date('Y-m-d'),
+                'direction'         => 'out',
+                'amount'            => $refundAmount,
+                'currency'          => dn_book_base($config ?? null),
+                'category'          => 'Customer Refund',
+                'category_raw'      => 'Customer Refund',
+                'person'            => $custName,
+                'description'       => "Refund cancelled KYC #{$appId} - {$custName}",
+                'validation_ref'    => 'KYC-REFUND-' . $appId,
+                'validation_status' => 'done',
+                'status'            => 'approved',
+                'approved_by'       => $admin['name'] ?? 'Admin',
+                'txn_type'          => 'REFUND',
+                'source'            => 'manual',
             ]);
-            $flashParts[] = "Refund \${$refundAmount} posted.";
+            $flashParts[] = 'Refund ' . dn_cur($config ?? null) . number_format($refundAmount, 2) . ' posted.';
         } catch (\Throwable $e) { $flashParts[] = "Refund failed: " . $e->getMessage(); }
     }
 

@@ -161,8 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'admin
     $agentName = trim($_POST['agent_name'] ?? '');
     $amount    = round((float)($_POST['amount'] ?? 0), 2);
     $notes     = trim($_POST['notes'] ?? 'Recorded by admin');
-    $currency  = strtoupper(trim($_POST['currency'] ?? 'USD'));
-    if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
+    $currency  = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
 
     if ($agentId <= 0 || $amount <= 0) {
         flash('Agent and amount required.', 'danger');
