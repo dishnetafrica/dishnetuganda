@@ -41,17 +41,10 @@ class PluginConfig
     {
         $config = [];
 
-        foreach ([$pluginRoot . '/data/config.json', $dataDir . '/config.json'] as $path) {
-            if (!is_file($path)) continue;
-            $decoded = json_decode((string)file_get_contents($path), true);
-            if (is_array($decoded)) $config = array_merge($config, $decoded);
-        }
-
-        // Operator overrides, if any.
-        $overrides = $dataDir . '/kyc_config.json';
-        if (is_file($overrides)) {
-            $decoded = json_decode((string)file_get_contents($overrides), true);
-            if (is_array($decoded)) $config = array_merge($config, $decoded);
+        foreach ([$pluginRoot . '/data/config.json', $dataDir . '/config.json',
+                  $dataDir . '/kyc_config.json'] as $path) {
+            $decoded = self::readJsonFile($path);
+            if ($decoded !== null) $config = array_merge($config, $decoded);
         }
 
         // The vault fills anything a re-install wiped; a value that is present
@@ -67,6 +60,79 @@ class PluginConfig
         }
 
         return $config;
+    }
+
+    /**
+     * Read + decode a config file without ever leaking a PHP warning into the
+     * response body — a warning printed above a JSON endpoint corrupts the
+     * payload (webhooks, web chat). A file that exists but is unreadable —
+     * typically rewritten as root by a CLI `docker exec … config:set` and left
+     * 0600 root:root while the web process runs as another user — is logged
+     * once per request with the fix, and treated as absent.
+     */
+    private static function readJsonFile(string $path): ?array
+    {
+        if (!is_file($path)) return null;
+        if (!is_readable($path)) {
+            static $warned = [];
+            if (!isset($warned[$path])) {
+                $warned[$path] = true;
+                error_log('[PluginConfig] ' . $path . ' exists but this process cannot read'
+                    . ' it (root-owned after a CLI write?) — its values are IGNORED.'
+                    . ' Fix: chown it to the same owner as plugin.sqlite3 in the data dir.');
+            }
+            return null;
+        }
+        $decoded = json_decode((string)@file_get_contents($path), true);
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * The shared write path for kyc_config.json: atomic tmp+rename, 0600, and
+     * — when running as root (CLI via docker exec) over a store owned by the
+     * web user — the file is handed back to that owner, so the very next web
+     * request can still read what the CLI just wrote.
+     */
+    private static function writeKycFile(string $path, array $data): array
+    {
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if ($json === false) return [false, 'Could not encode settings.'];
+
+        // Write-then-rename so a crash cannot leave a half-written config.
+        $tmp = $path . '.tmp.' . getmypid();
+        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
+            return [false, 'Could not write to the plugin data directory.'];
+        }
+        @chmod($tmp, 0600);
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            return [false, 'Could not save settings.'];
+        }
+
+        $ref = @stat(dirname($path) . '/plugin.sqlite3');
+        if ($ref && function_exists('posix_geteuid') && posix_geteuid() === 0
+            && ((int)$ref['uid'] !== 0 || (int)$ref['gid'] !== 0)) {
+            @chown($path, (int)$ref['uid']);
+            @chgrp($path, (int)$ref['gid']);
+        }
+        return [true, ''];
+    }
+
+    /**
+     * Existing kyc_config.json content for a read-modify-write, or a refusal.
+     * When the file exists but cannot be read, proceeding with an empty array
+     * would ERASE every other override on save — so the save must not happen.
+     */
+    private static function readExistingForSave(string $path)
+    {
+        if (!is_file($path)) return [];
+        if (!is_readable($path)) {
+            return [false, 'kyc_config.json exists but cannot be read by this process'
+                . ' (wrong file owner?) — saving now would erase your other settings.'
+                . ' Fix its ownership first (match plugin.sqlite3 in the data dir).'];
+        }
+        $d = json_decode((string)@file_get_contents($path), true);
+        return is_array($d) ? $d : [];
     }
 
     /** True only for values a person would call "on". */
@@ -109,11 +175,8 @@ class PluginConfig
     public static function saveEvolutionCredentials(string $dataDir, string $url, string $key): array
     {
         $path     = $dataDir . '/kyc_config.json';
-        $existing = [];
-        if (is_file($path)) {
-            $d = json_decode((string)file_get_contents($path), true);
-            if (is_array($d)) $existing = $d;
-        }
+        $existing = self::readExistingForSave($path);
+        if (($existing[0] ?? null) === false && is_string($existing[1] ?? null)) return $existing;
 
         $url = rtrim(trim($url), '/');
         if ($url !== '' && !preg_match('~^https?://~i', $url)) {
@@ -131,16 +194,7 @@ class PluginConfig
         $key = trim($key);
         if ($key !== '') $existing['evo_api_key'] = $key;
 
-        $json = json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        if ($json === false) return [false, 'Could not encode settings.'];
-
-        $tmp = $path . '.tmp.' . getmypid();
-        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            return [false, 'Could not write to the plugin data directory.'];
-        }
-        @chmod($tmp, 0600);
-        if (!@rename($tmp, $path)) { @unlink($tmp); return [false, 'Could not save settings.']; }
-        return [true, ''];
+        return self::writeKycFile($path, $existing);
     }
 
     /**
@@ -156,11 +210,8 @@ class PluginConfig
         $field    = $provider === 'openai' ? 'openai_api_key' : 'claude_api_key';
 
         $path     = $dataDir . '/kyc_config.json';
-        $existing = [];
-        if (is_file($path)) {
-            $d = json_decode((string)file_get_contents($path), true);
-            if (is_array($d)) $existing = $d;
-        }
+        $existing = self::readExistingForSave($path);
+        if (($existing[0] ?? null) === false && is_string($existing[1] ?? null)) return $existing;
 
         $existing['ai_provider']             = $provider;
         $existing['bot_custom_instructions'] = trim($instructions);
@@ -168,16 +219,7 @@ class PluginConfig
         $key = trim($key);
         if ($key !== '') $existing[$field] = $key;
 
-        $json = json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        if ($json === false) return [false, 'Could not encode settings.'];
-
-        $tmp = $path . '.tmp.' . getmypid();
-        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            return [false, 'Could not write to the plugin data directory.'];
-        }
-        @chmod($tmp, 0600);
-        if (!@rename($tmp, $path)) { @unlink($tmp); return [false, 'Could not save settings.']; }
-        return [true, ''];
+        return self::writeKycFile($path, $existing);
     }
 
     public static function isSet_(array $config, string $key): bool
@@ -205,11 +247,8 @@ class PluginConfig
         }
 
         $path     = $dataDir . '/kyc_config.json';
-        $existing = [];
-        if (is_file($path)) {
-            $decoded = json_decode((string)file_get_contents($path), true);
-            if (is_array($decoded)) $existing = $decoded;
-        }
+        $existing = self::readExistingForSave($path);
+        if (($existing[0] ?? null) === false && is_string($existing[1] ?? null)) return $existing;
 
         foreach ($changes as $k => $v) {
             // An empty string clears the override and lets config.json show through.
@@ -217,19 +256,6 @@ class PluginConfig
             $existing[$k] = $v;
         }
 
-        $json = json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        if ($json === false) return [false, 'Could not encode settings.'];
-
-        // Write-then-rename so a crash cannot leave a half-written config.
-        $tmp = $path . '.tmp.' . getmypid();
-        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            return [false, 'Could not write to the plugin data directory.'];
-        }
-        @chmod($tmp, 0600);
-        if (!@rename($tmp, $path)) {
-            @unlink($tmp);
-            return [false, 'Could not save settings.'];
-        }
-        return [true, ''];
+        return self::writeKycFile($path, $existing);
     }
 }
