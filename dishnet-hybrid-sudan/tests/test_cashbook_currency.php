@@ -71,6 +71,8 @@ $cb = (string)file_get_contents($root . '/tabs/accounts/cashbook.php');
 t('cashbook pills render from dn_book_currencies', strpos($cb, 'dn_book_currencies($config)') !== false, true);
 t('cashbook JS carries the allowed list', strpos($cb, '_cb4Currs = <?= json_encode(dn_book_currencies($config)) ?>') !== false, true);
 t('SSP FX flows are gated on SSP being selectable', strpos($cb, "indexOf('SSP') === -1") !== false, true);
+t('wizard hides Opening Balance where the accounts layer owns it',
+  strpos($cb, "'Exchange', 'SSP Advance', 'SSP Return', 'Opening Balance'") !== false, true);
 t("no fixed cb4PillSSP markup remains", strpos($cb, 'id="cb4PillSSP"') === false, true);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);

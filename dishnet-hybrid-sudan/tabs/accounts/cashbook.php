@@ -2087,14 +2087,17 @@ function cbCatInit() {
 
   Promise.all([p1, p2]).then(function(results) {
     _cbCatData = results[0].data || results[0];
-    // No SSP on this install => the SSP FX flows cannot be entered here.
+    // No SSP on this install => the SSP FX flows cannot be entered here, and
+    // opening balances belong ONLY on the Opening Balances screen (typed,
+    // account-bound, once per account) — a wizard 'Opening Balance' would be
+    // a bare untyped row in the wrong currency, as the first live test proved.
     if (_cb4Currs.indexOf('SSP') === -1 && _cbCatData) {
-      var _sspFlows = ['Exchange', 'SSP Advance', 'SSP Return'];
+      var _wizHidden = ['Exchange', 'SSP Advance', 'SSP Return', 'Opening Balance'];
       ['in', 'out_people', 'out_ops', 'out_fin', 'out'].forEach(function(g){
         if (Array.isArray(_cbCatData[g])) {
           _cbCatData[g] = _cbCatData[g].filter(function(c){
             var n = (c && c.name) ? c.name : c;
-            return _sspFlows.indexOf(n) === -1;
+            return _wizHidden.indexOf(n) === -1;
           });
         }
       });
