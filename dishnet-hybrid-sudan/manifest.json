@@ -208,6 +208,20 @@
             "description": "SECRET. Issued at URA onboarding, used by the Phase-2 crypto (AES session key + RSA signature). Never shown anywhere and never sent to a browser.",
             "required": 0,
             "type": "textarea"
+        },
+        {
+            "key": "cashbook_base_currency",
+            "label": "Cashbook: base (operating) currency",
+            "description": "The ledger's operating currency. Leave EMPTY on the Sudan installation (defaults to USD, unchanged). Uganda: UGX.",
+            "required": 0,
+            "type": "text"
+        },
+        {
+            "key": "cashbook_currencies",
+            "label": "Cashbook: selectable currencies",
+            "description": "Comma-separated list offered in expense/entry forms; the base is always first. Leave EMPTY on Sudan (defaults to USD,SSP). Uganda: UGX,USD — USD stays available for supplier/import payments; SSP simply never appears.",
+            "required": 0,
+            "type": "text"
         }
     ]
 }

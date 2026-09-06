@@ -198,7 +198,11 @@ foreach ($orphaned as $idx => $c) {
                 'date'              => substr($c['created_at'] ?? date('Y-m-d'), 0, 10),
                 'direction'         => 'in',
                 'amount'            => $amount,
-                'currency'          => 'USD',
+                // Collection rows may carry their own currency; otherwise the
+                // configured book base (USD on Sudan, UGX on Uganda).
+                'currency'          => strtoupper(trim((string)($c['currency'] ?? ''))) !== ''
+                                        ? strtoupper(trim((string)$c['currency']))
+                                        : dn_book_base($config ?? null),
                 'category'          => 'Receipt',
                 'category_raw'      => 'Receipt',
                 'person'            => $c['retailer_name'] ?? '',

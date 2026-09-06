@@ -745,7 +745,10 @@ switch ($changeType) {
                         'date'              => date('Y-m-d'),
                         'direction'         => 'in',
                         'amount'            => $amount,
-                        'currency'          => 'USD',
+                        // The payment's own uCRM currencyCode — never a
+                        // literal. A UGX MoMo payment books as UGX; Sudan's
+                        // USD payments still book as USD (their currencyCode).
+                        'currency'          => dn_payment_currency(is_array($payment) ? $payment : [], $config),
                         'category'          => 'Receipt',
                         'category_raw'      => 'Receipt',
                         'person'            => $_cashWith !== 'Office' ? $_cashWith : '',

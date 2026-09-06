@@ -78,6 +78,35 @@ class CashbookService
         $this->initTable();
     }
 
+    /**
+     * The book's base currency (config cashbook_base_currency; default USD =
+     * the Sudan installation exactly as before). Loaded lazily so no caller's
+     * constructor signature changes.
+     */
+    private ?string $bookBaseCache = null;
+
+    public function bookBase(): string
+    {
+        if ($this->bookBaseCache === null) {
+            require_once __DIR__ . '/currency.php';
+            require_once __DIR__ . '/PluginConfig.php';
+            try {
+                $cfg = PluginConfig::load(dirname(__DIR__), $this->dataDir);
+            } catch (\Throwable $e) {
+                $cfg = [];
+            }
+            $this->bookBaseCache = dn_book_base($cfg);
+        }
+        return $this->bookBaseCache;
+    }
+
+    /** Currency for a CRM payment row: its own currencyCode, else the base. */
+    private function payCurrency(array $pay): string
+    {
+        $c = strtoupper(trim((string)($pay['currencyCode'] ?? ($pay['currency'] ?? ''))));
+        return preg_match('/^[A-Z]{3}$/', $c) ? $c : $this->bookBase();
+    }
+
     /** Direct PDO — bypasses SqliteStore so ensureTable() never touches cb_ledger */
     /** Public PDO accessor for callers that need raw queries (e.g. reconciliation views) */
     public function getPdo(): \PDO { return $this->pdo(); }
@@ -1068,7 +1097,7 @@ class CashbookService
         if ($returnAmount > 0) {
             $this->addEntry([
                 'project'=>$entry['project'],'date'=>date('Y-m-d'),'direction'=>'in',
-                'amount'=>$returnAmount,'currency'=>'USD','category'=>'Receipt',
+                'amount'=>$returnAmount,'currency'=>$this->bookBase(),'category'=>'Receipt',
                 'description'=>'Change returned — '.$entry['person'].' re: '.$entry['sr'],
                 'validation_ref'=>$voucherNo,'validation_status'=>'voucher',
             ], $admin, true);
@@ -1657,7 +1686,7 @@ class CashbookService
                         'invoice_id'      => null,
                         'crm_customer_id' => $clientId,
                         'amount'          => $amount,
-                        'currency'        => 'USD',
+                        'currency'        => $this->payCurrency($pay),
                         'method'          => 'Cash',
                         'service_type'    => '',
                         'note'            => $note,
@@ -1685,7 +1714,7 @@ class CashbookService
                         'date'              => $payDate,
                         'direction'         => 'in',
                         'amount'            => $amount,
-                        'currency'          => 'USD',
+                        'currency'          => $this->payCurrency($pay),
                         'category'          => $isBank ? 'Bank Transfer' : 'Receipt',
                         'category_raw'      => $isBank ? 'Bank Transfer' : 'Receipt',
                         'person'            => '',
@@ -1727,7 +1756,7 @@ class CashbookService
 
                 $this->addEntryRaw([
                     'sr'=>'COL-'.$storeId,'project'=>'dishnet','date'=>$date,'direction'=>'in','amount'=>$amount,
-                    'currency'=>'USD','category'=>'Receipt','category_raw'=>'Receipt',
+                    'currency'=>(preg_match('/^[A-Z]{3}$/', strtoupper(trim((string)($c['currency'] ?? '')))) ? strtoupper(trim((string)$c['currency'])) : $this->bookBase()),'category'=>'Receipt','category_raw'=>'Receipt',
                     'person'=>$agent,'description'=>$desc,'validation_ref'=>$ref,
                     'validation_status'=>'na','status'=>'approved','approved_by'=>'Local Sync',
                     'crm_payment_id'=>(int)($c['crm_payment_id']??0),
@@ -1801,7 +1830,7 @@ class CashbookService
                 'date'              => $date,
                 'direction'         => 'in',
                 'amount'            => $amount,
-                'currency'          => 'USD',
+                'currency'          => (preg_match('/^[A-Z]{3}$/', strtoupper(trim((string)($c['currency'] ?? '')))) ? strtoupper(trim((string)$c['currency'])) : $this->bookBase()),
                 'category'          => 'Receipt',
                 'category_raw'      => 'Receipt',
                 'person'            => $agent,

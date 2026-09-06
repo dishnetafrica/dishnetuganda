@@ -2081,6 +2081,18 @@ function cbCatInit() {
 
   Promise.all([p1, p2]).then(function(results) {
     _cbCatData = results[0].data || results[0];
+    // No SSP on this install => the SSP FX flows cannot be entered here.
+    if (_cb4Currs.indexOf('SSP') === -1 && _cbCatData) {
+      var _sspFlows = ['Exchange', 'SSP Advance', 'SSP Return'];
+      ['in', 'out_people', 'out_ops', 'out_fin', 'out'].forEach(function(g){
+        if (Array.isArray(_cbCatData[g])) {
+          _cbCatData[g] = _cbCatData[g].filter(function(c){
+            var n = (c && c.name) ? c.name : c;
+            return _sspFlows.indexOf(n) === -1;
+          });
+        }
+      });
+    }
     var summaries = results[1].map(function(s){ return s.data || s; });
 
     // Merge usage across all projects
@@ -2291,14 +2303,19 @@ if (document.readyState === 'loading') {
 
     <!-- Currency pills -->
     <div class="cb4-curr-row">
-      <div class="cb4-cpill sel" id="cb4PillUSD" onclick="cb4SetCurr('USD')">
-        <div class="cb4-cpill-lbl">💵 USD</div>
-        <div class="cb4-cpill-bal" id="cb4PillUSDbal"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
+      <?php // Config-driven pills: Sudan default (USD,SSP) renders exactly the
+            // old two; Uganda (UGX,USD) never offers SSP.
+        $_cbFlags = ['USD' => "\u{1F4B5}", 'SSP' => "\u{1F1F8}\u{1F1F8}", 'UGX' => "\u{1F1FA}\u{1F1EC}"];
+        foreach (dn_book_currencies($config) as $_ci => $_cc): ?>
+      <div class="cb4-cpill<?= $_ci === 0 ? ' sel' : '' ?>" id="cb4Pill<?= htmlspecialchars($_cc) ?>" onclick="cb4SetCurr('<?= htmlspecialchars($_cc) ?>')">
+        <div class="cb4-cpill-lbl"><?= $_cbFlags[$_cc] ?? "\u{1F4B1}" ?> <?= htmlspecialchars($_cc) ?></div>
+        <?php if ($_ci === 0): ?>
+        <div class="cb4-cpill-bal" id="cb4PillBaseBal"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
+        <?php else: ?>
+        <div class="cb4-cpill-bal"><?= htmlspecialchars($_cc) ?></div>
+        <?php endif; ?>
       </div>
-      <div class="cb4-cpill" id="cb4PillSSP" onclick="cb4SetCurr('SSP')">
-        <div class="cb4-cpill-lbl">🇸🇸 SSP</div>
-        <div class="cb4-cpill-bal">SSP</div>
-      </div>
+      <?php endforeach; ?>
     </div>
 
     <!-- Direction cards -->
@@ -2619,7 +2636,8 @@ var _d2='in';
 function cbv2F(k,v){var u=new URL(window.location.href);u.searchParams.set(k,v);u.searchParams.set('cb_page','1');window.location.href=u.toString();}
 var _dt;function cbv2FD(k,v){clearTimeout(_dt);_dt=setTimeout(function(){cbv2F(k,v);},600);}
 // ═══ CB4 — Admin Entry Modal Logic ═══════════════════════════════════════
-var _cb4Curr = 'USD', _cb4Dir = '', _cb4Cat = '', _cb4Proj = '<?php echo $proj; ?>';
+var _cb4Currs = <?= json_encode(dn_book_currencies($config)) ?>;
+var _cb4Curr = _cb4Currs[0], _cb4Dir = '', _cb4Cat = '', _cb4Proj = '<?php echo $proj; ?>';
 
 // ── Smart person history (auto-learned from past entries) ───────────────
 var _cb4PersonHistory = <?php echo json_encode($_smartPersons, JSON_UNESCAPED_UNICODE); ?>;
@@ -2715,7 +2733,7 @@ function cbv2CloseModal() { cb4Close(); }
 
 // ── Reset ───────────────────────────────────────────────────────────────
 function cb4Reset() {
-  _cb4Curr='USD'; _cb4Dir=''; _cb4Cat=''; _cb4ActiveGrp='out_people';
+  _cb4Curr=_cb4Currs[0]; _cb4Dir=''; _cb4Cat=''; _cb4ActiveGrp='out_people';
   var mh=document.getElementById('cb4MH');
   mh.className='cb4-mh neutral';
   document.getElementById('cb4MTitle').textContent='Add Entry';
@@ -2725,8 +2743,10 @@ function cb4Reset() {
   document.getElementById('cb4Step1').style.display='';
   document.getElementById('cb4Step2').style.display='none';
   document.getElementById('cb4Footer').style.display='none';
-  document.getElementById('cb4PillUSD').classList.add('sel');
-  document.getElementById('cb4PillSSP').classList.remove('sel');
+  _cb4Currs.forEach(function(cur, i){
+    var el = document.getElementById('cb4Pill' + cur);
+    if (el) el.classList.toggle('sel', i === 0);
+  });
   document.getElementById('cb4DirIn').classList.remove('sel');
   document.getElementById('cb4DirOut').classList.remove('sel');
   document.getElementById('cb4NextBtn').disabled=true;
@@ -2762,9 +2782,11 @@ function cb4Reset() {
 // ── Currency pill ───────────────────────────────────────────────────────
 function cb4SetCurr(c) {
   _cb4Curr = c;
-  document.getElementById('cb4PillUSD').classList.toggle('sel', c==='USD');
-  document.getElementById('cb4PillSSP').classList.toggle('sel', c==='SSP');
-  document.getElementById('cb4AmtLbl').textContent = c==='SSP' ? 'AMOUNT (SSP)' : 'AMOUNT (USD)';
+  _cb4Currs.forEach(function(cur){
+    var el = document.getElementById('cb4Pill' + cur);
+    if (el) el.classList.toggle('sel', cur === c);
+  });
+  document.getElementById('cb4AmtLbl').textContent = 'AMOUNT (' + c + ')';
   document.getElementById('cb4AmtSym').textContent = c==='SSP' ? '' : <?= json_encode(trim(dn_cur($config))) ?>;
   document.getElementById('cb4RateWrap').style.display = c==='SSP' ? '' : 'none';
   if (_cb4Dir) { cb4RenderCats(); _cb4Cat=''; document.getElementById('cb4NextWrap').style.display='none'; }
@@ -3026,8 +3048,8 @@ function cb4Update() {
   var ready = amt > 0;
   btn.disabled = !ready;
   if (ready) {
-    var sym = _cb4Curr==='SSP' ? '' : '$';
-    var sfx = _cb4Curr==='SSP' ? ' SSP' : '';
+    var sym = _cb4Curr==='USD' ? '$' : '';
+    var sfx = _cb4Curr==='USD' ? '' : ' ' + _cb4Curr;
     var disp = sym + (amt < 1000 ? amt.toFixed(_cb4Curr==='SSP'?0:2) : Math.round(amt).toLocaleString()) + sfx;
     var labels = {
       'Receipt':'Save Receipt','Exchange':'Save Exchange','Salary':'Save Salary',

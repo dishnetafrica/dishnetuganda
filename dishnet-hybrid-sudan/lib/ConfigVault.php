@@ -57,6 +57,10 @@ class ConfigVault
         'efris_test_api_url',
         'efris_production_api_url',
         'efris_private_key',
+        // Ledger currency identity — losing it would silently re-book the
+        // cashbook in the wrong base after a re-install.
+        'cashbook_base_currency',
+        'cashbook_currencies',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string
