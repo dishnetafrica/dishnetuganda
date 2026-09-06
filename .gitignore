@@ -32,3 +32,6 @@ __pycache__/
 # Mail droplet secrets and runtime data — never committed
 dishnet-mail/.env
 dishnet-mail/data/
+
+# ConfigVault snapshot written next to the plugin dir by test runs — machine state, never committed
+.dishnet-sudan.vault.json

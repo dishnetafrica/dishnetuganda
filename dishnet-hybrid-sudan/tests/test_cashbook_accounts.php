@@ -128,6 +128,62 @@ t('no fake rate on a plain transfer', $r['rate'], null);
 t('same account both sides refused',
   $cb->recordAccountTransfer($cash, $cash, 10.0, 10.0, '2026-09-08', '', '', 'x')['ok'], false);
 
+echo "\nLedger streams: every running balance in its own currency\n";
+// A UGX-base install (config file in the data dir, exactly how the live
+// plugin reads it): UGX rows ride the base stream, USD rows their own —
+// a USD 10,000 investment can never surface with a UGX running balance.
+$t3 = sys_get_temp_dir() . '/cb_accounts_ugx_' . getmypid();
+@mkdir($t3, 0777, true);
+// Store first, config file second: SqliteStore::create() migrates any *.json
+// it finds in a fresh data dir into sqlite (renaming it .migrated), which
+// would eat the config. Live installs write overrides AFTER the store exists.
+$st3 = SqliteStore::create($t3);
+$cb3 = new CashbookService($st3, $t3);
+file_put_contents($t3 . '/kyc_config.json', json_encode([
+    'cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD']));
+t('install books in UGX', $cb3->bookBase(), 'UGX');
+foreach ([
+    ['2026-09-10', 'in',  500000.0, 'UGX', 'UGX sale'],
+    ['2026-09-11', 'in',  10000.0,  'USD', 'USD funding'],
+    ['2026-09-12', 'out', 200000.0, 'UGX', 'UGX expense'],
+    ['2026-09-13', 'out', 1500.0,   'USD', 'USD spend'],
+] as $x) {
+    $cb3->addEntryRaw(['project' => 'dishnet', 'date' => $x[0], 'direction' => $x[1],
+        'amount' => $x[2], 'currency' => $x[3], 'category' => 'Receipt',
+        'description' => $x[4], 'source' => 'manual', 'approved_by' => 'test']);
+}
+$byDesc = [];
+foreach ($cb3->getEntries(['project' => 'dishnet', 'limit' => 50]) as $row) {
+    $byDesc[$row['description']] = $row;
+}
+t('UGX sale balance runs in UGX', $byDesc['UGX sale']['running_balance'], 500000.0);
+t('and says so', $byDesc['UGX sale']['_bal_currency'], 'UGX');
+t('USD funding balance runs in its OWN stream', $byDesc['USD funding']['running_balance'], 10000.0);
+t('and is labelled USD', $byDesc['USD funding']['_bal_currency'], 'USD');
+t('UGX expense continues the UGX stream', $byDesc['UGX expense']['running_balance'], 300000.0);
+t('USD spend continues the USD stream', $byDesc['USD spend']['running_balance'], 8500.0);
+t('USD spend labelled USD', $byDesc['USD spend']['_bal_currency'], 'USD');
+
+// Legacy rows without a stored currency (Sudan history) ride the base stream.
+$cb3->addEntryRaw(['project' => 'dishnet', 'date' => '2026-09-14', 'direction' => 'in',
+    'amount' => 100000.0, 'currency' => 'UGX', 'category' => 'Receipt',
+    'description' => 'legacy row', 'source' => 'manual', 'approved_by' => 'test']);
+$st3->getPdo()->exec("UPDATE cb_ledger SET currency='' WHERE description='legacy row'");
+$byDesc = [];
+foreach ($cb3->getEntries(['project' => 'dishnet', 'limit' => 50]) as $row) {
+    $byDesc[$row['description']] = $row;
+}
+t('currency-less legacy row joins the base stream', $byDesc['legacy row']['running_balance'], 400000.0);
+t('and wears the base label', $byDesc['legacy row']['_bal_currency'], 'UGX');
+
+// A specific currency filter follows that currency only.
+$usdOnly = $cb3->getEntries(['project' => 'dishnet', 'currency' => 'USD', 'limit' => 50]);
+t('USD filter returns only USD rows', count($usdOnly), 2);
+$byDesc = [];
+foreach ($usdOnly as $row) $byDesc[$row['description']] = $row;
+t('filtered USD balance unchanged', $byDesc['USD spend']['running_balance'], 8500.0);
+t('filtered rows labelled USD', $byDesc['USD spend']['_bal_currency'], 'USD');
+
 echo "\nStandard Uganda set\n";
 $t2 = sys_get_temp_dir() . '/cb_accounts_seed_' . getmypid();
 @mkdir($t2, 0777, true);
@@ -144,6 +200,6 @@ t('txn types include the accounting set',
   in_array('DIRECTOR_FUNDING', CashbookService::TXN_TYPES, true)
   && in_array('OPENING_BALANCE', CashbookService::TXN_TYPES, true), true);
 
-exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($t2));
+exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($t2) . ' ' . escapeshellarg($t3));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

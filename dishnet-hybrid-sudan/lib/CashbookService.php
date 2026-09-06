@@ -1433,12 +1433,17 @@ class CashbookService
         $projFilter = !empty($f['project']) ? $f['project'] : '';
         $currFilter = !empty($f['currency']) ? $f['currency'] : '';
         $useSSP     = ($currFilter === 'SSP');
-        $amtCol     = $useSSP ? 'COALESCE(ssp_amount,0)' : 'amount';
-        // v4.9.18: When NOT in SSP mode, exclude SSP entries from USD running balance
-        // Same pattern as getBalance() — currency='USD' OR NULL OR empty
-        $currWhere  = $useSSP
-            ? " AND currency='SSP'"
-            : " AND (currency='USD' OR currency IS NULL OR currency='')";
+        // Phase B: currency streams are per-CURRENCY, keyed off the configured
+        // book base — never a literal. A specific currency filter follows that
+        // currency; the All view runs the base stream here and every other
+        // currency's own stream below. Sudan (base USD + SSP) is reproduced
+        // exactly; a UGX book gets UGX balances with USD as its own stream.
+        $base       = $this->bookBase();
+        $streamCur  = $currFilter !== '' ? $currFilter : $base;
+        $amtCol     = $streamCur === 'SSP' ? 'COALESCE(ssp_amount,0)' : 'amount';
+        $currWhere  = ($currFilter === '')
+            ? " AND (currency=" . $this->pdo()->quote($base) . " OR currency IS NULL OR currency='')"
+            : " AND currency=" . $this->pdo()->quote($streamCur);
         if ($projFilter) {
             $allRows = $this->dbq(
                 "SELECT id, direction, {$amtCol} as bal_amt FROM cb_ledger
@@ -1455,25 +1460,30 @@ class CashbookService
                 . " ORDER BY date ASC, id ASC"
             );
         }
-        // v4.9.18: Also compute SSP running balance separately for "All" view
-        $sspBalMap = [];
-        if (!$useSSP && !$currFilter) {
-            $sspQ = "SELECT id, direction, COALESCE(ssp_amount,0) as bal_amt FROM cb_ledger
-                     WHERE status NOT IN ('voided','voided_reconcile') AND currency='SSP'"
-                   . ($projFilter ? " AND project=?" : "")
-                   . " ORDER BY date ASC, id ASC";
-            $sspRows = $this->dbq($sspQ, $projFilter ? [$projFilter] : []);
-            $sspRun = 0.0;
-            foreach ($sspRows as $sr) {
-                $sspRun += $sr['direction'] === 'in' ? (float)$sr['bal_amt'] : -(float)$sr['bal_amt'];
-                $sspBalMap[(int)$sr['id']] = round($sspRun, 0);
+        // All view: every non-base currency gets its OWN running stream
+        // (SSP on Sudan, USD on Uganda, any future one) — balances never mix.
+        $otherMap = [];
+        if ($currFilter === '') {
+            $q = "SELECT id, direction, currency,
+                         CASE WHEN currency='SSP' THEN COALESCE(ssp_amount,0) ELSE amount END AS bal_amt
+                  FROM cb_ledger
+                  WHERE status NOT IN ('voided','voided_reconcile')
+                    AND currency IS NOT NULL AND currency != '' AND currency != " . $this->pdo()->quote($base)
+               . ($projFilter ? " AND project=?" : "")
+               . " ORDER BY date ASC, id ASC";
+            $runBy = [];
+            foreach ($this->dbq($q, $projFilter ? [$projFilter] : []) as $orow) {
+                $oc = (string)$orow['currency'];
+                $runBy[$oc] = ($runBy[$oc] ?? 0.0)
+                    + ($orow['direction'] === 'in' ? (float)$orow['bal_amt'] : -(float)$orow['bal_amt']);
+                $otherMap[(int)$orow['id']] = ['v' => round($runBy[$oc], $oc === 'SSP' ? 0 : 2), 'c' => $oc];
             }
         }
         $balMap  = [];
         $running = 0.0;
         foreach ($allRows as $r) {
             $running += $r['direction'] === 'in' ? (float)$r['bal_amt'] : -(float)$r['bal_amt'];
-            $balMap[(int)$r['id']] = round($running, $useSSP ? 0 : 2);
+            $balMap[(int)$r['id']] = round($running, $streamCur === 'SSP' ? 0 : 2);
         }
 
         // v4.9.10: Pass currency info to display layer
@@ -1483,13 +1493,12 @@ class CashbookService
         );
         foreach ($rows as &$r) {
             $id = (int)$r['id'];
-            // v4.9.18: SSP entries get their own running balance in "All" view
-            if (!$useSSP && ($r['currency'] ?? 'USD') === 'SSP' && isset($sspBalMap[$id])) {
-                $r['running_balance'] = $sspBalMap[$id];
-                $r['_bal_currency']   = 'SSP';
+            if ($currFilter === '' && isset($otherMap[$id])) {
+                $r['running_balance'] = $otherMap[$id]['v'];
+                $r['_bal_currency']   = $otherMap[$id]['c'];
             } else {
                 $r['running_balance'] = $balMap[$id] ?? null;
-                $r['_bal_currency']   = $useSSP ? 'SSP' : 'USD';
+                $r['_bal_currency']   = $streamCur;
             }
         }
         return $rows;

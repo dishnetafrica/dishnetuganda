@@ -1,5 +1,6 @@
 <?php
 // ── Cashbook v2 — Rupesh's Digital Excel Replacement ─────────────────────
+require_once __DIR__ . '/../../lib/currency.php';
 require_once __DIR__ . '/../../lib/CashbookService.php';
 $cb      = new CashbookService($store, $dataDir);
 $meta    = $cb->getMeta();
@@ -11,7 +12,9 @@ if (!empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
     // Field agents can only export their own entries
     $_csvIsField = in_array($userRole ?? '', ['sales','sales_staff','field_agent','collection']) && !($isAdmin ?? false);
     $_csvPerson  = ($_csvIsField && !empty($retailer['name'])) ? $retailer['name'] : '';
-    $_csvCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), ['USD','SSP']) ? strtoupper($_GET['cb_curr']) : '';
+    $_csvCurrs = dn_book_currencies($config ?? ($GLOBALS['config'] ?? []));
+    $_csvBase  = $_csvCurrs[0];
+    $_csvCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_csvCurrs, true) ? strtoupper($_GET['cb_curr']) : '';
     $csvFilters = array_filter(['project' => $proj, 'date_from' => $_GET['cb_from'] ?? '', 'date_to' => $_GET['cb_to'] ?? '', 'person' => $_csvPerson, 'currency' => $_csvCurr, 'limit' => 9999, 'offset' => 0]);
     $rows  = $cb->getEntries($csvFilters);
     $_csvIsSSP = ($_csvCurr === 'SSP');
@@ -21,17 +24,24 @@ if (!empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
     header('Content-Disposition: attachment; filename="'.$fname.'"');
     $out = fopen('php://output','w');
     // v4.9.18: Currency-separated CSV columns
-    if ($_csvIsAll) {
+    $_csvHasSSP = in_array('SSP', $_csvCurrs, true);
+    if ($_csvIsAll && $_csvHasSSP) {
+        // Sudan layout — base there is USD, so this header is byte-identical.
         fputcsv($out, ['SR No.','Date','Particulars','Category','Person','Currency',
-            'Received USD','Payment USD','USD Balance',
+            'Received '.$_csvBase,'Payment '.$_csvBase,$_csvBase.' Balance',
             'Received SSP','Payment SSP','SSP Balance',
             'Ref','Status','Source']);
+    } elseif ($_csvIsAll) {
+        // Multi-currency book without SSP: every amount sits next to its own
+        // currency, and the running balance names the stream it belongs to.
+        fputcsv($out, ['SR No.','Date','Particulars','Category','Person','Currency',
+            'Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
     } elseif ($_csvIsSSP) {
         fputcsv($out, ['SR No.','Date','Particulars','Category','Person',
             'Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
     } else {
         fputcsv($out, ['SR No.','Date','Particulars','Category','Person',
-            'Received USD','Payment USD','USD Balance','Ref','Status','Source']);
+            'Received '.$_csvCurr,'Payment '.$_csvCurr,$_csvCurr.' Balance','Ref','Status','Source']);
     }
     foreach ($rows as $e) {
         $isIn = $e['direction']==='in';
@@ -42,17 +52,18 @@ if (!empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
         $usdAmt   = (float)$e['amount'];
         $sspAmt   = (float)($e['ssp_amount'] ?? 0);
         $bal      = $e['running_balance'] ?? '';
-        $balCurr  = $e['_bal_currency'] ?? ($isSspRow ? 'SSP' : 'USD');
+        $balCurr  = $e['_bal_currency'] ?? ($isSspRow ? 'SSP' : $_csvBase);
         $ref      = $e['validation_ref'] ?? '';
         $status   = $e['validation_status'] ?? '';
         $source   = $e['source'] ?? '';
 
-        if ($_csvIsAll) {
-            // Both USD and SSP columns — fill the correct side
+        $rowCur = strtoupper(trim((string)($e['currency'] ?? ''))) ?: $_csvBase;
+        if ($_csvIsAll && $_csvHasSSP) {
+            // Both base and SSP columns — fill the correct side
             fputcsv($out, [
                 $e['sr'], $e['date'], $e['description'], $catDisplay, $personVal,
-                $isSspRow ? 'SSP' : 'USD',
-                // USD columns
+                $rowCur,
+                // Base-currency columns
                 (!$isSspRow && $isIn)  ? $usdAmt : '',
                 (!$isSspRow && !$isIn) ? $usdAmt : '',
                 (!$isSspRow)           ? $bal     : '',
@@ -62,6 +73,10 @@ if (!empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
                 ($isSspRow)            ? $bal      : '',
                 $ref, $status, $source
             ]);
+        } elseif ($_csvIsAll) {
+            fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
+                $rowCur, $isIn ? $usdAmt : '', $isIn ? '' : $usdAmt,
+                $bal, ($bal === '' ? '' : $balCurr), $ref, $status, $source]);
         } elseif ($_csvIsSSP) {
             fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
                 $isIn ? $sspAmt : '', $isIn ? '' : $sspAmt, $bal, $ref, $status, $source]);
@@ -88,6 +103,16 @@ $_cbCurrs = dn_book_currencies($config ?? ($GLOBALS['config'] ?? []));
 $_cbBase  = $_cbCurrs[0];
 $_cbSSP   = in_array('SSP', $_cbCurrs, true);
 $filterCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_cbCurrs, true) ? strtoupper($_GET['cb_curr']) : '';
+// A row's amount always wears the ROW's own currency: base-currency rows keep
+// the install's display symbol, any other currency shows its own code — a USD
+// row can never dress up as UGX (or vice versa).
+$_cbRowMoney = function (array $e, int $dec = 2) use ($config, $_cbBase): string {
+    $cur = strtoupper(trim((string)($e['currency'] ?? '')));
+    if ($cur === '' || $cur === $_cbBase) {
+        return dn_cur($config) . number_format((float)$e['amount'], $dec);
+    }
+    return htmlspecialchars($cur) . ' ' . number_format((float)$e['amount'], $dec);
+};
 $search     = trim($_GET['cb_q'] ?? '');
 $page       = max(1, (int)($_GET['cb_page'] ?? 1));
 $perPage    = 50;
@@ -1558,7 +1583,7 @@ document.addEventListener('DOMContentLoaded', function() {
           echo ($isIn?'+':'-') . number_format((float)$e['ssp_amount'],0) . ' <span style="font-size:10px;font-weight:800;background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 5px;">SSP</span>';
           if (!empty($e['ssp_rate'])): ?><div style="font-size:9px;color:#92400e;margin-top:2px;">≈ <?= dn_cur($config) ?><?php echo number_format($e['amount'],2); ?> @<?php echo number_format($e['ssp_rate'],0); ?></div><?php endif;
         else:
-          echo ($isIn?'+':'-') . dn_cur($config) . number_format($e['amount'],2);
+          echo ($isIn?'+':'-') . $_cbRowMoney($e);
         endif; ?></div>
     </div>
     <div class="cb3-card-meta">
@@ -1608,16 +1633,19 @@ document.addEventListener('DOMContentLoaded', function() {
       if ($_cw2 && $_cw2 !== 'Office' && $isIn): ?> <span style="background:#fef2f2;color:#dc2626;border-radius:8px;padding:1px 5px;font-size:9px;font-weight:800;">💰<?= htmlspecialchars($_cw2) ?></span><?php
       elseif ($_cw2 === 'Office' && $isIn): ?> <span style="background:#dcfce7;color:#166534;border-radius:8px;padding:1px 5px;font-size:9px;font-weight:800;">✅</span><?php
       endif; ?></td>
-    <?php $_isSsp = ($e['currency']??'USD')==='SSP'; $_sspAmt = !empty($e['ssp_amount']) ? number_format((float)$e['ssp_amount'],0).' SSP' : dn_cur($config) . number_format($e['amount'],2); ?>
-    <td class="cbv2-in"><?php echo $isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : dn_cur($config) . number_format($e['amount'],2)) : ''; ?></td>
-    <td class="cbv2-out"><?php echo !$isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : dn_cur($config) . number_format($e['amount'],2)) : ''; ?></td>
+    <?php $_isSsp = ($e['currency']??'USD')==='SSP'; $_sspAmt = !empty($e['ssp_amount']) ? number_format((float)$e['ssp_amount'],0).' SSP' : $_cbRowMoney($e); ?>
+    <td class="cbv2-in"><?php echo $isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : $_cbRowMoney($e)) : ''; ?></td>
+    <td class="cbv2-out"><?php echo !$isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : $_cbRowMoney($e)) : ''; ?></td>
     <td style="font-family:monospace;font-size:11px;"><?php
       if ($e['running_balance'] !== null) {
           // v4.9.18: Use _bal_currency to show correct format (SSP vs USD)
           if ($filterCurr === 'SSP' || ($e['_bal_currency'] ?? '') === 'SSP') {
               echo number_format($e['running_balance'], 0) . ' <span style="color:#92400e;font-size:9px;">SSP</span>';
           } else {
-              echo dn_cur($config) . number_format($e['running_balance'], 2);
+              $_bc = strtoupper((string)($e['_bal_currency'] ?? $_cbBase));
+              echo $_bc === $_cbBase
+                  ? dn_cur($config) . number_format($e['running_balance'], 2)
+                  : htmlspecialchars($_bc) . ' ' . number_format($e['running_balance'], 2);
           }
       } else { echo '—'; }
     ?></td>

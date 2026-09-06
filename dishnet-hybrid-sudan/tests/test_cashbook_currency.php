@@ -75,5 +75,16 @@ t('wizard hides Opening Balance where the accounts layer owns it',
   strpos($cb, "'Exchange', 'SSP Advance', 'SSP Return', 'Opening Balance'") !== false, true);
 t("no fixed cb4PillSSP markup remains", strpos($cb, 'id="cb4PillSSP"') === false, true);
 
+echo "\nLedger rows wear the ROW currency, never the install symbol\n";
+t('row cells render via the row-currency helper', substr_count($cb, '$_cbRowMoney($e)') >= 4, true);
+t('no cell prints the display symbol on a raw row amount',
+  strpos($cb, "dn_cur(\$config) . number_format(\$e['amount']") === false, true);
+t('balance cell follows the balance-stream currency',
+  strpos($cb, "\$e['_bal_currency'] ?? \$_cbBase") !== false, true);
+t('CSV headers carry the configured base, not a USD literal',
+  strpos($cb, "'Received USD'") === false, true);
+t('CSV currency filter is config-driven',
+  strpos($cb, "in_array(strtoupper(\$_GET['cb_curr'] ?? ''), \$_csvCurrs, true)") !== false, true);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
