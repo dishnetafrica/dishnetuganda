@@ -254,6 +254,118 @@ class CashbookService
     }
 
     /**
+     * Money moved between two accounts as ONE act, two legs, one shared
+     * reference — the Uganda mirror of Sudan's EXCH pairs, generalised to
+     * accounts instead of hard-wired USD/SSP. Same-currency = plain TRANSFER;
+     * different currencies = an exchange where BOTH amounts are entered by
+     * the operator (never auto-multiplied), and the receiving leg records
+     * the original currency, original amount, the effective rate and its
+     * source. USD investment in, UGX out to spend: this is that chain.
+     */
+    public function recordAccountTransfer(int $fromId, int $toId, float $amountFrom,
+                                          float $amountTo, string $date, string $description,
+                                          string $rateSource, string $admin): array
+    {
+        $from = $this->account($fromId);
+        $to   = $this->account($toId);
+        if (!$from || !$to)          return ['ok' => false, 'error' => 'Both accounts must exist'];
+        if ($fromId === $toId)       return ['ok' => false, 'error' => 'Pick two different accounts'];
+        if (!(int)$from['active'] || !(int)$to['active']) return ['ok' => false, 'error' => 'Both accounts must be active'];
+        if ($amountFrom <= 0 || $amountTo <= 0) return ['ok' => false, 'error' => 'Both amounts must be positive'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return ['ok' => false, 'error' => 'Date must be YYYY-MM-DD'];
+        $isFx = $from['currency'] !== $to['currency'];
+        if ($isFx && trim($rateSource) === '') {
+            return ['ok' => false, 'error' => 'A currency exchange needs its rate source (e.g. "Ecobank board rate")'];
+        }
+        if (!$isFx && abs($amountFrom - $amountTo) > 0.005) {
+            return ['ok' => false, 'error' => 'A same-currency transfer must move the same amount'];
+        }
+
+        $n   = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FX-%' AND direction='out'")[0]['c'] ?? 0) + 1;
+        $ref = sprintf('FX-%04d', $n);
+        $rate = round($amountTo / $amountFrom, 6);
+        $legDesc = $description !== '' ? $description
+                 : ($isFx
+                    ? "Exchange {$from['currency']} " . number_format($amountFrom, 2)
+                      . " → {$to['currency']} " . number_format($amountTo, 2) . " @ " . number_format($rate, 2)
+                    : "Transfer {$from['name']} → {$to['name']}");
+
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'out',
+            'amount' => $amountFrom, 'currency' => (string)$from['currency'],
+            'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
+            'description' => $legDesc . " (to {$to['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'account_id' => $fromId, 'txn_type' => 'TRANSFER',
+        ]);
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
+            'amount' => $amountTo, 'currency' => (string)$to['currency'],
+            'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
+            'description' => $legDesc . " (from {$from['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'account_id' => $toId, 'txn_type' => 'TRANSFER',
+            'fx_currency' => $isFx ? (string)$from['currency'] : '',
+            'fx_amount'   => $isFx ? $amountFrom : null,
+            'fx_rate'     => $isFx ? $rate : null,
+            'fx_rate_source' => $isFx ? trim($rateSource) : '',
+        ]);
+        return ['ok' => true, 'ref' => $ref, 'rate' => $isFx ? $rate : null];
+    }
+
+    /**
+     * Outside money coming IN (investor/director injection): the receiving
+     * account gains the funds and a liability account of the SAME currency
+     * records what the company now owes — one act, two legs, one reference.
+     * Never revenue, never a customer payment: both legs are typed
+     * DIRECTOR_FUNDING.
+     */
+    public function recordFunding(int $receivingId, int $liabilityId, float $amount,
+                                  string $date, string $description, string $reference,
+                                  string $admin): array
+    {
+        $recv = $this->account($receivingId);
+        $liab = $this->account($liabilityId);
+        if (!$recv || !$liab) return ['ok' => false, 'error' => 'Both accounts must exist'];
+        if (!in_array($liab['kind'], ['director', 'payable'], true)) {
+            return ['ok' => false, 'error' => 'The liability side must be a director/payable account'];
+        }
+        if ($recv['currency'] !== $liab['currency']) {
+            return ['ok' => false, 'error' =>
+                "Currency mismatch: funds land in {$recv['currency']} but the liability account is "
+                . "{$liab['currency']} — add a {$recv['currency']} funding account (e.g. 'Director Funding – {$recv['currency']}') so the debt is recorded in the currency it is owed in"];
+        }
+        if ($amount <= 0) return ['ok' => false, 'error' => 'Amount must be positive'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return ['ok' => false, 'error' => 'Date must be YYYY-MM-DD'];
+
+        $n   = (int)($this->query("SELECT COUNT(DISTINCT validation_ref) c FROM cb_ledger WHERE validation_ref LIKE 'FUND-%'")[0]['c'] ?? 0) + 1;
+        $ref = $reference !== '' ? $reference : sprintf('FUND-%04d', $n);
+        $desc = $description !== '' ? $description : 'Shareholder/director funding received';
+
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
+            'amount' => $amount, 'currency' => (string)$recv['currency'],
+            'category' => 'Loan Received', 'category_raw' => 'Loan Received',
+            'description' => $desc . " (into {$recv['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'funding',
+            'account_id' => $receivingId, 'txn_type' => 'DIRECTOR_FUNDING',
+        ]);
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
+            'amount' => $amount, 'currency' => (string)$liab['currency'],
+            'category' => 'Loan Received', 'category_raw' => 'Loan Received',
+            'description' => $desc . " — payable ({$liab['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'funding',
+            'account_id' => $liabilityId, 'txn_type' => 'DIRECTOR_FUNDING',
+        ]);
+        return ['ok' => true, 'ref' => $ref];
+    }
+
+    /**
      * One-click standard Uganda account set (operator-approved 2026-09-06).
      * Refuses when any account already exists — never a silent duplicate.
      */

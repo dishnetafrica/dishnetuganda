@@ -42,6 +42,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ob_action'])) {
             $_obCb->setAccountActive((int)($_POST['account_id'] ?? 0),
                                      (string)($_POST['to'] ?? '') === '1');
             $_obMsg = ['ok' => true, 'text' => 'Account updated.'];
+        } elseif ($act === 'funding') {
+            $r = $_obCb->recordFunding(
+                (int)($_POST['recv_id'] ?? 0), (int)($_POST['liab_id'] ?? 0),
+                (float)str_replace([',', ' '], '', (string)($_POST['amount'] ?? '0')),
+                (string)($_POST['date'] ?? ''),
+                trim((string)($_POST['description'] ?? '')),
+                trim((string)($_POST['reference'] ?? '')),
+                $_obAdmin
+            );
+            $_obMsg = $r['ok']
+                ? ['ok' => true, 'text' => 'Funding recorded — ' . $r['ref'] . ' (funds in + payable, linked).']
+                : ['ok' => false, 'text' => $r['error']];
+        } elseif ($act === 'transfer') {
+            $r = $_obCb->recordAccountTransfer(
+                (int)($_POST['from_id'] ?? 0), (int)($_POST['to_id'] ?? 0),
+                (float)str_replace([',', ' '], '', (string)($_POST['amount_from'] ?? '0')),
+                (float)str_replace([',', ' '], '', (string)($_POST['amount_to'] ?? '0')),
+                (string)($_POST['date'] ?? ''),
+                trim((string)($_POST['description'] ?? '')),
+                trim((string)($_POST['rate_source'] ?? '')),
+                $_obAdmin
+            );
+            $_obMsg = $r['ok']
+                ? ['ok' => true, 'text' => 'Movement recorded — ' . $r['ref']
+                    . ($r['rate'] !== null ? ' (rate ' . number_format($r['rate'], 2) . ', both legs linked)' : ' (both legs linked)')]
+                : ['ok' => false, 'text' => $r['error']];
         } elseif ($act === 'opening') {
             $r = $_obCb->recordOpeningBalance(
                 (int)($_POST['account_id'] ?? 0),
@@ -143,6 +169,105 @@ $_obAccounts = $_obCb->accounts();
         <button name="ob_action" value="add_account" style="padding:8px 16px;border:none;border-radius:6px;background:#141414;color:#fff;font-weight:700;cursor:pointer;">Add</button>
       </form>
     </details>
+  </div>
+
+  <!-- Funding received (investment in) -->
+  <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:14px;">
+    <h3 style="margin:0 0 4px;">Funding received (investor / director money in)</h3>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">
+      Two linked legs: the funds land in an account AND a payable of the same currency records
+      what the company owes. Never booked as revenue. USD injections need a USD liability
+      account (add one above, e.g. "Director Funding – USD").
+    </p>
+    <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;"><?= $_csrf ?? '' ?>
+      <label style="font-size:12px;color:#374151;">Money lands in
+        <select name="recv_id" required style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+          <option value="">— account —</option>
+          <?php foreach ($_obAccounts as $a): if (!(int)$a['active'] || in_array($a['kind'], ['payable','director'], true)) continue; ?>
+            <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars((string)$a['name']) ?> (<?= htmlspecialchars((string)$a['currency']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label style="font-size:12px;color:#374151;">Owed to
+        <select name="liab_id" required style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+          <option value="">— liability account —</option>
+          <?php foreach ($_obAccounts as $a): if (!(int)$a['active'] || !in_array($a['kind'], ['payable','director'], true)) continue; ?>
+            <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars((string)$a['name']) ?> (<?= htmlspecialchars((string)$a['currency']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label style="font-size:12px;color:#374151;">Amount
+        <input type="text" name="amount" required inputmode="decimal" placeholder="0"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;">Date
+        <input type="date" name="date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;">Reference
+        <input type="text" name="reference" placeholder="auto (FUND-…)"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;grid-column:1/-1;">Description
+        <input type="text" name="description" placeholder="Shareholder/director funding received"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <button name="ob_action" value="funding" style="padding:10px 18px;border:none;border-radius:8px;background:#141414;color:#fff;font-weight:800;cursor:pointer;">
+        Record Funding
+      </button>
+    </form>
+  </div>
+
+  <!-- Exchange / transfer between accounts -->
+  <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:14px;">
+    <h3 style="margin:0 0 4px;">Exchange / transfer between accounts</h3>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">
+      Both amounts are entered by you — the system never converts silently. For a currency
+      exchange (e.g. USD → UGX) the receiving leg permanently records the original currency,
+      original amount, effective rate and your rate source, linked by one FX reference —
+      the same chain discipline as the South Sudan books.
+    </p>
+    <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;"><?= $_csrf ?? '' ?>
+      <label style="font-size:12px;color:#374151;">From
+        <select name="from_id" required style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+          <option value="">— account —</option>
+          <?php foreach ($_obAccounts as $a): if (!(int)$a['active']) continue; ?>
+            <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars((string)$a['name']) ?> (<?= htmlspecialchars((string)$a['currency']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label style="font-size:12px;color:#374151;">Amount out
+        <input type="text" name="amount_from" required inputmode="decimal" placeholder="e.g. 8,000"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;">To
+        <select name="to_id" required style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+          <option value="">— account —</option>
+          <?php foreach ($_obAccounts as $a): if (!(int)$a['active']) continue; ?>
+            <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars((string)$a['name']) ?> (<?= htmlspecialchars((string)$a['currency']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label style="font-size:12px;color:#374151;">Amount in
+        <input type="text" name="amount_to" required inputmode="decimal" placeholder="e.g. 29,760,000"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;">Date
+        <input type="date" name="date" value="<?= htmlspecialchars(date('Y-m-d')) ?>" required
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;">Rate source (for FX)
+        <input type="text" name="rate_source" placeholder="e.g. Ecobank board rate"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <label style="font-size:12px;color:#374151;grid-column:1/-1;">Description (optional)
+        <input type="text" name="description" placeholder="auto"
+               style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
+      </label>
+      <button name="ob_action" value="transfer" style="padding:10px 18px;border:none;border-radius:8px;background:#141414;color:#fff;font-weight:800;cursor:pointer;">
+        Record Movement
+      </button>
+    </form>
   </div>
 
   <!-- Opening balance entry -->

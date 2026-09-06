@@ -75,6 +75,59 @@ t('inactive account refused', (function () use ($cb, $director) {
     return $r['ok'];
 })(), false);
 
+echo "\nThe USD-injection chain: funding in, exchange to UGX, spend in UGX\n";
+$usdBank  = (int)$cb->addAccount('Ecobank Uganda – USD', 'USD', 'bank')['id'];
+$usdLiab  = (int)$cb->addAccount('Director Funding – USD', 'USD', 'director')['id'];
+
+// 1. Investment arrives: USD 10,000 into the USD bank, owed to the director.
+$r = $cb->recordFunding($usdBank, $usdLiab, 10000.0, '2026-09-06', 'Investment from outside', '', 'Bhavin');
+t('funding recorded with a linked ref', $r['ok'] && strpos((string)$r['ref'], 'FUND-') === 0, true);
+t('USD bank gained the funds', $cb->accountBalance($usdBank), 10000.0);
+t('USD liability records what is owed', $cb->accountBalance($usdLiab), 10000.0);
+$fundRows = $store->getPdo()->query(
+    "SELECT txn_type, currency, category FROM cb_ledger WHERE validation_ref='{$r['ref']}'")->fetchAll(PDO::FETCH_ASSOC);
+t('both funding legs typed DIRECTOR_FUNDING',
+  count($fundRows) === 2 && $fundRows[0]['txn_type'] === 'DIRECTOR_FUNDING'
+  && $fundRows[1]['txn_type'] === 'DIRECTOR_FUNDING', true);
+t('no funding leg reads as a sales Receipt',
+  $fundRows[0]['category'] !== 'Receipt' && $fundRows[1]['category'] !== 'Receipt', true);
+
+// Currency-mismatch guard: USD funds cannot land against the UGX director account.
+$ugxLiab = (int)$cb->addAccount('Director Funding – UGX', 'UGX', 'director')['id'];
+$bad = $cb->recordFunding($usdBank, $ugxLiab, 500.0, '2026-09-06', '', '', 'x');
+t('USD funding against UGX liability refused', $bad['ok'], false);
+t('the message says how to fix it', stripos((string)$bad['error'], 'currency') !== false, true);
+
+// 2. Exchange USD 8,000 → UGX 29,760,000 (operator-entered, both sides).
+$r = $cb->recordAccountTransfer($usdBank, $ecobank, 8000.0, 29760000.0,
+    '2026-09-07', '', 'Ecobank board rate', 'Bhavin');
+t('exchange recorded', $r['ok'], true);
+t('effective rate derived from the two amounts', $r['rate'], 3720.0);
+t('USD account debited', $cb->accountBalance($usdBank), 2000.0);
+t('UGX account credited', $cb->accountBalance($ecobank), 5250000.0 + 29760000.0);
+$legs = $store->getPdo()->query(
+    "SELECT direction, currency, fx_currency, fx_amount, fx_rate, fx_rate_source, txn_type
+     FROM cb_ledger WHERE validation_ref='{$r['ref']}' ORDER BY direction")->fetchAll(PDO::FETCH_ASSOC);
+t('two legs, one reference', count($legs), 2);
+t('both legs typed TRANSFER', $legs[0]['txn_type'] === 'TRANSFER' && $legs[1]['txn_type'] === 'TRANSFER', true);
+t('receiving leg remembers the original USD', $legs[0]['fx_currency'], 'USD');
+t('receiving leg remembers the original amount', (float)$legs[0]['fx_amount'], 8000.0);
+t('receiving leg records the rate', (float)$legs[0]['fx_rate'], 3720.0);
+t('and where the rate came from', $legs[0]['fx_rate_source'], 'Ecobank board rate');
+t('outgoing leg carries no fx fields', (string)$legs[1]['fx_currency'], '');
+
+echo "\nTransfer guards\n";
+t('FX without a rate source refused',
+  $cb->recordAccountTransfer($usdBank, $ecobank, 100.0, 372000.0, '2026-09-07', '', '', 'x')['ok'], false);
+t('same-currency transfer must balance',
+  $cb->recordAccountTransfer($ecobank, $ecobank + 999, 100.0, 90.0, '2026-09-07', '', '', 'x')['ok'], false);
+$cash = (int)$cb->addAccount('Cash – Uganda', 'UGX', 'cash')['id'];
+$r = $cb->recordAccountTransfer($ecobank, $cash, 1000000.0, 1000000.0, '2026-09-08', '', '', 'Bhavin');
+t('same-currency transfer works', $r['ok'], true);
+t('no fake rate on a plain transfer', $r['rate'], null);
+t('same account both sides refused',
+  $cb->recordAccountTransfer($cash, $cash, 10.0, 10.0, '2026-09-08', '', '', 'x')['ok'], false);
+
 echo "\nStandard Uganda set\n";
 $t2 = sys_get_temp_dir() . '/cb_accounts_seed_' . getmypid();
 @mkdir($t2, 0777, true);
