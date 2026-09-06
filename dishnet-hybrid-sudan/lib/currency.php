@@ -45,10 +45,39 @@ if (!function_exists('dn_cur')) {
  * forms, without touching the Sudan code paths.
  */
 if (!function_exists('dn_book_base')) {
+    /**
+     * The effective per-install configuration, read straight from the config
+     * FILES (uCRM's config.json + the operator-override kyc_config.json).
+     *
+     * Exists because two backends answer to the name kyc_config.json: the
+     * override writer (PluginConfig::saveOverrides) writes the FILE, while
+     * some page contexts hydrate $config from the SqliteStore copy — which
+     * never learns new keys. Pages passing such a partial $config would
+     * silently fall back to Sudan defaults; this reader makes dn_book_*
+     * self-sufficient. Pure reads, cached per request, no side effects.
+     */
+    function dn_book_effective_config(): array
+    {
+        static $cfg = null;
+        if ($cfg !== null) return $cfg;
+        $cfg = [];
+        $root = dirname(__DIR__);
+        $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
+        foreach ([$root . '/data/config.json', $dataDir . '/config.json',
+                  $dataDir . '/kyc_config.json'] as $p) {
+            if (!is_file($p)) continue;
+            $d = json_decode((string)@file_get_contents($p), true);
+            if (is_array($d)) $cfg = array_merge($cfg, $d);
+        }
+        return $cfg;
+    }
+
     /** The operating (base) currency of the cashbook ledger. */
     function dn_book_base(?array $config): string
     {
-        $c = strtoupper(trim((string)($config['cashbook_base_currency'] ?? '')));
+        $v = $config['cashbook_base_currency']
+          ?? (dn_book_effective_config()['cashbook_base_currency'] ?? '');
+        $c = strtoupper(trim((string)$v));
         return preg_match('/^[A-Z]{3}$/', $c) ? $c : 'USD';
     }
 
@@ -56,7 +85,9 @@ if (!function_exists('dn_book_base')) {
     function dn_book_currencies(?array $config): array
     {
         $base = dn_book_base($config);
-        $raw  = strtoupper(trim((string)($config['cashbook_currencies'] ?? '')));
+        $rawV = $config['cashbook_currencies']
+             ?? (dn_book_effective_config()['cashbook_currencies'] ?? '');
+        $raw  = strtoupper(trim((string)$rawV));
         $list = [];
         foreach ($raw === '' ? ['USD', 'SSP'] : explode(',', $raw) as $c) {
             $c = trim($c);
