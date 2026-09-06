@@ -268,6 +268,9 @@ try {
 <a href="?page=dashboard&tab=accounts_ledger" class="kyc-tab <?= $tab==='accounts_ledger'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-journal-text"></i></span> Revenue Ledger
 </a>
+<a href="?page=dashboard&tab=opening_balances" class="kyc-tab <?= $tab==='opening_balances'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-bank"></i></span> Opening Balances
+</a>
 <?php if (in_array('SSP', dn_book_currencies($GLOBALS['config'] ?? null), true)): // Sudan-only books ?>
 <a href="?page=dashboard&tab=ssp_overview" class="kyc-tab <?= $tab==='ssp_overview'?'active':'' ?>">
     <span class="nav-icon"></span> SSP Overview

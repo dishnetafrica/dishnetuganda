@@ -222,6 +222,13 @@
             "description": "Comma-separated list offered in expense/entry forms; the base is always first. Leave EMPTY on Sudan (defaults to USD,SSP). Uganda: UGX,USD — USD stays available for supplier/import payments; SSP simply never appears.",
             "required": 0,
             "type": "text"
+        },
+        {
+            "key": "books_start_date",
+            "label": "Accounting: books start date",
+            "description": "The date this installation's books commence (YYYY-MM-DD). Uganda: 2026-09-06. Used as the default as-of date for opening balances; entries with earlier real dates remain allowed for historical records.",
+            "required": 0,
+            "type": "text"
         }
     ]
 }

@@ -61,6 +61,7 @@ class ConfigVault
         // cashbook in the wrong base after a re-install.
         'cashbook_base_currency',
         'cashbook_currencies',
+        'books_start_date',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

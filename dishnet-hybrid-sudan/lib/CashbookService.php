@@ -107,6 +107,177 @@ class CashbookService
         return preg_match('/^[A-Z]{3}$/', $c) ? $c : $this->bookBase();
     }
 
+    // ═══ Accounts & opening balances (Phase B — Uganda books) ═══════════════
+    //
+    // cb_accounts gives money a HOME (a bank account, a cash box, a mobile-
+    // money wallet, a payable-to-director liability), each with exactly one
+    // currency — balances are never merged across currencies. Opening
+    // balances are ordinary ledger rows with txn_type OPENING_BALANCE, so
+    // they count in the account balance but can never masquerade as sales,
+    // customer payments or expenses. Sudan is untouched: nothing writes here
+    // unless the operator uses the Opening Balances screen.
+
+    public const ACCOUNT_KINDS = [
+        'bank', 'cash', 'momo', 'receivable', 'payable', 'inventory', 'asset', 'director',
+    ];
+    public const TXN_TYPES = [
+        'SALE', 'PAYMENT', 'EXPENSE', 'TRANSFER',
+        'OPENING_BALANCE', 'REFUND', 'ADJUSTMENT', 'DIRECTOR_FUNDING',
+    ];
+
+    private function ensureAccountsTable(): void
+    {
+        $this->dbq("CREATE TABLE IF NOT EXISTS cb_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            currency TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'bank',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )");
+    }
+
+    public function accounts(bool $activeOnly = false): array
+    {
+        $this->ensureAccountsTable();
+        return $this->query('SELECT * FROM cb_accounts'
+            . ($activeOnly ? ' WHERE active=1' : '') . ' ORDER BY id');
+    }
+
+    public function account(int $id): ?array
+    {
+        $this->ensureAccountsTable();
+        $r = $this->query('SELECT * FROM cb_accounts WHERE id=?', [$id]);
+        return $r[0] ?? null;
+    }
+
+    public function addAccount(string $name, string $currency, string $kind): array
+    {
+        $this->ensureAccountsTable();
+        $name = trim($name);
+        $currency = strtoupper(trim($currency));
+        if ($name === '') return ['ok' => false, 'error' => 'Account name required'];
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) return ['ok' => false, 'error' => 'Currency must be a 3-letter code'];
+        if (!in_array($kind, self::ACCOUNT_KINDS, true)) return ['ok' => false, 'error' => 'Unknown account kind'];
+        foreach ($this->accounts() as $a) {
+            if (strcasecmp((string)$a['name'], $name) === 0) {
+                return ['ok' => false, 'error' => 'An account with this name already exists'];
+            }
+        }
+        $this->dbq('INSERT INTO cb_accounts (name, currency, kind) VALUES (?,?,?)',
+                   [$name, $currency, $kind]);
+        $id = (int)$this->pdo()->lastInsertId();
+        return ['ok' => true, 'id' => $id];
+    }
+
+    public function setAccountActive(int $id, bool $active): void
+    {
+        $this->ensureAccountsTable();
+        $this->dbq("UPDATE cb_accounts SET active=?, updated_at=datetime('now') WHERE id=?",
+                   [$active ? 1 : 0, $id]);
+    }
+
+    /** Balance of one account: approved in − approved out, in ITS currency. */
+    public function accountBalance(int $id): float
+    {
+        $r = $this->query(
+            "SELECT COALESCE(SUM(CASE direction WHEN 'in' THEN amount ELSE -amount END),0) b
+             FROM cb_ledger WHERE account_id=? AND status='approved'", [$id]);
+        return (float)($r[0]['b'] ?? 0);
+    }
+
+    public function accountEntryCount(int $id, bool $excludeOpening = true): int
+    {
+        $r = $this->query(
+            'SELECT COUNT(*) n FROM cb_ledger WHERE account_id=?'
+            . ($excludeOpening ? " AND txn_type != 'OPENING_BALANCE'" : ''), [$id]);
+        return (int)($r[0]['n'] ?? 0);
+    }
+
+    public function openingFor(int $accountId): ?array
+    {
+        $r = $this->query(
+            "SELECT * FROM cb_ledger WHERE account_id=? AND txn_type='OPENING_BALANCE' LIMIT 1",
+            [$accountId]);
+        return $r[0] ?? null;
+    }
+
+    /**
+     * Record (or, while the account has no other activity, correct) the ONE
+     * opening balance of an account. Never a sale, never a payment: the row
+     * is typed OPENING_BALANCE with its own source and category, and the
+     * amount is always entered positive — a payable/director account's
+     * opening is what the company OWES, on a liability account.
+     */
+    public function recordOpeningBalance(int $accountId, float $amount, string $asOf,
+                                         string $description, string $reference, string $admin): array
+    {
+        $acc = $this->account($accountId);
+        if (!$acc)               return ['ok' => false, 'error' => 'No such account'];
+        if (!(int)$acc['active']) return ['ok' => false, 'error' => 'Account is inactive'];
+        if ($amount < 0)         return ['ok' => false, 'error' => 'Enter the opening balance as a positive amount'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $asOf)) return ['ok' => false, 'error' => 'As-of date must be YYYY-MM-DD'];
+
+        $existing = $this->openingFor($accountId);
+        if ($existing !== null) {
+            if ($this->accountEntryCount($accountId, true) > 0) {
+                return ['ok' => false, 'error' =>
+                    'This account already has activity — correct the position with an ADJUSTMENT entry, not by rewriting the opening balance'];
+            }
+            $this->dbq(
+                "UPDATE cb_ledger SET amount=?, date=?, description=?, validation_ref=?,
+                        approved_by=?, updated_at=datetime('now') WHERE id=?",
+                [$amount, $asOf, $description, $reference, $admin, (int)$existing['id']]);
+            return ['ok' => true, 'sr' => (string)$existing['sr'], 'updated' => true];
+        }
+
+        $sr = $this->addEntryRaw([
+            'sr'                => 'OB-' . $accountId,
+            'project'           => 'dishnet',
+            'date'              => $asOf,
+            'direction'         => 'in',
+            'amount'            => $amount,
+            'currency'          => (string)$acc['currency'],
+            'category'          => 'Opening Balance',
+            'category_raw'      => 'Opening Balance',
+            'description'       => $description,
+            'validation_ref'    => $reference,
+            'validation_status' => 'na',
+            'status'            => 'approved',
+            'approved_by'       => $admin,
+            'source'            => 'opening_balance',
+            'account_id'        => $accountId,
+            'txn_type'          => 'OPENING_BALANCE',
+        ]);
+        return ['ok' => true, 'sr' => $sr, 'updated' => false];
+    }
+
+    /**
+     * One-click standard Uganda account set (operator-approved 2026-09-06).
+     * Refuses when any account already exists — never a silent duplicate.
+     */
+    public function seedStandardAccounts(): array
+    {
+        if (count($this->accounts()) > 0) {
+            return ['ok' => false, 'error' => 'Accounts already exist — add further accounts individually'];
+        }
+        $std = [
+            ['Ecobank Uganda – UGX',           'UGX', 'bank'],
+            ['Ecobank Uganda – USD',           'USD', 'bank'],
+            ['Cash – Uganda',                  'UGX', 'cash'],
+            ['MTN Mobile Money',               'UGX', 'momo'],
+            ['Airtel Money',                   'UGX', 'momo'],
+            ['Director/Shareholder Funding',   'UGX', 'director'],
+        ];
+        $made = [];
+        foreach ($std as [$n, $c, $k]) {
+            $r = $this->addAccount($n, $c, $k);
+            if ($r['ok']) $made[] = $n;
+        }
+        return ['ok' => true, 'created' => $made];
+    }
+
     /** Direct PDO — bypasses SqliteStore so ensureTable() never touches cb_ledger */
     /** Public PDO accessor for callers that need raw queries (e.g. reconciliation views) */
     public function getPdo(): \PDO { return $this->pdo(); }
@@ -306,6 +477,15 @@ class CashbookService
             'ssp_amount'       => "REAL",
             'ssp_rate'         => "REAL",
             'payroll_ref'      => "TEXT DEFAULT ''",  // v4.11.0: HRM payroll reference
+            // Phase B (Uganda books): account dimension + transaction nature +
+            // explicit foreign-currency record. Defaults keep every existing
+            // row and every Sudan write untouched.
+            'account_id'       => "INTEGER NOT NULL DEFAULT 0",
+            'txn_type'         => "TEXT NOT NULL DEFAULT ''",
+            'fx_currency'      => "TEXT DEFAULT ''",
+            'fx_amount'        => "REAL",
+            'fx_rate'          => "REAL",
+            'fx_rate_source'   => "TEXT DEFAULT ''",
             'cash_with'        => "TEXT DEFAULT ''",   // v4.11.3: who physically holds this cash
             'cash_with_id'     => "INTEGER DEFAULT 0", // v4.11.3: retailer ID of cash holder
         ];
@@ -1032,20 +1212,21 @@ class CashbookService
     {
         $now     = date('Y-m-d H:i:s');
         $project = $data['project'] ?? 'dishnet';
-        // SSP entries get their own SSP-XXXX series; USD entries use project prefix
-        $isSspEntry = (($data['currency'] ?? 'USD') === 'SSP');
+        // SSP entries get their own SSP-XXXX series; base entries use project prefix
+        $isSspEntry = (($data['currency'] ?? $this->bookBase()) === 'SSP');
         $sr      = (($data['sr'] ?? '') !== '') ? $data['sr'] : ($isSspEntry ? $this->nextSrSSP() : $this->nextSr($project));
         $this->dbq(
             "INSERT INTO cb_ledger
              (sr,project,date,direction,amount,currency,ssp_amount,ssp_rate,
               category,category_raw,person,
               description,validation_ref,validation_status,status,approved_by,
-              crm_payment_id,crm_client_id,source,payroll_ref,cash_with,cash_with_id,created_at,updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              crm_payment_id,crm_client_id,source,payroll_ref,cash_with,cash_with_id,
+              account_id,txn_type,fx_currency,fx_amount,fx_rate,fx_rate_source,created_at,updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 $sr, $project,
                 $data['date'] ?? date('Y-m-d'), $data['direction'] ?? 'in',
-                (float)($data['amount'] ?? 0), $data['currency'] ?? 'USD',
+                (float)($data['amount'] ?? 0), $data['currency'] ?? $this->bookBase(),
                 isset($data['ssp_amount']) ? (float)$data['ssp_amount'] : null,
                 isset($data['ssp_rate'])   ? (float)$data['ssp_rate']   : null,
                 $data['category'] ?? 'Misc Expense', $data['category_raw'] ?? '',
@@ -1058,6 +1239,11 @@ class CashbookService
                 $data['payroll_ref'] ?? '',
                 $data['cash_with'] ?? '',
                 (int)($data['cash_with_id'] ?? 0),
+                (int)($data['account_id'] ?? 0), $data['txn_type'] ?? '',
+                $data['fx_currency'] ?? '',
+                isset($data['fx_amount']) ? (float)$data['fx_amount'] : null,
+                isset($data['fx_rate'])   ? (float)$data['fx_rate']   : null,
+                $data['fx_rate_source'] ?? '',
                 $data['created_at'] ?? $now, $now,
             ]
         );
