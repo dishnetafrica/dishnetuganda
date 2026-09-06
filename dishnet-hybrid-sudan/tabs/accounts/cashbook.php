@@ -84,7 +84,10 @@ $dateTo    = $_GET['cb_to']   ?? '';
 $filterCat  = $_GET['cb_cat']  ?? '';
 $filterVal  = $_GET['cb_vs']   ?? '';
 $filterDir  = in_array($_GET['cb_dir'] ?? '', ['in','out']) ? ($_GET['cb_dir'] ?? '') : '';
-$filterCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), ['USD','SSP']) ? strtoupper($_GET['cb_curr']) : '';
+$_cbCurrs = dn_book_currencies($config ?? ($GLOBALS['config'] ?? []));
+$_cbBase  = $_cbCurrs[0];
+$_cbSSP   = in_array('SSP', $_cbCurrs, true);
+$filterCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_cbCurrs, true) ? strtoupper($_GET['cb_curr']) : '';
 $search     = trim($_GET['cb_q'] ?? '');
 $page       = max(1, (int)($_GET['cb_page'] ?? 1));
 $perPage    = 50;
@@ -1010,14 +1013,14 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
 <div style="padding:14px 14px 0;background:var(--bg);">
   <!-- Title -->
   <div style="font-size:11px;font-weight:700;color:var(--mute);margin-bottom:10px;letter-spacing:.5px;">
-    💰 Cashbook &nbsp;·&nbsp; <span style="font-weight:500;"><?php echo $filterCurr==='USD'?'USD Ledger':($filterCurr==='SSP'?'SSP Ledger':'Dual-currency cash ledger · USD &amp; SSP'); ?></span>
+    💰 Cashbook &nbsp;·&nbsp; <span style="font-weight:500;"><?php echo $filterCurr !== '' ? $filterCurr.' Ledger' : (count($_cbCurrs) > 1 ? 'Cash ledger · '.implode(' &amp; ', $_cbCurrs) : $_cbBase.' cash ledger'); ?></span>
   </div>
 
-  <?php if ($filterCurr !== 'SSP'): ?>
-  <!-- Green USD card -->
+  <?php if ($filterCurr === '' || $filterCurr === $_cbBase): ?>
+  <!-- Green base-currency card -->
   <div style="background:#1a6b3a;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
-    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">💵 USD BALANCE</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;"><?= $_cbBase === 'USD' ? "\u{1F4B5}" : "\u{1F1FA}\u{1F1EC}" ?> <?= htmlspecialchars($_cbBase) ?> BALANCE</div>
     <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
     <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;"><?php echo date('d M Y'); ?> &nbsp;·&nbsp; <?php echo number_format($seedCount); ?> entries &nbsp;·&nbsp; <?php echo $proj==='4g'?'4G':'Fiber&SL'; ?></div>
     <?php if($pendingCount>0): ?>
@@ -1028,7 +1031,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <?php endif; ?>
 
-  <?php if ($filterCurr !== 'USD'): ?>
+  <?php if ($_cbSSP && $filterCurr !== $_cbBase): ?>
   <!-- Blue SSP card -->
   <div style="background:#1a3a7a;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
@@ -1038,7 +1041,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <?php endif; ?>
 
-  <?php if ($filterCurr === ''): ?>
+  <?php if ($_cbSSP && $filterCurr === ''): ?>
   <!-- Black combined card -->
   <div style="background:#0f0f0f;border-radius:16px;padding:18px 20px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
     <div>
@@ -1085,6 +1088,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <?php endif; } ?>
 
+  <?php if ($_cbSSP): ?>
   <!-- SSP Rate Reference — global, all projects, all staff -->
   <?php
     $rateHistory   = $cb->getRateHistory(30);
@@ -1192,6 +1196,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
     <div style="font-size:11px;color:rgba(255,255,255,.25);text-align:center;padding:4px 0;">No rate history yet — set today's rate to start tracking.</div>
     <?php endif;?>
   </div>
+  <?php endif; /* SSP-gated rate widget */ ?>
 </div>
 <?php endif; // end field agent / admin balance strip ?>
 
@@ -1380,7 +1385,10 @@ function cbHovReconcile() {
 <?php endif; ?>
 <!-- ── Primary filter bar: Currency + Date + Actions ── -->
 <div style="padding:12px 14px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:52px;z-index:100;">
-  <?php foreach(['' => 'All', 'USD' => '💵 USD', 'SSP' => '🇸🇸 SSP'] as $cv => $cl): ?>
+  <?php $_cbFlagMap = ['USD' => "\u{1F4B5}", 'SSP' => "\u{1F1F8}\u{1F1F8}", 'UGX' => "\u{1F1FA}\u{1F1EC}"];
+        $_cbChips = ['' => 'All'];
+        foreach ($_cbCurrs as $_cbc) $_cbChips[$_cbc] = ($_cbFlagMap[$_cbc] ?? "\u{1F4B1}") . ' ' . $_cbc;
+        foreach($_cbChips as $cv => $cl): ?>
   <a href="?<?php echo http_build_query(array_merge($_GET,['cb_curr'=>$cv,'cb_page'=>1])); ?>"
      style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;border:1.5px solid;
             <?php echo $filterCurr===$cv
@@ -1396,12 +1404,10 @@ function cbHovReconcile() {
   <?php endif; ?>
   <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj])); ?>"
     style="padding:8px 16px;background:#0f0f0f;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ <?php echo $filterCurr ? $filterCurr : 'CSV'; ?></a>
-  <?php if(!$filterCurr): ?>
-  <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj,'cb_curr'=>'USD'])); ?>"
-    style="padding:8px 12px;background:#fff;color:#374151;border:1.5px solid #e2e8f0;border-radius:10px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ USD only</a>
-  <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj,'cb_curr'=>'SSP'])); ?>"
-    style="padding:8px 12px;background:#fff;color:#92400e;border:1.5px solid #fde68a;border-radius:10px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ SSP only</a>
-  <?php endif; ?>
+  <?php if(!$filterCurr): foreach ($_cbCurrs as $_ci => $_cbc): ?>
+  <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj,'cb_curr'=>$_cbc])); ?>"
+    style="padding:8px 12px;background:#fff;color:<?= $_ci === 0 ? '#374151' : '#92400e' ?>;border:1.5px solid <?= $_ci === 0 ? '#e2e8f0' : '#fde68a' ?>;border-radius:10px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ <?= htmlspecialchars($_cbc) ?> only</a>
+  <?php endforeach; endif; ?>
 </div>
 <!-- ── Search + advanced filter ── -->
 <div class="cb3-search-bar" style="top:108px;">
