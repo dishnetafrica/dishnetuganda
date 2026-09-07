@@ -926,12 +926,21 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <!-- Quick actions for field_accountant -->
   <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+    <?php if ($_cbSSP): ?>
     <a href="?page=dashboard&tab=my_account&v=exchange"
       style="flex:1;background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
       <div style="font-size:18px;">💱</div>
       <div style="font-size:11px;font-weight:800;color:#7c3aed;margin-top:2px;">Convert Currency</div>
       <div style="font-size:10px;color:#94a3b8;">USD ↔ SSP</div>
     </a>
+    <?php else: ?>
+    <a href="?page=dashboard&tab=opening_balances"
+      style="flex:1;background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
+      <div style="font-size:18px;">💱</div>
+      <div style="font-size:11px;font-weight:800;color:#7c3aed;margin-top:2px;">Convert Currency</div>
+      <div style="font-size:10px;color:#94a3b8;">account ↔ account, rate recorded</div>
+    </a>
+    <?php endif; ?>
     <a href="?page=dashboard&tab=my_account&v=expense"
       style="flex:1;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
       <div style="font-size:18px;">💸</div>
@@ -2386,11 +2395,13 @@ if (document.readyState === 'loading') {
         <div class="cb4-dir-lbl" id="cb4DirInLbl">Cash IN</div>
         <div class="cb4-dir-sub">Receipt</div>
       </div>
+      <?php if ($_cbSSP): ?>
       <div class="cb4-dir-btn" id="cb4DirExch" onclick="cb4SetDir('exchange')" style="border:2px solid var(--border);">
         <div class="cb4-dir-ic">🔄</div>
         <div class="cb4-dir-lbl">Exchange</div>
         <div class="cb4-dir-sub">USD ↔ SSP</div>
       </div>
+      <?php endif; ?>
       <div class="cb4-dir-btn out" id="cb4DirOut" onclick="cb4SetDir('out')">
         <div class="cb4-dir-ic">⬇️</div>
         <div class="cb4-dir-lbl">Cash OUT</div>
@@ -2870,8 +2881,10 @@ function cb4SetDir(dir) {
   _cb4Dir = dir; _cb4Cat = '';
   document.getElementById('cb4DirIn').classList.toggle('sel', dir==='in');
   document.getElementById('cb4DirOut').classList.toggle('sel', dir==='out');
-  document.getElementById('cb4DirExch').classList.toggle('sel', dir==='exchange');
+  var _cb4ExchBtn = document.getElementById('cb4DirExch');
+  if (_cb4ExchBtn) _cb4ExchBtn.classList.toggle('sel', dir==='exchange');
   // v4.9.10: Exchange skips category — goes straight to exchange form
+  if (dir === 'exchange' && _cb4Hidden.indexOf('Exchange') !== -1) return;
   if (dir === 'exchange') {
     document.getElementById('cb4CatSection').style.display = 'none';
     document.getElementById('cb4NextWrap').style.display = 'none';
@@ -3790,7 +3803,7 @@ function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+per
             <option value="online">Online / CRM</option>
             <option value="pending">Pending Receipt</option>
             <option value="jedco">Jedco</option>
-            <option value="exchange">Exchange</option>
+            <?php if ($_cbSSP): ?><option value="exchange">Exchange</option><?php endif; ?>
           </select>
         </div>
       </div>

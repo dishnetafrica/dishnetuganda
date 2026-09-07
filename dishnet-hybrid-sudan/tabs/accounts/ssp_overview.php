@@ -19,6 +19,12 @@ if (!($retailer['is_admin'] ?? false) && !in_array($retailer['role'] ?? '', ['ad
     return;
 }
 
+if (!function_exists('dn_ssp_selectable')) require_once __DIR__ . '/../../lib/currency.php';
+if (!dn_ssp_selectable($config ?? null)) {
+    echo '<div style="padding:40px;color:#64748b;font-weight:700;">SSP flows are not enabled on this installation.</div>';
+    return;
+}
+
 require_once __DIR__ . '/../../lib/CashbookService.php';
 
 $cb = new CashbookService($store, $dataDir);

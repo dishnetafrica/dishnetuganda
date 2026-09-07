@@ -491,6 +491,7 @@ $txns = array_slice($txns, 0, 30);
 
 // ── Current sub-view ──
 $v = $_GET['v'] ?? 'summary';
+if ($v === 'exchange' && !dn_ssp_selectable($config ?? null)) { $v = 'summary'; }
 $oweText  = $exposure > 0 ? 'You owe company' : ($exposure < 0 ? 'Company owes you' : 'Settled');
 $oweColor = $exposure > 0 ? '#dc2626' : ($exposure < 0 ? '#16a34a' : '#64748b');
 ?>
@@ -654,11 +655,13 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
         <div style="font-size:14px;">💳</div>
         <div style="font-size:11px;font-weight:700;color:<?= $v==='issue_advance'?'#fff':'#374151' ?>;">Issue</div>
     </a>
+    <?php if (dn_ssp_selectable($config ?? null)): ?>
     <a href="?page=dashboard&tab=my_account&v=exchange"
        style="background:<?= $v==='exchange'?'#7c3aed':'#fff' ?>;border:1.5px solid <?= $v==='exchange'?'#7c3aed':'#e2e8f0' ?>;border-radius:12px;padding:10px 6px;text-align:center;text-decoration:none;">
         <div style="font-size:14px;">💱</div>
         <div style="font-size:11px;font-weight:700;color:<?= $v==='exchange'?'#fff':'#374151' ?>;">Convert</div>
     </a>
+    <?php endif; ?>
 </div>
 
 <?php else: ?>

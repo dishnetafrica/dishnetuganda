@@ -897,11 +897,13 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
         <div class="fr3-dir-lbl" id="fr3DirInLbl">SSP IN</div>
         <div class="fr3-dir-sub" id="fr3DirInSub">Received · Exchange</div>
       </div>
+      <?php if (dn_ssp_selectable($config ?? null)): ?>
       <div class="fr3-dir-btn" id="fr3DirExch" onclick="fr3SetDir('exchange')" style="background:#f5f3ff;border-color:#c4b5fd;">
         <div class="fr3-dir-ic">💱</div>
         <div class="fr3-dir-lbl">Exchange</div>
         <div class="fr3-dir-sub">USD ↔ SSP</div>
       </div>
+      <?php endif; ?>
       <div class="fr3-dir-btn out" id="fr3DirOut" onclick="fr3SetDir('out')">
         <div class="fr3-dir-ic">⬇️</div>
         <div class="fr3-dir-lbl">Cash OUT</div>

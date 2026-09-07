@@ -260,6 +260,27 @@ t('summary view is per-currency P&L on a non-SSP book',
   && strpos($cb, 'capital flows excluded · one section per currency') !== false, true);
 t('void action wired (safe correction path)',
   strpos($cb, "cbCrudVoid()") !== false, true);
+t('the wizard Exchange direction tile is SSP-gated (the door the live UAT found)',
+  strpos($cb, "<?php if (\$_cbSSP): ?>\n      <div class=\"cb4-dir-btn\" id=\"cb4DirExch\"") !== false, true);
+t('the exchange path is inert in JS where SSP is hidden',
+  strpos($cb, "dir === 'exchange' && _cb4Hidden.indexOf('Exchange') !== -1) return;") !== false, true);
+t('the Convert Currency quick action points at accounts on a non-SSP book',
+  strpos($cb, 'account ↔ account, rate recorded') !== false, true);
+t('the wizard survives the gated tile (null-guarded toggle)',
+  strpos($cb, "if (_cb4ExchBtn) _cb4ExchBtn.classList.toggle") !== false, true);
+t('the Exchange validation status is SSP-gated in the edit modal',
+  strpos($cb, "<?php if (\$_cbSSP): ?><option value=\"exchange\">") !== false, true);
+$maX = (string)file_get_contents($rootC01 . '/tabs/sales/my_account.php');
+t('my_account: the exchange view collapses to summary on a non-SSP book',
+  strpos($maX, "if (\$v === 'exchange' && !dn_ssp_selectable(\$config ?? null)) { \$v = 'summary'; }") !== false, true);
+t('my_account: the Convert tile is SSP-gated',
+  substr_count($maX, "<?php if (dn_ssp_selectable(\$config ?? null)): ?>") >= 1, true);
+$waX = (string)file_get_contents($rootC01 . '/tabs/sales/wallet.php');
+t('wallet: the field Exchange tile is SSP-gated',
+  strpos($waX, "<?php if (dn_ssp_selectable(\$config ?? null)): ?>\n      <div class=\"fr3-dir-btn\" id=\"fr3DirExch\"") !== false, true);
+$soX = (string)file_get_contents($rootC01 . '/tabs/accounts/ssp_overview.php');
+t('ssp_overview tab refuses to render on a non-SSP book',
+  strpos($soX, "if (!dn_ssp_selectable(\$config ?? null)) {") !== false, true);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
