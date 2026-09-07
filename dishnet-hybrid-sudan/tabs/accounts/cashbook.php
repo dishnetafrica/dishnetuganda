@@ -993,7 +993,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
       <?php else: ?>
         no <?= htmlspecialchars($_pos['currency']) ?> accounts yet<?php if (abs($_pos['unassigned']) > 0.004): ?> &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?><?php endif; ?>
       <?php endif; ?>
-      <?php if ($_cbPosI === 0): ?>&nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entries<?php endif; ?>
+      <?php if ($_cbPosI === 0): ?>&nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entr<?= $_cbLiveCount === 1 ? 'y' : 'ies' ?><?php endif; ?>
       &nbsp;·&nbsp; <?php echo date('d M Y'); ?>
     </div>
     <?php if ($_cbPosI === 0 && $pendingCount > 0): ?>

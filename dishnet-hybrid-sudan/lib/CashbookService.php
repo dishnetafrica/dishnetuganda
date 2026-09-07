@@ -502,8 +502,13 @@ class CashbookService
         }
         unset($p);
 
-        // Base currency first, then the rest alphabetically — stable display.
+        // The BOOK's base currency always has a position — a UGX book shows
+        // its UGX card even before the first UGX shilling arrives.
         $baseCur = $this->bookBase();
+        $positions[$baseCur] = $positions[$baseCur] ?? [
+            'currency' => $baseCur, 'accounts' => [], 'accounts_total' => 0.0,
+            'unassigned' => 0.0, 'total' => 0.0,
+        ];
         uksort($positions, function ($x, $y) use ($baseCur) {
             if ($x === $baseCur) return -1;
             if ($y === $baseCur) return 1;

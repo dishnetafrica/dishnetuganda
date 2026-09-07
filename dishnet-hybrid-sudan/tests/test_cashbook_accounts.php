@@ -297,6 +297,11 @@ $cb6->addEntryRaw(['project'=>'dishnet','date'=>'2026-09-07','direction'=>'in',
     'description'=>'Opening Balance [2026-09]','source'=>'manual','approved_by'=>'Bhavin Madlani']);
 $pos6 = $cb6->currencyPositions();
 t('stray row shows as unassigned USD 10,000', $pos6['USD']['unassigned'] ?? null, 10000.0);
+// The live 2026-09-07 screenshot: only USD activity existed, and the UGX
+// hero card vanished. The BASE currency always has a position, even at zero.
+t('the base currency card exists even with zero UGX activity',
+  array_keys($pos6), ['UGX', 'USD']);
+t('and it reads zero, honestly', $pos6['UGX']['total'], 0.0);
 
 $strayId = (int)$st6->getPdo()->query("SELECT id FROM cb_ledger LIMIT 1")->fetchColumn();
 $v6 = $cb6->voidEntry($strayId, 'misclassified — replaced by typed funding', 'Bhavin');
