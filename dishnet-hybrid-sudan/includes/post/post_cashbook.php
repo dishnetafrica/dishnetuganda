@@ -387,26 +387,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_ad
     $isAcct3  = $isAdmin3 || in_array($retailer['role'] ?? '', ['accountant'], true);
     $category = trim($_POST['category'] ?? 'adjustment');
     $autoApprove = in_array($category, ['collection','topup','opening'], true) || $isAcct3;
-    // On a book without SSP the Exchange tile means USD ↔ the base currency
-    // (money-changer cash exchange): two honest one-currency legs via the
-    // service — never Sudan's single-row ssp_amount machinery.
-    if (strcasecmp($category, 'Exchange') === 0 && !dn_ssp_selectable($config ?? null)) {
-        if (!$isAcct3) { flash('Only accountants can record an exchange.', 'danger'); redirect('?page=dashboard&tab=cashbook'); }
-        $exDir  = (($_POST['direction'] ?? '') === 'out') ? 'usd_to_base' : 'base_to_usd';
-        $result = $cb->recordCashExchange(
-            round((float)($_POST['amount'] ?? 0), 2),
-            (float)($_POST['rate'] ?? 0),
-            $exDir,
-            trim($_POST['date'] ?? '') !== '' ? trim($_POST['date']) : date('Y-m-d'),
-            trim($_POST['description'] ?? ''),
-            trim($_POST['project'] ?? '') !== '' ? trim($_POST['project']) : 'dishnet',
-            trim($_POST['person'] ?? ''),
-            is_array($retailer) ? (string)($retailer['name'] ?? 'staff') : 'staff'
-        );
-        if ($result['ok'] ?? false) { flash('✅ Exchange recorded — ' . $result['ref'], 'success'); }
-        else { flash('Exchange failed: ' . ($result['error'] ?? 'unknown error'), 'danger'); }
-        redirect('?page=dashboard&tab=cashbook');
-    }
     $data = $_POST;
     if (!empty($_FILES['photo']['tmp_name'])) {
         $data['photo_tmp']  = $_FILES['photo']['tmp_name'];
@@ -738,6 +718,32 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
     require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
     require_once dirname(__DIR__, 2) . '/lib/TransactionIntegrityGuard.php';
     $cb = new CashbookService($store, $dataDir);
+
+    // On a book without SSP the wizard's Exchange means USD ↔ the base
+    // currency: two honest one-currency legs via the service. Runs before
+    // the TIG pre-save (its exchange rules are SSP semantics) and before
+    // the SSP dual-entry machinery below, which stays Sudan-only.
+    $exchTypeX = trim($_POST['exchange_type'] ?? '');
+    if ($exchTypeX !== '' && !dn_ssp_selectable($config ?? null)) {
+        $isAcctX = !empty($retailer['is_admin']) || in_array($retailer['role'] ?? '', ['accountant'], true);
+        if (!$isAcctX) { flash('Only accountants can record an exchange.', 'danger'); redirect('?page=dashboard&tab=cashbook'); }
+        if (!in_array($exchTypeX, ['usd_to_ssp', 'ssp_to_usd'], true)) {
+            flash('Invalid exchange direction.', 'danger'); redirect('?page=dashboard&tab=cashbook');
+        }
+        $resX = $cb->recordCashExchange(
+            round((float)($_POST['amount'] ?? 0), 2),
+            (float)($_POST['ssp_rate'] ?? 0),
+            $exchTypeX === 'usd_to_ssp' ? 'usd_to_base' : 'base_to_usd',
+            trim($_POST['date'] ?? '') !== '' ? trim($_POST['date']) : date('Y-m-d'),
+            trim($_POST['description'] ?? ''),
+            trim($_POST['project'] ?? '') !== '' ? trim($_POST['project']) : 'dishnet',
+            trim($_POST['person'] ?? ''),
+            is_array($retailer) ? (string)($retailer['name'] ?? 'staff') : 'staff'
+        );
+        if ($resX['ok'] ?? false) { flash('✅ Exchange recorded — ' . $resX['ref'], 'success'); }
+        else { flash('Exchange failed: ' . ($resX['error'] ?? 'unknown error'), 'danger'); }
+        redirect('?page=dashboard&tab=cashbook');
+    }
 
     // ── v4.11.3: Pre-save integrity check ─────────────────────────────────────
     $exchType = trim($_POST['exchange_type'] ?? '');

@@ -273,9 +273,13 @@ t('the Convert Currency quick action opens the wizard exchange',
   strpos($cb, "cb4Open('exchange');return false;") !== false, true);
 t('the wizard tolerates a missing tile (null-guarded toggle)',
   strpos($cb, "if (_cb4ExchBtn) _cb4ExchBtn.classList.toggle") !== false, true);
-t('non-SSP Exchange posts route to the honest pair writer',
-  strpos((string)file_get_contents($rootC01 . '/includes/post/post_cashbook.php'),
-    "strcasecmp(\$category, 'Exchange') === 0 && !dn_ssp_selectable(\$config ?? null)") !== false, true);
+$pcX = (string)file_get_contents($rootC01 . '/includes/post/post_cashbook.php');
+t('the wizard handler (cb_action=add_entry) routes non-SSP exchanges to the pair writer',
+  strpos($pcX, "\$exchTypeX !== '' && !dn_ssp_selectable(\$config ?? null)") !== false
+  && strpos($pcX, 'recordCashExchange(') !== false, true);
+t('the routing runs BEFORE the SSP-semantics integrity check and dual-entry machinery',
+  strpos($pcX, 'recordCashExchange(') < strpos($pcX, 'TransactionIntegrityGuard::preSave')
+  && strpos($pcX, 'recordCashExchange(') < strpos($pcX, 'EXCHANGE DUAL-ENTRY'), true);
 $maX = (string)file_get_contents($rootC01 . '/tabs/sales/my_account.php');
 t('my_account: the exchange view collapses to summary on a non-SSP book',
   strpos($maX, "if (\$v === 'exchange' && !dn_ssp_selectable(\$config ?? null)) { \$v = 'summary'; }") !== false, true);
