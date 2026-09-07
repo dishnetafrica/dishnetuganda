@@ -260,16 +260,22 @@ t('summary view is per-currency P&L on a non-SSP book',
   && strpos($cb, 'capital flows excluded · one section per currency') !== false, true);
 t('void action wired (safe correction path)',
   strpos($cb, "cbCrudVoid()") !== false, true);
-t('the wizard Exchange direction tile is SSP-gated (the door the live UAT found)',
-  strpos($cb, "<?php if (\$_cbSSP): ?>\n      <div class=\"cb4-dir-btn\" id=\"cb4DirExch\"") !== false, true);
-t('the exchange path is inert in JS where SSP is hidden',
-  strpos($cb, "dir === 'exchange' && _cb4Hidden.indexOf('Exchange') !== -1) return;") !== false, true);
-t('the Convert Currency quick action points at accounts on a non-SSP book',
-  strpos($cb, 'account ↔ account, rate recorded') !== false, true);
-t('the wizard survives the gated tile (null-guarded toggle)',
+t('the Exchange tile lives on every book, labeled with ITS counter-currency',
+  strpos($cb, 'USD ↔ <?= htmlspecialchars($_cbXC) ?>') !== false
+  && strpos($cb, "<?php if (\$_cbSSP): ?>\n      <div class=\"cb4-dir-btn\" id=\"cb4DirExch\"") === false, true);
+t('no exchange label hard-codes SSP any more (JS uses _cb4XC)',
+  strpos($cb, "var _cb4XC = <?= json_encode(\$_cbXC) ?>;") !== false
+  && strpos($cb, "'Exchange · USD ↔ SSP'") === false
+  && strpos($cb, "'Exchange USD to SSP (") === false, true);
+t('the USD amount field wears $ on a non-SSP book, never the display symbol',
+  strpos($cb, "<?= \$_cbSSP ? trim(dn_cur(\$config)) : '\$' ?>") !== false, true);
+t('the Convert Currency quick action opens the wizard exchange',
+  strpos($cb, "cb4Open('exchange');return false;") !== false, true);
+t('the wizard tolerates a missing tile (null-guarded toggle)',
   strpos($cb, "if (_cb4ExchBtn) _cb4ExchBtn.classList.toggle") !== false, true);
-t('the Exchange validation status is SSP-gated in the edit modal',
-  strpos($cb, "<?php if (\$_cbSSP): ?><option value=\"exchange\">") !== false, true);
+t('non-SSP Exchange posts route to the honest pair writer',
+  strpos((string)file_get_contents($rootC01 . '/includes/post/post_cashbook.php'),
+    "strcasecmp(\$category, 'Exchange') === 0 && !dn_ssp_selectable(\$config ?? null)") !== false, true);
 $maX = (string)file_get_contents($rootC01 . '/tabs/sales/my_account.php');
 t('my_account: the exchange view collapses to summary on a non-SSP book',
   strpos($maX, "if (\$v === 'exchange' && !dn_ssp_selectable(\$config ?? null)) { \$v = 'summary'; }") !== false, true);

@@ -333,6 +333,48 @@ t('pair-void zeroes both accounts',
 
 exec('rm -rf ' . escapeshellarg($t5) . ' ' . escapeshellarg($t6));
 
+echo "\nCash exchange (the wizard's Exchange tile) — honest USD ↔ base pair\n";
+$t7  = sys_get_temp_dir() . '/cb_acct_t7_' . getmypid();
+@mkdir($t7, 0777, true);
+$st7 = SqliteStore::create($t7);
+file_put_contents($t7 . '/kyc_config.json', json_encode(['cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD']));
+$cb7 = new CashbookService($st7, $t7);
+$x1 = $cb7->recordCashExchange(100.0, 3730.0, 'usd_to_base', '2026-09-07', '', 'dishnet', 'UAT', 'tester');
+t('exchange records with an FXC ref', ($x1['ok'] ?? false) && strpos((string)$x1['ref'], 'FXC-') === 0, true);
+t('the UGX side is the entered rate times the USD', $x1['base_amount'] ?? 0.0, 373000.0);
+$pos7 = $cb7->currencyPositions();
+t('USD position moved down by the USD given', (float)$pos7['USD']['total'], -100.0);
+t('UGX position moved up by the UGX received', (float)$pos7['UGX']['total'], 373000.0);
+t('each leg carries ONE currency (no ssp_amount machinery)',
+  (int)$st7->getPdo()->query("SELECT COUNT(*) FROM cb_ledger WHERE source='fx_exchange' AND ssp_amount IS NOT NULL")->fetchColumn(), 0);
+t('the receiving leg records the operator rate',
+  (float)$st7->getPdo()->query("SELECT fx_rate FROM cb_ledger WHERE source='fx_exchange' AND direction='in'")->fetchColumn(), 3730.0);
+$pl7 = $cb7->plByPeriod('dishnet', '2026-01-01', '2026-12-31');
+t('an exchange is never revenue in ANY currency',
+  (float)(($pl7['UGX']['revenue_total'] ?? 0) + ($pl7['USD']['revenue_total'] ?? 0)), 0.0);
+t('and never an expense either',
+  (float)(($pl7['UGX']['expense_total'] ?? 0) + ($pl7['USD']['expense_total'] ?? 0)), 0.0);
+$x2 = $cb7->recordCashExchange(50.0, 3700.0, 'base_to_usd', '2026-09-07', '', 'dishnet', 'UAT', 'tester');
+t('reverse direction books UGX out / USD in', ($x2['ok'] ?? false)
+  && (float)$cb7->currencyPositions()['USD']['total'] === -50.0
+  && (float)$cb7->currencyPositions()['UGX']['total'] === 188000.0, true);
+$xLeg = (int)$st7->getPdo()->query("SELECT id FROM cb_ledger WHERE validation_ref='" . $x2['ref'] . "' LIMIT 1")->fetchColumn();
+$xv   = $cb7->voidEntry($xLeg, 'UAT pair void', 'tester');
+t('voiding one exchange leg voids the pair', $xv['voided'] ?? 0, 2);
+t('pair-void restores both positions',
+  (float)$cb7->currencyPositions()['USD']['total'] === -100.0
+  && (float)$cb7->currencyPositions()['UGX']['total'] === 373000.0, true);
+t('zero rate refused', $cb7->recordCashExchange(100.0, 0.0, 'usd_to_base', '2026-09-07', '', 'dishnet', '', 't')['ok'], false);
+t('junk direction refused', $cb7->recordCashExchange(100.0, 3730.0, 'sideways', '2026-09-07', '', 'dishnet', '', 't')['ok'], false);
+$t8  = sys_get_temp_dir() . '/cb_acct_t8_' . getmypid();
+@mkdir($t8, 0777, true);
+$st8 = SqliteStore::create($t8);
+file_put_contents($t8 . '/kyc_config.json', json_encode(['cashbook_base_currency' => 'USD']));
+$cb8 = new CashbookService($st8, $t8);
+t('a USD-base book has no counter-currency to exchange',
+  strpos((string)($cb8->recordCashExchange(100.0, 3730.0, 'usd_to_base', '2026-09-07', '', 'dishnet', '', 't')['error'] ?? ''), 'counter-currency') !== false, true);
+exec('rm -rf ' . escapeshellarg($t7) . ' ' . escapeshellarg($t8));
+
 exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($t2) . ' ' . escapeshellarg($t3) . ' ' . escapeshellarg($t4));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

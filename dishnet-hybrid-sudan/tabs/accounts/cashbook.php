@@ -22,6 +22,8 @@ $filterDir  = in_array($_GET['cb_dir'] ?? '', ['in','out']) ? ($_GET['cb_dir'] ?
 $_cbCurrs = dn_book_currencies($config ?? ($GLOBALS['config'] ?? []));
 $_cbBase  = $_cbCurrs[0];
 $_cbSSP   = in_array('SSP', $_cbCurrs, true);
+$_cbXC    = $_cbSSP ? 'SSP' : $_cbBase;   // the counter-currency USD exchanges with
+$_cbXFlag = $_cbSSP ? '🇸🇸' : '🇺🇬';
 $filterCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_cbCurrs, true) ? strtoupper($_GET['cb_curr']) : '';
 // A row's amount always wears the ROW's own currency: base-currency rows keep
 // the install's display symbol, any other currency shows its own code — a USD
@@ -934,11 +936,11 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
       <div style="font-size:10px;color:#94a3b8;">USD ↔ SSP</div>
     </a>
     <?php else: ?>
-    <a href="?page=dashboard&tab=opening_balances"
+    <a href="#" onclick="cb4Open('exchange');return false;"
       style="flex:1;background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
       <div style="font-size:18px;">💱</div>
       <div style="font-size:11px;font-weight:800;color:#7c3aed;margin-top:2px;">Convert Currency</div>
-      <div style="font-size:10px;color:#94a3b8;">account ↔ account, rate recorded</div>
+      <div style="font-size:10px;color:#94a3b8;">USD ↔ <?= htmlspecialchars($_cbXC) ?></div>
     </a>
     <?php endif; ?>
     <a href="?page=dashboard&tab=my_account&v=expense"
@@ -2395,13 +2397,11 @@ if (document.readyState === 'loading') {
         <div class="cb4-dir-lbl" id="cb4DirInLbl">Cash IN</div>
         <div class="cb4-dir-sub">Receipt</div>
       </div>
-      <?php if ($_cbSSP): ?>
       <div class="cb4-dir-btn" id="cb4DirExch" onclick="cb4SetDir('exchange')" style="border:2px solid var(--border);">
         <div class="cb4-dir-ic">🔄</div>
         <div class="cb4-dir-lbl">Exchange</div>
-        <div class="cb4-dir-sub">USD ↔ SSP</div>
+        <div class="cb4-dir-sub">USD ↔ <?= htmlspecialchars($_cbXC) ?></div>
       </div>
-      <?php endif; ?>
       <div class="cb4-dir-btn out" id="cb4DirOut" onclick="cb4SetDir('out')">
         <div class="cb4-dir-ic">⬇️</div>
         <div class="cb4-dir-lbl">Cash OUT</div>
@@ -2592,12 +2592,12 @@ if (document.readyState === 'loading') {
         <label class="cb4-lbl">EXCHANGE TYPE</label>
         <div class="cb4-dir-row" style="grid-template-columns:1fr 1fr;">
           <div class="cb4-dir-btn out sel" id="cb4ExchUSD2SSP" onclick="cb4SetExchType('usd_to_ssp')">
-            <div class="cb4-dir-ic">💵→🇸🇸</div>
-            <div class="cb4-dir-lbl" style="font-size:11px;">USD → SSP</div>
+            <div class="cb4-dir-ic">💵→<?= $_cbXFlag ?></div>
+            <div class="cb4-dir-lbl" style="font-size:11px;">USD → <?= htmlspecialchars($_cbXC) ?></div>
           </div>
           <div class="cb4-dir-btn in" id="cb4ExchSSP2USD" onclick="cb4SetExchType('ssp_to_usd')">
-            <div class="cb4-dir-ic">🇸🇸→💵</div>
-            <div class="cb4-dir-lbl" style="font-size:11px;">SSP → USD</div>
+            <div class="cb4-dir-ic"><?= $_cbXFlag ?>→💵</div>
+            <div class="cb4-dir-lbl" style="font-size:11px;"><?= htmlspecialchars($_cbXC) ?> → USD</div>
           </div>
         </div>
       </div>
@@ -2615,12 +2615,12 @@ if (document.readyState === 'loading') {
       </div>
       <div class="cb4-fg">
         <label class="cb4-lbl" id="cb4ExchAmtLbl">USD AMOUNT (giving out)</label>
-        <div class="cb4-aw"><span class="cb4-as"><?= trim(dn_cur($config)) ?></span>
+        <div class="cb4-aw"><span class="cb4-as"><?= $_cbSSP ? trim(dn_cur($config)) : '$' ?></span>
           <input type="number" class="cb4-inp cb4-ai" id="cb4ExchAmt" placeholder="0.00" step="0.01" min="0.01" oninput="cb4ExchCalc()">
         </div>
       </div>
       <div class="cb4-fg">
-        <label class="cb4-lbl">EXCHANGE RATE (SSP per $1)</label>
+        <label class="cb4-lbl">EXCHANGE RATE (<?= htmlspecialchars($_cbXC) ?> per $1)</label>
         <input type="number" class="cb4-inp" id="cb4ExchRate" placeholder="e.g. 5700" step="1" min="1" value="<?php echo (int)$xRate ?: ''; ?>" oninput="cb4ExchCalc()">
       </div>
       <div id="cb4ExchCalcResult" style="display:none;background:var(--color-background-success, #f0fdf4);color:var(--color-text-success, #15803d);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:12px;"></div>
@@ -2726,6 +2726,7 @@ var _cb4CatsOUT_fin = [];
 // items carry .id, which is exactly how a manual Opening Balance slipped
 // through on 2026-09-07.
 var _cb4Hidden = ['Opening Balance'<?php if (!$_cbSSP): ?>, 'Exchange', 'SSP Advance', 'SSP Return'<?php endif; ?>];
+var _cb4XC = <?= json_encode($_cbXC) ?>;
 function _cb4StripHidden(list) {
   return (list || []).filter(function (c) {
     var n = (c && c.id) ? c.id : ((c && c.name) ? c.name : c);
@@ -2884,7 +2885,6 @@ function cb4SetDir(dir) {
   var _cb4ExchBtn = document.getElementById('cb4DirExch');
   if (_cb4ExchBtn) _cb4ExchBtn.classList.toggle('sel', dir==='exchange');
   // v4.9.10: Exchange skips category — goes straight to exchange form
-  if (dir === 'exchange' && _cb4Hidden.indexOf('Exchange') !== -1) return;
   if (dir === 'exchange') {
     document.getElementById('cb4CatSection').style.display = 'none';
     document.getElementById('cb4NextWrap').style.display = 'none';
@@ -2913,7 +2913,7 @@ function cb4UpdateHeader() {
   if(!_cb4Dir) { mh.className='cb4-mh neutral'; document.getElementById('cb4MTitle').textContent='Add Entry'; document.getElementById('cb4MSub').textContent='Select direction to begin'; return; }
   if (_cb4Dir === 'exchange') {
     mh.className = 'cb4-mh neutral';
-    document.getElementById('cb4MTitle').textContent = 'Exchange · USD ↔ SSP';
+    document.getElementById('cb4MTitle').textContent = 'Exchange · USD ↔ ' + _cb4XC;
     document.getElementById('cb4MSub').textContent = 'Convert between currencies';
     return;
   }
@@ -3157,7 +3157,7 @@ function cb4ShowExchangeForm() {
   // Hide all regular Step 2 fields, show exchange-specific form
   document.getElementById('cb4RegularFields').style.display = 'none';
   document.getElementById('cb4ExchWrap').style.display = '';
-  document.getElementById('cb4Step2Label').textContent = 'Exchange · USD ↔ SSP';
+  document.getElementById('cb4Step2Label').textContent = 'Exchange · USD ↔ ' + _cb4XC;
   // Reset exchange form
   _cb4ExchType = 'usd_to_ssp';
   cb4SetExchType('usd_to_ssp');
@@ -3191,9 +3191,9 @@ function cb4ExchCalc() {
   if (amt > 0 && rate > 0) {
     var ssp = Math.round(amt * rate);
     if (_cb4ExchType === 'usd_to_ssp') {
-      calc.textContent = 'SSP received: ' + ssp.toLocaleString() + ' SSP';
+      calc.textContent = _cb4XC + ' received: ' + ssp.toLocaleString() + ' ' + _cb4XC;
     } else {
-      calc.textContent = 'SSP given: ' + ssp.toLocaleString() + ' SSP';
+      calc.textContent = _cb4XC + ' given: ' + ssp.toLocaleString() + ' ' + _cb4XC;
     }
     calc.style.display = '';
   } else {
@@ -3204,8 +3204,8 @@ function cb4ExchCalc() {
   var preview = document.getElementById('cb4ExchDescPreview');
   if (amt > 0 && rate > 0) {
     var desc = _cb4ExchType === 'usd_to_ssp'
-      ? 'Exchange USD to SSP (' + amt + '@' + rate + ')'
-      : 'Exchange SSP to USD (' + amt + '@' + rate + ')';
+      ? 'Exchange USD to ' + _cb4XC + ' (' + amt + '@' + rate + ')'
+      : 'Exchange ' + _cb4XC + ' to USD (' + amt + '@' + rate + ')';
     if (person) desc += ' By ' + person;
     if (note) desc += ' - ' + note;
     desc += ' [' + (new Date().toISOString().substring(0,7).replace('-','-')) + ']';
@@ -3224,7 +3224,7 @@ function cb4ExchUpdateSave() {
   btn.disabled = !(amt > 0 && rate > 0);
   if (amt > 0 && rate > 0) {
     var ssp = Math.round(amt * rate);
-    btn.textContent = 'Save Exchange · ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' ↔ ' + ssp.toLocaleString() + ' SSP';
+    btn.textContent = 'Save Exchange · ' + <?= json_encode($_cbSSP ? dn_cur($config) : '$') ?> + amt.toFixed(2) + ' ↔ ' + ssp.toLocaleString() + ' ' + _cb4XC;
   } else {
     btn.textContent = 'Save Exchange';
   }
@@ -3242,8 +3242,8 @@ function cb4Submit() {
     var note   = document.getElementById('cb4ExchNote').value.trim();
     // Auto-generate description matching Rupesh's Excel pattern
     var desc = _cb4ExchType === 'usd_to_ssp'
-      ? 'Exchange USD to SSP (' + amt + '@' + rate + ')'
-      : 'Exchange SSP to USD (' + amt + '@' + rate + ')';
+      ? 'Exchange USD to ' + _cb4XC + ' (' + amt + '@' + rate + ')'
+      : 'Exchange ' + _cb4XC + ' to USD (' + amt + '@' + rate + ')';
     if (person) desc += ' By ' + person;
     if (note) desc += ' - ' + note;
     desc += ' [' + (new Date().toISOString().substring(0,7)) + ']';
@@ -3803,7 +3803,7 @@ function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+per
             <option value="online">Online / CRM</option>
             <option value="pending">Pending Receipt</option>
             <option value="jedco">Jedco</option>
-            <?php if ($_cbSSP): ?><option value="exchange">Exchange</option><?php endif; ?>
+            <option value="exchange">Exchange</option>
           </select>
         </div>
       </div>

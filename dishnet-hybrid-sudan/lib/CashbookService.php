@@ -319,6 +319,53 @@ class CashbookService
     }
 
     /**
+     * Cash-bag exchange (money changer): USD ↔ the book's base currency at
+     * an operator-entered rate, in the unassigned stream — what the wizard's
+     * Exchange tile records on a book without SSP. Two legs, one currency
+     * each, typed TRANSFER so the P&L never sees them, sharing an FXC ref so
+     * voiding one leg voids both. Sudan keeps its own single-row ssp_amount
+     * machinery; this path never runs there.
+     */
+    public function recordCashExchange(float $usdAmount, float $rate, string $direction,
+                                       string $date, string $description, string $project,
+                                       string $person, string $admin): array
+    {
+        $base = $this->bookBase();
+        if ($base === 'USD')     return ['ok' => false, 'error' => 'This book has no counter-currency to exchange USD with'];
+        if (!in_array($direction, ['usd_to_base', 'base_to_usd'], true)) return ['ok' => false, 'error' => 'Invalid exchange direction'];
+        if ($usdAmount <= 0 || $rate <= 0) return ['ok' => false, 'error' => 'Amount and rate must be positive'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return ['ok' => false, 'error' => 'Date must be YYYY-MM-DD'];
+
+        $baseAmount = round($usdAmount * $rate, 2);
+        $n    = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FXC-%' AND direction='out'")[0]['c'] ?? 0) + 1;
+        $ref  = sprintf('FXC-%04d', $n);
+        $give = $direction === 'usd_to_base' ? ['USD', $usdAmount] : [$base, $baseAmount];
+        $get  = $direction === 'usd_to_base' ? [$base, $baseAmount] : ['USD', $usdAmount];
+        if (trim($description) === '') {
+            $description = "Exchange {$give[0]} " . number_format($give[1], 2)
+                         . " → {$get[0]} " . number_format($get[1], 2) . " @ " . number_format($rate, 2);
+        }
+        $common = [
+            'project' => $project !== '' ? $project : 'dishnet', 'date' => $date,
+            'category' => 'Exchange', 'category_raw' => 'Exchange', 'person' => $person,
+            'validation_ref' => $ref, 'validation_status' => 'exchange',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'fx_exchange',
+            'account_id' => 0, 'txn_type' => 'TRANSFER',
+        ];
+        $this->addEntryRaw($common + [
+            'direction' => 'out', 'amount' => $give[1], 'currency' => $give[0],
+            'description' => $description . ' (gave)',
+        ]);
+        $this->addEntryRaw($common + [
+            'direction' => 'in', 'amount' => $get[1], 'currency' => $get[0],
+            'description' => $description . ' (received)',
+            'fx_currency' => $give[0], 'fx_amount' => $give[1],
+            'fx_rate' => round($rate, 6), 'fx_rate_source' => 'operator-entered',
+        ]);
+        return ['ok' => true, 'ref' => $ref, 'base_amount' => $baseAmount, 'currency' => $base];
+    }
+
+    /**
      * Outside money coming IN (investor/director injection): the receiving
      * account gains the funds and a liability account of the SAME currency
      * records what the company now owes — one act, two legs, one reference.
@@ -667,7 +714,7 @@ class CashbookService
             return ['ok' => false, 'error' => 'Entry is already voided.'];
         }
 
-        $pairSources = ['account_transfer', 'funding'];
+        $pairSources = ['account_transfer', 'funding', 'fx_exchange'];
         $stamp = ' [VOIDED: ' . $reason . ' — by ' . ($actor !== '' ? $actor : 'admin')
                . ' ' . date('Y-m-d H:i') . ']';
 
