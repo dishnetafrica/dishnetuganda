@@ -279,7 +279,16 @@
         if (strlen($newPwd) < 8)        $er2('Password must be at least 8 characters.');
         if ($newPwd !== $confPwd)        $er2('Passwords do not match.');
         $auth->updateRetailer($rid, ['password' => $newPwd], false);
-        if (isset($_SESSION['dn_retailer'])) $_SESSION['dn_retailer']['must_change_pwd'] = false;
+        // The session caches the retailer record for 5 minutes under
+        // 'kyc_retailer' (the old line here cleared a 'dn_retailer' key that
+        // never existed — the modal kept haunting users from the stale
+        // cache). Bust the cache and fix the cached copy in place.
+        if (isset($_SESSION['kyc_retailer'])) {
+            $_SESSION['kyc_retailer']['cache_refreshed'] = 0;
+            if (isset($_SESSION['kyc_retailer']['cached_record'])) {
+                $_SESSION['kyc_retailer']['cached_record']['must_change_pwd'] = false;
+            }
+        }
         $ok2([], 'Password changed successfully.');
     }
 

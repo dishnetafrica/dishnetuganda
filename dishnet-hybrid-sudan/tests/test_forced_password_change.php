@@ -54,6 +54,22 @@ t('is_admin not self-escalatable', empty($row['is_admin']), true);
 t('role not self-escalatable', ($row['role'] ?? '') !== 'admin', true);
 t('wallet not self-writable', (float)($row['wallet'] ?? 0), 0.0);
 
+echo "\nThe 5-minute session cache cannot haunt a changed password\n";
+// currentRetailer() serves a cached copy under $_SESSION['kyc_retailer'];
+// simulate the exact live bug: record cleared, cache still carries the flag.
+$_SESSION['kyc_retailer'] = [
+    'id' => $rid,
+    'cached_record'   => array_merge($row, ['must_change_pwd' => true]),
+    'cache_refreshed' => time(),
+];
+$cur = $auth->currentRetailer();
+t('fresh cache serves the stale flag (the haunting)', !empty($cur['must_change_pwd']), true);
+// The busted cache (what change_password now does) forces a DB refresh.
+$_SESSION['kyc_retailer']['cache_refreshed'] = 0;
+$cur = $auth->currentRetailer();
+t('busted cache re-reads the RECORD — flag gone', empty($cur['must_change_pwd']), true);
+unset($_SESSION['kyc_retailer']);
+
 echo "\nAPI contract (source guards)\n";
 $api = (string)file_get_contents(dirname(__DIR__) . '/includes/api/api_retailer.php');
 t('handler reads the authoritative RECORD flag',
@@ -65,6 +81,11 @@ t('current password still verified on ordinary profile changes',
 $pub = (string)file_get_contents(dirname(__DIR__) . '/public.php');
 t('modal reloads after success so the rotated token is picked up',
   strpos($pub, 'location.reload(); }, 800);') !== false, true);
+t('handler busts the REAL session cache key (kyc_retailer)',
+  strpos($api, "\$_SESSION['kyc_retailer']['cache_refreshed'] = 0;") !== false
+  && strpos($api, "\$_SESSION['dn_retailer']['must_change_pwd']") === false, true);
+t('render gate re-checks the record before showing the modal',
+  strpos($pub, "\$_fpFresh = \$store->findOne('retailers.json', 'id'") !== false, true);
 
 exec('rm -rf ' . escapeshellarg($tmp));
 printf("\n%d passed, %d failed\n", $pass, $fail);

@@ -1516,6 +1516,20 @@ $packages=$store->load('kyc_packages.json');
 <body>
 <div id="toastContainer"></div>
 
+<?php if (!empty($retailer['must_change_pwd'])):
+    // Self-heal: the session serves a 5-minute cached copy of the retailer
+    // record, so this flag can be STALE right after a successful change.
+    // The RECORD is authoritative — re-check it before showing the modal,
+    // and repair the cached copy so it stops haunting this session.
+    $_fpFresh = $store->findOne('retailers.json', 'id', (int)($retailer['id'] ?? 0));
+    if ($_fpFresh && empty($_fpFresh['must_change_pwd'])) {
+        $retailer['must_change_pwd'] = false;
+        if (isset($_SESSION['kyc_retailer']['cached_record'])) {
+            $_SESSION['kyc_retailer']['cached_record']['must_change_pwd'] = false;
+            $_SESSION['kyc_retailer']['cache_refreshed'] = time();
+        }
+    }
+endif; ?>
 <?php if (!empty($retailer['must_change_pwd'])): ?>
 <!--  FORCED PASSWORD CHANGE MODAL  -->
 <div id="forcePwdModal" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:center;padding:16px;">
