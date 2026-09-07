@@ -71,6 +71,19 @@ class EfrisClient
     public function isUsable(): bool      { return $this->refuse === ''; }
     public function refusalReason(): string { return $this->refuse; }
 
+    /**
+     * Transport factory: efris_gateway=weaf selects the WEAF Company REST
+     * gateway; anything else keeps this Phase-1 envelope client.
+     */
+    public static function forConfig(array $config, int $timeout = 20): EfrisClient
+    {
+        if (strtolower(trim((string)($config['efris_gateway'] ?? ''))) === 'weaf') {
+            require_once __DIR__ . '/WeafEfrisClient.php';
+            return new WeafEfrisClient($config, max($timeout, 25));
+        }
+        return new EfrisClient($config, $timeout);
+    }
+
     /** T101: server time — the reachability probe. */
     public function ping(): array
     {

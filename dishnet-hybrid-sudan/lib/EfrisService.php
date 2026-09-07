@@ -52,7 +52,7 @@ class EfrisService
         $this->dataDir = $dataDir;
         $this->tx      = new EfrisStore($store->getPdo());
         $this->crm     = $crm ?: CrmApiClient::fromUcrm(dirname(__DIR__), $config);
-        $this->client  = $client ?: new EfrisClient($config);
+        $this->client  = $client ?: EfrisClient::forConfig($config);
     }
 
     private ?EfrisGoodsService $goodsSvc = null;

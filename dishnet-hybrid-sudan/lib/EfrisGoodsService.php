@@ -33,7 +33,7 @@ class EfrisGoodsService
         $this->config  = $config;
         $this->dataDir = $dataDir;
         $this->goods   = new EfrisGoodsStore($store->getPdo());
-        $this->client  = $client ?: new EfrisClient($config);
+        $this->client  = $client ?: EfrisClient::forConfig($config);
     }
 
     public function registry(): EfrisGoodsStore { return $this->goods; }
@@ -157,11 +157,13 @@ class EfrisGoodsService
         }
 
         $r = $this->client->stockMaintain(['stock' => [
-            'goods_code' => (string)$g['goods_code'],
+            'goods_code' => (string)($g['goods_code'] !== '' ? $g['goods_code'] : $g['name']),
             'op'         => $op,
             'qty'        => $qty,
             'reason'     => trim($reason),
             'note'       => trim($note),
+            'unit'       => (string)$g['unit'],
+            'unit_price' => $g['unit_price'] !== null ? (float)$g['unit_price'] : 0.0,
         ]]);
 
         if ($r['ok'] && is_array($r['content'])) {

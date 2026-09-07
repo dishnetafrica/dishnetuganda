@@ -346,3 +346,39 @@ this case.
 Test coverage: `tests/test_efris_uat.php` (57 asserts) against the fake
 server, which now simulates all five interfaces with rejection and
 insufficient-stock behaviours. Operator drill: `php tools/efris_uat_drill.php`.
+
+---
+
+## WEAF gateway option (2026-09-07)
+
+A third-party path arrived: WEAF Company (weafcompany.com) offers a
+bearer-token REST gateway in front of URA EFRIS — they hold the device and
+crypto, we POST near-raw URA structures to `/api/{tin}/<endpoint>` with
+`environment=Sandbox|Production`. Their sandbox demonstrably forwards to
+URA's real TEST environment (the fiscal QR resolves at efristest.ura.go.ug)
+under their shared dev TIN 1015264035.
+
+Implementation: `WeafEfrisClient` (selected by `efris_gateway=weaf`;
+`efris_weaf_base_url`, `efris_weaf_token`, `efris_tin`) — the same client
+surface, so the service/queue/store/PDF pipeline is untouched. Every field
+name and dictionary code is transcribed verbatim from their Postman
+collection (WEAF_EFRIS_WEB_API); responses are normalised to the pipeline's
+content keys (fdn=invoiceNo, verificationCode=antifakeCode, qrCode). The
+URA-direct Phase-2 connector stays on the roadmap as the vendor-lock-free
+fallback.
+
+Deliberate limits pending the vendor meeting / master-data:
+- only `taxRule=STANDARD` invoices are translated (other categories refuse);
+- product currency dictionary mapped for UGX ('101') only;
+- stockInType '102', adjustType '105', reasonCode '102', operationType '102'
+  are the vendor sample values — confirm dictionaries;
+- WEAF exposes NO credit-note cancellation (T114) — cancel refuses with that
+  message; ask the vendor;
+- credit notes return an application referenceNo, not a fiscal number —
+  confirm the approval flow;
+- production through WEAF REFUSES until their URA accreditation is verified
+  in writing and DishNet's own TIN is onboarded.
+
+Proof: `tests/test_efris_weaf.php` (34 asserts) against
+`tests/fixtures/fake_weaf_server.php` (shapes copied from the collection);
+real-sandbox drill for the operator: `php tools/efris_weaf_drill.php`.

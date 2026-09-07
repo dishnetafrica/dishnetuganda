@@ -169,6 +169,7 @@ foreach ((array)$store->load('efris_tax_map.json') as $r) {
     if (!empty($r['tax'])) $_efTaxRaw .= $r['tax'] . ' = ' . ($r['category'] ?? '') . "\n";
 }
 
+$_efGateway = strtolower(trim((string)($_efCfg['efris_gateway'] ?? '')));
 $_efGoods  = $_efSvc->goodsService()->registry()->all();
 $_efGCount = $_efSvc->goodsService()->registry()->counts();
 $_efStockLog = $_efSvc->goodsService()->registry()->stockLog(0, 12);
@@ -220,6 +221,13 @@ $_efBadge = function (string $s): string {
         <div style="font-size:11px;color:#991b1b;">Production connector not built (Phase 2) — submissions refuse.</div>
       <?php elseif ($_efEnv === 'disabled'): ?>
         <div style="font-size:11px;color:#6b7280;">Set efris_environment=test in Configuration to use the test flow.</div>
+      <?php endif; ?>
+    </div>
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;">
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">Gateway</div>
+      <strong><?= $_efGateway === 'weaf' ? 'WEAF (weafcompany.com)' : 'URA direct (phase 1)' ?></strong>
+      <?php if ($_efGateway === 'weaf' && trim((string)($_efCfg['efris_weaf_token'] ?? '')) === ''): ?>
+        <div style="font-size:11px;color:#991b1b;">efris_weaf_token not set.</div>
       <?php endif; ?>
     </div>
     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;">
