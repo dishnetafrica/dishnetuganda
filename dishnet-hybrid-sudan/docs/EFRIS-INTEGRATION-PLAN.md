@@ -315,3 +315,34 @@ credentials.
    watch via `invoice.edit` webhook + `NEEDS_ADJUSTMENT` flag.
 5. Plugin has no composer → OpenSSL-ext crypto + one vendored single-file QR
    encoder, consistent with the codebase.
+
+---
+
+## UAT readiness build (2026-09-07)
+
+Driven by URA's "EFRIS System-to-System UAT Readiness Checklist" (v1.5
+spec). The five interfaces beyond invoicing now exist on the same Phase-1
+rails — internal models over the test envelope, verbatim responses,
+DB-level idempotency, production refusing until the Phase-2 crypto
+connector is transcribed from the official spec with real credentials.
+
+| Checklist | Interface | Where |
+|---|---|---|
+| Q1 configure goods/services | T130 `uploadGoods` | `EfrisGoodsService::register`, admin tab registry (write-through to the commodity map) |
+| Q2 stock upload/adjust | T131 `stockMaintain` | `EfrisGoodsService::adjustStock` + `efris_stock_log` |
+| Q3 tax rates | (unchanged) | tax map + uCRM tax registry |
+| Q4 fiscalised invoice | T109 | (unchanged pipeline) |
+| Q5 B2C/B2B/B2G | buyer `type_code` 0/1/2/3 | mapper; `efrisBuyerType` client attribute for government/foreigner |
+| Q6 buyer TIN validation | T119 `queryTin` | 24h-cached; gates every B2B/B2G submit; mapper hard-errors a B2B/B2G invoice with no TIN |
+| Q7 stock after sale | (server-side) | EFRIS decrements on fiscalisation; `mirrorInvoiceSale` keeps the local registry in step |
+| Q8 credit note | T110 `applyCreditNote` | `EfrisService::submitCreditNote` — requires the original FDN; original row becomes CREDITED |
+| Q9 cancel credit note | T114 `cancelCreditNote` | `EfrisService::cancelCreditNote` — CN row CANCELLED, original restored to FISCALISED |
+
+Hardening note: a company buyer without a TIN no longer maps as B2B — the
+mapper blocks with the fix (set `efrisTin`, or `efrisBuyerType=individual`
+for a walk-in shop). The first live invoice (Family Shoppers) is exactly
+this case.
+
+Test coverage: `tests/test_efris_uat.php` (57 asserts) against the fake
+server, which now simulates all five interfaces with rejection and
+insufficient-stock behaviours. Operator drill: `php tools/efris_uat_drill.php`.

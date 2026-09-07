@@ -31,6 +31,11 @@ class EfrisClient
 
     public const IC_SERVER_TIME = 'T101';
     public const IC_INVOICE     = 'T109';
+    public const IC_CN_APPLY    = 'T110';   // credit note application
+    public const IC_CN_CANCEL   = 'T114';   // cancel a credit note application
+    public const IC_TIN_QUERY   = 'T119';   // query taxpayer information by TIN
+    public const IC_GOODS       = 'T130';   // goods/services registration
+    public const IC_STOCK       = 'T131';   // goods stock maintenance
 
     private array  $config;
     private string $env;
@@ -76,6 +81,36 @@ class EfrisClient
     public function submitInvoice(array $payload): array
     {
         return $this->call(self::IC_INVOICE, $payload);
+    }
+
+    /** T119: query a taxpayer by TIN (buyer validation for B2B/B2G). */
+    public function queryTin(string $tin): array
+    {
+        return $this->call(self::IC_TIN_QUERY, ['tin' => trim($tin)]);
+    }
+
+    /** T130: register one goods/services item. */
+    public function uploadGoods(array $payload): array
+    {
+        return $this->call(self::IC_GOODS, $payload);
+    }
+
+    /** T131: stock increase/decrease for a registered goods item. */
+    public function stockMaintain(array $payload): array
+    {
+        return $this->call(self::IC_STOCK, $payload);
+    }
+
+    /** T110: apply a credit note against a fiscalised invoice. */
+    public function applyCreditNote(array $payload): array
+    {
+        return $this->call(self::IC_CN_APPLY, $payload);
+    }
+
+    /** T114: cancel a credit note application. */
+    public function cancelCreditNote(array $payload): array
+    {
+        return $this->call(self::IC_CN_CANCEL, $payload);
     }
 
     /**

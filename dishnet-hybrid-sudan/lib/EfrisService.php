@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/EfrisStore.php';
 require_once __DIR__ . '/EfrisInvoiceMapper.php';
 require_once __DIR__ . '/EfrisClient.php';
+require_once __DIR__ . '/EfrisGoodsService.php';
 require_once __DIR__ . '/CrmApiClient.php';
 
 /**
@@ -54,8 +55,62 @@ class EfrisService
         $this->client  = $client ?: new EfrisClient($config);
     }
 
+    private ?EfrisGoodsService $goodsSvc = null;
+
     public function transactions(): EfrisStore { return $this->tx; }
     public function environment(): string      { return $this->client->environment(); }
+
+    public function goodsService(): EfrisGoodsService
+    {
+        if ($this->goodsSvc === null) {
+            $this->goodsSvc = new EfrisGoodsService($this->store, $this->config, $this->dataDir, $this->client);
+        }
+        return $this->goodsSvc;
+    }
+
+    /**
+     * T119 — validate a TIN against EFRIS. Definitive answers (found / not
+     * found) are cached 24h so repeated submissions for the same buyer cost
+     * one lookup; transport failures are never cached.
+     * @return array{ok:bool, error:string, taxpayer:?array, cached:bool}
+     */
+    public function queryTin(string $tin): array
+    {
+        $tin = trim($tin);
+        if (!preg_match('/^\d{10}$/', $tin)) {
+            return ['ok' => false, 'error' => "TIN '{$tin}' is not 10 digits", 'taxpayer' => null, 'cached' => false];
+        }
+        if (!$this->client->isUsable()) {
+            return ['ok' => false, 'error' => $this->client->refusalReason(), 'taxpayer' => null, 'cached' => false];
+        }
+        // The store keeps documents as LISTS of rows — cache rows carry their TIN.
+        $rows = (array)$this->store->load('efris_tin_cache.json');
+        foreach ($rows as $c) {
+            if (!is_array($c) || (string)($c['tin'] ?? '') !== $tin) continue;
+            if ((int)($c['checked_at'] ?? 0) > time() - 86400) {
+                return ['ok' => (bool)($c['ok'] ?? false), 'error' => (string)($c['error'] ?? ''),
+                        'taxpayer' => $c['taxpayer'] ?? null, 'cached' => true];
+            }
+        }
+        $r = $this->client->queryTin($tin);
+        $entry = ['tin' => $tin, 'checked_at' => time(), 'ok' => false, 'error' => $r['error'], 'taxpayer' => null];
+        if ($r['ok'] && is_array($r['content'])) {
+            $entry['ok'] = true;
+            $entry['error'] = '';
+            $entry['taxpayer'] = [
+                'name'   => (string)($r['content']['taxpayerName'] ?? ''),
+                'status' => (string)($r['content']['status'] ?? ''),
+            ];
+        }
+        if ($r['ok'] || $r['envelope'] !== null) {   // definitive answer — cacheable
+            $rows = array_values(array_filter($rows,
+                fn($c) => is_array($c) && (string)($c['tin'] ?? '') !== $tin));
+            $rows[] = $entry;
+            $this->store->save('efris_tin_cache.json', $rows);
+        }
+        return ['ok' => $entry['ok'], 'error' => (string)$entry['error'],
+                'taxpayer' => $entry['taxpayer'], 'cached' => false];
+    }
 
     public function autoSubmitEnabled(): bool
     {
@@ -192,6 +247,20 @@ class EfrisService
             return ['ok' => false, 'status' => self::ST_ERROR, 'message' => $msg, 'tx' => $this->tx->get($txId)];
         }
 
+        // ── Buyer TIN validation (T119) — URA rejects a B2B/B2G invoice with
+        // an unknown TIN, so ask first and fail with an actionable message.
+        // B2C and foreigner invoices skip this by design (checklist Q6).
+        $typeCode = (int)($m['model']['buyer']['type_code'] ?? 1);
+        if (in_array($typeCode, [0, 3], true)) {
+            $tv = $this->queryTin((string)($m['model']['buyer']['tin'] ?? ''));
+            if (!$tv['ok']) {
+                $msg = 'Buyer TIN validation failed (T119): ' . $tv['error'];
+                $this->tx->update($txId, ['status' => self::ST_ERROR, 'response_message' => $msg]);
+                $this->log("invoice {$number}: {$msg}");
+                return ['ok' => false, 'status' => self::ST_ERROR, 'message' => $msg, 'tx' => $this->tx->get($txId)];
+            }
+        }
+
         // ── Send ──
         $this->tx->update($txId, [
             'status'          => self::ST_SUBMITTED,
@@ -225,6 +294,10 @@ class EfrisService
                 'response_message'  => 'OK',
             ]);
             $this->log("invoice {$number}: FISCALISED fdn={$fdn} env={$env} source={$source}");
+            // EFRIS decrements stock server-side for stocked goods on a
+            // fiscalised sale — mirror it so the registry matches URA's view.
+            try { $this->goodsService()->mirrorInvoiceSale($m['model']['items'] ?? [], $number); }
+            catch (\Throwable $e) { $this->log("stock mirror failed for {$number}: " . $e->getMessage()); }
             return ['ok' => true, 'status' => self::ST_FISCALISED, 'message' => 'Fiscalised.',
                     'tx' => $this->tx->get($txId)];
         }
@@ -244,6 +317,223 @@ class EfrisService
             'response_code' => $rc !== '' ? $rc : (string)$r['http'],
             'response_message' => $r['error']]);
         $this->log("invoice {$number}: {$status} — {$r['error']}");
+        return ['ok' => false, 'status' => $status, 'message' => $r['error'], 'tx' => $this->tx->get($txId)];
+    }
+
+    /**
+     * T110 — apply a credit note. $ucrmCreditNoteId is uCRM's credit-note id
+     * (its own entity, not the invoice id). The original invoice must carry
+     * an FDN from fiscalisation here — a credit note corrects a fiscal
+     * document, so without one there is nothing to correct. Checklist Q8.
+     */
+    public function submitCreditNote(int $ucrmCreditNoteId, string $reason,
+                                     string $source = 'manual', bool $retry = false): array
+    {
+        $env = $this->client->environment();
+        if ($env === EfrisClient::ENV_DISABLED) {
+            return ['ok' => false, 'status' => 'DISABLED',
+                    'message' => 'EFRIS is disabled — set efris_environment=test to use the test flow.', 'tx' => null];
+        }
+        if ($env === EfrisClient::ENV_PRODUCTION) {
+            return ['ok' => false, 'status' => 'REFUSED', 'message' => $this->client->refusalReason(), 'tx' => null];
+        }
+        if (trim($reason) === '') {
+            return ['ok' => false, 'status' => self::ST_ERROR,
+                    'message' => 'A credit note needs its reason — URA requires one.', 'tx' => null];
+        }
+        if ($ucrmCreditNoteId <= 0)        return ['ok' => false, 'status' => self::ST_ERROR, 'message' => 'No credit note id', 'tx' => null];
+        if (!$this->crm->isConfigured())   return ['ok' => false, 'status' => self::ST_ERROR, 'message' => 'uCRM API is not configured', 'tx' => null];
+
+        $cn = $this->crm->get("credit-notes/{$ucrmCreditNoteId}")
+           ?? $this->crm->get("billing/credit-notes/{$ucrmCreditNoteId}");
+        if (!is_array($cn) || empty($cn['id'])) {
+            return ['ok' => false, 'status' => self::ST_ERROR,
+                    'message' => "Credit note {$ucrmCreditNoteId} not found in uCRM", 'tx' => null];
+        }
+        $origId = (int)($cn['invoiceId'] ?? 0);
+        $orig   = $origId > 0 ? $this->tx->find($origId) : null;
+        if ($orig === null || trim((string)$orig['fdn']) === ''
+            || !in_array($orig['status'], [self::ST_FISCALISED, self::ST_NEEDS_ADJUSTMENT, 'CREDITED'], true)) {
+            return ['ok' => false, 'status' => self::ST_ERROR,
+                    'message' => 'The original invoice' . ($origId > 0 ? " (uCRM #{$origId})" : '')
+                               . ' is not fiscalised — a credit note corrects a fiscal document, so fiscalise the invoice first.',
+                    'tx' => null];
+        }
+
+        $number   = trim((string)($cn['number'] ?? '')) ?: ('CN-' . $ucrmCreditNoteId);
+        $clientId = (int)($cn['clientId'] ?? 0);
+        $client   = $clientId > 0 ? ($this->crm->get("clients/{$clientId}") ?? []) : [];
+        $extra = [
+            'client_id'   => $clientId,
+            'client_name' => trim(((string)($client['firstName'] ?? '')) . ' ' . ((string)($client['lastName'] ?? '')))
+                             ?: (string)($client['companyName'] ?? ''),
+            'amount'      => (float)($cn['total'] ?? 0),
+            'currency'    => (string)($cn['currencyCode'] ?? ''),
+        ];
+
+        [$row, $createdNow] = $this->tx->beginSubmission(
+            $ucrmCreditNoteId, $number, $env, $extra, EfrisStore::KIND_CREDIT_NOTE);
+        if ($row === null) {
+            return ['ok' => false, 'status' => self::ST_ERROR, 'message' => 'Could not claim the transaction row', 'tx' => null];
+        }
+        if (!$createdNow) {
+            if ($row['status'] === self::ST_FISCALISED) {
+                return ['ok' => true, 'status' => self::ST_FISCALISED, 'duplicate' => true,
+                        'message' => 'This credit note is already fiscalised — returning the stored record.', 'tx' => $row];
+            }
+            if ($row['status'] === 'CANCELLED') {
+                return ['ok' => false, 'status' => 'CANCELLED',
+                        'message' => 'This credit note was cancelled — issue a new uCRM credit note instead.', 'tx' => $row];
+            }
+            if ($row['status'] === self::ST_REJECTED && !$retry) {
+                return ['ok' => false, 'status' => self::ST_REJECTED,
+                        'message' => 'EFRIS rejected this credit note: ' . (string)$row['response_message']
+                                   . ' — fix the data, then use Retry.', 'tx' => $row];
+            }
+            $this->tx->update((int)$row['id'], ['status' => self::ST_PENDING, 'environment' => $env]);
+            $this->tx->bumpRetry((int)$row['id']);
+        }
+        $txId = (int)$row['id'];
+        $this->tx->update($txId, ['linked_invoice_id' => $origId]);
+
+        $mapper = new EfrisInvoiceMapper($this->config, $this->commodityMap(), $this->taxMap(), $this->taxRegistry());
+        $m = $mapper->map($cn, is_array($client) ? $client : []);
+        if (!$m['ok']) {
+            $msg = 'Validation failed: ' . implode('; ', $m['errors']);
+            $this->tx->update($txId, ['status' => self::ST_ERROR, 'response_message' => $msg]);
+            $this->log("credit note {$number}: {$msg}");
+            return ['ok' => false, 'status' => self::ST_ERROR, 'message' => $msg, 'tx' => $this->tx->get($txId)];
+        }
+        $model = $m['model'];
+        $model['kind']        = 'credit_note';
+        $model['reason']      = trim($reason);
+        $model['original']    = ['ucrm_invoice_id' => $origId, 'fdn' => (string)$orig['fdn']];
+        $model['credit_note'] = $model['invoice'];
+        unset($model['invoice']);
+
+        $this->tx->update($txId, [
+            'status'          => self::ST_SUBMITTED,
+            'submitted_at'    => gmdate('Y-m-d H:i:s'),
+            'request_payload' => json_encode($model),
+        ]);
+        $r = $this->client->applyCreditNote($model);
+        $this->tx->update($txId, [
+            'request_id'       => $r['request_id'],
+            'response_payload' => $r['raw'] !== '' ? $r['raw'] : json_encode($r['envelope']),
+        ]);
+
+        if ($r['ok'] && is_array($r['content'])) {
+            $fdn = trim((string)($r['content']['fdn'] ?? $r['content']['creditNoteNo'] ?? ''));
+            if ($fdn === '') {
+                $msg = 'EFRIS said success but returned no credit-note number — NOT marked fiscalised';
+                $this->tx->update($txId, ['status' => self::ST_ERROR, 'response_message' => $msg]);
+                return ['ok' => false, 'status' => self::ST_ERROR, 'message' => $msg, 'tx' => $this->tx->get($txId)];
+            }
+            $this->tx->update($txId, [
+                'status'            => self::ST_FISCALISED,
+                'fdn'               => $fdn,
+                'verification_code' => trim((string)($r['content']['verificationCode'] ?? '')),
+                'qr_data'           => trim((string)($r['content']['qrCode'] ?? '')),
+                'efris_reference'   => trim((string)($r['content']['referenceNo'] ?? '')),
+                'fiscalised_at'     => trim((string)($r['content']['fiscalisedAt'] ?? gmdate('Y-m-d H:i:s'))),
+                'response_code'     => '00',
+                'response_message'  => 'OK',
+            ]);
+            $this->tx->update((int)$orig['id'], ['status' => 'CREDITED']);
+            $this->log("credit note {$number}: FISCALISED fdn={$fdn} against invoice #{$origId} ({$orig['fdn']})");
+            return ['ok' => true, 'status' => self::ST_FISCALISED, 'message' => 'Credit note fiscalised.',
+                    'tx' => $this->tx->get($txId)];
+        }
+
+        $rc = (string)($r['envelope']['returnStateInfo']['returnCode'] ?? '');
+        $isRejection = $r['http'] > 0 && $r['http'] < 500 && $r['envelope'] !== null && $rc !== '';
+        $status = $isRejection ? self::ST_REJECTED : self::ST_ERROR;
+        $this->tx->update($txId, ['status' => $status,
+            'response_code' => $rc !== '' ? $rc : (string)$r['http'],
+            'response_message' => $r['error']]);
+        $this->log("credit note {$number}: {$status} — {$r['error']}");
+        return ['ok' => false, 'status' => $status, 'message' => $r['error'], 'tx' => $this->tx->get($txId)];
+    }
+
+    /** T114 — cancel a fiscalised credit note application. Checklist Q9. */
+    public function cancelCreditNote(int $ucrmCreditNoteId, string $reason, string $source = 'manual'): array
+    {
+        $env = $this->client->environment();
+        if ($env === EfrisClient::ENV_DISABLED) {
+            return ['ok' => false, 'status' => 'DISABLED',
+                    'message' => 'EFRIS is disabled — set efris_environment=test to use the test flow.', 'tx' => null];
+        }
+        if ($env === EfrisClient::ENV_PRODUCTION) {
+            return ['ok' => false, 'status' => 'REFUSED', 'message' => $this->client->refusalReason(), 'tx' => null];
+        }
+        if (trim($reason) === '') {
+            return ['ok' => false, 'status' => self::ST_ERROR,
+                    'message' => 'Cancelling a credit note needs its reason.', 'tx' => null];
+        }
+        $cnRow = $this->tx->find($ucrmCreditNoteId, EfrisStore::KIND_CREDIT_NOTE);
+        if ($cnRow === null || $cnRow['status'] === 'CANCELLED' || trim((string)$cnRow['fdn']) === '') {
+            return ['ok' => false, 'status' => self::ST_ERROR,
+                    'message' => $cnRow !== null && $cnRow['status'] === 'CANCELLED'
+                        ? 'This credit note is already cancelled.'
+                        : 'No fiscalised credit note found for that id — only a fiscalised credit note can be cancelled.',
+                    'tx' => $cnRow];
+        }
+
+        [$row, $createdNow] = $this->tx->beginSubmission(
+            $ucrmCreditNoteId, (string)$cnRow['invoice_number'], $env,
+            ['client_id' => $cnRow['client_id'], 'client_name' => $cnRow['client_name'],
+             'amount' => $cnRow['amount'], 'currency' => $cnRow['currency']],
+            EfrisStore::KIND_CANCEL);
+        if ($row === null) {
+            return ['ok' => false, 'status' => self::ST_ERROR, 'message' => 'Could not claim the cancel row', 'tx' => null];
+        }
+        if (!$createdNow && $row['status'] === self::ST_FISCALISED) {
+            return ['ok' => true, 'status' => self::ST_FISCALISED, 'duplicate' => true,
+                    'message' => 'This cancellation was already acknowledged by EFRIS.', 'tx' => $row];
+        }
+        $txId = (int)$row['id'];
+        $this->tx->update($txId, ['linked_invoice_id' => $cnRow['linked_invoice_id']]);
+
+        $payload = ['cancel' => ['credit_note_fdn' => (string)$cnRow['fdn'], 'reason' => trim($reason)]];
+        $this->tx->update($txId, [
+            'status'          => self::ST_SUBMITTED,
+            'submitted_at'    => gmdate('Y-m-d H:i:s'),
+            'request_payload' => json_encode($payload),
+        ]);
+        $r = $this->client->cancelCreditNote($payload);
+        $this->tx->update($txId, [
+            'request_id'       => $r['request_id'],
+            'response_payload' => $r['raw'] !== '' ? $r['raw'] : json_encode($r['envelope']),
+        ]);
+
+        if ($r['ok'] && is_array($r['content'])) {
+            $this->tx->update($txId, [
+                'status'           => self::ST_FISCALISED,
+                'efris_reference'  => trim((string)($r['content']['referenceNo'] ?? '')),
+                'fiscalised_at'    => gmdate('Y-m-d H:i:s'),
+                'response_code'    => '00',
+                'response_message' => 'OK',
+            ]);
+            $this->tx->update((int)$cnRow['id'], ['status' => 'CANCELLED',
+                'response_message' => 'Cancelled: ' . trim($reason)]);
+            // The credit against the original invoice is undone.
+            $origId = (int)($cnRow['linked_invoice_id'] ?? 0);
+            $orig = $origId > 0 ? $this->tx->find($origId) : null;
+            if ($orig !== null && $orig['status'] === 'CREDITED') {
+                $this->tx->update((int)$orig['id'], ['status' => self::ST_FISCALISED]);
+            }
+            $this->log("credit note {$cnRow['invoice_number']}: CANCELLED ({$reason})");
+            return ['ok' => true, 'status' => 'CANCELLED', 'message' => 'Credit note cancelled.',
+                    'tx' => $this->tx->get($txId)];
+        }
+
+        $rc = (string)($r['envelope']['returnStateInfo']['returnCode'] ?? '');
+        $isRejection = $r['http'] > 0 && $r['http'] < 500 && $r['envelope'] !== null && $rc !== '';
+        $status = $isRejection ? self::ST_REJECTED : self::ST_ERROR;
+        $this->tx->update($txId, ['status' => $status,
+            'response_code' => $rc !== '' ? $rc : (string)$r['http'],
+            'response_message' => $r['error']]);
+        $this->log("credit note cancel {$cnRow['invoice_number']}: {$status} — {$r['error']}");
         return ['ok' => false, 'status' => $status, 'message' => $r['error'], 'tx' => $this->tx->get($txId)];
     }
 

@@ -112,3 +112,27 @@ in production against this API; ? = confirm against the probe output.
 2. Exact names: `currencyCode`, `amountPaid`/`amountToPay`, invoice-level `taxes`, `subtotal`.
 3. The custom-attribute keys uCRM generated for the four EFRIS attributes.
 4. Whether discounts appear as `discountTotal`, negative lines, or both.
+
+---
+
+## Phase-1 internal models — UAT interfaces (2026-09-07)
+
+Same convention as the invoice model: internal field names now, URA
+transcription in Phase 2.
+
+- **T130 goods**: `{goods:{name, goods_code, commodity_code, unit,
+  unit_price, currency, vat_category, stocked}}` → response
+  `goodsReference` stored verbatim on `efris_goods`.
+- **T131 stock**: `{stock:{goods_code, op:increase|decrease, qty, reason,
+  note}}` → `stockReference`; every movement (or refusal) appended to
+  `efris_stock_log`.
+- **T119 TIN**: `{tin}` → `{taxpayerName, status}`; cached 24h in
+  `efris_tin_cache.json` (list rows `{tin, checked_at, ok, error, taxpayer}`).
+- **T110 credit note**: invoice model with `invoice` renamed
+  `credit_note`, plus `{kind:'credit_note', reason, original:{ucrm_invoice_id,
+  fdn}}` → CN gets its own `fdn`; row kind `credit_note`,
+  `linked_invoice_id` set, original row → `CREDITED`.
+- **T114 cancel**: `{cancel:{credit_note_fdn, reason}}` → `referenceNo`;
+  row kind `cancel`; CN row → `CANCELLED`, original → `FISCALISED`.
+- **Buyer typing**: `buyer.type_code` = 0 B2B, 1 B2C, 2 foreigner, 3 B2G;
+  government/foreigner declared via the `efrisBuyerType` client attribute.

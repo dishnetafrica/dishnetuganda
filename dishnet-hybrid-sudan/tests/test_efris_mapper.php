@@ -118,8 +118,18 @@ $probeClient = [
     'attributes' => [],
 ];
 $mp = (new EfrisInvoiceMapper($cfg))->map($probeInvoice, $probeClient);
-t('live invoice maps ok', $mp['ok'], true);
+// UAT hardening: a company buyer with NO TIN can no longer pass as B2B —
+// URA validates the TIN (checklist Q6), so the mapper blocks with the fix.
+t('live company buyer without a TIN is blocked as B2B',
+  !$mp['ok'] && strpos(implode(' ', $mp['errors']), 'Buyer TIN is required') !== false, true);
 t('clientType 2 ⇒ business buyer', $mp['model']['buyer']['type'], 'business');
+t('business buyer carries EFRIS code 0', $mp['model']['buyer']['type_code'], 0);
+// The operator's fix for a shop without a TIN: mark it individual (B2C).
+$asB2C = $probeClient;
+$asB2C['attributes'] = [['key' => 'efrisBuyerType', 'value' => 'individual']];
+$mp = (new EfrisInvoiceMapper($cfg))->map($probeInvoice, $asB2C);
+t('marked individual, the same invoice maps ok', $mp['ok'], true);
+t('and carries EFRIS code 1 (B2C)', $mp['model']['buyer']['type_code'], 1);
 t('dueDate read', $mp['model']['invoice']['due_date'], '2026-09-19');
 t('taxableSupplyDate carried', $mp['model']['invoice']['taxable_supply_date'], '2026-09-05');
 t('untaxed line: shape none recorded', $mp['model']['meta']['tax_shapes'], ['none']);

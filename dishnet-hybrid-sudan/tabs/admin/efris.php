@@ -68,6 +68,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ef_action'])) {
                                 . htmlspecialchars($out['filename']) . '</a>'];
                 }
             }
+        } elseif ($act === 'goods_save') {
+            $r = $_efSvc->goodsService()->save([
+                'name'           => (string)($_POST['g_name'] ?? ''),
+                'goods_code'     => (string)($_POST['g_code'] ?? ''),
+                'commodity_code' => (string)($_POST['g_commodity'] ?? ''),
+                'unit'           => (string)($_POST['g_unit'] ?? 'each'),
+                'unit_price'     => (string)($_POST['g_price'] ?? ''),
+                'vat_category'   => (string)($_POST['g_vat'] ?? 'standard'),
+                'stocked'        => !empty($_POST['g_stocked']),
+            ]);
+            $_efMsg = ['ok' => $r['ok'],
+                'text' => $r['ok'] ? 'Item saved to the goods registry.' : htmlspecialchars((string)$r['error'])];
+        } elseif ($act === 'goods_register') {
+            $r = $_efSvc->goodsService()->register((int)($_POST['goods_id'] ?? 0));
+            $_efMsg = ['ok' => $r['ok'],
+                'text' => $r['ok'] ? 'Registered with EFRIS — reference ' . htmlspecialchars((string)$r['reference'])
+                                   : 'Registration failed: ' . htmlspecialchars((string)$r['error'])];
+        } elseif ($act === 'stock_adjust') {
+            $r = $_efSvc->goodsService()->adjustStock(
+                (int)($_POST['goods_id'] ?? 0),
+                (string)($_POST['stock_op'] ?? ''),
+                (float)($_POST['stock_qty'] ?? 0),
+                (string)($_POST['stock_reason'] ?? ''),
+                (string)($_POST['stock_note'] ?? ''),
+                is_array($retailer ?? null) ? (string)($retailer['name'] ?? 'admin') : 'admin');
+            $_efMsg = ['ok' => $r['ok'],
+                'text' => $r['ok'] ? 'Stock updated — now ' . (float)$r['stock_qty'] . ' on hand.'
+                                   : 'Stock movement refused: ' . htmlspecialchars((string)$r['error'])];
+        } elseif ($act === 'tin_check') {
+            $r = $_efSvc->queryTin((string)($_POST['tin'] ?? ''));
+            $_efMsg = ['ok' => $r['ok'],
+                'text' => $r['ok']
+                    ? 'TIN valid: ' . htmlspecialchars((string)($r['taxpayer']['name'] ?? ''))
+                      . ' (' . htmlspecialchars((string)($r['taxpayer']['status'] ?? '')) . ')'
+                      . ($r['cached'] ? ' — cached' : '')
+                    : 'TIN check failed: ' . htmlspecialchars((string)$r['error'])];
+        } elseif ($act === 'cn_submit' || $act === 'cn_retry') {
+            $r = $_efSvc->submitCreditNote((int)($_POST['cn_id'] ?? 0),
+                (string)($_POST['cn_reason'] ?? ''), 'manual', $act === 'cn_retry');
+            $_efMsg = ['ok' => $r['ok'],
+                'text' => ($r['duplicate'] ?? false ? 'Duplicate detected: ' : '')
+                        . $r['status'] . ' — ' . htmlspecialchars((string)$r['message'])];
+        } elseif ($act === 'cn_cancel') {
+            $r = $_efSvc->cancelCreditNote((int)($_POST['cn_id'] ?? 0),
+                (string)($_POST['cn_reason'] ?? ''), 'manual');
+            $_efMsg = ['ok' => $r['ok'],
+                'text' => $r['status'] . ' — ' . htmlspecialchars((string)$r['message'])];
         } elseif ($act === 'save_maps') {
             $parse = function (string $raw): array {
                 $rows = [];
@@ -121,6 +168,10 @@ $_efTaxRaw = '';
 foreach ((array)$store->load('efris_tax_map.json') as $r) {
     if (!empty($r['tax'])) $_efTaxRaw .= $r['tax'] . ' = ' . ($r['category'] ?? '') . "\n";
 }
+
+$_efGoods  = $_efSvc->goodsService()->registry()->all();
+$_efGCount = $_efSvc->goodsService()->registry()->counts();
+$_efStockLog = $_efSvc->goodsService()->registry()->stockLog(0, 12);
 
 $_efStatuses = ['PENDING','SUBMITTED','FISCALISED','REJECTED','ERROR','NEEDS_ADJUSTMENT','CANCELLED','CREDITED','DEBITED'];
 $_efBadge = function (string $s): string {
@@ -272,6 +323,136 @@ $_efBadge = function (string $s): string {
       </tr>
       <?php endforeach; ?>
     </table>
+    </div>
+  </div>
+
+  <!-- Goods & stock (URA checklist Q1/Q2/Q7) -->
+  <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:14px;">
+    <h3 style="margin:0 0 4px;">Goods &amp; services registry
+      <span style="font-size:12px;color:#6b7280;font-weight:400;">— <?= (int)$_efGCount['registered'] ?>/<?= (int)$_efGCount['total'] ?> registered with EFRIS</span></h3>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">
+      One row per item you sell. The <strong>name must match the uCRM invoice line label</strong> —
+      that is how invoices find the item. Saving a row with a commodity code also updates the
+      invoice mapping below automatically. Mark physical items (Starlink kits, routers) as
+      <em>stocked</em>; stock must arrive via a stock-in before they can be sold fiscally.
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#f9fafb;text-align:left;">
+        <th style="padding:6px 8px;">Item</th><th style="padding:6px 8px;">SKU</th>
+        <th style="padding:6px 8px;">Commodity</th><th style="padding:6px 8px;">Unit</th>
+        <th style="padding:6px 8px;">VAT</th><th style="padding:6px 8px;text-align:right;">Stock</th>
+        <th style="padding:6px 8px;">EFRIS</th><th style="padding:6px 8px;">Actions</th>
+      </tr>
+      <?php if (!$_efGoods): ?>
+        <tr><td colspan="8" style="padding:12px;color:#6b7280;">No items yet — add your service plans and hardware below.</td></tr>
+      <?php endif; ?>
+      <?php foreach ($_efGoods as $g): ?>
+      <tr style="border-top:1px solid #f3f4f6;">
+        <td style="padding:6px 8px;"><?= htmlspecialchars((string)$g['name']) ?></td>
+        <td style="padding:6px 8px;font-family:monospace;font-size:12px;"><?= htmlspecialchars((string)$g['goods_code']) ?></td>
+        <td style="padding:6px 8px;font-family:monospace;font-size:12px;"><?= htmlspecialchars((string)$g['commodity_code']) ?></td>
+        <td style="padding:6px 8px;"><?= htmlspecialchars((string)$g['unit']) ?></td>
+        <td style="padding:6px 8px;"><?= htmlspecialchars((string)$g['vat_category']) ?></td>
+        <td style="padding:6px 8px;text-align:right;"><?= (int)$g['stocked'] ? number_format((float)$g['stock_qty'], 0) : '<span style="color:#9ca3af">service</span>' ?></td>
+        <td style="padding:6px 8px;">
+          <?php if ($g['status'] === 'REGISTERED'): ?>
+            <span style="color:#065f46;font-weight:700;">✓ registered</span>
+          <?php elseif ($g['status'] === 'ERROR'): ?>
+            <span style="color:#991b1b;" title="<?= htmlspecialchars((string)$g['response_message']) ?>">✗ error</span>
+          <?php else: ?><span style="color:#b45309;">not registered</span><?php endif; ?>
+        </td>
+        <td style="padding:6px 8px;white-space:nowrap;">
+          <?php if ($g['status'] !== 'REGISTERED'): ?>
+          <form method="post" style="display:inline;"><?= $_csrf ?>
+            <input type="hidden" name="goods_id" value="<?= (int)$g['id'] ?>">
+            <button name="ef_action" value="goods_register" style="border:none;background:none;color:#1d4ed8;cursor:pointer;padding:0;font-size:13px;">Register (T130)</button>
+          </form>
+          <?php elseif ((int)$g['stocked']): ?>
+          <form method="post" style="display:inline-flex;gap:4px;align-items:center;"><?= $_csrf ?>
+            <input type="hidden" name="goods_id" value="<?= (int)$g['id'] ?>">
+            <select name="stock_op" style="padding:3px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+              <option value="increase">stock in</option><option value="decrease">stock out</option>
+            </select>
+            <input type="number" name="stock_qty" step="1" min="1" placeholder="qty" style="width:64px;padding:3px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+            <input type="text" name="stock_reason" placeholder="reason (purchase…)" style="width:130px;padding:3px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+            <button name="ef_action" value="stock_adjust" style="border:1px solid #d1d5db;background:#fff;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:12px;">Apply (T131)</button>
+          </form>
+          <?php endif; ?>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+    </table>
+    </div>
+    <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#1d4ed8;">Add / edit an item</summary>
+      <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px;"><?= $_csrf ?>
+        <label style="font-size:11px;color:#374151;">Name (uCRM line label)<br>
+          <input type="text" name="g_name" required style="padding:7px;border:1px solid #d1d5db;border-radius:6px;width:200px;"></label>
+        <label style="font-size:11px;color:#374151;">Your SKU<br>
+          <input type="text" name="g_code" style="padding:7px;border:1px solid #d1d5db;border-radius:6px;width:120px;"></label>
+        <label style="font-size:11px;color:#374151;">URA commodity code<br>
+          <input type="text" name="g_commodity" style="padding:7px;border:1px solid #d1d5db;border-radius:6px;width:150px;"></label>
+        <label style="font-size:11px;color:#374151;">Unit<br>
+          <select name="g_unit" style="padding:7px;border:1px solid #d1d5db;border-radius:6px;">
+            <?php foreach (EfrisGoodsStore::UNITS as $u): ?><option><?= $u ?></option><?php endforeach; ?>
+          </select></label>
+        <label style="font-size:11px;color:#374151;">Unit price (UGX)<br>
+          <input type="number" name="g_price" step="0.01" style="padding:7px;border:1px solid #d1d5db;border-radius:6px;width:110px;"></label>
+        <label style="font-size:11px;color:#374151;">VAT<br>
+          <select name="g_vat" style="padding:7px;border:1px solid #d1d5db;border-radius:6px;">
+            <?php foreach (EfrisGoodsStore::VAT_CATEGORIES as $v): ?><option><?= $v ?></option><?php endforeach; ?>
+          </select></label>
+        <label style="font-size:12px;color:#374151;display:flex;align-items:center;gap:4px;padding-bottom:8px;">
+          <input type="checkbox" name="g_stocked" value="1"> stocked (physical goods)</label>
+        <button name="ef_action" value="goods_save" style="padding:8px 14px;border-radius:6px;border:none;background:#141414;color:#fff;cursor:pointer;">Save item</button>
+      </form>
+    </details>
+    <?php if ($_efStockLog): ?>
+    <details style="margin-top:6px;"><summary style="cursor:pointer;font-size:13px;">Recent stock movements</summary>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;">
+        <?php foreach ($_efStockLog as $l): ?>
+        <tr style="border-top:1px solid #f3f4f6;">
+          <td style="padding:4px 8px;white-space:nowrap;"><?= htmlspecialchars(substr((string)$l['created_at'], 0, 16)) ?></td>
+          <td style="padding:4px 8px;"><?= htmlspecialchars((string)$l['goods_name']) ?></td>
+          <td style="padding:4px 8px;color:<?= $l['op'] === 'increase' ? '#065f46' : '#991b1b' ?>;"><?= $l['op'] === 'increase' ? '+' : '−' ?><?= number_format((float)$l['qty'], 0) ?></td>
+          <td style="padding:4px 8px;"><?= htmlspecialchars((string)$l['reason']) ?></td>
+          <td style="padding:4px 8px;color:<?= $l['status'] === 'OK' ? '#065f46' : '#991b1b' ?>;"><?= htmlspecialchars((string)$l['status']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </table>
+    </details>
+    <?php endif; ?>
+  </div>
+
+  <!-- TIN check + credit notes (URA checklist Q6/Q8/Q9) -->
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
+    <div style="flex:1;min-width:300px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+      <h3 style="margin:0 0 8px;">Validate a buyer TIN (T119)</h3>
+      <p style="font-size:12px;color:#6b7280;margin:0 0 8px;">
+        B2B and B2G invoices validate the buyer's TIN automatically before submission;
+        this checks one by hand. Answers are cached for a day.
+      </p>
+      <form method="post" style="display:flex;gap:8px;"><?= $_csrf ?>
+        <input type="text" name="tin" placeholder="10-digit TIN" pattern="\d{10}" required
+               style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;width:160px;">
+        <button name="ef_action" value="tin_check" style="padding:8px 14px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer;">Check</button>
+      </form>
+    </div>
+    <div style="flex:2;min-width:380px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+      <h3 style="margin:0 0 8px;">Credit notes (T110 / T114)</h3>
+      <p style="font-size:12px;color:#6b7280;margin:0 0 8px;">
+        Create the credit note in uCRM first (it stays the billing truth), then apply it
+        fiscally here with its uCRM credit-note ID. The original invoice must already be
+        fiscalised. Cancelling uses the same ID.
+      </p>
+      <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;"><?= $_csrf ?>
+        <input type="number" name="cn_id" placeholder="uCRM credit note ID" required
+               style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;width:170px;">
+        <input type="text" name="cn_reason" placeholder="reason (required)" required
+               style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;flex:1;min-width:180px;">
+        <button name="ef_action" value="cn_submit" style="padding:8px 14px;border-radius:6px;border:none;background:#141414;color:#fff;cursor:pointer;">Apply (T110)</button>
+        <button name="ef_action" value="cn_cancel" style="padding:8px 14px;border-radius:6px;border:1px solid #fca5a5;background:#fff;color:#991b1b;cursor:pointer;">Cancel (T114)</button>
+      </form>
     </div>
   </div>
 

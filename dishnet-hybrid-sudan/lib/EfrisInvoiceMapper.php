@@ -103,9 +103,26 @@ class EfrisInvoiceMapper
         $buyerType = $clientType === 2 ? 'business'
                    : ($clientType === 1 ? 'individual'
                    : (($tin !== '' || $company !== '') ? 'business' : 'individual'));
+        // The efrisBuyerType client attribute overrides — it is the only way
+        // uCRM can say "this customer is a government body" or "a foreigner".
+        $typeOverride = strtolower($attrs['buyer_type']);
+        if (in_array($typeOverride, ['government', 'b2g'], true))       $buyerType = 'government';
+        elseif (in_array($typeOverride, ['foreigner', 'foreign'], true)) $buyerType = 'foreigner';
+        elseif (in_array($typeOverride, ['business', 'b2b'], true))      $buyerType = 'business';
+        elseif (in_array($typeOverride, ['individual', 'b2c'], true))    $buyerType = 'individual';
+        // EFRIS buyerType enumeration: 0 B2B, 1 B2C, 2 foreigner, 3 B2G.
+        $typeCode = ['business' => 0, 'individual' => 1, 'foreigner' => 2, 'government' => 3][$buyerType];
+        // URA validates the buyer TIN on B2B and B2G — an invoice without one
+        // cannot pass, so it fails HERE with an actionable message.
+        if (in_array($buyerType, ['business', 'government'], true) && $tin === '') {
+            $errors[] = 'Buyer TIN is required for a ' . ($buyerType === 'government' ? 'B2G' : 'B2B')
+                      . ' invoice — set the efrisTin attribute on the uCRM client'
+                      . ($buyerType === 'business' ? ', or mark the client individual (efrisBuyerType=individual)' : '');
+        }
 
         $buyer = [
             'type'          => $buyerType,
+            'type_code'     => $typeCode,
             'name'          => $buyerName,
             'company_name'  => $company,
             'tin'           => $tin,
@@ -301,7 +318,7 @@ class EfrisInvoiceMapper
     /** Read EFRIS fields from uCRM client custom attributes (never a second DB). */
     private function clientAttributes(array $client): array
     {
-        $out = ['tin' => '', 'brn' => '', 'nin' => '', 'taxpayer_type' => ''];
+        $out = ['tin' => '', 'brn' => '', 'nin' => '', 'taxpayer_type' => '', 'buyer_type' => ''];
         foreach (($client['attributes'] ?? []) as $a) {
             $key = strtolower(preg_replace('/[^a-z0-9]/i', '',
                 (string)($a['key'] ?? $a['name'] ?? '')));
@@ -311,6 +328,7 @@ class EfrisInvoiceMapper
             elseif (substr($key, -3) === 'brn')                           $out['brn'] = $val;
             elseif (substr($key, -3) === 'nin')                           $out['nin'] = $val;
             elseif (strpos($key, 'taxpayertype') !== false)               $out['taxpayer_type'] = $val;
+            elseif (strpos($key, 'buyertype') !== false)                  $out['buyer_type'] = $val;
         }
         return $out;
     }
