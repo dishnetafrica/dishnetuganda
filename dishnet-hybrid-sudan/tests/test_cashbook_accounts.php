@@ -252,8 +252,12 @@ $pos = $cb5->currencyPositions();
 t('positions carry one entry per currency', array_keys($pos), ['UGX', 'USD']);
 t('UGX position = opening + customer payment only',
   $pos['UGX']['total'], 5329000.0);
-t('USD position = funding on both accounts (asset + liability)',
-  $pos['USD']['total'], 20000.0);
+t('USD CASH position = the bank leg only — the counterpart is not cash',
+  $pos['USD']['total'], 10000.0);
+t('the funding counterpart sits in its own bucket',
+  $pos['USD']['counterparts_total'], 10000.0);
+t('counterpart accounts are never in the cash account list',
+  count(array_filter($pos['USD']['accounts'], fn($a) => $a['kind'] === 'director')), 0);
 t('no combined figure exists anywhere in the position payload',
   !isset($pos['UGX']['combined']) && !isset($pos['USD']['combined'])
   && !array_key_exists('combined_usd', $pos) && !array_key_exists('total', $pos), true);
@@ -263,7 +267,7 @@ $fx5 = $cb5->recordAccountTransfer($usdBank5, $ugxBank5, 2000.0, 7440000.0,
     '2026-09-09', '', 'Ecobank board rate', 'Bhavin');
 t('FX transfer recorded', $fx5['ok'], true);
 $pos = $cb5->currencyPositions();
-t('USD position dropped by the USD leg', $pos['USD']['total'], 18000.0);
+t('USD cash position dropped by the USD leg', $pos['USD']['total'], 8000.0);
 t('UGX position rose by the UGX leg', $pos['UGX']['total'], 5329000.0 + 7440000.0);
 
 // (6)/(7)/(8) P&L: capital flows invisible, revenue is only the customer payment.

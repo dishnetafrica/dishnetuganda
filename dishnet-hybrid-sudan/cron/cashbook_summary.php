@@ -73,6 +73,11 @@ if (!dn_ssp_selectable($config)) {
         if (abs($pos['unassigned']) > 0.004) {
             $lines[] = "  (unassigned rows: {$pos['currency']} " . number_format($pos['unassigned'], 2) . ")";
         }
+        foreach ($pos['counterparts'] ?? [] as $cpt) {
+            if (!(float)$cpt['balance'] && empty($cpt['active'])) continue;
+            $kindLbl = $cpt['kind'] === 'equity' ? 'capital' : $cpt['kind'];
+            $lines[] = "  [{$kindLbl}] {$cpt['name']}: {$pos['currency']} " . number_format((float)$cpt['balance'], 2);
+        }
         $lines[] = "";
     }
     if (!$positions) { $lines[] = "No cash positions yet."; $lines[] = ""; }

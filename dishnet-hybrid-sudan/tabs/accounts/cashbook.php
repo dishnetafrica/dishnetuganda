@@ -996,6 +996,13 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
       <?php if ($_cbPosI === 0): ?>&nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entr<?= $_cbLiveCount === 1 ? 'y' : 'ies' ?><?php endif; ?>
       &nbsp;·&nbsp; <?php echo date('d M Y'); ?>
     </div>
+    <?php if (!empty($_pos['counterparts'])): ?>
+    <div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:4px;">
+      <?php foreach ($_pos['counterparts'] as $_cpt): if (!(float)$_cpt['balance'] && empty($_cpt['active'])) continue; ?>
+        <?= htmlspecialchars($_cpt['name']) ?> (<?= $_cpt['kind'] === 'equity' ? 'capital' : htmlspecialchars($_cpt['kind']) ?>): <?= htmlspecialchars($_pos['currency']) ?> <?= number_format((float)$_cpt['balance'], 2) ?>&nbsp;&nbsp;
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
     <?php if ($_cbPosI === 0 && $pendingCount > 0): ?>
     <div style="margin-top:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.25);border-radius:20px;padding:4px 10px;cursor:pointer;" onclick="location.href='?<?php echo htmlspecialchars(http_build_query(array_merge($_GET,['cb_view'=>'pending']))); ?>'">
       <span style="font-size:9px;font-weight:800;color:#fcd34d;">⚠ <?php echo $pendingCount; ?> pending settlement<?= $pendingCount === 1 ? '' : 's' ?></span>

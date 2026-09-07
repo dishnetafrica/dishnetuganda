@@ -183,7 +183,7 @@ $_obAccounts = $_obCb->accounts();
       <label style="font-size:12px;color:#374151;">Money lands in
         <select name="recv_id" required style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
           <option value="">— account —</option>
-          <?php foreach ($_obAccounts as $a): if (!(int)$a['active'] || in_array($a['kind'], ['payable','director'], true)) continue; ?>
+          <?php foreach ($_obAccounts as $a): if (!(int)$a['active'] || in_array($a['kind'], ['payable','director','equity'], true)) continue; ?>
             <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars((string)$a['name']) ?> (<?= htmlspecialchars((string)$a['currency']) ?>)</option>
           <?php endforeach; ?>
         </select>
@@ -191,7 +191,7 @@ $_obAccounts = $_obCb->accounts();
       <label style="font-size:12px;color:#374151;">Owed to
         <select name="liab_id" required style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;">
           <option value="">— liability account —</option>
-          <?php foreach ($_obAccounts as $a): if (!(int)$a['active'] || !in_array($a['kind'], ['payable','director'], true)) continue; ?>
+          <?php foreach ($_obAccounts as $a): if (!(int)$a['active'] || !in_array($a['kind'], ['payable','director','equity'], true)) continue; ?>
             <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars((string)$a['name']) ?> (<?= htmlspecialchars((string)$a['currency']) ?>)</option>
           <?php endforeach; ?>
         </select>

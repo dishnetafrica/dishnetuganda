@@ -117,8 +117,11 @@ class CashbookService
     // customer payments or expenses. Sudan is untouched: nothing writes here
     // unless the operator uses the Opening Balances screen.
 
+    // 'equity' = share capital / permanent investment: the counterpart of a
+    // capital contribution. It is NOT a payable — nothing is owed back.
     public const ACCOUNT_KINDS = [
         'bank', 'cash', 'momo', 'receivable', 'payable', 'inventory', 'asset', 'director',
+        'equity',
     ];
     public const TXN_TYPES = [
         'SALE', 'PAYMENT', 'EXPENSE', 'TRANSFER',
@@ -329,9 +332,11 @@ class CashbookService
         $recv = $this->account($receivingId);
         $liab = $this->account($liabilityId);
         if (!$recv || !$liab) return ['ok' => false, 'error' => 'Both accounts must exist'];
-        if (!in_array($liab['kind'], ['director', 'payable'], true)) {
-            return ['ok' => false, 'error' => 'The liability side must be a director/payable account'];
+        if (!in_array($liab['kind'], ['director', 'payable', 'equity'], true)) {
+            return ['ok' => false, 'error' => 'The counterpart must be a director/payable (loan) or equity (share capital) account'];
         }
+        $isEquity = ($liab['kind'] === 'equity');
+        $fundCat  = $isEquity ? 'Share Capital' : 'Loan Received';
         if ($recv['currency'] !== $liab['currency']) {
             return ['ok' => false, 'error' =>
                 "Currency mismatch: funds land in {$recv['currency']} but the liability account is "
@@ -342,12 +347,13 @@ class CashbookService
 
         $n   = (int)($this->query("SELECT COUNT(DISTINCT validation_ref) c FROM cb_ledger WHERE validation_ref LIKE 'FUND-%'")[0]['c'] ?? 0) + 1;
         $ref = $reference !== '' ? $reference : sprintf('FUND-%04d', $n);
-        $desc = $description !== '' ? $description : 'Shareholder/director funding received';
+        $desc = $description !== '' ? $description
+              : ($isEquity ? 'Share capital contribution' : 'Shareholder/director funding received');
 
         $this->addEntryRaw([
             'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
             'amount' => $amount, 'currency' => (string)$recv['currency'],
-            'category' => 'Loan Received', 'category_raw' => 'Loan Received',
+            'category' => $fundCat, 'category_raw' => $fundCat,
             'description' => $desc . " (into {$recv['name']})",
             'validation_ref' => $ref, 'validation_status' => 'na',
             'status' => 'approved', 'approved_by' => $admin, 'source' => 'funding',
@@ -356,8 +362,8 @@ class CashbookService
         $this->addEntryRaw([
             'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
             'amount' => $amount, 'currency' => (string)$liab['currency'],
-            'category' => 'Loan Received', 'category_raw' => 'Loan Received',
-            'description' => $desc . " — payable ({$liab['name']})",
+            'category' => $fundCat, 'category_raw' => $fundCat,
+            'description' => $desc . ($isEquity ? " — share capital ({$liab['name']})" : " — payable ({$liab['name']})"),
             'validation_ref' => $ref, 'validation_status' => 'na',
             'status' => 'approved', 'approved_by' => $admin, 'source' => 'funding',
             'account_id' => $liabilityId, 'txn_type' => 'DIRECTOR_FUNDING',
@@ -409,13 +415,18 @@ class CashbookService
      * rather than trading P&L. Typed rows are classified by txn_type instead.
      */
     public const CAPITAL_CATEGORIES = [
-        'Opening Balance', 'Loan Received', 'Loan Given', 'Loan Return Received',
+        'Opening Balance', 'Share Capital', 'Loan Received', 'Loan Given', 'Loan Return Received',
         'Interco In', 'Interco Out', 'Bank Transfer', 'Exchange',
         'Staff Advance', 'SSP Advance', 'SSP Return', 'Advance Return',
     ];
 
     /** Transaction types that are capital/flow movements, never P&L. */
     public const CAPITAL_TXN_TYPES = ['OPENING_BALANCE', 'DIRECTOR_FUNDING', 'TRANSFER', 'ADJUSTMENT'];
+
+    /** Kinds that HOLD money. Everything else (director/payable/equity/
+     *  receivable/inventory/asset) is a balance-sheet counterpart and must
+     *  never be added into a cash position. */
+    public const MONEY_KINDS = ['bank', 'cash', 'momo'];
 
     private function isCapitalRow(array $r): bool
     {
@@ -472,10 +483,17 @@ class CashbookService
             $cur = strtoupper($a['currency']);
             $positions[$cur] = $positions[$cur] ?? [
                 'currency' => $cur, 'accounts' => [], 'accounts_total' => 0.0,
+                'counterparts' => [], 'counterparts_total' => 0.0,
                 'unassigned' => 0.0, 'total' => 0.0,
             ];
-            $positions[$cur]['accounts'][] = $a;
-            $positions[$cur]['accounts_total'] = round($positions[$cur]['accounts_total'] + (float)$a['balance'], 2);
+            if (in_array($a['kind'], self::MONEY_KINDS, true)) {
+                $positions[$cur]['accounts'][] = $a;
+                $positions[$cur]['accounts_total'] = round($positions[$cur]['accounts_total'] + (float)$a['balance'], 2);
+            } else {
+                // Equity/liability/receivable counterparts: shown, never cash.
+                $positions[$cur]['counterparts'][] = $a;
+                $positions[$cur]['counterparts_total'] = round($positions[$cur]['counterparts_total'] + (float)$a['balance'], 2);
+            }
         }
 
         // Unassigned stream: approved rows with no account, per row currency.
@@ -492,6 +510,7 @@ class CashbookService
             $cur = strtoupper($row['cur']);
             $positions[$cur] = $positions[$cur] ?? [
                 'currency' => $cur, 'accounts' => [], 'accounts_total' => 0.0,
+                'counterparts' => [], 'counterparts_total' => 0.0,
                 'unassigned' => 0.0, 'total' => 0.0,
             ];
             $positions[$cur]['unassigned'] = (float)$row['bal'];
@@ -507,6 +526,7 @@ class CashbookService
         $baseCur = $this->bookBase();
         $positions[$baseCur] = $positions[$baseCur] ?? [
             'currency' => $baseCur, 'accounts' => [], 'accounts_total' => 0.0,
+            'counterparts' => [], 'counterparts_total' => 0.0,
             'unassigned' => 0.0, 'total' => 0.0,
         ];
         uksort($positions, function ($x, $y) use ($baseCur) {
