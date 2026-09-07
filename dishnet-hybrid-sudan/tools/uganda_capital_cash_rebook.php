@@ -1,26 +1,33 @@
 <?php
 declare(strict_types=1);
 /**
- * uganda_capital_cash_rebook.php — one-shot, guarded rebooking after the
- * operator clarified the real-world story (2026-09-07):
+ * uganda_capital_cash_rebook.php — one-shot, guarded rebooking to the real
+ * story, confirmed by the operator's own June entries (2026-09-07):
  *
- *   the USD 10,000 share capital was brought IN CASH — not via Ecobank —
- *   and the whole amount was then exchanged to UGX 35,200,000 at 3,520.
+ *   USD 10,000 share capital was brought IN CASH on 09 Jun 2026 (the
+ *   "09-06-2026" value date is dd-mm — June, not September), exchanged to
+ *   UGX 36,550,000 at 3,655 on 15 Jun 2026, and June expenses of
+ *   UGX 1,350,000 followed — leaving UGX 35,200,000 in hand today, which
+ *   reconciles exactly: 36,550,000 − 150,000 − 1,200,000 = 35,200,000.
  *
- * What the live book says today          →  What it should say
- *   FUND-0001: capital into Ecobank USD  →  capital into Cash – Uganda – USD
- *   FXC-0001:  unassigned USD -10,000 /  →  account transfer Cash USD →
- *              unassigned UGX +35.2M        Cash – Uganda (UGX), rate 3,520
+ * What the live book says              →  What it should say
+ *   FUND-0001: into Ecobank USD,       →  into Cash – Uganda – USD,
+ *              dated 2026-09-06            value date 2026-06-09
+ *   FXC-0001:  out USD 10,000 (Sept)   →  account transfer Cash USD →
+ *              + in-leg edited by hand     Cash – Uganda, USD 10,000 ↔
+ *              to UGX 36.55M (15 Jun)      UGX 36,550,000 @ 3,655, 15 Jun
+ *   CB-5/CB-6: June expenses           →  kept exactly as they are
  *
- * Steps (each leg voided stays on the ledger with its reason — audit trail):
+ * Steps (every voided leg stays on the ledger with its reason — audit trail):
  *   1. verify the live ledger matches EXACTLY this diagnosed state
- *   2. void the FXC-0001 exchange pair (if still active)
+ *   2. void the FXC-0001 exchange pair
  *   3. void the FUND-0001 funding pair
  *   4. find-or-create "Cash – Uganda – USD" (cash, USD)
- *   5. record share capital USD 10,000, value date 2026-09-06, into that
+ *   5. record share capital USD 10,000, value date 2026-06-09, into that
  *      cash account + Share Capital – Bhavin (USD)
  *   6. record the conversion as an account transfer: Cash – Uganda – USD →
- *      Cash – Uganda, USD 10,000 ↔ UGX 35,200,000 (money changer @ 3,520)
+ *      Cash – Uganda, USD 10,000 ↔ UGX 36,550,000 (money changer @ 3,655),
+ *      dated 2026-06-15
  *   7. print the resulting per-currency positions
  *
  * SAFE BY DEFAULT:
@@ -43,18 +50,26 @@ require_once $root . '/lib/CashbookService.php';
 require_once $root . '/lib/currency.php';
 
 const UCR_AMOUNT      = 10000.0;
-const UCR_UGX_AMOUNT  = 35200000.0;
-const UCR_RATE        = 3520.0;
-const UCR_VALUE_DATE  = '2026-09-06';
+const UCR_UGX_AMOUNT  = 36550000.0;
+const UCR_OLD_UGX     = 35200000.0;   // the pre-edit in-leg, if the edit was undone
+const UCR_RATE        = 3655.0;
+const UCR_VALUE_DATE  = '2026-06-09';
+const UCR_XFER_DATE   = '2026-06-15';
 const UCR_EQUITY_NAME = 'Share Capital – Bhavin (USD)';
 const UCR_BANK_NAME   = 'Ecobank Uganda – USD';
 const UCR_CASH_USD    = 'Cash – Uganda – USD';
 const UCR_CASH_UGX    = 'Cash – Uganda';
 const UCR_ACTOR       = 'Bhavin Madlani (CLI rebook)';
 const UCR_DESC_FUND   = 'Share capital contribution — Bhavin Madlani (brought in cash)';
-const UCR_DESC_XFER   = 'Capital converted to UGX — money changer @ 3,520';
-const UCR_VOID_FXC    = 'Rebooked as account transfer between cash accounts';
-const UCR_VOID_FUND   = 'Capital arrived as cash, not bank — rebooked into ' . UCR_CASH_USD;
+const UCR_DESC_XFER   = 'Capital converted to UGX — money changer @ 3,655';
+const UCR_VOID_FXC    = 'Rebooked as account transfer — actual conversion 15 Jun 2026 @ 3,655';
+const UCR_VOID_FUND   = 'Capital was cash on 09 Jun 2026, not bank — rebooked into ' . UCR_CASH_USD;
+
+// The operator's real June expense rows — recognised and KEPT untouched.
+const UCR_KEEP = [
+    ['amount' => 150000.0,  'category' => 'Vehicle'],
+    ['amount' => 1200000.0, 'category' => 'Site Expense'],
+];
 
 $confirm = in_array('--confirm', array_slice($argv, 1), true);
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
@@ -63,7 +78,7 @@ $cb      = new CashbookService($store, $dataDir);
 $pdo     = $store->getPdo();
 $mode    = $confirm ? 'EXECUTE' : 'DRY RUN (no writes — add --confirm to execute)';
 
-echo "══ Uganda capital cash rebook — {$mode}\n";
+echo "══ Uganda capital cash rebook (June story) — {$mode}\n";
 echo "   data dir: {$dataDir}\n";
 echo "   book base: " . $cb->bookBase() . "\n\n";
 
@@ -82,24 +97,31 @@ foreach ([UCR_BANK_NAME => ['bank', 'USD'], UCR_EQUITY_NAME => ['equity', 'USD']
         exit(1);
     }
 }
-$bankId   = (int)$byName[UCR_BANK_NAME]['id'];
-$equityId = (int)$byName[UCR_EQUITY_NAME]['id'];
+$bankId    = (int)$byName[UCR_BANK_NAME]['id'];
+$equityId  = (int)$byName[UCR_EQUITY_NAME]['id'];
 $cashUgxId = (int)$byName[UCR_CASH_UGX]['id'];
 
-// ── Guard: every ACTIVE row must be one of the four diagnosed legs
+// ── Guard: every ACTIVE row must be a diagnosed leg or a kept expense
 $active = $pdo->query(
     "SELECT id, sr, date, direction, amount, currency, category, account_id, source, validation_ref
      FROM cb_ledger WHERE status NOT IN ('voided','voided_reconcile') ORDER BY id"
 )->fetchAll(PDO::FETCH_ASSOC);
-$fundLegs = []; $fxcLegs = []; $strangers = [];
+$fundLegs = []; $fxcOut = []; $fxcIn = []; $kept = []; $strangers = [];
 foreach ($active as $r) {
     $amt = (float)$r['amount'];
     if ($r['validation_ref'] === 'FUND-0001' && $r['source'] === 'funding'
         && $r['direction'] === 'in' && $amt === UCR_AMOUNT && $r['currency'] === 'USD'
         && in_array((int)$r['account_id'], [$bankId, $equityId], true)) { $fundLegs[] = $r; continue; }
-    if ($r['validation_ref'] === 'FXC-0001' && $r['source'] === 'fx_exchange' && (int)$r['account_id'] === 0
-        && (($r['direction'] === 'out' && $amt === UCR_AMOUNT && $r['currency'] === 'USD')
-         || ($r['direction'] === 'in' && $amt === UCR_UGX_AMOUNT && $r['currency'] === 'UGX'))) { $fxcLegs[] = $r; continue; }
+    if ($r['validation_ref'] === 'FXC-0001' && $r['source'] === 'fx_exchange' && (int)$r['account_id'] === 0) {
+        if ($r['direction'] === 'out' && $amt === UCR_AMOUNT && $r['currency'] === 'USD') { $fxcOut[] = $r; continue; }
+        if ($r['direction'] === 'in' && $r['currency'] === 'UGX'
+            && in_array($amt, [UCR_UGX_AMOUNT, UCR_OLD_UGX], true)) { $fxcIn[] = $r; continue; }
+    }
+    if ($r['source'] === 'manual' && $r['direction'] === 'out' && $r['currency'] === 'UGX' && (int)$r['account_id'] === 0) {
+        foreach (UCR_KEEP as $k) {
+            if ($amt === $k['amount'] && $r['category'] === $k['category']) { $kept[] = $r; continue 2; }
+        }
+    }
     $strangers[] = $r;
 }
 if ($strangers) {
@@ -115,34 +137,32 @@ if (count($fundLegs) !== 2) {
     fwrite(STDERR, "ABORT: expected the FUND-0001 pair (2 active legs), found " . count($fundLegs) . ". Investigate first.\n");
     exit(1);
 }
-if (!in_array(count($fxcLegs), [0, 2], true)) {
-    fwrite(STDERR, "ABORT: FXC-0001 has " . count($fxcLegs) . " active leg(s) — expected the pair or none. Investigate first.\n");
+if (count($fxcOut) !== 1 || count($fxcIn) !== 1) {
+    fwrite(STDERR, "ABORT: expected the FXC-0001 pair (1 out + 1 in active leg), found "
+        . count($fxcOut) . " out / " . count($fxcIn) . " in. Investigate first.\n");
     exit(1);
 }
 
-$xferDate = UCR_VALUE_DATE;
-foreach ($fxcLegs as $r) if ($r['direction'] === 'in') $xferDate = $r['date'];
-if (!$fxcLegs) $xferDate = '2026-09-07';
-
-echo "1. FUND-0001 pair found (into " . UCR_BANK_NAME . ") — will VOID both legs: '" . UCR_VOID_FUND . "'.\n";
-echo "2. " . ($fxcLegs ? "FXC-0001 exchange pair found — will VOID both legs: '" . UCR_VOID_FXC . "'."
-                        : "FXC-0001 already voided/absent — void step skipped.") . "\n";
-echo "3. Cash account: " . UCR_CASH_USD . (isset($byName[UCR_CASH_USD]) ? " — exists." : " — will create (USD, cash).") . "\n";
-echo "4. Will record: USD " . number_format(UCR_AMOUNT, 2) . " share capital, value date " . UCR_VALUE_DATE
-   . ", into " . UCR_CASH_USD . " + " . UCR_EQUITY_NAME . " (typed pair, excluded from P&L).\n";
-echo "5. Will record: transfer " . UCR_CASH_USD . " → " . UCR_CASH_UGX . ", USD " . number_format(UCR_AMOUNT, 2)
-   . " ↔ UGX " . number_format(UCR_UGX_AMOUNT, 2) . " @ " . number_format(UCR_RATE, 0) . ", date {$xferDate}.\n\n";
+echo "1. FUND-0001 pair found (into " . UCR_BANK_NAME . ", dated 2026-09-06) — will VOID both legs:\n   '" . UCR_VOID_FUND . "'.\n";
+echo "2. FXC-0001 pair found (out USD 10,000 + in UGX " . number_format((float)$fxcIn[0]['amount'], 0)
+   . ", the in-leg hand-edited) — will VOID both legs:\n   '" . UCR_VOID_FXC . "'.\n";
+echo "3. Kept untouched: " . count($kept) . " real June expense row(s) — "
+   . implode(', ', array_map(fn($r) => "{$r['sr']} {$r['category']} UGX " . number_format((float)$r['amount'], 0), $kept)) . ".\n";
+echo "4. Cash account: " . UCR_CASH_USD . (isset($byName[UCR_CASH_USD]) ? " — exists." : " — will create (USD, cash).") . "\n";
+echo "5. Will record: USD " . number_format(UCR_AMOUNT, 2) . " share capital, value date " . UCR_VALUE_DATE
+   . " (09 Jun 2026), into " . UCR_CASH_USD . " + " . UCR_EQUITY_NAME . ".\n";
+echo "6. Will record: transfer " . UCR_CASH_USD . " → " . UCR_CASH_UGX . ", USD " . number_format(UCR_AMOUNT, 2)
+   . " ↔ UGX " . number_format(UCR_UGX_AMOUNT, 0) . " @ " . number_format(UCR_RATE, 0) . ", date " . UCR_XFER_DATE . " (15 Jun 2026).\n\n";
 
 if (!$confirm) {
     echo "DRY RUN complete — nothing was changed. Re-run with --confirm to execute.\n";
     exit(0);
 }
 
-if ($fxcLegs) {
-    $v = $cb->voidEntry((int)$fxcLegs[0]['id'], UCR_VOID_FXC, UCR_ACTOR);
-    if (!($v['ok'] ?? false) || (int)($v['voided'] ?? 0) !== 2) { fwrite(STDERR, "ABORT: FXC void failed — " . ($v['error'] ?? '?') . "\n"); exit(1); }
-    echo "✔ Voided the FXC-0001 exchange pair (2 legs).\n";
-}
+$v = $cb->voidEntry((int)$fxcOut[0]['id'], UCR_VOID_FXC, UCR_ACTOR);
+if (!($v['ok'] ?? false) || (int)($v['voided'] ?? 0) !== 2) { fwrite(STDERR, "ABORT: FXC void failed — " . ($v['error'] ?? '?') . "\n"); exit(1); }
+echo "✔ Voided the FXC-0001 exchange pair (2 legs).\n";
+
 $v = $cb->voidEntry((int)$fundLegs[0]['id'], UCR_VOID_FUND, UCR_ACTOR);
 if (!($v['ok'] ?? false) || (int)($v['voided'] ?? 0) !== 2) { fwrite(STDERR, "ABORT: FUND void failed — " . ($v['error'] ?? '?') . "\n"); exit(1); }
 echo "✔ Voided the FUND-0001 funding pair (2 legs).\n";
@@ -159,8 +179,8 @@ $f = $cb->recordFunding($cashUsdId, $equityId, UCR_AMOUNT, UCR_VALUE_DATE, UCR_D
 if (!($f['ok'] ?? false)) { fwrite(STDERR, "ABORT: funding failed — " . ($f['error'] ?? '?') . "\n"); exit(1); }
 echo "✔ Share capital recorded in cash — ref {$f['ref']} (value date " . UCR_VALUE_DATE . ").\n";
 
-$t = $cb->recordAccountTransfer($cashUsdId, $cashUgxId, UCR_AMOUNT, UCR_UGX_AMOUNT, $xferDate,
-    UCR_DESC_XFER, 'Money changer @ 3,520', UCR_ACTOR);
+$t = $cb->recordAccountTransfer($cashUsdId, $cashUgxId, UCR_AMOUNT, UCR_UGX_AMOUNT, UCR_XFER_DATE,
+    UCR_DESC_XFER, 'Money changer @ 3,655', UCR_ACTOR);
 if (!($t['ok'] ?? false)) { fwrite(STDERR, "ABORT: transfer failed — " . ($t['error'] ?? '?') . "\n"); exit(1); }
 echo "✔ Conversion recorded as account transfer — ref {$t['ref']} @ " . number_format((float)$t['rate'], 2) . ".\n\n";
 
@@ -180,8 +200,8 @@ foreach ($cb->currencyPositions() as $pos) {
         echo "    [{$kindLbl}] {$a['name']}: {$pos['currency']} " . number_format((float)$a['balance'], 2) . "\n";
     }
 }
-echo "\nDone. The story the book now tells: Bhavin brought USD 10,000 in cash\n"
-   . "(share capital), and it was exchanged for UGX 35,200,000 at 3,520 —\n"
-   . "now sitting in " . UCR_CASH_UGX . ". If part of those shillings went into\n"
-   . "Ecobank UGX or Mobile Money, record a same-currency Transfer on the\n"
-   . "Opening Balances screen from " . UCR_CASH_UGX . " to that account.\n";
+echo "\nDone. The story the book now tells: USD 10,000 brought in cash on\n"
+   . "09 Jun 2026 (share capital), exchanged for UGX 36,550,000 at 3,655 on\n"
+   . "15 Jun 2026, June expenses of UGX 1,350,000 — leaving UGX 35,200,000\n"
+   . "in hand, matching the cash box. The June expenses stay unassigned for\n"
+   . "now; per-account expense mapping arrives with the next phase.\n";

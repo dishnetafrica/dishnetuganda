@@ -374,6 +374,17 @@ t('and the error points at Void', strpos((string)$xDel['error'], 'Void') !== fal
 $plain7 = $cb7->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 5.0,
     'category' => 'Receipt', 'description' => 'plain row'], ['name' => 't'], true);
 t('a plain manual row still deletes', $cb7->deleteEntry((int)$plain7['id'], ['name' => 't'])['ok'], true);
+// Editing one leg's money fields is the same trap as deleting it (live: the
+// FXC in-leg was hand-edited to a new amount/date while the out leg kept the old).
+$xEdit = $cb7->updateEntry($xPairLeg, ['amount' => 999.0], ['name' => 't']);
+t('editing a pair leg amount is refused', $xEdit['ok'], false);
+t('and the error points at Void', strpos((string)$xEdit['error'], 'Void') !== false, true);
+t('a harmless description edit on a pair leg still works',
+  $cb7->updateEntry($xPairLeg, ['description' => 'note'], ['name' => 't'])['ok'], true);
+$plain8 = $cb7->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 5.0,
+    'category' => 'Receipt', 'description' => 'plain row 2'], ['name' => 't'], true);
+t('a plain row amount edit still works',
+  $cb7->updateEntry((int)$plain8['id'], ['amount' => 6.0], ['name' => 't'])['ok'], true);
 t('junk direction refused', $cb7->recordCashExchange(100.0, 3730.0, 'sideways', '2026-09-07', '', 'dishnet', '', 't')['ok'], false);
 $t8  = sys_get_temp_dir() . '/cb_acct_t8_' . getmypid();
 @mkdir($t8, 0777, true);

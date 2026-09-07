@@ -1735,6 +1735,19 @@ class CashbookService
 
     public function updateEntry(int $id, array $data, array $admin): array
     {
+        // The money fields of a linked pair stay in step with the other leg:
+        // live, one exchange leg was edited to a new amount/date while its
+        // counterpart kept the old ones. Void the pair and re-enter instead.
+        $row = $this->dbq("SELECT source FROM cb_ledger WHERE id=?", [$id]);
+        if (empty($row)) return ['ok'=>false,'error'=>'Entry not found'];
+        if (in_array((string)($row[0]['source'] ?? ''), ['account_transfer', 'funding', 'fx_exchange'], true)) {
+            foreach (['amount', 'date', 'direction', 'category'] as $f) {
+                if (array_key_exists($f, $data)) {
+                    return ['ok'=>false,'error'=>
+                        'This is one leg of a linked two-leg entry — its amount, date, direction and category stay in step with the other leg. Void the pair and re-enter it instead.'];
+                }
+            }
+        }
         $allowed = ['description','validation_ref','validation_status','category','person','amount','date','direction'];
         $sets = []; $params = [];
         foreach ($allowed as $f) {
