@@ -265,11 +265,19 @@
         $curPwd  = trim($body['current_password']  ?? '');
         $newPwd  = trim($body['new_password']       ?? '');
         $confPwd = trim($body['confirm_password']   ?? '');
-        if (!$curPwd)                   $er2('Current password is required.');
+        // FORCED first-run change: the account still carries the known
+        // default password and this very session was just opened with it.
+        // The modal deliberately has no "current password" field — demanding
+        // one here locked every new staff member out on their first login.
+        // Authoritative flag = the retailer RECORD, not the session copy.
+        $recNow      = $store->findOne('retailers.json', 'id', $rid) ?: [];
+        $forcedFirst = !empty($recNow['must_change_pwd']);
+        if (!$forcedFirst) {
+            if (!$curPwd)               $er2('Current password is required.');
+            if (!$auth->verifyPassword($rid, $curPwd)) $er2('Current password is incorrect.');
+        }
         if (strlen($newPwd) < 8)        $er2('Password must be at least 8 characters.');
         if ($newPwd !== $confPwd)        $er2('Passwords do not match.');
-        // Verify current password
-        if (!$auth->verifyPassword($rid, $curPwd)) $er2('Current password is incorrect.');
         $auth->updateRetailer($rid, ['password' => $newPwd], false);
         if (isset($_SESSION['dn_retailer'])) $_SESSION['dn_retailer']['must_change_pwd'] = false;
         $ok2([], 'Password changed successfully.');

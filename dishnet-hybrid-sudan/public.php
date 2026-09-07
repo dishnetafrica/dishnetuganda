@@ -1587,7 +1587,10 @@ async function fpSave() {
     }).then(function(r) { return r.json(); });
     if (res.status === 'success') {
       document.getElementById('forcePwdModal').remove();
-      showToast(' Password updated successfully!', 'success');
+      showToast(' Password updated — reloading…', 'success');
+      // The API token rotates on password change; reload so the page picks
+      // up the fresh one instead of keeping the dead token.
+      setTimeout(function(){ location.reload(); }, 800);
     } else {
       errEl.textContent = res.message || 'Failed to save. Try again.';
       errEl.style.display = 'block';

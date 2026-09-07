@@ -342,6 +342,16 @@ class RetailerAuth
      */
     public function updateRetailer(int $id, array $updates, bool $callerIsAdmin = false): bool
     {
+        // MED-07 FIX: Strip privilege-escalation fields unless caller is admin.
+        // A sales agent could POST is_admin=1 to upgrade themselves without
+        // this guard. Runs BEFORE the password branch: stripping afterwards
+        // used to discard the CRIT-05 token rotation for every self-service
+        // password change, leaving the old token alive.
+        if (!$callerIsAdmin) {
+            unset($updates['is_admin'], $updates['role'], $updates['is_field_agent'],
+                  $updates['api_token'], $updates['token_issued_at'], $updates['wallet']);
+        }
+
         if (isset($updates['password']) && $updates['password']) {
             $updates['password'] = password_hash($updates['password'], PASSWORD_BCRYPT, ['cost' => 12]);
             // CRIT-05: Rotate token on password change
@@ -351,13 +361,6 @@ class RetailerAuth
             $updates['must_change_pwd'] = false;
         } else {
             unset($updates['password']);
-        }
-
-        // MED-07 FIX: Strip privilege-escalation fields unless caller is admin.
-        // A sales agent could POST is_admin=1 to upgrade themselves without this guard.
-        if (!$callerIsAdmin) {
-            unset($updates['is_admin'], $updates['role'], $updates['is_field_agent'],
-                  $updates['api_token'], $updates['token_issued_at'], $updates['wallet']);
         }
 
         return $this->store->updateOne('retailers.json', 'id', $id, $updates);
