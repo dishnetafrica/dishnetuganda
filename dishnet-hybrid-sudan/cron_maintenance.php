@@ -1074,19 +1074,32 @@ try {
         require_once __DIR__ . '/lib/CashbookService.php';
         $cbSummary = new CashbookService($store, $dataDir);
 
-        // Get today's entries
+        // Get today's entries — totals PER CURRENCY (never one blind sum;
+        // a UGX and a USD row cannot share a total). The message renders the
+        // base stream in the headline and any others as extra lines.
         $allEntries = $cbSummary->getEntries(['date_from' => $todayStr2, 'date_to' => $todayStr2, 'limit' => 9999]);
-        $totalIn  = 0;
-        $totalOut = 0;
+        $_mBase = dn_book_base($config ?? null);
+        $byCur  = [];
         $countIn  = 0;
         $countOut = 0;
         foreach ($allEntries as $e) {
-            $amt = (float)($e['amount'] ?? 0);
+            if (in_array($e['status'] ?? '', ['voided', 'voided_reconcile'], true)) continue;
+            $cur = strtoupper(trim((string)($e['currency'] ?? ''))) ?: $_mBase;
+            $amt = ($cur === 'SSP') ? (float)($e['ssp_amount'] ?? 0) : (float)($e['amount'] ?? 0);
             $dir = $e['direction'] ?? '';
-            if ($dir === 'in')  { $totalIn  += $amt; $countIn++;  }
-            if ($dir === 'out') { $totalOut += $amt; $countOut++; }
+            $byCur[$cur] = $byCur[$cur] ?? ['in' => 0.0, 'out' => 0.0];
+            if ($dir === 'in')  { $byCur[$cur]['in']  += $amt; $countIn++;  }
+            if ($dir === 'out') { $byCur[$cur]['out'] += $amt; $countOut++; }
         }
-        $netFlow = $totalIn - $totalOut;
+        $totalIn  = $byCur[$_mBase]['in']  ?? 0.0;
+        $totalOut = $byCur[$_mBase]['out'] ?? 0.0;
+        $netFlow  = $totalIn - $totalOut;
+        $extraCurLines = '';
+        foreach ($byCur as $cur => $t) {
+            if ($cur === $_mBase) continue;
+            $extraCurLines .= "\n{$cur}: IN +" . number_format($t['in'], 2)
+                            . " / OUT -" . number_format($t['out'], 2) . " {$cur}";
+        }
 
         // Agent-wise collection summary
         if (!class_exists('StaffCashPositionService')) {
@@ -1114,7 +1127,8 @@ try {
         $msg = "📊 *Cashbook Daily Summary — {$todayStr2}*\n\n"
              . "💰 *Cash IN:*  " . dn_cur($config) . number_format($totalIn, 2) . " ({$countIn} entries)\n"
              . "💸 *Cash OUT:* " . dn_cur($config) . number_format($totalOut, 2) . " ({$countOut} entries)\n"
-             . "📈 *Net Flow:* " . dn_cur($config) . number_format($netFlow, 2) . "\n";
+             . "📈 *Net Flow:* " . dn_cur($config) . number_format($netFlow, 2) . "\n"
+             . ($extraCurLines !== '' ? "🌐 *Other currencies:*" . $extraCurLines . "\n" : '');
 
         if (!empty($agentLines)) {
             $msg .= "\n👥 *Cash Held by Agents:*\n" . implode("\n", $agentLines) . "\n";

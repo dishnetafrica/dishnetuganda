@@ -961,8 +961,52 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
     💰 Cashbook &nbsp;·&nbsp; <span style="font-weight:500;"><?php echo $filterCurr !== '' ? $filterCurr.' Ledger' : (count($_cbCurrs) > 1 ? 'Cash ledger · '.implode(' &amp; ', $_cbCurrs) : $_cbBase.' cash ledger'); ?></span>
   </div>
 
-  <?php if ($filterCurr === '' || $filterCurr === $_cbBase): ?>
-  <!-- Green base-currency card -->
+  <?php if (!$_cbSSP): ?>
+  <!-- Phase C: per-currency POSITION cards. Each total lives in its OWN
+       currency; the label comes from the position data, never the display
+       symbol — a USD stream can no longer wear a UGX costume. No combined
+       figure exists on this screen. -->
+  <?php
+    $_cbPositions = $cb->currencyPositions();
+    if (!$_cbPositions) {
+        $_cbPositions = [$_cbBase => ['currency' => $_cbBase, 'accounts' => [],
+            'accounts_total' => 0.0, 'unassigned' => 0.0, 'total' => 0.0]];
+    }
+    $_cbLiveCount = $cb->countEntries($proj);
+    $_cbPosBgs = ['#1a6b3a', '#1a3a7a', '#5b3a7a'];
+    $_cbPosI = 0;
+    foreach ($_cbPositions as $_pos):
+      if ($filterCurr !== '' && $_pos['currency'] !== $filterCurr) { $_cbPosI++; continue; }
+      $_posBg = $_cbPosBgs[min($_cbPosI, 2)];
+  ?>
+  <div style="background:<?= $_posBg ?>;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">💼 <?= htmlspecialchars($_pos['currency']) ?> POSITION</div>
+    <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= htmlspecialchars($_pos['currency']) ?> <?php echo number_format($_pos['total'], 2); ?></div>
+    <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;">
+      <?php if (!empty($_pos['accounts'])): ?>
+        <?= count($_pos['accounts']) ?> account<?= count($_pos['accounts']) === 1 ? '' : 's' ?>:
+        <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['accounts_total'], 2) ?>
+        <?php if (abs($_pos['unassigned']) > 0.004): ?>
+          &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?>
+        <?php endif; ?>
+      <?php else: ?>
+        no <?= htmlspecialchars($_pos['currency']) ?> accounts yet<?php if (abs($_pos['unassigned']) > 0.004): ?> &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?><?php endif; ?>
+      <?php endif; ?>
+      <?php if ($_cbPosI === 0): ?>&nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entries<?php endif; ?>
+      &nbsp;·&nbsp; <?php echo date('d M Y'); ?>
+    </div>
+    <?php if ($_cbPosI === 0 && $pendingCount > 0): ?>
+    <div style="margin-top:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.25);border-radius:20px;padding:4px 10px;cursor:pointer;" onclick="location.href='?<?php echo htmlspecialchars(http_build_query(array_merge($_GET,['cb_view'=>'pending']))); ?>'">
+      <span style="font-size:9px;font-weight:800;color:#fcd34d;">⚠ <?php echo $pendingCount; ?> pending settlement<?= $pendingCount === 1 ? '' : 's' ?></span>
+    </div>
+    <?php endif; ?>
+  </div>
+  <?php $_cbPosI++; endforeach; ?>
+  <?php endif; ?>
+
+  <?php if ($_cbSSP && ($filterCurr === '' || $filterCurr === $_cbBase)): ?>
+  <!-- Green base-currency card (legacy dual-currency book) -->
   <div style="background:#1a6b3a;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
     <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;"><?= $_cbBase === 'USD' ? "\u{1F4B5}" : "\u{1F1FA}\u{1F1EC}" ?> <?= htmlspecialchars($_cbBase) ?> BALANCE</div>
@@ -1489,7 +1533,7 @@ document.addEventListener('DOMContentLoaded', function() {
   elseif($src==='collect_payment'||$src==='crm_sync') $srcBadge='<span class="cb3-card-src pwa">📱PWA</span>';
   $crudData = htmlspecialchars(json_encode(['sr'=>$e['sr'],'date'=>$e['date'],'direction'=>$e['direction'],'amount'=>$e['amount'],'category'=>$e['category'],'category_raw'=>$e['category_raw']??'','person'=>$e['person'],'description'=>$e['description'],'validation_ref'=>$e['validation_ref'],'validation_status'=>$e['validation_status'],'source'=>$src]),ENT_QUOTES);
 ?>
-<div class="cb3-card <?php echo $isPend?'pend':''; ?>" data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
+<div class="cb3-card <?php echo $isPend?'pend':''; ?>"<?php if (in_array($e['status'] ?? '', ['voided','voided_reconcile'], true)): ?> style="opacity:.5;"<?php endif; ?> data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
   <?php if($isAdmin): ?>
   <div class="cb3-card-sel">
     <input type="checkbox" class="cb-row-chk" value="<?php echo $e['id']; ?>" onchange="cbSelChanged()" style="width:16px;height:16px;cursor:pointer;">
@@ -1542,7 +1586,8 @@ document.addEventListener('DOMContentLoaded', function() {
     $isIn=$e['direction']==='in'; $isPend=$e['validation_status']==='pending';
     $src=$e['source']??'manual';
     $crudData2 = htmlspecialchars(json_encode(['sr'=>$e['sr'],'date'=>$e['date'],'direction'=>$e['direction'],'amount'=>$e['amount'],'category'=>$e['category'],'category_raw'=>$e['category_raw']??'','person'=>$e['person'],'description'=>$e['description'],'validation_ref'=>$e['validation_ref'],'validation_status'=>$e['validation_status'],'source'=>$src]),ENT_QUOTES); ?>
-  <tr <?php echo $isPend?'style="background:#fffbeb;"':''; ?> data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
+  <?php $_isVoidRow = in_array($e['status'] ?? '', ['voided','voided_reconcile'], true); ?>
+  <tr <?php echo $_isVoidRow ? 'style="opacity:.5;text-decoration:line-through;background:#fafafa;"' : ($isPend?'style="background:#fffbeb;"':''); ?> data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
     <?php if($isAdmin): ?><td><input type="checkbox" class="cb-row-chk" value="<?php echo $e['id']; ?>" onchange="cbSelChanged()" style="cursor:pointer;width:14px;height:14px;"></td><?php endif; ?>
     <td style="font-family:monospace;font-size:10px;color:#94a3b8;"><?php echo htmlspecialchars($e['sr']); ?></td>
     <td style="font-family:monospace;font-size:10px;white-space:nowrap;"><?php echo $e['date']; ?></td>
@@ -1810,6 +1855,63 @@ $icOut=array_sum(array_column(array_filter($interco,fn($r)=>$r['direction']==='o
 </div>
 
 <?php elseif($view==='summary'): ?>
+<?php if (!$_cbSSP): ?>
+<?php
+// Phase C: cash-basis trading P&L, one section per currency. Capital flows
+// (openings, funding, transfers, adjustments) are excluded by the reader
+// itself; refunds are a contra-revenue line. Currencies are NEVER summed.
+$sumYear = $_GET['cb_yr'] ?? date('Y');
+$plData  = $cb->plByPeriod($proj, $sumYear.'-01-01', $sumYear.'-12-31');
+$inColors=['#059669','#0891b2','#7c3aed','#0369a1','#065f46','#1d4ed8'];
+$outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9','#374151'];
+?>
+<div class="cbv2-tb">
+  <select class="cbv2-fi" onchange="cbv2F('cb_yr',this.value)">
+    <?php foreach(['2026','2025','2024'] as $yr): ?>
+    <option value="<?php echo $yr; ?>" <?php echo $sumYear===$yr?'selected':''; ?>><?php echo $yr; ?></option>
+    <?php endforeach; ?>
+  </select>
+  <span style="font-size:12px;color:#94a3b8;">Trading P&amp;L · capital flows excluded · one section per currency</span>
+</div>
+<?php if (!$plData): ?>
+<div style="background:#fff;border:1.5px solid #e8e8e3;border-radius:14px;padding:28px;text-align:center;color:#94a3b8;font-size:13px;">
+  No trading activity in <?= htmlspecialchars($sumYear) ?> yet.
+</div>
+<?php endif; ?>
+<?php foreach ($plData as $_pl): $_pc = htmlspecialchars($_pl['currency']);
+      $maxIn=max(1,max($_pl['revenue'] ?: [1])); $maxOut=max(1,max($_pl['expenses'] ?: [1])); ?>
+<div style="margin-bottom:18px;">
+  <div style="font-size:13px;font-weight:800;color:#0f0f0f;margin:14px 0 8px;letter-spacing:.5px;"><?= $_pc ?> POSITION —
+    Revenue <span style="color:#059669;"><?= $_pc ?> <?= number_format($_pl['revenue_total'],0) ?></span>
+    <?php if (abs($_pl['refunds_total']) > 0.004): ?> · Refunds <span style="color:#b45309;">−<?= $_pc ?> <?= number_format($_pl['refunds_total'],0) ?></span><?php endif; ?>
+    · Expenses <span style="color:#dc2626;"><?= $_pc ?> <?= number_format($_pl['expense_total'],0) ?></span>
+    · Net <span style="color:<?= $_pl['net']>=0?'#059669':'#dc2626' ?>;"><?= $_pc ?> <?= number_format($_pl['net'],0) ?></span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#e5e5e0;">
+    <div style="background:#fff;padding:18px;">
+      <div style="font-size:13px;font-weight:800;color:#059669;margin-bottom:14px;">💰 Revenue — <?= $_pc ?> <?= number_format($_pl['revenue_total'],0) ?></div>
+      <?php $i=0; foreach($_pl['revenue'] as $cat=>$tot): $col=$inColors[$i%count($inColors)]; $i++; ?>
+      <div class="cbv2-sum-row">
+        <div class="cbv2-sum-label"><?php echo cbCatIcon($cat).' '.htmlspecialchars($cat); ?></div>
+        <div class="cbv2-sum-bw"><div class="cbv2-sum-b" style="width:<?php echo round($tot/$maxIn*100); ?>%;background:<?php echo $col; ?>;"></div></div>
+        <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;"><?= $_pc ?> <?php echo number_format($tot,0); ?></div>
+      </div>
+      <?php endforeach; if (!$_pl['revenue']) echo '<div style="font-size:12px;color:#94a3b8;">—</div>'; ?>
+    </div>
+    <div style="background:#fff;padding:18px;">
+      <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:14px;">💸 Expenses — <?= $_pc ?> <?= number_format($_pl['expense_total'],0) ?></div>
+      <?php $i=0; foreach($_pl['expenses'] as $cat=>$tot): $col=$outColors[$i%count($outColors)]; $i++; ?>
+      <div class="cbv2-sum-row">
+        <div class="cbv2-sum-label"><?php echo cbCatIcon($cat).' '.htmlspecialchars($cat); ?></div>
+        <div class="cbv2-sum-bw"><div class="cbv2-sum-b" style="width:<?php echo round($tot/$maxOut*100); ?>%;background:<?php echo $col; ?>;"></div></div>
+        <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;"><?= $_pc ?> <?php echo number_format($tot,0); ?></div>
+      </div>
+      <?php endforeach; if (!$_pl['expenses']) echo '<div style="font-size:12px;color:#94a3b8;">—</div>'; ?>
+    </div>
+  </div>
+</div>
+<?php endforeach; ?>
+<?php else: ?>
 <?php
 $sumYear=$_GET['cb_yr']??date('Y');
 $summary=$cb->getSummary($proj,$sumYear.'-01-01',$sumYear.'-12-31');
@@ -1849,6 +1951,7 @@ $outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9
   </div>
 </div>
 
+<?php endif; /* summary: per-currency vs legacy */ ?>
 <?php elseif($view==='alerts'): ?>
 <div style="padding-bottom:40px;">
   <div style="margin-bottom:18px;">
@@ -2039,15 +2142,9 @@ function cbCatInit() {
     // opening balances belong ONLY on the Opening Balances screen (typed,
     // account-bound, once per account) — a wizard 'Opening Balance' would be
     // a bare untyped row in the wrong currency, as the first live test proved.
-    if (_cb4Currs.indexOf('SSP') === -1 && _cbCatData) {
-      var _wizHidden = ['Exchange', 'SSP Advance', 'SSP Return', 'Opening Balance'];
+    if (_cbCatData) {
       ['in', 'out_people', 'out_ops', 'out_fin', 'out'].forEach(function(g){
-        if (Array.isArray(_cbCatData[g])) {
-          _cbCatData[g] = _cbCatData[g].filter(function(c){
-            var n = (c && c.name) ? c.name : c;
-            return _wizHidden.indexOf(n) === -1;
-          });
-        }
+        if (Array.isArray(_cbCatData[g])) _cbCatData[g] = _cb4StripHidden(_cbCatData[g]);
       });
     }
     var summaries = results[1].map(function(s){ return s.data || s; });
@@ -2606,6 +2703,17 @@ var _cb4CatsIN = [];
 var _cb4CatsOUT_people = [];
 var _cb4CatsOUT_ops = [];
 var _cb4CatsOUT_fin = [];
+// C0.1: categories no entry UI may offer, whatever the data source says.
+// Matches by id OR name — the old filter matched .name only, and wizard
+// items carry .id, which is exactly how a manual Opening Balance slipped
+// through on 2026-09-07.
+var _cb4Hidden = ['Opening Balance'<?php if (!$_cbSSP): ?>, 'Exchange', 'SSP Advance', 'SSP Return'<?php endif; ?>];
+function _cb4StripHidden(list) {
+  return (list || []).filter(function (c) {
+    var n = (c && c.id) ? c.id : ((c && c.name) ? c.name : c);
+    return _cb4Hidden.indexOf(n) === -1;
+  });
+}
 // v4.9.10: BookKeeper account names + custom categories for "Other..." search
 var _cb4BkAccounts = [];
 var _cb4CustomCats = [];
@@ -2617,10 +2725,10 @@ var _cb4CatsReady = false;
     .then(function(r){ return r.json(); })
     .then(function(resp) {
       var d = resp.data || resp;
-      _cb4CatsIN          = d.in          || [];
-      _cb4CatsOUT_people  = d.out_people  || [];
-      _cb4CatsOUT_ops     = d.out_ops     || [];
-      _cb4CatsOUT_fin     = d.out_fin     || [];
+      _cb4CatsIN          = _cb4StripHidden(d.in);
+      _cb4CatsOUT_people  = _cb4StripHidden(d.out_people);
+      _cb4CatsOUT_ops     = _cb4StripHidden(d.out_ops);
+      _cb4CatsOUT_fin     = _cb4StripHidden(d.out_fin);
       _cb4BkAccounts      = d.bk_accounts      || [];
       _cb4CustomCats      = d.custom_categories || [];
       // If API returned empty (shouldn't happen), load fallbacks
@@ -2629,12 +2737,12 @@ var _cb4CatsReady = false;
     })
     .catch(function(){
       // Fallback to built-in defaults if API fails
-      _cb4CatsIN = [
+      _cb4CatsIN = _cb4StripHidden([
         {id:'Receipt',ic:'💰',lbl:'Receipt'},
         {id:'Bank Transfer',ic:'🏦',lbl:'Bank Transfer'},{id:'Loan Received',ic:'💵',lbl:'Loan Received'},
-        {id:'Refund',ic:'🔙',lbl:'Refund'},{id:'Opening Balance',ic:'📊',lbl:'Opening Bal'},
+        {id:'Refund',ic:'🔙',lbl:'Refund'},
         {id:'Misc Income',ic:'📦',lbl:'Misc Income'}
-      ];
+      ]);
       _cb4CatsOUT_people = [
         {id:'Salary',ic:'💼',lbl:'Salary'},{id:'Transport Allowance',ic:'🚗',lbl:'Transport'},
         {id:'Food Allowance',ic:'🍽️',lbl:'Food Allow.'},{id:'Commission',ic:'💵',lbl:'Commission'},
@@ -3583,8 +3691,17 @@ function cbCrudClose() {
   setTimeout(function(){ m.style.display='none'; document.body.style.overflow=''; }, 220);
 }
 function cbCrudDelete() {
-  if (!confirm('Permanently delete this entry? This cannot be undone.')) return;
+  if (!confirm('Permanently DELETE this entry? Voiding keeps the audit trail — deleting does not. This cannot be undone.')) return;
   document.getElementById('cbCrudAction').value = 'delete_entry';
+  document.getElementById('cbCrudForm').submit();
+}
+function cbCrudVoid() {
+  var reason = prompt('Void this entry — reason (kept on the row for the audit trail):');
+  if (reason === null) return;
+  reason = reason.trim();
+  if (reason.length < 3) { alert('A short reason is required to void.'); return; }
+  document.getElementById('cbCrudVoidReason').value = reason;
+  document.getElementById('cbCrudAction').value = 'void_entry';
   document.getElementById('cbCrudForm').submit();
 }
 function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+person+'?')){window.location.href='?<?php echo http_build_query(array_merge(['page'=>'dashboard','tab'=>'cashbook'],['cb_remind'=>'1'])); ?>&cb_rid='+id;}}
@@ -3639,7 +3756,7 @@ function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+per
 
       <div class="cbcrud-row">
         <div>
-          <div class="cbcrud-lbl">Amount (USD)</div>
+          <div class="cbcrud-lbl">Amount</div>
           <input type="number" name="amount" id="cbCrudAmt" class="cbcrud-inp" step="0.01" min="0.01">
         </div>
         <div>
@@ -3685,8 +3802,10 @@ function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+per
         </div>
       </div>
 
+      <input type="hidden" name="void_reason" id="cbCrudVoidReason" value="">
       <div class="cbcrud-actions">
         <button type="submit" class="cbcrud-save">💾 Save Changes</button>
+        <button type="button" class="cbcrud-del" style="background:#fffbeb;color:#b45309;border-color:#fde68a;" onclick="cbCrudVoid()">🚫 Void</button>
         <button type="button" class="cbcrud-del" onclick="cbCrudDelete()">🗑 Delete</button>
       </div>
     </form>

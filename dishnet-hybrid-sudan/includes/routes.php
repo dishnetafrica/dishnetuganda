@@ -310,6 +310,13 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     $rows2  = $cb2csv->getEntries($csvF2);
     $_isSSP2 = ($_csvCurr2 === 'SSP');
     $_isAll2 = ($_csvCurr2 === '');
+    // Phase C: non-SSP layouts carry Account and Type columns.
+    $_acctNames2 = [];
+    if (!$_hasSSP2) {
+        try {
+            foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+        } catch (\Throwable $e) {}
+    }
     $fname2 = 'cashbook-'.strtoupper($proj2).'-'.($_csvCurr2 ?: 'ALL').'-'.date('Y-m-d').'.csv';
     ob_end_clean();
     header('Content-Type: text/csv; charset=UTF-8');
@@ -321,11 +328,13 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     } elseif ($_isAll2) {
         // Multi-currency book without SSP columns: every amount sits next to
         // its own currency and the balance names the stream it belongs to.
-        fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
+        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
     } elseif ($_isSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
-    } else {
+    } elseif ($_hasSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
+    } else {
+        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
     }
     foreach ($rows2 as $e2) {
         $isIn2 = $e2['direction'] === 'in';
@@ -341,15 +350,25 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
                 ($_isSspRow2&&$isIn2)?$sA2:'', ($_isSspRow2&&!$isIn2)?$sA2:'', ($_isSspRow2)?$bl2:'',
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } elseif ($_isAll2) {
-            fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
+            fputcsv($out2, [$e2['sr'],$e2['date'],
+                $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
+                $e2['txn_type'] ?? '',
+                $e2['description'],$e2['category'],$e2['person'],
                 $rowCur2, $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, ($bl2===''?'':$blCur2),
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } elseif ($_isSSP2) {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
                 $isIn2?$sA2:'', $isIn2?'':$sA2, $bl2,
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
-        } else {
+        } elseif ($_hasSSP2) {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
+                $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+        } else {
+            fputcsv($out2, [$e2['sr'],$e2['date'],
+                $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
+                $e2['txn_type'] ?? '',
+                $e2['description'],$e2['category'],$e2['person'],
                 $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         }

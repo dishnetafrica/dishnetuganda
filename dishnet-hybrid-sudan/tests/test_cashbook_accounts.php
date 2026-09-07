@@ -215,6 +215,115 @@ t('txn types include the accounting set',
   in_array('DIRECTOR_FUNDING', CashbookService::TXN_TYPES, true)
   && in_array('OPENING_BALANCE', CashbookService::TXN_TYPES, true), true);
 
+
+echo "\nPhase C readers: positions, ledgers, P&L — currencies never merge\n";
+$t5 = sys_get_temp_dir() . '/cb_phasec_' . getmypid();
+@mkdir($t5, 0777, true);
+$st5 = SqliteStore::create($t5);
+$cb5 = new CashbookService($st5, $t5);
+file_put_contents($t5 . '/kyc_config.json', json_encode([
+    'cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD']));
+
+$ugxBank5 = (int)$cb5->addAccount('Ecobank Uganda – UGX', 'UGX', 'bank')['id'];
+$usdBank5 = (int)$cb5->addAccount('Ecobank Uganda – USD', 'USD', 'bank')['id'];
+$usdLiab5 = (int)$cb5->addAccount('Director Funding – USD', 'USD', 'director')['id'];
+
+// (3)/(4) an account books exactly one currency — wrong-currency rows throw.
+$threw = false;
+try { $cb5->addEntryRaw(['project'=>'dishnet','date'=>'2026-09-08','direction'=>'in',
+    'amount'=>100.0,'currency'=>'USD','category'=>'Receipt','description'=>'wrong',
+    'account_id'=>$ugxBank5,'source'=>'manual']); } catch (\Throwable $e) { $threw = true; }
+t('UGX account refuses a USD row', $threw, true);
+$threw = false;
+try { $cb5->addEntryRaw(['project'=>'dishnet','date'=>'2026-09-08','direction'=>'in',
+    'amount'=>100.0,'currency'=>'UGX','category'=>'Receipt','description'=>'wrong',
+    'account_id'=>$usdBank5,'source'=>'manual']); } catch (\Throwable $e) { $threw = true; }
+t('USD account refuses a UGX row', $threw, true);
+
+// Build activity: UGX opening + UGX revenue + USD funding + FX transfer.
+$cb5->recordOpeningBalance($ugxBank5, 5000000.0, '2026-09-06', 'opening', 'STMT', 'Bhavin');
+$cb5->addEntryRaw(['project'=>'dishnet','date'=>'2026-09-08','direction'=>'in',
+    'amount'=>329000.0,'currency'=>'UGX','category'=>'Receipt','description'=>'customer payment',
+    'account_id'=>$ugxBank5,'source'=>'crm_webhook']);
+$fund5 = $cb5->recordFunding($usdBank5, $usdLiab5, 10000.0, '2026-09-08', 'Investment', '', 'Bhavin');
+
+// (1)/(2) a UGX transaction moves only the UGX position; USD only USD.
+$pos = $cb5->currencyPositions();
+t('positions carry one entry per currency', array_keys($pos), ['UGX', 'USD']);
+t('UGX position = opening + customer payment only',
+  $pos['UGX']['total'], 5329000.0);
+t('USD position = funding on both accounts (asset + liability)',
+  $pos['USD']['total'], 20000.0);
+t('no combined figure exists anywhere in the position payload',
+  !isset($pos['UGX']['combined']) && !isset($pos['USD']['combined'])
+  && !array_key_exists('combined_usd', $pos) && !array_key_exists('total', $pos), true);
+
+// (9)/(15-adjacent) FX conversion: two currency-specific legs, both positions move.
+$fx5 = $cb5->recordAccountTransfer($usdBank5, $ugxBank5, 2000.0, 7440000.0,
+    '2026-09-09', '', 'Ecobank board rate', 'Bhavin');
+t('FX transfer recorded', $fx5['ok'], true);
+$pos = $cb5->currencyPositions();
+t('USD position dropped by the USD leg', $pos['USD']['total'], 18000.0);
+t('UGX position rose by the UGX leg', $pos['UGX']['total'], 5329000.0 + 7440000.0);
+
+// (6)/(7)/(8) P&L: capital flows invisible, revenue is only the customer payment.
+$pl = $cb5->plByPeriod('dishnet', '2026-09-01', '2026-09-30');
+t('P&L has a UGX section only (no USD trading yet)', array_keys($pl), ['UGX']);
+t('UGX revenue = the customer payment alone', $pl['UGX']['revenue_total'], 329000.0);
+t('opening balance is NOT revenue', isset($pl['UGX']['revenue']['Opening Balance']), false);
+t('funding is NOT revenue anywhere', isset($pl['USD']), false);
+t('transfer legs are NOT expenses', $pl['UGX']['expense_total'], 0.0);
+
+// (10)/(11) account ledgers run independently, in the account currency.
+$led = $cb5->accountLedger($ugxBank5);
+t('UGX account ledger labelled UGX', $led['currency'], 'UGX');
+t('UGX running balance includes opening + payment + FX in',
+  $led['balance'], 5329000.0 + 7440000.0);
+$ledU = $cb5->accountLedger($usdBank5);
+t('USD account ledger independent of UGX', $ledU['balance'], 8000.0);
+
+// (15) THE correction path: a stray manual "opening" can be voided and
+// replaced by proper funding WITHOUT ever doubling the money.
+$t6 = sys_get_temp_dir() . '/cb_correction_' . getmypid();
+@mkdir($t6, 0777, true);
+$st6 = SqliteStore::create($t6);
+$cb6 = new CashbookService($st6, $t6);
+file_put_contents($t6 . '/kyc_config.json', json_encode([
+    'cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD']));
+// The live CB-1 shape: manual, untyped, account-less, USD 10,000.
+$cb6->addEntryRaw(['project'=>'dishnet','date'=>'2026-09-07','direction'=>'in',
+    'amount'=>10000.0,'currency'=>'USD','category'=>'Opening Balance',
+    'category_raw'=>'Opening Balance','person'=>'Bhavin',
+    'description'=>'Opening Balance [2026-09]','source'=>'manual','approved_by'=>'Bhavin Madlani']);
+$pos6 = $cb6->currencyPositions();
+t('stray row shows as unassigned USD 10,000', $pos6['USD']['unassigned'] ?? null, 10000.0);
+
+$strayId = (int)$st6->getPdo()->query("SELECT id FROM cb_ledger LIMIT 1")->fetchColumn();
+$v6 = $cb6->voidEntry($strayId, 'misclassified — replaced by typed funding', 'Bhavin');
+t('void succeeds with a reason', $v6['ok'], true);
+t('void keeps the row (audit), removes the money',
+  ($cb6->currencyPositions()['USD']['total'] ?? 0.0), 0.0);
+t('void refuses a second attempt', $cb6->voidEntry($strayId, 'again', 'x')['ok'], false);
+t('void without a reason refused', $cb6->voidEntry(999999, '', 'x')['ok'], false);
+
+$usdBank6 = (int)$cb6->addAccount('Ecobank Uganda – USD', 'USD', 'bank')['id'];
+$usdLiab6 = (int)$cb6->addAccount('Director Funding – USD', 'USD', 'director')['id'];
+$cb6->recordFunding($usdBank6, $usdLiab6, 10000.0, '2026-09-06', 'Investment from Bhavin', '', 'Bhavin');
+$pos6 = $cb6->currencyPositions();
+t('after correction: USD bank holds exactly 10,000 — never 20,000',
+  (float)($pos6['USD']['accounts'][0]['balance'] ?? 0) + 0.0, 10000.0);
+t('voided stray contributes nothing', $pos6['USD']['unassigned'], 0.0);
+
+// Pair-void: voiding one funding leg voids BOTH.
+$fundRef6 = $st6->getPdo()->query("SELECT validation_ref FROM cb_ledger WHERE source='funding' LIMIT 1")->fetchColumn();
+$legId6   = (int)$st6->getPdo()->query("SELECT id FROM cb_ledger WHERE source='funding' LIMIT 1")->fetchColumn();
+$pv = $cb6->voidEntry($legId6, 'testing pair void', 'Bhavin');
+t('voiding one funding leg voids the linked pair', $pv['voided'] ?? 0, 2);
+t('pair-void zeroes both accounts',
+  ($cb6->currencyPositions()['USD']['total'] ?? 0.0), 0.0);
+
+exec('rm -rf ' . escapeshellarg($t5) . ' ' . escapeshellarg($t6));
+
 exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($t2) . ' ' . escapeshellarg($t3) . ' ' . escapeshellarg($t4));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

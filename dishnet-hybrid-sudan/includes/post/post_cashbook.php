@@ -635,7 +635,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_ad
         // v4.11.3: Post-save assertion — verify chain fired correctly
         $_savedRecord = ['sr' => $result['sr'] ?? '', 'category' => $_tigData['category'] ?? '', 'person' => $_tigData['person'] ?? '', 'direction' => $_tigData['direction'] ?? 'out'];
         TransactionIntegrityGuard::postSave($_tigCtx, $_savedRecord, $store, $store->getPdo(), $dataDir);
-    } else flash($result['message'] ?? '❌ Error adding entry.', 'danger');
+    } else flash($result['message'] ?? $result['error'] ?? '❌ Error adding entry.', 'danger');
     redirect('?page=dashboard&tab=cashbook');
 }
 
@@ -667,6 +667,26 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_re
     if ($result['success']) flash($result['message'], 'warning');
     else flash($result['message'], 'danger');
     redirect('?page=dashboard&tab=cashbook&cb_view=pending');
+}
+
+// ── Cashbook: Void Entry (accountant/admin) — the SAFE correction path ────
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='void_entry') {
+    $retailer = $auth->requireLogin();
+    if (empty($retailer['is_admin']) && ($retailer['role'] ?? '') !== 'accountant') {
+        flash('Accountant or admin access required.', 'danger');
+        redirect('?page=dashboard&tab=cashbook');
+    }
+    if (!csrfCheck()) { flash('Security error.', 'danger'); redirect('?page=dashboard&tab=cashbook'); }
+    require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
+    $cb = new CashbookService($store, $dataDir);
+    $r  = $cb->voidEntry((int)($_POST['entry_id'] ?? 0), trim($_POST['void_reason'] ?? ''), $retailer['name'] ?? 'admin');
+    if ($r['ok'] ?? false) {
+        flash('🚫 Voided ' . (int)$r['voided'] . ' entr' . ((int)$r['voided'] === 1 ? 'y' : 'ies (linked pair)') . ' — kept on the ledger for audit.', 'success');
+        logActivity($dataDir, 'cashbook_void', 'Entry voided', 'id=' . (int)($_POST['entry_id'] ?? 0) . ' by ' . ($retailer['name'] ?? '') . ': ' . trim($_POST['void_reason'] ?? ''));
+    } else {
+        flash($r['error'] ?? 'Void failed.', 'danger');
+    }
+    redirect('?page=dashboard&tab=cashbook');
 }
 
 // ── Cashbook: Set Opening Balance (admin) — retired ───────────────────────

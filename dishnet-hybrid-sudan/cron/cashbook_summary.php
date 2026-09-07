@@ -53,6 +53,60 @@ if (empty($recipients)) {
 
 // ── Build stats ────────────────────────────────────────────────────────────
 $today   = date('Y-m-d');
+
+// Phase C: on a book without SSP the evening summary is rendered from the
+// account-aware readers — one position per currency, trading P&L only,
+// nothing summed across currencies, no $ symbols. The legacy USD/SSP
+// message below remains exactly as-is for the dual-currency (Sudan) book.
+if (!dn_ssp_selectable($config)) {
+    $positions = $cb->currencyPositions();
+    $plToday   = $cb->plByPeriod('', $today, $today);
+    $lines   = [];
+    $lines[] = "💰 *DishNet Cashbook — " . date('d M Y') . "*";
+    $lines[] = "";
+    foreach ($positions as $pos) {
+        $lines[] = "*{$pos['currency']} POSITION: {$pos['currency']} " . number_format($pos['total'], 2) . "*";
+        foreach ($pos['accounts'] as $a) {
+            if (empty($a['active']) && !(float)$a['balance']) continue;
+            $lines[] = "  {$a['name']}: {$pos['currency']} " . number_format((float)$a['balance'], 2);
+        }
+        if (abs($pos['unassigned']) > 0.004) {
+            $lines[] = "  (unassigned rows: {$pos['currency']} " . number_format($pos['unassigned'], 2) . ")";
+        }
+        $lines[] = "";
+    }
+    if (!$positions) { $lines[] = "No cash positions yet."; $lines[] = ""; }
+    foreach ($plToday as $pl) {
+        $lines[] = "{$pl['currency']} today — IN: +{$pl['currency']} " . number_format($pl['revenue_total'], 2)
+                 . "  OUT: −{$pl['currency']} " . number_format($pl['expense_total'], 2)
+                 . ($pl['refunds_total'] != 0 ? "  Refunds: {$pl['currency']} " . number_format($pl['refunds_total'], 2) : '');
+    }
+    $pending = $cb->getPendingEntries();
+    $todayEntries = $cb->getEntries(['date_from' => $today, 'date_to' => $today]);
+    $lines[] = "📋 Entries today: " . count($todayEntries);
+    if (count($pending) > 0) {
+        $lines[] = "⚠️  *Pending approvals: " . count($pending) . "*";
+        $lines[] = "Review: " . rtrim($config['plugin_public_url'] ?? '', '/') . "?page=dashboard&tab=cashbook&cb_view=pending";
+    } else {
+        $lines[] = "✅ No pending approvals";
+    }
+    $lines[] = "";
+    $lines[] = "_DishNet Hybrid · Auto-summary_";
+    $message = implode("\n", $lines);
+
+    $sent = 0;
+    foreach ($recipients as $r) {
+        try {
+            $notify->sendRaw($r['phone'], $message, 'cashbook_daily_summary');
+            $sent++;
+        } catch (\Throwable $e) {
+            cb_log('Send failed to ' . ($r['name'] ?? '?') . ': ' . $e->getMessage());
+        }
+    }
+    cb_log("Per-currency summary sent to {$sent} recipient(s)");
+    return;
+}
+
 $balances = $cb->getBothBalances();
 
 $todayUSD = $cb->getSummary('dishnet', $today, $today);

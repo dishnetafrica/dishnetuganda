@@ -306,14 +306,16 @@ rclog(sprintf('Carry: %d staff over limit of $%.2f', count($carryAlerts), $carry
 rclog('Running Control 3: Ledger Drift Check');
 
 // cb_ledger totals (approved entries only, project = dishnet)
+$_rcBase = dn_book_base($config ?? null);
 $cbRow = $pdo->prepare(
     "SELECT
         SUM(CASE WHEN direction='in'  THEN amount ELSE 0 END) AS cb_in,
         SUM(CASE WHEN direction='out' THEN amount ELSE 0 END) AS cb_out
      FROM cb_ledger
-     WHERE project=? AND status='approved'"
+     WHERE project=? AND status='approved'
+       AND (currency = ? OR currency IS NULL OR currency = '')"
 );
-$cbRow->execute([$project]);
+$cbRow->execute([$project, $_rcBase]);
 $cb = $cbRow->fetch(\PDO::FETCH_ASSOC);
 $cbIn  = round((float)($cb['cb_in']  ?? 0), 2);
 $cbOut = round((float)($cb['cb_out'] ?? 0), 2);

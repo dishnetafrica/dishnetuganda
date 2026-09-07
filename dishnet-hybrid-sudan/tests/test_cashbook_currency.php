@@ -82,7 +82,29 @@ $rS = $svS->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 5
     'category' => 'Receipt', 'description' => 'no currency given'], ['name' => 't'], true);
 t('Sudan addEntry default stays USD',
   $stS->getPdo()->query('SELECT currency FROM cb_ledger WHERE id=' . (int)$rS['id'])->fetchColumn(), 'USD');
+
+echo "\nC0.1 — a manual entry can never be an Opening Balance again\n";
+$rOB = $svU->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 10000.0,
+    'currency' => 'USD', 'category' => 'Opening Balance', 'person' => 'Bhavin',
+    'description' => 'the exact shape of the 2026-09-07 live entry'], ['name' => 't'], true);
+t('addEntry refuses the Opening Balance category', $rOB['ok'], false);
+t('and points at the Opening Balances screen',
+  stripos((string)($rOB['message'] ?? ''), 'Opening Balances screen') !== false, true);
+t('no row was written by the refused entry',
+  (int)$stU->getPdo()->query("SELECT COUNT(*) FROM cb_ledger WHERE category='Opening Balance'")->fetchColumn(), 0);
 exec('rm -rf ' . escapeshellarg($tdU) . ' ' . escapeshellarg($tdS));
+
+$rootC01 = dirname(__DIR__);
+$apiCb = (string)file_get_contents($rootC01 . '/includes/api/api_cashbook.php');
+$cbC01 = (string)file_get_contents($rootC01 . '/tabs/accounts/cashbook.php');
+t('category API strips Opening Balance before responding',
+  strpos($apiCb, "\$_catHide = ['Opening Balance'];") !== false, true);
+t('and strips the SSP flows on a non-SSP book',
+  strpos($apiCb, "dn_ssp_selectable(\$config ?? null)") !== false, true);
+t('wizard strips hidden categories on EVERY load path (id or name)',
+  substr_count($cbC01, '_cb4StripHidden(') >= 6, true);
+t('the wizard fallback list lost its Opening Balance tile',
+  strpos($cbC01, "{id:'Opening Balance'") === false, true);
 
 echo "\nScanner v2 — the blind spots the audit proved are covered\n";
 $root = dirname(__DIR__);
@@ -154,9 +176,14 @@ if ($viol) echo '    ' . implode("\n    ", $viol) . "\n";
 // CashbookService's remaining SQL currency literals are the Phase-C reader
 // debt (getBalance/getSummary/getLedger family). Pinned: may only shrink.
 $cbs = (string)file_get_contents($root . '/lib/CashbookService.php');
-t('reader-layer SQL literal debt did not grow (Phase C scope)',
-  substr_count($cbs, "currency='USD'") + substr_count($cbs, "currency = 'USD'")
-  + substr_count($cbs, "currency='SSP'") <= 12, true);
+// USD-stream filters are the Sudan-lens reader debt (may only shrink as
+// consumers move to the account-aware readers). SSP CASE-reads are the
+// legitimate dual-column semantics and are not counted.
+t('reader-layer USD-filter debt did not grow (may only shrink)',
+  substr_count($cbs, "currency='USD'") + substr_count($cbs, "currency = 'USD'") <= 5, true);
+t('SSP dual-column reads are CASE-guarded semantics, not stream filters',
+  substr_count($cbs, "currency='SSP'")
+    - substr_count($cbs, "CASE WHEN currency='SSP'") <= 5, true);
 t('KYC cash sale no longer bakes USD into SQL',
   strpos((string)file_get_contents($root . '/lib/KycService.php'), "'in', ?, 'USD'") === false, true);
 
@@ -190,9 +217,10 @@ t('field_expenses renders from dn_book_currencies', substr_count($fe, 'dn_book_c
 $cb = (string)file_get_contents($root . '/tabs/accounts/cashbook.php');
 t('cashbook pills render from dn_book_currencies', strpos($cb, 'dn_book_currencies($config)') !== false, true);
 t('cashbook JS carries the allowed list', strpos($cb, '_cb4Currs = <?= json_encode(dn_book_currencies($config)) ?>') !== false, true);
-t('SSP FX flows are gated on SSP being selectable', strpos($cb, "indexOf('SSP') === -1") !== false, true);
+t('SSP FX flows are gated on SSP being selectable',
+  strpos($cb, "<?php if (!\$_cbSSP): ?>, 'Exchange', 'SSP Advance', 'SSP Return'<?php endif; ?>") !== false, true);
 t('wizard hides Opening Balance where the accounts layer owns it',
-  strpos($cb, "'Exchange', 'SSP Advance', 'SSP Return', 'Opening Balance'") !== false, true);
+  strpos($cb, "var _cb4Hidden = ['Opening Balance'") !== false, true);
 t("no fixed cb4PillSSP markup remains", strpos($cb, 'id="cb4PillSSP"') === false, true);
 
 echo "\nLedger rows wear the ROW currency, never the install symbol\n";
@@ -215,6 +243,23 @@ t('live CSV Currency column states the row currency',
 t('the unreachable tab-side exporter is gone (links to the live one remain)',
   strpos($cb, 'CSV EXPORT lives in includes/routes.php') !== false
   && strpos($cb, '$_csvIsAll') === false && strpos($cb, 'fputcsv') === false, true);
+
+echo "\nPhase C hero: a balance always names its OWN currency\n";
+t('non-SSP hero renders per-currency POSITION cards',
+  strpos($cb, "htmlspecialchars(\$_pos['currency']) ?> POSITION") !== false, true);
+t('the position amount is prefixed by the position currency, not the display symbol',
+  strpos($cb, "<?= htmlspecialchars(\$_pos['currency']) ?> <?php echo number_format(\$_pos['total'], 2); ?>") !== false, true);
+t('the legacy mislabeled hero only survives behind the SSP gate',
+  strpos($cb, "<?php if (\$_cbSSP && (\$filterCurr === '' || \$filterCurr === \$_cbBase)): ?>") !== false, true);
+t('no combined figure on a non-SSP book (COMBINED card is SSP-gated)',
+  strpos($cb, '<?php if ($_cbSSP && $filterCurr === \'\'): ?>') !== false, true);
+t('live entry count feeds the card, not the seeder metadata',
+  strpos($cb, '$_cbLiveCount = $cb->countEntries($proj);') !== false, true);
+t('summary view is per-currency P&L on a non-SSP book',
+  strpos($cb, '$plData  = $cb->plByPeriod($proj') !== false
+  && strpos($cb, 'capital flows excluded · one section per currency') !== false, true);
+t('void action wired (safe correction path)',
+  strpos($cb, "cbCrudVoid()") !== false, true);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
