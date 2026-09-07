@@ -1749,8 +1749,16 @@ class CashbookService
 
     public function deleteEntry(int $id, array $admin): array
     {
-        $entry = $this->dbq("SELECT id,sr FROM cb_ledger WHERE id=?", [$id]);
+        $entry = $this->dbq("SELECT id,sr,source FROM cb_ledger WHERE id=?", [$id]);
         if (empty($entry)) return ['ok'=>false,'error'=>'Entry not found'];
+        // A row that is one leg of a linked pair can never be hard-deleted:
+        // losing one side breaks double-entry (live: the FUND-0001 equity leg
+        // was deleted, leaving a bank leg with no counterpart). Void instead —
+        // voiding one leg voids both and keeps the audit trail.
+        if (in_array((string)($entry[0]['source'] ?? ''), ['account_transfer', 'funding', 'fx_exchange'], true)) {
+            return ['ok'=>false,'error'=>
+                'This is one leg of a linked two-leg entry — deleting it would break double-entry. Use Void instead (voiding one leg voids both).'];
+        }
         $this->dbq("DELETE FROM cb_ledger WHERE id=?", [$id]);
         return ['ok'=>true, 'sr'=>$entry[0]['sr']??''];
     }

@@ -365,6 +365,15 @@ t('pair-void restores both positions',
   (float)$cb7->currencyPositions()['USD']['total'] === -100.0
   && (float)$cb7->currencyPositions()['UGX']['total'] === 373000.0, true);
 t('zero rate refused', $cb7->recordCashExchange(100.0, 0.0, 'usd_to_base', '2026-09-07', '', 'dishnet', '', 't')['ok'], false);
+
+// The live FUND-0001 equity leg was hard-deleted — pair legs refuse delete now.
+$xPairLeg = (int)$st7->getPdo()->query("SELECT id FROM cb_ledger WHERE source='fx_exchange' AND status='approved' LIMIT 1")->fetchColumn();
+$xDel = $cb7->deleteEntry($xPairLeg, ['name' => 't']);
+t('deleting one leg of a linked pair is refused', $xDel['ok'], false);
+t('and the error points at Void', strpos((string)$xDel['error'], 'Void') !== false, true);
+$plain7 = $cb7->addEntry(['project' => 'dishnet', 'direction' => 'in', 'amount' => 5.0,
+    'category' => 'Receipt', 'description' => 'plain row'], ['name' => 't'], true);
+t('a plain manual row still deletes', $cb7->deleteEntry((int)$plain7['id'], ['name' => 't'])['ok'], true);
 t('junk direction refused', $cb7->recordCashExchange(100.0, 3730.0, 'sideways', '2026-09-07', '', 'dishnet', '', 't')['ok'], false);
 $t8  = sys_get_temp_dir() . '/cb_acct_t8_' . getmypid();
 @mkdir($t8, 0777, true);
