@@ -108,6 +108,11 @@ class CustomerEmails
 
     private static function pack(array $c, string $subject, string $body, string $text, string $pre = ''): array
     {
+        $banner = trim((string)($c['email_test_banner'] ?? ''));
+        if ($banner !== '') {
+            $subject = '[TEST] ' . $subject;
+            $text    = '*** ' . $banner . " ***\r\n\r\n" . $text;
+        }
         return [
             'subject' => $subject,
             'html'    => EmailTemplate::wrap($c, $subject, $body, ['preheader' => $pre]),

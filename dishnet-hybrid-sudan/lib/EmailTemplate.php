@@ -163,6 +163,7 @@ class EmailTemplate
         $site = self::e($b['website']);
         $wa   = preg_replace('/\D+/', '', $b['support_wa']);
 
+        $testBanner = trim((string)($config['email_test_banner'] ?? ''));
         $badge = $b['badge_line'] !== ''
             ? '<div style="margin-top:3px;font-size:11px;color:#8a8a8a;">' . self::e($b['badge_line']) . '</div>'
             : '';
@@ -202,6 +203,17 @@ class EmailTemplate
 . '<div style="height:4px;width:64px;background:' . $acc . ';border-radius:2px;margin:6px 0 0;"></div>'
 . $badge
 . '</td></tr>'
+
+// test banner — only when an operator is running a labelled test send, so a
+// real customer email can never carry it
+. ($testBanner !== ''
+    ? '<tr><td class="dn-pad" style="padding:14px 32px 0;">'
+      . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+      . 'style="background:#fff7ed;border:2px dashed #fb923c;border-radius:8px;"><tr>'
+      . '<td style="padding:10px 14px;font-family:Helvetica,Arial,sans-serif;font-size:12px;'
+      . 'font-weight:700;color:#9a3412;text-align:center;">' . self::e($testBanner) . '</td>'
+      . '</tr></table></td></tr>'
+    : '')
 
 // body
 . '<tr><td class="dn-pad" style="padding:22px 32px 6px;">' . $bodyHtml . '</td></tr>'
