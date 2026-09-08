@@ -217,32 +217,83 @@
   </table>
   {% endif %}
 
+  <div style="font-size:9px;color:#6B6B6B;margin-top:2px;">
+    This quotation is governed by the Service Process and Terms &amp; Conditions on page 2, which form part of it.
+  </div>
+
+  <!-- ═══ PAGE 2 — SERVICE PROCESS & TERMS ═══ -->
+  <div style="page-break-before:always;"></div>
+  <div style="padding-top:14px;">
+    <div style="font-size:9px;color:#999;">DishNet &mdash; Quotation {{ quote.number }} &middot; Service Process &amp; Terms &amp; Conditions</div>
+    <div style="height:2px;background:#D41C1C;margin:4px 0 12px;width:120px;"></div>
+  </div>
+
+  <!-- HOW WE WORK -->
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-bottom:6px;">HOW WE WORK &mdash; FROM ORDER TO ONLINE</div>
+  <table style="width:100%;border-collapse:separate;border-spacing:6px;margin-bottom:4px;">
+    <tr>
+      <td style="width:33%;background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #D41C1C;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">1 &middot; QUOTE &amp; ACCEPTANCE</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">You accept this quotation by signing it, confirming in writing, or making payment. Acceptance in any of these ways is agreement to the Terms &amp; Conditions below.</div>
+      </td>
+      <td style="width:33%;background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #141414;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">2 &middot; PAYMENT</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">One-time charges (equipment, installation) and the first service month are paid in full before delivery or installation is scheduled, using the bank details on page 1.</div>
+      </td>
+      <td style="width:33%;background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #D41C1C;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">3 &middot; SITE &amp; PERMISSIONS</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">You confirm the installation site, that you have the right to install there (including landlord permission where relevant), and that the dish location has a clear view of the sky.</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #141414;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">4 &middot; DELIVERY &amp; INSTALLATION</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">Installation is scheduled on a mutually agreed date after payment clears. Dates and lead times are estimates in good faith, not guarantees. Non-standard work is agreed and priced before it begins.</div>
+      </td>
+      <td style="background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #D41C1C;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">5 &middot; ACTIVATION &amp; HANDOVER</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">We activate the service, demonstrate it working at handover, and hand you the connection details. The work is accepted at handover unless a defect is reported in writing within 48 hours.</div>
+      </td>
+      <td style="background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #141414;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">6 &middot; AFTER-SALES SUPPORT</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">DishNet manages the Starlink account and provides ongoing local support on +256 705 993 348 (WhatsApp and calls) for as long as your service is active with us.</div>
+      </td>
+    </tr>
+  </table>
+  <div style="font-size:8px;color:#6B6B6B;margin-bottom:12px;">The steps above describe the full scope of the standard service. Anything not listed &mdash; or not itemised on page 1 &mdash; is out of scope and will be quoted separately.</div>
+
   <!-- ═══ TERMS & CONDITIONS — UGANDA ═══ -->
-  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-top:6px;margin-bottom:5px;">TERMS &amp; CONDITIONS</div>
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-bottom:5px;">TERMS &amp; CONDITIONS</div>
   <table style="width:100%;border-collapse:collapse;">
     <tr>
-      <td style="vertical-align:top;padding:0 5px 0 0;width:33%;font-size:9px;color:#444;line-height:1.45;">
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">1. Currency &amp; Pricing:</b> All prices in Ugandan Shillings (UGX). {% if totals.taxes|length > 0 %}VAT is itemised in the totals above.{% else %}No VAT is charged on this quotation.{% endif %} Prices may change with 30 days' notice.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">2. Payment:</b> Service is prepaid — the monthly fee is due before the start of each service month. Service pauses automatically at the end of an unpaid period and resumes on payment.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">3. Installation:</b> Professional installation as quoted. Non-standard mounting (roof, pole, long cable runs) is agreed and charged separately before work begins. The dish needs a clear, unobstructed view of the sky.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">4. Equipment:</b> Purchased equipment (e.g. the Starlink kit) becomes the customer's property on full payment; the manufacturer's warranty applies. Any equipment provided on loan remains DishNet property and must be returned within 7 days of termination.</div>
+      <td style="vertical-align:top;padding:0 5px 0 0;width:33%;font-size:8.5px;color:#444;line-height:1.4;">
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">1. Agreement &amp; Acceptance:</b> This quotation together with these Terms &amp; Conditions is the entire agreement between the customer and DishNet Africa Ltd and supersedes all prior discussions. No verbal statement or promise binds DishNet unless confirmed in writing by an authorised DishNet representative.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">2. Currency &amp; Pricing:</b> All prices in Ugandan Shillings (UGX). {% if totals.taxes|length > 0 %}VAT is itemised in the totals on page 1.{% else %}No VAT is charged on this quotation.{% endif %} Prices may change with 30 days' notice. Any new or increased government tax, levy or regulatory fee introduced after acceptance may be passed on at cost.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">3. Payment:</b> Service is prepaid — the monthly fee is due before the start of each service month. Service pauses automatically at the end of an unpaid period, without liability to DishNet, and resumes on payment.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">4. Title &amp; Risk:</b> Ownership of purchased equipment passes to the customer only on full payment; until then it remains DishNet property and may be recovered. Risk of loss or damage passes to the customer on delivery to the premises.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">5. Installation &amp; Premises:</b> Professional installation as quoted; non-standard mounting (roof, pole, long cable runs) is agreed and charged separately before work begins. The customer warrants they have the right to install at the premises and is responsible for any landlord or premises dispute. Minor drilling and mounting marks are a normal part of installation; DishNet is not liable for pre-existing structural defects.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">6. Acceptance of Work:</b> The installation and service are deemed accepted at handover unless a defect is reported in writing within 48 hours. Use of the service constitutes acceptance.</div>
       </td>
-      <td style="vertical-align:top;padding:0 5px;width:33%;font-size:9px;color:#444;line-height:1.45;">
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">5. Service:</b> Internet is delivered over the Starlink satellite network; speeds, coverage and availability are determined by Starlink. DishNet provides local installation, account management and after-sales support: +256 705 993 348.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">6. Fair Use:</b> Lawful personal or business use only. No resale of the service without a written agreement.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">7. Cancellation &amp; Refunds:</b> Cancel or pause with notice before your next billing date. Fees for a started service month, and installation fees once work has begun, are not refundable.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">8. Relocation:</b> Moving the service to a new address may require re-installation, quoted separately.</div>
+      <td style="vertical-align:top;padding:0 5px;width:33%;font-size:8.5px;color:#444;line-height:1.4;">
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">7. Third-Party Network:</b> Internet is delivered over the Starlink satellite network, which is owned and operated by Starlink, not DishNet. Speeds, coverage, availability, network policies and network pricing are determined by Starlink and may change without DishNet's control. DishNet does not warrant uninterrupted or fault-free service and is not liable for outages, degradation or changes on the Starlink network. Starlink's own service terms also apply to use of the network.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">8. Service &amp; Support:</b> DishNet provides installation, account management and after-sales support on +256 705 993 348. Support covers the DishNet-supplied installation and account; the customer's own devices, internal networks and third-party equipment are outside scope and chargeable on request.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">9. Equipment Warranty:</b> Hardware carries the manufacturer's warranty only; DishNet facilitates warranty claims but gives no separate warranty of its own. Warranty cover is lost through misuse, tampering, unauthorised repair, lightning, power surges, water or weather damage, or accident — protecting the equipment after delivery is the customer's responsibility. Equipment provided on loan remains DishNet property and must be returned in working condition within 7 days of termination.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">10. Fair Use:</b> Lawful personal or business use only; no resale of the service without a written agreement. DishNet may suspend the service immediately and without refund where it is used unlawfully, and the customer remains fully responsible for all use of the connection.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">11. Cancellation &amp; Refunds:</b> Cancel or pause with notice before the next billing date. Fees for a started service month, and installation fees once work has begun, are not refundable. Delivered equipment is not returnable for refund unless defective on arrival.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">12. Relocation &amp; Changes:</b> Moving the service to a new address may require re-installation, quoted separately. Plan changes take effect from the next billing cycle.</div>
       </td>
-      <td style="vertical-align:top;padding:0 0 0 5px;width:33%;font-size:9px;color:#444;line-height:1.45;">
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">9. Liability:</b> DishNet is not liable for indirect or consequential damages; total liability is capped at 3 months of service fees.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">10. Force Majeure:</b> Not liable for disruption caused by events beyond our control, including weather, power failures, satellite network outages or natural disasters.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">11. Customer Duty:</b> Provide accurate information and safe access for installers, protect the equipment, and report faults within 24 hours.</div>
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">12. Governing Law:</b> Laws of the Republic of Uganda.</div>
+      <td style="vertical-align:top;padding:0 0 0 5px;width:33%;font-size:8.5px;color:#444;line-height:1.4;">
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">13. Liability:</b> To the maximum extent permitted by law, DishNet is not liable for indirect, incidental or consequential loss, including loss of business, profits, data or downtime. DishNet's total aggregate liability under this agreement is capped at the service fees paid by the customer in the 3 months before the claim arose.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">14. Force Majeure:</b> DishNet is not liable for failure or delay caused by events beyond its reasonable control, including weather, power failure, satellite or network outage, acts of government or regulators, civil unrest or natural disaster.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">15. Suspension &amp; Termination:</b> DishNet may suspend or terminate the service for breach of these terms on notice. Obligations that accrued before termination survive it.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">16. Variation &amp; Severability:</b> Changes to these terms bind DishNet only if made in writing by an authorised representative. If any clause is held invalid, the remaining clauses stay in force. Not enforcing a clause on one occasion is not a waiver of it.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">17. Notices &amp; Data:</b> Official communications use the contact details on this quotation. Customer information is used to provide the service and is shared with Starlink only as needed for activation and support.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">18. Disputes &amp; Governing Law:</b> The parties will first attempt to resolve any dispute in good faith within 30 days of written notice. Unresolved disputes are subject to the courts of, and this agreement is governed by the laws of, the Republic of Uganda.</div>
       </td>
     </tr>
   </table>
 
-  <div style="font-size:8px;font-weight:700;color:#141414;margin-top:5px;">By accepting this quotation, you agree to the above Terms &amp; Conditions.</div>
+  <div style="font-size:8px;font-weight:700;color:#141414;margin-top:6px;">By signing, confirming in writing, or paying against this quotation, the customer accepts the Service Process and Terms &amp; Conditions above.</div>
 
   <!-- SIGNATURE (dynamic sales person) -->
   <table style="width:100%;border-collapse:collapse;margin-top:14px;border-top:1px solid #eee;">
