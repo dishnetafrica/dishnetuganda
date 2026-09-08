@@ -13,6 +13,7 @@ require_once dirname(__DIR__, 2) . '/lib/PluginConfig.php';
 require_once dirname(__DIR__, 2) . '/lib/EvolutionApiService.php';
 require_once dirname(__DIR__, 2) . '/lib/EvoWebhookGuard.php';
 require_once dirname(__DIR__, 2) . '/lib/DishNetAiBrain.php';
+require_once dirname(__DIR__, 2) . '/lib/FlyerAsset.php';
 
 // wa_ai_public_base() / wa_ai_webhook_url() — shared with tools/wa_webhook_doctor.php
 require_once dirname(__DIR__, 2) . '/lib/wa_webhook_url.php';
@@ -117,6 +118,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
         list($ok, $err) = PluginConfig::saveOverrides($_wData,
             ['ai_currency' => trim((string)($_POST['ai_currency'] ?? ''))]);
         $_wMsg = ['ok' => $ok, 'text' => $ok ? 'Currency saved.' : $err];
+        $_wCfg = PluginConfig::load($_wRoot, $_wData);
+
+    } elseif ($act === 'save_marketing') {
+        list($ok, $err) = PluginConfig::saveOverrides($_wData, [
+            'ai_identity_line' => trim((string)($_POST['ai_identity_line'] ?? '')),
+            'wa_flyer_url'     => trim((string)($_POST['wa_flyer_url'] ?? '')),
+            'wa_flyer_caption' => trim((string)($_POST['wa_flyer_caption'] ?? '')),
+        ]);
+        $_wMsg = ['ok' => $ok, 'text' => $ok ? 'Marketing settings saved.' : $err];
         $_wCfg = PluginConfig::load($_wRoot, $_wData);
 
     } elseif ($act === 'forget_lead') {
@@ -466,6 +476,44 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
       </span>
     </div>
   </form>
+
+  <form method="post"><?= $_csrf ?>
+    <input type="hidden" name="wa_action" value="save_marketing">
+    <div class="wa-row" style="display:block">
+      <span class="n" style="display:block;margin-bottom:6px">Marketing &mdash; who we are &amp; the plans flyer</span>
+
+      <input type="text" name="ai_identity_line" style="width:100%"
+             placeholder="DishNet is an internet service provider."
+             value="<?= h((string)($_wCfg['ai_identity_line'] ?? '')) ?>">
+      <div style="color:#5a6b60;font-size:12px;margin:4px 0 10px;max-width:75ch">
+        One sentence the AI uses to describe the company, on WhatsApp and website chat alike
+        (e.g. <em>&ldquo;DishNet Africa Ltd is an IT solutions company and UCC Authorised
+        Starlink Installer in Uganda.&rdquo;</em>). Blank keeps the original wording. Only put
+        a claim here you can back with paper &mdash; it goes out in writing to every customer.
+      </div>
+
+      <?php $_wFlyer = FlyerAsset::describe($_wCfg, $_wData); ?>
+      <div style="font-size:13px;margin-bottom:4px">
+        Plans flyer image: <strong><?= h($_wFlyer) ?></strong>
+      </div>
+      <div style="color:#5a6b60;font-size:12px;margin-bottom:8px;max-width:75ch">
+        When a flyer is installed, the AI attaches it the first time a customer asks about
+        plans or prices (and whenever they ask for a brochure), instead of typing the whole
+        list. To install it, copy your image to
+        <code><?= h(rtrim($_wData, '/')) ?>/wa_flyer.jpg</code> (or .png) inside the ucrm
+        container &mdash; or host it yourself and paste the address below. Not installed means
+        the AI behaves exactly as before. At most one flyer per conversation per day.
+      </div>
+      <input type="text" name="wa_flyer_url" style="width:100%"
+             placeholder="https://… public image address (optional — the file above wins)"
+             value="<?= h((string)($_wCfg['wa_flyer_url'] ?? '')) ?>">
+      <input type="text" name="wa_flyer_caption" style="width:100%;margin-top:6px"
+             placeholder="Caption sent under the image, e.g. DishNet Uganda — Starlink Plans ✅ UCC Authorised Installer"
+             value="<?= h((string)($_wCfg['wa_flyer_caption'] ?? '')) ?>">
+      <div style="margin-top:8px"><button class="wa-btn p" type="submit">Save marketing</button></div>
+    </div>
+  </form>
+
   <div class="wa-row">
     <span class="n">Test</span>
     <span class="d">Ask the AI "Hello" directly, with no WhatsApp involved.</span>

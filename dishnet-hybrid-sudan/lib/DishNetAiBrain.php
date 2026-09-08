@@ -30,6 +30,7 @@ class DishNetAiBrain
     /** Markers the model may emit. Parsed out before the customer sees anything. */
     const MARKER_ESCALATE = 'ESCALATE';
     const MARKER_QUOTE    = 'QUOTE';
+    const MARKER_FLYER    = 'FLYER';
 
     /** Hard ceiling on a WhatsApp reply. Long walls of text do not get read. */
     const MAX_REPLY_CHARS = 1200;
@@ -140,7 +141,13 @@ class DishNetAiBrain
         // ── Identity ────────────────────────────────────────────────────
         $where = $transport === 'web' ? 'in the chat window on our website' : 'on WhatsApp';
         $p .= "You are the DishNet assistant, replying to a customer {$where}.\n";
-        $p .= "DishNet is an internet service provider. Be warm, direct and brief.\n\n";
+        // Who we are is the operator's sentence to write, per deployment:
+        // Sudan is an ISP, Uganda markets itself as an IT solutions company
+        // and UCC-authorised Starlink installer. Unset keeps the original
+        // line so existing installs read byte-identically.
+        $identity = trim((string)($this->config['ai_identity_line'] ?? ''));
+        $p .= ($identity !== '' ? $identity : 'DishNet is an internet service provider.')
+            . " Be warm, direct and brief.\n\n";
 
         // ── Non-negotiable rules ────────────────────────────────────────
         // Ported from AiBrain's grounding block. These exist because a
@@ -302,6 +309,20 @@ class DishNetAiBrain
         $p .= "  <<ESCALATE reason>>  hand this conversation to a human\n";
         if ($channel === 'sales') {
             $p .= "  <<QUOTE plan name>>  the customer wants a written quote for a specific plan\n";
+            // Only offered when the worker has actually found a flyer to send
+            // (flyer_available is set by AiReplyWorker, never by web chat) —
+            // a marker with nothing behind it would make the AI promise an
+            // image that never arrives.
+            if ($transport !== 'web' && !empty($this->config['flyer_available'])) {
+                $p .= "  <<FLYER>>  attach our plans flyer image to this reply\n";
+                $p .= "FLYER: the first time plans or prices come up in a conversation — and whenever "
+                    . "the customer asks for a brochure, poster, price list or something they can "
+                    . "share — end your reply with <<FLYER>>. The flyer image with the full plan "
+                    . "list is then sent along with your message, so keep your text short: one or "
+                    . "two sentences and your next question, not the whole list typed out again. "
+                    . "If this conversation already shows the flyer was sent, refer back to it "
+                    . "instead of attaching it again.\n";
+            }
         }
 
         // ── Retrieved data ──────────────────────────────────────────────
@@ -663,6 +684,10 @@ class DishNetAiBrain
             $escalate = true;
             $reason   = $reason !== '' ? $reason : ('Quote requested: ' . trim($m[1]));
         }
+        // The flyer flag survives even when no flyer is configured: the worker
+        // is the one who knows whether an image exists, and ignores the flag
+        // when it does not. The marker itself is stripped below either way.
+        $sendFlyer = (bool)preg_match('/<<\s*' . self::MARKER_FLYER . '\b[^>]*>>/i', $raw);
 
         $clean = preg_replace('/<<[^>]*>>/', '', $raw);
         $clean = trim(preg_replace("/\n{3,}/", "\n\n", (string)$clean));
@@ -676,13 +701,15 @@ class DishNetAiBrain
             $clean = "Let me get someone from the team to help you with this.";
         }
 
-        return ['reply' => $clean, 'escalate' => $escalate, 'escalate_reason' => $reason];
+        return ['reply' => $clean, 'escalate' => $escalate, 'escalate_reason' => $reason,
+                'send_flyer' => $sendFlyer];
     }
 
     private function handover(string $reason): array
     {
         error_log('[DishNetAiBrain] handover: ' . $reason);
-        return ['reply' => '', 'escalate' => true, 'escalate_reason' => $reason];
+        return ['reply' => '', 'escalate' => true, 'escalate_reason' => $reason,
+                'send_flyer' => false];
     }
 
     private function asksForHuman(string $text): bool

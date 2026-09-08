@@ -64,6 +64,43 @@ $long = str_repeat('word ', 500);
 $r = call($brain,'parseMarkers',[$long]);
 t('over-long reply is truncated', mb_strlen($r['reply']) <= DishNetAiBrain::MAX_REPLY_CHARS, true);
 
+echo "\nFlyer marker — the model may ask for the plans image\n";
+$r = call($brain,'parseMarkers',["Here are our plans!\n<<FLYER>>"]);
+t('flyer marker detected', $r['send_flyer'], true);
+t('flyer marker stripped from reply', $r['reply'], 'Here are our plans!');
+t('flyer alone does not escalate', $r['escalate'], false);
+$r = call($brain,'parseMarkers',["Prices attached.\n<<FLYER please>>"]);
+t('flyer marker with stray words still detected', $r['send_flyer'], true);
+$r = call($brain,'parseMarkers',["Just text, no markers."]);
+t('no marker means no flyer', $r['send_flyer'], false);
+$r = call($brain,'parseMarkers',["Attached.\n<<FLYERS>>"]);
+t('FLYERS is a different (unknown) marker, not a flyer request', $r['send_flyer'], false);
+t('but it is still stripped', $r['reply'], 'Attached.');
+
+echo "\nFlyer offer appears only when a flyer actually exists\n";
+$noFlyerP = call($brain,'buildSystemPrompt',[['channel'=>'sales','message'=>'x']]);
+hasnt('no flyer configured: marker never offered', $noFlyerP, '<<FLYER>>');
+$fBrain = new DishNetAiBrain(['claude_api_key'=>'k','flyer_available'=>'1']);
+$fp = call($fBrain,'buildSystemPrompt',[['channel'=>'sales','message'=>'x']]);
+has('flyer available: sales is offered the marker', $fp, '<<FLYER>>');
+has('with keep-it-short guidance', $fp, 'keep your text short');
+has('and a no-repeat instruction', $fp, 'instead of attaching it again');
+$fs = call($fBrain,'buildSystemPrompt',[['channel'=>'support','message'=>'x']]);
+hasnt('support never offers the flyer', $fs, '<<FLYER>>');
+$fw = call($fBrain,'buildSystemPrompt',[['channel'=>'sales','transport'=>'web','message'=>'x']]);
+hasnt('web chat never offers the flyer', $fw, '<<FLYER>>');
+
+echo "\nIdentity line is the operator's sentence, per deployment\n";
+$idBrain = new DishNetAiBrain(['claude_api_key'=>'k','ai_identity_line'=>
+  'DishNet Africa Ltd is an IT solutions company and UCC Authorised Starlink Installer in Uganda.']);
+$ip = call($idBrain,'buildSystemPrompt',[['channel'=>'sales','message'=>'x']]);
+has('custom identity reaches the prompt', $ip, 'UCC Authorised Starlink Installer');
+hasnt('and replaces the default ISP line', $ip, 'DishNet is an internet service provider.');
+has('tone instruction survives the swap', $ip, 'Be warm, direct and brief.');
+$dp = call($brain,'buildSystemPrompt',[['channel'=>'sales','message'=>'x']]);
+has('unset keeps the original wording byte for byte', $dp,
+    "DishNet is an internet service provider. Be warm, direct and brief.");
+
 echo "\nGrounding rules are always present\n";
 $p = call($brain,'buildSystemPrompt',[['channel'=>'sales','message'=>'hi']]);
 has('forbids inventing prices', $p, 'NEVER invent a product name, price');

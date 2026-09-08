@@ -21,10 +21,15 @@ declare(strict_types=1);
  */
 class AiReplyWorker extends WorkerBase
 {
+    /** wa_messages.media_url tag marking a flyer send, for the cooldown query. */
+    const FLYER_MEDIA_TAG = 'flyer:plans';
+
     private EvolutionApiService $evo;
     private DishNetTools $tools;
     private DishNetAiBrain $brain;
     private $convSvc;
+    /** @var array|null FlyerAsset::find() result, resolved once per run */
+    private $flyer;
 
     public function __construct($store, array $config, int $maxRun = 55, int $batch = 10)
     {
@@ -36,6 +41,11 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/ConversationService.php';
         require_once $root . '/lib/DishNetAiBrain.php';
         require_once $root . '/lib/KnowledgeBase.php';
+        require_once $root . '/lib/FlyerAsset.php';
+
+        // Same override the tools and crons honour, so tests and one-shots can
+        // point the worker at their own data directory.
+        $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 
         $this->evo   = new EvolutionApiService($config);
         $this->tools = new DishNetTools($store, $config, $root);
@@ -43,9 +53,16 @@ class AiReplyWorker extends WorkerBase
         // chat uses ride into the shared system prompt. Empty (legacy) when
         // migration 064 has not been seeded.
         $config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
+        // Only when an image actually exists is the model offered <<FLYER>> —
+        // otherwise the prompt is unchanged and the AI cannot promise an
+        // attachment nothing would send.
+        $this->flyer = FlyerAsset::find($config, $dataDir);
+        if ($this->flyer !== null) {
+            $config['flyer_available'] = '1';
+        }
         $this->brain = new DishNetAiBrain($config);
+        $this->config = $config;
 
-        $dataDir = getDataDir($root);
         $this->convSvc = new ConversationService($dataDir, $this->pdo);
     }
 
@@ -112,6 +129,11 @@ class AiReplyWorker extends WorkerBase
                     'agent_name' => 'DishNet AI',
                     'metadata'   => json_encode(['channel' => $channel]),
                 ]);
+            }
+            // After the text, so a retry of a failed text send can never have
+            // already delivered the image once.
+            if (!empty($ai['send_flyer'])) {
+                $this->maybeSendFlyer($convId, $channel, $phone);
             }
             if (!empty($ai['escalate'])) {
                 $this->escalate($convId, $channel, $phone, (string)($ai['escalate_reason'] ?? 'AI requested handover'));
@@ -335,6 +357,78 @@ class AiReplyWorker extends WorkerBase
         }
         $data = json_decode((string)$raw, true);
         return is_array($data) ? $data : null;
+    }
+
+    /**
+     * Send the plans flyer image, when there is one and it was not sent to
+     * this conversation recently.
+     *
+     * Lives entirely in the never-throw zone after the text reply: a missing
+     * file, an Evolution refusal or a full disk downgrades to a log line and
+     * the customer still has the text they were answered with. The cooldown
+     * is the backstop for a model that emits <<FLYER>> too eagerly — the
+     * prompt already says once per conversation, but prompts are requests.
+     */
+    private function maybeSendFlyer(int $convId, string $channel, string $phone): void
+    {
+        try {
+            if ($this->flyer === null) return;   // model flagged it, nothing to send
+            if ($convId > 0 && $this->flyerSentRecently($convId)) {
+                $this->log('info', "conv {$convId}: flyer already sent recently — not repeating it");
+                return;
+            }
+
+            $media = FlyerAsset::payload($this->flyer);
+            if ($media === '') {
+                $this->log('warn', "conv {$convId}: flyer vanished between resolve and send — skipped");
+                return;
+            }
+
+            $caption = trim((string)($this->config['wa_flyer_caption'] ?? ''));
+            $send = $this->evo->sendImage($channel, $phone, $media, $caption);
+            if (empty($send['ok'])) {
+                $this->log('warn', "conv {$convId}: flyer send failed — " . (string)($send['error'] ?? '?'));
+                return;
+            }
+            $this->log('info', "conv {$convId}: plans flyer sent (" . (string)$this->flyer['kind'] . ")");
+
+            if ($convId > 0) {
+                // Stored as a media message: the Inbox shows it happened, and
+                // the model sees it in history — which is how "already sent,
+                // refer back to it" becomes possible.
+                $this->convSvc->storeMessage($convId, [
+                    'direction'  => 'out',
+                    'role'       => 'assistant',
+                    'body'       => $caption !== '' ? $caption : '[plans flyer image]',
+                    'media_type' => 'image',
+                    'media_url'  => self::FLYER_MEDIA_TAG,
+                    'agent_name' => 'DishNet AI',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->log('error', 'flyer send failed: ' . $e->getMessage());
+        }
+    }
+
+    private function flyerSentRecently(int $convId): bool
+    {
+        $hours = $this->config['wa_flyer_cooldown_hours'] ?? null;
+        $hours = ($hours === null || $hours === '' || !is_numeric($hours))
+               ? 24                          // default: once a day per conversation
+               : max(0, (int)$hours);
+        if ($hours === 0) return false;      // 0 = the model's judgement alone
+
+        $stmt = $this->pdo->prepare(
+            "SELECT sent_at FROM wa_messages
+              WHERE conversation_id = ? AND direction = 'out' AND media_url = ?
+              ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute([$convId, self::FLYER_MEDIA_TAG]);
+        $at = (string)($stmt->fetchColumn() ?: '');
+        if ($at === '') return false;
+
+        $ts = strtotime($at . ' UTC');       // sent_at is stored as UTC
+        return $ts !== false && (time() - $ts) < $hours * 3600;
     }
 
     private function humanIsHandling(int $convId): bool

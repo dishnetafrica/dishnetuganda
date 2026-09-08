@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => []];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -50,5 +50,18 @@ if (preg_match('#^/webhook/set/(.+)$#', $path, $m)) {
 }
 if (preg_match('#^/message/sendText/#', $path)) {
     fe2_out(['key' => ['id' => 'FAKE-EVO-MSG'], 'status' => 'PENDING']);
+}
+if (preg_match('#^/message/sendMedia/(.+)$#', $path, $m)) {
+    // Record enough to assert on without persisting a whole base64 image.
+    $media = (string)($body['media'] ?? '');
+    $state['media_calls'][] = [
+        'instance'     => $m[1],
+        'number'       => (string)($body['number'] ?? ''),
+        'mediatype'    => (string)($body['mediatype'] ?? ''),
+        'caption'      => (string)($body['caption'] ?? ''),
+        'media_len'    => strlen($media),
+        'media_prefix' => substr($media, 0, 48),
+    ];
+    fe2_out(['key' => ['id' => 'FAKE-EVO-MEDIA'], 'status' => 'PENDING']);
 }
 fe2_out(['error' => 'FAKE-EVO-TEST: path not simulated: ' . $path], 404);
