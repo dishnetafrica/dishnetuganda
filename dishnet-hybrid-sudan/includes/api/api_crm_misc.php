@@ -4019,6 +4019,32 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
     require_once $pluginRoot . '/lib/OverdueWorkbenchService.php';
 
     $cfg    = $store->load('kyc_config.json') ?: [];
+
+    // Same gate as the cron. The workbench is the other way this ladder can
+    // reach a customer, so it must refuse on a prepaid install too — with the
+    // reason shown, not a silent zero-sent run the operator cannot explain.
+    $_dunBlocked = _dunningBlockedReason($cfg);
+    if ($_dunBlocked !== '') {
+        @file_put_contents($jobFile, json_encode([
+            'job_id'      => $jobId,
+            'started_at'  => time(),   // $startTs is set further down the run
+            'finished_at' => time(),
+            'running'     => false,
+            'attempted_total'    => count($invNums),
+            'progress'           => 0,
+            'sent_email'         => 0,
+            'sent_wa'            => 0,
+            'skipped_dedup'      => 0,
+            'skipped_no_contact' => 0,
+            'errors_count'       => 1,
+            'errors'             => [['invoice_number' => '', 'error' => $_dunBlocked]],
+            'blocked_reason'     => $_dunBlocked,
+            'channels'           => $channels,
+            'finished_human'     => date('Y-m-d H:i:s'),
+        ], JSON_PRETTY_PRINT));
+        return;
+    }
+
     $notify = new NotificationService($store, $cfg);
     $owb    = new OverdueWorkbenchService($store, $cfg, $crm);
 

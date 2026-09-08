@@ -81,3 +81,11 @@ foreach (EmailTemplate::brand(PluginConfig::load($root, $dataDir)) as $k => $v) 
     printf("  %-16s %s\n", $k, $v);
 }
 echo "\nNow open Admin → Email Preview to inspect every template.\n";
+if (in_array('--uganda', $argvAll, true)) {
+    // Branding alone does not stop the postpaid overdue ladder, which
+    // would tell a prepaid customer their service is suspended. Say so
+    // here rather than changing an unrelated key behind the operator.
+    echo "\nUganda is prepaid. Also run, once:\n";
+    echo "  php tools/set_billing_model.php --prepaid\n";
+}
+

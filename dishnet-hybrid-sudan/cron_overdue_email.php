@@ -134,6 +134,17 @@ try {
                 WHERE stage = 9");
 } catch (\Throwable $e) {}
 
+// ── Billing-model gate ───────────────────────────────────────────────────────
+// Before anything is read, sent or logged: this ladder chases postpaid debt.
+// On a prepaid install it is wrong in every stage, so it stops here rather
+// than telling a customer who owes nothing that their service is suspended.
+$_dunBlocked = _dunningBlockedReason($config);
+if ($_dunBlocked !== '') {
+    olog("STOPPED: {$_dunBlocked}");
+    olog("Nothing was read, sent or logged. Set billing_model=postpaid to re-enable.");
+    return;
+}
+
 // ── SMTP settings ────────────────────────────────────────────────────────────
 olog("Resolving SMTP from dataDir: {$dataDir}");
 $smtp = _getSmtpSettings($store, $config);
