@@ -381,6 +381,40 @@ class MailService
     }
 
     /**
+     * RFC 2047 encode a header value that may contain non-ASCII.
+     *
+     * A raw UTF-8 subject line is not legal in a header and each mail client
+     * guesses the charset differently: Outlook read our em-dash correctly,
+     * Roundcube rendered it as "â€"". Encoded words remove the guess.
+     *
+     * Folded into short encoded words so no header line exceeds the 76-column
+     * limit, split on character boundaries so multi-byte characters survive.
+     */
+    public static function encodeHeaderText(string $v): string
+    {
+        if ($v === '' || !preg_match('/[\x80-\xFF]/', $v)) return $v;
+        $words = [];
+        $len   = mb_strlen($v, 'UTF-8');
+        for ($i = 0; $i < $len; $i += 15) {          // 15 chars ≈ 60 base64 columns
+            $words[] = '=?UTF-8?B?' . base64_encode(mb_substr($v, $i, 15, 'UTF-8')) . '?=';
+        }
+        return implode("\r\n ", $words);
+    }
+
+    /**
+     * Encode only the display-name part of an address header, leaving the
+     * address itself — which must stay literal — untouched.
+     */
+    public static function encodeHeaderName(string $v): string
+    {
+        if ($v === '' || !preg_match('/[\x80-\xFF]/', $v)) return $v;
+        if (preg_match('/^\s*"?(.*?)"?\s*(<[^>]+>)\s*$/', $v, $m) && $m[1] !== '') {
+            return self::encodeHeaderText($m[1]) . ' ' . $m[2];
+        }
+        return self::encodeHeaderText($v);
+    }
+
+    /**
      * Assemble the full MIME message (header block + body) without touching
      * the network — the seam the tests exercise. With no attachments this
      * reproduces the historical multipart/alternative message; attachments
@@ -432,9 +466,9 @@ class MailService
         }
 
         $headers = [
-            'From' => $fromHeader,
-            'To' => $toHeader,
-            'Subject' => $subject,
+            'From' => self::encodeHeaderName($fromHeader),
+            'To' => self::encodeHeaderName($toHeader),
+            'Subject' => self::encodeHeaderText($subject),
             'MIME-Version' => '1.0',
             'Content-Type' => $contentType,
             'Date' => date('r'),

@@ -185,5 +185,27 @@ t('a Sent copy is filed only after a successful send',
 t('and it can never fail the customer send',
   strpos($ms, 'catch (\\Throwable $e) {') !== false && strpos($ms, "'step' => 'sent_copy'") !== false, true);
 
+echo "\nHeaders carry no raw UTF-8 — the em-dash mojibake\n";
+// Lived failure: "Welcome to DishNet — your internet is live" arrived in
+// Roundcube as "DishNet â€\" your internet is live", because the subject went
+// out as raw UTF-8 and each client guessed the charset differently.
+$subj = '[TEST] Welcome to DishNet — your internet is live';
+$mailer2 = new MailService('/nonexistent');
+[$hh, ] = $mailer2->composeMime('DishNet <a@b.c>', '"Bhavin Madlani" <x@y.z>', $subj, '<p>x</p>', 'x');
+t('no raw 8-bit byte survives in the headers', (bool)preg_match('/[\x80-\xFF]/', $hh), false);
+$unfolded = preg_replace("/\r\n[ \t]+/", ' ', $hh);
+preg_match('/^Subject: (.*)$/m', $unfolded, $sm);
+t('subject decodes back to exactly what was asked for',
+  mb_decode_mimeheader(trim($sm[1])), $subj);
+$tooLong = false;
+foreach (explode("\r\n", $hh) as $ln) if (strlen($ln) > 78) $tooLong = true;
+t('every header line stays within the 78-column limit', $tooLong, false);
+t('a plain ASCII subject is left untouched',
+  MailService::encodeHeaderText('Invoice INV-0428 due 20 Sep'), 'Invoice INV-0428 due 20 Sep');
+t('an address keeps its literal <angle> part',
+  strpos(MailService::encodeHeaderName('"Amal Öqvist" <a@b.c>'), '<a@b.c>') !== false, true);
+t('and the display name is encoded',
+  strpos(MailService::encodeHeaderName('"Amal Öqvist" <a@b.c>'), '=?UTF-8?B?') === 0, true);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
