@@ -89,6 +89,10 @@ if (!isset($store)) {
 if (!isset($config)) {
     $config = $store->load('kyc_config.json') ?? [];
 }
+// Contacts and currency symbols in the message copy below come from config,
+// defaulting to the exact values these lines have always printed.
+require_once __DIR__ . '/lib/CustomerContact.php';
+require_once __DIR__ . '/lib/currency.php';
 
 // ── Response helpers ───────────────────────────────────────────────────────
 function whResp(int $code, string $msg, array $data = []): void {
@@ -176,7 +180,7 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
                  . '&token=' . urlencode($pdfToken);
 
         $notify->sendDocument('accounts', $phone, $pdfUrl, "{$invoNum}.pdf",
-            "Invoice #{$invoNum} — \${$amount} — Due: {$dueDate}\n— DishNet Africa",
+            "Invoice #{$invoNum} — " . dn_money($amount, $config, null) . " — Due: {$dueDate}\n— DishNet Africa",
             'ops_invoice_pdf');
         return true;
     } catch (\Throwable $e) {
@@ -764,7 +768,7 @@ switch ($changeType) {
                         'created_at'        => date('Y-m-d H:i:s'),
                     ]);
 
-                    whLog($changeType, "Cashbook auto-post: \${$amount} from {$name} (PAY-{$paymentId})");
+                    whLog($changeType, "Cashbook auto-post: " . dn_money($amount, $config, null) . " from {$name} (PAY-{$paymentId})");
                 } else {
                     whLog($changeType, "Cashbook skip — PAY-{$paymentId} already posted");
                 }
@@ -811,7 +815,7 @@ switch ($changeType) {
             } else {
                 // Send text receipt to customer
                 $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
-                whLog($changeType, "Payment thanks sent: \${$amount} → {$name}");
+                whLog($changeType, "Payment thanks sent: " . dn_money($amount, $config, null) . " → {$name}");
 
                 // v4.10.4: Queue receipt PDF for cron pickup — background fetch after
                 // fastcgi_finish_request was unreliable (sleep + cURL never completed).
@@ -885,7 +889,7 @@ switch ($changeType) {
                             // use current payment amount as fallback
                             if ($totalPaid <= 0) $totalPaid = $amount;
 
-                            whLog($changeType, "Credit sale check: quoted=\${$quotedAmount} paid=\${$totalPaid} delivery_sent={$deliveryAlready}");
+                            whLog($changeType, "Credit sale check: quoted=" . dn_money($quotedAmount, $config, null) . " paid=" . dn_money($totalPaid, $config, null) . " delivery_sent={$deliveryAlready}");
 
                             if ($totalPaid >= $quotedAmount || $quotedAmount <= 0) {
                                 // Generate delivery note
@@ -909,7 +913,7 @@ switch ($changeType) {
                                     whLog($changeType, "Delivery PDF generation failed for {$name}: " . ($delResult['error'] ?? 'unknown'));
                                 }
                             } else {
-                                whLog($changeType, "Delivery note DEFERRED — partial payment (\${$totalPaid} of \${$quotedAmount})");
+                                whLog($changeType, "Delivery note DEFERRED — partial payment (" . dn_money($totalPaid, $config, null) . " of " . dn_money($quotedAmount, $config, null) . ")");
                             }
                         }
                     }
@@ -1072,8 +1076,8 @@ switch ($changeType) {
                 . "Your DishNet service *{$svcName}* is now active. 🌐\n\n"
                 . "🔑 Login credentials have been shared via email.\n\n"
                 . "Manage your account:\n"
-                . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-                . "📞 Support: +211 921 443 002\n"
+                . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
+                . "📞 Support: " . CustomerContact::accounts($config) . "\n"
                 . "💬 wa.me/211921443002\n\n"
                 . "Thank you for choosing DishNet! 🙏\n"
                 . "— DishNet Team",
@@ -1265,7 +1269,7 @@ switch ($changeType) {
                         "🛡️ *VIP Suspension Intercepted*\n\n"
                         . "UCRM marked *{$name}* (CRM #{$clientId}) as suspended.\n"
                         . "Service: *{$svcName}*\n"
-                        . "Outstanding: *\${$outstandingFmt}*\n\n"
+                        . "Outstanding: *" . dn_money($outstandingFmt, $config, null) . "*\n\n"
                         . "Customer received NO message. Devices NOT blocked.\n"
                         . "Tag: NO_AUTO_BLOCK — manual decision required.\n\n"
                         . "Review in CRM and reach out to client finance team if needed.",
@@ -1286,10 +1290,10 @@ switch ($changeType) {
                 . "Dear {$name},\n\n"
                 . "Your DishNet *{$svcName}* service has been suspended due to an unpaid invoice.\n\n"
                 . "To restore your service immediately:\n"
-                . "1️⃣ Pay online: https://dishnetafrica.com/tutorials/index.html\n"
+                . "1️⃣ Pay online: " . CustomerContact::payUrl($config) . "\n"
                 . "2️⃣ Or contact your agent\n\n"
                 . "Service is restored *automatically within minutes* of payment.\n\n"
-                . "📞 +211 921 443 009\n"
+                . "📞 " . CustomerContact::sales($config) . "\n"
                 . "— DishNet Accounts",
                 'ops_service_suspended');
             whLog($changeType, "Suspension WhatsApp sent to {$name} ({$svcName})");
@@ -1463,8 +1467,8 @@ switch ($changeType) {
                     . "You're back online!"
                     . $credBlock
                     . "\n\nManage your account:\n"
-                    . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-                    . "📞 +211 921 443 009\n"
+                    . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
+                    . "📞 " . CustomerContact::sales($config) . "\n"
                     . "— DishNet Accounts",
                     'ops_service_restored');
                 whLog($changeType, "Restoration notice sent to {$name}");
@@ -1614,7 +1618,7 @@ switch ($changeType) {
                 ? "Please settle by *{$postponedToFmt}* to avoid another suspension.\n\n"
                 : "Please settle the outstanding balance to avoid another suspension.\n\n";
             $balanceLine = $outstanding > 0
-                ? "Outstanding balance: *\${$outstandingFmt}*\n\n"
+                ? "Outstanding balance: *" . dn_money($outstandingFmt, $config, null) . "*\n\n"
                 : "";
 
             $notify->sendVia('accounts', $phone,
@@ -1626,8 +1630,8 @@ switch ($changeType) {
                 . "*Your bill is still pending.*\n\n"
                 . $deadlineLine
                 . "To pay now:\n"
-                . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-                . "📞 +211 921 443 009\n"
+                . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
+                . "📞 " . CustomerContact::sales($config) . "\n"
                 . "— DishNet Accounts",
                 'ops_service_postponed');
             whLog($changeType, "Postpone notice sent to {$name}");
@@ -1779,7 +1783,7 @@ switch ($changeType) {
                 $msg = "🎉 *Welcome to DishNet!*\n\n"
                      . "Hi {$custName},\n\n"
                      . "Your account has been activated. Our team will set up your service shortly.\n\n"
-                     . "For support: +211 927 797 217\n\n"
+                     . "For support: " . CustomerContact::escalation($config) . "\n\n"
                      . "— _DishNet Africa_";
                 $notify->sendVia('support', $custPhone, $msg, 'ops_customer_activated', [
                     'customer_name' => $custName, 'crm_id' => $clientId,
@@ -1839,9 +1843,9 @@ switch ($changeType) {
             $msg = "✅ *Quote Approved — DishNet Africa*\n\n"
                  . "Dear {$name},\n\n"
                  . "Thank you for approving Quote *#{$num}*!\n\n"
-                 . "💰 Amount: \${$totalFmt}\n\n"
+                 . "💰 Amount: " . dn_money($totalFmt, $config, null) . "\n\n"
                  . "Our team will contact you shortly to schedule your installation.\n\n"
-                 . "📞 +211 921 443 006\n"
+                 . "📞 " . CustomerContact::support($config) . "\n"
                  . "— DishNet Africa";
             $notify->sendVia('support', $phone, $msg, 'ops_quote_approved', [
                 'customer_name' => $name, 'quote_num' => $num, 'amount' => $totalFmt,
@@ -2214,7 +2218,7 @@ switch ($changeType) {
                  . "✅ Reply *YES* to proceed.\n\n";
 
             // Contact info
-            $msg .= "📞 +211 921 443 009 | 🛒 0923 400 000";
+            $msg .= "📞 " . CustomerContact::sales($config) . " | 🛒 " . CustomerContact::shop($config);
             if ($email) $msg .= "\n📧 {$email}";
             $msg .= "\n\n🚀 *DishNet Internet Services*";
             // Use full rich message as caption (WhatsApp Web supports ~4096 chars)
@@ -2414,7 +2418,7 @@ switch ($changeType) {
             if ($phone) {
                 $msg = "💳 *Credit Note Issued*\n\n"
                      . "Hi {$name},\n\n"
-                     . "A credit of *\${$amount}* (#{$cnNum}) has been applied to your account.\n\n"
+                     . "A credit of *" . dn_money($amount, $config, null) . "* (#{$cnNum}) has been applied to your account.\n\n"
                      . "This will be offset against your next invoice.\n\n"
                      . "— _DishNet Africa_";
                 $notify->sendVia('accounts', $phone, $msg, 'ops_credit_note', [
@@ -2487,7 +2491,7 @@ switch ($changeType) {
         // Skip if invoice is already paid
         $balance = $total - $amountPaid;
         if ($invStatus === 3 || $balance <= 0.01) {
-            whLog($changeType, "near_due SKIPPED — invoice #{$invoiceNum} already paid (\${$amountPaid}/\${$total})");
+            whLog($changeType, "near_due SKIPPED — invoice #{$invoiceNum} already paid (" . dn_money($amountPaid, $config, null) . "/" . dn_money($total, $config, null) . ")");
             whResp(200, 'near_due — invoice already paid, skipping.');
         }
 
@@ -2526,7 +2530,7 @@ switch ($changeType) {
             $notify->invoiceDueTomorrow($phone, $name, $invoiceNum, $total, $currency, $dueDate, $svcName);
         }
 
-        whLog($changeType, "Pre-due reminder sent: #{$invoiceNum} \${$total} → {$name} ({$daysUntil} days)");
+        whLog($changeType, "Pre-due reminder sent: #{$invoiceNum} " . dn_money($total, $config, null) . " → {$name} ({$daysUntil} days)");
         whResp(200, 'near_due — notification sent.');
     }
 
@@ -2557,7 +2561,7 @@ switch ($changeType) {
         // already received. This caused false reminders (e.g. Ashish Kareliya #1152).
         $balance = $total - $amountPaid;
         if ($invStatus === 3 || $balance <= 0.01) {
-            whLog($changeType, "overdue SKIPPED — invoice #{$invoiceNum} already paid (\${$amountPaid}/\${$total}, status={$invStatus})");
+            whLog($changeType, "overdue SKIPPED — invoice #{$invoiceNum} already paid (" . dn_money($amountPaid, $config, null) . "/" . dn_money($total, $config, null) . ", status={$invStatus})");
             whResp(200, 'overdue — invoice already paid, skipping notification.');
         }
 
@@ -2595,7 +2599,7 @@ switch ($changeType) {
             $notify->overdueDay5($phone, $name, $invoiceNum, $total, $currency, $svcName);
         }
 
-        whLog($changeType, "Overdue notice sent: #{$invoiceNum} \${$total} → {$name} ({$daysOverdue} days overdue)");
+        whLog($changeType, "Overdue notice sent: #{$invoiceNum} " . dn_money($total, $config, null) . " → {$name} ({$daysOverdue} days overdue)");
         whResp(200, 'overdue — notification sent.');
     }
 
@@ -2665,7 +2669,7 @@ switch ($changeType) {
                     [(int)$orig['id']]
                 );
 
-                whLog($changeType, "Cashbook reversal posted: -\${$originalAmt} (was {$orig['sr']})");
+                whLog($changeType, "Cashbook reversal posted: -" . dn_money($originalAmt, $config, null) . " (was {$orig['sr']})");
             } else {
                 whLog($changeType, "No cashbook entry found for CRM-PAY-{$paymentId} — skip reversal");
             }
@@ -2721,7 +2725,7 @@ switch ($changeType) {
         try {
             if ($reversedCb || $voidedCol) {
                 $alertMsg = "⚠️ *CRM Payment Deleted*\n\n"
-                    . "Payment #*{$paymentId}* (\${$originalAmt}) was deleted from CRM.\n\n";
+                    . "Payment #*{$paymentId}* (" . dn_money($originalAmt, $config, null) . ") was deleted from CRM.\n\n";
                 if ($reversedCb) {
                     $alertMsg .= "✅ Cashbook auto-reversal posted\n";
                 }

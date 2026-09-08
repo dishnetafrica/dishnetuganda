@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/CustomerContact.php';
+
 // PHP 7.4 polyfills
 if (!function_exists('str_contains')) { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
@@ -29,6 +31,26 @@ require_once __DIR__ . '/currency.php';
  */
 class NotificationService
 {
+    /**
+     * Render an amount with this install's currency.
+     *
+     * Thirty-odd message strings wrote a literal "$" in front of the number,
+     * so a Ugandan customer was told their shilling invoice was in dollars.
+     * The symbol now comes from config. A sigil ($) sits tight against the
+     * digits and an alphabetic code (UGX) takes a space, which is how each is
+     * written — and which leaves every Sudan message here byte-identical.
+     *
+     * Accepts a number or an already-formatted string, because callers pass
+     * both.
+     */
+    private function money($v, int $dp = 2): string
+    {
+        $sym = rtrim($this->curSym);
+        $num = is_numeric($v) ? number_format((float)$v, $dp) : (string)$v;
+        $gap = preg_match('/[A-Za-z]$/', $sym) ? ' ' : '';
+        return $sym . $gap . $num;
+    }
+
     const LOG_FILE    = 'notification_log.json';
     const TIMEOUT_SEC = 8;
     const SUPPORT     = 'support';
@@ -51,6 +73,13 @@ class NotificationService
     private string $dataDir = '';
     /** Money prefix for message texts (config currency_symbol + space). */
     private string $curSym = 'UGX ';
+    /** Shape dn_money() expects, built from the symbol this install uses. */
+    private array  $cfgForMoney = [];
+    /** Customer-facing contacts and links — see the constructor for defaults. */
+    private string $cAccountsPhone = '';
+    private string $cSupportPhone  = '';
+    private string $cPayUrl        = '';
+    private string $cAppUrl        = '';
     /** @var float[] Timestamps of recent sends for rate limiting */
     private array  $sendTimestamps = [];
 
@@ -58,6 +87,14 @@ class NotificationService
     {
         $this->store      = $store;
         $this->curSym     = dn_cur($config);
+        $this->cfgForMoney = ['currency_symbol' => rtrim($this->curSym)];
+        // Contacts and links were welded into ~30 message strings. The
+        // defaults are the exact values those strings have always carried, so
+        // an install that sets nothing sends what it sends today.
+        $this->cAccountsPhone = CustomerContact::accounts($config);
+        $this->cSupportPhone  = CustomerContact::support($config);
+        $this->cPayUrl        = CustomerContact::payUrl($config);
+        $this->cAppUrl        = CustomerContact::appUrl($config);
         // wa_plugin_url = base URL of the WhatsApp server
         // e.g. http://wa.dishnetafrica.com  (NOT the UCRM plugin path)
         $this->pluginUrl  = rtrim(trim($config['wa_plugin_url'] ?? ''), '/');
@@ -180,7 +217,7 @@ class NotificationService
         $msg = "📋 *New Registration*\n\n"
              . "👤 {$customerName}\n"
              . "📍 {$area}\n"
-             . "📶 {$type} | \${$amount}\n\n"
+             . "📶 {$type} | {$this->money($amount)}\n\n"
              . "{$source}\n"
              . "🔖 App #{$appId}\n\n"
              . "👷 Agent: {$retailer['name']}\n"
@@ -256,7 +293,7 @@ class NotificationService
                   . "👤 {$fullName}\n"
                   . "🔗 CRM #{$crmClientId} (existing client)\n"
                   . "📍 *NEW SITE:* {$newAddress}\n"
-                  . "📶 {$serviceType} | \${$amount}\n\n"
+                  . "📶 {$serviceType} | {$this->money($amount)}\n\n"
                   . "{$sourceLine}\n"
                   . $quoteLine
                   . $jobLine
@@ -307,7 +344,7 @@ class NotificationService
                   . "👤 {$fullName}\n"
                   . "🔗 CRM #{$crmClientId} (existing)\n"
                   . "📍 New site: {$newAddress}\n"
-                  . "📶 {$serviceType} | \${$amount}\n\n"
+                  . "📶 {$serviceType} | {$this->money($amount)}\n\n"
                   . $quoteLine
                   . $jobLine
                   . "🔖 App #{$appId}\n\n"
@@ -454,11 +491,11 @@ class NotificationService
              . "👤 {$customerName}\n"
              . "📋 App #{$appId}{$serviceLine}\n\n"
              . "❌ *Error:* {$lastError}\n\n"
-             . "💰 *Wallet refunded:* \${$refunded}"
+             . "💰 *Wallet refunded:* {$this->money($refunded)}"
              . $balanceLine . "\n\n"
              . "📋 *Next steps:*\n"
              . $guidance . "\n\n"
-             . "❓ Need help? +211 921 443 006";
+             . "❓ Need help? {$this->cSupportPhone}";
         
         $vars = [
             'agent_name'      => $retailer['name'],
@@ -486,8 +523,8 @@ class NotificationService
         
         $msg = "💰 *Wallet Credit Added*\n\n"
              . "Hi {$retailer['name']},\n\n"
-             . "➕ Added: *\${$a}*\n"
-             . "💼 Balance: *\${$b}*"
+             . "➕ Added: *{$this->money($a)}*\n"
+             . "💼 Balance: *{$this->money($b)}*"
              . $noteLine . "\n\n"
              . "👤 By: {$addedBy}\n"
              . "🔖 Ref: {$ref}";
@@ -508,7 +545,7 @@ class NotificationService
         
         $msg = "💳 *Recharge Request*\n\n"
              . "👤 {$retailer['name']}{$areaLine}\n"
-             . "💰 Amount: *\${$a}*"
+             . "💰 Amount: *{$this->money($a)}*"
              . $methodLine
              . $screenshotLine . "\n\n"
              . "🔖 Request #{$requestId}\n"
@@ -529,8 +566,8 @@ class NotificationService
             "✅ *Wallet Recharge Approved — DishNet Africa*\n\n"
             . "Hi {$retailer['name']},\n\n"
             . "Your wallet has been topped up:\n"
-            . "💰 Amount Added: *\${$a}*\n"
-            . "📊 New Balance: *\${$b}*\n"
+            . "💰 Amount Added: *{$this->money($a)}*\n"
+            . "📊 New Balance: *{$this->money($b)}*\n"
             . "👤 Approved by: {$approvedBy}"
             . $invoiceLine . "\n\n"
             . "This credit has been applied to your DishNet account.\n"
@@ -547,7 +584,7 @@ class NotificationService
         
         $msg = "⚠️ *Recharge Request Declined*\n\n"
              . "Hi {$retailer['name']},\n\n"
-             . "💰 Amount: \${$a}\n"
+             . "💰 Amount: {$this->money($a)}\n"
              . $refLine
              . "❌ *Reason:* {$reason}\n\n"
              . "📋 *What to do:*\n"
@@ -574,14 +611,14 @@ class NotificationService
         $msg = "🧾 *New Invoice*\n\n"
              . "Dear {$customerName},\n\n"
              . "Invoice #{$invoiceNum}\n"
-             . "💰 Amount: *\${$a}*\n"
+             . "💰 Amount: *{$this->money($a)}*\n"
              . "📅 Due: {$dueDate}"
              . $serviceLine . "\n\n"
              . "💳 Pay online:\n"
-             . "https://dishnetafrica.com/tutorials/index.html\n\n"
-             . "❓ Help: +211 921 443 002\n\n"
+             . "{$this->cPayUrl}\n\n"
+             . "❓ Help: {$this->cAccountsPhone}\n\n"
              . "📱 Manage everything on the DishNet app:\n"
-             . "https://dishnetafrica.com/get-the-app.html\n"
+             . "{$this->cAppUrl}\n"
              . "— DishNet Accounts";
         
         $this->sendVia(self::ACCOUNTS, $customerPhone, $msg,
@@ -604,10 +641,10 @@ class NotificationService
 
         $msg = "✅ *Invoice Auto-Paid — DishNet Africa*\n\n"
              . "Dear {$customerName},\n\n"
-             . "Your invoice #{$invoiceNum} for *\${$a}* has been automatically covered by your account credit.\n\n"
-             . "💰 Invoice total: \${$a}\n"
-             . "✅ Covered by credit: \${$a}\n"
-             . "💳 You owe: *\$0.00*"
+             . "Your invoice #{$invoiceNum} for *{$this->money($a)}* has been automatically covered by your account credit.\n\n"
+             . "💰 Invoice total: {$this->money($a)}\n"
+             . "✅ Covered by credit: {$this->money($a)}\n"
+             . "💳 You owe: *{$this->money(0)}*"
              . $serviceLine
              . $leftoverLine . "\n\n"
              . "No action needed — your service continues uninterrupted.\n\n"
@@ -633,14 +670,14 @@ class NotificationService
         $msg = "🧾 *Invoice — Balance Due — DishNet Africa*\n\n"
              . "Dear {$customerName},\n\n"
              . "Your invoice #{$invoiceNum} is ready.\n\n"
-             . "💰 Invoice total: \${$a}\n"
-             . "✅ Credit applied: \${$ca}\n"
-             . "💳 *Remaining due: \${$r}*\n"
+             . "💰 Invoice total: {$this->money($a)}\n"
+             . "✅ Credit applied: {$this->money($ca)}\n"
+             . "💳 *Remaining due: {$this->money($r)}*\n"
              . "📅 Due date: {$dueDate}"
              . $serviceLine . "\n\n"
              . "Pay the remaining balance:\n"
-             . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-             . "❓ Help: +211 921 443 002\n"
+             . "🔗 {$this->cPayUrl}\n\n"
+             . "❓ Help: {$this->cAccountsPhone}\n"
              . "— DishNet Accounts";
 
         $this->sendVia(self::ACCOUNTS, $customerPhone, $msg,
@@ -657,7 +694,7 @@ class NotificationService
         
         $msg = "✅ *Payment Received*\n\n"
              . "Dear {$customerName},\n\n"
-             . "💰 Amount: *\${$a}*\n"
+             . "💰 Amount: *{$this->money($a)}*\n"
              . "🔖 Ref: {$txnId}"
              . $invoiceLine
              . $balanceLine . "\n\n"
@@ -679,11 +716,11 @@ class NotificationService
         $msg = "⏰ *Payment Reminder*\n\n"
              . "Dear {$customerName},\n\n"
              . $invoiceLine
-             . "💰 Outstanding: *\${$o}*\n"
+             . "💰 Outstanding: *{$this->money($o)}*\n"
              . "📅 Due: {$dueDate}"
              . $serviceLine . "\n\n"
              . "Pay now to avoid service interruption:\n"
-             . "💳 https://dishnetafrica.com/tutorials/index.html\n\n"
+             . "💳 {$this->cPayUrl}\n\n"
              . "Already paid? Reply with your receipt.\n"
              . "— DishNet Accounts";
         
@@ -707,7 +744,7 @@ class NotificationService
         
         $msg = "💵 *Cash Handover Submitted*\n\n"
              . "👤 {$agent['name']}{$areaLine}\n"
-             . "💰 Amount: *\${$a}*\n"
+             . "💰 Amount: *{$this->money($a)}*\n"
              . "📤 To: {$remittedTo}"
              . $salesLine
              . $collectedLine . "\n\n"
@@ -728,8 +765,8 @@ class NotificationService
         
         $msg = "✅ *Handover Confirmed*\n\n"
              . "Hi {$agent['name']},\n\n"
-             . "💰 Confirmed: *\${$a}*\n"
-             . "💼 Cash-in-hand: *\${$b}*\n\n"
+             . "💰 Confirmed: *{$this->money($a)}*\n"
+             . "💼 Cash-in-hand: *{$this->money($b)}*\n\n"
              . $refLine
              . "👤 By: {$approvedBy}\n"
              . "⏰ " . date('M j, g:i A') . "\n\n"
@@ -749,7 +786,7 @@ class NotificationService
         
         $msg = "⚠️ *Handover Needs Review*\n\n"
              . "Hi {$agent['name']},\n\n"
-             . "💰 Submitted: \${$a}"
+             . "💰 Submitted: {$this->money($a)}"
              . $discLine . "\n\n"
              . $refLine
              . "❌ *Issue:* {$reason}\n\n"
@@ -808,7 +845,7 @@ class NotificationService
         $a = number_format($amount, 2);
         $svcLine = $serviceName ? "\n📶 Service: {$serviceName}" : '';
         $this->sendVia(self::ACCOUNTS, $customerPhone,
-            "📋 *Upcoming Invoice — DishNet Africa*\n\nHi {$customerName},\n\nJust a heads-up: your invoice #{$invoiceNum} of *{$a} {$currency}* is due on *{$dueDate}* (7 days).{$svcLine}\n\n💳 Pay early online:\n🔗 https://dishnetafrica.com/tutorials/index.html\n\n— DishNet Accounts",
+            "📋 *Upcoming Invoice — DishNet Africa*\n\nHi {$customerName},\n\nJust a heads-up: your invoice #{$invoiceNum} of *{$a} {$currency}* is due on *{$dueDate}* (7 days).{$svcLine}\n\n💳 Pay early online:\n🔗 {$this->cPayUrl}\n\n— DishNet Accounts",
             'ops_pre_due_d7',
             ['customer_name' => $customerName, 'amount' => $a, 'currency' => $currency,
              'invoice_number' => $invoiceNum, 'due_date' => $dueDate, 'service_name' => $serviceName]
@@ -820,7 +857,7 @@ class NotificationService
         $a = number_format($amount, 2);
         $svcLine = $serviceName ? "\n📶 Service: {$serviceName}" : '';
         $this->sendVia(self::ACCOUNTS, $customerPhone,
-            "⏰ *Due in 3 Days — DishNet Africa*\n\nHi {$customerName},\n\nYour invoice #{$invoiceNum} is due on *{$dueDate}*.\n💰 Amount: *{$a} {$currency}*{$svcLine}\n\nPay now to keep your service running:\n🔗 https://dishnetafrica.com/tutorials/index.html\n\nNeed help? +211 921 443 002\n— DishNet Accounts",
+            "⏰ *Due in 3 Days — DishNet Africa*\n\nHi {$customerName},\n\nYour invoice #{$invoiceNum} is due on *{$dueDate}*.\n💰 Amount: *{$a} {$currency}*{$svcLine}\n\nPay now to keep your service running:\n🔗 {$this->cPayUrl}\n\nNeed help? {$this->cAccountsPhone}\n— DishNet Accounts",
             'ops_pre_due_d3',
             ['customer_name' => $customerName, 'amount' => $a, 'currency' => $currency,
              'invoice_number' => $invoiceNum, 'due_date' => $dueDate, 'service_name' => $serviceName]
@@ -832,7 +869,7 @@ class NotificationService
         $a = number_format($amount, 2);
         $svcLine = $serviceName ? "\n📶 Service: {$serviceName}" : '';
         $this->sendVia(self::ACCOUNTS, $customerPhone,
-            "🔴 *Due Tomorrow — DishNet Africa*\n\nDear {$customerName},\n\nYour invoice #{$invoiceNum} of *{$a} {$currency}* is due *tomorrow* ({$dueDate}).{$svcLine}\n\nPlease pay today to avoid any service interruption:\n🔗 https://dishnetafrica.com/tutorials/index.html\n\n📞 +211 921 443 002\n— DishNet Accounts",
+            "🔴 *Due Tomorrow — DishNet Africa*\n\nDear {$customerName},\n\nYour invoice #{$invoiceNum} of *{$a} {$currency}* is due *tomorrow* ({$dueDate}).{$svcLine}\n\nPlease pay today to avoid any service interruption:\n🔗 {$this->cPayUrl}\n\n📞 {$this->cAccountsPhone}\n— DishNet Accounts",
             'ops_pre_due_d1',
             ['customer_name' => $customerName, 'amount' => $a, 'currency' => $currency,
              'invoice_number' => $invoiceNum, 'due_date' => $dueDate, 'service_name' => $serviceName]
@@ -850,7 +887,7 @@ class NotificationService
     {
         $a = number_format($amount, 2);
         $this->sendVia(self::ACCOUNTS, $customerPhone,
-            "⏰ *Gentle Reminder — DishNet Africa*\n\nHi {$customerName},\n\nYour invoice #{$invoiceNum} of *{$a} {$currency}* was due yesterday.\n\nPay today to avoid any interruption to your service:\n🔗 https://dishnetafrica.com/tutorials/index.html\n\nNeed help? Reply to this message or call\n📞 +211 921 443 002\n\n— DishNet Accounts",
+            "⏰ *Gentle Reminder — DishNet Africa*\n\nHi {$customerName},\n\nYour invoice #{$invoiceNum} of *{$a} {$currency}* was due yesterday.\n\nPay today to avoid any interruption to your service:\n🔗 {$this->cPayUrl}\n\nNeed help? Reply to this message or call\n📞 {$this->cAccountsPhone}\n\n— DishNet Accounts",
             'ops_overdue_d1',
             ['customer_name' => $customerName, 'amount' => $a, 'currency' => $currency,
              'invoice_number' => $invoiceNum, 'service_name' => $serviceName]
@@ -861,7 +898,7 @@ class NotificationService
     {
         $a = number_format($amount, 2);
         $this->sendVia(self::ACCOUNTS, $customerPhone,
-            "🔴 *Account Overdue — DishNet Africa*\n\nDear {$customerName},\n\nYour account has an outstanding balance of *{$a} {$currency}* (Invoice #{$invoiceNum}).\n\nYour service is at risk of suspension.\n\nPay now — takes less than 2 minutes:\n1️⃣ https://dishnetafrica.com/tutorials/index.html\n2️⃣ Click Pay → Pay with Card → Confirm\n\nQuestions? +211 921 443 002\n— DishNet Accounts",
+            "🔴 *Account Overdue — DishNet Africa*\n\nDear {$customerName},\n\nYour account has an outstanding balance of *{$a} {$currency}* (Invoice #{$invoiceNum}).\n\nYour service is at risk of suspension.\n\nPay now — takes less than 2 minutes:\n1️⃣ {$this->cPayUrl}\n2️⃣ Click Pay → Pay with Card → Confirm\n\nQuestions? {$this->cAccountsPhone}\n— DishNet Accounts",
             'ops_overdue_d3',
             ['customer_name' => $customerName, 'amount' => $a, 'currency' => $currency,
              'invoice_number' => $invoiceNum, 'service_name' => $serviceName]
@@ -872,7 +909,7 @@ class NotificationService
     {
         $a = number_format($amount, 2);
         $this->sendVia(self::ACCOUNTS, $customerPhone,
-            "🚨 *Final Notice — Service Suspending Tonight*\n\nDear {$customerName},\n\nYour DishNet service *{$serviceName}* will be suspended at midnight unless payment is received.\n\n💰 Outstanding: *{$a} {$currency}*\n📋 Invoice: #{$invoiceNum}\n\nPay before midnight:\n🔗 https://dishnetafrica.com/tutorials/index.html\n\nAlready paid? Reply with your transaction ID and we'll restore your service immediately.\n\n📞 +211 921 443 002\n— DishNet Accounts",
+            "🚨 *Final Notice — Service Suspending Tonight*\n\nDear {$customerName},\n\nYour DishNet service *{$serviceName}* will be suspended at midnight unless payment is received.\n\n💰 Outstanding: *{$a} {$currency}*\n📋 Invoice: #{$invoiceNum}\n\nPay before midnight:\n🔗 {$this->cPayUrl}\n\nAlready paid? Reply with your transaction ID and we'll restore your service immediately.\n\n📞 {$this->cAccountsPhone}\n— DishNet Accounts",
             'ops_overdue_d5',
             ['customer_name' => $customerName, 'amount' => $a, 'currency' => $currency,
              'invoice_number' => $invoiceNum, 'service_name' => $serviceName]
@@ -887,7 +924,7 @@ class NotificationService
     public function installationConfirmed(string $customerPhone, string $customerName, string $serviceType, string $installDate, string $installTime, string $techName): void
     {
         $this->sendVia(self::SUPPORT, $customerPhone,
-            "📅 *Installation Confirmed — DishNet Africa*\n\nHi {$customerName},\n\nYour *{$serviceType}* installation is booked! ✅\n\n📆 Date: *{$installDate}*\n🕐 Time window: {$installTime}\n👷 Technician: {$techName}\n\nOur technician will call you *30 minutes* before arrival.\n\nPlease ensure someone is at the location during the scheduled window.\n\nQuestions? 📞 +211 921 443 006\n— DishNet Support",
+            "📅 *Installation Confirmed — DishNet Africa*\n\nHi {$customerName},\n\nYour *{$serviceType}* installation is booked! ✅\n\n📆 Date: *{$installDate}*\n🕐 Time window: {$installTime}\n👷 Technician: {$techName}\n\nOur technician will call you *30 minutes* before arrival.\n\nPlease ensure someone is at the location during the scheduled window.\n\nQuestions? 📞 {$this->cSupportPhone}\n— DishNet Support",
             'ops_install_confirmed',
             ['customer_name' => $customerName, 'service_type' => $serviceType,
              'install_date' => $installDate, 'install_time' => $installTime, 'tech_name' => $techName]
@@ -912,7 +949,7 @@ class NotificationService
     public function outageAlert(string $customerPhone, string $customerName, string $maintDate, string $maintStart, string $maintEnd): void
     {
         $this->sendVia(self::SUPPORT, $customerPhone,
-            "🔧 *Planned Maintenance — DishNet Africa*\n\nDear {$customerName},\n\nWe will be performing maintenance in your area that may temporarily affect your service.\n\n📅 Date: *{$maintDate}*\n🕐 Window: {$maintStart} – {$maintEnd}\n\nService will be fully restored by {$maintEnd}.\nNo action required on your part.\n\nWe apologise for any inconvenience.\n\nQuestions? 📞 +211 921 443 006\n— DishNet Technical Team",
+            "🔧 *Planned Maintenance — DishNet Africa*\n\nDear {$customerName},\n\nWe will be performing maintenance in your area that may temporarily affect your service.\n\n📅 Date: *{$maintDate}*\n🕐 Window: {$maintStart} – {$maintEnd}\n\nService will be fully restored by {$maintEnd}.\nNo action required on your part.\n\nWe apologise for any inconvenience.\n\nQuestions? 📞 {$this->cSupportPhone}\n— DishNet Technical Team",
             'ops_outage_alert',
             ['customer_name' => $customerName, 'maint_date' => $maintDate,
              'maint_start' => $maintStart, 'maint_end' => $maintEnd]
@@ -932,11 +969,11 @@ class NotificationService
              . "Dear {$customerName},\n\n"
              . "Your service is coming up for renewal:\n\n"
              . "📶 Service: *{$serviceName}*\n"
-             . "💰 Amount: *\${$a}*\n"
+             . "💰 Amount: *{$this->money($a)}*\n"
              . "📅 Renewal: {$renewalDate}\n\n"
              . "Make sure your account has sufficient balance to avoid interruption.\n\n"
-             . "💳 Top up: https://dishnetafrica.com/tutorials/index.html\n\n"
-             . "❓ Help: +211 921 443 002\n"
+             . "💳 Top up: {$this->cPayUrl}\n\n"
+             . "❓ Help: {$this->cAccountsPhone}\n"
              . "— DishNet Accounts";
 
         $this->sendVia(self::ACCOUNTS, $customerPhone, $msg,
@@ -985,7 +1022,7 @@ class NotificationService
              . "We noticed your *{$serviceName}* service ended on {$endedDate}.\n\n"
              . "We'd love to have you back! 🌐\n\n"
              . "🎁 Contact us about our reconnection offers\n"
-             . "📞 Call: +211 921 443 002\n"
+             . "📞 Call: {$this->cAccountsPhone}\n"
              . "💬 WhatsApp: wa.me/211921443002\n\n"
              . "We're always improving our network and would value your feedback on how we can serve you better.\n\n"
              . "— DishNet Team";
@@ -1013,7 +1050,7 @@ class NotificationService
              . $balanceLine . "\n\n"
              . "🔄 *Want to reconnect?*\n"
              . "We have special offers for returning customers!\n\n"
-             . "📞 +211 921 443 006\n"
+             . "📞 {$this->cSupportPhone}\n"
              . "💬 wa.me/211921443006\n\n"
              . "We'd love to have you back.\n"
              . "— DishNet Team";
@@ -1034,7 +1071,7 @@ class NotificationService
         $b     = number_format($bonus, 2);
         $total = number_format($commission + $bonus, 2);
         $this->sendVia(self::SUPPORT, $agent['phone'] ?? '',
-            "💰 *Monthly Commission — DishNet Africa*\n\nHi {$agent['name']},\n\nHere is your commission for *{$month}*:\n\n👥 New customers:  {$newCustomers}\n💵 Commission:     \${$c}\n🎁 Bonus:          \${$b}\n━━━━━━━━━━━━━━━━━━\n💰 Total:          *\${$total}*\n\nPayment by: {$payDate}\n\nKeep up the great work! 🙌\n— DishNet Operations",
+            "💰 *Monthly Commission — DishNet Africa*\n\nHi {$agent['name']},\n\nHere is your commission for *{$month}*:\n\n👥 New customers:  {$newCustomers}\n💵 Commission:     {$this->money($c)}\n🎁 Bonus:          {$this->money($b)}\n━━━━━━━━━━━━━━━━━━\n💰 Total:          *{$this->money($total)}*\n\nPayment by: {$payDate}\n\nKeep up the great work! 🙌\n— DishNet Operations",
             'ops_commission_summary',
             ['agent_name' => $agent['name'], 'month' => $month, 'new_customers' => (string)$newCustomers,
              'commission_amount' => $c, 'bonus' => $b, 'total_payout' => $total, 'pay_date' => $payDate]
@@ -1087,7 +1124,7 @@ class NotificationService
              . $custPhoneLine
              . $packageLine
              . $validityLine . "\n\n"
-             . "💵 Fee: \${$f}\n"
+             . "💵 Fee: {$this->money($f)}\n"
              . "🔖 MSISDN: {$msisdn}\n\n"
              . "✅ Customer can now connect!";
         
@@ -1341,7 +1378,7 @@ class NotificationService
             "🧾 *Fiber Invoice Recorded*\n\n"
             . "📦 Supplier: {$supplier}\n"
             . "🔖 Invoice: #{$invoiceNum}\n"
-            . "💰 Amount: *\${$a}*\n"
+            . "💰 Amount: *{$this->money($a)}*\n"
             . "📅 Period: {$period}\n"
             . "👤 By: {$recordedBy}\n\n"
             . "👉 Review in Plugin → Fiber Costs",
@@ -1359,8 +1396,8 @@ class NotificationService
         $this->sendAdmin(
             "⚠️ *Fiber Cost Variance Alert*\n\n"
             . "📦 {$supplier} — #{$invoiceNum}\n\n"
-            . "📊 Expected: \${$e}\n"
-            . "{$icon} Invoiced: \${$a}\n"
+            . "📊 Expected: {$this->money($e)}\n"
+            . "{$icon} Invoiced: {$this->money($a)}\n"
             . "📈 Variance: *{$v}* ({$vp}%)\n\n"
             . "Please investigate in Plugin → Fiber Costs → Reconcile",
             'fiber_variance_alert'
@@ -1373,7 +1410,7 @@ class NotificationService
         $lines = [];
         foreach (array_slice($changes, 0, 5) as $c) {
             $dir = $c['change'] > 0 ? '📈' : '📉';
-            $lines[] = "{$dir} {$c['plan']}: \${$c['old_cost']} → \${$c['new_cost']} ({$c['change_pct']}%)";
+            $lines[] = "{$dir} {$c['plan']}: " . dn_money($c['old_cost'], $this->cfgForMoney, null) . " → " . dn_money($c['new_cost'], $this->cfgForMoney, null) . " ({$c['change_pct']}%)";
         }
         if (count($changes) > 5) $lines[] = "…and " . (count($changes) - 5) . " more";
         $this->sendAdmin(
@@ -1400,7 +1437,7 @@ class NotificationService
         $this->sendAdmin(
             "✅ *Fiber Invoice Posted to Cashbook*\n\n"
             . "📦 {$supplier} — #{$invoiceNum}\n"
-            . "💰 \${$a} | 📅 {$period}\n\n"
+            . "💰 {$this->money($a)} | 📅 {$period}\n\n"
             . "Entry created in the main cashbook.",
             'fiber_invoice_posted'
         );

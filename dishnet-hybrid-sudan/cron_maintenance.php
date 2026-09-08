@@ -114,9 +114,9 @@ try {
                 'debits_total'  => round($debits, 2),
                 'detected_at'   => date('Y-m-d H:i:s'),
             ];
-            mlog("  ⚠  DISCREPANCY — Retailer #{$rid} ({$retailer['name']}): live=\${$liveBal} ledger=\${$expected} diff=\${$diff}");
+            mlog("  ⚠  DISCREPANCY — Retailer #{$rid} ({$retailer['name']}): live=" . dn_money($liveBal, $config, null) . " ledger=" . dn_money($expected, $config, null) . " diff=" . dn_money($diff, $config, null));
         } else {
-            mlog("  ✓  Retailer #{$rid} ({$retailer['name']}): \${$liveBal} OK");
+            mlog("  ✓  Retailer #{$rid} ({$retailer['name']}): " . dn_money($liveBal, $config, null) . " OK");
         }
     }
 
@@ -146,9 +146,9 @@ try {
         $alertLines = ["DishNet Wallet Integrity Alert — " . date('Y-m-d H:i:s'), ""];
         foreach ($discrepancies as $d) {
             $alertLines[] = "Retailer #{$d['retailer_id']} ({$d['retailer_name']})";
-            $alertLines[] = "  Live balance : \${$d['live_balance']}";
-            $alertLines[] = "  Ledger total : \${$d['ledger_balance']} (credits \${$d['credits_total']} − debits \${$d['debits_total']})";
-            $alertLines[] = "  Difference   : \${$d['diff']}";
+            $alertLines[] = "  Live balance : " . dn_money($d['live_balance'], $config, null);
+            $alertLines[] = "  Ledger total : " . dn_money($d['ledger_balance'], $config, null) . " (credits " . dn_money($d['credits_total'], $config, null) . " − debits " . dn_money($d['debits_total'], $config, null) . ")";
+            $alertLines[] = "  Difference   : " . dn_money($d['diff'], $config, null);
             $alertLines[] = "";
         }
         $alertLines[] = "Check wallet_integrity_log.json in the DishNet data directory.";
@@ -780,7 +780,7 @@ try {
 
             // Send invoice notification
             $notify->invoiceCreated($phone, $fullName, $invoiceNum, $total, $dueDate ?: 'See invoice');
-            mlog("  SENT: Invoice #{$invoiceNum} \${$total} → {$fullName} ({$phone})");
+            mlog("  SENT: Invoice #{$invoiceNum} " . dn_money($total, $config, null) . " → {$fullName} ({$phone})");
 
             // Send invoice PDF via WhatsML
             try {
@@ -816,7 +816,7 @@ try {
                         $phone,
                         $pdfUrl,
                         "{$invoiceNum}.pdf",
-                        "Invoice #{$invoiceNum} — \${$total} — Due: {$dueDate}\n— DishNet Africa",
+                        "Invoice #{$invoiceNum} — " . dn_money($total, $config, null) . " — Due: {$dueDate}\n— DishNet Africa",
                         'ops_invoice_pdf'
                     );
                     mlog("  PDF sent: #{$invoiceNum}");
@@ -1031,7 +1031,7 @@ try {
 
         $nudgeLog[$logKey] = date('Y-m-d H:i:s');
         $nudged++;
-        mlog("  Nudged {$name} (#{$aid}) — \${$cih} in hand");
+        mlog("  Nudged {$name} (#{$aid}) — " . dn_money($cih, $config, null) . " in hand");
         usleep(300000);
     }
 
@@ -1042,7 +1042,7 @@ try {
     }
     $store->save('handover_nudge_log.json', $nudgeLog);
 
-    mlog("  Handover nudge done: {$nudged} agents nudged (threshold: \${$threshold})");
+    mlog("  Handover nudge done: {$nudged} agents nudged (threshold: " . dn_money($threshold, $config, null) . ")");
     $results['handover_nudge'] = ['nudged' => $nudged, 'threshold' => $threshold];
 } catch (\Throwable $e) {
     mlog("  ERROR: " . $e->getMessage());
@@ -1146,7 +1146,7 @@ try {
             $notify->sendRaw($adminPhone, $msg, 'ops_cashbook_daily_summary');
             $summaryLog[$todayStr2] = date('Y-m-d H:i:s');
             $store->save('cashbook_summary_log.json', $summaryLog);
-            mlog("  Sent to {$adminPhone}: IN=\${$totalIn}, OUT=\${$totalOut}");
+            mlog("  Sent to {$adminPhone}: IN=" . dn_money($totalIn, $config, null) . ", OUT=" . dn_money($totalOut, $config, null));
             $results['cashbook_summary'] = ['sent' => true, 'cash_in' => $totalIn, 'cash_out' => $totalOut];
         } else {
             mlog("  SKIP — whatsapp_admin_phone not configured");

@@ -23,6 +23,27 @@ if (!function_exists('dn_cur')) {
         return htmlspecialchars($s, ENT_QUOTES) . ' ';
     }
 
+    /**
+     * An amount with its symbol attached, ready to drop into a message.
+     *
+     * dn_cur() always appends a space, which reads correctly for an
+     * alphabetic code ("UGX 1,645,440.00") and wrongly for a sigil
+     * ("$ 1,234.00"). Message copy across the plugin wrote "$" tight against
+     * the digits, so this keeps that spacing for a sigil and adds the space
+     * only for a letter code. Every existing dollar rendering therefore comes
+     * out byte-identical while Uganda reads properly.
+     *
+     * Takes a number or an already-formatted string, because callers pass both.
+     */
+    function dn_money($v, ?array $config = null, ?int $dp = 2): string
+    {
+        $sym = rtrim(dn_cur($config));
+        // $dp === null means "print the number exactly as handed over", for
+        // callers whose spacing and decimals are already what they want.
+        $num = ($dp !== null && is_numeric($v)) ? number_format((float)$v, $dp) : (string)$v;
+        return $sym . (preg_match('/[A-Za-z]$/', $sym) ? ' ' : '') . $num;
+    }
+
     /** Currency CODE for API payloads (uCRM currencyCode etc.), e.g. "UGX". */
     function dn_code(?array $config = null): string
     {

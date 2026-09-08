@@ -94,22 +94,42 @@ and that wiring, a Uganda customer whose period ends is told by WhatsApp
 
 ---
 
-## Still open, found while auditing this
+## The WhatsApp defect found while auditing this — now fixed
 
-**The WhatsApp messages have the defect the emails just had.**
-`lib/NotificationService.php` builds every customer-facing WhatsApp message
-and was never covered by the currency codemod. It contains 31 hardcoded
-dollar-sign amounts and 22 South Sudan references — `+211 921 443 002`,
-`dishnetafrica.com/tutorials/index.html`, `dishnetafrica.com/get-the-app.html`.
+The emails were clean; the WhatsApp messages were not. `NotificationService`,
+`webhook.php`, `cron_quote_wa.php`, `cron_maintenance.php`,
+`DeliveryPdfService` and the customer-app push notifications all wrote a
+literal `$` in front of the figure and a `+211` number underneath it. A
+Ugandan customer's invoice notification read:
 
-A Ugandan customer receiving the invoice notification today sees
-`Amount: $1,645,440.00` and a +211 help number.
+> 💰 Amount: **$1,645,440.00**
+> ❓ Help: +211 921 443 002
 
-The currency sweep test does not catch it: its patterns match `'$' .` and
-`"$" . number_format(...)`, but not `"*\${$a}*"` — a dollar escaped inside an
-interpolated double-quoted string, which is the form this file uses. The
-blind spot is in `tests/test_currency_sweep.php`.
+Two changes fixed it:
 
-This is the same class of error as the email leak and is live on the primary
-customer channel, but it is outside the email scope that was asked for, so it
-is reported rather than silently fixed.
+- `dn_money()` in `lib/currency.php` renders an amount with the install's own
+  symbol. A sigil sits tight against the digits (`$1,234.00`) and an
+  alphabetic code takes a space (`UGX 1,645,440.00`), which is how each is
+  written — and which leaves every Sudan rendering byte-identical.
+- `lib/CustomerContact.php` holds the five distinct phone numbers and two
+  links in one place. They stay distinct on purpose: routing a billing
+  question to the installation team is its own failure. Every default is the
+  exact literal that call site printed before.
+
+`tools/set_email_brand.php --uganda` now writes these alongside the email
+brand, so one command moves both channels.
+
+**Why it was invisible.** The currency sweep matched `'$' .` and
+`"$" . number_format(...)` but not `"*\${$a}*"` — a dollar escaped inside an
+interpolated double-quoted string, which is the form all this code used. The
+sweep now carries that pattern, enforced across the files a customer reads.
+
+**Deliberately left alone.** Staff screens — handover, payroll, admin audit
+notes, cash reconciliation — still use the old form. They are internal, and
+the reconciliation report belongs to the Sudan dual-currency cash stack that
+the sweep already exempts. The default AI knowledge block is headed
+"SOUTH SUDAN CONTEXT" and lists that market's plans in dollars on purpose;
+Uganda seeds its own knowledge rather than editing it.
+
+**Still to check:** the Uganda install should have its own knowledge seeded
+(`tools/seed_knowledge.php`), or the AI will quote South Sudan prices.

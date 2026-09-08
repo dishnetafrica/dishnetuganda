@@ -20,6 +20,7 @@ $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EmailTemplate.php';
+require_once $root . '/lib/CustomerContact.php';
 
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
@@ -43,7 +44,7 @@ $UGANDA = [
     'email_bank_account_ugx' => '7247510191',
     'email_bank_account_usd' => '7247510192',
     'email_bank_swift'       => 'ECOCUGKA',
-];
+] + CustomerContact::UGANDA;   // the phone numbers and links in WhatsApp copy
 
 if (in_array('--show', $argvAll, true)) {
     echo "Effective email branding (configured value, else historical default):\n\n";
