@@ -159,6 +159,9 @@ $_m_jobs = [
     // if the last word in any conversation is the customer's and it has sat
     // longer than the patience window, the alert number hears about it once.
     'wa_watchdog'   => ['interval' => 900,                 'script' => __DIR__ . '/wa_watchdog.php'],
+    // The webhook that feeds the AI must STAY registered — this is the guard
+    // against the silent failure where Evolution loses it and the AI goes mute.
+    'wa_webhook_guard' => ['interval' => 600,              'script' => __DIR__ . '/wa_webhook_guard.php'],
 
     // 'wa_bot' disabled in the Sudan edition — superseded by the AI brain.
     // cron_wa_bot.php polls the WASender inbox and auto-replies through
