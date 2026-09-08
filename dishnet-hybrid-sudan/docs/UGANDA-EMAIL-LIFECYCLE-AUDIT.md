@@ -1,6 +1,7 @@
 # DishNet Uganda — Customer Email Lifecycle Audit
 **Date:** 2026-09-08 · **Scope:** every customer-facing email the platform can send
 **Verdict:** 🔴 **NOT READY** for a Uganda customer. Infrastructure is ready; content is not.
+**Update 8 Sep 2026:** Phases 1-3 implemented (shell + 8 emails + `/email-preview`); mail_doctor reports 7 pass / 2 warn / 0 fail with zero South Sudan references in any customer email. Remaining before production: operator sign-off on the previews, the dunning gate, and the uCRM-notifications policy decision above.
 
 ---
 
@@ -175,8 +176,8 @@ RENEWAL / UPGRADE / CANCELLATION ──📱 WA + 📧 confirm──► MISSING
 | Outlook / Gmail / Apple Mail | **NOT VERIFIED** — no client testing performed |
 | Tracking links | ✅ none used |
 | Customer data exposure | ✅ none found in logs (`quote_mail.log` stores address only) |
-| Does uCRM still send its 3 templates? | 🔴 **NOT VERIFIED** — plugin was switched to plugin-only mail; uCRM's own mailer state unknown |
-| Does the dunning cron still send? | 🔴 **NOT VERIFIED** — it uses raw SMTP, not MailService |
+| Does uCRM still send its 3 templates? | ⚠️ **UNVERIFIABLE BY CODE** — uCRM's API returns 404 for `settings`; it does not expose mailer configuration. Answer it in the browser (uCRM → System → Settings → Mailer) and settle it by policy: the plugin owns customer email, so uCRM's customer notifications should be OFF, or a customer receives two emails — one Uganda-branded, one Sudan-branded — for the same invoice. |
+| Does the dunning cron still send? | 🔴 **YES — VERIFIED** (mail_doctor, 8 Sep 2026): it resolves to the Brevo relay and can send. Its nine stages tell a prepaid customer their service is *suspended* and chase debt for 210 days. Must be gated or rewritten before the first Uganda customer. |
 
 ---
 
