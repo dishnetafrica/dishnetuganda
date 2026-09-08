@@ -222,6 +222,10 @@ class MailService
      *                          tags from $htmlBody.
      * @param array  $extraHeaders  Optional extra MIME headers (e.g.
      *                              ['Reply-To' => 'support@dishnetafrica.com']).
+     * @param array  $attachments   Optional files to attach, each entry
+     *                              ['name' => 'Quotation-PF001.pdf',
+     *                               'mime' => 'application/pdf',
+     *                               'content' => raw bytes].
      *
      * @return array{ok:bool, error?:string, log?:array}
      *   On success: ['ok' => true, 'log' => [...steps...]]
@@ -229,7 +233,7 @@ class MailService
      */
     public function send(string $toEmail, string $toName, string $subject,
                          string $htmlBody, string $textBody = '',
-                         array $extraHeaders = []): array
+                         array $extraHeaders = [], array $attachments = []): array
     {
         $log = [];
         $cfg = $this->getConfig();
@@ -250,8 +254,6 @@ class MailService
             ), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
 
-        // Build multipart/alternative MIME
-        $boundary = '=_DishNet_' . bin2hex(random_bytes(8));
         $fromHeader = $cfg['from'];
         // If sender doesn't already have a display name, add "DishNet Africa"
         if (strpos($fromHeader, '<') === false) {
@@ -261,32 +263,9 @@ class MailService
             ? sprintf('"%s" <%s>', addslashes($toName), $toEmail)
             : $toEmail;
 
-        $headers = [
-            'From' => $fromHeader,
-            'To' => $toHeader,
-            'Subject' => $subject,
-            'MIME-Version' => '1.0',
-            'Content-Type' => 'multipart/alternative; boundary="' . $boundary . '"',
-            'Date' => date('r'),
-            'Message-ID' => '<dn_' . bin2hex(random_bytes(8)) . '@' . (gethostname() ?: 'dishnetafrica.com') . '>',
-            'X-Mailer' => 'DishNet-Hybrid/4.21.8',
-        ];
-        foreach ($extraHeaders as $k => $v) $headers[$k] = $v;
-
-        $headerStr = '';
-        foreach ($headers as $k => $v) $headerStr .= "{$k}: {$v}\r\n";
-
-        $mimeBody =
-            "--{$boundary}\r\n"
-          . "Content-Type: text/plain; charset=UTF-8\r\n"
-          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-          . $textBody . "\r\n\r\n"
-          . "--{$boundary}\r\n"
-          . "Content-Type: text/html; charset=UTF-8\r\n"
-          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-          . $htmlBody . "\r\n\r\n"
-          . "--{$boundary}--\r\n";
-
+        [$headerStr, $mimeBody] = $this->composeMime(
+            $fromHeader, $toHeader, $subject, $htmlBody, $textBody, $extraHeaders, $attachments
+        );
         $rawMessage = $headerStr . "\r\n" . $mimeBody;
 
         // Open SMTP
@@ -370,5 +349,74 @@ class MailService
 
         $log[] = ['step' => 'sent', 'ok' => true, 'msg' => "Email queued at SMTP server for {$toEmail}"];
         return ['ok' => true, 'log' => $log];
+    }
+
+    /**
+     * Assemble the full MIME message (header block + body) without touching
+     * the network — the seam the tests exercise. With no attachments this
+     * reproduces the historical multipart/alternative message; attachments
+     * wrap that part in multipart/mixed with each file base64-encoded.
+     *
+     * @return array{0:string,1:string} [header block ending in CRLF, body]
+     */
+    public function composeMime(string $fromHeader, string $toHeader, string $subject,
+                                string $htmlBody, string $textBody,
+                                array $extraHeaders = [], array $attachments = []): array
+    {
+        $altBoundary = '=_DishNet_' . bin2hex(random_bytes(8));
+
+        $altBody =
+            "--{$altBoundary}\r\n"
+          . "Content-Type: text/plain; charset=UTF-8\r\n"
+          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+          . $textBody . "\r\n\r\n"
+          . "--{$altBoundary}\r\n"
+          . "Content-Type: text/html; charset=UTF-8\r\n"
+          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+          . $htmlBody . "\r\n\r\n"
+          . "--{$altBoundary}--\r\n";
+
+        if ($attachments) {
+            $mixBoundary = '=_DishNetMix_' . bin2hex(random_bytes(8));
+            $contentType = 'multipart/mixed; boundary="' . $mixBoundary . '"';
+            $body =
+                "--{$mixBoundary}\r\n"
+              . "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n\r\n"
+              . $altBody . "\r\n";
+            foreach ($attachments as $a) {
+                // Filenames go into a quoted header — keep them boring.
+                $name = preg_replace('/[^A-Za-z0-9 ._()\-]/', '_', (string)($a['name'] ?? 'attachment'));
+                if ($name === '' || $name === false) $name = 'attachment';
+                $mime = (string)($a['mime'] ?? 'application/octet-stream');
+                $body .=
+                    "--{$mixBoundary}\r\n"
+                  . "Content-Type: {$mime}; name=\"{$name}\"\r\n"
+                  . "Content-Transfer-Encoding: base64\r\n"
+                  . "Content-Disposition: attachment; filename=\"{$name}\"\r\n\r\n"
+                  . chunk_split(base64_encode((string)($a['content'] ?? '')), 76, "\r\n")
+                  . "\r\n";
+            }
+            $body .= "--{$mixBoundary}--\r\n";
+        } else {
+            $contentType = 'multipart/alternative; boundary="' . $altBoundary . '"';
+            $body = $altBody;
+        }
+
+        $headers = [
+            'From' => $fromHeader,
+            'To' => $toHeader,
+            'Subject' => $subject,
+            'MIME-Version' => '1.0',
+            'Content-Type' => $contentType,
+            'Date' => date('r'),
+            'Message-ID' => '<dn_' . bin2hex(random_bytes(8)) . '@' . (gethostname() ?: 'dishnetafrica.com') . '>',
+            'X-Mailer' => 'DishNet-Hybrid/4.21.8',
+        ];
+        foreach ($extraHeaders as $k => $v) $headers[$k] = $v;
+
+        $headerStr = '';
+        foreach ($headers as $k => $v) $headerStr .= "{$k}: {$v}\r\n";
+
+        return [$headerStr, $body];
     }
 }
