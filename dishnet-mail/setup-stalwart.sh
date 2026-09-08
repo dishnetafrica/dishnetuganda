@@ -17,23 +17,50 @@ ADMIN_USER="admin"
 say()  { printf '%s\n' "$*"; }
 line() { printf '────────────────────────────────────────────────────────\n'; }
 
-# ── Find a working admin password ───────────────────────────────────────────
+# ── 0) Self-heal permissions: the container user must own the data dirs ─────
+CUID=$(docker exec stalwart id -u 2>/dev/null || true)
+CGID=$(docker exec stalwart id -g 2>/dev/null || true)
+if [ -n "$CUID" ]; then
+  OWNER=$(stat -c %u data/stalwart 2>/dev/null || echo '?')
+  if [ "$OWNER" != "$CUID" ]; then
+    chown -R "${CUID}:${CGID:-$CUID}" data/stalwart data/stalwart-etc 2>/dev/null
+    say "ok   data dirs handed to container user uid=${CUID} (were uid=${OWNER})"
+  else
+    say "ok   data dir ownership already correct (uid=${CUID})"
+  fi
+fi
+if docker logs --since 60m stalwart 2>&1 | tail -40 | grep -q 'Permission denied'; then
+  say "…    a recent permission error is in the log — restarting Stalwart clean"
+  docker restart stalwart >/dev/null; sleep 7
+fi
+
+# ── 1) Find a working admin password — and say WHICH failure this is ────────
 CANDIDATES=()
 [ -n "${STALWART_PASS:-}" ] && CANDIDATES+=("$STALWART_PASS")
 if [ -f .env ]; then
   ENVPASS=$(grep -E '^STALWART_ADMIN=' .env | cut -d: -f2-)
   [ -n "$ENVPASS" ] && CANDIDATES+=("$ENVPASS")
 fi
-PASS=""
+PASS=""; LASTCODE=""
 for c in "${CANDIDATES[@]}"; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' -u "${ADMIN_USER}:${c}" "$API/api/principal?limit=1")
-  if [ "$code" = "200" ]; then PASS="$c"; break; fi
+  LASTCODE=$(curl -s -o /dev/null -w '%{http_code}' -u "${ADMIN_USER}:${c}" "$API/api/principal?limit=1")
+  if [ "$LASTCODE" = "200" ]; then PASS="$c"; break; fi
 done
 if [ -z "$PASS" ]; then
-  say "FAIL: could not authenticate to Stalwart as admin."
-  say "  Tried the STALWART_PASS you provided and the .env recovery password."
-  say "  A 404/405 here can also mean the setup wizard was never finished —"
-  say "  open https://mail.${DOMAIN} and complete it, then rerun this."
+  line
+  if [ "$LASTCODE" = "401" ] || [ "$LASTCODE" = "403" ]; then
+    say "STOP: Stalwart IS configured, but neither password is the admin password."
+    say "  The wizard's administrator page decided the real one — if it displayed a"
+    say "  generated password, use that:  STALWART_PASS='thatpassword' bash setup-stalwart.sh"
+  else
+    say "STOP: Stalwart is still in first-run mode (API answered HTTP ${LASTCODE})."
+    say "  The wizard has not been completed on this instance — permissions are fixed"
+    say "  now, so this time it will save. Open https://mail.${DOMAIN} and fill:"
+    say "    hostname mail.${DOMAIN} · domain ${DOMAIN} · ACME OFF · DKIM ON"
+    say "    storage defaults · internal directory · admin password YJ… (yours)"
+    say "    Manual DNS · Finish setup"
+    say "  Then rerun this exact command."
+  fi
   exit 1
 fi
 say "ok   admin authentication works"
