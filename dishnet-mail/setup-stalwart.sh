@@ -77,14 +77,29 @@ user, _, pw = os.environ["AUTH"].partition(":")
 basic = base64.b64encode(os.environ["AUTH"].encode()).decode()
 failed = False
 
+USING_VARIANTS = [
+    ["urn:ietf:params:jmap:core", "urn:stalwart:jmap", "urn:ietf:params:jmap:principals"],
+    ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:principals"],
+    ["urn:ietf:params:jmap:core", "urn:stalwart:jmap"],
+]
+
 def jmap(calls):
-    body = json.dumps({"using": ["urn:ietf:params:jmap:core", "urn:stalwart:jmap",
-                                 "urn:ietf:params:jmap:principals"],
-                       "methodCalls": calls}).encode()
-    req = urllib.request.Request(API + "/jmap", data=body, method="POST",
-        headers={"Content-Type": "application/json", "Authorization": "Basic " + basic})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return json.load(r)["methodResponses"]
+    last = None
+    for using in USING_VARIANTS:
+        body = json.dumps({"using": using, "methodCalls": calls}).encode()
+        req = urllib.request.Request(API + "/jmap", data=body, method="POST",
+            headers={"Content-Type": "application/json", "Authorization": "Basic " + basic})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return json.load(r)["methodResponses"]
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:400]
+            last = f"HTTP {e.code}: {detail}"
+            # A capability complaint means try the next using-list; anything
+            # else will repeat identically, so surface it now.
+            if "apab" not in detail and "using" not in detail:
+                break
+    raise RuntimeError(last or "request failed")
 
 session = json.load(open(os.environ["SESSION_FILE"]))
 prim = session.get("primaryAccounts") or {}
@@ -96,10 +111,13 @@ print(f"ok   account id {acct}")
 family = None
 notes = []
 for t in ["Principal", "Individual", "Account", "User", "Directory"]:
-    r = jmap([[f"{t}/get", {"accountId": acct, "ids": []}, "0"]])[0]
-    kind = r[1].get("type") if r[0] == "error" else "ok"
+    try:
+        r = jmap([[f"{t}/get", {"accountId": acct, "ids": []}, "0"]])[0]
+        kind = r[1].get("type") if r[0] == "error" else "ok"
+    except RuntimeError as e:
+        kind = str(e)[:60]
     notes.append(f"{t}/get={kind}")
-    if not (r[0] == "error" and r[1].get("type") == "unknownMethod") and family is None:
+    if kind == "ok" and family is None:
         family = t
 print("ok   probe: " + "  ".join(notes))
 if family is None:
@@ -108,7 +126,10 @@ if family is None:
 print(f"ok   using {family}/set")
 
 def setcall(create_obj):
-    r = jmap([[f"{family}/set", {"accountId": acct, "create": {"c1": create_obj}}, "0"]])[0]
+    try:
+        r = jmap([[f"{family}/set", {"accountId": acct, "create": {"c1": create_obj}}, "0"]])[0]
+    except RuntimeError as e:
+        return ("transport", {"type": "transport", "detail": str(e)})
     if r[0] == "error":
         return ("error", r[1])
     created = (r[1].get("created") or {})
@@ -183,6 +204,16 @@ for name, desc, extra, upw in users:
         if done: break
     if not done:
         print(f"FAIL {addr} — tried {last[0]}, got {json.dumps(last[2])[:220]}"); failed = True
+
+# Reconnaissance for the certificate fix: which settings-ish families exist?
+recon = []
+for t in ["Setting", "Settings", "Certificate", "ServerSetting", "Queue"]:
+    try:
+        r = jmap([[f"{t}/get", {"accountId": acct, "ids": []}, "0"]])[0]
+        recon.append(f"{t}={'ok' if r[0] != 'error' else r[1].get('type')}")
+    except RuntimeError as e:
+        recon.append(f"{t}=({str(e)[:40]})")
+print("info settings probe: " + "  ".join(recon))
 
 sys.exit(1 if failed else 0)
 PYEOF
