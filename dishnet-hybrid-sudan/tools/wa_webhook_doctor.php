@@ -124,10 +124,14 @@ foreach ([EvolutionApiService::CHANNEL_SALES,
     }
     ok('setWebhook accepted');
 
-    $after = $evo->getWebhook($inst);
-    $afterS = json_encode($after['data'] ?? []);
-    if (strpos($afterS, 'page=evo_webhook') !== false && strpos($afterS, $secret) !== false) {
-        ok('verified: Evolution now holds our URL with the current token');
+    $after  = $evo->getWebhook($inst);
+    $ad     = (array)($after['data'] ?? []);
+    $afterS = json_encode($ad);
+    // EXACT match, not a substring: a doubled path or a foreign host contains
+    // the same fragments and would otherwise pass this check.
+    $afterUrl = (string)($ad['url'] ?? ($ad['webhook']['url'] ?? ''));
+    if ($afterUrl === $url) {
+        ok('verified: Evolution holds exactly our URL');
     } else {
         bad('setWebhook said OK but the read-back does not show our URL — Evolution answered: '
           . maskTokens(mb_substr($afterS, 0, 260), $secret));
