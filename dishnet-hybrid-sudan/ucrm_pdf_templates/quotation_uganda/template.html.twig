@@ -1,6 +1,7 @@
 <!-- ═══ DishNet Smart Quote Template — UGANDA EDITION v1 (derived from SS v5) ═══ -->
 <!-- Uganda positioning: IT solutions company & UCC Authorised Starlink Installer. -->
-<!-- Not an ISP, not VAT-registered; prices UGX; service prepaid; kits are SOLD.  -->
+<!-- Not an ISP; prices UGX; service prepaid; kits are SOLD. VAT wording follows   -->
+<!-- the quote's own tax lines, so it stays true before and after registration.    -->
 
 {# ── AUTO-DETECT STARLINK ITEMS (badge only — terms below are one set) ── #}
 {% set is_starlink = false %}
@@ -190,7 +191,7 @@
   <table style="width:100%;border-collapse:collapse;">
     <tr>
       <td style="vertical-align:top;padding:0 5px 0 0;width:33%;font-size:9px;color:#444;line-height:1.45;">
-        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">1. Currency &amp; Pricing:</b> All prices in Ugandan Shillings (UGX). DishNet Africa Ltd is not VAT-registered; no VAT is charged on this quotation. Prices may change with 30 days' notice.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">1. Currency &amp; Pricing:</b> All prices in Ugandan Shillings (UGX). {% if totals.taxes|length > 0 %}VAT is itemised in the totals above.{% else %}No VAT is charged on this quotation.{% endif %} Prices may change with 30 days' notice.</div>
         <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">2. Payment:</b> Service is prepaid — the monthly fee is due before the start of each service month. Service pauses automatically at the end of an unpaid period and resumes on payment.</div>
         <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">3. Installation:</b> Professional installation as quoted. Non-standard mounting (roof, pole, long cable runs) is agreed and charged separately before work begins. The dish needs a clear, unobstructed view of the sky.</div>
         <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">4. Equipment:</b> Purchased equipment (e.g. the Starlink kit) becomes the customer's property on full payment; the manufacturer's warranty applies. Any equipment provided on loan remains DishNet property and must be returned within 7 days of termination.</div>
