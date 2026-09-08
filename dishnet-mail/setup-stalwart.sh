@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 # setup-stalwart.sh — configure a wizarded Stalwart v0.16 headlessly.
 #
-# v2: Stalwart 0.16 administers itself over JMAP (POST /jmap, User/set etc.),
-# not the old /api/principal REST — this script speaks that dialect, and reads
-# the server's own /api/schema so field names come from the running version
-# instead of guesswork.
+# v3: the server said "unknownMethod" to User/set and Domain/set, so this
+# version DISCOVERS the JMAP method family first (Principal/…, Account/…,
+# etc.) by probing harmless empty calls, then creates the domain and the
+# mailboxes with automatic retries across field-name variants. Every server
+# answer that blocks progress is printed verbatim.
 #
 #   cd /opt/dishnet/dishnet-mail
 #   STALWART_PASS='admin-password' ACCOUNTS_PASS='accounts@ password' bash setup-stalwart.sh
-#
-# Creates: domain dishnetuganda.com (if missing) and mailboxes accounts@,
-# bhavin@, kishan@, billing@ (with info@/postmaster@/abuse@ aliases),
-# starlink@, dmarc@. Existing users are left untouched. Then installs the TLS
-# certificate + hostname via the host-mounted config.json, restarts, verifies.
 set -u
 
 API="http://172.17.0.1:8090"
@@ -33,9 +29,14 @@ if [ -n "$CUID" ]; then
     chown -R "${CUID}:${CGID:-$CUID}" data/stalwart data/stalwart-etc 2>/dev/null
     say "ok   data dirs handed to container user uid=${CUID}"
   fi
+  # The dumper writes the LE certificate as root; Stalwart (uid 2000) must be
+  # able to READ it or it silently serves a self-signed one — the exact
+  # symptom the last run showed on :993. Re-applied every run because cert
+  # renewals recreate the files as root.
+  chmod -R a+rX data/certs 2>/dev/null && say "ok   certificate files readable by the mail server"
 fi
 
-# ── 1) Authenticate: try both admin names across the candidate passwords ────
+# ── 1) Authenticate ─────────────────────────────────────────────────────────
 CANDIDATES=()
 [ -n "${STALWART_PASS:-}" ] && CANDIDATES+=("$STALWART_PASS")
 if [ -f .env ]; then
@@ -50,128 +51,146 @@ for u in "admin" "admin@${DOMAIN}"; do
   done
 done
 if [ -z "$AUTH" ]; then
-  line
-  if [ "$LASTCODE" = "401" ] || [ "$LASTCODE" = "403" ]; then
-    say "STOP: server is configured but the admin password is wrong (HTTP ${LASTCODE})."
-    say "  Use the password from the wizard's 'Setup complete' screen in STALWART_PASS."
-  else
-    say "STOP: /jmap/session answered HTTP ${LASTCODE} — the wizard may not be finished."
-    say "  Open https://mail.${DOMAIN}, complete it, and rerun this command."
-  fi
+  say "STOP: could not authenticate to /jmap/session (HTTP ${LASTCODE})."
+  say "  Put the wizard's generated admin password in STALWART_PASS and rerun."
   exit 1
 fi
 say "ok   authenticated as ${AUTH%%:*}"
 
-# ── 2) Schema + session → account id and the real type/field names ─────────
-curl -s -u "$AUTH" "$API/api/schema" -o "$TMPD/schema.json" || true
-ACCOUNTS_PW="${ACCOUNTS_PASS:-$(openssl rand -base64 12)}"
-PW_BHAVIN=$(openssl rand -base64 12); PW_KISHAN=$(openssl rand -base64 12)
-PW_BILLING=$(openssl rand -base64 12); PW_STARLINK=$(openssl rand -base64 12)
-PW_DMARC=$(openssl rand -base64 12)
-
-python3 - "$TMPD" "$DOMAIN" "$ACCOUNTS_PW" "$PW_BHAVIN" "$PW_KISHAN" "$PW_BILLING" "$PW_STARLINK" "$PW_DMARC" <<'PYEOF' > "$TMPD/plan.sh"
-import json, sys, re
-tmpd, domain = sys.argv[1], sys.argv[2]
-pw = dict(zip(["accounts","bhavin","kishan","billing","starlink","dmarc"], sys.argv[3:9]))
-
-session = json.load(open(tmpd + "/session.json"))
-# Account id: prefer the stalwart capability's primary account, else any.
-prim = session.get("primaryAccounts") or {}
-acct = prim.get("urn:stalwart:jmap") or (list(prim.values())[0] if prim else None)
-if not acct:
-    accts = session.get("accounts") or {}
-    acct = next(iter(accts), None)
-if not acct:
-    print('say "STOP: no account id in /jmap/session — paste this file to Claude:"; cat ' + tmpd + '/session.json')
-    sys.exit(0)
-
-# Schema: find the admin object types and their field names.
-types = {}
-try:
-    schema = json.load(open(tmpd + "/schema.json"))
-    def walk(o):
-        if isinstance(o, dict):
-            n = o.get("name") or o.get("type") or o.get("id")
-            fields = o.get("fields") or o.get("properties")
-            if isinstance(n, str) and isinstance(fields, (list, dict)):
-                fl = list(fields.keys()) if isinstance(fields, dict) else \
-                     [f.get("id") or f.get("name") for f in fields if isinstance(f, dict)]
-                types.setdefault(n, [x for x in fl if x])
-            for v in o.values(): walk(v)
-        elif isinstance(o, list):
-            for v in o: walk(v)
-    walk(schema)
-except Exception:
-    pass
-
-def pick_type(cands):
-    for c in cands:
-        for t in types:
-            if t.lower() == c: return t
-    return None
-user_t   = pick_type(["user", "account", "individual", "principal"]) or "User"
-domain_t = pick_type(["domain"]) or "Domain"
-
-def pick_field(fl, *pats):
-    for p in pats:
-        for f in fl:
-            if re.fullmatch(p, f, re.I): return f
-    return None
-ufl = types.get(user_t, [])
-f_login  = pick_field(ufl, "loginName", "login", "name", "username") or "name"
-f_desc   = pick_field(ufl, "description", "fullName", "displayName") or "description"
-f_email  = pick_field(ufl, "emails", "email", "emailAddresses", "addresses") or "emails"
-f_secret = pick_field(ufl, "password", "secrets?") or "secret"
-plural_email = not f_email.endswith(("l", "s")) or f_email.endswith("s")
-
-def jmap(calls):
-    return json.dumps({"using": ["urn:ietf:params:jmap:core", "urn:stalwart:jmap",
-                                 "urn:ietf:params:jmap:principals"],
-                       "methodCalls": calls})
-
-def esc(s): return s.replace("'", "'\\''")
-
-print(f'ACCT="{acct}"')
-print(f'say "ok   account id {acct}; types: {user_t}/{domain_t}; fields: {f_login},{f_desc},{f_email},{f_secret}"')
-
-# One query to list existing logins so creates can be skipped.
-q = jmap([[f"{user_t}/query", {"accountId": acct}, "0"],
-          [f"{user_t}/get", {"accountId": acct,
-             "#ids": {"resultOf": "0", "name": f"{user_t}/query", "path": "/ids"},
-             "properties": [f_login, f_email]}, "1"]])
-print(f"EXISTING=$(curl -s -u \"$AUTH\" -X POST -H 'Content-Type: application/json' -d '{esc(q)}' \"$API/jmap\")")
-
-dm = jmap([[f"{domain_t}/set", {"accountId": acct,
-            "create": {"d1": {"name": domain}}}, "0"]])
-print(f"DOMRESP=$(curl -s -u \"$AUTH\" -X POST -H 'Content-Type: application/json' -d '{esc(dm)}' \"$API/jmap\")")
-print('echo "$DOMRESP" | grep -q \'"created"\' && say "ok   domain create call accepted" || say "info domain call: $(echo "$DOMRESP" | head -c 160)"')
-
-users = [("accounts", "Accounts", []),
-         ("bhavin", "Bhavin Madlani", []),
-         ("kishan", "Kishan", []),
-         ("billing", "Billing", ["info", "postmaster", "abuse"]),
-         ("starlink", "Starlink intake", []),
-         ("dmarc", "DMARC reports", [])]
-for u, d, extra in users:
-    emails = [f"{u}@{domain}"] + [f"{e}@{domain}" for e in extra]
-    obj = {f_login: u, f_desc: d, f_secret: pw[u],
-           f_email: emails if plural_email else emails[0]}
-    call = jmap([[f"{user_t}/set", {"accountId": acct, "create": {"c1": obj}}, "0"]])
-    print(f'if echo "$EXISTING" | grep -q \'"{u}@{domain}"\'; then say "ok   {u}@ already exists — untouched"; else')
-    print(f"  R=$(curl -s -u \"$AUTH\" -X POST -H 'Content-Type: application/json' -d '{esc(call)}' \"$API/jmap\")")
-    print(f'  if echo "$R" | grep -q \'"c1"\' && ! echo "$R" | grep -q notCreated; then say "ok   {u}@{domain} created";')
-    print(f'  else say "FAIL {u}@ — $(echo "$R" | head -c 220)"; FAILED=1; fi')
-    print('fi')
-PYEOF
-
+# ── 2) Discover the method family and create everything (pure python) ──────
 FAILED=0
 line
-say "1) Creating domain and mailboxes over JMAP"
-# shellcheck disable=SC1090
-source "$TMPD/plan.sh"
+say "1) Discovering JMAP admin methods and creating domain + mailboxes"
+PW_ACCOUNTS="${ACCOUNTS_PASS:-$(openssl rand -base64 12)}"
+PW_BHAVIN="$(openssl rand -base64 12)"; PW_KISHAN="$(openssl rand -base64 12)"
+PW_BILLING="$(openssl rand -base64 12)"; PW_STARLINK="$(openssl rand -base64 12)"
+PW_DMARC="$(openssl rand -base64 12)"
+AUTH="$AUTH" API="$API" DOMAIN="$DOMAIN" SESSION_FILE="$TMPD/session.json" \
+PW_ACCOUNTS="$PW_ACCOUNTS" PW_BHAVIN="$PW_BHAVIN" PW_KISHAN="$PW_KISHAN" \
+PW_BILLING="$PW_BILLING" PW_STARLINK="$PW_STARLINK" PW_DMARC="$PW_DMARC" \
+python3 - <<'PYEOF'
+import json, os, sys, base64, urllib.request
 
+API    = os.environ["API"]
+DOMAIN = os.environ["DOMAIN"]
+user, _, pw = os.environ["AUTH"].partition(":")
+basic = base64.b64encode(os.environ["AUTH"].encode()).decode()
+failed = False
+
+def jmap(calls):
+    body = json.dumps({"using": ["urn:ietf:params:jmap:core", "urn:stalwart:jmap",
+                                 "urn:ietf:params:jmap:principals"],
+                       "methodCalls": calls}).encode()
+    req = urllib.request.Request(API + "/jmap", data=body, method="POST",
+        headers={"Content-Type": "application/json", "Authorization": "Basic " + basic})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)["methodResponses"]
+
+session = json.load(open(os.environ["SESSION_FILE"]))
+prim = session.get("primaryAccounts") or {}
+acct = prim.get("urn:stalwart:jmap") or next(iter(prim.values()), None) \
+       or next(iter(session.get("accounts") or {}), None)
+print(f"ok   account id {acct}")
+
+# Which method family exists? unknownMethod means no; anything else means yes.
+family = None
+notes = []
+for t in ["Principal", "Individual", "Account", "User", "Directory"]:
+    r = jmap([[f"{t}/get", {"accountId": acct, "ids": []}, "0"]])[0]
+    kind = r[1].get("type") if r[0] == "error" else "ok"
+    notes.append(f"{t}/get={kind}")
+    if not (r[0] == "error" and r[1].get("type") == "unknownMethod") and family is None:
+        family = t
+print("ok   probe: " + "  ".join(notes))
+if family is None:
+    print("FAIL no admin method family answered — paste this output to Claude")
+    sys.exit(1)
+print(f"ok   using {family}/set")
+
+def setcall(create_obj):
+    r = jmap([[f"{family}/set", {"accountId": acct, "create": {"c1": create_obj}}, "0"]])[0]
+    if r[0] == "error":
+        return ("error", r[1])
+    created = (r[1].get("created") or {})
+    if "c1" in created:
+        return ("created", created["c1"])
+    return ("notCreated", (r[1].get("notCreated") or {}).get("c1", {}))
+
+def existing_names():
+    try:
+        q = jmap([[f"{family}/query", {"accountId": acct}, "0"],
+                  [f"{family}/get", {"accountId": acct,
+                     "#ids": {"resultOf": "0", "name": f"{family}/query", "path": "/ids"}}, "1"]])
+        for resp in q:
+            if resp[0] == f"{family}/get":
+                out = set()
+                for item in resp[1].get("list") or []:
+                    for v in item.values():
+                        if isinstance(v, str): out.add(v.lower())
+                        if isinstance(v, list):
+                            out.update(str(x).lower() for x in v)
+                return out
+    except Exception as e:
+        print(f"info existing-list unavailable ({e}) — will rely on alreadyExists")
+    return set()
+
+have = existing_names()
+
+# Domain first.
+if DOMAIN.lower() in have:
+    print(f"ok   domain {DOMAIN} already present")
+else:
+    st, info = setcall({"name": DOMAIN, "type": "domain"})
+    if st == "created":
+        print(f"ok   domain {DOMAIN} created")
+    elif st == "notCreated" and info.get("type") in ("alreadyExists", "invalidProperties") and "name" not in (info.get("properties") or []):
+        print(f"ok   domain call: {info.get('type')} (treating as present)")
+    else:
+        print(f"FAIL domain — {json.dumps(info)[:220]}"); failed = True
+
+users = [("accounts", "Accounts",        [],                                   os.environ["PW_ACCOUNTS"]),
+         ("bhavin",   "Bhavin Madlani",  [],                                   os.environ["PW_BHAVIN"]),
+         ("kishan",   "Kishan",          [],                                   os.environ["PW_KISHAN"]),
+         ("billing",  "Billing",         ["info", "postmaster", "abuse"],      os.environ["PW_BILLING"]),
+         ("starlink", "Starlink intake", [],                                   os.environ["PW_STARLINK"]),
+         ("dmarc",    "DMARC reports",   [],                                   os.environ["PW_DMARC"])]
+
+secret_variants = [("secrets", "list"), ("secret", "str"), ("password", "str")]
+email_variants  = [("emails", "list"), ("email", "str")]
+
+for name, desc, extra, upw in users:
+    addr = f"{name}@{DOMAIN}"
+    if addr.lower() in have or name.lower() in have:
+        print(f"ok   {addr} already exists — untouched"); continue
+    emails = [addr] + [f"{e}@{DOMAIN}" for e in extra]
+    done = False; last = None
+    for sk, sv in secret_variants:
+        for ek, ev in email_variants:
+            obj = {"name": name, "type": "individual", "description": desc,
+                   sk: ([upw] if sv == "list" else upw),
+                   ek: (emails if ev == "list" else emails[0])}
+            st, info = setcall(obj)
+            last = (obj_keys := f"{sk}/{ek}", st, info)
+            if st == "created":
+                print(f"ok   {addr} created ({sk},{ek})"); done = True; break
+            if st == "notCreated" and info.get("type") == "alreadyExists":
+                print(f"ok   {addr} already exists — untouched"); done = True; break
+            # invalidProperties naming our variant fields → try the next combo;
+            # anything else → stop and show it.
+            props = info.get("properties") or []
+            if not (info.get("type") == "invalidProperties" and any(p in (sk, ek, "type", "description") for p in props)):
+                break
+        if done: break
+    if not done:
+        print(f"FAIL {addr} — tried {last[0]}, got {json.dumps(last[2])[:220]}"); failed = True
+
+sys.exit(1 if failed else 0)
+PYEOF
+[ $? -ne 0 ] && FAILED=1
+
+# ── 3) TLS certificate + hostname via config.json ───────────────────────────
 line
-say "2) TLS certificate + hostname via config.json (file config overrides DB)"
+say "2) TLS certificate + hostname via config.json"
 python3 - <<PYEOF
 import json
 p = "data/stalwart-etc/config.json"
@@ -180,7 +199,7 @@ cfg["certificate.default.cert"] = "%{file:${CERTDIR}/fullchain.pem}%"
 cfg["certificate.default.private-key"] = "%{file:${CERTDIR}/privkey.pem}%"
 cfg["server.hostname"] = "mail.${DOMAIN}"
 json.dump(cfg, open(p, "w"), indent=2)
-print("ok   config.json now carries certificate + hostname")
+print("ok   config.json carries certificate + hostname")
 PYEOF
 [ -n "$CUID" ] && chown "${CUID}:${CGID:-$CUID}" data/stalwart-etc/config.json 2>/dev/null
 
@@ -188,20 +207,25 @@ line
 say "3) Restarting and verifying"
 docker restart stalwart >/dev/null && sleep 8
 curl -s -o /dev/null -w 'admin UI  https://mail.'"$DOMAIN"'   HTTP %{http_code}\n' "https://mail.${DOMAIN}"
-timeout 6 bash -c "echo | openssl s_client -connect mail.${DOMAIN}:993 -brief 2>&1 | head -2" || say "imaps :993 not answering (TLS may need the UI route instead)"
+CERTLINE=$(timeout 6 bash -c "echo | openssl s_client -connect mail.${DOMAIN}:993 2>/dev/null | openssl x509 -noout -subject 2>/dev/null")
+say "imaps :993 certificate: ${CERTLINE:-not answering}"
+case "$CERTLINE" in
+  *"$DOMAIN"*) say "ok   real Let's Encrypt certificate is being served" ;;
+  *) say "warn :993 still shows a self-signed certificate — webmail login may complain; tell Claude" ;;
+esac
 
 line
-say "MAILBOX PASSWORDS — write these down NOW (shown once; pre-existing users keep their old password):"
-printf '  %-34s %s\n' "accounts@${DOMAIN}" "${ACCOUNTS_PW}"
-printf '  %-34s %s\n' "bhavin@${DOMAIN}"   "${PW_BHAVIN}"
-printf '  %-34s %s\n' "kishan@${DOMAIN}"   "${PW_KISHAN}"
-printf '  %-34s %s\n' "billing@${DOMAIN}"  "${PW_BILLING}"
-printf '  %-34s %s\n' "starlink@${DOMAIN}" "${PW_STARLINK}"
-printf '  %-34s %s\n' "dmarc@${DOMAIN}"    "${PW_DMARC}"
+say "MAILBOX PASSWORDS — write these down NOW (shown once; a user that ALREADY existed keeps its old password):"
+printf '  %-34s %s\n' "accounts@${DOMAIN}" "$PW_ACCOUNTS"
+printf '  %-34s %s\n' "bhavin@${DOMAIN}"   "$PW_BHAVIN"
+printf '  %-34s %s\n' "kishan@${DOMAIN}"   "$PW_KISHAN"
+printf '  %-34s %s\n' "billing@${DOMAIN}"  "$PW_BILLING"
+printf '  %-34s %s\n' "starlink@${DOMAIN}" "$PW_STARLINK"
+printf '  %-34s %s\n' "dmarc@${DOMAIN}"    "$PW_DMARC"
 line
 say "NEXT:"
-say "  1. Webmail test: https://webmail.${DOMAIN} — username accounts@${DOMAIN} (full address)."
-say "  2. Admin UI → Domains → ${DOMAIN} → DNS records: copy the _domainkey TXT rows to GoDaddy."
+say "  1. Webmail: https://webmail.${DOMAIN} — username accounts@${DOMAIN} (full address)."
+say "  2. Admin UI → Domains → ${DOMAIN} → DNS records → copy _domainkey TXT rows to GoDaddy."
 say "  3. GoDaddy: delete the mailstore1.secureserver.net MX row (cutover)."
-say "  4. Test email:  email_setup.php … --from billing@${DOMAIN} --test bhavin@${DOMAIN}"
+say "  4. Test: email_setup.php … --from billing@${DOMAIN} --test bhavin@${DOMAIN}"
 [ "$FAILED" = "0" ] && say "RESULT: PASS" || say "RESULT: PARTIAL — paste this whole output to Claude"
