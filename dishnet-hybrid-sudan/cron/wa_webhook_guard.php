@@ -108,19 +108,22 @@ try {
             // moment the number reconnects
         }
 
+        // Healthy means EXACTLY our URL — host included. The live failure
+        // this rule comes from: the webhook held the SUDAN domain with the
+        // same path and token, so a substring check would have blessed it
+        // while Uganda's messages went to the wrong country.
         $_wg_before = $_wg_evo->getWebhook($_wg_inst);
-        $_wg_bs = json_encode($_wg_before['data'] ?? []);
-        $_wg_ok = strpos($_wg_bs, 'page=evo_webhook') !== false
-               && strpos($_wg_bs, $_wg_secret) !== false
-               && strpos($_wg_bs, '"enabled":false') === false;
-        if ($_wg_ok) continue;   // healthy — the normal, silent case
+        $_wg_d      = is_array($_wg_before['data'] ?? null) ? $_wg_before['data'] : [];
+        $_wg_regUrl = (string)($_wg_d['url'] ?? ($_wg_d['webhook']['url'] ?? ''));
+        $_wg_disab  = (isset($_wg_d['enabled']) && $_wg_d['enabled'] === false)
+                   || (isset($_wg_d['webhook']['enabled']) && $_wg_d['webhook']['enabled'] === false);
+        if ($_wg_regUrl === $_wg_url && !$_wg_disab) continue;   // healthy — the normal, silent case
 
         $_wg_log("{$_wg_chn}: webhook for '{$_wg_inst}' is missing/stale — re-registering");
         $_wg_set = $_wg_evo->setWebhook($_wg_inst, $_wg_url);
-        $_wg_after = json_encode($_wg_evo->getWebhook($_wg_inst)['data'] ?? []);
-        $_wg_fixed = ($_wg_set['ok'] ?? false)
-                  && strpos($_wg_after, 'page=evo_webhook') !== false
-                  && strpos($_wg_after, $_wg_secret) !== false;
+        $_wg_ad  = (array)($_wg_evo->getWebhook($_wg_inst)['data'] ?? []);
+        $_wg_afterUrl = (string)($_wg_ad['url'] ?? ($_wg_ad['webhook']['url'] ?? ''));
+        $_wg_fixed = ($_wg_set['ok'] ?? false) && $_wg_afterUrl === $_wg_url;
 
         if ($_wg_fixed) {
             $_wg_log("{$_wg_chn}: webhook restored and verified for '{$_wg_inst}'");

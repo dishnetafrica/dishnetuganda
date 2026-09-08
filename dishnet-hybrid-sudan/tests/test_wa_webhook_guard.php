@@ -73,11 +73,28 @@ $out = $run();
 t('no re-registration chatter', strpos($out, 're-registering'), false);
 t('no extra set call', (int)($evoState()['set_calls'] ?? 0), 1);
 
+echo "\nWrong-domain webhook with the SAME token — the live Sudan-URL failure\n";
+$post = function (string $p, array $body) use ($port) {
+    $ch = curl_init("http://127.0.0.1:{$port}{$p}");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 2, CURLOPT_PROXY => '',
+        CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($body)]);
+    $r = curl_exec($ch); curl_close($ch);
+    return (string)$r;
+};
+$post('/webhook/set/dishnet_ug', ['webhook' => [
+    'url' => 'https://crm.dishnetsudan.example/crm/_plugins/x/public.php?page=evo_webhook&token=' . $secret]]);
+$out = $run();
+t('a foreign-host URL with our token is NOT judged healthy',
+  strpos($out, 'restored and verified') !== false, true);
+t('Evolution now holds the RIGHT host again',
+  strpos((string)($evoState()['webhooks']['dishnet_ug']['url'] ?? ''), 'crm.test.example') !== false, true);
+
 echo "\nEvolution loses the webhook again — the guard heals it again\n";
 $hit($port, '/__test/clear_webhook');
 $out = $run();
 t('healed on the next pass', strpos($out, 'restored and verified') !== false, true);
-t('set calls now 2', (int)($evoState()['set_calls'] ?? 0), 2);
+t('set calls now 4 (wrong-host fix + this heal)', (int)($evoState()['set_calls'] ?? 0), 4);
 
 echo "\nScheduling\n";
 $master = (string)file_get_contents($root . '/cron/master.php');
