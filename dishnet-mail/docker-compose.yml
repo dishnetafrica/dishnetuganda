@@ -83,3 +83,7 @@ services:
       - ROUNDCUBEMAIL_PRODUCT_NAME=DishNet Webmail
     volumes:
       - ./data/roundcube:/var/roundcube/db
+      # Trust Stalwart over the docker bridge even while its mail-port cert is
+      # the self-signed placeholder — fixes "Connection to storage server
+      # failed" at webmail login. See the file for why this is safe here.
+      - ./roundcube-custom.php:/var/roundcube/config/custom.inc.php:ro
