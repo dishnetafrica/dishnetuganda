@@ -36,15 +36,20 @@ services:
                                   # reachable only via Traefik (traefik-mail.yml)
                                   # or an SSH tunnel; never published publicly.
     volumes:
-      - ./data/stalwart:/opt/stalwart
+      # This image generation runs `stalwart --config /etc/stalwart/config.json`
+      # and stores everything under /var/lib/stalwart — NOT the old
+      # /opt/stalwart path. Deployed with the old mount, all config lived in
+      # the container layer, broke invisibly, and survived nowhere. Both real
+      # paths are host-mounted now so config and mail persist and are
+      # inspectable from the host.
+      - ./data/stalwart:/var/lib/stalwart
+      - ./data/stalwart-etc:/etc/stalwart
       - ./data/certs:/opt/stalwart-certs:ro   # from certs-dumper (Traefik's LE cert)
     environment:
       - STALWART_RECOVERY_ADMIN=${STALWART_ADMIN:-}
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
+    # No healthcheck: the image ships no wget/curl, so the old check failed
+    # forever and reported a healthy server as "unhealthy". Watch it with
+    # `curl http://172.17.0.1:8090/healthz` from the host instead.
 
   # Watches Traefik's ACME store and keeps PEM files current for Stalwart's
   # SMTP/IMAP TLS. Confirm the acme.json path on this install first:
