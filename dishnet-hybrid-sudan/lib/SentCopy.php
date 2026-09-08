@@ -30,7 +30,7 @@ class SentCopy
     /** @return array{ok:bool,error:string,folder:string} */
     public static function append(array $settings, string $rawMessage): array
     {
-        $out = ['ok' => false, 'error' => '', 'folder' => ''];
+        $out = ['ok' => false, 'error' => '', 'folder' => '', 'listed' => [], 'created' => ''];
         if (empty($settings['sent_copy_enabled'])) {
             $out['error'] = 'disabled';
             return $out;
@@ -94,23 +94,54 @@ class SentCopy
             $msg = preg_replace("/\r\n|\r|\n/", "\r\n", $rawMessage);
             $len = strlen($msg);
 
+            // Ask the server which folders exist, and prefer the one it marks
+            // \Sent — that is authoritative and survives any naming scheme
+            // (Sent, Sent Items, INBOX.Sent, localised names).
+            fwrite($fp, "a2 LIST \"\" \"*\"\r\n");
+            $listing = $readUntil('a2');
+            $special = '';
+            $exists  = [];
+            foreach (preg_split('/\r?\n/', $listing) as $ln) {
+                if (!preg_match('/^\* LIST \(([^)]*)\)\s+\S+\s+(.+)$/', trim($ln), $m2)) continue;
+                $name = trim($m2[2], '"');
+                $exists[] = $name;
+                if (stripos($m2[1], '\\Sent') !== false) $special = $name;
+            }
+            if ($special !== '') array_unshift($folders, $special);
+            $folders = array_values(array_unique($folders));
+            $out['listed'] = $exists;
+
             $n = 1;
-            foreach ($folders as $folder) {
+            $tryAppend = function (string $folder) use ($fp, $q, $msg, $len, &$n, $readLine, $readUntil) {
                 $tag = 'b' . $n++;
                 fwrite($fp, $tag . ' APPEND ' . $q($folder) . ' (\\Seen) {' . $len . "}\r\n");
                 $cont = $readLine();
                 if (strncmp(ltrim($cont), '+', 1) !== 0) {
-                    // Server refused the folder (usually TRYCREATE) — next candidate.
-                    if (strpos($cont, $tag) === false) $readUntil($tag);
-                    continue;
+                    $rest = strpos($cont, $tag) === false ? $readUntil($tag) : $cont;
+                    return [false, trim($cont . ' ' . $rest)];
                 }
                 fwrite($fp, $msg . "\r\n");
                 $resp = $readUntil($tag);
-                if (strpos($resp, $tag . ' OK') !== false) {
-                    $out['ok'] = true; $out['folder'] = $folder;
-                    break;
+                return [strpos($resp, $tag . ' OK') !== false, trim($resp)];
+            };
+
+            foreach ($folders as $folder) {
+                [$okA, $why] = $tryAppend($folder);
+                if ($okA) { $out['ok'] = true; $out['folder'] = $folder; break; }
+
+                // The mailbox is new and has no Sent folder yet — a mail client
+                // would create it, so we do too, then append again.
+                if (stripos($why, 'TRYCREATE') !== false || !in_array($folder, $exists, true)) {
+                    $tag = 'c' . $n++;
+                    fwrite($fp, $tag . ' CREATE ' . $q($folder) . "\r\n");
+                    $cr = $readUntil($tag);
+                    if (strpos($cr, $tag . ' OK') !== false) {
+                        $out['created'] = $folder;
+                        [$okA, $why] = $tryAppend($folder);
+                        if ($okA) { $out['ok'] = true; $out['folder'] = $folder; break; }
+                    }
                 }
-                $out['error'] = 'APPEND to "' . $folder . '" refused';
+                $out['error'] = 'APPEND to "' . $folder . '" refused: ' . mb_substr($why, 0, 160);
             }
             if (!$out['ok'] && $out['error'] === '') {
                 $out['error'] = 'no Sent folder accepted the message (tried: ' . implode(', ', $folders) . ')';

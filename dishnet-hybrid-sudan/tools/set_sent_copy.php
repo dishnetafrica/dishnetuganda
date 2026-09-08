@@ -103,9 +103,15 @@ echo "\n  … filing a test message\n";
 $r = SentCopy::append($es, $raw);
 if (!empty($r['ok'])) {
     echo "  PASS — filed in \"{$r['folder']}\"\n";
+    if (!empty($r['created'])) echo "  (created the \"{$r['created']}\" folder — it did not exist yet)\n";
     echo "\nOpen https://webmail." . substr(strrchr($user, '@'), 1) . " → Sent. It is there.\n";
     exit(0);
 }
 echo "  FAIL — {$r['error']}\n";
+if (!empty($r['listed'])) {
+    echo "\n  Folders this mailbox actually has:\n";
+    foreach ($r['listed'] as $f) echo "    - {$f}\n";
+    echo "  Rerun with --folder \"<one of those>\" if none of them is a Sent folder.\n";
+}
 echo "\nThe password is saved; fix the cause and rerun with --test only.\n";
 exit(1);
