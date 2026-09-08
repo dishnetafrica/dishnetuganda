@@ -35,12 +35,33 @@ chmod -R a+rX data/certs 2>/dev/null
 
 line
 say "2) Embedding the certificate in Stalwart's configuration"
+cp -f "$CFG" "${CFG}.bak.$(date +%s)" 2>/dev/null
+cp -f "$CFG" "${CFG}.rollback" 2>/dev/null
+say "  ok   backup taken (${CFG}.rollback)"
 python3 - "$CFG" "$SRC" "$HOST" "$DOMAIN" <<'PYEOF'
 import json, sys
 cfg_path, src, host, domain = sys.argv[1:5]
 cert = open(src + "/fullchain.pem").read()
 key  = open(src + "/privkey.pem").read()
 cfg  = json.load(open(cfg_path))
+
+# What the file already carried — the bootstrap keys we must not disturb.
+print("  info existing config keys: " + ", ".join(sorted(cfg.keys())))
+
+# THE missing piece: this build reads only whitelisted keys from the file and
+# takes everything else from the database, which is why the certificate — and
+# even the logging switch — were silently ignored. Naming the whitelist makes
+# the file authoritative for these sections. The bootstrap keys already in the
+# file are added verbatim so nothing that works today stops working.
+locals_ = ["config.local-keys.*", "store.*", "storage.*", "directory.*",
+           "tracer.*", "certificate.*", "server.*", "cluster.*",
+           "authentication.fallback-admin.*"]
+for k in cfg:
+    if k not in ("config.local-keys",) and "." in k:
+        pat = k.rsplit(".", 1)[0] + ".*"
+        if pat not in locals_:
+            locals_.append(pat)
+cfg["config.local-keys"] = locals_
 
 # Drop any earlier macro-form attempt so the two cannot disagree.
 for k in list(cfg):
@@ -71,10 +92,22 @@ CGID=$(docker exec stalwart id -g 2>/dev/null || echo 2000)
 chown "${CUID}:${CGID}" "$CFG" 2>/dev/null
 
 line
-say "3) Restarting"
+say "3) Restarting (with automatic rollback if the server does not come back)"
 docker restart stalwart >/dev/null && sleep 10
-say "   — server log (this is the part that was invisible before) —"
+say "   — server log —"
 docker logs --since 2m stalwart 2>&1 | tail -25
+
+# Safety net: if nothing answers on 993 the new config broke the server, so
+# put the old one back rather than leaving mail down overnight.
+if ! timeout 6 bash -c "echo | openssl s_client -connect ${HOST}:993 2>/dev/null | head -1" | grep -q .; then
+  say "  !!   port 993 is not answering — rolling the configuration back"
+  cp -f "${CFG}.rollback" "$CFG"
+  chown "$(docker exec stalwart id -u 2>/dev/null || echo 2000)":"$(docker exec stalwart id -g 2>/dev/null || echo 2000)" "$CFG" 2>/dev/null
+  docker restart stalwart >/dev/null && sleep 8
+  say "  ok   previous configuration restored — mail is serving again"
+  say "RESULT: rolled back. Paste this output to Claude."
+  exit 1
+fi
 
 line
 say "4) What is actually served now"
