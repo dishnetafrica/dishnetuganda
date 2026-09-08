@@ -383,6 +383,11 @@ try {
 <a href="?page=dashboard&tab=roles" class="kyc-tab <?= $tab==='roles'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-shield-lock-fill"></i></span> Roles &amp; Permissions
 </a>
+<?php if ($isAdmin): ?>
+<a href="?page=dashboard&tab=email_preview" class="kyc-tab <?= $tab==='email_preview'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-envelope-paper"></i></span> Email Preview
+</a>
+<?php endif; ?>
 <?php endif; ?>
 <?php if($can('wallet_admin')): ?>
 <a href="?page=dashboard&tab=wallet_admin" class="kyc-tab <?= $tab==='wallet_admin'?'active':'' ?>" style="position:relative;">

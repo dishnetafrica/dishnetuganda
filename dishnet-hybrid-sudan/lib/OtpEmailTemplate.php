@@ -26,8 +26,18 @@ class OtpEmailTemplate
         return "DishNet Login Code: {$code}";
     }
 
-    public static function html(string $firstName, string $code, int $ttlMinutes): string
+    public static function html(string $firstName, string $code, int $ttlMinutes, array $config = []): string
     {
+        // Brand values come from configuration; the defaults ARE the values
+        // this template has always printed, so an install that configures
+        // nothing renders exactly as before.
+        require_once __DIR__ . '/EmailTemplate.php';
+        $b       = EmailTemplate::brand($config);
+        $company = htmlspecialchars($b['company_name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $where   = htmlspecialchars($b['locality'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $site    = htmlspecialchars($b['website'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $phone   = htmlspecialchars($b['support_phone'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $waDigits= preg_replace('/\D+/', '', $b['support_wa']);
         $name = htmlspecialchars($firstName ?: 'there', ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $codeEsc = htmlspecialchars($code, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $ttl = (int)$ttlMinutes;
@@ -113,13 +123,13 @@ class OtpEmailTemplate
         <tr>
           <td style="padding:18px 32px 28px;border-top:1px solid #eeeeee;">
             <p style="margin:0;font-size:11px;color:#999999;line-height:1.6;">
-              <strong style="color:#666666;font-weight:600;">DishNet Africa Ltd.</strong> &middot; Juba, South Sudan<br>
-              <a href="https://dishnetafrica.com" style="color:#D41C1C;text-decoration:none;">dishnetafrica.com</a>
+              <strong style="color:#666666;font-weight:600;">{$company}</strong> &middot; {$where}<br>
+              <a href="https://{$site}" style="color:#D41C1C;text-decoration:none;">{$site}</a>
               &middot;
-              Support: <a href="https://wa.me/211921443009" style="color:#D41C1C;text-decoration:none;">+211 921 443 009</a>
+              Support: <a href="https://wa.me/{$waDigits}" style="color:#D41C1C;text-decoration:none;">{$phone}</a>
             </p>
             <p style="margin:14px 0 0;font-size:10px;color:#bbbbbb;line-height:1.5;">
-              &copy; {$year} DishNet Africa Ltd. This is an automated message — please do not reply.
+              &copy; {$year} {$company} This is an automated message — please do not reply.
             </p>
           </td>
         </tr>
@@ -133,8 +143,10 @@ class OtpEmailTemplate
 HTML;
     }
 
-    public static function text(string $firstName, string $code, int $ttlMinutes): string
+    public static function text(string $firstName, string $code, int $ttlMinutes, array $config = []): string
     {
+        require_once __DIR__ . '/EmailTemplate.php';
+        $b    = EmailTemplate::brand($config);
         $name = $firstName ?: 'there';
         $ttl = (int)$ttlMinutes;
         return
@@ -143,8 +155,8 @@ HTML;
             "    {$code}\r\n\r\n" .
             "This code is valid for {$ttl} minutes.\r\n\r\n" .
             "If you did not request this code, please ignore this email — your account is secure.\r\n\r\n" .
-            "— DishNet Africa\r\n" .
-            "https://dishnetafrica.com\r\n" .
-            "Support: +211 921 443 009\r\n";
+            "— " . $b['company_name'] . "\r\n" .
+            "https://" . $b['website'] . "\r\n" .
+            "Support: " . $b['support_phone'] . "\r\n";
     }
 }

@@ -77,7 +77,7 @@ class RecMailer extends MailService
     public function send(string $toEmail, string $toName, string $subject,
                          string $htmlBody, string $textBody = '',
                          array $extraHeaders = [], array $attachments = []): array {
-        $this->sent[] = compact('toEmail', 'toName', 'subject', 'htmlBody', 'extraHeaders', 'attachments');
+        $this->sent[] = compact('toEmail', 'toName', 'subject', 'htmlBody', 'textBody', 'extraHeaders', 'attachments');
         return $this->sendOk ? ['ok' => true] : ['ok' => false, 'error' => 'SMTP said no'];
     }
 }
@@ -129,7 +129,15 @@ $att = $mailer->sent[0]['attachments'][0] ?? [];
 t('PDF attached under the quote number', $att['name'] ?? '', 'Quotation-PF007.pdf');
 t('as application/pdf', $att['mime'] ?? '', 'application/pdf');
 t('with the exact bytes uCRM served', $att['content'] ?? '', '%PDF-1.4 real-quote-bytes');
-t('body invites reply-or-pay acceptance', strpos((string)($mailer->sent[0]['htmlBody'] ?? ''), 'either one confirms your order') !== false, true);
+$body0 = (string)($mailer->sent[0]['htmlBody'] ?? '');
+t('body invites reply-or-pay acceptance', stripos($body0, 'either one confirms your order') !== false, true);
+// The quotation email now rides the shared shell, so it must carry the shell's
+// marks: a responsive rule, a dark-mode block and the branded footer.
+t('rendered through the shared email shell', strpos($body0, '<!DOCTYPE html>') === 0, true);
+t('mobile responsive', strpos($body0, '@media only screen and (max-width:620px)') !== false, true);
+t('dark-mode aware', strpos($body0, 'prefers-color-scheme:dark') !== false, true);
+t('plain-text twin is supplied, not auto-stripped',
+  strpos((string)($mailer->sent[0]['textBody'] ?? ''), 'Quotation') !== false, true);
 t('send is on the audit log', strpos((string)@file_get_contents($tmp . '/quote_mail.log'), 'PF007 -> billing@cust.test sent') !== false, true);
 
 echo "\nPDF path fallback — second endpoint tried when the first is empty\n";

@@ -478,12 +478,15 @@ if (!function_exists('ca_send_otp_email')) {
 
         $firstName = explode(' ', trim($name))[0] ?: '';
         $subject = OtpEmailTemplate::subject($code);
-        $html    = OtpEmailTemplate::html($firstName, $code, $ttlMinutes);
-        $text    = OtpEmailTemplate::text($firstName, $code, $ttlMinutes);
+        $html    = OtpEmailTemplate::html($firstName, $code, $ttlMinutes, $config);
+        $text    = OtpEmailTemplate::text($firstName, $code, $ttlMinutes, $config);
 
         $mailer = new MailService($dataDir);
+        // Reply-To was hardcoded to the Sudan address, so a Uganda customer
+        // replying to their login email reached the wrong operation.
+        require_once dirname(__DIR__, 2) . '/lib/EmailTemplate.php';
         $result = $mailer->send($toEmail, $name, $subject, $html, $text, [
-            'Reply-To' => 'info@dishnetafrica.com',
+            'Reply-To' => EmailTemplate::replyTo($config),
         ]);
 
         if (!empty($result['ok'])) {

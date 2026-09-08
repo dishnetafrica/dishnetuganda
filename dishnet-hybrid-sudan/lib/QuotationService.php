@@ -519,7 +519,8 @@ class QuotationService
                 $eset = is_file($ef) ? (json_decode((string)@file_get_contents($ef), true) ?: []) : [];
                 if (!empty($eset['quote_email_via_plugin'])) {
                     [$viaPlugin, $emailErr] = $this->emailQuotePdf(
-                        $quoteId, (string)($ucrmNumber ?: $quoteRef), $crmClientId, $retailer
+                        $quoteId, (string)($ucrmNumber ?: $quoteRef), $crmClientId, $retailer,
+                        $this->itemsTotal($items)
                     );
                 }
                 if (!$viaPlugin) {
@@ -541,7 +542,7 @@ class QuotationService
      * Returns [sent, error]. Never throws: any failure returns [false, why]
      * and the caller falls back to uCRM's /send.
      */
-    protected function emailQuotePdf(int $quoteId, string $number, int $crmClientId, array $retailer): array
+    protected function emailQuotePdf(int $quoteId, string $number, int $crmClientId, array $retailer, float $total = 0.0): array
     {
         try {
             $mail = $this->newMailService();
@@ -576,27 +577,22 @@ class QuotationService
             }
 
             $days  = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
-            $phone = (string)($this->config['quote_company_phone'] ?? self::COMPANY_PHONE);
             $cmail = (string)($this->config['quote_company_email'] ?? self::COMPANY_EMAIL);
-            $agent = trim((string)($retailer['name'] ?? '')) ?: self::COMPANY_NAME;
-            $first = trim(explode(' ', trim($name !== '' ? $name : 'Customer'))[0]);
 
-            $subject = "Quotation {$number} — " . self::COMPANY_NAME;
-            $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-            $html =
-                '<p>Dear ' . $e($first) . ',</p>'
-              . '<p>Thank you for your interest in ' . $e(self::COMPANY_NAME) . '. Please find attached our quotation <b>'
-              . $e($number) . '</b> with the full breakdown of items and prices.</p>'
-              . '<ul>'
-              . '<li>The quotation is <b>valid for ' . $days . ' days</b> from its date of issue.</li>'
-              . '<li>Payment details are on the quotation — please use <b>' . $e($number) . '</b> as the payment reference.</li>'
-              . '<li>To go ahead, simply reply to confirm or make payment; either one confirms your order and we will contact you to arrange the next step.</li>'
-              . '</ul>'
-              . '<p>If anything needs adjusting, just tell us and we will send a revised quotation.</p>'
-              . '<p>Warm regards,<br><b>' . $e($agent) . '</b><br>' . $e(self::COMPANY_NAME)
-              . '<br>' . $e($phone) . ' &middot; ' . $e($cmail) . '</p>';
+            // One shell for every customer email (docs/UGANDA-EMAIL-LIFECYCLE-AUDIT.md):
+            // branded header/footer, mobile and dark-mode ready, plain-text twin,
+            // and the money + next-steps the plain version never carried.
+            require_once __DIR__ . '/CustomerEmails.php';
+            $built = CustomerEmails::quotation($this->config, [
+                'customer_name' => $name !== '' ? $name : 'Customer',
+                'quote_number'  => $number,
+                'total'         => $total > 0 ? $total : '',
+                'valid_days'    => $days,
+            ]);
+            $subject = $built['subject'];
 
-            $send = $mail->send($email, $name !== '' ? $name : 'Customer', $subject, $html, '',
+            $send = $mail->send($email, $name !== '' ? $name : 'Customer',
+                $subject, $built['html'], $built['text'],
                 ['Reply-To' => $cmail],
                 [[
                     'name'    => 'Quotation-' . (preg_replace('/[^A-Za-z0-9_\-]/', '', $number) ?: 'quote') . '.pdf',

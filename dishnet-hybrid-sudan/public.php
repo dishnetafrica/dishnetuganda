@@ -2551,6 +2551,7 @@ $_tabFiles = [
     'overdue_workbench'=> 'tabs/admin/overdue_workbench.php',
     'ucrm_data'        => 'tabs/admin/ucrm_data.php',
     'smtp_diagnostic'  => 'tabs/admin/smtp_diagnostic.php',
+    'email_preview'    => 'tabs/admin/email_preview.php',
     'starlink_suspensions' => 'tabs/admin/starlink_suspensions.php',
     'starlink_pauses'  => 'tabs/admin/starlink_pauses.php',
     'maintenance'      => 'tabs/admin/maintenance.php',
