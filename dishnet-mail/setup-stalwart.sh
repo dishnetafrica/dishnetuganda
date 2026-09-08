@@ -1,183 +1,207 @@
 #!/usr/bin/env bash
-# setup-stalwart.sh — configure a freshly-wizarded Stalwart (v0.16) headlessly:
-# domain, mailboxes, TLS certificate, and the DNS records to copy to GoDaddy.
+# setup-stalwart.sh — configure a wizarded Stalwart v0.16 headlessly.
+#
+# v2: Stalwart 0.16 administers itself over JMAP (POST /jmap, User/set etc.),
+# not the old /api/principal REST — this script speaks that dialect, and reads
+# the server's own /api/schema so field names come from the running version
+# instead of guesswork.
 #
 #   cd /opt/dishnet/dishnet-mail
-#   STALWART_PASS='the-admin-password' ACCOUNTS_PASS='mailbox-password' bash setup-stalwart.sh
+#   STALWART_PASS='admin-password' ACCOUNTS_PASS='accounts@ password' bash setup-stalwart.sh
 #
-# Idempotent: principals that already exist are left alone (their passwords are
-# NOT changed on a re-run). Every step prints what happened; nothing is silent.
+# Creates: domain dishnetuganda.com (if missing) and mailboxes accounts@,
+# bhavin@, kishan@, billing@ (with info@/postmaster@/abuse@ aliases),
+# starlink@, dmarc@. Existing users are left untouched. Then installs the TLS
+# certificate + hostname via the host-mounted config.json, restarts, verifies.
 set -u
 
 API="http://172.17.0.1:8090"
 DOMAIN="dishnetuganda.com"
 CERTDIR="/opt/stalwart-certs/mail.${DOMAIN}"
-ADMIN_USER="admin"
+TMPD=$(mktemp -d)
+trap 'rm -rf "$TMPD"' EXIT
 
 say()  { printf '%s\n' "$*"; }
 line() { printf '────────────────────────────────────────────────────────\n'; }
 
-# ── 0) Self-heal permissions: the container user must own the data dirs ─────
+# ── 0) Self-heal volume ownership ───────────────────────────────────────────
 CUID=$(docker exec stalwart id -u 2>/dev/null || true)
 CGID=$(docker exec stalwart id -g 2>/dev/null || true)
 if [ -n "$CUID" ]; then
   OWNER=$(stat -c %u data/stalwart 2>/dev/null || echo '?')
   if [ "$OWNER" != "$CUID" ]; then
     chown -R "${CUID}:${CGID:-$CUID}" data/stalwart data/stalwart-etc 2>/dev/null
-    say "ok   data dirs handed to container user uid=${CUID} (were uid=${OWNER})"
-  else
-    say "ok   data dir ownership already correct (uid=${CUID})"
+    say "ok   data dirs handed to container user uid=${CUID}"
   fi
 fi
-if docker logs --since 60m stalwart 2>&1 | tail -40 | grep -q 'Permission denied'; then
-  say "…    a recent permission error is in the log — restarting Stalwart clean"
-  docker restart stalwart >/dev/null; sleep 7
-fi
 
-# ── 1) Find a working admin password — and say WHICH failure this is ────────
+# ── 1) Authenticate: try both admin names across the candidate passwords ────
 CANDIDATES=()
 [ -n "${STALWART_PASS:-}" ] && CANDIDATES+=("$STALWART_PASS")
 if [ -f .env ]; then
   ENVPASS=$(grep -E '^STALWART_ADMIN=' .env | cut -d: -f2-)
   [ -n "$ENVPASS" ] && CANDIDATES+=("$ENVPASS")
 fi
-PASS=""; LASTCODE=""
+AUTH=""; LASTCODE=""
 for u in "admin" "admin@${DOMAIN}"; do
   for c in "${CANDIDATES[@]}"; do
-    LASTCODE=$(curl -s -o /dev/null -w '%{http_code}' -u "${u}:${c}" "$API/api/principal?limit=1")
-    if [ "$LASTCODE" = "200" ]; then PASS="$c"; ADMIN_USER="$u"; break 2; fi
+    LASTCODE=$(curl -s -o "$TMPD/session.json" -w '%{http_code}' -u "${u}:${c}" "$API/jmap/session")
+    if [ "$LASTCODE" = "200" ]; then AUTH="${u}:${c}"; break 2; fi
   done
 done
-if [ -z "$PASS" ]; then
+if [ -z "$AUTH" ]; then
   line
   if [ "$LASTCODE" = "401" ] || [ "$LASTCODE" = "403" ]; then
-    say "STOP: Stalwart IS configured, but neither password is the admin password."
-    say "  The wizard's administrator page decided the real one — if it displayed a"
-    say "  generated password, use that:  STALWART_PASS='thatpassword' bash setup-stalwart.sh"
+    say "STOP: server is configured but the admin password is wrong (HTTP ${LASTCODE})."
+    say "  Use the password from the wizard's 'Setup complete' screen in STALWART_PASS."
   else
-    say "STOP: Stalwart is still in first-run mode (API answered HTTP ${LASTCODE})."
-    say "  The wizard has not been completed on this instance — permissions are fixed"
-    say "  now, so this time it will save. Open https://mail.${DOMAIN} and fill:"
-    say "    hostname mail.${DOMAIN} · domain ${DOMAIN} · ACME OFF · DKIM ON"
-    say "    storage defaults · internal directory · admin password YJ… (yours)"
-    say "    Manual DNS · Finish setup"
-    say "  Then rerun this exact command."
+    say "STOP: /jmap/session answered HTTP ${LASTCODE} — the wizard may not be finished."
+    say "  Open https://mail.${DOMAIN}, complete it, and rerun this command."
   fi
   exit 1
 fi
-say "ok   admin authentication works"
+say "ok   authenticated as ${AUTH%%:*}"
 
-req() { # method path [json]
-  local m="$1" p="$2" b="${3:-}"
-  if [ -n "$b" ]; then
-    curl -s -w '\n%{http_code}' -u "${ADMIN_USER}:${PASS}" -X "$m" \
-         -H 'Content-Type: application/json' -d "$b" "$API$p"
-  else
-    curl -s -w '\n%{http_code}' -u "${ADMIN_USER}:${PASS}" -X "$m" "$API$p"
-  fi
-}
+# ── 2) Schema + session → account id and the real type/field names ─────────
+curl -s -u "$AUTH" "$API/api/schema" -o "$TMPD/schema.json" || true
+ACCOUNTS_PW="${ACCOUNTS_PASS:-$(openssl rand -base64 12)}"
+PW_BHAVIN=$(openssl rand -base64 12); PW_KISHAN=$(openssl rand -base64 12)
+PW_BILLING=$(openssl rand -base64 12); PW_STARLINK=$(openssl rand -base64 12)
+PW_DMARC=$(openssl rand -base64 12)
 
-exists_principal() { # name -> 0 if exists
-  local out code
-  out=$(req GET "/api/principal/$1"); code=$(printf '%s' "$out" | tail -1)
-  [ "$code" = "200" ]
-}
+python3 - "$TMPD" "$DOMAIN" "$ACCOUNTS_PW" "$PW_BHAVIN" "$PW_KISHAN" "$PW_BILLING" "$PW_STARLINK" "$PW_DMARC" <<'PYEOF' > "$TMPD/plan.sh"
+import json, sys, re
+tmpd, domain = sys.argv[1], sys.argv[2]
+pw = dict(zip(["accounts","bhavin","kishan","billing","starlink","dmarc"], sys.argv[3:9]))
 
-mk_principal() { # json name label
-  local body="$1" name="$2" label="$3" out code resp
-  if exists_principal "$name"; then say "ok   ${label} already exists — untouched"; return 0; fi
-  out=$(req POST "/api/principal" "$body")
-  code=$(printf '%s' "$out" | tail -1); resp=$(printf '%s' "$out" | sed '$d' | head -c 200)
-  if [ "$code" = "200" ] || [ "$code" = "201" ]; then
-    say "ok   ${label} created"
-  else
-    say "FAIL ${label} — HTTP ${code}: ${resp}"
-    FAILED=1
-  fi
-}
+session = json.load(open(tmpd + "/session.json"))
+# Account id: prefer the stalwart capability's primary account, else any.
+prim = session.get("primaryAccounts") or {}
+acct = prim.get("urn:stalwart:jmap") or (list(prim.values())[0] if prim else None)
+if not acct:
+    accts = session.get("accounts") or {}
+    acct = next(iter(accts), None)
+if not acct:
+    print('say "STOP: no account id in /jmap/session — paste this file to Claude:"; cat ' + tmpd + '/session.json')
+    sys.exit(0)
+
+# Schema: find the admin object types and their field names.
+types = {}
+try:
+    schema = json.load(open(tmpd + "/schema.json"))
+    def walk(o):
+        if isinstance(o, dict):
+            n = o.get("name") or o.get("type") or o.get("id")
+            fields = o.get("fields") or o.get("properties")
+            if isinstance(n, str) and isinstance(fields, (list, dict)):
+                fl = list(fields.keys()) if isinstance(fields, dict) else \
+                     [f.get("id") or f.get("name") for f in fields if isinstance(f, dict)]
+                types.setdefault(n, [x for x in fl if x])
+            for v in o.values(): walk(v)
+        elif isinstance(o, list):
+            for v in o: walk(v)
+    walk(schema)
+except Exception:
+    pass
+
+def pick_type(cands):
+    for c in cands:
+        for t in types:
+            if t.lower() == c: return t
+    return None
+user_t   = pick_type(["user", "account", "individual", "principal"]) or "User"
+domain_t = pick_type(["domain"]) or "Domain"
+
+def pick_field(fl, *pats):
+    for p in pats:
+        for f in fl:
+            if re.fullmatch(p, f, re.I): return f
+    return None
+ufl = types.get(user_t, [])
+f_login  = pick_field(ufl, "loginName", "login", "name", "username") or "name"
+f_desc   = pick_field(ufl, "description", "fullName", "displayName") or "description"
+f_email  = pick_field(ufl, "emails", "email", "emailAddresses", "addresses") or "emails"
+f_secret = pick_field(ufl, "password", "secrets?") or "secret"
+plural_email = not f_email.endswith(("l", "s")) or f_email.endswith("s")
+
+def jmap(calls):
+    return json.dumps({"using": ["urn:ietf:params:jmap:core", "urn:stalwart:jmap",
+                                 "urn:ietf:params:jmap:principals"],
+                       "methodCalls": calls})
+
+def esc(s): return s.replace("'", "'\\''")
+
+print(f'ACCT="{acct}"')
+print(f'say "ok   account id {acct}; types: {user_t}/{domain_t}; fields: {f_login},{f_desc},{f_email},{f_secret}"')
+
+# One query to list existing logins so creates can be skipped.
+q = jmap([[f"{user_t}/query", {"accountId": acct}, "0"],
+          [f"{user_t}/get", {"accountId": acct,
+             "#ids": {"resultOf": "0", "name": f"{user_t}/query", "path": "/ids"},
+             "properties": [f_login, f_email]}, "1"]])
+print(f"EXISTING=$(curl -s -u \"$AUTH\" -X POST -H 'Content-Type: application/json' -d '{esc(q)}' \"$API/jmap\")")
+
+dm = jmap([[f"{domain_t}/set", {"accountId": acct,
+            "create": {"d1": {"name": domain}}}, "0"]])
+print(f"DOMRESP=$(curl -s -u \"$AUTH\" -X POST -H 'Content-Type: application/json' -d '{esc(dm)}' \"$API/jmap\")")
+print('echo "$DOMRESP" | grep -q \'"created"\' && say "ok   domain create call accepted" || say "info domain call: $(echo "$DOMRESP" | head -c 160)"')
+
+users = [("accounts", "Accounts", []),
+         ("bhavin", "Bhavin Madlani", []),
+         ("kishan", "Kishan", []),
+         ("billing", "Billing", ["info", "postmaster", "abuse"]),
+         ("starlink", "Starlink intake", []),
+         ("dmarc", "DMARC reports", [])]
+for u, d, extra in users:
+    emails = [f"{u}@{domain}"] + [f"{e}@{domain}" for e in extra]
+    obj = {f_login: u, f_desc: d, f_secret: pw[u],
+           f_email: emails if plural_email else emails[0]}
+    call = jmap([[f"{user_t}/set", {"accountId": acct, "create": {"c1": obj}}, "0"]])
+    print(f'if echo "$EXISTING" | grep -q \'"{u}@{domain}"\'; then say "ok   {u}@ already exists — untouched"; else')
+    print(f"  R=$(curl -s -u \"$AUTH\" -X POST -H 'Content-Type: application/json' -d '{esc(call)}' \"$API/jmap\")")
+    print(f'  if echo "$R" | grep -q \'"c1"\' && ! echo "$R" | grep -q notCreated; then say "ok   {u}@{domain} created";')
+    print(f'  else say "FAIL {u}@ — $(echo "$R" | head -c 220)"; FAILED=1; fi')
+    print('fi')
+PYEOF
 
 FAILED=0
 line
-say "1) Domain + mailboxes on ${DOMAIN}"
-
-mk_principal "{\"type\":\"domain\",\"name\":\"${DOMAIN}\",\"description\":\"Primary mail domain\"}" \
-  "${DOMAIN}" "domain ${DOMAIN}"
-
-ACCOUNTS_PW="${ACCOUNTS_PASS:-}"
-if [ -z "$ACCOUNTS_PW" ]; then ACCOUNTS_PW=$(openssl rand -base64 12); fi
-declare -A PW
-PW[accounts]="$ACCOUNTS_PW"
-for u in bhavin kishan billing starlink dmarc; do PW[$u]=$(openssl rand -base64 12); done
-
-mkbox() { # user displayname extra_emails_csv
-  local u="$1" d="$2" extra="${3:-}" emails="\"${u}@${DOMAIN}\""
-  if [ -n "$extra" ]; then
-    for e in ${extra//,/ }; do emails="${emails},\"${e}@${DOMAIN}\""; done
-  fi
-  mk_principal "{\"type\":\"individual\",\"name\":\"${u}\",\"description\":\"${d}\",\"secrets\":[\"${PW[$u]}\"],\"emails\":[${emails}],\"quota\":0,\"roles\":[\"user\"]}" \
-    "$u" "mailbox ${u}@${DOMAIN}"
-}
-mkbox accounts "Accounts"
-mkbox bhavin   "Bhavin Madlani"
-mkbox kishan   "Kishan"
-mkbox billing  "Billing" "info,postmaster,abuse"
-mkbox starlink "Starlink intake"
-mkbox dmarc    "DMARC reports"
+say "1) Creating domain and mailboxes over JMAP"
+# shellcheck disable=SC1090
+source "$TMPD/plan.sh"
 
 line
-say "2) TLS certificate from the Traefik dumper files"
-CERTJSON="[{\"type\":\"insert\",\"prefix\":\"certificate.default\",\"values\":[[\"cert\",\"%{file:${CERTDIR}/fullchain.pem}%\"],[\"private-key\",\"%{file:${CERTDIR}/privkey.pem}%\"]]},{\"type\":\"insert\",\"prefix\":\"server\",\"values\":[[\"hostname\",\"mail.${DOMAIN}\"]]}]"
-out=$(req POST "/api/settings" "$CERTJSON"); code=$(printf '%s' "$out" | tail -1)
-if [ "$code" = "200" ]; then
-  say "ok   certificate + hostname settings written"
-else
-  say "warn settings API answered HTTP ${code} — do this bit in the UI:"
-  say "     Settings → Server → TLS → Certificates: cert ${CERTDIR}/fullchain.pem"
-  say "     key ${CERTDIR}/privkey.pem; Settings → Server: hostname mail.${DOMAIN}"
-fi
-req GET "/api/reload" >/dev/null 2>&1 || true
+say "2) TLS certificate + hostname via config.json (file config overrides DB)"
+python3 - <<PYEOF
+import json
+p = "data/stalwart-etc/config.json"
+cfg = json.load(open(p))
+cfg["certificate.default.cert"] = "%{file:${CERTDIR}/fullchain.pem}%"
+cfg["certificate.default.private-key"] = "%{file:${CERTDIR}/privkey.pem}%"
+cfg["server.hostname"] = "mail.${DOMAIN}"
+json.dump(cfg, open(p, "w"), indent=2)
+print("ok   config.json now carries certificate + hostname")
+PYEOF
+[ -n "$CUID" ] && chown "${CUID}:${CGID:-$CUID}" data/stalwart-etc/config.json 2>/dev/null
 
 line
-say "3) DNS records Stalwart wants for ${DOMAIN} (add the *_domainkey TXT rows at GoDaddy)"
-out=$(req GET "/api/dns/records/${DOMAIN}"); code=$(printf '%s' "$out" | tail -1)
-if [ "$code" = "200" ]; then
-  printf '%s' "$out" | sed '$d' | python3 -c '
-import json,sys
-try:
-    d=json.load(sys.stdin)
-    rows=d.get("data",d) if isinstance(d,dict) else d
-    for r in rows:
-        t=str(r.get("type","")).upper()
-        if "DKIM" in t or "domainkey" in str(r.get("name","")) or t in ("TXT","MX","SRV","CNAME"):
-            print("  %-6s %-45s %s" % (r.get("type",""), r.get("name",""), str(r.get("content", r.get("value","")))[:180]))
-except Exception as e:
-    sys.stdout.write("  (could not parse: %s)\n" % e)
-'
-else
-  say "warn DNS-records API answered HTTP ${code} — read them in the UI under the domain's DNS page"
-fi
+say "3) Restarting and verifying"
+docker restart stalwart >/dev/null && sleep 8
+curl -s -o /dev/null -w 'admin UI  https://mail.'"$DOMAIN"'   HTTP %{http_code}\n' "https://mail.${DOMAIN}"
+timeout 6 bash -c "echo | openssl s_client -connect mail.${DOMAIN}:993 -brief 2>&1 | head -2" || say "imaps :993 not answering (TLS may need the UI route instead)"
 
 line
-say "4) Restarting Stalwart to apply everything"
-docker restart stalwart >/dev/null && sleep 6
-docker logs --since 1m stalwart 2>&1 | grep -E 'listen-start|error|failed' | head -12
-curl -s -o /dev/null -w 'https admin UI     HTTP %{http_code}\n' "https://mail.${DOMAIN}"
-timeout 6 bash -c "echo | openssl s_client -connect mail.${DOMAIN}:993 -brief 2>&1 | head -2" || say "imaps :993 not answering yet"
-
-line
-say "MAILBOX PASSWORDS — write these down NOW, they are not shown again:"
-for u in accounts bhavin kishan billing starlink dmarc; do
-  if exists_principal "$u"; then printf '  %-10s %s@%s   %s\n' "$u" "$u" "$DOMAIN" "${PW[$u]}"; fi
-done
-say "  (a mailbox that already existed keeps its old password — the one above is unused)"
+say "MAILBOX PASSWORDS — write these down NOW (shown once; pre-existing users keep their old password):"
+printf '  %-34s %s\n' "accounts@${DOMAIN}" "${ACCOUNTS_PW}"
+printf '  %-34s %s\n' "bhavin@${DOMAIN}"   "${PW_BHAVIN}"
+printf '  %-34s %s\n' "kishan@${DOMAIN}"   "${PW_KISHAN}"
+printf '  %-34s %s\n' "billing@${DOMAIN}"  "${PW_BILLING}"
+printf '  %-34s %s\n' "starlink@${DOMAIN}" "${PW_STARLINK}"
+printf '  %-34s %s\n' "dmarc@${DOMAIN}"    "${PW_DMARC}"
 line
 say "NEXT:"
-say "  1. Webmail login test: https://webmail.${DOMAIN} — username accounts@${DOMAIN} (full address)."
-say "  2. Add the _domainkey TXT rows above at GoDaddy."
-say "  3. In the admin UI, one screen I do not set blindly: Settings → SMTP → Outbound"
-say "     relay host smtp-relay.brevo.com : 587 STARTTLS, login b7cac0001@smtp-brevo.com,"
-say "     password = your Brevo SMTP key.  (Needed for replies FROM webmail; the plugin's"
-say "     own sending already goes to Brevo directly and works today.)"
-say "  4. Cutover at GoDaddy: delete the mailstore1 MX row (and secureserver leftovers)."
-say "  5. Test:  the email_setup.php command with --from billing@${DOMAIN} --test bhavin@${DOMAIN}"
-[ "$FAILED" = "0" ] && say "RESULT: PASS" || say "RESULT: PARTIAL — read the FAIL lines above"
+say "  1. Webmail test: https://webmail.${DOMAIN} — username accounts@${DOMAIN} (full address)."
+say "  2. Admin UI → Domains → ${DOMAIN} → DNS records: copy the _domainkey TXT rows to GoDaddy."
+say "  3. GoDaddy: delete the mailstore1.secureserver.net MX row (cutover)."
+say "  4. Test email:  email_setup.php … --from billing@${DOMAIN} --test bhavin@${DOMAIN}"
+[ "$FAILED" = "0" ] && say "RESULT: PASS" || say "RESULT: PARTIAL — paste this whole output to Claude"
