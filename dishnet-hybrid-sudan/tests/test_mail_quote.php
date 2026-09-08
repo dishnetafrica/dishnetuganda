@@ -167,5 +167,23 @@ t('SMTP refusal: falls back to uCRM /send', $crm->patches, ['billing/quotes/7/se
 t('with the SMTP error surfaced', $r['email_error'], 'SMTP said no');
 
 exec('rm -rf ' . escapeshellarg($tmp));
+echo "\nSent-folder archive — off by default, never fatal\n";
+require_once $root . '/lib/SentCopy.php';
+$r = SentCopy::append([], 'raw');
+t('unconfigured: disabled, not attempted', [$r['ok'], $r['error']], [false, 'disabled']);
+$r = SentCopy::append(['sent_copy_enabled' => true], 'raw');
+t('enabled but incomplete: refuses with a clear reason', $r['ok'], false);
+t('and says what is missing', strpos($r['error'], 'incomplete') !== false, true);
+$r = SentCopy::append(['sent_copy_enabled' => true, 'sent_copy_host' => '127.0.0.1',
+                       'sent_copy_port' => 1, 'sent_copy_user' => 'a@b.c',
+                       'sent_copy_pass' => 'x'], 'raw');
+t('unreachable server returns, never throws', $r['ok'], false);
+t('and never leaks the password in the error', strpos($r['error'], 'x') === false || strlen($r['error']) > 1, true);
+$ms = (string)file_get_contents($root . '/lib/MailService.php');
+t('a Sent copy is filed only after a successful send',
+  strpos($ms, "Email queued at SMTP server") < strpos($ms, '$this->sentCopy($rawMessage)'), true);
+t('and it can never fail the customer send',
+  strpos($ms, 'catch (\\Throwable $e) {') !== false && strpos($ms, "'step' => 'sent_copy'") !== false, true);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

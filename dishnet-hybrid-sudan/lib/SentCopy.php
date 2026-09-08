@@ -1,0 +1,126 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * SentCopy — file a copy of an outgoing message into the Sent folder.
+ *
+ * WHY: the platform sends through a relay (Brevo), which delivers to the
+ * recipient without the message ever passing through our own mail server. The
+ * relay has a log, but the operator's Sent folder — the place a human actually
+ * looks — stays empty. Mail clients solve this by appending the sent message to
+ * the mailbox over IMAP; this does the same for the platform's automated mail.
+ *
+ * Config (email_settings.json, alongside the SMTP keys):
+ *   sent_copy_enabled  true
+ *   sent_copy_host     mail.dishnetuganda.com
+ *   sent_copy_port     993
+ *   sent_copy_user     accounts@dishnetuganda.com
+ *   sent_copy_pass     the mailbox password
+ *   sent_copy_folder   Sent            (optional; INBOX.Sent is tried too)
+ *
+ * Unconfigured means disabled — no behaviour change anywhere.
+ *
+ * NEVER THROWS. A copy that cannot be filed must never fail a customer send:
+ * the customer already has the email; our archive is the lesser concern.
+ *
+ * PHP 7.4 compatible, raw IMAP over TLS — no ext-imap required.
+ */
+class SentCopy
+{
+    /** @return array{ok:bool,error:string,folder:string} */
+    public static function append(array $settings, string $rawMessage): array
+    {
+        $out = ['ok' => false, 'error' => '', 'folder' => ''];
+        if (empty($settings['sent_copy_enabled'])) {
+            $out['error'] = 'disabled';
+            return $out;
+        }
+        $host = trim((string)($settings['sent_copy_host'] ?? ''));
+        $user = trim((string)($settings['sent_copy_user'] ?? ''));
+        $pass = (string)($settings['sent_copy_pass'] ?? '');
+        $port = (int)($settings['sent_copy_port'] ?? 993) ?: 993;
+        if ($host === '' || $user === '' || $pass === '') {
+            $out['error'] = 'sent-copy is enabled but host/user/password are incomplete';
+            return $out;
+        }
+        // Folder candidates: what the operator configured, then the two
+        // spellings every IMAP server in practice uses.
+        $folders = array_values(array_unique(array_filter([
+            trim((string)($settings['sent_copy_folder'] ?? '')), 'Sent', 'INBOX.Sent',
+        ])));
+
+        $fp = null;
+        try {
+            $ctx = stream_context_create(['ssl' => [
+                // The mail host may still be presenting a self-signed
+                // certificate; this is our own server on our own network and
+                // the alternative is no archive at all.
+                'verify_peer'       => (bool)($settings['sent_copy_verify'] ?? false),
+                'verify_peer_name'  => (bool)($settings['sent_copy_verify'] ?? false),
+                'allow_self_signed' => true,
+            ]]);
+            $errno = 0; $errstr = '';
+            $fp = @stream_socket_client("ssl://{$host}:{$port}", $errno, $errstr, 12,
+                                        STREAM_CLIENT_CONNECT, $ctx);
+            if (!$fp) { $out['error'] = "connect failed: {$errstr}"; return $out; }
+            stream_set_timeout($fp, 15);
+
+            $readLine = function () use ($fp) { return (string)fgets($fp, 8192); };
+            $greeting = $readLine();
+            if (strpos($greeting, 'OK') === false) {
+                $out['error'] = 'unexpected greeting: ' . trim($greeting);
+                return $out;
+            }
+
+            // Read until the tagged response for $tag arrives.
+            $readUntil = function (string $tag) use ($fp) {
+                $buf = '';
+                while (($l = fgets($fp, 8192)) !== false) {
+                    $buf .= $l;
+                    if (strncmp($l, $tag . ' ', strlen($tag) + 1) === 0) break;
+                }
+                return $buf;
+            };
+            $q = fn(string $s) => '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $s) . '"';
+
+            fwrite($fp, 'a1 LOGIN ' . $q($user) . ' ' . $q($pass) . "\r\n");
+            $resp = $readUntil('a1');
+            if (strpos($resp, 'a1 OK') === false) {
+                $out['error'] = 'login rejected';   // never echo the server's line: it can quote the password
+                return $out;
+            }
+
+            // Normalise line endings: IMAP literals are counted in CRLF bytes.
+            $msg = preg_replace("/\r\n|\r|\n/", "\r\n", $rawMessage);
+            $len = strlen($msg);
+
+            $n = 1;
+            foreach ($folders as $folder) {
+                $tag = 'b' . $n++;
+                fwrite($fp, $tag . ' APPEND ' . $q($folder) . ' (\\Seen) {' . $len . "}\r\n");
+                $cont = $readLine();
+                if (strncmp(ltrim($cont), '+', 1) !== 0) {
+                    // Server refused the folder (usually TRYCREATE) — next candidate.
+                    if (strpos($cont, $tag) === false) $readUntil($tag);
+                    continue;
+                }
+                fwrite($fp, $msg . "\r\n");
+                $resp = $readUntil($tag);
+                if (strpos($resp, $tag . ' OK') !== false) {
+                    $out['ok'] = true; $out['folder'] = $folder;
+                    break;
+                }
+                $out['error'] = 'APPEND to "' . $folder . '" refused';
+            }
+            if (!$out['ok'] && $out['error'] === '') {
+                $out['error'] = 'no Sent folder accepted the message (tried: ' . implode(', ', $folders) . ')';
+            }
+            fwrite($fp, "z9 LOGOUT\r\n");
+        } catch (\Throwable $e) {
+            $out['error'] = $e->getMessage();
+        } finally {
+            if (is_resource($fp)) @fclose($fp);
+        }
+        return $out;
+    }
+}

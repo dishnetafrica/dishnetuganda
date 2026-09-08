@@ -348,7 +348,36 @@ class MailService
         @fclose($fp);
 
         $log[] = ['step' => 'sent', 'ok' => true, 'msg' => "Email queued at SMTP server for {$toEmail}"];
+
+        // File a copy in the Sent folder. The relay delivers without the
+        // message passing through our own mail server, so without this the
+        // operator's Sent folder never shows what the platform sent. Bookkeeping
+        // only: a failure here is logged and never fails the send, because the
+        // customer already has the email.
+        $sentCopy = $this->sentCopy($rawMessage);
+        if ($sentCopy !== null) $log[] = $sentCopy;
+
         return ['ok' => true, 'log' => $log];
+    }
+
+    /**
+     * @return array|null a log step, or null when sent-copy is not configured
+     */
+    private function sentCopy(string $rawMessage): ?array
+    {
+        try {
+            $file = $this->dataDir . '/email_settings.json';
+            $es = is_file($file)
+                ? (json_decode((string)@file_get_contents($file), true) ?: []) : [];
+            if (empty($es['sent_copy_enabled'])) return null;
+
+            require_once __DIR__ . '/SentCopy.php';
+            $r = SentCopy::append($es, $rawMessage);
+            return ['step' => 'sent_copy', 'ok' => (bool)$r['ok'],
+                    'msg'  => $r['ok'] ? 'filed in "' . $r['folder'] . '"' : (string)$r['error']];
+        } catch (\Throwable $e) {
+            return ['step' => 'sent_copy', 'ok' => false, 'msg' => $e->getMessage()];
+        }
     }
 
     /**
