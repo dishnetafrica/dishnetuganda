@@ -122,10 +122,23 @@ $crm = CrmApiClient::fromUcrm($root, $config);
 if (!$crm->isConfigured()) {
     nk('uCRM API not configured for this plugin — mailer state NOT VERIFIED');
 } else {
+    // Control test first: if a known-good endpoint answers, the API is fine and
+    // any failure below is about the settings endpoint, not connectivity.
+    $probe = $crm->get('clients?limit=1');
+    info('API reachable: ' . (is_array($probe) ? 'yes' : 'no'));
     $s = $crm->get('settings');
     if (!is_array($s)) {
         $err = $crm->getLastError();
-        nk('uCRM settings unreadable (' . (string)($err['detail'] ?? $err['error'] ?? '?') . ') — NOT VERIFIED');
+        $why = isset($err['curl_error']) ? 'connection: ' . $err['curl_error']
+             : (isset($err['http_code']) ? 'HTTP ' . $err['http_code'] : 'no response');
+        if (is_array($probe)) {
+            nk('uCRM API works, but it does not expose mailer settings (' . $why . ')');
+            info('ANSWER THIS IN THE BROWSER: uCRM → System → Settings → Mailer.');
+            info('Recommended: leave it unconfigured / notifications off, so the plugin owns');
+            info('customer email and nobody receives two emails for the same event.');
+        } else {
+            nk('uCRM API unreachable (' . $why . ') — mailer state NOT VERIFIED');
+        }
     } else {
         $host = (string)($s['mailerHost'] ?? '');
         $tr   = (string)($s['mailerTransport'] ?? '');
