@@ -42,9 +42,11 @@ if [ -f .env ]; then
   [ -n "$ENVPASS" ] && CANDIDATES+=("$ENVPASS")
 fi
 PASS=""; LASTCODE=""
-for c in "${CANDIDATES[@]}"; do
-  LASTCODE=$(curl -s -o /dev/null -w '%{http_code}' -u "${ADMIN_USER}:${c}" "$API/api/principal?limit=1")
-  if [ "$LASTCODE" = "200" ]; then PASS="$c"; break; fi
+for u in "admin" "admin@${DOMAIN}"; do
+  for c in "${CANDIDATES[@]}"; do
+    LASTCODE=$(curl -s -o /dev/null -w '%{http_code}' -u "${u}:${c}" "$API/api/principal?limit=1")
+    if [ "$LASTCODE" = "200" ]; then PASS="$c"; ADMIN_USER="$u"; break 2; fi
+  done
 done
 if [ -z "$PASS" ]; then
   line
