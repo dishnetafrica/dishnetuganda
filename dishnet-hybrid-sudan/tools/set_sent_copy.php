@@ -59,8 +59,12 @@ $port   = (int)($opt['port'] ?? ($es['sent_copy_port'] ?? 993)) ?: 993;
 $folder = trim((string)($opt['folder'] ?? ($es['sent_copy_folder'] ?? 'Sent'))) ?: 'Sent';
 
 $pass = (string)($opt['pass'] ?? '');
-if ($pass === '' && !empty($es['sent_copy_pass']) && !isset($opt['user'])) {
-    $pass = (string)$es['sent_copy_pass'];         // keep the stored one
+// Reuse the stored password whenever the mailbox is the same one — naming the
+// mailbox again on a re-test should not force a re-typed password, and it is
+// what made the first --test run fail with no TTY to type into.
+if ($pass === '' && !empty($es['sent_copy_pass'])
+    && strcasecmp((string)($es['sent_copy_user'] ?? ''), $user) === 0) {
+    $pass = (string)$es['sent_copy_pass'];
 }
 if ($pass === '') {
     echo "Mailbox password for {$user}: ";
@@ -69,7 +73,12 @@ if ($pass === '') {
     $pass = trim((string)fgets(STDIN));
     if ($tty) { @shell_exec('stty echo 2>/dev/null'); echo "\n"; }
 }
-if ($pass === '') { fwrite(STDERR, "No password given — nothing changed.\n"); exit(1); }
+if ($pass === '') {
+    fwrite(STDERR, "No password given — nothing changed.\n");
+    fwrite(STDERR, "If you are running this through 'docker exec' there is no keyboard: add -it,\n");
+    fwrite(STDERR, "or pass it directly with --pass 'the password'.\n");
+    exit(1);
+}
 
 $es = array_merge($es, [
     'sent_copy_enabled' => true,
