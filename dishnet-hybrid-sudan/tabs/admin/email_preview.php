@@ -67,7 +67,15 @@ $_epSample = [
     'logged_at'        => '9 September 2026, 20:14',
 ];
 
-$_epKeys = array_keys(CustomerEmails::CATALOGUE);
+require_once dirname(__DIR__, 2) . '/lib/CustomerEmailDispatcher.php';
+$_epKeys   = array_keys(CustomerEmails::CATALOGUE);
+$_epStates = CustomerEmailDispatcher::states($_epCfg);
+// getConfig() normalises SMTP settings and drops the rest, so read the file
+// itself for the quotation toggle — the same source QuotationService uses.
+$_epSettings = [];
+if (is_file($dataDir . '/email_settings.json')) {
+    $_epSettings = json_decode((string)@file_get_contents($dataDir . '/email_settings.json'), true) ?: [];
+}
 $_epPick = (string)($_GET['tpl'] ?? $_epKeys[0]);
 if (!in_array($_epPick, $_epKeys, true)) $_epPick = $_epKeys[0];
 
@@ -149,6 +157,28 @@ $_epSudan = preg_match_all('/\+211|South Sudan|Juba|dishnetafrica\.com/i', $_epM
           <tr><td>To</td><td>the customer's billing email address</td></tr>
           <tr><td>Reply-To</td><td><?= htmlspecialchars(EmailTemplate::replyTo($_epCfg)) ?></td></tr>
           <tr><td>Trigger</td><td><?= htmlspecialchars($_epTrigger) ?></td></tr>
+          <tr><td>Sends today?</td><td><?php
+            // What a real customer would get right now, as opposed to what
+            // this screen can render. They are not the same thing until an
+            // operator turns the event on.
+            if ($_epPick === 'quotation') {
+                $_on = !empty($_epSettings['quote_email_via_plugin']);
+                echo $_on
+                  ? '<span class="ep-chip" style="background:#dcfce7;color:#166534;">YES</span> when a quote is created'
+                  : '<span class="ep-chip" style="background:#fee2e2;color:#991b1b;">NO</span> — uCRM sends the quote instead (quote_email_via_plugin is off)';
+            } elseif ($_epPick === 'login_code') {
+                echo '<span class="ep-chip" style="background:#dcfce7;color:#166534;">YES</span> whenever a customer asks for a code'
+                   . '<div style="font-size:11px;color:#92400e;margin-top:4px;">Sent by <code>OtpEmailTemplate</code>, not this template &mdash; '
+                   . 'what you see here is not what arrives.</div>';
+            } elseif (isset($_epStates[$_epPick])) {
+                echo $_epStates[$_epPick]['on']
+                  ? '<span class="ep-chip" style="background:#dcfce7;color:#166534;">YES</span> &mdash; this reaches real customers'
+                  : '<span class="ep-chip" style="background:#f1f5f9;color:#475569;">no</span> &mdash; switched off; '
+                    . '<code>php tools/set_customer_emails.php --master on --on ' . htmlspecialchars($_epPick) . '</code>';
+            } else {
+                echo '<span class="ep-chip" style="background:#f1f5f9;color:#475569;">unknown</span>';
+            }
+          ?></td></tr>
           <tr><td>Type</td><td><span class="ep-chip" style="background:#e0e7ff;color:#3730a3;"><?= htmlspecialchars($_epType) ?></span></td></tr>
           <tr><td>Template</td><td><code>CustomerEmails::<?= htmlspecialchars($_epPick) ?></code></td></tr>
           <tr><td>Checks</td><td>

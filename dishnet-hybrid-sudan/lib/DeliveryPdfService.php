@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/CustomerContact.php';
+
 require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/crm_url.php';
 
@@ -343,8 +345,8 @@ class DeliveryPdfService
                  . "\xF0\x9F\x9B\xB0 Starlink setup: 1\xe2\x80\x932 working days after scheduling\n"
                  . "\xF0\x9F\x93\xB6 We'll activate your service and confirm via WhatsApp\n\n"
                  . "\xF0\x9F\x93\x84 *Your delivery document is attached above* \xe2\x80\x94 it contains your full terms and conditions. Please save it for your records.\n\n"
-                 . "\xF0\x9F\x93\xB2 Sales: wa.me/211923400000\n"
-                 . "\xF0\x9F\x9B\xA0 Support: wa.me/211921443002\n\n"
+                 . "\xF0\x9F\x93\xB2 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->config) . "\n"
+                 . "\xF0\x9F\x9B\xA0 Support: " . 'wa.me/' . CustomerContact::supportWa($this->config) . "\n\n"
                  . "Thank you for choosing DishNet Africa \xF0\x9F\x9A\x80";
         }
 
@@ -363,8 +365,8 @@ class DeliveryPdfService
                  . "\xF0\x9F\x91\xA4 Installed by: {$staffName}\n\n"
                  . "\xF0\x9F\x93\x84 *Your delivery acknowledgment is attached* \xe2\x80\x94 it confirms the equipment received and your service terms. Please save it for your records.\n\n"
                  . "Need help? We're here 24/7:\n"
-                 . "\xF0\x9F\x9B\xA0 Support: wa.me/211921443002\n"
-                 . "\xF0\x9F\x93\xB2 Sales: wa.me/211923400000\n\n"
+                 . "\xF0\x9F\x9B\xA0 Support: " . 'wa.me/' . CustomerContact::supportWa($this->config) . "\n"
+                 . "\xF0\x9F\x93\xB2 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->config) . "\n\n"
                  . "Welcome to DishNet Fiber \xF0\x9F\x9A\x80";
         }
 
@@ -380,8 +382,8 @@ class DeliveryPdfService
              . "\xF0\x9F\x94\xB4 Fiber installation: 3\xe2\x80\x935 working days after scheduling\n"
              . "\xF0\x9F\x93\xB6 We'll confirm the date and technician details via WhatsApp\n\n"
              . "\xF0\x9F\x93\x84 *Your service document is attached above* \xe2\x80\x94 it contains your full terms and conditions. Please save it for your records.\n\n"
-             . "\xF0\x9F\x93\xB2 Sales: wa.me/211923400000\n"
-             . "\xF0\x9F\x9B\xA0 Support: wa.me/211921443002\n\n"
+             . "\xF0\x9F\x93\xB2 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->config) . "\n"
+             . "\xF0\x9F\x9B\xA0 Support: " . 'wa.me/' . CustomerContact::supportWa($this->config) . "\n\n"
              . "Thank you for choosing DishNet Africa \xF0\x9F\x9A\x80";
     }
 

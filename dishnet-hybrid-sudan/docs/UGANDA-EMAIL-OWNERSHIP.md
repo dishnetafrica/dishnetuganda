@@ -8,11 +8,17 @@ Anything that could not be established says so.
 
 ---
 
-## The finding that changes the order of work
+## The finding that changed the order of work — now addressed
 
 The nine Uganda email templates render correctly and are proven free of Sudan
-content. **Eight of them are not connected to anything.** The only template a
-real customer event can trigger today is the quotation.
+content. **Eight of them were not connected to anything.** The only template a
+real customer event could trigger was the quotation.
+
+Seven are now wired to their real uCRM webhook events, behind switches that
+all start OFF. Nothing reaches a customer until an operator turns an event on
+(`tools/set_customer_emails.php`), so this changed no behaviour on either
+install when it was deployed. The table below records the state before the
+wiring; the section after it records where each one is now attached.
 
 | Template | Wired to a real event? | Where |
 |---|---|---|
@@ -42,6 +48,33 @@ plugin sends and the uCRM `quotes/{id}/send` call is skipped; off means uCRM
 sends. One owner either way.
 
 ---
+
+## Where each email is now wired
+
+| Template | uCRM event | Dedupe key |
+|---|---|---|
+| Invoice | `invoice.add` | `INV<number>` |
+| Payment received | `payment.add` | `PAY<payment id>` |
+| Welcome / activated | `service.add` | `SVCADD<client>:<service>` |
+| Service paused | `service.suspend` | `SUSP<client>:<date>` |
+| Service resumed | `service.activate` / `unsuspend` | `RESUME<client>:<date>` |
+| Support acknowledgement | `ticket.add` | `TKT<ticket id>` |
+| Installation scheduled | `job.add` | `JOB<job id>` |
+
+Each send rides alongside the WhatsApp message that event already sent, so the
+trigger conditions and the recipient are identical to a channel that has been
+working for months. Three properties are enforced by test: nothing sends
+unless both the master switch and that event's switch are on; a webhook retry
+does not send twice; and nothing here can throw into the webhook it rides on —
+an SMTP failure must not turn a recorded payment into a failed webhook.
+
+A failed send stays retryable. Only a delivered one blocks forever, and a
+claim abandoned by a crash unblocks after ten minutes.
+
+**Known limitation.** The invoice and payment emails sit inside the existing
+`if ($phone && ...)` guard, so a customer with an email address but no phone
+number on file gets neither. Fixing that means restructuring a live webhook's
+control flow, which is a larger change than this one and is not attempted here.
 
 ## Target ownership
 

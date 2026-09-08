@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/CustomerContact.php';
 // ═══════════════════════════════════════════════════════════════
 // LEADS / CALL CENTER
 // ═══════════════════════════════════════════════════════════════
@@ -216,7 +217,7 @@
                         // T6 — Dead lead farewell
                         $waMsg = "Hi {$leadName}! We tried reaching you a few times about DishNet Fiber.\n\n"
                                . "We'll leave it here for now — but whenever you're ready for fast fiber internet, we're just a message away 🌐\n\n"
-                               . "wa.me/211923400000";
+                               . 'wa.me/' . CustomerContact::salesWa($config);
                     } else {
                         // T2 — No answer, will retry
                         $waMsg = "Hi {$leadName}! 👋 We just tried calling you from DishNet Fiber.\n\n"
@@ -236,7 +237,7 @@
                     $waMsg = "Hi {$leadName}, thanks for your time! 🙏\n\n"
                            . "No problem at all. Whenever you need fast fiber internet in future, "
                            . "we're just a message away 🌐\n\n"
-                           . "wa.me/211923400000";
+                           . 'wa.me/' . CustomerContact::salesWa($config);
                 } elseif ($outcome === 'callback' && !empty($updatedLead['follow_up_date'])) {
                     // T4 — Callback scheduled
                     $waMsg = "Hi {$leadName}! Thanks for speaking with us 📞\n\n"

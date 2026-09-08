@@ -75,6 +75,8 @@ class NotificationService
     private string $curSym = 'UGX ';
     /** Shape dn_money() expects, built from the symbol this install uses. */
     private array  $cfgForMoney = [];
+    /** The install config, kept for the shared contact lookups. */
+    private array  $cfgForContacts = [];
     /** Customer-facing contacts and links — see the constructor for defaults. */
     private string $cAccountsPhone = '';
     private string $cSupportPhone  = '';
@@ -88,6 +90,7 @@ class NotificationService
         $this->store      = $store;
         $this->curSym     = dn_cur($config);
         $this->cfgForMoney = ['currency_symbol' => rtrim($this->curSym)];
+        $this->cfgForContacts = $config;
         // Contacts and links were welded into ~30 message strings. The
         // defaults are the exact values those strings have always carried, so
         // an install that sets nothing sends what it sends today.
@@ -438,8 +441,8 @@ class NotificationService
                  . "📞 Our support team will call you shortly to schedule installation.\n\n"
                  . "⏱ *Installation Timeline:*\n"
                  . "{$timelineLines}\n\n"
-                 . "📲 Sales: wa.me/211923400000\n"
-                 . "🛠 Support: wa.me/211921443002\n\n"
+                 . "📲 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->cfgForContacts) . "\n"
+                 . "🛠 Support: " . 'wa.me/' . CustomerContact::supportWa($this->cfgForContacts) . "\n\n"
                  . "Thank you for choosing DishNet Africa 🚀";
 
             $this->sendVia(self::SUPPORT, $customerPhone, $msg,
@@ -1001,7 +1004,7 @@ class NotificationService
              . $refLine . "\n\n"
              . "Your technician will contact you before arriving.\n"
              . "Please ensure someone is available at the installation site.\n\n"
-             . "🛠 Support: wa.me/211921443002\n"
+             . "🛠 Support: " . 'wa.me/' . CustomerContact::supportWa($this->cfgForContacts) . "\n"
              . "— DishNet Support";
 
         $this->sendVia(self::SUPPORT, $customerPhone, $msg,
@@ -1023,7 +1026,7 @@ class NotificationService
              . "We'd love to have you back! 🌐\n\n"
              . "🎁 Contact us about our reconnection offers\n"
              . "📞 Call: {$this->cAccountsPhone}\n"
-             . "💬 WhatsApp: wa.me/211921443002\n\n"
+             . "💬 WhatsApp: " . 'wa.me/' . CustomerContact::supportWa($this->cfgForContacts) . "\n\n"
              . "We're always improving our network and would value your feedback on how we can serve you better.\n\n"
              . "— DishNet Team";
 
@@ -1051,7 +1054,7 @@ class NotificationService
              . "🔄 *Want to reconnect?*\n"
              . "We have special offers for returning customers!\n\n"
              . "📞 {$this->cSupportPhone}\n"
-             . "💬 wa.me/211921443006\n\n"
+             . "💬 " . 'wa.me/' . CustomerContact::technicalWa($this->cfgForContacts) . "\n\n"
              . "We'd love to have you back.\n"
              . "— DishNet Team";
         

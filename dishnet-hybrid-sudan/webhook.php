@@ -92,6 +92,7 @@ if (!isset($config)) {
 // Contacts and currency symbols in the message copy below come from config,
 // defaulting to the exact values these lines have always printed.
 require_once __DIR__ . '/lib/CustomerContact.php';
+require_once __DIR__ . '/lib/CustomerEmailDispatcher.php';
 require_once __DIR__ . '/lib/currency.php';
 
 // ── Response helpers ───────────────────────────────────────────────────────
@@ -128,6 +129,34 @@ function whLog(string $event, string $msg, array $data = []): void {
  * Returns array: ['scenario'=>'auto_paid'|'partial'|'normal', 'amount_paid'=>float,
  *                 'remaining'=>float, 'credit_remaining'=>float]
  */
+/**
+ * Send a lifecycle email alongside the WhatsApp message this webhook already
+ * sent, if that event's switch is on.
+ *
+ * Every switch starts OFF, so this changes nothing until an operator turns one
+ * on. It never throws and never blocks: the WhatsApp message and the CRM work
+ * have already happened by the time it is called, and an SMTP hiccup must not
+ * turn a successful payment into a failed webhook.
+ */
+function whCustomerEmail(string $key, int $clientId, string $name, array $data,
+                         string $dedupe, array $config, string $dataDir,
+                         $crm, $store, string $changeType = ''): void
+{
+    try {
+        if (!CustomerEmailDispatcher::enabled($key, $config)) return;
+        $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
+        $d   = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe);
+        if ($r['sent']) {
+            whLog($changeType ?: 'email', "Customer email sent: {$key} → {$r['to']}");
+        } elseif ($r['reason'] !== 'already sent' && $r['reason'] !== 'switched off') {
+            whLog($changeType ?: 'email', "Customer email NOT sent ({$key}): {$r['reason']}");
+        }
+    } catch (\Throwable $e) {
+        error_log('[whCustomerEmail] ' . $key . ': ' . $e->getMessage());
+    }
+}
+
 function whInvoiceCreditScenario(array $invoice, array $client): array
 {
     $total      = (float)($invoice['total'] ?? $invoice['amount'] ?? 0);
@@ -613,6 +642,13 @@ switch ($changeType) {
                 $invoiceId, $invoNum, $amount, $dueDate ?: 'See invoice',
                 $creditData, $config, $dataDir, $serviceName);
 
+            whCustomerEmail('invoice', (int)$clientId, $name, [
+                'invoice_number' => $invoNum,
+                'amount'         => $amount,
+                'due_date'       => $dueDate ?: 'See invoice',
+                'plan'           => $serviceName,
+            ], "INV{$invoNum}", $config, $dataDir, $crm, $store, $changeType);
+
             // Push notification to customer's app
             try {
                 fcm_push_invoice_created($store->getPdo(), $config, (int)$clientId, $invoNum, $amount);
@@ -815,6 +851,12 @@ switch ($changeType) {
             } else {
                 // Send text receipt to customer
                 $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
+
+                whCustomerEmail('payment_received', (int)$clientId, $name, [
+                    'amount'    => $amount,
+                    'reference' => "PAY-{$txnId}",
+                    'paid_on'   => date('j F Y'),
+                ], "PAY{$paymentId}", $config, $dataDir, $crm, $store, $changeType);
                 whLog($changeType, "Payment thanks sent: " . dn_money($amount, $config, null) . " → {$name}");
 
                 // v4.10.4: Queue receipt PDF for cron pickup — background fetch after
@@ -1078,11 +1120,16 @@ switch ($changeType) {
                 . "Manage your account:\n"
                 . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
                 . "📞 Support: " . CustomerContact::accounts($config) . "\n"
-                . "💬 wa.me/211921443002\n\n"
+                . "💬 " . 'wa.me/' . CustomerContact::supportWa($config) . "\n\n"
                 . "Thank you for choosing DishNet! 🙏\n"
                 . "— DishNet Team",
                 'ops_service_activated');
             whLog($changeType, "Service activated notification -> {$name} ({$svcName})");
+
+            whCustomerEmail('welcome', (int)$clientId, $name, [
+                'plan' => $svcName,
+                'date' => date('j F Y'),
+            ], "SVCADD{$clientId}:{$svcName}", $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
             try {
@@ -1298,6 +1345,13 @@ switch ($changeType) {
                 'ops_service_suspended');
             whLog($changeType, "Suspension WhatsApp sent to {$name} ({$svcName})");
 
+            // "Paused", not "suspended": on a prepaid install the period simply
+            // ended. The template says so, and says how to resume.
+            whCustomerEmail('service_paused', (int)$clientId, $name, [
+                'plan' => $svcName,
+                'date' => date('j F Y'),
+            ], "SUSP{$clientId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
+
             // Push notification to customer's app
             try {
                 fcm_push_service_suspended($store->getPdo(), $config, (int)$clientId, $svcName);
@@ -1472,6 +1526,11 @@ switch ($changeType) {
                     . "— DishNet Accounts",
                     'ops_service_restored');
                 whLog($changeType, "Restoration notice sent to {$name}");
+
+                whCustomerEmail('service_resumed', (int)$clientId, $name, [
+                    'plan' => $svcName,
+                    'date' => date('j F Y'),
+                ], "RESUME{$clientId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
             }
 
             // Push notification to customer's app (always — even if WA was deduped)
@@ -1945,6 +2004,14 @@ switch ($changeType) {
             whLog($changeType, "Job #{$jobId} — No user assigned", ['job_title' => $title]);
         }
         
+        // A job is the installation appointment. Until now only the assigned
+        // technician heard about it — the customer was told nothing.
+        whCustomerEmail('install_scheduled', $clientId, $clientName === 'N/A' ? '' : $clientName, [
+            'install_date'   => $dateFormatted,
+            'install_window' => $timeFormatted ?? '',
+            'engineer'       => $techName ?? '',
+        ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
+
         whResp(200, 'job.add processed.');
     }
 
@@ -1962,6 +2029,12 @@ switch ($changeType) {
             ['ticket_id' => (string)$ticketId, 'subject' => $subject]
         );
         whLog($changeType, "Admin notified: ticket #{$ticketId}");
+
+        // The customer has heard nothing until now — only the admin was told.
+        whCustomerEmail('support_received', $clientId, '', [
+            'ticket'  => "#{$ticketId}",
+            'subject' => $subject,
+        ], "TKT{$ticketId}", $config, $dataDir, $crm, $store, $changeType);
         whResp(200, 'ticket.add processed.');
     }
 

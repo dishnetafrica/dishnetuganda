@@ -25,6 +25,9 @@ class CustomerContact
         'contact_sales_phone'       => '+211 921 443 009',
         'contact_escalation_phone'  => '+211 927 797 217',
         'contact_shop_phone'        => '0923 400 000',
+        'contact_sales_wa'          => '211923400000',
+        'contact_support_wa'        => '211921443002',
+        'contact_technical_wa'      => '211921443006',
         'contact_pay_url'           => 'https://dishnetafrica.com/tutorials/index.html',
         'contact_app_url'           => 'https://dishnetafrica.com/get-the-app.html',
     ];
@@ -45,6 +48,10 @@ class CustomerContact
     public static function escalation(?array $c = null): string { return self::v($c, 'contact_escalation_phone'); }
     /** Retail counter number. */
     public static function shop(?array $c = null): string       { return self::v($c, 'contact_shop_phone'); }
+    /** wa.me numbers — digits only, no plus sign, as that link requires. */
+    public static function salesWa(?array $c = null): string     { return self::v($c, 'contact_sales_wa'); }
+    public static function supportWa(?array $c = null): string   { return self::v($c, 'contact_support_wa'); }
+    public static function technicalWa(?array $c = null): string { return self::v($c, 'contact_technical_wa'); }
     /** Where a customer is sent to pay. */
     public static function payUrl(?array $c = null): string     { return self::v($c, 'contact_pay_url'); }
     /** Where a customer downloads the app. */
@@ -65,6 +72,9 @@ class CustomerContact
         'contact_sales_phone'      => '+256 705 993 348',
         'contact_escalation_phone' => '+256 705 993 348',
         'contact_shop_phone'       => '+256 705 993 348',
+        'contact_sales_wa'         => '256705993348',
+        'contact_support_wa'       => '256705993348',
+        'contact_technical_wa'     => '256705993348',
         'contact_pay_url'          => 'https://dishnetuganda.com/pay',
         'contact_app_url'          => 'https://dishnetuganda.com/app',
     ];
