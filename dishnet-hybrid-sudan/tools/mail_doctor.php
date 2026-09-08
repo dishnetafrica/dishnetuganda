@@ -115,36 +115,29 @@ if (!empty($cfg['host'])) {
 
 // ── 3. uCRM's own mailer (owns the 3 uCRM notification templates) ───────────
 line(); echo "3) uCRM's own mailer — does it still send invoice/payment notices?\n";
-$ucrmJson = null;
-foreach ([$root . '/ucrm.json', dirname($root) . '/ucrm.json', $dataDir . '/ucrm.json'] as $p) {
-    if (is_file($p)) { $ucrmJson = json_decode((string)@file_get_contents($p), true); break; }
-}
-$base = rtrim((string)($ucrmJson['ucrmPublicUrl'] ?? $ucrmJson['ucrmLocalUrl'] ?? ''), '/');
-$key  = (string)($ucrmJson['pluginAppKey'] ?? '');
-if ($base === '' || $key === '') {
-    nk('Could not read ucrm.json — uCRM mailer state NOT VERIFIED');
+// Use the plugin's own API client — it prefers ucrmLocalUrl (same-server and
+// always reachable) over the public URL, which raw curl could not reach.
+require_once $root . '/lib/CrmApiClient.php';
+$crm = CrmApiClient::fromUcrm($root, $config);
+if (!$crm->isConfigured()) {
+    nk('uCRM API not configured for this plugin — mailer state NOT VERIFIED');
 } else {
-    $ch = curl_init($base . '/api/v1.0/settings');
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 12,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_HTTPHEADER => ['x-auth-app-key: ' . $key, 'Accept: application/json']]);
-    $raw = (string)curl_exec($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    $s = json_decode($raw, true);
-    if ($code !== 200 || !is_array($s)) {
-        nk("uCRM settings API answered HTTP {$code} — mailer state NOT VERIFIED");
+    $s = $crm->get('settings');
+    if (!is_array($s)) {
+        $err = $crm->getLastError();
+        nk('uCRM settings unreadable (' . (string)($err['detail'] ?? $err['error'] ?? '?') . ') — NOT VERIFIED');
     } else {
         $host = (string)($s['mailerHost'] ?? '');
         $tr   = (string)($s['mailerTransport'] ?? '');
-        if ($host !== '') {
-            ok('uCRM mailer configured: ' . $tr . ' ' . $host . ':' . (string)($s['mailerPort'] ?? '?')
-               . ' as ' . (string)($s['mailerUsername'] ?? '(no auth)'));
-            info('So uCRM CAN still send its own invoice/payment notification emails.');
+        if ($host !== '' || strtolower($tr) === 'sendmail') {
+            ok('uCRM mailer configured: ' . ($tr !== '' ? $tr : 'smtp') . ' ' . ($host !== '' ? $host : '(sendmail)')
+               . ($s['mailerPort'] ?? '') . ' as ' . (string)($s['mailerUsername'] ?? '(no auth)'));
+            info('uCRM CAN still send its own invoice / payment notification emails.');
+            info('Two systems can therefore email the same customer — decide which owns billing email.');
         } else {
-            no('uCRM mailer is NOT configured — the three uCRM notification templates '
+            no('uCRM mailer is NOT configured — its three notification templates '
                . '(new invoice, overdue, payment received) send NOTHING.');
-            info('Either configure uCRM System → Settings → Mailer, or move those notices into the plugin.');
+            info('That is fine IF the plugin owns billing email; otherwise configure uCRM System → Settings → Mailer.');
         }
     }
 }
