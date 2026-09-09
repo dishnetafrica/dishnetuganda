@@ -27,6 +27,43 @@ declare(strict_types=1);
  */
 class SentCopy
 {
+    /**
+     * Addresses worth trying when the mail server's public name is
+     * unreachable from inside a container.
+     *
+     * The container's own default gateway is the host, and the mail ports are
+     * published there. /proc/net/route holds it in little-endian hex, which is
+     * the only place a container can learn it without extra tooling.
+     *
+     * An operator can override the whole guessing game with sent_copy_hosts,
+     * a comma-separated list tried in order.
+     */
+    private static function routes(array $settings): array
+    {
+        $manual = trim((string)($settings['sent_copy_hosts'] ?? ''));
+        if ($manual !== '') {
+            return array_values(array_filter(array_map('trim', explode(',', $manual))));
+        }
+        $out = [];
+        $raw = @file_get_contents('/proc/net/route');
+        if (is_string($raw)) {
+            foreach (explode("\n", $raw) as $i => $line) {
+                if ($i === 0 || trim($line) === '') continue;
+                $f = preg_split('/\s+/', trim($line));
+                // Destination 00000000 marks the default route; field 2 is the
+                // gateway, hex, least significant byte first.
+                if (count($f) < 3 || $f[1] !== '00000000') continue;
+                $hex = $f[2];
+                if (!preg_match('/^[0-9A-Fa-f]{8}$/', $hex)) continue;
+                $ip = implode('.', array_map('hexdec', array_reverse(str_split($hex, 2))));
+                if ($ip !== '0.0.0.0') $out[] = $ip;
+            }
+        }
+        // The default-bridge gateway, in case the routing table said nothing.
+        $out[] = '172.17.0.1';
+        return array_values(array_unique($out));
+    }
+
     /** @return array{ok:bool,error:string,folder:string} */
     public static function append(array $settings, string $rawMessage): array
     {
@@ -66,9 +103,12 @@ class SentCopy
             $verify   = (bool)($settings['sent_copy_verify'] ?? false);
             $attempts = [[$host, null]];
             if (filter_var($host, FILTER_VALIDATE_IP) === false) {
-                foreach (['172.17.0.1', 'host.docker.internal'] as $alt) {
-                    $attempts[] = [$alt, $host];
-                }
+                // Do not GUESS the bridge address. 172.17.0.1 is only the
+                // gateway for containers on the DEFAULT bridge; a container on
+                // a compose network has a different one, and guessing wrong
+                // produces a failure that says nothing. Read the container's
+                // actual default gateway out of the routing table.
+                foreach (self::routes($settings) as $alt) $attempts[] = [$alt, $host];
             }
 
             $fp = null; $tried = [];
@@ -81,14 +121,23 @@ class SentCopy
                 if ($certName !== null) $sslOpts['peer_name'] = $certName;
                 $ctx = stream_context_create(['ssl' => $sslOpts]);
 
+                // stream_socket_client reports a failed TLS handshake in a
+                // WARNING, not in $errstr — which is exactly what the previous
+                // "@" suppressed, leaving "connect failed: " with no reason.
+                $warn = '';
+                set_error_handler(function ($no, $str) use (&$warn) { $warn = $str; return true; });
                 $errno = 0; $errstr = '';
-                $fp = @stream_socket_client("ssl://{$connectHost}:{$port}", $errno, $errstr, 8,
-                                            STREAM_CLIENT_CONNECT, $ctx);
+                $fp = stream_socket_client("ssl://{$connectHost}:{$port}", $errno, $errstr, 8,
+                                           STREAM_CLIENT_CONNECT, $ctx);
+                restore_error_handler();
                 if ($fp) { $out['via'] = $connectHost; break; }
-                // An empty $errstr says nothing, so name what was actually
-                // tried and what the resolver believed.
-                $why = trim($errstr) !== '' ? trim($errstr)
-                     : ($errno ? "errno {$errno}" : 'no error reported (DNS or TLS handshake)');
+
+                $why = trim($errstr) !== '' ? trim($errstr) : '';
+                if ($why === '' && $warn !== '') {
+                    // Trim PHP's function-name prefix, keep the reason.
+                    $why = trim(preg_replace('/^stream_socket_client\(\):\s*/', '', $warn));
+                }
+                if ($why === '') $why = $errno ? "errno {$errno}" : 'no reason reported';
                 $ip  = filter_var($connectHost, FILTER_VALIDATE_IP) ? $connectHost
                      : (gethostbyname($connectHost) ?: '');
                 $tried[] = $connectHost . ($ip && $ip !== $connectHost ? " ({$ip})" : '') . ': ' . $why;

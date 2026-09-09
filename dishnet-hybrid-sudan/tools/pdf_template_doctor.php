@@ -150,9 +150,8 @@ foreach (['billing/quotes?limit=5', 'quotes?limit=5'] as $ep) {
     break;
 }
 if ($quoteId <= 0) {
-    // Newest first. Without the ordering this picked quote #1 — the oldest
-    // one on the install, quite possibly a deleted draft with no PDF, which
-    // is exactly what happened on the first run.
+    // Newest first. The ordering parameter is not always honoured, so take
+    // the highest id across the endpoint spellings rather than the first row.
     foreach (['billing/quotes?limit=1&order=createdDate&direction=DESC',
               'quotes?limit=1&order=createdDate&direction=DESC',
               'billing/quotes?limit=1', 'quotes?limit=1'] as $ep) {
@@ -168,20 +167,57 @@ if ($quoteId <= 0) {
 if ($quoteId <= 0) {
     nv('no quote exists yet — create one in the app, then rerun with --quote <id>');
 } else {
-    // billing/ FIRST: that is the path QuotationService proved works when it
-    // attaches the PDF to the quotation email. Trying only the bare one is
-    // why the first run reported NOT VERIFIED.
+    // billing/ first, because that is the namespace QuotationService creates
+    // quotes in. If neither answers, the probe below asks the API what it
+    // does serve instead of guessing a third time.
     $pdf = null;
     foreach (["billing/quotes/{$quoteId}/pdf", "quotes/{$quoteId}/pdf"] as $ep) {
         $try = $crm->getRawContent($ep);
         if (is_string($try) && strncmp($try, '%PDF', 4) === 0) { $pdf = $try; break; }
     }
     if ($pdf === null) {
-        nv("quote {$quoteId}: neither billing/quotes/{id}/pdf nor quotes/{id}/pdf returned a PDF ("
-           . json_encode($crm->getLastError()) . ')');
-        echo "        A 404 here usually means that quote is a stale draft rather than a\n";
-        echo "        real quotation. Create one in the app and rerun with --quote <id>;\n";
-        echo "        the ids above are what this install actually holds.\n";
+        nv("quote {$quoteId}: neither billing/quotes/{id}/pdf nor quotes/{id}/pdf returned a PDF");
+        // Both guesses failed on a quote that demonstrably exists, so stop
+        // guessing and ask the API what it does serve. Whatever answers here
+        // is the endpoint QuotationService should be using to attach the PDF.
+        echo "\n  Probing for the endpoint that does serve it:\n";
+        $pdfEndpoint = '';
+        foreach ([
+            "billing/quotes/{$quoteId}/pdf", "quotes/{$quoteId}/pdf",
+            "billing/quotes/{$quoteId}/file", "quotes/{$quoteId}/file",
+            "billing/quotes/{$quoteId}/download", "quotes/{$quoteId}/download",
+            "billing/quotes/{$quoteId}/print", "quotes/{$quoteId}/print",
+            "billing/quote-pdf/{$quoteId}", "quote-pdf/{$quoteId}",
+        ] as $ep) {
+            $try  = $crm->getRawContent($ep);
+            $err  = $crm->getLastError();
+            $code = (string)($err['http_code'] ?? '?');
+            if (is_string($try) && strncmp($try, '%PDF', 4) === 0) {
+                printf("    %-40s PDF (%d bytes)  <-- this one\n", $ep, strlen($try));
+                $pdfEndpoint = $ep; $pdf = $try; break;
+            }
+            printf("    %-40s HTTP %s%s\n", $ep, $code,
+                   is_string($try) && $try !== '' ? '  (' . strlen($try) . ' bytes, not a PDF)' : '');
+        }
+        if ($pdfEndpoint !== '') {
+            ok("the PDF is served at {$pdfEndpoint} — QuotationService should use this path");
+        } else {
+            echo "\n  None of those served a PDF. What uCRM says the quote IS:\n";
+            $q = $crm->get("billing/quotes/{$quoteId}") ?: $crm->get("quotes/{$quoteId}");
+            if (is_array($q)) {
+                foreach ($q as $k => $v) {
+                    if (is_scalar($v) || $v === null) printf("    %-22s %s\n", $k, var_export($v, true));
+                }
+            } else {
+                echo "    (the quote itself could not be fetched either)\n";
+            }
+            no('uCRM serves no quotation PDF over the API on this install — so the '
+             . 'plugin cannot attach one, and QuotationService silently falls back '
+             . 'to letting uCRM send the email instead');
+        }
+    }
+    if ($pdf === null) {
+        // nothing more to read
     } else {
         $bytes = strlen($pdf);
         ok("quote {$quoteId}: PDF fetched ({$bytes} bytes)");
