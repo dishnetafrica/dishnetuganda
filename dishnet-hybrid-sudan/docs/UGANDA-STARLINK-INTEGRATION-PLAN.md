@@ -207,6 +207,78 @@ a multi-tenant layer for one tenant would be inventing a problem.
 
 ---
 
+## 5b. South Sudan reference implementation
+
+South Sudan's Starlink integration works. This section records, component by
+component, exactly what Uganda takes from it and why — so the audit trail
+shows deliberate reuse rather than a second implementation that grew by
+accident.
+
+The rule throughout: **the mechanism travels, the data never does.** Every
+row below is code. No cookie, session, account number, cached response or
+encryption key crosses from Sudan to Uganda.
+
+### Session and transport
+
+| South Sudan component | Uganda Hybrid component | Reuse / Rewrite | Reason |
+|---|---|---|---|
+| `session_manager.php` `smCurl()` | `StarlinkPortalConnector::request()` | **Reuse, adapted** | Working HTTP layer with the right headers and cookie capture. Becomes a method, not a global. |
+| `smBuildHeaders()` | `StarlinkPortalConnector::headers()` | **Reuse** | The header set Starlink accepts. Guessing this again would mean rediscovering it by getting rejected. |
+| `smMergeCookies()` | `StarlinkPortalConnector::mergeCookies()` | **Reuse** | `Set-Cookie` merging is fiddly and this version is proven against the live portal. |
+| `smPickFingerprint()` | `StarlinkPortalConnector::fingerprint()` | **Reuse** | A stable fingerprint per session. |
+| `smPaceRequest()`, `smIsThrottled()`, `smRecordThrottle()`, `smClearThrottle()` | `StarlinkPortalConnector` throttle methods | **Reuse** | Skipping throttle handling is how a session gets flagged. Uganda's throttle state file is its own. |
+| `smHeartbeat()` | `StarlinkPortalConnector::heartbeat()` | **Reuse** | Verifies a refreshed cookie actually works before it is kept. |
+| `smSilentReauth()` | `StarlinkPortalConnector::refresh()` | **Reuse** | Both refresh endpoints and the alternation between them. |
+| `smDeriveKey()`, `smEncrypt()`, `smDecrypt()` | `StarlinkSessionStore` | **Reuse** | Encrypted cookie at rest. The key derives from the plugin directory, so Uganda's key differs from Sudan's by construction. |
+| `smLoadAccounts()`, `smSaveAccounts()`, `smUpdateAccountState()` | `StarlinkSessionStore` | **Reuse, adapted** | Same state and failure counters — `needs_manual_reimport`, `consecutive_failures`, `cookie_dead_at` — in Hybrid's own store. |
+| `smPickNextAccount()`, `smProcessAccount()` | — | **Not ported** | Multi-account rotation. Uganda has one account; the shape is preserved so it can return. |
+| `smMigrateEncryption()` | — | **Not ported** | Migrates the fleet plugin's legacy plaintext cookies. Uganda has no legacy. |
+| `smGetSessionSummary()`, `smTimeAgo()` | Admin panel, later | **Defer** | Display only. |
+
+### Endpoints — the most valuable thing being reused
+
+These were found by working against the live portal. Rediscovering them means
+a sequence of rejected requests against a real account, which is exactly the
+behaviour that gets a session flagged.
+
+| Purpose | Endpoint | Used by |
+|---|---|---|
+| Service lines (account) | `/api/webagg/v2/accounts/{account}/service-lines` | ServiceLineSync |
+| Service lines (all) | `/api/webagg/v2/accounts/service-lines` | ServiceLineSync |
+| Service line numbers | `/api/accounts/v1/accounts/service-line-numbers` | ServiceLineSync |
+| Account contact | `/api/accounts/v3/accounts/contact` | Connector verification |
+| Invoice balances | `/api/webagg/v1/public/billing/invoice-balances/{invoice}` | InvoiceSync |
+| Data usage | `/api/telemetryagg/v1/data-usage/account/{a}/service-line/{s}/annotated` | Deferred (Phase 6) |
+| Session refresh | `/api/auth/v1/session/refresh`, `/api/auth/v1/token/refresh` | Connector |
+| Fallback host | `api.starlink.com` for the same paths | Connector |
+
+Kit serials arrive inside the service-line response (`userTerminals[0].serialNumber`)
+rather than from a separate endpoint — the discovery that made the fleet
+plugin's own registry possible, and the reason KitSync is a consumer of
+ServiceLineSync rather than a separate fetch.
+
+### Data shaping
+
+| South Sudan component | Uganda Hybrid component | Reuse / Rewrite | Reason |
+|---|---|---|---|
+| `cidNormalizeInvoice()` (`cron_invoice_details.php`) | `StarlinkInvoiceSync::normalise()` | **Reference, rewritten** | Its shape is right — raw content in, normalised record out, line items preserved. Rewritten because Uganda's record keeps fields Sudan does not (billing period, tax as shown, service and kit references, document path) and adds the accounting layer beside it. |
+| `cidAtomicWriteJson()` | — | **Not ported** | Hybrid stores in SQLite, and `SecureFile` already does atomic writes with correct ownership. |
+| `KitRegistryWriter::regenerate()` | `StarlinkKitSync` → `StockService` | **Reference, not ported** | Its merge-order logic is instructive, but it writes a JSON file owned by a plugin Uganda will not run. Uganda's kits land in `StockService`, which already owns physical units. |
+| `KitRegistryWriter::newKitRecord()` | — | **Reference** | Useful as a field checklist for what is worth knowing about a kit. |
+| `cron_session.php` orchestration | `cron/starlink_sync.php` | **Rewrite** | Sudan's loop paces work across many accounts on a five-minute cycle. Uganda has one account and needs invoices daily. Same connector underneath; a schedule that matches the job. |
+| `cron_auto_block.php` | — | **Not ported** | Postpaid suspension. Uganda is prepaid — see §7. |
+
+### What this buys
+
+The parts genuinely expensive to rediscover — the header set, cookie merging,
+the refresh endpoints and their alternation, throttle backoff, the fact that
+kit serials ride inside the service-line payload — all come across. The parts
+that are cheap to write and specific to Uganda — record shape, scheduling,
+accounting — are written for Uganda rather than inherited from a country with
+different needs.
+
+---
+
 ## 6. Starlink invoices and Uganda tax — the highest-value piece
 
 This is the part Sudan never needed and Uganda genuinely does. A Starlink
