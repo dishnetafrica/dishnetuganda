@@ -175,6 +175,24 @@ $r2 = $conn->get('/api/webagg/v2/accounts/service-lines');
 is_(strpos((string)$r2['error'], 'backing off') !== false,
     'and the next call does not even leave the building', (string)$r2['error']);
 
+echo "\nThe keep-alive is what makes a session survive at all\n";
+// Starlink's access token expires in minutes when nothing uses it. Uganda's
+// session was accepted and rejected minutes later; South Sudan's has run for
+// months, because its cron uses the session every 300 seconds. I read that
+// cron as telemetry and recommended deferring it. It is load-bearing.
+$cron = (string)file_get_contents($root . '/cron/starlink_keepalive.php');
+is_(strpos($cron, 'LINES_LIGHT_PATH') !== false,
+    'it uses the light endpoint — the rich one 500s and a keep-alive that '
+  . 'cries wolf gets ignored');
+is_(strpos($cron, 'STATE_EXPIRED') !== false && strpos($cron, 'exit(0)') !== false,
+    'and leaves an already-dead session alone rather than hammering it');
+is_(preg_match('/->\s*(send|post)\s*\(/', $cron) === 0, 'it sends nothing');
+
+$master = (string)file_get_contents($root . '/cron/master.php');
+is_(strpos($master, 'starlink_keepalive.php') !== false, 'it is scheduled');
+is_(preg_match("/'starlink_alive'\s*=>\s*\['interval'\s*=>\s*300/", $master) === 1,
+    'every 300 seconds, matching the interval South Sudan proved');
+
 echo "\nAn identifier is never shortened to fit a column\n";
 // The service line table cut its numbers to 22 characters, so
 // SL-DF-15784590-46113-10 printed as SL-DF-15784590-46113-1 — still a

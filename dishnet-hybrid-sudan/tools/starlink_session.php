@@ -98,7 +98,25 @@ function show(StarlinkSessionStore $store, array $config): void
     }
     printf("    %-16s %s\n", 'imported', $s['imported_at'] !== ''
         ? $s['imported_at'] . ' by ' . $s['imported_by'] : '—');
-    printf("    %-16s %s\n", 'last accepted', $s['last_ok_at'] ?: '—');
+    // How long the session has survived. This is the number the whole
+    // web-session question turns on, so it is shown rather than computed by
+    // whoever is looking.
+    $ago = function (string $ts): string {
+        if ($ts === '') return '—';
+        $secs = time() - (int)strtotime($ts . ' UTC');
+        if ($secs < 0)    return $ts;
+        if ($secs < 90)   return $secs . 's ago';
+        if ($secs < 5400) return round($secs / 60) . 'm ago';
+        return round($secs / 3600, 1) . 'h ago';
+    };
+    printf("    %-16s %s\n", 'last accepted', $s['last_ok_at'] !== ''
+        ? $s['last_ok_at'] . '  (' . $ago($s['last_ok_at']) . ')' : '—');
+    if ($s['imported_at'] !== '' && $s['last_ok_at'] !== '') {
+        $lived = (int)strtotime($s['last_ok_at'] . ' UTC')
+               - (int)strtotime($s['imported_at'] . ' UTC');
+        printf("    %-16s %s\n", 'session lasted',
+            $lived < 90 ? $lived . 's' : round($lived / 60) . ' minutes so far');
+    }
     printf("    %-16s %s\n", 'failures', (string)$s['failures']);
     if ($s['last_error'] !== '')      printf("    %-16s %s\n", 'last error', $s['last_error']);
     if ($s['throttled_until'] !== '') printf("    %-16s %s\n", 'backing off until', $s['throttled_until']);

@@ -119,6 +119,9 @@ $_m_jobs = [
     'starlink_mail'  => ['interval' => 300,                 'script' => __DIR__ . '/starlink_mail.php'],
     // Reads the customer mailbox and files drafts for approval. Never sends.
     'inbound_mail'   => ['interval' => 300,                 'script' => __DIR__ . '/inbound_mail.php'],
+    // Keeps the Starlink session alive by using it. Not telemetry — the
+    // access token expires in minutes, and a session that is used survives.
+    'starlink_alive' => ['interval' => 300,                 'script' => __DIR__ . '/starlink_keepalive.php'],
     'wa_sync'       => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_wa_sync.php'],
     'crm_sync'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_sync.php'],
     // v4.20.0 — Time-based access expiry checker. LAZY-POLL pattern: only

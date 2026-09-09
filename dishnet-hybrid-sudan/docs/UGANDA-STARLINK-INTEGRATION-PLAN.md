@@ -111,7 +111,8 @@ different key — but it is stated as a rule rather than left to luck:
 | Service lines | Yes (`webagg` discovery) | No | Yes | **Port as `StarlinkServiceLineSync`** |
 | Activation / service status | Yes | No | Yes | Port with service lines |
 | Service plans | Yes (`dr_plan_cache.json`) | Prices live in uCRM | Useful | Port read-only, for reconciliation |
-| Usage telemetry | Yes (5-minute keep-alive) | No | Not yet | **Defer to Phase 6** — no value at this scale |
+| Session keep-alive | Yes (`cron_session.php`, 300s) | **Yes — `cron/starlink_keepalive.php`** | **Yes, required** | **Ported** — the token dies in minutes without it |
+| Usage telemetry | Yes (same cron) | No | Not yet | **Defer to Phase 6** — the data, not the keep-alive |
 | Kit → customer handover | No (Starlink cannot know) | **Yes — StockService** | Yes | **Hybrid owns. Retire `KitRegister`** |
 | Customer / billing relationship | No | Yes (uCRM) | Yes | uCRM stays authoritative |
 | WiFi management (SSID/password) | Yes (`dr_wifi_change.php`, gRPC to router) | No | Maybe | **Evaluate later** — needs router reachability |
@@ -321,11 +322,22 @@ single cookie.** The four inherited from the fleet plugin answer
 `401 token_expired` — they need the very token that expired. `/auth-rp/auth/*`
 paths answer 404 except `login`, which 302s to the site root and sets nothing.
 
-So: **a session must be re-imported by a person when its access token
-expires.** That is the operating cost of the web-session route, it is not a
-defect to be fixed by trying harder, and the honest planning assumption is
-that somebody re-imports periodically. How often is still unmeasured — the
-store records `last_ok_at` and `imported_at`, so the interval will emerge.
+So there is no way to MINT a token. But that turned out not to be the
+question, because a session does not need re-minting if it never goes idle.
+
+**Correction, and it changes the operating cost.** The access token expires in
+minutes when nothing uses it — the Uganda session was accepted, then rejected
+on the next command. The South Sudan installation has run for months on the
+same mechanism, and the reason is `cron_session.php`, titled "Per-Account
+Cookie Keep-Alive", every 300 seconds. Using a session keeps it alive. I had
+read that cron as telemetry polling and recommended deferring it as low value
+at this scale; it is load-bearing, and deferring it would have left Uganda
+with a session that dies faster than anyone could use it.
+
+`cron/starlink_keepalive.php` is the Uganda equivalent: one cheap request
+every five minutes, no data written, and it leaves an already-dead session
+alone rather than hammering it. A re-import is then only needed when the SSO
+session itself ends, which is a far rarer event than a token expiry.
 
 This is the strongest argument yet for pursuing Enterprise API access in
 parallel. It does not change the decision to start on the web session, which
@@ -408,7 +420,7 @@ fields beside it.
 | Not ported | Reason |
 |---|---|
 | `cron_auto_block.php` | Uganda is prepaid: the model is pause/resume, not suspend-for-arrears. The dunning gate already blocks the postpaid path. Porting this would build the wrong billing model. |
-| `cron_session.php` 5-minute keep-alive | Per-cycle telemetry for a handful of service lines is cost without benefit. Revisit when the fleet justifies it. |
+| ~~`cron_session.php` 5-minute keep-alive~~ | **Corrected — this IS ported.** I read it as telemetry polling and called it low value at this scale. It is titled "Per-Account Cookie Keep-Alive" and it is load-bearing: Starlink's access token expires in minutes, and a session that is USED survives while one left alone does not. Uganda's session was accepted and then rejected minutes later precisely because nothing was using it. `cron/starlink_keepalive.php` is the Uganda equivalent, and it is what makes the web-session route viable at all. The telemetry that cron also collects stays deferred; the keep-alive does not. |
 | `full_history_scan.php` | Nothing to scan. Useful the day Uganda has years of history. |
 | `backup.php` / `cron_backup.php` | Hybrid already backs up to Drive. A second backup system is a second thing to get wrong. |
 | `client.php` (portal replica) | Hybrid has a customer app. Two customer-facing surfaces would drift. |
