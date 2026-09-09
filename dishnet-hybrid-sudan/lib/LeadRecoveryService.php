@@ -169,17 +169,20 @@ class LeadRecoveryService
             $phone = $c['phone'];
             $match = $crmPhoneMap[$phone] ?? null;
 
-            // Try with/without 211 prefix
-            if (!$match && strpos($phone, '211') === 0) {
-                $short = substr($phone, 3);
+            // With and without the country code it actually carries — the
+            // install's own, and 211 for records created before Uganda.
+            foreach (self::knownPrefixes() as $pfx) {
+                if ($match || strpos($phone, $pfx) !== 0) continue;
+                $short = substr($phone, strlen($pfx));
                 $match = $crmPhoneMap[$short] ?? $crmPhoneMap['0' . $short] ?? null;
             }
             if (!$match && strlen($phone) === 9) {
-                $match = $crmPhoneMap['211' . $phone] ?? null;
+                $cc    = \CustomerContact::countryCode();
+                $match = $crmPhoneMap[$cc . $phone] ?? ($crmPhoneMap['211' . $phone] ?? null);
             }
-            // Try adding 0 prefix
-            if (!$match && strpos($phone, '211') === 0) {
-                $match = $crmPhoneMap['0' . substr($phone, 3)] ?? null;
+            foreach (self::knownPrefixes() as $pfx) {
+                if ($match || strpos($phone, $pfx) !== 0) continue;
+                $match = $crmPhoneMap['0' . substr($phone, strlen($pfx))] ?? null;
             }
 
             $isCustomer = $match ? 1 : 0;
@@ -257,12 +260,14 @@ class LeadRecoveryService
             $match = $crmPhones[$phone] ?? null;
 
             // Also try with/without 211 prefix
-            if (!$match && strpos($phone, '211') === 0) {
-                $short = substr($phone, 3);
+            foreach (self::knownPrefixes() as $pfx) {
+                if ($match || strpos($phone, $pfx) !== 0) continue;
+                $short = substr($phone, strlen($pfx));
                 $match = $crmPhones[$short] ?? $crmPhones['0' . $short] ?? null;
             }
             if (!$match && strlen($phone) === 9) {
-                $match = $crmPhones['211' . $phone] ?? null;
+                $cc    = \CustomerContact::countryCode();
+                $match = $crmPhones[$cc . $phone] ?? ($crmPhones['211' . $phone] ?? null);
             }
 
             $isCustomer = $match ? 1 : 0;
@@ -532,18 +537,53 @@ class LeadRecoveryService
         )->execute(["\n→ Auto-converted to Lead #{$newLead['id']} assigned to {$assignName}", $lead['id']]);
     }
 
+    /**
+     * Give a local number its country, and leave every other number alone.
+     *
+     * The country code was hardcoded to 211, so a Ugandan number typed as
+     * 0705993348 became 211705993348 — a South Sudan number that does not
+     * exist. It comes from configuration now, defaulting to 211 so the Sudan
+     * install is unchanged.
+     *
+     * A number that already carries a country code is never touched. A
+     * customer in Kampala may perfectly well hold a South Sudan, Kenyan or
+     * Indian WhatsApp number, and that is not an error to be corrected.
+     */
+    /**
+     * Country codes a stored number might carry.
+     *
+     * The install's own first, then 211: a Uganda install still holds records
+     * created while this plugin was Sudan-only, and those numbers should keep
+     * matching rather than quietly becoming new leads.
+     */
+    private static function knownPrefixes(): array
+    {
+        require_once __DIR__ . '/CustomerContact.php';
+        $cc = \CustomerContact::countryCode();
+        return array_values(array_unique(array_filter([$cc, '211'])));
+    }
+
     private function normalisePhone(string $phone): string
     {
+        require_once __DIR__ . '/CustomerContact.php';
+        $cc = \CustomerContact::countryCode();
+
         $phone = preg_replace('/[^0-9]/', '', $phone);
-        if (empty($phone)) return '';
-        if (strpos($phone, '00211') === 0) $phone = substr($phone, 2);
-        if (strpos($phone, '+') === 0) $phone = substr($phone, 1);
-        if (strlen($phone) === 9 && ($phone[0] === '9' || $phone[0] === '0')) {
-            $phone = '211' . ($phone[0] === '0' ? substr($phone, 1) : $phone);
-        }
-        if (strpos($phone, '0') === 0 && strlen($phone) === 10) {
-            $phone = '211' . substr($phone, 1);
-        }
+        if ($phone === '') return '';
+
+        // 00<cc>... is the international prefix written the old way.
+        if (strpos($phone, '00' . $cc) === 0) $phone = substr($phone, 2);
+        if (strpos($phone, '00') === 0 && strlen($phone) > 10) $phone = substr($phone, 2);
+
+        // Already international: any number long enough to carry a country
+        // code and not starting with a trunk 0 is left exactly as it is.
+        if ($phone[0] !== '0' && strlen($phone) >= 11) return $phone;
+
+        // Local, with or without the trunk 0.
+        if (strlen($phone) === 10 && $phone[0] === '0') return $cc . substr($phone, 1);
+        if (strlen($phone) === 9  && $phone[0] !== '0') return $cc . $phone;
+        if (strlen($phone) === 9  && $phone[0] === '0') return $cc . substr($phone, 1);
+
         return $phone;
     }
 
