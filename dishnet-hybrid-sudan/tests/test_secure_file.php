@@ -62,6 +62,20 @@ try { SecureFile::adopt($missing, $dir); ok('adopting a missing file is a no-op'
 catch (\Throwable $e) { bad('adopting a missing file threw', $e->getMessage()); }
 is_(SecureFile::describeOwner($missing) === '(missing)', 'and its owner reads as missing');
 
+echo "\nThe question asked is whether the OWNING PROCESS can read it\n";
+// Judging by mode alone called a 0600 file owned by nginx "unreadable" when
+// nginx could read it perfectly. A false alarm teaches an operator to ignore
+// the tool, which is worse than no tool.
+foreach ([0600, 0640, 0644] as $m) {
+    chmod($file, $m);
+    $r = SecureFile::readableByOwnerOf($file, $dir);
+    is_($r['ok'], sprintf('%o owned by the same user is fine', $m), $r['why']);
+}
+is_(SecureFile::readableByOwnerOf($dir . '/nope.json', $dir)['ok'],
+    'a file that is not there is not a permission problem');
+is_(SecureFile::describeOwner($dir) !== '(missing)',
+    'a DIRECTORY has an owner — is_file() said otherwise and broke the comparison');
+
 echo "\nThe writers no longer lock the file to one user\n";
 foreach (['tools/set_sent_copy.php', 'tools/email_setup.php'] as $rel) {
     $src = (string)file_get_contents($root . '/' . $rel);

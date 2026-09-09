@@ -67,14 +67,53 @@ class SecureFile
     }
 
     /** "root:root (0600)" style description, for doctors and setup output. */
-    public static function describeOwner(string $file): string
+    public static function describeOwner(string $path): string
     {
-        if (!is_file($file)) return '(missing)';
+        // file_exists, not is_file: this is asked about the DATA DIRECTORY as
+        // often as about a file, and is_file() answers false for a directory —
+        // which printed "Directory owned by (missing)" and then made every
+        // correctly-owned file look wrong, because the comparison had nothing
+        // real to compare against.
+        if (!file_exists($path)) return '(missing)';
+        $file = $path;
         $uid = @fileowner($file);
         $gid = @filegroup($file);
         $u = function_exists('posix_getpwuid') && $uid !== false ? (posix_getpwuid($uid)['name'] ?? $uid) : $uid;
         $g = function_exists('posix_getgrgid') && $gid !== false ? (posix_getgrgid($gid)['name'] ?? $gid) : $gid;
         return "{$u}:{$g}";
+    }
+
+    /**
+     * Can the process that owns $dir read $file?
+     *
+     * That is the question that matters, and it is not "is the mode 0600".
+     * A file owned by nginx at 0600 is perfectly readable by nginx; a file
+     * owned by root at 0600 is not. Judging by mode alone flagged the first
+     * as broken, which is a false alarm that teaches an operator to ignore
+     * the tool.
+     *
+     * @return array{ok:bool, why:string}
+     */
+    public static function readableByOwnerOf(string $file, string $dir): array
+    {
+        if (!is_file($file))    return ['ok' => true,  'why' => 'not present'];
+        if (!file_exists($dir)) return ['ok' => true,  'why' => 'cannot identify the owning process'];
+
+        $perms = @fileperms($file) ?: 0;
+        $mode  = substr(sprintf('%o', $perms), -4);
+        $fUid  = @fileowner($file); $fGid = @filegroup($file);
+        $dUid  = @fileowner($dir);  $dGid = @filegroup($dir);
+
+        if ($perms & 0004) return ['ok' => true, 'why' => "{$mode} world-readable"];
+        if ($fUid === $dUid && ($perms & 0400)) {
+            return ['ok' => true, 'why' => "{$mode} owned by the same user"];
+        }
+        if ($fGid === $dGid && ($perms & 0040)) {
+            return ['ok' => true, 'why' => "{$mode} shared group"];
+        }
+        return ['ok' => false,
+                'why' => "{$mode} " . self::describeOwner($file)
+                       . ' but the process runs as ' . self::describeOwner($dir)];
     }
 
     /**

@@ -40,16 +40,14 @@ $bad = 0;
 foreach ($files as $f) {
     $path = $dataDir . '/' . $f;
     if (!is_file($path)) { printf("  %-24s (not present)\n", $f); continue; }
-    $a    = SecureFile::auditReadability($path);
     $mode = substr(sprintf('%o', @fileperms($path) ?: 0), -4);
     $own  = SecureFile::describeOwner($path);
-    $dirOwn = SecureFile::describeOwner($dataDir);
-
-    // The real question is whether the web user can read it, and the web user
-    // owns the data directory. Same owner, or group/other readable, is fine.
-    $ok = ($own === $dirOwn) || $a['readable_by_others'];
-    printf("  %-24s %s %-16s %s\n", $f, $mode, $own, $ok ? 'ok' : 'UNREADABLE by the web process');
-    if ($ok) continue;
+    // Not "is the mode 0600" — a file owned by nginx at 0600 is readable BY
+    // nginx. Only a file the owning process cannot open is a problem.
+    $r    = SecureFile::readableByOwnerOf($path, $dataDir);
+    printf("  %-24s %s %-16s %s\n", $f, $mode, $own,
+           $r['ok'] ? 'ok' : 'UNREADABLE — ' . $r['why']);
+    if ($r['ok']) continue;
     $bad++;
     if ($fix) {
         SecureFile::adopt($path, $dataDir);
