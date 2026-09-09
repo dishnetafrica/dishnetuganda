@@ -175,7 +175,9 @@ is_(strpos($got, 'BRAND_OK') !== false,
 is_(strpos($got, 'NO_SUDAN') !== false, 'and no Sudan default leaks through');
 
 $srcD = (string)file_get_contents($root . '/lib/CustomerEmailDispatcher.php');
-is_(strpos($srcD, 'CustomerEmails::render($key, self::effectiveConfig($this->config)') !== false,
+// $this->config IS the on-disk config now — the constructor resolves it, and
+// the block at the end of this file asserts that it does so exactly once.
+is_(strpos($srcD, 'CustomerEmails::render($key, $this->config,') !== false,
     'render() is handed the on-disk config, not the caller\'s array');
 
 $wh4 = (string)file_get_contents($root . '/webhook.php');
@@ -185,6 +187,57 @@ is_(strpos($wh4, '$crm->get("billing/quotes/{$quoteId}") ?: [];') === false,
     'and the second fetch that returned nothing is gone');
 
 @unlink($brandDir . '/kyc_config.json'); @rmdir($brandDir);
+
+echo "\nEvery use of the config is the on-disk one, not just the ones found so far\n";
+// The same stale array caused three faults in three layers: switches off,
+// Sudan company name in the body, Sudan Reply-To in the header. Fixing each
+// where it was found moved the bug one layer down. It is resolved once in the
+// constructor now, so there is no fourth layer.
+$srcD2 = (string)file_get_contents($root . '/lib/CustomerEmailDispatcher.php');
+is_(strpos($srcD2, '$this->config  = self::effectiveConfig($config);') !== false,
+    'the constructor stores the effective config, not the caller\'s array');
+$codeD = '';
+foreach (token_get_all($srcD2) as $tk) {
+    if (is_array($tk) && in_array($tk[0], [T_COMMENT, T_DOC_COMMENT], true)) continue;
+    $codeD .= is_array($tk) ? $tk[1] : $tk;
+}
+// masterEnabled() is static and resolves its own argument for callers who
+// hold no instance; that is correct and separate. What matters is that the
+// INSTANCE resolves once, at construction.
+is_(substr_count($codeD, '$this->config  = self::effectiveConfig($config);') === 1,
+    'and the instance resolves it exactly once, at construction');
+is_(strpos($codeD, 'self::effectiveConfig($this->config)') === false,
+    'nothing re-resolves an already-resolved config');
+is_(strpos($codeD, 'EmailTemplate::replyTo($this->config)') !== false,
+    'the Reply-To header reads that same resolved config');
+
+// Prove it end to end: an empty caller array, Uganda settings only on disk.
+$rtDir = sys_get_temp_dir() . '/ced_rt_' . bin2hex(random_bytes(4));
+@mkdir($rtDir, 0777, true);
+file_put_contents($rtDir . '/kyc_config.json', json_encode([
+    'customer_emails_enabled' => 1, 'customer_email_quotation' => 1,
+    'email_reply_to' => 'accounts@dishnetuganda.com',
+    'email_company_name' => 'DishNet Africa Limited',
+]));
+$probe = <<<'SUB'
+$root = __ROOT__; $GLOBALS['dataDir'] = __CFG__;
+require_once $root . '/lib/CustomerEmailDispatcher.php';
+require_once $root . '/lib/EmailTemplate.php';
+$d = new CustomerEmailDispatcher(__CFG__, []);   // EMPTY caller array
+$r = new ReflectionProperty(CustomerEmailDispatcher::class, 'config');
+$r->setAccessible(true);
+echo EmailTemplate::replyTo($r->getValue($d));
+SUB;
+$code = str_replace(['__ROOT__', '__CFG__'],
+                    [var_export($root, true), var_export($rtDir, true)], $probe);
+$out = []; exec('php -r ' . escapeshellarg($code) . ' 2>&1', $out);
+$got = trim(implode('', $out));
+is_($got === 'accounts@dishnetuganda.com',
+    'a dispatcher built with no config still replies to the Uganda address',
+    'got: ' . $got);
+is_(strpos($got, 'dishnetafrica.com') === false,
+    'and never to the Sudan one');
+@unlink($rtDir . '/kyc_config.json'); @rmdir($rtDir);
 
 echo "\nThe wiring is where the events actually happen\n";
 $wh = (string)file_get_contents($root . '/webhook.php');

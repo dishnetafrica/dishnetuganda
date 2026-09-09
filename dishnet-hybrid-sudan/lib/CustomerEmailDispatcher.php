@@ -44,7 +44,18 @@ class CustomerEmailDispatcher
     public function __construct(string $dataDir, array $config, $crm = null, $pdo = null)
     {
         $this->dataDir = $dataDir;
-        $this->config  = $config;
+        // Resolved ONCE, here, rather than at each use.
+        //
+        // The webhook hydrates its array from the SqliteStore copy, which
+        // never learns keys written to the config FILE. That has now caused
+        // three separate faults in three layers: the switches read as off, the
+        // body rendered with the Sudan company name, and the Reply-To header
+        // pointed at info@dishnetafrica.com on a Ugandan quotation. Each was
+        // fixed where it was found, which simply moved the bug one layer down.
+        //
+        // Holding the effective config means every use is correct by
+        // construction, and there is no fourth layer to find.
+        $this->config  = self::effectiveConfig($config);
         $this->crm     = $crm;
         $this->pdo     = $pdo;
     }
@@ -204,14 +215,7 @@ class CustomerEmailDispatcher
                 return $this->result(false, 'already sent', $email);
             }
 
-            // effectiveConfig, not $this->config. The webhook hydrates its
-            // config from the SqliteStore copy, which never learned the
-            // email_* branding keys — so a webhook-sent quotation carried the
-            // Sudan defaults: "DishNet Africa Ltd." instead of the registered
-            // "DishNet Africa Limited". The switches were fixed for this
-            // reason already; the rendering needed the same treatment.
-            $built = CustomerEmails::render($key, self::effectiveConfig($this->config),
-                                            $data + ['name' => $name]);
+            $built = CustomerEmails::render($key, $this->config, $data + ['name' => $name]);
             $mail  = new MailService($this->dataDir);
             if (!$mail->getConfig()) {
                 return $this->result(false, 'plugin mail is not configured', $email);
