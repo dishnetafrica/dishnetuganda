@@ -135,7 +135,28 @@ class CustomerEmailDispatcher
                 if (is_array($d)) $fromDisk = array_merge($fromDisk, $d);
             }
         }
-        return array_merge($config, $fromDisk);
+        // Disk wins, EXCEPT where disk is empty and the caller has a value.
+        //
+        // uCRM re-materialises its config.json from the manifest, writing every
+        // declared field it holds no value for as "". A plain array_merge lets
+        // that empty string beat a real one — and the real one is often the
+        // ConfigVault's copy, restored moments earlier precisely so that a
+        // re-install would not lose it. Declaring the mailbox password in the
+        // manifest was enough to blank a working password: the field appeared,
+        // unfilled, and erased the value the vault was holding.
+        //
+        // An unfilled field is not an instruction to erase. Clearing a value
+        // has its own explicit routes — saveOverrides unsets a key given '',
+        // and set_mailbox_password.php has --clear — so nothing is lost by
+        // refusing to read emptiness as intent.
+        foreach ($fromDisk as $k => $v) {
+            if (is_string($v) && trim($v) === ''
+                && isset($config[$k]) && trim((string)$config[$k]) !== '') {
+                continue;
+            }
+            $config[$k] = $v;
+        }
+        return $config;
     }
 
     /** The master switch. Absent means off. */

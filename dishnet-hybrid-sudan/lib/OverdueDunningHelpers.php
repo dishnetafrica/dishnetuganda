@@ -76,7 +76,18 @@ if (!function_exists('_dunningEffectiveConfig')) {
                   $dataDir . '/kyc_config.json'] as $p) {
             if (!is_file($p)) continue;
             $d = json_decode((string)@file_get_contents($p), true);
-            if (is_array($d)) $cfg = array_merge($cfg, $d);
+            if (!is_array($d)) continue;
+            // A later file's EMPTY value must not erase an earlier real one.
+            // uCRM writes every manifest-declared field it holds no value for
+            // as "", so a plain merge lets an unfilled form field blank a
+            // working setting. That already blanked a live mailbox password.
+            foreach ($d as $k => $v) {
+                if (is_string($v) && trim($v) === ''
+                    && isset($cfg[$k]) && trim((string)$cfg[$k]) !== '') {
+                    continue;
+                }
+                $cfg[$k] = $v;
+            }
         }
         return $cfg;
     }
