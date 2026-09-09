@@ -190,6 +190,42 @@ class KitRegister
         return ['ok' => true, 'error' => ''];
     }
 
+    /**
+     * Remove a kit recorded in error — a mistyped serial, or a copied example.
+     *
+     * Deliberately narrow. A kit Starlink has ever written to us about is real
+     * hardware with a real history, and erasing that is exactly what the
+     * movement log exists to prevent. This removes only what a person typed
+     * and nothing has ever confirmed.
+     *
+     * @return array{ok:bool, error:string, removed:int}
+     */
+    public function deleteTypo(string $kitId): array
+    {
+        $kit = self::normaliseKitId($kitId);
+        if ($kit === '') return ['ok' => false, 'error' => 'no kit id given', 'removed' => 0];
+        if ($this->find($kit) === null) {
+            return ['ok' => false, 'error' => 'no such kit', 'removed' => 0];
+        }
+
+        foreach ($this->history($kit) as $h) {
+            if (strtolower((string)$h['who']) === 'starlink') {
+                return ['ok' => false, 'removed' => 0,
+                        'error' => 'Starlink has written to us about this kit, so it is real '
+                                 . 'hardware with a history — mark it returned instead of erasing it'];
+            }
+        }
+
+        $n = count($this->history($kit));
+        $this->pdo->prepare('DELETE FROM starlink_kit_events WHERE kit_id = ?')->execute([$kit]);
+        $this->pdo->prepare('DELETE FROM starlink_kits WHERE kit_id = ?')->execute([$kit]);
+
+        // Not to the movement log, which is now gone: to the server log, where
+        // a deletion is still visible to anyone asking what happened.
+        error_log('[KitRegister] removed hand-entered kit ' . $kit . ' and its ' . $n . ' event(s)');
+        return ['ok' => true, 'error' => '', 'removed' => $n];
+    }
+
     public function find(string $kitId): ?array
     {
         $st = $this->pdo->prepare('SELECT * FROM starlink_kits WHERE kit_id = ?');

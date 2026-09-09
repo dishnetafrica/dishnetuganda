@@ -10,6 +10,7 @@ chdir(dirname(__DIR__));
  *   php tools/kits.php --kit KIT-0123-4567      one kit, and everywhere it has been
  *   php tools/kits.php --assign KIT-0123-4567 --client 4021 --by bhavin
  *   php tools/kits.php --return KIT-0123-4567 --by bhavin
+ *   php tools/kits.php --delete KIT-0123-4567      a serial typed in error
  *
  * Starlink's own emails put kits in here as they are ordered, shipped and
  * activated. What those emails cannot say is whose hands a kit ended up in —
@@ -60,6 +61,14 @@ if ($has('--assign')) {
         echo "  This kit was with client {$r['moved_from']} — the move is in its history.\n";
     }
     echo "\n";
+    exit(0);
+}
+
+if ($has('--delete')) {
+    $r = $reg->deleteTypo($value('--delete'));
+    if (empty($r['ok'])) { echo "\n  " . $r['error'] . "\n\n"; exit(1); }
+    echo "\n  Removed, with its " . $r['removed'] . " history entry(s).\n";
+    echo "  Only ever possible for a serial nothing has confirmed.\n\n";
     exit(0);
 }
 

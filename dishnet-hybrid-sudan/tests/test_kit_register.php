@@ -109,6 +109,27 @@ $bad2 = $r->assign('KIT01234567', 0, 'x');
 is_(empty($bad1['ok']) && empty($bad2['ok']),
     'a missing kit or a missing customer is refused, not half-recorded');
 
+echo "\nA serial typed in error can be taken back out\n";
+// It will happen: a mistyped serial, or an example command copied literally.
+// One of mine was, against a real customer, an hour after this shipped.
+$r3 = reg();
+$r3->assign('KIT-TYPO-0001', 2, 'bhavin');
+is_($r3->find('KITTYPO0001') !== null, 'the mistake is recorded like anything else');
+$d = $r3->deleteTypo('KIT-TYPO-0001');
+is_(!empty($d['ok']), 'and can be removed', (string)($d['error'] ?? ''));
+is_($r3->find('KITTYPO0001') === null, 'the kit is gone');
+is_($r3->history('KITTYPO0001') === [], 'and so is its history, which was never real');
+
+echo "\nBut real hardware cannot be erased this way\n";
+$r4 = reg();
+$r4->noteFromSupplier(['kit' => 'UT12345678'], 'ORDER_SHIPPED');
+$r4->assign('UT12345678', 2, 'bhavin');
+$d2 = $r4->deleteTypo('UT12345678');
+is_(empty($d2['ok']), 'a kit Starlink told us about refuses to be deleted');
+is_(strpos((string)$d2['error'], 'mark it returned') !== false,
+    'and points at the honest alternative', (string)$d2['error']);
+is_($r4->find('UT12345678') !== null, 'the record stands');
+
 echo "\nThe supplier pipeline records kits but assigns nobody\n";
 // The classifier matches a MESSAGE to a client. That is not the same as
 // knowing whose hands the kit ended up in, and treating it as the same would
