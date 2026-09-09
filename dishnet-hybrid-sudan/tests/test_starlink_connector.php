@@ -198,6 +198,35 @@ is_(strpos((string)$r['error'], 'no Starlink session has been imported') !== fal
 $v = $conn->verify();
 is_(empty($v['ok']), 'verify fails too, without pretending');
 
+echo "\nA truncated paste is visible before it wastes anyone's afternoon\n";
+// A Starlink cookie runs to several thousand bytes. Pasted into a terminal it
+// is cut at the kernel's canonical line buffer — 4096 on Linux — and every
+// NAME survives while the last VALUE is severed. It imports cleanly, lists
+// correctly, and Starlink answers 401 to a session that looks complete.
+$store = freshStore($tmp);
+$long  = 'a=1; b=2; token=' . str_repeat('x', 4050);
+$store->importCookie(substr($long, 0, 4050), 'bhavin');   // as a terminal would leave it
+$shape = $store->shape();
+is_(!empty($shape['suspect_truncated']),
+    'a session near the terminal limit is flagged as suspect',
+    (string)$shape['total'] . ' bytes');
+is_(isset($shape['names']['token']), 'the truncated cookie still LISTS — which is the trap');
+is_($shape['names']['token'] < 4050, 'while its value is visibly short');
+
+$store = freshStore($tmp);
+$store->importCookie('a=1; b=2', 'bhavin');
+is_(empty($store->shape()['suspect_truncated']), 'a short session is not flagged');
+is_($store->shape()['total'] === 8, 'and its size is reported', (string)$store->shape()['total']);
+is_(strpos(json_encode($store->shape()), 'xxxx') === false,
+    'the shape never carries a value, only its length');
+
+echo "\nThe import cannot be truncated by a terminal any more\n";
+$tool = (string)file_get_contents($root . '/tools/starlink_session.php');
+is_(strpos($tool, 'stty -icanon') !== false,
+    'typing it in switches canonical mode off, removing the line limit');
+is_(strpos($tool, 'stream_isatty(STDIN)') !== false,
+    'and a piped cookie bypasses the terminal entirely');
+
 echo "\nA cookie that is not a cookie is refused at the door\n";
 $store = freshStore($tmp);
 $r = $store->importCookie('I pasted the whole page by mistake', 'bhavin');

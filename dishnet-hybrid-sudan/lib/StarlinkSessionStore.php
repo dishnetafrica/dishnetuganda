@@ -256,6 +256,36 @@ class StarlinkSessionStore
     }
 
     /**
+     * Name → value LENGTH. Never a value.
+     *
+     * Long enough to diagnose the failure that is otherwise invisible: a
+     * cookie pasted into a terminal is truncated at the canonical input
+     * buffer, usually 4096 bytes, and a Starlink session is far longer than
+     * that. The names all arrive, the last value is cut mid-JWT, and Starlink
+     * answers 401 to a session that looks complete in every listing.
+     *
+     * @return array{names:array<string,int>, total:int, suspect_truncated:bool}
+     */
+    public function shape(): array
+    {
+        $cookie = $this->cookie();
+        $names  = [];
+        foreach (explode(';', $cookie) as $part) {
+            $part = trim($part);
+            if ($part === '') continue;
+            $eq = strpos($part, '=');
+            if ($eq === false) { $names[$part] = 0; continue; }
+            $names[substr($part, 0, $eq)] = strlen(substr($part, $eq + 1));
+        }
+        $total = strlen($cookie);
+
+        // 4096 is the usual terminal line limit; allow for the trailing
+        // newline and the "cookie: " prefix a paste may include.
+        return ['names' => $names, 'total' => $total,
+                'suspect_truncated' => $total >= 4000 && $total <= 4110];
+    }
+
+    /**
      * The NAMES of the cookies held, never the values.
      *
      * Enough for an operator to see that a session looks complete; useless to

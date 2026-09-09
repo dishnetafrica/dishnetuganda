@@ -256,6 +256,34 @@ class StarlinkPortalConnector implements StarlinkConnector
         return ['ok' => false, 'error' => 'the refreshed session did not verify'];
     }
 
+    /**
+     * One raw request, with nothing helping it.
+     *
+     * No refresh on 401, no throttle check, no state written. The probe needs
+     * to report what Starlink actually said, and the automatic refresh —
+     * correct in normal use — replaced a 401 on the call we cared about with a
+     * 404 from the refresh endpoint, which is a different question's answer.
+     *
+     * @return array{code:int, error:string, bytes:int, snippet:string}
+     */
+    public function raw(string $method, string $path): array
+    {
+        $cookie = $this->store->cookie();
+        if ($cookie === '') return ['code' => 0, 'error' => 'no session', 'bytes' => 0, 'snippet' => ''];
+
+        $headers = $this->headers($cookie);
+        if ($method === 'POST') $headers[] = 'content-length: 0';
+
+        $r    = $this->send($method, self::HOST . $path, $headers);
+        $body = (string)($r['body'] ?? '');
+        return [
+            'code'    => (int)($r['code'] ?? 0),
+            'error'   => (string)($r['error'] ?? ''),
+            'bytes'   => strlen($body),
+            'snippet' => str_replace(["\n", "\r"], ' ', substr($body, 0, 120)),
+        ];
+    }
+
     public function verify(): array
     {
         if (!$this->isConfigured()) {

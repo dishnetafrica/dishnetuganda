@@ -36,6 +36,42 @@ if (!$conn->isConfigured()) {
     exit(1);
 }
 
+// ── 0. Diagnose: what does Starlink actually say, to each thing we ask? ──
+if (in_array('--diagnose', array_slice($argv, 1), true)) {
+    $shape = $store->shape();
+    printf("  %-22s %d cookies, %d bytes\n", 'session holds',
+        count($shape['names']), $shape['total']);
+    if (!empty($shape['suspect_truncated'])) {
+        echo "  " . str_repeat('!', 64) . "\n";
+        echo "  That is ~4096 bytes — where a terminal cuts a pasted line.\n";
+        echo "  Every cookie NAME survives truncation; the last VALUE does not.\n";
+        echo "  Re-import by piping the cookie in rather than pasting it.\n";
+        echo "  " . str_repeat('!', 64) . "\n";
+    }
+    echo "\n  Raw responses — no refresh, no retry, nothing helping:\n\n";
+    printf("  %-6s %-52s %s\n", 'CODE', 'PATH', 'BYTES');
+    printf("  %s\n", str_repeat('-', 72));
+    foreach ([
+        ['GET',  '/api/accounts/v3/accounts/contact'],
+        ['GET',  '/api/webagg/v2/accounts/service-lines?limit=1&page=0'],
+        ['GET',  '/api/accounts/v1/accounts/service-line-numbers'],
+        ['POST', '/api/auth/v1/session/refresh'],
+        ['POST', '/api/auth/v1/token/refresh'],
+    ] as [$m, $path]) {
+        $d = $conn->raw($m, $path);
+        printf("  %-6s %-52s %d\n", $d['code'] ?: ($d['error'] !== '' ? 'ERR' : '0'),
+            $m . ' ' . substr($path, 0, 48), $d['bytes']);
+        if ($d['error'] !== '')   echo "         " . $d['error'] . "\n";
+        if ($d['snippet'] !== '') echo "         " . $d['snippet'] . "\n";
+    }
+    echo "\n  401/403 everywhere means the cookie is not accepted — truncated,\n";
+    echo "  expired, or from a different account.\n";
+    echo "  200 on contact but 401 elsewhere means the session is real and a\n";
+    echo "  second auth layer is refusing — a different problem entirely.\n";
+    echo "  404 on a refresh path means that endpoint is not there any more.\n\n";
+    exit(0);
+}
+
 // ── 1. Does Starlink still accept us? ────────────────────────────────────
 $v = $conn->verify();
 printf("  %-22s %s\n", 'session accepted', !empty($v['ok']) ? 'YES' : 'NO');
@@ -47,6 +83,8 @@ if (empty($v['ok'])) {
         echo "  The session is dead. Sign in again and import a fresh cookie:\n\n";
         echo "    docker exec -it ucrm php tools/starlink_session.php --import\n\n";
     }
+    echo "  To see what Starlink said to each request, with nothing helping:\n\n";
+    echo "    php tools/starlink_probe.php --diagnose\n\n";
     exit(1);
 }
 printf("  %-22s %s\n", 'identified as', (string)$v['detail']);

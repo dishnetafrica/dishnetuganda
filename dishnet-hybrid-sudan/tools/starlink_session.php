@@ -74,8 +74,17 @@ function show(StarlinkSessionStore $store, array $config): void
     printf("    %-16s %s\n", 'account', $s['account_email'] !== '' ? $s['account_email']
         : (($config['starlink_account_email'] ?? '') ?: '(not set)'));
     printf("    %-16s %s\n", 'account number', $s['account_number'] ?: '(not set)');
+    $shape = $store->shape();
     printf("    %-16s %s\n", 'cookies held', $s['cookie_present']
-        ? implode(', ', $s['cookie_names']) . '  (names only)' : 'none');
+        ? count($shape['names']) . ' · ' . $shape['total'] . ' bytes' : 'none');
+    if ($s['cookie_present']) {
+        $bits = [];
+        foreach ($shape['names'] as $n => $len) $bits[] = $n . '(' . $len . ')';
+        printf("    %-16s %s\n", '', implode(', ', $bits));
+        if (!empty($shape['suspect_truncated'])) {
+            printf("    %-16s %s\n", '', 'WARNING: ~4096 bytes — likely truncated by a terminal paste');
+        }
+    }
     printf("    %-16s %s\n", 'imported', $s['imported_at'] !== ''
         ? $s['imported_at'] . ' by ' . $s['imported_by'] : '—');
     printf("    %-16s %s\n", 'last accepted', $s['last_ok_at'] ?: '—');
@@ -106,20 +115,39 @@ if ($value('--account') !== '' || $value('--number') !== '') {
 }
 
 if ($has('--import')) {
-    $stty = @shell_exec('stty -g 2>/dev/null');
-    if ($stty === null || trim((string)$stty) === '') {
-        echo "\n  This is not an interactive terminal, so typing cannot be hidden.\n";
-        echo "  Re-run it with a terminal attached:\n\n";
-        echo "    docker exec -it ucrm php " . __FILE__ . " --import\n\n";
-        exit(1);
-    }
+    // A Starlink cookie is several thousand bytes. Terminal input in canonical
+    // mode truncates a line at the kernel buffer — 4096 bytes on Linux — so a
+    // pasted session arrives with every NAME present and the last value cut in
+    // half. It imports cleanly, lists correctly, and Starlink answers 401.
+    //
+    // Two ways in, neither of them canonical:
+    //   piped   — no terminal, no limit
+    //   typed   — canonical mode switched off, read byte by byte
+    $piped = !stream_isatty(STDIN);
 
-    echo "\n  Paste the cookie header from a browser signed in to the UGANDA\n";
-    echo "  Starlink account. It will not be shown.\n\n  cookie: ";
-    @shell_exec('stty -echo');
-    $cookie = (string)fgets(STDIN);
-    @shell_exec('stty ' . trim((string)$stty));
-    echo "\n";
+    if ($piped) {
+        $cookie = (string)stream_get_contents(STDIN);
+    } else {
+        $stty = @shell_exec('stty -g 2>/dev/null');
+        if ($stty === null || trim((string)$stty) === '') {
+            echo "\n  No terminal, and nothing piped in. Either:\n\n";
+            echo "    docker exec -it ucrm php " . __FILE__ . " --import\n";
+            echo "    cat cookie.txt | docker exec -i ucrm php " . __FILE__ . " --import\n\n";
+            exit(1);
+        }
+        echo "\n  Paste the cookie header from a browser signed in to the UGANDA\n";
+        echo "  Starlink account. It will not be shown.\n\n  cookie: ";
+
+        // -icanon removes the line-length limit; -echo keeps it off the screen.
+        @shell_exec('stty -icanon -echo min 1 time 0');
+        $cookie = '';
+        while (($ch = fgetc(STDIN)) !== false) {
+            if ($ch === "\n" || $ch === "\r") break;
+            $cookie .= $ch;
+        }
+        @shell_exec('stty ' . trim((string)$stty));
+        echo "\n";
+    }
 
     $cookie = trim($cookie, "\r\n ");
     if (stripos($cookie, 'cookie:') === 0) $cookie = trim(substr($cookie, 7));
@@ -127,12 +155,24 @@ if ($has('--import')) {
     $r = $store->importCookie($cookie, get_current_user(),
         $value('--account') ?: (string)($config['starlink_account_email'] ?? ''),
         $value('--number'));
-    $cookie = str_repeat("\0", strlen($cookie));   // do not leave it in memory
+    $len = strlen($cookie);
+    $cookie = str_repeat("\0", $len);   // do not leave it in memory
 
     if (empty($r['ok'])) { echo "\n  " . $r['error'] . "\n\n"; exit(1); }
 
-    echo "  Imported " . count($r['names']) . " cookie(s): " . implode(', ', $r['names']) . "\n";
+    $shape = $store->shape();
+    echo "  Imported " . count($r['names']) . " cookie(s), " . $shape['total'] . " bytes.\n";
     echo "  (names only — the values are encrypted and never printed)\n";
+
+    if (!empty($shape['suspect_truncated'])) {
+        echo "\n  WARNING: that is almost exactly 4096 bytes, which is where a\n";
+        echo "  terminal cuts a pasted line. The session may be truncated even\n";
+        echo "  though every name is present. If the probe says 401, pipe it in\n";
+        echo "  instead:\n\n";
+        echo "    cat cookie.txt | docker exec -i ucrm php " . __FILE__ . " --import\n";
+        echo "    shred -u cookie.txt\n";
+    }
+
     echo "\n  Now prove Starlink accepts it:\n\n";
     echo "    php tools/starlink_probe.php\n\n";
     exit(0);
