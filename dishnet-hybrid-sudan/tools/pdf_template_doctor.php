@@ -24,6 +24,7 @@ $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/CrmApiClient.php';
+require_once $root . '/lib/QuotePdfSource.php';
 
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
@@ -172,8 +173,8 @@ if ($quoteId <= 0) {
     // does serve instead of guessing a third time.
     $pdf = null;
     foreach (["billing/quotes/{$quoteId}/pdf", "quotes/{$quoteId}/pdf"] as $ep) {
-        $try = $crm->getRawContent($ep);
-        if (is_string($try) && strncmp($try, '%PDF', 4) === 0) { $pdf = $try; break; }
+        $try = QuotePdfSource::toPdfBytes($crm->getRawContent($ep));
+        if ($try !== '') { $pdf = $try; break; }
     }
     if ($pdf === null) {
         nv("quote {$quoteId}: neither billing/quotes/{id}/pdf nor quotes/{id}/pdf returned a PDF");
@@ -189,10 +190,10 @@ if ($quoteId <= 0) {
             "billing/quotes/{$quoteId}/print", "quotes/{$quoteId}/print",
             "billing/quote-pdf/{$quoteId}", "quote-pdf/{$quoteId}",
         ] as $ep) {
-            $try  = $crm->getRawContent($ep);
-            $err  = $crm->getLastError();
+            $try = QuotePdfSource::toPdfBytes($crm->getRawContent($ep));
+            $err = $crm->getLastError();
             $code = (string)($err['http_code'] ?? '?');
-            if (is_string($try) && strncmp($try, '%PDF', 4) === 0) {
+            if ($try !== '') {
                 printf("    %-40s PDF (%d bytes)  <-- this one\n", $ep, strlen($try));
                 $pdfEndpoint = $ep; $pdf = $try; break;
             }
@@ -265,8 +266,8 @@ if ($invId <= 0) {
 } else {
     $ipdf = null;
     foreach (["invoices/{$invId}/pdf", "billing/invoices/{$invId}/pdf"] as $ep) {
-        $try = $crm->getRawContent($ep);
-        if (is_string($try) && strncmp($try, '%PDF', 4) === 0) { $ipdf = $try; break; }
+        $try = QuotePdfSource::toPdfBytes($crm->getRawContent($ep));
+        if ($try !== '') { $ipdf = $try; break; }
     }
     if ($ipdf === null) {
         nv("invoice {$invId}: uCRM did not return a PDF");

@@ -328,5 +328,38 @@ $t('the send tool says WHICH renderer produced the attachment',
    strpos((string)file_get_contents($root . '/tools/quote_email_send.php'),
           'rendered by the PLUGIN, not by uCRM') !== false);
 
+echo "\nA PDF that arrives base64-encoded is still a PDF\n";
+require_once $root . '/lib/QuotePdfSource.php';
+// getRawContent() has always ended with base64_encode(). Every checker
+// written since compared the result against '%PDF' and concluded there was no
+// PDF — a base64 one begins "JVBERi0". uCRM was serving the document all
+// along; the plugin discarded it and drew its own, and the customer got a
+// quotation that looked nothing like the installed template.
+$rawPdf = "%PDF-1.4\n1 0 obj<<>>\nendobj";
+t('raw bytes pass through untouched',
+   QuotePdfSource::toPdfBytes($rawPdf), $rawPdf);
+t('base64 is decoded back to the same bytes',
+   QuotePdfSource::toPdfBytes(base64_encode($rawPdf)), $rawPdf);
+t('an HTML error page is not mistaken for a PDF',
+   QuotePdfSource::toPdfBytes('<html>Not Found</html>'), '');
+t('nor is base64 of something that is not a PDF',
+   QuotePdfSource::toPdfBytes(base64_encode('<html>')), '');
+t('null and empty are handled without a warning',
+   QuotePdfSource::toPdfBytes(null) . QuotePdfSource::toPdfBytes(''), '');
+// Strip comments first: the explanation of this very bug names both
+// getRawContent and '%PDF' a few lines apart, and matched itself.
+$stripComments = function (string $file): string {
+    $code = '';
+    foreach (token_get_all((string)file_get_contents($file)) as $tk) {
+        if (is_array($tk) && in_array($tk[0], [T_COMMENT, T_DOC_COMMENT], true)) continue;
+        $code .= is_array($tk) ? $tk[1] : $tk;
+    }
+    return $code;
+};
+t('no caller compares getRawContent output to %PDF any more',
+   preg_match("/getRawContent\\([^)]*\\)[^;]*'%PDF'/",
+              $stripComments($root . '/lib/QuotePdfSource.php')
+            . $stripComments($root . '/tools/pdf_template_doctor.php')), 0);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

@@ -22,6 +22,37 @@ declare(strict_types=1);
 class QuotePdfSource
 {
     /**
+     * Turn whatever CrmApiClient handed back into raw PDF bytes.
+     *
+     * getRawContent() ends with `return base64_encode($response)` — it has
+     * always base64-encoded what it fetches, because its first caller needed
+     * base64 for the WhatsApp media API. Every checker written since has
+     * compared the result against '%PDF' and concluded there was no PDF: a
+     * base64 PDF begins "JVBERi0".
+     *
+     * uCRM was serving the document correctly the whole time. The plugin threw
+     * it away and drew its own, and the customer received a quotation that
+     * looked nothing like the template the operator had designed. The doctor
+     * built to investigate that made the identical comparison and reported,
+     * confidently, that this uCRM serves no quotation PDF at all.
+     *
+     * @return string raw PDF bytes, or '' if this is not a PDF at all
+     */
+    public static function toPdfBytes($value): string
+    {
+        if (!is_string($value) || $value === '') return '';
+        if (strncmp($value, '%PDF', 4) === 0) return $value;
+
+        // base64_decode with strict mode: anything that is not valid base64 is
+        // not a mis-encoded PDF, it is something else entirely.
+        $decoded = base64_decode($value, true);
+        if (is_string($decoded) && strncmp($decoded, '%PDF', 4) === 0) return $decoded;
+
+        return '';
+    }
+
+
+    /**
      * @return array{0:string,1:string}  [pdf bytes or '', 'ucrm'|'plugin'|'none']
      */
     /**
@@ -61,8 +92,8 @@ class QuotePdfSource
             foreach ($waits as $wait) {
                 if ($wait > 0) sleep($wait);
                 foreach (["quotes/{$quoteId}/pdf", "billing/quotes/{$quoteId}/pdf"] as $ep) {
-                    $try = $crm->getRawContent($ep);
-                    if (is_string($try) && strncmp($try, '%PDF', 4) === 0) return [$try, 'ucrm'];
+                    $bytes = self::toPdfBytes($crm->getRawContent($ep));
+                    if ($bytes !== '') return [$bytes, 'ucrm'];
                 }
             }
 
@@ -82,8 +113,8 @@ class QuotePdfSource
             $path = (string)($res['pdf_path'] ?? '');
             if ($path === '' || !is_file($path)) return ['', 'none'];
 
-            $bytes = (string)@file_get_contents($path);
-            return strncmp($bytes, '%PDF', 4) === 0 ? [$bytes, 'plugin'] : ['', 'none'];
+            $bytes = self::toPdfBytes((string)@file_get_contents($path));
+            return $bytes !== '' ? [$bytes, 'plugin'] : ['', 'none'];
         } catch (\Throwable $e) {
             error_log('[QuotePdfSource] ' . $e->getMessage());
             return ['', 'none'];
