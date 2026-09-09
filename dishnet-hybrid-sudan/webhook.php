@@ -191,7 +191,7 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
         }
 
         require_once __DIR__ . '/lib/QuotePdfSource.php';
-        [$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client);
+        [$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client, $quote);
 
         // The case has already resolved these, falling back to the entity in
         // the webhook payload when the API does not answer. Re-fetching here

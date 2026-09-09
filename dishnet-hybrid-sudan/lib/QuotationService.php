@@ -592,6 +592,8 @@ class QuotationService
             require_once __DIR__ . '/QuotePdfSource.php';
             [$pdf, $pdfSource] = QuotePdfSource::fetch(
                 $this->crm, $this->dataDir, $this->config, $quoteId, $client);
+            // (the quote is fetched inside when not supplied — this path does
+            //  not hold one at this point)
             if ($pdf === '') {
                 CustomerEmailDispatcher::releaseClaim($this->emailPdo(), "QEMAIL{$quoteId}");
                 return [false, 'uCRM served no quotation PDF and the plugin could not render one'];

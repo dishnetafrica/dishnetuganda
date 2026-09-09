@@ -153,8 +153,10 @@ $crm = new FakeCrm(); $crm->client = $goodClient; $crm->pdfPrimary = null; $crm-
 $mailer = new RecMailer();
 $r = $mkSvc($crm, $mailer)->createCrmQuote(42, $items, 'QUO-3', $retailer);
 t('fallback endpoint delivered the PDF', $r['emailed_by_plugin'], true);
-t('both endpoints were tried in order', $crm->rawPaths,
-  ["billing/quotes/{$crm->quoteId}/pdf", "quotes/{$crm->quoteId}/pdf"]);
+// quotes/{id}/pdf leads: that is the path the WhatsApp branch has been
+// fetching successfully all along. billing/ follows as the fallback.
+t('both endpoints were tried, the proven one first', $crm->rawPaths,
+  ["quotes/{$crm->quoteId}/pdf", "billing/quotes/{$crm->quoteId}/pdf"]);
 
 echo "\nFailures fall back to uCRM — a quote is never silently unemailed\n";
 $crm = new FakeCrm(); $crm->client = ['firstName' => 'No', 'lastName' => 'Email', 'contacts' => []];
@@ -303,6 +305,28 @@ $t('and the error is logged where the operator will look, not only to error_log'
    strpos($wh3, "'Quotation email errored: '") !== false);
 $t('the send tool can see a stuck claim',
    strpos((string)file_get_contents($root . '/tools/quote_email_send.php'), 'clear-claim') !== false);
+
+echo "\nuCRM renders nothing for a draft, so the draft is approved first\n";
+$src2 = (string)file_get_contents($root . '/lib/QuotePdfSource.php');
+// Every quote is created as a draft. Fetching immediately always 404'd, we
+// fell back to rendering our own, and the customer got a document that looked
+// nothing like the template the operator designed in uCRM.
+$t('a draft quote is moved to Open before the PDF is asked for',
+   strpos($src2, "\$crm->patch(\"billing/quotes/{\$quoteId}\", ['status' => 1])") !== false);
+$t('and the fetch is retried, because generation is not instant',
+   strpos($src2, 'foreach ($waits as $wait)') !== false);
+$t('uCRM is asked before the plugin renders anything',
+   strpos($src2, "return [\$try, 'ucrm'];") < strpos($src2, 'new PluginQuotePdf'));
+$t('a quote already Open is not needlessly re-approved',
+   strpos($src2, "\$status === 0") !== false);
+$t('the caller can pass the quote it holds, avoiding a round trip',
+   strpos($src2, 'array $quote = []') !== false);
+$t('and the webhook does pass it',
+   strpos((string)file_get_contents($root . '/webhook.php'),
+          'QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client, $quote)') !== false);
+$t('the send tool says WHICH renderer produced the attachment',
+   strpos((string)file_get_contents($root . '/tools/quote_email_send.php'),
+          'rendered by the PLUGIN, not by uCRM') !== false);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

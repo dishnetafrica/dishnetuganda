@@ -45,6 +45,7 @@ $config  = PluginConfig::load($root, $dataDir);
 function step(string $m): void { echo "  ->   {$m}\n"; }
 function ok(string $m): void   { echo "  ok   {$m}\n"; }
 function no(string $m): void   { echo "  FAIL {$m}\n"; }
+function wr(string $m): void   { echo "  warn {$m}\n"; }
 function line(): void { echo str_repeat('-', 66) . "\n"; }
 
 line();
@@ -128,9 +129,19 @@ if ($email === '') {
 ok("recipient: {$name} <{$email}>");
 
 // 4. The PDF.
-[$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client);
-$pdf !== '' ? ok('PDF: ' . strlen($pdf) . " bytes (from {$src})")
-            : no('no PDF — uCRM served none and the plugin could not render one');
+[$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client, $quote);
+if ($pdf === '') {
+    no('no PDF — uCRM served none and the plugin could not render one');
+} elseif ($src === 'ucrm') {
+    ok('PDF: ' . strlen($pdf) . ' bytes rendered by uCRM from the quote template'
+       . (isset($quote['quoteTemplateId']) ? ' (id ' . $quote['quoteTemplateId'] . ')' : '')
+       . ' — this is the document you designed');
+} else {
+    wr('PDF: ' . strlen($pdf) . ' bytes rendered by the PLUGIN, not by uCRM.');
+    echo "       The customer will NOT see your uCRM quote template. That happens\n";
+    echo "       when uCRM will not serve the PDF — most often because the quote is\n";
+    echo "       still a draft, since uCRM renders nothing for a draft.\n";
+}
 
 // 5. The message.
 $built = CustomerEmails::quotation($config, [

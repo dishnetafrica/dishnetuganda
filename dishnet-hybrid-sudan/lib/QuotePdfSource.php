@@ -24,16 +24,51 @@ class QuotePdfSource
     /**
      * @return array{0:string,1:string}  [pdf bytes or '', 'ucrm'|'plugin'|'none']
      */
-    public static function fetch($crm, string $dataDir, array $config, int $quoteId, array $client = []): array
+    /**
+     * @param array $quote  the quote as the caller already has it, so its
+     *                      status can be read without another round trip
+     * @return array{0:string,1:string}  [pdf bytes or '', 'ucrm'|'plugin'|'none']
+     */
+    public static function fetch($crm, string $dataDir, array $config, int $quoteId,
+                                 array $client = [], array $quote = []): array
     {
         try {
-            foreach (["billing/quotes/{$quoteId}/pdf", "quotes/{$quoteId}/pdf"] as $ep) {
-                $try = $crm->getRawContent($ep);
-                if (is_string($try) && strncmp($try, '%PDF', 4) === 0) return [$try, 'ucrm'];
+            if (!$quote) {
+                $quote = $crm->get("billing/quotes/{$quoteId}") ?: $crm->get("quotes/{$quoteId}") ?: [];
             }
 
-            $quote = $crm->get("billing/quotes/{$quoteId}") ?: $crm->get("quotes/{$quoteId}");
-            if (!is_array($quote) || !$quote) return ['', 'none'];
+            // uCRM does not render a PDF for a DRAFT quote — every endpoint
+            // spelling answers 404 — and every quote is created as a draft.
+            // Fetching straight away therefore always failed, we fell back to
+            // rendering our own, and the customer received a document that
+            // looked nothing like the template the operator had designed in
+            // uCRM. The WhatsApp path has always known this: approve, wait,
+            // then fetch.
+            //
+            // Approving is not a liberty being taken here. cron_quote_wa and
+            // the quote.add WhatsApp branch already move every draft to Open
+            // for exactly this reason; this only stops doing it twice.
+            $status = (int)($quote['status'] ?? 1);
+            if ($status === 0) {
+                try { $crm->patch("billing/quotes/{$quoteId}", ['status' => 1]); }
+                catch (\Throwable $e) { /* the fetch below decides, not this */ }
+            }
+
+            // Generation is not instant. Poll rather than sleeping a flat five
+            // seconds: usually the second attempt has it, and the webhook is
+            // holding uCRM's connection open the whole time.
+            $waits = $status === 0 ? [1, 2, 3] : [0, 2];
+            foreach ($waits as $wait) {
+                if ($wait > 0) sleep($wait);
+                foreach (["quotes/{$quoteId}/pdf", "billing/quotes/{$quoteId}/pdf"] as $ep) {
+                    $try = $crm->getRawContent($ep);
+                    if (is_string($try) && strncmp($try, '%PDF', 4) === 0) return [$try, 'ucrm'];
+                }
+            }
+
+            // Only now render our own — an unbranded document beats none, but
+            // it is the fallback, not the plan.
+            if (!$quote) return ['', 'none'];
 
             require_once __DIR__ . '/PluginQuotePdf.php';
             $gen = new PluginQuotePdf($dataDir, $config);
