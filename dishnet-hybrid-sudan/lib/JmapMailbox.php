@@ -65,7 +65,9 @@ class JmapMailbox
 
         $sess = $this->call('GET', $this->baseUrl . '/.well-known/jmap');
         if (!is_array($sess) || empty($sess['accounts'])) {
-            $out['error'] = 'the JMAP session could not be opened (check the URL and credentials)';
+            $why = $this->transportProblem();
+            $out['error'] = 'the JMAP session could not be opened'
+                          . ($why !== '' ? ' — ' . $why : '');
             return $out;
         }
         $apiUrl    = (string)($sess['apiUrl'] ?? ($this->baseUrl . '/jmap/'));
@@ -185,6 +187,49 @@ class JmapMailbox
     }
 
     /** @return array|null */
+    /**
+     * What the last request actually did.
+     *
+     * The first version of call() returned null for everything that was not
+     * valid JSON, so a name that would not resolve, a certificate that would
+     * not verify, a wrong password and a wrong path all surfaced as the same
+     * sentence: "the JMAP session could not be opened (check the URL and
+     * credentials)". Four different faults, one message, and no way to tell
+     * from the outside which one you had.
+     *
+     * @return array{status:int, error:string, body:string, url:string}
+     */
+    public function lastTransport(): array
+    {
+        return $this->lastTransport;
+    }
+
+    /** @var array{status:int, error:string, body:string, url:string} */
+    private $lastTransport = ['status' => 0, 'error' => '', 'body' => '', 'url' => ''];
+
+    /** A sentence naming what went wrong, or '' when nothing did. */
+    public function transportProblem(): string
+    {
+        $t = $this->lastTransport;
+        if ($t['error'] !== '')  return 'could not reach ' . $t['url'] . ': ' . $t['error'];
+        if ($t['status'] === 401 || $t['status'] === 403) {
+            return 'the server answered ' . $t['status']
+                 . ' — the mailbox address or password is wrong';
+        }
+        if ($t['status'] === 404) {
+            return 'the server answered 404 — this URL serves no JMAP session '
+                 . '(is JMAP enabled, and is this the right host?)';
+        }
+        if ($t['status'] >= 400) {
+            return 'the server answered ' . $t['status'] . ': ' . substr($t['body'], 0, 160);
+        }
+        if ($t['status'] === 200 && $t['body'] !== '') {
+            return 'the server answered 200 but not with a JMAP session: '
+                 . substr($t['body'], 0, 160);
+        }
+        return '';
+    }
+
     private function call(string $method, string $url, ?array $body = null)
     {
         $headers = [
@@ -204,8 +249,18 @@ class JmapMailbox
             CURLOPT_CONNECTTIMEOUT => 10,
         ]);
         if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
-        $raw = curl_exec($ch);
+        $raw    = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err    = (string)curl_error($ch);
         curl_close($ch);
+
+        $this->lastTransport = [
+            'status' => $status,
+            'error'  => $err,
+            'body'   => trim((string)$raw),
+            'url'    => $url,
+        ];
+
         $j = json_decode((string)$raw, true);
         return is_array($j) ? $j : null;
     }

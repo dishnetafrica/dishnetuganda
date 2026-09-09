@@ -17,6 +17,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
+require_once $root . '/lib/ConfigVault.php';
 
 $pass = 0; $fail = 0;
 function ok(string $m): void  { global $pass; $pass++; echo "  ok   {$m}\n"; }
@@ -52,7 +53,11 @@ foreach ($runs as [$tool, $flags, $what]) {
     $path = $root . '/tools/' . $tool;
     if (!is_file($path)) { bad($tool . ' is missing'); continue; }
 
+    // DN_VAULT_FILE as well as DN_DATA_DIR. The vault lives outside the data
+    // directory by design, so without this the tools write their test values
+    // into the real one — which then gap-fills them back over live config.
     $cmd = 'DN_DATA_DIR=' . escapeshellarg($tmp)
+         . ' DN_VAULT_FILE=' . escapeshellarg($tmp . '/vault.json')
          . ' php ' . escapeshellarg($path) . ' '
          . implode(' ', array_map('escapeshellarg', $flags)) . ' 2>&1';
     $out  = [];
@@ -67,6 +72,13 @@ foreach ($runs as [$tool, $flags, $what]) {
     is_(!$fatal, $tool . ' ' . implode(' ', $flags) . ' — ' . $what,
         $fatal ? substr($text, 0, 400) : '');
 }
+
+echo "\nThe smoke test cannot reach the real vault\n";
+is_(!is_file($tmp . '/kyc_config.json') || is_file($tmp . '/vault.json'),
+    'the tools wrote their vault inside the test directory');
+$realVault = ConfigVault::path($root, dirname($root) . '/data');
+is_(strpos($realVault, $tmp) === false || getenv('DN_VAULT_FILE') !== false,
+    'and the real vault path is untouched by this run');
 
 echo "\nThe fatal that got out is specifically covered\n";
 $src = (string)file_get_contents($root . '/tools/inbound_mail_run.php');

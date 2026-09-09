@@ -74,6 +74,21 @@ class ConfigVault
 
     public static function path(string $pluginRoot, string $dataDir): string
     {
+        // Tests must be able to put the vault somewhere of their own.
+        //
+        // The vault deliberately lives OUTSIDE the data directory so that it
+        // survives a re-install — which also means DN_DATA_DIR does not move
+        // it. A smoke test that ran the tools with a temporary data directory
+        // therefore wrote its fake mailbox into the real vault, and because
+        // the vault gap-fills missing keys, that fake would later be restored
+        // over a genuine one. A test that can corrupt production config is
+        // worse than the bug it was guarding against.
+        //
+        // Read from the environment, so only a CLI process that sets it is
+        // affected; nothing a web request can reach.
+        $override = (string)getenv('DN_VAULT_FILE');
+        if ($override !== '') return $override;
+
         $parent = dirname(rtrim($pluginRoot, '/'));
         if (is_dir($parent) && is_writable($parent)) {
             return $parent . '/.dishnet-sudan.vault.json';
