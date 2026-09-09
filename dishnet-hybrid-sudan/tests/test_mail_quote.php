@@ -216,8 +216,16 @@ $t('the docker bridge gateway is tried when the name fails',
 $t('an IP route still verifies the certificate, pinned to the real hostname',
    strpos($sc, "'peer_name'") !== false
    && strpos($sc, '\'verify_peer\'       => $certName !== null ? true : $verify') !== false);
-$t('an empty error string is replaced by something a human can act on',
-   strpos($sc, 'no error reported (DNS or TLS handshake)') !== false);
+$t('the TLS warning is captured rather than suppressed by @',
+   strpos($sc, 'set_error_handler') !== false
+   && strpos($sc, 'restore_error_handler') !== false
+   && strpos($sc, '@stream_socket_client') === false);
+$t('an empty error string still yields something a human can act on',
+   strpos($sc, "no reason reported") !== false);
+$t('the bridge address is read from the routing table, not hardcoded',
+   strpos($sc, '/proc/net/route') !== false);
+$t('an operator can override the routes entirely',
+   strpos($sc, 'sent_copy_hosts') !== false);
 $t('every attempted route is reported back, not just the last',
    strpos($sc, "\$out['tried'] = \$tried;") !== false);
 $t('the successful route is reported too',
