@@ -103,8 +103,8 @@ if (in_array('--diagnose', array_slice($argv, 1), true)) {
         echo "  " . str_repeat('!', 64) . "\n";
     }
     echo "\n  Raw responses — no refresh, no retry, nothing helping:\n\n";
-    printf("  %-6s %-52s %s\n", 'CODE', 'PATH', 'BYTES');
-    printf("  %s\n", str_repeat('-', 72));
+    printf("  %-6s %-46s %-7s %s\n", 'CODE', 'PATH', 'BYTES', 'SETS COOKIES');
+    printf("  %s\n", str_repeat('-', 88));
     // The refresh paths inherited from the fleet plugin answered 404 to a
     // dead session and 401 to a live one, so neither is renewing anything
     // here. Candidates are TRIED rather than assumed, and whichever answers
@@ -121,12 +121,24 @@ if (in_array('--diagnose', array_slice($argv, 1), true)) {
         ['GET',  '/api/auth-rp/auth/user'],
         ['GET',  '/api/auth/v1/session'],
         ['GET',  '/api/auth/v1/user'],
+        // The SSO layer answers 200 while the data layer says token_expired,
+        // so whatever mints a fresh access token most likely lives here.
+        ['GET',  '/auth-rp/auth/refresh'],
+        ['POST', '/auth-rp/auth/refresh'],
+        ['GET',  '/auth-rp/auth/token'],
+        ['GET',  '/auth-rp/auth/session'],
+        ['GET',  '/auth-rp/auth/login'],
+        ['GET',  '/auth-rp/auth/authorize'],
+        ['GET',  '/auth-rp/signin-oidc'],
+        ['GET',  '/api/auth/v1/access-token'],
     ] as [$m, $path]) {
         $d = $conn->raw($m, $path);
-        printf("  %-6s %-52s %d\n", $d['code'] ?: ($d['error'] !== '' ? 'ERR' : '0'),
-            $m . ' ' . substr($path, 0, 48), $d['bytes']);
-        if ($d['error'] !== '')   echo "         " . $d['error'] . "\n";
-        if ($d['snippet'] !== '') echo "         " . $d['snippet'] . "\n";
+        $sets = $d['sets'] === [] ? '—' : implode(',', $d['sets']);
+        printf("  %-6s %-46s %-7d %s\n", $d['code'] ?: ($d['error'] !== '' ? 'ERR' : '0'),
+            $m . ' ' . substr($path, 0, 42), $d['bytes'], substr($sets, 0, 30));
+        if ($d['location'] !== '') echo "         → " . substr($d['location'], 0, 90) . "\n";
+        if ($d['error'] !== '')    echo "         " . $d['error'] . "\n";
+        if ($d['snippet'] !== '' && $d['code'] !== 200) echo "         " . $d['snippet'] . "\n";
     }
     echo "\n  401/403 everywhere means the cookie is not accepted — truncated,\n";
     echo "  expired, from a different account, or REVOKED because somebody\n";
@@ -134,7 +146,10 @@ if (in_array('--diagnose', array_slice($argv, 1), true)) {
     echo "  own session, so signing out there kills it here.\n";
     echo "  200 on contact but 401 elsewhere means the session is real and a\n";
     echo "  second auth layer is refusing — a different problem entirely.\n";
-    echo "  404 on a refresh path means that endpoint is not there any more.\n\n";
+    echo "  404 on a refresh path means that endpoint is not there any more.\n";
+    echo "\n  What matters most in the SETS COOKIES column: any response that\n";
+    echo "  sets Starlink.Com.Access.V1 has just minted a fresh access token,\n";
+    echo "  whatever its status code. That is the endpoint worth wiring in.\n\n";
     exit(0);
 }
 

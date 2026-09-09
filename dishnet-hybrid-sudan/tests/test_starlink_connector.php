@@ -175,6 +175,49 @@ $r2 = $conn->get('/api/webagg/v2/accounts/service-lines');
 is_(strpos((string)$r2['error'], 'backing off') !== false,
     'and the next call does not even leave the building', (string)$r2['error']);
 
+echo "\nAn expired token is not a dead session\n";
+// Starlink authenticates in two tiers. When the short-lived access token
+// expires, every data call answers 401 token_expired while the SSO endpoint
+// still answers 200 with the account's identity. Treating the first as a dead
+// session sends somebody to fetch a cookie they already have.
+$store = freshStore($tmp);
+$store->importCookie('Starlink.Com.Sso=alive; Starlink.Com.Access.V1=stale', 'bhavin');
+$conn = new StarlinkPortalConnector($store, [], function (string $m, string $u, array $h, $b) {
+    if (strpos($u, '/auth-rp/auth/user') !== false) {
+        return ['code' => 200, 'body' => '{"email":"accounts@dishnetuganda.com"}',
+                'cookies' => [], 'error' => ''];
+    }
+    if (strpos($u, '/refresh') !== false) {
+        return ['code' => 401, 'body' => 'token_expired', 'cookies' => [], 'error' => ''];
+    }
+    return ['code' => 401, 'body' => 'token_expired', 'cookies' => [], 'error' => ''];
+});
+$r = $conn->get('/api/webagg/v2/accounts/service-lines');
+is_(empty($r['ok']), 'the data call still fails');
+is_(strpos((string)$r['error'], 'access token has expired') !== false,
+    'but it is named as an expiry, not a rejection', (string)$r['error']);
+is_(strpos((string)$r['error'], 'SSO session is still alive') !== false,
+    'and it says the account is fine');
+is_($store->status()['state'] === StarlinkSessionStore::STATE_EXPIRED,
+    'the session reads expired, not dead', $store->status()['state']);
+is_($store->status()['failures'] === 0,
+    'and it costs no failure count — an expiry is not a fault');
+
+$sso = $conn->ssoAlive();
+is_(!empty($sso['ok']) && $sso['email'] === 'accounts@dishnetuganda.com',
+    'the SSO layer can be asked directly, and names the account');
+
+echo "\nWhile a session with no SSO left really is dead\n";
+$store = freshStore($tmp);
+$store->importCookie('Starlink.Com.Sso=gone', 'bhavin');
+$conn = new StarlinkPortalConnector($store, [], function (string $m, string $u, array $h, $b) {
+    return ['code' => 401, 'body' => 'token_expired', 'cookies' => [], 'error' => ''];
+});
+$r = $conn->get('/api/webagg/v2/accounts/service-lines');
+is_(strpos((string)$r['error'], 'could not be refreshed') !== false,
+    'that one is reported as a session no longer accepted', (string)$r['error']);
+is_($store->status()['failures'] > 0, 'and it does count as a failure');
+
 echo "\nA session that keeps failing is declared dead, not retried forever\n";
 $store = freshStore($tmp);
 $store->importCookie('sid=abc', 'bhavin');

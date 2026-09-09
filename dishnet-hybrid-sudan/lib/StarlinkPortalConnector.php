@@ -38,6 +38,21 @@ class StarlinkPortalConnector implements StarlinkConnector
     /** Verified cheaply, and it returns who we are — useful in itself. */
     const VERIFY_PATH = '/api/accounts/v3/accounts/contact';
 
+    /**
+     * The SSO layer, which is not the same layer as the data calls.
+     *
+     * Starlink authenticates in two tiers: a long-lived SSO session
+     * (Starlink.Com.Sso) and a short-lived access token
+     * (Starlink.Com.Access.V1). When the access token expires, every data call
+     * answers 401 token_expired while THIS endpoint still answers 200 with the
+     * account's identity.
+     *
+     * That distinction decides whether a session is recoverable. Treating an
+     * expired token as a dead session would send somebody to fetch a cookie
+     * they did not need.
+     */
+    const SSO_PATH = '/auth-rp/auth/user';
+
     /** Alternated per run so neither is hammered. Their reasoning, kept. */
     const REFRESH_PATHS = [
         '/api/auth/v1/session/refresh',
@@ -194,6 +209,20 @@ class StarlinkPortalConnector implements StarlinkConnector
             if (!empty($ref['ok'])) {
                 return $this->request($method, $path, false);
             }
+            // Before calling it dead: is the SSO session still up? An expired
+            // access token and a revoked session look identical at the data
+            // layer and are entirely different problems. Counting the first as
+            // the second sends somebody to fetch a cookie they already have.
+            $sso = $this->ssoAlive();
+            if (!empty($sso['ok'])) {
+                $this->store->markExpired('the access token expired; the SSO session for '
+                    . ($sso['email'] !== '' ? $sso['email'] : 'this account') . ' is still valid');
+                return $fail('the access token has expired. The SSO session is still alive, '
+                           . 'so this is recoverable — but no endpoint we know of mints a new '
+                           . 'token, so the cookie must be re-imported from the browser',
+                           $code, false);
+            }
+
             $this->store->markFailure('unauthorised, and the refresh failed: ' . (string)$ref['error']);
             return $fail('the session is no longer accepted and could not be refreshed: '
                        . (string)$ref['error'], $code, false);
@@ -264,12 +293,20 @@ class StarlinkPortalConnector implements StarlinkConnector
      * correct in normal use — replaced a 401 on the call we cared about with a
      * 404 from the refresh endpoint, which is a different question's answer.
      *
-     * @return array{code:int, error:string, bytes:int, snippet:string}
+     * Reports which cookies the response SET, because that is the actual
+     * question when hunting for whatever mints a fresh access token: a 200
+     * that sets nothing has not renewed anything, and a 302 that sets
+     * Starlink.Com.Access.V1 has.
+     *
+     * @return array{code:int, error:string, bytes:int, snippet:string, sets:array, location:string}
      */
     public function raw(string $method, string $path): array
     {
         $cookie = $this->store->cookie();
-        if ($cookie === '') return ['code' => 0, 'error' => 'no session', 'bytes' => 0, 'snippet' => ''];
+        if ($cookie === '') {
+            return ['code' => 0, 'error' => 'no session', 'bytes' => 0,
+                    'snippet' => '', 'sets' => [], 'location' => ''];
+        }
 
         $headers = $this->headers($cookie);
         if ($method === 'POST') $headers[] = 'content-length: 0';
@@ -277,11 +314,32 @@ class StarlinkPortalConnector implements StarlinkConnector
         $r    = $this->send($method, self::HOST . $path, $headers);
         $body = (string)($r['body'] ?? '');
         return [
-            'code'    => (int)($r['code'] ?? 0),
-            'error'   => (string)($r['error'] ?? ''),
-            'bytes'   => strlen($body),
-            'snippet' => str_replace(["\n", "\r"], ' ', substr($body, 0, 120)),
+            'code'     => (int)($r['code'] ?? 0),
+            'error'    => (string)($r['error'] ?? ''),
+            'bytes'    => strlen($body),
+            'snippet'  => str_replace(["\n", "\r"], ' ', substr($body, 0, 120)),
+            'sets'     => array_keys((array)($r['cookies'] ?? [])),
+            'location' => (string)($r['location'] ?? ''),
         ];
+    }
+
+    /**
+     * Is the SSO session still alive, whatever the access token is doing?
+     *
+     * @return array{ok:bool, email:string, code:int}
+     */
+    public function ssoAlive(): array
+    {
+        $cookie = $this->store->cookie();
+        if ($cookie === '') return ['ok' => false, 'email' => '', 'code' => 0];
+
+        $r    = $this->send('GET', self::HOST . self::SSO_PATH, $this->headers($cookie));
+        $code = (int)($r['code'] ?? 0);
+        if ($code !== 200) return ['ok' => false, 'email' => '', 'code' => $code];
+
+        $d = json_decode((string)($r['body'] ?? ''), true);
+        return ['ok' => true, 'code' => 200,
+                'email' => is_array($d) ? (string)($d['email'] ?? '') : ''];
     }
 
     public function verify(): array
@@ -338,7 +396,17 @@ class StarlinkPortalConnector implements StarlinkConnector
 
         $this->lastDetail = $err !== '' ? $err : ('HTTP ' . $code);
 
-        return ['code' => $code, 'body' => $body,
+        // Redirects are not followed (see the class comment), but where one
+        // points is worth knowing: an OIDC re-auth is a redirect chain, and
+        // the Location is the next step in it.
+        $location = '';
+        foreach ($lines as $line) {
+            if (stripos((string)$line, 'location:') === 0) {
+                $location = trim(substr((string)$line, strlen('location:')));
+            }
+        }
+
+        return ['code' => $code, 'body' => $body, 'location' => $location,
                 'cookies' => self::parseSetCookie($lines), 'error' => $err];
     }
 }

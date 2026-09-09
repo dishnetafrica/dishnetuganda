@@ -29,6 +29,7 @@ class StarlinkSessionStore
 {
     const STATE_ACTIVE   = 'active';
     const STATE_STALE    = 'stale';      // refresh failing, not yet given up
+    const STATE_EXPIRED  = 'expired';    // access token gone, SSO still alive
     const STATE_DEAD     = 'dead';       // a person must import a new cookie
     const STATE_ABSENT   = 'absent';     // nothing imported yet
 
@@ -180,6 +181,23 @@ class StarlinkSessionStore
         $this->save($rec);
     }
 
+    /**
+     * The access token expired while the SSO session is still valid.
+     *
+     * Deliberately NOT a failure. Failures accumulate towards declaring a
+     * session dead, and an expired token is the ordinary end of a working
+     * session's day — counting it as a fault would eventually condemn a
+     * session that never did anything wrong.
+     */
+    public function markExpired(string $why): void
+    {
+        $rec = $this->load();
+        $rec['last_checked_at'] = gmdate('Y-m-d H:i:s');
+        $rec['state']      = self::STATE_EXPIRED;
+        $rec['last_error'] = mb_substr($why, 0, 300);
+        $this->save($rec);
+    }
+
     public function markFailure(string $why): void
     {
         $rec = $this->load();
@@ -191,10 +209,17 @@ class StarlinkSessionStore
         $this->save($rec);
     }
 
-    /** True when a person has to go and fetch a new cookie. */
+    /**
+     * True when a person has to go and fetch a new cookie.
+     *
+     * Expired counts. Until an endpoint is found that mints a fresh access
+     * token from the SSO session, a re-import is the only way back — the
+     * difference from dead is that the account is fine and the trip is short.
+     */
     public function needsReimport(): bool
     {
-        return (string)$this->load()['state'] === self::STATE_DEAD;
+        $state = (string)$this->load()['state'];
+        return $state === self::STATE_DEAD || $state === self::STATE_EXPIRED;
     }
 
     // ── Throttle, kept beside the session it belongs to ───────────────────
