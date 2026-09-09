@@ -123,22 +123,30 @@ $candidates = array_values(array_unique(array_filter($candidates)));
 
 $working = '';
 foreach ($candidates as $url) {
-    // A GET with no body: webhook.php answers 400 "Empty body." when it is
-    // reached and running, which is exactly the proof we want. A connection
-    // failure or uCRM's own 404 page is not.
+    // POST, because that is what uCRM does and what webhook.php requires — a
+    // GET is answered 405 "POST required.", which the first run of this tool
+    // mistook for a failure. An empty POST body reaches the handler and is
+    // refused at its first check with 400 "Empty body.", which is exactly the
+    // proof wanted: the route resolved, the file ran, nothing was processed.
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8,
         CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_CUSTOMREQUEST  => 'POST',
+        CURLOPT_POSTFIELDS     => '',
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
     ]);
     $body = (string)curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
     curl_close($ch);
 
-    $reached = $code > 0 && (stripos($body, 'Empty body') !== false || $code === 400);
-    printf("    %-60s %s\n", $url,
-        $reached ? "reachable (HTTP {$code})"
+    // Either answer proves the handler ran. Anything else — uCRM's own 404
+    // page, a redirect to a login screen, no connection — does not.
+    $reached = (stripos($body, 'Empty body') !== false)
+            || (stripos($body, 'POST required') !== false);
+    printf("    %-72s %s\n", $url,
+        $reached ? "REACHED (HTTP {$code})"
                  : ($code > 0 ? "HTTP {$code} — not our webhook" : 'no connection: ' . $err));
     if ($reached && $working === '') $working = $url;
 }
