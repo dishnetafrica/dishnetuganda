@@ -111,7 +111,10 @@ if (in_array('--diagnose', array_slice($argv, 1), true)) {
     // 200 is the one worth wiring in.
     foreach ([
         ['GET',  '/api/accounts/v3/accounts/contact'],
-        ['GET',  '/api/webagg/v2/accounts/service-lines?limit=1&page=0'],
+        // The full parameter set. Dropping isConverting/onlyActive was my
+        // own malformed request being read as Starlink's fault.
+        ['GET',  '/api/webagg/v2/accounts/service-lines?limit=1&page=0'
+               . '&isConverting=false&onlyActive=false'],
         ['GET',  '/api/accounts/v1/accounts/service-line-numbers'],
         ['POST', '/api/auth/v1/session/refresh'],
         ['POST', '/api/auth/v1/token/refresh'],
@@ -176,8 +179,25 @@ if (in_array('--verify', array_slice($argv, 1), true)) {
 }
 
 // ── 2. What is on the account? ───────────────────────────────────────────
-$r = $conn->get('/api/webagg/v2/accounts/service-lines?limit=100&page=0'
-              . '&isConverting=false&onlyActive=false');
+$r = $conn->get(StarlinkPortalConnector::LINES_PATH);
+if (empty($r['ok']) && (int)$r['code'] >= 500) {
+    // The rich endpoint is having a bad minute. The light one answered 200 in
+    // the same run where this 500ed, and it still says which lines exist.
+    echo "  " . str_repeat('─', 64) . "\n";
+    echo "\n  service-lines returned " . (int)$r['code'] . " — their side. Falling back\n";
+    echo "  to the lighter endpoint, which answered while it did not.\n";
+    $light = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
+    if (!empty($light['ok'])) {
+        $nums = $light['data']['content'] ?? $light['data']['results'] ?? $light['data'];
+        $nums = is_array($nums) ? $nums : [];
+        echo "\n  " . count($nums) . " service line number(s):\n\n";
+        foreach (array_slice($nums, 0, 50) as $n) {
+            echo '    ' . (is_string($n) ? $n : json_encode($n)) . "\n";
+        }
+        echo "\n  The account is fine. Try the full call again in a minute.\n\n";
+        exit(0);
+    }
+}
 if (empty($r['ok'])) {
     echo "  " . str_repeat('─', 64) . "\n\n";
     echo "  The session works, but the service-line call did not: "

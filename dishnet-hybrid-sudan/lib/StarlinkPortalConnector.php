@@ -53,6 +53,19 @@ class StarlinkPortalConnector implements StarlinkConnector
      */
     const SSO_PATH = '/auth-rp/auth/user';
 
+    /**
+     * The service-line numbers, and nothing else.
+     *
+     * Worth knowing about because it answered 200 in the same run where the
+     * full webagg service-lines call answered 500. When the rich endpoint is
+     * having a bad minute, this still says which lines exist.
+     */
+    const LINES_LIGHT_PATH = '/api/accounts/v1/accounts/service-line-numbers';
+
+    /** Everything about the service lines. Occasionally 500s; retry handles it. */
+    const LINES_PATH = '/api/webagg/v2/accounts/service-lines'
+                     . '?limit=100&page=0&isConverting=false&onlyActive=false';
+
     /** Alternated per run so neither is hammered. Their reasoning, kept. */
     const REFRESH_PATHS = [
         '/api/auth/v1/session/refresh',
@@ -167,7 +180,8 @@ class StarlinkPortalConnector implements StarlinkConnector
      * retry, because an expired token is the ordinary condition of a
      * long-lived session rather than an error.
      */
-    public function request(string $method, string $path, bool $allowRefresh = true): array
+    public function request(string $method, string $path, bool $allowRefresh = true,
+                            bool $allowRetry = true): array
     {
         $fail = function (string $err, int $code = 0, bool $retryable = false) {
             return ['ok' => false, 'code' => $code, 'data' => [],
@@ -228,11 +242,27 @@ class StarlinkPortalConnector implements StarlinkConnector
                        . (string)$ref['error'], $code, false);
         }
 
+        if ($code >= 500) {
+            // Their side, not ours. The same call with the same parameters
+            // succeeded minutes earlier and 500ed on the next run, so this is
+            // weather rather than a wrong request — and it must NOT count
+            // against the session, which did nothing wrong. Counting it would
+            // eventually declare a perfectly good cookie dead because Starlink
+            // had a bad afternoon.
+            if ($allowRetry) {
+                sleep(2);
+                return $this->request($method, $path, $allowRefresh, false);
+            }
+            return $fail('Starlink returned HTTP ' . $code
+                       . ' — their side, and it cleared on a retry before now',
+                         $code, true);
+        }
+
         if ($code < 200 || $code >= 300) {
             $err = (string)($r['error'] ?? '') !== ''
                 ? (string)$r['error'] : 'Starlink returned HTTP ' . $code;
             $this->store->markFailure($err);
-            return $fail($err, $code, $code >= 500);
+            return $fail($err, $code, false);
         }
 
         $data = json_decode((string)($r['body'] ?? ''), true);

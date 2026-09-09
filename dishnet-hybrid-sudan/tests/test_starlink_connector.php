@@ -175,6 +175,38 @@ $r2 = $conn->get('/api/webagg/v2/accounts/service-lines');
 is_(strpos((string)$r2['error'], 'backing off') !== false,
     'and the next call does not even leave the building', (string)$r2['error']);
 
+echo "\nStarlink having a bad minute is not the session's fault\n";
+// The same call with the same parameters returned ten service lines and then
+// 500ed on the next run. Counting that against the session would eventually
+// condemn a perfectly good cookie because Starlink had a bad afternoon.
+$store = freshStore($tmp);
+$store->importCookie('sid=abc', 'bhavin');
+$tries = 0;
+$conn = new StarlinkPortalConnector($store, [], function (string $m, string $u, array $h, $b)
+        use (&$tries) {
+    $tries++;
+    return $tries === 1
+        ? ['code' => 500, 'body' => 'internal_server_error', 'cookies' => [], 'error' => '']
+        : ['code' => 200, 'body' => '{"ok":true}', 'cookies' => [], 'error' => ''];
+});
+$r = $conn->get('/api/webagg/v2/accounts/service-lines');
+is_(!empty($r['ok']), 'one retry gets past a transient 500', (string)$r['error']);
+is_($tries === 2, 'and it retried exactly once', (string)$tries);
+is_($store->status()['failures'] === 0,
+    'a server error costs the session nothing — it did nothing wrong');
+
+$store = freshStore($tmp);
+$store->importCookie('sid=abc', 'bhavin');
+$conn = new StarlinkPortalConnector($store, [], fakeStarlink([
+    '/api/' => ['code' => 500, 'body' => '', 'cookies' => [], 'error' => ''],
+], $seen));
+$r = $conn->get('/api/webagg/v2/accounts/service-lines');
+is_(empty($r['ok']) && !empty($r['retryable']),
+    'a 500 that persists still fails, and is still marked retryable');
+is_($store->status()['failures'] === 0, 'and still costs the session nothing');
+is_($store->status()['state'] !== StarlinkSessionStore::STATE_DEAD,
+    'their outage can never declare our cookie dead');
+
 echo "\nAn expired token is not a dead session\n";
 // Starlink authenticates in two tiers. When the short-lived access token
 // expires, every data call answers 401 token_expired while the SSO endpoint

@@ -279,6 +279,69 @@ different needs.
 
 ---
 
+## 5c. What the live account actually said
+
+Phase 1 ran against the real Uganda account. Recording it here because some of
+it contradicts what was assumed, and the next person should read the evidence
+rather than the assumption.
+
+### Confirmed working
+
+| Endpoint | Result |
+|---|---|
+| `/api/accounts/v3/accounts/contact` | 200, ~4 KB |
+| `/api/accounts/v1/accounts/service-line-numbers` | 200, light and reliable |
+| `/api/webagg/v2/accounts/service-lines` | 200 with the full parameter set — and an intermittent 500 |
+| `/auth-rp/auth/user` | 200, returns the account email |
+
+The account holds **10 service lines**, all Uganda residential plans, all
+`pendingActivation: true`, `userTerminals` **empty** on every one. No dish is
+attached yet, so there are no kit serials to sync — which is the account's
+real state, not a mapping failure. Serials will appear as terminals are
+assigned.
+
+### Starlink authenticates in two tiers
+
+This was not understood when the connector was designed, and it changes how a
+failure must be read.
+
+- `Starlink.Com.Sso` — the long-lived session.
+- `Starlink.Com.Access.V1` — a short-lived access token.
+
+When the access token expires, **every data call answers `401 token_expired`
+while `/auth-rp/auth/user` still answers 200**. An expired token and a revoked
+session are identical at the data layer and are different problems: one needs
+a minute, the other needs a trip to a browser. The connector asks the SSO
+layer before condemning a session, and an expiry does not count as a failure.
+
+### There is no silent re-auth
+
+Sixteen candidate endpoints were tried, in both methods. **Not one set a
+single cookie.** The four inherited from the fleet plugin answer
+`401 token_expired` — they need the very token that expired. `/auth-rp/auth/*`
+paths answer 404 except `login`, which 302s to the site root and sets nothing.
+
+So: **a session must be re-imported by a person when its access token
+expires.** That is the operating cost of the web-session route, it is not a
+defect to be fixed by trying harder, and the honest planning assumption is
+that somebody re-imports periodically. How often is still unmeasured — the
+store records `last_ok_at` and `imported_at`, so the interval will emerge.
+
+This is the strongest argument yet for pursuing Enterprise API access in
+parallel. It does not change the decision to start on the web session, which
+works; it changes what the web session costs to run.
+
+### Their 500s are not our failures
+
+`service-lines` returned ten results, then `internal_server_error` on the next
+run with identical parameters, then worked again. A 5xx is retried once and
+never counted against the session — otherwise a bad afternoon at Starlink
+would eventually declare a perfectly good cookie dead. The lighter
+`service-line-numbers` endpoint answered 200 in the same run where the rich
+one 500ed, so it is the fallback when that happens.
+
+---
+
 ## 6. Starlink invoices and Uganda tax — the highest-value piece
 
 This is the part Sudan never needed and Uganda genuinely does. A Starlink
