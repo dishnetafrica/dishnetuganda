@@ -9,6 +9,7 @@ chdir(dirname(__DIR__));
  *   php tools/ai_facts.php --set office "..."    replace one
  *   php tools/ai_facts.php --omit delivery       say nothing rather than say Sudan's
  *   php tools/ai_facts.php --reset office        back to the Sudan default
+ *   php tools/ai_facts.php --uganda              delivery and payment, Uganda
  *
  * The assistant's business facts were written for the South Sudan operation:
  * a walk-in office in Juba, kits flown to Renk and crossing at the Joda
@@ -88,6 +89,51 @@ if ($args === [] || $has('--show')) {
 }
 
 $updates = [];
+
+// The Uganda answers that can be written from what the system already knows.
+// The office is not among them: nobody can derive an address, and a wrong one
+// sends a customer across Kampala for nothing. It is set on its own.
+if ($has('--uganda')) {
+    $bank = [
+        'beneficiary' => trim((string)($config['email_bank_beneficiary'] ?? '')),
+        'name'        => trim((string)($config['email_bank_name'] ?? '')),
+        'ugx'         => trim((string)($config['email_bank_account_ugx'] ?? '')),
+        'usd'         => trim((string)($config['email_bank_account_usd'] ?? '')),
+        'swift'       => trim((string)($config['email_bank_swift'] ?? '')),
+    ];
+    $missing = array_keys(array_filter($bank, function ($v) { return $v === ''; }));
+
+    // Account numbers are never typed in here. They are already configured for
+    // the quotation and invoice templates, and one source telling customers two
+    // different account numbers is worse than none.
+    if (in_array('beneficiary', $missing, true) || in_array('ugx', $missing, true)) {
+        echo "\n  The bank details are not configured, so the payment answer cannot be\n";
+        echo "  written from them — and they are not going to be typed in here.\n\n";
+        echo "    php tools/set_email_brand.php --uganda\n\n";
+        exit(1);
+    }
+
+    $pay = 'payment is by bank transfer to ' . $bank['beneficiary']
+         . ($bank['name'] !== '' ? ' at ' . $bank['name'] : '') . '. '
+         . 'UGX account ' . $bank['ugx']
+         . ($bank['usd'] !== '' ? ', USD account ' . $bank['usd'] : '')
+         . ($bank['swift'] !== '' ? ', SWIFT ' . $bank['swift'] : '') . '. '
+         . 'Ask them to use their quotation or invoice number as the payment reference. '
+         . 'These are the only payment details we have — do not offer any other method, '
+         . 'and do not name an amount unless it is in the DATA above.';
+
+    $del = 'our team delivers the kit and installs it at the customer\'s premises. '
+         . 'Do NOT promise a number of days, a specific date, or a transport cost — '
+         . 'those vary by location, so offer to have a colleague confirm them.';
+
+    $updates['ai_fact_payment']  = $pay;
+    $updates['ai_fact_delivery'] = $del;
+
+    echo "\n  Setting delivery and payment for Uganda.\n";
+    echo "  The OFFICE answer is not set here — give the address with:\n";
+    echo "    php tools/ai_facts.php --set office \"...\"\n";
+}
+
 foreach (['--set' => 1, '--omit' => 0, '--reset' => 0] as $flag => $takesText) {
     if (!$has($flag)) continue;
     $which = strtolower($value($flag));

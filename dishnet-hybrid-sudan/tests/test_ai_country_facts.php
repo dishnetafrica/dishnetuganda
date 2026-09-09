@@ -76,5 +76,19 @@ foreach ([['channel' => 'sales'],
         . ' gets the corrected answer');
 }
 
+echo "\nThe Uganda preset writes no numbers of its own\n";
+// Account numbers are configured once, for the quotation and invoice
+// templates. One system telling customers two different account numbers is
+// worse than a system that tells them none.
+$toolSrc = (string)file_get_contents($root . '/tools/ai_facts.php');
+is_(strpos($toolSrc, "email_bank_account_ugx") !== false,
+    'the payment answer is composed from the configured bank details');
+is_(preg_match('/[\'"]\d{8,}[\'"]/', $toolSrc) === 0,
+    'and no account number is written into the tool itself');
+is_(strpos($toolSrc, 'not going to be typed in here') !== false,
+    'missing bank details stop the preset rather than inviting a guess');
+is_(strpos($toolSrc, "\$updates['ai_fact_office']") === false,
+    'the office is never set by the preset — nobody can derive an address');
+
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);
