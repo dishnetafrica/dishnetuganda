@@ -66,6 +66,25 @@ class StarlinkPortalConnector implements StarlinkConnector
     const LINES_PATH = '/api/webagg/v2/accounts/service-lines'
                      . '?limit=100&page=0&isConverting=false&onlyActive=false';
 
+    /**
+     * Paths observed in the browser's own network traffic, not guessed.
+     *
+     * Both answered 200 for this account while the browser was signed in, so
+     * they are recorded rather than rediscovered. Guessing paths against a
+     * live session costs requests we would rather spend on real work, and a
+     * wrong guess teaches nothing.
+     */
+    const SETTINGS_PATH    = '/api/accounts/v1/managed-accounts/settings';
+    const OBLIGATIONS_PATH = '/api/accounts/v1/accounts/customer-details/obligations';
+
+    /**
+     * Who the signed-in person is, by subject id.
+     *
+     * The subject id comes from the SSO endpoint; the browser chains exactly
+     * these two calls. Concatenate the id — this constant is a prefix.
+     */
+    const USER_PATH = '/api/webagg/v3/accounts/user/';
+
     /** Alternated per run so neither is hammered. Their reasoning, kept. */
     const REFRESH_PATHS = [
         '/api/auth/v1/session/refresh',

@@ -8,6 +8,7 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php            verify, then list service lines
  *   php tools/starlink_probe.php --verify   verify only, one request
  *   php tools/starlink_probe.php --shape    what the response actually looks like
+ *   php tools/starlink_probe.php --info     who the account is, and what it owes
  *
  * Phase 1 ends here. This reads and prints; it stores no Starlink data, posts
  * nothing to the books, and changes nothing except the session's own
@@ -87,6 +88,42 @@ if (in_array('--shape', array_slice($argv, 1), true)) {
     $walk($r['data']);
     echo "\n  Read the kit serial and status field names off this, rather than\n";
     echo "  guessing them a second time.\n\n";
+    exit(0);
+}
+
+// ── 0b. Info: who the account is, and what it owes ──────────────────────
+// The service-line listing says what the account HAS. These say who it is and
+// what it is billed for, which is where Phase 2 starts. Read-only, three
+// requests, stores nothing.
+if (in_array('--info', array_slice($argv, 1), true)) {
+    $show = function (string $label, array $r) {
+        echo "\n  " . $label . "\n";
+        if (empty($r['ok'])) { echo "    " . (string)$r['error'] . "\n"; return null; }
+        $d = $r['data'];
+        $body = is_array($d) && isset($d['content']) ? $d['content'] : $d;
+        echo "    " . json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        return $d;
+    };
+
+    // Who we are signed in as. The subject id it returns unlocks the next call.
+    $sso = $conn->get(StarlinkPortalConnector::SSO_PATH);
+    $me  = $show('SSO — signed in as', $sso);
+
+    $subject = '';
+    foreach (['subjectId', 'sub', 'userId', 'id'] as $k) {
+        if (is_array($me) && isset($me[$k]) && is_string($me[$k]) && $me[$k] !== '') {
+            $subject = $me[$k]; break;
+        }
+    }
+    if ($subject !== '') {
+        $show('ACCOUNT HOLDER', $conn->get(StarlinkPortalConnector::USER_PATH . rawurlencode($subject)));
+    } else {
+        echo "\n  ACCOUNT HOLDER\n    no subject id in the SSO response; skipped\n";
+    }
+
+    $show('SETTINGS',    $conn->get(StarlinkPortalConnector::SETTINGS_PATH));
+    $show('OBLIGATIONS', $conn->get(StarlinkPortalConnector::OBLIGATIONS_PATH));
+    echo "\n";
     exit(0);
 }
 
