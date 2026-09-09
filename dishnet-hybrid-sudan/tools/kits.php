@@ -5,29 +5,40 @@ chdir(dirname(__DIR__));
 /**
  * kits.php — which kit went to which customer.
  *
- *   php tools/kits.php                          what we hold, and who has what
- *   php tools/kits.php --client 4021            what this customer has
- *   php tools/kits.php --kit KIT-0123-4567      one kit, and everywhere it has been
- *   php tools/kits.php --assign KIT-0123-4567 --client 4021 --by bhavin
- *   php tools/kits.php --return KIT-0123-4567 --by bhavin
- *   php tools/kits.php --delete KIT-0123-4567      a serial typed in error
+ *   php tools/kits.php                        Starlink units, and who holds them
+ *   php tools/kits.php --serial UT01234567    one unit, and everywhere it has been
+ *   php tools/kits.php --client 2             what one customer holds
+ *   php tools/kits.php --receive UT01234567 --by bhavin
+ *   php tools/kits.php --assign UT01234567 --client 2 --by bhavin
  *
- * Starlink's own emails put kits in here as they are ordered, shipped and
- * activated. What those emails cannot say is whose hands a kit ended up in —
- * so assignment is always a person recording a handover, and their word wins
- * over anything inferred from an inbox.
+ * This reads and writes StockService, which already owns serial-numbered
+ * equipment, its movements and its location — including `customer`.
+ *
+ * An earlier version of this tool had its own kit table. That was a second
+ * store for something the plugin already tracked, and two tables both
+ * claiming to say which kit a customer has will disagree eventually — in
+ * front of the customer. It was retired before it held anything real.
+ *
+ * A kit must be RECEIVED before it can be assigned. StockService refuses to
+ * install a unit that is not in stock, which is the right discipline: hardware
+ * nobody has physically taken delivery of should not be handed to a customer
+ * on paper.
  */
 
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
 
 $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
-require_once $root . '/lib/KitRegister.php';
+require_once $root . '/lib/StoreInterface.php';
+require_once $root . '/lib/SqliteStore.php';
+require_once $root . '/lib/StockService.php';
 
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $pdo = new PDO('sqlite:' . $dataDir . '/plugin.sqlite3');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$reg = new KitRegister($pdo);
+
+$stock = new StockService($pdo, $dataDir);
+$stock->ensureTables();
 
 $args  = array_slice($argv, 1);
 $value = function (string $f) use ($args) {
@@ -36,86 +47,143 @@ $value = function (string $f) use ($args) {
 };
 $has = function (string $f) use ($args) { return in_array($f, $args, true); };
 
-function row(array $k): void
+/** One unit by serial, however it was spelled. */
+function findBySerial(PDO $pdo, string $serial): ?array
 {
-    printf("  %-18s %-10s %-9s %-16s %s\n",
-        substr((string)$k['kit_id'], 0, 18),
-        (string)$k['status'],
-        ((int)$k['crm_client_id'] ?: '—'),
-        substr((string)$k['order_reference'], 0, 16),
-        substr((string)$k['assigned_at'], 0, 16));
+    $norm = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $serial) ?? '');
+    if ($norm === '') return null;
+    $st = $pdo->prepare(
+        "SELECT * FROM stock_units
+          WHERE UPPER(REPLACE(REPLACE(REPLACE(serial_number,'-',''),' ',''),'_','')) = ?");
+    $st->execute([$norm]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    return $r ?: null;
 }
+
 function head(): void
 {
-    printf("\n  %-18s %-10s %-9s %-16s %s\n", 'KIT', 'STATUS', 'CLIENT', 'ORDER', 'ASSIGNED');
-    printf("  %-18s %-10s %-9s %-16s %s\n", str_repeat('-', 18), str_repeat('-', 10),
-        str_repeat('-', 9), str_repeat('-', 16), str_repeat('-', 16));
+    printf("\n  %-18s %-11s %-9s %-12s %s\n", 'SERIAL', 'STATUS', 'CLIENT', 'STARLINK', 'SERVICE LINE');
+    printf("  %s\n", str_repeat('-', 68));
+}
+function row(array $u): void
+{
+    printf("  %-18s %-11s %-9s %-12s %s\n",
+        substr((string)($u['serial_number'] ?? ''), 0, 18),
+        (string)($u['status'] ?? ''),
+        ((int)($u['crm_client_id'] ?? 0) ?: '—'),
+        substr((string)($u['starlink_status'] ?? ''), 0, 12) ?: '—',
+        substr((string)($u['starlink_service_line'] ?? ''), 0, 20) ?: '—');
 }
 
+// ── receive: a kit arrives and becomes stock ─────────────────────────────
+if ($has('--receive')) {
+    $serial = $value('--receive');
+    if (findBySerial($pdo, $serial) !== null) {
+        echo "\n  That serial is already on the books. php tools/kits.php --serial {$serial}\n\n";
+        exit(1);
+    }
+    $cats = $stock->getCategories(true);
+    $cat  = null;
+    foreach ($cats as $c) {
+        if (strtolower((string)($c['service_type'] ?? '')) === 'starlink') { $cat = $c; break; }
+    }
+    if ($cat === null) {
+        echo "\n  No Starlink category exists in stock yet. Create one in the Stock tab\n";
+        echo "  first — a unit has to be a kind of thing before it can be a thing.\n\n";
+        exit(1);
+    }
+    try {
+        $r = $stock->createUnit([
+            'category_id'    => (int)$cat['id'],
+            'serial_number'  => strtoupper(trim($serial)),
+            'status'         => 'in_stock',
+            'location_type'  => 'warehouse',
+            'starlink_status'=> $value('--starlink-status'),
+            'notes'          => $value('--note'),
+        ], 0, $value('--by') ?: 'cli');
+        echo "\n  Received into stock as unit " . (int)($r['unit_id'] ?? $r['id'] ?? 0) . ".\n";
+        echo "  Assign it when it reaches a customer:\n";
+        echo "    php tools/kits.php --assign {$serial} --client <id> --by <name>\n\n";
+        exit(0);
+    } catch (\Throwable $e) {
+        echo "\n  " . $e->getMessage() . "\n\n";
+        exit(1);
+    }
+}
+
+// ── assign: a customer physically receives it ────────────────────────────
 if ($has('--assign')) {
-    $r = $reg->assign($value('--assign'), (int)$value('--client'),
-                      $value('--by') ?: 'cli', $value('--note'));
-    if (empty($r['ok'])) { echo "\n  " . $r['error'] . "\n\n"; exit(1); }
-    echo "\n  Recorded.\n";
-    if ($r['moved_from'] > 0) {
-        echo "  This kit was with client {$r['moved_from']} — the move is in its history.\n";
+    $u = findBySerial($pdo, $value('--assign'));
+    if ($u === null) {
+        echo "\n  No unit with that serial. Receive it into stock first:\n";
+        echo "    php tools/kits.php --receive " . $value('--assign') . " --by <name>\n\n";
+        exit(1);
     }
-    echo "\n";
-    exit(0);
+    $client = (int)$value('--client');
+    if ($client <= 0) { echo "\n  Give --client <uCRM client id>.\n\n"; exit(1); }
+    try {
+        $stock->install((int)$u['id'], [
+            'crm_client_id' => $client,
+            'client_name'   => $value('--client-name') ?: ('Client ' . $client),
+        ], 0, $value('--by') ?: 'cli');
+        echo "\n  Recorded: " . $u['serial_number'] . " is with client {$client}.\n";
+        echo "  The move is in its movement history.\n\n";
+        exit(0);
+    } catch (\Throwable $e) {
+        echo "\n  " . $e->getMessage() . "\n\n";
+        exit(1);
+    }
 }
 
-if ($has('--delete')) {
-    $r = $reg->deleteTypo($value('--delete'));
-    if (empty($r['ok'])) { echo "\n  " . $r['error'] . "\n\n"; exit(1); }
-    echo "\n  Removed, with its " . $r['removed'] . " history entry(s).\n";
-    echo "  Only ever possible for a serial nothing has confirmed.\n\n";
-    exit(0);
-}
-
-if ($has('--return')) {
-    $r = $reg->markReturned($value('--return'), $value('--by') ?: 'cli', $value('--note'));
-    echo empty($r['ok']) ? "\n  " . $r['error'] . "\n\n" : "\n  Recorded as returned.\n\n";
-    exit(empty($r['ok']) ? 1 : 0);
-}
-
-if ($value('--kit') !== '') {
-    $k = $reg->find($value('--kit'));
-    if ($k === null) { echo "\n  No kit by that number.\n\n"; exit(1); }
-    head(); row($k);
+// ── one serial, and everywhere it has been ───────────────────────────────
+if ($value('--serial') !== '') {
+    $u = findBySerial($pdo, $value('--serial'));
+    if ($u === null) { echo "\n  No unit with that serial.\n\n"; exit(1); }
+    head(); row($u);
     echo "\n  EVERYWHERE IT HAS BEEN\n";
-    foreach ($reg->history((string)$k['kit_id']) as $h) {
-        printf("    %-19s %-34s %s\n", substr((string)$h['at'], 0, 19),
-            substr((string)$h['what'], 0, 34), (string)$h['who']);
+    foreach ($stock->getMovements(['unit_id' => (int)$u['id']], 100) as $m) {
+        printf("    %-19s %-10s %-14s → %-14s %s\n",
+            substr((string)$m['created_at'], 0, 19),
+            (string)$m['movement_type'],
+            substr((string)$m['from_location_name'] ?: (string)$m['from_location_type'], 0, 14),
+            substr((string)$m['to_location_name'] ?: (string)$m['to_location_type'], 0, 14),
+            (string)$m['performed_by_name']);
     }
     echo "\n";
     exit(0);
 }
 
+// ── what one customer holds ──────────────────────────────────────────────
 if ($value('--client') !== '') {
-    $kits = $reg->forClient((int)$value('--client'));
-    if ($kits === []) { echo "\n  This customer holds no kit we know of.\n\n"; exit(1); }
+    $st = $pdo->prepare('SELECT * FROM stock_units WHERE crm_client_id = ? ORDER BY updated_at DESC');
+    $st->execute([(int)$value('--client')]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    if ($rows === []) { echo "\n  This customer holds no equipment we know of.\n\n"; exit(1); }
     head();
-    foreach ($kits as $k) row($k);
+    foreach ($rows as $u) row($u);
     echo "\n";
     exit(0);
 }
 
-$counts = $reg->counts();
-echo "\n  STARLINK KITS\n";
-if ($counts === []) {
-    echo "\n  None recorded yet. They arrive from Starlink's own emails as orders\n";
-    echo "  are confirmed and shipped, and from a person recording a handover:\n\n";
-    echo "    php tools/kits.php --assign <kit> --client <id> --by <name>\n\n";
+// ── the overview ─────────────────────────────────────────────────────────
+$rows = $pdo->query(
+    "SELECT u.* FROM stock_units u
+       LEFT JOIN stock_categories c ON c.id = u.category_id
+      WHERE LOWER(COALESCE(c.service_type,'')) = 'starlink'
+         OR COALESCE(u.starlink_status,'') <> ''
+         OR COALESCE(u.starlink_service_line,'') <> ''
+      ORDER BY u.updated_at DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+echo "\n  STARLINK EQUIPMENT\n";
+if ($rows === []) {
+    echo "\n  None recorded yet. A kit becomes visible here when it is received:\n\n";
+    echo "    php tools/kits.php --receive <serial> --by <name>\n\n";
+    echo "  Phase 4 will also bring serials in from the Starlink service-line\n";
+    echo "  sync, so kits appear before anyone types them.\n\n";
     exit(0);
 }
-foreach ($counts as $k => $v) printf("    %-10s %d\n", $k, $v);
-
-$free = $reg->unassigned();
-if ($free !== []) {
-    echo "\n  NOBODY HAS THESE\n";
-    head();
-    foreach ($free as $k) row($k);
-}
-echo "\n  php tools/kits.php --kit <number>     one kit, and everywhere it has been\n";
-echo "  php tools/kits.php --client <id>     what one customer holds\n\n";
+head();
+foreach ($rows as $u) row($u);
+echo "\n  php tools/kits.php --serial <serial>   one unit, and everywhere it has been\n";
+echo "  php tools/kits.php --client <id>      what one customer holds\n\n";
 exit(0);

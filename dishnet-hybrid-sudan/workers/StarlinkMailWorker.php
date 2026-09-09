@@ -143,26 +143,17 @@ class StarlinkMailWorker
             $c['confidence'], $c['action_required'] ? 1 : 0, $c['ai_model'], $msgId,
         ]);
 
-        // ── the kit register ─────────────────────────────────────────────
-        // Their email names hardware; this is the only moment we learn a
-        // serial exists before somebody reads it off a roof. Recorded, but
-        // never assigned to a customer here: the classifier matched this
-        // MESSAGE to a client, which is not the same as knowing whose hands
-        // the kit ended up in. A person records that, and their word wins.
+        // The kit serial named in this email is already stored, in this row's
+        // extracted_json. It is deliberately NOT pushed into inventory here.
         //
-        // Failure here must never cost the routing below — the alert and the
-        // timeline entry matter more than the register.
-        try {
-            require_once dirname(__DIR__) . '/lib/KitRegister.php';
-            $kits = new KitRegister($this->pdo);
-            $kit  = $kits->noteFromSupplier((array)$c['extracted'], (string)$c['type']);
-            if ($kit !== '' && $clientId !== null) {
-                error_log('[starlink_mail] kit ' . $kit . ' seen in mail matched to client '
-                        . $clientId . ' — not assigned; a person records the handover');
-            }
-        } catch (\Throwable $e) {
-            error_log('[starlink_mail] kit register: ' . $e->getMessage());
-        }
+        // An email saying Starlink shipped a kit is not the same as holding
+        // one: StockService::install() refuses a unit that is not in stock,
+        // and that discipline is correct. Creating units from an inbox would
+        // put hardware on the books that nobody has received.
+        //
+        // Phase 4 (StarlinkKitSync) reconciles these serials against
+        // StockService properly, from the service-line sync rather than from
+        // mail. Until then the fact is recorded and a person receives the kit.
 
         // ── route ────────────────────────────────────────────────────────
         $needsHuman = $c['action_required'] || $clientId === null || $c['confidence'] < self::MIN_CONFIDENCE;

@@ -51,7 +51,7 @@ $runs = [
     ['jmap_probe.php',            [],         'probes for a JMAP endpoint'],
     ['ai_facts.php',              [],         'shows what the assistant tells customers'],
     ['inbound_mail_run.php',      ['--to-drafts'], 'reports that draft filing is unconfigured'],
-    ['kits.php',                  [],         'lists the kit register'],
+    ['kits.php',                  [],         'lists Starlink equipment from StockService'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {

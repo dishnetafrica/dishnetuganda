@@ -1086,7 +1086,8 @@ switch ($changeType) {
                 if (!class_exists('StarlinkBlockBridge')) {
                     @require_once __DIR__ . '/lib/StarlinkBlockBridge.php';
                 }
-                if (class_exists('StarlinkBlockBridge')) {
+                if (class_exists('StarlinkBlockBridge')
+                    && StarlinkBlockBridge::appliesTo($config)) {
                     $bridge = new StarlinkBlockBridge($store->getPdo(), $store, $config, $dataDir, $notify);
                     $bridgeResult = $bridge->restoreClient((int)$clientId, 'webhook:payment.add');
                     if (($bridgeResult['routers_restored'] ?? 0) > 0) {
@@ -1462,7 +1463,8 @@ switch ($changeType) {
             if (!class_exists('StarlinkBlockBridge')) {
                 @require_once __DIR__ . '/lib/StarlinkBlockBridge.php';
             }
-            if (class_exists('StarlinkBlockBridge')) {
+            if (class_exists('StarlinkBlockBridge')
+                && StarlinkBlockBridge::appliesTo($config)) {
                 $bridge = new StarlinkBlockBridge($store->getPdo(), $store, $config, $dataDir, $notify);
                 $bridgeResult = $bridge->suspendClient((int)$clientId, $client, 'webhook:service.suspend');
                 whLog($changeType, sprintf(

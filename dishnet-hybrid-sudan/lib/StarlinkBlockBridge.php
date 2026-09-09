@@ -46,6 +46,27 @@ declare(strict_types=1);
 
 class StarlinkBlockBridge
 {
+    /**
+     * Is blocking hardware for non-payment part of this country's model?
+     *
+     * It is not, on a prepaid install. Prepaid service lapses and resumes;
+     * it is not suspended for arrears, because there are no arrears — that is
+     * the whole difference between the two models. A prepaid customer whose
+     * dish went dark because a postpaid sweep ran is a customer we broke.
+     *
+     * On Uganda it also reaches for dishnet-data-report, which is not
+     * installed there, so every call was a request to a plugin that does not
+     * exist. Silent, and only because the failure was caught.
+     *
+     * Absent config means postpaid, exactly as before, so the Sudan install
+     * is unchanged.
+     */
+    public static function appliesTo(array $config): bool
+    {
+        $model = strtolower(trim((string)($config['billing_model'] ?? '')));
+        return $model !== 'prepaid';
+    }
+
     /** @var \PDO */ private $pdo;
     /** @var mixed */ private $store;
     /** @var array */ private $config;
