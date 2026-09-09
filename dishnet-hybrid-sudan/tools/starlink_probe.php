@@ -188,8 +188,13 @@ if (empty($r['ok']) && (int)$r['code'] >= 500) {
     echo "  to the lighter endpoint, which answered while it did not.\n";
     $light = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
     if (!empty($light['ok'])) {
-        $nums = $light['data']['content'] ?? $light['data']['results'] ?? $light['data'];
-        $nums = is_array($nums) ? $nums : [];
+        // content is the ENVELOPE — pageIndex, limit, isLastPage, results.
+        // Reading it instead of its results printed "0, 50, true" as though
+        // they were service lines.
+        $nums = $light['data']['content']['results']
+             ?? $light['data']['results']
+             ?? [];
+        $nums = is_array($nums) ? array_values(array_filter($nums, 'is_string')) : [];
         echo "\n  " . count($nums) . " service line number(s):\n\n";
         foreach (array_slice($nums, 0, 50) as $n) {
             echo '    ' . (is_string($n) ? $n : json_encode($n)) . "\n";
@@ -220,9 +225,9 @@ if ($rows === []) {
     exit(0);
 }
 
-printf("\n  %-22s %-14s %-9s %-22s %s\n",
+printf("\n  %-24s %-18s %-9s %-22s %s\n",
     'SERVICE LINE', 'DISH', 'STATE', 'PLAN', 'ADDRESS');
-printf("  %s\n", str_repeat('-', 96));
+printf("  %s\n", str_repeat('-', 100));
 foreach (array_slice($rows, 0, 50) as $sl) {
     if (!is_array($sl)) continue;
     // The kit serial rides inside the service line rather than arriving from
@@ -251,9 +256,13 @@ foreach (array_slice($rows, 0, 50) as $sl) {
     elseif (!empty($sub['active']))             $state = 'active';
     elseif (array_key_exists('active', $sub))   $state = 'inactive';
 
-    printf("  %-22s %-14s %-9s %-22s %s\n",
-        substr((string)($sl['serviceLineNumber'] ?? ''), 0, 22),
-        $serial !== '' ? substr($serial, 0, 14) : 'no dish yet',
+    // Identifiers are printed WHOLE. A service line number cut to the column
+    // width — SL-DF-15784590-46113-10 shown as ...-1 — is still a plausible
+    // identifier, so nobody notices it is wrong until they use it. Descriptive
+    // text may be trimmed; a thing you could paste into a search box may not.
+    printf("  %-24s %-18s %-9s %-22s %s\n",
+        (string)($sl['serviceLineNumber'] ?? ''),
+        $serial !== '' ? $serial : 'no dish yet',
         $state,
         substr((string)($sub['productDescription'] ?? ''), 0, 22),
         substr((string)($sl['serviceAddress']['formattedAddress'] ?? ''), 0, 30));

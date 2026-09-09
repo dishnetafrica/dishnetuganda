@@ -175,6 +175,25 @@ $r2 = $conn->get('/api/webagg/v2/accounts/service-lines');
 is_(strpos((string)$r2['error'], 'backing off') !== false,
     'and the next call does not even leave the building', (string)$r2['error']);
 
+echo "\nAn identifier is never shortened to fit a column\n";
+// The service line table cut its numbers to 22 characters, so
+// SL-DF-15784590-46113-10 printed as SL-DF-15784590-46113-1 — still a
+// plausible identifier, and wrong. Nobody notices until they use it.
+$probe = (string)file_get_contents($root . '/tools/starlink_probe.php');
+is_(strpos($probe, "substr((string)(\$sl['serviceLineNumber']") === false,
+    'the service line number is printed whole');
+is_(preg_match('/substr\\(\\$serial/', $probe) === 0, 'and so is the kit serial');
+is_(strpos($probe, 'may not') !== false,
+    'with the rule written beside it: descriptive text may be trimmed, '
+  . 'an identifier may not');
+
+echo "\nThe light endpoint's results are read, not the envelope round them\n";
+is_(strpos($probe, "['content']['results']") !== false,
+    'content.results is what holds the service lines');
+is_(strpos($probe, 'is_string') !== false,
+    'and only strings are printed — pageIndex, limit and isLastPage are not '
+  . 'service lines');
+
 echo "\nStarlink having a bad minute is not the session's fault\n";
 // The same call with the same parameters returned ten service lines and then
 // 500ed on the next run. Counting that against the session would eventually
