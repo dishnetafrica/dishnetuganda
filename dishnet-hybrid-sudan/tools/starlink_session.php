@@ -136,10 +136,6 @@ if ($value('--import-file') !== '') {
     if (empty($shape['has_session_tokens'])) {
         echo "\n  WARNING: no Starlink.Com.Sso or Starlink.Com.Access.V1 in there.\n";
         echo "  That is not a signed-in session.\n";
-    } elseif (!empty($shape['ends_on_session_token'])) {
-        echo "\n  WARNING: the cookie ENDS on a session token. A browser sets\n";
-        echo "  analytics and consent cookies after those, so the tail was cut —\n";
-        echo "  whatever the byte count says.\n";
     } elseif (!empty($shape['suspect_truncated'])) {
         echo "\n  WARNING: ~4096 bytes, where a terminal cuts a line. Check the\n";
         echo "  file was not itself written through a terminal paste.\n";
@@ -202,11 +198,7 @@ if ($has('--import')) {
     echo "  Imported " . count($r['names']) . " cookie(s), " . $shape['total'] . " bytes.\n";
     echo "  (names only — the values are encrypted and never printed)\n";
 
-    if (!empty($shape['ends_on_session_token'])) {
-        echo "\n  WARNING: the cookie ENDS on a session token. A signed-in browser\n";
-        echo "  sets analytics and consent cookies after those, so the tail was\n";
-        echo "  cut — whatever the byte count says.\n";
-    } elseif (!empty($shape['suspect_truncated'])) {
+    if (!empty($shape['suspect_truncated'])) {
         echo "\n  WARNING: ~4096 bytes, where a terminal cuts a pasted line.\n";
     }
     if (!empty($shape['suspect_truncated'])) {

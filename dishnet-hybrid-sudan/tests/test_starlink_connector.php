@@ -220,31 +220,34 @@ is_($store->shape()['total'] === 8, 'and its size is reported', (string)$store->
 is_(strpos(json_encode($store->shape()), 'xxxx') === false,
     'the shape never carries a value, only its length');
 
-echo "\nTruncation is caught by content too, not only by size\n";
-// The byte-count signal misses a cut that lands short of 4096. A signed-in
-// browser sets analytics and consent cookies AFTER the session tokens, so a
-// session ending ON one of those tokens lost its tail whatever the size says.
+echo "\nOnly what is actually known counts as a verdict\n";
+// A jar ending on a session token LOOKS like a severed tail, and was briefly
+// reported as one. Then a 5,238-byte jar ending exactly that way was accepted
+// by Starlink first time. Browsers promise no cookie order, so the observation
+// is kept as a hint and never decides anything.
 $store = freshStore($tmp);
 $store->importCookie('_ga=1; Starlink.Com.Sso=abc; Starlink.Com.Access.V1=def', 'bhavin');
 $sh = $store->shape();
-is_(!empty($sh['ends_on_session_token']),
-    'a cookie ending on the access token is flagged');
-is_(!empty($sh['suspect_truncated']), 'and therefore suspect, at any size',
-    (string)$sh['total'] . ' bytes');
-is_(!empty($sh['has_session_tokens']), 'while still recognising it as a session');
-
-$store = freshStore($tmp);
-$store->importCookie('Starlink.Com.Sso=abc; Starlink.Com.Access.V1=def; '
-                   . 'pageviewCount=12; OptanonConsent=xyz', 'bhavin');
-$sh = $store->shape();
-is_(empty($sh['ends_on_session_token']),
-    'a complete jar has housekeeping cookies after the session ones');
-is_(empty($sh['suspect_truncated']), 'so it is not flagged');
+is_(!empty($sh['ends_on_session_token']), 'the observation is still made');
+is_(empty($sh['suspect_truncated']),
+    'but a short jar in that order is NOT called truncated — cookie order '
+  . 'proves nothing', (string)$sh['total'] . ' bytes');
+is_(!empty($sh['has_session_tokens']), 'and it is recognised as a session');
 
 $store = freshStore($tmp);
 $store->importCookie('_ga=1; OptanonConsent=xyz', 'bhavin');
 is_(empty($store->shape()['has_session_tokens']),
-    'and a jar with no session token is recognised as not signed in');
+    'a jar with no Starlink token is not a signed-in session — that much IS known');
+
+$store = freshStore($tmp);
+$store->importCookie('a=1; b=2; token=' . str_repeat('x', 4050), 'bhavin');
+$sh = $store->shape();
+is_(!empty($sh['suspect_truncated']),
+    'and 4,095 bytes still is: nothing but a terminal cut lands there',
+    (string)$sh['total'] . ' bytes');
+is_(isset($sh['names']['token']), 'the truncated cookie still LISTS — which is the trap');
+is_(strpos(json_encode($sh), 'xxxx') === false,
+    'the shape never carries a value, only its length');
 
 echo "\nThe import cannot be truncated by a terminal any more\n";
 $tool = (string)file_get_contents($root . '/tools/starlink_session.php');

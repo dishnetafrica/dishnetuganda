@@ -7,6 +7,7 @@ chdir(dirname(__DIR__));
  *
  *   php tools/starlink_probe.php            verify, then list service lines
  *   php tools/starlink_probe.php --verify   verify only, one request
+ *   php tools/starlink_probe.php --shape    what the response actually looks like
  *
  * Phase 1 ends here. This reads and prints; it stores no Starlink data, posts
  * nothing to the books, and changes nothing except the session's own
@@ -34,6 +35,44 @@ if (!$conn->isConfigured()) {
     echo "\n  No session imported yet.\n\n";
     echo "    docker exec -it ucrm php tools/starlink_session.php --import\n\n";
     exit(1);
+}
+
+// ── 0a. Shape: what does the payload actually contain? ───────────────────
+// Guessing field names is what produced a table of em-dashes: the kit serial
+// was read from userTerminals[0].serialNumber because that is where the fleet
+// plugin found it, and this account's response evidently puts it elsewhere.
+// This prints the structure so the mapping is read rather than assumed.
+if (in_array('--shape', array_slice($argv, 1), true)) {
+    $r = $conn->get('/api/webagg/v2/accounts/service-lines?limit=2&page=0'
+                  . '&isConverting=false&onlyActive=false');
+    if (empty($r['ok'])) { echo "\n  " . (string)$r['error'] . "\n\n"; exit(1); }
+
+    /** Keys and types, with short scalars shown. Business identifiers, not secrets. */
+    $walk = function ($node, string $prefix = '', int $depth = 0) use (&$walk) {
+        if ($depth > 4) return;
+        foreach ((array)$node as $k => $v) {
+            $path = $prefix === '' ? (string)$k : $prefix . '.' . $k;
+            if (is_array($v)) {
+                $isList = $v !== [] && array_keys($v) === range(0, count($v) - 1);
+                printf("    %-46s %s\n", $path, $isList ? 'list(' . count($v) . ')' : 'object');
+                $walk($isList ? ($v[0] ?? []) : $v, $path . ($isList ? '[0]' : ''), $depth + 1);
+            } elseif (is_bool($v)) {
+                printf("    %-46s bool  %s\n", $path, $v ? 'true' : 'false');
+            } elseif ($v === null) {
+                printf("    %-46s null\n", $path);
+            } else {
+                $show = (string)$v;
+                if (mb_strlen($show) > 40) $show = mb_substr($show, 0, 37) . '...';
+                printf("    %-46s %-5s %s\n", $path, gettype($v), $show);
+            }
+        }
+    };
+
+    echo "\n  RESPONSE SHAPE — service-lines\n\n";
+    $walk($r['data']);
+    echo "\n  Read the kit serial and status field names off this, rather than\n";
+    echo "  guessing them a second time.\n\n";
+    exit(0);
 }
 
 // ── 0. Diagnose: what does Starlink actually say, to each thing we ask? ──
@@ -126,14 +165,43 @@ foreach (array_slice($rows, 0, 50) as $sl) {
     // The kit serial rides inside the service line rather than arriving from
     // an endpoint of its own — the discovery that makes KitSync a consumer of
     // this call instead of a separate fetch.
-    $serial = (string)($sl['userTerminals'][0]['serialNumber']
-                    ?? $sl['userTerminalId'] ?? '');
+    // Several plausible homes for the serial, because this response does not
+    // always put it where the fleet plugin found it. Whichever answers first
+    // is used; --shape says which one this account actually uses.
+    $serial = '';
+    foreach ([$sl['userTerminals'][0]['serialNumber'] ?? null,
+              $sl['userTerminal']['serialNumber']    ?? null,
+              $sl['userTerminalSerialNumber']        ?? null,
+              $sl['kitSerialNumber']                 ?? null,
+              $sl['serialNumber']                    ?? null,
+              $sl['userTerminalId']                  ?? null] as $cand) {
+        if (is_string($cand) && trim($cand) !== '') { $serial = trim($cand); break; }
+    }
+
+    // Printed as it arrives. A numeric status is a code we have not decoded,
+    // and rendering it as a word would be inventing a meaning for it.
+    $status = $sl['active'] ?? null;
+    $status = is_bool($status) ? ($status ? 'active' : 'inactive')
+            : (string)($sl['serviceLineStatus'] ?? $sl['status'] ?? '—');
+
     printf("  %-22s %-18s %-10s %s\n",
         substr((string)($sl['serviceLineNumber'] ?? ''), 0, 22),
         substr($serial, 0, 18) ?: '—',
-        substr((string)($sl['active'] ?? '') !== '' ? (!empty($sl['active']) ? 'active' : 'inactive')
-            : (string)($sl['status'] ?? '—'), 0, 10),
+        substr($status, 0, 10),
         substr((string)($sl['nickname'] ?? ''), 0, 24));
+}
+
+$noSerials = true;
+foreach ($rows as $sl) {
+    if (!is_array($sl)) continue;
+    foreach ($sl as $k => $v) {
+        if (stripos((string)$k, 'serial') !== false && is_string($v) && $v !== '') $noSerials = false;
+    }
+}
+if ($noSerials) {
+    echo "\n  No kit serial was found in any of these. That is a mapping problem,\n";
+    echo "  not an empty account — run --shape to see where this response puts\n";
+    echo "  it, rather than guessing a second time.\n";
 }
 
 echo "\n  Nothing was stored. Phase 2 is what starts keeping it.\n\n";

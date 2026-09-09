@@ -284,19 +284,29 @@ class StarlinkSessionStore
         // Size: 4096 is the usual terminal line limit. A session landing there
         // was almost certainly cut.
         //
-        // Content: a browser signed in to Starlink sets housekeeping cookies
-        // AFTER the session ones — analytics, consent, page counters. If the
-        // session tokens are the LAST thing present, the tail was severed,
-        // whatever the byte count says.
-        $keys  = array_keys($names);
-        $last  = $keys === [] ? '' : (string)end($keys);
-        $tailCut = in_array($last, ['Starlink.Com.Access.V1', 'Starlink.Com.Sso'], true);
+        // Content: a session with no Starlink token in it is not a session,
+        // whatever else it contains. That one is certain.
+        //
+        // What is NOT certain — and was briefly treated as if it were — is
+        // cookie ORDER. A jar ending on a session token looked like a severed
+        // tail, so it was reported as one; then a 5,238-byte jar ending
+        // exactly that way was accepted by Starlink on the first try. Browsers
+        // do not promise an order. The observation is kept as a hint, never as
+        // a verdict, and it no longer makes a session "suspect" on its own.
+        $keys = array_keys($names);
+        $last = $keys === [] ? '' : (string)end($keys);
 
-        return ['names' => $names, 'total' => $total,
-                'has_session_tokens' => isset($names['Starlink.Com.Access.V1'])
-                                     || isset($names['Starlink.Com.Sso']),
-                'ends_on_session_token' => $tailCut,
-                'suspect_truncated' => ($total >= 4000 && $total <= 4110) || $tailCut];
+        return [
+            'names' => $names,
+            'total' => $total,
+            'has_session_tokens'    => isset($names['Starlink.Com.Access.V1'])
+                                    || isset($names['Starlink.Com.Sso']),
+            'ends_on_session_token' => in_array($last, ['Starlink.Com.Access.V1',
+                                                        'Starlink.Com.Sso'], true),
+            // Size alone. It is the signal that was actually right: 4,095
+            // bytes is where a terminal cuts, and nothing else lands there.
+            'suspect_truncated'     => $total >= 4000 && $total <= 4110,
+        ];
     }
 
     /**
