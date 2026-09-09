@@ -279,10 +279,24 @@ class StarlinkSessionStore
         }
         $total = strlen($cookie);
 
-        // 4096 is the usual terminal line limit; allow for the trailing
-        // newline and the "cookie: " prefix a paste may include.
+        // Two independent signals, because either alone can be fooled.
+        //
+        // Size: 4096 is the usual terminal line limit. A session landing there
+        // was almost certainly cut.
+        //
+        // Content: a browser signed in to Starlink sets housekeeping cookies
+        // AFTER the session ones — analytics, consent, page counters. If the
+        // session tokens are the LAST thing present, the tail was severed,
+        // whatever the byte count says.
+        $keys  = array_keys($names);
+        $last  = $keys === [] ? '' : (string)end($keys);
+        $tailCut = in_array($last, ['Starlink.Com.Access.V1', 'Starlink.Com.Sso'], true);
+
         return ['names' => $names, 'total' => $total,
-                'suspect_truncated' => $total >= 4000 && $total <= 4110];
+                'has_session_tokens' => isset($names['Starlink.Com.Access.V1'])
+                                     || isset($names['Starlink.Com.Sso']),
+                'ends_on_session_token' => $tailCut,
+                'suspect_truncated' => ($total >= 4000 && $total <= 4110) || $tailCut];
     }
 
     /**

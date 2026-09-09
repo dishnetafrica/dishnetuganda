@@ -6,6 +6,7 @@ chdir(dirname(__DIR__));
  * starlink_session.php — the Uganda Starlink session.
  *
  *   php tools/starlink_session.php                  what we hold, and its state
+ *   php tools/starlink_session.php --import-file /tmp/cookie.txt
  *   docker exec -it ucrm php .../starlink_session.php --import
  *   php tools/starlink_session.php --account ops@dishnetuganda.com --number 000-1
  *   php tools/starlink_session.php --forget
@@ -114,6 +115,43 @@ if ($value('--account') !== '' || $value('--number') !== '') {
     exit(0);
 }
 
+// A file is the only way in that no terminal can shorten. Writing that file
+// is the part that needs care — see the note under --import.
+if ($value('--import-file') !== '') {
+    $path = $value('--import-file');
+    if (!is_file($path)) { echo "\n  No such file: {$path}\n\n"; exit(1); }
+
+    $cookie = trim((string)@file_get_contents($path), "\r\n ");
+    if (stripos($cookie, 'cookie:') === 0) $cookie = trim(substr($cookie, 7));
+
+    $r = $store->importCookie($cookie, get_current_user(),
+        $value('--account') ?: (string)($config['starlink_account_email'] ?? ''),
+        $value('--number'));
+    $cookie = str_repeat("\0", strlen($cookie));
+
+    if (empty($r['ok'])) { echo "\n  " . $r['error'] . "\n\n"; exit(1); }
+
+    $shape = $store->shape();
+    echo "\n  Imported " . count($r['names']) . " cookie(s), " . $shape['total'] . " bytes.\n";
+    if (empty($shape['has_session_tokens'])) {
+        echo "\n  WARNING: no Starlink.Com.Sso or Starlink.Com.Access.V1 in there.\n";
+        echo "  That is not a signed-in session.\n";
+    } elseif (!empty($shape['ends_on_session_token'])) {
+        echo "\n  WARNING: the cookie ENDS on a session token. A browser sets\n";
+        echo "  analytics and consent cookies after those, so the tail was cut —\n";
+        echo "  whatever the byte count says.\n";
+    } elseif (!empty($shape['suspect_truncated'])) {
+        echo "\n  WARNING: ~4096 bytes, where a terminal cuts a line. Check the\n";
+        echo "  file was not itself written through a terminal paste.\n";
+    } else {
+        echo "  It looks complete: session tokens present, and cookies after them.\n";
+    }
+    echo "\n  Delete the file now — it holds a live session:\n\n";
+    echo "    shred -u " . $path . "\n\n";
+    echo "  Then:  php tools/starlink_probe.php\n\n";
+    exit(0);
+}
+
 if ($has('--import')) {
     // A Starlink cookie is several thousand bytes. Terminal input in canonical
     // mode truncates a line at the kernel buffer — 4096 bytes on Linux — so a
@@ -164,13 +202,21 @@ if ($has('--import')) {
     echo "  Imported " . count($r['names']) . " cookie(s), " . $shape['total'] . " bytes.\n";
     echo "  (names only — the values are encrypted and never printed)\n";
 
+    if (!empty($shape['ends_on_session_token'])) {
+        echo "\n  WARNING: the cookie ENDS on a session token. A signed-in browser\n";
+        echo "  sets analytics and consent cookies after those, so the tail was\n";
+        echo "  cut — whatever the byte count says.\n";
+    } elseif (!empty($shape['suspect_truncated'])) {
+        echo "\n  WARNING: ~4096 bytes, where a terminal cuts a pasted line.\n";
+    }
     if (!empty($shape['suspect_truncated'])) {
-        echo "\n  WARNING: that is almost exactly 4096 bytes, which is where a\n";
-        echo "  terminal cuts a pasted line. The session may be truncated even\n";
-        echo "  though every name is present. If the probe says 401, pipe it in\n";
-        echo "  instead:\n\n";
-        echo "    cat cookie.txt | docker exec -i ucrm php " . __FILE__ . " --import\n";
-        echo "    shred -u cookie.txt\n";
+        echo "\n  A file is the only route no terminal can shorten. Write it with an\n";
+        echo "  EDITOR — nano or vi — not by pasting into `cat`, which is cut the\n";
+        echo "  same way:\n\n";
+        echo "    nano /root/c.txt            (paste, Ctrl-O, Ctrl-X)\n";
+        echo "    docker cp /root/c.txt ucrm:/tmp/c.txt\n";
+        echo "    docker exec ucrm php " . __FILE__ . " --import-file /tmp/c.txt\n";
+        echo "    docker exec ucrm shred -u /tmp/c.txt && shred -u /root/c.txt\n";
     }
 
     echo "\n  Now prove Starlink accepts it:\n\n";

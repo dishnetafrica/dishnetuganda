@@ -220,12 +220,42 @@ is_($store->shape()['total'] === 8, 'and its size is reported', (string)$store->
 is_(strpos(json_encode($store->shape()), 'xxxx') === false,
     'the shape never carries a value, only its length');
 
+echo "\nTruncation is caught by content too, not only by size\n";
+// The byte-count signal misses a cut that lands short of 4096. A signed-in
+// browser sets analytics and consent cookies AFTER the session tokens, so a
+// session ending ON one of those tokens lost its tail whatever the size says.
+$store = freshStore($tmp);
+$store->importCookie('_ga=1; Starlink.Com.Sso=abc; Starlink.Com.Access.V1=def', 'bhavin');
+$sh = $store->shape();
+is_(!empty($sh['ends_on_session_token']),
+    'a cookie ending on the access token is flagged');
+is_(!empty($sh['suspect_truncated']), 'and therefore suspect, at any size',
+    (string)$sh['total'] . ' bytes');
+is_(!empty($sh['has_session_tokens']), 'while still recognising it as a session');
+
+$store = freshStore($tmp);
+$store->importCookie('Starlink.Com.Sso=abc; Starlink.Com.Access.V1=def; '
+                   . 'pageviewCount=12; OptanonConsent=xyz', 'bhavin');
+$sh = $store->shape();
+is_(empty($sh['ends_on_session_token']),
+    'a complete jar has housekeeping cookies after the session ones');
+is_(empty($sh['suspect_truncated']), 'so it is not flagged');
+
+$store = freshStore($tmp);
+$store->importCookie('_ga=1; OptanonConsent=xyz', 'bhavin');
+is_(empty($store->shape()['has_session_tokens']),
+    'and a jar with no session token is recognised as not signed in');
+
 echo "\nThe import cannot be truncated by a terminal any more\n";
 $tool = (string)file_get_contents($root . '/tools/starlink_session.php');
 is_(strpos($tool, 'stty -icanon') !== false,
     'typing it in switches canonical mode off, removing the line limit');
 is_(strpos($tool, 'stream_isatty(STDIN)') !== false,
     'and a piped cookie bypasses the terminal entirely');
+is_(strpos($tool, "--import-file") !== false,
+    'a file can be imported directly — the only route no terminal can shorten');
+is_(strpos($tool, 'nano /root/c.txt') !== false,
+    'and the advice names an editor, because pasting into `cat` is cut the same way');
 
 echo "\nA cookie that is not a cookie is refused at the door\n";
 $store = freshStore($tmp);
