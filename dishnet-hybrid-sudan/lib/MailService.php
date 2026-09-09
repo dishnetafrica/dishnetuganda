@@ -33,6 +33,9 @@ declare(strict_types=1);
 
 class MailService
 {
+    /** Set when the settings file is present but unreadable by this process. */
+    public $unreadableReason = '';
+
     /** @var array Last-resolved config, cached for the request */
     private $cfg = null;
     private $cfgError = '';
@@ -63,6 +66,17 @@ class MailService
         //   - toggle ON  → try UCRM API first, fall back to plugin SMTP
         //   - toggle OFF → use plugin SMTP directly
         $emailFile = $this->dataDir . '/email_settings.json';
+        // The file existing but being unreadable is a completely different
+        // problem from it being absent, and reported as "not configured" the
+        // two are indistinguishable. That is what happened: written 0600 by
+        // root, invisible to the web process, and the webhook said the mailer
+        // was unconfigured while the CLI read it fine.
+        if (is_file($emailFile) && !is_readable($emailFile)) {
+            require_once __DIR__ . '/SecureFile.php';
+            $this->unreadableReason = 'email_settings.json exists but this process cannot read it ('
+                . SecureFile::auditReadability($emailFile)['why'] . ')';
+            error_log('[MailService] ' . $this->unreadableReason);
+        }
         $ec = file_exists($emailFile)
             ? (json_decode((string)@file_get_contents($emailFile), true) ?: [])
             : [];

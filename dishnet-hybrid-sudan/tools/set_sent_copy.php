@@ -30,11 +30,15 @@ $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $file    = rtrim($dataDir, '/') . '/email_settings.json';
 $es      = is_file($file) ? (json_decode((string)@file_get_contents($file), true) ?: []) : [];
 
-$save = function (array $es) use ($file) {
-    $tmp = $file . '.tmp.' . getmypid();
-    if (@file_put_contents($tmp, json_encode($es, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX) === false
-        || !@rename($tmp, $file)) { @unlink($tmp); fwrite(STDERR, "could not write {$file}\n"); exit(1); }
-    @chmod($file, 0600);
+$save = function (array $es) use ($file, $root) {
+    // 0600 as root made this unreadable to the web process, and the plugin
+    // then reported "plugin mail is not configured" from the webhook while
+    // reading perfectly from the command line. SecureFile hands it to the
+    // data directory's owner instead.
+    require_once $root . '/lib/SecureFile.php';
+    $r = SecureFile::write($file, json_encode($es, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    if (!$r['ok']) { fwrite(STDERR, "could not write {$file}: {$r['error']}\n"); exit(1); }
+    echo "  saved {$file}  owner {$r['owner']}  mode {$r['mode']}\n";
 };
 
 if (isset($opt['show'])) {

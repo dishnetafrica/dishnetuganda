@@ -100,7 +100,8 @@ if (@file_put_contents($tmp, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNE
     fwrite(STDERR, "FAIL: could not write {$file} — is the data directory writable?\n");
     exit(1);
 }
-@chmod($file, 0600);
+require_once __DIR__ . '/../lib/SecureFile.php';
+SecureFile::adopt($file);   // 0600 as root hides this from the web process
 echo "  ✔ configuration written to email_settings.json\n";
 
 if ($test === '') {
