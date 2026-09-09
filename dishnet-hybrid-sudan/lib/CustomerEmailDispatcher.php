@@ -49,6 +49,52 @@ class CustomerEmailDispatcher
         $this->pdo     = $pdo;
     }
 
+    /**
+     * Claim an event exactly once, across code paths that do not know about
+     * each other.
+     *
+     * The quotation email has two entry points: QuotationService, when a quote
+     * is created through the DishNet app, and the quote.add webhook, which
+     * fires for every quote including that one. Without a shared claim the
+     * customer gets the same quotation twice.
+     *
+     * Uses notification_dedup — the same table and the same INSERT OR IGNORE
+     * that webhook.php already relies on for invoices — so the two mechanisms
+     * cannot disagree about what has been sent.
+     *
+     * @return bool true if the caller now owns this event
+     */
+    public static function claimOnce(PDO $pdo, string $key): bool
+    {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS notification_dedup (
+                dedup_key TEXT PRIMARY KEY, sent_at TEXT NOT NULL)");
+            $st = $pdo->prepare('INSERT OR IGNORE INTO notification_dedup (dedup_key, sent_at) VALUES (?, ?)');
+            $st->execute([$key, date('Y-m-d H:i:s')]);
+            return $st->rowCount() > 0;
+        } catch (\Throwable $e) {
+            // A broken claim must not silence the email; a duplicate is the
+            // lesser failure than a customer hearing nothing.
+            return true;
+        }
+    }
+
+    /**
+     * Give a claim back, so a failed attempt can be retried.
+     *
+     * claimOnce() has to run BEFORE the work, or two paths race and the
+     * customer gets two emails. But a claim held after a failure is worse than
+     * the race it prevents: the quotation would then never be sent by anyone,
+     * and nothing would say why. Every failure path releases.
+     */
+    public static function releaseClaim(PDO $pdo, string $key): void
+    {
+        try {
+            $st = $pdo->prepare('DELETE FROM notification_dedup WHERE dedup_key = ?');
+            $st->execute([$key]);
+        } catch (\Throwable $e) {}
+    }
+
     /** The master switch. Absent means off. */
     public static function masterEnabled(array $config): bool
     {

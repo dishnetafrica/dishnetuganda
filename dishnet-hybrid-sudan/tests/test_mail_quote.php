@@ -54,7 +54,15 @@ class FakeCrm extends CrmApiClient
     public $pdfPrimary;
     public $pdfSecondary;
     public function __construct() { parent::__construct('http://fake.test', 'k'); }
-    public function post(string $path, array $p = []): ?array { return ['id' => 7, 'number' => 'PF007']; }
+    /** Each scenario is a different quote, so each gets its own id — the
+     *  once-only claim in QuotationService is real and would otherwise let
+     *  only the first scenario through. */
+    public static int $nextId = 7;
+    public int $quoteId = 0;
+    public function post(string $path, array $p = []): ?array {
+        $this->quoteId = self::$nextId++;
+        return ['id' => $this->quoteId, 'number' => 'PF007'];
+    }
     public function get(string $path): ?array { return $this->client; }
     public function patch(string $path, array $p = []): ?array { $this->patches[] = $path; return ['ok' => true]; }
     public function getRawContent(string $path): ?string {
@@ -113,7 +121,7 @@ echo "\nToggle absent — uCRM sends, exactly as before\n";
 $crm = new FakeCrm(); $crm->client = $goodClient; $crm->pdfPrimary = '%PDF-1.4 x';
 $r = $mkSvc($crm, new RecMailer())->createCrmQuote(42, $items, 'QUO-1', $retailer);
 t('quote created', $r['ok'] ?? false, true);
-t('uCRM /send is the sender', $crm->patches, ['billing/quotes/7/send']);
+t('uCRM /send is the sender', $crm->patches, ["billing/quotes/{$crm->quoteId}/send"]);
 t('not emailed by plugin', $r['emailed_by_plugin'], false);
 
 echo "\nToggle ON — the plugin emails the PDF itself, uCRM mailer untouched\n";
@@ -145,25 +153,26 @@ $crm = new FakeCrm(); $crm->client = $goodClient; $crm->pdfPrimary = null; $crm-
 $mailer = new RecMailer();
 $r = $mkSvc($crm, $mailer)->createCrmQuote(42, $items, 'QUO-3', $retailer);
 t('fallback endpoint delivered the PDF', $r['emailed_by_plugin'], true);
-t('both endpoints were tried in order', $crm->rawPaths, ['billing/quotes/7/pdf', 'quotes/7/pdf']);
+t('both endpoints were tried in order', $crm->rawPaths,
+  ["billing/quotes/{$crm->quoteId}/pdf", "quotes/{$crm->quoteId}/pdf"]);
 
 echo "\nFailures fall back to uCRM — a quote is never silently unemailed\n";
 $crm = new FakeCrm(); $crm->client = ['firstName' => 'No', 'lastName' => 'Email', 'contacts' => []];
 $crm->pdfPrimary = '%PDF-1.4 x';
 $r = $mkSvc($crm, new RecMailer())->createCrmQuote(42, $items, 'QUO-4', $retailer);
-t('no customer email: falls back to uCRM /send', $crm->patches, ['billing/quotes/7/send']);
+t('no customer email: falls back to uCRM /send', $crm->patches, ["billing/quotes/{$crm->quoteId}/send"]);
 t('and says why', strpos((string)$r['email_error'], 'email') !== false, true);
 
 $crm = new FakeCrm(); $crm->client = $goodClient; $crm->pdfPrimary = '%PDF-1.4 x';
 $mailer = new RecMailer(); $mailer->configured = false;
 $r = $mkSvc($crm, $mailer)->createCrmQuote(42, $items, 'QUO-5', $retailer);
-t('unconfigured plugin mail: falls back to uCRM /send', $crm->patches, ['billing/quotes/7/send']);
+t('unconfigured plugin mail: falls back to uCRM /send', $crm->patches, ["billing/quotes/{$crm->quoteId}/send"]);
 t('error names the settings screen', strpos((string)$r['email_error'], 'not configured') !== false, true);
 
 $crm = new FakeCrm(); $crm->client = $goodClient; $crm->pdfPrimary = '%PDF-1.4 x';
 $mailer = new RecMailer(); $mailer->sendOk = false;
 $r = $mkSvc($crm, $mailer)->createCrmQuote(42, $items, 'QUO-6', $retailer);
-t('SMTP refusal: falls back to uCRM /send', $crm->patches, ['billing/quotes/7/send']);
+t('SMTP refusal: falls back to uCRM /send', $crm->patches, ["billing/quotes/{$crm->quoteId}/send"]);
 t('with the SMTP error surfaced', $r['email_error'], 'SMTP said no');
 
 exec('rm -rf ' . escapeshellarg($tmp));
@@ -236,15 +245,16 @@ $t('an IP host is not given pointless alternates',
 
 echo "\nA quotation still carries a PDF when uCRM serves none\n";
 $qs = (string)file_get_contents($root . '/lib/QuotationService.php');
+$src = (string)file_get_contents($root . '/lib/QuotePdfSource.php');
 $t('the plugin renders its own PDF when uCRM answers 404',
-   strpos($qs, 'renderOwnQuotePdf') !== false
-   && strpos($qs, 'PluginQuotePdf') !== false);
+   strpos($src, 'PluginQuotePdf') !== false);
 $t('the own-render is tried only after uCRM has been asked both ways',
-   strpos($qs, 'billing/quotes/{$quoteId}/pdf') < strpos($qs, '$this->renderOwnQuotePdf'));
+   strpos($src, 'billing/quotes/{$quoteId}/pdf') < strpos($src, 'new PluginQuotePdf'));
 $t('a failed own-render still falls back to uCRM sending, as before',
    strpos($qs, 'uCRM served no quotation PDF and the plugin could not render one') !== false);
 $t('the renderer never throws into the quote path',
-   preg_match('/renderOwnQuotePdf.*?catch \\(\\\\Throwable/s', $qs) === 1);
+   strpos($src, 'catch (\\Throwable') !== false
+   && strpos($src, "return ['', 'none'];") !== false);
 $t('and the operator is told when a plugin-rendered PDF went out',
    strpos($qs, 'sent with a plugin-rendered PDF') !== false);
 
@@ -257,6 +267,28 @@ $t('with nothing configured the public name still leads, as before',
    strpos($sc, '$attempts[] = [$host, null];' . "\n" . '                if (filter_var($host, FILTER_VALIDATE_IP) === false) {') !== false);
 $t('a route that stopped working names the likely cause',
    strpos($sc, 'lost the docker network') !== false);
+
+echo "\nA quote created in uCRM\'s own screen also gets our email, exactly once\n";
+$wh = (string)file_get_contents($root . '/webhook.php');
+$t('quote.add sends the branded quotation email',
+   strpos($wh, 'whQuotationEmail(') !== false);
+$callPos = strpos($wh, 'whQuotationEmail($quoteId');
+$gatePos = strpos($wh, 'if ($phone && $amount > 0) {', $callPos ?: 0);
+$t('it runs before the phone gate, so an email-only customer is served',
+   $callPos !== false && $gatePos !== false && $callPos < $gatePos);
+$t('both entry points claim the same key, so no customer gets two',
+   strpos($wh, 'QEMAIL{$quoteId}') !== false
+   && strpos($qs, 'QEMAIL{$quoteId}') !== false);
+$t('the attachment uses the key MailService actually reads',
+   strpos($wh, "'content' => \$pdf") !== false
+   && strpos($wh, "'data' => \$pdf") === false);
+$t('the PDF comes from the one shared source, not a second copy of the logic',
+   strpos($wh, 'QuotePdfSource::fetch') !== false
+   && strpos($qs, 'QuotePdfSource::fetch') !== false
+   && strpos($qs, 'renderOwnQuotePdf') === false);
+$t('a claim failure lets the email through rather than silencing it',
+   strpos((string)file_get_contents($root . '/lib/CustomerEmailDispatcher.php'),
+          'A broken claim must not silence the email') !== false);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

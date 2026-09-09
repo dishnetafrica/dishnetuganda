@@ -157,6 +157,53 @@ function whCustomerEmail(string $key, int $clientId, string $name, array $data,
     }
 }
 
+/**
+ * Send the branded quotation email for a quote created anywhere.
+ *
+ * QuotationService covers quotes created through the DishNet app. A quote
+ * typed into uCRM's own screen never touches it, and uCRM then sends its own
+ * email — which on this install fails outright and, when it works, carries
+ * uCRM's wording and a Reply-To pointing at the wrong country.
+ *
+ * Claimed against the same key QuotationService uses, so a quote created in
+ * the app cannot produce two emails.
+ */
+function whQuotationEmail(int $quoteId, int $clientId, string $name, array $client,
+                          array $config, string $dataDir, $crm, $store, string $changeType = ''): void
+{
+    try {
+        if (!CustomerEmailDispatcher::enabled('quotation', $config)) return;
+        $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
+        if (!$pdo) return;
+        if (!CustomerEmailDispatcher::claimOnce($pdo, "QEMAIL{$quoteId}")) {
+            whLog($changeType ?: 'email', "Quotation email for #{$quoteId} already claimed — skipping");
+            return;
+        }
+
+        require_once __DIR__ . '/lib/QuotePdfSource.php';
+        [$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client);
+
+        $quote  = $crm->get("billing/quotes/{$quoteId}") ?: [];
+        $number = (string)($quote['number'] ?? $quoteId);
+        $atts   = $pdf !== ''
+            ? [['name' => "Quotation-{$number}.pdf", 'mime' => 'application/pdf', 'content' => $pdf]]
+            : [];
+
+        $d = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        $r = $d->send('quotation', ['client_id' => $clientId], $name, [
+            'quote_number' => $number,
+            'total'        => (float)($quote['total'] ?? 0),
+            'amount'       => (float)($quote['total'] ?? 0),
+        ], '', $atts);
+
+        whLog($changeType ?: 'email', $r['sent']
+            ? "Quotation email sent to {$r['to']} (PDF: {$src})"
+            : "Quotation email NOT sent: {$r['reason']}");
+    } catch (\Throwable $e) {
+        error_log('[whQuotationEmail] ' . $e->getMessage());
+    }
+}
+
 function whInvoiceCreditScenario(array $invoice, array $client): array
 {
     $total      = (float)($invoice['total'] ?? $invoice['amount'] ?? 0);
@@ -2172,6 +2219,11 @@ switch ($changeType) {
         foreach (($client['contacts'] ?? []) as $c) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
+
+        // Before the phone gate below: a customer who gave us an email address
+        // but no phone number should still receive their quotation.
+        whQuotationEmail($quoteId, (int)$clientId, $name, $client,
+                         $config, $dataDir, $crm, $store, $changeType);
 
         if ($phone && $amount > 0) {
             // ── KYC quote check: let cron_quote_wa handle ALL plugin-generated quotes ──

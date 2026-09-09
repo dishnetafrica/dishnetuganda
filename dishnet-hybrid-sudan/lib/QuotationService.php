@@ -543,38 +543,16 @@ class QuotationService
      * and the caller falls back to uCRM's /send.
      */
     /**
-     * Render the quotation PDF ourselves, for installs where uCRM serves none.
+     * The database handle for the once-only email claim.
      *
-     * Returns the PDF bytes, or '' if anything at all goes wrong — the caller
-     * then falls back to uCRM sending its own email, which is what happened
-     * before this existed. Never throws: a quotation that reaches the customer
-     * without our branding beats one that never reaches them.
+     * $this->pdo is a typed property that only some construction paths set,
+     * and reading it unset throws — which was swallowed by the catch below and
+     * came back as "could not send", quietly handing the email to uCRM. The
+     * store is always there.
      */
-    private function renderOwnQuotePdf(int $quoteId, array $client): string
+    private function emailPdo(): \PDO
     {
-        try {
-            $quote = $this->crm->get("billing/quotes/{$quoteId}")
-                  ?: $this->crm->get("quotes/{$quoteId}");
-            if (!is_array($quote) || !$quote) return '';
-
-            require_once __DIR__ . '/PluginQuotePdf.php';
-            $gen = new PluginQuotePdf($this->dataDir, $this->config);
-            $res = $gen->generate($quote, $client, [
-                'name'    => (string)($quote['organizationName'] ?? ''),
-                'tax_id'  => (string)($quote['organizationTaxId'] ?? ''),
-                'reg_no'  => (string)($quote['organizationRegistrationNumber'] ?? ''),
-                'street'  => (string)($quote['organizationStreet1'] ?? ''),
-                'city'    => (string)($quote['organizationCity'] ?? ''),
-            ]);
-            $path = (string)($res['pdf_path'] ?? '');
-            if ($path === '' || !is_file($path)) return '';
-
-            $bytes = (string)@file_get_contents($path);
-            return strncmp($bytes, '%PDF', 4) === 0 ? $bytes : '';
-        } catch (\Throwable $e) {
-            error_log('[QuotationService] own-PDF render failed: ' . $e->getMessage());
-            return '';
-        }
+        return $this->store->getPdo();
     }
 
     protected function emailQuotePdf(int $quoteId, string $number, int $crmClientId, array $retailer, float $total = 0.0): array
@@ -601,26 +579,21 @@ class QuotationService
             }
             if ($email === '') return [false, 'customer has no email address in uCRM'];
 
-            // The PDF uCRM would itself have attached. Path differs across
-            // uCRM versions, so try both.
-            $pdf = $this->crm->getRawContent("billing/quotes/{$quoteId}/pdf");
-            if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
-                $pdf = $this->crm->getRawContent("quotes/{$quoteId}/pdf");
+            // One place decides where the PDF comes from, because the quote
+            // email now has two entry points — here, and the quote.add webhook
+            // for quotes created in uCRM's own screen.
+            // Claim it before doing the work: quote.add fires for this very
+            // quote and would otherwise send the customer a second copy.
+            require_once __DIR__ . '/CustomerEmailDispatcher.php';
+            if (!CustomerEmailDispatcher::claimOnce($this->emailPdo(), "QEMAIL{$quoteId}")) {
+                return [false, 'the quotation email for this quote was already sent'];
             }
 
-            // Some uCRM installs serve no quotation PDF over the API at all —
-            // every endpoint spelling answers 404, confirmed by
-            // tools/pdf_template_doctor.php. Giving up here meant falling back
-            // to letting uCRM send its own email, so the branded Uganda
-            // quotation was never the one the customer received. Render our
-            // own instead: PluginQuotePdf drives wkhtmltopdf, which is already
-            // on the uCRM host.
-            $pdfSource = 'ucrm';
-            if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
-                $pdf = $this->renderOwnQuotePdf($quoteId, $client);
-                $pdfSource = 'plugin';
-            }
-            if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
+            require_once __DIR__ . '/QuotePdfSource.php';
+            [$pdf, $pdfSource] = QuotePdfSource::fetch(
+                $this->crm, $this->dataDir, $this->config, $quoteId, $client);
+            if ($pdf === '') {
+                CustomerEmailDispatcher::releaseClaim($this->emailPdo(), "QEMAIL{$quoteId}");
                 return [false, 'uCRM served no quotation PDF and the plugin could not render one'];
             }
 
@@ -649,6 +622,7 @@ class QuotationService
                 ]]
             );
             if (empty($send['ok'])) {
+                CustomerEmailDispatcher::releaseClaim($this->emailPdo(), "QEMAIL{$quoteId}");
                 return [false, (string)($send['error'] ?? 'send failed')];
             }
 
