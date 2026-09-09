@@ -55,9 +55,12 @@ $mailHost = $domain !== '' ? 'mail.' . $domain : '';
 // Where the container next door actually is. The docker network gives it a
 // name; JMAP needs an address to pin the certificate's hostname to.
 $stalwartIp = '';
+$viaName    = '';
 foreach (['stalwart', 'mail', 'dishnet-mail'] as $n) {
     $ip = gethostbyname($n);
-    if ($ip !== $n && filter_var($ip, FILTER_VALIDATE_IP)) { $stalwartIp = $ip; break; }
+    if ($ip !== $n && filter_var($ip, FILTER_VALIDATE_IP)) {
+        $stalwartIp = $ip; $viaName = $n; break;
+    }
 }
 
 /** @var array<int,array{url:string,resolve:string[],note:string}> */
@@ -81,7 +84,7 @@ if ($stalwartIp !== '' && $mailHost !== '') {
     foreach ([443, 8443] as $port) {
         $add('https://' . $mailHost . ($port === 443 ? '' : ':' . $port),
              [$mailHost . ':' . $port . ':' . $stalwartIp],
-             'via container ' . $stalwartIp);
+             'via ' . $viaName . ' ' . $stalwartIp);
     }
 }
 foreach ([8080, 8081, 80] as $port) {
@@ -125,16 +128,18 @@ if ($winner === '') {
     echo "  not durable and is lost whenever the stack is recreated:\n\n";
     echo "    docker network connect dishnet-mail_default ucrm\n\n";
     echo "  If a line says 404, JMAP is probably disabled on that server.\n";
-    echo "  If a line says 401, the address or password is wrong.\n\n";
+    echo "  If a line says 401, the address or password is wrong.\n";
+    echo "  If a line says 307, the session moved and should now be followed —\n";
+    echo "  a redirect that stays on the same host is followed automatically.\n\n";
     exit(1);
 }
 
 echo "\n  JMAP answers at: {$winner}\n";
 if ($winnerResolve !== []) {
-    echo "  pinned to: " . implode(', ', $winnerResolve) . "\n";
-    echo "\n  Store both — the address matters as much as the URL here:\n\n";
-    echo "    php tools/set_inbound_mail.php --url {$winner} --resolve "
-       . escapeshellarg(implode(',', $winnerResolve)) . "\n\n";
+    echo "  reached through the {$viaName} container at {$stalwartIp}\n";
+    echo "\n  Store the container NAME, not that address: it is re-resolved on\n";
+    echo "  every connect, so recreating the mail stack costs nothing.\n\n";
+    echo "    php tools/set_inbound_mail.php --url {$winner} --via {$viaName}\n\n";
 } elseif ($winner !== $configured) {
     echo "\n  That is not what is configured. Point the plugin at it:\n\n";
     echo "    php tools/set_inbound_mail.php --url {$winner}\n\n";

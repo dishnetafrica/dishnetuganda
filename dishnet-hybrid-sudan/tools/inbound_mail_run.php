@@ -99,6 +99,9 @@ $mailbox = new JmapMailbox(
 $resolve = trim((string)($config['email_ai_jmap_resolve'] ?? ''));
 if ($resolve !== '') $mailbox->setResolve(array_map('trim', explode(',', $resolve)));
 
+$via = trim((string)($config['email_ai_jmap_via'] ?? ''));
+if ($via !== '') $mailbox->setVia($via);
+
 if (!$mailbox->isConfigured()) {
     // Say which key is missing, not which keys exist. The first version of
     // this listed all three whenever any one was absent, so a run that was

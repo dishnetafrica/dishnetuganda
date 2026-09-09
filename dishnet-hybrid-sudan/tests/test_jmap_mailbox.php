@@ -152,5 +152,47 @@ $box->fetch('', 1);
 is_($seen === 'https://mail.example.com/.well-known/jmap',
     'the session is still requested by its proper name', 'got: ' . var_export($seen, true));
 
+echo "\nA redirect is followed only where it cannot leak the password\n";
+// Stalwart answers /.well-known/jmap with a 307 to /jmap/session, so refusing
+// every redirect meant never arriving. But the request carries Basic auth,
+// and that header is the mailbox password.
+is_(JmapMailbox::sameOrigin('https://mail.x.com/.well-known/jmap',
+                            'https://mail.x.com/jmap/session'),
+    'a redirect to another path on the same host is the same origin');
+is_(JmapMailbox::sameOrigin('https://mail.x.com:443/a', 'https://mail.x.com/b'),
+    'an explicit :443 and an implicit one are the same origin');
+is_(!JmapMailbox::sameOrigin('https://mail.x.com/a', 'https://evil.com/a'),
+    'another host is not');
+is_(!JmapMailbox::sameOrigin('https://mail.x.com/a', 'http://mail.x.com/a'),
+    'nor is the same host without TLS — that would put it on the wire');
+is_(!JmapMailbox::sameOrigin('https://mail.x.com/a', 'https://mail.x.com:8443/a'),
+    'nor another port');
+
+is_(JmapMailbox::absolutise('/jmap/session', 'http://stalwart:8080/.well-known/jmap')
+    === 'http://stalwart:8080/jmap/session', 'a rooted Location keeps host and port');
+is_(JmapMailbox::absolutise('https://other.example/x', 'http://stalwart:8080/y')
+    === 'https://other.example/x', 'an absolute Location is taken as given');
+
+echo "\nAnd the hop is actually taken\n";
+$seen = [];
+$box  = new JmapMailbox('http://stalwart:8080', 'u', 'p',
+    function ($m, $u, $h, $b) use (&$seen) {
+        $seen[] = $u;
+        return null;   // the harness cannot emulate headers; the URLs are the point
+    });
+$box->fetch('', 1);
+is_($seen === ['http://stalwart:8080/.well-known/jmap'],
+    'the session is asked for at the well-known path first',
+    json_encode($seen));
+
+echo "\nA container name is resolved when the connection is made, not when stored\n";
+$box2 = new JmapMailbox('https://mail.dishnetuganda.com', 'u', 'p',
+    function ($m, $u, $h, $b) { return null; });
+$box2->setVia('definitely-not-a-real-host-' . bin2hex(random_bytes(3)));
+$r2 = $box2->fetch('', 1);
+is_(empty($r2['ok']), 'a name that does not resolve fails the fetch');
+is_(strpos((string)$r2['error'], 'session could not be opened') !== false,
+    'and reports it rather than pinning to nothing', (string)$r2['error']);
+
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);

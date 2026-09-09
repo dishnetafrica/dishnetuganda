@@ -63,6 +63,8 @@ class JmapMailbox
             return $out;
         }
 
+        $this->applyVia();
+
         $sess = $this->call('GET', $this->baseUrl . '/.well-known/jmap');
         if (!is_array($sess) || empty($sess['accounts'])) {
             $why = $this->transportProblem();
@@ -270,7 +272,85 @@ class JmapMailbox
     /** @var string[] */
     private $resolve = [];
 
-    private function call(string $method, string $url, ?array $body = null)
+    /**
+     * Reach the server's proper hostname through a neighbouring container.
+     *
+     * The certificate is issued for the public mail name; the only reachable
+     * copy is the container next door. Pinning a fixed address would work
+     * until the mail stack is recreated and the address changes — the same
+     * rot that already costs us the docker network attachment. So the docker
+     * NAME is stored and resolved at connect time, and an address change
+     * costs nothing.
+     */
+    public function setVia(string $dockerName): void
+    {
+        $this->via = trim($dockerName);
+    }
+
+    /** @var string */
+    private $via = '';
+
+    /** Turn $via into a pin for this base URL, if it resolves. */
+    private function applyVia(): void
+    {
+        if ($this->via === '' || $this->resolve !== []) return;
+
+        $ip = gethostbyname($this->via);
+        if ($ip === $this->via || !filter_var($ip, FILTER_VALIDATE_IP)) {
+            // Left unpinned deliberately: the request then fails with a real
+            // transport error naming the host, which is more useful than a
+            // pin quietly built from nothing.
+            return;
+        }
+        $u    = parse_url($this->baseUrl);
+        $host = (string)($u['host'] ?? '');
+        if ($host === '') return;
+        $port = (int)($u['port'] ?? (($u['scheme'] ?? '') === 'https' ? 443 : 80));
+
+        $this->resolve = [$host . ':' . $port . ':' . $ip];
+    }
+
+    /**
+     * Is $to the same origin as $from — same scheme, host and port?
+     *
+     * This is the whole safety question for following a redirect. The request
+     * carries Basic authentication, and that header is the mailbox password;
+     * sending it to a host we were merely pointed at would hand the password
+     * to whoever controls the pointer. Staying on the same origin sends it
+     * only back where it was already going.
+     */
+    public static function sameOrigin(string $from, string $to): bool
+    {
+        $a = parse_url($from);
+        $b = parse_url($to);
+        if (!is_array($a) || !is_array($b)) return false;
+
+        $port = function (array $u): int {
+            if (isset($u['port'])) return (int)$u['port'];
+            return ($u['scheme'] ?? '') === 'https' ? 443 : 80;
+        };
+        return strtolower((string)($a['scheme'] ?? '')) === strtolower((string)($b['scheme'] ?? ''))
+            && strtolower((string)($a['host']   ?? '')) === strtolower((string)($b['host']   ?? ''))
+            && $port($a) === $port($b);
+    }
+
+    /** Turn a Location value into an absolute URL against the request it answered. */
+    public static function absolutise(string $location, string $base): string
+    {
+        $location = trim($location);
+        if ($location === '') return '';
+        if (preg_match('#^https?://#i', $location)) return $location;
+
+        $u = parse_url($base);
+        if (!is_array($u) || !isset($u['scheme'], $u['host'])) return '';
+        $root = $u['scheme'] . '://' . $u['host'] . (isset($u['port']) ? ':' . $u['port'] : '');
+
+        if ($location[0] === '/') return $root . $location;
+        $dir = rtrim(dirname((string)($u['path'] ?? '/')), '/');
+        return $root . $dir . '/' . $location;
+    }
+
+    private function call(string $method, string $url, ?array $body = null, int $hop = 0)
     {
         $headers = [
             'Authorization: Basic ' . base64_encode($this->user . ':' . $this->pass),
@@ -313,6 +393,24 @@ class JmapMailbox
             'url'      => $url,
             'location' => $loc,
         ];
+
+        // Stalwart answers /.well-known/jmap with a 307 to /jmap/session: the
+        // well-known path is a pointer, and refusing every redirect meant
+        // never arriving. Same-origin redirects are followed — 307 preserves
+        // the method and body, which is what the JMAP call needs — and a
+        // redirect that leaves the origin is reported instead, because
+        // following it would carry the mailbox password to a host we were
+        // merely pointed at.
+        if ($status >= 300 && $status < 400 && $loc !== '' && $hop < 3) {
+            $next = self::absolutise($loc, $url);
+            if ($next !== '' && self::sameOrigin($url, $next)) {
+                return $this->call($method, $next, $body, $hop + 1);
+            }
+            $this->lastTransport['error'] =
+                'redirected off this host to ' . $next . ' — not followed, because the '
+              . 'request carries the mailbox password';
+            return null;
+        }
 
         $j = json_decode((string)$raw, true);
         return is_array($j) ? $j : null;

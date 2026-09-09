@@ -48,7 +48,8 @@ if ($args === [] || $has('--show')) {
     printf("    %-22s %s\n", 'email_ai_jmap_url',   ($config['email_ai_jmap_url']   ?? '') ?: '(not set)');
     printf("    %-22s %s\n", 'email_ai_mailbox',    ($config['email_ai_mailbox']    ?? '') ?: '(not set)');
     printf("    %-22s %s\n", 'email_ai_mailbox_pw', mask((string)($config['email_ai_mailbox_pw'] ?? '')));
-    printf("    %-22s %s\n", 'email_ai_jmap_resolve', ($config['email_ai_jmap_resolve'] ?? '') ?: '(none — plain DNS)');
+    printf("    %-22s %s\n", 'email_ai_jmap_via', ($config['email_ai_jmap_via'] ?? '') ?: '(none — plain DNS)');
+    printf("    %-22s %s\n", 'email_ai_jmap_resolve', ($config['email_ai_jmap_resolve'] ?? '') ?: '(none)');
     echo "\n  Reading is all this enables. Every reply still waits for a person.\n\n";
     // --show on its own is a question, not a change.
     if ($args === [] || count($args) === 1) exit(0);
@@ -60,6 +61,10 @@ if ($value('--mailbox') !== '') $updates['email_ai_mailbox']  = trim($value('--m
 // host:port:ip, comma separated — the certificate's name at the address that
 // actually holds it. jmap_probe.php prints the value to use.
 if ($value('--resolve')  !== '') $updates['email_ai_jmap_resolve'] = trim($value('--resolve'));
+// The docker name of the container actually holding the mailbox. Preferred
+// over --resolve: it is re-resolved on every connect, so an address change
+// when the mail stack is recreated costs nothing.
+if ($value('--via')      !== '') $updates['email_ai_jmap_via'] = trim($value('--via'));
 
 if ($has('--password')) {
     echo "\n  The mailbox password is not set from here.\n\n";
