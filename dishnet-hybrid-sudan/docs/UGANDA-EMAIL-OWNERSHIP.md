@@ -206,3 +206,35 @@ Reg 80046255496181, The Accacia Mall, Kampala, UGX, no VAT.
 **The archive is bookkeeping, not delivery.** It has never affected whether a
 customer receives mail. A failure here costs the operator visibility in
 webmail and nothing else.
+
+---
+
+## The quotation email, end to end — working 9 September 2026
+
+Verified by delivery, not by inference: `Quotation 000005 — DishNet Africa
+Limited`, with a 66 KB PDF, to both `bhavin.madlani@outlook.com` and
+`bhavin@dishnetafrica.com`, filed in "Sent Items".
+
+The chain, and what was broken in each link:
+
+| Link | Was |
+|---|---|
+| uCRM fires `quote.add` | no webhook endpoint had ever been registered |
+| routed to the handler | `webhook.php` had no `public.php` route, so it was unreachable |
+| handler reads the switch | `$config` came from the SqliteStore copy; the tool writes the file |
+| claims the event once | claimed before the work, never released on failure |
+| finds the recipient | worked |
+| gets the PDF | uCRM serves none on this install; `PluginQuotePdf` renders it |
+| sends via Brevo | worked |
+| files a Sent copy | reached Stalwart only over the shared docker network |
+| greets the customer | read `customer_name`; every sender passes `name` |
+
+Not one of those failed loudly. Every single one either returned 200, logged
+nothing, or produced a plausible-looking email — which is why finding them
+took a morning of narrowing rather than reading a stack trace.
+
+**The lesson worth keeping:** each fix was small, and each was found by making
+the system say what it had actually done rather than what it was expected to
+do. The tools that pay for themselves here are the ones that print the bytes —
+`quote_email_send` running the path in the foreground, the PDF doctor
+inflating the real document, the SMTP conversation printed line by line.
