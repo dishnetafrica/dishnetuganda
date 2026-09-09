@@ -129,7 +129,11 @@ if (!$mailbox->isConfigured()) {
     exit(1);
 }
 
-$crm   = new CrmApiClient($root, $config);
+// fromUcrm, not the constructor: it reads ucrm.json for the base URL and app
+// key. Handing the constructor a plugin root and a config array type-errors on
+// the second argument, which is a fatal at exactly the point where the mailbox
+// has finally been configured.
+$crm   = CrmApiClient::fromUcrm($root, $config);
 $brain = new DishNetAiBrain($config);
 
 echo "\n  Reading " . (string)($config['email_ai_mailbox'] ?? '') . "\n";
