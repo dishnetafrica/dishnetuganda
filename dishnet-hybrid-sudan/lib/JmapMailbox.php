@@ -78,8 +78,13 @@ class JmapMailbox
         // Ask for each header by name. JMAP returns them as
         // header:<Name>:asText properties, which is the only way to get at
         // headers it does not model as first-class fields.
-        $props = ['id', 'messageId', 'threadId', 'from', 'to', 'subject',
-                  'receivedAt', 'preview', 'bodyValues', 'textBody'];
+        // hasAttachment and attachments matter as much as the text: the
+        // classifier treats a customer's attached document as a reason for a
+        // person to read the reply, and it can only do that if the names
+        // actually arrive here.
+        $props = ['id', 'messageId', 'threadId', 'from', 'to', 'cc', 'subject',
+                  'receivedAt', 'preview', 'bodyValues', 'textBody',
+                  'hasAttachment', 'attachments'];
         foreach (self::WANTED_HEADERS as $hdr) $props[] = 'header:' . $hdr . ':asText';
 
         $resp = $this->call('POST', $apiUrl, [
@@ -146,11 +151,37 @@ class JmapMailbox
             'from_name'   => (string)($e['from'][0]['name'] ?? ''),
             'to'          => array_map(function ($t) { return (string)($t['email'] ?? ''); },
                                        (array)($e['to'] ?? [])),
+            'cc'          => array_map(function ($t) { return (string)($t['email'] ?? ''); },
+                                       (array)($e['cc'] ?? [])),
+            'attachments' => self::attachmentNames($e),
             'subject'     => (string)($e['subject'] ?? ''),
             'received_at' => (string)($e['receivedAt'] ?? ''),
             'body'        => $body,
             'headers'     => $headers,
         ];
+    }
+
+    /**
+     * Filenames of what the customer attached.
+     *
+     * An unnamed part still counts — the fact that something was attached is
+     * the signal, not what it was called — so it is reported by type instead
+     * of dropped.
+     *
+     * @return string[]
+     */
+    private static function attachmentNames(array $e): array
+    {
+        $out = [];
+        foreach ((array)($e['attachments'] ?? []) as $a) {
+            if (!is_array($a)) continue;
+            $name = trim((string)($a['name'] ?? ''));
+            if ($name === '') $name = '(unnamed ' . (string)($a['type'] ?? 'file') . ')';
+            $out[] = $name;
+        }
+        // Some servers report the flag without listing the parts.
+        if ($out === [] && !empty($e['hasAttachment'])) $out[] = '(attachment)';
+        return $out;
     }
 
     /** @return array|null */

@@ -64,6 +64,12 @@ class ConfigVault
         'cashbook_base_currency',
         'cashbook_currencies',
         'books_start_date',
+        // Inbound mail: the address the AI reads and its password. A
+        // re-install that lost these would silently stop the draft inbox,
+        // and nobody notices mail that is not being read.
+        'email_ai_jmap_url',
+        'email_ai_mailbox',
+        'email_ai_mailbox_pw',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

@@ -28,6 +28,11 @@ class PluginConfig
         'shopbot_ai_token',
         'stalwart_api_token',
         'starlink_mail_password',
+        // The password to the mailbox customers write to. It is a secret in
+        // exactly the sense the others are, so it takes the same road: the
+        // uCRM Configuration screen and the encrypted vault, never a command
+        // line and never a JSON file in the data directory.
+        'email_ai_mailbox_pw',
     ];
 
     const BOOL_KEYS = [
