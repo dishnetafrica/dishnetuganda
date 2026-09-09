@@ -25,6 +25,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
 $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/SecureFile.php';
+require_once $root . '/lib/ConfigVault.php';
 
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $fix     = in_array('--fix', $argv, true);
@@ -36,9 +37,17 @@ echo str_repeat('-', 66) . "\n";
 
 $files = ['email_settings.json', 'kyc_config.json', 'config.json',
           'wa_templates.json', 'vault.json'];
+
+// The vault does not always live in the data directory — ConfigVault puts it
+// beside the plugins root when that is writable, so its real location has to
+// be asked for rather than assumed. It was not being checked at all, which
+// mattered from the moment a tool run as root started writing it.
+$files[] = ConfigVault::path($root, $dataDir);
+
 $bad = 0;
 foreach ($files as $f) {
-    $path = $dataDir . '/' . $f;
+    $path = (strpos($f, '/') === 0) ? $f : $dataDir . '/' . $f;
+    $f    = basename($f);
     if (!is_file($path)) { printf("  %-24s (not present)\n", $f); continue; }
     $mode = substr(sprintf('%o', @fileperms($path) ?: 0), -4);
     $own  = SecureFile::describeOwner($path);

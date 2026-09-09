@@ -95,11 +95,37 @@ $mailbox = new JmapMailbox(
 );
 
 if (!$mailbox->isConfigured()) {
-    echo "\n  The mailbox is not configured. Three keys are needed:\n\n";
-    echo "    email_ai_jmap_url    e.g. https://mail.dishnetuganda.com\n";
-    echo "    email_ai_mailbox     e.g. accounts@dishnetuganda.com\n";
-    echo "    email_ai_mailbox_pw  its password\n\n";
-    echo "  Put them in the plugin's config, never on a command line.\n\n";
+    // Say which key is missing, not which keys exist. The first version of
+    // this listed all three whenever any one was absent, so a run that was
+    // one password away from working read exactly like a run that had never
+    // been configured at all.
+    $need = [
+        'email_ai_jmap_url'   => 'the mail server URL, e.g. https://mail.dishnetuganda.com',
+        'email_ai_mailbox'    => 'the address to read, e.g. accounts@dishnetuganda.com',
+        'email_ai_mailbox_pw' => 'its password',
+    ];
+    echo "\n  THE MAILBOX IS NOT READY\n\n";
+    $missing = [];
+    foreach ($need as $k => $what) {
+        $set = trim((string)($config[$k] ?? '')) !== '';
+        if (!$set) $missing[] = $k;
+        printf("    %-21s %s\n", $k, $set
+            ? ($k === 'email_ai_mailbox_pw' ? 'set' : (string)$config[$k])
+            : 'MISSING — ' . $what);
+    }
+    echo "\n";
+    if ($missing === ['email_ai_mailbox_pw']) {
+        echo "  Only the password is missing. Two ways to set it:\n\n";
+        echo "    1. uCRM → System → Plugins → DishNet → Configuration\n";
+        echo "       field: \"Inbound mail: mailbox password\"\n";
+        echo "       (if that field is not there, uCRM is still holding the old\n";
+        echo "        manifest — use 2 instead)\n\n";
+        echo "    2. php tools/set_mailbox_password.php\n";
+        echo "       Typed in, never echoed, never in your shell history.\n\n";
+    } else {
+        echo "  php tools/set_inbound_mail.php --url <url> --mailbox <address>\n";
+        echo "  php tools/set_mailbox_password.php\n\n";
+    }
     exit(1);
 }
 

@@ -134,6 +134,62 @@ class ConfigVault
         return $config;
     }
 
+    /**
+     * Put values into the vault directly.
+     *
+     * The ordinary route for configuration is uCRM's own Configuration screen,
+     * and this is not a replacement for it. It exists for the case where uCRM
+     * is still holding an older manifest and has no field to type into yet —
+     * a secret that cannot be entered anywhere is not more secure, it just
+     * ends up in a shell command instead.
+     *
+     * Written through SecureFile deliberately. refresh() writes 0600, which is
+     * right when the web process itself writes it and wrong the moment a tool
+     * run as root through docker exec does: the file becomes root-owned, the
+     * web user can no longer read it, and everything reports "not configured"
+     * while the value sits there perfectly intact. That outage has already
+     * happened once here, to email_settings.json.
+     *
+     * @param array<string,string> $pairs  VAULT_KEYS only; anything else is refused
+     * @return array{ok:bool, error:string, stored:string[]}
+     */
+    public static function store(string $pluginRoot, string $dataDir, array $pairs): array
+    {
+        $stored = [];
+        foreach (array_keys($pairs) as $k) {
+            if (!in_array($k, self::VAULT_KEYS, true)) {
+                return ['ok' => false, 'stored' => [],
+                        'error' => "'{$k}' is not a vault key"];
+            }
+        }
+
+        $file  = self::path($pluginRoot, $dataDir);
+        $vault = [];
+        if (is_file($file)) {
+            $decoded = json_decode((string)@file_get_contents($file), true);
+            if (is_array($decoded)) $vault = $decoded;
+        }
+        if (!isset($vault['config']) || !is_array($vault['config'])) $vault['config'] = [];
+
+        foreach ($pairs as $k => $v) {
+            $v = (string)$v;
+            if (trim($v) === '') { unset($vault['config'][$k]); continue; }
+            $vault['config'][$k] = $v;
+            $stored[] = $k;
+        }
+
+        require_once __DIR__ . '/SecureFile.php';
+        $r = SecureFile::write($file,
+            (string)json_encode($vault, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        if (empty($r['ok'])) {
+            return ['ok' => false, 'stored' => [], 'error' => (string)($r['error'] ?? 'write failed')];
+        }
+        // Names only. A log line is not a place for a password.
+        error_log('[ConfigVault] stored: ' . implode(', ', $stored));
+        return ['ok' => true, 'error' => '', 'stored' => $stored];
+    }
+
     /** Write the vault only when its content actually changed. */
     private static function refresh(string $file, string $dataDir, array $config, array $previous = []): void
     {
