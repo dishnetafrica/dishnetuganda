@@ -38,12 +38,18 @@ class SentCopy
      * An operator can override the whole guessing game with sent_copy_hosts,
      * a comma-separated list tried in order.
      */
+    /** Routes the operator configured explicitly, in the order given. */
+    private static function manualRoutes(array $settings): array
+    {
+        $raw = trim((string)($settings['sent_copy_hosts'] ?? ''));
+        if ($raw === '') return [];
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
+    }
+
     private static function routes(array $settings): array
     {
-        $manual = trim((string)($settings['sent_copy_hosts'] ?? ''));
-        if ($manual !== '') {
-            return array_values(array_filter(array_map('trim', explode(',', $manual))));
-        }
+        $manual = self::manualRoutes($settings);
+        if ($manual) return $manual;
         $out = [];
         $raw = @file_get_contents('/proc/net/route');
         if (is_string($raw)) {
@@ -101,14 +107,27 @@ class SentCopy
             // mail.dishnetuganda.com. That is stricter than the name attempt,
             // not looser.
             $verify   = (bool)($settings['sent_copy_verify'] ?? false);
-            $attempts = [[$host, null]];
-            if (filter_var($host, FILTER_VALIDATE_IP) === false) {
-                // Do not GUESS the bridge address. 172.17.0.1 is only the
-                // gateway for containers on the DEFAULT bridge; a container on
-                // a compose network has a different one, and guessing wrong
-                // produces a failure that says nothing. Read the container's
-                // actual default gateway out of the routing table.
-                foreach (self::routes($settings) as $alt) $attempts[] = [$alt, $host];
+            // Order matters: this runs on EVERY outgoing email, so a route
+            // known to fail must not be tried first each time.
+            //
+            // An explicitly configured route (sent_copy_hosts) is the
+            // operator saying "this is how you reach it here", so it goes
+            // first and the public name becomes the fallback. Without one,
+            // the public name leads and the discovered gateway follows.
+            //
+            // Do not GUESS the bridge address: 172.17.0.1 is the gateway for
+            // containers on the DEFAULT bridge only, and a container on a
+            // compose network has a different one.
+            $manual   = self::manualRoutes($settings);
+            $attempts = [];
+            if ($manual && filter_var($host, FILTER_VALIDATE_IP) === false) {
+                foreach ($manual as $alt) $attempts[] = [$alt, $host];
+                $attempts[] = [$host, null];
+            } else {
+                $attempts[] = [$host, null];
+                if (filter_var($host, FILTER_VALIDATE_IP) === false) {
+                    foreach (self::routes($settings) as $alt) $attempts[] = [$alt, $host];
+                }
             }
 
             $fp = null; $tried = [];
@@ -143,7 +162,10 @@ class SentCopy
                 $tried[] = $connectHost . ($ip && $ip !== $connectHost ? " ({$ip})" : '') . ': ' . $why;
             }
             if (!$fp) {
-                $out['error'] = 'connect failed on every route — ' . implode('; ', $tried);
+                $out['error'] = 'connect failed on every route — ' . implode('; ', $tried)
+                    . ($manual ? '. A configured route stopped working: if the container was '
+                               . 'recreated it will have lost the docker network it was attached to '
+                               . '(docker network connect <mail network> ucrm).' : '');
                 $out['tried'] = $tried;
                 return $out;
             }

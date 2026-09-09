@@ -166,3 +166,43 @@ Uganda seeds its own knowledge rather than editing it.
 
 **Still to check:** the Uganda install should have its own knowledge seeded
 (`tools/seed_knowledge.php`), or the AI will quote South Sudan prices.
+
+---
+
+## The working mail configuration, as established on the server
+
+Recorded here because three of these were discovered the hard way and none is
+obvious from the code.
+
+**The Sent-folder archive reaches Stalwart by container name, not by DNS.**
+`mail.dishnetuganda.com` resolves to the host's own public address; the uCRM
+container cannot connect back to it. uCRM was attached to the mail stack's
+docker network and `sent_copy_hosts` set to `stalwart`:
+
+```
+docker network connect dishnet-mail_default ucrm
+php tools/set_sent_copy.php --hosts stalwart --test
+```
+
+**This attachment is not durable.** If the uCRM container is recreated — an
+EasyPanel update, a stack redeploy — it loses that network and the archive
+starts failing again. The failure message says so. Re-run the
+`docker network connect` line; nothing else needs changing.
+
+**The Sent folder is called "Sent Items", not "Sent".** The configuration says
+`Sent` and that is fine: SentCopy asks the server which folder carries the
+`\Sent` flag and prefers it over the configured name.
+
+**uCRM serves no quotation PDF over its API on this install.** Every endpoint
+spelling answers 404 for a quote that exists. The plugin renders its own with
+wkhtmltopdf instead (`PluginQuotePdf`, previously dead code). Before that, the
+fetch failure made `QuotationService` fall back to letting uCRM send its own
+email, so the branded Uganda quotation was never what the customer received.
+
+**Quote `000001` renders with template id 1005 ("v4")** and carries fully
+correct Uganda organisation data — DishNet Africa Limited, TIN 1059140632,
+Reg 80046255496181, The Accacia Mall, Kampala, UGX, no VAT.
+
+**The archive is bookkeeping, not delivery.** It has never affected whether a
+customer receives mail. A failure here costs the operator visibility in
+webmail and nothing else.

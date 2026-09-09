@@ -248,5 +248,15 @@ $t('the renderer never throws into the quote path',
 $t('and the operator is told when a plugin-rendered PDF went out',
    strpos($qs, 'sent with a plugin-rendered PDF') !== false);
 
+echo "\nA configured route is tried first, not after a known failure\n";
+$t('an explicit sent_copy_hosts leads the attempt order',
+   strpos($sc, 'if ($manual && filter_var($host, FILTER_VALIDATE_IP) === false)') !== false);
+$t('and the public name remains as the fallback behind it',
+   preg_match('/foreach \\(\\$manual as \\$alt\\) \\$attempts\\[\\] = \\[\\$alt, \\$host\\];\s*\n\s*\\$attempts\\[\\] = \\[\\$host, null\\];/', $sc) === 1);
+$t('with nothing configured the public name still leads, as before',
+   strpos($sc, '$attempts[] = [$host, null];' . "\n" . '                if (filter_var($host, FILTER_VALIDATE_IP) === false) {') !== false);
+$t('a route that stopped working names the likely cause',
+   strpos($sc, 'lost the docker network') !== false);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
