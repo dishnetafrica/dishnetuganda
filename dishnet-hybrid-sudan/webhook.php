@@ -205,10 +205,19 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             'amount'       => (float)($quote['total'] ?? 0),
         ], '', $atts);
 
-        whLog($changeType ?: 'email', $r['sent']
-            ? "Quotation email sent to {$r['to']} (PDF: {$src})"
-            : "Quotation email NOT sent: {$r['reason']}");
+        if ($r['sent']) {
+            whLog($changeType ?: 'email', "Quotation email sent to {$r['to']} (PDF: {$src})");
+        } else {
+            // Give the claim back. It is taken BEFORE the work so two paths
+            // cannot both send, but a claim held after a failure is worse than
+            // the race it prevents: the quotation is then permanently
+            // unsendable by anyone, and the only symptom is silence.
+            CustomerEmailDispatcher::releaseClaim($pdo, "QEMAIL{$quoteId}");
+            whLog($changeType ?: 'email', "Quotation email NOT sent: {$r['reason']}");
+        }
     } catch (\Throwable $e) {
+        if (isset($pdo) && $pdo) CustomerEmailDispatcher::releaseClaim($pdo, "QEMAIL{$quoteId}");
+        whLog($changeType ?: 'email', 'Quotation email errored: ' . $e->getMessage());
         error_log('[whQuotationEmail] ' . $e->getMessage());
     }
 }

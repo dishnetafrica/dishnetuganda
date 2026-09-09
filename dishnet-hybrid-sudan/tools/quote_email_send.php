@@ -30,7 +30,7 @@ require_once $root . '/lib/EmailTemplate.php';
 require_once $root . '/lib/MailService.php';
 require_once $root . '/lib/QuotePdfSource.php';
 
-$opt     = getopt('', ['quote:', 'to:', 'dry-run', 'force']);
+$opt     = getopt('', ['quote:', 'to:', 'dry-run', 'force', 'clear-claim']);
 $quoteId = (int)($opt['quote'] ?? 0);
 $dry     = isset($opt['dry-run']);
 $force   = isset($opt['force']);
@@ -59,6 +59,34 @@ step('customer_email_quotation: ' . (!empty($eff['customer_email_quotation']) ? 
 if (!$on && !$force) {
     no('a switch is off — nothing would be sent. Use --force to test anyway.');
     exit(1);
+}
+
+// 1b. The once-only claim. The webhook takes it before doing the work so two
+//     paths cannot both send; if a run failed while holding it, the quotation
+//     becomes permanently unsendable and the only symptom is silence.
+require_once $root . '/lib/SqliteStore.php';
+$claimPdo = null;
+try { $claimPdo = SqliteStore::create($dataDir)->getPdo(); } catch (\Throwable $e) {}
+if ($claimPdo) {
+    $held = false;
+    try {
+        $st = $claimPdo->prepare('SELECT sent_at FROM notification_dedup WHERE dedup_key = ?');
+        $st->execute(["QEMAIL{$quoteId}"]);
+        $held = (string)($st->fetchColumn() ?: '');
+    } catch (\Throwable $e) {}
+    if ($held) {
+        if (isset($opt['clear-claim'])) {
+            CustomerEmailDispatcher::releaseClaim($claimPdo, "QEMAIL{$quoteId}");
+            ok("claim QEMAIL{$quoteId} (taken {$held}) cleared — the webhook may send again");
+        } else {
+            no("a claim on QEMAIL{$quoteId} is held from {$held}");
+            echo "       The webhook already took this quote and did not give it back, so\n";
+            echo "       it will refuse to send again. This tool ignores the claim, but the\n";
+            echo "       webhook will not. Clear it with --clear-claim.\n";
+        }
+    } else {
+        step("no claim held on QEMAIL{$quoteId}");
+    }
 }
 
 // 2. uCRM and the quote.

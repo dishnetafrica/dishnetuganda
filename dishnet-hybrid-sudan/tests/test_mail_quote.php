@@ -290,5 +290,19 @@ $t('a claim failure lets the email through rather than silencing it',
    strpos((string)file_get_contents($root . '/lib/CustomerEmailDispatcher.php'),
           'A broken claim must not silence the email') !== false);
 
+echo "\nA claim taken by the webhook is given back when the send fails\n";
+$wh3 = (string)file_get_contents($root . '/webhook.php');
+// The claim is taken before the work so two paths cannot both send. Held
+// after a failure, it makes the quotation permanently unsendable by anyone,
+// and the only symptom is silence — which is how quote #5 was lost.
+$t('the failure branch releases the claim',
+   preg_match('/releaseClaim\\(\\$pdo, "QEMAIL\\{\\$quoteId\\}"\\);\s*\n\s*whLog[^\n]*NOT sent/', $wh3) === 1);
+$t('a thrown exception releases it too',
+   preg_match('/catch \\(\\\\Throwable \\$e\\) \\{\s*\n\s*if \\(isset\\(\\$pdo\\)[^\n]*releaseClaim/', $wh3) === 1);
+$t('and the error is logged where the operator will look, not only to error_log',
+   strpos($wh3, "'Quotation email errored: '") !== false);
+$t('the send tool can see a stuck claim',
+   strpos((string)file_get_contents($root . '/tools/quote_email_send.php'), 'clear-claim') !== false);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
