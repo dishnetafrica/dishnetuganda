@@ -76,5 +76,15 @@ foreach ([
     t("{$page} routes to {$file}", $routed, true);
 }
 
+echo "\nTools read the webhook log with the keys whLog actually writes\n";
+$whSrc  = (string)file_get_contents(dirname(__DIR__) . '/webhook.php');
+$docSrc = (string)file_get_contents(dirname(__DIR__) . '/tools/quote_email_doctor.php');
+// The doctor printed blank timestamps for every row because it read 'at' and
+// 'time', which whLog has never written. Pin the real names.
+foreach (['received_at', 'message', 'event'] as $key) {
+    t("whLog writes '{$key}'",  strpos($whSrc,  "'{$key}'") !== false, true);
+    t("the doctor reads '{$key}'", strpos($docSrc, "'{$key}'") !== false, true);
+}
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

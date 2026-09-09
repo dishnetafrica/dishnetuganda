@@ -64,12 +64,13 @@ $log = is_file($logFile) ? (json_decode((string)@file_get_contents($logFile), tr
 
 $lastAt = ''; $events = 0;
 foreach ($log as $e) {
-    $at = (string)($e['at'] ?? $e['time'] ?? '');
+    $at = (string)($e['received_at'] ?? $e['at'] ?? $e['time'] ?? '');
     if ($at > $lastAt) $lastAt = $at;
     $events++;
 }
 if ($events > 0) {
-    ok("uCRM has delivered {$events} webhook event(s); the most recent at " . substr($lastAt, 0, 19));
+    ok("uCRM has delivered {$events} webhook event(s)"
+       . ($lastAt !== '' ? '; the most recent at ' . substr($lastAt, 0, 19) : ''));
 } else {
     no('no webhook event has EVER reached the plugin');
     echo "        Register the endpoint: php tools/webhook_setup.php\n";
@@ -91,11 +92,11 @@ if (!is_file($logFile)) {
     $log = json_decode((string)@file_get_contents($logFile), true) ?: [];
     $rows = [];
     foreach (array_reverse($log) as $e) {
-        $msg = (string)($e['msg'] ?? $e['message'] ?? '');
+        $msg = (string)($e['message'] ?? $e['msg'] ?? '');
         $ev  = (string)($e['event'] ?? '');
         if (stripos($ev, 'quote') === false && stripos($msg, 'quot') === false) continue;
         $rows[] = sprintf('    %-20s %-14s %s',
-            substr((string)($e['at'] ?? $e['time'] ?? ''), 0, 19), $ev, substr($msg, 0, 90));
+            substr((string)($e['received_at'] ?? $e['at'] ?? ''), 0, 19), $ev, substr($msg, 0, 90));
         if (count($rows) >= 12) break;
     }
     if (!$rows) {
