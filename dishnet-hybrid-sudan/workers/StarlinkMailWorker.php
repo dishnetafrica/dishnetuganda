@@ -143,6 +143,27 @@ class StarlinkMailWorker
             $c['confidence'], $c['action_required'] ? 1 : 0, $c['ai_model'], $msgId,
         ]);
 
+        // ── the kit register ─────────────────────────────────────────────
+        // Their email names hardware; this is the only moment we learn a
+        // serial exists before somebody reads it off a roof. Recorded, but
+        // never assigned to a customer here: the classifier matched this
+        // MESSAGE to a client, which is not the same as knowing whose hands
+        // the kit ended up in. A person records that, and their word wins.
+        //
+        // Failure here must never cost the routing below — the alert and the
+        // timeline entry matter more than the register.
+        try {
+            require_once dirname(__DIR__) . '/lib/KitRegister.php';
+            $kits = new KitRegister($this->pdo);
+            $kit  = $kits->noteFromSupplier((array)$c['extracted'], (string)$c['type']);
+            if ($kit !== '' && $clientId !== null) {
+                error_log('[starlink_mail] kit ' . $kit . ' seen in mail matched to client '
+                        . $clientId . ' — not assigned; a person records the handover');
+            }
+        } catch (\Throwable $e) {
+            error_log('[starlink_mail] kit register: ' . $e->getMessage());
+        }
+
         // ── route ────────────────────────────────────────────────────────
         $needsHuman = $c['action_required'] || $clientId === null || $c['confidence'] < self::MIN_CONFIDENCE;
         if ($needsHuman) {
