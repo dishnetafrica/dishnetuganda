@@ -216,6 +216,14 @@ if (empty($r['ok'])) {
 $rows = $r['data']['content']['results'] ?? $r['data']['results'] ?? [];
 if (!is_array($rows)) $rows = [];
 
+// Every service line carries the account it belongs to. Learning it here
+// saves an operator typing what the session already knows.
+foreach ($rows as $sl) {
+    if (is_array($sl) && trim((string)($sl['accountReferenceId'] ?? '')) !== '') {
+        $store->rememberAccount('', (string)$sl['accountReferenceId']);
+        break;
+    }
+}
 printf("  %-22s %d\n", 'service lines', count($rows));
 echo "  " . str_repeat('─', 64) . "\n";
 

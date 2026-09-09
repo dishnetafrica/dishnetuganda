@@ -161,6 +161,27 @@ class StarlinkSessionStore
             : ['ok' => false, 'error' => 'could not write the session store'];
     }
 
+    /**
+     * Record whose account this session is, learned rather than typed.
+     *
+     * Only fills a blank. An operator who set the account deliberately is not
+     * overruled by something read off a response, and a session that reports
+     * an account nobody entered is exactly the thing worth checking against
+     * the account they meant to use.
+     */
+    public function rememberAccount(string $email, string $number): void
+    {
+        $rec     = $this->load();
+        $changed = false;
+        if ($email !== '' && trim((string)$rec['account_email']) === '') {
+            $rec['account_email'] = $email; $changed = true;
+        }
+        if ($number !== '' && trim((string)$rec['account_number']) === '') {
+            $rec['account_number'] = $number; $changed = true;
+        }
+        if ($changed) $this->save($rec);
+    }
+
     /** Replace the cookie after a refresh handed us new values. */
     public function updateCookie(string $cookie): bool
     {

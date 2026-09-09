@@ -381,8 +381,26 @@ class StarlinkPortalConnector implements StarlinkConnector
         if (empty($r['ok'])) {
             return ['ok' => false, 'error' => (string)$r['error'], 'detail' => $this->lastDetail];
         }
-        $d = $r['data'];
-        $who = (string)($d['email'] ?? $d['contactEmail'] ?? $d['accountNumber'] ?? '');
+
+        // Who this session belongs to.
+        //
+        // The contact response does not carry the email at its top level, so
+        // verify reported the unhelpful "session accepted" while the operator
+        // screen showed the account as "(not set)" — a thing the session knew
+        // perfectly well and was never asked. The SSO endpoint answers it, and
+        // an account this connector can name is one an operator can check
+        // against the account they meant to use.
+        $who = '';
+        $sso = $this->ssoAlive();
+        if (!empty($sso['ok']) && $sso['email'] !== '') $who = (string)$sso['email'];
+
+        if ($who === '') {
+            $d   = $r['data'];
+            $who = (string)($d['content']['email'] ?? $d['email'] ?? $d['contactEmail'] ?? '');
+        }
+
+        if ($who !== '') $this->store->rememberAccount($who, '');
+
         return ['ok' => true, 'error' => '',
                 'detail' => $who !== '' ? $who : 'session accepted'];
     }

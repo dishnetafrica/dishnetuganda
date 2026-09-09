@@ -175,6 +175,38 @@ $r2 = $conn->get('/api/webagg/v2/accounts/service-lines');
 is_(strpos((string)$r2['error'], 'backing off') !== false,
     'and the next call does not even leave the building', (string)$r2['error']);
 
+echo "\nThe session says whose account it is, without being told\n";
+// verify reported "session accepted" while the operator screen showed the
+// account as "(not set)" — something the session knew and was never asked.
+$store = freshStore($tmp);
+$store->importCookie('Starlink.Com.Sso=abc', 'bhavin');
+$conn = new StarlinkPortalConnector($store, [], function (string $m, string $u, array $h, $b) {
+    if (strpos($u, '/auth-rp/auth/user') !== false) {
+        return ['code' => 200, 'body' => '{"email":"accounts@dishnetuganda.com"}',
+                'cookies' => [], 'error' => ''];
+    }
+    return ['code' => 200, 'body' => '{"content":{}}', 'cookies' => [], 'error' => ''];
+});
+$v = $conn->verify();
+is_(!empty($v['ok']), 'verify succeeds');
+is_($v['detail'] === 'accounts@dishnetuganda.com',
+    'and names the account instead of saying "session accepted"', (string)$v['detail']);
+is_($store->status()['account_email'] === 'accounts@dishnetuganda.com',
+    'which is remembered, so the status screen stops saying (not set)');
+
+echo "\nBut what a person set deliberately is never overruled\n";
+$store = freshStore($tmp);
+$store->importCookie('a=1', 'bhavin', 'chosen@dishnetuganda.com', 'ACC-TYPED');
+$store->rememberAccount('somethingelse@example.com', 'ACC-OTHER');
+is_($store->status()['account_email'] === 'chosen@dishnetuganda.com',
+    'a typed email stands');
+is_($store->status()['account_number'] === 'ACC-TYPED', 'and a typed number with it');
+$store2 = freshStore($tmp);
+$store2->importCookie('a=1', 'bhavin');
+$store2->rememberAccount('learned@dishnetuganda.com', 'ACC-LEARNED');
+is_($store2->status()['account_number'] === 'ACC-LEARNED',
+    'while a blank is filled from what the session knows');
+
 echo "\nThe keep-alive is what makes a session survive at all\n";
 // Starlink's access token expires in minutes when nothing uses it. Uganda's
 // session was accepted and rejected minutes later; South Sudan's has run for
