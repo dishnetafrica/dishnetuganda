@@ -53,9 +53,24 @@ if (in_array('--shape', array_slice($argv, 1), true)) {
         foreach ((array)$node as $k => $v) {
             $path = $prefix === '' ? (string)$k : $prefix . '.' . $k;
             if (is_array($v)) {
-                $isList = $v !== [] && array_keys($v) === range(0, count($v) - 1);
+                // An empty array decodes the same whether it was [] or {}, and
+                // printing it as "object" hid the finding that mattered:
+                // userTerminals is EMPTY on every line, which is why no serial
+                // was found. Say empty when it is empty.
+                if ($v === []) { printf("    %-46s %s\n", $path, 'EMPTY'); continue; }
+
+                $isList = array_keys($v) === range(0, count($v) - 1);
                 printf("    %-46s %s\n", $path, $isList ? 'list(' . count($v) . ')' : 'object');
-                $walk($isList ? ($v[0] ?? []) : $v, $path . ($isList ? '[0]' : ''), $depth + 1);
+
+                // Only descend into a container. Walking a string yields a
+                // phantom child at key 0 — addressLines[0].0 was that.
+                $next = $isList ? ($v[0] ?? null) : $v;
+                if (is_array($next)) $walk($next, $path . ($isList ? '[0]' : ''), $depth + 1);
+                elseif ($isList && $next !== null) {
+                    $show = (string)$next;
+                    printf("    %-46s %-5s %s\n", $path . '[0]', gettype($next),
+                        mb_strlen($show) > 40 ? mb_substr($show, 0, 37) . '...' : $show);
+                }
             } elseif (is_bool($v)) {
                 printf("    %-46s bool  %s\n", $path, $v ? 'true' : 'false');
             } elseif ($v === null) {
@@ -158,50 +173,54 @@ if ($rows === []) {
     exit(0);
 }
 
-printf("\n  %-22s %-18s %-10s %s\n", 'SERVICE LINE', 'KIT SERIAL', 'STATUS', 'NICKNAME');
-printf("  %s\n", str_repeat('-', 70));
+printf("\n  %-22s %-14s %-9s %-22s %s\n",
+    'SERVICE LINE', 'DISH', 'STATE', 'PLAN', 'ADDRESS');
+printf("  %s\n", str_repeat('-', 96));
 foreach (array_slice($rows, 0, 50) as $sl) {
     if (!is_array($sl)) continue;
     // The kit serial rides inside the service line rather than arriving from
     // an endpoint of its own — the discovery that makes KitSync a consumer of
     // this call instead of a separate fetch.
-    // Several plausible homes for the serial, because this response does not
-    // always put it where the fleet plugin found it. Whichever answers first
-    // is used; --shape says which one this account actually uses.
+    // Where the serial lives when there IS one. On this account every
+    // service line has an empty userTerminals, because none has a dish
+    // attached yet — pendingActivation is true on all ten. An em-dash here is
+    // the truth, not a lookup that failed.
     $serial = '';
     foreach ([$sl['userTerminals'][0]['serialNumber'] ?? null,
+              $sl['userTerminals'][0]['kitSerialNumber'] ?? null,
               $sl['userTerminal']['serialNumber']    ?? null,
               $sl['userTerminalSerialNumber']        ?? null,
-              $sl['kitSerialNumber']                 ?? null,
-              $sl['serialNumber']                    ?? null,
-              $sl['userTerminalId']                  ?? null] as $cand) {
+              $sl['kitSerialNumber']                 ?? null] as $cand) {
         if (is_string($cand) && trim($cand) !== '') { $serial = trim($cand); break; }
     }
 
-    // Printed as it arrives. A numeric status is a code we have not decoded,
-    // and rendering it as a word would be inventing a meaning for it.
-    $status = $sl['active'] ?? null;
-    $status = is_bool($status) ? ($status ? 'active' : 'inactive')
-            : (string)($sl['serviceLineStatus'] ?? $sl['status'] ?? '—');
+    // The subscription says in words what `status: 7` says in a code nobody
+    // has decoded. Prefer the words.
+    $sub    = is_array($sl['subscription'] ?? null) ? $sl['subscription'] : [];
+    $state  = '—';
+    if (!empty($sub['isSuspended']))            $state = 'suspended';
+    elseif (!empty($sub['isPaused']))           $state = 'paused';
+    elseif (!empty($sub['pendingActivation']))  $state = 'pending';
+    elseif (!empty($sub['active']))             $state = 'active';
+    elseif (array_key_exists('active', $sub))   $state = 'inactive';
 
-    printf("  %-22s %-18s %-10s %s\n",
+    printf("  %-22s %-14s %-9s %-22s %s\n",
         substr((string)($sl['serviceLineNumber'] ?? ''), 0, 22),
-        substr($serial, 0, 18) ?: '—',
-        substr($status, 0, 10),
-        substr((string)($sl['nickname'] ?? ''), 0, 24));
+        $serial !== '' ? substr($serial, 0, 14) : 'no dish yet',
+        $state,
+        substr((string)($sub['productDescription'] ?? ''), 0, 22),
+        substr((string)($sl['serviceAddress']['formattedAddress'] ?? ''), 0, 30));
 }
 
-$noSerials = true;
+$pending = 0;
 foreach ($rows as $sl) {
-    if (!is_array($sl)) continue;
-    foreach ($sl as $k => $v) {
-        if (stripos((string)$k, 'serial') !== false && is_string($v) && $v !== '') $noSerials = false;
-    }
+    if (is_array($sl) && !empty($sl['subscription']['pendingActivation'])) $pending++;
 }
-if ($noSerials) {
-    echo "\n  No kit serial was found in any of these. That is a mapping problem,\n";
-    echo "  not an empty account — run --shape to see where this response puts\n";
-    echo "  it, rather than guessing a second time.\n";
+if ($pending > 0) {
+    echo "\n  {$pending} of these have no dish attached yet (pendingActivation).\n";
+    echo "  An empty DISH column there is the account's real state, not a\n";
+    echo "  lookup that failed — the serial appears once a terminal is\n";
+    echo "  assigned to the line.\n";
 }
 
 echo "\n  Nothing was stored. Phase 2 is what starts keeping it.\n\n";
