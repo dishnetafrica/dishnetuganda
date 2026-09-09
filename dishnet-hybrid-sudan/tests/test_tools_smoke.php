@@ -54,6 +54,7 @@ $runs = [
     ['kits.php',                  [],         'lists Starlink equipment from StockService'],
     ['starlink_session.php',      [],         'reports the Starlink session state'],
     ['starlink_probe.php',        [],         'refuses to probe without a session'],
+    ['cron_status.php',           ['--all'],  'reports which scheduled jobs have run'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
