@@ -225,7 +225,7 @@ encryption key crosses from Sudan to Uganda.
 | `session_manager.php` `smCurl()` | `StarlinkPortalConnector::request()` | **Reuse, adapted** | Working HTTP layer with the right headers and cookie capture. Becomes a method, not a global. |
 | `smBuildHeaders()` | `StarlinkPortalConnector::headers()` | **Reuse** | The header set Starlink accepts. Guessing this again would mean rediscovering it by getting rejected. |
 | `smMergeCookies()` | `StarlinkPortalConnector::mergeCookies()` | **Reuse** | `Set-Cookie` merging is fiddly and this version is proven against the live portal. |
-| `smPickFingerprint()` | `StarlinkPortalConnector::fingerprint()` | **Reuse** | A stable fingerprint per session. |
+| `smPickFingerprint()` | — | **Not ported — corrected** | My first draft said reuse. Reading the source says otherwise: their v2.7.35 note records that rotating user agents and fingerprints was tried as anti-ban protection, broke telemetry calls, and was reverted to a fixed nine-header set that had worked for months. The function survives only in the WiFi manager. Inheriting the fix means not repeating the experiment. |
 | `smPaceRequest()`, `smIsThrottled()`, `smRecordThrottle()`, `smClearThrottle()` | `StarlinkPortalConnector` throttle methods | **Reuse** | Skipping throttle handling is how a session gets flagged. Uganda's throttle state file is its own. |
 | `smHeartbeat()` | `StarlinkPortalConnector::heartbeat()` | **Reuse** | Verifies a refreshed cookie actually works before it is kept. |
 | `smSilentReauth()` | `StarlinkPortalConnector::refresh()` | **Reuse** | Both refresh endpoints and the alternation between them. |

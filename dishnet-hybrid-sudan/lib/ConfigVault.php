@@ -72,6 +72,12 @@ class ConfigVault
         'email_ai_mailbox_pw',
         'email_ai_jmap_resolve',
         'email_ai_jmap_via',
+        // The Starlink account this install syncs from. The session cookie is
+        // NOT here — it lives encrypted in starlink_session.json, because a
+        // vault that survives a re-install should not also survive it holding
+        // somebody's live session.
+        'starlink_account_email',
+        'starlink_account_number',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string
