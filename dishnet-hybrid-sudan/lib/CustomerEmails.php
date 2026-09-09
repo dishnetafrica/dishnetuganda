@@ -50,7 +50,11 @@ class CustomerEmails
     private static function cur(array $c): string
     {
         $x = trim((string)($c['email_currency'] ?? ($c['ai_currency'] ?? '')));
-        return $x !== '' ? $x : 'UGX';
+        if ($x === '') return 'UGX';
+        // A three-letter code is an ISO code and is written in capitals. One
+        // install had it stored lowercase and a customer was quoted "ugx 0",
+        // which reads like a placeholder somebody forgot to fill in.
+        return preg_match('/^[A-Za-z]{3}$/', $x) ? strtoupper($x) : $x;
     }
 
     private static function amt(array $c, $v): string

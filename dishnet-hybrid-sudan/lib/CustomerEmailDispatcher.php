@@ -204,7 +204,14 @@ class CustomerEmailDispatcher
                 return $this->result(false, 'already sent', $email);
             }
 
-            $built = CustomerEmails::render($key, $this->config, $data + ['name' => $name]);
+            // effectiveConfig, not $this->config. The webhook hydrates its
+            // config from the SqliteStore copy, which never learned the
+            // email_* branding keys — so a webhook-sent quotation carried the
+            // Sudan defaults: "DishNet Africa Ltd." instead of the registered
+            // "DishNet Africa Limited". The switches were fixed for this
+            // reason already; the rendering needed the same treatment.
+            $built = CustomerEmails::render($key, self::effectiveConfig($this->config),
+                                            $data + ['name' => $name]);
             $mail  = new MailService($this->dataDir);
             if (!$mail->getConfig()) {
                 return $this->result(false, 'plugin mail is not configured', $email);

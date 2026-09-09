@@ -169,7 +169,8 @@ function whCustomerEmail(string $key, int $clientId, string $name, array $data,
  * the app cannot produce two emails.
  */
 function whQuotationEmail(int $quoteId, int $clientId, string $name, array $client,
-                          array $config, string $dataDir, $crm, $store, string $changeType = ''): void
+                          array $config, string $dataDir, $crm, $store, string $changeType = '',
+                          array $quote = [], string $quoteNum = '', float $amount = 0.0): void
 {
     try {
         // Say why, always. The first version returned silently when the switch
@@ -192,8 +193,13 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
         require_once __DIR__ . '/lib/QuotePdfSource.php';
         [$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client);
 
-        $quote  = $crm->get("billing/quotes/{$quoteId}") ?: [];
-        $number = (string)($quote['number'] ?? $quoteId);
+        // The case has already resolved these, falling back to the entity in
+        // the webhook payload when the API does not answer. Re-fetching here
+        // threw that away: the second call came back empty, so the customer
+        // was sent "Quotation 8" for UGX 0 instead of "Quotation 000008" for
+        // UGX 2,749,000. Never re-derive what the caller already has.
+        $number = $quoteNum !== '' ? $quoteNum : (string)($quote['number'] ?? $quoteId);
+        $total  = $amount > 0 ? $amount : (float)($quote['total'] ?? 0);
         $atts   = $pdf !== ''
             ? [['name' => "Quotation-{$number}.pdf", 'mime' => 'application/pdf', 'content' => $pdf]]
             : [];
@@ -204,8 +210,8 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             // and is then greeted by its full name rather than its first word.
             'first_name'   => (string)($client['firstName'] ?? ''),
             'quote_number' => $number,
-            'total'        => (float)($quote['total'] ?? 0),
-            'amount'       => (float)($quote['total'] ?? 0),
+            'total'        => $total,
+            'amount'       => $total,
         ], '', $atts);
 
         if ($r['sent']) {
@@ -2244,7 +2250,8 @@ switch ($changeType) {
         // Before the phone gate below: a customer who gave us an email address
         // but no phone number should still receive their quotation.
         whQuotationEmail($quoteId, (int)$clientId, $name, $client,
-                         $config, $dataDir, $crm, $store, $changeType);
+                         $config, $dataDir, $crm, $store, $changeType,
+                         $quote, $quoteNum, (float)$amount);
 
         if ($phone && $amount > 0) {
             // ── KYC quote check: let cron_quote_wa handle ALL plugin-generated quotes ──

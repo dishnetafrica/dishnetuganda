@@ -145,6 +145,47 @@ is_(strpos($wh2, 'Quotation email skipped: the quotation switch is off') !== fal
 
 @unlink($cfgDir . '/kyc_config.json'); @rmdir($cfgDir);
 
+echo "\nA webhook-sent email carries the install's own brand, not the defaults\n";
+// The switches were fixed to read from disk; the RENDERING was not, so a
+// webhook-sent quotation went out as "DishNet Africa Ltd." — the Sudan
+// default — while the same email from the CLI said "DishNet Africa Limited".
+$brandDir = sys_get_temp_dir() . '/ced_brand_' . bin2hex(random_bytes(4));
+@mkdir($brandDir, 0777, true);
+file_put_contents($brandDir . '/kyc_config.json', json_encode([
+    'customer_emails_enabled' => 1, 'customer_email_quotation' => 1,
+    'email_company_name' => 'DishNet Africa Limited', 'email_currency' => 'UGX',
+]));
+$probe = <<<'SUB'
+$root = __ROOT__; $GLOBALS['dataDir'] = __CFG__;
+require_once $root . '/lib/CustomerEmailDispatcher.php';
+require_once $root . '/lib/CustomerEmails.php';
+// An EMPTY caller array — the stale store copy the webhook actually holds.
+$eff = CustomerEmailDispatcher::effectiveConfig([]);
+$o = CustomerEmails::quotation($eff, ['name' => 'Secure Solutions',
+        'quote_number' => '000008', 'total' => 2749000]);
+echo (strpos($o['html'], 'DishNet Africa Limited') !== false ? 'BRAND_OK' : 'BRAND_STALE');
+echo (strpos($o['html'], 'DishNet Africa Ltd.') === false ? ' NO_SUDAN' : ' SUDAN_LEAK');
+SUB;
+$code = str_replace(['__ROOT__', '__CFG__'],
+                    [var_export($root, true), var_export($brandDir, true)], $probe);
+$out = []; exec('php -r ' . escapeshellarg($code) . ' 2>&1', $out);
+$got = trim(implode('', $out));
+is_(strpos($got, 'BRAND_OK') !== false,
+    'the registered company name is used, not the Sudan default', 'got: ' . $got);
+is_(strpos($got, 'NO_SUDAN') !== false, 'and no Sudan default leaks through');
+
+$srcD = (string)file_get_contents($root . '/lib/CustomerEmailDispatcher.php');
+is_(strpos($srcD, 'CustomerEmails::render($key, self::effectiveConfig($this->config)') !== false,
+    'render() is handed the on-disk config, not the caller\'s array');
+
+$wh4 = (string)file_get_contents($root . '/webhook.php');
+is_(strpos($wh4, '$quote, $quoteNum, (float)$amount);') !== false,
+    'the webhook passes the quote it already resolved instead of re-fetching');
+is_(strpos($wh4, '$crm->get("billing/quotes/{$quoteId}") ?: [];') === false,
+    'and the second fetch that returned nothing is gone');
+
+@unlink($brandDir . '/kyc_config.json'); @rmdir($brandDir);
+
 echo "\nThe wiring is where the events actually happen\n";
 $wh = (string)file_get_contents($root . '/webhook.php');
 foreach ([
