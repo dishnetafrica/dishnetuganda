@@ -71,6 +71,28 @@ is_(!isset($v4['config']['email_ai_mailbox_pw']), 'the key is gone');
 is_(($v4['config']['email_ai_mailbox'] ?? '') === 'accounts@dishnetuganda.com',
     'and the rest of the vault is untouched');
 
+echo "\nThe vault does not forget what it is holding\n";
+// It lost a live mailbox password. refresh() runs on every config load, under
+// whichever account happens to be running, and rebuilt the snapshot purely
+// from the config it was handed. A root-written 0600 vault that nginx could
+// not read looked like an empty vault, and the next web request wrote that
+// emptiness back.
+ConfigVault::store($pluginRoot, $dataDir, ['email_ai_mailbox_pw' => 'survives']);
+
+// A load that knows nothing about the mailbox — as a partial code path, or a
+// process that could not read a file, would see.
+$after = ConfigVault::apply($pluginRoot, $dataDir, ['currency_code' => 'UGX']);
+$v5 = json_decode((string)file_get_contents($file), true);
+is_(($v5['config']['email_ai_mailbox_pw'] ?? '') === 'survives',
+    'a load carrying other keys does not drop the password',
+    json_encode(array_keys($v5['config'] ?? [])));
+is_(($after['email_ai_mailbox_pw'] ?? '') === 'survives',
+    'and it is handed back to the caller that lacked it');
+
+$mode5 = substr(sprintf('%o', fileperms($file)), -4);
+is_($mode5 !== '0600', 'the refresh writes through SecureFile, not a bare 0600',
+    'mode: ' . $mode5);
+
 echo "\nThe tool will not take a password from the command line\n";
 $src = (string)file_get_contents($root . '/tools/set_mailbox_password.php');
 is_(strpos($src, 'Do not pass the password as an argument') !== false,

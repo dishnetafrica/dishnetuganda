@@ -210,7 +210,22 @@ class ConfigVault
     /** Write the vault only when its content actually changed. */
     private static function refresh(string $file, string $dataDir, array $config, array $previous = []): void
     {
+        // Start from what the vault already holds, not from nothing.
+        //
+        // Rebuilding the snapshot purely from $config means any key the caller
+        // happens not to have — because a file was unreadable, because uCRM
+        // wrote it empty, because this code path only loads part of the
+        // configuration — is dropped from the vault entirely. The vault exists
+        // to survive exactly those moments. It already refuses to forget the
+        // webhook secret when the file is briefly absent; the same reasoning
+        // applies to every key in it, and not applying it cost a password.
+        //
+        // Removing a key from the vault is therefore deliberate only:
+        // ConfigVault::store() with an empty value does it, nothing else.
         $snap = ['config' => []];
+        foreach ((array)($previous['config'] ?? []) as $k => $v) {
+            if (in_array($k, self::VAULT_KEYS, true)) $snap['config'][$k] = $v;
+        }
         foreach (self::VAULT_KEYS as $k) {
             if (array_key_exists($k, $config)
                 && !(is_string($config[$k]) && trim($config[$k]) === '')) {
@@ -236,10 +251,17 @@ class ConfigVault
         if (is_file($file) && (string)@file_get_contents($file) === $json) {
             return;
         }
-        $tmp = $file . '.tmp';
-        if (@file_put_contents($tmp, $json) !== false) {
-            @chmod($tmp, 0600);
-            @rename($tmp, $file);
-        }
+
+        // Through SecureFile, not a bare 0600.
+        //
+        // This runs on every config load, under whichever account happens to
+        // be running: root from a docker exec, nginx from a web request. A
+        // 0600 file written by root cannot be read by nginx — and an unreadable
+        // vault reads as an EMPTY vault, which is how a live mailbox password
+        // was lost. The root CLI stored it, a later root load rewrote the file
+        // as root-owned 0600, and the next web request could not read it, so it
+        // rebuilt the vault from a config that no longer had the password in it.
+        require_once __DIR__ . '/SecureFile.php';
+        SecureFile::write($file, $json);
     }
 }

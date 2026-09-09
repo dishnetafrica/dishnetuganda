@@ -261,7 +261,7 @@
     {
       "key": "email_ai_mailbox_pw",
       "label": "Inbound mail: mailbox password",
-      "description": "SECRET. Stored encrypted and never shown on the plugin page or written to logs.",
+      "description": "SECRET. Held in the plugin data directory, readable only by the plugin. Never shown on the plugin page and never written to logs.",
       "required": 0,
       "type": "text"
     }
