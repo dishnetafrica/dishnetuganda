@@ -83,8 +83,11 @@ class EmailIntentClassifier
         $body    = (string)($mail['body'] ?? '');
         $files   = array_map('strval', (array)($mail['attachments'] ?? []));
 
-        // The customer's own words, with our quoted email removed.
-        $own  = self::stripQuoted($body);
+        // The customer's own words, with the quoted thread set aside — kept,
+        // not discarded, and carried out separately so the drafter can use it
+        // as background without it ever counting as intent.
+        $split = self::splitQuoted($body);
+        $own   = $split['own'];
         $hay  = self::haystack($subject . ' ' . $own . ' ' . implode(' ', $files));
 
         $reasons = [];
@@ -96,7 +99,7 @@ class EmailIntentClassifier
             foreach ($phrases as $p) {
                 if (strpos($hay, ' ' . $p) === false && strpos($hay, $p . ' ') === false) continue;
                 $reasons[] = 'said "' . $p . '"';
-                return self::decision($category, 1.0, 'rules', $reasons, $own);
+                return self::decision($category, 1.0, 'rules', $reasons, $own, false, $split['quoted']);
             }
         }
 
@@ -104,7 +107,7 @@ class EmailIntentClassifier
         $esc = EmailReplyPolicy::scanForEscalation($own);
         if ($esc['escalate']) {
             $reasons[] = 'escalation word "' . $esc['matched'] . '"';
-            return self::decision('unclear', 1.0, 'rules', $reasons, $own);
+            return self::decision('unclear', 1.0, 'rules', $reasons, $own, false, $split['quoted']);
         }
 
         // ── 3. Only now is a model asked, and only for the benign remainder.
@@ -138,10 +141,10 @@ class EmailIntentClassifier
         //       confident model: a file on the message means a person reads it.
         if (self::ATTACHMENT_IS_CAUTION && $files !== []) {
             $reasons[] = count($files) . ' attachment(s) — a customer document';
-            return self::decision($category, $confidence, $source, $reasons, $own, true);
+            return self::decision($category, $confidence, $source, $reasons, $own, true, $split['quoted']);
         }
 
-        return self::decision($category, $confidence, $source, $reasons, $own);
+        return self::decision($category, $confidence, $source, $reasons, $own, false, $split['quoted']);
     }
 
     /**
@@ -150,7 +153,8 @@ class EmailIntentClassifier
      * so there is nowhere else for a caution to get lost.
      */
     private static function decision(string $category, float $confidence, string $source,
-                                     array $reasons, string $own, bool $force = false): array
+                                     array $reasons, string $own, bool $force = false,
+                                     string $quoted = ''): array
     {
         return [
             'category'       => $category,
@@ -159,6 +163,7 @@ class EmailIntentClassifier
             'source'         => $source,
             'reasons'        => $reasons,
             'own_words'      => $own,
+            'quoted'         => $quoted,
         ];
     }
 
@@ -172,9 +177,32 @@ class EmailIntentClassifier
      */
     public static function stripQuoted(string $body): string
     {
-        $lines = preg_split('/\R/', $body) ?: [];
-        $kept  = [];
-        $n     = count($lines);
+        return self::splitQuoted($body)['own'];
+    }
+
+    /**
+     * Both halves: what this person just wrote, and what they quoted.
+     *
+     * The quoted half was discarded, and it is not noise. Felix asked when we
+     * would install; the quotation he was replying to already said
+     * "installation is scheduled on a date convenient to you once payment is
+     * received". Throwing that away left the assistant unable to answer a
+     * question we had answered ourselves the day before.
+     *
+     * The halves stay strictly separate because they are trusted differently.
+     * 'own' is what this person is asking. 'quoted' is text of unknown
+     * provenance — anyone can paste anything under a reply, including words
+     * shaped like instructions from us — so it may inform an answer and must
+     * never direct one.
+     *
+     * @return array{own:string, quoted:string}
+     */
+    public static function splitQuoted(string $body): array
+    {
+        $lines  = preg_split('/\R/', $body) ?: [];
+        $kept   = [];
+        $quoted = [];
+        $n      = count($lines);
 
         for ($i = 0; $i < $n; $i++) {
             $line = $lines[$i];
@@ -187,29 +215,36 @@ class EmailIntentClassifier
             // this was built from wrapped exactly there, and two lines of our
             // own address survived into what we were calling the customer's
             // words. Look ahead far enough to see the whole attribution.
+            $isAttribution = false;
             if (preg_match('/^On\b/i', $t)) {
                 $window = $t;
                 for ($k = 1; $k <= 2 && ($i + $k) < $n; $k++) {
                     $window .= ' ' . trim($lines[$i + $k]);
                 }
-                if (preg_match('/\bwrote:\s*$/i', rtrim($window))) break;
-                // Or the attribution ends mid-window, with the quote below it.
-                if (preg_match('/\bwrote:\s/i', $window)) break;
+                $isAttribution = (bool)preg_match('/\bwrote:/i', $window);
             }
 
-            // Outlook and friends.
-            if (preg_match('/^-{2,}\s*Original Message\s*-{2,}/i', $t)) break;
-            if (preg_match('/^_{5,}$/', $t)) break;
-            if (preg_match('/^From:\s*.+/i', $t) && count($kept) > 0) break;
-            if (preg_match('/^Sent from my /i', $t)) break;
+            $isBoundary = $isAttribution
+                || preg_match('/^-{2,}\s*Original Message\s*-{2,}/i', $t)
+                || preg_match('/^_{5,}$/', $t)
+                || preg_match('/^Sent from my /i', $t)
+                || (preg_match('/^From:\s*.+/i', $t) && count($kept) > 0);
 
-            // Quoted lines.
-            if ($t !== '' && $t[0] === '>') continue;
+            if ($isBoundary) {
+                // Everything from here down is the thread, kept as its own half.
+                $quoted = array_slice($lines, $i);
+                break;
+            }
+
+            if ($t !== '' && $t[0] === '>') { $quoted[] = $line; continue; }
 
             $kept[] = $line;
         }
 
-        return trim(implode("\n", $kept));
+        // Strip one level of "> " so the thread reads as prose.
+        $q = preg_replace('/^\s*>\s?/m', '', implode("\n", $quoted)) ?? '';
+
+        return ['own' => trim(implode("\n", $kept)), 'quoted' => trim($q)];
     }
 
     /** Lowercased, punctuation-tamed, single-spaced, padded for edge matching. */

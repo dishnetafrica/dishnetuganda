@@ -252,9 +252,12 @@ class InboundMailWorker
         // 'account' and 'constraints', so it received a message with no
         // context and no rules and did the only sensible thing with it.
         $context = [
-            'message' => (string)$intent['own_words'],
-            'channel' => self::channelFor((string)$intent['category']),
-            'medium'  => 'email',
+            'message'     => (string)$intent['own_words'],
+            'channel'     => self::channelFor((string)$intent['category']),
+            'medium'      => 'email',
+            'attachments' => array_map('strval', (array)($mail['attachments'] ?? [])),
+            'thread'      => (string)($intent['quoted'] ?? ''),
+            'signature'   => self::signature($this->config),
         ];
 
         // Account facts, only when we actually know whose account it is. A
@@ -315,6 +318,26 @@ class InboundMailWorker
         }
 
         return $reply;
+    }
+
+    /**
+     * How a DishNet email is signed.
+     *
+     * Left to invent one, the model wrote "DishNet Team" — which appears on no
+     * other email this company sends. Built from the same branding keys as
+     * every template, so a draft and a real notification sign off alike.
+     */
+    public static function signature(array $config): string
+    {
+        require_once __DIR__ . '/EmailTemplate.php';
+        $b = EmailTemplate::brand($config);
+
+        $line = 'Warm regards,' . "\n" . $b['company_name'];
+        $bits = array_values(array_filter([$b['support_phone'], $b['website']]));
+        if ($bits !== []) $line .= "\n" . implode(' · ', $bits);
+        if (trim((string)$b['badge_line']) !== '') $line .= "\n" . $b['badge_line'];
+
+        return $line;
     }
 
     /**

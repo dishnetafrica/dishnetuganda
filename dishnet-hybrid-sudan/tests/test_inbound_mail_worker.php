@@ -95,7 +95,15 @@ $felix = [
                    . "<accounts@dishnetuganda.com> wrote:\n> Dear Felix,\n> Business 1TB — UGX 1,645,440\n",
 ];
 
-$config = ['email_reply_to' => 'accounts@dishnetuganda.com'];
+// The live box's branding. Without it, brand() correctly falls back to the
+// Sudan defaults — which is the behaviour, not the bug.
+$config = [
+    'email_reply_to'      => 'accounts@dishnetuganda.com',
+    'email_company_name'  => 'DishNet Africa Limited',
+    'email_support_phone' => '+256 705 993 348',
+    'email_website'       => 'dishnetuganda.com',
+    'email_badge_line'    => 'UCC Authorised Starlink Installer',
+];
 
 function newWorker(array $emails, $crm, $brain, array $config): array
 {
@@ -243,6 +251,30 @@ is_(strpos($src, 'MailService') === false, 'it does not name the mailer');
 is_(preg_match('/->\s*send\s*\(/', $src) === 0, 'it calls nothing named send()');
 is_(strpos($src, EmailDraftStore::class . '::SENT') === false
     && strpos($src, "'sent'") === false, 'and never writes a sent status');
+
+echo "\nThe thread and the attachment reach the drafter\n";
+// Felix asked when we would install. The quotation he was replying to already
+// said "installation is scheduled once payment is received" — discarding the
+// quoted half left the assistant unable to answer a question we had answered
+// ourselves the day before. And a business that sends a purchase order and
+// gets no acknowledgement has to ask again.
+is_(($ctx['thread'] ?? '') !== '', 'the quoted thread is passed as background');
+is_(strpos((string)($ctx['thread'] ?? ''), 'Business 1TB') !== false,
+    'carrying what we had already told them', substr((string)($ctx['thread'] ?? ''), 0, 120));
+is_(strpos((string)($ctx['message'] ?? ''), 'Business 1TB') === false,
+    'while their own words stay free of it — background is not intent');
+is_(in_array('DISHNET PO 090926 INTERNET SERVICE.pdf', (array)($ctx['attachments'] ?? []), true),
+    'the attachment is named so the reply can acknowledge it',
+    json_encode($ctx['attachments'] ?? null));
+
+echo "\nAnd it is told how to sign\n";
+is_(strpos((string)($ctx['signature'] ?? ''), 'DishNet Africa Limited') !== false,
+    'with the registered company name, not an invented "DishNet Team"',
+    (string)($ctx['signature'] ?? ''));
+$sigSrc = InboundMailWorker::signature(['email_company_name' => 'X Ltd',
+                                        'email_support_phone' => '+256 1', 'email_website' => 'x.com']);
+is_(strpos($sigSrc, 'X Ltd') !== false && strpos($sigSrc, '+256 1') !== false,
+    'built from the same branding keys as every other email', $sigSrc);
 
 echo "\nA dry run can show its work\n";
 $item = $run['items'][0];
