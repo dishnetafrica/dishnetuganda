@@ -10,6 +10,7 @@ chdir(dirname(__DIR__));
  *   php tools/inbound_mail_run.php --list          show what is waiting for a person
  *   php tools/inbound_mail_run.php --show 7        read one draft in full
  *   php tools/inbound_mail_run.php --forget 7      drop it so it is drafted again
+ *   php tools/inbound_mail_run.php --to-drafts     file pending drafts in the mailbox
  *   php tools/inbound_mail_run.php --since 2026-09-09T00:00:00Z
  *
  * Nothing this tool can do reaches a customer. Drafts wait in the inbox until
@@ -30,6 +31,9 @@ require_once $root . '/lib/CrmApiClient.php';
 require_once $root . '/lib/DishNetAiBrain.php';
 require_once $root . '/lib/EmailTemplate.php';
 require_once $root . '/lib/CustomerEmailDispatcher.php';
+require_once $root . '/lib/MailService.php';
+require_once $root . '/lib/SentCopy.php';
+require_once $root . '/lib/DraftMailCopy.php';
 foreach (['EmailReplyPolicy', 'EmailIntentClassifier', 'EmailCustomerMatcher',
           'InboundMailFilter', 'EmailDraftStore', 'JmapMailbox',
           'InboundMailWorker'] as $c) {
@@ -66,6 +70,50 @@ if ($has('--list')) {
     }
     echo "\n  php tools/inbound_mail_run.php --show <id>   to read one\n\n";
     exit(0);
+}
+
+if ($has('--to-drafts')) {
+    // The approval inbox that already exists on every desk is the mail client.
+    $esFile = $dataDir . '/email_settings.json';
+    $es     = is_file($esFile)
+        ? (json_decode((string)@file_get_contents($esFile), true) ?: [])
+        : [];
+
+    if (empty($es['sent_copy_enabled'])) {
+        echo "\n  The mailbox copy is not configured, so there is nowhere to file a\n";
+        echo "  draft. It uses the same IMAP settings as the Sent-folder archive:\n\n";
+        echo "    php tools/set_sent_copy.php --show\n\n";
+        exit(1);
+    }
+
+    $pending = $store->unplaced(25);
+    if ($pending === []) {
+        echo "\n  Nothing to file. Every pending draft with a body is already in the\n";
+        echo "  mailbox, or is empty and must be written by hand.\n\n";
+        exit(0);
+    }
+
+    echo "\n  Filing " . count($pending) . " draft(s) into the mailbox\n\n";
+    $filed = 0;
+    foreach ($pending as $d) {
+        $r = DraftMailCopy::place($es, $d, $config);
+        if (!empty($r['ok'])) {
+            $store->markPlaced((int)$d['id'], (string)$r['folder']);
+            $filed++;
+            printf("  FILED   %-4d %-26s → %s\n", $d['id'],
+                substr((string)$d['from_addr'], 0, 26), (string)$r['folder']);
+        } else {
+            printf("  FAILED  %-4d %-26s %s\n", $d['id'],
+                substr((string)$d['from_addr'], 0, 26), (string)$r['error']);
+        }
+    }
+    echo "\n  {$filed} draft(s) now waiting in the Drafts folder of "
+       . (string)($config['email_ai_mailbox'] ?? 'the mailbox') . ".\n";
+    echo "  Open webmail, edit if needed, and send — that is the approval.\n\n";
+    echo "  Note: a draft sent from webmail is sent somewhere this plugin cannot\n";
+    echo "  see, so its row here will still read \"pending\". The reply is real;\n";
+    echo "  our record of it is not.\n\n";
+    exit($filed > 0 ? 0 : 1);
 }
 
 if ($has('--forget')) {

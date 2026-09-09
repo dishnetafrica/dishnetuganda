@@ -59,6 +59,13 @@ class EmailDraftStore
                 error          TEXT    NOT NULL DEFAULT '',
                 created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
              )");
+        // Added after the table shipped, so it is an ALTER rather than part of
+        // the CREATE above. Filing the same draft into the mailbox twice would
+        // put two near-identical replies in front of a person, who then has to
+        // work out whether they differ.
+        try { $this->pdo->exec("ALTER TABLE email_drafts ADD COLUMN placed_at TEXT NOT NULL DEFAULT ''"); }
+        catch (\Throwable $e) { /* already there */ }
+
         foreach ([
             'CREATE INDEX IF NOT EXISTS idx_ed_status  ON email_drafts(status, created_at)',
             'CREATE INDEX IF NOT EXISTS idx_ed_from    ON email_drafts(from_addr, created_at)',
@@ -200,6 +207,28 @@ class EmailDraftStore
         $st = $this->pdo->prepare('DELETE FROM email_drafts WHERE id = ? AND status <> ?');
         $st->execute([$id, self::SENT]);
         return ['ok' => $st->rowCount() > 0, 'error' => ''];
+    }
+
+    /** Record that this draft now exists in the mailbox's Drafts folder. */
+    public function markPlaced(int $id, string $folder): bool
+    {
+        $st = $this->pdo->prepare(
+            'UPDATE email_drafts SET placed_at = :at WHERE id = :id AND placed_at = ""');
+        $st->execute([':at' => gmdate('Y-m-d H:i:s') . ' ' . $folder, ':id' => $id]);
+        return $st->rowCount() > 0;
+    }
+
+    /** Pending drafts that have a body and are not yet in the mailbox. */
+    public function unplaced(int $limit = 25): array
+    {
+        $st = $this->pdo->prepare(
+            'SELECT * FROM email_drafts
+              WHERE status = :s AND placed_at = "" AND TRIM(draft_body) <> ""
+              ORDER BY id LIMIT :l');
+        $st->bindValue(':s', self::PENDING);
+        $st->bindValue(':l', $limit, PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function prune(int $days = 90): int

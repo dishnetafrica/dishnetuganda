@@ -50,6 +50,7 @@ $runs = [
     ['config_trace.php',          ['email_ai_mailbox_pw'], 'traces a config key through its layers'],
     ['jmap_probe.php',            [],         'probes for a JMAP endpoint'],
     ['ai_facts.php',              [],         'shows what the assistant tells customers'],
+    ['inbound_mail_run.php',      ['--to-drafts'], 'reports that draft filing is unconfigured'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {

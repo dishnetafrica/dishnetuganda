@@ -71,8 +71,21 @@ class SentCopy
     }
 
     /** @return array{ok:bool,error:string,folder:string} */
-    public static function append(array $settings, string $rawMessage): array
+    /**
+     * @param array $opts  Which folder this message belongs in. Defaults are
+     *                     the Sent folder exactly as before, so every existing
+     *                     caller behaves identically:
+     *                       folders  string[] candidate names to try
+     *                       special  the IMAP special-use flag to prefer
+     *                       flags    the flags to APPEND with
+     */
+    public static function append(array $settings, string $rawMessage, array $opts = []): array
     {
+        $folderNames  = (array)($opts['folders'] ?? []);
+        $specialFlag  = (string)($opts['special'] ?? '\\Sent');
+        $appendFlags  = (string)($opts['flags']   ?? '\\Seen');
+        $purpose      = (string)($opts['purpose'] ?? 'Sent');
+
         $out = ['ok' => false, 'error' => '', 'folder' => '', 'listed' => [], 'created' => '',
                 'via' => '', 'tried' => []];
         if (empty($settings['sent_copy_enabled'])) {
@@ -89,9 +102,11 @@ class SentCopy
         }
         // Folder candidates: what the operator configured, then the two
         // spellings every IMAP server in practice uses.
-        $folders = array_values(array_unique(array_filter([
-            trim((string)($settings['sent_copy_folder'] ?? '')), 'Sent', 'INBOX.Sent',
-        ])));
+        $folders = $folderNames !== []
+            ? array_values(array_unique(array_filter(array_map('trim', $folderNames))))
+            : array_values(array_unique(array_filter([
+                trim((string)($settings['sent_copy_folder'] ?? '')), 'Sent', 'INBOX.Sent',
+            ])));
 
         $fp = null;
         try {
@@ -200,9 +215,10 @@ class SentCopy
             $msg = preg_replace("/\r\n|\r|\n/", "\r\n", $rawMessage);
             $len = strlen($msg);
 
-            // Ask the server which folders exist, and prefer the one it marks
-            // \Sent — that is authoritative and survives any naming scheme
-            // (Sent, Sent Items, INBOX.Sent, localised names).
+            // Ask the server which folders exist, and prefer the one the
+            // server itself marks with the special-use flag — authoritative,
+            // and it survives any naming scheme (Sent, Sent Items,
+            // INBOX.Sent, Drafts, localised names).
             fwrite($fp, "a2 LIST \"\" \"*\"\r\n");
             $listing = $readUntil('a2');
             $special = '';
@@ -211,16 +227,16 @@ class SentCopy
                 if (!preg_match('/^\* LIST \(([^)]*)\)\s+\S+\s+(.+)$/', trim($ln), $m2)) continue;
                 $name = trim($m2[2], '"');
                 $exists[] = $name;
-                if (stripos($m2[1], '\\Sent') !== false) $special = $name;
+                if (stripos($m2[1], $specialFlag) !== false) $special = $name;
             }
             if ($special !== '') array_unshift($folders, $special);
             $folders = array_values(array_unique($folders));
             $out['listed'] = $exists;
 
             $n = 1;
-            $tryAppend = function (string $folder) use ($fp, $q, $msg, $len, &$n, $readLine, $readUntil) {
+            $tryAppend = function (string $folder) use ($fp, $q, $msg, $len, &$n, $readLine, $readUntil, $appendFlags) {
                 $tag = 'b' . $n++;
-                fwrite($fp, $tag . ' APPEND ' . $q($folder) . ' (\\Seen) {' . $len . "}\r\n");
+                fwrite($fp, $tag . ' APPEND ' . $q($folder) . ' (' . $appendFlags . ') {' . $len . "}\r\n");
                 $cont = $readLine();
                 if (strncmp(ltrim($cont), '+', 1) !== 0) {
                     $rest = strpos($cont, $tag) === false ? $readUntil($tag) : $cont;
@@ -250,7 +266,8 @@ class SentCopy
                 $out['error'] = 'APPEND to "' . $folder . '" refused: ' . mb_substr($why, 0, 160);
             }
             if (!$out['ok'] && $out['error'] === '') {
-                $out['error'] = 'no Sent folder accepted the message (tried: ' . implode(', ', $folders) . ')';
+                $out['error'] = 'no ' . $purpose . ' folder accepted the message (tried: '
+                              . implode(', ', $folders) . ')';
             }
             fwrite($fp, "z9 LOGOUT\r\n");
         } catch (\Throwable $e) {
