@@ -237,8 +237,23 @@ is_(preg_match('/->\s*(send|post)\s*\(/', $cron) === 0, 'it sends nothing');
 
 $master = (string)file_get_contents($root . '/cron/master.php');
 is_(strpos($master, 'starlink_keepalive.php') !== false, 'it is scheduled');
-is_(preg_match("/'starlink_alive'\s*=>\s*\['interval'\s*=>\s*300/", $master) === 1,
-    'every 300 seconds, matching the interval South Sudan proved');
+
+// South Sudan proved a ~300s touch cadence, and that is what this asserts —
+// but the registered interval is not the cadence. South Sudan's cron is a
+// real crontab line firing every 300s. Ours is dispatched by master.php,
+// which UCRM drives on its own ~300s heartbeat, and the check is
+// elapsed >= interval. At exactly 300 a cycle arriving two seconds early
+// leaves elapsed at 298, the job is skipped, and the next chance is ten
+// minutes out — longer than the token lives. Below the heartbeat it fires
+// every cycle, which IS South Sudan's cadence.
+preg_match("/'starlink_alive'\s*=>\s*\['interval'\s*=>\s*(\d+)/", $master, $ivm);
+$iv = isset($ivm[1]) ? (int)$ivm[1] : 0;
+is_($iv > 0 && $iv < 300,
+    'on an interval below the heartbeat, so every cycle actually reaches it',
+    'interval is ' . $iv . ' — at or above 300 it aliases and gets skipped');
+is_($iv >= 120,
+    'and no faster than South Sudan, which touches once every 300 seconds',
+    'interval is ' . $iv);
 
 echo "\nAn identifier is never shortened to fit a column\n";
 // The service line table cut its numbers to 22 characters, so

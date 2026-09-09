@@ -113,15 +113,31 @@ foreach (['gdrive_backup','maintenance','bidal_summary','staff_jobs',
 $_m_walletInterval = max(60, (int)($_m_config['wallet_sync_interval_minutes'] ?? 360) * 60);
 
 $_m_jobs = [
+    // ── FIRST, ALWAYS ────────────────────────────────────────────────────
+    // Keeps the Starlink session alive by using it. Not telemetry — the
+    // access token expires in minutes, and a session that is used survives.
+    //
+    // It runs FIRST for a reason. It was placed after inbound_mail, which
+    // reads a mailbox and calls an LLM to draft replies — comfortably the
+    // slowest job here. Both carried interval 300, so they fell due on the
+    // same cycle every time, and when the mail run spent the budget the
+    // guard below broke the loop before the keep-alive was ever dispatched.
+    // A session then died quietly with failures 0, because nothing had
+    // touched it to find out. One cheap request, taken before anything can
+    // spend the budget, is what a keep-alive has to be.
+    //
+    // The interval is 240, not 300, because UCRM drives master.php on a
+    // ~300s heartbeat: at 300 the elapsed check lands on the boundary and a
+    // late cycle defers it another five minutes, which is how a token with
+    // minutes of life gets missed.
+    'starlink_alive' => ['interval' => 240,                 'script' => __DIR__ . '/starlink_keepalive.php'],
+
     // ── FAST & FREQUENT (run every cycle) ────────────────────────────────
     'event_processor'=> ['interval' => 30,                  'script' => __DIR__ . '/event_processor.php'],
     'identity_worker'=> ['interval' => 60,                  'script' => __DIR__ . '/identity_worker.php'],
     'starlink_mail'  => ['interval' => 300,                 'script' => __DIR__ . '/starlink_mail.php'],
     // Reads the customer mailbox and files drafts for approval. Never sends.
     'inbound_mail'   => ['interval' => 300,                 'script' => __DIR__ . '/inbound_mail.php'],
-    // Keeps the Starlink session alive by using it. Not telemetry — the
-    // access token expires in minutes, and a session that is used survives.
-    'starlink_alive' => ['interval' => 300,                 'script' => __DIR__ . '/starlink_keepalive.php'],
     'wa_sync'       => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_wa_sync.php'],
     'crm_sync'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_sync.php'],
     // v4.20.0 — Time-based access expiry checker. LAZY-POLL pattern: only
