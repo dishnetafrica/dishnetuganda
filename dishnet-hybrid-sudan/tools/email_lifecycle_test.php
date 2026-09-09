@@ -108,7 +108,7 @@ echo "Mode:    " . ($dry ? 'DRY RUN — nothing is sent' : 'LIVE — emails will
 echo "Stages:  " . count($JOURNEY) . "\n";
 echo str_repeat('=', 74) . "\n";
 
-$sent = 0; $failed = 0; $n = 0;
+$sent = 0; $failed = 0; $filed = 0; $copyFailed = 0; $n = 0;
 foreach ($JOURNEY as [$key, $trigger]) {
     $n++;
     $m = CustomerEmails::render($key, $config, $C);
@@ -159,6 +159,17 @@ foreach ($JOURNEY as [$key, $trigger]) {
                      ['Reply-To' => EmailTemplate::replyTo($config)]);
     if (!empty($r['ok'])) { $sent++;  echo "  Result      : SENT\n"; }
     else { $failed++; echo "  Result      : FAILED — " . (string)($r['error'] ?? '?') . "\n"; }
+
+    // The Sent-folder copy was reported inside the log and thrown away here,
+    // so a mailbox that filed nothing looked identical to one that filed
+    // everything. Say what happened, including "not switched on".
+    $copyLine = 'not switched on (sent_copy_enabled is off)';
+    foreach ((array)($r['log'] ?? []) as $step) {
+        if (($step['step'] ?? '') !== 'sent_copy') continue;
+        $copyLine = (!empty($step['ok']) ? 'filed — ' : 'FAILED — ') . (string)($step['msg'] ?? '');
+        if (!empty($step['ok'])) $filed++; else $copyFailed++;
+    }
+    echo "  Sent folder : {$copyLine}\n";
     if ($wait > 0 && $n < count($JOURNEY)) sleep($wait);
 }
 
@@ -168,6 +179,17 @@ if ($dry) {
     exit(0);
 }
 printf("LIFECYCLE TEST: %d sent · %d failed\n", $sent, $failed);
+if ($sent > 0) {
+    if ($filed === 0 && $copyFailed === 0) {
+        printf("SENT FOLDER:    nothing filed — the mailbox will look empty.\n");
+        printf("                Turn it on:  php tools/set_sent_copy.php --user accounts@%s --test\n",
+               'dishnetuganda.com');
+    } elseif ($copyFailed > 0) {
+        printf("SENT FOLDER:    %d filed · %d FAILED — see the per-stage lines above\n", $filed, $copyFailed);
+    } else {
+        printf("SENT FOLDER:    %d of %d filed\n", $filed, $sent);
+    }
+}
 echo "Check {$to} — every subject starts with [TEST] and every body carries a dashed TEST banner.\n";
 echo "Read them in the order above: that is the order a real customer receives them.\n";
 exit($failed ? 1 : 0);

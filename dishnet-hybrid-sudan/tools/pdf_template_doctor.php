@@ -135,6 +135,20 @@ foreach (['quote-templates' => 'quote', 'invoice-templates' => 'invoice'] as $ep
 
 line();
 echo "3) The actual PDF a customer would receive\n";
+// Print what the install actually holds. The first two runs reported on
+// "quote 1" without ever saying whether that quote was real, which made a
+// missing PDF indistinguishable from a stale draft.
+foreach (['billing/quotes?limit=5', 'quotes?limit=5'] as $ep) {
+    $qs = $crm->get($ep);
+    if (!is_array($qs) || !$qs) continue;
+    echo "  quotes on this install (newest ids last):\n";
+    foreach ($qs as $q) {
+        printf("    #%-6s %-16s %s\n", (string)($q['id'] ?? '?'),
+               (string)($q['number'] ?? $q['quoteNumber'] ?? '(no number)'),
+               isset($q['createdDate']) ? (string)$q['createdDate'] : '');
+    }
+    break;
+}
 if ($quoteId <= 0) {
     // Newest first. Without the ordering this picked quote #1 — the oldest
     // one on the install, quite possibly a deleted draft with no PDF, which
@@ -152,7 +166,7 @@ if ($quoteId <= 0) {
     }
 }
 if ($quoteId <= 0) {
-    nv('no quote exists yet — create one, then rerun with --quote <id>');
+    nv('no quote exists yet — create one in the app, then rerun with --quote <id>');
 } else {
     // billing/ FIRST: that is the path QuotationService proved works when it
     // attaches the PDF to the quotation email. Trying only the bare one is
@@ -165,6 +179,9 @@ if ($quoteId <= 0) {
     if ($pdf === null) {
         nv("quote {$quoteId}: neither billing/quotes/{id}/pdf nor quotes/{id}/pdf returned a PDF ("
            . json_encode($crm->getLastError()) . ')');
+        echo "        A 404 here usually means that quote is a stale draft rather than a\n";
+        echo "        real quotation. Create one in the app and rerun with --quote <id>;\n";
+        echo "        the ids above are what this install actually holds.\n";
     } else {
         $bytes = strlen($pdf);
         ok("quote {$quoteId}: PDF fetched ({$bytes} bytes)");
