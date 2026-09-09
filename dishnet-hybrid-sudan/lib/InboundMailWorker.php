@@ -182,6 +182,10 @@ class InboundMailWorker
             'requires_human' => (bool)$intent['requires_human'],
             'client_id'      => $clientId,
             'match'          => (string)$match['confidence'],
+            // Carried out so a dry run can show what it wrote. A run that
+            // stores nothing must still be able to show its work.
+            'draft_body'     => (string)$draft['body'],
+            'draft_subject'  => (string)$draft['subject'],
         ];
     }
 

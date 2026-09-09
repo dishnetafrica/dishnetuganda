@@ -176,6 +176,32 @@ class EmailDraftStore
     }
 
     /** Drop decided rows older than the retention window. */
+    /**
+     * Forget a draft so its message can be read and drafted again.
+     *
+     * Needed the moment a draft comes out wrong for a reason since fixed: the
+     * message is marked seen, so no later run touches it, and the bad draft is
+     * frozen in the inbox forever.
+     *
+     * A SENT draft is never forgotten. That row is the record of what a
+     * customer actually received, and losing it would mean nobody could answer
+     * "what did we tell them?".
+     *
+     * @return array{ok:bool, error:string}
+     */
+    public function forget(int $id): array
+    {
+        $row = $this->get($id);
+        if ($row === null) return ['ok' => false, 'error' => 'no draft with that id'];
+        if ((string)$row['status'] === self::SENT) {
+            return ['ok' => false,
+                    'error' => 'that reply was sent to the customer — its record stays'];
+        }
+        $st = $this->pdo->prepare('DELETE FROM email_drafts WHERE id = ? AND status <> ?');
+        $st->execute([$id, self::SENT]);
+        return ['ok' => $st->rowCount() > 0, 'error' => ''];
+    }
+
     public function prune(int $days = 90): int
     {
         $st = $this->pdo->prepare(

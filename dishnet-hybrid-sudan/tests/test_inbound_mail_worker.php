@@ -209,6 +209,36 @@ is_(preg_match('/->\s*send\s*\(/', $src) === 0, 'it calls nothing named send()')
 is_(strpos($src, EmailDraftStore::class . '::SENT') === false
     && strpos($src, "'sent'") === false, 'and never writes a sent status');
 
+echo "\nA dry run can show its work\n";
+$item = $run['items'][0];
+is_(isset($item['draft_body']),
+    'the draft text comes back from handle(), not only from the database');
+is_(strpos((string)$item['draft_body'], 'Thank you for the purchase order') !== false,
+    'so a run that stores nothing can still be read', (string)($item['draft_body'] ?? ''));
+
+echo "\nA bad draft is not frozen forever\n";
+// A draft that came out wrong for a reason since fixed must be re-drawable:
+// the message is marked seen, so no later run touches it.
+$pdoF = new PDO('sqlite::memory:');
+$pdoF->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$storeF = new EmailDraftStore($pdoF);
+$idF = $storeF->add(['message_id' => '<m1@x>', 'from_addr' => 'a@b.c', 'subject' => 'S',
+                     'draft_body' => 'a bad draft', 'status' => EmailDraftStore::PENDING]);
+is_($storeF->seen('<m1@x>'), 'the message is marked seen while the draft exists');
+$rF = $storeF->forget($idF);
+is_(!empty($rF['ok']), 'it can be forgotten', (string)($rF['error'] ?? ''));
+is_(!$storeF->seen('<m1@x>'), 'and the message reads as unseen again');
+
+echo "\nBut what a customer actually received is never forgotten\n";
+$idS = $storeF->add(['message_id' => '<m2@x>', 'from_addr' => 'a@b.c', 'subject' => 'S',
+                     'draft_body' => 'sent text', 'status' => EmailDraftStore::PENDING]);
+$storeF->decide($idS, EmailDraftStore::SENT, 'tester');
+$rS = $storeF->forget($idS);
+is_(empty($rS['ok']), 'a sent reply refuses to be forgotten');
+is_(strpos((string)$rS['error'], 'sent to the customer') !== false,
+    'saying why — it is the record of what we told them', (string)$rS['error']);
+is_($storeF->get($idS) !== null, 'and the row is still there');
+
 echo "\nThe mailbox password cannot be written to disk in the clear\n";
 require_once $root . '/lib/PluginConfig.php';
 is_(in_array('email_ai_mailbox_pw', PluginConfig::SECRET_KEYS, true),

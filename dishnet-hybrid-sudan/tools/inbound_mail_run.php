@@ -9,6 +9,7 @@ chdir(dirname(__DIR__));
  *   php tools/inbound_mail_run.php                 read, draft, file as pending
  *   php tools/inbound_mail_run.php --list          show what is waiting for a person
  *   php tools/inbound_mail_run.php --show 7        read one draft in full
+ *   php tools/inbound_mail_run.php --forget 7      drop it so it is drafted again
  *   php tools/inbound_mail_run.php --since 2026-09-09T00:00:00Z
  *
  * Nothing this tool can do reaches a customer. Drafts wait in the inbox until
@@ -64,6 +65,14 @@ if ($has('--list')) {
             ((int)$d['crm_client_id'] ?: '—'));
     }
     echo "\n  php tools/inbound_mail_run.php --show <id>   to read one\n\n";
+    exit(0);
+}
+
+if ($has('--forget')) {
+    $id = (int)$value('--forget', '0');
+    $r  = $store->forget($id);
+    if (empty($r['ok'])) { echo "\n  " . ($r['error'] ?: 'nothing to forget') . "\n\n"; exit(1); }
+    echo "\n  Draft {$id} forgotten. The next run will read that message again.\n\n";
     exit(0);
 }
 
@@ -171,6 +180,19 @@ foreach ($run['items'] as $i) {
         printf("          category %s · client %s · match %s%s\n",
             (string)$i['category'], ((int)$i['client_id'] ?: '—'), (string)$i['match'],
             !empty($i['requires_human']) ? ' · HUMAN APPROVAL REQUIRED' : '');
+
+        // A dry run exists to be read. Printing only the verdict hides the one
+        // thing worth judging, and sends you looking for a draft id that a dry
+        // run never created.
+        if ($has('--dry')) {
+            $body = trim((string)($i['draft_body'] ?? ''));
+            echo "\n          ── draft ──────────────────────────────────────────\n";
+            foreach (explode("\n", $body !== '' ? $body
+                    : '(empty — written by hand; see the reason above)') as $line) {
+                echo '          ' . $line . "\n";
+            }
+            echo "          ───────────────────────────────────────────────────\n\n";
+        }
     }
 }
 echo "\n  Nothing was sent. " . ($has('--dry')
