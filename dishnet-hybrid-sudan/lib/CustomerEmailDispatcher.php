@@ -95,17 +95,51 @@ class CustomerEmailDispatcher
         } catch (\Throwable $e) {}
     }
 
+    /**
+     * The switches as they are ON DISK, merged over whatever the caller holds.
+     *
+     * Two backends answer to the name kyc_config.json. tools/set_customer_emails
+     * writes the FILE through PluginConfig::saveOverrides; webhook.php hydrates
+     * $config from the SqliteStore copy, which never learns new keys. So an
+     * operator could turn quotation email on, see it ON in the tool, and have
+     * the webhook read it as off — which is exactly what happened, and the send
+     * returned silently because a switched-off event is not an error.
+     *
+     * lib/currency.php solved this once for the ledger currency and
+     * OverdueDunningHelpers again for the dunning gate. Same fix here: read the
+     * files, cache per request, let the caller's array win only where the files
+     * say nothing.
+     */
+    public static function effectiveConfig(array $config = []): array
+    {
+        static $fromDisk = null;
+        if ($fromDisk === null) {
+            $fromDisk = [];
+            $root    = dirname(__DIR__);
+            $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
+            foreach ([$root . '/data/config.json', $dataDir . '/config.json',
+                      $dataDir . '/kyc_config.json'] as $p) {
+                if (!is_file($p)) continue;
+                $d = json_decode((string)@file_get_contents($p), true);
+                if (is_array($d)) $fromDisk = array_merge($fromDisk, $d);
+            }
+        }
+        return array_merge($config, $fromDisk);
+    }
+
     /** The master switch. Absent means off. */
     public static function masterEnabled(array $config): bool
     {
-        return !empty($config['customer_emails_enabled']);
+        $c = self::effectiveConfig($config);
+        return !empty($c['customer_emails_enabled']);
     }
 
     /** Whether one event may send. Both switches must be on. */
     public static function enabled(string $key, array $config): bool
     {
         if (!self::masterEnabled($config)) return false;
-        return !empty($config['customer_email_' . $key]);
+        $c = self::effectiveConfig($config);
+        return !empty($c['customer_email_' . $key]);
     }
 
     /** Every event and its current state, for settings screens and doctors. */

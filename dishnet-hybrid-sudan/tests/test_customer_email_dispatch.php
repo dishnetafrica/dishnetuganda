@@ -112,6 +112,39 @@ is_($r['reason'] !== 'already sent',
 is_($d3->send('invoice', 'a@b.co', 'A', [])['reason'] !== 'already sent',
     'with no dedupe key given, nothing is ever considered a repeat');
 
+echo "\nA switch set on disk is seen even when the caller's array is stale\n";
+// webhook.php hydrates $config from the SqliteStore copy, which never learns
+// keys written to the FILE by tools/set_customer_emails. The dispatcher must
+// read the file itself or an operator turns a switch on and the webhook still
+// sees it off — silently, because a switched-off event is not an error.
+$cfgDir = sys_get_temp_dir() . '/ced_cfg_' . bin2hex(random_bytes(4));
+@mkdir($cfgDir, 0777, true);
+file_put_contents($cfgDir . '/kyc_config.json', json_encode([
+    'customer_emails_enabled' => 1, 'customer_email_quotation' => 1,
+]));
+$probe = <<<'SUB'
+$root = __ROOT__; $GLOBALS['dataDir'] = __DIR__CFG__;
+require_once $root . '/lib/CustomerEmailDispatcher.php';
+// A deliberately EMPTY caller array — the stale store copy.
+echo CustomerEmailDispatcher::enabled('quotation', []) ? 'ON' : 'OFF';
+SUB;
+$code = str_replace(['__ROOT__', '__DIR__CFG__'],
+                    [var_export($root, true), var_export($cfgDir, true)], $probe);
+$out = [];
+exec('php -r ' . escapeshellarg($code) . ' 2>&1', $out);
+is_(trim(implode('', $out)) === 'ON',
+    'the switch on disk wins over an empty caller array',
+    'got: ' . trim(implode('', $out)));
+
+$srcD = (string)file_get_contents($root . '/lib/CustomerEmailDispatcher.php');
+is_(strpos($srcD, 'kyc_config.json') !== false,
+    'the dispatcher reads the config file rather than trusting its argument');
+$wh2 = (string)file_get_contents($root . '/webhook.php');
+is_(strpos($wh2, 'Quotation email skipped: the quotation switch is off') !== false,
+    'and a decline is logged, so a silent skip cannot happen again');
+
+@unlink($cfgDir . '/kyc_config.json'); @rmdir($cfgDir);
+
 echo "\nThe wiring is where the events actually happen\n";
 $wh = (string)file_get_contents($root . '/webhook.php');
 foreach ([

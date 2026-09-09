@@ -53,29 +53,33 @@ $mail ? ok('the plugin mailer is configured (' . (string)($mail['host'] ?? '?') 
       : no('the plugin mailer is NOT configured — Settings → System → Email');
 
 line();
-echo "2) Will uCRM tell us when a quote is created?\n";
+echo "2) Is uCRM actually telling us when a quote is created?\n";
+// getWebhooks() asks an endpoint this uCRM answers 404 to, so "no webhooks"
+// from the API means nothing at all here — it said that while an endpoint was
+// registered and delivering. The webhook log is the evidence that counts: if
+// events arrived, the endpoint exists and works, whatever the API claims.
 $crm = CrmApiClient::fromUcrm($root, $config);
-if (!$crm || !$crm->isConfigured()) {
-    no('no uCRM API credentials');
+$logFile = $dataDir . '/webhook_log.json';
+$log = is_file($logFile) ? (json_decode((string)@file_get_contents($logFile), true) ?: []) : [];
+
+$lastAt = ''; $events = 0;
+foreach ($log as $e) {
+    $at = (string)($e['at'] ?? $e['time'] ?? '');
+    if ($at > $lastAt) $lastAt = $at;
+    $events++;
+}
+if ($events > 0) {
+    ok("uCRM has delivered {$events} webhook event(s); the most recent at " . substr($lastAt, 0, 19));
 } else {
-    $hooks = $crm->getWebhooks();
-    if (!$hooks) {
-        no('uCRM lists NO webhooks — quote.add can never reach the plugin');
-    } else {
-        $found = false;
-        foreach ($hooks as $h) {
-            $url = (string)($h['url'] ?? '');
-            $ev  = $h['eventTypes'] ?? $h['events'] ?? [];
-            $evs = is_array($ev) ? implode(',', $ev) : (string)$ev;
-            $isOurs = stripos($url, 'dishnet-hybrid-sudan') !== false;
-            $active = !empty($h['isActive']) || !isset($h['isActive']);
-            printf("    %-4s %-58s %s\n", $active ? 'on' : 'OFF',
-                   substr($url, -58), $evs === '' ? '(all events)' : substr($evs, 0, 40));
-            if ($isOurs && $active) $found = true;
-        }
-        $found ? ok('a plugin webhook is registered and active')
-               : no('no ACTIVE plugin webhook — uCRM cannot notify us of a new quote');
-    }
+    no('no webhook event has EVER reached the plugin');
+    echo "        Register the endpoint: php tools/webhook_setup.php\n";
+}
+
+// Report the API's answer as information, not as a verdict.
+$hooks = $crm ? $crm->get('webhooks/endpoints') : null;
+if ($hooks === null) {
+    echo "        (the API cannot list endpoints on this uCRM — it answers 404 —\n";
+    echo "         so registration can only be seen in uCRM → System → Webhooks)\n";
 }
 
 line();

@@ -143,7 +143,7 @@ function whCustomerEmail(string $key, int $clientId, string $name, array $data,
                          $crm, $store, string $changeType = ''): void
 {
     try {
-        if (!CustomerEmailDispatcher::enabled($key, $config)) return;
+        if (!CustomerEmailDispatcher::enabled($key, $config)) return;   // off is not an error
         $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
         $d   = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
         $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe);
@@ -172,9 +172,18 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
                           array $config, string $dataDir, $crm, $store, string $changeType = ''): void
 {
     try {
-        if (!CustomerEmailDispatcher::enabled('quotation', $config)) return;
+        // Say why, always. The first version returned silently when the switch
+        // read as off, and the switch read as off because $config here comes
+        // from the store copy rather than the file the tool writes. A silent
+        // skip and a working send looked identical in the log.
+        if (!CustomerEmailDispatcher::enabled('quotation', $config)) {
+            whLog($changeType ?: 'email',
+                  'Quotation email skipped: the quotation switch is off '
+                . '(php tools/set_customer_emails.php --master on --on quotation)');
+            return;
+        }
         $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
-        if (!$pdo) return;
+        if (!$pdo) { whLog($changeType ?: 'email', 'Quotation email skipped: no database handle'); return; }
         if (!CustomerEmailDispatcher::claimOnce($pdo, "QEMAIL{$quoteId}")) {
             whLog($changeType ?: 'email', "Quotation email for #{$quoteId} already claimed — skipping");
             return;
