@@ -43,20 +43,62 @@ $crm = CrmApiClient::fromUcrm($root, $config);
 if (!$crm || !$crm->isConfigured()) { no('no uCRM API credentials'); exit(1); }
 
 line();
-echo "1) What uCRM has registered now\n";
-$hooks = $crm->get('webhooks/endpoints');
-if ($hooks === null) {
-    no('the webhooks endpoint itself failed: ' . json_encode($crm->getLastError()));
-    echo "        That is different from having none registered — the API refused\n";
-    echo "        the question. Check the App Key's permissions in uCRM.\n";
-    exit(1);
+echo "1) Where does this uCRM keep its webhook endpoints?\n";
+// webhooks/endpoints answers 404 here, the same way settings does. The
+// resource has moved between uCRM versions and is spelled differently across
+// them, so ask rather than assume — the PDF endpoint taught the same lesson.
+$apiBase = rtrim($crm->getBaseUrl(), '/');
+$root2   = preg_replace('#/api/v[0-9.]+$#', '', $apiBase);
+$appKey  = $crm->getAppKey();
+$authHdr = $crm->getAuthHeader();
+
+$probe = function (string $url) use ($appKey, $authHdr): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10,
+        CURLOPT_HTTPHEADER => [$authHdr . ': ' . $appKey, 'Content-Type: application/json'],
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $body = (string)curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $json = json_decode($body, true);
+    return ['code' => $code, 'json' => $json, 'raw' => $body];
+};
+
+$bases = array_values(array_unique(array_filter([
+    $apiBase,
+    $root2 . '/api/v1.0',
+    $root2 . '/api/v2.0',
+])));
+$paths = ['webhook-endpoints', 'webhooks/endpoints', 'webhooks', 'webhook_endpoints'];
+
+$endpointUrl = '';
+$hooks = [];
+foreach ($bases as $b) {
+    foreach ($paths as $pth) {
+        $u = $b . '/' . $pth;
+        $r = $probe($u);
+        $isList = $r['code'] === 200 && is_array($r['json']);
+        printf("    %-52s HTTP %-4s %s\n", str_replace($root2, '', $u), (string)$r['code'],
+               $isList ? 'LIST (' . count($r['json']) . ' entries)' : '');
+        if ($isList && $endpointUrl === '') { $endpointUrl = $u; $hooks = $r['json']; }
+    }
 }
-if (!$hooks) {
-    no('NO endpoints registered — uCRM cannot notify the plugin of anything');
+
+if ($endpointUrl === '') {
+    no('no webhook endpoint resource answered on any API version');
+    echo "        Register it by hand instead: uCRM → System → Webhooks → Add.\n";
+    echo "        Section 2 below prints the URL to paste.\n";
 } else {
-    foreach ($hooks as $h) {
-        printf("    #%-4s %-6s %s\n", (string)($h['id'] ?? '?'),
-               !empty($h['isActive']) ? 'active' : 'OFF', (string)($h['url'] ?? ''));
+    ok("this uCRM serves them at " . str_replace($root2, '', $endpointUrl));
+    if (!$hooks) {
+        no('and NONE are registered — uCRM cannot notify the plugin of anything');
+    } else {
+        foreach ($hooks as $h) {
+            printf("    #%-4s %-6s %s\n", (string)($h['id'] ?? '?'),
+                   !empty($h['isActive']) ? 'active' : 'OFF', (string)($h['url'] ?? ''));
+        }
     }
 }
 
@@ -114,6 +156,18 @@ foreach ($hooks as $h) {
 }
 if ($already) { ok('that address is already registered and active — nothing to do'); exit(0); }
 
+// No API resource means --fix cannot help, so say so now rather than sending
+// the operator round a loop that ends here anyway.
+if ($endpointUrl === '') {
+    no('this uCRM exposes no webhook resource over the API — register it by hand');
+    echo "\n  uCRM → System → Webhooks → Add:\n";
+    echo "      URL     {$working}\n";
+    echo "      Events  leave empty (all events)\n";
+    echo "      Active  yes\n\n";
+    echo "  Then create a quote and run tools/quote_email_doctor.php.\n";
+    exit(1);
+}
+
 if (!$doFix) {
     wr('not registered. Rerun with --fix to register it:');
     echo "          php tools/webhook_setup.php --fix\n";
@@ -123,16 +177,36 @@ if (!$doFix) {
 // Empty event list = every event, which is what this plugin wants: it decides
 // per changeType in its own switch, and a narrow list would silently drop any
 // event added later.
-$res = $crm->createWebhook($working, [], false);
-if (!is_array($res) || empty($res['id'])) {
-    no('registration failed: ' . json_encode($crm->getLastError()));
+
+$ch = curl_init($endpointUrl);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+    CURLOPT_CUSTOMREQUEST  => 'POST',
+    CURLOPT_HTTPHEADER     => [$authHdr . ': ' . $appKey, 'Content-Type: application/json'],
+    CURLOPT_POSTFIELDS     => json_encode([
+        'url' => $working, 'isActive' => true, 'verifySslCertificate' => false,
+    ]),
+    CURLOPT_SSL_VERIFYPEER => false,
+]);
+$raw  = (string)curl_exec($ch);
+$code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+$res  = json_decode($raw, true);
+
+if ($code >= 300 || !is_array($res) || empty($res['id'])) {
+    no("registration failed (HTTP {$code}): " . substr($raw, 0, 300));
+    echo "\n  Add it by hand in uCRM → System → Webhooks:\n";
+    echo "      URL     {$working}\n";
+    echo "      Events  leave empty (all events)\n";
     exit(1);
 }
 ok("registered as endpoint #{$res['id']}");
 
-$after = $crm->get('webhooks/endpoints') ?: [];
+$after = $probe($endpointUrl);
 $seen  = false;
-foreach ($after as $h) if ((int)($h['id'] ?? 0) === (int)$res['id']) $seen = true;
+foreach ((array)($after['json'] ?? []) as $h) {
+    if ((int)($h['id'] ?? 0) === (int)$res['id']) $seen = true;
+}
 $seen ? ok('uCRM confirms it on re-read') : no('uCRM did not list it back — check the UI');
 
 line();
