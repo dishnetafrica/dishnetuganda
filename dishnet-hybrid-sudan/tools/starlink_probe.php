@@ -105,12 +105,22 @@ if (in_array('--diagnose', array_slice($argv, 1), true)) {
     echo "\n  Raw responses — no refresh, no retry, nothing helping:\n\n";
     printf("  %-6s %-52s %s\n", 'CODE', 'PATH', 'BYTES');
     printf("  %s\n", str_repeat('-', 72));
+    // The refresh paths inherited from the fleet plugin answered 404 to a
+    // dead session and 401 to a live one, so neither is renewing anything
+    // here. Candidates are TRIED rather than assumed, and whichever answers
+    // 200 is the one worth wiring in.
     foreach ([
         ['GET',  '/api/accounts/v3/accounts/contact'],
         ['GET',  '/api/webagg/v2/accounts/service-lines?limit=1&page=0'],
         ['GET',  '/api/accounts/v1/accounts/service-line-numbers'],
         ['POST', '/api/auth/v1/session/refresh'],
         ['POST', '/api/auth/v1/token/refresh'],
+        ['GET',  '/api/auth/v1/session/refresh'],
+        ['POST', '/api/auth/v1/refresh'],
+        ['GET',  '/auth-rp/auth/user'],
+        ['GET',  '/api/auth-rp/auth/user'],
+        ['GET',  '/api/auth/v1/session'],
+        ['GET',  '/api/auth/v1/user'],
     ] as [$m, $path]) {
         $d = $conn->raw($m, $path);
         printf("  %-6s %-52s %d\n", $d['code'] ?: ($d['error'] !== '' ? 'ERR' : '0'),
@@ -119,7 +129,9 @@ if (in_array('--diagnose', array_slice($argv, 1), true)) {
         if ($d['snippet'] !== '') echo "         " . $d['snippet'] . "\n";
     }
     echo "\n  401/403 everywhere means the cookie is not accepted — truncated,\n";
-    echo "  expired, or from a different account.\n";
+    echo "  expired, from a different account, or REVOKED because somebody\n";
+    echo "  signed out of starlink.com. The imported cookie is the browser's\n";
+    echo "  own session, so signing out there kills it here.\n";
     echo "  200 on contact but 401 elsewhere means the session is real and a\n";
     echo "  second auth layer is refusing — a different problem entirely.\n";
     echo "  404 on a refresh path means that endpoint is not there any more.\n\n";

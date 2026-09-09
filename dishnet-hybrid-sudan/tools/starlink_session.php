@@ -19,6 +19,16 @@ chdir(dirname(__DIR__));
  * in shell history and is visible to anyone running ps. It is stored
  * encrypted, and nothing ever prints it back.
  *
+ * ─── The session is SHARED with the browser ──────────────────────────────
+ * An imported cookie is not a copy of a session; it IS the session, the same
+ * one the browser holds. So:
+ *
+ *   • Signing out of starlink.com in that browser REVOKES this one too.
+ *     A session accepted a minute ago will start answering 401 immediately.
+ *   • Sign out FIRST if you are revoking an old cookie, then sign back in and
+ *     import from the new session. Never sign out afterwards.
+ *   • Closing the tab is fine. Signing out is not.
+ *
  * ─── Getting the cookie ──────────────────────────────────────────────────
  *   1. Sign in to starlink.com in a browser, as the Uganda account.
  *   2. Open developer tools → Network, and click any request to starlink.com.
