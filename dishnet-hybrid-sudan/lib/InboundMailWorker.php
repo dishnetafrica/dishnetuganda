@@ -163,7 +163,9 @@ class InboundMailWorker
             'customer_note' => $note,
             'category'      => (string)$intent['category'],
             'confidence'    => (float)$intent['confidence'],
-            'escalation'    => $intent['requires_human'] ? 'human approval required' : '',
+            'escalation'    => trim(($intent['requires_human'] ? 'human approval required' : '')
+                                . ((string)($draft['escalation'] ?? '') !== ''
+                                    ? ' · ' . (string)$draft['escalation'] : '')),
             'draft_subject' => (string)$draft['subject'],
             'draft_body'    => (string)$draft['body'],
             'status'        => EmailDraftStore::PENDING,
@@ -227,7 +229,7 @@ class InboundMailWorker
     private function draft(array $intent, array $match, array $mail): array
     {
         $subject = (string)($mail['subject'] ?? '');
-        $reply   = ['subject' => self::replySubject($subject), 'body' => ''];
+        $reply   = ['subject' => self::replySubject($subject), 'body' => '', 'escalation' => ''];
 
         if ($this->brain === null || !$this->brain->isConfigured()) {
             $reply['body'] = '';
@@ -236,33 +238,64 @@ class InboundMailWorker
 
         $client = is_array($match['client'] ?? null) ? $match['client'] : null;
 
+        // These key names are the brain's, not mine.
+        //
+        // The first draft it produced said "It seems I don't have access to
+        // installation dates or account details" — for a customer we had
+        // matched exactly, seconds earlier. The reason was not the model. I
+        // passed 'client', 'name' and 'constraint'; the brain reads 'customer',
+        // 'account' and 'constraints', so it received a message with no
+        // context and no rules and did the only sensible thing with it.
         $context = [
             'message' => (string)$intent['own_words'],
             'channel' => self::channelFor((string)$intent['category']),
-            'name'    => (string)($mail['from_name'] ?? ''),
+            'medium'  => 'email',
         ];
 
         // Account facts, only when we actually know whose account it is. A
         // draft written against a guessed account is worse than one written
         // against none: a person reviewing it would have no way to tell.
         if ($client !== null && EmailCustomerMatcher::isCertain((string)$match['confidence'])) {
-            $context['client'] = $client;
+            $context['customer'] = [
+                'name'    => trim((string)($client['companyName'] ?? ''))
+                          ?: trim(($client['firstName'] ?? '') . ' ' . ($client['lastName'] ?? ''))
+                          ?: (string)($mail['from_name'] ?? ''),
+                'is_lead' => !empty($client['isLead']),
+            ];
+            $context['account'] = ['id' => (int)($client['id'] ?? 0)];
         }
 
-        // What a person must decide is stated to the model, so the draft asks
-        // rather than promises. The model is not trusted to hold this line —
-        // the policy already refuses the send — but a draft that promises a
-        // date is a draft somebody has to rewrite.
+        // What a person must decide, stated as rules the model is given before
+        // the data. It is not trusted to hold this line — the policy already
+        // refuses the send — but a draft that promises a date is a draft
+        // somebody has to rewrite, and the point of a draft is to save that.
         if (!empty($intent['requires_human'])) {
-            $context['constraint'] =
-                'Do not promise or confirm any date, amount, refund, discount or '
-              . 'commitment. Acknowledge what the customer sent, state what happens '
-              . 'next, and say a colleague will confirm the details.';
+            $context['constraints'] = [
+                'Promise, confirm or estimate any date — installation, delivery or visit',
+                'Confirm, accept or acknowledge acceptance of an order or purchase order',
+                'Agree any price, discount, refund or credit',
+                'Confirm that a payment has been received',
+            ];
         }
 
         try {
             $r = $this->brain->reply($context);
-            $reply['body'] = trim((string)($r['reply'] ?? ''));
+
+            // An escalation is a note for the reviewer, never a draft.
+            //
+            // The brain's handover text — "Please hold on while I escalate
+            // your request" — is written for a chat window where a colleague
+            // appears shortly. Left in the draft body it sits under an
+            // APPROVE & SEND button, one careless click from being sent to a
+            // customer as a complete reply. The reason belongs to the person
+            // reading; the empty body tells them plainly that this one has to
+            // be written by hand.
+            if (!empty($r['escalate'])) {
+                $reply['body']      = '';
+                $reply['escalation'] = trim((string)($r['escalate_reason'] ?? 'the assistant could not answer this'));
+            } else {
+                $reply['body'] = trim((string)($r['reply'] ?? ''));
+            }
         } catch (\Throwable $e) {
             error_log('[InboundMailWorker] draft failed: ' . $e->getMessage());
             $reply['body'] = '';

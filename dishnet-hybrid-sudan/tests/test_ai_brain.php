@@ -410,5 +410,29 @@ t('and no invented cheaper unlimited-only plan',
 t('tone: human sales agent, not a chatbot',
   str_contains($fp, 'human sales agent at a small business'), true);
 
+// ── Email is not chat ────────────────────────────────────────────────
+// The first email draft this brain wrote said "Please hold on while I
+// escalate your request." Sensible in a chat window, where a colleague can
+// appear a minute later; nonsense in an inbox, read once, hours later.
+$brainE = new DishNetAiBrain([]);
+$fpE = $brainE->promptPreview([
+    'channel' => 'sales', 'medium' => 'email', 'message' => 'When will you install?',
+    'constraints' => ['Promise, confirm or estimate any date'],
+]);
+t('email: the medium is stated', str_contains($fpE, 'THE MEDIUM IS EMAIL'), true);
+t('email: no holding messages', str_contains($fpE, 'hold on'), true);
+t('email: does not announce escalating to the customer',
+  str_contains($fpE, 'nobody to escalate to'), true);
+t('email: answers in one reply rather than asking and stopping',
+  str_contains($fpE, 'costs them another day'), true);
+t('email: constraints are stated as rules', str_contains($fpE, 'YOU MUST NOT'), true);
+t('email: and the constraint itself appears',
+  str_contains($fpE, 'Promise, confirm or estimate any date'), true);
+
+// WhatsApp must be untouched by all of that.
+$fpW = $brainE->promptPreview(['channel' => 'sales', 'message' => 'When will you install?']);
+t('whatsapp: no email rules leak in', str_contains($fpW, 'THE MEDIUM IS EMAIL'), false);
+t('whatsapp: no constraints section', str_contains($fpW, 'YOU MUST NOT'), false);
+
 printf("\n%d passed, %d failed\n",$pass,$fail);
 exit($fail===0?0:1);

@@ -198,6 +198,9 @@ class DishNetAiBrain
         // ── Channel role ────────────────────────────────────────────────
         $p .= $this->channelRules($channel);
 
+        // ── Medium ──────────────────────────────────────────────────────
+        $p .= $this->mediumRules($ctx);
+
         // ── Existing customers are not prospects ────────────────────────
         // Ported from the South Sudan bot, where sales kept being pinged
         // about people already paying. The identity lookup already runs on
@@ -343,6 +346,51 @@ class DishNetAiBrain
      * What this number is for. One brain, three roles — the difference is
      * posture and available data, not a separate bot.
      */
+    /**
+     * How this reply will be read, which is not the same as what it is about.
+     *
+     * The first email draft this brain produced said "Please hold on while I
+     * escalate your request." Sensible in a chat window, where a colleague can
+     * appear a minute later. Nonsense in an inbox: the customer reads it once,
+     * hours later, and there is nothing to hold on for. Every chat instinct in
+     * the prompt above — short turns, one question at a time, hand over to a
+     * human — has to be restated for a medium where the reply IS the response.
+     *
+     * And in this medium a colleague is already reading: nothing is sent to a
+     * customer until a person approves it. So there is no one to escalate TO.
+     * Saying so to the customer describes a process that is not happening.
+     */
+    private function mediumRules(array $ctx): string
+    {
+        if (($ctx['medium'] ?? '') !== 'email') return '';
+
+        $p = "\nTHE MEDIUM IS EMAIL, NOT CHAT.\n"
+           . "- Write a letter, not a chat turn: a greeting, complete sentences, a sign-off.\n"
+           . "- They will read this once, later. Never write \"hold on\", \"please wait\", "
+           . "\"one moment\", or any promise to come back shortly — this reply is the "
+           . "response, not a placeholder for one.\n"
+           . "- A colleague reads and approves every draft before it is sent, so there is "
+           . "nobody to escalate to and no transfer to announce. Never tell the customer you "
+           . "are escalating, checking with someone, or connecting them. Write the best reply "
+           . "you can and let the colleague handle what you cannot.\n"
+           . "- If a fact is genuinely not available to you, leave it out. Do not narrate what "
+           . "you lack access to; that is our internal plumbing and not their concern.\n"
+           . "- Answer everything they asked that you CAN answer, in one reply. Do not ask a "
+           . "qualifying question and stop — that costs them another day.\n";
+
+        // What a person has already decided this reply may not do. Stated as
+        // rules, before the data, so a persuasive message cannot argue past
+        // them.
+        $c = array_values(array_filter(array_map('strval', (array)($ctx['constraints'] ?? []))));
+        if ($c !== []) {
+            $p .= "\nYOU MUST NOT, IN THIS REPLY:\n";
+            foreach ($c as $line) $p .= '- ' . $line . "\n";
+            $p .= "If the customer asked for one of these, say plainly that a colleague will "
+                . "confirm it, and answer the rest of their message normally.\n";
+        }
+        return $p;
+    }
+
     private function channelRules(string $channel): string
     {
         switch ($channel) {

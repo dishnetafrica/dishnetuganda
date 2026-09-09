@@ -53,11 +53,17 @@ class FakeCrm
 class FakeBrain
 {
     public $calls = [];
+    public $escalates = false;
     public function isConfigured(): bool { return true; }
     public function reply(array $ctx): array
     {
         $this->calls[] = $ctx;
         if (!empty($ctx['classify_only'])) return ['reply' => 'plans_pricing'];
+        if ($this->escalates) {
+            // Exactly what the real brain returned on the first live draft.
+            return ['reply' => 'Please hold on while I escalate your request.',
+                    'escalate' => true, 'escalate_reason' => 'no installation dates available'];
+        }
         return ['reply' => "Dear Felix,\n\nThank you for the purchase order."];
     }
 }
@@ -122,12 +128,42 @@ is_((int)($counts[EmailDraftStore::SENT] ?? 0) === 0, 'and nothing at all is sen
 is_((int)($counts[EmailDraftStore::APPROVED] ?? 0) === 0, 'nothing is pre-approved either',
     json_encode($counts));
 
-echo "\nThe model is told not to promise what it cannot know\n";
+echo "\nThe brain is spoken to in its own vocabulary\n";
+// The first live draft claimed to have no account details for a customer we
+// had matched exactly one step earlier. The keys were invented: 'client',
+// 'name' and 'constraint' against a brain that reads 'customer', 'account'
+// and 'constraints'. It received nothing and answered accordingly.
 $drafting = array_values(array_filter($brain->calls, function ($c) { return empty($c['classify_only']); }));
 is_(count($drafting) === 1, 'the brain was asked for exactly one draft');
-is_(isset($drafting[0]['constraint']), 'a constraint was attached to the request');
-is_(strpos((string)($drafting[0]['constraint'] ?? ''), 'date') !== false,
-    'naming dates specifically — the thing this customer asked for');
+$ctx = $drafting[0];
+$brainSrc = (string)file_get_contents($root . '/lib/DishNetAiBrain.php');
+foreach (['customer', 'account', 'constraints', 'medium'] as $k) {
+    is_(isset($ctx[$k]), "it is given '{$k}'", json_encode(array_keys($ctx)));
+    is_(strpos($brainSrc, "\$ctx['" . $k . "']") !== false,
+        "and the brain actually reads '{$k}'");
+}
+is_(($ctx['customer']['name'] ?? '') === 'Subterra Limited',
+    'the customer is named from the uCRM record', json_encode($ctx['customer'] ?? null));
+is_(($ctx['medium'] ?? '') === 'email', 'and told this is email, not a chat window');
+is_(count(array_filter($ctx['constraints'], function ($c) { return stripos($c, 'date') !== false; })) > 0,
+    'dates are named in the constraints — the thing this customer asked for',
+    json_encode($ctx['constraints']));
+
+echo "\nAn escalation is a note for the reviewer, never a draft\n";
+// "Please hold on while I escalate your request" under an APPROVE & SEND
+// button is one careless click from reaching a customer as a whole reply.
+$escBrain = new FakeBrain();
+$escBrain->escalates = true;
+[$wE, $sE] = newWorker([$felix], new FakeCrm(), $escBrain, $config);
+$wE->run();
+$pE = $sE->listByStatus(EmailDraftStore::PENDING)[0];
+is_(trim((string)$pE['draft_body']) === '',
+    'the handover sentence does not become the draft body',
+    'body: ' . $pE['draft_body']);
+is_(strpos((string)$pE['escalation'], 'no installation dates available') !== false,
+    'the reason is recorded for the person instead', (string)$pE['escalation']);
+is_(strpos((string)$pE['escalation'], 'human approval required') !== false,
+    'alongside the approval hold');
 
 echo "\nOur own quoted email never reaches the model\n";
 is_(strpos((string)($drafting[0]['message'] ?? ''), '1,645,440') === false,
@@ -180,7 +216,7 @@ is_(in_array('email_ai_mailbox_pw', PluginConfig::SECRET_KEYS, true),
 $r = PluginConfig::saveOverrides(sys_get_temp_dir(), ['email_ai_mailbox_pw' => 'hunter2']);
 is_(($r[0] ?? null) === false, 'and an attempt to save it fails', json_encode($r));
 is_(strpos((string)($r[1] ?? ''), 'Configuration screen') !== false,
-    'pointing at the encrypted route instead', (string)($r[1] ?? ''));
+    'pointing at the Configuration screen instead', (string)($r[1] ?? ''));
 $setter = (string)file_get_contents($root . '/tools/set_inbound_mail.php');
 is_(strpos($setter, 'stty') === false,
     'and the setter no longer offers to read a password at all');
