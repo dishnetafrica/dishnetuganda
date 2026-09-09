@@ -19,13 +19,25 @@ function ok(string $m): void  { global $pass; $pass++; echo "  ok   {$m}\n"; }
 function bad(string $m, string $d=''): void { global $fail; $fail++; echo "  FAIL {$m}\n"; if($d)echo "       {$d}\n"; }
 function is_(bool $c, string $m, string $d=''): void { $c ? ok($m) : bad($m, $d); }
 
-// A fake JMAP server: session, then one query/get pair.
+// A fake JMAP server: session, mailbox list, then one query/get pair.
 $calls = [];
 $fake = function (string $method, string $url, array $headers, ?array $body) use (&$calls) {
     $calls[] = ['method' => $method, 'url' => $url, 'body' => $body, 'headers' => $headers];
     if ($method === 'GET') {
         return ['apiUrl' => 'https://mail.example/jmap/', 'accounts' => ['acc1' => ['name' => 'x']]];
     }
+
+    // The folder list. A real account has more than an inbox, and the reader
+    // must want only one of them.
+    $call = (string)($body['methodCalls'][0][0] ?? '');
+    if ($call === 'Mailbox/get') {
+        return ['methodResponses' => [['Mailbox/get', ['list' => [
+            ['id' => 'mb-sent',  'name' => 'Sent Items', 'role' => 'sent'],
+            ['id' => 'mb-inbox', 'name' => 'Inbox',      'role' => 'inbox'],
+            ['id' => 'mb-junk',  'name' => 'Junk Mail',  'role' => 'junk'],
+        ]], 'm']]];
+    }
+
     return ['methodResponses' => [
         ['Email/query', ['ids' => ['e1', 'e2']], 'q'],
         ['Email/get', ['list' => [
@@ -151,6 +163,42 @@ $box->setResolve(['mail.example.com:443:172.20.0.4']);
 $box->fetch('', 1);
 is_($seen === 'https://mail.example.com/.well-known/jmap',
     'the session is still requested by its proper name', 'got: ' . var_export($seen, true));
+
+echo "\nOnly the inbox is read\n";
+// The first live run read seventeen messages, fourteen of them our own
+// quotations in Sent Items. Nothing was drafted for them only because the
+// loop guard caught our own address — the second line of defence doing the
+// first line's job. Drafts, Trash and Spam were in scope too.
+$queryCall = null;
+foreach ($calls as $c) {
+    $name = (string)($c['body']['methodCalls'][0][0] ?? '');
+    if ($name === 'Email/query') { $queryCall = $c['body']['methodCalls'][0][1]; break; }
+}
+is_(is_array($queryCall), 'the reader issues an Email/query');
+is_(($queryCall['filter']['inMailbox'] ?? '') === 'mb-inbox',
+    'filtered to the mailbox with the inbox role',
+    json_encode($queryCall['filter'] ?? null));
+is_(($queryCall['filter']['inMailbox'] ?? '') !== 'mb-sent',
+    'never Sent Items, where our own outgoing mail lives');
+
+echo "\nAn account with no inbox is refused, not read wholesale\n";
+$noInbox = function (string $method, string $url, array $headers, ?array $body) {
+    if ($method === 'GET') {
+        return ['apiUrl' => 'https://mail.example/jmap/', 'accounts' => ['acc1' => ['name' => 'x']]];
+    }
+    if ((string)($body['methodCalls'][0][0] ?? '') === 'Mailbox/get') {
+        return ['methodResponses' => [['Mailbox/get', ['list' => [
+            ['id' => 'mb-a', 'name' => 'Archive', 'role' => 'archive'],
+        ]], 'm']]];
+    }
+    return ['methodResponses' => []];
+};
+$mbNo = new JmapMailbox('https://mail.example', 'u', 'p', $noInbox);
+$rNo  = $mbNo->fetch('', 25);
+is_(empty($rNo['ok']), 'the fetch fails');
+is_(strpos((string)$rNo['error'], 'inbox role') !== false,
+    'saying why, rather than falling back to every folder', (string)$rNo['error']);
+is_($rNo['emails'] === [], 'and reads nothing');
 
 echo "\nA redirect is followed only where it cannot leak the password\n";
 // Stalwart answers /.well-known/jmap with a 307 to /jmap/session, so refusing

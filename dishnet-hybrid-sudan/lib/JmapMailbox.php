@@ -91,12 +91,31 @@ class JmapMailbox
                   'hasAttachment', 'attachments'];
         foreach (self::WANTED_HEADERS as $hdr) $props[] = 'header:' . $hdr . ':asText';
 
+        // Read the INBOX, not the account.
+        //
+        // Without this the query spans every mailbox, so the first live run
+        // read seventeen messages of which fourteen were our own quotations
+        // sitting in Sent Items. Nothing was drafted for them only because
+        // the loop guard recognised our own address — a second line of
+        // defence doing the first line's job. Drafts, Trash and Spam are in
+        // scope on that query too, and a reply drafted to something in Spam
+        // is a reply drafted to whatever put it there.
+        $inbox = $this->inboxId($apiUrl, $accountId);
+        if ($inbox === '') {
+            $out['error'] = 'the account has no mailbox with the inbox role — '
+                          . 'refusing to read every folder instead';
+            return $out;
+        }
+
+        $filter = ['inMailbox' => $inbox];
+        if ($since !== '') $filter['after'] = $since;
+
         $resp = $this->call('POST', $apiUrl, [
             'using' => ['urn:ietf:params:jmap:core', 'urn:ietf:params:jmap:mail'],
             'methodCalls' => [
                 ['Email/query', [
                     'accountId' => $accountId,
-                    'filter'    => $since !== '' ? ['after' => $since] : new \stdClass(),
+                    'filter'    => $filter,
                     'sort'      => [['property' => 'receivedAt', 'isAscending' => true]],
                     'limit'     => max(1, $limit),
                 ], 'q'],
@@ -126,6 +145,38 @@ class JmapMailbox
         $out['newest'] = $newest;
         $out['ok'] = true;
         return $out;
+    }
+
+    /**
+     * The id of the mailbox mail actually arrives in.
+     *
+     * By role rather than by name: "Inbox" is localised and renameable, while
+     * the role is what the protocol guarantees. If no mailbox claims the role,
+     * the caller is told rather than quietly falling back to every folder —
+     * reading the wrong folders is the fault being fixed, so a fallback to
+     * exactly that would be no fix at all.
+     */
+    private function inboxId(string $apiUrl, string $accountId): string
+    {
+        $r = $this->call('POST', $apiUrl, [
+            'using' => ['urn:ietf:params:jmap:core', 'urn:ietf:params:jmap:mail'],
+            'methodCalls' => [
+                ['Mailbox/get', [
+                    'accountId'  => $accountId,
+                    'properties' => ['id', 'name', 'role'],
+                ], 'm'],
+            ],
+        ]);
+
+        foreach ((array)($r['methodResponses'] ?? []) as $mr) {
+            if (($mr[0] ?? '') !== 'Mailbox/get') continue;
+            foreach ((array)($mr[1]['list'] ?? []) as $box) {
+                if (strtolower((string)($box['role'] ?? '')) === 'inbox') {
+                    return (string)($box['id'] ?? '');
+                }
+            }
+        }
+        return '';
     }
 
     private function normalise(array $e): array
