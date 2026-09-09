@@ -110,9 +110,15 @@ $base      = rtrim(wa_ai_public_base($config), '/');
 $apiBase   = rtrim($crm->getBaseUrl(), '/');
 $localRoot = preg_replace('#/api/v[0-9.]+$#', '', $apiBase);
 
+// uCRM serves only public.php from a plugin directory; webhook.php at its own
+// path returns uCRM's 404, which is exactly what the first run of this tool
+// found. The handler is routed through public.php?page=crm_webhook.
 $candidates = [];
-if ($localRoot !== '') $candidates[] = $localRoot . '/_plugins/dishnet-hybrid-sudan/webhook.php';
-if ($base !== '')      $candidates[] = $base . '/webhook.php';
+foreach ([$localRoot . '/_plugins/dishnet-hybrid-sudan', $base] as $b) {
+    $b = rtrim((string)$b, '/');
+    if ($b === '') continue;
+    $candidates[] = $b . '/public.php?page=crm_webhook';
+}
 $candidates = array_values(array_unique(array_filter($candidates)));
 
 $working = '';

@@ -678,6 +678,23 @@ if ($page === 'prices') {
     exit;
 }
 
+// ── uCRM event webhook ───────────────────────────────────────────────
+// URL: public.php?page=crm_webhook
+//
+// uCRM serves ONLY public.php from a plugin directory, so webhook.php at its
+// own path returns uCRM's 404 — which is what it had been doing. Every event
+// this plugin reacts to (invoice.add, payment.add, quote.add, the service
+// suspend/activate pair) arrives here or not at all, so without this route the
+// whole handler was unreachable and the plugin was deaf to uCRM.
+//
+// webhook.php guards its own bootstrap with !isset($dataDir) / !isset($store),
+// which is precisely so it can be required like this.
+if ($page === 'crm_webhook') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/webhook.php';
+    exit;
+}
+
 //  Evolution API Webhook 
 // URL: public.php?page=evo_webhook
 if ($page === 'evo_webhook') {

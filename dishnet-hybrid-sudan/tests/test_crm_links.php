@@ -60,5 +60,21 @@ foreach ($it as $file) {
 t('zero hardcoded CRM hosts / old plugin names', count($violations), 0);
 if ($violations) echo "    " . implode("\n    ", array_slice($violations, 0, 20)) . "\n";
 
+echo "\nEvery externally-called entry point is routed through public.php\n";
+$pub = (string)file_get_contents(dirname(__DIR__) . '/public.php');
+foreach ([
+    'crm_webhook' => 'webhook.php',       // uCRM events: invoice, payment, quote, suspend
+    'evo_webhook' => 'evo_webhook.php',   // WhatsApp inbound
+    'wa_webhook'  => 'wa_webhook.php',
+] as $page => $file) {
+    // uCRM serves ONLY public.php from a plugin directory. A handler without a
+    // route here is silently unreachable — which is exactly what happened to
+    // webhook.php: registered nowhere, called never, and the plugin was deaf
+    // to every uCRM event since launch.
+    $routed = strpos($pub, "\$page === '{$page}'") !== false
+           && strpos($pub, "/{$file}'") !== false;
+    t("{$page} routes to {$file}", $routed, true);
+}
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
