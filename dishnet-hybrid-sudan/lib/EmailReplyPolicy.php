@@ -47,6 +47,19 @@ class EmailReplyPolicy
         'regulatory'      => 'UCC or other regulatory questions',
         'outage_claim'    => 'A claim about service failure and its consequences',
         'unclear'         => 'Anything the classifier could not place confidently',
+
+        // Added after the first real customer email. Subterra Limited replied
+        // to a quotation with a purchase order attached and asked when we
+        // would install. Nothing in the list above covered it, so it read as
+        // 'installation' — a MAY_AUTO category — and a machine could have
+        // answered an order with a date nobody had committed to.
+        //
+        // These four are all commitments. None is a published fact.
+        'order_po'        => 'A purchase order or an order being placed',
+        'schedule_request'=> 'Asking us to commit to a date or a visit',
+        'payment_claim'   => 'A customer saying they have paid',
+        'contract_signed' => 'A signed contract, agreement or document returned',
+        'technical_fault' => 'A report that the service is not working',
     ];
 
     /** Every category, for settings screens and the draft inbox. */
