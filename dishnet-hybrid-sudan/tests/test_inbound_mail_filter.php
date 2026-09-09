@@ -101,5 +101,31 @@ InboundMailFilter::addressOf('Felix Orech <felix@x.com>') === 'felix@x.com'
 InboundMailFilter::addressOf('felix@x.com') === 'felix@x.com'
     ? ok('a bare address is left alone') : bad('bare address mangled');
 
+echo "\nSupplier mail is not customer mail\n";
+// Starlink writes to the customer mailbox too. Read as an enquiry, an order
+// confirmation becomes a drafted reply to our own supplier — and there is
+// already a pipeline that reads these properly, pulling out the kit and the
+// order reference and filing them against a customer.
+foreach (['no-reply@starlink.com', 'orders@email.starlink.com', 'billing@spacex.com'] as $a) {
+    mustIgnore('supplier ' . $a, [], $a, 'Your Starlink order has shipped');
+}
+$sup = ignored([], 'no-reply@starlink.com', 'Your Starlink order has shipped');
+strpos((string)$sup['reason'], 'starlink_mail pipeline') !== false
+    ? ok('the reason points at the pipeline that does handle it')
+    : bad('the reason should name the starlink_mail pipeline', (string)$sup['reason']);
+
+echo "\nBut only the real supplier domains\n";
+InboundMailFilter::isSupplier('felix@notstarlink.com') === false
+    ? ok('a domain that merely contains the name is a customer')
+    : bad('notstarlink.com must not count as the supplier');
+InboundMailFilter::isSupplier('a@starlink.com.attacker.net') === false
+    ? ok('a lookalike suffix is not a subdomain')
+    : bad('starlink.com.attacker.net must not count as the supplier');
+InboundMailFilter::isSupplier('orders@email.starlink.com') === true
+    ? ok('while a real subdomain is')
+    : bad('email.starlink.com should be recognised');
+mustAnswer('a customer writing ABOUT Starlink is still a customer',
+    [], 'customer@gmail.com', 'I want Starlink');
+
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);

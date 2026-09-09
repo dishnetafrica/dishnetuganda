@@ -67,6 +67,36 @@ class InboundMailFilter
      * @param array  $ourAddresses  every address this platform sends as
      * @return array{ignore:bool, reason:string}
      */
+    /**
+     * Domains that are our suppliers, not our customers.
+     *
+     * Starlink's mail lands in the customer mailbox too, and the assistant
+     * would read an order confirmation as a customer enquiry and draft a reply
+     * to our own supplier. There is already a pipeline for these — the
+     * starlink@ mailbox, StarlinkMailClassifier, and the starlink_events
+     * store, which pulls out the kit and the order reference — so the right
+     * answer here is to stand aside and let it work, not to answer.
+     */
+    const SUPPLIER_DOMAINS = [
+        'starlink.com', 'spacex.com', 'email.starlink.com', 'mail.starlink.com',
+    ];
+
+    /** Is this address one of our suppliers? */
+    public static function isSupplier(string $address): bool
+    {
+        $addr = strtolower(self::addressOf($address));
+        $at   = strrpos($addr, '@');
+        if ($at === false) return false;
+        $domain = substr($addr, $at + 1);
+
+        foreach (self::SUPPLIER_DOMAINS as $d) {
+            // The domain itself, or any subdomain of it. Not a substring
+            // match: "notstarlink.com" is somebody else entirely.
+            if ($domain === $d || substr($domain, -strlen('.' . $d)) === '.' . $d) return true;
+        }
+        return false;
+    }
+
     public static function assess(array $headers, string $from, string $subject, array $ourAddresses = []): array
     {
         $h = [];
@@ -80,6 +110,13 @@ class InboundMailFilter
                 return self::ignore('the message is from one of our own addresses');
             }
         }
+        // ── Suppliers ───────────────────────────────────────────────────
+        // Not junk, and not a customer. Handled by the Starlink pipeline.
+        if (self::isSupplier($from)) {
+            return self::ignore('supplier mail (Starlink) — handled by the '
+                              . 'starlink_mail pipeline, never answered as a customer');
+        }
+
         // Our own outgoing mail carries this; a reply to it will not.
         if (isset($h['x-dishnet-auto'])) {
             return self::ignore('the message carries our own automation header');
