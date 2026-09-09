@@ -200,6 +200,9 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
 
         $d = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
         $r = $d->send('quotation', ['client_id' => $clientId], $name, [
+            // A person is greeted by first name; a company account has none,
+            // and is then greeted by its full name rather than its first word.
+            'first_name'   => (string)($client['firstName'] ?? ''),
             'quote_number' => $number,
             'total'        => (float)($quote['total'] ?? 0),
             'amount'       => (float)($quote['total'] ?? 0),

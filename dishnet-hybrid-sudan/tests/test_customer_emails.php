@@ -138,5 +138,30 @@ t('preview never sends', strpos($tab, '->send('), false);
 t('preview renders every catalogue entry', strpos($tab, 'CustomerEmails::CATALOGUE') !== false, true);
 t('route registered', strpos((string)file_get_contents($root . '/public.php'), "'email_preview'") !== false, true);
 
+echo "\nThe customer is greeted by a name they recognise\n";
+// Every template read 'customer_name'; every sender passes 'name'. The
+// fallback therefore fired on every real email and customers were greeted
+// "Dear there," — including on a UGX 2,249,000 quotation.
+foreach ([
+    'a company account'    => [['name' => 'Family Shoppers'],                       'Family Shoppers'],
+    'a person, full name'  => [['name' => 'Felix Orech'],                           'Felix Orech'],
+    'a first name given'   => [['first_name' => 'Felix', 'name' => 'Felix Orech'],  'Felix'],
+    'the legacy key'       => [['customer_name' => 'Subterra Limited'],             'Subterra Limited'],
+    'nothing at all'       => [[],                                                  'there'],
+] as $what => [$data, $want]) {
+    foreach (['quotation', 'payment_received', 'welcome', 'invoice'] as $key) {
+        $out  = CustomerEmails::render($key, ['email_currency' => 'UGX'], $data + [
+            'quote_number' => 'Q1', 'invoice_number' => 'I1', 'amount' => 1000,
+        ]);
+        $text = (string)$out['text'];
+        $hit  = strpos($text, "Dear {$want},") !== false;
+        t("{$key}: {$what} is greeted \"{$want}\"", $hit, true);
+    }
+}
+t('a company is never greeted by its first word only',
+  strpos((string)CustomerEmails::quotation(['email_currency' => 'UGX'],
+      ['name' => 'Family Shoppers', 'quote_number' => 'Q1'])['text'], 'Dear Family,'), false);
+
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

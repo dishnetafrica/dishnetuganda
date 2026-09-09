@@ -59,10 +59,28 @@ class CustomerEmails
         return $m === '' ? '' : self::cur($c) . ' ' . $m;
     }
 
-    private static function first(string $name): string
+    /**
+     * Who to greet.
+     *
+     * Two things were wrong here. Every sender passes 'name', while every
+     * template read 'customer_name' — so the fallback fired every time and
+     * real customers were greeted "Dear there,". And taking the first word
+     * turns a company into "Dear Family," when the account is Family Shoppers.
+     *
+     * So: an explicit first_name wins, because a person is nicer greeted by
+     * it; otherwise the name is used whole, which is right for a company and
+     * merely formal for a person. "there" is the last resort it was always
+     * meant to be, not the common case.
+     */
+    private static function greetingName(array $d): string
     {
-        $n = trim($name);
-        return $n === '' ? 'there' : explode(' ', $n)[0];
+        $fn = trim((string)($d['first_name'] ?? ''));
+        if ($fn !== '') return $fn;
+        foreach (['customer_name', 'name', 'company_name'] as $k) {
+            $n = trim((string)($d[$k] ?? ''));
+            if ($n !== '') return $n;
+        }
+        return 'there';
     }
 
     /**
@@ -130,7 +148,7 @@ class CustomerEmails
         $sub   = "Quotation {$num} — " . EmailTemplate::brand($c)['company_name'];
 
         $body = EmailTemplate::h1('Your quotation is attached')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Thank you for your interest in DishNet. Quotation <strong>' . $e($num)
                 . '</strong> is attached to this email as a PDF, with the full breakdown of items and prices.')
               . EmailTemplate::facts([
@@ -149,7 +167,7 @@ class CustomerEmails
               . self::payHow($c)
               . EmailTemplate::p(self::supportLine($c));
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Thank you for your interest in DishNet. Quotation {$num} is attached as a PDF.\r\n\r\n"
               . "Total: {$total}\r\nValid for: {$days} days\r\nPayment reference: {$num}\r\n\r\n"
               . "To go ahead, reply to confirm or make payment - either one confirms your order.\r\n"
@@ -167,7 +185,7 @@ class CustomerEmails
         $sub = 'Payment received — thank you (' . $amt . ')';
 
         $body = EmailTemplate::h1('We have received your payment')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Thank you — your payment has been received and applied to your account. '
                 . 'This email is your receipt.')
               . EmailTemplate::facts([
@@ -185,7 +203,7 @@ class CustomerEmails
                     : '')
               . EmailTemplate::p(self::supportLine($c));
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Thank you - we have received your payment. This email is your receipt.\r\n\r\n"
               . "Amount: {$amt}\r\n"
               . "Received on: " . (string)($d['paid_on'] ?? '') . "\r\n"
@@ -204,7 +222,7 @@ class CustomerEmails
         $sub  = 'Your DishNet installation is booked for ' . $date;
 
         $body = EmailTemplate::h1('Your installation is booked')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Good news — your DishNet installation is scheduled. Here are the details.')
               . EmailTemplate::facts([
                     'Date'      => $date,
@@ -224,7 +242,7 @@ class CustomerEmails
                 . 'please give us as much notice as you can.', 'info')
               . EmailTemplate::p(self::supportLine($c));
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your DishNet installation is scheduled.\r\n\r\n"
               . "Date: {$date}\r\nTime: " . (string)($d['window'] ?? '') . "\r\n"
               . "Address: " . (string)($d['address'] ?? '') . "\r\n"
@@ -246,7 +264,7 @@ class CustomerEmails
         $b     = EmailTemplate::brand($c);
 
         $body = EmailTemplate::h1('Your internet is live 🎉')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Welcome to DishNet. Your service is installed, activated and ready to use. '
                 . 'Keep this email — it has everything about your account in one place.')
               . EmailTemplate::h1('Your service')
@@ -278,7 +296,7 @@ class CustomerEmails
                 . $e($b['support_phone']) . '</strong>. Tell us your account number and we will help — '
                 . 'faults, slow speeds, moving house, upgrading your plan.', 'good');
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Welcome to DishNet - your internet is live.\r\n\r\n"
               . "Plan: {$plan}\r\nMonthly price: {$price}\r\n"
               . "Activated on: " . (string)($d['activated_on'] ?? '') . "\r\n"
@@ -304,7 +322,7 @@ class CustomerEmails
         $sub = "Invoice {$num} — {$amt} due {$due}";
 
         $body = EmailTemplate::h1('Your invoice is ready')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Here is your invoice for the coming service period. '
                 . 'A PDF copy is attached for your records.')
               . EmailTemplate::facts([
@@ -323,7 +341,7 @@ class CustomerEmails
                 . '</strong> keeps your internet running without interruption.', 'info')
               . EmailTemplate::p(self::supportLine($c));
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your invoice for the coming service period is ready (PDF attached).\r\n\r\n"
               . "Invoice: {$num}\r\nPlan: " . (string)($d['plan_name'] ?? '') . "\r\n"
               . "Service period: " . (string)($d['period'] ?? '') . "\r\n"
@@ -343,7 +361,7 @@ class CustomerEmails
         $sub = 'Your DishNet service is paused — ' . $amt . ' to resume';
 
         $body = EmailTemplate::h1('Your service is paused')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Your paid service period has ended, so your internet is paused for now. '
                 . 'Nothing is cancelled and your equipment stays yours — the service simply waits for the '
                 . 'next payment.')
@@ -362,7 +380,7 @@ class CustomerEmails
               . EmailTemplate::p('Already paid? Send us the confirmation and we will check it straight away. '
                 . self::supportLine($c));
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your paid service period has ended, so your internet is paused. Nothing is cancelled.\r\n\r\n"
               . "Invoice: {$num}\r\nAmount to resume: {$amt}\r\nPayment reference: {$num}\r\n\r\n"
               . "There is no reconnection fee - your service resumes as soon as payment reaches us.\r\n\r\n"
@@ -379,7 +397,7 @@ class CustomerEmails
         $sub = 'Your DishNet service is back on';
 
         $body = EmailTemplate::h1('You are back online')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Your payment has been received and your internet is active again. '
                 . 'Thank you.')
               . EmailTemplate::facts([
@@ -390,7 +408,7 @@ class CustomerEmails
               . EmailTemplate::p('If any device is still offline, restart your router and wait two minutes. '
                 . self::supportLine($c));
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your payment has been received and your internet is active again.\r\n\r\n"
               . "Service period: " . (string)($d['period'] ?? '') . "\r\n"
               . "Next payment due: " . (string)($d['next_due'] ?? '') . "\r\n\r\n"
@@ -408,7 +426,7 @@ class CustomerEmails
         $sub  = $code . ' is your DishNet login code';
 
         $body = EmailTemplate::h1('Your login code')
-              . EmailTemplate::p('Hi ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ', '
+              . EmailTemplate::p('Hi ' . $e(self::greetingName($d)) . ', '
                 . 'use this code to sign in to your DishNet account.')
               . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
                 . 'style="background:#f7f7f7;border-radius:10px;margin:0 0 18px;"><tr>'
@@ -419,7 +437,7 @@ class CustomerEmails
               . EmailTemplate::note('<strong>Didn\'t request this?</strong> You can ignore this email — '
                 . 'your account is secure. Never share this code with anyone, including DishNet staff.', 'warn');
 
-        $text = 'Hi ' . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = 'Hi ' . self::greetingName($d) . ",\r\n\r\n"
               . "Your DishNet login code is:\r\n\r\n    {$code}\r\n\r\n"
               . "It expires in {$ttl} minutes.\r\n\r\n"
               . "If you did not request this code, ignore this email - your account is secure.\r\n"
@@ -436,7 +454,7 @@ class CustomerEmails
         $sub = 'We have your request — ' . $ref;
 
         $body = EmailTemplate::h1('We are on it')
-              . EmailTemplate::p('Dear ' . $e(self::first((string)($d['customer_name'] ?? ''))) . ',')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Thank you for contacting DishNet support. Your request is logged and '
                 . 'our team is looking at it.')
               . EmailTemplate::facts([
@@ -450,7 +468,7 @@ class CustomerEmails
               . EmailTemplate::note('For anything urgent, WhatsApp is fastest — we usually reply within '
                 . 'minutes during the day.', 'info');
 
-        $text = "Dear " . self::first((string)($d['customer_name'] ?? '')) . ",\r\n\r\n"
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Thank you for contacting DishNet support. Your request is logged.\r\n\r\n"
               . "Reference: {$ref}\r\nSubject: " . (string)($d['subject'] ?? '') . "\r\n"
               . "Logged: " . (string)($d['logged_at'] ?? '') . "\r\n\r\n"

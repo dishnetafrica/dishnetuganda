@@ -134,7 +134,8 @@ $pdf !== '' ? ok('PDF: ' . strlen($pdf) . " bytes (from {$src})")
 
 // 5. The message.
 $built = CustomerEmails::quotation($config, [
-    'name' => $name, 'quote_number' => $number,
+    'name' => $name, 'first_name' => (string)($client['firstName'] ?? ''),
+    'quote_number' => $number,
     'total' => (float)($quote['total'] ?? 0), 'amount' => (float)($quote['total'] ?? 0),
 ]);
 ok('subject: ' . (string)$built['subject']);
