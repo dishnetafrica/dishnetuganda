@@ -253,22 +253,8 @@ class DishNetAiBrain
         // an invented one is worse than either -- so each fact carries its own
         // fence around what may NOT be added to it.
         $p .= "\nBUSINESS FACTS (answer from these directly):\n";
-        $p .= "- OFFICE: We do not have a walk-in office in Sudan yet — in Sudan we serve "
-            . "customers on WhatsApp and by delivery. Our office is in Juba, South Sudan "
-            . "(DishNet Africa): Tomping Sector 4, American Embassy Road, opposite Pope "
-            . "Francis Roundabout, Mon–Sat 9 AM–6 PM. Having the office in Juba does not "
-            . "change which country's plans you quote.\n";
-        $p .= "- DELIVERY TO SUDAN: kits are flown to Renk, cross into Sudan through the "
-            . "Joda border, and are then transported by road onward to the customer's city — "
-            . "this route reaches the different cities of Sudan. Say exactly that. Do NOT "
-            . "promise a number of days, a specific date, or a delivery fee — logistics "
-            . "vary, so offer to have a colleague confirm timing and cost for their exact "
-            . "location, and " . $this->markerHint(self::MARKER_ESCALATE) . " when they want it.\n";
-        $p .= "- PAYMENT: customers pay online at https://dishnetafrica.com/pay.html — the "
-            . "same payment system our South Sudan operation uses. Always write the full "
-            . "https:// address. NEVER share bank details or account numbers in chat. If they "
-            . "cannot use the page or ask for another method, take their details and "
-            . $this->markerHint(self::MARKER_ESCALATE) . " so a colleague arranges it.\n";
+        $p .= $this->localFacts();
+
         $p .= "- HOW PRIORITY PLANS WORK (Starlink's standard behaviour, and what the "
             . "\"unlimited\" on our posters means): each plan includes the priority-data "
             . "allowance in its name; when that allowance is used up the internet does NOT "
@@ -403,6 +389,74 @@ class DishNetAiBrain
                 . "confirm it, and answer the rest of their message normally.\n";
         }
         return $p;
+    }
+
+    /**
+     * The facts that are true of one country and false of the next.
+     *
+     * These were written for the South Sudan operation and were reaching
+     * Ugandan customers unchanged: a walk-in office in Juba, kits flown to
+     * Renk and crossing at the Joda border, and payment at a Sudanese URL —
+     * on a box whose own quotations ask for a bank transfer to Ecobank
+     * Uganda. Nothing was broken; the answers were simply another country's.
+     *
+     * Unset keeps the original wording exactly, so the Sudan install reads
+     * byte-identically. The literal value "omit" drops a fact entirely, which
+     * is the right answer while an operator knows the Sudan text is wrong and
+     * does not yet have their own: saying nothing beats saying that.
+     */
+    private function localFacts(): string
+    {
+        $esc = $this->markerHint(self::MARKER_ESCALATE);
+
+        $defaults = [
+            'ai_fact_office' =>
+                "We do not have a walk-in office in Sudan yet — in Sudan we serve "
+              . "customers on WhatsApp and by delivery. Our office is in Juba, South Sudan "
+              . "(DishNet Africa): Tomping Sector 4, American Embassy Road, opposite Pope "
+              . "Francis Roundabout, Mon–Sat 9 AM–6 PM. Having the office in Juba does not "
+              . "change which country's plans you quote.",
+            'ai_fact_delivery' =>
+                "kits are flown to Renk, cross into Sudan through the "
+              . "Joda border, and are then transported by road onward to the customer's city — "
+              . "this route reaches the different cities of Sudan. Say exactly that. Do NOT "
+              . "promise a number of days, a specific date, or a delivery fee — logistics "
+              . "vary, so offer to have a colleague confirm timing and cost for their exact "
+              . "location, and " . $esc . " when they want it.",
+            'ai_fact_payment' =>
+                "customers pay online at https://dishnetafrica.com/pay.html — the "
+              . "same payment system our South Sudan operation uses. Always write the full "
+              . "https:// address. NEVER share bank details or account numbers in chat. If they "
+              . "cannot use the page or ask for another method, take their details and "
+              . $esc . " so a colleague arranges it.",
+        ];
+        $labels = [
+            'ai_fact_office'   => 'OFFICE',
+            'ai_fact_delivery' => 'DELIVERY TO SUDAN',
+            'ai_fact_payment'  => 'PAYMENT',
+        ];
+        $customLabels = [
+            'ai_fact_office'   => 'OFFICE',
+            'ai_fact_delivery' => 'DELIVERY',
+            'ai_fact_payment'  => 'PAYMENT',
+        ];
+
+        $out = '';
+        foreach ($defaults as $key => $default) {
+            $set = trim((string)($this->config[$key] ?? ''));
+
+            if (strtolower($set) === 'omit') continue;
+
+            if ($set === '') {
+                $out .= '- ' . $labels[$key] . ': ' . $default . "\n";
+                continue;
+            }
+            // An operator's own words, plus the escalation mechanism, which is
+            // machinery rather than a fact and must not be lost with the text.
+            $out .= '- ' . $customLabels[$key] . ': ' . $set
+                  . ' If you cannot answer fully from this, ' . $esc . ".\n";
+        }
+        return $out;
     }
 
     private function channelRules(string $channel): string

@@ -49,6 +49,7 @@ $runs = [
     ['quote_email_doctor.php',    [],         'diagnoses the quotation path'],
     ['config_trace.php',          ['email_ai_mailbox_pw'], 'traces a config key through its layers'],
     ['jmap_probe.php',            [],         'probes for a JMAP endpoint'],
+    ['ai_facts.php',              [],         'shows what the assistant tells customers'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
