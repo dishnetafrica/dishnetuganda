@@ -187,8 +187,11 @@ foreach ($run['items'] as $i) {
         if ($has('--dry')) {
             $body = trim((string)($i['draft_body'] ?? ''));
             echo "\n          ── draft ──────────────────────────────────────────\n";
-            foreach (explode("\n", $body !== '' ? $body
-                    : '(empty — written by hand; see the reason above)') as $line) {
+            // "See the reason above" printed nothing above. Say it here.
+            $why = trim((string)($i['escalation'] ?? ''));
+            $empty = '(empty — must be written by hand'
+                   . ($why !== '' ? ': ' . $why : '') . ')';
+            foreach (explode("\n", $body !== '' ? $body : $empty) as $line) {
                 echo '          ' . $line . "\n";
             }
             echo "          ───────────────────────────────────────────────────\n\n";

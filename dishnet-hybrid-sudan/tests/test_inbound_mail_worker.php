@@ -53,16 +53,27 @@ class FakeCrm
 class FakeBrain
 {
     public $calls = [];
-    public $escalates = false;
+    public $escalates = false;   // false | 'handover' | 'canned' | 'flagged'
     public function isConfigured(): bool { return true; }
     public function reply(array $ctx): array
     {
         $this->calls[] = $ctx;
         if (!empty($ctx['classify_only'])) return ['reply' => 'plans_pricing'];
-        if ($this->escalates) {
-            // Exactly what the real brain returned on the first live draft.
-            return ['reply' => 'Please hold on while I escalate your request.',
-                    'escalate' => true, 'escalate_reason' => 'no installation dates available'];
+        if ($this->escalates === 'handover') {
+            // handover(): the provider failed. Empty reply, flag set.
+            return ['reply' => '', 'escalate' => true,
+                    'escalate_reason' => 'AI provider unavailable'];
+        }
+        if ($this->escalates === 'canned') {
+            // parseMarkers() when the model emitted only a marker.
+            return ['reply' => 'Let me get someone from the team to help you with this.',
+                    'escalate' => true, 'escalate_reason' => 'AI requested handover'];
+        }
+        if ($this->escalates === 'flagged') {
+            // The common case: a real letter, correctly flagged for a person.
+            return ['reply' => "Dear Subterra Limited,\n\nThank you for the purchase "
+                             . "order. A colleague will confirm the installation date.",
+                    'escalate' => true, 'escalate_reason' => 'purchase order needs acceptance'];
         }
         return ['reply' => "Dear Felix,\n\nThank you for the purchase order."];
     }
@@ -149,21 +160,45 @@ is_(count(array_filter($ctx['constraints'], function ($c) { return stripos($c, '
     'dates are named in the constraints — the thing this customer asked for',
     json_encode($ctx['constraints']));
 
-echo "\nAn escalation is a note for the reviewer, never a draft\n";
-// "Please hold on while I escalate your request" under an APPROVE & SEND
-// button is one careless click from reaching a customer as a whole reply.
-$escBrain = new FakeBrain();
-$escBrain->escalates = true;
-[$wE, $sE] = newWorker([$felix], new FakeCrm(), $escBrain, $config);
-$wE->run();
-$pE = $sE->listByStatus(EmailDraftStore::PENDING)[0];
-is_(trim((string)$pE['draft_body']) === '',
-    'the handover sentence does not become the draft body',
-    'body: ' . $pE['draft_body']);
-is_(strpos((string)$pE['escalation'], 'no installation dates available') !== false,
-    'the reason is recorded for the person instead', (string)$pE['escalation']);
-is_(strpos((string)$pE['escalation'], 'human approval required') !== false,
-    'alongside the approval hold');
+echo "\nA flag for a person is not the same as having nothing to say\n";
+// A purchase order SHOULD be flagged — that is the marker working. Emptying
+// the body there discards a usable draft and leaves the reviewer writing from
+// scratch, which is the one thing this was built to avoid.
+$flagged = new FakeBrain();
+$flagged->escalates = 'flagged';
+[$wF2, $sF2] = newWorker([$felix], new FakeCrm(), $flagged, $config);
+$wF2->run();
+$pF2 = $sF2->listByStatus(EmailDraftStore::PENDING)[0];
+is_(strpos((string)$pF2['draft_body'], 'Thank you for the purchase order') !== false,
+    'a real letter survives the flag', 'body: ' . $pF2['draft_body']);
+is_(strpos((string)$pF2['escalation'], 'purchase order needs acceptance') !== false,
+    'and the reason rides alongside it', (string)$pF2['escalation']);
+
+echo "\nBut a chat holding line is never a draft\n";
+foreach (['handover' => 'AI provider unavailable',
+          'canned'   => 'AI requested handover'] as $mode => $expect) {
+    $b = new FakeBrain();
+    $b->escalates = $mode;
+    [$wX, $sX] = newWorker([$felix], new FakeCrm(), $b, $config);
+    $wX->run();
+    $pX = $sX->listByStatus(EmailDraftStore::PENDING)[0];
+    is_(trim((string)$pX['draft_body']) === '',
+        "{$mode}: nothing reaches the body", 'body: ' . $pX['draft_body']);
+    is_(strpos((string)$pX['escalation'], $expect) !== false,
+        "{$mode}: the reason is recorded for the person", (string)$pX['escalation']);
+}
+
+echo "\nThe canned lines are still the brain's actual words\n";
+// Copied into the worker on purpose. If one is reworded in the brain and not
+// here, this says so rather than a holding message quietly reaching a customer.
+$brainSrc2 = (string)file_get_contents($root . '/lib/DishNetAiBrain.php');
+foreach (InboundMailWorker::HOLDING_MESSAGES as $canned) {
+    is_(strpos($brainSrc2, $canned) !== false,
+        'the brain still says "' . substr($canned, 0, 40) . '…"');
+}
+is_(InboundMailWorker::isHoldingMessage('') === true, 'an empty body counts as nothing to send');
+is_(InboundMailWorker::isHoldingMessage('Dear Felix, your kit ships Monday.') === false,
+    'a real letter does not');
 
 echo "\nOur own quoted email never reaches the model\n";
 is_(strpos((string)($drafting[0]['message'] ?? ''), '1,645,440') === false,

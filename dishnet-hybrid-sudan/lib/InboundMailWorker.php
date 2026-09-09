@@ -186,6 +186,7 @@ class InboundMailWorker
             // stores nothing must still be able to show its work.
             'draft_body'     => (string)$draft['body'],
             'draft_subject'  => (string)$draft['subject'],
+            'escalation'     => (string)($draft['escalation'] ?? ''),
         ];
     }
 
@@ -285,20 +286,28 @@ class InboundMailWorker
         try {
             $r = $this->brain->reply($context);
 
-            // An escalation is a note for the reviewer, never a draft.
+            // An escalation flag and a canned holding message are different
+            // things, and treating them alike threw away good replies.
             //
-            // The brain's handover text — "Please hold on while I escalate
-            // your request" — is written for a chat window where a colleague
-            // appears shortly. Left in the draft body it sits under an
-            // APPROVE & SEND button, one careless click from being sent to a
-            // customer as a complete reply. The reason belongs to the person
-            // reading; the empty body tells them plainly that this one has to
-            // be written by hand.
+            // handover() returns an EMPTY reply with the flag: the provider
+            // failed, or there was nothing to answer. Nothing to keep.
+            //
+            // parseMarkers() returns the model's real letter with the flag
+            // attached, because a purchase order SHOULD be flagged for a
+            // person — that is the marker working. Emptying the body there
+            // discards a usable draft and leaves the reviewer to write from
+            // scratch, which is the one thing this was built to avoid.
+            //
+            // Only the canned chat lines are refused. Under an APPROVE & SEND
+            // button, "Please hold on" is one click from reaching a customer
+            // as a whole reply.
+            $body = trim((string)($r['reply'] ?? ''));
+            if (self::isHoldingMessage($body)) $body = '';
+
+            $reply['body'] = $body;
             if (!empty($r['escalate'])) {
-                $reply['body']      = '';
-                $reply['escalation'] = trim((string)($r['escalate_reason'] ?? 'the assistant could not answer this'));
-            } else {
-                $reply['body'] = trim((string)($r['reply'] ?? ''));
+                $reply['escalation'] = trim((string)($r['escalate_reason'] ?? ''))
+                    ?: 'the assistant asked for a person';
             }
         } catch (\Throwable $e) {
             error_log('[InboundMailWorker] draft failed: ' . $e->getMessage());
@@ -306,6 +315,29 @@ class InboundMailWorker
         }
 
         return $reply;
+    }
+
+    /**
+     * The brain's canned chat lines, which are never an email reply.
+     *
+     * Copied deliberately, and a test asserts each one still appears in
+     * DishNetAiBrain — if one is reworded there and not here, the suite says
+     * so rather than a holding message quietly reaching a customer.
+     */
+    const HOLDING_MESSAGES = [
+        'Let me get someone from the team to help you with this.',
+        "Of course — I'm connecting you with someone from our team now.",
+    ];
+
+    /** Is this text a chat holding line rather than a reply worth reviewing? */
+    public static function isHoldingMessage(string $body): bool
+    {
+        $b = strtolower(trim($body));
+        if ($b === '') return true;
+        foreach (self::HOLDING_MESSAGES as $canned) {
+            if (strpos($b, strtolower(trim($canned))) !== false) return true;
+        }
+        return false;
     }
 
     /** Which of the brain's existing channel voices fits this category. */
