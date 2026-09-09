@@ -111,12 +111,23 @@ $raw = "From: DishNet <{$user}>\r\n"
 echo "\n  … filing a test message\n";
 $r = SentCopy::append($es, $raw);
 if (!empty($r['ok'])) {
-    echo "  PASS — filed in \"{$r['folder']}\"\n";
+    echo "  PASS — filed in \"{$r['folder']}\""
+       . (!empty($r['via']) ? " via {$r['via']}" : '') . "\n";
+    if (!empty($r['created'])) echo "  note — created the folder \"{$r['created']}\"\n";
     if (!empty($r['created'])) echo "  (created the \"{$r['created']}\" folder — it did not exist yet)\n";
     echo "\nOpen https://webmail." . substr(strrchr($user, '@'), 1) . " → Sent. It is there.\n";
     exit(0);
 }
 echo "  FAIL — {$r['error']}\n";
+foreach ((array)($r['tried'] ?? []) as $t) echo "         tried {$t}\n";
+if (!empty($r['tried'])) {
+    echo "\n  Every route failed. The container almost certainly cannot reach the\n";
+    echo "  mail server by its public name — DNS returns this host's own public\n";
+    echo "  address, and connecting back to it from inside a container needs NAT\n";
+    echo "  hairpinning the host may not do. Check what the container can see:\n";
+    echo "    docker exec ucrm getent hosts mail.dishnetuganda.com\n";
+    echo "    docker exec ucrm timeout 5 bash -c '</dev/tcp/172.17.0.1/993' && echo bridge-ok\n";
+}
 if (!empty($r['listed'])) {
     echo "\n  Folders this mailbox actually has:\n";
     foreach ($r['listed'] as $f) echo "    - {$f}\n";

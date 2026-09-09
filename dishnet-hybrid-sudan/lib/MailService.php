@@ -374,7 +374,10 @@ class MailService
             require_once __DIR__ . '/SentCopy.php';
             $r = SentCopy::append($es, $rawMessage);
             return ['step' => 'sent_copy', 'ok' => (bool)$r['ok'],
-                    'msg'  => $r['ok'] ? 'filed in "' . $r['folder'] . '"' : (string)$r['error']];
+                    'msg'  => $r['ok']
+                        ? 'filed in "' . $r['folder'] . '"'
+                          . (!empty($r['via']) ? ' via ' . $r['via'] : '')
+                        : (string)$r['error']];
         } catch (\Throwable $e) {
             return ['step' => 'sent_copy', 'ok' => false, 'msg' => $e->getMessage()];
         }

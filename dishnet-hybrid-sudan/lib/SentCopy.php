@@ -30,7 +30,8 @@ class SentCopy
     /** @return array{ok:bool,error:string,folder:string} */
     public static function append(array $settings, string $rawMessage): array
     {
-        $out = ['ok' => false, 'error' => '', 'folder' => '', 'listed' => [], 'created' => ''];
+        $out = ['ok' => false, 'error' => '', 'folder' => '', 'listed' => [], 'created' => '',
+                'via' => '', 'tried' => []];
         if (empty($settings['sent_copy_enabled'])) {
             $out['error'] = 'disabled';
             return $out;
@@ -51,18 +52,52 @@ class SentCopy
 
         $fp = null;
         try {
-            $ctx = stream_context_create(['ssl' => [
-                // The mail host may still be presenting a self-signed
-                // certificate; this is our own server on our own network and
-                // the alternative is no archive at all.
-                'verify_peer'       => (bool)($settings['sent_copy_verify'] ?? false),
-                'verify_peer_name'  => (bool)($settings['sent_copy_verify'] ?? false),
-                'allow_self_signed' => true,
-            ]]);
-            $errno = 0; $errstr = '';
-            $fp = @stream_socket_client("ssl://{$host}:{$port}", $errno, $errstr, 12,
-                                        STREAM_CLIENT_CONNECT, $ctx);
-            if (!$fp) { $out['error'] = "connect failed: {$errstr}"; return $out; }
+            // The uCRM container often cannot reach the mail server by its
+            // public name: the DNS answer is the host's own public address, and
+            // a container connecting back to that address depends on NAT
+            // hairpinning that many hosts do not do. The mail ports ARE
+            // published on the docker bridge gateway, so try that next.
+            //
+            // The bridge attempts keep certificate verification honest by
+            // pinning peer_name to the real hostname: we connect to an address
+            // but still require the certificate to be the one issued for
+            // mail.dishnetuganda.com. That is stricter than the name attempt,
+            // not looser.
+            $verify   = (bool)($settings['sent_copy_verify'] ?? false);
+            $attempts = [[$host, null]];
+            if (filter_var($host, FILTER_VALIDATE_IP) === false) {
+                foreach (['172.17.0.1', 'host.docker.internal'] as $alt) {
+                    $attempts[] = [$alt, $host];
+                }
+            }
+
+            $fp = null; $tried = [];
+            foreach ($attempts as [$connectHost, $certName]) {
+                $sslOpts = [
+                    'verify_peer'       => $certName !== null ? true : $verify,
+                    'verify_peer_name'  => $certName !== null ? true : $verify,
+                    'allow_self_signed' => $certName === null,
+                ];
+                if ($certName !== null) $sslOpts['peer_name'] = $certName;
+                $ctx = stream_context_create(['ssl' => $sslOpts]);
+
+                $errno = 0; $errstr = '';
+                $fp = @stream_socket_client("ssl://{$connectHost}:{$port}", $errno, $errstr, 8,
+                                            STREAM_CLIENT_CONNECT, $ctx);
+                if ($fp) { $out['via'] = $connectHost; break; }
+                // An empty $errstr says nothing, so name what was actually
+                // tried and what the resolver believed.
+                $why = trim($errstr) !== '' ? trim($errstr)
+                     : ($errno ? "errno {$errno}" : 'no error reported (DNS or TLS handshake)');
+                $ip  = filter_var($connectHost, FILTER_VALIDATE_IP) ? $connectHost
+                     : (gethostbyname($connectHost) ?: '');
+                $tried[] = $connectHost . ($ip && $ip !== $connectHost ? " ({$ip})" : '') . ': ' . $why;
+            }
+            if (!$fp) {
+                $out['error'] = 'connect failed on every route — ' . implode('; ', $tried);
+                $out['tried'] = $tried;
+                return $out;
+            }
             stream_set_timeout($fp, 15);
 
             $readLine = function () use ($fp) { return (string)fgets($fp, 8192); };

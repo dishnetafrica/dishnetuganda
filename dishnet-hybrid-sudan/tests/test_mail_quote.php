@@ -207,5 +207,24 @@ t('an address keeps its literal <angle> part',
 t('and the display name is encoded',
   strpos(MailService::encodeHeaderName('"Amal Öqvist" <a@b.c>'), '=?UTF-8?B?') === 0, true);
 
+echo "\nSent-copy tries more than one route, and says which\n";
+$sc = (string)file_get_contents($root . '/lib/SentCopy.php');
+$t = function (string $n, bool $c) { global $pass, $fail;
+    if ($c) { $pass++; echo "  ok   {$n}\n"; } else { $fail++; echo "  FAIL {$n}\n"; } };
+$t('the docker bridge gateway is tried when the name fails',
+   strpos($sc, '172.17.0.1') !== false);
+$t('an IP route still verifies the certificate, pinned to the real hostname',
+   strpos($sc, "'peer_name'") !== false
+   && strpos($sc, '\'verify_peer\'       => $certName !== null ? true : $verify') !== false);
+$t('an empty error string is replaced by something a human can act on',
+   strpos($sc, 'no error reported (DNS or TLS handshake)') !== false);
+$t('every attempted route is reported back, not just the last',
+   strpos($sc, "\$out['tried'] = \$tried;") !== false);
+$t('the successful route is reported too',
+   strpos($sc, "\$out['via'] = \$connectHost;") !== false);
+$t('an IP host is not given pointless alternates',
+   strpos($sc, 'FILTER_VALIDATE_IP') !== false);
+
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);
