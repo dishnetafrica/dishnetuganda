@@ -8,7 +8,12 @@ chdir(dirname(__DIR__));
  *
  *   php tools/set_sent_copy.php --user accounts@dishnetuganda.com --test
  *   php tools/set_sent_copy.php --off
+ *   php tools/set_sent_copy.php --hosts stalwart,172.18.251.1
  *   php tools/set_sent_copy.php --show
+ *
+ * --hosts overrides the routes tried when the public name is unreachable from
+ * inside the container. Give it a container name on a shared docker network,
+ * or an address, or several separated by commas; they are tried in order.
  *
  * Prompts for the mailbox password (hidden). Defaults the IMAP host to
  * mail.<domain of the user address> and the folder to Sent.
@@ -20,7 +25,7 @@ $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/SentCopy.php';
 
-$opt     = getopt('', ['user:', 'pass:', 'host:', 'port:', 'folder:', 'test', 'off', 'show']);
+$opt     = getopt('', ['user:', 'pass:', 'host:', 'port:', 'folder:', 'hosts:', 'test', 'off', 'show']);
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $file    = rtrim($dataDir, '/') . '/email_settings.json';
 $es      = is_file($file) ? (json_decode((string)@file_get_contents($file), true) ?: []) : [];
@@ -34,7 +39,7 @@ $save = function (array $es) use ($file) {
 
 if (isset($opt['show'])) {
     echo "Sent-copy settings:\n";
-    foreach (['sent_copy_enabled','sent_copy_host','sent_copy_port','sent_copy_user','sent_copy_folder'] as $k) {
+    foreach (['sent_copy_enabled','sent_copy_host','sent_copy_port','sent_copy_user','sent_copy_folder','sent_copy_hosts'] as $k) {
         printf("  %-18s %s\n", substr($k, 10), var_export($es[$k] ?? null, true));
     }
     printf("  %-18s %s\n", 'pass', isset($es['sent_copy_pass']) && $es['sent_copy_pass'] !== '' ? '(set)' : '(not set)');
@@ -56,6 +61,7 @@ if ($user === '' || !filter_var($user, FILTER_VALIDATE_EMAIL)) {
 $host = trim((string)($opt['host'] ?? ($es['sent_copy_host'] ?? '')));
 if ($host === '') $host = 'mail.' . substr(strrchr($user, '@'), 1);
 $port   = (int)($opt['port'] ?? ($es['sent_copy_port'] ?? 993)) ?: 993;
+if (isset($opt['hosts'])) $es['sent_copy_hosts'] = trim((string)$opt['hosts']);
 $folder = trim((string)($opt['folder'] ?? ($es['sent_copy_folder'] ?? 'Sent'))) ?: 'Sent';
 
 $pass = (string)($opt['pass'] ?? '');

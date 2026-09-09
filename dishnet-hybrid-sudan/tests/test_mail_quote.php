@@ -234,5 +234,19 @@ $t('an IP host is not given pointless alternates',
    strpos($sc, 'FILTER_VALIDATE_IP') !== false);
 
 
+echo "\nA quotation still carries a PDF when uCRM serves none\n";
+$qs = (string)file_get_contents($root . '/lib/QuotationService.php');
+$t('the plugin renders its own PDF when uCRM answers 404',
+   strpos($qs, 'renderOwnQuotePdf') !== false
+   && strpos($qs, 'PluginQuotePdf') !== false);
+$t('the own-render is tried only after uCRM has been asked both ways',
+   strpos($qs, 'billing/quotes/{$quoteId}/pdf') < strpos($qs, '$this->renderOwnQuotePdf'));
+$t('a failed own-render still falls back to uCRM sending, as before',
+   strpos($qs, 'uCRM served no quotation PDF and the plugin could not render one') !== false);
+$t('the renderer never throws into the quote path',
+   preg_match('/renderOwnQuotePdf.*?catch \\(\\\\Throwable/s', $qs) === 1);
+$t('and the operator is told when a plugin-rendered PDF went out',
+   strpos($qs, 'sent with a plugin-rendered PDF') !== false);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

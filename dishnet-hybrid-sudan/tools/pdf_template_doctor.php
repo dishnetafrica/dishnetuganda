@@ -35,7 +35,7 @@ foreach ($argvAll as $i => $a) {
     if ($a === '--quote' && isset($argvAll[$i + 1])) $quoteId = (int)$argvAll[$i + 1];
 }
 
-$pass = 0; $warn = 0; $failn = 0;
+$pass = 0; $warn = 0; $failn = 0; $sudanFound = false;
 function line(): void { echo str_repeat('─', 66) . "\n"; }
 function ok(string $m): void   { global $pass;  $pass++;  echo "  ok    {$m}\n"; }
 function wr(string $m): void   { global $warn;  $warn++;  echo "  warn  {$m}\n"; }
@@ -204,6 +204,10 @@ if ($quoteId <= 0) {
         } else {
             echo "\n  None of those served a PDF. What uCRM says the quote IS:\n";
             $q = $crm->get("billing/quotes/{$quoteId}") ?: $crm->get("quotes/{$quoteId}");
+            if (is_array($q) && !empty($q['quoteTemplateId'])) {
+                echo "    (this quote renders with template id {$q['quoteTemplateId']} — match it\n";
+                echo "     against the names listed in section 2 above)\n";
+            }
             if (is_array($q)) {
                 foreach ($q as $k => $v) {
                     if (is_scalar($v) || $v === null) printf("    %-22s %s\n", $k, var_export($v, true));
@@ -232,8 +236,8 @@ if ($quoteId <= 0) {
             foreach (SUDAN_MARKERS as $needle) {
                 if (stripos($text, $needle) !== false) $found[] = $needle;
             }
-            $found ? no('the PDF contains: ' . implode(', ', $found) . ' — this is the Sudan template')
-                   : ok('no Juba, South Sudan, +211 or dishnetafrica in the PDF text');
+            if ($found) { $sudanFound = true; no('the PDF contains: ' . implode(', ', $found) . ' — this is the Sudan template'); }
+            else        { ok('no Juba, South Sudan, +211 or dishnetafrica in the PDF text'); }
 
             foreach (['Uganda' => 'the country', 'UCC' => 'the UCC authorisation line',
                       'UGX' => 'shilling amounts', 'TIN' => 'the tax identification number'] as $need => $what) {
@@ -277,8 +281,8 @@ if ($invId <= 0) {
         } else {
             $found = [];
             foreach (SUDAN_MARKERS as $needle) if (stripos($itext, $needle) !== false) $found[] = $needle;
-            $found ? no('the invoice PDF contains: ' . implode(', ', $found))
-                   : ok('no Juba, South Sudan, +211 or dishnetafrica in the invoice PDF');
+            if ($found) { $sudanFound = true; no('the invoice PDF contains: ' . implode(', ', $found)); }
+            else        { ok('no Juba, South Sudan, +211 or dishnetafrica in the invoice PDF'); }
             foreach (['Uganda' => 'the country', 'UGX' => 'shilling amounts',
                       'TIN' => 'the tax identification number'] as $need => $what) {
                 stripos($itext, $need) !== false ? ok("the invoice PDF shows {$what}")
@@ -292,10 +296,22 @@ if ($invId <= 0) {
 line();
 printf("RESULT: %d pass · %d warn · %d fail\n", $pass, $warn, $failn);
 if ($failn) {
-    echo "\nA FAIL above means the PDF text itself carried South Sudan content, so a\n";
-    echo "Uganda customer would receive a South Sudan document. Install the template\n";
-    echo "from ucrm_pdf_templates/quotation_uganda/ (and invoice_uganda/) in uCRM under\n";
-    echo "System → Customising, set each as the DEFAULT, then rerun this.\n";
+    // Two different failures land here and they need different answers, so
+    // say which one happened rather than assuming the Sudan-content case.
+    if ($sudanFound) {
+        echo "\nThe PDF text carried South Sudan content, so a Uganda customer would\n";
+        echo "receive a South Sudan document. Install the template from\n";
+        echo "ucrm_pdf_templates/quotation_uganda/ (and invoice_uganda/) in uCRM under\n";
+        echo "System → Customising, set each as the DEFAULT, then rerun this.\n";
+    } else {
+        echo "\nuCRM serves no quotation PDF over its API on this install — every endpoint\n";
+        echo "spelling answers 404. Nothing is wrong with the quote itself; the API simply\n";
+        echo "does not expose the rendered document.\n\n";
+        echo "That matters because QuotationService fetched that PDF to attach it, and on\n";
+        echo "failure fell back to letting uCRM send its own email. The plugin now renders\n";
+        echo "its own PDF with wkhtmltopdf instead, so the branded quotation goes out with\n";
+        echo "a document attached. Create a quote and check what arrives.\n";
+    }
 } elseif ($warn) {
     echo "\nNothing failed, but something could not be established. A NOT VERIFIED line\n";
     echo "is not a clean bill of health — it means this tool could not read the bytes.\n";

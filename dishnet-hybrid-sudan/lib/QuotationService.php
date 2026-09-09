@@ -542,6 +542,41 @@ class QuotationService
      * Returns [sent, error]. Never throws: any failure returns [false, why]
      * and the caller falls back to uCRM's /send.
      */
+    /**
+     * Render the quotation PDF ourselves, for installs where uCRM serves none.
+     *
+     * Returns the PDF bytes, or '' if anything at all goes wrong — the caller
+     * then falls back to uCRM sending its own email, which is what happened
+     * before this existed. Never throws: a quotation that reaches the customer
+     * without our branding beats one that never reaches them.
+     */
+    private function renderOwnQuotePdf(int $quoteId, array $client): string
+    {
+        try {
+            $quote = $this->crm->get("billing/quotes/{$quoteId}")
+                  ?: $this->crm->get("quotes/{$quoteId}");
+            if (!is_array($quote) || !$quote) return '';
+
+            require_once __DIR__ . '/PluginQuotePdf.php';
+            $gen = new PluginQuotePdf($this->dataDir, $this->config);
+            $res = $gen->generate($quote, $client, [
+                'name'    => (string)($quote['organizationName'] ?? ''),
+                'tax_id'  => (string)($quote['organizationTaxId'] ?? ''),
+                'reg_no'  => (string)($quote['organizationRegistrationNumber'] ?? ''),
+                'street'  => (string)($quote['organizationStreet1'] ?? ''),
+                'city'    => (string)($quote['organizationCity'] ?? ''),
+            ]);
+            $path = (string)($res['pdf_path'] ?? '');
+            if ($path === '' || !is_file($path)) return '';
+
+            $bytes = (string)@file_get_contents($path);
+            return strncmp($bytes, '%PDF', 4) === 0 ? $bytes : '';
+        } catch (\Throwable $e) {
+            error_log('[QuotationService] own-PDF render failed: ' . $e->getMessage());
+            return '';
+        }
+    }
+
     protected function emailQuotePdf(int $quoteId, string $number, int $crmClientId, array $retailer, float $total = 0.0): array
     {
         try {
@@ -567,13 +602,26 @@ class QuotationService
             if ($email === '') return [false, 'customer has no email address in uCRM'];
 
             // The PDF uCRM would itself have attached. Path differs across
-            // uCRM versions, so try both before giving up.
+            // uCRM versions, so try both.
             $pdf = $this->crm->getRawContent("billing/quotes/{$quoteId}/pdf");
             if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
                 $pdf = $this->crm->getRawContent("quotes/{$quoteId}/pdf");
             }
+
+            // Some uCRM installs serve no quotation PDF over the API at all —
+            // every endpoint spelling answers 404, confirmed by
+            // tools/pdf_template_doctor.php. Giving up here meant falling back
+            // to letting uCRM send its own email, so the branded Uganda
+            // quotation was never the one the customer received. Render our
+            // own instead: PluginQuotePdf drives wkhtmltopdf, which is already
+            // on the uCRM host.
+            $pdfSource = 'ucrm';
             if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
-                return [false, 'could not fetch the quotation PDF from uCRM'];
+                $pdf = $this->renderOwnQuotePdf($quoteId, $client);
+                $pdfSource = 'plugin';
+            }
+            if (!is_string($pdf) || strncmp($pdf, '%PDF', 4) !== 0) {
+                return [false, 'uCRM served no quotation PDF and the plugin could not render one'];
             }
 
             $days  = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
@@ -606,7 +654,10 @@ class QuotationService
 
             @file_put_contents($this->dataDir . '/quote_mail.log',
                 '[' . gmdate('Y-m-d H:i:s') . "] {$number} -> {$email} sent\n", FILE_APPEND | LOCK_EX);
-            return [true, ''];
+            // Not an error, but worth recording: a plugin-rendered PDF means
+            // uCRM served none, which the operator should know about.
+            return [true, $pdfSource === 'plugin'
+                ? 'sent with a plugin-rendered PDF (uCRM served none)' : ''];
         } catch (\Throwable $e) {
             return [false, $e->getMessage()];
         }
