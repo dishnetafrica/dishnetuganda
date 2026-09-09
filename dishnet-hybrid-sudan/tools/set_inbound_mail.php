@@ -8,6 +8,7 @@ chdir(dirname(__DIR__));
  *   php tools/set_inbound_mail.php --show
  *   php tools/set_inbound_mail.php --url https://mail.dishnetuganda.com \
  *       --mailbox accounts@dishnetuganda.com
+ *   php tools/set_inbound_mail.php --resolve mail.example.com:443:172.20.0.4
  *
  * The PASSWORD is not settable here, deliberately. PluginConfig refuses to
  * write a secret to the data directory, and that refusal is the design: a
@@ -47,6 +48,7 @@ if ($args === [] || $has('--show')) {
     printf("    %-22s %s\n", 'email_ai_jmap_url',   ($config['email_ai_jmap_url']   ?? '') ?: '(not set)');
     printf("    %-22s %s\n", 'email_ai_mailbox',    ($config['email_ai_mailbox']    ?? '') ?: '(not set)');
     printf("    %-22s %s\n", 'email_ai_mailbox_pw', mask((string)($config['email_ai_mailbox_pw'] ?? '')));
+    printf("    %-22s %s\n", 'email_ai_jmap_resolve', ($config['email_ai_jmap_resolve'] ?? '') ?: '(none — plain DNS)');
     echo "\n  Reading is all this enables. Every reply still waits for a person.\n\n";
     // --show on its own is a question, not a change.
     if ($args === [] || count($args) === 1) exit(0);
@@ -55,6 +57,9 @@ if ($args === [] || $has('--show')) {
 $updates = [];
 if ($value('--url')     !== '') $updates['email_ai_jmap_url'] = rtrim($value('--url'), '/');
 if ($value('--mailbox') !== '') $updates['email_ai_mailbox']  = trim($value('--mailbox'));
+// host:port:ip, comma separated — the certificate's name at the address that
+// actually holds it. jmap_probe.php prints the value to use.
+if ($value('--resolve')  !== '') $updates['email_ai_jmap_resolve'] = trim($value('--resolve'));
 
 if ($has('--password')) {
     echo "\n  The mailbox password is not set from here.\n\n";

@@ -94,6 +94,11 @@ $mailbox = new JmapMailbox(
     (string)($config['email_ai_mailbox_pw'] ?? '')
 );
 
+// Whatever the probe found has to apply here too. A URL that only works with
+// a pinned address is not configured until the address is configured with it.
+$resolve = trim((string)($config['email_ai_jmap_resolve'] ?? ''));
+if ($resolve !== '') $mailbox->setResolve(array_map('trim', explode(',', $resolve)));
+
 if (!$mailbox->isConfigured()) {
     // Say which key is missing, not which keys exist. The first version of
     // this listed all three whenever any one was absent, so a run that was

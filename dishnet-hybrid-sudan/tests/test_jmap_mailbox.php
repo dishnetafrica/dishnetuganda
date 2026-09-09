@@ -117,5 +117,40 @@ $unset = new JmapMailbox('', '', '', $fake);
 is_(!$unset->isConfigured(), 'an unconfigured mailbox says so');
 is_(!$unset->fetch()['ok'], 'and refuses to fetch');
 
+echo "\nThe diagnostic never goes quiet\n";
+// The one candidate that was actually reachable printed a bare "the JMAP
+// session could not be opened" with nothing after it, because the explainer
+// returned '' for a 200 with no body. The reachable case must be the most
+// informative line, not the least.
+$cases = [
+    [['status' => 200, 'error' => '', 'body' => '',        'location' => ''], 'empty body'],
+    [['status' => 200, 'error' => '', 'body' => 'hello',   'location' => ''], 'not a JMAP session'],
+    [['status' => 302, 'error' => '', 'body' => '',        'location' => 'https://x/'], 'redirect'],
+    [['status' => 401, 'error' => '', 'body' => '',        'location' => ''], 'password is wrong'],
+    [['status' => 403, 'error' => '', 'body' => '',        'location' => ''], 'refused'],
+    [['status' => 404, 'error' => '', 'body' => '',        'location' => ''], 'no JMAP session'],
+    [['status' => 502, 'error' => '', 'body' => 'Bad Gateway', 'location' => ''], 'HTTP 502'],
+    [['status' => 0,   'error' => 'Could not resolve host', 'body' => '', 'location' => ''], 'Could not resolve'],
+];
+foreach ($cases as [$t, $expect]) {
+    $box = new JmapMailbox('http://x', 'u', 'p');
+    $ref = new ReflectionProperty(JmapMailbox::class, 'lastTransport');
+    $ref->setAccessible(true);
+    $ref->setValue($box, $t + ['url' => 'http://x']);
+    $said = $box->transportProblem();
+    is_($said !== '' && stripos($said, $expect) !== false,
+        'status ' . $t['status'] . ($t['error'] ? ' / ' . $t['error'] : '') . ' → says "' . $expect . '"',
+        'said: ' . $said);
+}
+
+echo "\nA pinned address is carried into the request\n";
+$seen = null;
+$box  = new JmapMailbox('https://mail.example.com', 'u', 'p',
+    function ($m, $u, $h, $b) use (&$seen) { $seen = $u; return null; });
+$box->setResolve(['mail.example.com:443:172.20.0.4']);
+$box->fetch('', 1);
+is_($seen === 'https://mail.example.com/.well-known/jmap',
+    'the session is still requested by its proper name', 'got: ' . var_export($seen, true));
+
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);

@@ -70,6 +70,7 @@ class ConfigVault
         'email_ai_jmap_url',
         'email_ai_mailbox',
         'email_ai_mailbox_pw',
+        'email_ai_jmap_resolve',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

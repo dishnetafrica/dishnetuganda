@@ -50,34 +50,70 @@ if ($user === '' || $pass === '') {
 $domain     = substr(strrchr($user, '@') ?: '', 1);
 $configured = rtrim((string)($value('--url', (string)($config['email_ai_jmap_url'] ?? ''))), '/');
 
-$candidates = array_values(array_unique(array_filter([
-    $configured,
-    $domain !== '' ? 'https://mail.' . $domain : '',
-    $domain !== '' ? 'https://' . $domain      : '',
-    'http://stalwart:8080',
-    'https://stalwart:443',
-    'http://stalwart',
-])));
+$mailHost = $domain !== '' ? 'mail.' . $domain : '';
+
+// Where the container next door actually is. The docker network gives it a
+// name; JMAP needs an address to pin the certificate's hostname to.
+$stalwartIp = '';
+foreach (['stalwart', 'mail', 'dishnet-mail'] as $n) {
+    $ip = gethostbyname($n);
+    if ($ip !== $n && filter_var($ip, FILTER_VALIDATE_IP)) { $stalwartIp = $ip; break; }
+}
+
+/** @var array<int,array{url:string,resolve:string[],note:string}> */
+$candidates = [];
+$add = function (string $url, array $resolve = [], string $note = '') use (&$candidates) {
+    $url = rtrim($url, '/');
+    if ($url === '') return;
+    foreach ($candidates as $c) if ($c['url'] === $url && $c['resolve'] === $resolve) return;
+    $candidates[] = ['url' => $url, 'resolve' => $resolve, 'note' => $note];
+};
+
+$add($configured, [], 'configured');
+if ($mailHost !== '') $add('https://' . $mailHost);
+
+// The interesting ones: the correct hostname, pinned to the container's own
+// address. The certificate is issued for the public name, so asking for the
+// container by its docker name fails the TLS check — and asking for the public
+// name leaves the machine and comes back through a proxy that answered 502.
+// This is the combination that is neither.
+if ($stalwartIp !== '' && $mailHost !== '') {
+    foreach ([443, 8443] as $port) {
+        $add('https://' . $mailHost . ($port === 443 ? '' : ':' . $port),
+             [$mailHost . ':' . $port . ':' . $stalwartIp],
+             'via container ' . $stalwartIp);
+    }
+}
+foreach ([8080, 8081, 80] as $port) {
+    $add('http://stalwart:' . $port);
+    if ($stalwartIp !== '') $add('http://' . $stalwartIp . ':' . $port);
+}
+if ($domain !== '') $add('https://' . $domain);
 
 echo "\n  Probing JMAP as {$user}\n";
+echo "  mail host " . ($mailHost ?: '(unknown)')
+   . " · container " . ($stalwartIp ?: 'NOT FOUND on this docker network') . "\n";
 echo "  " . str_repeat('─', 62) . "\n";
 
-$winner = '';
-foreach ($candidates as $url) {
-    $box = new JmapMailbox($url, $user, $pass);
+$winner        = '';
+$winnerResolve = [];
+foreach ($candidates as $c) {
+    $box = new JmapMailbox($c['url'], $user, $pass);
+    if ($c['resolve'] !== []) $box->setResolve($c['resolve']);
+
     // fetch() with a limit of 1 opens the session and stops; the probe is the
     // session, not the mail.
-    $r   = $box->fetch('', 1);
-    $t   = $box->lastTransport();
+    $r = $box->fetch('', 1);
 
+    $label = $c['url'] . ($c['note'] !== '' ? '  [' . $c['note'] . ']' : '');
     if (!empty($r['ok'])) {
-        printf("  %-34s SESSION OK — %d message(s) visible\n", $url, count($r['emails']));
-        if ($winner === '') $winner = $url;
+        printf("  %-46s SESSION OK — %d message(s) visible\n", $label, count($r['emails']));
+        if ($winner === '') { $winner = $c['url']; $winnerResolve = $c['resolve']; }
         continue;
     }
 
     $why = $box->transportProblem();
-    printf("  %-34s %s\n", $url, $why !== '' ? $why : (string)$r['error']);
+    printf("  %-46s %s\n", $label, $why !== '' ? $why : (string)$r['error']);
 }
 
 echo "  " . str_repeat('─', 62) . "\n";
@@ -94,7 +130,12 @@ if ($winner === '') {
 }
 
 echo "\n  JMAP answers at: {$winner}\n";
-if ($winner !== $configured) {
+if ($winnerResolve !== []) {
+    echo "  pinned to: " . implode(', ', $winnerResolve) . "\n";
+    echo "\n  Store both — the address matters as much as the URL here:\n\n";
+    echo "    php tools/set_inbound_mail.php --url {$winner} --resolve "
+       . escapeshellarg(implode(',', $winnerResolve)) . "\n\n";
+} elseif ($winner !== $configured) {
     echo "\n  That is not what is configured. Point the plugin at it:\n\n";
     echo "    php tools/set_inbound_mail.php --url {$winner}\n\n";
 } else {

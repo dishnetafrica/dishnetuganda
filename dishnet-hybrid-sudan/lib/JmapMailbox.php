@@ -197,38 +197,78 @@ class JmapMailbox
      * credentials)". Four different faults, one message, and no way to tell
      * from the outside which one you had.
      *
-     * @return array{status:int, error:string, body:string, url:string}
+     * @return array{status:int, error:string, body:string, url:string, location:string}
      */
     public function lastTransport(): array
     {
         return $this->lastTransport;
     }
 
-    /** @var array{status:int, error:string, body:string, url:string} */
-    private $lastTransport = ['status' => 0, 'error' => '', 'body' => '', 'url' => ''];
+    /** @var array{status:int, error:string, body:string, url:string, location:string} */
+    private $lastTransport = ['status' => 0, 'error' => '', 'body' => '',
+                              'url' => '', 'location' => ''];
 
-    /** A sentence naming what went wrong, or '' when nothing did. */
+    /**
+     * A sentence naming what went wrong. Never empty when something did.
+     *
+     * The first version could return '' — and did, for the one candidate that
+     * was actually reachable, which printed as a bare "the JMAP session could
+     * not be opened" with nothing after it. A diagnostic that goes quiet on
+     * the interesting case is worse than none, because it reads as though
+     * that case were less informative than the failures around it.
+     */
     public function transportProblem(): string
     {
-        $t = $this->lastTransport;
+        $t     = $this->lastTransport;
+        $bytes = strlen($t['body']);
+        $snip  = $bytes > 0 ? ' · ' . str_replace("\n", ' ', substr($t['body'], 0, 120)) : '';
+
         if ($t['error'] !== '')  return 'could not reach ' . $t['url'] . ': ' . $t['error'];
-        if ($t['status'] === 401 || $t['status'] === 403) {
-            return 'the server answered ' . $t['status']
-                 . ' — the mailbox address or password is wrong';
+
+        if ($t['status'] === 401) {
+            return 'HTTP 401 — the mailbox address or password is wrong';
+        }
+        if ($t['status'] === 403) {
+            // Not necessarily auth: a web server in front of the wrong host
+            // refuses the path just as readily.
+            return 'HTTP 403 refused — either the credentials, or this is not '
+                 . 'a JMAP endpoint at all' . $snip;
         }
         if ($t['status'] === 404) {
-            return 'the server answered 404 — this URL serves no JMAP session '
-                 . '(is JMAP enabled, and is this the right host?)';
+            return 'HTTP 404 — this URL serves no JMAP session';
+        }
+        if ($t['status'] >= 300 && $t['status'] < 400) {
+            return 'HTTP ' . $t['status'] . ' redirect to ' . ($t['location'] ?: '(no Location)');
         }
         if ($t['status'] >= 400) {
-            return 'the server answered ' . $t['status'] . ': ' . substr($t['body'], 0, 160);
+            return 'HTTP ' . $t['status'] . $snip;
         }
-        if ($t['status'] === 200 && $t['body'] !== '') {
-            return 'the server answered 200 but not with a JMAP session: '
-                 . substr($t['body'], 0, 160);
+        if ($t['status'] === 200) {
+            return $bytes === 0
+                ? 'HTTP 200 but an empty body — reachable, but not answering JMAP here'
+                : 'HTTP 200, ' . $bytes . ' bytes, not a JMAP session' . $snip;
         }
-        return '';
+        return 'no response' . ($t['status'] ? ' (HTTP ' . $t['status'] . ')' : '');
     }
+
+    /**
+     * Pin a hostname to an address, as curl --resolve does.
+     *
+     * Needed because the certificate is issued for the public mail name while
+     * the only reachable copy is the container next door: connecting to the
+     * container by its docker name fails the certificate check, and connecting
+     * to the public name leaves the datacentre and comes back through a proxy.
+     * This asks for the right name at the right address.
+     *
+     * @param string[] $entries  each "host:port:ip"
+     */
+    public function setResolve(array $entries): void
+    {
+        $this->resolve = array_values(array_filter(array_map('strval', $entries)));
+    }
+
+    /** @var string[] */
+    private $resolve = [];
 
     private function call(string $method, string $url, ?array $body = null)
     {
@@ -247,18 +287,31 @@ class JmapMailbox
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_HEADER         => true,
         ]);
+        if ($this->resolve !== []) curl_setopt($ch, CURLOPT_RESOLVE, $this->resolve);
         if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
-        $raw    = curl_exec($ch);
-        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err    = (string)curl_error($ch);
+        $raw     = (string)curl_exec($ch);
+        $status  = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $hdrSize = (int)curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $err     = (string)curl_error($ch);
         curl_close($ch);
 
+        $head = substr($raw, 0, $hdrSize);
+        $raw  = substr($raw, $hdrSize);
+
+        // Redirects are reported rather than followed. Following one would
+        // carry the Authorization header to wherever it pointed, and that
+        // header is the mailbox password.
+        $loc = '';
+        if (preg_match('/^Location:\s*(.+)$/mi', $head, $m)) $loc = trim($m[1]);
+
         $this->lastTransport = [
-            'status' => $status,
-            'error'  => $err,
-            'body'   => trim((string)$raw),
-            'url'    => $url,
+            'status'   => $status,
+            'error'    => $err,
+            'body'     => trim($raw),
+            'url'      => $url,
+            'location' => $loc,
         ];
 
         $j = json_decode((string)$raw, true);
