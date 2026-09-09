@@ -175,6 +175,21 @@ $r2 = $conn->get('/api/webagg/v2/accounts/service-lines');
 is_(strpos((string)$r2['error'], 'backing off') !== false,
     'and the next call does not even leave the building', (string)$r2['error']);
 
+echo "\nThe account number comes out of the jar it was already in\n";
+$store = freshStore($tmp);
+$store->importCookie('_ga=1; starlink.com.account_number=ACC-DF-15744579-40001-43; '
+                   . 'Starlink.Com.Sso=abc', 'bhavin');
+is_($store->status()['account_number'] === 'ACC-DF-15744579-40001-43',
+    'read from the cookie at import, not waited for from a listing',
+    $store->status()['account_number']);
+is_(strpos(json_encode($store->status()), 'abc') === false,
+    'and reading one value did not put the session tokens on screen');
+
+$store = freshStore($tmp);
+$store->importCookie('starlink.com.account_number=FROM-JAR', 'bhavin', '', 'TYPED');
+is_($store->status()['account_number'] === 'TYPED',
+    'a number given explicitly still wins over the jar');
+
 echo "\nThe session says whose account it is, without being told\n";
 // verify reported "session accepted" while the operator screen showed the
 // account as "(not set)" — something the session knew and was never asked.

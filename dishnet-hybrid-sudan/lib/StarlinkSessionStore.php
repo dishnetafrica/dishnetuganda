@@ -156,6 +156,14 @@ class StarlinkSessionStore
         if ($accountEmail  !== '') $rec['account_email']  = $accountEmail;
         if ($accountNumber !== '') $rec['account_number'] = $accountNumber;
 
+        // The browser already knows the account number and puts it in the jar.
+        // Reading it here saves waiting for a service-line listing to learn
+        // something the session has been carrying all along.
+        if (trim((string)$rec['account_number']) === '') {
+            $fromCookie = self::cookieValue($cookie, 'starlink.com.account_number');
+            if ($fromCookie !== '') $rec['account_number'] = $fromCookie;
+        }
+
         return $this->save($rec)
             ? ['ok' => true, 'error' => '', 'names' => self::cookieNames($cookie)]
             : ['ok' => false, 'error' => 'could not write the session store'];
@@ -353,6 +361,25 @@ class StarlinkSessionStore
             // bytes is where a terminal cuts, and nothing else lands there.
             'suspect_truncated'     => $total >= 4000 && $total <= 4110,
         ];
+    }
+
+    /**
+     * One cookie's value, by name.
+     *
+     * Used for the account number only — a business identifier the browser
+     * puts in the jar in plain sight. Not a general accessor for session
+     * tokens: those are read once, by the connector, and never by anything
+     * that might print.
+     */
+    public static function cookieValue(string $cookie, string $want): string
+    {
+        foreach (explode(';', $cookie) as $part) {
+            $part = trim($part);
+            $eq   = strpos($part, '=');
+            if ($eq === false) continue;
+            if (substr($part, 0, $eq) === $want) return trim(substr($part, $eq + 1));
+        }
+        return '';
     }
 
     /**
