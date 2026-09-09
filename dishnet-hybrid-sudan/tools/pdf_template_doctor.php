@@ -106,39 +106,65 @@ ok('uCRM API answers (' . $crm->getBaseUrl() . ')');
 
 line();
 echo "2) Which PDF templates are installed\n";
+// A template's NAME proves nothing. This install has one called "Invoice
+// Ugadna" — a typo that no search for "uganda" will ever match — and one
+// called simply "v4", which could be anything. So the name is printed as a
+// hint and the verdict is left to the PDF text in step 3.
 foreach (['quote-templates' => 'quote', 'invoice-templates' => 'invoice'] as $ep => $what) {
     $list = $crm->get($ep);
     if ($list === null) {
-        nv("uCRM did not serve /{$ep} (" . json_encode($crm->getLastError()) . ") — check the template in the uCRM UI instead");
+        nv("uCRM did not serve /{$ep} (" . json_encode($crm->getLastError()) . ')');
         continue;
     }
     if (!$list) { wr("no {$what} templates returned"); continue; }
     echo "  {$what} templates:\n";
     foreach ($list as $t) {
-        $nm = (string)($t['name'] ?? ('#' . ($t['id'] ?? '?')));
-        $id = (string)($t['id'] ?? '?');
-        $ug = stripos($nm, 'uganda') !== false;
-        printf("    %-6s %-38s %s\n", $id, $nm, $ug ? '← Uganda' : '');
+        $nm  = (string)($t['name'] ?? ('#' . ($t['id'] ?? '?')));
+        $id  = (string)($t['id'] ?? '?');
+        $def = !empty($t['isDefault']) || !empty($t['default']) ? '  ← DEFAULT' : '';
+        printf("    %-6s %-38s%s\n", $id, $nm, $def);
     }
-    $hasUg = false;
-    foreach ($list as $t) if (stripos((string)($t['name'] ?? ''), 'uganda') !== false) $hasUg = true;
-    $hasUg ? ok("a Uganda {$what} template is installed")
-           : no("NO Uganda {$what} template is installed — uCRM will render the Sudan one");
+    // Say what uCRM exposes, so the next version of this tool can use it.
+    $keys = is_array($list[0] ?? null) ? implode(', ', array_keys($list[0])) : '';
+    if ($keys !== '') echo "    fields: {$keys}\n";
+    $marked = false;
+    foreach ($list as $t) if (!empty($t['isDefault']) || !empty($t['default'])) $marked = true;
+    $marked ? ok("uCRM names a default {$what} template")
+            : nv("uCRM does not expose which {$what} template is the default — check the UI");
 }
 
 line();
 echo "3) The actual PDF a customer would receive\n";
 if ($quoteId <= 0) {
-    $quotes = $crm->get('quotes?limit=1&order=createdDate&direction=DESC');
-    if (!$quotes) $quotes = $crm->get('quotes?limit=1');
-    if (is_array($quotes) && $quotes) $quoteId = (int)($quotes[0]['id'] ?? 0);
+    // Newest first. Without the ordering this picked quote #1 — the oldest
+    // one on the install, quite possibly a deleted draft with no PDF, which
+    // is exactly what happened on the first run.
+    foreach (['billing/quotes?limit=1&order=createdDate&direction=DESC',
+              'quotes?limit=1&order=createdDate&direction=DESC',
+              'billing/quotes?limit=1', 'quotes?limit=1'] as $ep) {
+        $qs = $crm->get($ep);
+        if (is_array($qs) && $qs) {
+            // Some endpoints answer with the newest last whatever we ask.
+            $ids = [];
+            foreach ($qs as $q) if (!empty($q['id'])) $ids[] = (int)$q['id'];
+            if ($ids) { $quoteId = max($ids); break; }
+        }
+    }
 }
 if ($quoteId <= 0) {
     nv('no quote exists yet — create one, then rerun with --quote <id>');
 } else {
-    $pdf = $crm->getRawContent("quotes/{$quoteId}/pdf");
-    if ($pdf === null || strncmp((string)$pdf, '%PDF', 4) !== 0) {
-        nv("quote {$quoteId}: uCRM did not return a PDF (" . json_encode($crm->getLastError()) . ')');
+    // billing/ FIRST: that is the path QuotationService proved works when it
+    // attaches the PDF to the quotation email. Trying only the bare one is
+    // why the first run reported NOT VERIFIED.
+    $pdf = null;
+    foreach (["billing/quotes/{$quoteId}/pdf", "quotes/{$quoteId}/pdf"] as $ep) {
+        $try = $crm->getRawContent($ep);
+        if (is_string($try) && strncmp($try, '%PDF', 4) === 0) { $pdf = $try; break; }
+    }
+    if ($pdf === null) {
+        nv("quote {$quoteId}: neither billing/quotes/{id}/pdf nor quotes/{id}/pdf returned a PDF ("
+           . json_encode($crm->getLastError()) . ')');
     } else {
         $bytes = strlen($pdf);
         ok("quote {$quoteId}: PDF fetched ({$bytes} bytes)");
@@ -167,11 +193,61 @@ if ($quoteId <= 0) {
 }
 
 line();
+echo "4) The actual INVOICE a customer would receive\n";
+$invId = 0;
+foreach (['invoices?limit=1&order=createdDate&direction=DESC', 'invoices?limit=1'] as $ep) {
+    $inv = $crm->get($ep);
+    if (is_array($inv) && $inv) {
+        $ids = [];
+        foreach ($inv as $i) if (!empty($i['id'])) $ids[] = (int)$i['id'];
+        if ($ids) { $invId = max($ids); break; }
+    }
+}
+if ($invId <= 0) {
+    nv('no invoice exists yet to inspect');
+} else {
+    $ipdf = null;
+    foreach (["invoices/{$invId}/pdf", "billing/invoices/{$invId}/pdf"] as $ep) {
+        $try = $crm->getRawContent($ep);
+        if (is_string($try) && strncmp($try, '%PDF', 4) === 0) { $ipdf = $try; break; }
+    }
+    if ($ipdf === null) {
+        nv("invoice {$invId}: uCRM did not return a PDF");
+    } else {
+        ok("invoice {$invId}: PDF fetched (" . strlen($ipdf) . ' bytes)');
+        $ifile = $dataDir . "/invoice_{$invId}_check.pdf";
+        @file_put_contents($ifile, $ipdf);
+        $itext = pdf_text($ipdf);
+        if ($itext === null) {
+            nv("the invoice PDF text could not be decoded — open {$ifile} and read it");
+            echo "  saved  {$ifile}\n";
+        } else {
+            $found = [];
+            foreach (SUDAN_MARKERS as $needle) if (stripos($itext, $needle) !== false) $found[] = $needle;
+            $found ? no('the invoice PDF contains: ' . implode(', ', $found))
+                   : ok('no Juba, South Sudan, +211 or dishnetafrica in the invoice PDF');
+            foreach (['Uganda' => 'the country', 'UGX' => 'shilling amounts',
+                      'TIN' => 'the tax identification number'] as $need => $what) {
+                stripos($itext, $need) !== false ? ok("the invoice PDF shows {$what}")
+                                                 : wr("the invoice PDF does not mention {$what}");
+            }
+            if ($keep) { echo "  saved  {$ifile}\n"; } else { @unlink($ifile); }
+        }
+    }
+}
+
+line();
 printf("RESULT: %d pass · %d warn · %d fail\n", $pass, $warn, $failn);
 if ($failn) {
-    echo "\nA failure above means a Uganda customer would receive a South Sudan\n";
-    echo "document. Install the template from ucrm_pdf_templates/quotation_uganda/\n";
-    echo "in uCRM (System → Customising → Quote templates), set it as the default,\n";
-    echo "then rerun this.\n";
+    echo "\nA FAIL above means the PDF text itself carried South Sudan content, so a\n";
+    echo "Uganda customer would receive a South Sudan document. Install the template\n";
+    echo "from ucrm_pdf_templates/quotation_uganda/ (and invoice_uganda/) in uCRM under\n";
+    echo "System → Customising, set each as the DEFAULT, then rerun this.\n";
+} elseif ($warn) {
+    echo "\nNothing failed, but something could not be established. A NOT VERIFIED line\n";
+    echo "is not a clean bill of health — it means this tool could not read the bytes.\n";
+    echo "Where it says so, open the saved PDF and read it yourself.\n";
+} else {
+    echo "\nThe PDFs a customer receives were read and carry no South Sudan content.\n";
 }
 exit($failn ? 1 : 0);
