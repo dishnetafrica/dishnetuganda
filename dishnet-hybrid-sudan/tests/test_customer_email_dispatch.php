@@ -36,9 +36,10 @@ is_(!CustomerEmailDispatcher::enabled('welcome',
 
 echo "\nThe two templates with no switch are not listed as switchable\n";
 $states = CustomerEmailDispatcher::states(['customer_emails_enabled' => 1]);
-is_(!isset($states['quotation']), 'quotation is not switched here (QuotationService owns it)');
+is_(isset($states['quotation']),
+    'quotation IS switchable — the quote.add path needs a switch of its own');
 is_(!isset($states['login_code']), 'login_code is not switched here (the portal owns it)');
-is_(count($states) === 7, 'seven events are switchable', 'got ' . count($states));
+is_(count($states) === 8, 'eight events are switchable', 'got ' . count($states));
 
 echo "\nA send that is switched off does nothing at all\n";
 $tmp = sys_get_temp_dir() . '/ced_' . bin2hex(random_bytes(4));

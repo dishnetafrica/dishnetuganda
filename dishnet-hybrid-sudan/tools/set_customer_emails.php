@@ -38,9 +38,11 @@ function show(array $config): void
     foreach (CustomerEmailDispatcher::states($config) as $key => $s) {
         printf("  %-20s %-5s %s\n", $key, $s['on'] ? 'ON' : 'off', $s['trigger']);
     }
-    echo "\n  Not switched here, because neither is dispatched by events:\n";
-    echo "    quotation    sent by QuotationService with the PDF attached,\n";
-    echo "                 switched by quote_email_via_plugin\n";
+    echo "\n  quotation has TWO paths and needs the right switch for each:\n";
+    echo "    quote_email_via_plugin    quotes created in the DishNet app\n";
+    echo "    customer_email_quotation  quotes typed into uCRM's own screen\n";
+    echo "                              (listed above — turn it on there)\n";
+    echo "\n  Not switched here:\n";
     echo "    login_code   sent by the portal the moment a customer asks for a\n";
     echo "                 code — gating it would lock people out\n\n";
 }

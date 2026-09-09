@@ -117,7 +117,15 @@ class CustomerEmailDispatcher
             // the quotation is sent by QuotationService with its PDF, and the
             // login code is sent by the portal the moment a customer asks for
             // one — gating that would lock people out of their own account.
-            if ($k === 'quotation' || $k === 'login_code') continue;
+            // The login code is sent by the portal the moment a customer asks
+            // for one; gating that would lock people out of their account.
+            //
+            // The quotation IS switchable, because there are two paths to it:
+            // QuotationService covers quotes created through the app, under
+            // quote_email_via_plugin, and the quote.add webhook covers quotes
+            // typed into uCRM's own screen, under this switch. Without it that
+            // second path could not be turned on at all.
+            if ($k === 'login_code') continue;
             $out[$k] = [
                 'label'   => CustomerEmails::CATALOGUE[$k][0],
                 'trigger' => CustomerEmails::CATALOGUE[$k][1],
