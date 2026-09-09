@@ -113,8 +113,13 @@ $localRoot = preg_replace('#/api/v[0-9.]+$#', '', $apiBase);
 // uCRM serves only public.php from a plugin directory; webhook.php at its own
 // path returns uCRM's 404, which is exactly what the first run of this tool
 // found. The handler is routed through public.php?page=crm_webhook.
+// Public address FIRST when it works. Both are reachable from inside the uCRM
+// container, but localhost is only correct if the process dispatching webhooks
+// is the same container this tool ran in — and if uCRM ever moves delivery to
+// a worker, a localhost endpoint points at the wrong place and fails silently.
+// The public name is right from anywhere.
 $candidates = [];
-foreach ([$localRoot . '/_plugins/dishnet-hybrid-sudan', $base] as $b) {
+foreach ([$base, $localRoot . '/_plugins/dishnet-hybrid-sudan'] as $b) {
     $b = rtrim((string)$b, '/');
     if ($b === '') continue;
     $candidates[] = $b . '/public.php?page=crm_webhook';
@@ -159,6 +164,10 @@ if ($working === '') {
     exit(1);
 }
 ok("uCRM can reach {$working}");
+if (count($candidates) > 1 && strpos($working, 'localhost') !== false) {
+    wr('that is the loopback address — it only works if webhook delivery runs in '
+     . 'this same container. Prefer the public URL if it is also REACHED above.');
+}
 
 line();
 echo "3) Registering\n";
