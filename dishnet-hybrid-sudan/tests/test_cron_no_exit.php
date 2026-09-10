@@ -82,6 +82,30 @@ is_($missing === [], 'every scheduled script exists',
 is_($guilty === [], 'none of them calls exit() or die()',
     implode('; ', $guilty));
 
+echo "\nAnd if one dies anyway, it costs a cycle rather than everything\n";
+// exit() is not the only way to end a process. A set_time_limit fatal and
+// memory exhaustion are both E_ERROR, uncatchable, and a scheduled script can
+// hit either without anyone having written exit() anywhere. jobs_cache fetches
+// every uCRM scheduling job since January under a 60s limit and stopped the
+// cycle at position 21 the same morning the exit() bug was fixed.
+//
+// So master.php claims the slot before running the job. A job that never
+// returns is already stamped, is not due again until its interval elapses,
+// and the jobs behind it get their turn on the next cycle.
+$runAt   = strpos($master, 'master_log("RUN {$_m_name}")');
+$include = strpos($master, 'include $_m_scriptPath');
+$preSave = strpos($master, "'duration_ms' => -1");
+
+is_($preSave !== false, 'the slot is claimed with duration_ms = -1');
+is_($preSave !== false && $runAt !== false && $include !== false
+    && $preSave > $runAt && $preSave < $include,
+    'and claimed BEFORE the job is included, which is the whole point',
+    'claiming it afterwards is what let one job block eighteen others');
+
+$saveCalls = substr_count($master, "save('master_schedule.json'");
+is_($saveCalls >= 2, 'the real duration is still written when a job finishes',
+    'found ' . $saveCalls . ' saves; expected a claim and a completion');
+
 echo "\nThe keep-alive in particular, since it is dispatched first\n";
 $ka = $root . '/cron/starlink_keepalive.php';
 is_(is_file($ka) && $exitsIn($ka) === 0,

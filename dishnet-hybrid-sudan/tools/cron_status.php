@@ -77,8 +77,17 @@ foreach ($m as $j) {
     $elapsed  = ($lastRun > 1) ? $now - $lastRun : null;
     $overdue  = ($elapsed === null) ? PHP_INT_MAX : $elapsed - $interval;
 
+    // master.php writes duration_ms = -1 when it claims the slot and replaces
+    // it on completion. Still -1 means the job started and never came back —
+    // it ended the process. That job is the reason everything below it is
+    // stale, and naming it is the whole point of this tool.
+    $dur   = array_key_exists('duration_ms', (array)($schedule[$name] ?? []))
+           ? (int)$schedule[$name]['duration_ms'] : 0;
+    $died  = ($dur < 0);
+
     $rows[] = ['name' => $name, 'interval' => $interval, 'at' => $lastAt,
-               'elapsed' => $elapsed, 'overdue' => $overdue, 'order' => $order++];
+               'elapsed' => $elapsed, 'overdue' => $overdue, 'died' => $died,
+               'order' => $order++];
 }
 
 /** Most overdue first; registration order breaks ties, since that is the thing
@@ -114,17 +123,25 @@ printf("  %-3s %-20s %9s %9s  %-19s %s\n", '#', 'job', 'every', 'last run', 'at'
 $shown = 0;
 foreach ($rows as $r) {
     $late = $r['overdue'] > $r['interval'];          // missed a whole cycle
-    if (!$all && !$late) continue;
+    if (!$all && !$late && !$r['died']) continue;
     $shown++;
     printf("  %-3d %-20s %8ds %9s  %-19s %s\n",
         $r['order'] + 1, $r['name'], $r['interval'], $ago($r['elapsed']), $r['at'],
-        $r['elapsed'] === null ? 'NEVER RUN' : ($late ? 'OVERDUE' : ''));
+        $r['died'] ? 'DID NOT FINISH'
+                   : ($r['elapsed'] === null ? 'NEVER RUN' : ($late ? 'OVERDUE' : '')));
 }
 
 if ($shown === 0) {
     echo "\n  Every job is running on schedule.\n";
     echo "  Run with --all to see them.\n\n";
     exit(0);
+}
+
+$died = array_filter($rows, function ($r) { return $r['died']; });
+if ($died !== []) {
+    echo "\n  DID NOT FINISH means the job started and never returned: it ended\n";
+    echo "  master.php's process, so nothing after it ran that cycle. Look there\n";
+    echo "  first — everything stale below it is a symptom, not a cause.\n";
 }
 
 echo "\n  If job #1 is current and everything below it is stale, the cycle is\n";

@@ -273,6 +273,29 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
     master_log("RUN {$_m_name}");
     $_m_start = microtime(true);
 
+    // ── Claim the slot BEFORE running it ─────────────────────────────────
+    // The try/catch below catches exceptions. It does not catch exit(), a
+    // set_time_limit fatal, or memory exhaustion — those end the process
+    // outright. A job that dies that way never reaches the save at the
+    // bottom of this loop, so it records no timestamp, stays due on every
+    // cycle, and blocks every job registered after it. Permanently, and
+    // silently: the offender reads as NEVER RUN precisely because it runs
+    // every time.
+    //
+    // Two jobs did exactly this in one morning. identity_worker called
+    // exit() and stopped the plugin for five days; jobs_cache appears to
+    // exceed its 60s limit and stops it at position 21.
+    //
+    // Writing the timestamp first turns a permanent stop into one lost
+    // cycle per interval. duration_ms stays -1 until the job completes, so
+    // a job that never finishes is visible rather than merely absent.
+    $_m_schedule[$_m_name] = [
+        'last_run'    => $_m_now,
+        'last_run_at' => date('Y-m-d H:i:s'),
+        'duration_ms' => -1,
+    ];
+    $_m_store->save('master_schedule.json', $_m_schedule);
+
     // Per-job PHP time limit — prevents any single job from hanging forever.
     // Heavy jobs get 120s, gdrive_backup gets 600s (36MB upload over Juba), others 60s.
     $_m_heavy = in_array($_m_name, ['lte_sync','lte_cron','lte_usage','evo_sync','maintenance','fiber_sync','cashbook_reconcile','gdrive_backup']);
