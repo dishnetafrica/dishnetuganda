@@ -56,6 +56,11 @@ foreach (explode("\n", $src) as $line) {
     if ($t === '' || $t[0] === '#') continue;
     if (strpos($t, '//') === 0 || strpos($t, '*') === 0) continue;
     if (preg_match("/'([a-z0-9_]+)'\s*=>\s*\['interval'\s*=>\s*(\d+)/i", $line, $one)) {
+        // Hour-gated jobs are not late when they have not run — master.php
+        // skips them until their hour comes round. Listing them as NEVER RUN
+        // put eight healthy daily jobs in a report about broken ones.
+        $one['hour'] = preg_match("/'run_hour'\s*=>\s*(\d+)/", $line, $h) ? (int)$h[1] : null;
+        $one['dow']  = preg_match("/'run_dow'\s*=>\s*(\d+)/",  $line, $d) ? (int)$d[1] : null;
         $m[] = $one;
     }
 }
@@ -87,7 +92,7 @@ foreach ($m as $j) {
 
     $rows[] = ['name' => $name, 'interval' => $interval, 'at' => $lastAt,
                'elapsed' => $elapsed, 'overdue' => $overdue, 'died' => $died,
-               'order' => $order++];
+               'hour' => $j['hour'], 'dow' => $j['dow'], 'order' => $order++];
 }
 
 /** Most overdue first; registration order breaks ties, since that is the thing
@@ -95,6 +100,11 @@ foreach ($m as $j) {
 usort($rows, function ($a, $b) {
     return $b['overdue'] <=> $a['overdue'] ?: $a['order'] <=> $b['order'];
 });
+
+$dayName = function (int $d): string {
+    $n = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    return $n[$d] ?? (string)$d;
+};
 
 $ago = function (?int $s): string {
     if ($s === null) return '—';
@@ -122,13 +132,21 @@ printf("  %-3s %-20s %9s %9s  %-19s %s\n", '#', 'job', 'every', 'last run', 'at'
 
 $shown = 0;
 foreach ($rows as $r) {
-    $late = $r['overdue'] > $r['interval'];          // missed a whole cycle
+    $daily = ($r['hour'] !== null);
+    $late  = !$daily && $r['overdue'] > $r['interval'];   // missed a whole cycle
     if (!$all && !$late && !$r['died']) continue;
     $shown++;
     printf("  %-3d %-20s %8ds %9s  %-19s %s\n",
         $r['order'] + 1, $r['name'], $r['interval'], $ago($r['elapsed']), $r['at'],
         $r['died'] ? 'DID NOT FINISH'
-                   : ($r['elapsed'] === null ? 'NEVER RUN' : ($late ? 'OVERDUE' : '')));
+          : ($daily ? 'waits ' . sprintf('%02d:00', $r['hour'])
+                    . ($r['dow'] !== null ? ' ' . $dayName($r['dow']) : '')
+                    : ($r['elapsed'] === null ? 'NEVER RUN' : ($late ? 'OVERDUE' : ''))));
+}
+
+$waiting = count(array_filter($rows, function ($r) { return $r['hour'] !== null; }));
+if (!$all && $waiting > 0) {
+    echo "\n  " . $waiting . " daily job(s) waiting for their hour — not late. --all to see them.\n";
 }
 
 if ($shown === 0) {
