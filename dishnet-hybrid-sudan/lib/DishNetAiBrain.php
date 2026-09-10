@@ -207,6 +207,9 @@ class DishNetAiBrain
         // ── Qualify before recommending ─────────────────────────────────
         $p .= $this->qualification($channel);
 
+        // ── What the hardware actually does ─────────────────────────────
+        $p .= $this->hardwareBlock($channel);
+
         // ── Medium ──────────────────────────────────────────────────────
         $p .= $this->mediumRules($ctx);
 
@@ -572,6 +575,11 @@ class DishNetAiBrain
              . "- If any of those come up, say so plainly and steer to Business. Never quote a "
              . "Residential plan to that customer as though it would do the job — on Residential "
              . "they cannot reach their own cameras or office from outside.\n"
+             . "- CCTV IS THE ONE TO ASK ABOUT, NOT ASSUME. Cameras that only record to a box "
+             . "on site need no public IP and are fine on Residential. It is watching them from "
+             . "somewhere else that needs one. So ask which they want before steering anywhere: "
+             . "selling a business plan to someone who only wanted cameras recording at home is "
+             . "the same mistake as the reverse, just more expensive for them.\n"
              . "- If you cannot tell, ask once, in your own words: will they need CCTV remote "
              . "viewing, VPN, remote access or a server — anything needing a public IP?\n"
              . "- An organisation (office, hotel, lodge, factory, school, NGO, bank, health "
@@ -595,6 +603,48 @@ class DishNetAiBrain
              . "how it will be powered and mounted — that decides Mini against Standard.\n"
              . "- Anything large, multi-site, or asking for a contract or guaranteed uptime: "
              . "take the details and " . $esc . " rather than designing it yourself.\n";
+    }
+
+    /**
+     * What the hardware actually does.
+     *
+     * "Which dish should I buy?" is a question about a building, a number of
+     * people, a power supply and whether the thing ever has to move — not a
+     * question about a product list. Answered from the catalogue alone it goes
+     * wrong in both directions: a family sold a Mini that cannot cover the
+     * house, or a couple in a flat sold the largest thing on the page.
+     *
+     * Loaded here rather than injected by the caller because ten places build
+     * this class — the website chat among them — and a module that depends on
+     * every one of them remembering to pass it is a module that is missing
+     * wherever somebody forgot.
+     *
+     * OFF unless ai_hardware_expert is set. Absence means the prompt South
+     * Sudan has today, byte for byte.
+     */
+    private function hardwareBlock(string $channel): string
+    {
+        if (!filter_var($this->config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return '';
+        }
+        $sells = $channel === 'sales'
+              || filter_var($this->config['ai_sales_on_all_numbers'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (!$sells) return '';
+
+        // Injectable, so a test can render a known catalogue and so an operator
+        // can point at their own file.
+        if (isset($this->config['hardware_block'])) return (string)$this->config['hardware_block'];
+
+        $file = trim((string)($this->config['hardware_file'] ?? ''));
+        if ($file === '') $file = __DIR__ . '/../tools/starlink_hardware.json';
+        if (!is_file($file)) return '';
+
+        if (!class_exists('HardwareKnowledge')) {
+            $lib = __DIR__ . '/HardwareKnowledge.php';
+            if (!is_file($lib)) return '';
+            require_once $lib;
+        }
+        return HardwareKnowledge::promptBlock($file);
     }
 
     /**

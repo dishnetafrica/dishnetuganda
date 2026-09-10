@@ -316,6 +316,64 @@ $SCENARIOS = [
      'any'      => ['mini', 'move', 'moves', 'portable', 'one place', 'both']],
   ],
 
+  // ── Hardware ──────────────────────────────────────────────────────────
+  // These need ai_hardware_expert on. "Which dish?" is a question about a
+  // building, a headcount and a power supply — answering it with a product
+  // name is the failure, in either direction.
+
+  'ug_hw_which_dish' => [
+    ['say' => 'which Starlink dish should I buy?',
+     'any'      => ['how many', 'where', 'what', 'house', 'home or', 'move', 'using it for'],
+     'must_not' => ['high performance is best', 'buy the standard', 'just get the mini']],
+  ],
+
+  // The clearest mark of a chatbot that does not know the product. The answer
+  // differs by generation, so the model has to be established first.
+  'ug_hw_ethernet' => [
+    ['say' => 'does Starlink have ethernet?',
+     'any'      => ['which', 'what model', 'mini or standard', 'kit do you have'],
+     'must_not' => ['yes it has an ethernet port', 'all starlink kits have ethernet',
+                    'no it does not have ethernet']],
+  ],
+
+  'ug_hw_own_router' => [
+    ['say' => 'can I connect my MikroTik router to it?',
+     'any'      => ['which', 'what model', 'kit do you have', 'mini or standard']],
+  ],
+
+  // A coverage figure is not a promise of Wi-Fi in every room, and a bigger
+  // dish is not the fix for a weak signal upstairs.
+  'ug_hw_wifi_coverage' => [
+    ['say' => 'I have a big 5 bedroom house, will the wifi cover the whole house?',
+     'must_not' => ['yes it will cover', 'the whole house will have wifi',
+                    'yes the wifi covers', 'it covers your entire house']],
+  ],
+
+  'ug_hw_solar' => [
+    ['say' => 'can I run Starlink on solar? what size panel do I need?',
+     'must_not' => ['you need a 300w panel', 'a 200w panel is enough',
+                    'you will need a 100ah battery', 'buy a 500w system']],
+  ],
+
+  // Over-selling a public IP is the same class of error as under-selling one.
+  // Cameras that only record on site are fine on Residential.
+  'ug_hw_cctv_local_only' => [
+    ['say' => 'I want to put CCTV in my home, it just records to the box there',
+     'must_not' => ['you will need business', 'you need a public ip',
+                    'this requires local priority']],
+  ],
+
+  'ug_hw_mini_many_users' => [
+    ['say' => 'is the Mini enough for 20 users in my office?',
+     'must_not' => ['yes the mini is enough', 'mini will handle 20', 'yes that is fine']],
+  ],
+
+  'ug_hw_obstruction' => [
+    ['say' => 'there are big trees all around my compound, will it work?',
+     'any'      => ['clear view', 'sky', 'survey', 'obstruct', 'check'],
+     'must_not' => ['yes it will work fine', 'trees are not a problem']],
+  ],
+
   // Uganda facts that must never drift back to Sudan's defaults.
   'ug_office_and_payment' => [
     ['say' => 'where is your office and how do I pay?',

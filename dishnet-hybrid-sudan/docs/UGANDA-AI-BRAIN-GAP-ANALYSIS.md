@@ -274,6 +274,66 @@ includes the store's file path, whose temp directory is 8 random hex characters.
 It failed roughly one run in 680 — on a different machine each time, for a reason
 unrelated to the property it checks. The sentinel is now non-hex.
 
+### Hardware expert (§22–39)
+
+"Which dish should I buy?" is a question about a building, a headcount, a power
+supply and whether the thing ever moves. Answering it from a product list fails
+in both directions — a family sold a Mini that cannot cover the house, or two
+people in a flat sold the largest thing on the page.
+
+`lib/HardwareKnowledge.php` renders `tools/starlink_hardware.json` into the
+prompt. Two properties make it safe:
+
+**Dated, not permanent.** Every model carries `verified_on` and a source. Past
+`stale_after_days` (180) the block stops asserting and tells the assistant to
+confirm. Starlink changes hardware generations; a spec stated confidently
+eighteen months after anyone checked it is exactly the plausible-and-wrong
+answer everything else here prevents. `tools/hardware_check.php` shows what is
+current, what is stale and which fields are unverified.
+
+**Null is not a value.** High Performance ships with `wifi`, `ethernet` and
+`coverage_m2` null, because that is the honest state of what we have confirmed.
+They render as "not verified — say you will confirm it, never fill the gap".
+
+The rules that carry the most risk:
+
+- **The dish is not the Wi-Fi.** A coverage figure never appears without that
+  caveat attached, and a bigger dish is named explicitly as the wrong fix for a
+  weak signal in a back bedroom.
+- **Ethernet is never answered generically.** The answer differs by model and
+  generation, so the prompt requires establishing the kit first — MikroTik,
+  UniFi, Fortinet, Cisco and switches all included.
+- **Solar sizing covers the whole load**, never the dish figure alone, and never
+  states a panel or battery size we have not confirmed.
+- **Never recommend on price**, in either direction.
+- Obstructions and difficult sites become a survey, not a promise.
+
+**CCTV was corrected here.** The first version of `qualification()` treated every
+camera as a public-IP requirement. Cameras recording to a box on site need no
+public IP and are fine on Residential; it is watching them from elsewhere that
+needs one. Over-selling a business plan is the same mistake as under-selling
+one, just more expensive for the customer — so the assistant now asks which
+before steering anywhere.
+
+No price is in the hardware file, asserted by test.
+
+### On "separate brains"
+
+The suggested architecture — Sales → Product → Hardware → Public IP → Pricing →
+Installation → Support → Escalation — is what this now is, with one difference
+worth stating plainly: they are composed into **one** model call, not eight.
+
+`buildSystemPrompt()` already assembles absolute rules, style, channel role,
+qualification, hardware, medium, knowledge base, live data and local facts as
+separate modules, each independently gated and independently tested. That is
+the reliability benefit you are describing.
+
+Running them as genuinely separate calls would cost eight round trips per
+WhatsApp message. The AI reply path has a 45-second budget and answers ~127
+messages a day on the sales number alone; eight sequential model calls would put
+replies minutes behind the customer and multiply the ways a reply can fail to
+arrive. The module boundaries are worth having. The extra network calls are not.
+
 ### Still deliberately not built
 
 A second pricing store, a second AI platform, an n8n rebuild, any routing change.
