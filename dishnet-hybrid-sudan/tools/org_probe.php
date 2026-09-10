@@ -34,10 +34,21 @@ require_once $root . '/lib/CrmApiClient.php';
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 
-$base = trim((string)($config['crm_base_url'] ?? ''));
-$key  = trim((string)($config['crm_app_key']  ?? ''));
-if ($base === '' || $key === '') { echo "\n  uCRM is not configured in this install.\n\n"; exit(2); }
-$crm = new CrmApiClient($base, $key);
+// fromUcrm() is how every other caller builds this: a manual crm_base_url +
+// crm_auth_token pair if set, otherwise uCRM's own injected ucrm.json. The
+// first version of this tool read crm_base_url and crm_app_key directly and
+// reported "not configured" on an install that has been talking to uCRM all
+// day — the keys were guessed rather than looked up, which is the same class
+// of mistake as guessing an organization id.
+$crm = CrmApiClient::fromUcrm($root, $config);
+if (!$crm->isConfigured()) {
+    echo "\n  uCRM is not configured for this plugin.\n";
+    echo "  Checked: crm_base_url + crm_auth_token in config, then ucrm.json\n";
+    echo "  (ucrmLocalUrl / ucrmPublicUrl + pluginAppKey) at:\n";
+    echo "      " . $root . "/ucrm.json\n";
+    echo "      " . $root . "/data/ucrm.json\n\n";
+    exit(2);
+}
 
 $orgs = null;
 try { $orgs = $crm->get('organizations'); }

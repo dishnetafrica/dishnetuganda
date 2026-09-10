@@ -63,6 +63,18 @@ $runs = [
     ['wa_answering.php',          [],         'reports whether each number is answering'],
     ['set_alert_number.php',      [],         'shows whose phone a handover wakes'],
     ['wa_compare.php',            [],         'refuses to compare fewer than two channels'],
+
+    // Added after org_probe.php shipped reading crm_base_url + crm_app_key
+    // directly and reported "uCRM is not configured" on an install that had
+    // been talking to uCRM all day. That is the same bootstrapping mistake
+    // this file's header describes, one factory later — and it reached the
+    // server because the new tools were never added to this list.
+    ['org_probe.php',             [],         'reports the uCRM organizations, or why it cannot'],
+    ['crm_audit.php',             [],         'reports the lead and quotation state'],
+    ['set_config.php',            [],         'shows the AI settings'],
+    ['wa_conversation.php',       [],         'lists recent conversations'],
+    ['hardware_check.php',        [],         'reports what we claim about the dishes'],
+    ['price_check.php',           [],         'compares published prices against uCRM'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
@@ -96,10 +108,35 @@ $realVault = ConfigVault::path($root, dirname($root) . '/data');
 is_(strpos($realVault, $tmp) === false || getenv('DN_VAULT_FILE') !== false,
     'and the real vault path is untouched by this run');
 
-echo "\nThe fatal that got out is specifically covered\n";
+echo "\nEvery tool builds the API client through the factory, not by hand\n";
+// This guard used to read one file — inbound_mail_run.php, where the fatal was
+// found. A single-file check for a mistake anyone can repeat is not a guard,
+// and org_probe.php proved it: it read crm_base_url and crm_app_key directly,
+// passed this test, and reported "uCRM is not configured" on an install that
+// had been talking to uCRM all day. The constructor takes (url, key) and
+// knows nothing about ucrm.json; fromUcrm() is where the real credentials
+// live. So every tool is scanned now, not the one that failed first.
+$offenders = [];
+foreach ((array)glob($root . '/tools/*.php') as $f) {
+    $src = (string)@file_get_contents($f);
+    if (strpos($src, 'CrmApiClient') === false) continue;
+    // Constructing it directly is only acceptable with an explicit url+key
+    // pair that the caller already resolved — which no tool here does.
+    // \\? not \?  — in a single-quoted PHP string '\\?' collapses to '\?',
+    // which the regex engine reads as a literal question mark, so the pattern
+    // hunted for "new ?CrmApiClient(" and matched nothing. The guard reported
+    // green against a file that had the exact bug it was written to catch.
+    if (preg_match('/new\s+\\\\?CrmApiClient\s*\(/', $src)
+        && strpos($src, 'CrmApiClient::fromUcrm(') === false) {
+        $offenders[] = basename($f);
+    }
+}
+is_(!$offenders, 'no tool constructs CrmApiClient directly',
+    'builds it by hand: ' . implode(', ', $offenders));
+
 $src = (string)file_get_contents($root . '/tools/inbound_mail_run.php');
 is_(strpos($src, 'CrmApiClient::fromUcrm(') !== false,
-    'the API client is built through its factory');
+    'inbound_mail_run.php — the original fatal — still uses the factory');
 is_(preg_match('/new\s+CrmApiClient\s*\(/', $src) === 0,
     'and never through the constructor, which takes a URL and a key');
 
