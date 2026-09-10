@@ -30,6 +30,27 @@ require_once __DIR__ . '/lib/bootstrap_data.php';
 $dataDir = getDataDir(__DIR__);
 $store   = SqliteStore::create($dataDir); // SQLite — shares same plugin.sqlite3 as public.php
 $config  = $store->load('kyc_config.json');
+
+// ── Off switch ───────────────────────────────────────────────────────────
+// This is South Sudan's BlueCard LTE bridge. Uganda has no LTE business and
+// no BlueCard, but there was no way to say so: with lte_feed_url unset this
+// script falls back to a hardcoded dishnetss.com URL and syncs anyway. The
+// lte_sync_enabled flag had been removed as "no longer required".
+//
+// On Uganda that meant polling a Sudan server every five minutes over several
+// calls at CURLOPT_TIMEOUT => 60, which exceeds master.php's 120s limit for
+// this job. The resulting fatal is E_ERROR — uncatchable — so it ended the
+// master cycle and every job behind it.
+//
+// The gate is an OPT-OUT, not an opt-in: absence means run, exactly as
+// before, so the Sudan installation is byte-for-byte unchanged. Only an
+// explicit false turns it off.
+//   php tools/set_lte_sync.php --off
+if (array_key_exists('lte_sync_enabled', (array)$config)
+    && !filter_var($config['lte_sync_enabled'], FILTER_VALIDATE_BOOLEAN)) {
+    return;
+}
+
 // B-08 FIX: MagmaApiClient constructor takes a single config array, not 4 positional args.
 // Previous call would throw ArgumentCountError on PHP 8 strict mode.
 $magma   = new MagmaApiClient([

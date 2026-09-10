@@ -55,6 +55,7 @@ $runs = [
     ['starlink_session.php',      [],         'reports the Starlink session state'],
     ['starlink_probe.php',        [],         'refuses to probe without a session'],
     ['cron_status.php',           ['--all'],  'reports which scheduled jobs have run'],
+    ['set_lte_sync.php',          [],         'shows whether the LTE bridge syncs here'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
