@@ -5,8 +5,8 @@ chdir(dirname(__DIR__));
 /**
  * wa_send_test.php — send one message down the real path and show the answer.
  *
- *   php tools/wa_send_test.php --to 256700000000
- *   php tools/wa_send_test.php --to 256700000000 --channel support --text "hello"
+ *   php tools/wa_send_test.php --to <a handset you hold>
+ *   php tools/wa_send_test.php --to <your number> --channel support --text "hello"
  *
  * The assistant's log proves it produced a reply and that sendText returned
  * ok. Neither proves WhatsApp delivered anything: ok means only that Evolution
@@ -44,8 +44,11 @@ $text    = $value('--text', 'DishNet test message — please ignore.');
 
 if ($to === '') {
     echo "\n  Which number should this go to?\n\n";
-    echo "    php tools/wa_send_test.php --to 256700000000 [--channel sales]\n\n";
-    echo "  It sends a real WhatsApp message, so there is no default.\n\n";
+    echo "    php tools/wa_send_test.php --to <a handset you hold> [--channel sales]\n\n";
+    echo "  It sends a real WhatsApp message, so there is no default — and use a\n";
+    echo "  phone you actually hold. A worked example in documentation is a real,\n";
+    echo "  dialable number belonging to somebody: one was pasted straight from a\n";
+    echo "  help text and a stranger received a test message.\n\n";
     exit(1);
 }
 
@@ -55,8 +58,8 @@ if ($to === '') {
 $digits = preg_replace('/\D+/', '', $to);
 if (strlen($digits) < 9) {
     echo "\n  \"" . $to . "\" is not a phone number — it reduces to " . ($digits ?: 'nothing') . ".\n";
-    echo "  Substitute a real handset, with the country code and no plus:\n\n";
-    echo "    php tools/wa_send_test.php --to 256700123456\n\n";
+    echo "  Use a handset you hold, with the country code and no plus.\n";
+    echo "  Not an example from a help text — those belong to real people.\n\n";
     exit(1);
 }
 
