@@ -29,13 +29,21 @@ require_once $root . '/lib/JsonStore.php';
 require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/bootstrap_data.php';
 
+// master.php stamps last_run_at after setting its own timezone. Read the same
+// one rather than assuming: without this the headline rendered in UTC against
+// Juba-stamped rows and reported the same event two hours apart.
+$masterSrc = (string)file_get_contents($root . '/cron/master.php');
+if (preg_match("/date_default_timezone_set\(\s*'([^']+)'\s*\)/", $masterSrc, $tzm)) {
+    date_default_timezone_set($tzm[1]);
+}
+
 $dataDir  = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $schedule = SqliteStore::create($dataDir)->load('master_schedule.json') ?? [];
 
 // The job list lives inside master.php's array. Including that file would run
 // every job on this machine, so the registration lines are read as text — the
 // same reason the ordering test reads them rather than importing them.
-$src = (string)file_get_contents($root . '/cron/master.php');
+$src = $masterSrc;
 
 // Line by line, skipping comments. A regex over the whole file also matched
 // the job registrations that are commented OUT — job_assign and wa_bot are
@@ -98,7 +106,7 @@ if ($newest === 0) {
     echo "  Nothing has ever run.\n";
 } else {
     echo "  Last dispatch of any job: " . date('Y-m-d H:i:s', $newest)
-       . "  (" . $ago($now - $newest) . " ago)\n";
+       . "  (" . $ago($now - $newest) . " ago, " . date_default_timezone_get() . ")\n";
 }
 echo "  " . str_repeat('─', 72) . "\n";
 printf("  %-3s %-20s %9s %9s  %-19s %s\n", '#', 'job', 'every', 'last run', 'at', 'state');
