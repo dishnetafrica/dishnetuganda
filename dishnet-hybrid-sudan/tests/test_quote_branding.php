@@ -145,6 +145,32 @@ $bare = $svc()->companyDetails(9);
 is_($bare['_source']['phone'] === 'constant', 'the constant is reached');
 is_(!empty($bare['_warnings']), 'and it is warned about, not printed quietly');
 
+echo "\nWhen uCRM is not the source, it says why\n";
+// The failure that cost a deploy to diagnose: QuotationService derived the
+// plugin root by walking up from the data directory, which stopped being
+// inside the plugin when bootstrap_data.php moved it out to survive upgrades.
+// fromUcrm() then found no ucrm.json, every call failed, and branding fell to
+// config with nothing anywhere saying so.
+$scenario('unreachable');
+$why = $svc(['quote_company_phone' => '+256705993348'])->companyDetails(9);
+is_(!empty($why['_org_error']), 'a reason is recorded', 'silence is what made this expensive');
+is_($why['_source']['phone'] === 'config', 'and the source is honest about it');
+
+$scenario('uganda');
+$fine = $svc()->companyDetails(9);
+is_($fine['_org_error'] === '', 'and it is empty when uCRM did answer',
+    'got: ' . $fine['_org_error']);
+
+echo "\nThe plugin root is not guessed from the data directory\n";
+// lib/ is inside the plugin root by definition. Walking up from $dataDir is
+// not, and has not been since the data directory moved.
+$qsrc = (string)file_get_contents($root . '/lib/QuotationService.php');
+is_(strpos($qsrc, 'CrmApiClient::fromUcrm(dirname(__DIR__)') !== false,
+    'the root comes from this file\'s own location');
+is_(strpos($qsrc, '$pluginRoot = dirname($dataDir)') === false,
+    'and never from walking up out of the data directory',
+    'that walk lands outside the plugin whenever data lives beside it');
+
 echo "\nThe probe reports this by asking, not by re-deriving it\n";
 // org_probe.php used to reimplement the lookup — read the config keys, fall
 // back to the constants, print a verdict. It therefore kept reporting the old

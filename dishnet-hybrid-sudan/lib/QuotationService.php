@@ -46,6 +46,8 @@ class QuotationService
     private CrmApiClient $crm;
     /** @var array<string,array> organization lookups, memoised for this instance */
     private array $orgMemo = [];
+    /** Why uCRM was not the source, when it was not. Empty means it was. */
+    private string $orgError = '';
 
     public function __construct($store, string $dataDir, array $config = [])
     {
@@ -57,12 +59,19 @@ class QuotationService
         }
         $this->config = $config;
         $this->ns  = new NotificationService($store, $config);
-        // Use factory method — resolves API URL + key from ucrm.json automatically
-        $pluginRoot = dirname($dataDir);  // data/ is inside plugin root
-        if (!file_exists($pluginRoot . '/manifest.json')) {
-            $pluginRoot = dirname($pluginRoot); // try one more level up
-        }
-        $this->crm = CrmApiClient::fromUcrm($pluginRoot, $config);
+        // The plugin root is where THIS FILE lives, not somewhere up from the
+        // data directory. The old derivation walked up from $dataDir with the
+        // comment "data/ is inside plugin root", and that stopped being true
+        // when bootstrap_data.php moved the data directory to a SIBLING of the
+        // plugin so it would survive uCRM upgrades — uCRM replaces the plugin
+        // directory wholesale, and the database used to go with it.
+        //
+        // When the walk misses, fromUcrm() gets a root with no ucrm.json,
+        // finds no credentials, and every uCRM call from this class fails
+        // quietly: branding falls back to config, and createCrmQuote() cannot
+        // post a quote at all. lib/ is inside the plugin root by definition,
+        // so this cannot miss.
+        $this->crm = CrmApiClient::fromUcrm(dirname(__DIR__), $config);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -561,7 +570,8 @@ class QuotationService
         $out['address'] = implode(', ', $addr);
         if ($out['address'] !== '') $src['address'] = 'ucrm';
 
-        $out['_source']   = $src;
+        $out['_source']    = $src;
+        $out['_org_error'] = $this->orgError;
         $out['_warnings'] = $warn;
         return $out;
     }
@@ -604,7 +614,13 @@ class QuotationService
         } catch (\Throwable $e) {
             // uCRM unreachable degrades to config, never to the constant
             // silently — companyDetails() records the source either way.
+            $this->orgError = $e->getMessage();
             $org = [];
+        }
+        if (!$org && $this->orgError === '') {
+            $this->orgError = $this->crm->isConfigured()
+                ? 'uCRM returned no matching organization'
+                : 'uCRM credentials not resolved for this plugin root';
         }
         return $this->orgMemo[$key] = $org;
     }

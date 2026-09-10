@@ -138,6 +138,11 @@ try {
                $LABELS[$co['_source'][$k] ?? 'constant'] ?? '?');
     }
 
+    if (!empty($co['_org_error'])) {
+        echo "\n     uCRM was NOT the source. Reason: " . $co['_org_error'] . "\n";
+        echo "     The values above came from plugin config or a built-in default.\n";
+    }
+
     if (!empty($co['_warnings'])) {
         echo "\n     FELL THROUGH TO A BUILT-IN DEFAULT:\n";
         foreach ($co['_warnings'] as $w) echo "       - " . $w . "\n";
