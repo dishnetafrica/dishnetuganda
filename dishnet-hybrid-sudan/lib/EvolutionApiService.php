@@ -261,9 +261,22 @@ class EvolutionApiService
      * An already-connected instance returns no QR — check connectionState
      * first if you need to distinguish that from a failure.
      */
-    public function connect(string $instance): array
+    /**
+     * Reconnect an instance, and get a pairing code when a number is given.
+     *
+     * A Baileys session drops on its own — dishnet_richard went from open to
+     * close inside seven minutes — and the QR route needs somebody in front of
+     * the Evolution manager with the handset. Evolution issues a pairing code
+     * instead when the number is passed, which can be read down a phone line
+     * and typed into WhatsApp > Linked devices > Link with phone number.
+     */
+    public function connect(string $instance, string $number = ''): array
     {
-        $r = $this->request('GET', '/instance/connect/' . rawurlencode($instance));
+        $path = '/instance/connect/' . rawurlencode($instance);
+        $number = preg_replace('/\D+/', '', $number);
+        if ($number !== '') $path .= '?number=' . rawurlencode($number);
+
+        $r = $this->request('GET', $path);
         if (!$r['ok']) return $r;
 
         $d  = $r['data'];

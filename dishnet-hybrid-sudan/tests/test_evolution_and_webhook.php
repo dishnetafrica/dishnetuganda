@@ -49,6 +49,22 @@ $bare = new EvolutionApiService(['evo_api_url' => 'https://evo.example', 'evo_ap
 t('URL+key alone -> can reach the API', $bare->canReachApi(), true);
 t('URL+key alone -> NOT fully configured', $bare->isConfigured(), false);
 t('no channels mapped yet', $bare->configuredChannels(), []);
+
+// A registered webhook is not a working number: dishnet_richard held a
+// correct webhook at state=close, so Evolution had nothing to forward and the
+// assistant looked silently broken while every check passed. connect() takes
+// an optional number so a dropped session can be re-paired with a code read
+// down a phone line, rather than someone standing over the Evolution manager
+// with the handset.
+$rc = new ReflectionMethod('EvolutionApiService', 'connect');
+t('connect() still works with one argument', $rc->getNumberOfRequiredParameters(), 1);
+t('and takes a number for a pairing code', $rc->getNumberOfParameters(), 2);
+
+$svc = (string)file_get_contents(dirname(__DIR__) . '/lib/EvolutionApiService.php');
+t('the number is passed to Evolution as a query parameter',
+  strpos($svc, "?number=' . rawurlencode(\$number)") !== false, true);
+t('and stripped to digits first',
+  strpos($svc, "preg_replace('/\\D+/', '', \$number)") !== false, true);
 $noKey = new EvolutionApiService(['evo_api_url' => 'https://evo.example']);
 t('missing key -> cannot reach', $noKey->canReachApi(), false);
 $full = new EvolutionApiService(['evo_api_url'=>'https://e','evo_api_key'=>'k','evo_instance_sales'=>'s']);
