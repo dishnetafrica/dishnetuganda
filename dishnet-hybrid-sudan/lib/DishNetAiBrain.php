@@ -490,7 +490,7 @@ class DishNetAiBrain
                      . "them to a different number.\n";
 
             case 'account':
-                return "YOUR ROLE ON THIS NUMBER: ACCOUNTS — invoices, balances and payments.\n"
+                $base = "YOUR ROLE ON THIS NUMBER: ACCOUNTS — invoices, balances and payments.\n"
                      . "- Only discuss the account in the DATA section. It belongs to the person on "
                      . "this number and nobody else.\n"
                      . "- If there is no ACCOUNT section, you have not identified them. Ask for their "
@@ -499,10 +499,11 @@ class DishNetAiBrain
                      . "- You cannot take payments or mark an invoice paid. You can explain how to pay "
                      . "and confirm what is currently owed.\n"
                      . "- Disputes, refunds and payments the customer says they already made: hand over.\n";
+                break;
 
             case 'support':
             default:
-                return "YOUR ROLE ON THIS NUMBER: SUPPORT — faults and technical help.\n"
+                $base = "YOUR ROLE ON THIS NUMBER: SUPPORT — faults and technical help.\n"
                      . "- If LINE STATUS shows the connection is up, the fault is local: router, WiFi, "
                      . "power or one device. Guide them through that, do not raise a line fault.\n"
                      . "- If LINE STATUS shows it is down, or you have no line data, work through the "
@@ -513,7 +514,50 @@ class DishNetAiBrain
                      . "- Never promise a restoration time or a technician visit slot. Hand over.\n"
                      . "- If SERVICES shows the service is suspended or expired, that is a billing "
                      . "matter, not a fault — say so kindly and point them to accounts.\n";
+                break;
         }
+
+        return $base . $this->salesAnywhere();
+    }
+
+    /**
+     * Sell on a number whose job is something else.
+     *
+     * DishNet Uganda runs two public numbers and a handful of people. Somebody
+     * asking "how much for internet at my home?" on the support number is not
+     * on the wrong number — they are a customer, and the support role says
+     * nothing about plans or prices, so they got troubleshooting or a
+     * handover. Only one instance name fits in evo_instance_sales, so putting
+     * both numbers on the sales channel was never available either.
+     *
+     * The channel still decides the PRIMARY role. This only adds the ability
+     * to answer a sales question where it is asked.
+     *
+     * OFF unless ai_sales_on_all_numbers is set, so South Sudan — where the
+     * numbers are genuinely separate desks — is unchanged. Absence means the
+     * old prompt, byte for byte.
+     */
+    private function salesAnywhere(): string
+    {
+        if (!filter_var($this->config['ai_sales_on_all_numbers'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return '';
+        }
+
+        // The guardrails are the sales role's, deliberately repeated rather
+        // than referenced: the model reads one prompt, not two, and the
+        // monthly/one-time separation is the mistake that costs real money.
+        return "\nALSO ON THIS NUMBER: SALES ENQUIRIES.\n"
+             . "- We are one small team across a few numbers. If someone asks what we offer, "
+             . "what it costs, or how to get connected, ANSWER them here. Never tell a "
+             . "customer they have reached the wrong number or send them to another one.\n"
+             . "- Recommend only real plans from PLANS, at their real prices. If PLANS is not "
+             . "in your data, say you will confirm and hand over rather than describing "
+             . "anything from memory.\n"
+             . "- MONEY IS TWO SEPARATE THINGS. PLANS are RECURRING monthly charges; HARDWARE "
+             . "is a ONE-TIME charge. Never blend the two into a single figure.\n"
+             . "- Never add delivery, customs, taxes or any charge that is not in your data.\n"
+             . "- Coverage and installation dates are NOT in your data. Take the customer's "
+             . "area and hand over — never confirm either.\n";
     }
 
     /**
