@@ -36,7 +36,21 @@ $schedule = SqliteStore::create($dataDir)->load('master_schedule.json') ?? [];
 // every job on this machine, so the registration lines are read as text — the
 // same reason the ordering test reads them rather than importing them.
 $src = (string)file_get_contents($root . '/cron/master.php');
-preg_match_all("/'([a-z0-9_]+)'\s*=>\s*\['interval'\s*=>\s*(\d+)/i", $src, $m, PREG_SET_ORDER);
+
+// Line by line, skipping comments. A regex over the whole file also matched
+// the job registrations that are commented OUT — job_assign and wa_bot are
+// both disabled — and reported them as real jobs, which shifted every
+// dispatch position after them. A tool built to expose misleading output
+// should not produce it.
+$m = [];
+foreach (explode("\n", $src) as $line) {
+    $t = ltrim($line);
+    if ($t === '' || $t[0] === '#') continue;
+    if (strpos($t, '//') === 0 || strpos($t, '*') === 0) continue;
+    if (preg_match("/'([a-z0-9_]+)'\s*=>\s*\['interval'\s*=>\s*(\d+)/i", $line, $one)) {
+        $m[] = $one;
+    }
+}
 
 if ($m === []) { echo "\n  Could not read the job list from cron/master.php\n\n"; exit(1); }
 
@@ -73,7 +87,19 @@ $ago = function (?int $s): string {
     return (int)round($s / 86400) . 'd';
 };
 
+// The single most useful number: when did ANY job last run? master.php saves
+// the schedule after each job, so the newest timestamp here is the last time
+// a cycle got at least that far. If it is days old, nothing is running.
+$newest = 0;
+foreach ($rows as $r) { if ($r['elapsed'] !== null) $newest = max($newest, $now - $r['elapsed']); }
+
 echo "\n  SCHEDULED JOBS — #1 is dispatched first each cycle\n";
+if ($newest === 0) {
+    echo "  Nothing has ever run.\n";
+} else {
+    echo "  Last dispatch of any job: " . date('Y-m-d H:i:s', $newest)
+       . "  (" . $ago($now - $newest) . " ago)\n";
+}
 echo "  " . str_repeat('─', 72) . "\n";
 printf("  %-3s %-20s %9s %9s  %-19s %s\n", '#', 'job', 'every', 'last run', 'at', 'state');
 
@@ -93,7 +119,10 @@ if ($shown === 0) {
     exit(0);
 }
 
-echo "\n  A job that is overdue while the ones registered above it are current\n";
-echo "  is being starved by the execution budget, not failing on its own.\n";
-echo "  If EVERYTHING is overdue, master.php itself is not being called.\n\n";
+echo "\n  If job #1 is current and everything below it is stale, the cycle is\n";
+echo "  dying inside a job rather than being starved: master.php includes job\n";
+echo "  scripts in its own process, so a top-level exit() in one of them ends\n";
+echo "  the whole run — and the try/catch around the include cannot catch it.\n";
+echo "  A job overdue while several above it are current is budget starvation.\n";
+echo "  If EVERYTHING is stale, master.php itself is not being called.\n\n";
 exit(0);

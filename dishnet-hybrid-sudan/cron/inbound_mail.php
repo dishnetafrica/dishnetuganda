@@ -17,7 +17,7 @@ declare(strict_types=1);
  *
  * CLI only.
  */
-if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+if (PHP_SAPI !== 'cli') return;   // a web request is not ours to serve
 
 $pluginRoot = dirname(__DIR__);
 require_once $pluginRoot . '/lib/error_handler.php';
@@ -44,7 +44,7 @@ $mailbox = new JmapMailbox(
     (string)($config['email_ai_mailbox']    ?? ''),
     (string)($config['email_ai_mailbox_pw'] ?? '')
 );
-if (!$mailbox->isConfigured()) exit(0);          // not set up here; nothing to do
+if (!$mailbox->isConfigured()) return;           // not set up here; nothing to do
 
 $via = trim((string)($config['email_ai_jmap_via'] ?? ''));
 if ($via !== '') $mailbox->setVia($via);
@@ -55,8 +55,8 @@ if ($resolve !== '') $mailbox->setResolve(array_map('trim', explode(',', $resolv
 // message_id is unique so the second insert is refused, but the second run
 // would still have spent a model call to produce the draft it then discards.
 $lock = @fopen($dataDir . '/inbound_mail.lock', 'c');
-if ($lock === false) exit(0);
-if (!flock($lock, LOCK_EX | LOCK_NB)) exit(0);
+if ($lock === false) return;
+if (!flock($lock, LOCK_EX | LOCK_NB)) return;
 
 try {
     $pdo = new PDO('sqlite:' . $dataDir . '/plugin.sqlite3');
@@ -105,4 +105,4 @@ try {
     flock($lock, LOCK_UN);
     fclose($lock);
 }
-exit(0);
+return;

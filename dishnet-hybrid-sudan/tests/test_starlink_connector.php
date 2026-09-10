@@ -231,8 +231,13 @@ $cron = (string)file_get_contents($root . '/cron/starlink_keepalive.php');
 is_(strpos($cron, 'LINES_LIGHT_PATH') !== false,
     'it uses the light endpoint — the rich one 500s and a keep-alive that '
   . 'cries wolf gets ignored');
-is_(strpos($cron, 'STATE_EXPIRED') !== false && strpos($cron, 'exit(0)') !== false,
+// It bails out with return, never exit(): master.php includes this script in
+// its own process and dispatches it FIRST, so an exit() here would end the
+// cycle before any other job ran. See SAFETY.md RULE 11b.
+is_(strpos($cron, 'STATE_EXPIRED') !== false && strpos($cron, 'return;') !== false,
     'and leaves an already-dead session alone rather than hammering it');
+is_(strpos($cron, 'exit(') === false,
+    'and returns rather than exiting, so it cannot end the master cycle');
 is_(preg_match('/->\s*(send|post)\s*\(/', $cron) === 0, 'it sends nothing');
 
 $master = (string)file_get_contents($root . '/cron/master.php');

@@ -34,7 +34,7 @@ declare(strict_types=1);
  *
  * CLI only.
  */
-if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+if (PHP_SAPI !== 'cli') return;   // a web request is not ours to serve
 
 $pluginRoot = dirname(__DIR__);
 require_once $pluginRoot . '/lib/error_handler.php';
@@ -47,7 +47,7 @@ $dataDir = getDataDir($pluginRoot);
 $config  = PluginConfig::load($pluginRoot, $dataDir);
 $store   = new StarlinkSessionStore($pluginRoot, $dataDir);
 
-if ($store->cookie() === '') exit(0);            // nothing imported here
+if ($store->cookie() === '') return;             // nothing imported here
 
 $status = $store->status();
 
@@ -61,7 +61,7 @@ if (in_array($status['state'], [StarlinkSessionStore::STATE_EXPIRED,
                 . ' — a person must re-import: php tools/starlink_session.php --import');
         $store->markExpired((string)$status['last_error']);   // refresh the timestamp
     }
-    exit(0);
+    return;
 }
 
 $conn = new StarlinkPortalConnector($store, $config);
@@ -70,7 +70,7 @@ $r    = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
 if (!empty($r['ok'])) {
     // markOk() already ran inside the request. Nothing to say — a keep-alive
     // that logs every success drowns the one line that matters.
-    exit(0);
+    return;
 }
 
 // A 5xx is Starlink's weather and costs the session nothing; the connector
@@ -79,4 +79,4 @@ if (!empty($r['ok'])) {
 if ((int)$r['code'] < 500) {
     error_log('[starlink_keepalive] session no longer working: ' . (string)$r['error']);
 }
-exit(0);
+return;
