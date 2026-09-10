@@ -8,7 +8,7 @@ chdir(dirname(__DIR__));
  *   php tools/kits.php                        Starlink units, and who holds them
  *   php tools/kits.php --serial UT01234567    one unit, and everywhere it has been
  *   php tools/kits.php --client 2             what one customer holds
- *   php tools/kits.php --receive UT01234567 --by bhavin
+ *   php tools/kits.php --receive UT01234567 --by bhavin --account ops@dishnetuganda.com
  *   php tools/kits.php --assign UT01234567 --client 2 --by bhavin
  *
  * This reads and writes StockService, which already owns serial-numbered
@@ -62,17 +62,22 @@ function findBySerial(PDO $pdo, string $serial): ?array
 
 function head(): void
 {
-    printf("\n  %-18s %-11s %-9s %-12s %s\n", 'SERIAL', 'STATUS', 'CLIENT', 'STARLINK', 'SERVICE LINE');
-    printf("  %s\n", str_repeat('-', 68));
+    printf("\n  %-18s %-11s %-7s %-10s %-26s %s\n",
+        'SERIAL', 'STATUS', 'CLIENT', 'STARLINK', 'FROM ACCOUNT', 'SERVICE LINE');
+    printf("  %s\n", str_repeat('-', 96));
 }
 function row(array $u): void
 {
-    printf("  %-18s %-11s %-9s %-12s %s\n",
-        substr((string)($u['serial_number'] ?? ''), 0, 18),
+    // Serials and service-line identifiers print WHOLE. Truncating one turned
+    // SL-DF-15784590-46113-10 into "-1" in an earlier table and corrupted six
+    // rows out of ten.
+    printf("  %-18s %-11s %-7s %-10s %-26s %s\n",
+        (string)($u['serial_number'] ?? ''),
         (string)($u['status'] ?? ''),
         ((int)($u['crm_client_id'] ?? 0) ?: '—'),
-        substr((string)($u['starlink_status'] ?? ''), 0, 12) ?: '—',
-        substr((string)($u['starlink_service_line'] ?? ''), 0, 20) ?: '—');
+        substr((string)($u['starlink_status'] ?? ''), 0, 10) ?: '—',
+        (string)($u['starlink_account'] ?? '') ?: '—',
+        (string)($u['starlink_service_line'] ?? '') ?: '—');
 }
 
 // ── receive: a kit arrives and becomes stock ─────────────────────────────
@@ -98,10 +103,20 @@ if ($has('--receive')) {
             'serial_number'  => strtoupper(trim($serial)),
             'status'         => 'in_stock',
             'location_type'  => 'warehouse',
+            // Which Starlink account this kit came from. DishNet buys through
+            // more than one, and "which of our accounts supplied the kit this
+            // customer is using" is not answerable afterwards unless it is
+            // recorded at the moment of delivery. The column already existed;
+            // nothing was filling it.
+            'starlink_account'=> $value('--account'),
             'starlink_status'=> $value('--starlink-status'),
             'notes'          => $value('--note'),
         ], 0, $value('--by') ?: 'cli');
         echo "\n  Received into stock as unit " . (int)($r['unit_id'] ?? $r['id'] ?? 0) . ".\n";
+        if (trim((string)$value('--account')) === '') {
+            echo "  No --account given, so which Starlink account supplied this kit\n";
+            echo "  is not recorded. That is answerable now and guesswork later.\n";
+        }
         echo "  Assign it when it reaches a customer:\n";
         echo "    php tools/kits.php --assign {$serial} --client <id> --by <name>\n\n";
         exit(0);

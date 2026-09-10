@@ -85,5 +85,26 @@ is_(substr_count($hook, 'StarlinkBlockBridge::appliesTo($config)') === 2,
     'both webhook call sites consult it — suspend and restore',
     substr_count($hook, 'StarlinkBlockBridge::appliesTo($config)') . ' site(s)');
 
+echo "\nA kit records which Starlink account supplied it\n";
+// DishNet buys through more than one Starlink account. Which account supplied
+// the kit a given customer is using cannot be reconstructed afterwards — the
+// serial is on the invoice of one account and nowhere else. stock_units has
+// carried a starlink_account column all along; the receive tool never filled
+// it, so every kit taken in so far records an unknown source.
+$kits = (string)file_get_contents($root . '/tools/kits.php');
+is_(strpos($kits, "'starlink_account'=> \$value('--account')") !== false,
+    'the receive path passes --account through to the unit');
+is_(strpos($kits, 'FROM ACCOUNT') !== false,
+    'and the listing shows it — an invisible column is an unfilled one');
+is_(strpos($kits, 'No --account given') !== false,
+    'omitting it says so at the time, when it is still answerable');
+
+// Identifiers print whole. Truncation corrupted six service-line numbers out
+// of ten in an earlier table, and a half-printed serial is worse than none.
+is_(strpos($kits, "substr((string)(\$u['serial_number']") === false,
+    'serials are never truncated to fit a column');
+is_(strpos($kits, "substr((string)(\$u['starlink_service_line']") === false,
+    'nor are service-line identifiers');
+
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);
