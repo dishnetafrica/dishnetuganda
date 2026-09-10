@@ -159,10 +159,15 @@ $p = $brain->promptPreview($sales + ['products' => $catalogue + [
     'hardware' => [['name' => 'Starlink Standard Kit', 'price' => 600.0],
                    ['name' => 'Professional Installation', 'price' => 50.0]]]]);
 has('monthly vs one-time distinction is a rule', $p, 'MONEY IS TWO SEPARATE THINGS');
-has('upfront = confirmed one-time items only',   $p, 'ONLY the confirmed one-time items from HARDWARE');
+has('upfront = one-time items from HARDWARE',    $p, 'Add up the one-time items from HARDWARE');
 has('monthly price presented separately',        $p, 'monthly price');
 has('no invented delivery/customs/taxes',        $p, 'Never add delivery, customs, taxes');
-has('missing one-time price => confirm + hand over', $p, 'say you will confirm it and hand over');
+// One missing price used to suppress every other price too, so a customer
+// asking what it costs was told the team would check while the kit price sat
+// in the prompt. Quote what you have; confirm only what you don't.
+has('one missing price still quotes the rest',   $p, 'quote everything else anyway');
+has('withholding a known price is forbidden',    $p, 'NEVER withhold a price you have');
+has('the missing one is still never guessed',    $p, 'Never estimate the missing');
 $rulePos = strpos($p, 'MONEY IS TWO SEPARATE THINGS');
 $dataPos = strpos($p, 'HARDWARE (one-time items');
 t('upfront rule precedes the data it governs', $rulePos !== false && $dataPos !== false && $rulePos < $dataPos, true);

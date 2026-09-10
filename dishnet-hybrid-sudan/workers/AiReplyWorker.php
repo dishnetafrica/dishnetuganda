@@ -141,7 +141,13 @@ class AiReplyWorker extends WorkerBase
                 $this->maybeSendFlyer($convId, $channel, $phone);
             }
             if (!empty($ai['escalate'])) {
-                $this->escalate($convId, $channel, $phone, (string)($ai['escalate_reason'] ?? 'AI requested handover'));
+                // The customer already has a reply. Passing true stops the holding
+                // line being sent on top of it: c109 received "I can't provide
+                // final pricing without checking with our team" and "Let me get a
+                // colleague to confirm that for you" in the same second — two
+                // apologies for one question.
+                $this->escalate($convId, $channel, $phone,
+                    (string)($ai['escalate_reason'] ?? 'AI requested handover'), true);
             }
         } catch (\Throwable $e) {
             $this->log('error', 'post-send bookkeeping failed: ' . $e->getMessage());
@@ -466,7 +472,13 @@ class AiReplyWorker extends WorkerBase
         }
     }
 
-    private function escalate(int $convId, string $channel, string $phone, string $reason): void
+    /**
+     * @param bool $alreadyAnswered The customer has had a reply this turn, so the
+     *                              holding line would be a second message saying
+     *                              the same thing.
+     */
+    private function escalate(int $convId, string $channel, string $phone, string $reason,
+                              bool $alreadyAnswered = false): void
     {
         $this->log('info', "conv {$convId}: HANDOFF to human — {$reason}");
         try {
@@ -504,7 +516,7 @@ class AiReplyWorker extends WorkerBase
             // Empty by default: an installation that has not set a line keeps
             // the old behaviour exactly.
             $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
-            if ($holding !== '' && $phone !== '' && !$this->alreadySaid($convId, $holding)) {
+            if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
                 $send = $this->evo->sendText($channel, $phone, $holding);
                 if (!empty($send['ok'])) {
                     if ($convId > 0) {

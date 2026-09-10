@@ -110,6 +110,36 @@ is_($afterFirst === $before + 1, 'the first handover in a conversation speaks');
 is_($afterSecond === $afterFirst, 'the second one stays quiet',
     'repeating a holding line at someone already waiting reads worse than silence');
 
+echo "\nWhen the customer already got a reply, the line stays quiet\n";
+// c109 received "I can't provide final pricing without checking with our team"
+// and "Let me get a colleague to confirm that for you" in the same second.
+// Both are true, both are an apology, and together they read as a bot looping.
+$escalateAnswered = function (AiReplyWorker $w, int $convId, string $phone) {
+    $m = new ReflectionMethod(AiReplyWorker::class, 'escalate');
+    $m->setAccessible(true);
+    $m->invoke($w, $convId, 'sales', $phone, 'AI requested handover', true);
+};
+$before = $sentCount();
+$escalateAnswered($w, 0, '256700000005');
+is_($sentCount() === $before, 'no holding line on top of an answer the customer already has');
+
+// The same customer, having had nothing, must still hear it — the suppression
+// is about this turn, not a permanent mute.
+$before = $sentCount();
+$escalate($w, 0, '256700000006');
+is_($sentCount() === $before + 1, 'an empty reply still speaks');
+
+echo "\nAnd the post-send call site actually passes the flag\n";
+// Behaviour above proves the parameter works; this proves it is wired to the
+// call that runs after a successful send, which is the one that duplicated.
+$src   = (string)file_get_contents($root . '/workers/AiReplyWorker.php');
+$anchor = 'if (!empty($ai[' . "'escalate'" . ']))';
+$after  = substr($src, (int)strpos($src, $anchor));
+$after = substr($after, 0, 600);
+is_(preg_match('/escalate\\([^;]*,\\s*true\\s*\\)/s', $after) === 1,
+    'the escalate after a send is marked already-answered',
+    'without the flag the duplicate comes straight back');
+
 echo "\nA different customer is unaffected by that\n";
 $before = $sentCount();
 $escalate($w, 0, '256700000004');
