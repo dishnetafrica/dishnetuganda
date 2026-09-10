@@ -61,6 +61,7 @@ $runs = [
     ['wa_send_test.php',          [],         'refuses to send without an explicit number'],
     ['set_handover_message.php',  [],         'shows what a handover tells the customer'],
     ['wa_answering.php',          [],         'reports whether each number is answering'],
+    ['set_alert_number.php',      [],         'shows whose phone a handover wakes'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
