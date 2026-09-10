@@ -67,12 +67,26 @@ if [ "${1:-}" = "--check" ]; then
     exit 0
 fi
 
+# Whoever owns the destination owns it afterwards. Extracting as root applied
+# the archive's own ./ entry to $DEST and changed it from unms:unms 775 to
+# root:root 755, so uCRM's user could no longer write into its own plugin
+# directory. It stopped calling the plugin at that exact minute, and nothing
+# said why: heartbeat.log simply stopped having new lines.
+OWNER="$(stat -c '%u:%g' "$DEST")"
+MODE="$(stat -c '%a' "$DEST")"
+
 # tar rather than rsync: rsync is not always installed, and tar's exclude is
-# unambiguous about which data directory it means.
+# unambiguous about which data directory it means. --no-overwrite-dir keeps
+# the metadata of directories that already exist.
 tar -C "$SRC" --exclude=./data --exclude=./.git -cf - . \
-  | tar -C "$DEST" -xf -
+  | tar -C "$DEST" --no-overwrite-dir -xf -
 
 echo "$HEAD" > "$DEST/.deployed-commit"
+
+# Belt and braces: --no-overwrite-dir protects $DEST itself, this covers files
+# and subdirectories created by the extraction.
+chown -R "$OWNER" "$DEST" 2>/dev/null || echo "  ! could not chown to $OWNER — check the plugin still runs"
+chmod "$MODE" "$DEST" 2>/dev/null || true
 
 # The only verification that counts: read it back from inside the container.
 SEEN="$(docker exec "$CONTAINER" cat "$IN_CONTAINER/.deployed-commit" 2>/dev/null || echo 'unreadable')"

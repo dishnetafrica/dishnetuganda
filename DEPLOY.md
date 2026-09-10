@@ -43,6 +43,25 @@ It never deletes, and it never touches `data/` — plugin runtime state lives
 there and in the sibling `.dishnet-hybrid-sudan-data` directory, and neither
 belongs to this repository.
 
+## Ownership
+
+The served directory keeps the owner and mode it already had. The first
+version of this script did not, and that broke the plugin worse than the bug
+it was deploying: extracting as root applied the archive's own `./` entry to
+the destination, turning `unms:unms 775` into `root:root 755`. uCRM's user
+could no longer write into its own plugin directory, so uCRM stopped calling
+`main.php` — silently, at that exact minute. Nothing logged an error; the
+heartbeat log simply stopped gaining lines.
+
+If it happens again:
+
+```
+D=/home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan
+chown -R unms:unms "$D" && chmod 775 "$D"
+```
+
+`unms` on the host is the uid the container calls `nginx`.
+
 ## plugins_staging is not where the plugin runs
 
 uCRM unpacks uploaded zips into `plugins_staging` before installing them into
