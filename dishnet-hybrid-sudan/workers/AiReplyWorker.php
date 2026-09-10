@@ -121,6 +121,29 @@ class AiReplyWorker extends WorkerBase
         // Everything past here is bookkeeping. Never throw — the customer has
         // already received the message and must not receive it again.
         try {
+            // Claim our own echo in the webhook's dedupe table, first thing.
+            //
+            // Evolution posts every outbound message back as fromMe, and the
+            // webhook now reads an unrecognised fromMe message as a colleague
+            // typing on the handset — which stands the AI down. Our own reply
+            // must never look like that. Storing it below already dedupes it,
+            // but the echo is a separate HTTP request that could in principle
+            // arrive first; claiming the id here means it is dropped at the
+            // webhook's idempotency check before it can be misread.
+            $ourId = (string)($send['data']['key']['id'] ?? '');
+            if ($ourId !== '') {
+                try {
+                    if (!class_exists('EvoWebhookGuard')) {
+                        $g = __DIR__ . '/../lib/EvoWebhookGuard.php';
+                        if (is_file($g)) require_once $g;
+                    }
+                    if (class_exists('EvoWebhookGuard')) {
+                        (new \EvoWebhookGuard($this->pdo, $this->config))
+                            ->claim($ourId, (string)($p['whatsapp_instance'] ?? ''), 'ai.reply');
+                    }
+                } catch (\Throwable $e) { /* dedupe is a backstop, not a requirement */ }
+            }
+
             if ($convId > 0) {
                 $this->convSvc->storeMessage($convId, [
                     'direction'  => 'out',

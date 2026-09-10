@@ -167,7 +167,7 @@ foreach ($messages as $msg) {
         if ($custPhone !== '' && $ownText !== '') {
             try {
                 $conv = $convSvc->ensureConversation($custPhone, $channel, null, 'import');
-                $convSvc->storeMessage((int)$conv['id'], [
+                $stored = $convSvc->storeMessage((int)$conv['id'], [
                     'direction'     => 'out',
                     'role'          => 'agent',
                     'body'          => $ownText,
@@ -175,6 +175,18 @@ foreach ($messages as $msg) {
                     'wa_message_id' => $messageId,
                     'metadata'      => json_encode(['channel' => $channel, 'source' => 'handset']),
                 ]);
+
+                // Was this a person, or our own reply echoing back?
+                //
+                // The AI records what it sends under the id Evolution returns,
+                // so its own echo dedupes to null here. A non-null insert is a
+                // message that arrived without us having sent it — somebody
+                // typed it on the handset — and that is what has to stand the
+                // AI down. Before this, nothing on the Evolution path ever set
+                // human_active, so the stand-down rule had never once fired.
+                if ($stored !== null) {
+                    $convSvc->markHumanHandling((int)$conv['id']);
+                }
             } catch (\Throwable $e) {
                 error_log('[evo_webhook] outbound store failed: ' . $e->getMessage());
             }
