@@ -125,7 +125,26 @@ class EventBus
      * @param string $workerId  Unique worker ID (defaults to PID)
      * @return array Claimed events (may be empty)
      */
-    public function consume(int $limit = 20, string $workerId = ''): array
+    /**
+     * Claim a batch of events for processing.
+     *
+     * $types narrows the claim to those event types. Pass none and it claims
+     * whatever sorts first, which is what it always did.
+     *
+     * That default is a trap, and it caught this installation. A worker asks
+     * for a batch of 20, gets the 20 oldest events of ANY type, keeps the ones
+     * it handles and releases the rest. Seven stale events from August that no
+     * worker handles sat permanently at the head of that ordering. The moment
+     * total pending crossed 20, no ai.reply event fell inside the batch, the
+     * AI worker received an empty matched list and stopped — with eight real
+     * customers queued behind it, every one of them eligible, unlocked and
+     * untried. Nothing logged an error: from the worker's side there was
+     * simply no work.
+     *
+     * Filtering in SQL means a backlog of one type can no longer starve
+     * another. WorkerBase's own comment asked for this.
+     */
+    public function consume(int $limit = 20, string $workerId = '', array $types = []): array
     {
         if (!$workerId) {
             $workerId = (string)getmypid();
@@ -138,16 +157,24 @@ class EventBus
         $this->pdo->beginTransaction();
         try {
             // Find eligible events
+            $typeClause = '';
+            $typeArgs   = [];
+            $wanted = array_values(array_filter(array_map('strval', $types), 'strlen'));
+            if ($wanted !== [] && !in_array('*', $wanted, true)) {
+                $typeClause = ' AND event_type IN (' . implode(',', array_fill(0, count($wanted), '?')) . ')';
+                $typeArgs   = $wanted;
+            }
+
             $selectStmt = $this->pdo->prepare('
                 SELECT id FROM events
                 WHERE status IN (\'pending\', \'failed\')
                   AND attempts < max_attempts
                   AND next_retry_at <= datetime(\'now\')
-                  AND (locked_by IS NULL OR locked_by = \'\')
+                  AND (locked_by IS NULL OR locked_by = \'\')' . $typeClause . '
                 ORDER BY priority ASC, created_at ASC
                 LIMIT ?
             ');
-            $selectStmt->execute([$limit]);
+            $selectStmt->execute(array_merge($typeArgs, [$limit]));
             $ids = $selectStmt->fetchAll(\PDO::FETCH_COLUMN);
 
             if (empty($ids)) {
