@@ -1,0 +1,32 @@
+{
+  "_readme": [
+    "WHAT WE HAVE PUBLISHED — flyers, the website, printed material.",
+    "",
+    "This file is NOT a price list and nothing quotes from it. uCRM is the only",
+    "source of truth for what a customer is told; the AI reads the catalogue live",
+    "and this file is never loaded by the plugin at runtime (tests assert that).",
+    "",
+    "Its only job is to be compared against uCRM by tools/price_check.php, so that",
+    "the day someone changes a price in uCRM and the flyer still says the old one,",
+    "it shows up as a report instead of as an argument with a customer holding the",
+    "flyer. Update it when the printed material changes, not when uCRM changes.",
+    "",
+    "'match' is a case-insensitive substring of the uCRM item name. 'published' is",
+    "null for anything we deliberately do not publish — Business is quoted on the",
+    "day, which is why the flyer says ASK FOR TODAY'S QUOTE."
+  ],
+  "currency": "UGX",
+  "source": "DishNet Uganda Starlink flyer",
+  "plans": [
+    { "match": "lite",         "published": 249000,  "note": "Residential Lite — flyer: up to 100 Mbps" },
+    { "match": "residential",  "published": 329000,  "note": "Residential — flyer: up to 400 Mbps" },
+    { "match": "business 50",  "published": null,    "note": "quoted on the day" },
+    { "match": "business 500", "published": null,    "note": "quoted on the day" },
+    { "match": "business 1",   "published": null,    "note": "quoted on the day" }
+  ],
+  "hardware": [
+    { "match": "mini",         "published": 2249000, "note": "Starlink Mini kit — hardware only" },
+    { "match": "standard kit", "published": 2649000, "note": "Starlink Standard kit — hardware only" },
+    { "match": "installation", "published": 150000,  "note": "professional installation, standard site only" }
+  ]
+}

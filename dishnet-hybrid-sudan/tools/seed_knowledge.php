@@ -10,6 +10,22 @@ declare(strict_types=1);
  *
  *   docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/seed_knowledge.php
  *
+ * --refresh-seeded additionally corrects rows that are STILL AS SEEDED
+ * (updated_by='seed'), leaving every operator-edited row alone:
+ *
+ *   docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/seed_knowledge.php --refresh-seeded
+ *
+ * That flag exists because a seeded row can be wrong. TBC_SLA_STATIC_IP put
+ * "public/static IP availability" on the never-improvise list while
+ * BUSINESS_PLANS stated a public IP as a feature of Business — so the AI was
+ * told to answer and to refuse the same question, and took the safer branch.
+ * Insert-or-ignore could never have corrected that, and asking an operator to
+ * hand-edit a row to fix our own mistake is not a fix.
+ *
+ * The one thing it will not do is overwrite a human. An operator's wording is
+ * the approved wording; if they have touched a row, the correction is reported
+ * and skipped so someone can apply it deliberately.
+ *
  * CLI only.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
@@ -19,6 +35,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/StoreInterface.php';
 require_once $root . '/lib/JsonStore.php';
 require_once $root . '/lib/SqliteStore.php';
+require_once $root . '/lib/KnowledgeSeeder.php';
 
 $store = SqliteStore::create(getDataDir($root));   // runs migrations, incl. 064
 $pdo   = $store->getPdo();
@@ -27,19 +44,18 @@ $seed = json_decode((string)file_get_contents(__DIR__ . '/knowledge_seed.json'),
 $items = $seed['items'] ?? [];
 if (!$items) exit("knowledge_seed.json has no items\n");
 
-$ins = $pdo->prepare(
-    "INSERT OR IGNORE INTO knowledge_items (item_key, kind, title, answer, wa_answer, updated_by)
-     VALUES (?,?,?,?,?, 'seed')"
-);
-$added = 0; $kept = 0;
-foreach ($items as $it) {
-    $ins->execute([
-        (string)$it['item_key'],
-        (string)($it['kind'] ?? 'fact'),
-        (string)($it['title'] ?? $it['item_key']),
-        (string)($it['answer'] ?? ''),
-        (string)($it['wa_answer'] ?? ''),
-    ]);
-    $ins->rowCount() ? $added++ : $kept++;
+$refresh = in_array('--refresh-seeded', $argv, true);
+
+$r = KnowledgeSeeder::apply($pdo, $items, $refresh);
+
+foreach ($r['corrected'] as $k) echo "  corrected: {$k}\n";
+printf("knowledge seed: %d added, %d already present, %d corrected\n",
+       $r['added'], $r['kept'], count($r['corrected']));
+
+if (!$refresh) {
+    echo "(run with --refresh-seeded to also correct rows still as seeded)\n";
 }
-printf("knowledge seed: %d added, %d already present (left untouched)\n", $added, $kept);
+if ($r['protected']) {
+    echo "\nEdited by hand, so left exactly as they are — apply these yourself if you want them:\n";
+    foreach ($r['protected'] as $k) echo "  - {$k}\n";
+}

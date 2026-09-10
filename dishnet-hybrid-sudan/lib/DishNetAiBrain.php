@@ -204,6 +204,9 @@ class DishNetAiBrain
         // ── Channel role ────────────────────────────────────────────────
         $p .= $this->channelRules($channel);
 
+        // ── Qualify before recommending ─────────────────────────────────
+        $p .= $this->qualification($channel);
+
         // ── Medium ──────────────────────────────────────────────────────
         $p .= $this->mediumRules($ctx);
 
@@ -524,6 +527,74 @@ class DishNetAiBrain
         }
 
         return $base . $this->salesAnywhere();
+    }
+
+    /**
+     * Qualify before recommending.
+     *
+     * The advisor posture told the model to ask "one or two short qualifying
+     * questions" and then recommend. That is the whole recommendation logic,
+     * and a hotel, a factory and a two-person household all reached it
+     * identically. Worse, the guard ran in one direction only: RULE_CHEAPEST_PLAN
+     * stops Business being offered as a cheap home plan, and nothing at all
+     * stopped a business that needs a public IP being sold Residential — which
+     * fails on NAT the day they try to view their own cameras.
+     *
+     * So this is the missing branch, not a new brain. Two blocks: what makes a
+     * requirement a BUSINESS requirement, and the smallest question set that
+     * settles it for each kind of customer.
+     *
+     * OFF unless ai_qualification is set. Absence means the prompt South Sudan
+     * has today, byte for byte.
+     */
+    private function qualification(string $channel): string
+    {
+        if (!filter_var($this->config['ai_qualification'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return '';
+        }
+        // Only where selling actually happens: the sales role, or any number
+        // that ai_sales_on_all_numbers has put in the selling business.
+        $sells = $channel === 'sales'
+              || filter_var($this->config['ai_sales_on_all_numbers'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (!$sells) return '';
+
+        $esc = $this->markerHint(self::MARKER_ESCALATE);
+
+        return "\nQUALIFY BEFORE YOU RECOMMEND.\n"
+             . "- A customer describes a need, not a product. Work out what they are trying to "
+             . "achieve, then recommend. One question at a time, never a list of questions, and "
+             . "never re-ask something they have already told you.\n"
+             . "- THESE ARE BUSINESS REQUIREMENTS, not home ones: CCTV they want to view from "
+             . "elsewhere, VPN, a server, remote desktop, hosting, remote monitoring, access "
+             . "control, anything the public connects to, linking sites, or more than one "
+             . "location. Any of these needs a PUBLIC IP, which is part of DishNet Business "
+             . "(Starlink Local Priority) and is NOT part of a Residential plan.\n"
+             . "- If any of those come up, say so plainly and steer to Business. Never quote a "
+             . "Residential plan to that customer as though it would do the job — on Residential "
+             . "they cannot reach their own cameras or office from outside.\n"
+             . "- If you cannot tell, ask once, in your own words: will they need CCTV remote "
+             . "viewing, VPN, remote access or a server — anything needing a public IP?\n"
+             . "- An organisation (office, hotel, lodge, factory, school, NGO, bank, health "
+             . "centre, government, farm with staff) is never given Residential as the default "
+             . "answer. Ask what they will run on it first.\n"
+             . "- Business pricing is only yours to quote when it is in PLANS. If it is not "
+             . "there, say you will confirm today's Business quotation and " . $esc . ". Never "
+             . "estimate it, and never work it out from a Residential price.\n"
+             . "\nWHAT TO ESTABLISH, BY CUSTOMER — only what changes the recommendation:\n"
+             . "- Home: their town, roughly how many people, what they use it for. Two questions "
+             . "is usually enough. Then answer.\n"
+             . "- Office or small business: how many users, which applications matter, CCTV or "
+             . "VPN, whether they have a connection already.\n"
+             . "- Hotel or lodge: how many rooms, guests as well as staff, whether WiFi has to "
+             . "cover the whole property, card or POS payments, CCTV, and whether they need a "
+             . "backup line.\n"
+             . "- Factory or warehouse: how many users, production or ERP systems, CCTV, remote "
+             . "monitoring, and how many sites.\n"
+             . "- School: how many users and whether labs or classes depend on it.\n"
+             . "- Farm, remote site or field team: whether it stays in one place or moves, and "
+             . "how it will be powered and mounted — that decides Mini against Standard.\n"
+             . "- Anything large, multi-site, or asking for a contract or guaranteed uptime: "
+             . "take the details and " . $esc . " rather than designing it yourself.\n";
     }
 
     /**

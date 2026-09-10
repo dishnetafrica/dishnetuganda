@@ -18,6 +18,7 @@ declare(strict_types=1);
  *   php tests/conversation-suite.php              all scenarios
  *   php tests/conversation-suite.php --list       names only, spends nothing
  *   php tests/conversation-suite.php --only=short_answers
+ *   php tests/conversation-suite.php --only=ug_        the Uganda set (prefix match)
  *   php tests/conversation-suite.php --channel=whatsapp
  *
  * A scenario is a list of turns. Each turn is what the customer says plus what
@@ -217,6 +218,109 @@ $SCENARIOS = [
     ['say' => 'when does my service expire?',
      'must_not' => ['expires on', 'your service ends']],
   ],
+
+  // ── Uganda ────────────────────────────────────────────────────────────
+  // Run with --only=ug_ (the whole set) or --only=ug_hotel (just one). These
+  // need a Uganda install: ai_qualification on, and the Uganda catalogue in
+  // uCRM. They deliberately assert NO prices — the catalogue is live and
+  // differs per install, so every assertion here is about the decision the
+  // assistant makes, which is the thing that was actually broken.
+
+  // The sale that fails after the customer has paid. Residential is behind
+  // CGNAT, so a warehouse owner who wants to see their own cameras from home
+  // cannot, at any speed. This must be caught before the sale, not after.
+  'ug_public_ip_cctv' => [
+    ['say' => 'I need internet for CCTV at my warehouse',
+     'must_not' => ['residential lite is ideal', 'i recommend residential']],
+    ['say' => 'yes I want to view the cameras from my home',
+     'any'      => ['business', 'public ip', 'local priority'],
+     'must_not' => ['residential will work', 'residential is fine',
+                    'any of our plans will']],
+  ],
+
+  'ug_public_ip_vpn' => [
+    ['say' => 'we need internet for our office, staff connect by VPN to our server',
+     'any'      => ['business', 'public ip', 'local priority'],
+     'must_not' => ['i recommend residential', 'residential lite']],
+  ],
+
+  // An organisation must never be handed the home plan as a default answer.
+  'ug_hotel' => [
+    ['say' => 'I have a hotel with 30 rooms, I need internet',
+     'any'      => ['rooms', 'guests', 'staff', 'cctv', 'how many', 'wifi', 'business'],
+     'must_not' => ['residential lite is the best', 'i recommend residential lite']],
+  ],
+
+  'ug_factory' => [
+    ['say' => 'I need internet for my factory in Mukono',
+     'any'      => ['how many', 'what', 'business', 'users', 'cctv'],
+     'must_not' => ['i recommend residential lite']],
+  ],
+
+  'ug_school' => [
+    ['say' => 'we are a school and need internet for our computer lab',
+     'any'      => ['how many', 'business', 'students', 'users', 'lab']],
+  ],
+
+  // The other half of the guard: a household must NOT be interrogated or
+  // pushed to Business. Getting this wrong is how you lose the easy sales.
+  'ug_home_simple' => [
+    ['say' => 'I want internet for my home in Entebbe, 5 people',
+     'must_not' => ['business plan is best', 'i recommend business',
+                    'do you need a public ip', 'local priority']],
+  ],
+
+  'ug_discount' => [
+    ['say' => 'can you give me a discount?',
+     'must_not' => ['i can offer you', 'special price', 'discounted price',
+                    'i can reduce', 'we can do it for']],
+  ],
+
+  // We make no regulatory claims about what a customer may import.
+  'ug_import_myself' => [
+    ['say' => 'I will just import the Starlink kit myself from Dubai',
+     'must_not' => ['illegal', 'will not work in uganda', 'against the law',
+                    'will be seized', 'customs will take']],
+  ],
+
+  'ug_too_expensive' => [
+    ['say' => 'why is your price so high?',
+     'any'      => ['installation', 'warranty', 'support', 'genuine', 'includes'],
+     'must_not' => ['i agree it is expensive', 'sorry about the price']],
+  ],
+
+  // Standard installation is standard. A pole is not.
+  'ug_install_nonstandard' => [
+    ['say' => 'my roof has no clear view, I need a 6 metre pole and 80m of cable',
+     'must_not' => ['installation is 150,000', 'the standard installation price',
+                    'installation will cost 150']],
+  ],
+
+  // Business pricing is RED unless the catalogue carries it: confirm, never
+  // estimate, and never derive it from a Residential price.
+  'ug_business_price' => [
+    ['say' => 'how much is the Business 500GB plan per month?',
+     'must_not' => ['approximately', 'around ugx', 'roughly', 'should be about',
+                    'estimate', 'i think it is']],
+  ],
+
+  // SLA terms genuinely have no approved answer. This one must still refuse.
+  'ug_sla' => [
+    ['say' => 'do you guarantee 99.9% uptime? I need an SLA in writing',
+     'must_not' => ['yes we guarantee', 'we guarantee 99', 'our sla is',
+                    'we offer 99.9']],
+  ],
+
+  'ug_farm_portable' => [
+    ['say' => 'I need internet on my farm and sometimes at another site',
+     'any'      => ['mini', 'move', 'moves', 'portable', 'one place', 'both']],
+  ],
+
+  // Uganda facts that must never drift back to Sudan's defaults.
+  'ug_office_and_payment' => [
+    ['say' => 'where is your office and how do I pay?',
+     'must_not' => ['juba', 'khartoum', 'south sudan', 'dishnetafrica.com/pay']],
+  ],
 ];
 
 if ($list) {
@@ -246,7 +350,9 @@ $failures = [];
 $tokIn = $tokOut = 0;
 
 foreach ($SCENARIOS as $name => $turns) {
-    if ($only !== null && $only !== $name) continue;
+    // Prefix match, so --only=ug_ runs the whole Uganda set and
+    // --only=ug_hotel runs the one scenario.
+    if ($only !== null && $only !== $name && strpos($name, $only) !== 0) continue;
     printf("── %s\n", $name);
     $history = [];
 

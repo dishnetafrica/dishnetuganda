@@ -1,132 +1,173 @@
 {
- "_readme": [
-  "Seed knowledge for the DishNet Uganda deployment. Loaded by",
-  "tools/seed_knowledge.php — idempotent: existing item_keys are never",
-  "overwritten, so operator edits in the admin tab always win.",
-  "Facts here are only ones the owner has approved in writing."
- ],
- "items": [
-  {
-   "item_key": "OFFICE_LOCATION",
-   "kind": "fact",
-   "title": "Where is the DishNet Uganda office",
-   "answer": "Our DishNet Uganda office is located on Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda. Customers are welcome to visit; offer to share the directions/location pin.",
-   "wa_answer": "📍 DishNet Uganda Office — Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda 🇺🇬 You're welcome to visit us at our office. Would you like us to share the directions/location pin?"
-  },
-  {
-   "item_key": "COMPANY_IDENTITY",
-   "kind": "fact",
-   "title": "What is DishNet / is DishNet the same as Starlink",
-   "answer": "DishNet Africa Ltd is an East African internet company operating since 2013, with operations in South Sudan, Sudan and Uganda. Starlink is the satellite network (SpaceX); DishNet is the local service company that supplies genuine Starlink hardware, installs it professionally, supports customers 24/7 on WhatsApp, and bills in Ugandan shillings including mobile money."
-  },
-  {
-   "item_key": "GENUINE_STARLINK",
-   "kind": "fact",
-   "title": "Is this genuine Starlink",
-   "answer": "Yes — genuine Starlink hardware on the genuine Starlink network. DishNet purchases directly from Starlink in Uganda and every invoice carries an official URA EFRIS fiscal code the customer can verify."
-  },
-  {
-   "item_key": "COVERAGE_UGANDA",
-   "kind": "fact",
-   "title": "Where does it work in Uganda",
-   "answer": "Starlink covers all of Uganda — every district, town and village in all four regions. The only site requirement is a clear view of the sky, which our technician confirms at survey. Never name any Ugandan place as not covered."
-  },
-  {
-   "item_key": "WEATHER_HONESTY",
-   "kind": "fact",
-   "title": "What happens in rain",
-   "answer": "Normal rain and clouds are fine. Very heavy storms can cause brief slowdowns or short interruptions that recover by themselves — that is honest satellite reality and we say it plainly."
-  },
-  {
-   "item_key": "RULE_NO_SPEED_GUARANTEE",
-   "kind": "rule",
-   "title": "Never guarantee speed",
-   "answer": "Never guarantee a specific speed, uptime percentage or latency. Speeds are 'up to' figures; real speed varies with network load and weather."
-  },
-  {
-   "item_key": "RULE_NO_DATE_PROMISES",
-   "kind": "rule",
-   "title": "Never promise unconfirmed dates",
-   "answer": "Never promise an installation or delivery date unless the installation team has confirmed it. Say the date is confirmed at scheduling."
-  },
-  {
-   "item_key": "RULE_FLEX_GATE",
-   "kind": "rule",
-   "title": "Flex is quoted, not signed",
-   "answer": "DishNet Flex plans may be quoted and interest registered, but no Flex customer may be activated or contract promised until management confirms — collect their details and escalate (<<ESCALATE flex signup>>)."
-  },
-  {
-   "item_key": "RULE_DISCOUNTS_TO_SALES",
-   "kind": "rule",
-   "title": "Discounts go to Sales",
-   "answer": "Prices are the same for everyone and you have no authority to discount. Any discount or special-deal request: take details and escalate to sales."
-  },
-  {
-   "item_key": "RULE_PAYMENT_SAFETY",
-   "kind": "rule",
-   "title": "Official payment channels only",
-   "answer": "Never direct a customer to pay to any personal phone number or personal account. Payments only via the official DishNet payment details on the invoice. If a customer reports paying someone claiming to be DishNet, treat it as possible fraud and escalate immediately."
-  },
-  {
-   "item_key": "TBC_REFUND_POLICY",
-   "kind": "tbc",
-   "title": "refund policy"
-  },
-  {
-   "item_key": "TBC_WARRANTY_DAMAGE",
-   "kind": "tbc",
-   "title": "warranty, damaged, lost or stolen equipment terms"
-  },
-  {
-   "item_key": "TBC_FLEX_TERMS",
-   "kind": "tbc",
-   "title": "Flex contract termination, pause and equipment-return terms"
-  },
-  {
-   "item_key": "TBC_REGULATORY",
-   "kind": "tbc",
-   "title": "regulatory, licensing or legality questions"
-  },
-  {
-   "item_key": "TBC_CROSS_BORDER",
-   "kind": "tbc",
-   "title": "using the service across borders or while travelling abroad"
-  },
-  {
-   "item_key": "TBC_SLA_STATIC_IP",
-   "kind": "tbc",
-   "title": "business SLA terms and public/static IP availability"
-  },
-  {
-   "item_key": "TBC_RELOCATION",
-   "kind": "tbc",
-   "title": "relocation fees and account transfer process"
-  },
-  {
-   "item_key": "BUSINESS_PLANS",
-   "kind": "fact",
-   "title": "Business plans (priority data + public IP)",
-   "answer": "Our DishNet Business plans run on Starlink Local Priority: a monthly priority-data block (50 GB, 500 GB or 1 TB) plus a PUBLIC IP address and priority support. After the priority data is used, unlimited standard data continues. They are ideal for offices, CCTV/remote access, VPNs and heavy users. Always quote the current prices from the live price list.",
-   "wa_answer": "💼 DishNet Business = priority data (50GB/500GB/1TB) + public IP + priority support. Unlimited standard data after. Great for offices, CCTV & VPN. Want today's prices?"
-  },
-  {
-   "item_key": "OBJECTION_CHEAPER_KIT",
-   "kind": "fact",
-   "title": "Objection: another seller has a cheaper Starlink kit",
-   "answer": "Never criticise other sellers. Approved answer: some sellers offer imported kits at lower prices. Our kits are genuine Uganda-channel stock with warranty and a VAT receipt, and every package includes delivery, professional installation, your first month of internet and local support on WhatsApp. If upfront cost is the concern, offer the Flex plan: connected with UGX 0 upfront.",
-   "wa_answer": "Our kits are genuine Uganda stock with warranty + VAT receipt, and the package includes delivery, professional installation, your first month and local support. If upfront cost is the issue — our Flex plan gets you connected with UGX 0 upfront. 🙂"
-  },
-  {
-   "item_key": "RULE_CHEAPEST_PLAN",
-   "kind": "rule",
-   "title": "Cheapest plan must match the customer's use",
-   "answer": "When someone asks for the cheapest plan, first match it to their use. For a home or personal customer the cheapest option is the cheapest RESIDENTIAL plan (DishNet Lite); never present a Business plan as the default cheapest choice for home use. Business plans cost less per month only because they carry a priority-data block (then standard data) and a public IP - they are designed for offices. If the use is unknown, ask one short question (home or business?) or state both clearly labelled. Always take names and prices from the live catalogue, never from memory."
-  },
-  {
-   "item_key": "PLAN_SERVICE_MAP",
-   "kind": "fact",
-   "title": "Which Starlink service is behind each DishNet plan",
-   "answer": "One naming system: always present the DishNet plan name first; the Starlink name is the underlying service, stated openly whenever a customer asks. Mapping: DishNet Lite = Starlink Residential Lite; DishNet Home = Starlink Residential; DishNet Flex 24 / Flex 12 = Starlink Residential on a 24- or 12-month DishNet package with the kit included; DishNet Business 50 / 500 / 1TB = Starlink Local Priority 50 GB / 500 GB / 1 TB with a public IP. DishNet packages run on the Starlink network while DishNet provides delivery, installation, mobile-money billing, warranty handling and local support; DishNet does not operate the satellite network itself. Never invent Starlink-branded plan names (there is no 'Starlink Home'). Prices always come from the live catalogue, never from this note."
-  }
- ]
+  "_readme": [
+    "Seed knowledge for the DishNet Uganda deployment. Loaded by",
+    "tools/seed_knowledge.php — idempotent: existing item_keys are never",
+    "overwritten, so operator edits in the admin tab always win.",
+    "Facts here are only ones the owner has approved in writing."
+  ],
+  "items": [
+    {
+      "item_key": "OFFICE_LOCATION",
+      "kind": "fact",
+      "title": "Where is the DishNet Uganda office",
+      "answer": "Our DishNet Uganda office is located on Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda. Customers are welcome to visit; offer to share the directions/location pin.",
+      "wa_answer": "📍 DishNet Uganda Office — Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda 🇺🇬 You're welcome to visit us at our office. Would you like us to share the directions/location pin?"
+    },
+    {
+      "item_key": "COMPANY_IDENTITY",
+      "kind": "fact",
+      "title": "What is DishNet / is DishNet the same as Starlink",
+      "answer": "DishNet Africa Ltd is an East African internet company operating since 2013, with operations in South Sudan, Sudan and Uganda. Starlink is the satellite network (SpaceX); DishNet is the local service company that supplies genuine Starlink hardware, installs it professionally, supports customers 24/7 on WhatsApp, and bills in Ugandan shillings including mobile money."
+    },
+    {
+      "item_key": "GENUINE_STARLINK",
+      "kind": "fact",
+      "title": "Is this genuine Starlink",
+      "answer": "Yes — genuine Starlink hardware on the genuine Starlink network. DishNet purchases directly from Starlink in Uganda and every invoice carries an official URA EFRIS fiscal code the customer can verify."
+    },
+    {
+      "item_key": "COVERAGE_UGANDA",
+      "kind": "fact",
+      "title": "Where does it work in Uganda",
+      "answer": "Starlink covers all of Uganda — every district, town and village in all four regions. The only site requirement is a clear view of the sky, which our technician confirms at survey. Never name any Ugandan place as not covered."
+    },
+    {
+      "item_key": "WEATHER_HONESTY",
+      "kind": "fact",
+      "title": "What happens in rain",
+      "answer": "Normal rain and clouds are fine. Very heavy storms can cause brief slowdowns or short interruptions that recover by themselves — that is honest satellite reality and we say it plainly."
+    },
+    {
+      "item_key": "RULE_NO_SPEED_GUARANTEE",
+      "kind": "rule",
+      "title": "Never guarantee speed",
+      "answer": "Never guarantee a specific speed, uptime percentage or latency. Speeds are 'up to' figures; real speed varies with network load and weather."
+    },
+    {
+      "item_key": "RULE_NO_DATE_PROMISES",
+      "kind": "rule",
+      "title": "Never promise unconfirmed dates",
+      "answer": "Never promise an installation or delivery date unless the installation team has confirmed it. Say the date is confirmed at scheduling."
+    },
+    {
+      "item_key": "RULE_FLEX_GATE",
+      "kind": "rule",
+      "title": "Flex is quoted, not signed",
+      "answer": "DishNet Flex plans may be quoted and interest registered, but no Flex customer may be activated or contract promised until management confirms — collect their details and escalate (<<ESCALATE flex signup>>)."
+    },
+    {
+      "item_key": "RULE_DISCOUNTS_TO_SALES",
+      "kind": "rule",
+      "title": "Discounts go to Sales",
+      "answer": "Prices are the same for everyone and you have no authority to discount. Any discount or special-deal request: take details and escalate to sales."
+    },
+    {
+      "item_key": "RULE_PAYMENT_SAFETY",
+      "kind": "rule",
+      "title": "Official payment channels only",
+      "answer": "Never direct a customer to pay to any personal phone number or personal account. Payments only via the official DishNet payment details on the invoice. If a customer reports paying someone claiming to be DishNet, treat it as possible fraud and escalate immediately."
+    },
+    {
+      "item_key": "TBC_REFUND_POLICY",
+      "kind": "tbc",
+      "title": "refund policy"
+    },
+    {
+      "item_key": "TBC_WARRANTY_DAMAGE",
+      "kind": "tbc",
+      "title": "warranty, damaged, lost or stolen equipment terms"
+    },
+    {
+      "item_key": "TBC_FLEX_TERMS",
+      "kind": "tbc",
+      "title": "Flex contract termination, pause and equipment-return terms"
+    },
+    {
+      "item_key": "TBC_REGULATORY",
+      "kind": "tbc",
+      "title": "regulatory, licensing or legality questions"
+    },
+    {
+      "item_key": "TBC_CROSS_BORDER",
+      "kind": "tbc",
+      "title": "using the service across borders or while travelling abroad"
+    },
+    {
+      "item_key": "TBC_SLA_STATIC_IP",
+      "kind": "tbc",
+      "title": "business SLA terms: guaranteed uptime, service credits, response-time commitments and signed contracts"
+    },
+    {
+      "item_key": "TBC_RELOCATION",
+      "kind": "tbc",
+      "title": "relocation fees and account transfer process"
+    },
+    {
+      "item_key": "BUSINESS_PLANS",
+      "kind": "fact",
+      "title": "Business plans (priority data + public IP)",
+      "answer": "Our DishNet Business plans run on Starlink Local Priority: a monthly priority-data block (50 GB, 500 GB or 1 TB) plus a PUBLIC IP address and priority support. After the priority data is used, unlimited standard data continues. They are ideal for offices, CCTV/remote access, VPNs and heavy users. Always quote the current prices from the live price list.",
+      "wa_answer": "💼 DishNet Business = priority data (50GB/500GB/1TB) + public IP + priority support. Unlimited standard data after. Great for offices, CCTV & VPN. Want today's prices?"
+    },
+    {
+      "item_key": "OBJECTION_CHEAPER_KIT",
+      "kind": "fact",
+      "title": "Objection: another seller has a cheaper Starlink kit",
+      "answer": "Never criticise other sellers. Approved answer: some sellers offer imported kits at lower prices. Our kits are genuine Uganda-channel stock with warranty and a VAT receipt, and every package includes delivery, professional installation, your first month of internet and local support on WhatsApp. If upfront cost is the concern, offer the Flex plan: connected with UGX 0 upfront.",
+      "wa_answer": "Our kits are genuine Uganda stock with warranty + VAT receipt, and the package includes delivery, professional installation, your first month and local support. If upfront cost is the issue — our Flex plan gets you connected with UGX 0 upfront. 🙂"
+    },
+    {
+      "item_key": "RULE_CHEAPEST_PLAN",
+      "kind": "rule",
+      "title": "Cheapest plan must match the customer's use",
+      "answer": "When someone asks for the cheapest plan, first match it to their use. For a home or personal customer the cheapest option is the cheapest RESIDENTIAL plan (DishNet Lite); never present a Business plan as the default cheapest choice for home use. Business plans cost less per month only because they carry a priority-data block (then standard data) and a public IP - they are designed for offices. If the use is unknown, ask one short question (home or business?) or state both clearly labelled. Always take names and prices from the live catalogue, never from memory."
+    },
+    {
+      "item_key": "PLAN_SERVICE_MAP",
+      "kind": "fact",
+      "title": "Which Starlink service is behind each DishNet plan",
+      "answer": "One naming system: always present the DishNet plan name first; the Starlink name is the underlying service, stated openly whenever a customer asks. Mapping: DishNet Lite = Starlink Residential Lite; DishNet Home = Starlink Residential; DishNet Flex 24 / Flex 12 = Starlink Residential on a 24- or 12-month DishNet package with the kit included; DishNet Business 50 / 500 / 1TB = Starlink Local Priority 50 GB / 500 GB / 1 TB with a public IP. DishNet packages run on the Starlink network while DishNet provides delivery, installation, mobile-money billing, warranty handling and local support; DishNet does not operate the satellite network itself. Never invent Starlink-branded plan names (there is no 'Starlink Home'). Prices always come from the live catalogue, never from this note."
+    },
+    {
+      "item_key": "PUBLIC_IP",
+      "kind": "fact",
+      "title": "Do I get a public IP / can I access CCTV, VPN or a server remotely",
+      "answer": "A public IP is included with DishNet Business (Starlink Local Priority), not with Residential or Residential Lite. Residential is behind CGNAT, so cameras, VPNs, servers, remote desktop and anything else reached from outside will not work on it, however fast it is. If a customer needs remote access of any kind, that is a Business requirement — say so directly rather than selling Residential and letting them find out. What a public IP costs is part of the current Business quotation: quote it only from the live catalogue, and otherwise offer to confirm today's price.",
+      "wa_answer": "Public IP comes with DishNet Business (Starlink Local Priority) — not with Residential. If you need CCTV, VPN or remote access from outside, you'll need Business. Shall I get you today's Business quotation?"
+    },
+    {
+      "item_key": "OBJECTION_TOO_EXPENSIVE",
+      "kind": "fact",
+      "title": "Objection: your price is too high / why so expensive",
+      "answer": "Never be defensive and never apologise for the price. Break the package into what it actually is, using live catalogue figures only: the kit is a one-time cost, the plan is monthly, installation is one-time. Then say what buying through DishNet includes — genuine Uganda-channel hardware with warranty, professional installation, activation and configuration, billing in shillings, local support on WhatsApp, warranty handling, and a VAT receipt. If upfront cost is the real objection, offer Flex. Never invent a discount; discounts are Sales' decision.",
+      "wa_answer": "Let me break it down — the kit is one-time, the plan is monthly, installation is one-time. That price includes genuine hardware with warranty, professional installation, setup, local billing and support here on WhatsApp. If the upfront is the issue, our Flex plan starts at UGX 0 upfront."
+    },
+    {
+      "item_key": "OBJECTION_IMPORT_MYSELF",
+      "kind": "fact",
+      "title": "Objection: I will import the Starlink kit myself / buy it online",
+      "answer": "Never criticise the customer's plan or other sellers. Approved points: an imported kit arrives as hardware only — the customer handles shipping, duties and clearing themselves, activates it themselves, and has no local warranty route if it fails. DishNet supplies Uganda-channel stock with a VAT receipt, installs it properly, activates it, bills in shillings and handles warranty locally. State the difference and let them choose. Never claim an import is illegal, will not work, or will be seized — we do not make regulatory claims.",
+      "wa_answer": "You can, and some people do. The difference is what happens after: an imported kit is hardware only — shipping, duties and clearing are yours, and there's no local warranty route. Ours is Uganda stock with a VAT receipt, installed and activated, billed in shillings, supported here."
+    },
+    {
+      "item_key": "OBJECTION_DISCOUNT",
+      "kind": "fact",
+      "title": "Objection: can I get a discount / is the price negotiable",
+      "answer": "You have no authority to discount, and you must not hint that a discount might be available. Do not restate the customer's proposed figure as though it were ours, and never calculate a total from it. Say the listed price is what it is, take their name and what they are buying, and hand over to Sales, who decide. If the real problem is the upfront amount, Flex is the approved answer to offer.",
+      "wa_answer": "Our prices are set, so I can't change them myself — but let me pass you to our Sales team who handle that. If it's the upfront amount that's the issue, our Flex plan gets you connected with UGX 0 upfront."
+    },
+    {
+      "item_key": "INSTALLATION_SCOPE",
+      "kind": "fact",
+      "title": "What does installation include, and when does it cost more",
+      "answer": "Professional installation at the listed price covers a standard install: mounting the dish with a clear view of the sky, running a normal cable length, setting up the router and testing the connection. It is not every site. Long cable runs, poles or masts, difficult roof access, tower work, multi-floor or multi-building cabling, structured cabling and commercial network setups are quoted separately after a site assessment. Never promise the standard installation price for a site you have not seen described. If the customer describes anything unusual, say installation for their site will be confirmed and take their details.",
+      "wa_answer": "Standard installation covers mounting the dish with a clear sky view, normal cabling, router setup and testing. Poles, long cable runs, difficult roofs or office cabling are quoted after a site assessment — tell me about your site and I'll get it confirmed."
+    },
+    {
+      "item_key": "RULE_QUALIFY_BEFORE_QUOTING",
+      "kind": "rule",
+      "title": "Establish the requirement before recommending a plan",
+      "answer": "Never answer 'which plan should I buy' with a plan name before you know what it is for. For a household two short questions is enough — town, and how many people. For any organisation, or anyone mentioning CCTV, VPN, a server, remote access or more than one site, establish the public-IP requirement first: those are Business requirements and Residential will not do the job. Getting the recommendation right matters more than answering quickly, but never interrogate — ask one question at a time and stop as soon as you can answer."
+    }
+  ]
 }

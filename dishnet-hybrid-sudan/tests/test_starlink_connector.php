@@ -177,12 +177,18 @@ is_(strpos((string)$r2['error'], 'backing off') !== false,
 
 echo "\nThe account number comes out of the jar it was already in\n";
 $store = freshStore($tmp);
+// The sentinel is deliberately long and non-hex. It used to be "abc", and
+// status() returns the store's full path, whose temp directory is eight random
+// hex characters — so roughly one run in 680 found "abc" in the pathname and
+// failed an assertion about leaking session tokens. Nothing to do with the
+// property being tested, and it fails on a different machine each time.
+$SSO = 'SSO-SECRET-MUST-NEVER-BE-PRINTED';
 $store->importCookie('_ga=1; starlink.com.account_number=ACC-DF-15744579-40001-43; '
-                   . 'Starlink.Com.Sso=abc', 'bhavin');
+                   . 'Starlink.Com.Sso=' . $SSO, 'bhavin');
 is_($store->status()['account_number'] === 'ACC-DF-15744579-40001-43',
     'read from the cookie at import, not waited for from a listing',
     $store->status()['account_number']);
-is_(strpos(json_encode($store->status()), 'abc') === false,
+is_(strpos(json_encode($store->status()), $SSO) === false,
     'and reading one value did not put the session tokens on screen');
 
 $store = freshStore($tmp);
