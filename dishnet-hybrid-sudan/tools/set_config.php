@@ -36,28 +36,54 @@ $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 // The flags that change how the assistant behaves. Listed so `set_config.php`
 // with no arguments answers "what is switched on?", which is the question
 // actually being asked at a terminal.
+// type matters. The first version of this tool ran every value through
+// filter_var(FILTER_VALIDATE_BOOLEAN), which counts only 1/true/on/yes as
+// true — so a 30-minute cooldown displayed as "OFF", indistinguishable from
+// the 0 that disables the stand-down rule entirely. A settings screen that
+// cannot tell 30 from 0 is worse than no settings screen.
 $FLAGS = [
-    'ai_qualification'        => 'Qualify before recommending; route CCTV/VPN/servers to Business',
-    'ai_hardware_expert'      => 'Know the dishes: coverage vs Wi-Fi, Ethernet per model, solar',
-    'ai_sales_on_all_numbers' => 'Let every number answer a sales question',
-    'ai_handover_message'     => 'What the customer hears when the AI hands over',
-    'wa_human_cooldown_minutes' => 'How long the AI stays quiet after a colleague replies',
-    'stock_statement'         => 'What to say about availability',
-    'ai_currency'             => 'Currency prices are stated in',
+    'ai_qualification' => ['bool',
+        'Qualify before recommending; route CCTV/VPN/servers to Business'],
+    'ai_hardware_expert' => ['bool',
+        'Know the dishes: coverage vs Wi-Fi, Ethernet per model, solar'],
+    'ai_sales_on_all_numbers' => ['bool',
+        'Let every number answer a sales question'],
+    'ai_handover_message' => ['text',
+        'What the customer hears when the AI hands over'],
+    'wa_human_cooldown_minutes' => ['minutes',
+        'How long the AI stays quiet after a colleague replies (0 = never stands down)'],
+    'stock_statement' => ['text',
+        'What to say about availability — stated to customers as written'],
+    'ai_currency' => ['text',
+        'Currency prices are stated in — shown to customers exactly as typed'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
     $cfg = PluginConfig::load($root, $dataDir);
     echo "\n  AI SETTINGS\n\n";
-    foreach ($FLAGS as $k => $what) {
+    foreach ($FLAGS as $k => list($type, $what)) {
         $raw = $cfg[$k] ?? null;
         $set = !($raw === null || $raw === '');
-        $on  = $set && filter_var($raw, FILTER_VALIDATE_BOOLEAN);
-        $shown = !$set ? 'not set (default)'
-               : (is_numeric($raw) || in_array(strtolower((string)$raw), ['1','0','true','false'], true)
-                    ? ($on ? 'ON' : 'OFF')
-                    : '"' . mb_substr((string)$raw, 0, 40) . '"');
+        $note = '';
+
+        if (!$set) {
+            $shown = 'not set (default)';
+            if ($type === 'minutes') $note = 'default: 1440 (24 hours)';
+        } elseif ($type === 'bool') {
+            $shown = filter_var($raw, FILTER_VALIDATE_BOOLEAN) ? 'ON' : 'OFF';
+        } elseif ($type === 'minutes') {
+            // Shown as the number it is. 0 is not "off" — it is a decision
+            // with a consequence, so it says the consequence.
+            $n = is_numeric($raw) ? (int)$raw : null;
+            if ($n === null)   { $shown = '"' . (string)$raw . '"'; $note = 'not a number — treated as the 1440 default'; }
+            elseif ($n === 0)  { $shown = '0 minutes'; $note = '⚠ the AI NEVER stands down, even while a colleague is typing'; }
+            else               { $shown = $n . ' minutes'; }
+        } else {
+            $shown = '"' . (string)$raw . '"';
+        }
+
         printf("    %-27s %s\n", $k, $shown);
+        if ($note !== '') printf("    %-27s %s\n", '', $note);
         printf("    %-27s %s\n\n", '', $what);
     }
 };
@@ -86,8 +112,34 @@ if (!$clear && !in_array('--value', $args, true)) {
 }
 $new = $clear ? '' : $value('--value');
 
+// Some of these are not flags — they are text a customer reads, verbatim.
+// Saying so at the moment of setting is the only time anyone is looking.
+$warn = [];
+if (!$clear) {
+    if ($key === 'ai_currency' && $new !== '' && $new !== mb_strtoupper($new)) {
+        $warn[] = 'This is printed next to every price exactly as typed, so prices will '
+                . 'read "' . $new . ' 329,000". Your flyer says "' . mb_strtoupper($new) . '".';
+    }
+    if ($key === 'stock_statement' && $new !== ''
+        && in_array(mb_strtolower(trim($new)), ['yes', 'no', 'y', 'n', 'ok', 'true', 'false'], true)) {
+        $warn[] = 'The assistant is told to answer stock questions from this line directly '
+                . 'and confidently. As "' . $new . '" that is thin — a sentence works better, '
+                . 'for example: "Standard and Mini kits are in stock in Kampala."';
+    }
+    if ($key === 'wa_human_cooldown_minutes' && $new !== '' && is_numeric($new) && (int)$new === 0) {
+        $warn[] = '0 means the AI NEVER stands down. It will keep answering while a colleague '
+                . 'is typing, which is what produced ninety-seven messages on c109.';
+    }
+    if ($key === 'ai_handover_message' && mb_strlen($new) > 160) {
+        $warn[] = 'That is long for a holding line on WhatsApp. It is sent on its own, before '
+                . 'a person arrives.';
+    }
+}
+
 list($ok, $err) = PluginConfig::saveOverrides($dataDir, [$key => $new]);
 if (!$ok) { echo "\n  Could not save: " . (string)$err . "\n\n"; exit(1); }
+
+foreach ($warn as $w) echo "\n  Note: " . $w . "\n";
 
 echo "\n  " . $key . ($clear ? ' cleared — back to the default.' : ' = ' . $new) . "\n";
 $show();
