@@ -493,8 +493,65 @@ class AiReplyWorker extends WorkerBase
                 . ($reason !== '' ? " — {$reason}" : '') . '. Open Engage → WhatsApp → Inbox.',
                 30
             );
+
+            // ── And tell the customer ────────────────────────────────────
+            // A handoff sent them nothing at all. The team gets a buzz, the
+            // Inbox turns red, and the person who asked the question hears
+            // silence — indistinguishable from being ignored. Six
+            // conversations were sitting like that, one of them since nine
+            // that morning.
+            //
+            // Empty by default: an installation that has not set a line keeps
+            // the old behaviour exactly.
+            $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
+            if ($holding !== '' && $phone !== '' && !$this->alreadySaid($convId, $holding)) {
+                $send = $this->evo->sendText($channel, $phone, $holding);
+                if (!empty($send['ok'])) {
+                    if ($convId > 0) {
+                        $this->convSvc->storeMessage($convId, [
+                            'direction'     => 'out',
+                            'role'          => 'assistant',
+                            'body'          => $holding,
+                            'agent_name'    => 'DishNet AI',
+                            'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
+                            'metadata'      => json_encode(['channel' => $channel, 'handover' => true]),
+                        ]);
+                    }
+                } else {
+                    $this->log('warn', "conv {$convId}: handover line not sent: "
+                        . (string)($send['error'] ?? '?'));
+                }
+            }
         } catch (\Throwable $e) {
             $this->log('error', 'escalation failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Have we said this already in the last few turns?
+     *
+     * A customer who trips the handoff three times running should hear it
+     * once. The team alert has a 30-minute cooldown for the same reason, and
+     * repeating a holding line at somebody already waiting reads worse than
+     * saying nothing.
+     *
+     * On any error it answers false: a duplicate is a smaller failure than
+     * another silence.
+     */
+    private function alreadySaid(int $convId, string $text): bool
+    {
+        if ($convId <= 0) return false;
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT body FROM wa_messages
+                  WHERE conversation_id = ? AND direction = 'out'
+                  ORDER BY id DESC LIMIT 3"
+            );
+            $stmt->execute([$convId]);
+            foreach ((array)$stmt->fetchAll(\PDO::FETCH_COLUMN) as $b) {
+                if (trim((string)$b) === trim($text)) return true;
+            }
+        } catch (\Throwable $e) { /* fall through */ }
+        return false;
     }
 }

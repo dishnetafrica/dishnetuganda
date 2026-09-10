@@ -59,6 +59,7 @@ $runs = [
     ['set_sales_everywhere.php',  [],         'shows which numbers may answer sales'],
     ['wa_connect.php',            [],         'reports which numbers are actually connected'],
     ['wa_send_test.php',          [],         'refuses to send without an explicit number'],
+    ['set_handover_message.php',  [],         'shows what a handover tells the customer'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {

@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => []];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => []];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -48,8 +48,16 @@ if (preg_match('#^/webhook/set/(.+)$#', $path, $m)) {
     $state['set_calls']++;
     fe2_out(['webhook' => $state['webhooks'][$m[1]]]);
 }
-if (preg_match('#^/message/sendText/#', $path)) {
-    fe2_out(['key' => ['id' => 'FAKE-EVO-MSG'], 'status' => 'PENDING']);
+if (preg_match('#^/message/sendText/(.+)$#', $path, $m)) {
+    // Recorded, not just answered. A test could previously only see that a
+    // send returned ok, which is the same thing production logs showed while
+    // customers sat in silence — "it returned ok" is not "it said something".
+    $state['text_calls'][] = [
+        'instance' => $m[1],
+        'number'   => (string)($body['number'] ?? ''),
+        'text'     => (string)($body['text'] ?? ''),
+    ];
+    fe2_out(['key' => ['id' => 'FAKE-EVO-MSG-' . count($state['text_calls'])], 'status' => 'PENDING']);
 }
 if (preg_match('#^/message/sendMedia/(.+)$#', $path, $m)) {
     // Record enough to assert on without persisting a whole base64 image.
