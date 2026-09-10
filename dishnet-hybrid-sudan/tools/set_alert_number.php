@@ -29,6 +29,16 @@ chdir(dirname(__DIR__));
  *                   and alerts stopped without saying so.
  *
  * All three refused here, with the reason.
+ *
+ * The first of those is the one a blocklist would not have caught. That handset
+ * was fine to alert — it was the operator's own. What made it a fault was that
+ * it was ALSO conversation c109: a live thread the assistant answers. Alerts
+ * landed in it, came back as customer messages, and were answered. So the guard
+ * is not "never that number", it is "never a number this system is already
+ * talking to", which is the actual mechanism and catches the next one too.
+ *
+ *   --force  set it anyway, with the reason printed. For the case where the
+ *            thread is the operator's own and they have closed it.
  */
 
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
@@ -38,6 +48,9 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EvolutionApiService.php';
 require_once $root . '/lib/AlertService.php';
+require_once $root . '/lib/StoreInterface.php';
+require_once $root . '/lib/JsonStore.php';
+require_once $root . '/lib/SqliteStore.php';
 
 $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
@@ -77,7 +90,8 @@ if (!in_array('--off', $args, true) && $value('--to') === '') {
     // Not a dialable example. Pasted verbatim this fails loudly, which is
     // the point — the last two placeholders went in as-is.
     echo "    php tools/set_alert_number.php --to <the handset to wake>\n";
-    echo "    php tools/set_alert_number.php --off\n\n";
+    echo "    php tools/set_alert_number.php --off\n";
+    echo "    php tools/set_alert_number.php --to <handset> --force   (already a conversation)\n\n";
     echo "  Use a person's handset. Not a number this plugin answers on:\n";
     foreach ($ours as $d => $n) echo "      " . $d . "  is " . $n . "\n";
     echo "\n";
@@ -105,6 +119,51 @@ if (isset($ours[$dig])) {
     echo "  message, gets answered, and the answer lands back on the sender. Use a\n";
     echo "  person's handset instead.\n\n";
     exit(1);
+}
+
+$force = in_array('--force', $args, true);
+
+// Is this a number the assistant is already in a conversation with? That is
+// the c109 mechanism: alerts land in the thread, read as customer messages,
+// and get answered. Matched on the last 9 digits, the same way identity
+// lookups match, so +211 927 797 217 and 0927797217 are one number.
+$conv = null;
+try {
+    $pdo   = SqliteStore::create($dataDir)->getPdo();
+    $last9 = strlen($dig) >= 9 ? substr($dig, -9) : $dig;
+    $st = $pdo->prepare(
+        "SELECT id, channel, message_count, last_message_at, state
+           FROM wa_conversations
+          WHERE replace(replace(replace(phone,'+',''),' ',''),'-','') LIKE ?
+          ORDER BY message_count DESC LIMIT 1"
+    );
+    $st->execute(['%' . $last9]);
+    $conv = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (\Throwable $e) {
+    echo "\n  (could not check conversations: " . $e->getMessage() . ")\n";
+}
+
+if ($conv && !$force) {
+    echo "\n  " . $dig . " is already conversation c" . (int)$conv['id']
+       . " on " . (string)$conv['channel'] . " — " . (int)$conv['message_count']
+       . " message(s), last " . (string)($conv['last_message_at'] ?: 'unknown') . ".\n\n";
+    echo "  Alerts sent there land in that thread. The assistant reads them as\n";
+    echo "  customer messages and answers them, which is how one handset ended up\n";
+    echo "  in 24 messages with its own alert channel while five customers waited.\n\n";
+    echo "  If this is your own handset, close that conversation first, or:\n";
+    echo "    php tools/set_alert_number.php --to " . $dig . " --force\n\n";
+    exit(1);
+}
+
+// Different country from every number we answer on. Not wrong — an operator
+// travels, and this company runs in three countries — but it is how Uganda
+// handovers ended up being announced in South Sudan, so it is said out loud.
+$ourCc = [];
+foreach (array_keys($ours) as $d) if (strlen($d) >= 3) $ourCc[substr($d, 0, 3)] = true;
+if ($ourCc && strlen($dig) >= 3 && !isset($ourCc[substr($dig, 0, 3)])) {
+    echo "\n  Note: +" . substr($dig, 0, 3) . " is not the country any of our numbers\n";
+    echo "  are on (" . implode(', ', array_map(fn($c) => '+' . $c, array_keys($ourCc))) . ").\n";
+    echo "  Fine if that is where the person is. Worth knowing if it is not.\n";
 }
 
 list($ok, $err) = PluginConfig::saveOverrides($dataDir, ['alert_whatsapp' => $dig]);
