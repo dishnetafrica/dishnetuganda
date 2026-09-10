@@ -58,6 +58,7 @@ $runs = [
     ['set_lte_sync.php',          [],         'shows whether the LTE bridge syncs here'],
     ['set_sales_everywhere.php',  [],         'shows which numbers may answer sales'],
     ['wa_connect.php',            [],         'reports which numbers are actually connected'],
+    ['wa_send_test.php',          [],         'refuses to send without an explicit number'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
