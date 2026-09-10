@@ -49,6 +49,17 @@ if ($to === '') {
     exit(1);
 }
 
+// A pasted placeholder reaches Evolution as whatever digits survive: the
+// literal 2567XXXXXXXX became "2567", and Evolution answered with a puzzling
+// 400 about a jid that does not exist. Say so here instead.
+$digits = preg_replace('/\D+/', '', $to);
+if (strlen($digits) < 9) {
+    echo "\n  \"" . $to . "\" is not a phone number — it reduces to " . ($digits ?: 'nothing') . ".\n";
+    echo "  Substitute a real handset, with the country code and no plus:\n\n";
+    echo "    php tools/wa_send_test.php --to 256700123456\n\n";
+    exit(1);
+}
+
 $instance = $evo->instanceFor($channel);
 if ($instance === '') {
     echo "\n  No instance is mapped to the '" . $channel . "' channel.\n\n";
