@@ -18,7 +18,22 @@ require_once dirname(__DIR__) . '/lib/AlertService.php';
 class AlertFakeStore {
     public array $files = [];
     public function load(string $f): array { return $this->files[$f] ?? []; }
-    public function withLock(string $f, callable $fn) { $this->files[$f] = $fn($this->files[$f] ?? []); }
+    /**
+     * Both real stores read $result['records'] and return $result['result'].
+     * This fake used to keep whatever the callback returned, which agreed with
+     * a caller that returned a bare array instead of that shape — so the suite
+     * was green while SqliteStore discarded every write and printed three
+     * warnings per handoff. A fake that models the bug hides the bug.
+     */
+    public function withLock(string $f, callable $fn) {
+        $r = $fn($this->files[$f] ?? []);
+        if (!is_array($r) || !array_key_exists('records', $r)) {
+            throw new \RuntimeException(
+                'withLock callback for ' . $f . " must return ['records' => ..., 'result' => ...]");
+        }
+        $this->files[$f] = $r['records'];
+        return $r['result'] ?? null;
+    }
 }
 class FakeEvo {
     public array $sent = [];
