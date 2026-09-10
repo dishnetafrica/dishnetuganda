@@ -44,6 +44,8 @@ class QuotationService
     private array  $config;
     private NotificationService $ns;
     private CrmApiClient $crm;
+    /** @var array<string,array> organization lookups, memoised for this instance */
+    private array $orgMemo = [];
 
     public function __construct($store, string $dataDir, array $config = [])
     {
@@ -393,9 +395,13 @@ class QuotationService
         $followUp   = $opts['follow_up']   ?? '';
         $amountPaid = isset($opts['amount_paid']) ? (float)$opts['amount_paid'] : null;
         $balance    = isset($opts['balance'])     ? (float)$opts['balance']     : null;
-        $company    = $this->config['quote_company_name']  ?? self::COMPANY_NAME;
-        $compPhone  = $this->config['quote_company_phone'] ?? self::COMPANY_PHONE;
-        $compEmail  = $this->config['quote_company_email'] ?? self::COMPANY_EMAIL;
+        $co         = $this->companyDetails(isset($opts['client_id']) ? (int)$opts['client_id'] : null);
+        $company    = $co['name'];
+        $compPhone  = $co['phone'];
+        $compEmail  = $co['email'];
+        foreach ($co['_warnings'] as $w) {
+            error_log('[QuotationService] company details: ' . $w);
+        }
         $validDays  = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
         $validUntil = date('d M Y', strtotime("+{$validDays} days"));
 
@@ -481,6 +487,128 @@ class QuotationService
     /**
      * Push a quote to UCRM billing/quotes and immediately send it via UCRM.
      */
+    /**
+     * Whose details go on this quotation.
+     *
+     * The three constants at the top of this class are South Sudan's, and an
+     * unset config key did not mean "blank" — it meant Juba's phone number
+     * printed on a Ugandan customer's quote as the number to call. That was
+     * live until today.
+     *
+     * uCRM already holds the right answer and always did: organization 1 on
+     * this install carries DishNet Africa Limited, +256705993348,
+     * accounts@dishnetuganda.com, the Acacia Mall address, the URA TIN and the
+     * bank details. Duplicating that into plugin config was the same mistake
+     * as typing prices into the prompt — a second source of truth that nobody
+     * remembers to update.
+     *
+     * WHICH organization is not a guess. A quote is issued for a client, and a
+     * client carries organizationId. Without a client — a lead quote — the one
+     * uCRM marks `selected` is used. (lib/FtthCrmService.php's note about "Org
+     * 2 / Org 7" describes the South Sudan install; this one has a single
+     * organization at id 1.)
+     *
+     * The fallback is PER FIELD, not per source. uCRM holding a name but no
+     * phone must not drag the name back down to the constant with it.
+     *
+     *   1. the client's organization in uCRM
+     *   2. explicit plugin config      quote_company_{name,phone,email}
+     *   3. the compiled constant       — recorded as a fault, never silent
+     *
+     * @return array{name:string,phone:string,email:string,website:string,
+     *               address:string,tax_id:string,registration_number:string,
+     *               bank_name:string,bank_1:string,bank_2:string,logo_url:string,
+     *               _source:array<string,string>,_warnings:array<string>}
+     */
+    public function companyDetails(?int $clientId = null): array
+    {
+        $org = $this->resolveOrganization($clientId);
+
+        $src = []; $warn = [];
+        // [uCRM key, config key, compiled constant]
+        $map = [
+            'name'  => ['name',  'quote_company_name',  self::COMPANY_NAME],
+            'phone' => ['phone', 'quote_company_phone', self::COMPANY_PHONE],
+            'email' => ['email', 'quote_company_email', self::COMPANY_EMAIL],
+        ];
+        $out = [];
+        foreach ($map as $field => [$orgKey, $cfgKey, $const]) {
+            $fromOrg = trim((string)($org[$orgKey] ?? ''));
+            $fromCfg = trim((string)($this->config[$cfgKey] ?? ''));
+            if ($fromOrg !== '')      { $out[$field] = $fromOrg; $src[$field] = 'ucrm'; }
+            elseif ($fromCfg !== '')  { $out[$field] = $fromCfg; $src[$field] = 'config'; }
+            else {
+                $out[$field] = $const; $src[$field] = 'constant';
+                $warn[] = "{$field} fell through to the built-in default \"{$const}\" — "
+                        . "uCRM has no {$orgKey} and {$cfgKey} is unset";
+            }
+        }
+
+        // Fields uCRM holds that nothing was reading. No constant for these:
+        // absent is absent, and the caller omits the line rather than inventing it.
+        foreach (['website' => 'website', 'tax_id' => 'taxId',
+                  'registration_number' => 'registrationNumber',
+                  'bank_name' => 'bankAccountName', 'bank_1' => 'bankAccountField1',
+                  'bank_2' => 'bankAccountField2', 'logo_url' => 'logoUrl'] as $k => $orgKey) {
+            $out[$k] = trim((string)($org[$orgKey] ?? ''));
+            if ($out[$k] !== '') $src[$k] = 'ucrm';
+        }
+
+        $addr = array_values(array_filter([
+            trim((string)($org['street1'] ?? '')), trim((string)($org['street2'] ?? '')),
+            trim((string)($org['city'] ?? '')),    trim((string)($org['zipCode'] ?? '')),
+        ], fn($v) => $v !== ''));
+        $out['address'] = implode(', ', $addr);
+        if ($out['address'] !== '') $src['address'] = 'ucrm';
+
+        $out['_source']   = $src;
+        $out['_warnings'] = $warn;
+        return $out;
+    }
+
+    /**
+     * The organization a quote belongs to, memoised for the request.
+     *
+     * Never organizations[0]: on an install with more than one, that is a coin
+     * toss between two companies' letterheads. Client first, then whichever
+     * uCRM itself marks selected.
+     */
+    private function resolveOrganization(?int $clientId): array
+    {
+        // Per instance, not static. A static memo would outlive the config that
+        // produced it, so a second QuotationService built with different
+        // settings in the same process would silently answer from the first
+        // one's uCRM. Within a single quote it is the same organization either
+        // way, which is all the memo is for.
+        $key = $clientId === null ? 'default' : ('c' . $clientId);
+        if (isset($this->orgMemo[$key])) return $this->orgMemo[$key];
+
+        $org = [];
+        try {
+            $orgId = null;
+            if ($clientId !== null && $clientId > 0) {
+                $client = $this->crm->get("clients/{$clientId}");
+                $orgId  = isset($client['organizationId']) ? (int)$client['organizationId'] : null;
+            }
+            $all = $this->crm->get('organizations') ?? [];
+            foreach ((array)$all as $o) {
+                if (!is_array($o)) continue;
+                if ($orgId !== null && (int)($o['id'] ?? 0) === $orgId) { $org = $o; break; }
+                if ($orgId === null && !empty($o['selected']))          { $org = $o; break; }
+            }
+            // uCRM marks none as selected and we have no client: only then is
+            // taking the first one reasonable, and only because there is one.
+            if (!$org && $orgId === null && count((array)$all) === 1 && is_array($all[0])) {
+                $org = $all[0];
+            }
+        } catch (\Throwable $e) {
+            // uCRM unreachable degrades to config, never to the constant
+            // silently — companyDetails() records the source either way.
+            $org = [];
+        }
+        return $this->orgMemo[$key] = $org;
+    }
+
     public function createCrmQuote(int $crmClientId, array $items, string $quoteRef, array $retailer, string $note = ''): array
     {
         $validityDays = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
@@ -600,7 +728,7 @@ class QuotationService
             }
 
             $days  = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
-            $cmail = (string)($this->config['quote_company_email'] ?? self::COMPANY_EMAIL);
+            $cmail = $this->companyDetails($crmClientId)['email'];
 
             // One shell for every customer email (docs/UGANDA-EMAIL-LIFECYCLE-AUDIT.md):
             // branded header/footer, mobile and dark-mode ready, plain-text twin,

@@ -9,6 +9,12 @@ declare(strict_types=1);
  *
  * ── Architecture ────────────────────────────────────────────────────────
  *
+ *   NOTE (verified 2026-09-10 via tools/org_probe.php): this describes the
+ *   South Sudan install. The Uganda instance has ONE organization — id 1,
+ *   DishNet Africa Limited, marked selected — and all clients belong to it.
+ *   Nothing should infer an organization id from the note below; a quote
+ *   resolves it from the client's own organizationId.
+ *
  *   DishNet UCRM has two organizations:
  *     Org 2 — DishNet Africa Limited  → end customers (Fiber / StarLink)
  *     Org 7 — FTTH Project            → retailers (treated as B2B clients)
