@@ -44,6 +44,8 @@ $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 $FLAGS = [
     'ai_qualification' => ['bool',
         'Qualify before recommending; route CCTV/VPN/servers to Business'],
+    'ai_lead_capture' => ['bool',
+        'Write a CRM lead when the assistant qualifies a real opportunity'],
     'ai_hardware_expert' => ['bool',
         'Know the dishes: coverage vs Wi-Fi, Ethernet per model, solar'],
     'ai_sales_on_all_numbers' => ['bool',

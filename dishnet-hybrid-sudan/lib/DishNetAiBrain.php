@@ -31,6 +31,7 @@ class DishNetAiBrain
     const MARKER_ESCALATE = 'ESCALATE';
     const MARKER_QUOTE    = 'QUOTE';
     const MARKER_FLYER    = 'FLYER';
+    const MARKER_LEAD     = 'LEAD';
 
     /** Hard ceiling on a WhatsApp reply. Long walls of text do not get read. */
     const MAX_REPLY_CHARS = 1200;
@@ -625,7 +626,53 @@ class DishNetAiBrain
              . "- Farm, remote site or field team: whether it stays in one place or moves, and "
              . "how it will be powered and mounted — that decides Mini against Standard.\n"
              . "- Anything large, multi-site, or asking for a contract or guaranteed uptime: "
-             . "take the details and " . $esc . " rather than designing it yourself.\n";
+             . "take the details and " . $esc . " rather than designing it yourself.\n"
+             . $this->leadCapture();
+    }
+
+    /**
+     * Record the opportunity, when there is one.
+     *
+     * The team works in WhatsApp and will carry on doing so. This is so a real
+     * opportunity ALSO lands somewhere structured, instead of living only in a
+     * thread somebody has to remember to scroll back through.
+     *
+     * The instruction is written to be hard to over-trigger, because the
+     * expensive failure here is not a missed lead — it is a pipeline full of
+     * people who asked one question, which is a pipeline nobody reads. The
+     * service applies its own floor on top of this and refuses anything
+     * without a stated requirement, so an eager marker costs nothing.
+     *
+     * OFF unless ai_lead_capture is set.
+     */
+    private function leadCapture(): string
+    {
+        if (!filter_var($this->config['ai_lead_capture'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return '';
+        }
+        return "\nRECORDING A SALES OPPORTUNITY.\n"
+             . "- When this conversation has become a REAL opportunity, add a line at the very "
+             . "end of your reply in exactly this form, and nothing else on that line:\n"
+             . "  <<LEAD {\"requirement\":\"...\",\"location\":\"...\",\"customer_type\":\"...\"}>>\n"
+             . "- The customer never sees it; it is removed before the message is sent.\n"
+             . "- Keys you may use, all optional except requirement: requirement, location, "
+             . "customer_type, customer_name, company, users_devices, existing_internet, "
+             . "recommended_solution, recommended_plan, recommended_hardware, "
+             . "public_ip_required (yes/no), cctv_remote_access (yes/no), quote_requested "
+             . "(true/false), ai_summary.\n"
+             . "- ONLY WHAT THEY ACTUALLY TOLD YOU. Leave a key out entirely rather than "
+             . "guessing it. Never infer a location from a dialling code, a business size from "
+             . "a tone, or a budget from anything at all.\n"
+             . "- ai_summary is two or three sentences a salesperson can act on without reading "
+             . "the thread: who they are, what they need, what you recommended and why, and "
+             . "what is still open.\n"
+             . "- DO NOT emit it for someone just asking a question. \"How much is Starlink?\", "
+             . "\"do you install?\", \"does it work in Kampala?\" are enquiries, not "
+             . "opportunities. Emit it when they have told you what they actually need — a "
+             . "place, a use, a purchase to make, or a quotation to send.\n"
+             . "- Once per conversation is normally enough. Emit it again only when you have "
+             . "learned something materially new, and then include everything you know, not "
+             . "only the new part.\n";
     }
 
     /**
@@ -1023,6 +1070,22 @@ class DishNetAiBrain
         // when it does not. The marker itself is stripped below either way.
         $sendFlyer = (bool)preg_match('/<<\s*' . self::MARKER_FLYER . '\b[^>]*>>/i', $raw);
 
+        // <<LEAD {json}>> — what the conversation established, for the sales
+        // record. Carried as JSON because these are structured facts, not a
+        // sentence, and a key/value soup in free text is guesswork to parse.
+        //
+        // Stripped with its own pattern before the generic one: the generic
+        // strip is [^>]* and JSON can legitimately contain '>', which would
+        // leave half a marker in a message to a customer.
+        $lead = null;
+        if (preg_match('/<<\s*' . self::MARKER_LEAD . '\s*(\{.*?\})\s*>>/is', $raw, $m)) {
+            $decoded = json_decode($m[1], true);
+            // Malformed JSON is dropped, never guessed at. The marker is still
+            // stripped, so a bad emission costs a lead, not a mangled reply.
+            if (is_array($decoded)) $lead = $decoded;
+            $raw = preg_replace('/<<\s*' . self::MARKER_LEAD . '\s*\{.*?\}\s*>>/is', '', $raw) ?? $raw;
+        }
+
         $clean = preg_replace('/<<[^>]*>>/', '', $raw);
         $clean = trim(preg_replace("/\n{3,}/", "\n\n", (string)$clean));
 
@@ -1036,7 +1099,7 @@ class DishNetAiBrain
         }
 
         return ['reply' => $clean, 'escalate' => $escalate, 'escalate_reason' => $reason,
-                'send_flyer' => $sendFlyer];
+                'send_flyer' => $sendFlyer, 'lead' => $lead];
     }
 
     private function handover(string $reason): array

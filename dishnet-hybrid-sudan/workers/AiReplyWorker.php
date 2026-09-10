@@ -163,6 +163,28 @@ class AiReplyWorker extends WorkerBase
             if (!empty($ai['send_flyer'])) {
                 $this->maybeSendFlyer($convId, $channel, $phone);
             }
+            // The sales record. After the send, inside the never-throw zone:
+            // a CRM failure must never cost the customer their reply, and the
+            // service refuses anything that has not established a requirement.
+            if (!empty($ai['lead']) && is_array($ai['lead'])) {
+                try {
+                    if (!class_exists('AiLeadService')) {
+                        $f = __DIR__ . '/../lib/AiLeadService.php';
+                        if (is_file($f)) require_once $f;
+                    }
+                    if (class_exists('AiLeadService')) {
+                        $svc = new \AiLeadService($this->store, $this->config, $this->pdo);
+                        $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai');
+                        $this->log($r['ok'] ? 'info' : 'info', sprintf(
+                            'conv %d: lead %s%s', $convId, $r['action'],
+                            $r['reason'] !== '' ? ' — ' . $r['reason'] : ' #' . (int)$r['lead_id']
+                        ));
+                    }
+                } catch (\Throwable $e) {
+                    $this->log('warn', 'lead capture failed: ' . $e->getMessage());
+                }
+            }
+
             if (!empty($ai['escalate'])) {
                 // The customer already has a reply. Passing true stops the holding
                 // line being sent on top of it: c109 received "I can't provide

@@ -1083,14 +1083,15 @@ if ($action === 'conv_to_lead') {
 
     // Dedup: check existing leads
     $allLeads3 = $store->load('leads.json') ?? [];
-    $suffix3 = substr(preg_replace('/[^0-9]/', '', $phone3), -9);
-    foreach ($allLeads3 as $el3) {
-        $es = substr(preg_replace('/[^0-9]/', '', $el3['phone'] ?? ''), -9);
-        if ($es && $es === $suffix3 && !in_array($el3['status'] ?? '', ['won','lost','dead'], true)) {
-            // Link conv to existing lead
-            $pdo2->prepare("UPDATE wa_conversations SET lead_id = ? WHERE id = ?")->execute([(int)$el3['id'], $convId]);
-            apiOk(['lead_id' => (int)$el3['id'], 'assigned_to' => $el3['assigned_name'] ?? ''], 'Linked to existing lead #' . $el3['id']);
-        }
+    // One dedupe rule for the whole system. This was the original and only
+    // copy; AiLeadService needed the same behaviour, and two copies of a
+    // matcher agree until the day one of them is edited. Same rule, unchanged:
+    // last nine digits, skipping won/lost/dead.
+    require_once dirname(__DIR__) . '/lib/LeadMatcher.php';
+    $el3 = LeadMatcher::find($allLeads3, (string)$phone3);
+    if ($el3 !== null) {
+        $pdo2->prepare("UPDATE wa_conversations SET lead_id = ? WHERE id = ?")->execute([(int)$el3['id'], $convId]);
+        apiOk(['lead_id' => (int)$el3['id'], 'assigned_to' => $el3['assigned_name'] ?? ''], 'Linked to existing lead #' . $el3['id']);
     }
 
     // Smart-assign: lightest loaded sales agent
