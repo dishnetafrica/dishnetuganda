@@ -190,6 +190,48 @@ $rows = $pdo->query(
       ORDER BY u.updated_at DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 echo "\n  STARLINK EQUIPMENT\n";
+
+// How many, and how complete. A list you have to count by eye does not answer
+// "how many kits do we have", and the blanks matter as much as the total:
+// a kit with no account recorded cannot be traced to the invoice that bought
+// it, and one with no customer is either in the warehouse or lost track of.
+$total    = count($rows);
+$withCust = 0; $withLine = 0; $withAcct = 0;
+$byStatus = [];
+foreach ($rows as $u) {
+    if ((int)($u['crm_client_id'] ?? 0) > 0)                    $withCust++;
+    if (trim((string)($u['starlink_service_line'] ?? '')) !== '') $withLine++;
+    if (trim((string)($u['starlink_account'] ?? '')) !== '')      $withAcct++;
+    $st = (string)($u['status'] ?? 'unknown');
+    $byStatus[$st] = ($byStatus[$st] ?? 0) + 1;
+}
+
+if ($total > 0) {
+    $parts = [];
+    foreach ($byStatus as $st => $n) $parts[] = $n . ' ' . $st;
+    echo "\n  " . $total . " unit" . ($total === 1 ? '' : 's')
+       . ($parts ? '  (' . implode(', ', $parts) . ')' : '') . "\n";
+    printf("  %d with a customer · %d with a service line · %d with a supplying account\n",
+        $withCust, $withLine, $withAcct);
+    if ($withAcct < $total) {
+        echo "  " . ($total - $withAcct) . " do not record which Starlink account supplied them.\n";
+        echo "  Kits received before that was captured; --account fills it going forward.\n";
+    }
+}
+
+// Everything else in stock, so "how much equipment do we have" is answerable
+// from here too rather than looking Starlink-only and reading as the whole.
+$others = (int)$pdo->query(
+    "SELECT COUNT(*) FROM stock_units u
+       LEFT JOIN stock_categories c ON c.id = u.category_id
+      WHERE LOWER(COALESCE(c.service_type,'')) <> 'starlink'
+        AND COALESCE(u.starlink_status,'') = ''
+        AND COALESCE(u.starlink_service_line,'') = ''")->fetchColumn();
+if ($others > 0) {
+    echo "  " . $others . " further unit" . ($others === 1 ? '' : 's')
+       . " in stock are not Starlink — see the Stock tab.\n";
+}
+
 if ($rows === []) {
     echo "\n  None recorded yet. A kit becomes visible here when it is received:\n\n";
     echo "    php tools/kits.php --receive <serial> --by <name>\n\n";
