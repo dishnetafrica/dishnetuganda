@@ -56,8 +56,8 @@ foreach (['CCTV they want to view from elsewhere', 'VPN', 'a server', 'remote de
           'hosting', 'remote monitoring', 'access control', 'more than one'] as $trigger) {
     has('trigger: ' . $trigger, $p, $trigger);
 }
-has('and they are named as needing a public IP', $p, 'needs a PUBLIC IP');
-has('which Residential does not carry',          $p, 'NOT part of a Residential plan');
+has('and a public IP is what they need',   $p, 'A BUSINESS PLAN IS FOR ONE THING');
+has('which no Residential plan carries',   $p, 'not part of any Residential plan');
 
 echo "\nThe expensive mistake is forbidden explicitly\n";
 has('never sell Residential to that customer', $p, 'Never quote a '
@@ -69,9 +69,35 @@ has('the proactive question', $p, 'ask once');
 has('one question at a time',  $p, 'never a list of questions');
 has('and never re-asks',       $p, 'never re-ask something they have already told you');
 
-echo "\nOrganisations are never defaulted to Residential\n";
-has('the organisation list', $p, 'hotel, lodge, factory, school, NGO, bank');
-has('no Residential default', $p, 'never given Residential as the default');
+echo "\nBeing a business is not, by itself, a reason for a Business plan\n";
+// The correction: customer type and public-IP requirement are separate
+// questions. Quoting Business to a boutique that only needs WhatsApp and a POS
+// charges them for a public IP they will never use.
+has('the label does not decide',        $p, 'NEVER THE LABEL');
+has('and neither does trading',         $p, 'Being a business is not the reason');
+has('the businesses that stay residential', $p, 'shop, restaurant, boutique');
+has('and what quoting Business costs them', $p, 'something they cannot use');
+has('a small guesthouse is not a big hotel', $p, 'A small guesthouse is often a residential plan');
+
+echo "\nThe two residential plans are chosen on use, not on the label\n";
+// The higher-capacity plan is the normal answer for a busy household or small
+// office; the lighter one is for genuinely light use or a stated budget limit.
+has('the higher-capacity plan is preferred where use is heavy', $p, 'HIGHER-CAPACITY');
+foreach (['several people or devices', 'work from home', 'video meetings', 'streaming',
+          'online learning', 'gaming', 'cloud applications', 'small office'] as $reason) {
+    has('reason to go higher: ' . $reason, $p, $reason);
+}
+has('the lighter plan has its own case', $p, 'use is genuinely light');
+has('including a stated budget',         $p, 'price is the constraint');
+has('the recommendation carries a reason', $p, 'ALWAYS SAY WHY');
+has('and both directions are named as failures', $p, 'Both are the same failure');
+
+echo "\nNo plan name or price is baked into the rule\n";
+// If a plan is renamed or repriced in uCRM this block must not go stale.
+is_(strpos($p, '329,000') === false && strpos($p, '249,000') === false,
+    'no price is written into the qualification block',
+    'prices live in uCRM; a number here becomes a second catalogue');
+has('names and prices come from the catalogue', $p, 'Take the names and prices from');
 
 echo "\nBusiness pricing stays RED unless it is in the live catalogue\n";
 // The whole point of the price rules: an unlisted Business price is confirmed,

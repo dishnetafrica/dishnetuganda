@@ -316,6 +316,37 @@ $SCENARIOS = [
      'any'      => ['mini', 'move', 'moves', 'portable', 'one place', 'both']],
   ],
 
+  // ── Plan choice: the requirement decides, not the label ───────────────
+  // Two failures, opposite directions, same cause — not listening. Leaving a
+  // houseful of people working and streaming on the light plan, and charging a
+  // boutique for a public IP it will never use.
+
+  'ug_res_heavy_user' => [
+    ['say' => 'internet for my home in Kampala, 6 of us, we work from home, video calls and Netflix',
+     'must_not' => ['i recommend residential lite', 'i recommend dishnet lite',
+                    'lite would be perfect', 'lite is ideal', 'go with lite',
+                    'you need business', 'local priority']],
+  ],
+
+  'ug_res_light_user' => [
+    ['say' => 'just me in one room, only WhatsApp and a bit of browsing, I want the cheapest',
+     'any'      => ['lite'],
+     'must_not' => ['business plan', 'local priority', 'public ip']],
+  ],
+
+  // A business with no public-IP requirement is a residential customer.
+  'ug_business_no_public_ip' => [
+    ['say' => 'I run a small boutique in Kampala. We use WhatsApp, a POS machine and browsing. No cameras.',
+     'must_not' => ['business plan', 'local priority', 'you need a public ip',
+                    'dishnet business']],
+  ],
+
+  'ug_business_real_public_ip' => [
+    ['say' => 'small office, 8 staff, we VPN into our server from outside',
+     'any'      => ['business', 'public ip', 'local priority'],
+     'must_not' => ['residential lite', 'lite will be fine']],
+  ],
+
   // ── Hardware ──────────────────────────────────────────────────────────
   // These need ai_hardware_expert on. "Which dish?" is a question about a
   // building, a headcount and a power supply — answering it with a product
