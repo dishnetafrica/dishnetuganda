@@ -27,7 +27,7 @@ $config  = $store->load('kyc_config.json') ?? [];
 $crm     = CrmApiClient::fromUcrm(dirname(__DIR__), $config);
 
 if (!$crm->isConfigured()) {
-    log_msg('CRM not configured — skipping.'); return;
+    log_msg_jobs_cache('CRM not configured — skipping.'); return;
 }
 
 $dateFrom = '2026-01-01';
@@ -45,7 +45,7 @@ $qs   = "?limit=500&dateFrom={$dateFrom}&statuses[]=0&statuses[]=1&statuses[]=2"
 $jobs = $crm->get('scheduling/jobs' . $qs);
 
 if (!is_array($jobs)) {
-    log_msg('CRM API error: ' . json_encode($crm->getLastError())); return;
+    log_msg_jobs_cache('CRM API error: ' . json_encode($crm->getLastError())); return;
 }
 
 // Load existing cache for merge
@@ -75,8 +75,14 @@ $store->save('scheduling_cache_meta.json', [
     'plugin_version' => '4.3.45',
 ]);
 
-log_msg("Done — {$fetched} jobs fetched, " . count($byId) . " total in cache.");
+log_msg_jobs_cache("Done — {$fetched} jobs fetched, " . count($byId) . " total in cache.");
+// Renamed from log_msg(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function log_msg(string $m): void {
+function log_msg_jobs_cache(string $m): void {
     echo '[' . date('Y-m-d H:i:s') . '] [jobs_cache] ' . $m . "\n";
 }

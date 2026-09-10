@@ -75,13 +75,13 @@ foreach ($pending as $idx => $item) {
     $attempts = (int)($item['attempts'] ?? 0);
 
     if (!$crmId || !file_exists($filePath)) {
-        log_msg("Skipping item — file missing or no CRM ID: {$filePath}");
+        log_msg_photo_retry("Skipping item — file missing or no CRM ID: {$filePath}");
         $queue[$idx]['exhausted']   = true;
         $queue[$idx]['exhaust_reason'] = 'file_not_found';
         continue;
     }
 
-    log_msg("Retrying {$docName} for CRM #{$crmId} (attempt " . ($attempts + 1) . "/" . MAX_ATTEMPTS . ")");
+    log_msg_photo_retry("Retrying {$docName} for CRM #{$crmId} (attempt " . ($attempts + 1) . "/" . MAX_ATTEMPTS . ")");
 
     $ok = $crm->upload($filePath, ['name' => $docName], $crmId);
 
@@ -101,11 +101,11 @@ foreach ($pending as $idx => $item) {
                     $field       => true,
                     'updated_at' => date('Y-m-d H:i:s'),
                 ]);
-                log_msg("  ✅ Updated {$field}=true on application (CRM #{$crmId})");
+                log_msg_photo_retry("  ✅ Updated {$field}=true on application (CRM #{$crmId})");
                 break;
             }
         }
-        log_msg("  ✅ Upload succeeded for CRM #{$crmId} — {$docName}");
+        log_msg_photo_retry("  ✅ Upload succeeded for CRM #{$crmId} — {$docName}");
     } else {
         $failed++;
         $newAttempts = $attempts + 1;
@@ -124,11 +124,11 @@ foreach ($pending as $idx => $item) {
                 "Please upload manually in UCRM → Client → Files tab.",
                 'photo_retry_exhausted'
             );
-            log_msg("  ❌ Exhausted after {$newAttempts} attempts — admin notified");
+            log_msg_photo_retry("  ❌ Exhausted after {$newAttempts} attempts — admin notified");
         } else {
             $delay = BACKOFF[$newAttempts] ?? 1800;
             $queue[$idx]['next_retry_at'] = date('Y-m-d H:i:s', time() + $delay);
-            log_msg("  ⏳ Failed (attempt {$newAttempts}) — next retry in " . ($delay/60) . " min");
+            log_msg_photo_retry("  ⏳ Failed (attempt {$newAttempts}) — next retry in " . ($delay/60) . " min");
         }
     }
 }
@@ -148,7 +148,7 @@ foreach ($queue as $item) {
     $triedAt = strtotime($item['last_tried_at'] ?? $item['queued_at'] ?? '1970-01-01');
     if ($triedAt < $cutoff30 && !empty($item['file_path']) && file_exists($item['file_path'])) {
         @unlink($item['file_path']);
-        log_msg('Disk cleanup: removed exhausted file ' . basename($item['file_path']));
+        log_msg_photo_retry('Disk cleanup: removed exhausted file ' . basename($item['file_path']));
     }
 }
 
@@ -169,10 +169,16 @@ flock($lockFp, LOCK_UN);
 fclose($lockFp);
 
 if ($processed > 0) {
-    log_msg("Run complete — processed: {$processed}, succeeded: {$succeeded}, failed: {$failed}");
+    log_msg_photo_retry("Run complete — processed: {$processed}, succeeded: {$succeeded}, failed: {$failed}");
 }
+// Renamed from log_msg(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function log_msg(string $msg): void
+function log_msg_photo_retry(string $msg): void
 {
     echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n";
 }

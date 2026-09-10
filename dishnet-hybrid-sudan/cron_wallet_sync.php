@@ -44,13 +44,13 @@ $lockFile = $dataDir . '/cron_wallet_sync.lock';
 $lockFp   = fopen($lockFile, 'w+');
 if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
     fclose($lockFp);
-    log_msg("Already running — skipping.");
+    log_msg_wallet_sync("Already running — skipping.");
     return;
 }
 
 // ── Check CRM is configured ───────────────────────────────────────────────
 if (!$crm->isConfigured()) {
-    log_msg("CRM not configured — skipping wallet sync.");
+    log_msg_wallet_sync("CRM not configured — skipping wallet sync.");
     cleanup($lockFp, $lockFile);
     return;
 }
@@ -64,14 +64,14 @@ if ($intervalMinutes > 0) {
         $elapsed = time() - $lastRun;
         if ($elapsed < $intervalMinutes * 60) {
             $remaining = ceil(($intervalMinutes * 60 - $elapsed) / 60);
-            log_msg("Too soon — last run " . round($elapsed/60,1) . "m ago, interval is {$intervalMinutes}m. Next in {$remaining}m.");
+            log_msg_wallet_sync("Too soon — last run " . round($elapsed/60,1) . "m ago, interval is {$intervalMinutes}m. Next in {$remaining}m.");
             cleanup($lockFp, $lockFile);
             return;
         }
     }
 }
 
-log_msg("=== CRM Wallet Sync START ===");
+log_msg_wallet_sync("=== CRM Wallet Sync START ===");
 
 // ── TASK 0: Retry failed recharge invoices ────────────────────────────────
 // Any recharge with invoice_status='failed' and retry count < 5 gets retried.
@@ -125,18 +125,18 @@ foreach ($allRecharges as $r) {
             'crm_client_id_used' => $crmClientId,
         ]);
         $retryFixed++;
-        log_msg("  ✅ Recharge #{$r['id']} ({$retailer['name']}): invoice created → UCRM #{$invoice['id']}");
+        log_msg_wallet_sync("  ✅ Recharge #{$r['id']} ({$retailer['name']}): invoice created → UCRM #{$invoice['id']}");
     } else {
         $store->updateOne('wallet_recharge_requests.json', 'id', (int)$r['id'], [
             'crm_invoice_retry' => $retryCount + 1,
             'crm_invoice_err'   => "Retry " . ($retryCount + 1) . "/5 failed at " . date('Y-m-d H:i:s'),
         ]);
-        log_msg("  ⚠ Recharge #{$r['id']} ({$retailer['name']}): retry " . ($retryCount+1) . "/5 failed");
+        log_msg_wallet_sync("  ⚠ Recharge #{$r['id']} ({$retailer['name']}): retry " . ($retryCount+1) . "/5 failed");
     }
 }
 
 if ($retried > 0 || $retryGiveUp > 0) {
-    log_msg("  Invoice retries: {$retried} attempted, {$retryFixed} fixed, {$retryGiveUp} gave up (manual action needed)");
+    log_msg_wallet_sync("  Invoice retries: {$retried} attempted, {$retryFixed} fixed, {$retryGiveUp} gave up (manual action needed)");
 }
 
 // ── Load all retailers ────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ foreach ($retailers as $r) {
 
     $crmClient = $crm->get("clients/{$crmId}");
     if (!$crmClient) {
-        log_msg("  ⚠ #{$r['id']} {$r['name']} — CRM #{$crmId} fetch failed");
+        log_msg_wallet_sync("  ⚠ #{$r['id']} {$r['name']} — CRM #{$crmId} fetch failed");
         $failed++;
         $report[] = [
             'id'         => $r['id'],
@@ -194,7 +194,7 @@ foreach ($retailers as $r) {
 
     if (!$changed) {
         $unchanged++;
-        log_msg("  — #{$r['id']} {$r['name']}: no change (\${$owesAmt})");
+        log_msg_wallet_sync("  — #{$r['id']} {$r['name']}: no change (\${$owesAmt})");
         continue;
     }
 
@@ -229,7 +229,7 @@ foreach ($retailers as $r) {
     }
 
     $arrow = $owesAmt > $prevWal ? '⬆' : '⬇';
-    log_msg("  {$arrow} #{$r['id']} {$r['name']}: \${$prevWal} → \${$owesAmt} (CRM bal: \${$crmBal})");
+    log_msg_wallet_sync("  {$arrow} #{$r['id']} {$r['name']}: \${$prevWal} → \${$owesAmt} (CRM bal: \${$crmBal})");
     $updated++;
 }
 
@@ -254,8 +254,8 @@ $totalOwed = array_sum(array_column(
     'owes_amt'
 ));
 
-log_msg("=== DONE — updated: {$updated}, unchanged: {$unchanged}, failed: {$failed}, skipped: {$skipped} ===");
-log_msg("    Debtors: {$debtors} | Total outstanding: \${$totalOwed}");
+log_msg_wallet_sync("=== DONE — updated: {$updated}, unchanged: {$unchanged}, failed: {$failed}, skipped: {$skipped} ===");
+log_msg_wallet_sync("    Debtors: {$debtors} | Total outstanding: \${$totalOwed}");
 
 // ── TASK: CRM Direct Payment Reconciliation ───────────────────────────────
 // Piggybacks on this cron since we already have a live CRM connection.
@@ -264,7 +264,7 @@ log_msg("    Debtors: {$debtors} | Total outstanding: \${$totalOwed}");
 // stay accurate.
 require_once __DIR__ . '/lib/FieldAgentService.php';
 
-log_msg("--- CRM Payment Reconciliation START ---");
+log_msg_wallet_sync("--- CRM Payment Reconciliation START ---");
 
 $lookbackDays = (int)($config['payment_reconcile_lookback_days'] ?? 7);
 $since        = date('Y-m-d', strtotime("-{$lookbackDays} days")) . 'T00:00:00+03:00';
@@ -274,9 +274,9 @@ $params   = http_build_query(['createdDateFrom' => $since, 'limit' => 500]);
 $payments = $crm->get("payments?{$params}");
 
 if (!is_array($payments)) {
-    log_msg("  ⚠ Could not fetch payments from UCRM — " . json_encode($crm->getLastError()));
+    log_msg_wallet_sync("  ⚠ Could not fetch payments from UCRM — " . json_encode($crm->getLastError()));
 } else {
-    log_msg("  Fetched " . count($payments) . " UCRM payments (last {$lookbackDays} days).");
+    log_msg_wallet_sync("  Fetched " . count($payments) . " UCRM payments (last {$lookbackDays} days).");
 
     // Build lookup of already-known CRM payment IDs
     $allCollections = $store->load(FieldAgentService::COLLECTIONS_FILE);
@@ -363,13 +363,13 @@ if (!is_array($payments)) {
         }
 
         $flag = $agentId === 0 ? ' ⚠ NEEDS REVIEW' : '';
-        log_msg("  ✅ UCRM PMT #{$crmPaymentId} → Collection #{$record['id']} | \${$amount} | {$customerName} | → {$agentName}{$flag}");
+        log_msg_wallet_sync("  ✅ UCRM PMT #{$crmPaymentId} → Collection #{$record['id']} | \${$amount} | {$customerName} | → {$agentName}{$flag}");
         $pmtInserted++;
     }
 
-    log_msg("  Payment reconcile: inserted={$pmtInserted}, skipped={$pmtSkipped}, unassigned={$pmtUnassigned}");
+    log_msg_wallet_sync("  Payment reconcile: inserted={$pmtInserted}, skipped={$pmtSkipped}, unassigned={$pmtUnassigned}");
     if ($pmtUnassigned > 0) {
-        log_msg("  ⚠ {$pmtUnassigned} payment(s) unassigned — review in Field Agent tab (filter: source=crm_direct)");
+        log_msg_wallet_sync("  ⚠ {$pmtUnassigned} payment(s) unassigned — review in Field Agent tab (filter: source=crm_direct)");
     }
 
     // Save reconciliation report
@@ -383,7 +383,7 @@ if (!is_array($payments)) {
     ], JSON_PRETTY_PRINT));
 }
 
-log_msg("--- CRM Payment Reconciliation END ---");
+log_msg_wallet_sync("--- CRM Payment Reconciliation END ---");
 
 // Save last run timestamp
 file_put_contents($dataDir . '/wallet_sync_last_run.txt', time());
@@ -400,8 +400,14 @@ function cleanup($fp, string $file): void
     flock($fp, LOCK_UN);
     fclose($fp);
 }
+// Renamed from log_msg(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function log_msg(string $msg): void
+function log_msg_wallet_sync(string $msg): void
 {
     $ts = date('Y-m-d H:i:s');
     echo "[{$ts}] {$msg}\n";

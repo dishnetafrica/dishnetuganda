@@ -51,17 +51,23 @@ if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
     fclose($lockFp);
     return; // Another instance is running
 }
+// Renamed from clog(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function clog(string $msg): void {
+function clog_lte_usage(string $msg): void {
     echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . PHP_EOL;
 }
 
-clog('=== LTE Usage Sync Start ===');
+clog_lte_usage('=== LTE Usage Sync Start ===');
 set_time_limit(300); // 5-minute safety guard against Magma API hangs
 
 // Check if Magma is configured
 if (!$magma->isConfigured()) {
-    clog('ERROR: Magma not configured. Skipping usage sync.');
+    clog_lte_usage('ERROR: Magma not configured. Skipping usage sync.');
     flock($lockFp, LOCK_UN);
     fclose($lockFp);
     return;
@@ -74,17 +80,17 @@ if (!$magma->isConfigured()) {
 $syncResult = $lte->syncUsageFromPrometheus();
 
 if (!empty($syncResult['skipped'])) {
-    clog('Sync skipped: ' . ($syncResult['reason'] ?? 'unknown'));
+    clog_lte_usage('Sync skipped: ' . ($syncResult['reason'] ?? 'unknown'));
     flock($lockFp, LOCK_UN);
     fclose($lockFp);
     return;
 }
 
-clog("Synced {$syncResult['synced']} data-cap subscriptions");
+clog_lte_usage("Synced {$syncResult['synced']} data-cap subscriptions");
 
 if (!empty($syncResult['errors'])) {
     foreach ($syncResult['errors'] as $err) {
-        clog("  ERROR: {$err}");
+        clog_lte_usage("  ERROR: {$err}");
     }
 }
 
@@ -106,7 +112,7 @@ foreach ($syncResult['warnings'] ?? [] as $warn) {
     $bytesAllowed = LteSqliteService::formatBytes((int)($sub['bytes_allowed'] ?? 0));
     $bytesRemaining = LteSqliteService::formatBytes((int)($sub['bytes_remaining'] ?? 0));
     
-    clog("  WARNING {$type}: {$name} ({$phone}) at {$percent}%");
+    clog_lte_usage("  WARNING {$type}: {$name} ({$phone}) at {$percent}%");
     
     if ($whatsappEnabled && !empty($phone)) {
         $emoji = $type === '80%' ? '🔴' : '🟡';
@@ -132,7 +138,7 @@ foreach ($syncResult['warnings'] ?? [] as $warn) {
     }
 }
 
-clog("Sent {$warningSent} usage warnings");
+clog_lte_usage("Sent {$warningSent} usage warnings");
 
 // ══════════════════════════════════════════════════════════════════════
 // STEP 3 — Suspend subscribers who exhausted their data
@@ -152,10 +158,10 @@ $percentThreshold = ($totalActive > 0) ? ceil($totalActive * ($maxSuspendPercent
 $effectiveLimit = max($maxSuspendPerRun, $percentThreshold);
 
 if ($exhaustedCount > $effectiveLimit) {
-    clog("⚠️ SAFETY GUARD TRIGGERED: {$exhaustedCount} subscribers marked for suspension");
-    clog("   Absolute limit: {$maxSuspendPerRun}, Percent limit ({$maxSuspendPercent}%): {$percentThreshold}");
-    clog("   Effective limit: {$effectiveLimit}");
-    clog("   SUSPENSIONS HALTED — Manual review required");
+    clog_lte_usage("⚠️ SAFETY GUARD TRIGGERED: {$exhaustedCount} subscribers marked for suspension");
+    clog_lte_usage("   Absolute limit: {$maxSuspendPerRun}, Percent limit ({$maxSuspendPercent}%): {$percentThreshold}");
+    clog_lte_usage("   Effective limit: {$effectiveLimit}");
+    clog_lte_usage("   SUSPENSIONS HALTED — Manual review required");
     
     // Log the safety trigger
     $safetyLog = $store->load('lte_safety_triggers.json') ?? [];
@@ -202,7 +208,7 @@ foreach ($syncResult['exhausted'] ?? [] as $sub) {
     $pkgName = $sub['package_name'] ?? '';
     $imsi = $sub['_imsi'] ?? '';
     
-    clog("  SUSPEND (data exhausted): #{$subscriberId} {$name}");
+    clog_lte_usage("  SUSPEND (data exhausted): #{$subscriberId} {$name}");
     
     // Suspend in Magma and locally
     $ok = $lte->suspendForDataExhausted($subscriberId, $sub);
@@ -241,11 +247,11 @@ foreach ($syncResult['exhausted'] ?? [] as $sub) {
             $notify->sendRaw($phone, $message, 'lte_data_exhausted');
         }
     } else {
-        clog("    ERROR: Failed to suspend #{$subscriberId}");
+        clog_lte_usage("    ERROR: Failed to suspend #{$subscriberId}");
     }
 }
 
-clog("Suspended {$suspendCount} subscribers for data exhaustion");
+clog_lte_usage("Suspended {$suspendCount} subscribers for data exhaustion");
 
 // ══════════════════════════════════════════════════════════════════════
 // STEP 4 — Save sync summary
@@ -274,4 +280,4 @@ $store->save('lte_usage_sync_log.json', $syncLog);
 flock($lockFp, LOCK_UN);
 fclose($lockFp);
 
-clog("=== LTE Usage Sync Done | Synced:{$syncResult['synced']} Warnings:{$warningSent} Suspended:{$suspendCount} ===");
+clog_lte_usage("=== LTE Usage Sync Done | Synced:{$syncResult['synced']} Warnings:{$warningSent} Suspended:{$suspendCount} ===");

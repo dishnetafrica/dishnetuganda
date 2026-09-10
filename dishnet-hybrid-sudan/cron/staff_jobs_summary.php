@@ -45,7 +45,7 @@ $notify  = new NotificationService($store, $config);
 // ── CRM client ────────────────────────────────────────────────────────────
 $crm = new CrmApiClient($config);
 if (!$crm->isConfigured()) {
-    log_msg('CRM not configured — cannot fetch scheduling jobs. Exiting.');
+    log_msg_staff_jobs('CRM not configured — cannot fetch scheduling jobs. Exiting.');
     return;
 }
 
@@ -64,7 +64,7 @@ $staff = array_filter($allRetailers, fn($r) =>
 );
 
 if (empty($staff)) {
-    log_msg('No active support staff found — exiting.');
+    log_msg_staff_jobs('No active support staff found — exiting.');
     return;
 }
 
@@ -79,7 +79,7 @@ foreach ($staff as $person) {
 
     if (!$ucrmUserId) {
         $unmapped[] = $name;
-        log_msg("Skipping {$name} — no ucrm_user_id set");
+        log_msg_staff_jobs("Skipping {$name} — no ucrm_user_id set");
         continue;
     }
 
@@ -94,7 +94,7 @@ foreach ($staff as $person) {
     $jobs = $crm->get('scheduling/jobs' . $qs);
 
     if ($jobs === null) {
-        log_msg("CRM API error for {$name}: " . json_encode($crm->getLastError()));
+        log_msg_staff_jobs("CRM API error for {$name}: " . json_encode($crm->getLastError()));
         continue;
     }
 
@@ -196,7 +196,7 @@ foreach ($staff as $person) {
     // Send via WASender (support channel)
     $notify->sendRaw($phone, $msg, 'staff_jobs_summary');
 
-    log_msg("Sent to {$name} ({$phone}) — today:{$countToday} overdue:{$countOverdue}");
+    log_msg_staff_jobs("Sent to {$name} ({$phone}) — today:{$countToday} overdue:{$countOverdue}");
 
     // Small delay between sends to avoid rate limiting
     usleep(500000); // 0.5 seconds
@@ -212,12 +212,18 @@ if (!empty($unmapped)) {
         . "Fix: Plugin → Manage Retailers → Edit each person → set UCRM User ID.\n"
         . "Find IDs at: " . dn_crm_web($config) . "/nms/settings/users";
     $notify->sendAdmin($adminMsg, 'staff_jobs_unmapped_alert');
-    log_msg("Admin alert sent — unmapped staff: {$names}");
+    log_msg_staff_jobs("Admin alert sent — unmapped staff: {$names}");
 }
 
-log_msg('Staff jobs summary cron complete.');
+log_msg_staff_jobs('Staff jobs summary cron complete.');
+// Renamed from log_msg(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function log_msg(string $msg): void
+function log_msg_staff_jobs(string $msg): void
 {
     echo '[' . date('Y-m-d H:i:s') . '] [staff_jobs_summary] ' . $msg . "\n";
 }

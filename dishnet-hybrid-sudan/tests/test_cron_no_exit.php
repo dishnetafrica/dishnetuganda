@@ -106,6 +106,46 @@ $saveCalls = substr_count($master, "save('master_schedule.json'");
 is_($saveCalls >= 2, 'the real duration is still written when a job finishes',
     'found ' . $saveCalls . ' saves; expected a claim and a completion');
 
+echo "\nNo two scheduled scripts declare the same function name\n";
+// The third way a job ends the cycle, after exit() and a fatal: two scripts
+// included into one process declaring the same function. Redeclaring is
+// E_COMPILE_ERROR — uncatchable, like the others, and invisible in the same
+// way. crm_sync (job 7) declared log_msg() first, jobs_cache (job 21) died on
+// it, and eighteen jobs behind it never ran. jobs_cache runs standalone in
+// 0.14s, so nothing about the job itself looked wrong.
+//
+// A declaration wrapped in if (!function_exists('x')) is FINE and must stay
+// that way: those are PHP 8 polyfills, and renaming one breaks the call sites
+// on any PHP where the guard skips the declaration.
+$declared = [];
+$guarded  = [];
+foreach ($jobs as $name => $file) {
+    if (!is_file($file)) continue;
+    $lines = explode("\n", (string)file_get_contents($file));
+    foreach ($lines as $i => $line) {
+        if (!preg_match('/^\s*function\s+([A-Za-z_]\w*)\s*\(/', $line, $m)) continue;
+        $fn = $m[1];
+        $near = implode("\n", array_slice($lines, max(0, $i - 2), 3));
+        if (strpos($near, "function_exists('" . $fn . "')") !== false) {
+            $guarded[$fn][] = $name;
+            continue;
+        }
+        $declared[$fn][] = $name;
+    }
+}
+
+$clashes = [];
+foreach ($declared as $fn => $who) {
+    if (count($who) > 1) $clashes[] = $fn . '() in ' . implode(' + ', $who);
+}
+is_($clashes === [], 'no function name is declared unguarded by two of them',
+    implode('; ', $clashes) . ' — one of them will die on redeclare');
+
+is_(isset($guarded['str_contains']) && count($guarded['str_contains']) > 1,
+    'and the PHP 8 polyfills stay guarded rather than renamed',
+    'str_contains must keep its name inside if (!function_exists()) or the '
+  . 'call sites break wherever the guard skips the declaration');
+
 echo "\nThe keep-alive in particular, since it is dispatched first\n";
 $ka = $root . '/cron/starlink_keepalive.php';
 is_(is_file($ka) && $exitsIn($ka) === 0,

@@ -57,7 +57,7 @@ foreach ($jobs as $job) {
     $queue->markProcessing($jobId);
     $processed++;
 
-    log_msg("Processing job #{$jobId}: {$job['firstname']} {$job['lastname']}");
+    log_msg_crm_sync("Processing job #{$jobId}: {$job['firstname']} {$job['lastname']}");
 
     try {
         // ── Step 3: Create CRM client ─────────────────────────────────
@@ -65,7 +65,7 @@ foreach ($jobs as $job) {
 
         if (!$crmResponse || empty($crmResponse['id'])) {
             $error = json_encode($crm->getLastError());
-            log_msg("  CRM rejected job #{$jobId}: {$error}");
+            log_msg_crm_sync("  CRM rejected job #{$jobId}: {$error}");
             $queue->markFailed($jobId, $error);
 
             // If exhausted all retries → reverse wallet + notify retailer
@@ -74,7 +74,7 @@ foreach ($jobs as $job) {
                 reverseWallet($wallet, $store, $job);
                 $queue->markReversed($jobId, "CRM sync failed after max retries: {$error}");
                 updateApplication($store, $job['application_id'], 'crm_failed');
-                log_msg("  Wallet reversed for job #{$jobId}");
+                log_msg_crm_sync("  Wallet reversed for job #{$jobId}");
                 // Notify retailer: CRM failed, wallet refunded
                 $app      = $store->findOne('kyc_applications.json', 'id', $job['application_id'] ?? 0);
                 $retailer = $app ? $store->findOne('retailers.json', 'id', (int)($app['retailer_id'] ?? 0)) : null;
@@ -84,7 +84,7 @@ foreach ($jobs as $job) {
         }
 
         $crmClientId = (string)$crmResponse['id'];
-        log_msg("  CRM client created: #{$crmClientId}");
+        log_msg_crm_sync("  CRM client created: #{$crmClientId}");
 
         // ── Step 4: Upload customer image ─────────────────────────────
         if (!empty($job['files']['customer_image'])) {
@@ -128,10 +128,10 @@ foreach ($jobs as $job) {
         $retailer = $app ? $store->findOne('retailers.json', 'id', (int)($app['retailer_id'] ?? 0)) : null;
         if ($retailer && $app) $notify->kycCrmCreated($retailer, $app, $crmClientId);
 
-        log_msg("  Job #{$jobId} completed. CRM client: #{$crmClientId}. WhatsApp sent.");
+        log_msg_crm_sync("  Job #{$jobId} completed. CRM client: #{$crmClientId}. WhatsApp sent.");
 
     } catch (\Throwable $e) {
-        log_msg("  Exception on job #{$jobId}: {$e->getMessage()}");
+        log_msg_crm_sync("  Exception on job #{$jobId}: {$e->getMessage()}");
         $queue->markFailed($jobId, $e->getMessage());
     }
 }
@@ -141,7 +141,7 @@ flock($lockFp, LOCK_UN);
 fclose($lockFp);
 
 if ($processed > 0) {
-    log_msg("Run complete: {$processed} jobs processed.");
+    log_msg_crm_sync("Run complete: {$processed} jobs processed.");
 }
 
 // ── Nightly: CashbookReconcileWorker (runs once per day at 23:00 Juba time) ──
@@ -161,19 +161,19 @@ if ($currentHour === $targetHour) {
 }
 
 if ($runReconcile) {
-    log_msg("Running CashbookReconcileWorker...");
+    log_msg_crm_sync("Running CashbookReconcileWorker...");
     try {
         require_once __DIR__ . '/workers/CashbookReconcileWorker.php';
         $reconciler = new CashbookReconcileWorker($store, $dataDir);
         $recResult  = $reconciler->run(7);
-        log_msg("CashbookReconcileWorker done: " .
+        log_msg_crm_sync("CashbookReconcileWorker done: " .
             "staff_days={$recResult['staff_days_computed']} " .
             "flags={$recResult['flags_raised']} " .
             "fixed={$recResult['expense_postings_fixed']} " .
             "settled={$recResult['advances_auto_settled']} " .
             "{$recResult['duration_ms']}ms");
     } catch (\Throwable $e) {
-        log_msg("CashbookReconcileWorker error: " . $e->getMessage());
+        log_msg_crm_sync("CashbookReconcileWorker error: " . $e->getMessage());
     }
 }
 
@@ -190,7 +190,7 @@ if ($crm->isConfigured()) {
 
     // Run delta at most every 2 minutes to avoid hammering UCRM API
     if ($nowTs - $lastDelta >= 120) {
-        log_msg('Delta client sync: starting...');
+        log_msg_crm_sync('Delta client sync: starting...');
         $modifiedSince = date('Y-m-d\TH:i:s', $nowTs - 7200); // last 2 hours
         $deltaData     = $crm->get("clients?direction=DESC&limit=100");
         $deltaCount    = 0;
@@ -208,9 +208,9 @@ if ($crm->isConfigured()) {
             // Rebuild compact search index
             buildSearchIndex($store, array_values($map));
 
-            log_msg("Delta client sync: merged {$deltaCount} clients. Cache total: " . count($map));
+            log_msg_crm_sync("Delta client sync: merged {$deltaCount} clients. Cache total: " . count($map));
         } else {
-            log_msg('Delta client sync: no data returned (CRM may be unreachable).');
+            log_msg_crm_sync('Delta client sync: no data returned (CRM may be unreachable).');
         }
 
         $store->save($deltaMetaKey, ['last_run_ts' => $nowTs, 'last_run' => date('Y-m-d H:i:s'), 'count' => $deltaCount]);
@@ -235,12 +235,12 @@ if ($crm->isConfigured()) {
             $retryQueue[$i]['status'] = 'failed';
             $retryQueue[$i]['last_error'] = 'Max retries exhausted';
             $retryUpdated = true;
-            log_msg("Payment retry #{$rq['id']}: exhausted after 5 attempts for {$rq['customer_name']}");
+            log_msg_crm_sync("Payment retry #{$rq['id']}: exhausted after 5 attempts for {$rq['customer_name']}");
             continue;
         }
         if (!empty($rq['next_retry_at']) && strtotime($rq['next_retry_at']) > time()) continue;
 
-        log_msg("Payment retry #{$rq['id']}: attempt {$rq['attempts']} for {$rq['customer_name']} \${$rq['payload']['amount']}");
+        log_msg_crm_sync("Payment retry #{$rq['id']}: attempt {$rq['attempts']} for {$rq['customer_name']} \${$rq['payload']['amount']}");
 
         // Resolve methodId → UUID (handles legacy slugs, ints, display names, pass-through UUIDs)
         {
@@ -278,7 +278,7 @@ if ($crm->isConfigured()) {
                     'crm_payment_id' => $result['id'],
                 ]);
             }
-            log_msg("  ✓ Payment synced to CRM #{$result['id']}");
+            log_msg_crm_sync("  ✓ Payment synced to CRM #{$result['id']}");
         } else {
             $err = $crmForRetry->getLastError();
             $errMsg = isset($err['http_code'])
@@ -288,7 +288,7 @@ if ($crm->isConfigured()) {
             $retryQueue[$i]['last_error']   = $errMsg;
             $retryQueue[$i]['next_retry_at'] = date('Y-m-d H:i:s', time() + (300 * $retryQueue[$i]['attempts'])); // exp backoff
             $retryUpdated = true;
-            log_msg("  ✗ Retry failed: {$errMsg}");
+            log_msg_crm_sync("  ✗ Retry failed: {$errMsg}");
         }
     }
 
@@ -372,7 +372,7 @@ if ($crm->isConfigured()) {
             $payload['note'] .= ' | Invoice: ' . $col['invoice_id'];
         }
 
-        log_msg("Auto-heal: posting collection #{$col['id']} for '{$custName}' CRM #{$custId}");
+        log_msg_crm_sync("Auto-heal: posting collection #{$col['id']} for '{$custName}' CRM #{$custId}");
         $result  = $crmForHeal->post('payments', $payload);
         $success = !empty($result) && isset($result['id']);
 
@@ -384,13 +384,13 @@ if ($crm->isConfigured()) {
                 'crm_auto_matched' => true,
             ]);
             $healCount++;
-            log_msg("  ✓ Auto-healed collection #{$col['id']} → CRM payment #{$result['id']}");
+            log_msg_crm_sync("  ✓ Auto-healed collection #{$col['id']} → CRM payment #{$result['id']}");
         } else {
             $err = $crmForHeal->getLastError();
-            log_msg("  ✗ Auto-heal failed for collection #{$col['id']}: " . json_encode($err));
+            log_msg_crm_sync("  ✗ Auto-heal failed for collection #{$col['id']}: " . json_encode($err));
         }
     }
-    if ($healCount > 0) log_msg("Auto-heal: fixed {$healCount} collection(s)");
+    if ($healCount > 0) log_msg_crm_sync("Auto-heal: fixed {$healCount} collection(s)");
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -419,7 +419,7 @@ if ($shouldPull && $crm->isConfigured()) {
     file_put_contents($dataDir . '/cashbook_meta_v2.json',
         json_encode($cbMeta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-    log_msg("Cashbook pull: {$result['imported']} imported, {$result['skipped']} skipped (from {$result['cutoff']})");
+    log_msg_crm_sync("Cashbook pull: {$result['imported']} imported, {$result['skipped']} skipped (from {$result['cutoff']})");
 }
 
 /**
@@ -593,8 +593,14 @@ function reverseWallet(WalletService $wallet, StoreInterface $store, array $job)
         'System'
     );
 }
+// Renamed from log_msg(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function log_msg(string $msg): void
+function log_msg_crm_sync(string $msg): void
 {
     $ts = date('Y-m-d H:i:s');
     echo "[{$ts}] {$msg}\n";
