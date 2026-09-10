@@ -95,6 +95,26 @@ is_(strpos($out, 'NEVER stands down') !== false, 'and so is a zero cooldown');
 is_((string)$saved('wa_human_cooldown_minutes') === '0',
     'but it is still saved — the operator decides, the tool only tells them');
 
+echo "\nQuotation branding is settable, and its default is named\n";
+// An unset key here is not blank — QuotationService compiles a South Sudan
+// phone number, so "not set" means Juba's number is on a Ugandan quote.
+$store([]);
+[$c, $out] = $run([]);
+is_(strpos($out, 'quote_company_phone') !== false, 'the key is managed by the tool',
+    'it was not, so the wrong number could not be corrected without a browser');
+is_(strpos($out, '+211920000000') !== false,
+    'and the default it falls back to is printed',
+    'an unset key that silently means "Juba" has to say so');
+
+[$c, $out] = $run(['--key', 'quote_company_phone', '--value', '+211920000000']);
+is_(strpos($out, 'South Sudan number') !== false,
+    'setting a +211 number on Ugandan quotes is called out', $out);
+is_((string)$saved('quote_company_phone') === '+211920000000',
+    'but still saved — the operator decides');
+
+[$c, $out] = $run(['--key', 'quote_company_phone', '--value', '+256703834115']);
+is_(strpos($out, 'South Sudan number') === false, 'a Uganda number draws no warning');
+
 echo "\nAn unknown key is refused, and secrets are not managed here\n";
 [$c, $out] = $run(['--key', 'claude_api_key', '--value', 'sk-test']);
 is_($c !== 0, 'a key it does not manage is refused');

@@ -56,6 +56,16 @@ $FLAGS = [
         'What to say about availability — stated to customers as written'],
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
+
+    // On every quotation the team sends. QuotationService compiles South Sudan
+    // defaults for all three, so an unset key is not a blank — it is Juba's
+    // phone number printed on a Ugandan customer's quote.
+    'quote_company_name' => ['text',
+        'Company name on quotations (unset = "DishNet Africa")'],
+    'quote_company_phone' => ['text',
+        'Phone printed on quotations (unset = +211920000000, South Sudan)'],
+    'quote_company_email' => ['text',
+        'Reply address on quotations (unset = info@dishnetafrica.com)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
@@ -129,6 +139,11 @@ if (!$clear) {
     if ($key === 'wa_human_cooldown_minutes' && $new !== '' && is_numeric($new) && (int)$new === 0) {
         $warn[] = '0 means the AI NEVER stands down. It will keep answering while a colleague '
                 . 'is typing, which is what produced ninety-seven messages on c109.';
+    }
+    if ($key === 'quote_company_phone' && $new !== ''
+        && strpos(preg_replace('/\D+/', '', $new) ?? '', '211') === 0) {
+        $warn[] = 'That is a South Sudan number. It is printed on quotations sent to '
+                . 'Ugandan customers as the number to call.';
     }
     if ($key === 'ai_handover_message' && mb_strlen($new) > 160) {
         $warn[] = 'That is long for a holding line on WhatsApp. It is sent on its own, before '
