@@ -125,9 +125,6 @@ foreach ($messages as $msg) {
     $fromMe    = !empty($key['fromMe']);
     $remoteJid = (string)($key['remoteJid'] ?? '');
 
-    // Our own outbound messages echo back. Record them, never reply to them.
-    if ($fromMe) { $skipped++; continue; }
-
     // Groups and broadcasts are not customer conversations.
     if (str_contains($remoteJid, '@g.us') || str_contains($remoteJid, 'broadcast')) {
         $skipped++;
@@ -147,6 +144,41 @@ foreach ($messages as $msg) {
     // loses the race here and is dropped, so the customer is never answered
     // twice for one message.
     if (!$guard->claim($messageId, $instance, $event)) {
+        $skipped++;
+        continue;
+    }
+
+    // ── A message WE sent ────────────────────────────────────────────────
+    // Either this plugin's own reply echoing back, or — the case that matters —
+    // a colleague answering from the handset. The comment here used to say
+    // "record them, never reply to them" while the code skipped before
+    // reaching any storing call, so a person's reply was invisible: it never
+    // entered the conversation, the AI never saw it in history, and the
+    // assistant would answer the next message as though nobody had spoken.
+    //
+    // Recorded now, never queued. The AI reads it as [name, from our team],
+    // honours what was promised, and does not claim those words as its own.
+    // Our own replies dedupe on wa_message_id, so the echo is not a copy.
+    if ($fromMe) {
+        // For a message we sent, the customer is the remote party. senderPn is
+        // OUR number here, which is why it is not consulted.
+        $custPhone = EvolutionApiService::phoneFromJid($remoteJid);
+        $ownText   = evoExtractText($msg);
+        if ($custPhone !== '' && $ownText !== '') {
+            try {
+                $conv = $convSvc->ensureConversation($custPhone, $channel, null, 'import');
+                $convSvc->storeMessage((int)$conv['id'], [
+                    'direction'     => 'out',
+                    'role'          => 'agent',
+                    'body'          => $ownText,
+                    'agent_name'    => 'Team',
+                    'wa_message_id' => $messageId,
+                    'metadata'      => json_encode(['channel' => $channel, 'source' => 'handset']),
+                ]);
+            } catch (\Throwable $e) {
+                error_log('[evo_webhook] outbound store failed: ' . $e->getMessage());
+            }
+        }
         $skipped++;
         continue;
     }

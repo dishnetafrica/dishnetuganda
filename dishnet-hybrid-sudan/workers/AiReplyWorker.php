@@ -127,6 +127,11 @@ class AiReplyWorker extends WorkerBase
                     'role'       => 'assistant',
                     'body'       => $reply,
                     'agent_name' => 'DishNet AI',
+                    // Evolution echoes every outbound message back through the
+                    // webhook, including this one. storeMessage dedupes on
+                    // wa_message_id, so recording the id Evolution just gave us
+                    // is what stops the echo landing as a second copy.
+                    'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
                     'metadata'   => json_encode(['channel' => $channel]),
                 ]);
             }
