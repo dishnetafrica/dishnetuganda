@@ -106,23 +106,48 @@ try {
     echo "     could not read clients: " . $e->getMessage() . "\n";
 }
 
-// What the quote would print TODAY, before any change.
-echo "\n\n  WHAT A QUOTATION PRINTS TODAY\n\n";
-$today = [
-    'company name' => [$config['quote_company_name']  ?? null, 'DishNet Africa'],
-    'phone'        => [$config['quote_company_phone'] ?? null, '+211920000000'],
-    'email'        => [$config['quote_company_email'] ?? null, 'info@dishnetafrica.com'],
-];
-$juba = false;
-foreach ($today as $label => [$set, $fallback]) {
-    $eff = ($set === null || $set === '') ? $fallback : (string)$set;
-    $src = ($set === null || $set === '') ? 'compiled default' : 'plugin config';
-    printf("     %-14s %-34s (%s)\n", $label, $eff, $src);
-    if (strpos(preg_replace('/\D+/', '', $eff) ?? '', '211') === 0) $juba = true;
+// What a quotation prints — asked of the code that decides it.
+//
+// This section used to reimplement the lookup: read the config keys, fall back
+// to the constants, print a verdict. It was therefore reporting the OLD rules
+// for a full deploy after QuotationService started reading uCRM, and said
+// "plugin config" while the live path was already answering "uCRM". A
+// diagnostic that re-derives what it is meant to observe tells you about
+// itself, not about the system.
+echo "\n\n  WHAT A QUOTATION PRINTS\n\n";
+require_once $root . '/lib/StoreInterface.php';
+require_once $root . '/lib/JsonStore.php';
+require_once $root . '/lib/SqliteStore.php';
+require_once $root . '/lib/NotificationService.php';
+require_once $root . '/lib/QuotationService.php';
+
+$LABELS = ['ucrm' => 'uCRM organization', 'config' => 'plugin config',
+           'constant' => 'BUILT-IN DEFAULT'];
+try {
+    $store = SqliteStore::create($dataDir);
+    $qs    = new QuotationService($store, $dataDir, $config);
+    $co    = $qs->companyDetails();          // no client: the selected organization
+
+    foreach (['name' => 'company name', 'phone' => 'phone', 'email' => 'email',
+              'address' => 'address', 'website' => 'website', 'tax_id' => 'tax id',
+              'registration_number' => 'registration no', 'bank_name' => 'bank account',
+              'bank_1' => 'account field 1', 'bank_2' => 'account field 2'] as $k => $label) {
+        $v = (string)($co[$k] ?? '');
+        if ($v === '' && !isset($co['_source'][$k])) continue;   // absent, not printed
+        printf("     %-17s %-36s (%s)\n", $label, $v,
+               $LABELS[$co['_source'][$k] ?? 'constant'] ?? '?');
+    }
+
+    if (!empty($co['_warnings'])) {
+        echo "\n     FELL THROUGH TO A BUILT-IN DEFAULT:\n";
+        foreach ($co['_warnings'] as $w) echo "       - " . $w . "\n";
+        echo "\n     These are South Sudan's. Set the field on the uCRM organization,\n";
+        echo "     or as a plugin config key, so a customer is not told to call Juba.\n\n";
+        exit(1);
+    }
+    echo "\n     Nothing is falling back to a built-in default.\n\n";
+} catch (\Throwable $e) {
+    echo "     could not resolve: " . $e->getMessage() . "\n\n";
+    exit(2);
 }
-if ($juba) {
-    echo "\n     A +211 number is printed on quotations sent to Ugandan customers.\n";
-    exit(1);
-}
-echo "\n";
 exit(0);

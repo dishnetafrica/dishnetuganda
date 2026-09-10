@@ -145,6 +145,21 @@ $bare = $svc()->companyDetails(9);
 is_($bare['_source']['phone'] === 'constant', 'the constant is reached');
 is_(!empty($bare['_warnings']), 'and it is warned about, not printed quietly');
 
+echo "\nThe probe reports this by asking, not by re-deriving it\n";
+// org_probe.php used to reimplement the lookup — read the config keys, fall
+// back to the constants, print a verdict. It therefore kept reporting the old
+// rules for a whole deploy after QuotationService started reading uCRM, and
+// said "plugin config" while the live path already answered "uCRM". A
+// diagnostic that re-derives what it observes describes itself, not the system.
+$probe = (string)file_get_contents($root . '/tools/org_probe.php');
+is_(strpos($probe, 'companyDetails(') !== false,
+    'it calls the method that actually decides');
+is_(strpos($probe, '+211920000000') === false,
+    'and carries no copy of the South Sudan constant',
+    'a second copy of the fallback is a second answer waiting to disagree');
+is_(strpos($probe, "_source") !== false,
+    'and prints the source the resolver reports, per field');
+
 if ($srv) { proc_terminate($srv); proc_close($srv); }
 exec('rm -rf ' . escapeshellarg($tmp));
 printf("\n%d passed, %d failed\n", $pass, $fail);
