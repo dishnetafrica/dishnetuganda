@@ -70,6 +70,20 @@ foreach (EmailTemplate::DEFAULTS as $key => $default) {
     printf("  %-16s %-34s %s\n", $short, $shown, $source);
 }
 
+// The SENDER is part of the identity too, and it is the one part that is not
+// in EmailTemplate::DEFAULTS — it lives with the SMTP settings, because it is
+// an address a relay has to be willing to use, not a line of copy.
+require_once $root . '/lib/EmailSettingsWriter.php';
+require_once $root . '/lib/MailService.php';
+$es       = EmailSettingsWriter::read($dataDir);
+$ordinary = trim((string)($es['smtp_from'] ?? $es['smtp_user'] ?? ''));
+$sysFrom  = MailService::normalizeFrom((string)($es['system_from'] ?? ''));
+printf("  %-16s %-34s %s\n", 'from', $ordinary !== '' ? $ordinary : '(none)',
+       $ordinary !== '' ? 'DISK' : 'unset');
+printf("  %-16s %-34s %s\n", 'login codes',
+       $sysFrom !== '' ? MailService::bareAddress($sysFrom) : ($ordinary ?: '(none)'),
+       $sysFrom !== '' ? 'DISK' : 'same as from');
+
 echo "\n";
 if ($sudan > 0) {
     echo "  $sudan contact field(s) are still on the Sudan default. A customer\n";

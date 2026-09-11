@@ -105,6 +105,24 @@ $cfg  = $mail->getConfig();
 if (!empty($cfg['host'])) {
     ok('SMTP resolved: ' . $cfg['user'] . ' via ' . $cfg['host'] . ':' . $cfg['port'] . ' ' . strtoupper((string)$cfg['enc']));
     info('From: ' . ($cfg['from'] ?? '(unset)'));
+    // The sender OTP mail uses, which is not necessarily the one above. If it
+    // is set and the two differ, the relay has to be willing to send as both —
+    // and a rejected MAIL FROM only shows up when a login code fails to
+    // arrive, which is the worst moment to discover it.
+    $sysFrom = (string)($cfg['system_from'] ?? '');
+    if ($sysFrom !== '') {
+        $sysDomain = strtolower((string)strrchr(MailService::bareAddress($sysFrom), '@'));
+        $ordDomain = strtolower((string)strrchr(MailService::bareAddress((string)($cfg['from'] ?? '')), '@'));
+        if ($sysDomain !== '' && $ordDomain !== '' && $sysDomain !== $ordDomain) {
+            nk('System sender: ' . $sysFrom . ' — a DIFFERENT domain from the From address. '
+               . 'Your relay must be authorised to send as it, or login codes will not go out. '
+               . 'Prove it: php tools/otp_email_test.php --to you@example.com');
+        } else {
+            ok('System sender: ' . $sysFrom . ' — login codes go out as this, header and envelope');
+        }
+    } else {
+        info('System sender: (not set) — login codes go out as the From address above');
+    }
     $es = is_file($dataDir . '/email_settings.json')
         ? (json_decode((string)@file_get_contents($dataDir . '/email_settings.json'), true) ?: []) : [];
     info('Mode: ' . (!empty($es['use_ucrm_email']) ? 'uCRM mailer first, plugin SMTP fallback' : 'PLUGIN-ONLY'));

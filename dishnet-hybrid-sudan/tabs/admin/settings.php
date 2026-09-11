@@ -26,7 +26,12 @@ $effFtthStart = max($maxFtthInDB, (int)($config['ftth_seq_start']??0));
 $wsLastRun    = file_exists($dataDir.'/wallet_sync_last_run.txt')
     ? date('d M H:i', (int)file_get_contents($dataDir.'/wallet_sync_last_run.txt')) : null;
 $wsi          = (int)($config['wallet_sync_interval_minutes'] ?? 360);
-$eSettings    = $store->load('email_settings.json') ?? [];
+require_once dirname(__DIR__, 2) . '/lib/EmailSettingsWriter.php';
+// The FILE, not the store. The store's copy is what this screen used to
+// show, and it is not what MailService sends with — a screen showing one
+// SMTP host while the mail goes out through another is how a working
+// configuration gets "fixed" into a broken one.
+$eSettings    = EmailSettingsWriter::read($dataDir, $store);
 
 //  Edit Collection (Admin CRUD) 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit_collection') {
@@ -288,7 +293,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'push_
 
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_email_settings') {
-    $eNew = [
+    require_once dirname(__DIR__, 2) . '/lib/MailService.php';
+    $sysFrom = MailService::normalizeFrom(trim($_POST['system_from'] ?? ''));
+    $sysRaw  = trim($_POST['system_from'] ?? '');
+
+    // Written through EmailSettingsWriter, which writes the FILE the mail
+    // system reads as well as the store this screen reads. Saving only the
+    // store is what made this form look like it worked while changing
+    // nothing, and it never blanks the password or drops a key the form
+    // does not know about.
+    $r = EmailSettingsWriter::save($dataDir, $store, [
         'recipients'      => trim($_POST['email_recipients'] ?? ''),
         'use_ucrm_email'  => !empty($_POST['use_ucrm_email']),
         'quote_email_via_plugin' => !empty($_POST['quote_email_via_plugin']),
@@ -298,11 +312,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'smtp_user'       => trim($_POST['smtp_user'] ?? ''),
         'smtp_enc'        => $_POST['smtp_enc'] ?? 'tls',
         'smtp_from'       => trim($_POST['smtp_from'] ?? ''),
-    ];
-    if (!empty($_POST['smtp_pass'])) $eNew['smtp_pass'] = trim($_POST['smtp_pass']);
-    else { $existing = $store->load('email_settings.json'); $eNew['smtp_pass'] = $existing['smtp_pass'] ?? ''; }
-    $store->save('email_settings.json', $eNew);
-    flash(' Email settings saved.', 'success');
+        'system_from'     => $sysFrom,
+        'smtp_pass'       => trim($_POST['smtp_pass'] ?? ''),
+    ]);
+
+    // 'danger' is the only type the flash renderer paints red. Anything else
+    // comes out green, and a failure reported in green is worse than silence.
+    if (!$r['ok']) {
+        flash(' Email settings NOT saved: ' . $r['error'], 'danger');
+    } elseif ($sysRaw !== '' && $sysFrom === '') {
+        // Saved, but one field was thrown away — say so rather than let the
+        // operator believe OTP mail moved when it did not. The renderer
+        // escapes the message, so the bad value goes in raw.
+        flash(' Email settings saved, but "' . $sysRaw
+              . '" is not a usable sender address and was not stored.', 'danger');
+    } else {
+        flash(' Email settings saved.', 'success');
+    }
     redirect('?page=dashboard&tab=settings&stab=system');
 }
 ?>
@@ -1305,6 +1331,19 @@ $_emUcrmConnected = ($_emApiUrl !== '' && $_emAppKey !== '');
             <div>
                 <label class="form-label">From Address</label>
                 <input type="text" name="smtp_from" class="form-control" value="<?= h($eSettings['smtp_from']??'') ?>" placeholder="noreply@dishnetafrica.com">
+                <div class="st-hint">Quotations, invoices and reminders go out as this. A customer can reply to it.</div>
+            </div>
+        </div>
+
+        <div class="st-row">
+            <div>
+                <label class="form-label">System Sender <small class="text-muted">(optional)</small></label>
+                <input type="text" name="system_from" class="form-control" value="<?= h($eSettings['system_from']??'') ?>" placeholder="no-reply@yourdomain.com">
+                <div class="st-hint">
+                    Login codes are sent as this instead &mdash; header and envelope both, so replies
+                    and bounces stay out of the mailbox above. Leave blank and login codes go out as
+                    the From Address, exactly as before.
+                </div>
             </div>
         </div>
 
