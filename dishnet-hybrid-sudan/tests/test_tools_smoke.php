@@ -143,6 +143,28 @@ is_(strpos($src, 'CrmApiClient::fromUcrm(') !== false,
 is_(preg_match('/new\s+CrmApiClient\s*\(/', $src) === 0,
     'and never through the constructor, which takes a URL and a key');
 
+// ── No test may reach the real ConfigVault ──────────────────────────────────
+//
+// The vault lives OUTSIDE the data directory so it survives a re-install,
+// which means DN_DATA_DIR does not isolate it. A test that ran a tool with a
+// temporary data directory still wrote into the REAL vault, and because the
+// vault gap-fills missing keys, that junk was restored into later tests —
+// results that depended on run order and on what the last run left behind.
+// This actually happened: a fake key and a dead 127.0.0.1 URL sat in the
+// vault and broke a new suite that had done nothing wrong.
+echo "\nThe suite cannot reach the real ConfigVault\n";
+
+$runner = (string)file_get_contents($root . '/tests/run.sh');
+is_(strpos($runner, 'DN_VAULT_FILE') !== false,
+    'the runner gives the whole run its own vault',
+    'without it, every tool-running test can write to the real one');
+is_(strpos($runner, 'export DN_VAULT_FILE') !== false,
+    'and exports it, so child processes inherit it',
+    'set but not exported reaches nothing');
+is_(strpos($runner, 'trap') !== false && strpos($runner, 'rm -f') !== false,
+    'and removes it afterwards',
+    'a temp vault left behind becomes the next run stale state');
+
 foreach (glob($tmp . '/*') ?: [] as $f) @unlink($f);
 @rmdir($tmp);
 
