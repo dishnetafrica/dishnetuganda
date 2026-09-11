@@ -117,6 +117,45 @@ $qc = [];
 foreach ($pdo->query("PRAGMA table_info(stock_quantities)") as $r) $qc[] = $r['name'];
 is_(in_array('avg_cost', $qc, true), 'bulk stock has somewhere to keep its cost');
 
+// ── The log has to outlive the deploy that fixes the thing it recorded ──────
+// MigrationRunner's default puts it at <pluginRoot>/data/migration.log —
+// inside the plugin directory, which uCRM replaces on upgrade and the deploy
+// script replaces on every deploy. The live server's copy was a snapshot left
+// by getDataDir()'s one-time rescue, frozen on the day it ran: it showed five
+// migrations failing and nothing at all since, which made a fixed problem
+// look current and a current one invisible.
+echo "\nThe migration log survives a deploy\n";
+is_(is_file($tmp . '/migration.log'),
+    'it is written to the data directory, which an upgrade does not touch',
+    'looked in ' . $tmp);
+is_(!is_file($root . '/data/migration.log'),
+    'and not inside the plugin directory, which one replaces',
+    'a stale file from before this fix — delete it: rm ' . $root . '/data/migration.log');
+
+// It survives deploys now, so nothing else keeps it small. Its own directory,
+// and a database that has never been migrated, so the run actually writes.
+$lt = sys_get_temp_dir() . '/dn_logtrim_' . bin2hex(random_bytes(4));
+@mkdir($lt, 0777, true);
+$big = $lt . '/migration.log';
+file_put_contents($big, str_repeat("[2026-01-01 00:00:00] OK: filler\n", 20000));
+$before = filesize($big);
+SqliteStore::create($lt);
+clearstatcache();
+$after = (int)filesize($big);
+is_($after < $before, 'an oversized log is trimmed rather than grown',
+    "was {$before}, now {$after}");
+is_(strpos((string)file_get_contents($big), 'earlier entries trimmed') !== false,
+    'and says so, rather than appearing to have lost entries');
+is_(strpos((string)file_get_contents($big), '067_stock_category_image.sql') !== false,
+    'while the run that trimmed it is still recorded');
+exec('rm -rf ' . escapeshellarg($lt));
+$log = (string)@file_get_contents($tmp . '/migration.log');
+is_(strpos($log, '067_stock_category_image.sql') !== false,
+    'the most recent migration is in it', substr($log, -200));
+is_(stripos($log, 'PARTIAL') === false,
+    'and nothing applied only partly', implode("\n       ",
+        array_filter(explode("\n", $log), fn($l) => stripos($l, 'PARTIAL') !== false)));
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n  {$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);

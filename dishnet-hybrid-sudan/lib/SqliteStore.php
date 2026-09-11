@@ -230,7 +230,18 @@ class SqliteStore implements StoreInterface
         $migrationsDir = dirname(__DIR__) . '/migrations';
         if (is_dir($migrationsDir)) {
             require_once dirname(__DIR__) . '/lib/MigrationRunner.php';
-            $runner = new \MigrationRunner($pdo, $migrationsDir);
+            // The log goes in the DATA directory, not the plugin directory.
+            //
+            // Its default is <pluginRoot>/data/migration.log — inside the
+            // plugin, which uCRM replaces on every upgrade and deploy-hybrid
+            // replaces on every deploy. So the record of what applied and what
+            // failed was destroyed by the very act of shipping a fix for it.
+            // The copy that survived on the live server was a snapshot left
+            // behind by getDataDir()'s one-time rescue, frozen on the day it
+            // ran: it showed five migrations failing and nothing since, which
+            // made a resolved problem look like a current one and a current
+            // one invisible.
+            $runner = new \MigrationRunner($pdo, $migrationsDir, $dataDir . '/migration.log');
             $runner->run(); // Safe: skips already-applied, logs errors, never throws
         }
 
