@@ -77,6 +77,7 @@ $runs = [
     ['price_check.php',           [],         'compares published prices against uCRM'],
     ['media.php',                 [],         'lists the photos and documents it can send'],
     ['tax_probe.php',             [],         'reports what uCRM holds about tax'],
+    ['hardware_diff.php',         [],         'compares the equipment screen against uCRM'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {
