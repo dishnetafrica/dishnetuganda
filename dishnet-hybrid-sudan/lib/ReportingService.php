@@ -52,12 +52,16 @@ final class ReportingService
     private array $config;
     private PurchaseService $purchases;
 
-    public function __construct($store, string $dataDir, ?\PDO $pdo = null, array $config = [])
+    /** CrmApiClient|null — when present, figures can be checked against uCRM */
+    private $crm = null;
+
+    public function __construct($store, string $dataDir, ?\PDO $pdo = null, array $config = [], $crm = null)
     {
         $this->store   = $store;
         $this->dataDir = $dataDir;
         $this->pdo     = $pdo ?: (method_exists($store, 'getPdo') ? $store->getPdo() : null);
         $this->config  = $config;
+        $this->crm     = $crm;
         $this->purchases = new PurchaseService(
             $this->pdo ?? new \PDO('sqlite::memory:'), $dataDir);
     }
@@ -330,8 +334,24 @@ final class ReportingService
     {
         $w = [];
         if ($this->invoices() === []) {
-            $w[] = 'No invoices are cached. Every sales figure is zero because there is '
-                 . 'nothing to read, not because nothing was sold.';
+            // "Nothing to read" is honest but it stops one question short. An
+            // empty cache and an empty business produce the same zero, and
+            // they are opposite situations: one means nobody has sold
+            // anything, the other means the reporting is not reading what was
+            // sold. uCRM can settle it in one call, so ask.
+            $live = $this->ucrmHasInvoices();
+            if ($live === true) {
+                $w[] = 'THE CACHE IS EMPTY BUT UCRM HAS INVOICES. Every sales figure above '
+                     . 'is zero because nothing has been read, not because nothing was sold. '
+                     . 'Populate it: php tools/report.php --refresh';
+            } elseif ($live === false) {
+                $w[] = 'No invoices are cached, and uCRM confirms it has none either — so '
+                     . 'these zeros are real. Nothing has been invoiced yet.';
+            } else {
+                $w[] = 'No invoices are cached, and uCRM could not be asked whether that is '
+                     . 'correct. These zeros may mean nothing was sold, or that nothing has '
+                     . 'been read. Run with --refresh to find out.';
+            }
         }
         if ($this->load('ucrm_invoice_payments_cache.json') === []) {
             $w[] = 'No payment records are cached. Payments are fetched per invoice as '
@@ -379,6 +399,65 @@ final class ReportingService
             foreach ($svc->invoices($cid) as $i) $out[] = $i;
         }
         return $this->invoiceCache = $out;
+    }
+
+    /**
+     * Does uCRM itself hold any invoice?
+     *
+     * @return bool|null null when uCRM cannot be reached — which is its own
+     *                   answer, and a different one from "no".
+     */
+    public function ucrmHasInvoices(): ?bool
+    {
+        if (!$this->crm || !method_exists($this->crm, 'get')) return null;
+        try {
+            $r = $this->crm->get('invoices?limit=1');
+            if (!is_array($r)) return null;
+            return $r !== [];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Pull every client's invoices from uCRM into the cache.
+     *
+     * The cache is filled on demand, one client at a time, when somebody
+     * opens the portal. On an install where no customer has logged in it is
+     * simply empty — and a management report built on it reads zero for a
+     * business that has been invoicing all month.
+     *
+     * @return array{ok:bool, clients:int, invoices:int, errors:string[]}
+     */
+    public function refreshFromUcrm(): array
+    {
+        if (!$this->crm) {
+            return ['ok' => false, 'clients' => 0, 'invoices' => 0,
+                    'errors' => ['uCRM is not configured — nothing to refresh from']];
+        }
+        require_once __DIR__ . '/ClientInvoiceCacheRefresher.php';
+        $r = new ClientInvoiceCacheRefresher($this->store, $this->crm, $this->dataDir);
+
+        $clients = $this->load('ucrm_clients_cache.json');
+        if ($clients === []) {
+            try {
+                $live = $this->crm->get('clients?limit=1000');
+                if (is_array($live)) { $clients = $live; $this->store->save('ucrm_clients_cache.json', $live); }
+            } catch (\Throwable $e) { /* fall through with what we have */ }
+        }
+
+        $errors = []; $n = 0;
+        foreach ($clients as $c) {
+            $id = (int)($c['id'] ?? 0);
+            if ($id <= 0) continue;
+            $res = $r->refreshForClient($id, true, 'report-refresh');
+            if (empty($res['ok'])) $errors[] = 'client ' . $id . ': ' . (string)($res['error'] ?? 'failed');
+            $n++;
+        }
+        $this->invoiceCache = null;   // whatever was read before this is stale now
+
+        return ['ok' => $errors === [], 'clients' => $n,
+                'invoices' => count($this->load('ucrm_invoices_cache.json')), 'errors' => $errors];
     }
 
     private function bookCurrency(): string

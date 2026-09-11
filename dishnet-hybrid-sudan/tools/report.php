@@ -36,8 +36,8 @@ $val = function (string $f) use ($args): string {
 };
 foreach ($args as $a) {
     if (strpos($a, '--') !== 0) continue;
-    if (!in_array($a, ['--from', '--to', '--json'], true)) {
-        fwrite(STDERR, "\n  Unknown option: {$a}\n  Known: --from <date> --to <date> --json\n\n");
+    if (!in_array($a, ['--from', '--to', '--json', '--refresh'], true)) {
+        fwrite(STDERR, "\n  Unknown option: {$a}\n  Known: --from <date> --to <date> --json --refresh\n\n");
         exit(2);
     }
 }
@@ -52,8 +52,28 @@ foreach (['--from', '--to'] as $f) {
 $dataDir = cliDataDir($root);
 $store   = SqliteStore::create($dataDir);
 $config  = PluginConfig::load($root, $dataDir);
-$rep     = new ReportingService($store, $dataDir, $store->getPdo(), $config);
-$s       = $rep->summary(['from' => $val('--from'), 'to' => $val('--to')]);
+
+// uCRM, when it will answer. With it the report can tell an empty CACHE from
+// an empty BUSINESS, which is the difference between "we have not sold
+// anything" and "our reporting is not reading what we sold".
+$crm = null;
+try {
+    require_once $root . '/lib/CrmApiClient.php';
+    $crm = CrmApiClient::fromUcrm($root, $config);
+} catch (\Throwable $e) { /* the report still works from caches alone */ }
+
+$rep = new ReportingService($store, $dataDir, $store->getPdo(), $config, $crm);
+
+if (in_array('--refresh', $args, true)) {
+    echo "\n  Pulling invoices from uCRM into the cache…\n";
+    $r = $rep->refreshFromUcrm();
+    printf("    %d client(s) asked, %d invoice(s) now cached\n", $r['clients'], $r['invoices']);
+    foreach (array_slice($r['errors'], 0, 5) as $e) echo "    ! {$e}\n";
+    if (count($r['errors']) > 5) echo "    ! …and " . (count($r['errors']) - 5) . " more\n";
+    echo "\n";
+}
+
+$s = $rep->summary(['from' => $val('--from'), 'to' => $val('--to')]);
 
 if (in_array('--json', $args, true)) {
     echo json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "\n";

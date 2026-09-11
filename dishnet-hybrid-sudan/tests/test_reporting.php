@@ -50,8 +50,11 @@ is_($sum['payments']['NONE']['complete'] === false,
 is_(strpos($sum['payments']['NONE']['caveat'], 'cached per invoice') !== false,
     'because that cache only holds invoices somebody has opened — a floor, not a total');
 $w = implode(' | ', $sum['warnings']);
-is_(strpos($w, 'nothing to read, not because nothing was sold') !== false,
-    'and the warnings say it in words', $w);
+// No uCRM was handed to this one, so it cannot know whether the empty cache
+// is the truth. Saying that is the honest answer — better than either of the
+// two confident ones it could have guessed at.
+is_(strpos($w, 'could not be asked whether that is correct') !== false,
+    'and the warnings say the cache could not be checked', $w);
 is_(strpos($w, 'No stock units exist') !== false, 'including why inventory is zero');
 t('margin is not offered at all', $sum['margin']['available'], false);
 is_(strpos($sum['margin']['reason'], 'no equipment has been installed') !== false,
@@ -196,6 +199,83 @@ t('not available', $m['available'], false);
 is_(strpos($m['reason'], 'linked to the invoice line') !== false,
     'because a unit is not tied to the line that sold it — inventing one from a '
     . 'catalogue price would be a made-up number on a management screen', $m['reason']);
+
+// ── An empty cache is not the same as an empty business ─────────────────────
+// Both produce zero, and they are opposite situations: one means nobody sold
+// anything, the other means the reporting is not reading what was sold. The
+// cache is filled on demand as customers open the portal, so on an install
+// where nobody has logged in it is simply empty — and a management report
+// built on it reads zero for a business that invoiced all month.
+echo "\nThe zero that means 'I have not looked'\n";
+$blank = sys_get_temp_dir() . '/dn_rep_blank_' . bin2hex(random_bytes(4));
+@mkdir($blank, 0777, true);
+$bs = SqliteStore::create($blank);
+
+/** A stand-in for CrmApiClient: answers exactly what the real one answers. */
+final class FakeCrm {
+    public array $invoices = [];
+    public array $clients  = [];
+    public bool  $down     = false;
+    public function get(string $path) {
+        if ($this->down) return null;
+        if (strpos($path, 'invoices?limit=1') === 0) return array_slice($this->invoices, 0, 1);
+        if (strpos($path, 'invoices?clientId=') === 0) {
+            $cid = (int)substr($path, strlen('invoices?clientId='));
+            return array_values(array_filter($this->invoices,
+                fn($i) => (int)($i['clientId'] ?? 0) === $cid));
+        }
+        if (strpos($path, 'clients') === 0) return $this->clients;
+        return [];
+    }
+    public function getLastError() { return 'fake'; }
+}
+
+// uCRM HAS invoices, the cache does not. The dangerous case.
+$fake = new FakeCrm();
+$fake->clients  = [['id' => 4021]];
+$fake->invoices = [['id' => 9001, 'clientId' => 4021, 'number' => 'REAL-1', 'total' => 750000,
+                    'amountPaid' => 0, 'status' => 2, 'currencyCode' => 'UGX',
+                    'createdDate' => '2026-09-11', 'items' => []]];
+$br = new ReportingService($bs, $blank, $bs->getPdo(), [], $fake);
+$w = implode(' | ', $br->summary()['warnings']);
+is_(strpos($w, 'THE CACHE IS EMPTY BUT UCRM HAS INVOICES') !== false,
+    'it says the reporting is not reading what was sold', $w);
+is_(strpos($w, '--refresh') !== false, 'and how to fix it');
+
+// uCRM has none either. The zeros are real, and saying so is worth as much.
+$fake2 = new FakeCrm();
+$br2 = new ReportingService($bs, $blank, $bs->getPdo(), [], $fake2);
+$w2 = implode(' | ', $br2->summary()['warnings']);
+is_(strpos($w2, 'uCRM confirms it has none either') !== false,
+    'an empty business is confirmed as empty, not left ambiguous', $w2);
+is_(strpos($w2, 'these zeros are real') !== false, 'in those words');
+
+// uCRM unreachable is a third answer, not a "no".
+$fake3 = new FakeCrm(); $fake3->down = true;
+$w3 = implode(' | ', (new ReportingService($bs, $blank, $bs->getPdo(), [], $fake3))->summary()['warnings']);
+is_(strpos($w3, 'could not be asked') !== false,
+    'and an unreachable uCRM is its own answer, not silence', $w3);
+t('asking directly gives the three states',
+  [(new ReportingService($bs, $blank, $bs->getPdo(), [], $fake))->ucrmHasInvoices(),
+   (new ReportingService($bs, $blank, $bs->getPdo(), [], $fake2))->ucrmHasInvoices(),
+   (new ReportingService($bs, $blank, $bs->getPdo(), [], $fake3))->ucrmHasInvoices()],
+  [true, false, null]);
+is_((new ReportingService($bs, $blank, $bs->getPdo(), []))->ucrmHasInvoices() === null,
+    'and no uCRM at all is the same as unreachable');
+
+echo "\nFilling the cache from uCRM\n";
+$res = $br->refreshFromUcrm();
+t('one client was asked', $res['clients'], 1);
+t('and its invoice is now cached', $res['invoices'], 1);
+$after = $br->summary();
+t('the sales figure is no longer zero', $after['sales']['UGX']['value'], 750000.0);
+// The invoice warning specifically — the other two are about payments and
+// stock, which really are still empty in this fixture and should still warn.
+is_(strpos(implode(' | ', $after['warnings']), 'UCRM HAS INVOICES') === false,
+    'and that warning is gone', implode(' | ', $after['warnings']));
+is_(count($after['warnings']) === 2,
+    'while the ones that are still true remain');
+exec('rm -rf ' . escapeshellarg($blank));
 
 // ── The printed report ──────────────────────────────────────────────────────
 echo "\nWhat management actually reads\n";
