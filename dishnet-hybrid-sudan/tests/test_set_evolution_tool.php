@@ -217,7 +217,9 @@ is_(($stored()['evo_api_url'] ?? '') === 'https://evo.dishnet.invalid',
 echo "\nIt reports what Evolution actually has\n";
 
 $run('--url http://127.0.0.1:' . $port . ' --allow-insecure');
-$r = $run('--support dishnet_ug');
+// Both channels, because an unmapped one is now a failure in its own right
+// and would mask what this case is actually about.
+$r = $run('--support dishnet_ug --sales dishnet_ug');
 is_(strpos($r['out'], 'dishnet_ug') !== false, 'the instance that exists is listed');
 is_(strpos($r['out'], 'open') !== false, 'with its connection state');
 is_($r['code'] === 0, 'and a configured, paired instance is a pass');
@@ -230,6 +232,40 @@ is_(strpos($r['out'], 'dishnet_richard') !== false, 'by name');
 is_(strpos($r['out'], 'match exactly') !== false,
     'with the reason it matters',
     'a near-miss spelling is the whole failure mode here');
+
+echo "\nWhat is NOT configured is reported too\n";
+
+// This read "Every configured instance exists and is paired" while
+// dishnet_richard sat at 'close', unmapped, answering nothing — because an
+// unmapped instance is invisible to every check, and a channel with no
+// instance name is silently skipped rather than called unrouted. The gap
+// was in what the tool did not look at.
+// evo_instance_support is a VAULT key: removing the override alone does
+// nothing, because ConfigVault restores it on the next load. Taking the
+// vault away first is the only way to reach the unmapped state at all —
+// which is itself worth knowing, and is why --clear-key had to learn the
+// same lesson.
+@unlink($tmp . '/vault.json');
+$run("--support ''");
+$r = $run('--sales dishnet_ug');
+is_(strpos($r['out'], 'NO INSTANCE FOR: support') !== false,
+    'a channel with no instance is named',
+    'silently skipping it is how an unrouted number passes as healthy');
+is_($r['code'] !== 0,
+    'and that is a failure, not a pass',
+    'exit 0 on an unrouted channel is the misleading part');
+
+$r = $run('--support dishnet_ug --sales dishnet_ug');
+is_(strpos($r['out'], 'NO INSTANCE FOR') === false, 'both mapped, no complaint');
+
+// The fake server holds only dishnet_ug, so mapping sales elsewhere leaves
+// it unmapped from the plugin's point of view.
+$run('--sales dishnet_richard');
+$r = $run('');
+is_(strpos($r['out'], 'NOT FOUND') !== false,
+    'a channel pointing at an instance Evolution lacks still fails');
+
+$run('--sales dishnet_ug');
 
 echo "\nWhat it writes wins over the uCRM form\n";
 

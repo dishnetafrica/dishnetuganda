@@ -247,6 +247,33 @@ if ($missing) {
     echo "  so a different spelling means the assistant answers on nothing.\n\n";
     exit(1);
 }
+// An instance nobody is mapped to is invisible to every check below, and
+// that is how this read "Every configured instance exists and is paired"
+// while dishnet_richard sat at 'close', unmapped, answering nothing. What
+// is NOT configured matters as much as what is.
+$unmapped = array_diff(array_keys($have), array_values($want));
+if ($unmapped) {
+    echo "  IN EVOLUTION BUT NOT MAPPED TO ANY CHANNEL\n\n";
+    foreach ($unmapped as $n) {
+        printf("    %-24s %s\n", $n, ($have[$n]['connected'] ?? false) ? 'connected' : 'not paired');
+    }
+    echo "\n    Nothing routes to these. If one is meant to be the sales or\n";
+    echo "    support number, map it:\n\n";
+    echo "      php tools/set_evolution.php --sales " . reset($unmapped) . "\n\n";
+}
+
+// And a channel with no instance name is not "fine", it is unrouted.
+$blank = [];
+foreach (['sales' => 'evo_instance_sales', 'support' => 'evo_instance_support'] as $role => $key) {
+    if (trim((string)($config[$key] ?? '')) === '') $blank[] = $role;
+}
+if ($blank) {
+    echo "  NO INSTANCE FOR: " . implode(', ', $blank) . "\n\n";
+    echo "    That channel is not mapped to a number, so nothing reaches the\n";
+    echo "    assistant on it — and every check here silently skips it.\n\n";
+    $problems = true;
+}
+
 // Existing is not the same as usable: an instance can sit unpaired for days
 // and the assistant answers on nothing while everything looks configured.
 $unpaired = [];
@@ -262,5 +289,10 @@ if ($unpaired) {
     echo "    php tools/wa_connect.php\n\n";
     exit(1);
 }
-echo "  Every configured instance exists and is paired.\n\n";
+if (!empty($problems)) {
+    echo "  Fix the unmapped channel(s) above before trusting anything here.\n\n";
+    exit(1);
+}
+echo "  Every configured channel is mapped to an instance that exists and is\n";
+echo "  paired.\n\n";
 exit(0);
