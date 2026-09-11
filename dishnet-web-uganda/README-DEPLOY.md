@@ -15,6 +15,9 @@ Built from the "Full Site Build v2" drop, then localised in-repo:
 | Images | The drop hotlinked one logo PNG from `portal.dishnetss.com` in 110 places, including favicon and og:image. Now local: `assets/img/favicon.svg` (header + icon), `og-dishnet.png` (social + JSON-LD), kit photos on starlink-kits.html |
 | Fonts | `Outfit` / `DM Sans` / `Barlow` woff2 now shipped and linked on every page — the drop named them with no font files, so every visitor got fallbacks |
 | 404 | Branded `404.html` added (the drop had none, so nginx would have served its default page) |
+| Address | `4th floor, Acacia Mall, 14-18 Cooper Road, office TT06, Kampala` on every page and in every schema.org record. Was Mawanda Road in 39 places. Same string as the plugin's knowledge base, so the website and the WhatsApp assistant cannot drift |
+| 404 country | `404.html` was still the Sudan template: logo and tag read "DishNet SUDAN", `addressCountry` and `geo.region` were `SD`, `areaServed` was `"SD"`, and it had no phone. All corrected from a page that was already right |
+| Tutorial phone | `get-help-on-whatsapp.html` said to call `+256 921 443 005` — the South Sudan support number `+211 921 443 002` wearing a Uganda prefix. Now `+256 705 993 348` like everywhere else |
 
 ## Deploy on EasyPanel
 
@@ -31,7 +34,14 @@ Built from the "Full Site Build v2" drop, then localised in-repo:
 
 ```bash
 ./verify-site.sh        # needs nginx on PATH (run on the server or in CI)
+python3 verify-address.py   # no nginx needed, runs anywhere
 ```
+
+`verify-address.py` is the one to run after any contact-detail edit: it
+asserts the whole site agrees on one address, one phone and one coverage
+list, that nothing points at the old office or at Sudan, and that every
+JSON-LD block still parses — an address edit that breaks the structured data
+silently removes the business from search results.
 
 Serves `site/` with the real `nginx.conf` and checks: every page 200, every
 internal link and asset resolves (no masked 404s), security headers and exactly
@@ -45,8 +55,7 @@ Prices and the product list live in uCRM only.
 
 | Item | Where |
 | --- | --- |
-| Email `uganda@dishnetafrica.com` | 37 files — confirm this mailbox exists, or send the real one |
-| Office address | `contact.html` says "Street address coming soon" |
+| Email `info@dishnetafrica.com` | 45 files — confirm this mailbox is monitored for Uganda enquiries |
 | APK | drop the signed app at `site/dishnet-africa.apk` (get-the-app.html links it; nginx already serves `.apk` with the right MIME type) |
 | Testimonials / gallery | deliberately absent — send real Ugandan quotes and photos and the pages get built; invented ones are fake reviews |
 | Portal deep-link | once the DishNet Hybrid plugin is installed on the Uganda uCRM, point "Customer Login" at its `public.php?page=customer_portal` instead of the bare `/crm` zone |

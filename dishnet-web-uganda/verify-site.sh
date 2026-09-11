@@ -123,7 +123,8 @@ echo "== content integrity =="
 # Remnants of the placeholder build or of any other DishNet country. Zero is
 # the only acceptable count for each.
 for pat in 256700000000 '700 000 000' uganda.dishnetafrica.com crm.dishnetafrica.com \
-           portal.dishnetss.com dishnetsudan 249900083481 211921443002; do
+           portal.dishnetss.com dishnetsudan 249900083481 211921443002 \
+           "921 443 00" "DishNet<small>SUDAN</small>" 'content="SD"' '"addressCountry": "SD"'; do
   n=$(grep -rF "$pat" "$HERE/site" --include='*.html' --include='*.xml' --include='*.txt' -l 2>/dev/null | wc -l)
   [ "$n" = 0 ] || { echo "  '$pat' still present in $n files"; fail=1; }
 done
