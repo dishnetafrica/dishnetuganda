@@ -74,6 +74,81 @@ if ($args === [] || $has('--show')) {
         }
         echo "\n";
     }
+    // The knowledge base says these things too, and nothing showed both.
+    //
+    // An office address lives in TWO places — the ai_fact_office config key
+    // above, and the OFFICE_LOCATION knowledge row — and they can disagree
+    // without anyone noticing. One of them told customers the office was on
+    // Mawanda Road for as long as it existed; the seeder reported "0
+    // corrected" afterwards and there was no way to tell from that whether
+    // the fix had landed or the row was simply already right.
+    try {
+        require_once $root . '/lib/StoreInterface.php';
+        require_once $root . '/lib/JsonStore.php';
+        require_once $root . '/lib/SqliteStore.php';
+        require_once $root . '/lib/KnowledgeBase.php';
+        $kb = KnowledgeBase::load(SqliteStore::create($dataDir)->getPdo());
+        $rows = array_merge($kb['fact'], $kb['rule'], $kb['tbc']);
+        if ($rows) {
+            echo "  APPROVED KNOWLEDGE — " . count($rows) . " row(s), edited in admin
+";
+            echo "  Shown from the database, which is what the assistant actually reads.
+
+";
+            foreach ([['fact', 'answered from here'],
+                      ['rule', 'conduct'],
+                      ['tbc',  'never improvised — holding line and hand over']] as [$kind, $what]) {
+                if (!$kb[$kind]) continue;
+                printf("  %s (%d) — %s
+", strtoupper($kind), count($kb[$kind]), $what);
+                foreach ($kb[$kind] as $r) {
+                    printf("    %-30s %s
+", (string)$r['item_key'],
+                           mb_substr(trim(preg_replace('/\s+/', ' ', (string)($r['answer'] ?: $r['title']))) ?? '', 0, 74));
+                }
+                echo "
+";
+            }
+            // The specific disagreement that has already happened once.
+            $office = '';
+            foreach ($kb['fact'] as $r) {
+                if ((string)$r['item_key'] === 'OFFICE_LOCATION') { $office = (string)$r['answer']; break; }
+            }
+            $cfgOffice = trim((string)($config['ai_fact_office'] ?? ''));
+            if ($office !== '' && $cfgOffice !== '' && strtolower($cfgOffice) !== 'omit') {
+                echo "  ⚠ The office address is set in BOTH places. They are in the same
+";
+                echo "    prompt, and the assistant will use whichever it reads first.
+
+";
+            }
+            if ($office !== '') {
+                echo "  OFFICE, as the knowledge base states it:
+";
+                foreach (explode("
+", wordwrap($office, 66, "
+", true) ?: '') as $l) {
+                    echo '      ' . $l . "
+";
+                }
+                echo "
+";
+            }
+        } else {
+            echo "  APPROVED KNOWLEDGE — none loaded.
+";
+            echo "  Run tools/seed_knowledge.php, or the assistant answers from the
+";
+            echo "  built-in prompt alone.
+
+";
+        }
+    } catch (\Throwable $e) {
+        echo "  (could not read the knowledge base: " . $e->getMessage() . ")
+
+";
+    }
+
     $stale = array_filter($keys, function ($k) use ($config) {
         return trim((string)($config[$k] ?? '')) === '';
     });
