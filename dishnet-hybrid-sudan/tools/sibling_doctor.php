@@ -50,6 +50,34 @@ $EXPECTED = [
 echo "\n  SIBLING PLUGIN DOCTOR — " . gmdate('Y-m-d H:i') . " UTC\n\n";
 printf("    %-22s %s\n", 'this plugin', $root);
 printf("    %-22s %s\n", 'plugins directory', SiblingPlugin::pluginsDir());
+
+// What is ACTUALLY installed, listed unconditionally.
+//
+// "NOT INSTALLED" on its own sends a reader hunting: they cannot tell a
+// plugin that was never installed from one installed under a different name
+// from a plugins directory this process cannot read at all. The listing
+// answers all three in one line, and if the plugin is there under another
+// name it is right here to be read off.
+$base    = SiblingPlugin::pluginsDir();
+$entries = is_dir($base) ? @scandir($base) : false;
+if ($entries === false) {
+    echo "\n    CANNOT READ the plugins directory. Everything below will say\n";
+    echo "    'not installed' whether or not it is — that is this, not them.\n\n";
+} else {
+    $dirs = [];
+    foreach ($entries as $e) {
+        if ($e === '.' || $e === '..') continue;
+        if (!is_dir($base . '/' . $e)) continue;
+        // The dot-directories are data, not plugins — shown separately
+        // because a plugin can be uninstalled while its data stays behind.
+        $dirs[$e[0] === '.' ? 'data' : 'plugins'][] = $e;
+    }
+    printf("    %-22s %s\n", 'plugins installed',
+           empty($dirs['plugins']) ? '(none)' : implode(', ', $dirs['plugins']));
+    if (!empty($dirs['data'])) {
+        printf("    %-22s %s\n", 'data directories', implode(', ', $dirs['data']));
+    }
+}
 echo "\n";
 
 $problems = 0;
@@ -61,9 +89,22 @@ foreach ($EXPECTED as $plugin => $files) {
 
     echo "  " . $plugin . "\n";
     if (!$installed && $dir === null) {
-        echo "    NOT INSTALLED — every figure that comes from it reads as zero.\n\n";
+        echo "    NOT INSTALLED — no directory, and no leftover data directory either.\n";
+        echo "    Every figure that comes from it reads as zero:\n";
+        foreach ($files as $file => $why) {
+            printf("      %-28s %s\n", $file, $why);
+        }
+        echo "\n";
         $problems += count($files);
         continue;
+    }
+    if (!$installed && $dir !== null) {
+        // Data without a plugin: it was uninstalled and its data survived.
+        // Worth saying plainly — the reads still work, off data that nothing
+        // is updating any more, which is the most misleading state of all.
+        echo "    The plugin directory is GONE but its data is still here. Anything\n";
+        echo "    read from it is as old as the day that plugin was removed.\n";
+        $warnings++;
     }
     printf("    %-14s %s\n", 'data', $dir ?? '(none)');
     if ($dir !== null && substr($dir, -5) === '/data') {

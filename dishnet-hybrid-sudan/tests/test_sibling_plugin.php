@@ -196,6 +196,19 @@ is_($unsafe === [],
     'no resolved path reaches file_exists() as a possible null',
     implode("\n       ", array_slice($unsafe, 0, 6)));
 
+// ── The doctor names what IS there, not only what is not ────────────────────
+// "NOT INSTALLED" on its own cannot be told apart from "installed under
+// another name" or "this process cannot read the plugins directory at all".
+echo "\nThe doctor lists what is actually installed\n";
+$out = []; $rc = 0;
+exec(sprintf('php %s 2>&1', escapeshellarg(dirname(__DIR__) . '/tools/sibling_doctor.php')), $out, $rc);
+$report = implode("\n", $out);
+is_(strpos($report, 'plugins installed') !== false, 'it prints the installed list', substr($report, 0, 200));
+is_(strpos($report, 'dishnet-hybrid-sudan') !== false, 'which includes this plugin itself');
+is_(strpos($report, 'wifi_router_map.json') !== false,
+    'and names each file it wanted, so a reader knows what stopped working');
+is_($rc === 1, 'and exits non-zero while anything is unreadable');
+
 exec('rm -rf ' . escapeshellarg($base));
 echo "\n  {$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);
