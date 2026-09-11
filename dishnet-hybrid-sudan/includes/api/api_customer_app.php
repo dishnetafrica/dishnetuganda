@@ -478,12 +478,15 @@ if (!function_exists('ca_send_otp_email')) {
 
         $firstName = explode(' ', trim($name))[0] ?: '';
         $subject = OtpEmailTemplate::subject($code);
-        $html    = OtpEmailTemplate::html($firstName, $code, $ttlMinutes);
-        $text    = OtpEmailTemplate::text($firstName, $code, $ttlMinutes);
+        $html    = OtpEmailTemplate::html($firstName, $code, $ttlMinutes, $config);
+        $text    = OtpEmailTemplate::text($firstName, $code, $ttlMinutes, $config);
 
         $mailer = new MailService($dataDir);
+        // Reply-To was hardcoded to the Sudan address, so a Uganda customer
+        // replying to their login email reached the wrong operation.
+        require_once dirname(__DIR__, 2) . '/lib/EmailTemplate.php';
         $result = $mailer->send($toEmail, $name, $subject, $html, $text, [
-            'Reply-To' => 'info@dishnetafrica.com',
+            'Reply-To' => EmailTemplate::replyTo($config),
         ]);
 
         if (!empty($result['ok'])) {
@@ -2759,9 +2762,17 @@ if (!function_exists('ca_send_push')) {
 // ═══════════════════════════════════════════════════════════════════
 if (!function_exists('ca_push_invoice_created')) {
     function ca_push_invoice_created($pdo, $config, $clientId, $invoiceNumber, $amount, $currency = 'USD') {
+        // A dollar sign in front of the figure AND the code after it is wrong
+        // twice over on a shilling amount. The symbol comes from config; when
+        // it is an alphabetic code it replaces the suffix instead of doubling
+        // it, which leaves the Sudan wording exactly as it was.
+        $_sym  = rtrim(dn_cur($config));
+        $_disp = preg_match('/[A-Za-z]$/', $_sym)
+               ? "{$_sym} {$amount}"
+               : "{$_sym}{$amount} {$currency}";
         return ca_send_push($pdo, $config, $clientId, 'invoice_created',
             'New Invoice · DishNet',
-            "Invoice {$invoiceNumber} for \${$amount} {$currency} has been created. Tap to view.",
+            "Invoice {$invoiceNumber} for {$_disp} has been created. Tap to view.",
             ['invoice_number' => $invoiceNumber, 'amount' => (string)$amount]
         );
     }
@@ -2769,9 +2780,17 @@ if (!function_exists('ca_push_invoice_created')) {
 
 if (!function_exists('ca_push_payment_received')) {
     function ca_push_payment_received($pdo, $config, $clientId, $amount, $currency = 'USD') {
+        // A dollar sign in front of the figure AND the code after it is wrong
+        // twice over on a shilling amount. The symbol comes from config; when
+        // it is an alphabetic code it replaces the suffix instead of doubling
+        // it, which leaves the Sudan wording exactly as it was.
+        $_sym  = rtrim(dn_cur($config));
+        $_disp = preg_match('/[A-Za-z]$/', $_sym)
+               ? "{$_sym} {$amount}"
+               : "{$_sym}{$amount} {$currency}";
         return ca_send_push($pdo, $config, $clientId, 'payment_received',
             'Payment Confirmed · DishNet',
-            "Your payment of \${$amount} {$currency} has been received. Thank you!",
+            "Your payment of {$_disp} has been received. Thank you!",
             ['amount' => (string)$amount]
         );
     }

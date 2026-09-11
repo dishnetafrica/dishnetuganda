@@ -58,7 +58,7 @@ class StockService
     {
         // v4.11.3: Skip if tables already exist — avoids 14 DDL statements per API call
         $check = $this->db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='stock_categories'");
-        if ($check->fetch()) return;
+        if ($check->fetch()) { $this->ensureColumns(); return; }
 
         $this->db->exec("CREATE TABLE IF NOT EXISTS stock_categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, sku TEXT UNIQUE,
@@ -109,6 +109,54 @@ class StockService
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sm_cat_date ON stock_movements(category_id, created_at)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sm_unit ON stock_movements(unit_id)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sp_date ON stock_purchases(purchase_date)");
+
+        $this->ensureColumns();
+    }
+
+    /**
+     * Columns added after the table shipped.
+     *
+     * Separate from ensureTables() on purpose. That method returns early when
+     * the tables already exist — a sensible guard against running fourteen DDL
+     * statements on every API call — which means anything written after that
+     * return runs on fresh installs and on no existing one. A migration placed
+     * there works perfectly in testing and is missing everywhere it matters.
+     *
+     * One PRAGMA per process, and an ALTER only when the column is genuinely
+     * absent.
+     */
+    private function ensureColumns(): void
+    {
+        // Keyed to the connection, not the process. A plain static flag says
+        // "already migrated" to every later instance, including one holding a
+        // different database — so the second store in a process silently
+        // skips its migration. The test that caught this creates two.
+        static $checked = [];
+        $key = spl_object_id($this->db);
+        if (isset($checked[$key])) return;
+        $checked[$key] = true;
+
+        try {
+            $cols = [];
+            foreach ($this->db->query("PRAGMA table_info(stock_units)") as $r) {
+                $cols[] = (string)($r['name'] ?? '');
+            }
+            if ($cols === [] || in_array('starlink_service_line', $cols, true)) return;
+
+            // The Starlink service line a unit bills under.
+            //
+            // Added when KitRegister was retired into this table. Everything
+            // else that store held was already here — serial_number,
+            // starlink_account, starlink_status for the supplier's view of a
+            // unit distinct from our physical one, crm_client_id for who holds
+            // it, and stock_movements for everywhere it has been. This
+            // identifier was the only real gap, and it is what ties a physical
+            // unit to the Starlink record that invoices for it.
+            $this->db->exec("ALTER TABLE stock_units ADD COLUMN starlink_service_line TEXT DEFAULT ''");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_su_sl ON stock_units(starlink_service_line)");
+        } catch (\Throwable $e) {
+            error_log('[StockService] ensureColumns: ' . $e->getMessage());
+        }
     }
 
     /**

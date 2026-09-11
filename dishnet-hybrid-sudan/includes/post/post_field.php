@@ -261,7 +261,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='log_cash_in
     $retailer  = $auth->requireLogin();
     $rid       = (int)$retailer['id'];
     $cat       = trim($_POST['category'] ?? $_POST['ci_category'] ?? '');
-    $currency  = trim($_POST['currency'] ?? 'SSP');
+    // Sudan's cash-in flow defaults to SSP by design; on installs where SSP
+    // is not bookable the default falls to the book base instead.
+    $currency  = dn_entry_currency($_POST['currency'] ?? '', $config ?? null, 'SSP');
     $desc      = trim($_POST['description'] ?? $_POST['ci_desc'] ?? '');
     $sspAmt    = round((float)($_POST['ssp_amount'] ?? 0), 0);
     $usdGiven  = round((float)($_POST['usd_given']  ?? 0), 2);
@@ -322,8 +324,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='submit_hand
     $notes    = trim($_POST['handover_notes'] ?? $_POST['note'] ?? $_POST['notes'] ?? '');
     $toId     = (int)($_POST['to_staff_id'] ?? 0);
     $toName   = trim($_POST['to_staff_name'] ?? '');
-    $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
-    if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
+    $currency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
 
     if ($amount <= 0) {
         flash('Enter the cash amount you are handing over.', 'danger');
@@ -380,7 +381,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='field_give_
     $retailer = $auth->requireLogin();
     $rid      = (int)$retailer['id'];
     $amount   = round((float)($_POST['amount'] ?? 0), 2);
-    $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
+    $currency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
     $recipId  = (int)($_POST['recipient_id'] ?? 0);
     $recipName= trim($_POST['recipient_name'] ?? '');
     $purpose  = trim($_POST['purpose'] ?? 'misc');
@@ -698,8 +699,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
     $method   = trim($_POST['payment_method'] ?? 'Cash');
     $note     = trim($_POST['payment_note'] ?? '');
     $svcType  = trim($_POST['service_type'] ?? 'starlink');
-    $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
-    if (!in_array($currency, ['USD','SSP'], true)) $currency = 'USD';
+    $currency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
     
     // New enhanced fields
     $receiptNo    = trim($_POST['receipt_number'] ?? '');
@@ -935,7 +935,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
             'clientId'     => (int)$custId,
             'methodId'     => PaymentUuids::resolve($method),
             'amount'       => $amount,
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($currency, $config ?? null),
             'note'         => $crmNote,
         ];
         if ($invoiceId && (int)$invoiceId > 0) {
@@ -1090,7 +1090,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
     // v4.11.3: Posts immediately so Rupesh sees it in the main cashbook without
     // waiting for the CRM webhook round-trip. Uses crm_payment_id for dedup —
     // webhook.php checks this column and skips if already posted.
-    if ($amount > 0 && $currency === 'USD') {
+    if ($amount > 0 && $currency === dn_book_base($config ?? null)) {
         try {
             $cbPdo = $store->getPdo();
             $cbPdo->exec("CREATE TABLE IF NOT EXISTS cb_ledger (
@@ -1125,7 +1125,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
                         category_raw, person, description, validation_ref, validation_status,
                         status, approved_by, crm_payment_id, crm_client_id, source,
                         cash_with, cash_with_id, created_at)
-                     VALUES ('dishnet', ?, 'in', ?, 'USD', 'Receipt', 'Collection',
+                     VALUES ('dishnet', ?, 'in', ?, ?, 'Receipt', 'Collection',
                         ?, ?, ?, 'wr', 'approved', 'Auto-Collection',
                         ?, ?, 'collect_payment',
                         ?, ?, ?)"
@@ -1133,6 +1133,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
                 $cbStmt->execute([
                     date('Y-m-d'),
                     $amount,
+                    $currency,
                     $retailer['name'] ?? '',
                     $_cbDesc,
                     $_cbRef,

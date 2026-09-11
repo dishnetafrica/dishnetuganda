@@ -376,6 +376,12 @@ Account status is unclear or not yet confirmed. Guide through basic troubleshoot
             // >7 days: expiry shown in CUSTOMER ACCOUNT for context, no special instruction
         }
 
+        require_once __DIR__ . '/currency.php';
+        $cfgAll        = dn_book_effective_config();
+        $payCurrencies = implode(' or ', dn_book_currencies($cfgAll));
+        $payPhone      = trim((string)($cfgAll['payments_phone'] ?? $cfgAll['alert_whatsapp'] ?? ''));
+        $payPhoneLine  = $payPhone !== '' ? " Details: {$payPhone}." : '';
+
         $prompt = <<<PROMPT
 You are a customer support agent for DishNet Africa, an internet service provider in Juba, South Sudan. You communicate via WhatsApp.
 
@@ -507,7 +513,7 @@ SOUTH SUDAN CONTEXT:
 COMMON QUESTIONS — ANSWER THESE DIRECTLY:
 
 Q: How do I pay?
-A: Cash (USD or SSP) at our office, bank transfer, or mobile money. For account/mobile money details call +211 927 797 217.
+A: Cash ({$payCurrencies}) at our office, bank transfer, or mobile money.{$payPhoneLine}
 
 Q: Where is the office / how to find you?
 A: Airport Road, Kololo Area — opposite the Ministries, Juba. Open 8 AM to 8 PM daily. You can also reach us at dishnetafrica.com.

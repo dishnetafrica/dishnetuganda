@@ -113,10 +113,31 @@ foreach (['gdrive_backup','maintenance','bidal_summary','staff_jobs',
 $_m_walletInterval = max(60, (int)($_m_config['wallet_sync_interval_minutes'] ?? 360) * 60);
 
 $_m_jobs = [
+    // ── FIRST, ALWAYS ────────────────────────────────────────────────────
+    // Keeps the Starlink session alive by using it. Not telemetry — the
+    // access token expires in minutes, and a session that is used survives.
+    //
+    // It runs FIRST for a reason. It was placed after inbound_mail, which
+    // reads a mailbox and calls an LLM to draft replies — comfortably the
+    // slowest job here. Both carried interval 300, so they fell due on the
+    // same cycle every time, and when the mail run spent the budget the
+    // guard below broke the loop before the keep-alive was ever dispatched.
+    // A session then died quietly with failures 0, because nothing had
+    // touched it to find out. One cheap request, taken before anything can
+    // spend the budget, is what a keep-alive has to be.
+    //
+    // The interval is 240, not 300, because UCRM drives master.php on a
+    // ~300s heartbeat: at 300 the elapsed check lands on the boundary and a
+    // late cycle defers it another five minutes, which is how a token with
+    // minutes of life gets missed.
+    'starlink_alive' => ['interval' => 240,                 'script' => __DIR__ . '/starlink_keepalive.php'],
+
     // ── FAST & FREQUENT (run every cycle) ────────────────────────────────
     'event_processor'=> ['interval' => 30,                  'script' => __DIR__ . '/event_processor.php'],
     'identity_worker'=> ['interval' => 60,                  'script' => __DIR__ . '/identity_worker.php'],
     'starlink_mail'  => ['interval' => 300,                 'script' => __DIR__ . '/starlink_mail.php'],
+    // Reads the customer mailbox and files drafts for approval. Never sends.
+    'inbound_mail'   => ['interval' => 300,                 'script' => __DIR__ . '/inbound_mail.php'],
     'wa_sync'       => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_wa_sync.php'],
     'crm_sync'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/cron_sync.php'],
     // v4.20.0 — Time-based access expiry checker. LAZY-POLL pattern: only
@@ -146,6 +167,7 @@ $_m_jobs = [
     // a worker the moment a message arrives, so replies are normally immediate.
     // This catches anything stranded when that spawn is unavailable.
     'ai_reply'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/run_worker.php'],
+    'efris'         => ['interval' => 120,                 'script' => __DIR__ . '/efris_sync.php'],
 
     // ── Website chat retention ───────────────────────────────────────────
     // Deletes leads and transcripts past web_chat_retention_days (default 90).
@@ -158,6 +180,9 @@ $_m_jobs = [
     // if the last word in any conversation is the customer's and it has sat
     // longer than the patience window, the alert number hears about it once.
     'wa_watchdog'   => ['interval' => 900,                 'script' => __DIR__ . '/wa_watchdog.php'],
+    // The webhook that feeds the AI must STAY registered — this is the guard
+    // against the silent failure where Evolution loses it and the AI goes mute.
+    'wa_webhook_guard' => ['interval' => 600,              'script' => __DIR__ . '/wa_webhook_guard.php'],
 
     // 'wa_bot' disabled in the Sudan edition — superseded by the AI brain.
     // cron_wa_bot.php polls the WASender inbox and auto-replies through
@@ -247,6 +272,29 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
 
     master_log("RUN {$_m_name}");
     $_m_start = microtime(true);
+
+    // ── Claim the slot BEFORE running it ─────────────────────────────────
+    // The try/catch below catches exceptions. It does not catch exit(), a
+    // set_time_limit fatal, or memory exhaustion — those end the process
+    // outright. A job that dies that way never reaches the save at the
+    // bottom of this loop, so it records no timestamp, stays due on every
+    // cycle, and blocks every job registered after it. Permanently, and
+    // silently: the offender reads as NEVER RUN precisely because it runs
+    // every time.
+    //
+    // Two jobs did exactly this in one morning. identity_worker called
+    // exit() and stopped the plugin for five days; jobs_cache appears to
+    // exceed its 60s limit and stops it at position 21.
+    //
+    // Writing the timestamp first turns a permanent stop into one lost
+    // cycle per interval. duration_ms stays -1 until the job completes, so
+    // a job that never finishes is visible rather than merely absent.
+    $_m_schedule[$_m_name] = [
+        'last_run'    => $_m_now,
+        'last_run_at' => date('Y-m-d H:i:s'),
+        'duration_ms' => -1,
+    ];
+    $_m_store->save('master_schedule.json', $_m_schedule);
 
     // Per-job PHP time limit — prevents any single job from hanging forever.
     // Heavy jobs get 120s, gdrive_backup gets 600s (36MB upload over Juba), others 60s.

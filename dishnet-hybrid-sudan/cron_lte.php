@@ -30,6 +30,27 @@ require_once __DIR__ . '/lib/bootstrap_data.php';
 $dataDir = getDataDir(__DIR__);
 $store   = SqliteStore::create($dataDir); // SQLite — shares same plugin.sqlite3 as public.php
 $config  = $store->load('kyc_config.json');
+
+// ── Off switch ───────────────────────────────────────────────────────────
+// This is South Sudan's BlueCard LTE bridge. Uganda has no LTE business and
+// no BlueCard, but there was no way to say so: with lte_feed_url unset this
+// script falls back to a hardcoded dishnetss.com URL and syncs anyway. The
+// lte_sync_enabled flag had been removed as "no longer required".
+//
+// On Uganda that meant polling a Sudan server every five minutes over several
+// calls at CURLOPT_TIMEOUT => 60, which exceeds master.php's 120s limit for
+// this job. The resulting fatal is E_ERROR — uncatchable — so it ended the
+// master cycle and every job behind it.
+//
+// The gate is an OPT-OUT, not an opt-in: absence means run, exactly as
+// before, so the Sudan installation is byte-for-byte unchanged. Only an
+// explicit false turns it off.
+//   php tools/set_lte_sync.php --off
+if (array_key_exists('lte_sync_enabled', (array)$config)
+    && !filter_var($config['lte_sync_enabled'], FILTER_VALIDATE_BOOLEAN)) {
+    return;
+}
+
 // B-08 FIX: MagmaApiClient constructor takes a single config array, not 4 positional args.
 // Previous call would throw ArgumentCountError on PHP 8 strict mode.
 $magma   = new MagmaApiClient([
@@ -56,15 +77,21 @@ $log        = [];
 $suspended  = 0;
 $reactivated= 0;
 $errors     = [];
+// Renamed from clog(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function clog(string $msg): void {
+function clog_lte_cron(string $msg): void {
     echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . PHP_EOL;
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // TASK 1 — AUTO-SUSPEND expired subscribers
 // ══════════════════════════════════════════════════════════════════════
-clog('=== LTE Cron Start ===');
+clog_lte_cron('=== LTE Cron Start ===');
 set_time_limit(300); // 5-minute safety guard against Magma API hangs
 
 // Read subscribers and subscriptions from SQLite (populated by cron_lte_sync.php step 10b)
@@ -76,7 +103,7 @@ try {
     $subs = $pdo->query("SELECT * FROM lte_subscribers WHERE deleted_at IS NULL")->fetchAll(\PDO::FETCH_ASSOC);
     $allSubs = $pdo->query("SELECT * FROM lte_subscriptions ORDER BY id DESC")->fetchAll(\PDO::FETCH_ASSOC);
 } catch (\Throwable $e) {
-    clog("SQLite read failed ({$e->getMessage()}), falling back to JSON");
+    clog_lte_cron("SQLite read failed ({$e->getMessage()}), falling back to JSON");
     $subs = $store->load('lte_subscribers.json') ?? [];
     $allSubs = $store->load('lte_subscriptions.json') ?? [];
 }
@@ -106,7 +133,7 @@ foreach ($subs as $sub) {
 
     // ── Suspend: active locally but expired past grace cutoff ──────
     if ($status === 'active' && $expiresAt && $expiresAt < $graceCutoff) {
-        clog("SUSPEND #{$id} {$sub['name']} (expired {$expiresAt}, grace {$graceDays}d)");
+        clog_lte_cron("SUSPEND #{$id} {$sub['name']} (expired {$expiresAt}, grace {$graceDays}d)");
         $ok = $lte->suspendSubscriber($id, 'auto_expired');
         if ($ok) {
             $suspended++;
@@ -133,13 +160,13 @@ foreach ($subs as $sub) {
             }
         } else {
             $errors[] = "Failed to suspend #{$id} {$sub['name']}";
-            clog("  ERROR: suspend failed for #{$id}");
+            clog_lte_cron("  ERROR: suspend failed for #{$id}");
         }
     }
 
     // ── Reactivate: suspended but has a valid active subscription ──
     if ($status === 'suspended' && $subStatus === 'active' && $expiresAt >= $today) {
-        clog("REACTIVATE #{$id} {$sub['name']} (valid until {$expiresAt})");
+        clog_lte_cron("REACTIVATE #{$id} {$sub['name']} (valid until {$expiresAt})");
         $ok = $lte->reactivateSubscriber($id);
         if ($ok) {
             $reactivated++;
@@ -159,12 +186,12 @@ foreach ($subs as $sub) {
             $store->save('lte_auto_reactivate_log.json', $reacLog);
         } else {
             $errors[] = "Failed to reactivate #{$id} {$sub['name']}";
-            clog("  ERROR: reactivate failed for #{$id}");
+            clog_lte_cron("  ERROR: reactivate failed for #{$id}");
         }
     }
 }
 
-clog("Suspended: {$suspended} | Reactivated: {$reactivated} | Errors: " . count($errors));
+clog_lte_cron("Suspended: {$suspended} | Reactivated: {$reactivated} | Errors: " . count($errors));
 
 // ══════════════════════════════════════════════════════════════════════
 // TASK 2 — DAILY OPS REPORT (once per day, after midnight)
@@ -173,7 +200,7 @@ $lastReportDate = trim($store->load('lte_last_report_date.json')[0] ?? '');
 $todayStr = date('Y-m-d');
 
 if ($lastReportDate !== $todayStr && date('H') >= 1) { // run after 1am
-    clog("Generating daily report for {$todayStr}...");
+    clog_lte_cron("Generating daily report for {$todayStr}...");
 
     $yesterday = date('Y-m-d', strtotime('-1 day'));
 
@@ -269,9 +296,9 @@ if ($lastReportDate !== $todayStr && date('H') >= 1) { // run after 1am
         ]);
     }
 
-    clog("Daily report saved. Total revenue: \${$totalRev}");
+    clog_lte_cron("Daily report saved. Total revenue: \${$totalRev}");
 } else {
-    clog("Daily report already generated for {$todayStr}, skipping.");
+    clog_lte_cron("Daily report already generated for {$todayStr}, skipping.");
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -280,7 +307,7 @@ if ($lastReportDate !== $todayStr && date('H') >= 1) { // run after 1am
 $lastSettleDate = trim($store->load('lte_last_settle_date.json')[0] ?? '');
 
 if ($lastSettleDate !== $todayStr && date('H') >= 2) {
-    clog("Generating settlement snapshot for {$todayStr}...");
+    clog_lte_cron("Generating settlement snapshot for {$todayStr}...");
 
     $yesterday = date('Y-m-d', strtotime('-1 day'));
     $rates = [
@@ -346,7 +373,7 @@ if ($lastSettleDate !== $todayStr && date('H') >= 2) {
     $store->save('lte_settlement_snapshots.json', $snapshots);
     $store->save('lte_last_settle_date.json', [$todayStr]);
 
-    clog("Settlement snapshot saved. Net to DishNet: \${$snapshot['totals']['net']}");
+    clog_lte_cron("Settlement snapshot saved. Net to DishNet: \${$snapshot['totals']['net']}");
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -354,4 +381,4 @@ if ($lastSettleDate !== $todayStr && date('H') >= 2) {
 // ══════════════════════════════════════════════════════════════════════
 flock($lockFp, LOCK_UN);
 fclose($lockFp);
-clog("=== LTE Cron Done | Suspended:{$suspended} Reactivated:{$reactivated} Errors:" . count($errors) . " ===");
+clog_lte_cron("=== LTE Cron Done | Suspended:{$suspended} Reactivated:{$reactivated} Errors:" . count($errors) . " ===");

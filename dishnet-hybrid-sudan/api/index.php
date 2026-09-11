@@ -550,7 +550,7 @@ if ($action === 'convert_to_customer') {
         $payResp = $crm->post('payments', [
             'clientId'     => (int)$crmClientId,
             'amount'       => $amount,
-            'currencyCode' => dn_code($config),
+            'currencyCode' => dn_payload_currency('', $config),
             'methodId'     => 2,  // 2=Cash, 3=Bank Transfer, 4=Credit Card, 6=Mobile Money
             'note'         => 'Payment received — Lead converted to Regular Customer.'
                             . ($paymentRef ? ' Ref: ' . $paymentRef : '')
@@ -1083,14 +1083,15 @@ if ($action === 'conv_to_lead') {
 
     // Dedup: check existing leads
     $allLeads3 = $store->load('leads.json') ?? [];
-    $suffix3 = substr(preg_replace('/[^0-9]/', '', $phone3), -9);
-    foreach ($allLeads3 as $el3) {
-        $es = substr(preg_replace('/[^0-9]/', '', $el3['phone'] ?? ''), -9);
-        if ($es && $es === $suffix3 && !in_array($el3['status'] ?? '', ['won','lost','dead'], true)) {
-            // Link conv to existing lead
-            $pdo2->prepare("UPDATE wa_conversations SET lead_id = ? WHERE id = ?")->execute([(int)$el3['id'], $convId]);
-            apiOk(['lead_id' => (int)$el3['id'], 'assigned_to' => $el3['assigned_name'] ?? ''], 'Linked to existing lead #' . $el3['id']);
-        }
+    // One dedupe rule for the whole system. This was the original and only
+    // copy; AiLeadService needed the same behaviour, and two copies of a
+    // matcher agree until the day one of them is edited. Same rule, unchanged:
+    // last nine digits, skipping won/lost/dead.
+    require_once dirname(__DIR__) . '/lib/LeadMatcher.php';
+    $el3 = LeadMatcher::find($allLeads3, (string)$phone3);
+    if ($el3 !== null) {
+        $pdo2->prepare("UPDATE wa_conversations SET lead_id = ? WHERE id = ?")->execute([(int)$el3['id'], $convId]);
+        apiOk(['lead_id' => (int)$el3['id'], 'assigned_to' => $el3['assigned_name'] ?? ''], 'Linked to existing lead #' . $el3['id']);
     }
 
     // Smart-assign: lightest loaded sales agent
@@ -2472,7 +2473,7 @@ if ($action === 'staff_ledger_balance') {
     require_once dirname(__DIR__) . '/lib/StaffLedgerService.php';
     $ledger   = new StaffLedgerService($store->getPdo());
     $staffId  = (int)($_GET['staff_id'] ?? $retailerId);
-    $currency = strtoupper($_GET['currency'] ?? 'USD');
+    $currency = dn_entry_currency($_GET['currency'] ?? '', $config ?? null);
     apiOk(['staff_id' => $staffId, 'currency' => $currency, 'balance' => $ledger->balance($staffId, $currency)]);
 }
 
@@ -2480,13 +2481,13 @@ if ($action === 'staff_ledger_position') {
     require_once dirname(__DIR__) . '/lib/StaffLedgerService.php';
     $ledger  = new StaffLedgerService($store->getPdo());
     $staffId = (int)($_GET['staff_id'] ?? $retailerId);
-    apiOk($ledger->position($staffId, strtoupper($_GET['currency'] ?? 'USD')));
+    apiOk($ledger->position($staffId, dn_entry_currency($_GET['currency'] ?? '', $config ?? null)));
 }
 
 if ($action === 'staff_ledger_positions') {
     require_once dirname(__DIR__) . '/lib/StaffLedgerService.php';
     $ledger = new StaffLedgerService($store->getPdo());
-    apiOk(['positions' => $ledger->allPositions(strtoupper($_GET['currency'] ?? 'USD'))]);
+    apiOk(['positions' => $ledger->allPositions(dn_entry_currency($_GET['currency'] ?? '', $config ?? null))]);
 }
 
 if ($action === 'staff_ledger_entries') {
@@ -2527,7 +2528,7 @@ if ($action === 'staff_ledger_summary') {
     $ledger  = new StaffLedgerService($store->getPdo());
     $staffId = (int)($_GET['staff_id'] ?? $retailerId);
     $month   = $_GET['month'] ?? date('Y-m');
-    apiOk($ledger->monthlySummary($staffId, $month, strtoupper($_GET['currency'] ?? 'USD')));
+    apiOk($ledger->monthlySummary($staffId, $month, dn_entry_currency($_GET['currency'] ?? '', $config ?? null)));
 }
 
 if ($action === 'staff_ledger_stats') {

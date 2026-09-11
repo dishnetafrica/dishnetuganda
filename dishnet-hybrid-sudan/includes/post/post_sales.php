@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
         $crmForPayment = !empty($retailerObj['ucrm_app_key'])
             ? new CrmApiClient(rtrim($crm->getBaseUrl(),'/'), $retailerObj['ucrm_app_key'], 'X-Auth-App-Key')
             : $crm;
-        $crmPayload=['clientId'=>(int)$custId,'methodId' => PaymentUuids::resolve($method),'amount'=>$amount,'note'=>"Collected by ".($retailerObj['name']??'')." (admin-approved)",'currencyCode'=>'USD'];
+        $crmPayload=['clientId'=>(int)$custId,'methodId' => PaymentUuids::resolve($method),'amount'=>$amount,'note'=>"Collected by ".($retailerObj['name']??'')." (admin-approved)",'currencyCode'=>dn_payload_currency($pCols[$pcIdx]['currency'] ?? '', $config ?? null)];
         $crmPayload['applyToInvoicesAutomatically']=true;
         $crmResult=$crmForPayment->post('payments',$crmPayload); $crmSuccess=!empty($crmResult)&&isset($crmResult['id']);
     }

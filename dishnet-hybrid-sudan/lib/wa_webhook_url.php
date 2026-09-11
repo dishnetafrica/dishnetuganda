@@ -33,6 +33,12 @@ if (!function_exists('wa_ai_public_base')) {
     function wa_ai_public_base(array $cfg): string
     {
         $saved = rtrim(trim((string)($cfg['plugin_public_url'] ?? '')), '/');
+        // The operator's word is law — but this is the BASE directory, and
+        // wa_ai_webhook_url() appends '/public.php?page=...' to it. A value
+        // that already ends in public.php would register
+        // .../public.php/public.php?page=evo_webhook, which uCRM 404s and
+        // which silently mutes the AI. Normalise instead of trusting blindly.
+        $saved = preg_replace('#/public\.php$#i', '', $saved);
         if ($saved !== '') return $saved;
 
         $fromUcrm = rtrim(preg_replace('#/public\.php$#', '', dn_plugin_public($cfg)), '/');

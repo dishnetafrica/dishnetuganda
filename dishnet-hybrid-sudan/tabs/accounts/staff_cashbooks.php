@@ -398,10 +398,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
     //   wo_reason       = (string) required, non-empty
     if ($scAction === 'admin_writeoff_expense') {
         $woStaff   = (int)($_POST['wo_staff_id'] ?? 0);
-        $woCur     = strtoupper(trim($_POST['wo_currency'] ?? 'USD'));
+        $woCur     = dn_entry_currency($_POST['wo_currency'] ?? '', $config ?? null);
         $woAmt     = round((float)($_POST['wo_amount'] ?? 0), 2);
         $woReason  = trim($_POST['wo_reason'] ?? '');
-        if (!in_array($woCur, ['USD','SSP'], true)) $woCur = 'USD';
 
         // Resolve target staff name
         $woStaffName = '';
@@ -490,6 +489,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
 
     // ── record_exchange: Atomic USD↔SSP conversion ─────────────────────
     if ($scAction === 'record_exchange') {
+        if (!dn_ssp_selectable($config ?? null)) {
+            flash('SSP flows are not enabled on this installation.', 'danger');
+            redirect('?page=dashboard&tab=staff_cashbooks');
+        }
         require_once dirname(__DIR__, 2) . '/lib/StaffLedgerWriter.php';
         $excDir   = trim($_POST['exc_direction'] ?? 'usd_to_ssp'); // usd_to_ssp | ssp_to_usd
         $excAmt   = round((float)($_POST['exc_amount'] ?? 0), 2);

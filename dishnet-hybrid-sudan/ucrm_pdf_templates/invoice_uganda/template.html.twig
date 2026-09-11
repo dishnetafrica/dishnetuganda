@@ -1,0 +1,290 @@
+<!-- ═══ DishNet Branded Invoice — UGANDA EDITION v1 (derived from SS v3) ═══ -->
+<!-- IT solutions company & UCC Authorised Starlink Installer. Prices UGX.     -->
+<!-- Title reads TAX INVOICE only when the document carries VAT lines, so it   -->
+<!-- stays correct before and after VAT registration.                          -->
+
+{# ── Company registration facts, preferring uCRM's Organization fields ── #}
+{% set org_tin = '1059140632' %}
+{% if organization.taxId is defined and organization.taxId %}{% set org_tin = organization.taxId %}{% endif %}
+{% set org_reg = '80046255496181' %}
+{% if organization.registrationNumber is defined and organization.registrationNumber %}{% set org_reg = organization.registrationNumber %}{% endif %}
+
+{# ── Paid check must match however the amount is formatted ── #}
+{% set is_paid = totals.amountDue in ['UGX 0.00', 'UGX 0', 'USh 0.00', '0.00', '$0.00'] %}
+
+<div class="invoice-wrapper">
+
+<!-- HEADER -->
+<table style="width:100%;border-collapse:collapse;border-bottom:2px solid #D41C1C;" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="padding:14px 24px 10px;vertical-align:middle;">
+      <div style="font-size:28px;font-weight:900;color:#D41C1C;font-family:Helvetica,Arial,sans-serif;letter-spacing:-0.5px;">DishNet</div>
+      <div style="height:5px;width:120px;background:#D41C1C;margin-top:3px;"></div>
+      <div style="font-size:8px;color:#999;margin-top:3px;letter-spacing:0.3px;">IT Solutions Provider &middot; UCC Authorised Starlink Installer &middot; Kampala, Uganda</div>
+    </td>
+    <td style="padding:14px 24px 10px;text-align:right;vertical-align:middle;">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#999;">{% if totals.taxes|length > 0 %}TAX INVOICE{% else %}INVOICE{% endif %}</div>
+      <div style="font-size:22px;font-weight:900;color:#141414;font-family:Helvetica,Arial,sans-serif;">{{ invoice.number }}</div>
+      <div style="font-size:9px;color:#999;">{{ invoice.createdDate }}</div>
+    </td>
+  </tr>
+</table>
+
+<!-- CONTENT -->
+<div style="padding:14px 24px 10px;">
+
+  <!-- INVOICE META ROW -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+    <tr>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;width:25%;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1px;color:#999;font-weight:700;">DUE DATE</div>
+        <div style="font-size:13px;font-weight:700;color:#D41C1C;">{{ invoice.dueDate }}</div>
+      </td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;width:25%;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1px;color:#999;font-weight:700;">SITE ID</div>
+        <div style="font-size:11px;font-weight:600;color:#141414;">{{ invoice.getAttribute('siteId') }}</div>
+      </td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;width:25%;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1px;color:#999;font-weight:700;">REFERENCE P.O</div>
+        <div style="font-size:11px;font-weight:600;color:#141414;">{{ invoice.getAttribute('referencePO') }}</div>
+      </td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;width:25%;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1px;color:#999;font-weight:700;">STATUS</div>
+        <div style="font-size:11px;font-weight:700;color:{% if is_paid %}#059669{% else %}#D41C1C{% endif %};">
+          {% if is_paid %}PAID{% else %}UNPAID{% endif %}
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ISSUED BY / ISSUED TO / DELIVERY -->
+  <table style="width:100%;border-collapse:separate;border-spacing:6px 0;margin-bottom:12px;">
+    <tr>
+      <td style="width:36%;padding:10px 12px;vertical-align:top;border:1px solid #e0e0e0;border-top:2px solid #D41C1C;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:3px;">ISSUED BY</div>
+        <div style="font-size:12px;font-weight:700;color:#141414;margin-bottom:2px;">{{ organization.name }}</div>
+        <div style="font-size:9px;color:#666;line-height:1.5;">
+          {{ organization.street1 }}{% if organization.street2 %}, {{ organization.street2 }}{% endif %}<br>
+          {{ organization.city }}{% if organization.state %}, {{ organization.state }}{% endif %}<br>
+          TIN: {{ org_tin }} &middot; Reg. No: {{ org_reg }}<br>
+          {% if organization.phone %}{{ organization.phone }}<br>{% endif %}
+          {% if organization.email %}{{ organization.email }}<br>{% endif %}
+          {% if organization.website %}{{ organization.website }}{% endif %}
+        </div>
+      </td>
+      <td style="width:36%;padding:10px 12px;vertical-align:top;border:1px solid #e0e0e0;border-top:2px solid #141414;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:3px;">ISSUED TO</div>
+        <div style="font-size:12px;font-weight:700;color:#141414;margin-bottom:2px;">{{ client.name }}</div>
+        {% if client.username %}<div style="font-size:9px;color:#444;font-weight:600;margin-bottom:2px;">Account: {{ client.username }}</div>{% endif %}
+        <div style="font-size:9px;color:#666;line-height:1.5;">
+          {% if client.invoiceAddressSameAsContact %}
+            {% if client.street1 %}{{ client.street1 }}<br>{% endif %}
+            {% if client.street2 %}{{ client.street2 }}<br>{% endif %}
+            {% if client.city %}{{ client.city }}<br>{% endif %}
+            {% if client.state %}{{ client.state }}<br>{% endif %}
+            {% if client.country %}{{ client.country }}{% endif %}
+          {% else %}
+            {% if client.invoiceStreet1 %}{{ client.invoiceStreet1 }}<br>{% endif %}
+            {% if client.invoiceStreet2 %}{{ client.invoiceStreet2 }}<br>{% endif %}
+            {% if client.invoiceCity %}{{ client.invoiceCity }}<br>{% endif %}
+            {% if client.invoiceState %}{{ client.invoiceState }}<br>{% endif %}
+            {% if client.invoiceCountry %}{{ client.invoiceCountry }}{% endif %}
+          {% endif %}
+        </div>
+        {% if client.companyTaxId %}<div style="font-size:9px;color:#666;">TIN: {{ client.companyTaxId }}</div>{% endif %}
+        {% if client.firstBillingPhone %}<div style="font-size:9px;color:#666;">{{ client.firstBillingPhone }}</div>{% endif %}
+        {% if client.firstBillingEmail %}<div style="font-size:9px;color:#666;">{{ client.firstBillingEmail }}</div>{% endif %}
+      </td>
+      <td style="width:28%;padding:10px 12px;vertical-align:top;border:1px solid #e0e0e0;border-top:2px solid #999;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:3px;">DELIVERY / INSTALLATION AT</div>
+        <div style="font-size:9px;color:#666;line-height:1.5;">{{ invoice.getAttribute('deliveredInstall') }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- SERVICE DESCRIPTION -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+    <tr>
+      <td style="padding:6px 12px;border:1px solid #e0e0e0;font-size:10px;color:#666;">
+        <b style="color:#141414;">Service:</b> Starlink internet service &amp; IT support for <b>{{ client.name }}</b>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ITEMS TABLE -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+    <thead>
+      <tr>
+        <th style="background:#f5f5f5;color:#444;font-size:8px;text-transform:uppercase;letter-spacing:0.8px;padding:8px 10px;font-weight:700;text-align:left;width:5%;border-bottom:2px solid #D41C1C;">#</th>
+        <th style="background:#f5f5f5;color:#444;font-size:8px;text-transform:uppercase;letter-spacing:0.8px;padding:8px 10px;font-weight:700;text-align:left;width:47%;border-bottom:2px solid #D41C1C;">Description</th>
+        <th style="background:#f5f5f5;color:#444;font-size:8px;text-transform:uppercase;letter-spacing:0.8px;padding:8px 10px;font-weight:700;text-align:center;width:10%;border-bottom:2px solid #D41C1C;">Qty</th>
+        <th style="background:#f5f5f5;color:#444;font-size:8px;text-transform:uppercase;letter-spacing:0.8px;padding:8px 10px;font-weight:700;text-align:right;width:18%;border-bottom:2px solid #D41C1C;">Rate/Unit</th>
+        <th style="background:#f5f5f5;color:#444;font-size:8px;text-transform:uppercase;letter-spacing:0.8px;padding:8px 10px;font-weight:700;text-align:right;width:20%;border-bottom:2px solid #D41C1C;">Amount (UGX)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set row_num = 1 %}
+      {% for item in items %}
+        <tr>
+          <td style="padding:8px 10px;font-size:10px;border-bottom:1px solid #eee;color:#999;font-weight:600;">{{ row_num }}</td>
+          <td style="padding:8px 10px;font-size:10px;border-bottom:1px solid #eee;">
+            <strong style="font-size:11px;color:#141414;">{{ item.label }}</strong>
+            {% if item.type == 'service' and item.service.tariff %}
+              <br><span style="font-size:8px;color:#555;font-weight:600;">{{ item.service.tariff }}</span>
+              {% if item.service.activeFrom %}
+                <span style="font-size:7px;color:#999;"> &middot; {{ item.service.activeFrom }} &mdash; {{ item.service.activeTo }}</span>
+              {% endif %}
+              {% if item.service.contractId %}
+                <span style="font-size:7px;color:#999;"> &middot; Contract: {{ item.service.contractId }}</span>
+              {% endif %}
+            {% elseif item.unit %}
+              <br><span style="font-size:7px;color:#999;text-transform:uppercase;">{{ item.type }} - {{ item.unit }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:8px 10px;font-size:10px;border-bottom:1px solid #eee;text-align:center;">{{ item.quantity }}</td>
+          <td style="padding:8px 10px;font-size:10px;border-bottom:1px solid #eee;text-align:right;">{{ item.price }}</td>
+          <td style="padding:8px 10px;font-size:10px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">{{ item.total }}</td>
+        </tr>
+        {% set row_num = row_num + 1 %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- TOTALS -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+    <tr>
+      <td style="width:58%;border:none;"></td>
+      <td style="width:42%;border:none;padding:0;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:5px 12px;font-size:10px;color:#666;border-bottom:1px solid #eee;">Subtotal</td>
+            <td style="padding:5px 12px;font-size:10px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">{{ totals.subtotal }}</td>
+          </tr>
+          {% if totals.hasDiscount %}
+          <tr>
+            <td style="padding:5px 12px;font-size:10px;color:#059669;border-bottom:1px solid #eee;">{{ totals.discountLabel }}</td>
+            <td style="padding:5px 12px;font-size:10px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">{{ totals.discountPrice }}</td>
+          </tr>
+          {% endif %}
+          {% for tax in totals.taxes %}
+          <tr>
+            <td style="padding:5px 12px;font-size:10px;color:#666;border-bottom:1px solid #eee;">{{ tax.label }}</td>
+            <td style="padding:5px 12px;font-size:10px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">{{ tax.price }}</td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td style="padding:6px 12px;font-size:11px;font-weight:700;color:#141414;border-bottom:1px solid #ddd;">Grand Total</td>
+            <td style="padding:6px 12px;font-size:11px;font-weight:800;text-align:right;border-bottom:1px solid #ddd;">{{ totals.total }}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 12px;font-size:10px;color:#666;border-bottom:1px solid #eee;">Amount Paid</td>
+            <td style="padding:5px 12px;font-size:10px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">{{ totals.amountPaid }}</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 12px;font-size:13px;font-weight:800;color:#D41C1C;border-top:2px solid #D41C1C;">Amount Due (UGX)</td>
+            <td style="padding:7px 12px;font-size:13px;font-weight:800;text-align:right;color:#D41C1C;border-top:2px solid #D41C1C;">{{ totals.amountDue }}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ONLINE PAYMENT -->
+  {% if invoice.onlinePaymentLink and not is_paid %}
+  <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+    <tr>
+      <td style="border:1px solid #BBF7D0;padding:12px 14px;text-align:center;background:#F0FDF4;">
+        <div style="font-size:9px;color:#065f46;margin-bottom:8px;">Pay this invoice securely online</div>
+        <a href="{{ invoice.onlinePaymentLink }}" style="display:inline-block;background:#059669;color:#ffffff;font-size:12px;font-weight:700;padding:10px 32px;border-radius:6px;text-decoration:none;letter-spacing:0.5px;">PAY NOW &mdash; {{ totals.amountDue }}</a>
+        <div style="font-size:7px;color:#999;margin-top:6px;">{{ invoice.onlinePaymentLink }}</div>
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <!-- PAYMENT DETAILS — BANK TRANSFER -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+    <tr>
+      <td style="border:1px solid #e0e0e0;border-left:3px solid #D41C1C;padding:8px 12px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:50%;vertical-align:top;padding:0 8px 0 0;">
+              <div style="font-size:9px;color:#444;line-height:1.55;">
+                <b style="color:#141414;">Beneficiary:</b> DISHNET AFRICA LIMITED<br>
+                <b style="color:#141414;">Bank:</b> Ecobank Uganda Limited &mdash; Head Office<br>
+                <b style="color:#141414;">Bank Address:</b> Plot 4 Parliament Avenue, Kampala, Uganda
+              </div>
+            </td>
+            <td style="width:50%;vertical-align:top;padding:0 0 0 8px;">
+              <div style="font-size:9px;color:#444;line-height:1.55;">
+                <b style="color:#141414;">UGX Account:</b> 7247510191<br>
+                <b style="color:#141414;">USD Account:</b> 7247510192 <span style="color:#999;">(international)</span><br>
+                <b style="color:#141414;">SWIFT/BIC:</b> ECOCUGKA
+              </div>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:8px;color:#999;margin-top:5px;border-top:1px solid #eee;padding-top:4px;">
+          Use <b style="color:#141414;">{{ invoice.number }}</b> as the payment reference and ensure the beneficiary name and account number are entered exactly as shown.
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- PAYMENT TERMS -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+    <tr>
+      <td style="border:1px solid #e0e0e0;border-left:3px solid #D41C1C;padding:7px 12px;font-size:8px;color:#444;line-height:1.6;">
+        <b style="color:#141414;">Payment Terms:</b> The amount due is payable on or before the due date shown. Service is prepaid — it pauses automatically at the end of an unpaid period and resumes on payment. This invoice is issued by <b>DISHNET AFRICA LIMITED</b> (TIN {{ org_tin }}) and is governed by the DishNet Service Process and Terms &amp; Conditions provided with your quotation.
+      </td>
+    </tr>
+  </table>
+
+  <!-- NOTES (if any) -->
+  {% if invoice.notes %}
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+    <tr>
+      <td style="border:1px solid #e0e0e0;border-left:3px solid #999;padding:6px 12px;">
+        <div style="font-size:7px;text-transform:uppercase;letter-spacing:1px;color:#999;font-weight:700;margin-bottom:2px;">NOTES</div>
+        <div style="font-size:8px;color:#444;line-height:1.5;">{{ invoice.notes }}</div>
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <!-- COMPUTER GENERATED NOTICE -->
+  <div style="font-size:8px;color:#999;font-style:italic;margin-bottom:8px;">This is a computer generated invoice &mdash; no signature required.</div>
+
+</div>
+
+<!-- FOOTER — pinned to bottom of A4 page -->
+<div class="invoice-footer">
+  <div style="padding:0 24px;">
+    <table style="width:100%;border-collapse:collapse;border-top:1px solid #e0e0e0;">
+      <tr>
+        <td style="padding:10px 0;vertical-align:middle;border:none;">
+          <div style="font-size:11px;font-weight:700;color:#141414;">Thank you for your business.</div>
+          <div style="font-size:8px;color:#999;margin-top:2px;">For queries, contact us at {{ organization.phone }} or {{ organization.email }}</div>
+        </td>
+        <td style="padding:10px 0;text-align:right;vertical-align:middle;border:none;">
+          {% if organization.stamp %}
+          <div>
+            <img src="{{ organization.stamp }}" style="max-height:50px;">
+          </div>
+          {% endif %}
+          <div style="font-size:8px;color:#666;margin-top:2px;">DishNet Africa Ltd</div>
+        </td>
+      </tr>
+    </table>
+  </div>
+  <div style="height:2px;background:#D41C1C;"></div>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 24px;font-size:8px;color:#999;">DishNet Africa Ltd &middot; Kampala, Uganda &middot; TIN {{ org_tin }}</td>
+      <td style="padding:6px 24px;font-size:9px;color:#D41C1C;text-align:center;font-style:italic;font-weight:600;">Of course we can ...</td>
+      <td style="padding:6px 24px;font-size:8px;color:#999;text-align:right;">{% if organization.website %}{{ organization.website }}{% else %}www.dishnetuganda.com{% endif %}</td>
+    </tr>
+  </table>
+</div>
+
+</div>

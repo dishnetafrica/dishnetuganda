@@ -105,6 +105,16 @@ $todaySalesTotal = $todayCash + $todayCredit;
 $todayLeads = count(array_filter($leads, fn($l)=>str_starts_with($l['created_at']??$l['submitted_at']??'',$today)));
 
 // ── Cashbook ─────────────────────────────────────────────────────────
+$_ceoSSP = dn_ssp_selectable($config ?? null);
+$_ceoPositions = []; $_ceoPl = [];
+if (!$_ceoSSP) {
+    try {
+        require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
+        $_ceoCb = new CashbookService($store, $dataDir);
+        $_ceoPositions = $_ceoCb->currencyPositions();
+        $_ceoPl = $_ceoCb->plByPeriod('dishnet', date('Y-m') . '-01', date('Y-m-d'));
+    } catch (Throwable $e) {}
+}
 $cbUsd = 0; $cbSsp = 0; $cbIn = 0; $cbOut = 0;
 try {
     $cbUsd = (float)$pdo->query("SELECT COALESCE(SUM(CASE WHEN direction='in' THEN amount ELSE -amount END),0) FROM cb_ledger WHERE project='dishnet' AND status NOT IN ('void','rejected')")->fetchColumn();
@@ -125,7 +135,7 @@ try {
     foreach ($retailers as $_r) {
         if ($_r['is_admin']??false) continue;
         if (!in_array($_r['role']??'',['sales','sales_staff','field_agent','collection','field_accountant'],true)) continue;
-        $fieldExposure += max(0,(float)$_slSvc->balance((int)$_r['id'],'USD'));
+        $fieldExposure += max(0,(float)$_slSvc->balance((int)$_r['id'], dn_book_base($config ?? null)));
     }
 } catch (Throwable $e) {}
 
@@ -202,7 +212,7 @@ foreach($retailers as $r){
     $rApps=count(array_filter($monthApps,fn($a)=>(int)($a['retailer_id']??0)===$rId));
     $rPend=count(array_filter($allHov,fn($h)=>(int)($h['from_id']??0)===$rId&&($h['status']??'')==='pending'));
     $rExp=0;
-    try{ if(class_exists('StaffLedgerService')) $rExp=max(0,(float)(new StaffLedgerService($pdo))->balance($rId,'USD')); }catch(Throwable $e){}
+    try{ if(class_exists('StaffLedgerService')) $rExp=max(0,(float)(new StaffLedgerService($pdo))->balance($rId, dn_book_base($config ?? null))); }catch(Throwable $e){}
     if($rRev>0||$rApps>0) $agentPerf[]=['name'=>$r['name']??'?','rev'=>$rRev,'apps'=>$rApps,'pend'=>$rPend,'exp'=>$rExp];
 }
 usort($agentPerf,fn($a,$b)=>$b['rev']<=>$a['rev']);
@@ -291,6 +301,28 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
 
 <!-- CASHBOOK -->
 <div class="cd-section">🏦 Cashbook — DishNet</div>
+<?php if (!$_ceoSSP): ?>
+<!-- Phase C: positions and month P&L per currency — no mixed sums, no fixed rates -->
+<div class="cd-g4">
+    <?php $_ct = 0; foreach ($_ceoPositions as $_cp): if ($_ct >= 2) break; $_ct++; ?>
+    <div class="cd-k <?= $_cp['total']<0?'cd-alert-red':'cd-alert-green' ?>">
+        <div class="cd-kv" style="color:<?= $_cp['total']>=0?'#15803d':'#991b1b' ?>;"><?= htmlspecialchars($_cp['currency']) ?> <?= number_format($_cp['total'],0) ?></div>
+        <div class="cd-kl"><?= htmlspecialchars($_cp['currency']) ?> Position</div><div class="cd-ks"><?= count($_cp['accounts']) ?> account<?= count($_cp['accounts'])===1?'':'s' ?><?= abs($_cp['unassigned'])>0.004 ? ' + unassigned' : '' ?></div>
+    </div>
+    <?php endforeach; for (; $_ct < 2; $_ct++): ?>
+    <div class="cd-k"><div class="cd-kv">—</div><div class="cd-kl">&nbsp;</div><div class="cd-ks">&nbsp;</div></div>
+    <?php endfor; ?>
+    <?php $_pl0 = reset($_ceoPl) ?: null; $_plc = $_pl0 ? htmlspecialchars($_pl0['currency']) : htmlspecialchars(dn_book_base($config ?? null)); ?>
+    <div class="cd-k cd-alert-blue">
+        <div class="cd-kv" style="color:#1d4ed8;"><?= $_plc ?> <?= number_format($_pl0['revenue_total'] ?? 0,0) ?></div>
+        <div class="cd-kl">Revenue <?= date('M') ?></div><div class="cd-ks">trading only · <?= $_plc ?></div>
+    </div>
+    <div class="cd-k cd-alert-amber">
+        <div class="cd-kv" style="color:#92400e;"><?= $_plc ?> <?= number_format($_pl0['expense_total'] ?? 0,0) ?></div>
+        <div class="cd-kl">Expenses <?= date('M') ?></div><div class="cd-ks">trading only · <?= $_plc ?></div>
+    </div>
+</div>
+<?php else: ?>
 <div class="cd-g4">
     <div class="cd-k <?= $cbUsd<0?'cd-alert-red':'cd-alert-green' ?>">
         <div class="cd-kv" style="color:<?= $cbUsd>=0?'#15803d':'#991b1b' ?>;"><?= dn_cur($config) ?><?= number_format($cbUsd,0) ?></div>
@@ -298,7 +330,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
     </div>
     <div class="cd-k cd-alert-purple">
         <div class="cd-kv" style="color:#7c3aed;font-size:18px;"><?= number_format($cbSsp,0) ?> SSP</div>
-        <div class="cd-kl">SSP Balance</div><div class="cd-ks">≈<?= dn_cur($config) ?><?= number_format($cbSsp/6000,0) ?></div>
+        <div class="cd-kl">SSP Balance</div><div class="cd-ks">separate ledger</div>
     </div>
     <div class="cd-k cd-alert-blue">
         <div class="cd-kv" style="color:#1d4ed8;"><?= dn_cur($config) ?><?= number_format($cbIn,0) ?></div>
@@ -309,6 +341,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
         <div class="cd-kl">OUT <?= date('M') ?></div><div class="cd-ks">Expenses</div>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- CASH CHAIN -->
 <div class="cd-section">💸 Cash Chain — Sales → Diko → Rupesh</div>

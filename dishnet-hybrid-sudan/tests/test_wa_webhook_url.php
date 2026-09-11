@@ -52,5 +52,25 @@ foreach (['tools/wa_webhook_doctor.php', 'tools/wa_prune_history.php', 'tabs/eng
     t("php -l {$f}", strpos($out, 'No syntax errors') !== false, true);
 }
 
+echo "\nA configured base is normalised — a doubled public.php mutes the AI\n";
+// Lived failure (8 Sep 2026): plugin_public_url was set to the full
+// .../public.php address, so the builder produced
+// .../public.php/public.php?page=evo_webhook — a 404 Evolution posted into
+// for as long as nobody noticed.
+$base = 'https://crm.example.test/crm/_plugins/dishnet-hybrid-sudan';
+$want = $base . '/public.php?page=evo_webhook&token=abc';
+foreach ([$base, $base . '/', $base . '/public.php', $base . '/public.php/', $base . '/PUBLIC.PHP'] as $variant) {
+    t('base "' . substr($variant, strrpos($variant, '/') === false ? 0 : strrpos($variant, '/')) . '" builds one public.php',
+      wa_ai_webhook_url(['plugin_public_url' => $variant], 'abc'), $want);
+}
+t('never two public.php segments',
+  substr_count(wa_ai_webhook_url(['plugin_public_url' => $base . '/public.php'], 'abc'), 'public.php'), 1);
+
+echo "\nThe doctor verifies exactly, not by substring\n";
+$doc = (string)file_get_contents(dirname(__DIR__) . '/tools/wa_webhook_doctor.php');
+t('doctor compares the whole URL', strpos($doc, '$afterUrl === $url') !== false, true);
+t('doctor no longer blesses any URL containing the fragments',
+  strpos($doc, "strpos(\$afterS, 'page=evo_webhook') !== false && strpos(\$afterS, \$secret)"), false);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

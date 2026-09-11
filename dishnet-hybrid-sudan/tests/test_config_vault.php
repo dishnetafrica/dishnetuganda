@@ -31,7 +31,16 @@ $cfg = PluginConfig::load($plugin, $data);
 $vault = ConfigVault::path($plugin, $data);
 t('vault lands in the plugins root, not the plugin', strpos($vault, $plugin) === false, true);
 t('vault file created', is_file($vault), true);
-t('vault is private (0600)', substr(sprintf('%o', fileperms($vault)), -4), '0600');
+// Not "is it 0600". A 0600 vault written by root through docker exec cannot be
+// read by nginx, and an unreadable vault reads as an empty one — which is how a
+// live mailbox password was lost. The property that matters is that no other
+// account can read it AND the account that owns the data directory can.
+require_once dirname(__DIR__) . '/lib/SecureFile.php';
+$vMode = substr(sprintf('%o', fileperms($vault)), -4);
+t('vault is not world-readable', (fileperms($vault) & 0004) === 0, true);
+$vRead = SecureFile::readableByOwnerOf($vault, $data);
+t('vault is readable by the process that owns the data dir (' . $vMode . ')',
+  !empty($vRead['ok']), true);
 
 // ── 2. Simulate delete + re-install: plugin folder wiped, vault survives ─
 unlink($data . '/config.json');

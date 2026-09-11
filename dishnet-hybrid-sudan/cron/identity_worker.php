@@ -11,7 +11,7 @@ declare(strict_types=1);
  *
  * CLI only — refuses to run over HTTP.
  */
-if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+if (PHP_SAPI !== 'cli') return;   // a web request is not ours to serve
 
 $pluginRoot = dirname(__DIR__);
 require_once $pluginRoot . '/lib/error_handler.php';
@@ -30,13 +30,13 @@ $dataDir = getDataDir($pluginRoot);
 $store   = SqliteStore::create($dataDir);
 $config  = PluginConfig::load($pluginRoot, $dataDir);
 
-if (empty($config['identity_enabled'])) exit(0);   // quiet: normal during setup
+if (empty($config['identity_enabled'])) return;    // quiet: normal during setup
 
 $pdo      = $store->getPdo();
 $provider = new StalwartProvider($config);
 if (!$provider->isConfigured()) {
     error_log('[identity_worker] identity_enabled but stalwart_api_url/token not set');
-    exit(0);
+    return;
 }
 
 $crm = CrmApiClient::fromUcrm($pluginRoot, $config);

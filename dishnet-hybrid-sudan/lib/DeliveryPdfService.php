@@ -1,5 +1,9 @@
 <?php
 declare(strict_types=1);
+
+require_once __DIR__ . '/CustomerContact.php';
+
+require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/crm_url.php';
 
 // PHP 7.4 polyfills
@@ -27,6 +31,9 @@ class DeliveryPdfService
     private $store;
     private string $dataDir;
     private array  $config;
+
+    /** Symbol-correct money for message copy; see dn_money(). */
+    private function m($v): string { return dn_money($v, $this->config, null); }
 
     const PDF_DIR       = 'delivery_pdfs';
     const TEMPLATE_DIR  = 'templates';
@@ -331,15 +338,15 @@ class DeliveryPdfService
                  . "Dear {$salutation},\n\n"
                  . "Your Starlink purchase is confirmed \xe2\x9c\x85\n\n"
                  . "\xF0\x9F\x93\xA6 KIT: {$kitSerial}\n"
-                 . "\xF0\x9F\x92\xB0 Paid: \${$amount}\n"
+                 . "\xF0\x9F\x92\xB0 Paid: {$this->m($amount)}\n"
                  . "\xF0\x9F\x91\xA4 Staff: {$staffName}\n\n"
                  . "\xF0\x9F\x94\x84 *What happens next:*\n"
                  . "\xF0\x9F\x93\x9E Our team will call you within 24hrs to schedule setup\n"
                  . "\xF0\x9F\x9B\xB0 Starlink setup: 1\xe2\x80\x932 working days after scheduling\n"
                  . "\xF0\x9F\x93\xB6 We'll activate your service and confirm via WhatsApp\n\n"
                  . "\xF0\x9F\x93\x84 *Your delivery document is attached above* \xe2\x80\x94 it contains your full terms and conditions. Please save it for your records.\n\n"
-                 . "\xF0\x9F\x93\xB2 Sales: wa.me/211923400000\n"
-                 . "\xF0\x9F\x9B\xA0 Support: wa.me/211921443002\n\n"
+                 . "\xF0\x9F\x93\xB2 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->config) . "\n"
+                 . "\xF0\x9F\x9B\xA0 Support: " . 'wa.me/' . CustomerContact::supportWa($this->config) . "\n\n"
                  . "Thank you for choosing DishNet Africa \xF0\x9F\x9A\x80";
         }
 
@@ -354,12 +361,12 @@ class DeliveryPdfService
                  . "Dear {$salutation},\n\n"
                  . "Your DishNet Fiber connection is now active \xe2\x9c\x85\n\n"
                  . "\xF0\x9F\x8C\x90 Plan: {$planName}\n"
-                 . "\xF0\x9F\x92\xB0 Monthly: \${$monthlyFee}/mo\n"
+                 . "\xF0\x9F\x92\xB0 Monthly: {$this->m($monthlyFee)}/mo\n"
                  . "\xF0\x9F\x91\xA4 Installed by: {$staffName}\n\n"
                  . "\xF0\x9F\x93\x84 *Your delivery acknowledgment is attached* \xe2\x80\x94 it confirms the equipment received and your service terms. Please save it for your records.\n\n"
                  . "Need help? We're here 24/7:\n"
-                 . "\xF0\x9F\x9B\xA0 Support: wa.me/211921443002\n"
-                 . "\xF0\x9F\x93\xB2 Sales: wa.me/211923400000\n\n"
+                 . "\xF0\x9F\x9B\xA0 Support: " . 'wa.me/' . CustomerContact::supportWa($this->config) . "\n"
+                 . "\xF0\x9F\x93\xB2 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->config) . "\n\n"
                  . "Welcome to DishNet Fiber \xF0\x9F\x9A\x80";
         }
 
@@ -368,15 +375,15 @@ class DeliveryPdfService
              . "Dear {$salutation},\n\n"
              . "Your DishNet Fiber service is confirmed \xe2\x9c\x85\n\n"
              . "\xF0\x9F\x8C\x90 Plan: {$planName}\n"
-             . "\xF0\x9F\x92\xB0 Install: \${$installFee} | Monthly: \${$monthlyFee}/mo\n"
+             . "\xF0\x9F\x92\xB0 Install: {$this->m($installFee)} | Monthly: {$this->m($monthlyFee)}/mo\n"
              . "\xF0\x9F\x91\xA4 Staff: {$staffName}\n\n"
              . "\xF0\x9F\x94\x84 *What happens next:*\n"
              . "\xF0\x9F\x93\x9E Our team will call you within 24hrs to schedule installation\n"
              . "\xF0\x9F\x94\xB4 Fiber installation: 3\xe2\x80\x935 working days after scheduling\n"
              . "\xF0\x9F\x93\xB6 We'll confirm the date and technician details via WhatsApp\n\n"
              . "\xF0\x9F\x93\x84 *Your service document is attached above* \xe2\x80\x94 it contains your full terms and conditions. Please save it for your records.\n\n"
-             . "\xF0\x9F\x93\xB2 Sales: wa.me/211923400000\n"
-             . "\xF0\x9F\x9B\xA0 Support: wa.me/211921443002\n\n"
+             . "\xF0\x9F\x93\xB2 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->config) . "\n"
+             . "\xF0\x9F\x9B\xA0 Support: " . 'wa.me/' . CustomerContact::supportWa($this->config) . "\n\n"
              . "Thank you for choosing DishNet Africa \xF0\x9F\x9A\x80";
     }
 

@@ -111,13 +111,19 @@ abstract class WorkerBase
     }
 
     /**
-     * Consume events filtered by specific types.
-     * Uses EventBus::consume() then filters locally.
-     * For future optimization: add type filter to SQL query.
+     * Consume events of the types this worker handles.
+     *
+     * The type filter is applied in SQL now, not only here. Filtering locally
+     * meant claiming 20 events of any type and discarding most of them, so a
+     * backlog of unhandled types at the head of the queue starved this worker
+     * entirely. The local pass below stays as a second line of defence.
      */
     protected function consumeFiltered(array $types, int $limit): array
     {
-        $events = $this->bus->consume($limit);
+        // Ask for our own types. Without this the batch is filled by whatever
+        // is oldest — a queue of another type starves this worker completely,
+        // and it did.
+        $events = $this->bus->consume($limit, '', $types);
         if (empty($types) || in_array('*', $types)) return $events;
 
         $matched = [];

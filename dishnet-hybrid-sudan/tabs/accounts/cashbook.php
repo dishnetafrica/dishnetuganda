@@ -1,77 +1,12 @@
 <?php
 // ── Cashbook v2 — Rupesh's Digital Excel Replacement ─────────────────────
+require_once __DIR__ . '/../../lib/currency.php';
 require_once __DIR__ . '/../../lib/CashbookService.php';
 $cb      = new CashbookService($store, $dataDir);
 $meta    = $cb->getMeta();
 $isAdmin = in_array($userRole ?? '', ['admin','accountant','super_admin']) || ($isAdmin ?? false);
 
-// ── CSV EXPORT ──────────────────────────────────────────────────────────────
-if (!empty($_GET['cb_export']) && $_GET['cb_export'] === 'csv') {
-    $proj  = in_array($_GET['cb_proj'] ?? 'dishnet', ['dishnet','4g','bluecard']) ? $_GET['cb_proj'] : 'dishnet';
-    // Field agents can only export their own entries
-    $_csvIsField = in_array($userRole ?? '', ['sales','sales_staff','field_agent','collection']) && !($isAdmin ?? false);
-    $_csvPerson  = ($_csvIsField && !empty($retailer['name'])) ? $retailer['name'] : '';
-    $_csvCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), ['USD','SSP']) ? strtoupper($_GET['cb_curr']) : '';
-    $csvFilters = array_filter(['project' => $proj, 'date_from' => $_GET['cb_from'] ?? '', 'date_to' => $_GET['cb_to'] ?? '', 'person' => $_csvPerson, 'currency' => $_csvCurr, 'limit' => 9999, 'offset' => 0]);
-    $rows  = $cb->getEntries($csvFilters);
-    $_csvIsSSP = ($_csvCurr === 'SSP');
-    $_csvIsAll = ($_csvCurr === '');
-    $fname = 'cashbook-'.strtoupper($proj).'-'.($_csvCurr ?: 'ALL').'-'.date('Y-m-d').'.csv';
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="'.$fname.'"');
-    $out = fopen('php://output','w');
-    // v4.9.18: Currency-separated CSV columns
-    if ($_csvIsAll) {
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person','Currency',
-            'Received USD','Payment USD','USD Balance',
-            'Received SSP','Payment SSP','SSP Balance',
-            'Ref','Status','Source']);
-    } elseif ($_csvIsSSP) {
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person',
-            'Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
-    } else {
-        fputcsv($out, ['SR No.','Date','Particulars','Category','Person',
-            'Received USD','Payment USD','USD Balance','Ref','Status','Source']);
-    }
-    foreach ($rows as $e) {
-        $isIn = $e['direction']==='in';
-        $catDisplay = $e['category'];
-        $personVal  = trim($e['person'] ?? '');
-        if ($personVal !== '') $catDisplay .= '-' . $personVal;
-        $isSspRow = ($e['currency'] ?? 'USD') === 'SSP';
-        $usdAmt   = (float)$e['amount'];
-        $sspAmt   = (float)($e['ssp_amount'] ?? 0);
-        $bal      = $e['running_balance'] ?? '';
-        $balCurr  = $e['_bal_currency'] ?? ($isSspRow ? 'SSP' : 'USD');
-        $ref      = $e['validation_ref'] ?? '';
-        $status   = $e['validation_status'] ?? '';
-        $source   = $e['source'] ?? '';
-
-        if ($_csvIsAll) {
-            // Both USD and SSP columns — fill the correct side
-            fputcsv($out, [
-                $e['sr'], $e['date'], $e['description'], $catDisplay, $personVal,
-                $isSspRow ? 'SSP' : 'USD',
-                // USD columns
-                (!$isSspRow && $isIn)  ? $usdAmt : '',
-                (!$isSspRow && !$isIn) ? $usdAmt : '',
-                (!$isSspRow)           ? $bal     : '',
-                // SSP columns
-                ($isSspRow && $isIn)   ? $sspAmt  : '',
-                ($isSspRow && !$isIn)  ? $sspAmt  : '',
-                ($isSspRow)            ? $bal      : '',
-                $ref, $status, $source
-            ]);
-        } elseif ($_csvIsSSP) {
-            fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
-                $isIn ? $sspAmt : '', $isIn ? '' : $sspAmt, $bal, $ref, $status, $source]);
-        } else {
-            fputcsv($out, [$e['sr'],$e['date'],$e['description'],$catDisplay,$personVal,
-                $isIn ? $usdAmt : '', $isIn ? '' : $usdAmt, $bal, $ref, $status, $source]);
-        }
-    }
-    fclose($out); exit;
-}
+// ── CSV EXPORT lives in includes/routes.php (runs before this tab loads) ──
 
 $seeded      = !empty($meta['seeded_at']);
 $seedCount   = (int)($meta['seeded_count'] ?? 0);
@@ -84,7 +19,22 @@ $dateTo    = $_GET['cb_to']   ?? '';
 $filterCat  = $_GET['cb_cat']  ?? '';
 $filterVal  = $_GET['cb_vs']   ?? '';
 $filterDir  = in_array($_GET['cb_dir'] ?? '', ['in','out']) ? ($_GET['cb_dir'] ?? '') : '';
-$filterCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), ['USD','SSP']) ? strtoupper($_GET['cb_curr']) : '';
+$_cbCurrs = dn_book_currencies($config ?? ($GLOBALS['config'] ?? []));
+$_cbBase  = $_cbCurrs[0];
+$_cbSSP   = in_array('SSP', $_cbCurrs, true);
+$_cbXC    = $_cbSSP ? 'SSP' : $_cbBase;   // the counter-currency USD exchanges with
+$_cbXFlag = $_cbSSP ? '🇸🇸' : '🇺🇬';
+$filterCurr = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_cbCurrs, true) ? strtoupper($_GET['cb_curr']) : '';
+// A row's amount always wears the ROW's own currency: base-currency rows keep
+// the install's display symbol, any other currency shows its own code — a USD
+// row can never dress up as UGX (or vice versa).
+$_cbRowMoney = function (array $e, int $dec = 2) use ($config, $_cbBase): string {
+    $cur = strtoupper(trim((string)($e['currency'] ?? '')));
+    if ($cur === '' || $cur === $_cbBase) {
+        return dn_cur($config) . number_format((float)$e['amount'], $dec);
+    }
+    return htmlspecialchars($cur) . ' ' . number_format((float)$e['amount'], $dec);
+};
 $search     = trim($_GET['cb_q'] ?? '');
 $page       = max(1, (int)($_GET['cb_page'] ?? 1));
 $perPage    = 50;
@@ -978,12 +928,21 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <!-- Quick actions for field_accountant -->
   <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+    <?php if ($_cbSSP): ?>
     <a href="?page=dashboard&tab=my_account&v=exchange"
       style="flex:1;background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
       <div style="font-size:18px;">💱</div>
       <div style="font-size:11px;font-weight:800;color:#7c3aed;margin-top:2px;">Convert Currency</div>
       <div style="font-size:10px;color:#94a3b8;">USD ↔ SSP</div>
     </a>
+    <?php else: ?>
+    <a href="#" onclick="cb4Open('exchange');return false;"
+      style="flex:1;background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
+      <div style="font-size:18px;">💱</div>
+      <div style="font-size:11px;font-weight:800;color:#7c3aed;margin-top:2px;">Convert Currency</div>
+      <div style="font-size:10px;color:#94a3b8;">USD ↔ <?= htmlspecialchars($_cbXC) ?></div>
+    </a>
+    <?php endif; ?>
     <a href="?page=dashboard&tab=my_account&v=expense"
       style="flex:1;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
       <div style="font-size:18px;">💸</div>
@@ -1010,14 +969,65 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
 <div style="padding:14px 14px 0;background:var(--bg);">
   <!-- Title -->
   <div style="font-size:11px;font-weight:700;color:var(--mute);margin-bottom:10px;letter-spacing:.5px;">
-    💰 Cashbook &nbsp;·&nbsp; <span style="font-weight:500;"><?php echo $filterCurr==='USD'?'USD Ledger':($filterCurr==='SSP'?'SSP Ledger':'Dual-currency cash ledger · USD &amp; SSP'); ?></span>
+    💰 Cashbook &nbsp;·&nbsp; <span style="font-weight:500;"><?php echo $filterCurr !== '' ? $filterCurr.' Ledger' : (count($_cbCurrs) > 1 ? 'Cash ledger · '.implode(' &amp; ', $_cbCurrs) : $_cbBase.' cash ledger'); ?></span>
   </div>
 
-  <?php if ($filterCurr !== 'SSP'): ?>
-  <!-- Green USD card -->
+  <?php if (!$_cbSSP): ?>
+  <!-- Phase C: per-currency POSITION cards. Each total lives in its OWN
+       currency; the label comes from the position data, never the display
+       symbol — a USD stream can no longer wear a UGX costume. No combined
+       figure exists on this screen. -->
+  <?php
+    $_cbPositions = $cb->currencyPositions();
+    if (!$_cbPositions) {
+        $_cbPositions = [$_cbBase => ['currency' => $_cbBase, 'accounts' => [],
+            'accounts_total' => 0.0, 'unassigned' => 0.0, 'total' => 0.0]];
+    }
+    $_cbLiveCount = $cb->countEntries($proj);
+    $_cbPosBgs = ['#1a6b3a', '#1a3a7a', '#5b3a7a'];
+    $_cbPosI = 0;
+    foreach ($_cbPositions as $_pos):
+      if ($filterCurr !== '' && $_pos['currency'] !== $filterCurr) { $_cbPosI++; continue; }
+      $_posBg = $_cbPosBgs[min($_cbPosI, 2)];
+  ?>
+  <div style="background:<?= $_posBg ?>;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">💼 <?= htmlspecialchars($_pos['currency']) ?> POSITION</div>
+    <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= htmlspecialchars($_pos['currency']) ?> <?php echo number_format($_pos['total'], 2); ?></div>
+    <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;">
+      <?php if (!empty($_pos['accounts'])): ?>
+        <?= count($_pos['accounts']) ?> account<?= count($_pos['accounts']) === 1 ? '' : 's' ?>:
+        <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['accounts_total'], 2) ?>
+        <?php if (abs($_pos['unassigned']) > 0.004): ?>
+          &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?>
+        <?php endif; ?>
+      <?php else: ?>
+        no <?= htmlspecialchars($_pos['currency']) ?> accounts yet<?php if (abs($_pos['unassigned']) > 0.004): ?> &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?><?php endif; ?>
+      <?php endif; ?>
+      <?php if ($_cbPosI === 0): ?>&nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entr<?= $_cbLiveCount === 1 ? 'y' : 'ies' ?><?php endif; ?>
+      &nbsp;·&nbsp; <?php echo date('d M Y'); ?>
+    </div>
+    <?php if (!empty($_pos['counterparts'])): ?>
+    <div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:4px;">
+      <?php foreach ($_pos['counterparts'] as $_cpt): if (!(float)$_cpt['balance'] && empty($_cpt['active'])) continue; ?>
+        <?= htmlspecialchars($_cpt['name']) ?> (<?= $_cpt['kind'] === 'equity' ? 'capital' : htmlspecialchars($_cpt['kind']) ?>): <?= htmlspecialchars($_pos['currency']) ?> <?= number_format((float)$_cpt['balance'], 2) ?>&nbsp;&nbsp;
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <?php if ($_cbPosI === 0 && $pendingCount > 0): ?>
+    <div style="margin-top:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.25);border-radius:20px;padding:4px 10px;cursor:pointer;" onclick="location.href='?<?php echo htmlspecialchars(http_build_query(array_merge($_GET,['cb_view'=>'pending']))); ?>'">
+      <span style="font-size:9px;font-weight:800;color:#fcd34d;">⚠ <?php echo $pendingCount; ?> pending settlement<?= $pendingCount === 1 ? '' : 's' ?></span>
+    </div>
+    <?php endif; ?>
+  </div>
+  <?php $_cbPosI++; endforeach; ?>
+  <?php endif; ?>
+
+  <?php if ($_cbSSP && ($filterCurr === '' || $filterCurr === $_cbBase)): ?>
+  <!-- Green base-currency card (legacy dual-currency book) -->
   <div style="background:#1a6b3a;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
-    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">💵 USD BALANCE</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;"><?= $_cbBase === 'USD' ? "\u{1F4B5}" : "\u{1F1FA}\u{1F1EC}" ?> <?= htmlspecialchars($_cbBase) ?> BALANCE</div>
     <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
     <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;"><?php echo date('d M Y'); ?> &nbsp;·&nbsp; <?php echo number_format($seedCount); ?> entries &nbsp;·&nbsp; <?php echo $proj==='4g'?'4G':'Fiber&SL'; ?></div>
     <?php if($pendingCount>0): ?>
@@ -1028,7 +1038,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <?php endif; ?>
 
-  <?php if ($filterCurr !== 'USD'): ?>
+  <?php if ($_cbSSP && $filterCurr !== $_cbBase): ?>
   <!-- Blue SSP card -->
   <div style="background:#1a3a7a;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
@@ -1038,7 +1048,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <?php endif; ?>
 
-  <?php if ($filterCurr === ''): ?>
+  <?php if ($_cbSSP && $filterCurr === ''): ?>
   <!-- Black combined card -->
   <div style="background:#0f0f0f;border-radius:16px;padding:18px 20px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
     <div>
@@ -1055,7 +1065,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   <?php
   // ── Exchange SSP Backfill Banner (admin only) ─────────────────────────
   $_exchDismissed = !empty($meta['exchange_ssp_banner_dismissed']);
-  if ($isAdmin && !$_exchDismissed) {
+  if ($_cbSSP && $isAdmin && !$_exchDismissed) {
       $_exchUsdCount = $cb->query("SELECT COUNT(*) as n FROM cb_ledger WHERE category='Exchange' AND currency='USD'")[0]['n'] ?? 0;
       $_exchSspCount = $cb->query("SELECT COUNT(*) as n FROM cb_ledger WHERE category='Exchange' AND currency='SSP'")[0]['n'] ?? 0;
       $_exchMissing  = (int)$_exchUsdCount - (int)$_exchSspCount;
@@ -1085,6 +1095,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
   <?php endif; } ?>
 
+  <?php if ($_cbSSP): ?>
   <!-- SSP Rate Reference — global, all projects, all staff -->
   <?php
     $rateHistory   = $cb->getRateHistory(30);
@@ -1192,6 +1203,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
     <div style="font-size:11px;color:rgba(255,255,255,.25);text-align:center;padding:4px 0;">No rate history yet — set today's rate to start tracking.</div>
     <?php endif;?>
   </div>
+  <?php endif; /* SSP-gated rate widget */ ?>
 </div>
 <?php endif; // end field agent / admin balance strip ?>
 
@@ -1380,7 +1392,10 @@ function cbHovReconcile() {
 <?php endif; ?>
 <!-- ── Primary filter bar: Currency + Date + Actions ── -->
 <div style="padding:12px 14px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:52px;z-index:100;">
-  <?php foreach(['' => 'All', 'USD' => '💵 USD', 'SSP' => '🇸🇸 SSP'] as $cv => $cl): ?>
+  <?php $_cbFlagMap = ['USD' => "\u{1F4B5}", 'SSP' => "\u{1F1F8}\u{1F1F8}", 'UGX' => "\u{1F1FA}\u{1F1EC}"];
+        $_cbChips = ['' => 'All'];
+        foreach ($_cbCurrs as $_cbc) $_cbChips[$_cbc] = ($_cbFlagMap[$_cbc] ?? "\u{1F4B1}") . ' ' . $_cbc;
+        foreach($_cbChips as $cv => $cl): ?>
   <a href="?<?php echo http_build_query(array_merge($_GET,['cb_curr'=>$cv,'cb_page'=>1])); ?>"
      style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;border:1.5px solid;
             <?php echo $filterCurr===$cv
@@ -1396,12 +1411,10 @@ function cbHovReconcile() {
   <?php endif; ?>
   <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj])); ?>"
     style="padding:8px 16px;background:#0f0f0f;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ <?php echo $filterCurr ? $filterCurr : 'CSV'; ?></a>
-  <?php if(!$filterCurr): ?>
-  <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj,'cb_curr'=>'USD'])); ?>"
-    style="padding:8px 12px;background:#fff;color:#374151;border:1.5px solid #e2e8f0;border-radius:10px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ USD only</a>
-  <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj,'cb_curr'=>'SSP'])); ?>"
-    style="padding:8px 12px;background:#fff;color:#92400e;border:1.5px solid #fde68a;border-radius:10px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ SSP only</a>
-  <?php endif; ?>
+  <?php if(!$filterCurr): foreach ($_cbCurrs as $_ci => $_cbc): ?>
+  <a href="?<?php echo http_build_query(array_merge($_GET,['cb_export'=>'csv','cb_proj'=>$proj,'cb_curr'=>$_cbc])); ?>"
+    style="padding:8px 12px;background:#fff;color:<?= $_ci === 0 ? '#374151' : '#92400e' ?>;border:1.5px solid <?= $_ci === 0 ? '#e2e8f0' : '#fde68a' ?>;border-radius:10px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">↓ <?= htmlspecialchars($_cbc) ?> only</a>
+  <?php endforeach; endif; ?>
 </div>
 <!-- ── Search + advanced filter ── -->
 <div class="cb3-search-bar" style="top:108px;">
@@ -1538,7 +1551,7 @@ document.addEventListener('DOMContentLoaded', function() {
   elseif($src==='collect_payment'||$src==='crm_sync') $srcBadge='<span class="cb3-card-src pwa">📱PWA</span>';
   $crudData = htmlspecialchars(json_encode(['sr'=>$e['sr'],'date'=>$e['date'],'direction'=>$e['direction'],'amount'=>$e['amount'],'category'=>$e['category'],'category_raw'=>$e['category_raw']??'','person'=>$e['person'],'description'=>$e['description'],'validation_ref'=>$e['validation_ref'],'validation_status'=>$e['validation_status'],'source'=>$src]),ENT_QUOTES);
 ?>
-<div class="cb3-card <?php echo $isPend?'pend':''; ?>" data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
+<div class="cb3-card <?php echo $isPend?'pend':''; ?>"<?php if (in_array($e['status'] ?? '', ['voided','voided_reconcile'], true)): ?> style="opacity:.5;"<?php endif; ?> data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
   <?php if($isAdmin): ?>
   <div class="cb3-card-sel">
     <input type="checkbox" class="cb-row-chk" value="<?php echo $e['id']; ?>" onchange="cbSelChanged()" style="width:16px;height:16px;cursor:pointer;">
@@ -1552,7 +1565,7 @@ document.addEventListener('DOMContentLoaded', function() {
           echo ($isIn?'+':'-') . number_format((float)$e['ssp_amount'],0) . ' <span style="font-size:10px;font-weight:800;background:#fef3c7;color:#92400e;border-radius:6px;padding:1px 5px;">SSP</span>';
           if (!empty($e['ssp_rate'])): ?><div style="font-size:9px;color:#92400e;margin-top:2px;">≈ <?= dn_cur($config) ?><?php echo number_format($e['amount'],2); ?> @<?php echo number_format($e['ssp_rate'],0); ?></div><?php endif;
         else:
-          echo ($isIn?'+':'-') . dn_cur($config) . number_format($e['amount'],2);
+          echo ($isIn?'+':'-') . $_cbRowMoney($e);
         endif; ?></div>
     </div>
     <div class="cb3-card-meta">
@@ -1591,7 +1604,8 @@ document.addEventListener('DOMContentLoaded', function() {
     $isIn=$e['direction']==='in'; $isPend=$e['validation_status']==='pending';
     $src=$e['source']??'manual';
     $crudData2 = htmlspecialchars(json_encode(['sr'=>$e['sr'],'date'=>$e['date'],'direction'=>$e['direction'],'amount'=>$e['amount'],'category'=>$e['category'],'category_raw'=>$e['category_raw']??'','person'=>$e['person'],'description'=>$e['description'],'validation_ref'=>$e['validation_ref'],'validation_status'=>$e['validation_status'],'source'=>$src]),ENT_QUOTES); ?>
-  <tr <?php echo $isPend?'style="background:#fffbeb;"':''; ?> data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
+  <?php $_isVoidRow = in_array($e['status'] ?? '', ['voided','voided_reconcile'], true); ?>
+  <tr <?php echo $_isVoidRow ? 'style="opacity:.5;text-decoration:line-through;background:#fafafa;"' : ($isPend?'style="background:#fffbeb;"':''); ?> data-id="<?php echo $e['id']; ?>" data-src="<?php echo htmlspecialchars($src); ?>">
     <?php if($isAdmin): ?><td><input type="checkbox" class="cb-row-chk" value="<?php echo $e['id']; ?>" onchange="cbSelChanged()" style="cursor:pointer;width:14px;height:14px;"></td><?php endif; ?>
     <td style="font-family:monospace;font-size:10px;color:#94a3b8;"><?php echo htmlspecialchars($e['sr']); ?></td>
     <td style="font-family:monospace;font-size:10px;white-space:nowrap;"><?php echo $e['date']; ?></td>
@@ -1602,16 +1616,19 @@ document.addEventListener('DOMContentLoaded', function() {
       if ($_cw2 && $_cw2 !== 'Office' && $isIn): ?> <span style="background:#fef2f2;color:#dc2626;border-radius:8px;padding:1px 5px;font-size:9px;font-weight:800;">💰<?= htmlspecialchars($_cw2) ?></span><?php
       elseif ($_cw2 === 'Office' && $isIn): ?> <span style="background:#dcfce7;color:#166534;border-radius:8px;padding:1px 5px;font-size:9px;font-weight:800;">✅</span><?php
       endif; ?></td>
-    <?php $_isSsp = ($e['currency']??'USD')==='SSP'; $_sspAmt = !empty($e['ssp_amount']) ? number_format((float)$e['ssp_amount'],0).' SSP' : dn_cur($config) . number_format($e['amount'],2); ?>
-    <td class="cbv2-in"><?php echo $isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : dn_cur($config) . number_format($e['amount'],2)) : ''; ?></td>
-    <td class="cbv2-out"><?php echo !$isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : dn_cur($config) . number_format($e['amount'],2)) : ''; ?></td>
+    <?php $_isSsp = ($e['currency']??'USD')==='SSP'; $_sspAmt = !empty($e['ssp_amount']) ? number_format((float)$e['ssp_amount'],0).' SSP' : $_cbRowMoney($e); ?>
+    <td class="cbv2-in"><?php echo $isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : $_cbRowMoney($e)) : ''; ?></td>
+    <td class="cbv2-out"><?php echo !$isIn ? ($_isSsp ? '<span style="color:#92400e;font-weight:700;">'.$_sspAmt.'</span>' : $_cbRowMoney($e)) : ''; ?></td>
     <td style="font-family:monospace;font-size:11px;"><?php
       if ($e['running_balance'] !== null) {
           // v4.9.18: Use _bal_currency to show correct format (SSP vs USD)
           if ($filterCurr === 'SSP' || ($e['_bal_currency'] ?? '') === 'SSP') {
               echo number_format($e['running_balance'], 0) . ' <span style="color:#92400e;font-size:9px;">SSP</span>';
           } else {
-              echo dn_cur($config) . number_format($e['running_balance'], 2);
+              $_bc = strtoupper((string)($e['_bal_currency'] ?? $_cbBase));
+              echo $_bc === $_cbBase
+                  ? dn_cur($config) . number_format($e['running_balance'], 2)
+                  : htmlspecialchars($_bc) . ' ' . number_format($e['running_balance'], 2);
           }
       } else { echo '—'; }
     ?></td>
@@ -1856,6 +1873,63 @@ $icOut=array_sum(array_column(array_filter($interco,fn($r)=>$r['direction']==='o
 </div>
 
 <?php elseif($view==='summary'): ?>
+<?php if (!$_cbSSP): ?>
+<?php
+// Phase C: cash-basis trading P&L, one section per currency. Capital flows
+// (openings, funding, transfers, adjustments) are excluded by the reader
+// itself; refunds are a contra-revenue line. Currencies are NEVER summed.
+$sumYear = $_GET['cb_yr'] ?? date('Y');
+$plData  = $cb->plByPeriod($proj, $sumYear.'-01-01', $sumYear.'-12-31');
+$inColors=['#059669','#0891b2','#7c3aed','#0369a1','#065f46','#1d4ed8'];
+$outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9','#374151'];
+?>
+<div class="cbv2-tb">
+  <select class="cbv2-fi" onchange="cbv2F('cb_yr',this.value)">
+    <?php foreach(['2026','2025','2024'] as $yr): ?>
+    <option value="<?php echo $yr; ?>" <?php echo $sumYear===$yr?'selected':''; ?>><?php echo $yr; ?></option>
+    <?php endforeach; ?>
+  </select>
+  <span style="font-size:12px;color:#94a3b8;">Trading P&amp;L · capital flows excluded · one section per currency</span>
+</div>
+<?php if (!$plData): ?>
+<div style="background:#fff;border:1.5px solid #e8e8e3;border-radius:14px;padding:28px;text-align:center;color:#94a3b8;font-size:13px;">
+  No trading activity in <?= htmlspecialchars($sumYear) ?> yet.
+</div>
+<?php endif; ?>
+<?php foreach ($plData as $_pl): $_pc = htmlspecialchars($_pl['currency']);
+      $maxIn=max(1,max($_pl['revenue'] ?: [1])); $maxOut=max(1,max($_pl['expenses'] ?: [1])); ?>
+<div style="margin-bottom:18px;">
+  <div style="font-size:13px;font-weight:800;color:#0f0f0f;margin:14px 0 8px;letter-spacing:.5px;"><?= $_pc ?> POSITION —
+    Revenue <span style="color:#059669;"><?= $_pc ?> <?= number_format($_pl['revenue_total'],0) ?></span>
+    <?php if (abs($_pl['refunds_total']) > 0.004): ?> · Refunds <span style="color:#b45309;">−<?= $_pc ?> <?= number_format($_pl['refunds_total'],0) ?></span><?php endif; ?>
+    · Expenses <span style="color:#dc2626;"><?= $_pc ?> <?= number_format($_pl['expense_total'],0) ?></span>
+    · Net <span style="color:<?= $_pl['net']>=0?'#059669':'#dc2626' ?>;"><?= $_pc ?> <?= number_format($_pl['net'],0) ?></span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#e5e5e0;">
+    <div style="background:#fff;padding:18px;">
+      <div style="font-size:13px;font-weight:800;color:#059669;margin-bottom:14px;">💰 Revenue — <?= $_pc ?> <?= number_format($_pl['revenue_total'],0) ?></div>
+      <?php $i=0; foreach($_pl['revenue'] as $cat=>$tot): $col=$inColors[$i%count($inColors)]; $i++; ?>
+      <div class="cbv2-sum-row">
+        <div class="cbv2-sum-label"><?php echo cbCatIcon($cat).' '.htmlspecialchars($cat); ?></div>
+        <div class="cbv2-sum-bw"><div class="cbv2-sum-b" style="width:<?php echo round($tot/$maxIn*100); ?>%;background:<?php echo $col; ?>;"></div></div>
+        <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;"><?= $_pc ?> <?php echo number_format($tot,0); ?></div>
+      </div>
+      <?php endforeach; if (!$_pl['revenue']) echo '<div style="font-size:12px;color:#94a3b8;">—</div>'; ?>
+    </div>
+    <div style="background:#fff;padding:18px;">
+      <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:14px;">💸 Expenses — <?= $_pc ?> <?= number_format($_pl['expense_total'],0) ?></div>
+      <?php $i=0; foreach($_pl['expenses'] as $cat=>$tot): $col=$outColors[$i%count($outColors)]; $i++; ?>
+      <div class="cbv2-sum-row">
+        <div class="cbv2-sum-label"><?php echo cbCatIcon($cat).' '.htmlspecialchars($cat); ?></div>
+        <div class="cbv2-sum-bw"><div class="cbv2-sum-b" style="width:<?php echo round($tot/$maxOut*100); ?>%;background:<?php echo $col; ?>;"></div></div>
+        <div class="cbv2-sum-a" style="color:<?php echo $col; ?>;"><?= $_pc ?> <?php echo number_format($tot,0); ?></div>
+      </div>
+      <?php endforeach; if (!$_pl['expenses']) echo '<div style="font-size:12px;color:#94a3b8;">—</div>'; ?>
+    </div>
+  </div>
+</div>
+<?php endforeach; ?>
+<?php else: ?>
 <?php
 $sumYear=$_GET['cb_yr']??date('Y');
 $summary=$cb->getSummary($proj,$sumYear.'-01-01',$sumYear.'-12-31');
@@ -1895,6 +1969,7 @@ $outColors=['#dc2626','#ea580c','#d97706','#7c3aed','#0d9488','#1d4ed8','#6d28d9
   </div>
 </div>
 
+<?php endif; /* summary: per-currency vs legacy */ ?>
 <?php elseif($view==='alerts'): ?>
 <div style="padding-bottom:40px;">
   <div style="margin-bottom:18px;">
@@ -2081,6 +2156,15 @@ function cbCatInit() {
 
   Promise.all([p1, p2]).then(function(results) {
     _cbCatData = results[0].data || results[0];
+    // No SSP on this install => the SSP FX flows cannot be entered here, and
+    // opening balances belong ONLY on the Opening Balances screen (typed,
+    // account-bound, once per account) — a wizard 'Opening Balance' would be
+    // a bare untyped row in the wrong currency, as the first live test proved.
+    if (_cbCatData) {
+      ['in', 'out_people', 'out_ops', 'out_fin', 'out'].forEach(function(g){
+        if (Array.isArray(_cbCatData[g])) _cbCatData[g] = _cb4StripHidden(_cbCatData[g]);
+      });
+    }
     var summaries = results[1].map(function(s){ return s.data || s; });
 
     // Merge usage across all projects
@@ -2291,14 +2375,19 @@ if (document.readyState === 'loading') {
 
     <!-- Currency pills -->
     <div class="cb4-curr-row">
-      <div class="cb4-cpill sel" id="cb4PillUSD" onclick="cb4SetCurr('USD')">
-        <div class="cb4-cpill-lbl">💵 USD</div>
-        <div class="cb4-cpill-bal" id="cb4PillUSDbal"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
+      <?php // Config-driven pills: Sudan default (USD,SSP) renders exactly the
+            // old two; Uganda (UGX,USD) never offers SSP.
+        $_cbFlags = ['USD' => "\u{1F4B5}", 'SSP' => "\u{1F1F8}\u{1F1F8}", 'UGX' => "\u{1F1FA}\u{1F1EC}"];
+        foreach (dn_book_currencies($config) as $_ci => $_cc): ?>
+      <div class="cb4-cpill<?= $_ci === 0 ? ' sel' : '' ?>" id="cb4Pill<?= htmlspecialchars($_cc) ?>" onclick="cb4SetCurr('<?= htmlspecialchars($_cc) ?>')">
+        <div class="cb4-cpill-lbl"><?= $_cbFlags[$_cc] ?? "\u{1F4B1}" ?> <?= htmlspecialchars($_cc) ?></div>
+        <?php if ($_ci === 0): ?>
+        <div class="cb4-cpill-bal" id="cb4PillBaseBal"><?= dn_cur($config) ?><?php echo number_format($projBal,2); ?></div>
+        <?php else: ?>
+        <div class="cb4-cpill-bal"><?= htmlspecialchars($_cc) ?></div>
+        <?php endif; ?>
       </div>
-      <div class="cb4-cpill" id="cb4PillSSP" onclick="cb4SetCurr('SSP')">
-        <div class="cb4-cpill-lbl">🇸🇸 SSP</div>
-        <div class="cb4-cpill-bal">SSP</div>
-      </div>
+      <?php endforeach; ?>
     </div>
 
     <!-- Direction cards -->
@@ -2311,7 +2400,7 @@ if (document.readyState === 'loading') {
       <div class="cb4-dir-btn" id="cb4DirExch" onclick="cb4SetDir('exchange')" style="border:2px solid var(--border);">
         <div class="cb4-dir-ic">🔄</div>
         <div class="cb4-dir-lbl">Exchange</div>
-        <div class="cb4-dir-sub">USD ↔ SSP</div>
+        <div class="cb4-dir-sub">USD ↔ <?= htmlspecialchars($_cbXC) ?></div>
       </div>
       <div class="cb4-dir-btn out" id="cb4DirOut" onclick="cb4SetDir('out')">
         <div class="cb4-dir-ic">⬇️</div>
@@ -2503,12 +2592,12 @@ if (document.readyState === 'loading') {
         <label class="cb4-lbl">EXCHANGE TYPE</label>
         <div class="cb4-dir-row" style="grid-template-columns:1fr 1fr;">
           <div class="cb4-dir-btn out sel" id="cb4ExchUSD2SSP" onclick="cb4SetExchType('usd_to_ssp')">
-            <div class="cb4-dir-ic">💵→🇸🇸</div>
-            <div class="cb4-dir-lbl" style="font-size:11px;">USD → SSP</div>
+            <div class="cb4-dir-ic">💵→<?= $_cbXFlag ?></div>
+            <div class="cb4-dir-lbl" style="font-size:11px;">USD → <?= htmlspecialchars($_cbXC) ?></div>
           </div>
           <div class="cb4-dir-btn in" id="cb4ExchSSP2USD" onclick="cb4SetExchType('ssp_to_usd')">
-            <div class="cb4-dir-ic">🇸🇸→💵</div>
-            <div class="cb4-dir-lbl" style="font-size:11px;">SSP → USD</div>
+            <div class="cb4-dir-ic"><?= $_cbXFlag ?>→💵</div>
+            <div class="cb4-dir-lbl" style="font-size:11px;"><?= htmlspecialchars($_cbXC) ?> → USD</div>
           </div>
         </div>
       </div>
@@ -2526,12 +2615,12 @@ if (document.readyState === 'loading') {
       </div>
       <div class="cb4-fg">
         <label class="cb4-lbl" id="cb4ExchAmtLbl">USD AMOUNT (giving out)</label>
-        <div class="cb4-aw"><span class="cb4-as"><?= trim(dn_cur($config)) ?></span>
+        <div class="cb4-aw"><span class="cb4-as"><?= $_cbSSP ? trim(dn_cur($config)) : '$' ?></span>
           <input type="number" class="cb4-inp cb4-ai" id="cb4ExchAmt" placeholder="0.00" step="0.01" min="0.01" oninput="cb4ExchCalc()">
         </div>
       </div>
       <div class="cb4-fg">
-        <label class="cb4-lbl">EXCHANGE RATE (SSP per $1)</label>
+        <label class="cb4-lbl">EXCHANGE RATE (<?= htmlspecialchars($_cbXC) ?> per $1)</label>
         <input type="number" class="cb4-inp" id="cb4ExchRate" placeholder="e.g. 5700" step="1" min="1" value="<?php echo (int)$xRate ?: ''; ?>" oninput="cb4ExchCalc()">
       </div>
       <div id="cb4ExchCalcResult" style="display:none;background:var(--color-background-success, #f0fdf4);color:var(--color-text-success, #15803d);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:12px;"></div>
@@ -2619,7 +2708,8 @@ var _d2='in';
 function cbv2F(k,v){var u=new URL(window.location.href);u.searchParams.set(k,v);u.searchParams.set('cb_page','1');window.location.href=u.toString();}
 var _dt;function cbv2FD(k,v){clearTimeout(_dt);_dt=setTimeout(function(){cbv2F(k,v);},600);}
 // ═══ CB4 — Admin Entry Modal Logic ═══════════════════════════════════════
-var _cb4Curr = 'USD', _cb4Dir = '', _cb4Cat = '', _cb4Proj = '<?php echo $proj; ?>';
+var _cb4Currs = <?= json_encode(dn_book_currencies($config)) ?>;
+var _cb4Curr = _cb4Currs[0], _cb4Dir = '', _cb4Cat = '', _cb4Proj = '<?php echo $proj; ?>';
 
 // ── Smart person history (auto-learned from past entries) ───────────────
 var _cb4PersonHistory = <?php echo json_encode($_smartPersons, JSON_UNESCAPED_UNICODE); ?>;
@@ -2631,6 +2721,18 @@ var _cb4CatsIN = [];
 var _cb4CatsOUT_people = [];
 var _cb4CatsOUT_ops = [];
 var _cb4CatsOUT_fin = [];
+// C0.1: categories no entry UI may offer, whatever the data source says.
+// Matches by id OR name — the old filter matched .name only, and wizard
+// items carry .id, which is exactly how a manual Opening Balance slipped
+// through on 2026-09-07.
+var _cb4Hidden = ['Opening Balance'<?php if (!$_cbSSP): ?>, 'Exchange', 'SSP Advance', 'SSP Return'<?php endif; ?>];
+var _cb4XC = <?= json_encode($_cbXC) ?>;
+function _cb4StripHidden(list) {
+  return (list || []).filter(function (c) {
+    var n = (c && c.id) ? c.id : ((c && c.name) ? c.name : c);
+    return _cb4Hidden.indexOf(n) === -1;
+  });
+}
 // v4.9.10: BookKeeper account names + custom categories for "Other..." search
 var _cb4BkAccounts = [];
 var _cb4CustomCats = [];
@@ -2642,10 +2744,10 @@ var _cb4CatsReady = false;
     .then(function(r){ return r.json(); })
     .then(function(resp) {
       var d = resp.data || resp;
-      _cb4CatsIN          = d.in          || [];
-      _cb4CatsOUT_people  = d.out_people  || [];
-      _cb4CatsOUT_ops     = d.out_ops     || [];
-      _cb4CatsOUT_fin     = d.out_fin     || [];
+      _cb4CatsIN          = _cb4StripHidden(d.in);
+      _cb4CatsOUT_people  = _cb4StripHidden(d.out_people);
+      _cb4CatsOUT_ops     = _cb4StripHidden(d.out_ops);
+      _cb4CatsOUT_fin     = _cb4StripHidden(d.out_fin);
       _cb4BkAccounts      = d.bk_accounts      || [];
       _cb4CustomCats      = d.custom_categories || [];
       // If API returned empty (shouldn't happen), load fallbacks
@@ -2654,12 +2756,12 @@ var _cb4CatsReady = false;
     })
     .catch(function(){
       // Fallback to built-in defaults if API fails
-      _cb4CatsIN = [
+      _cb4CatsIN = _cb4StripHidden([
         {id:'Receipt',ic:'💰',lbl:'Receipt'},
         {id:'Bank Transfer',ic:'🏦',lbl:'Bank Transfer'},{id:'Loan Received',ic:'💵',lbl:'Loan Received'},
-        {id:'Refund',ic:'🔙',lbl:'Refund'},{id:'Opening Balance',ic:'📊',lbl:'Opening Bal'},
+        {id:'Refund',ic:'🔙',lbl:'Refund'},
         {id:'Misc Income',ic:'📦',lbl:'Misc Income'}
-      ];
+      ]);
       _cb4CatsOUT_people = [
         {id:'Salary',ic:'💼',lbl:'Salary'},{id:'Transport Allowance',ic:'🚗',lbl:'Transport'},
         {id:'Food Allowance',ic:'🍽️',lbl:'Food Allow.'},{id:'Commission',ic:'💵',lbl:'Commission'},
@@ -2715,7 +2817,7 @@ function cbv2CloseModal() { cb4Close(); }
 
 // ── Reset ───────────────────────────────────────────────────────────────
 function cb4Reset() {
-  _cb4Curr='USD'; _cb4Dir=''; _cb4Cat=''; _cb4ActiveGrp='out_people';
+  _cb4Curr=_cb4Currs[0]; _cb4Dir=''; _cb4Cat=''; _cb4ActiveGrp='out_people';
   var mh=document.getElementById('cb4MH');
   mh.className='cb4-mh neutral';
   document.getElementById('cb4MTitle').textContent='Add Entry';
@@ -2725,8 +2827,10 @@ function cb4Reset() {
   document.getElementById('cb4Step1').style.display='';
   document.getElementById('cb4Step2').style.display='none';
   document.getElementById('cb4Footer').style.display='none';
-  document.getElementById('cb4PillUSD').classList.add('sel');
-  document.getElementById('cb4PillSSP').classList.remove('sel');
+  _cb4Currs.forEach(function(cur, i){
+    var el = document.getElementById('cb4Pill' + cur);
+    if (el) el.classList.toggle('sel', i === 0);
+  });
   document.getElementById('cb4DirIn').classList.remove('sel');
   document.getElementById('cb4DirOut').classList.remove('sel');
   document.getElementById('cb4NextBtn').disabled=true;
@@ -2762,9 +2866,11 @@ function cb4Reset() {
 // ── Currency pill ───────────────────────────────────────────────────────
 function cb4SetCurr(c) {
   _cb4Curr = c;
-  document.getElementById('cb4PillUSD').classList.toggle('sel', c==='USD');
-  document.getElementById('cb4PillSSP').classList.toggle('sel', c==='SSP');
-  document.getElementById('cb4AmtLbl').textContent = c==='SSP' ? 'AMOUNT (SSP)' : 'AMOUNT (USD)';
+  _cb4Currs.forEach(function(cur){
+    var el = document.getElementById('cb4Pill' + cur);
+    if (el) el.classList.toggle('sel', cur === c);
+  });
+  document.getElementById('cb4AmtLbl').textContent = 'AMOUNT (' + c + ')';
   document.getElementById('cb4AmtSym').textContent = c==='SSP' ? '' : <?= json_encode(trim(dn_cur($config))) ?>;
   document.getElementById('cb4RateWrap').style.display = c==='SSP' ? '' : 'none';
   if (_cb4Dir) { cb4RenderCats(); _cb4Cat=''; document.getElementById('cb4NextWrap').style.display='none'; }
@@ -2776,7 +2882,8 @@ function cb4SetDir(dir) {
   _cb4Dir = dir; _cb4Cat = '';
   document.getElementById('cb4DirIn').classList.toggle('sel', dir==='in');
   document.getElementById('cb4DirOut').classList.toggle('sel', dir==='out');
-  document.getElementById('cb4DirExch').classList.toggle('sel', dir==='exchange');
+  var _cb4ExchBtn = document.getElementById('cb4DirExch');
+  if (_cb4ExchBtn) _cb4ExchBtn.classList.toggle('sel', dir==='exchange');
   // v4.9.10: Exchange skips category — goes straight to exchange form
   if (dir === 'exchange') {
     document.getElementById('cb4CatSection').style.display = 'none';
@@ -2806,7 +2913,7 @@ function cb4UpdateHeader() {
   if(!_cb4Dir) { mh.className='cb4-mh neutral'; document.getElementById('cb4MTitle').textContent='Add Entry'; document.getElementById('cb4MSub').textContent='Select direction to begin'; return; }
   if (_cb4Dir === 'exchange') {
     mh.className = 'cb4-mh neutral';
-    document.getElementById('cb4MTitle').textContent = 'Exchange · USD ↔ SSP';
+    document.getElementById('cb4MTitle').textContent = 'Exchange · USD ↔ ' + _cb4XC;
     document.getElementById('cb4MSub').textContent = 'Convert between currencies';
     return;
   }
@@ -3026,8 +3133,8 @@ function cb4Update() {
   var ready = amt > 0;
   btn.disabled = !ready;
   if (ready) {
-    var sym = _cb4Curr==='SSP' ? '' : '$';
-    var sfx = _cb4Curr==='SSP' ? ' SSP' : '';
+    var sym = _cb4Curr==='USD' ? '$' : '';
+    var sfx = _cb4Curr==='USD' ? '' : ' ' + _cb4Curr;
     var disp = sym + (amt < 1000 ? amt.toFixed(_cb4Curr==='SSP'?0:2) : Math.round(amt).toLocaleString()) + sfx;
     var labels = {
       'Receipt':'Save Receipt','Exchange':'Save Exchange','Salary':'Save Salary',
@@ -3050,7 +3157,7 @@ function cb4ShowExchangeForm() {
   // Hide all regular Step 2 fields, show exchange-specific form
   document.getElementById('cb4RegularFields').style.display = 'none';
   document.getElementById('cb4ExchWrap').style.display = '';
-  document.getElementById('cb4Step2Label').textContent = 'Exchange · USD ↔ SSP';
+  document.getElementById('cb4Step2Label').textContent = 'Exchange · USD ↔ ' + _cb4XC;
   // Reset exchange form
   _cb4ExchType = 'usd_to_ssp';
   cb4SetExchType('usd_to_ssp');
@@ -3084,9 +3191,9 @@ function cb4ExchCalc() {
   if (amt > 0 && rate > 0) {
     var ssp = Math.round(amt * rate);
     if (_cb4ExchType === 'usd_to_ssp') {
-      calc.textContent = 'SSP received: ' + ssp.toLocaleString() + ' SSP';
+      calc.textContent = _cb4XC + ' received: ' + ssp.toLocaleString() + ' ' + _cb4XC;
     } else {
-      calc.textContent = 'SSP given: ' + ssp.toLocaleString() + ' SSP';
+      calc.textContent = _cb4XC + ' given: ' + ssp.toLocaleString() + ' ' + _cb4XC;
     }
     calc.style.display = '';
   } else {
@@ -3097,8 +3204,8 @@ function cb4ExchCalc() {
   var preview = document.getElementById('cb4ExchDescPreview');
   if (amt > 0 && rate > 0) {
     var desc = _cb4ExchType === 'usd_to_ssp'
-      ? 'Exchange USD to SSP (' + amt + '@' + rate + ')'
-      : 'Exchange SSP to USD (' + amt + '@' + rate + ')';
+      ? 'Exchange USD to ' + _cb4XC + ' (' + amt + '@' + rate + ')'
+      : 'Exchange ' + _cb4XC + ' to USD (' + amt + '@' + rate + ')';
     if (person) desc += ' By ' + person;
     if (note) desc += ' - ' + note;
     desc += ' [' + (new Date().toISOString().substring(0,7).replace('-','-')) + ']';
@@ -3117,7 +3224,7 @@ function cb4ExchUpdateSave() {
   btn.disabled = !(amt > 0 && rate > 0);
   if (amt > 0 && rate > 0) {
     var ssp = Math.round(amt * rate);
-    btn.textContent = 'Save Exchange · ' + <?= json_encode(dn_cur($config)) ?> + amt.toFixed(2) + ' ↔ ' + ssp.toLocaleString() + ' SSP';
+    btn.textContent = 'Save Exchange · ' + <?= json_encode($_cbSSP ? dn_cur($config) : '$') ?> + amt.toFixed(2) + ' ↔ ' + ssp.toLocaleString() + ' ' + _cb4XC;
   } else {
     btn.textContent = 'Save Exchange';
   }
@@ -3135,8 +3242,8 @@ function cb4Submit() {
     var note   = document.getElementById('cb4ExchNote').value.trim();
     // Auto-generate description matching Rupesh's Excel pattern
     var desc = _cb4ExchType === 'usd_to_ssp'
-      ? 'Exchange USD to SSP (' + amt + '@' + rate + ')'
-      : 'Exchange SSP to USD (' + amt + '@' + rate + ')';
+      ? 'Exchange USD to ' + _cb4XC + ' (' + amt + '@' + rate + ')'
+      : 'Exchange ' + _cb4XC + ' to USD (' + amt + '@' + rate + ')';
     if (person) desc += ' By ' + person;
     if (note) desc += ' - ' + note;
     desc += ' [' + (new Date().toISOString().substring(0,7)) + ']';
@@ -3604,8 +3711,17 @@ function cbCrudClose() {
   setTimeout(function(){ m.style.display='none'; document.body.style.overflow=''; }, 220);
 }
 function cbCrudDelete() {
-  if (!confirm('Permanently delete this entry? This cannot be undone.')) return;
+  if (!confirm('Permanently DELETE this entry? Voiding keeps the audit trail — deleting does not. This cannot be undone.')) return;
   document.getElementById('cbCrudAction').value = 'delete_entry';
+  document.getElementById('cbCrudForm').submit();
+}
+function cbCrudVoid() {
+  var reason = prompt('Void this entry — reason (kept on the row for the audit trail):');
+  if (reason === null) return;
+  reason = reason.trim();
+  if (reason.length < 3) { alert('A short reason is required to void.'); return; }
+  document.getElementById('cbCrudVoidReason').value = reason;
+  document.getElementById('cbCrudAction').value = 'void_entry';
   document.getElementById('cbCrudForm').submit();
 }
 function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+person+'?')){window.location.href='?<?php echo http_build_query(array_merge(['page'=>'dashboard','tab'=>'cashbook'],['cb_remind'=>'1'])); ?>&cb_rid='+id;}}
@@ -3660,7 +3776,7 @@ function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+per
 
       <div class="cbcrud-row">
         <div>
-          <div class="cbcrud-lbl">Amount (USD)</div>
+          <div class="cbcrud-lbl">Amount</div>
           <input type="number" name="amount" id="cbCrudAmt" class="cbcrud-inp" step="0.01" min="0.01">
         </div>
         <div>
@@ -3706,8 +3822,10 @@ function cbv2SendReminder(id,person){if(confirm('Send WhatsApp reminder to '+per
         </div>
       </div>
 
+      <input type="hidden" name="void_reason" id="cbCrudVoidReason" value="">
       <div class="cbcrud-actions">
         <button type="submit" class="cbcrud-save">💾 Save Changes</button>
+        <button type="button" class="cbcrud-del" style="background:#fffbeb;color:#b45309;border-color:#fde68a;" onclick="cbCrudVoid()">🚫 Void</button>
         <button type="button" class="cbcrud-del" onclick="cbCrudDelete()">🗑 Delete</button>
       </div>
     </form>

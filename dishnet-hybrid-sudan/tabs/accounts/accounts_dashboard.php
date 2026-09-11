@@ -79,6 +79,8 @@ $_activeCustomers = count($_acIds);
 // ── Cashbook balances ──
 require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
 $cbDash    = new CashbookService($store, $dataDir);
+$_dashSSP  = dn_ssp_selectable($config ?? null);
+$_dashPositions = $_dashSSP ? [] : $cbDash->currencyPositions();
 $cbBals    = $cbDash->getBothBalances();
 $cbDishBal = (float)($cbBals['dishnet']['balance'] ?? 0);
 $cb4gBal   = (float)($cbBals['4g']['balance']     ?? 0);
@@ -283,6 +285,22 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
     <div class="d2-hero-badge">CASHBOOK</div>
   </div>
   <div class="d2-bal">
+    <?php if (!$_dashSSP): ?>
+    <!-- Phase C: one position per currency, never a combined figure -->
+    <div class="d2-bal-lbl">Cash Position — per currency</div>
+    <?php $_dpFirst = true; foreach ($_dashPositions as $_dp): ?>
+      <?php if ($_dpFirst): ?>
+      <div class="d2-bal-val"><?= htmlspecialchars($_dp['currency']) ?> <?= number_format($_dp['total'],2) ?></div>
+      <?php $_dpFirst = false; else: ?>
+      <div class="d2-bal-val" style="font-size:20px;margin-top:2px;"><?= htmlspecialchars($_dp['currency']) ?> <?= number_format($_dp['total'],2) ?></div>
+      <?php endif; ?>
+    <?php endforeach; if ($_dpFirst): ?><div class="d2-bal-val"><?= htmlspecialchars(dn_book_base($config ?? null)) ?> 0.00</div><?php endif; ?>
+    <div class="d2-bal-split">
+      <?php foreach ($_dashPositions as $_dp): foreach ($_dp['accounts'] as $_da): if (!$_da['active'] && !(float)$_da['balance']) continue; ?>
+      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl"><?= htmlspecialchars($_da['name']) ?></span><span class="d2-bal-chip-val"><?= htmlspecialchars($_dp['currency']) ?> <?= number_format((float)$_da['balance'],2) ?></span></div>
+      <?php endforeach; endforeach; ?>
+    </div>
+    <?php else: ?>
     <div class="d2-bal-lbl">Total Cash Position</div>
     <div class="d2-bal-val"><?= dn_cur($config) ?><?= number_format($cbTotalBal,2) ?></div>
     <div class="d2-bal-split">
@@ -290,6 +308,7 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
       <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">DishNet 4G</span><span class="d2-bal-chip-val"><?= dn_cur($config) ?><?= number_format($cb4gBal,2) ?></span></div>
       <div class="d2-bal-chip"><span class="d2-bal-chip-lbl">BlueCARD</span><span class="d2-bal-chip-val"><?= dn_cur($config) ?><?= number_format($cbBcBal,2) ?></span></div>
     </div>
+    <?php endif; ?>
   </div>
   <div class="d2-today">
     <div>
@@ -574,6 +593,22 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
   </div>
   <div class="d2-section-body">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+      <?php if (!$_dashSSP): ?>
+      <?php // Phase C: month expenses per currency, capital flows excluded.
+        $_dashPl = $cbDash->plByPeriod('', date('Y-m') . '-01', date('Y-m-d'));
+        $_dashPlShown = 0;
+        foreach ($_dashPl as $_dpl): if ($_dashPlShown >= 2) break; $_dashPlShown++; ?>
+      <div style="text-align:center;padding:10px 4px;background:#fef3c7;border-radius:10px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#d97706;"><?= htmlspecialchars($_dpl['currency']) ?> <?= number_format($_dpl['expense_total'],0) ?></div>
+        <div style="font-size:9px;font-weight:700;color:#6b7280;"><?= htmlspecialchars($_dpl['currency']) ?> expenses (month)</div>
+      </div>
+      <?php endforeach; for ($_i = $_dashPlShown; $_i < 2; $_i++): ?>
+      <div style="text-align:center;padding:10px 4px;background:#fef3c7;border-radius:10px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#d97706;">—</div>
+        <div style="font-size:9px;font-weight:700;color:#6b7280;">&nbsp;</div>
+      </div>
+      <?php endfor; ?>
+      <?php else: ?>
       <div style="text-align:center;padding:10px 4px;background:#fef3c7;border-radius:10px;">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#d97706;"><?= dn_cur($config) ?><?= number_format($_expSummary['total_usd']??0,0) ?></div>
         <div style="font-size:9px;font-weight:700;color:#6b7280;">USD Total</div>
@@ -582,6 +617,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#d97706;"><?= number_format($_expSummary['total_ssp']??0,0) ?></div>
         <div style="font-size:9px;font-weight:700;color:#6b7280;">SSP Total</div>
       </div>
+      <?php endif; ?>
       <div style="text-align:center;padding:10px 4px;background:#f0fdf4;border-radius:10px;">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:#059669;"><?= $_expSummary['approved']??0 ?></div>
         <div style="font-size:9px;font-weight:700;color:#6b7280;">Approved</div>

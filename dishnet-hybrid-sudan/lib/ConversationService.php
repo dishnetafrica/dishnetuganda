@@ -457,6 +457,33 @@ class ConversationService
     /**
      * Mark conversation as read (reset unread count).
      */
+    /**
+     * A colleague has picked this conversation up.
+     *
+     * Nothing on the live Evolution path ever set this. humanIsHandling()
+     * checks state='human_active' and last_human_reply_at, and only
+     * WaBotService — the legacy WASender path, disabled in this edition —
+     * wrote either. So the AI's "a person is handling this, stay out" rule has
+     * never once fired in production, and c109 is what that looks like: a
+     * colleague typing on the handset at 19:18, 19:21, 19:24 and 19:49 with
+     * the assistant answering over the top of them every time.
+     */
+    public function markHumanHandling(int $convId): void
+    {
+        if ($convId <= 0) return;
+        $st = $this->db->prepare(
+            "UPDATE wa_conversations
+                SET state = 'human_active',
+                    last_human_reply_at = ?,
+                    updated_at = datetime('now')
+              WHERE id = ?"
+        );
+        // UTC, matching wa_messages.sent_at. humanIsHandling() compares this
+        // against time(), and a Juba-stamped value would read three hours in
+        // the future and silence the AI for three hours longer than intended.
+        $st->execute([gmdate('Y-m-d H:i:s'), $convId]);
+    }
+
     public function markRead(int $conversationId): void
     {
         $this->db->prepare("UPDATE wa_conversations SET unread_count = 0, updated_at = datetime('now') WHERE id = ?")

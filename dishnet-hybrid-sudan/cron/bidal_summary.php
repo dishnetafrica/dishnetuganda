@@ -46,7 +46,7 @@ foreach ($retailers as $r) {
 }
 
 if (!$leader) {
-    log_msg('No support_leader with phone found — skipping');
+    log_msg_bidal_summary('No support_leader with phone found — skipping');
     return;
 }
 
@@ -94,9 +94,15 @@ $notify->bidalMorningSummary($leader, [
     'completed_week'  => $completedWeek,
 ]);
 
-log_msg("Morning summary sent to {$leader['name']} ({$leader['phone']}) — pending:{$pending} testing:{$testing} done_today:{$completedToday}");
+log_msg_bidal_summary("Morning summary sent to {$leader['name']} ({$leader['phone']}) — pending:{$pending} testing:{$testing} done_today:{$completedToday}");
+// Renamed from log_msg(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function log_msg(string $msg): void
+function log_msg_bidal_summary(string $msg): void
 {
     echo '[' . date('Y-m-d H:i:s') . '] [bidal_summary] ' . $msg . "\n";
 }

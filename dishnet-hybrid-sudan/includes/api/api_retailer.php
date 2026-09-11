@@ -49,8 +49,7 @@
         $note     = trim($body['payment_note']    ?? '');
         $svcType  = trim($body['service_type']    ?? 'starlink');
         $invoiceId= trim($body['invoice_id']      ?? '');
-        $currency = strtoupper(trim($body['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD','SSP'], true)) $currency = 'USD';
+        $currency = dn_entry_currency($body['currency'] ?? '', $config ?? null);
 
         if (!$custName || $amount <= 0) $er2('Customer name and amount are required.', 422);
 
@@ -135,7 +134,7 @@
                 'clientId'     => (int)$custId,
                 'methodId'     => PaymentUuids::resolve($method),
                 'amount'       => $amount,
-                'currencyCode' => 'USD',
+                'currencyCode' => dn_payload_currency($currency, $config ?? null),
                 'note'         => "Collected by {$me2['name']} via DishNet PWA".($invoiceId?" (Inv #{$invoiceId})":"").($note?" — {$note}":"")." | Ref: {$paymentRef}",
             ];
             // v4.21.57 — apply payment to the SPECIFIC invoice the staff
@@ -266,13 +265,30 @@
         $curPwd  = trim($body['current_password']  ?? '');
         $newPwd  = trim($body['new_password']       ?? '');
         $confPwd = trim($body['confirm_password']   ?? '');
-        if (!$curPwd)                   $er2('Current password is required.');
+        // FORCED first-run change: the account still carries the known
+        // default password and this very session was just opened with it.
+        // The modal deliberately has no "current password" field — demanding
+        // one here locked every new staff member out on their first login.
+        // Authoritative flag = the retailer RECORD, not the session copy.
+        $recNow      = $store->findOne('retailers.json', 'id', $rid) ?: [];
+        $forcedFirst = !empty($recNow['must_change_pwd']);
+        if (!$forcedFirst) {
+            if (!$curPwd)               $er2('Current password is required.');
+            if (!$auth->verifyPassword($rid, $curPwd)) $er2('Current password is incorrect.');
+        }
         if (strlen($newPwd) < 8)        $er2('Password must be at least 8 characters.');
         if ($newPwd !== $confPwd)        $er2('Passwords do not match.');
-        // Verify current password
-        if (!$auth->verifyPassword($rid, $curPwd)) $er2('Current password is incorrect.');
         $auth->updateRetailer($rid, ['password' => $newPwd], false);
-        if (isset($_SESSION['dn_retailer'])) $_SESSION['dn_retailer']['must_change_pwd'] = false;
+        // The session caches the retailer record for 5 minutes under
+        // 'kyc_retailer' (the old line here cleared a 'dn_retailer' key that
+        // never existed — the modal kept haunting users from the stale
+        // cache). Bust the cache and fix the cached copy in place.
+        if (isset($_SESSION['kyc_retailer'])) {
+            $_SESSION['kyc_retailer']['cache_refreshed'] = 0;
+            if (isset($_SESSION['kyc_retailer']['cached_record'])) {
+                $_SESSION['kyc_retailer']['cached_record']['must_change_pwd'] = false;
+            }
+        }
         $ok2([], 'Password changed successfully.');
     }
 

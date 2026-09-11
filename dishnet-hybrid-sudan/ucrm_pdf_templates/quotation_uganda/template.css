@@ -1,0 +1,9 @@
+@page { margin: 0; size: A4; }
+body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #141414; line-height: 1.45; margin: 0; padding: 0; }
+body.page-size-a4 { margin: 0; }
+body.page-size-letter { margin: 0; }
+body.page-size-legal { margin: 0; }
+* { box-sizing: border-box; }
+table { border-collapse: collapse; }
+td, th { border: none; }
+.dn-footer-wrap { position: fixed; bottom: 0; left: 0; right: 0; width: 100%; }

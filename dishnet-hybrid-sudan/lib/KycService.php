@@ -937,7 +937,7 @@ class KycService
             $paymentPayload = [
                 'clientId'     => (int)$crmClientId,
                 'amount'       => (float)$checkAmount,
-                'currencyCode' => 'USD',
+                'currencyCode' => dn_payload_currency('', $cfg ?? null),
                 'methodId'     => $ucrm_method,
                 'note'         => 'Cash collected at registration — DishNet Sales Hub'
                                 . ' | Agent: ' . ($retailer['name'] ?? '')
@@ -1743,7 +1743,7 @@ class KycService
                 "INSERT INTO cb_ledger (project, date, direction, amount, currency, category, category_raw,
                     person, description, validation_ref, validation_status, status, approved_by,
                     crm_client_id, source, created_at)
-                 VALUES (?, ?, 'in', ?, 'USD', 'Receipt', 'KYC Cash Sale',
+                 VALUES (?, ?, 'in', ?, ?, 'Receipt', 'KYC Cash Sale',
                     ?, ?, ?, 'pending', 'approved', 'Auto-KYC',
                     ?, 'kyc_cash_sale', ?)"
             );
@@ -1751,6 +1751,7 @@ class KycService
                 'dishnet',
                 date('Y-m-d'),
                 $amount,
+                dn_book_base($this->store->load('kyc_config.json') ?: []),
                 $staffName,
                 "Cash collected for {$serviceType} registration: {$customerName}",
                 "CRM#{$crmClientId}",

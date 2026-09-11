@@ -108,6 +108,26 @@ When editing a file, output the COMPLETE file — never partial snippets
 that need manual merging. If the file is too large, use str_replace on
 specific sections, but verify with `php -l` afterward.
 
+## ⛔ RULE 11b: A SCHEDULED CRON SCRIPT MUST NEVER CALL exit()
+
+cron/master.php runs every job with `include`, in its own process. exit() is
+not a Throwable, so it walks past the try/catch around that include and ends
+the master run — every job registered after the offender silently stops.
+
+Use `return;`. It hands control back to master.php when included and ends the
+script when run directly.
+
+It fails backwards, which is why it went unnoticed for five days: the schedule
+is saved after each job, so the offending script never records its own
+timestamp. It reads as NEVER RUN while being dispatched every cycle, and the
+job before it looks perfectly healthy.
+
+Enforced by tests/test_cron_no_exit.php, which tokenises each scheduled script
+rather than grepping it.
+
+(Numbered 11b because two crons already cite "SAFETY.md RULE 11" for this rule
+in their headers, from before RULE 11 came to mean something else.)
+
 ## ⛔ RULE 12: CASHBOOK DEDUP FORMAT
 
 validation_ref format: PAY-{crmId} (since v4.9.10)

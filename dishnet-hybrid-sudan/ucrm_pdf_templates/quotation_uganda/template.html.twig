@@ -1,0 +1,322 @@
+<!-- ═══ DishNet Smart Quote Template — UGANDA EDITION v1 (derived from SS v5) ═══ -->
+<!-- Uganda positioning: IT solutions company & UCC Authorised Starlink Installer. -->
+<!-- Not an ISP; prices UGX; service prepaid; kits are SOLD. VAT wording follows   -->
+<!-- the quote's own tax lines, so it stays true before and after registration.    -->
+
+{# ── AUTO-DETECT STARLINK ITEMS (badge only — terms below are one set) ── #}
+{% set is_starlink = false %}
+{% set all_labels = '' %}
+{% for item in items %}
+  {% set all_labels = all_labels ~ ' ' ~ item.label %}
+{% endfor %}
+{% if 'Starlink' in all_labels or 'starlink' in all_labels or 'STARLINK' in all_labels or 'Kit' in all_labels %}
+  {% set is_starlink = true %}
+{% endif %}
+
+{# ── Dynamic sales person from client attribute, fallback to Bhavin ── #}
+{% set agent_name = client.getAttribute('salesPerson') %}
+{% if agent_name is empty %}
+  {% set agent_name = 'Bhavin Madlani' %}
+{% endif %}
+
+{# ── Company registration facts, preferring what uCRM's Organization holds ── #}
+{% set org_tin = '1059140632' %}
+{% if organization.taxId is defined and organization.taxId %}{% set org_tin = organization.taxId %}{% endif %}
+{% set org_reg = '80046255496181' %}
+{% if organization.registrationNumber is defined and organization.registrationNumber %}{% set org_reg = organization.registrationNumber %}{% endif %}
+
+<!-- FOOTER pinned to bottom -->
+<div class="dn-footer-wrap">
+  <div style="height:3px;background:#D41C1C;"></div>
+  <table style="width:100%;background:#141414;border-collapse:collapse;">
+    <tr>
+      <td style="padding:8px 28px;font-size:9px;color:#aaa;">{{ organization.name }} &middot; Kampala, Uganda &middot; TIN {{ org_tin }}</td>
+      <td style="padding:8px 28px;font-size:10px;color:#999;text-align:center;font-style:italic;font-weight:600;">Of course we can ...</td>
+      <td style="padding:8px 28px;font-size:9px;color:#999;text-align:right;">Sales: +256 705 993 348 | {% if organization.website %}{{ organization.website }}{% else %}www.dishnetuganda.com{% endif %}</td>
+    </tr>
+  </table>
+</div>
+
+<!-- HEADER -->
+<table style="width:100%;background:#141414;border-collapse:collapse;" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="padding:18px 28px 14px;vertical-align:middle;">
+      <table style="border-collapse:collapse;"><tr>
+        <td style="padding:0;vertical-align:middle;">
+          <div style="font-size:30px;font-weight:900;color:#ffffff;font-family:Helvetica,Arial,sans-serif;letter-spacing:-0.5px;">DishNet</div>
+          <div style="height:5px;width:120px;background:#D41C1C;margin-top:3px;"></div>
+        </td>
+        <td style="padding:0 0 0 10px;vertical-align:middle;">
+          {% if is_starlink %}
+            <span style="display:inline-block;background:#333;border:1px solid #555;color:#fff;font-size:8px;font-weight:800;letter-spacing:1.5px;padding:3px 8px 2px;border-radius:3px;text-transform:uppercase;">STARLINK</span>
+          {% endif %}
+        </td>
+      </tr></table>
+      <div style="font-size:9px;color:#bbb;margin-top:4px;letter-spacing:0.3px;">IT Solutions Provider &middot; UCC Authorised Starlink Installer &middot; Kampala, Uganda</div>
+    </td>
+    <td style="padding:18px 28px 14px;text-align:right;vertical-align:middle;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#bbb;">QUOTATION</div>
+      <div style="font-size:24px;font-weight:900;color:#fff;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.5px;">{{ quote.number }}</div>
+      <div style="font-size:9px;color:#aaa;">{{ quote.createdDate }}</div>
+    </td>
+  </tr>
+</table>
+<div style="height:3px;background:#D41C1C;"></div>
+
+<!-- CONTENT -->
+<div style="padding:16px 28px 45px;">
+
+  <!-- BILL TO / FROM -->
+  <table style="width:100%;border-collapse:separate;border-spacing:10px 0;margin-bottom:16px;">
+    <tr>
+      <td style="width:50%;background:#f8f8f8;border-radius:6px;padding:12px 14px;vertical-align:top;border-left:3px solid #D41C1C;">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:#777;font-weight:700;margin-bottom:4px;">BILL TO</div>
+        <div style="font-size:14px;font-weight:700;color:#141414;margin-bottom:3px;">{{ client.name }}</div>
+        {% if client.companyName %}<div style="font-size:10px;color:#6B6B6B;font-weight:600;">{{ client.companyName }}</div>{% endif %}
+        <div style="font-size:10px;color:#6B6B6B;line-height:1.5;">
+          {% if client.invoiceAddressSameAsContact %}
+            {% if client.street1 %}{{ client.street1 }}{% endif %}{% if client.street2 %}, {{ client.street2 }}{% endif %}<br>
+            {% if client.city %}{{ client.city }}{% endif %}{% if client.state %}, {{ client.state }}{% endif %}<br>
+            {% if client.country %}{{ client.country }}{% endif %}
+          {% else %}
+            {% if client.invoiceStreet1 %}{{ client.invoiceStreet1 }}{% endif %}{% if client.invoiceStreet2 %}, {{ client.invoiceStreet2 }}{% endif %}<br>
+            {% if client.invoiceCity %}{{ client.invoiceCity }}{% endif %}{% if client.invoiceState %}, {{ client.invoiceState }}{% endif %}<br>
+            {% if client.invoiceCountry %}{{ client.invoiceCountry }}{% endif %}
+          {% endif %}
+        </div>
+        {% if client.firstBillingPhone %}<div style="font-size:10px;color:#6B6B6B;">{{ client.firstBillingPhone }}</div>{% endif %}
+        {% if client.firstGeneralPhone and client.firstGeneralPhone != client.firstBillingPhone %}<div style="font-size:10px;color:#6B6B6B;">{{ client.firstGeneralPhone }}</div>{% endif %}
+        {% if client.firstBillingEmail %}<div style="font-size:10px;color:#6B6B6B;">{{ client.firstBillingEmail }}</div>{% endif %}
+      </td>
+      <td style="width:50%;background:#f8f8f8;border-radius:6px;padding:12px 14px;vertical-align:top;border-left:3px solid #141414;">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:#777;font-weight:700;margin-bottom:4px;">FROM</div>
+        <div style="font-size:14px;font-weight:700;color:#141414;margin-bottom:3px;">{{ organization.name }}</div>
+        <div style="font-size:10px;color:#6B6B6B;line-height:1.5;">
+          {{ organization.street1 }}{% if organization.street2 %}, {{ organization.street2 }}{% endif %}<br>
+          {{ organization.city }}{% if organization.state %}, {{ organization.state }}{% endif %}<br>
+          TIN: {{ org_tin }} &middot; Reg. No: {{ org_reg }}<br>
+          {% if organization.phone %}{{ organization.phone }}{% endif %}<br>
+          {% if organization.email %}{{ organization.email }}{% endif %}<br>
+          {% if organization.website %}{{ organization.website }}{% endif %}
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ITEMS TABLE -->
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-bottom:5px;">QUOTATION DETAILS</div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+    <thead>
+      <tr>
+        <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:left;width:5%;">#</th>
+        <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:left;width:43%;">Description</th>
+        <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:12%;">Qty</th>
+        <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:18%;">Unit Price</th>
+        <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:22%;">Amount (UGX)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set row_num = 1 %}
+      {% for item in items %}
+        <tr style="{% if loop.index is even %}background:#fafafa;{% endif %}">
+          <td style="padding:10px;font-size:11px;border-bottom:1px solid #f0f0f0;color:#888;font-weight:600;">{{ row_num }}</td>
+          <td style="padding:10px;font-size:11px;border-bottom:1px solid #f0f0f0;">
+            <strong style="font-size:12px;">{{ item.label }}</strong>
+            {% if item.unit %}<br><span style="font-size:8px;color:#9B9B9B;text-transform:uppercase;letter-spacing:0.5px;">{{ item.type }} - {{ item.unit }}</span>{% endif %}
+          </td>
+          <td style="padding:10px;font-size:11px;border-bottom:1px solid #f0f0f0;text-align:right;">{{ item.quantity }}</td>
+          <td style="padding:10px;font-size:11px;border-bottom:1px solid #f0f0f0;text-align:right;">{{ item.price }}</td>
+          <td style="padding:10px;font-size:11px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;">{{ item.total }}</td>
+        </tr>
+        {% set row_num = row_num + 1 %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- TOTALS -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+    <tr>
+      <td style="width:58%;border:none;"></td>
+      <td style="width:42%;border:none;padding:0;">
+        <table style="width:100%;border-collapse:collapse;background:#f8f8f8;border-radius:6px;">
+          <tr>
+            <td style="padding:6px 14px;font-size:11px;color:#6B6B6B;border-bottom:1px solid #eee;">Subtotal</td>
+            <td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">{{ totals.subtotal }}</td>
+          </tr>
+          {% if totals.hasDiscount %}
+          <tr>
+            <td style="padding:6px 14px;font-size:11px;color:#059669;border-bottom:1px solid #eee;">{{ totals.discountLabel }}</td>
+            <td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">{{ totals.discountPrice }}</td>
+          </tr>
+          {% endif %}
+          {% for tax in totals.taxes %}
+          <tr>
+            <td style="padding:6px 14px;font-size:11px;color:#6B6B6B;border-bottom:1px solid #eee;">{{ tax.label }}</td>
+            <td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">{{ tax.price }}</td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td style="padding:9px 14px;font-size:15px;font-weight:800;color:#fff;background:#141414;">Total Due</td>
+            <td style="padding:9px 14px;font-size:15px;font-weight:800;text-align:right;color:#fff;background:#141414;">{{ totals.total }}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- PAYMENT DETAILS -->
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-bottom:5px;">PAYMENT DETAILS &mdash; BANK TRANSFER</div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+    <tr>
+      <td style="background:#f8f8f8;border-radius:6px;padding:10px 14px;border-left:3px solid #D41C1C;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:50%;vertical-align:top;padding:0 8px 0 0;">
+              <div style="font-size:10px;color:#444;line-height:1.6;">
+                <b style="color:#141414;">Beneficiary:</b> DISHNET AFRICA LIMITED<br>
+                <b style="color:#141414;">Bank:</b> Ecobank Uganda Limited &mdash; Head Office<br>
+                <b style="color:#141414;">Bank Address:</b> Plot 4 Parliament Avenue, Kampala, Uganda
+              </div>
+            </td>
+            <td style="width:50%;vertical-align:top;padding:0 0 0 8px;">
+              <div style="font-size:10px;color:#444;line-height:1.6;">
+                <b style="color:#141414;">UGX Account:</b> 7247510191<br>
+                <b style="color:#141414;">USD Account:</b> 7247510192 <span style="color:#6B6B6B;">(international)</span><br>
+                <b style="color:#141414;">SWIFT/BIC:</b> ECOCUGKA
+              </div>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:9px;color:#6B6B6B;margin-top:6px;border-top:1px solid #e5e5e5;padding-top:5px;">
+          Pay in the currency of this quotation and use <b style="color:#141414;">{{ quote.number }}</b> as the payment reference.
+          Please ensure the beneficiary name and account number are entered exactly as shown above.
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- VALIDITY -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+    <tr>
+      <td style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:9px 14px;font-size:10px;color:#065f46;">
+        <b style="color:#059669;font-size:12px;margin-right:6px;">V</b>
+        Valid for <strong>7 days</strong> from date of issue. Prices subject to change after expiry.
+      </td>
+    </tr>
+  </table>
+
+  <!-- NOTES -->
+  {% if quote.notes %}
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+    <tr>
+      <td style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:9px 14px;">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#92400e;font-weight:700;margin-bottom:3px;">NOTES</div>
+        <div style="font-size:10px;color:#78350f;line-height:1.5;">{{ quote.notes }}</div>
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <div style="font-size:9px;color:#6B6B6B;margin-top:2px;">
+    This quotation is governed by the Service Process and Terms &amp; Conditions on page 2, which form part of it.
+  </div>
+
+  <!-- ═══ PAGE 2 — SERVICE PROCESS & TERMS ═══ -->
+  <div style="page-break-before:always;"></div>
+  <div style="padding-top:14px;">
+    <div style="font-size:9px;color:#999;">DishNet &mdash; Quotation {{ quote.number }} &middot; Service Process &amp; Terms &amp; Conditions</div>
+    <div style="height:2px;background:#D41C1C;margin:4px 0 12px;width:120px;"></div>
+  </div>
+
+  <!-- HOW WE WORK -->
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-bottom:6px;">HOW WE WORK &mdash; FROM ORDER TO ONLINE</div>
+  <table style="width:100%;border-collapse:separate;border-spacing:6px;margin-bottom:4px;">
+    <tr>
+      <td style="width:33%;background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #D41C1C;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">1 &middot; QUOTE &amp; ACCEPTANCE</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">You accept this quotation by signing it, confirming in writing, or making payment. Acceptance in any of these ways is agreement to the Terms &amp; Conditions below.</div>
+      </td>
+      <td style="width:33%;background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #141414;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">2 &middot; PAYMENT</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">One-time charges (equipment, installation) and the first service month are paid in full before delivery or installation is scheduled, using the bank details on page 1.</div>
+      </td>
+      <td style="width:33%;background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #D41C1C;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">3 &middot; SITE &amp; PERMISSIONS</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">You confirm the installation site, that you have the right to install there (including landlord permission where relevant), and that the dish location has a clear view of the sky.</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #141414;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">4 &middot; DELIVERY &amp; INSTALLATION</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">Installation is scheduled on a mutually agreed date after payment clears. Dates and lead times are estimates in good faith, not guarantees. Non-standard work is agreed and priced before it begins.</div>
+      </td>
+      <td style="background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #D41C1C;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">5 &middot; ACTIVATION &amp; HANDOVER</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">We activate the service, demonstrate it working at handover, and hand you the connection details. The work is accepted at handover unless a defect is reported in writing within 48 hours.</div>
+      </td>
+      <td style="background:#f8f8f8;border-radius:6px;padding:8px 10px;vertical-align:top;border-top:3px solid #141414;">
+        <div style="font-size:10px;font-weight:800;color:#141414;">6 &middot; AFTER-SALES SUPPORT</div>
+        <div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">DishNet manages the Starlink account and provides ongoing local support on +256 705 993 348 (WhatsApp and calls) for as long as your service is active with us.</div>
+      </td>
+    </tr>
+  </table>
+  <div style="font-size:8px;color:#6B6B6B;margin-bottom:12px;">The steps above describe the full scope of the standard service. Anything not listed &mdash; or not itemised on page 1 &mdash; is out of scope and will be quoted separately.</div>
+
+  <!-- ═══ TERMS & CONDITIONS — UGANDA ═══ -->
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#666;font-weight:700;margin-bottom:5px;">TERMS &amp; CONDITIONS</div>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="vertical-align:top;padding:0 5px 0 0;width:33%;font-size:8px;color:#444;line-height:1.38;">
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">1. Agreement &amp; Acceptance:</b> This quotation together with these Terms &amp; Conditions is the entire agreement between the customer and DishNet Africa Ltd and supersedes all prior discussions. No verbal statement or promise binds DishNet unless confirmed in writing by an authorised DishNet representative.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">2. Currency &amp; Pricing:</b> All prices in Ugandan Shillings (UGX). {% if totals.taxes|length > 0 %}VAT is itemised in the totals on page 1.{% else %}No VAT is charged on this quotation.{% endif %} Prices may change with 30 days' notice. Any new or increased government tax, levy or regulatory fee introduced after acceptance may be passed on at cost.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">3. Payment:</b> Service is prepaid — the monthly fee is due before the start of each service month. Service pauses automatically at the end of an unpaid period, without liability to DishNet, and resumes on payment.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">4. Title &amp; Risk:</b> Ownership of purchased equipment passes to the customer only on full payment; until then it remains DishNet property and may be recovered. Risk of loss or damage passes to the customer on delivery to the premises.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">5. Installation &amp; Premises:</b> Professional installation as quoted; non-standard mounting (roof, pole, long cable runs) is agreed and charged separately before work begins. The customer warrants they have the right to install at the premises and is responsible for any landlord or premises dispute. Minor drilling and mounting marks are a normal part of installation; DishNet is not liable for pre-existing structural defects.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">6. Acceptance of Work:</b> The installation and service are deemed accepted at handover unless a defect is reported in writing within 48 hours. Use of the service constitutes acceptance.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">7. Cancellation &amp; Refunds:</b> Cancel or pause with notice before the next billing date. Fees for a started service month, and installation fees once work has begun, are not refundable. Delivered equipment is not returnable for refund unless defective on arrival.</div>
+      </td>
+      <td style="vertical-align:top;padding:0 5px;width:33%;font-size:8px;color:#444;line-height:1.38;">
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">8. Third-Party Network:</b> Internet is delivered over the Starlink satellite network, which is owned and operated by Starlink, not DishNet. Speeds, coverage, availability, network policies and network pricing are determined by Starlink and may change without DishNet's control. DishNet does not warrant uninterrupted or fault-free service and is not liable for outages, degradation or changes on the Starlink network. Use of the network is also subject to Starlink's applicable terms.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">9. Independent Company:</b> DishNet Africa Ltd is an independent Ugandan company. It is not an agent, partner, franchisee, affiliate, or representative of Starlink or SpaceX, and nothing in this agreement creates such a relationship. DishNet's installer authorisation is issued by the Uganda Communications Commission, not by Starlink. "Starlink" and related marks belong to their owners and are used only to identify the network and equipment. DishNet's commitments do not bind Starlink, and Starlink's publications do not bind DishNet.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">10. Account &amp; Continuity:</b> The Starlink account serving the customer is registered and managed by DishNet; the customer's contract is with DishNet only, and no direct contract with Starlink arises from this quotation unless a transfer is separately agreed in writing. If the network, account or applicable network policies make continued service impossible, unlawful or impracticable for reasons outside DishNet's control, DishNet may migrate the customer to an equivalent solution or terminate the service; a refund of unused prepaid service fees is the customer's sole and entire remedy.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">11. Service &amp; Support:</b> DishNet provides installation, account management and after-sales support on +256 705 993 348. Support covers the DishNet-supplied installation and account; the customer's own devices, internal networks and third-party equipment are outside scope and chargeable on request.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">12. Equipment Warranty:</b> Hardware carries the manufacturer's warranty only; DishNet facilitates claims but gives no separate warranty of its own. Warranty cover is lost through misuse, tampering, unauthorised repair, lightning, power surges, water or weather damage, or accident — protecting the equipment after delivery is the customer's responsibility. Loaned equipment remains DishNet property, returnable in working condition within 7 days of termination.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">13. Fair Use:</b> Lawful personal or business use only; no resale of the service without a written agreement. DishNet may suspend the service immediately and without refund where it is used unlawfully, and the customer remains fully responsible for all use of the connection.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">14. Relocation &amp; Changes:</b> Moving the service to a new address may require re-installation, quoted separately. Plan changes take effect from the next billing cycle.</div>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 5px;width:33%;font-size:8px;color:#444;line-height:1.38;">
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">15. Liability:</b> To the maximum extent permitted by law, DishNet is not liable for indirect, incidental or consequential loss, including loss of business, profits, data or downtime. DishNet's total aggregate liability under this agreement is capped at the service fees paid by the customer in the 3 months before the claim arose.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">16. Customer Indemnity:</b> The customer indemnifies and holds DishNet harmless against claims, demands, penalties and losses brought by any third party — including network operators, rights holders or authorities — to the extent arising from the customer's use or misuse of the service or equipment, the customer's content or activities, or the customer's breach of these terms or of applicable network terms.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">17. Force Majeure:</b> DishNet is not liable for failure or delay caused by events beyond its reasonable control, including weather, power failure, satellite or network outage, acts of government or regulators, civil unrest or natural disaster.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">18. Suspension &amp; Termination:</b> DishNet may suspend or terminate the service for breach of these terms on notice. Obligations that accrued before termination survive it.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">19. Variation &amp; Severability:</b> Changes to these terms bind DishNet only if made in writing by an authorised representative. If any clause is held invalid, the remaining clauses stay in force. Not enforcing a clause on one occasion is not a waiver of it.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">20. Notices &amp; Data:</b> Official communications use the contact details on this quotation. Customer information is used to provide the service and is shared with the network operator only as needed for activation and support.</div>
+        <div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">21. Disputes &amp; Governing Law:</b> The parties will first attempt to resolve any dispute in good faith within 30 days of written notice. Unresolved disputes are subject to the courts of, and this agreement is governed by the laws of, the Republic of Uganda.</div>
+      </td>
+    </tr>
+  </table>
+
+  <div style="font-size:8px;font-weight:700;color:#141414;margin-top:6px;">By signing, confirming in writing, or paying against this quotation, the customer accepts the Service Process and Terms &amp; Conditions above.</div>
+
+  <!-- SIGNATURE (dynamic sales person) -->
+  <table style="width:100%;border-collapse:collapse;margin-top:14px;border-top:1px solid #eee;">
+    <tr>
+      <td style="width:45%;padding:8px 0 0;vertical-align:top;border:none;">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#777;font-weight:700;">PREPARED BY</div>
+        <div style="border-top:1.5px solid #141414;padding-top:4px;margin-top:16px;">
+          <span style="font-size:10px;font-weight:700;">{{ agent_name }}</span>
+          <span style="font-size:9px;color:#6B6B6B;float:right;">DishNet Africa Ltd</span>
+        </div>
+      </td>
+      <td style="width:10%;border:none;"></td>
+      <td style="width:45%;padding:8px 0 0;vertical-align:top;border:none;">
+        <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#777;font-weight:700;">ACCEPTED BY (CUSTOMER)</div>
+        <div style="border-top:1.5px solid #141414;padding-top:4px;margin-top:16px;">
+          <span style="font-size:10px;font-weight:700;">______________________________</span>
+          <span style="font-size:9px;color:#6B6B6B;float:right;">Date: ____________</span>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+</div>

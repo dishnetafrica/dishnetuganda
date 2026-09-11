@@ -11,7 +11,7 @@ declare(strict_types=1);
  *
  * CLI only — refuses to run over HTTP.
  */
-if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+if (PHP_SAPI !== 'cli') return;   // a web request is not ours to serve
 
 $pluginRoot = dirname(__DIR__);
 require_once $pluginRoot . '/lib/error_handler.php';
@@ -34,7 +34,7 @@ $dataDir = getDataDir($pluginRoot);
 $store   = SqliteStore::create($dataDir);
 $config  = PluginConfig::load($pluginRoot, $dataDir);
 
-if (empty($config['starlink_mail_enabled'])) exit(0);   // quiet: normal during setup
+if (empty($config['starlink_mail_enabled'])) return;    // quiet: normal during setup
 
 $pdo = $store->getPdo();
 

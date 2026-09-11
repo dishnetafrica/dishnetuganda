@@ -54,6 +54,37 @@ class SqliteStore implements StoreInterface
     private \PDO   $pdo;
     private string $dir;
 
+    /**
+     * Request-level cache for blobs that are read many times per page.
+     *
+     * This was three separate function-scoped statics all named $_loadCache —
+     * one in load(), one in save(), one in updateOne(). A function-scoped
+     * static belongs to that function alone, so save() and updateOne() were
+     * clearing their own permanently-empty arrays and load()'s cache was
+     * never invalidated by anything at all, withLock() included. Inside one
+     * process, a write followed by a read returned the data from before the
+     * write. In a web request that is mostly hidden by the redirect that
+     * follows a save; in a worker or cron, which lives for thousands of
+     * records, it is not hidden at all.
+     *
+     * Keyed by data directory as well as file name, because a process may
+     * hold stores on two different directories and they are not the same
+     * data.
+     */
+    private static array $loadCache = [];
+
+    /** Blobs stable enough to cache. Anything time-sensitive is left out. */
+    private const CACHEABLE = ['retailers.json', 'kyc_devices.json', 'kyc_packages.json',
+                               'subscription_plans.json', 'kyc_config.json'];
+
+    private function cacheKey(string $file): string { return $this->dir . '|' . $file; }
+
+    /** Drop a cached blob. Every write path must call this. */
+    private function forget(string $file): void
+    {
+        unset(self::$loadCache[$this->cacheKey($file)]);
+    }
+
     /** Tables known to store flat-object configs (not record arrays). */
     private static array $FLAT_TABLES = [
         'kyc_config', 'email_settings', 'backup_settings',
@@ -281,15 +312,13 @@ class SqliteStore implements StoreInterface
      */
     public function load(string $file): array
     {
-        // v4.11.3 PERF: Request-level in-memory cache for read-only blobs.
-        // retailers.json is loaded 29x per admin page — this makes 28 of those free.
-        // Cache is cleared by save() and updateOne() to prevent stale reads.
-        static $_loadCache = [];
-        // Only cache known-stable blobs (not time-sensitive data)
-        static $_cacheable = ['retailers.json', 'kyc_devices.json', 'kyc_packages.json',
-                              'subscription_plans.json', 'kyc_config.json'];
-        if (in_array($file, $_cacheable, true) && isset($_loadCache[$file])) {
-            return $_loadCache[$file];
+        // v4.11.3 PERF: request-level cache. retailers.json is loaded 29x per
+        // admin page — this makes 28 of those free. Every write path calls
+        // forget(), so a read after a write in the same process is correct.
+        $_cacheable = self::CACHEABLE;
+        $_ck        = $this->cacheKey($file);
+        if (in_array($file, $_cacheable, true) && isset(self::$loadCache[$_ck])) {
+            return self::$loadCache[$_ck];
         }
 
         $table = $this->tableFor($file);
@@ -316,7 +345,7 @@ class SqliteStore implements StoreInterface
             if ($row === false) return [];
             $decoded = json_decode($row, true);
             $result_blob = is_array($decoded) ? $decoded : [];
-            if (in_array($file, $_cacheable, true)) { $_loadCache[$file] = $result_blob; }
+            if (in_array($file, $_cacheable, true)) { self::$loadCache[$_ck] = $result_blob; }
             return $result_blob;
         }
 
@@ -341,7 +370,7 @@ class SqliteStore implements StoreInterface
                 $rows
             )));
             // Cache stable blobs for this request (cleared by save/updateOne)
-            if (in_array($file, $_cacheable, true)) { $_loadCache[$file] = $result; }
+            if (in_array($file, $_cacheable, true)) { self::$loadCache[$_ck] = $result; }
             return $result;
         } catch (\PDOException $e) {
             // Fallback: table has proper columns (no 'data' column).
@@ -367,9 +396,7 @@ class SqliteStore implements StoreInterface
      */
     public function save(string $file, array $data): void
     {
-        // v4.11.3 PERF: Invalidate request-level load cache on write
-        static $_loadCache = [];
-        unset($_loadCache[$file]);
+        $this->forget($file);   // a read after this write must see it
 
         $table = $this->tableFor($file);
         $this->ensureTable($table);
@@ -422,6 +449,7 @@ class SqliteStore implements StoreInterface
      */
     public function append(string $file, array $record): array
     {
+        $this->forget($file);   // a read after this write must see it
         $table = $this->tableFor($file);
         $this->ensureTable($table);
 
@@ -565,9 +593,7 @@ class SqliteStore implements StoreInterface
      */
     public function updateOne(string $file, string $key, $value, array $updates): bool
     {
-        // v4.11.3 PERF: Invalidate request-level load cache on write
-        static $_loadCache = [];
-        unset($_loadCache[$file]);
+        $this->forget($file);   // a read after this write must see it
 
         $table = $this->tableFor($file);
         $this->ensureTable($table);
@@ -651,6 +677,7 @@ class SqliteStore implements StoreInterface
      */
     public function appendWithId(string $file, array $record): array
     {
+        $this->forget($file);   // a read after this write must see it
         $table = $this->tableFor($file);
         $this->ensureTable($table);
 
@@ -734,6 +761,7 @@ class SqliteStore implements StoreInterface
      */
     public function withLock(string $file, callable $fn)
     {
+        $this->forget($file);   // a read after this write must see it
         $table = $this->tableFor($file);
         $this->ensureTable($table);
 
@@ -820,9 +848,14 @@ class SqliteStore implements StoreInterface
             }
 
             $this->pdo->commit();
+            // Again after commit: the callback is arbitrary code and may have
+            // called load(), repopulating the cache from the pre-commit
+            // snapshot it was reading inside this transaction.
+            $this->forget($file);
             return $result['result'];
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
+            $this->forget($file);
             throw $e;
         }
     }
@@ -1034,13 +1067,20 @@ class SqliteStore implements StoreInterface
 
     private function ensureTable(string $table): void
     {
+        // Keyed by directory as well as table, for the same reason the load
+        // cache is: this static is shared by every instance in the process,
+        // and two stores on different directories are different databases.
+        // Keyed on the table name alone, the second store would find the
+        // first store's table marked created and never create its own —
+        // every query against it then failing with "no such table".
         static $checked = [];
-        if (isset($checked[$table])) return;
+        $ck = $this->dir . '|' . $table;
+        if (isset($checked[$ck])) return;
 
         // If the table already exists with proper columns (from SQL migrations),
         // do NOT create it as a blob table. Just mark as checked.
         if ($this->isProperTable($table)) {
-            $checked[$table] = true;
+            $checked[$ck] = true;
             return;
         }
 
@@ -1050,7 +1090,7 @@ class SqliteStore implements StoreInterface
                 data TEXT    NOT NULL
             )
         ");
-        $checked[$table] = true;
+        $checked[$ck] = true;
     }
 
     /**

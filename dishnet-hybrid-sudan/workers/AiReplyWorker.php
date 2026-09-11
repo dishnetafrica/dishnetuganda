@@ -21,10 +21,19 @@ declare(strict_types=1);
  */
 class AiReplyWorker extends WorkerBase
 {
+    /** wa_messages.media_url tag marking a flyer send, for the cooldown query. */
+    const FLYER_MEDIA_TAG = 'flyer:plans';
+    /** Same idea per named photo, so the same picture is never sent twice. */
+    const PHOTO_MEDIA_TAG = 'dishnet:photo:';
+
     private EvolutionApiService $evo;
     private DishNetTools $tools;
     private DishNetAiBrain $brain;
     private $convSvc;
+    /** @var array|null FlyerAsset::find() result, resolved once per run */
+    private $flyer;
+    /** Where the photo library lives; the worker resolves names against it. */
+    private string $photoDir = '';
 
     public function __construct($store, array $config, int $maxRun = 55, int $batch = 10)
     {
@@ -36,6 +45,11 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/ConversationService.php';
         require_once $root . '/lib/DishNetAiBrain.php';
         require_once $root . '/lib/KnowledgeBase.php';
+        require_once $root . '/lib/FlyerAsset.php';
+
+        // Same override the tools and crons honour, so tests and one-shots can
+        // point the worker at their own data directory.
+        $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 
         $this->evo   = new EvolutionApiService($config);
         $this->tools = new DishNetTools($store, $config, $root);
@@ -43,9 +57,27 @@ class AiReplyWorker extends WorkerBase
         // chat uses ride into the shared system prompt. Empty (legacy) when
         // migration 064 has not been seeded.
         $config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
+        // Only when an image actually exists is the model offered <<FLYER>> —
+        // otherwise the prompt is unchanged and the AI cannot promise an
+        // attachment nothing would send.
+        $this->flyer = FlyerAsset::find($config, $dataDir);
+        if ($this->flyer !== null) {
+            $config['flyer_available'] = '1';
+        }
+        // Named photos the operator dropped in <dataDir>/photos. An empty
+        // folder leaves photo_block as '' and the model is never told the
+        // action exists — the same absence story the flyer uses.
+        if (!class_exists('MediaLibrary')) {
+            $pl = __DIR__ . '/../lib/MediaLibrary.php';
+            if (is_file($pl)) require_once $pl;
+        }
+        $this->photoDir = $dataDir;
+        if (class_exists('MediaLibrary')) {
+            $config['photo_block'] = \MediaLibrary::promptBlock($dataDir);
+        }
         $this->brain = new DishNetAiBrain($config);
+        $this->config = $config;
 
-        $dataDir = getDataDir($root);
         $this->convSvc = new ConversationService($dataDir, $this->pdo);
     }
 
@@ -104,17 +136,88 @@ class AiReplyWorker extends WorkerBase
         // Everything past here is bookkeeping. Never throw — the customer has
         // already received the message and must not receive it again.
         try {
+            // Claim our own echo in the webhook's dedupe table, first thing.
+            //
+            // Evolution posts every outbound message back as fromMe, and the
+            // webhook now reads an unrecognised fromMe message as a colleague
+            // typing on the handset — which stands the AI down. Our own reply
+            // must never look like that. Storing it below already dedupes it,
+            // but the echo is a separate HTTP request that could in principle
+            // arrive first; claiming the id here means it is dropped at the
+            // webhook's idempotency check before it can be misread.
+            $ourId = (string)($send['data']['key']['id'] ?? '');
+            if ($ourId !== '') {
+                try {
+                    if (!class_exists('EvoWebhookGuard')) {
+                        $g = __DIR__ . '/../lib/EvoWebhookGuard.php';
+                        if (is_file($g)) require_once $g;
+                    }
+                    if (class_exists('EvoWebhookGuard')) {
+                        (new \EvoWebhookGuard($this->pdo, $this->config))
+                            ->claim($ourId, (string)($p['whatsapp_instance'] ?? ''), 'ai.reply');
+                    }
+                } catch (\Throwable $e) { /* dedupe is a backstop, not a requirement */ }
+            }
+
             if ($convId > 0) {
                 $this->convSvc->storeMessage($convId, [
                     'direction'  => 'out',
                     'role'       => 'assistant',
                     'body'       => $reply,
                     'agent_name' => 'DishNet AI',
+                    // Evolution echoes every outbound message back through the
+                    // webhook, including this one. storeMessage dedupes on
+                    // wa_message_id, so recording the id Evolution just gave us
+                    // is what stops the echo landing as a second copy.
+                    'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
                     'metadata'   => json_encode(['channel' => $channel]),
                 ]);
             }
+            // A named photo the model asked for. Before the flyer, because a
+            // customer who asked to see the kit wants the kit, not the price
+            // list.
+            if (!empty($ai['photo'])) {
+                $this->maybeSendPhoto($convId, $channel, $phone, (string)$ai['photo']);
+            }
+            if (!empty($ai['doc'])) {
+                $this->maybeSendDocument($convId, $channel, $phone, (string)$ai['doc']);
+            }
+
+            // After the text, so a retry of a failed text send can never have
+            // already delivered the image once.
+            if (!empty($ai['send_flyer'])) {
+                $this->maybeSendFlyer($convId, $channel, $phone);
+            }
+            // The sales record. After the send, inside the never-throw zone:
+            // a CRM failure must never cost the customer their reply, and the
+            // service refuses anything that has not established a requirement.
+            if (!empty($ai['lead']) && is_array($ai['lead'])) {
+                try {
+                    if (!class_exists('AiLeadService')) {
+                        $f = __DIR__ . '/../lib/AiLeadService.php';
+                        if (is_file($f)) require_once $f;
+                    }
+                    if (class_exists('AiLeadService')) {
+                        $svc = new \AiLeadService($this->store, $this->config, $this->pdo);
+                        $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai');
+                        $this->log($r['ok'] ? 'info' : 'info', sprintf(
+                            'conv %d: lead %s%s', $convId, $r['action'],
+                            $r['reason'] !== '' ? ' — ' . $r['reason'] : ' #' . (int)$r['lead_id']
+                        ));
+                    }
+                } catch (\Throwable $e) {
+                    $this->log('warn', 'lead capture failed: ' . $e->getMessage());
+                }
+            }
+
             if (!empty($ai['escalate'])) {
-                $this->escalate($convId, $channel, $phone, (string)($ai['escalate_reason'] ?? 'AI requested handover'));
+                // The customer already has a reply. Passing true stops the holding
+                // line being sent on top of it: c109 received "I can't provide
+                // final pricing without checking with our team" and "Let me get a
+                // colleague to confirm that for you" in the same second — two
+                // apologies for one question.
+                $this->escalate($convId, $channel, $phone,
+                    (string)($ai['escalate_reason'] ?? 'AI requested handover'), true);
             }
         } catch (\Throwable $e) {
             $this->log('error', 'post-send bookkeeping failed: ' . $e->getMessage());
@@ -337,6 +440,194 @@ class AiReplyWorker extends WorkerBase
         return is_array($data) ? $data : null;
     }
 
+    /**
+     * Send one named photo from the operator's library.
+     *
+     * A name the library does not have sends nothing and logs it. That is the
+     * safety property: the model picks from a list it was given, and a name it
+     * invented resolves to no file rather than to the wrong picture.
+     */
+    private function maybeSendPhoto(int $convId, string $channel, string $phone, string $name): void
+    {
+        try {
+            if (!class_exists('MediaLibrary')) return;
+            $photo = \MediaLibrary::find($this->photoDir, $name);
+            if ($photo === null) {
+                $this->log('warn', "conv {$convId}: no photo named '{$name}' — nothing sent");
+                return;
+            }
+            // Twice is worse than not at all: they already have it, and a
+            // repeat reads as a bot that forgot.
+            if ($convId > 0 && $this->photoSentAlready($convId, $name)) {
+                $this->log('info', "conv {$convId}: photo '{$name}' already sent — not repeating");
+                return;
+            }
+
+            $media = \MediaLibrary::payload($photo);
+            if ($media === '') {
+                $this->log('warn', "conv {$convId}: photo '{$name}' vanished before sending");
+                return;
+            }
+
+            $send = $this->evo->sendImage($channel, $phone, $media, (string)$photo['caption']);
+            if (empty($send['ok'])) {
+                $this->log('warn', "conv {$convId}: photo '{$name}' failed — "
+                    . (string)($send['error'] ?? '?'));
+                return;
+            }
+            $this->log('info', "conv {$convId}: photo '{$name}' sent");
+
+            if ($convId > 0) {
+                $this->convSvc->storeMessage($convId, [
+                    'direction'  => 'out',
+                    'role'       => 'assistant',
+                    'body'       => $photo['caption'] !== '' ? $photo['caption'] : ('[photo: ' . $name . ']'),
+                    'media_type' => 'image',
+                    'media_url'  => self::PHOTO_MEDIA_TAG . $name,
+                    'agent_name' => 'DishNet AI',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->log('error', 'photo send failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send one named document — a spec sheet, a brochure.
+     *
+     * sendMedia with mediatype 'document' and a real file name, because a PDF
+     * arriving as "file" with no extension is a PDF nobody opens.
+     */
+    private function maybeSendDocument(int $convId, string $channel, string $phone, string $name): void
+    {
+        try {
+            if (!class_exists('MediaLibrary')) return;
+            $doc = \MediaLibrary::findDocument($this->photoDir, $name);
+            if ($doc === null) {
+                $this->log('warn', "conv {$convId}: no document named '{$name}' — nothing sent");
+                return;
+            }
+            if ($convId > 0 && $this->photoSentAlready($convId, 'doc:' . $name)) {
+                $this->log('info', "conv {$convId}: document '{$name}' already sent — not repeating");
+                return;
+            }
+
+            $media = \MediaLibrary::payload($doc);
+            if ($media === '') {
+                $this->log('warn', "conv {$convId}: document '{$name}' vanished before sending");
+                return;
+            }
+
+            $send = $this->evo->sendMedia($channel, $phone, 'document', $media,
+                                          (string)$doc['caption'], (string)$doc['file']);
+            if (empty($send['ok'])) {
+                $this->log('warn', "conv {$convId}: document '{$name}' failed — "
+                    . (string)($send['error'] ?? '?'));
+                return;
+            }
+            $this->log('info', "conv {$convId}: document '{$name}' sent");
+
+            if ($convId > 0) {
+                $this->convSvc->storeMessage($convId, [
+                    'direction'  => 'out',
+                    'role'       => 'assistant',
+                    'body'       => $doc['caption'] !== '' ? $doc['caption'] : ('[document: ' . $doc['file'] . ']'),
+                    'media_type' => 'document',
+                    'media_url'  => self::PHOTO_MEDIA_TAG . 'doc:' . $name,
+                    'agent_name' => 'DishNet AI',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->log('error', 'document send failed: ' . $e->getMessage());
+        }
+    }
+
+    /** Has this exact photo already gone to this conversation? */
+    private function photoSentAlready(int $convId, string $name): bool
+    {
+        try {
+            $st = $this->pdo->prepare(
+                "SELECT 1 FROM wa_messages WHERE conversation_id = ? AND media_url = ? LIMIT 1"
+            );
+            $st->execute([$convId, self::PHOTO_MEDIA_TAG . $name]);
+            return (bool)$st->fetchColumn();
+        } catch (\Throwable $e) {
+            return false;   // a failed check must never block a photo
+        }
+    }
+
+    /**
+     * Send the plans flyer image, when there is one and it was not sent to
+     * this conversation recently.
+     *
+     * Lives entirely in the never-throw zone after the text reply: a missing
+     * file, an Evolution refusal or a full disk downgrades to a log line and
+     * the customer still has the text they were answered with. The cooldown
+     * is the backstop for a model that emits <<FLYER>> too eagerly — the
+     * prompt already says once per conversation, but prompts are requests.
+     */
+    private function maybeSendFlyer(int $convId, string $channel, string $phone): void
+    {
+        try {
+            if ($this->flyer === null) return;   // model flagged it, nothing to send
+            if ($convId > 0 && $this->flyerSentRecently($convId)) {
+                $this->log('info', "conv {$convId}: flyer already sent recently — not repeating it");
+                return;
+            }
+
+            $media = FlyerAsset::payload($this->flyer);
+            if ($media === '') {
+                $this->log('warn', "conv {$convId}: flyer vanished between resolve and send — skipped");
+                return;
+            }
+
+            $caption = trim((string)($this->config['wa_flyer_caption'] ?? ''));
+            $send = $this->evo->sendImage($channel, $phone, $media, $caption);
+            if (empty($send['ok'])) {
+                $this->log('warn', "conv {$convId}: flyer send failed — " . (string)($send['error'] ?? '?'));
+                return;
+            }
+            $this->log('info', "conv {$convId}: plans flyer sent (" . (string)$this->flyer['kind'] . ")");
+
+            if ($convId > 0) {
+                // Stored as a media message: the Inbox shows it happened, and
+                // the model sees it in history — which is how "already sent,
+                // refer back to it" becomes possible.
+                $this->convSvc->storeMessage($convId, [
+                    'direction'  => 'out',
+                    'role'       => 'assistant',
+                    'body'       => $caption !== '' ? $caption : '[plans flyer image]',
+                    'media_type' => 'image',
+                    'media_url'  => self::FLYER_MEDIA_TAG,
+                    'agent_name' => 'DishNet AI',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->log('error', 'flyer send failed: ' . $e->getMessage());
+        }
+    }
+
+    private function flyerSentRecently(int $convId): bool
+    {
+        $hours = $this->config['wa_flyer_cooldown_hours'] ?? null;
+        $hours = ($hours === null || $hours === '' || !is_numeric($hours))
+               ? 24                          // default: once a day per conversation
+               : max(0, (int)$hours);
+        if ($hours === 0) return false;      // 0 = the model's judgement alone
+
+        $stmt = $this->pdo->prepare(
+            "SELECT sent_at FROM wa_messages
+              WHERE conversation_id = ? AND direction = 'out' AND media_url = ?
+              ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute([$convId, self::FLYER_MEDIA_TAG]);
+        $at = (string)($stmt->fetchColumn() ?: '');
+        if ($at === '') return false;
+
+        $ts = strtotime($at . ' UTC');       // sent_at is stored as UTC
+        return $ts !== false && (time() - $ts) < $hours * 3600;
+    }
+
     private function humanIsHandling(int $convId): bool
     {
         try {
@@ -367,7 +658,13 @@ class AiReplyWorker extends WorkerBase
         }
     }
 
-    private function escalate(int $convId, string $channel, string $phone, string $reason): void
+    /**
+     * @param bool $alreadyAnswered The customer has had a reply this turn, so the
+     *                              holding line would be a second message saying
+     *                              the same thing.
+     */
+    private function escalate(int $convId, string $channel, string $phone, string $reason,
+                              bool $alreadyAnswered = false): void
     {
         $this->log('info', "conv {$convId}: HANDOFF to human — {$reason}");
         try {
@@ -394,8 +691,65 @@ class AiReplyWorker extends WorkerBase
                 . ($reason !== '' ? " — {$reason}" : '') . '. Open Engage → WhatsApp → Inbox.',
                 30
             );
+
+            // ── And tell the customer ────────────────────────────────────
+            // A handoff sent them nothing at all. The team gets a buzz, the
+            // Inbox turns red, and the person who asked the question hears
+            // silence — indistinguishable from being ignored. Six
+            // conversations were sitting like that, one of them since nine
+            // that morning.
+            //
+            // Empty by default: an installation that has not set a line keeps
+            // the old behaviour exactly.
+            $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
+            if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
+                $send = $this->evo->sendText($channel, $phone, $holding);
+                if (!empty($send['ok'])) {
+                    if ($convId > 0) {
+                        $this->convSvc->storeMessage($convId, [
+                            'direction'     => 'out',
+                            'role'          => 'assistant',
+                            'body'          => $holding,
+                            'agent_name'    => 'DishNet AI',
+                            'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
+                            'metadata'      => json_encode(['channel' => $channel, 'handover' => true]),
+                        ]);
+                    }
+                } else {
+                    $this->log('warn', "conv {$convId}: handover line not sent: "
+                        . (string)($send['error'] ?? '?'));
+                }
+            }
         } catch (\Throwable $e) {
             $this->log('error', 'escalation failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Have we said this already in the last few turns?
+     *
+     * A customer who trips the handoff three times running should hear it
+     * once. The team alert has a 30-minute cooldown for the same reason, and
+     * repeating a holding line at somebody already waiting reads worse than
+     * saying nothing.
+     *
+     * On any error it answers false: a duplicate is a smaller failure than
+     * another silence.
+     */
+    private function alreadySaid(int $convId, string $text): bool
+    {
+        if ($convId <= 0) return false;
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT body FROM wa_messages
+                  WHERE conversation_id = ? AND direction = 'out'
+                  ORDER BY id DESC LIMIT 3"
+            );
+            $stmt->execute([$convId]);
+            foreach ((array)$stmt->fetchAll(\PDO::FETCH_COLUMN) as $b) {
+                if (trim((string)$b) === trim($text)) return true;
+            }
+        } catch (\Throwable $e) { /* fall through */ }
+        return false;
     }
 }

@@ -32,6 +32,96 @@
 
 declare(strict_types=1);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BILLING-MODEL GATE
+//
+// This whole ladder assumes a POSTPAID contract: the customer consumed the
+// service, an invoice fell due, and the debt is now chased for up to 210 days
+// while uCRM keeps the line suspended. Every stage's wording says so.
+//
+// Uganda is PREPAID. A customer buys a period up front; when it ends the
+// service PAUSES and the correct message is "top up to resume" — there is no
+// debt, nothing is overdue, nothing has been suspended for non-payment, and
+// no reconnection fee applies. Sending stage 4's "Final notice" to a prepaid
+// customer who owes nothing is both false and alarming, so on a prepaid
+// install the ladder must not run at all.
+//
+// The gate is a single config key, billing_model:
+//     absent / "postpaid"  → runs exactly as before   ← the Sudan install
+//     "prepaid"            → refuses to send          ← the Uganda install
+//
+// Absence is the old behaviour, so an installation that never sets the key
+// keeps the ladder it has today, byte for byte. The prepaid replacement is
+// CustomerEmails::servicePaused() / serviceResumed(), which carry the correct
+// wording and the Uganda brand.
+// ═══════════════════════════════════════════════════════════════════════════
+
+if (!function_exists('_dunningEffectiveConfig')) {
+    /**
+     * Read billing_model straight from the config FILES.
+     *
+     * _sendEmail() receives only SMTP settings, so it cannot be handed the
+     * plugin config by its callers. Reading the files here makes the guard
+     * self-sufficient: it holds no matter which code path reaches the send,
+     * including any added later. Pure reads, cached per request.
+     */
+    function _dunningEffectiveConfig(): array
+    {
+        static $cfg = null;
+        if ($cfg !== null) return $cfg;
+        $cfg  = [];
+        $root = dirname(__DIR__);
+        $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
+        foreach ([$root . '/data/config.json', $dataDir . '/config.json',
+                  $dataDir . '/kyc_config.json'] as $p) {
+            if (!is_file($p)) continue;
+            $d = json_decode((string)@file_get_contents($p), true);
+            if (!is_array($d)) continue;
+            // A later file's EMPTY value must not erase an earlier real one.
+            // uCRM writes every manifest-declared field it holds no value for
+            // as "", so a plain merge lets an unfilled form field blank a
+            // working setting. That already blanked a live mailbox password.
+            foreach ($d as $k => $v) {
+                if (is_string($v) && trim($v) === ''
+                    && isset($cfg[$k]) && trim((string)$cfg[$k]) !== '') {
+                    continue;
+                }
+                $cfg[$k] = $v;
+            }
+        }
+        return $cfg;
+    }
+}
+
+if (!function_exists('_dunningBillingModel')) {
+    /** 'prepaid' or 'postpaid'. Anything unrecognised means postpaid. */
+    function _dunningBillingModel(?array $cfg = null): string
+    {
+        // is_array() first: PHP 7.4 emits "array offset on null" otherwise,
+        // and this runs inside a cron whose log must stay readable.
+        $v = (is_array($cfg) && isset($cfg['billing_model'])) ? $cfg['billing_model'] : null;
+        if ($v === null || trim((string)$v) === '') {
+            $v = _dunningEffectiveConfig()['billing_model'] ?? '';
+        }
+        return strtolower(trim((string)$v)) === 'prepaid' ? 'prepaid' : 'postpaid';
+    }
+}
+
+if (!function_exists('_dunningBlockedReason')) {
+    /**
+     * '' when the ladder may run; otherwise a sentence saying why not, fit to
+     * print in a cron log or hand back to the workbench as an error.
+     */
+    function _dunningBlockedReason(?array $cfg = null): string
+    {
+        if (_dunningBillingModel($cfg) !== 'prepaid') return '';
+        return 'Billing model is prepaid: the 9-stage overdue ladder is written for '
+             . 'postpaid debt ("suspended", "final notice", "settle to restore") and '
+             . 'must not reach a prepaid customer, who owes nothing when a period '
+             . 'ends. Use the service paused / resumed emails instead.';
+    }
+}
+
 // ── Stage selector — single source of truth for "what stage does N days map to" ─
 if (!function_exists('_stageForDays')) {
     function _stageForDays(int $daysOverdue): int
@@ -162,6 +252,11 @@ if (!function_exists('_buildEmail')) {
         $fromName  = $cfg['overdue_email_from_name']      ?? 'DishNet Accounts';
         $acctPhone = $cfg['overdue_email_phone']           ?? '+211 921 443 009';
         $acctEmail = $cfg['overdue_email_accounts_email']  ?? 'accounts@dishnetafrica.com';
+        // Hardcoded until now. The defaults are the exact strings this footer
+        // has always printed, so Sudan is unchanged; an install that sets them
+        // cannot leak a Juba address into another country's mail.
+        $footLine  = $cfg['overdue_email_company_line']    ?? 'DishNet Africa Ltd · Airport Road, Juba, South Sudan';
+        $footWeb   = $cfg['overdue_email_website']         ?? 'www.dishnetafrica.com';
 
         $vars = ['first_name'=>$firstName,'full_name'=>$fullName,'invoice_number'=>$invNum,
                  'amount'=>$amount,'due_date'=>$dueDate,'days_overdue'=>$days,
@@ -199,8 +294,8 @@ if (!function_exists('_buildEmail')) {
     <a href="'.htmlspecialchars($payUrl).'" class="btn">'.htmlspecialchars($ctaT).' →</a>
     <p style="font-size:13px;color:#6b7280;">'.$ft.'</p>
   </div>
-  <div class="ft">DishNet Africa Ltd · Airport Road, Juba, South Sudan<br>
-  📞 '.htmlspecialchars($acctPhone).' · 📧 '.htmlspecialchars($acctEmail).' · 🌐 www.dishnetafrica.com</div>
+  <div class="ft">'.htmlspecialchars($footLine).'<br>
+  📞 '.htmlspecialchars($acctPhone).' · 📧 '.htmlspecialchars($acctEmail).' · 🌐 '.htmlspecialchars($footWeb).'</div>
 </div></body></html>';
     }
 }
@@ -287,6 +382,12 @@ if (!function_exists('_buildWhatsApp')) {
 if (!function_exists('_sendEmail')) {
     function _sendEmail(array $smtp, string $to, string $subject, string $html, string &$error): bool
     {
+        // Last line of defence. The cron and the workbench both check the gate
+        // before they build anything, but a guard at the wire means no future
+        // caller can reach a prepaid customer with postpaid debt wording.
+        $blocked = _dunningBlockedReason();
+        if ($blocked !== '') { $error = $blocked; return false; }
+
         $msg = "From: DishNet Accounts <{$smtp['from']}>\r\n"
              . "Reply-To: " . ($smtp['reply_to'] ?? $smtp['from']) . "\r\n"
              . "To: {$to}\r\n"
@@ -313,13 +414,13 @@ if (!function_exists('_rawSmtp')) {
             $read = function() use ($sock) { return fgets($sock, 512); };
             $write = function($cmd) use ($sock) { fwrite($sock, $cmd . "\r\n"); };
             $r = $read(); if (substr($r,0,3) !== '220') { $error="Not ready:{$r}"; fclose($sock); return false; }
-            $write("EHLO " . gethostname());
+            $write("EHLO " . MailService::ehloName($s));
             while (($l=fgets($sock,512))!==false){if(substr($l,3,1)===' ')break;}
             if ($s['enc']==='tls') {
                 $write("STARTTLS"); $r=$read();
                 if(substr($r,0,3)!=='220'){$error="STARTTLS failed";fclose($sock);return false;}
                 @stream_socket_enable_crypto($sock,true,STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT|STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT);
-                $write("EHLO ".gethostname());
+                $write("EHLO " . MailService::ehloName($s));
                 while(($l=fgets($sock,512))!==false){if(substr($l,3,1)===' ')break;}
             }
             $write("AUTH LOGIN"); $read();

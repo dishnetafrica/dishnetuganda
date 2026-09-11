@@ -55,7 +55,8 @@ $data  = strpos($p, 'PLANS (live');
 t('never-invent rule exists', is_int($rules), true);
 t('rules come before data', $rules !== false && $data !== false && $rules < $data, true);
 has('no-discount rule', $p, 'no authority to discount');
-has('coverage never confirmed', $p, 'Never confirm either');
+// The country is answerable; the site is not. See test_coverage_and_scale.php.
+has('a specific site is never promised', $p, 'never promise a particular roof');
 
 // ── 4. Provider failure = handover, never an exception ──────────────────
 try {
@@ -159,10 +160,15 @@ $p = $brain->promptPreview($sales + ['products' => $catalogue + [
     'hardware' => [['name' => 'Starlink Standard Kit', 'price' => 600.0],
                    ['name' => 'Professional Installation', 'price' => 50.0]]]]);
 has('monthly vs one-time distinction is a rule', $p, 'MONEY IS TWO SEPARATE THINGS');
-has('upfront = confirmed one-time items only',   $p, 'ONLY the confirmed one-time items from HARDWARE');
-has('monthly price presented separately',        $p, 'monthly price');
+has('upfront is itemised then totalled',         $p, 'TOTAL TO GET CONNECTED');
+has('monthly price presented separately',        $p, 'the monthly plan on its own');
 has('no invented delivery/customs/taxes',        $p, 'Never add delivery, customs, taxes');
-has('missing one-time price => confirm + hand over', $p, 'say you will confirm it and hand over');
+// One missing price used to suppress every other price too, so a customer
+// asking what it costs was told the team would check while the kit price sat
+// in the prompt. Quote what you have; confirm only what you don't.
+has('one missing price still quotes the rest',   $p, 'quote everything else anyway');
+has('withholding a known price is forbidden',    $p, 'NEVER withhold a price you have');
+has('the missing one is still never guessed',    $p, 'Never estimate the missing');
 $rulePos = strpos($p, 'MONEY IS TWO SEPARATE THINGS');
 $dataPos = strpos($p, 'HARDWARE (one-time items');
 t('upfront rule precedes the data it governs', $rulePos !== false && $dataPos !== false && $rulePos < $dataPos, true);

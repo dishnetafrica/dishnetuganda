@@ -114,9 +114,9 @@ try {
                 'debits_total'  => round($debits, 2),
                 'detected_at'   => date('Y-m-d H:i:s'),
             ];
-            mlog("  ⚠  DISCREPANCY — Retailer #{$rid} ({$retailer['name']}): live=\${$liveBal} ledger=\${$expected} diff=\${$diff}");
+            mlog("  ⚠  DISCREPANCY — Retailer #{$rid} ({$retailer['name']}): live=" . dn_money($liveBal, $config, null) . " ledger=" . dn_money($expected, $config, null) . " diff=" . dn_money($diff, $config, null));
         } else {
-            mlog("  ✓  Retailer #{$rid} ({$retailer['name']}): \${$liveBal} OK");
+            mlog("  ✓  Retailer #{$rid} ({$retailer['name']}): " . dn_money($liveBal, $config, null) . " OK");
         }
     }
 
@@ -146,9 +146,9 @@ try {
         $alertLines = ["DishNet Wallet Integrity Alert — " . date('Y-m-d H:i:s'), ""];
         foreach ($discrepancies as $d) {
             $alertLines[] = "Retailer #{$d['retailer_id']} ({$d['retailer_name']})";
-            $alertLines[] = "  Live balance : \${$d['live_balance']}";
-            $alertLines[] = "  Ledger total : \${$d['ledger_balance']} (credits \${$d['credits_total']} − debits \${$d['debits_total']})";
-            $alertLines[] = "  Difference   : \${$d['diff']}";
+            $alertLines[] = "  Live balance : " . dn_money($d['live_balance'], $config, null);
+            $alertLines[] = "  Ledger total : " . dn_money($d['ledger_balance'], $config, null) . " (credits " . dn_money($d['credits_total'], $config, null) . " − debits " . dn_money($d['debits_total'], $config, null) . ")";
+            $alertLines[] = "  Difference   : " . dn_money($d['diff'], $config, null);
             $alertLines[] = "";
         }
         $alertLines[] = "Check wallet_integrity_log.json in the DishNet data directory.";
@@ -780,7 +780,7 @@ try {
 
             // Send invoice notification
             $notify->invoiceCreated($phone, $fullName, $invoiceNum, $total, $dueDate ?: 'See invoice');
-            mlog("  SENT: Invoice #{$invoiceNum} \${$total} → {$fullName} ({$phone})");
+            mlog("  SENT: Invoice #{$invoiceNum} " . dn_money($total, $config, null) . " → {$fullName} ({$phone})");
 
             // Send invoice PDF via WhatsML
             try {
@@ -816,7 +816,7 @@ try {
                         $phone,
                         $pdfUrl,
                         "{$invoiceNum}.pdf",
-                        "Invoice #{$invoiceNum} — \${$total} — Due: {$dueDate}\n— DishNet Africa",
+                        "Invoice #{$invoiceNum} — " . dn_money($total, $config, null) . " — Due: {$dueDate}\n— DishNet Africa",
                         'ops_invoice_pdf'
                     );
                     mlog("  PDF sent: #{$invoiceNum}");
@@ -1031,7 +1031,7 @@ try {
 
         $nudgeLog[$logKey] = date('Y-m-d H:i:s');
         $nudged++;
-        mlog("  Nudged {$name} (#{$aid}) — \${$cih} in hand");
+        mlog("  Nudged {$name} (#{$aid}) — " . dn_money($cih, $config, null) . " in hand");
         usleep(300000);
     }
 
@@ -1042,7 +1042,7 @@ try {
     }
     $store->save('handover_nudge_log.json', $nudgeLog);
 
-    mlog("  Handover nudge done: {$nudged} agents nudged (threshold: \${$threshold})");
+    mlog("  Handover nudge done: {$nudged} agents nudged (threshold: " . dn_money($threshold, $config, null) . ")");
     $results['handover_nudge'] = ['nudged' => $nudged, 'threshold' => $threshold];
 } catch (\Throwable $e) {
     mlog("  ERROR: " . $e->getMessage());
@@ -1074,19 +1074,32 @@ try {
         require_once __DIR__ . '/lib/CashbookService.php';
         $cbSummary = new CashbookService($store, $dataDir);
 
-        // Get today's entries
+        // Get today's entries — totals PER CURRENCY (never one blind sum;
+        // a UGX and a USD row cannot share a total). The message renders the
+        // base stream in the headline and any others as extra lines.
         $allEntries = $cbSummary->getEntries(['date_from' => $todayStr2, 'date_to' => $todayStr2, 'limit' => 9999]);
-        $totalIn  = 0;
-        $totalOut = 0;
+        $_mBase = dn_book_base($config ?? null);
+        $byCur  = [];
         $countIn  = 0;
         $countOut = 0;
         foreach ($allEntries as $e) {
-            $amt = (float)($e['amount'] ?? 0);
+            if (in_array($e['status'] ?? '', ['voided', 'voided_reconcile'], true)) continue;
+            $cur = strtoupper(trim((string)($e['currency'] ?? ''))) ?: $_mBase;
+            $amt = ($cur === 'SSP') ? (float)($e['ssp_amount'] ?? 0) : (float)($e['amount'] ?? 0);
             $dir = $e['direction'] ?? '';
-            if ($dir === 'in')  { $totalIn  += $amt; $countIn++;  }
-            if ($dir === 'out') { $totalOut += $amt; $countOut++; }
+            $byCur[$cur] = $byCur[$cur] ?? ['in' => 0.0, 'out' => 0.0];
+            if ($dir === 'in')  { $byCur[$cur]['in']  += $amt; $countIn++;  }
+            if ($dir === 'out') { $byCur[$cur]['out'] += $amt; $countOut++; }
         }
-        $netFlow = $totalIn - $totalOut;
+        $totalIn  = $byCur[$_mBase]['in']  ?? 0.0;
+        $totalOut = $byCur[$_mBase]['out'] ?? 0.0;
+        $netFlow  = $totalIn - $totalOut;
+        $extraCurLines = '';
+        foreach ($byCur as $cur => $t) {
+            if ($cur === $_mBase) continue;
+            $extraCurLines .= "\n{$cur}: IN +" . number_format($t['in'], 2)
+                            . " / OUT -" . number_format($t['out'], 2) . " {$cur}";
+        }
 
         // Agent-wise collection summary
         if (!class_exists('StaffCashPositionService')) {
@@ -1114,7 +1127,8 @@ try {
         $msg = "📊 *Cashbook Daily Summary — {$todayStr2}*\n\n"
              . "💰 *Cash IN:*  " . dn_cur($config) . number_format($totalIn, 2) . " ({$countIn} entries)\n"
              . "💸 *Cash OUT:* " . dn_cur($config) . number_format($totalOut, 2) . " ({$countOut} entries)\n"
-             . "📈 *Net Flow:* " . dn_cur($config) . number_format($netFlow, 2) . "\n";
+             . "📈 *Net Flow:* " . dn_cur($config) . number_format($netFlow, 2) . "\n"
+             . ($extraCurLines !== '' ? "🌐 *Other currencies:*" . $extraCurLines . "\n" : '');
 
         if (!empty($agentLines)) {
             $msg .= "\n👥 *Cash Held by Agents:*\n" . implode("\n", $agentLines) . "\n";
@@ -1132,7 +1146,7 @@ try {
             $notify->sendRaw($adminPhone, $msg, 'ops_cashbook_daily_summary');
             $summaryLog[$todayStr2] = date('Y-m-d H:i:s');
             $store->save('cashbook_summary_log.json', $summaryLog);
-            mlog("  Sent to {$adminPhone}: IN=\${$totalIn}, OUT=\${$totalOut}");
+            mlog("  Sent to {$adminPhone}: IN=" . dn_money($totalIn, $config, null) . ", OUT=" . dn_money($totalOut, $config, null));
             $results['cashbook_summary'] = ['sent' => true, 'cash_in' => $totalIn, 'cash_out' => $totalOut];
         } else {
             mlog("  SKIP — whatsapp_admin_phone not configured");

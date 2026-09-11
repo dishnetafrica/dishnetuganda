@@ -268,12 +268,17 @@ try {
 <a href="?page=dashboard&tab=accounts_ledger" class="kyc-tab <?= $tab==='accounts_ledger'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-journal-text"></i></span> Revenue Ledger
 </a>
+<a href="?page=dashboard&tab=opening_balances" class="kyc-tab <?= $tab==='opening_balances'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-bank"></i></span> Opening Balances
+</a>
+<?php if (in_array('SSP', dn_book_currencies($GLOBALS['config'] ?? null), true)): // Sudan-only books ?>
 <a href="?page=dashboard&tab=ssp_overview" class="kyc-tab <?= $tab==='ssp_overview'?'active':'' ?>">
     <span class="nav-icon"></span> SSP Overview
 </a>
 <a href="?page=dashboard&tab=ssp_cashbook" class="kyc-tab <?= $tab==='ssp_cashbook'?'active':'' ?>">
     <span class="nav-icon"></span> SSP Cashbook
 </a>
+<?php endif; ?>
 <a href="?page=dashboard&tab=accounts_settlement" class="kyc-tab <?= $tab==='accounts_settlement'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-clipboard-data"></i></span> Settlement
 </a>
@@ -378,6 +383,11 @@ try {
 <a href="?page=dashboard&tab=roles" class="kyc-tab <?= $tab==='roles'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-shield-lock-fill"></i></span> Roles &amp; Permissions
 </a>
+<?php if ($isAdmin): ?>
+<a href="?page=dashboard&tab=email_preview" class="kyc-tab <?= $tab==='email_preview'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-envelope-paper"></i></span> Email Preview
+</a>
+<?php endif; ?>
 <?php endif; ?>
 <?php if($can('wallet_admin')): ?>
 <a href="?page=dashboard&tab=wallet_admin" class="kyc-tab <?= $tab==='wallet_admin'?'active':'' ?>" style="position:relative;">

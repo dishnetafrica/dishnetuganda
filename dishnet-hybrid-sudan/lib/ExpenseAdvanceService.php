@@ -165,8 +165,7 @@ class ExpenseAdvanceService
         $purpose = trim($data['purpose'] ?? 'misc');
         if (!in_array($purpose, self::PURPOSES, true)) $purpose = 'misc';
 
-        $currency = strtoupper(trim($data['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD', 'SSP'], true)) $currency = 'USD';
+        $currency = dn_entry_currency($data['currency'] ?? '', null);
 
         $project = in_array($data['project'] ?? '', ['dishnet', '4g', 'bluecard'], true)
             ? $data['project'] : 'dishnet';
@@ -531,8 +530,7 @@ class ExpenseAdvanceService
         $category = trim($data['category'] ?? 'other');
         if (!in_array($category, self::CATEGORIES, true)) $category = 'other';
 
-        $currency = strtoupper(trim($data['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD', 'SSP'], true)) $currency = 'USD';
+        $currency = dn_entry_currency($data['currency'] ?? '', null);
 
         // ── Balance guard: can't spend what you don't have ──────────────
         if ($currency === 'SSP') {

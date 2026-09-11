@@ -29,6 +29,7 @@ require_once __DIR__ . '/CrmApiClient.php';
 class QuotationService
 {
     const LOG_FILE     = 'quotes_log.json';
+    // Historical constant; the live code derives the code from config.
     const CURRENCY     = 'USD';
     const VALIDITY_DAYS = 7;
 
@@ -43,6 +44,10 @@ class QuotationService
     private array  $config;
     private NotificationService $ns;
     private CrmApiClient $crm;
+    /** @var array<string,array> organization lookups, memoised for this instance */
+    private array $orgMemo = [];
+    /** Why uCRM was not the source, when it was not. Empty means it was. */
+    private string $orgError = '';
 
     public function __construct($store, string $dataDir, array $config = [])
     {
@@ -54,12 +59,19 @@ class QuotationService
         }
         $this->config = $config;
         $this->ns  = new NotificationService($store, $config);
-        // Use factory method — resolves API URL + key from ucrm.json automatically
-        $pluginRoot = dirname($dataDir);  // data/ is inside plugin root
-        if (!file_exists($pluginRoot . '/manifest.json')) {
-            $pluginRoot = dirname($pluginRoot); // try one more level up
-        }
-        $this->crm = CrmApiClient::fromUcrm($pluginRoot, $config);
+        // The plugin root is where THIS FILE lives, not somewhere up from the
+        // data directory. The old derivation walked up from $dataDir with the
+        // comment "data/ is inside plugin root", and that stopped being true
+        // when bootstrap_data.php moved the data directory to a SIBLING of the
+        // plugin so it would survive uCRM upgrades — uCRM replaces the plugin
+        // directory wholesale, and the database used to go with it.
+        //
+        // When the walk misses, fromUcrm() gets a root with no ucrm.json,
+        // finds no credentials, and every uCRM call from this class fails
+        // quietly: branding falls back to config, and createCrmQuote() cannot
+        // post a quote at all. lib/ is inside the plugin root by definition,
+        // so this cannot miss.
+        $this->crm = CrmApiClient::fromUcrm(dirname(__DIR__), $config);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -392,9 +404,13 @@ class QuotationService
         $followUp   = $opts['follow_up']   ?? '';
         $amountPaid = isset($opts['amount_paid']) ? (float)$opts['amount_paid'] : null;
         $balance    = isset($opts['balance'])     ? (float)$opts['balance']     : null;
-        $company    = $this->config['quote_company_name']  ?? self::COMPANY_NAME;
-        $compPhone  = $this->config['quote_company_phone'] ?? self::COMPANY_PHONE;
-        $compEmail  = $this->config['quote_company_email'] ?? self::COMPANY_EMAIL;
+        $co         = $this->companyDetails(isset($opts['client_id']) ? (int)$opts['client_id'] : null);
+        $company    = $co['name'];
+        $compPhone  = $co['phone'];
+        $compEmail  = $co['email'];
+        foreach ($co['_warnings'] as $w) {
+            error_log('[QuotationService] company details: ' . $w);
+        }
         $validDays  = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
         $validUntil = date('d M Y', strtotime("+{$validDays} days"));
 
@@ -422,22 +438,23 @@ class QuotationService
             $unit      = $item['unit'] ?? '';
             $unitLabel = $unit && $unit !== 'amount' ? " / {$unit}" : '';
             $label     = $item['label'] ?? 'Item';
+            $c = dn_cur($this->config);
             if ($qty > 1) {
                 $lines[] = "• {$label}";
-                $lines[] = "  {$qty} × \${$price}{$unitLabel} = *\${$lineTotal}*";
+                $lines[] = "  {$qty} × {$c}{$price}{$unitLabel} = *{$c}{$lineTotal}*";
             } else {
-                $lines[] = "• {$label}: *\${$lineTotal}{$unitLabel}*";
+                $lines[] = "• {$label}: *{$c}{$lineTotal}{$unitLabel}*";
             }
         }
         $lines[] = "";
         $lines[] = "━━━━━━━━━━━━━━━━━━━━━━";
-        $lines[] = "💰 *TOTAL: \${$total}*";
+        $lines[] = "💰 *TOTAL: " . dn_cur($this->config) . "{$total}*";
 
         // ── Payment info ────────────────────────────────────────────────────
         if ($amountPaid !== null) {
-            $lines[] = "✅ *Paid: \${$amountPaid}*";
+            $lines[] = "✅ *Paid: " . dn_cur($this->config) . "{$amountPaid}*";
             if ($balance !== null && $balance > 0) {
-                $lines[] = "⚠️ *Balance Due: \${$balance}*";
+                $lines[] = "⚠️ *Balance Due: " . dn_cur($this->config) . "{$balance}*";
             } elseif ($balance !== null && $balance <= 0) {
                 $lines[] = "✅ *Fully Paid*";
             }
@@ -479,6 +496,135 @@ class QuotationService
     /**
      * Push a quote to UCRM billing/quotes and immediately send it via UCRM.
      */
+    /**
+     * Whose details go on this quotation.
+     *
+     * The three constants at the top of this class are South Sudan's, and an
+     * unset config key did not mean "blank" — it meant Juba's phone number
+     * printed on a Ugandan customer's quote as the number to call. That was
+     * live until today.
+     *
+     * uCRM already holds the right answer and always did: organization 1 on
+     * this install carries DishNet Africa Limited, +256705993348,
+     * accounts@dishnetuganda.com, the Acacia Mall address, the URA TIN and the
+     * bank details. Duplicating that into plugin config was the same mistake
+     * as typing prices into the prompt — a second source of truth that nobody
+     * remembers to update.
+     *
+     * WHICH organization is not a guess. A quote is issued for a client, and a
+     * client carries organizationId. Without a client — a lead quote — the one
+     * uCRM marks `selected` is used. (lib/FtthCrmService.php's note about "Org
+     * 2 / Org 7" describes the South Sudan install; this one has a single
+     * organization at id 1.)
+     *
+     * The fallback is PER FIELD, not per source. uCRM holding a name but no
+     * phone must not drag the name back down to the constant with it.
+     *
+     *   1. the client's organization in uCRM
+     *   2. explicit plugin config      quote_company_{name,phone,email}
+     *   3. the compiled constant       — recorded as a fault, never silent
+     *
+     * @return array{name:string,phone:string,email:string,website:string,
+     *               address:string,tax_id:string,registration_number:string,
+     *               bank_name:string,bank_1:string,bank_2:string,logo_url:string,
+     *               _source:array<string,string>,_warnings:array<string>}
+     */
+    public function companyDetails(?int $clientId = null): array
+    {
+        $org = $this->resolveOrganization($clientId);
+
+        $src = []; $warn = [];
+        // [uCRM key, config key, compiled constant]
+        $map = [
+            'name'  => ['name',  'quote_company_name',  self::COMPANY_NAME],
+            'phone' => ['phone', 'quote_company_phone', self::COMPANY_PHONE],
+            'email' => ['email', 'quote_company_email', self::COMPANY_EMAIL],
+        ];
+        $out = [];
+        foreach ($map as $field => [$orgKey, $cfgKey, $const]) {
+            $fromOrg = trim((string)($org[$orgKey] ?? ''));
+            $fromCfg = trim((string)($this->config[$cfgKey] ?? ''));
+            if ($fromOrg !== '')      { $out[$field] = $fromOrg; $src[$field] = 'ucrm'; }
+            elseif ($fromCfg !== '')  { $out[$field] = $fromCfg; $src[$field] = 'config'; }
+            else {
+                $out[$field] = $const; $src[$field] = 'constant';
+                $warn[] = "{$field} fell through to the built-in default \"{$const}\" — "
+                        . "uCRM has no {$orgKey} and {$cfgKey} is unset";
+            }
+        }
+
+        // Fields uCRM holds that nothing was reading. No constant for these:
+        // absent is absent, and the caller omits the line rather than inventing it.
+        foreach (['website' => 'website', 'tax_id' => 'taxId',
+                  'registration_number' => 'registrationNumber',
+                  'bank_name' => 'bankAccountName', 'bank_1' => 'bankAccountField1',
+                  'bank_2' => 'bankAccountField2', 'logo_url' => 'logoUrl'] as $k => $orgKey) {
+            $out[$k] = trim((string)($org[$orgKey] ?? ''));
+            if ($out[$k] !== '') $src[$k] = 'ucrm';
+        }
+
+        $addr = array_values(array_filter([
+            trim((string)($org['street1'] ?? '')), trim((string)($org['street2'] ?? '')),
+            trim((string)($org['city'] ?? '')),    trim((string)($org['zipCode'] ?? '')),
+        ], fn($v) => $v !== ''));
+        $out['address'] = implode(', ', $addr);
+        if ($out['address'] !== '') $src['address'] = 'ucrm';
+
+        $out['_source']    = $src;
+        $out['_org_error'] = $this->orgError;
+        $out['_warnings'] = $warn;
+        return $out;
+    }
+
+    /**
+     * The organization a quote belongs to, memoised for the request.
+     *
+     * Never organizations[0]: on an install with more than one, that is a coin
+     * toss between two companies' letterheads. Client first, then whichever
+     * uCRM itself marks selected.
+     */
+    private function resolveOrganization(?int $clientId): array
+    {
+        // Per instance, not static. A static memo would outlive the config that
+        // produced it, so a second QuotationService built with different
+        // settings in the same process would silently answer from the first
+        // one's uCRM. Within a single quote it is the same organization either
+        // way, which is all the memo is for.
+        $key = $clientId === null ? 'default' : ('c' . $clientId);
+        if (isset($this->orgMemo[$key])) return $this->orgMemo[$key];
+
+        $org = [];
+        try {
+            $orgId = null;
+            if ($clientId !== null && $clientId > 0) {
+                $client = $this->crm->get("clients/{$clientId}");
+                $orgId  = isset($client['organizationId']) ? (int)$client['organizationId'] : null;
+            }
+            $all = $this->crm->get('organizations') ?? [];
+            foreach ((array)$all as $o) {
+                if (!is_array($o)) continue;
+                if ($orgId !== null && (int)($o['id'] ?? 0) === $orgId) { $org = $o; break; }
+                if ($orgId === null && !empty($o['selected']))          { $org = $o; break; }
+            }
+            // uCRM marks none as selected and we have no client: only then is
+            // taking the first one reasonable, and only because there is one.
+            if (!$org && $orgId === null && count((array)$all) === 1 && is_array($all[0])) {
+                $org = $all[0];
+            }
+        } catch (\Throwable $e) {
+            // uCRM unreachable degrades to config, never to the constant
+            // silently — companyDetails() records the source either way.
+            $this->orgError = $e->getMessage();
+            $org = [];
+        }
+        if (!$org && $this->orgError === '') {
+            $this->orgError = $this->crm->isConfigured()
+                ? 'uCRM returned no matching organization'
+                : 'uCRM credentials not resolved for this plugin root';
+        }
+        return $this->orgMemo[$key] = $org;
+    }
+
     public function createCrmQuote(int $crmClientId, array $items, string $quoteRef, array $retailer, string $note = ''): array
     {
         $validityDays = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
@@ -504,14 +650,144 @@ class QuotationService
                     $fetched    = $this->crm->get("billing/quotes/{$quoteId}");
                     $ucrmNumber = $fetched['number'] ?? null;
                 }
-                // Send via UCRM (triggers email to customer)
-                $this->crm->patch("billing/quotes/{$quoteId}/send");
-                return ['ok' => true, 'quote_id' => $quoteId, 'quote_number' => $ucrmNumber];
+                // Who emails the customer? When the operator has switched
+                // quotation email to the plugin (Settings → System → Email),
+                // we fetch the PDF and send it ourselves through MailService —
+                // no uCRM mailer involved. Toggle absent or any plugin-send
+                // failure falls back to uCRM's own /send, the historical
+                // behaviour, so a quote never goes silently unemailed.
+                $viaPlugin = false; $emailErr = '';
+                // Same source MailService itself reads, so the toggle and the
+                // SMTP config can never disagree about which file is truth.
+                $ef   = $this->dataDir . '/email_settings.json';
+                $eset = is_file($ef) ? (json_decode((string)@file_get_contents($ef), true) ?: []) : [];
+                if (!empty($eset['quote_email_via_plugin'])) {
+                    [$viaPlugin, $emailErr] = $this->emailQuotePdf(
+                        $quoteId, (string)($ucrmNumber ?: $quoteRef), $crmClientId, $retailer,
+                        $this->itemsTotal($items)
+                    );
+                }
+                if (!$viaPlugin) {
+                    // Send via UCRM (triggers email to customer)
+                    $this->crm->patch("billing/quotes/{$quoteId}/send");
+                }
+                return ['ok' => true, 'quote_id' => $quoteId, 'quote_number' => $ucrmNumber,
+                        'emailed_by_plugin' => $viaPlugin, 'email_error' => $emailErr];
             }
             return ['ok' => false, 'error' => 'UCRM did not return quote ID.'];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Email the quotation PDF straight from the plugin's mail system.
+     *
+     * Returns [sent, error]. Never throws: any failure returns [false, why]
+     * and the caller falls back to uCRM's /send.
+     */
+    /**
+     * The database handle for the once-only email claim.
+     *
+     * $this->pdo is a typed property that only some construction paths set,
+     * and reading it unset throws — which was swallowed by the catch below and
+     * came back as "could not send", quietly handing the email to uCRM. The
+     * store is always there.
+     */
+    private function emailPdo(): \PDO
+    {
+        return $this->store->getPdo();
+    }
+
+    protected function emailQuotePdf(int $quoteId, string $number, int $crmClientId, array $retailer, float $total = 0.0): array
+    {
+        try {
+            $mail = $this->newMailService();
+            if (!$mail->getConfig()) {
+                return [false, 'plugin mail is not configured (Settings → System → Email)'];
+            }
+
+            // Recipient: the customer's billing contact, else any contact email.
+            $client = $this->crm->get("clients/{$crmClientId}") ?: [];
+            $name = trim((string)(($client['firstName'] ?? '') . ' ' . ($client['lastName'] ?? '')));
+            if ($name === '') $name = (string)($client['companyName'] ?? '');
+            $email = '';
+            $contacts = is_array($client['contacts'] ?? null) ? $client['contacts'] : [];
+            foreach ($contacts as $c) {
+                if (!empty($c['isBilling']) && !empty($c['email'])) { $email = (string)$c['email']; break; }
+            }
+            if ($email === '') {
+                foreach ($contacts as $c) {
+                    if (!empty($c['email'])) { $email = (string)$c['email']; break; }
+                }
+            }
+            if ($email === '') return [false, 'customer has no email address in uCRM'];
+
+            // One place decides where the PDF comes from, because the quote
+            // email now has two entry points — here, and the quote.add webhook
+            // for quotes created in uCRM's own screen.
+            // Claim it before doing the work: quote.add fires for this very
+            // quote and would otherwise send the customer a second copy.
+            require_once __DIR__ . '/CustomerEmailDispatcher.php';
+            if (!CustomerEmailDispatcher::claimOnce($this->emailPdo(), "QEMAIL{$quoteId}")) {
+                return [false, 'the quotation email for this quote was already sent'];
+            }
+
+            require_once __DIR__ . '/QuotePdfSource.php';
+            [$pdf, $pdfSource] = QuotePdfSource::fetch(
+                $this->crm, $this->dataDir, $this->config, $quoteId, $client);
+            // (the quote is fetched inside when not supplied — this path does
+            //  not hold one at this point)
+            if ($pdf === '') {
+                CustomerEmailDispatcher::releaseClaim($this->emailPdo(), "QEMAIL{$quoteId}");
+                return [false, 'uCRM served no quotation PDF and the plugin could not render one'];
+            }
+
+            $days  = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
+            $cmail = $this->companyDetails($crmClientId)['email'];
+
+            // One shell for every customer email (docs/UGANDA-EMAIL-LIFECYCLE-AUDIT.md):
+            // branded header/footer, mobile and dark-mode ready, plain-text twin,
+            // and the money + next-steps the plain version never carried.
+            require_once __DIR__ . '/CustomerEmails.php';
+            $built = CustomerEmails::quotation($this->config, [
+                'customer_name' => $name !== '' ? $name : 'Customer',
+                'quote_number'  => $number,
+                'total'         => $total > 0 ? $total : '',
+                'valid_days'    => $days,
+            ]);
+            $subject = $built['subject'];
+
+            $send = $mail->send($email, $name !== '' ? $name : 'Customer',
+                $subject, $built['html'], $built['text'],
+                ['Reply-To' => $cmail],
+                [[
+                    'name'    => 'Quotation-' . (preg_replace('/[^A-Za-z0-9_\-]/', '', $number) ?: 'quote') . '.pdf',
+                    'mime'    => 'application/pdf',
+                    'content' => $pdf,
+                ]]
+            );
+            if (empty($send['ok'])) {
+                CustomerEmailDispatcher::releaseClaim($this->emailPdo(), "QEMAIL{$quoteId}");
+                return [false, (string)($send['error'] ?? 'send failed')];
+            }
+
+            @file_put_contents($this->dataDir . '/quote_mail.log',
+                '[' . gmdate('Y-m-d H:i:s') . "] {$number} -> {$email} sent\n", FILE_APPEND | LOCK_EX);
+            // Not an error, but worth recording: a plugin-rendered PDF means
+            // uCRM served none, which the operator should know about.
+            return [true, $pdfSource === 'plugin'
+                ? 'sent with a plugin-rendered PDF (uCRM served none)' : ''];
+        } catch (\Throwable $e) {
+            return [false, $e->getMessage()];
+        }
+    }
+
+    /** Seam for tests: real callers get a MailService on the plugin data dir. */
+    protected function newMailService(): MailService
+    {
+        require_once __DIR__ . '/MailService.php';
+        return new MailService($this->dataDir);
     }
 
     /**
@@ -620,7 +896,7 @@ class QuotationService
         $all[] = array_merge([
             'id'         => $maxId + 1,
             'created_at' => date('Y-m-d H:i:s'),
-            'currency'   => self::CURRENCY,
+            'currency'   => dn_code($this->config),
         ], $data);
         if (count($all) > 2000) $all = array_slice($all, -2000);
         $this->store->save(self::LOG_FILE, $all);

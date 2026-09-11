@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit_
             'clientId'     => (int)$custId,
             'methodId'     => PaymentUuids::resolve($newMethod),
             'amount'       => $newAmount,
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($orig['currency'] ?? '', $config ?? null),
             'note'         => "Collected by {$orig['retailer_name']} [EDITED by admin]  {$newNote}",
             'applyToInvoicesAutomatically' => true,
         ];
@@ -222,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'push_
             'clientId'     => $custId,
             'methodId'     => PaymentUuids::resolve($c['method'] ?? 'Cash'),
             'amount'       => $amount,
-            'currencyCode' => 'USD',
+            'currencyCode' => dn_payload_currency($c['currency'] ?? '', $config ?? null),
             'note'         => 'Collected by '.($c['retailer_name']??'agent').' via DishNet PWA'
                             . ($c['invoice_id'] ? ' (Inv #'.$c['invoice_id'].')' : '')
                             . ($c['note'] ? '  '.$c['note'] : ''),
@@ -251,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'push_
                     'date'              => substr($c['created_at'] ?? date('Y-m-d'), 0, 10),
                     'direction'         => 'in',
                     'amount'            => $amount,
-                    'currency'          => 'USD',
+                    'currency'          => dn_payload_currency($c['currency'] ?? '', $config ?? null),
                     'category'          => 'Receipt',
                     'category_raw'      => 'Receipt',
                     'person'            => $c['retailer_name'] ?? '',
@@ -291,6 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $eNew = [
         'recipients'      => trim($_POST['email_recipients'] ?? ''),
         'use_ucrm_email'  => !empty($_POST['use_ucrm_email']),
+        'quote_email_via_plugin' => !empty($_POST['quote_email_via_plugin']),
         'smtp_preset'     => trim($_POST['smtp_preset'] ?? ''),
         'smtp_host'       => trim($_POST['smtp_host'] ?? ''),
         'smtp_port'       => (int)($_POST['smtp_port'] ?? 587),
@@ -1317,6 +1318,21 @@ $_emUcrmConnected = ($_emApiUrl !== '' && $_emAppKey !== '');
                 <input type="password" name="smtp_pass" class="form-control" value="" placeholder="App password (Outlook 2FA / Gmail App Password)">
             </div>
         </div>
+    </div>
+
+    <!-- Quotation email routing -->
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-top:12px;background:#fafafa;">
+        <label style="font-size:11px;font-weight:700;color:#374151;letter-spacing:0.04em;">📄 QUOTATION EMAILS</label>
+        <div style="font-size:12px;color:#666;margin:4px 0 10px;">
+            On: the plugin emails quotations itself &mdash; using the mail settings above &mdash;
+            with the quotation PDF attached, so uCRM's mailer is never needed. Off: uCRM sends
+            them (the old behaviour). If a plugin send fails, it falls back to uCRM automatically
+            so a quote is never silently unemailed.
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
+            <input type="checkbox" name="quote_email_via_plugin" value="1" <?= !empty($eSettings['quote_email_via_plugin']) ? 'checked' : '' ?>>
+            Send quotation emails from the plugin (attach PDF)
+        </label>
     </div>
 
     <button type="submit" class="st-save" style="margin-top:14px;"> Save Email Settings</button>

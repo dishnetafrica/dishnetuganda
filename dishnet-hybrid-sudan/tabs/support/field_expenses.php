@@ -25,9 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['fe_action'])) {
     if ($act === 'request_advance') {
         $amount = round((float)($_POST['amount'] ?? 0), 2);
         $purpose = trim($_POST['purpose'] ?? '');
-        $currency = strtoupper(trim($_POST['currency'] ?? 'USD'));
-        if (!in_array($currency, ['USD', 'SSP'])) $currency = 'USD';
-        $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP' : dn_cur($config) . number_format($amount, 2);
+        $currency = dn_entry_currency($_POST['currency'] ?? '', $config ?? null);
+        $amtDisplay = $currency === 'SSP' ? number_format($amount) . ' SSP'
+            : (($currency === dn_book_base($config) ? dn_cur($config) : $currency . ' ') . number_format($amount, 2));
         if ($amount > 0 && $purpose) {
             $store->appendWithId('activity_log.json', [
                 'event'   => 'advance_request',
@@ -131,22 +131,40 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
         <input type="hidden" name="fe_action" value="submit_expense">
         <input type="hidden" name="submitted_via" value="web">
 
-        <!-- Currency toggle -->
-        <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">
-            <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f0fdf4;color:#15803d;" id="cur_usd_label">
-                <input type="radio" name="currency" value="USD" checked style="display:none;" onchange="toggleCur('USD')"> 💵 USD
-            </label>
-            <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f8fafc;color:#9ca3af;" id="cur_ssp_label">
-                <input type="radio" name="currency" value="SSP" style="display:none;" onchange="toggleCur('SSP')"> 🇸🇸 SSP
-            </label>
-        </div>
-        <script>
-        function toggleCur(c) {
-            var u = document.getElementById('cur_usd_label'), s = document.getElementById('cur_ssp_label');
-            if (c==='USD') { u.style.background='#f0fdf4'; u.style.color='#15803d'; s.style.background='#f8fafc'; s.style.color='#9ca3af'; }
-            else { s.style.background='#eff6ff'; s.style.color='#1d4ed8'; u.style.background='#f8fafc'; u.style.color='#9ca3af'; }
+<?php
+// Currency toggle rendered from configuration (dn_book_currencies): the Sudan
+// install (default USD,SSP) keeps its exact two pills; Uganda (UGX,USD) never
+// shows SSP. First currency = default = the book base.
+if (!function_exists('fe_currency_toggle')) {
+    function fe_currency_toggle(string $prefix, array $currs): string {
+        $flag = ['USD' => "\u{1F4B5}", 'SSP' => "\u{1F1F8}\u{1F1F8}", 'UGX' => "\u{1F1FA}\u{1F1EC}"];
+        $h = '<div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">';
+        foreach ($currs as $i => $c) {
+            $on = $i === 0;
+            $bg = $on ? '#f0fdf4' : '#f8fafc'; $fg = $on ? '#15803d' : '#9ca3af';
+            $h .= '<label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:' . $bg . ';color:' . $fg . ';" id="' . $prefix . '_' . strtolower($c) . '_label">'
+                . '<input type="radio" name="currency" value="' . htmlspecialchars($c) . '"' . ($on ? ' checked' : '') . ' style="display:none;" onchange="feSetCur(\'' . $prefix . '\',\'' . $c . '\')"> '
+                . ($flag[$c] ?? "\u{1F4B1}") . ' ' . htmlspecialchars($c) . '</label>';
         }
-        </script>
+        return $h . '</div>';
+    }
+}
+?>
+<script>
+var _feCurs = <?= json_encode(dn_book_currencies($config)) ?>;
+function feSetCur(prefix, c) {
+  _feCurs.forEach(function (cur, i) {
+    var el = document.getElementById(prefix + '_' + cur.toLowerCase() + '_label');
+    if (!el) return;
+    var sel = cur === c;
+    el.style.background = sel ? (i === 0 ? '#f0fdf4' : '#eff6ff') : '#f8fafc';
+    el.style.color      = sel ? (i === 0 ? '#15803d' : '#1d4ed8') : '#9ca3af';
+  });
+}
+</script>
+
+        <!-- Currency toggle (config-driven) -->
+        <?= fe_currency_toggle('cur', dn_book_currencies($config)) ?>
 
         <label class="fe-label">Amount</label>
         <input type="number" name="amount" class="fe-input" placeholder="0.00" step="0.01" min="0.01" required style="font-size:20px;font-weight:800;text-align:center;">
@@ -266,22 +284,8 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
         <?= csrfField() ?>
         <input type="hidden" name="fe_action" value="request_advance">
 
-        <!-- Currency toggle -->
-        <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">
-            <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f0fdf4;color:#15803d;" id="adv_usd_label">
-                <input type="radio" name="currency" value="USD" checked style="display:none;" onchange="toggleAdvCur('USD')"> 💵 USD
-            </label>
-            <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f8fafc;color:#9ca3af;" id="adv_ssp_label">
-                <input type="radio" name="currency" value="SSP" style="display:none;" onchange="toggleAdvCur('SSP')"> 🇸🇸 SSP
-            </label>
-        </div>
-        <script>
-        function toggleAdvCur(c) {
-            var u = document.getElementById('adv_usd_label'), s = document.getElementById('adv_ssp_label');
-            if (c==='USD') { u.style.background='#f0fdf4'; u.style.color='#15803d'; s.style.background='#f8fafc'; s.style.color='#9ca3af'; }
-            else { s.style.background='#eff6ff'; s.style.color='#1d4ed8'; u.style.background='#f8fafc'; u.style.color='#9ca3af'; }
-        }
-        </script>
+        <!-- Currency toggle (config-driven) -->
+        <?= fe_currency_toggle('adv', dn_book_currencies($config)) ?>
 
         <label class="fe-label">Amount Needed</label>
         <input type="number" name="amount" class="fe-input" placeholder="0.00" step="0.01" min="1" required style="font-size:20px;font-weight:800;text-align:center;">

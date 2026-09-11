@@ -134,7 +134,7 @@ foreach ($orphaned as $idx => $c) {
         'clientId'     => $custId,
         'methodId'     => PaymentUuids::resolve($method),
         'amount'       => $amount,
-        'currencyCode' => dn_code($config),
+        'currencyCode' => dn_payload_currency($c['currency'] ?? '', $config),
         'note'         => 'Collected by ' . ($c['retailer_name'] ?? 'agent') . ' via DishNet PWA'
                         . (!empty($c['invoice_id']) ? " (Inv #{$c['invoice_id']})" : '')
                         . (!empty($c['note']) ? " — {$c['note']}" : '')
@@ -198,7 +198,11 @@ foreach ($orphaned as $idx => $c) {
                 'date'              => substr($c['created_at'] ?? date('Y-m-d'), 0, 10),
                 'direction'         => 'in',
                 'amount'            => $amount,
-                'currency'          => 'USD',
+                // Collection rows may carry their own currency; otherwise the
+                // configured book base (USD on Sudan, UGX on Uganda).
+                'currency'          => strtoupper(trim((string)($c['currency'] ?? ''))) !== ''
+                                        ? strtoupper(trim((string)$c['currency']))
+                                        : dn_book_base($config ?? null),
                 'category'          => 'Receipt',
                 'category_raw'      => 'Receipt',
                 'person'            => $c['retailer_name'] ?? '',

@@ -85,7 +85,7 @@ $ledger  = new StaffLedgerService($pdo);
 $oldSvc  = new StaffCashPositionService($store, $pdo);
 $dual    = new DualReadCashPosition($store, $pdo, $dataDir);
 
-$newAll  = $ledger->allPositions('USD');
+$newAll  = $ledger->allPositions(dn_book_base($config ?? null));
 $oldAll  = $oldSvc->getAllPositions();
 
 $allIds  = array_unique(array_merge(array_keys($newAll), array_keys($oldAll)));

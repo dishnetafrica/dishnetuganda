@@ -57,9 +57,9 @@ $notify  = new NotificationService($store, $config);
 $started = date('Y-m-d H:i:s');
 $now     = time();
 
-clog("══════════════════════════════════════════════");
-clog("DishNet Lead Cron — {$started}");
-clog("══════════════════════════════════════════════");
+clog_leads("══════════════════════════════════════════════");
+clog_leads("DishNet Lead Cron — {$started}");
+clog_leads("══════════════════════════════════════════════");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 $dripSize         = (int)($config['lead_drip_size']            ?? 5);
@@ -68,7 +68,7 @@ $reassignHours    = (int)($config['lead_stale_reassign_hours'] ?? 72);
 $autoEnabled      = ($config['lead_auto_assign_enabled']       ?? true);
 
 if (!$autoEnabled) {
-    clog("Lead auto-assign disabled in config — exiting.");
+    clog_leads("Lead auto-assign disabled in config — exiting.");
     flock($lockFp, LOCK_UN); fclose($lockFp); return;
 }
 
@@ -87,7 +87,7 @@ $agents = array_values(array_filter($retailers, function($r) use ($_allowedAssig
 }));
 
 if (empty($agents)) {
-    clog("No active agents found — exiting.");
+    clog_leads("No active agents found — exiting.");
     flock($lockFp, LOCK_UN); fclose($lockFp); return;
 }
 
@@ -121,7 +121,7 @@ $runLog = ['started_at' => $started, 'drip' => [], 'stale' => [], 'reminders' =>
 // =============================================================================
 // TASK 1 — DRIP ASSIGN
 // =============================================================================
-clog("\n[1/3] Drip Assignment (pool size: " . count($pool) . ", drip target: {$dripSize})");
+clog_leads("\n[1/3] Drip Assignment (pool size: " . count($pool) . ", drip target: {$dripSize})");
 
 // Sort agents: lightest load first for fair filling
 usort($agents, fn($a, $b) => ($agentLoad[(int)$a['id']] ?? 0) - ($agentLoad[(int)$b['id']] ?? 0));
@@ -185,20 +185,20 @@ foreach ($agents as $ag) {
     $aid   = (int)$ag['id'];
     $aLeads = $dripAssignments[$aid];
     if (empty($aLeads)) continue;
-    clog("  Assigned " . count($aLeads) . " leads → {$ag['name']}");
+    clog_leads("  Assigned " . count($aLeads) . " leads → {$ag['name']}");
     try {
         $notify->leadBatchAssigned($ag, $aLeads, "Auto-assigned by system · Call within 24h");
     } catch (Throwable $e) {
-        clog("  WA error for {$ag['name']}: " . $e->getMessage());
+        clog_leads("  WA error for {$ag['name']}: " . $e->getMessage());
     }
     $runLog['drip'][] = ['agent' => $ag['name'], 'count' => count($aLeads)];
 }
-clog("  Drip total: {$dripTotal} leads assigned");
+clog_leads("  Drip total: {$dripTotal} leads assigned");
 
 // =============================================================================
 // TASK 2 — STALE REASSIGNMENT
 // =============================================================================
-clog("\n[2/3] Stale Lead Reassignment (flag={$flagHours}h, reassign={$reassignHours}h)");
+clog_leads("\n[2/3] Stale Lead Reassignment (flag={$flagHours}h, reassign={$reassignHours}h)");
 
 $staleReassigned = []; // agentId => [lead, ...]
 $staleFlagged    = []; // agentId => [lead, ...]
@@ -250,7 +250,7 @@ foreach ($leads as &$l) {
         $agentLoad[$aid] = max(0, ($agentLoad[$aid] ?? 0) - 1);
         $staleReassigned[$newAid][] = $l;
 
-        clog("  ⟲ Lead #{$l['id']} ({$l['customer_name']}) reassigned from {$oldAgName} → {$newAg['name']} ({$hoursIdle}h idle)");
+        clog_leads("  ⟲ Lead #{$l['id']} ({$l['customer_name']}) reassigned from {$oldAgName} → {$newAg['name']} ({$hoursIdle}h idle)");
 
     } elseif ($hoursIdle >= $flagHours && empty($l['stale_flagged'])) {
         // Just flag — don't reassign yet
@@ -262,7 +262,7 @@ foreach ($leads as &$l) {
             'note'   => "⚠ No update in " . round($hoursIdle) . "h — will reassign if no action",
         ];
         $staleFlagged[$aid][] = $l;
-        clog("  ⚠ Lead #{$l['id']} ({$l['customer_name']}) flagged stale ({$hoursIdle}h idle)");
+        clog_leads("  ⚠ Lead #{$l['id']} ({$l['customer_name']}) flagged stale ({$hoursIdle}h idle)");
     }
 }
 unset($l);
@@ -285,7 +285,7 @@ foreach ($staleByPrev as $prevAid => $staleLeads) {
                 "\n\nPlease keep leads updated daily to retain them. 📱";
         $notify->sendRaw($prevAg['phone'] ?? '', $prevMsg, 'ops_lead_reassigned_notice');
     } catch (Throwable $e) {}
-    clog("  WA sent to {$prevAg['name']} — {$cnt} leads reassigned away");
+    clog_leads("  WA sent to {$prevAg['name']} — {$cnt} leads reassigned away");
 }
 
 // Notify stale warning (flagged, not yet reassigned)
@@ -300,7 +300,7 @@ foreach ($staleFlagged as $aid => $flaggedLeads) {
             "\n\nUpdate them now or they will be auto-reassigned in " . ($reassignHours - $flagHours) . "h. 🚨";
         $notify->sendRaw($ag['phone'] ?? '', $msg, 'ops_lead_stale_warning');
     } catch (Throwable $e) {}
-    clog("  WA warning sent to {$ag['name']} — {$cnt} leads flagged");
+    clog_leads("  WA warning sent to {$ag['name']} — {$cnt} leads flagged");
 }
 
 // Notify receiving agents about newly reassigned leads
@@ -317,7 +317,7 @@ foreach ($agents as $ag) {
 // =============================================================================
 // TASK 3 — FOLLOW-UP REMINDERS
 // =============================================================================
-clog("\n[3/3] Follow-Up Reminders");
+clog_leads("\n[3/3] Follow-Up Reminders");
 
 $todayStr = date('Y-m-d');
 $remCount = 0;
@@ -355,7 +355,7 @@ foreach ($remByAgent as $aid => $remLeads) {
                 "\n\nOpen Operations Hub → My Leads to call them. 🎯";
         $notify->sendRaw($ag['phone'] ?? '', $followMsg, 'ops_followup_reminder');
     } catch (Throwable $e) {}
-    clog("  Reminder sent to {$ag['name']} — {$cnt} leads due today");
+    clog_leads("  Reminder sent to {$ag['name']} — {$cnt} leads due today");
 }
 
 $runLog['reminders'] = $remCount;
@@ -373,11 +373,17 @@ $logData[] = $runLog;
 if (count($logData) > 200) $logData = array_slice($logData, -200);
 $store->save('lead_cron_log.json', $logData);
 
-clog("\n✓ Done — drip:{$dripTotal} stale:" . array_sum(array_map(fn($x)=>$x['count'], $runLog['stale'])) . " reminders:{$remCount}");
-clog("══════════════════════════════════════════════\n");
+clog_leads("\n✓ Done — drip:{$dripTotal} stale:" . array_sum(array_map(fn($x)=>$x['count'], $runLog['stale'])) . " reminders:{$remCount}");
+clog_leads("══════════════════════════════════════════════\n");
 
 flock($lockFp, LOCK_UN);
 fclose($lockFp);
 return;
+// Renamed from clog(). master.php includes every scheduled script into one
+// process, so two scripts declaring the same function name is a redeclare
+// fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared
+// log_msg() first and jobs_cache died on it, stopping the cycle at job 21.
+// Guarding with function_exists() would stop the fatal and silently route
+// this script's lines into another script's log file, so: unique names.
 
-function clog(string $msg): void { echo "[" . date('H:i:s') . "] {$msg}\n"; }
+function clog_leads(string $msg): void { echo "[" . date('H:i:s') . "] {$msg}\n"; }

@@ -12,7 +12,7 @@ if (!empty($_GET['fr_export']) && $_GET['fr_export'] === 'csv') {
     foreach ($store->load('payment_collections.json') ?: [] as $c) {
         if ((int)($c['retailer_id']??0)!==$agId) continue;
         if (($c['status'] ?? '') === 'voided') continue;
-        $rows[] = [substr($c['collected_at']??$c['created_at']??'',0,10),'IN','USD',$c['amount']??0,0,'Collection',$c['client_name']??'','approved'];
+        $rows[] = [substr($c['collected_at']??$c['created_at']??'',0,10),'IN',$c['currency']??dn_book_base($config ?? null),$c['amount']??0,0,'Collection',$c['client_name']??'','approved'];
     }
     if (!class_exists('ExpenseGateway')) require_once __DIR__ . '/../../lib/ExpenseGateway.php';
     $_frGw = new ExpenseGateway($store);
@@ -21,11 +21,11 @@ if (!empty($_GET['fr_export']) && $_GET['fr_export'] === 'csv') {
     }
     foreach ($store->load('cash_handovers.json') ?: [] as $h) {
         if ((int)($h['from_id']??0)!==$agId) continue;
-        $rows[] = [substr($h['created_at']??'',0,10),'OUT','USD',$h['amount']??0,0,'Handover',$h['note']??'',$h['status']??'pending'];
+        $rows[] = [substr($h['created_at']??'',0,10),'OUT',$h['currency']??dn_book_base($config ?? null),$h['amount']??0,0,'Handover',$h['note']??'',$h['status']??'pending'];
     }
     foreach ($store->load('cash_ins.json') ?: [] as $i) {
         if ((int)($i['collector_id']??0)!==$agId) continue;
-        $rows[] = [substr($i['created_at']??'',0,10),'IN',$i['currency']??'SSP',$i['amount']??0,$i['ssp_amount']??0,$i['category']??'SSP Received',$i['description']??'',$i['status']??'approved'];
+        $rows[] = [substr($i['created_at']??'',0,10),'IN',$i['currency']??(dn_ssp_selectable($config ?? null)?'SSP':dn_book_base($config ?? null)),$i['amount']??0,$i['ssp_amount']??0,$i['category']??'SSP Received',$i['description']??'',$i['status']??'approved'];
     }
     usort($rows, fn($a,$b)=>strcmp($a[0],$b[0]));
     foreach ($rows as $row) fputcsv($out, $row);
@@ -897,11 +897,13 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
         <div class="fr3-dir-lbl" id="fr3DirInLbl">SSP IN</div>
         <div class="fr3-dir-sub" id="fr3DirInSub">Received · Exchange</div>
       </div>
+      <?php if (dn_ssp_selectable($config ?? null)): ?>
       <div class="fr3-dir-btn" id="fr3DirExch" onclick="fr3SetDir('exchange')" style="background:#f5f3ff;border-color:#c4b5fd;">
         <div class="fr3-dir-ic">💱</div>
         <div class="fr3-dir-lbl">Exchange</div>
         <div class="fr3-dir-sub">USD ↔ SSP</div>
       </div>
+      <?php endif; ?>
       <div class="fr3-dir-btn out" id="fr3DirOut" onclick="fr3SetDir('out')">
         <div class="fr3-dir-ic">⬇️</div>
         <div class="fr3-dir-lbl">Cash OUT</div>

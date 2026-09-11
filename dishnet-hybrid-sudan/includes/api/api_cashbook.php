@@ -33,6 +33,7 @@
         // USD→SSP: SSP arrives in bag (+SSP), USD leaves bag (-USD)
         // SSP→USD: USD arrives in bag (+USD), SSP leaves bag (-SSP)
         if ($act === 'record_exchange' && $met === 'POST') {
+            if (!dn_ssp_selectable($config ?? null)) $er2('SSP flows are not enabled on this installation.', 422);
             $body2        = json_decode(file_get_contents('php://input'), true) ?? $_POST;
             $excDir       = trim($body2['exc_direction'] ?? 'usd_to_ssp');
             $excAmt       = round((float)($body2['exc_amount'] ?? 0), 2);  // always USD amount
@@ -326,6 +327,9 @@
                     'usd_equivalent_ssp' => 0.0,
                     'source'       => 'personal_bag',
                 ]);
+            } elseif (!dn_ssp_selectable($config ?? null)) {
+                // Phase C: one position per currency — no combined figure.
+                $ok2(['positions' => $cb->currencyPositions(), 'source' => 'currency_positions']);
             } else {
                 $ok2($cb->getBothBalances());
             }
@@ -343,24 +347,34 @@
             if (!empty($_GET['limit']))     $filters['limit']     = (int)$_GET['limit'];
             // Non-admins see only their own entries
             if (!$isAcct) $filters['actor_id'] = (int)$me2['id'];
-            $ok2(['entries' => $cb->getEntries($filters), 'balances' => $cb->getBothBalances()]);
+            $ok2(['entries' => $cb->getEntries($filters),
+                  'balances' => dn_ssp_selectable($config ?? null)
+                      ? $cb->getBothBalances()
+                      : ['positions' => $cb->currencyPositions()]]);
         }
 
         // GET cashbook_ledger — running balance ledger for one currency
         if ($act === 'cashbook_ledger' && $met === 'GET') {
             if (!$isAcct) $er2('Accountant/Admin only.', 403);
-            $currency = strtoupper($_GET['currency'] ?? 'USD');
+            $currency = dn_entry_currency($_GET['currency'] ?? '', $config ?? null);
+            $ledProj  = in_array($_GET['project'] ?? 'dishnet', ['dishnet','4g','bluecard'], true) ? ($_GET['project'] ?? 'dishnet') : 'dishnet';
             $ok2([
-                'ledger'  => $cb->getLedger($currency, $_GET['date_from'] ?? '', $_GET['date_to'] ?? ''),
-                'summary' => $cb->getSummary($currency, $_GET['date_from'] ?? '', $_GET['date_to'] ?? ''),
-                'balances'=> $cb->getBothBalances(),
+                'ledger'  => $cb->getEntries(array_filter(['project' => $ledProj, 'currency' => $currency,
+                                 'date_from' => $_GET['date_from'] ?? '', 'date_to' => $_GET['date_to'] ?? '',
+                                 'limit' => 500])),
+                'currency' => $currency,
+                'balances' => dn_ssp_selectable($config ?? null)
+                    ? $cb->getBothBalances()
+                    : ['positions' => $cb->currencyPositions()],
             ]);
         }
 
         // GET cashbook_summary — totals in/out by category
         if ($act === 'cashbook_summary' && $met === 'GET') {
             if (!$isAcct) $er2('Accountant/Admin only.', 403);
-            $ok2($cb->getSummary('dishnet', $_GET['date_from'] ?? '', $_GET['date_to'] ?? ''));
+            $ok2(dn_ssp_selectable($config ?? null)
+                ? $cb->getSummary('dishnet', $_GET['date_from'] ?? '', $_GET['date_to'] ?? '')
+                : ['pl' => $cb->plByPeriod('dishnet', $_GET['date_from'] ?? '', $_GET['date_to'] ?? '')]);
         }
 
         // GET cashbook_pending — entries awaiting approval
@@ -433,12 +447,9 @@
         // POST cashbook_set_opening — set opening balance (admin only)
         if ($act === 'cashbook_set_opening' && $met === 'POST') {
             if (!$isAdmin2) $er2('Admin only.', 403);
-            $body     = json_decode(file_get_contents('php://input'), true) ?? $_POST;
-            $currency = strtoupper(trim($body['currency'] ?? ''));
-            $amount   = round((float)($body['amount'] ?? 0), 2);
-            $result   = $cb->setOpeningBalance($currency, $amount, $me2);
-            if (!$result['success']) $er2($result['message'], 422);
-            $ok2($result);
+            // Retired: the old endpoint was wired to a stub that reported
+            // success while writing nothing. Openings are per-account now.
+            $er2('Opening balances are recorded per account on the Opening Balances screen.', 410);
         }
 
         // POST cashbook_set_rate — set USD→SSP exchange rate (admin/accountant)
@@ -491,6 +502,32 @@
 
         // GET cashbook_v2_summary — category P&L summary
         if ($act === 'cashbook_v2_summary' && $met === 'GET') {
+            if (!dn_ssp_selectable($config ?? null)) {
+                // Phase C: legacy response shape, base-currency section only
+                // (consumers expect in/out category maps in ONE currency);
+                // the full per-currency P&L rides along under by_currency.
+                $plAll = $cb->plByPeriod(
+                    (string)($_GET['project'] ?? 'dishnet'),
+                    $_GET['date_from'] ?? '', $_GET['date_to'] ?? ''
+                );
+                $plBase = reset($plAll) ?: ['revenue' => [], 'revenue_counts' => [],
+                    'expenses' => [], 'expense_counts' => [],
+                    'revenue_total' => 0.0, 'expense_total' => 0.0, 'net' => 0.0,
+                    'currency' => dn_book_base($config ?? null)];
+                $inMap = []; $outMap = [];
+                foreach ($plBase['revenue'] as $c3 => $t3) {
+                    $inMap[$c3] = ['total' => $t3, 'count' => (int)($plBase['revenue_counts'][$c3] ?? 0)];
+                }
+                foreach ($plBase['expenses'] as $c3 => $t3) {
+                    $outMap[$c3] = ['total' => $t3, 'count' => (int)($plBase['expense_counts'][$c3] ?? 0)];
+                }
+                $ok2([
+                    'in' => $inMap, 'out' => $outMap,
+                    'total_in' => $plBase['revenue_total'], 'total_out' => $plBase['expense_total'],
+                    'balance' => $plBase['net'], 'currency' => $plBase['currency'],
+                    'by_currency' => $plAll,
+                ]);
+            }
             $ok2($cb->getSummary(
                 $_GET['project'] ?? 'dishnet',
                 $_GET['date_from'] ?? '',
@@ -655,6 +692,20 @@
                     'Tom (Joseph Luate)','Bhavin (Madlani)','Nirmal (Samani)',
                     'Paji (Shamshare Singh)','Rupesh',
                 ];
+            }
+            // C0.1: strip categories the entry UIs must never offer.
+            // 'Opening Balance' is owned by the Opening Balances screen on
+            // every install; the SSP flows exist only where SSP is bookable.
+            $_catHide = ['Opening Balance'];
+            if (!dn_ssp_selectable($config ?? null)) {
+                $_catHide = array_merge($_catHide, ['Exchange', 'SSP Advance', 'SSP Return']);
+            }
+            foreach (['in', 'out_people', 'out_ops', 'out_fin', 'out'] as $_cg) {
+                if (!isset($cats[$_cg]) || !is_array($cats[$_cg])) continue;
+                $cats[$_cg] = array_values(array_filter($cats[$_cg], function ($c) use ($_catHide) {
+                    $n = is_array($c) ? ($c['id'] ?? ($c['name'] ?? '')) : $c;
+                    return !in_array($n, $_catHide, true);
+                }));
             }
             $ok2($cats);
         }

@@ -101,9 +101,17 @@ class AlertService
                 if (!$found) $rows[] = ['key' => $key, 'ts' => $ts];
                 // Old locks are noise; a week covers every cooldown in use.
                 $cut = time() - 7 * 86400;
-                return array_values(array_filter($rows, function ($r) use ($cut) {
+                $kept = array_values(array_filter($rows, function ($r) use ($cut) {
                     return (int)($r['ts'] ?? 0) > $cut;
                 }));
+
+                // withLock expects ['records' => ..., 'result' => ...]. This
+                // returned the bare array, so SqliteStore read a missing
+                // 'records' key, iterated null and never wrote anything: every
+                // handoff printed three warnings into the AI trace and the
+                // cooldown record was silently lost, which is what the
+                // cooldown exists to prevent.
+                return ['records' => $kept, 'result' => true];
             });
         } catch (\Throwable $e) { /* an unrecorded lock only risks one extra alert */ }
     }

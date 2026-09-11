@@ -2,6 +2,14 @@
 // Note: No strict_types - included from master.php
 date_default_timezone_set('Africa/Juba');
 
+// Phase C gate: this is an SSP-book report — on an install without SSP it
+// would compute zeros and silently "report nothing"; say so and stop.
+require_once dirname(__DIR__) . '/lib/currency.php';
+if (!dn_ssp_selectable(null)) {
+    echo "[staff_ssp_report] SSP is not bookable on this install — nothing to report.\n";
+    return;
+}
+
 /**
  * cron/staff_ssp_report.php — DishNet Hybrid Telecom
  *

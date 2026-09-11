@@ -40,6 +40,7 @@ $pluginRoot = __DIR__;
 $dataDir    = getDataDir($pluginRoot);
 $store      = SqliteStore::create($dataDir);
 $config     = $store->load('kyc_config.json') ?? [];
+require_once __DIR__ . '/lib/currency.php';
 
 if (($config['quote_wa_cron_enabled'] ?? true) === false) {
     qwa_log('Disabled via config — skipping.');
@@ -159,6 +160,9 @@ foreach ($apps as $app) {
     // Build items
     $items = _qwa_buildItems($quote, $quotSvc, $app);
     $total = array_sum(array_map(fn($i) => (float)$i['price'] * max(1,(int)$i['quantity']), $items));
+    // The caption said "$" regardless of market. dp=null keeps the exact
+    // digits this line has always printed.
+    $_qwaMoneytotal = dn_money($total, $config, null);
 
     // Fetch + save PDF
     $pdfUrl = _qwa_fetchAndStorePdf($quoteCrm, $quoteId, $quoteRef, $pdfDir, $config, $dataDir);
@@ -217,7 +221,7 @@ foreach ($apps as $app) {
                 $phone,
                 $pdfUrl,
                 "Quote-{$quoteRef}.pdf",
-                "Quote #{$quoteRef} — \${$total}\n— DishNet Africa",
+                "Quote #{$quoteRef} — {$_qwaMoneytotal}\n— DishNet Africa",
                 'ops_quote_pdf'
             );
             qwa_log("PDF SENT KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
@@ -295,6 +299,9 @@ foreach ($quotes as $q) {
     $clientName = _qwa_resolveName($clientId, $q, $crm);
     $items      = _qwa_buildItems($q, $quotSvc, []);
     $total      = array_sum(array_map(fn($i) => (float)$i['price'] * max(1,(int)$i['quantity']), $items));
+    // The caption said "$" regardless of market. dp=null keeps the exact
+    // digits this line has always printed.
+    $_qwaMoneytotal = dn_money($total, $config, null);
 
     if (empty($items)) {
         qwa_log("SKIP UCRM quote #{$qId} {$qNumber} — no items");
@@ -348,7 +355,7 @@ foreach ($quotes as $q) {
         try {
             $notify->sendDocument(NotificationService::SUPPORT, $phone, $pdfUrl,
                 "Quote-{$qNumber}.pdf",
-                "Quote #{$qNumber} — \${$total}\n— DishNet Africa",
+                "Quote #{$qNumber} — {$_qwaMoneytotal}\n— DishNet Africa",
                 'ops_quote_pdf');
             qwa_log("PDF SENT UCRM quote #{$qId} {$qNumber}");
         } catch (\Throwable $e) {
@@ -373,7 +380,7 @@ foreach ($quotes as $q) {
             'sent_via_crm'   => true,
             'has_pdf'        => !empty($pdfUrl),
             'sent_by'        => 'cron_quote_wa',
-            'currency'       => 'USD',
+            'currency'       => dn_code($config),
             'valid_until'    => date('Y-m-d', strtotime('+7 days')),
             'created_at'     => date('Y-m-d H:i:s'),
         ]);
@@ -396,6 +403,7 @@ if (!empty($pdfPending)) {
         $pqPhone = $pq['phone'] ?? '';
         $pqName  = $pq['name'] ?? '';
         $pqAmt   = $pq['amount'] ?? '0.00';
+        $_qwaMoneypqAmt = dn_money($pqAmt, $config, null);
         $pqTime  = (int)($pq['queued_at'] ?? 0);
 
         if (!$pqId || !$pqPhone) { $pdfDone[] = $idx; continue; }
@@ -420,7 +428,7 @@ if (!empty($pdfPending)) {
                 $pqPhone,
                 $pdfUrl,
                 "Quote-{$pqNum}.pdf",
-                "Quote #{$pqNum} — \${$pqAmt}\n— DishNet Africa",
+                "Quote #{$pqNum} — {$_qwaMoneypqAmt}\n— DishNet Africa",
                 'ops_quote_pdf'
             );
             qwa_log("PDF SENT from pending queue: #{$pqNum} → {$pqName} ({$pqPhone})");
@@ -647,7 +655,7 @@ foreach ($receiptQueue as $idx => &$rq) {
 
     // Send PDF via WhatsApp
     try {
-        $pdfCaption = "Receipt #PAY-{$rPayId} — USD " . number_format($rAmount, 2) . "\n— DishNet Africa";
+        $pdfCaption = "Receipt #PAY-{$rPayId} — " . dn_code($config) . " " . number_format($rAmount, 2) . "\n— DishNet Africa";
         $notify->sendDocument(
             NotificationService::ACCOUNTS,
             $rPhone,

@@ -78,6 +78,665 @@ class CashbookService
         $this->initTable();
     }
 
+    /**
+     * The book's base currency (config cashbook_base_currency; default USD =
+     * the Sudan installation exactly as before). Loaded lazily so no caller's
+     * constructor signature changes.
+     */
+    private ?string $bookBaseCache = null;
+
+    public function bookBase(): string
+    {
+        if ($this->bookBaseCache === null) {
+            require_once __DIR__ . '/currency.php';
+            require_once __DIR__ . '/PluginConfig.php';
+            try {
+                $cfg = PluginConfig::load(dirname(__DIR__), $this->dataDir);
+            } catch (\Throwable $e) {
+                $cfg = [];
+            }
+            $this->bookBaseCache = dn_book_base($cfg);
+        }
+        return $this->bookBaseCache;
+    }
+
+    /** Currency for a CRM payment row: its own currencyCode, else the base. */
+    private function payCurrency(array $pay): string
+    {
+        $c = strtoupper(trim((string)($pay['currencyCode'] ?? ($pay['currency'] ?? ''))));
+        return preg_match('/^[A-Z]{3}$/', $c) ? $c : $this->bookBase();
+    }
+
+    // ═══ Accounts & opening balances (Phase B — Uganda books) ═══════════════
+    //
+    // cb_accounts gives money a HOME (a bank account, a cash box, a mobile-
+    // money wallet, a payable-to-director liability), each with exactly one
+    // currency — balances are never merged across currencies. Opening
+    // balances are ordinary ledger rows with txn_type OPENING_BALANCE, so
+    // they count in the account balance but can never masquerade as sales,
+    // customer payments or expenses. Sudan is untouched: nothing writes here
+    // unless the operator uses the Opening Balances screen.
+
+    // 'equity' = share capital / permanent investment: the counterpart of a
+    // capital contribution. It is NOT a payable — nothing is owed back.
+    public const ACCOUNT_KINDS = [
+        'bank', 'cash', 'momo', 'receivable', 'payable', 'inventory', 'asset', 'director',
+        'equity',
+    ];
+    public const TXN_TYPES = [
+        'SALE', 'PAYMENT', 'EXPENSE', 'TRANSFER',
+        'OPENING_BALANCE', 'REFUND', 'ADJUSTMENT', 'DIRECTOR_FUNDING',
+    ];
+
+    private function ensureAccountsTable(): void
+    {
+        $this->dbq("CREATE TABLE IF NOT EXISTS cb_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            currency TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'bank',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )");
+    }
+
+    public function accounts(bool $activeOnly = false): array
+    {
+        $this->ensureAccountsTable();
+        return $this->query('SELECT * FROM cb_accounts'
+            . ($activeOnly ? ' WHERE active=1' : '') . ' ORDER BY id');
+    }
+
+    public function account(int $id): ?array
+    {
+        $this->ensureAccountsTable();
+        $r = $this->query('SELECT * FROM cb_accounts WHERE id=?', [$id]);
+        return $r[0] ?? null;
+    }
+
+    public function addAccount(string $name, string $currency, string $kind): array
+    {
+        $this->ensureAccountsTable();
+        $name = trim($name);
+        $currency = strtoupper(trim($currency));
+        if ($name === '') return ['ok' => false, 'error' => 'Account name required'];
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) return ['ok' => false, 'error' => 'Currency must be a 3-letter code'];
+        if (!in_array($kind, self::ACCOUNT_KINDS, true)) return ['ok' => false, 'error' => 'Unknown account kind'];
+        foreach ($this->accounts() as $a) {
+            if (strcasecmp((string)$a['name'], $name) === 0) {
+                return ['ok' => false, 'error' => 'An account with this name already exists'];
+            }
+        }
+        $this->dbq('INSERT INTO cb_accounts (name, currency, kind) VALUES (?,?,?)',
+                   [$name, $currency, $kind]);
+        $id = (int)$this->pdo()->lastInsertId();
+        return ['ok' => true, 'id' => $id];
+    }
+
+    public function setAccountActive(int $id, bool $active): void
+    {
+        $this->ensureAccountsTable();
+        $this->dbq("UPDATE cb_accounts SET active=?, updated_at=datetime('now') WHERE id=?",
+                   [$active ? 1 : 0, $id]);
+    }
+
+    /** Balance of one account: approved in − approved out, in ITS currency. */
+    public function accountBalance(int $id): float
+    {
+        $r = $this->query(
+            "SELECT COALESCE(SUM(CASE direction WHEN 'in' THEN amount ELSE -amount END),0) b
+             FROM cb_ledger WHERE account_id=? AND status='approved'", [$id]);
+        return (float)($r[0]['b'] ?? 0);
+    }
+
+    public function accountEntryCount(int $id, bool $excludeOpening = true): int
+    {
+        $r = $this->query(
+            'SELECT COUNT(*) n FROM cb_ledger WHERE account_id=?'
+            . ($excludeOpening ? " AND txn_type != 'OPENING_BALANCE'" : ''), [$id]);
+        return (int)($r[0]['n'] ?? 0);
+    }
+
+    public function openingFor(int $accountId): ?array
+    {
+        $r = $this->query(
+            "SELECT * FROM cb_ledger WHERE account_id=? AND txn_type='OPENING_BALANCE' LIMIT 1",
+            [$accountId]);
+        return $r[0] ?? null;
+    }
+
+    /**
+     * Record (or, while the account has no other activity, correct) the ONE
+     * opening balance of an account. Never a sale, never a payment: the row
+     * is typed OPENING_BALANCE with its own source and category, and the
+     * amount is always entered positive — a payable/director account's
+     * opening is what the company OWES, on a liability account.
+     */
+    public function recordOpeningBalance(int $accountId, float $amount, string $asOf,
+                                         string $description, string $reference, string $admin): array
+    {
+        $acc = $this->account($accountId);
+        if (!$acc)               return ['ok' => false, 'error' => 'No such account'];
+        if (!(int)$acc['active']) return ['ok' => false, 'error' => 'Account is inactive'];
+        if ($amount < 0)         return ['ok' => false, 'error' => 'Enter the opening balance as a positive amount'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $asOf)) return ['ok' => false, 'error' => 'As-of date must be YYYY-MM-DD'];
+
+        $existing = $this->openingFor($accountId);
+        if ($existing !== null) {
+            if ($this->accountEntryCount($accountId, true) > 0) {
+                return ['ok' => false, 'error' =>
+                    'This account already has activity — correct the position with an ADJUSTMENT entry, not by rewriting the opening balance'];
+            }
+            $this->dbq(
+                "UPDATE cb_ledger SET amount=?, date=?, description=?, validation_ref=?,
+                        approved_by=?, updated_at=datetime('now') WHERE id=?",
+                [$amount, $asOf, $description, $reference, $admin, (int)$existing['id']]);
+            return ['ok' => true, 'sr' => (string)$existing['sr'], 'updated' => true];
+        }
+
+        $sr = $this->addEntryRaw([
+            'sr'                => 'OB-' . $accountId,
+            'project'           => 'dishnet',
+            'date'              => $asOf,
+            'direction'         => 'in',
+            'amount'            => $amount,
+            'currency'          => (string)$acc['currency'],
+            'category'          => 'Opening Balance',
+            'category_raw'      => 'Opening Balance',
+            'description'       => $description,
+            'validation_ref'    => $reference,
+            'validation_status' => 'na',
+            'status'            => 'approved',
+            'approved_by'       => $admin,
+            'source'            => 'opening_balance',
+            'account_id'        => $accountId,
+            'txn_type'          => 'OPENING_BALANCE',
+        ]);
+        return ['ok' => true, 'sr' => $sr, 'updated' => false];
+    }
+
+    /**
+     * Money moved between two accounts as ONE act, two legs, one shared
+     * reference — the Uganda mirror of Sudan's EXCH pairs, generalised to
+     * accounts instead of hard-wired USD/SSP. Same-currency = plain TRANSFER;
+     * different currencies = an exchange where BOTH amounts are entered by
+     * the operator (never auto-multiplied), and the receiving leg records
+     * the original currency, original amount, the effective rate and its
+     * source. USD investment in, UGX out to spend: this is that chain.
+     */
+    public function recordAccountTransfer(int $fromId, int $toId, float $amountFrom,
+                                          float $amountTo, string $date, string $description,
+                                          string $rateSource, string $admin): array
+    {
+        $from = $this->account($fromId);
+        $to   = $this->account($toId);
+        if (!$from || !$to)          return ['ok' => false, 'error' => 'Both accounts must exist'];
+        if ($fromId === $toId)       return ['ok' => false, 'error' => 'Pick two different accounts'];
+        if (!(int)$from['active'] || !(int)$to['active']) return ['ok' => false, 'error' => 'Both accounts must be active'];
+        if ($amountFrom <= 0 || $amountTo <= 0) return ['ok' => false, 'error' => 'Both amounts must be positive'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return ['ok' => false, 'error' => 'Date must be YYYY-MM-DD'];
+        $isFx = $from['currency'] !== $to['currency'];
+        if ($isFx && trim($rateSource) === '') {
+            return ['ok' => false, 'error' => 'A currency exchange needs its rate source (e.g. "Ecobank board rate")'];
+        }
+        if (!$isFx && abs($amountFrom - $amountTo) > 0.005) {
+            return ['ok' => false, 'error' => 'A same-currency transfer must move the same amount'];
+        }
+
+        $n   = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FX-%' AND direction='out'")[0]['c'] ?? 0) + 1;
+        $ref = sprintf('FX-%04d', $n);
+        $rate = round($amountTo / $amountFrom, 6);
+        $legDesc = $description !== '' ? $description
+                 : ($isFx
+                    ? "Exchange {$from['currency']} " . number_format($amountFrom, 2)
+                      . " → {$to['currency']} " . number_format($amountTo, 2) . " @ " . number_format($rate, 2)
+                    : "Transfer {$from['name']} → {$to['name']}");
+
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'out',
+            'amount' => $amountFrom, 'currency' => (string)$from['currency'],
+            'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
+            'description' => $legDesc . " (to {$to['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'account_id' => $fromId, 'txn_type' => 'TRANSFER',
+        ]);
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
+            'amount' => $amountTo, 'currency' => (string)$to['currency'],
+            'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
+            'description' => $legDesc . " (from {$from['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'account_id' => $toId, 'txn_type' => 'TRANSFER',
+            'fx_currency' => $isFx ? (string)$from['currency'] : '',
+            'fx_amount'   => $isFx ? $amountFrom : null,
+            'fx_rate'     => $isFx ? $rate : null,
+            'fx_rate_source' => $isFx ? trim($rateSource) : '',
+        ]);
+        return ['ok' => true, 'ref' => $ref, 'rate' => $isFx ? $rate : null];
+    }
+
+    /**
+     * Cash-bag exchange (money changer): USD ↔ the book's base currency at
+     * an operator-entered rate, in the unassigned stream — what the wizard's
+     * Exchange tile records on a book without SSP. Two legs, one currency
+     * each, typed TRANSFER so the P&L never sees them, sharing an FXC ref so
+     * voiding one leg voids both. Sudan keeps its own single-row ssp_amount
+     * machinery; this path never runs there.
+     */
+    public function recordCashExchange(float $usdAmount, float $rate, string $direction,
+                                       string $date, string $description, string $project,
+                                       string $person, string $admin): array
+    {
+        $base = $this->bookBase();
+        if ($base === 'USD')     return ['ok' => false, 'error' => 'This book has no counter-currency to exchange USD with'];
+        if (!in_array($direction, ['usd_to_base', 'base_to_usd'], true)) return ['ok' => false, 'error' => 'Invalid exchange direction'];
+        if ($usdAmount <= 0 || $rate <= 0) return ['ok' => false, 'error' => 'Amount and rate must be positive'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return ['ok' => false, 'error' => 'Date must be YYYY-MM-DD'];
+
+        $baseAmount = round($usdAmount * $rate, 2);
+        $n    = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FXC-%' AND direction='out'")[0]['c'] ?? 0) + 1;
+        $ref  = sprintf('FXC-%04d', $n);
+        $give = $direction === 'usd_to_base' ? ['USD', $usdAmount] : [$base, $baseAmount];
+        $get  = $direction === 'usd_to_base' ? [$base, $baseAmount] : ['USD', $usdAmount];
+        if (trim($description) === '') {
+            $description = "Exchange {$give[0]} " . number_format($give[1], 2)
+                         . " → {$get[0]} " . number_format($get[1], 2) . " @ " . number_format($rate, 2);
+        }
+        $common = [
+            'project' => $project !== '' ? $project : 'dishnet', 'date' => $date,
+            'category' => 'Exchange', 'category_raw' => 'Exchange', 'person' => $person,
+            'validation_ref' => $ref, 'validation_status' => 'exchange',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'fx_exchange',
+            'account_id' => 0, 'txn_type' => 'TRANSFER',
+        ];
+        $this->addEntryRaw($common + [
+            'direction' => 'out', 'amount' => $give[1], 'currency' => $give[0],
+            'description' => $description . ' (gave)',
+        ]);
+        $this->addEntryRaw($common + [
+            'direction' => 'in', 'amount' => $get[1], 'currency' => $get[0],
+            'description' => $description . ' (received)',
+            'fx_currency' => $give[0], 'fx_amount' => $give[1],
+            'fx_rate' => round($rate, 6), 'fx_rate_source' => 'operator-entered',
+        ]);
+        return ['ok' => true, 'ref' => $ref, 'base_amount' => $baseAmount, 'currency' => $base];
+    }
+
+    /**
+     * Outside money coming IN (investor/director injection): the receiving
+     * account gains the funds and a liability account of the SAME currency
+     * records what the company now owes — one act, two legs, one reference.
+     * Never revenue, never a customer payment: both legs are typed
+     * DIRECTOR_FUNDING.
+     */
+    public function recordFunding(int $receivingId, int $liabilityId, float $amount,
+                                  string $date, string $description, string $reference,
+                                  string $admin): array
+    {
+        $recv = $this->account($receivingId);
+        $liab = $this->account($liabilityId);
+        if (!$recv || !$liab) return ['ok' => false, 'error' => 'Both accounts must exist'];
+        if (!in_array($liab['kind'], ['director', 'payable', 'equity'], true)) {
+            return ['ok' => false, 'error' => 'The counterpart must be a director/payable (loan) or equity (share capital) account'];
+        }
+        $isEquity = ($liab['kind'] === 'equity');
+        $fundCat  = $isEquity ? 'Share Capital' : 'Loan Received';
+        if ($recv['currency'] !== $liab['currency']) {
+            return ['ok' => false, 'error' =>
+                "Currency mismatch: funds land in {$recv['currency']} but the liability account is "
+                . "{$liab['currency']} — add a {$recv['currency']} funding account (e.g. 'Director Funding – {$recv['currency']}') so the debt is recorded in the currency it is owed in"];
+        }
+        if ($amount <= 0) return ['ok' => false, 'error' => 'Amount must be positive'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return ['ok' => false, 'error' => 'Date must be YYYY-MM-DD'];
+
+        $n   = (int)($this->query("SELECT COUNT(DISTINCT validation_ref) c FROM cb_ledger WHERE validation_ref LIKE 'FUND-%'")[0]['c'] ?? 0) + 1;
+        $ref = $reference !== '' ? $reference : sprintf('FUND-%04d', $n);
+        $desc = $description !== '' ? $description
+              : ($isEquity ? 'Share capital contribution' : 'Shareholder/director funding received');
+
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
+            'amount' => $amount, 'currency' => (string)$recv['currency'],
+            'category' => $fundCat, 'category_raw' => $fundCat,
+            'description' => $desc . " (into {$recv['name']})",
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'funding',
+            'account_id' => $receivingId, 'txn_type' => 'DIRECTOR_FUNDING',
+        ]);
+        $this->addEntryRaw([
+            'project' => 'dishnet', 'date' => $date, 'direction' => 'in',
+            'amount' => $amount, 'currency' => (string)$liab['currency'],
+            'category' => $fundCat, 'category_raw' => $fundCat,
+            'description' => $desc . ($isEquity ? " — share capital ({$liab['name']})" : " — payable ({$liab['name']})"),
+            'validation_ref' => $ref, 'validation_status' => 'na',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => 'funding',
+            'account_id' => $liabilityId, 'txn_type' => 'DIRECTOR_FUNDING',
+        ]);
+        return ['ok' => true, 'ref' => $ref];
+    }
+
+    /**
+     * One-click standard Uganda account set (operator-approved 2026-09-06).
+     * Refuses when any account already exists — never a silent duplicate.
+     */
+    public function seedStandardAccounts(): array
+    {
+        if ($this->bookBase() !== 'UGX') {
+            return ['ok' => false, 'error' => 'The standard set is the Uganda (UGX-base) chart — this install books in '
+                . $this->bookBase() . '. Add accounts individually instead.'];
+        }
+        if (count($this->accounts()) > 0) {
+            return ['ok' => false, 'error' => 'Accounts already exist — add further accounts individually'];
+        }
+        $std = [
+            ['Ecobank Uganda – UGX',           'UGX', 'bank'],
+            ['Ecobank Uganda – USD',           'USD', 'bank'],
+            ['Cash – Uganda',                  'UGX', 'cash'],
+            ['MTN Mobile Money',               'UGX', 'momo'],
+            ['Airtel Money',                   'UGX', 'momo'],
+            ['Director/Shareholder Funding',   'UGX', 'director'],
+        ];
+        $made = [];
+        foreach ($std as [$n, $c, $k]) {
+            $r = $this->addAccount($n, $c, $k);
+            if ($r['ok']) $made[] = $n;
+        }
+        return ['ok' => true, 'created' => $made];
+    }
+
+    // ═══ Phase C — account-aware, currency-honest READ layer ════════════════
+    //
+    // The rules these readers enforce, everywhere, with no exceptions:
+    //   · a balance belongs to ONE account or ONE currency stream — UGX and
+    //     USD are never added together into a single number;
+    //   · capital movements (openings, funding, transfers, adjustments) are
+    //     never trading income or expense;
+    //   · original row currency is authoritative; Sudan's SSP rows keep their
+    //     dual-column semantics (the SSP figure lives in ssp_amount).
+
+    /**
+     * Categories that mark a LEGACY (untyped) row as a capital/flow movement
+     * rather than trading P&L. Typed rows are classified by txn_type instead.
+     */
+    public const CAPITAL_CATEGORIES = [
+        'Opening Balance', 'Share Capital', 'Loan Received', 'Loan Given', 'Loan Return Received',
+        'Interco In', 'Interco Out', 'Bank Transfer', 'Exchange',
+        'Staff Advance', 'SSP Advance', 'SSP Return', 'Advance Return',
+    ];
+
+    /** Transaction types that are capital/flow movements, never P&L. */
+    public const CAPITAL_TXN_TYPES = ['OPENING_BALANCE', 'DIRECTOR_FUNDING', 'TRANSFER', 'ADJUSTMENT'];
+
+    /** Kinds that HOLD money. Everything else (director/payable/equity/
+     *  receivable/inventory/asset) is a balance-sheet counterpart and must
+     *  never be added into a cash position. */
+    public const MONEY_KINDS = ['bank', 'cash', 'momo'];
+
+    private function isCapitalRow(array $r): bool
+    {
+        $t = strtoupper(trim((string)($r['txn_type'] ?? '')));
+        if ($t !== '') return in_array($t, self::CAPITAL_TXN_TYPES, true);
+        return in_array((string)($r['category'] ?? ''), self::CAPITAL_CATEGORIES, true);
+    }
+
+    /** The amount a row moves in its OWN currency (SSP rows carry it in ssp_amount). */
+    private function rowAmount(array $r): float
+    {
+        return (($r['currency'] ?? '') === 'SSP')
+            ? (float)($r['ssp_amount'] ?? 0)
+            : (float)($r['amount'] ?? 0);
+    }
+
+    /** A row's currency, with legacy blank rows riding the configured base. */
+    private function rowCurrency(array $r): string
+    {
+        $c = strtoupper(trim((string)($r['currency'] ?? '')));
+        return $c !== '' ? $c : $this->bookBase();
+    }
+
+    /**
+     * Every active-or-used account with its balance in its OWN currency,
+     * grouped for the accounts overview. Never produces a cross-currency sum.
+     */
+    public function balancesByAccount(): array
+    {
+        $this->ensureAccountsTable();
+        return $this->dbq(
+            "SELECT a.id, a.name, a.currency, a.kind, a.active,
+                    ROUND(COALESCE(SUM(CASE WHEN l.direction='in' THEN l.amount ELSE -l.amount END), 0), 2) AS balance,
+                    COUNT(l.id) AS entries
+             FROM cb_accounts a
+             LEFT JOIN cb_ledger l ON l.account_id = a.id AND l.status = 'approved'
+             GROUP BY a.id
+             ORDER BY a.kind ASC, a.name ASC"
+        );
+    }
+
+    /**
+     * The whole install's cash position, one entry PER CURRENCY — each with
+     * its account balances plus the unassigned legacy stream (rows without an
+     * account). There is deliberately no combined figure anywhere in the
+     * return value: UGX 5,500,000 and USD 2,200 are two answers, not one.
+     */
+    public function currencyPositions(): array
+    {
+        $this->ensureAccountsTable();
+        $positions = [];
+
+        foreach ($this->balancesByAccount() as $a) {
+            $cur = strtoupper($a['currency']);
+            $positions[$cur] = $positions[$cur] ?? [
+                'currency' => $cur, 'accounts' => [], 'accounts_total' => 0.0,
+                'counterparts' => [], 'counterparts_total' => 0.0,
+                'unassigned' => 0.0, 'total' => 0.0,
+            ];
+            if (in_array($a['kind'], self::MONEY_KINDS, true)) {
+                $positions[$cur]['accounts'][] = $a;
+                $positions[$cur]['accounts_total'] = round($positions[$cur]['accounts_total'] + (float)$a['balance'], 2);
+            } else {
+                // Equity/liability/receivable counterparts: shown, never cash.
+                $positions[$cur]['counterparts'][] = $a;
+                $positions[$cur]['counterparts_total'] = round($positions[$cur]['counterparts_total'] + (float)$a['balance'], 2);
+            }
+        }
+
+        // Unassigned stream: approved rows with no account, per row currency.
+        $base = $this->pdo()->quote($this->bookBase());
+        foreach ($this->dbq(
+            "SELECT CASE WHEN currency IS NULL OR currency = '' THEN {$base} ELSE currency END AS cur,
+                    ROUND(SUM(CASE WHEN direction='in' THEN
+                            (CASE WHEN currency='SSP' THEN COALESCE(ssp_amount,0) ELSE amount END)
+                        ELSE -(CASE WHEN currency='SSP' THEN COALESCE(ssp_amount,0) ELSE amount END) END), 2) AS bal
+             FROM cb_ledger
+             WHERE account_id = 0 AND status = 'approved'
+             GROUP BY cur"
+        ) as $row) {
+            $cur = strtoupper($row['cur']);
+            $positions[$cur] = $positions[$cur] ?? [
+                'currency' => $cur, 'accounts' => [], 'accounts_total' => 0.0,
+                'counterparts' => [], 'counterparts_total' => 0.0,
+                'unassigned' => 0.0, 'total' => 0.0,
+            ];
+            $positions[$cur]['unassigned'] = (float)$row['bal'];
+        }
+
+        foreach ($positions as &$p) {
+            $p['total'] = round($p['accounts_total'] + $p['unassigned'], 2);
+        }
+        unset($p);
+
+        // The BOOK's base currency always has a position — a UGX book shows
+        // its UGX card even before the first UGX shilling arrives.
+        $baseCur = $this->bookBase();
+        $positions[$baseCur] = $positions[$baseCur] ?? [
+            'currency' => $baseCur, 'accounts' => [], 'accounts_total' => 0.0,
+            'counterparts' => [], 'counterparts_total' => 0.0,
+            'unassigned' => 0.0, 'total' => 0.0,
+        ];
+        uksort($positions, function ($x, $y) use ($baseCur) {
+            if ($x === $baseCur) return -1;
+            if ($y === $baseCur) return 1;
+            return strcmp($x, $y);
+        });
+        return $positions;
+    }
+
+    /**
+     * One account's ledger with a running balance in the ACCOUNT's currency.
+     * Voided rows stay listed (audit trail) but never move the balance.
+     */
+    public function accountLedger(int $accountId, string $from = '', string $to = '', int $limit = 200, int $offset = 0): array
+    {
+        $acct = $this->account($accountId);
+        if (!$acct) return ['ok' => false, 'error' => 'Unknown account'];
+
+        $w = ['account_id = ?', "status != 'voided_reconcile'"];
+        $p = [$accountId];
+        if ($from !== '') { $w[] = 'date >= ?'; $p[] = $from; }
+        if ($to !== '')   { $w[] = 'date <= ?'; $p[] = $to; }
+
+        $all = $this->dbq(
+            'SELECT id, direction, amount, status FROM cb_ledger WHERE account_id = ?
+             ORDER BY date ASC, id ASC', [$accountId]
+        );
+        $balMap = []; $running = 0.0;
+        foreach ($all as $r) {
+            if (!in_array($r['status'], ['voided', 'voided_reconcile'], true)) {
+                $running += $r['direction'] === 'in' ? (float)$r['amount'] : -(float)$r['amount'];
+            }
+            $balMap[(int)$r['id']] = round($running, 2);
+        }
+
+        $rows = $this->dbq(
+            'SELECT * FROM cb_ledger WHERE ' . implode(' AND ', $w) .
+            " ORDER BY date DESC, id DESC LIMIT {$limit} OFFSET {$offset}", $p
+        );
+        foreach ($rows as &$r) {
+            $r['running_balance'] = $balMap[(int)$r['id']] ?? null;
+            $r['_bal_currency']   = strtoupper($acct['currency']);
+        }
+        unset($r);
+
+        return [
+            'ok'       => true,
+            'account'  => $acct,
+            'currency' => strtoupper($acct['currency']),
+            'balance'  => $this->accountBalance($accountId),
+            'rows'     => $rows,
+        ];
+    }
+
+    /**
+     * Cash-basis trading P&L, one section PER CURRENCY. Capital movements
+     * (openings, funding, transfers, adjustments — and their legacy category
+     * equivalents) are excluded by construction; refunds appear as their own
+     * contra-revenue line, never buried in expenses.
+     */
+    public function plByPeriod(string $project = '', string $from = '', string $to = ''): array
+    {
+        $w = ["status = 'approved'"];
+        $p = [];
+        if ($project !== '') { $w[] = 'project = ?'; $p[] = $project; }
+        if ($from !== '')    { $w[] = 'date >= ?';   $p[] = $from; }
+        if ($to !== '')      { $w[] = 'date <= ?';   $p[] = $to; }
+
+        $out = [];
+        foreach ($this->dbq(
+            'SELECT direction, amount, currency, ssp_amount, category, txn_type
+             FROM cb_ledger WHERE ' . implode(' AND ', $w), $p
+        ) as $r) {
+            if ($this->isCapitalRow($r)) continue;
+
+            $cur = $this->rowCurrency($r);
+            $amt = $this->rowAmount($r);
+            $out[$cur] = $out[$cur] ?? [
+                'currency' => $cur,
+                'revenue' => [], 'revenue_counts' => [], 'revenue_total' => 0.0,
+                'refunds_total' => 0.0,
+                'expenses' => [], 'expense_counts' => [], 'expense_total' => 0.0,
+                'net' => 0.0,
+            ];
+
+            $isRefund = strtoupper((string)($r['txn_type'] ?? '')) === 'REFUND'
+                || in_array($r['category'], ['Refund', 'Customer Refund'], true);
+
+            if ($isRefund) {
+                // direction-aware: an out-refund reduces income; a rare
+                // in-refund (money returned to us) offsets it.
+                $out[$cur]['refunds_total'] = round(
+                    $out[$cur]['refunds_total'] + ($r['direction'] === 'out' ? $amt : -$amt), 2);
+            } elseif ($r['direction'] === 'in') {
+                $cat = (string)$r['category'];
+                $out[$cur]['revenue'][$cat] = round(($out[$cur]['revenue'][$cat] ?? 0) + $amt, 2);
+                $out[$cur]['revenue_counts'][$cat] = ($out[$cur]['revenue_counts'][$cat] ?? 0) + 1;
+                $out[$cur]['revenue_total'] = round($out[$cur]['revenue_total'] + $amt, 2);
+            } else {
+                $cat = (string)$r['category'];
+                $out[$cur]['expenses'][$cat] = round(($out[$cur]['expenses'][$cat] ?? 0) + $amt, 2);
+                $out[$cur]['expense_counts'][$cat] = ($out[$cur]['expense_counts'][$cat] ?? 0) + 1;
+                $out[$cur]['expense_total'] = round($out[$cur]['expense_total'] + $amt, 2);
+            }
+        }
+
+        foreach ($out as &$s) {
+            arsort($s['revenue']);
+            arsort($s['expenses']);
+            $s['net'] = round($s['revenue_total'] - $s['refunds_total'] - $s['expense_total'], 2);
+        }
+        unset($s);
+
+        $baseCur = $this->bookBase();
+        uksort($out, function ($x, $y) use ($baseCur) {
+            if ($x === $baseCur) return -1;
+            if ($y === $baseCur) return 1;
+            return strcmp($x, $y);
+        });
+        return $out;
+    }
+
+    /**
+     * Void a ledger row — the SAFE correction mechanism: the row stays
+     * visible with the reason welded on, every reader excludes it from
+     * balances, and nothing is destroyed. Rows written as linked pairs
+     * (transfers, funding) are voided as the whole pair by shared reference,
+     * so one leg can never be silently orphaned.
+     */
+    public function voidEntry(int $id, string $reason, string $actor): array
+    {
+        $reason = trim($reason);
+        if (strlen($reason) < 3) return ['ok' => false, 'error' => 'A void reason is required.'];
+        $row = $this->getEntryById($id);
+        if (!$row) return ['ok' => false, 'error' => 'Entry not found.'];
+        if (in_array($row['status'], ['voided', 'voided_reconcile'], true)) {
+            return ['ok' => false, 'error' => 'Entry is already voided.'];
+        }
+
+        $pairSources = ['account_transfer', 'funding', 'fx_exchange'];
+        $stamp = ' [VOIDED: ' . $reason . ' — by ' . ($actor !== '' ? $actor : 'admin')
+               . ' ' . date('Y-m-d H:i') . ']';
+
+        if (in_array((string)($row['source'] ?? ''), $pairSources, true)
+            && trim((string)($row['validation_ref'] ?? '')) !== '') {
+            $this->dbq(
+                "UPDATE cb_ledger SET status='voided', description = description || ?, updated_at = ?
+                 WHERE validation_ref = ? AND source = ? AND status NOT IN ('voided','voided_reconcile')",
+                [$stamp, date('Y-m-d H:i:s'), $row['validation_ref'], $row['source']]
+            );
+            $n = $this->dbq('SELECT COUNT(*) AS n FROM cb_ledger WHERE validation_ref = ? AND status = ?',
+                [$row['validation_ref'], 'voided'])[0]['n'] ?? 0;
+            return ['ok' => true, 'voided' => (int)$n, 'pair' => true];
+        }
+
+        $this->dbq(
+            "UPDATE cb_ledger SET status='voided', description = description || ?, updated_at = ? WHERE id = ?",
+            [$stamp, date('Y-m-d H:i:s'), $id]
+        );
+        return ['ok' => true, 'voided' => 1, 'pair' => false];
+    }
+
     /** Direct PDO — bypasses SqliteStore so ensureTable() never touches cb_ledger */
     /** Public PDO accessor for callers that need raw queries (e.g. reconciliation views) */
     public function getPdo(): \PDO { return $this->pdo(); }
@@ -277,6 +936,15 @@ class CashbookService
             'ssp_amount'       => "REAL",
             'ssp_rate'         => "REAL",
             'payroll_ref'      => "TEXT DEFAULT ''",  // v4.11.0: HRM payroll reference
+            // Phase B (Uganda books): account dimension + transaction nature +
+            // explicit foreign-currency record. Defaults keep every existing
+            // row and every Sudan write untouched.
+            'account_id'       => "INTEGER NOT NULL DEFAULT 0",
+            'txn_type'         => "TEXT NOT NULL DEFAULT ''",
+            'fx_currency'      => "TEXT DEFAULT ''",
+            'fx_amount'        => "REAL",
+            'fx_rate'          => "REAL",
+            'fx_rate_source'   => "TEXT DEFAULT ''",
             'cash_with'        => "TEXT DEFAULT ''",   // v4.11.3: who physically holds this cash
             'cash_with_id'     => "INTEGER DEFAULT 0", // v4.11.3: retailer ID of cash holder
         ];
@@ -965,12 +1633,21 @@ class CashbookService
         $project   = in_array($data['project'] ?? '', self::PROJECTS) ? $data['project'] : 'dishnet';
         $dir       = in_array($data['direction'] ?? '', ['in','out']) ? $data['direction'] : 'in';
         $amount    = round((float)($data['amount'] ?? 0), 2);
-        $currency  = strtoupper($data['currency'] ?? 'USD');
+        $currency  = strtoupper(trim((string)($data['currency'] ?? '')));
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) $currency = $this->bookBase();
         $cat       = trim($data['category'] ?? 'Receipt');
         $valStatus = array_key_exists($data['validation_status'] ?? '', self::VAL_STATUSES)
                      ? $data['validation_status'] : 'na';
 
         if ($amount <= 0) return ['ok'=>false,'error'=>'Amount must be > 0'];
+        // C0.1: openings belong EXCLUSIVELY to the account-based Opening
+        // Balances mechanism (typed, account-bound, once per account). The
+        // first live entry proved what a manual "Opening Balance" becomes:
+        // an untyped, account-less row in whatever currency was picked.
+        if (strcasecmp($cat, 'Opening Balance') === 0) {
+            return ['ok' => false, 'message' =>
+                'Opening balances are recorded per account on the Opening Balances screen — not as manual entries.'];
+        }
 
         $sr  = $data['sr'] ?? $this->nextSr($project);
         $now = date('Y-m-d H:i:s');
@@ -1001,22 +1678,38 @@ class CashbookService
 
     public function addEntryRaw(array $data): string
     {
+        // Phase C guard: an account books exactly one currency. A UGX account
+        // refuses a USD row and vice versa — silently mis-homed money is the
+        // one thing a multi-currency book can never recover from.
+        $acctId = (int)($data['account_id'] ?? 0);
+        if ($acctId > 0) {
+            $acct = $this->account($acctId);
+            if (!$acct) {
+                throw new \InvalidArgumentException("Unknown account #{$acctId}");
+            }
+            $rowCur = strtoupper(trim((string)($data['currency'] ?? $this->bookBase())));
+            if (strtoupper($acct['currency']) !== $rowCur) {
+                throw new \InvalidArgumentException(
+                    "Account '{$acct['name']}' books {$acct['currency']} — refusing a {$rowCur} row");
+            }
+        }
         $now     = date('Y-m-d H:i:s');
         $project = $data['project'] ?? 'dishnet';
-        // SSP entries get their own SSP-XXXX series; USD entries use project prefix
-        $isSspEntry = (($data['currency'] ?? 'USD') === 'SSP');
+        // SSP entries get their own SSP-XXXX series; base entries use project prefix
+        $isSspEntry = (($data['currency'] ?? $this->bookBase()) === 'SSP');
         $sr      = (($data['sr'] ?? '') !== '') ? $data['sr'] : ($isSspEntry ? $this->nextSrSSP() : $this->nextSr($project));
         $this->dbq(
             "INSERT INTO cb_ledger
              (sr,project,date,direction,amount,currency,ssp_amount,ssp_rate,
               category,category_raw,person,
               description,validation_ref,validation_status,status,approved_by,
-              crm_payment_id,crm_client_id,source,payroll_ref,cash_with,cash_with_id,created_at,updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              crm_payment_id,crm_client_id,source,payroll_ref,cash_with,cash_with_id,
+              account_id,txn_type,fx_currency,fx_amount,fx_rate,fx_rate_source,created_at,updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 $sr, $project,
                 $data['date'] ?? date('Y-m-d'), $data['direction'] ?? 'in',
-                (float)($data['amount'] ?? 0), $data['currency'] ?? 'USD',
+                (float)($data['amount'] ?? 0), $data['currency'] ?? $this->bookBase(),
                 isset($data['ssp_amount']) ? (float)$data['ssp_amount'] : null,
                 isset($data['ssp_rate'])   ? (float)$data['ssp_rate']   : null,
                 $data['category'] ?? 'Misc Expense', $data['category_raw'] ?? '',
@@ -1029,6 +1722,11 @@ class CashbookService
                 $data['payroll_ref'] ?? '',
                 $data['cash_with'] ?? '',
                 (int)($data['cash_with_id'] ?? 0),
+                (int)($data['account_id'] ?? 0), $data['txn_type'] ?? '',
+                $data['fx_currency'] ?? '',
+                isset($data['fx_amount']) ? (float)$data['fx_amount'] : null,
+                isset($data['fx_rate'])   ? (float)$data['fx_rate']   : null,
+                $data['fx_rate_source'] ?? '',
                 $data['created_at'] ?? $now, $now,
             ]
         );
@@ -1037,6 +1735,19 @@ class CashbookService
 
     public function updateEntry(int $id, array $data, array $admin): array
     {
+        // The money fields of a linked pair stay in step with the other leg:
+        // live, one exchange leg was edited to a new amount/date while its
+        // counterpart kept the old ones. Void the pair and re-enter instead.
+        $row = $this->dbq("SELECT source FROM cb_ledger WHERE id=?", [$id]);
+        if (empty($row)) return ['ok'=>false,'error'=>'Entry not found'];
+        if (in_array((string)($row[0]['source'] ?? ''), ['account_transfer', 'funding', 'fx_exchange'], true)) {
+            foreach (['amount', 'date', 'direction', 'category'] as $f) {
+                if (array_key_exists($f, $data)) {
+                    return ['ok'=>false,'error'=>
+                        'This is one leg of a linked two-leg entry — its amount, date, direction and category stay in step with the other leg. Void the pair and re-enter it instead.'];
+                }
+            }
+        }
         $allowed = ['description','validation_ref','validation_status','category','person','amount','date','direction'];
         $sets = []; $params = [];
         foreach ($allowed as $f) {
@@ -1051,8 +1762,16 @@ class CashbookService
 
     public function deleteEntry(int $id, array $admin): array
     {
-        $entry = $this->dbq("SELECT id,sr FROM cb_ledger WHERE id=?", [$id]);
+        $entry = $this->dbq("SELECT id,sr,source FROM cb_ledger WHERE id=?", [$id]);
         if (empty($entry)) return ['ok'=>false,'error'=>'Entry not found'];
+        // A row that is one leg of a linked pair can never be hard-deleted:
+        // losing one side breaks double-entry (live: the FUND-0001 equity leg
+        // was deleted, leaving a bank leg with no counterpart). Void instead —
+        // voiding one leg voids both and keeps the audit trail.
+        if (in_array((string)($entry[0]['source'] ?? ''), ['account_transfer', 'funding', 'fx_exchange'], true)) {
+            return ['ok'=>false,'error'=>
+                'This is one leg of a linked two-leg entry — deleting it would break double-entry. Use Void instead (voiding one leg voids both).'];
+        }
         $this->dbq("DELETE FROM cb_ledger WHERE id=?", [$id]);
         return ['ok'=>true, 'sr'=>$entry[0]['sr']??''];
     }
@@ -1068,7 +1787,7 @@ class CashbookService
         if ($returnAmount > 0) {
             $this->addEntry([
                 'project'=>$entry['project'],'date'=>date('Y-m-d'),'direction'=>'in',
-                'amount'=>$returnAmount,'currency'=>'USD','category'=>'Receipt',
+                'amount'=>$returnAmount,'currency'=>$this->bookBase(),'category'=>'Receipt',
                 'description'=>'Change returned — '.$entry['person'].' re: '.$entry['sr'],
                 'validation_ref'=>$voucherNo,'validation_status'=>'voucher',
             ], $admin, true);
@@ -1106,12 +1825,17 @@ class CashbookService
         $projFilter = !empty($f['project']) ? $f['project'] : '';
         $currFilter = !empty($f['currency']) ? $f['currency'] : '';
         $useSSP     = ($currFilter === 'SSP');
-        $amtCol     = $useSSP ? 'COALESCE(ssp_amount,0)' : 'amount';
-        // v4.9.18: When NOT in SSP mode, exclude SSP entries from USD running balance
-        // Same pattern as getBalance() — currency='USD' OR NULL OR empty
-        $currWhere  = $useSSP
-            ? " AND currency='SSP'"
-            : " AND (currency='USD' OR currency IS NULL OR currency='')";
+        // Phase B: currency streams are per-CURRENCY, keyed off the configured
+        // book base — never a literal. A specific currency filter follows that
+        // currency; the All view runs the base stream here and every other
+        // currency's own stream below. Sudan (base USD + SSP) is reproduced
+        // exactly; a UGX book gets UGX balances with USD as its own stream.
+        $base       = $this->bookBase();
+        $streamCur  = $currFilter !== '' ? $currFilter : $base;
+        $amtCol     = $streamCur === 'SSP' ? 'COALESCE(ssp_amount,0)' : 'amount';
+        $currWhere  = ($currFilter === '')
+            ? " AND (currency=" . $this->pdo()->quote($base) . " OR currency IS NULL OR currency='')"
+            : " AND currency=" . $this->pdo()->quote($streamCur);
         if ($projFilter) {
             $allRows = $this->dbq(
                 "SELECT id, direction, {$amtCol} as bal_amt FROM cb_ledger
@@ -1128,25 +1852,30 @@ class CashbookService
                 . " ORDER BY date ASC, id ASC"
             );
         }
-        // v4.9.18: Also compute SSP running balance separately for "All" view
-        $sspBalMap = [];
-        if (!$useSSP && !$currFilter) {
-            $sspQ = "SELECT id, direction, COALESCE(ssp_amount,0) as bal_amt FROM cb_ledger
-                     WHERE status NOT IN ('voided','voided_reconcile') AND currency='SSP'"
-                   . ($projFilter ? " AND project=?" : "")
-                   . " ORDER BY date ASC, id ASC";
-            $sspRows = $this->dbq($sspQ, $projFilter ? [$projFilter] : []);
-            $sspRun = 0.0;
-            foreach ($sspRows as $sr) {
-                $sspRun += $sr['direction'] === 'in' ? (float)$sr['bal_amt'] : -(float)$sr['bal_amt'];
-                $sspBalMap[(int)$sr['id']] = round($sspRun, 0);
+        // All view: every non-base currency gets its OWN running stream
+        // (SSP on Sudan, USD on Uganda, any future one) — balances never mix.
+        $otherMap = [];
+        if ($currFilter === '') {
+            $q = "SELECT id, direction, currency,
+                         CASE WHEN currency='SSP' THEN COALESCE(ssp_amount,0) ELSE amount END AS bal_amt
+                  FROM cb_ledger
+                  WHERE status NOT IN ('voided','voided_reconcile')
+                    AND currency IS NOT NULL AND currency != '' AND currency != " . $this->pdo()->quote($base)
+               . ($projFilter ? " AND project=?" : "")
+               . " ORDER BY date ASC, id ASC";
+            $runBy = [];
+            foreach ($this->dbq($q, $projFilter ? [$projFilter] : []) as $orow) {
+                $oc = (string)$orow['currency'];
+                $runBy[$oc] = ($runBy[$oc] ?? 0.0)
+                    + ($orow['direction'] === 'in' ? (float)$orow['bal_amt'] : -(float)$orow['bal_amt']);
+                $otherMap[(int)$orow['id']] = ['v' => round($runBy[$oc], $oc === 'SSP' ? 0 : 2), 'c' => $oc];
             }
         }
         $balMap  = [];
         $running = 0.0;
         foreach ($allRows as $r) {
             $running += $r['direction'] === 'in' ? (float)$r['bal_amt'] : -(float)$r['bal_amt'];
-            $balMap[(int)$r['id']] = round($running, $useSSP ? 0 : 2);
+            $balMap[(int)$r['id']] = round($running, $streamCur === 'SSP' ? 0 : 2);
         }
 
         // v4.9.10: Pass currency info to display layer
@@ -1156,13 +1885,12 @@ class CashbookService
         );
         foreach ($rows as &$r) {
             $id = (int)$r['id'];
-            // v4.9.18: SSP entries get their own running balance in "All" view
-            if (!$useSSP && ($r['currency'] ?? 'USD') === 'SSP' && isset($sspBalMap[$id])) {
-                $r['running_balance'] = $sspBalMap[$id];
-                $r['_bal_currency']   = 'SSP';
+            if ($currFilter === '' && isset($otherMap[$id])) {
+                $r['running_balance'] = $otherMap[$id]['v'];
+                $r['_bal_currency']   = $otherMap[$id]['c'];
             } else {
                 $r['running_balance'] = $balMap[$id] ?? null;
-                $r['_bal_currency']   = $useSSP ? 'SSP' : 'USD';
+                $r['_bal_currency']   = $streamCur;
             }
         }
         return $rows;
@@ -1294,11 +2022,15 @@ class CashbookService
                 [$project]
             );
         } else {
+            $curArg  = strtoupper(trim($currency));
+            if (!preg_match('/^[A-Z]{3}$/', $curArg)) $curArg = $this->bookBase();
+            // Legacy rows with no stored currency belong to the BASE stream.
+            $legacy  = ($curArg === $this->bookBase()) ? " OR currency IS NULL OR currency=''" : '';
             $r = $this->dbq(
                 "SELECT direction, SUM(amount) as total
                  FROM cb_ledger
                  WHERE project=? AND status='approved'
-                   AND (currency='USD' OR currency IS NULL OR currency='')
+                   AND (currency=" . $this->pdo()->quote($curArg) . $legacy . ")
                    AND NOT(amount=0 AND sr='')
                  GROUP BY direction",
                 [$project]
@@ -1463,8 +2195,6 @@ class CashbookService
             [$reason,date('Y-m-d H:i:s'),$id]);
         return ['ok'=>true];
     }
-    // legacy opening balance stub
-    public function setOpeningBalance(string $currency, float $amount, array $admin): array { return ['ok'=>true]; }
 
     /**
      * Sync CRM payment_collections into cashbook as Cash IN (Receipt) entries.
@@ -1657,7 +2387,7 @@ class CashbookService
                         'invoice_id'      => null,
                         'crm_customer_id' => $clientId,
                         'amount'          => $amount,
-                        'currency'        => 'USD',
+                        'currency'        => $this->payCurrency($pay),
                         'method'          => 'Cash',
                         'service_type'    => '',
                         'note'            => $note,
@@ -1685,7 +2415,7 @@ class CashbookService
                         'date'              => $payDate,
                         'direction'         => 'in',
                         'amount'            => $amount,
-                        'currency'          => 'USD',
+                        'currency'          => $this->payCurrency($pay),
                         'category'          => $isBank ? 'Bank Transfer' : 'Receipt',
                         'category_raw'      => $isBank ? 'Bank Transfer' : 'Receipt',
                         'person'            => '',
@@ -1727,7 +2457,7 @@ class CashbookService
 
                 $this->addEntryRaw([
                     'sr'=>'COL-'.$storeId,'project'=>'dishnet','date'=>$date,'direction'=>'in','amount'=>$amount,
-                    'currency'=>'USD','category'=>'Receipt','category_raw'=>'Receipt',
+                    'currency'=>(preg_match('/^[A-Z]{3}$/', strtoupper(trim((string)($c['currency'] ?? '')))) ? strtoupper(trim((string)$c['currency'])) : $this->bookBase()),'category'=>'Receipt','category_raw'=>'Receipt',
                     'person'=>$agent,'description'=>$desc,'validation_ref'=>$ref,
                     'validation_status'=>'na','status'=>'approved','approved_by'=>'Local Sync',
                     'crm_payment_id'=>(int)($c['crm_payment_id']??0),
@@ -1801,7 +2531,7 @@ class CashbookService
                 'date'              => $date,
                 'direction'         => 'in',
                 'amount'            => $amount,
-                'currency'          => 'USD',
+                'currency'          => (preg_match('/^[A-Z]{3}$/', strtoupper(trim((string)($c['currency'] ?? '')))) ? strtoupper(trim((string)$c['currency'])) : $this->bookBase()),
                 'category'          => 'Receipt',
                 'category_raw'      => 'Receipt',
                 'person'            => $agent,

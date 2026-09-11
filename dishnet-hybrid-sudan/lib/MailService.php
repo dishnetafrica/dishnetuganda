@@ -33,7 +33,43 @@ declare(strict_types=1);
 
 class MailService
 {
+    /** Set when the settings file is present but unreadable by this process. */
+    public $unreadableReason = '';
+
     /** @var array Last-resolved config, cached for the request */
+    /**
+     * The name this server introduces itself with at EHLO.
+     *
+     * gethostname() inside a container returns its hex id — "1c8f5997cf51" —
+     * which is not a domain, and a strict server refuses it outright:
+     *
+     *     550 5.5.0 Invalid EHLO domain.
+     *
+     * That is correct of the server and wrong of us. The sender's own domain
+     * is the honest answer: mail from no-reply@dishnetuganda.com is announced
+     * as dishnetuganda.com, which resolves and matches the envelope.
+     *
+     * smtp_ehlo overrides it when an operator needs something specific.
+     * gethostname() is kept as the last resort, but only when it contains a
+     * dot — a bare container id never reaches the wire again.
+     */
+    public static function ehloName(array $cfg): string
+    {
+        $explicit = trim((string)($cfg['ehlo'] ?? $cfg['smtp_ehlo'] ?? ''));
+        if ($explicit !== '') return $explicit;
+
+        foreach (['from', 'user'] as $k) {
+            $addr = trim((string)($cfg[$k] ?? ''));
+            $at   = strrpos($addr, '@');
+            if ($at === false) continue;
+            $dom = trim(substr($addr, $at + 1));
+            if ($dom !== '' && strpos($dom, '.') !== false) return $dom;
+        }
+
+        $hn = (string)gethostname();
+        return (strpos($hn, '.') !== false) ? $hn : 'localhost';
+    }
+
     private $cfg = null;
     private $cfgError = '';
     private $dataDir;
@@ -63,6 +99,17 @@ class MailService
         //   - toggle ON  → try UCRM API first, fall back to plugin SMTP
         //   - toggle OFF → use plugin SMTP directly
         $emailFile = $this->dataDir . '/email_settings.json';
+        // The file existing but being unreadable is a completely different
+        // problem from it being absent, and reported as "not configured" the
+        // two are indistinguishable. That is what happened: written 0600 by
+        // root, invisible to the web process, and the webhook said the mailer
+        // was unconfigured while the CLI read it fine.
+        if (is_file($emailFile) && !is_readable($emailFile)) {
+            require_once __DIR__ . '/SecureFile.php';
+            $this->unreadableReason = 'email_settings.json exists but this process cannot read it ('
+                . SecureFile::auditReadability($emailFile)['why'] . ')';
+            error_log('[MailService] ' . $this->unreadableReason);
+        }
         $ec = file_exists($emailFile)
             ? (json_decode((string)@file_get_contents($emailFile), true) ?: [])
             : [];
@@ -222,6 +269,10 @@ class MailService
      *                          tags from $htmlBody.
      * @param array  $extraHeaders  Optional extra MIME headers (e.g.
      *                              ['Reply-To' => 'support@dishnetafrica.com']).
+     * @param array  $attachments   Optional files to attach, each entry
+     *                              ['name' => 'Quotation-PF001.pdf',
+     *                               'mime' => 'application/pdf',
+     *                               'content' => raw bytes].
      *
      * @return array{ok:bool, error?:string, log?:array}
      *   On success: ['ok' => true, 'log' => [...steps...]]
@@ -229,7 +280,7 @@ class MailService
      */
     public function send(string $toEmail, string $toName, string $subject,
                          string $htmlBody, string $textBody = '',
-                         array $extraHeaders = []): array
+                         array $extraHeaders = [], array $attachments = []): array
     {
         $log = [];
         $cfg = $this->getConfig();
@@ -250,8 +301,6 @@ class MailService
             ), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
 
-        // Build multipart/alternative MIME
-        $boundary = '=_DishNet_' . bin2hex(random_bytes(8));
         $fromHeader = $cfg['from'];
         // If sender doesn't already have a display name, add "DishNet Africa"
         if (strpos($fromHeader, '<') === false) {
@@ -261,32 +310,9 @@ class MailService
             ? sprintf('"%s" <%s>', addslashes($toName), $toEmail)
             : $toEmail;
 
-        $headers = [
-            'From' => $fromHeader,
-            'To' => $toHeader,
-            'Subject' => $subject,
-            'MIME-Version' => '1.0',
-            'Content-Type' => 'multipart/alternative; boundary="' . $boundary . '"',
-            'Date' => date('r'),
-            'Message-ID' => '<dn_' . bin2hex(random_bytes(8)) . '@' . (gethostname() ?: 'dishnetafrica.com') . '>',
-            'X-Mailer' => 'DishNet-Hybrid/4.21.8',
-        ];
-        foreach ($extraHeaders as $k => $v) $headers[$k] = $v;
-
-        $headerStr = '';
-        foreach ($headers as $k => $v) $headerStr .= "{$k}: {$v}\r\n";
-
-        $mimeBody =
-            "--{$boundary}\r\n"
-          . "Content-Type: text/plain; charset=UTF-8\r\n"
-          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-          . $textBody . "\r\n\r\n"
-          . "--{$boundary}\r\n"
-          . "Content-Type: text/html; charset=UTF-8\r\n"
-          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
-          . $htmlBody . "\r\n\r\n"
-          . "--{$boundary}--\r\n";
-
+        [$headerStr, $mimeBody] = $this->composeMime(
+            $fromHeader, $toHeader, $subject, $htmlBody, $textBody, $extraHeaders, $attachments
+        );
         $rawMessage = $headerStr . "\r\n" . $mimeBody;
 
         // Open SMTP
@@ -322,7 +348,7 @@ class MailService
 
         if (!$expect('220', 'greeting')) return ['ok' => false, 'error' => 'Server greeting failed', 'log' => $log];
 
-        $hn = gethostname() ?: 'localhost';
+        $hn = self::ehloName($cfg);
         $write("EHLO {$hn}");
         if (!$expect('250', 'ehlo')) return ['ok' => false, 'error' => 'EHLO rejected', 'log' => $log];
 
@@ -369,6 +395,141 @@ class MailService
         @fclose($fp);
 
         $log[] = ['step' => 'sent', 'ok' => true, 'msg' => "Email queued at SMTP server for {$toEmail}"];
+
+        // File a copy in the Sent folder. The relay delivers without the
+        // message passing through our own mail server, so without this the
+        // operator's Sent folder never shows what the platform sent. Bookkeeping
+        // only: a failure here is logged and never fails the send, because the
+        // customer already has the email.
+        $sentCopy = $this->sentCopy($rawMessage);
+        if ($sentCopy !== null) $log[] = $sentCopy;
+
         return ['ok' => true, 'log' => $log];
+    }
+
+    /**
+     * @return array|null a log step, or null when sent-copy is not configured
+     */
+    private function sentCopy(string $rawMessage): ?array
+    {
+        try {
+            $file = $this->dataDir . '/email_settings.json';
+            $es = is_file($file)
+                ? (json_decode((string)@file_get_contents($file), true) ?: []) : [];
+            if (empty($es['sent_copy_enabled'])) return null;
+
+            require_once __DIR__ . '/SentCopy.php';
+            $r = SentCopy::append($es, $rawMessage);
+            return ['step' => 'sent_copy', 'ok' => (bool)$r['ok'],
+                    'msg'  => $r['ok']
+                        ? 'filed in "' . $r['folder'] . '"'
+                          . (!empty($r['via']) ? ' via ' . $r['via'] : '')
+                        : (string)$r['error']];
+        } catch (\Throwable $e) {
+            return ['step' => 'sent_copy', 'ok' => false, 'msg' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * RFC 2047 encode a header value that may contain non-ASCII.
+     *
+     * A raw UTF-8 subject line is not legal in a header and each mail client
+     * guesses the charset differently: Outlook read our em-dash correctly,
+     * Roundcube rendered it as "â€"". Encoded words remove the guess.
+     *
+     * Folded into short encoded words so no header line exceeds the 76-column
+     * limit, split on character boundaries so multi-byte characters survive.
+     */
+    public static function encodeHeaderText(string $v): string
+    {
+        if ($v === '' || !preg_match('/[\x80-\xFF]/', $v)) return $v;
+        $words = [];
+        $len   = mb_strlen($v, 'UTF-8');
+        for ($i = 0; $i < $len; $i += 15) {          // 15 chars ≈ 60 base64 columns
+            $words[] = '=?UTF-8?B?' . base64_encode(mb_substr($v, $i, 15, 'UTF-8')) . '?=';
+        }
+        return implode("\r\n ", $words);
+    }
+
+    /**
+     * Encode only the display-name part of an address header, leaving the
+     * address itself — which must stay literal — untouched.
+     */
+    public static function encodeHeaderName(string $v): string
+    {
+        if ($v === '' || !preg_match('/[\x80-\xFF]/', $v)) return $v;
+        if (preg_match('/^\s*"?(.*?)"?\s*(<[^>]+>)\s*$/', $v, $m) && $m[1] !== '') {
+            return self::encodeHeaderText($m[1]) . ' ' . $m[2];
+        }
+        return self::encodeHeaderText($v);
+    }
+
+    /**
+     * Assemble the full MIME message (header block + body) without touching
+     * the network — the seam the tests exercise. With no attachments this
+     * reproduces the historical multipart/alternative message; attachments
+     * wrap that part in multipart/mixed with each file base64-encoded.
+     *
+     * @return array{0:string,1:string} [header block ending in CRLF, body]
+     */
+    public function composeMime(string $fromHeader, string $toHeader, string $subject,
+                                string $htmlBody, string $textBody,
+                                array $extraHeaders = [], array $attachments = []): array
+    {
+        $altBoundary = '=_DishNet_' . bin2hex(random_bytes(8));
+
+        $altBody =
+            "--{$altBoundary}\r\n"
+          . "Content-Type: text/plain; charset=UTF-8\r\n"
+          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+          . $textBody . "\r\n\r\n"
+          . "--{$altBoundary}\r\n"
+          . "Content-Type: text/html; charset=UTF-8\r\n"
+          . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+          . $htmlBody . "\r\n\r\n"
+          . "--{$altBoundary}--\r\n";
+
+        if ($attachments) {
+            $mixBoundary = '=_DishNetMix_' . bin2hex(random_bytes(8));
+            $contentType = 'multipart/mixed; boundary="' . $mixBoundary . '"';
+            $body =
+                "--{$mixBoundary}\r\n"
+              . "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n\r\n"
+              . $altBody . "\r\n";
+            foreach ($attachments as $a) {
+                // Filenames go into a quoted header — keep them boring.
+                $name = preg_replace('/[^A-Za-z0-9 ._()\-]/', '_', (string)($a['name'] ?? 'attachment'));
+                if ($name === '' || $name === false) $name = 'attachment';
+                $mime = (string)($a['mime'] ?? 'application/octet-stream');
+                $body .=
+                    "--{$mixBoundary}\r\n"
+                  . "Content-Type: {$mime}; name=\"{$name}\"\r\n"
+                  . "Content-Transfer-Encoding: base64\r\n"
+                  . "Content-Disposition: attachment; filename=\"{$name}\"\r\n\r\n"
+                  . chunk_split(base64_encode((string)($a['content'] ?? '')), 76, "\r\n")
+                  . "\r\n";
+            }
+            $body .= "--{$mixBoundary}--\r\n";
+        } else {
+            $contentType = 'multipart/alternative; boundary="' . $altBoundary . '"';
+            $body = $altBody;
+        }
+
+        $headers = [
+            'From' => self::encodeHeaderName($fromHeader),
+            'To' => self::encodeHeaderName($toHeader),
+            'Subject' => self::encodeHeaderText($subject),
+            'MIME-Version' => '1.0',
+            'Content-Type' => $contentType,
+            'Date' => date('r'),
+            'Message-ID' => '<dn_' . bin2hex(random_bytes(8)) . '@' . (gethostname() ?: 'dishnetafrica.com') . '>',
+            'X-Mailer' => 'DishNet-Hybrid/4.21.8',
+        ];
+        foreach ($extraHeaders as $k => $v) $headers[$k] = $v;
+
+        $headerStr = '';
+        foreach ($headers as $k => $v) $headerStr .= "{$k}: {$v}\r\n";
+
+        return [$headerStr, $body];
     }
 }

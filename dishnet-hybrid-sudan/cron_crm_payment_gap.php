@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/lib/currency.php';
+require_once __DIR__ . '/lib/PaymentUuids.php';
 /**
  * cron_crm_payment_gap.php — Catch missed CRM webhook payments
  * DishNet Hybrid v4.9.18
@@ -73,6 +74,19 @@ foreach ($payments as $payment) {
         continue;
     }
 
+    // Same cash-only rule as webhook.php — the cashbook records cash;
+    // bank/cheque stays in uCRM. Without this the gap-filler back-filled
+    // exactly the payments the webhook deliberately skips.
+    $gapMethodId   = $payment['methodId'] ?? '';
+    $gapMethodName = strtolower(trim($payment['methodName'] ?? ''));
+    $gapIsCash     = ($gapMethodId === PaymentUuids::CASH)
+        || (empty($gapMethodId) && strpos($gapMethodName, 'cash') !== false)
+        || (empty($gapMethodId) && $gapMethodName === '');
+    if (!$gapIsCash) {
+        $skipped++;
+        continue;
+    }
+
     // ── Dedup check: same 3-way check as webhook.php ─────────────────
     $dupCheck = $pdo->prepare(
         "SELECT id FROM cb_ledger
@@ -121,10 +135,10 @@ foreach ($payments as $payment) {
         $cb->addEntryRaw([
             'sr'                => 'CRM-' . $paymentId,
             'project'           => 'dishnet',
-            'date'              => $today,
+            'date'              => substr((string)($payment['createdDate'] ?? $today), 0, 10),
             'direction'         => 'in',
             'amount'            => $amount,
-            'currency'          => 'USD',
+            'currency'          => dn_payment_currency($payment, $config ?? null),
             'category'          => 'Receipt',
             'category_raw'      => 'Receipt',
             'person'            => '',

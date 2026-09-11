@@ -678,11 +678,36 @@ if ($page === 'prices') {
     exit;
 }
 
+// ── uCRM event webhook ───────────────────────────────────────────────
+// URL: public.php?page=crm_webhook
+//
+// uCRM serves ONLY public.php from a plugin directory, so webhook.php at its
+// own path returns uCRM's 404 — which is what it had been doing. Every event
+// this plugin reacts to (invoice.add, payment.add, quote.add, the service
+// suspend/activate pair) arrives here or not at all, so without this route the
+// whole handler was unreachable and the plugin was deaf to uCRM.
+//
+// webhook.php guards its own bootstrap with !isset($dataDir) / !isset($store),
+// which is precisely so it can be required like this.
+if ($page === 'crm_webhook') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/webhook.php';
+    exit;
+}
+
 //  Evolution API Webhook 
 // URL: public.php?page=evo_webhook
 if ($page === 'evo_webhook') {
     while (ob_get_level() > 0) ob_end_clean();
     require __DIR__ . '/evo_webhook.php';
+    exit;
+}
+
+//  EFRIS fiscal e-invoice PDF (HMAC-tokened link from the admin tab)
+// URL: public.php?page=efris_pdf&file=…&token=…
+if ($page === 'efris_pdf') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/efris_pdf.php';
     exit;
 }
 
@@ -1508,6 +1533,20 @@ $packages=$store->load('kyc_packages.json');
 <body>
 <div id="toastContainer"></div>
 
+<?php if (!empty($retailer['must_change_pwd'])):
+    // Self-heal: the session serves a 5-minute cached copy of the retailer
+    // record, so this flag can be STALE right after a successful change.
+    // The RECORD is authoritative — re-check it before showing the modal,
+    // and repair the cached copy so it stops haunting this session.
+    $_fpFresh = $store->findOne('retailers.json', 'id', (int)($retailer['id'] ?? 0));
+    if ($_fpFresh && empty($_fpFresh['must_change_pwd'])) {
+        $retailer['must_change_pwd'] = false;
+        if (isset($_SESSION['kyc_retailer']['cached_record'])) {
+            $_SESSION['kyc_retailer']['cached_record']['must_change_pwd'] = false;
+            $_SESSION['kyc_retailer']['cache_refreshed'] = time();
+        }
+    }
+endif; ?>
 <?php if (!empty($retailer['must_change_pwd'])): ?>
 <!--  FORCED PASSWORD CHANGE MODAL  -->
 <div id="forcePwdModal" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:center;padding:16px;">
@@ -1579,7 +1618,10 @@ async function fpSave() {
     }).then(function(r) { return r.json(); });
     if (res.status === 'success') {
       document.getElementById('forcePwdModal').remove();
-      showToast(' Password updated successfully!', 'success');
+      showToast(' Password updated — reloading…', 'success');
+      // The API token rotates on password change; reload so the page picks
+      // up the fresh one instead of keeping the dead token.
+      setTimeout(function(){ location.reload(); }, 800);
     } else {
       errEl.textContent = res.message || 'Failed to save. Try again.';
       errEl.style.display = 'block';
@@ -2060,6 +2102,7 @@ else:
         ['id'=>'wa_leads',       'label'=>'WA Leads',                'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_orders','label'=>'Starlink Orders',         'icon'=>'[Orders]',   'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'knowledge_base', 'label'=>'AI Knowledge Base',       'icon'=>'[Brain]',    'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'efris',          'label'=>'EFRIS e-Invoicing',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'ceo_dashboard',  'label'=>'CEO Dashboard',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'all_apps',       'label'=>'All Orders',               'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'retailers_mgmt', 'label'=>'Manage Retailers / Staff', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2467,6 +2510,7 @@ $_tabFiles = [
     'staff_cashbooks'      => 'tabs/accounts/staff_cashbooks.php',
     'ssp_overview'         => 'tabs/accounts/ssp_overview.php',
     'ssp_cashbook'         => 'tabs/accounts/ssp_cashbook.php',
+    'opening_balances'     => 'tabs/accounts/opening_balances.php',   // Uganda books
     'ssp_imprest'          => 'tabs/accounts/ssp_imprest.php',
     'collection_reconcile' => 'tabs/accounts/collection_reconcile.php',
     'commission_cleanup'   => 'tabs/accounts/commission_cleanup.php',
@@ -2524,11 +2568,13 @@ $_tabFiles = [
     'overdue_workbench'=> 'tabs/admin/overdue_workbench.php',
     'ucrm_data'        => 'tabs/admin/ucrm_data.php',
     'smtp_diagnostic'  => 'tabs/admin/smtp_diagnostic.php',
+    'email_preview'    => 'tabs/admin/email_preview.php',
     'starlink_suspensions' => 'tabs/admin/starlink_suspensions.php',
     'starlink_pauses'  => 'tabs/admin/starlink_pauses.php',
     'maintenance'      => 'tabs/admin/maintenance.php',
     'settings'         => 'tabs/admin/settings.php',
     'system_health'    => 'tabs/admin/system_health.php',   // Sudan edition
+    'efris'            => 'tabs/admin/efris.php',            // Uganda e-invoicing
     'wa_ai_setup'      => 'tabs/engage/wa_ai_setup.php',    // Sudan edition
     'android_app'      => 'tabs/admin/android_app.php',
     'updater'          => 'tabs/admin/updater.php',
@@ -2583,6 +2629,7 @@ $_tabPerms = [
     'staff_cashbooks'      => ['accounts_dash', '*admin'],
     'ssp_overview'         => ['accounts_dash', '*admin'],
     'ssp_cashbook'         => ['accounts_dash', '*admin'],
+    'opening_balances'     => ['accounts_dash', '*admin'],
     'ssp_imprest'          => ['accounts_dash', '*admin'],
     'collection_reconcile' => ['accounts_dash', '*admin'],
     'commission_cleanup'   => '*admin',

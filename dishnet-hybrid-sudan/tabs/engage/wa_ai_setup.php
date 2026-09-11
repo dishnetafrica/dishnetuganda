@@ -13,6 +13,7 @@ require_once dirname(__DIR__, 2) . '/lib/PluginConfig.php';
 require_once dirname(__DIR__, 2) . '/lib/EvolutionApiService.php';
 require_once dirname(__DIR__, 2) . '/lib/EvoWebhookGuard.php';
 require_once dirname(__DIR__, 2) . '/lib/DishNetAiBrain.php';
+require_once dirname(__DIR__, 2) . '/lib/FlyerAsset.php';
 
 // wa_ai_public_base() / wa_ai_webhook_url() — shared with tools/wa_webhook_doctor.php
 require_once dirname(__DIR__, 2) . '/lib/wa_webhook_url.php';
@@ -40,6 +41,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
         $_wMsg = ['ok' => $ok, 'text' => $ok ? 'WhatsApp numbers saved.' : $err];
         $_wCfg = PluginConfig::load($_wRoot, $_wData);
         $_wEvo = new EvolutionApiService($_wCfg);
+
+    } elseif ($act === 'upload_media') {
+        require_once $_wRoot . '/lib/MediaLibrary.php';
+        $kind = ($_POST['media_kind'] ?? '') === 'document' ? 'document' : 'image';
+        $r = MediaLibrary::store($_wData, $_FILES['media_file'] ?? [], $kind,
+                                 (string)($_POST['media_name'] ?? ''),
+                                 (string)($_POST['media_caption'] ?? ''));
+        $_wMsg = ['ok' => $r['ok'], 'text' => $r['ok']
+            ? ('Saved as "' . $r['name'] . '". The assistant can send it from the next message.')
+            : $r['error']];
+
+    } elseif ($act === 'delete_media') {
+        require_once $_wRoot . '/lib/MediaLibrary.php';
+        $kind = ($_POST['media_kind'] ?? '') === 'document' ? 'document' : 'image';
+        $nm   = (string)($_POST['media_name'] ?? '');
+        $gone = MediaLibrary::remove($_wData, $kind, $nm);
+        $_wMsg = ['ok' => $gone, 'text' => $gone
+            ? ('Removed "' . $nm . '".') : 'Nothing was removed.'];
 
     } elseif ($act === 'toggle_ai') {
         $on = (string)($_POST['value'] ?? '') === '1';
@@ -117,6 +136,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
         list($ok, $err) = PluginConfig::saveOverrides($_wData,
             ['ai_currency' => trim((string)($_POST['ai_currency'] ?? ''))]);
         $_wMsg = ['ok' => $ok, 'text' => $ok ? 'Currency saved.' : $err];
+        $_wCfg = PluginConfig::load($_wRoot, $_wData);
+
+    } elseif ($act === 'save_marketing') {
+        list($ok, $err) = PluginConfig::saveOverrides($_wData, [
+            'ai_identity_line' => trim((string)($_POST['ai_identity_line'] ?? '')),
+            'wa_flyer_url'     => trim((string)($_POST['wa_flyer_url'] ?? '')),
+            'wa_flyer_caption' => trim((string)($_POST['wa_flyer_caption'] ?? '')),
+        ]);
+        $_wMsg = ['ok' => $ok, 'text' => $ok ? 'Marketing settings saved.' : $err];
         $_wCfg = PluginConfig::load($_wRoot, $_wData);
 
     } elseif ($act === 'forget_lead') {
@@ -466,6 +494,44 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
       </span>
     </div>
   </form>
+
+  <form method="post"><?= $_csrf ?>
+    <input type="hidden" name="wa_action" value="save_marketing">
+    <div class="wa-row" style="display:block">
+      <span class="n" style="display:block;margin-bottom:6px">Marketing &mdash; who we are &amp; the plans flyer</span>
+
+      <input type="text" name="ai_identity_line" style="width:100%"
+             placeholder="DishNet is an internet service provider."
+             value="<?= h((string)($_wCfg['ai_identity_line'] ?? '')) ?>">
+      <div style="color:#5a6b60;font-size:12px;margin:4px 0 10px;max-width:75ch">
+        One sentence the AI uses to describe the company, on WhatsApp and website chat alike
+        (e.g. <em>&ldquo;DishNet Africa Ltd is an IT solutions company and UCC Authorised
+        Starlink Installer in Uganda.&rdquo;</em>). Blank keeps the original wording. Only put
+        a claim here you can back with paper &mdash; it goes out in writing to every customer.
+      </div>
+
+      <?php $_wFlyer = FlyerAsset::describe($_wCfg, $_wData); ?>
+      <div style="font-size:13px;margin-bottom:4px">
+        Plans flyer image: <strong><?= h($_wFlyer) ?></strong>
+      </div>
+      <div style="color:#5a6b60;font-size:12px;margin-bottom:8px;max-width:75ch">
+        When a flyer is installed, the AI attaches it the first time a customer asks about
+        plans or prices (and whenever they ask for a brochure), instead of typing the whole
+        list. To install it, copy your image to
+        <code><?= h(rtrim($_wData, '/')) ?>/wa_flyer.jpg</code> (or .png) inside the ucrm
+        container &mdash; or host it yourself and paste the address below. Not installed means
+        the AI behaves exactly as before. At most one flyer per conversation per day.
+      </div>
+      <input type="text" name="wa_flyer_url" style="width:100%"
+             placeholder="https://… public image address (optional — the file above wins)"
+             value="<?= h((string)($_wCfg['wa_flyer_url'] ?? '')) ?>">
+      <input type="text" name="wa_flyer_caption" style="width:100%;margin-top:6px"
+             placeholder="Caption sent under the image, e.g. DishNet Uganda — Starlink Plans ✅ UCC Authorised Installer"
+             value="<?= h((string)($_wCfg['wa_flyer_caption'] ?? '')) ?>">
+      <div style="margin-top:8px"><button class="wa-btn p" type="submit">Save marketing</button></div>
+    </div>
+  </form>
+
   <div class="wa-row">
     <span class="n">Test</span>
     <span class="d">Ask the AI "Hello" directly, with no WhatsApp involved.</span>
@@ -835,4 +901,92 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
   </div>
   <div class="wa-note">Register webhook sends Evolution the address with the secret already in it,
   so nobody has to handle the secret.</div>
+</div>
+
+<?php
+// ── Photos and documents the assistant can send ─────────────────────────────
+// A customer asked to see the kit and was told a colleague would confirm. The
+// files existed; there was just no way to put them anywhere except a docker cp
+// on the host, which is not a thing a salesperson does.
+require_once $_wRoot . '/lib/MediaLibrary.php';
+$_wPhotos = MediaLibrary::all($_wData);
+$_wDocs   = MediaLibrary::documents($_wData);
+$_wKB     = function (int $b): string { return number_format($b / 1024, 0) . ' KB'; };
+?>
+<div class="wa-card">
+  <h3>What the assistant can show a customer</h3>
+  <div class="wa-note">
+    Upload a photo and it can send it when someone asks to see the kit. Upload a PDF and it can
+    send that when someone asks for full specifications. The <strong>name</strong> is how the
+    assistant asks for it, so name things the way a customer would say them —
+    <code>mini-kit</code>, <code>standard-spec-sheet</code>. Nothing uploaded here is offered to
+    customers until it is here, and a name it does not have sends nothing at all.
+  </div>
+
+  <form method="post" enctype="multipart/form-data" style="margin-top:14px">
+    <?= $_csrf ?>
+    <input type="hidden" name="wa_action" value="upload_media">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+      <label style="font-size:13px">
+        Kind<br>
+        <select name="media_kind" style="padding:6px">
+          <option value="image">Photo — JPG, PNG or WebP, up to 4 MB</option>
+          <option value="document">Document — PDF, up to 10 MB</option>
+        </select>
+      </label>
+      <label style="font-size:13px">
+        File<br>
+        <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.pdf" required>
+      </label>
+      <label style="font-size:13px;flex:1;min-width:160px">
+        Name <span style="color:#888">(optional — taken from the file name if blank)</span><br>
+        <input type="text" name="media_name" placeholder="mini-kit" style="width:100%;padding:6px">
+      </label>
+    </div>
+    <input type="text" name="media_caption" style="width:100%;margin-top:8px;padding:6px"
+           placeholder="Caption sent with it (optional) — e.g. Starlink Mini: dish with built-in WiFi, cables and power supply">
+    <button class="wa-btn" type="submit" style="margin-top:10px">Upload</button>
+  </form>
+
+  <?php foreach ([['Photos', $_wPhotos, 'image'], ['Documents', $_wDocs, 'document']] as $grp): ?>
+    <?php list($_gLabel, $_gItems, $_gKind) = $grp; ?>
+    <h4 style="margin:18px 0 6px;font-size:14px"><?= h($_gLabel) ?>
+      <span style="color:#888;font-weight:400">(<?= count($_gItems) ?>)</span></h4>
+    <?php if (!$_gItems): ?>
+      <div class="wa-note" style="margin:0">
+        None yet — so the assistant never offers
+        <?= $_gKind === 'document' ? 'a specification sheet' : 'a picture' ?>, and says a colleague
+        will send one instead.
+      </div>
+    <?php else: ?>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <?php foreach ($_gItems as $_k => $_it): ?>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:7px 8px 7px 0"><code><?= h((string)$_k) ?></code></td>
+            <td style="padding:7px 8px;color:#666"><?= h((string)$_it['file']) ?></td>
+            <td style="padding:7px 8px;color:#888;white-space:nowrap"><?= h($_wKB((int)$_it['bytes'])) ?></td>
+            <td style="padding:7px 8px;color:#666">
+              <?= $_it['caption'] !== '' ? h(mb_substr((string)$_it['caption'], 0, 60)) : '<span style="color:#aaa">no caption</span>' ?>
+            </td>
+            <td style="padding:7px 0;text-align:right">
+              <form method="post" onsubmit="return confirm('Remove <?= h((string)$_k) ?>?')" style="display:inline">
+                <?= $_csrf ?>
+                <input type="hidden" name="wa_action" value="delete_media">
+                <input type="hidden" name="media_kind" value="<?= h($_gKind) ?>">
+                <input type="hidden" name="media_name" value="<?= h((string)$_k) ?>">
+                <button type="submit" class="wa-btn" style="background:#b91c1c;padding:3px 9px;font-size:12px">Remove</button>
+              </form>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </table>
+    <?php endif; ?>
+  <?php endforeach; ?>
+
+  <div class="wa-note" style="margin-top:14px">
+    Use DishNet's own photographs — your stock, your installs, your technicians. They are yours
+    to send and they show what a customer actually receives. Starlink's own specification sheets
+    are published for resellers to pass on, so send those rather than retyping figures, and
+    replace them when a hardware generation changes: an old sheet is a confident wrong answer.
+  </div>
 </div>

@@ -89,6 +89,11 @@ if (!isset($store)) {
 if (!isset($config)) {
     $config = $store->load('kyc_config.json') ?? [];
 }
+// Contacts and currency symbols in the message copy below come from config,
+// defaulting to the exact values these lines have always printed.
+require_once __DIR__ . '/lib/CustomerContact.php';
+require_once __DIR__ . '/lib/CustomerEmailDispatcher.php';
+require_once __DIR__ . '/lib/currency.php';
 
 // ── Response helpers ───────────────────────────────────────────────────────
 function whResp(int $code, string $msg, array $data = []): void {
@@ -124,6 +129,108 @@ function whLog(string $event, string $msg, array $data = []): void {
  * Returns array: ['scenario'=>'auto_paid'|'partial'|'normal', 'amount_paid'=>float,
  *                 'remaining'=>float, 'credit_remaining'=>float]
  */
+/**
+ * Send a lifecycle email alongside the WhatsApp message this webhook already
+ * sent, if that event's switch is on.
+ *
+ * Every switch starts OFF, so this changes nothing until an operator turns one
+ * on. It never throws and never blocks: the WhatsApp message and the CRM work
+ * have already happened by the time it is called, and an SMTP hiccup must not
+ * turn a successful payment into a failed webhook.
+ */
+function whCustomerEmail(string $key, int $clientId, string $name, array $data,
+                         string $dedupe, array $config, string $dataDir,
+                         $crm, $store, string $changeType = ''): void
+{
+    try {
+        if (!CustomerEmailDispatcher::enabled($key, $config)) return;   // off is not an error
+        $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
+        $d   = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe);
+        if ($r['sent']) {
+            whLog($changeType ?: 'email', "Customer email sent: {$key} → {$r['to']}");
+        } elseif ($r['reason'] !== 'already sent' && $r['reason'] !== 'switched off') {
+            whLog($changeType ?: 'email', "Customer email NOT sent ({$key}): {$r['reason']}");
+        }
+    } catch (\Throwable $e) {
+        error_log('[whCustomerEmail] ' . $key . ': ' . $e->getMessage());
+    }
+}
+
+/**
+ * Send the branded quotation email for a quote created anywhere.
+ *
+ * QuotationService covers quotes created through the DishNet app. A quote
+ * typed into uCRM's own screen never touches it, and uCRM then sends its own
+ * email — which on this install fails outright and, when it works, carries
+ * uCRM's wording and a Reply-To pointing at the wrong country.
+ *
+ * Claimed against the same key QuotationService uses, so a quote created in
+ * the app cannot produce two emails.
+ */
+function whQuotationEmail(int $quoteId, int $clientId, string $name, array $client,
+                          array $config, string $dataDir, $crm, $store, string $changeType = '',
+                          array $quote = [], string $quoteNum = '', float $amount = 0.0): void
+{
+    try {
+        // Say why, always. The first version returned silently when the switch
+        // read as off, and the switch read as off because $config here comes
+        // from the store copy rather than the file the tool writes. A silent
+        // skip and a working send looked identical in the log.
+        if (!CustomerEmailDispatcher::enabled('quotation', $config)) {
+            whLog($changeType ?: 'email',
+                  'Quotation email skipped: the quotation switch is off '
+                . '(php tools/set_customer_emails.php --master on --on quotation)');
+            return;
+        }
+        $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
+        if (!$pdo) { whLog($changeType ?: 'email', 'Quotation email skipped: no database handle'); return; }
+        if (!CustomerEmailDispatcher::claimOnce($pdo, "QEMAIL{$quoteId}")) {
+            whLog($changeType ?: 'email', "Quotation email for #{$quoteId} already claimed — skipping");
+            return;
+        }
+
+        require_once __DIR__ . '/lib/QuotePdfSource.php';
+        [$pdf, $src] = QuotePdfSource::fetch($crm, $dataDir, $config, $quoteId, $client, $quote);
+
+        // The case has already resolved these, falling back to the entity in
+        // the webhook payload when the API does not answer. Re-fetching here
+        // threw that away: the second call came back empty, so the customer
+        // was sent "Quotation 8" for UGX 0 instead of "Quotation 000008" for
+        // UGX 2,749,000. Never re-derive what the caller already has.
+        $number = $quoteNum !== '' ? $quoteNum : (string)($quote['number'] ?? $quoteId);
+        $total  = $amount > 0 ? $amount : (float)($quote['total'] ?? 0);
+        $atts   = $pdf !== ''
+            ? [['name' => "Quotation-{$number}.pdf", 'mime' => 'application/pdf', 'content' => $pdf]]
+            : [];
+
+        $d = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        $r = $d->send('quotation', ['client_id' => $clientId], $name, [
+            // A person is greeted by first name; a company account has none,
+            // and is then greeted by its full name rather than its first word.
+            'first_name'   => (string)($client['firstName'] ?? ''),
+            'quote_number' => $number,
+            'total'        => $total,
+            'amount'       => $total,
+        ], '', $atts);
+
+        if ($r['sent']) {
+            whLog($changeType ?: 'email', "Quotation email sent to {$r['to']} (PDF: {$src})");
+        } else {
+            // Give the claim back. It is taken BEFORE the work so two paths
+            // cannot both send, but a claim held after a failure is worse than
+            // the race it prevents: the quotation is then permanently
+            // unsendable by anyone, and the only symptom is silence.
+            CustomerEmailDispatcher::releaseClaim($pdo, "QEMAIL{$quoteId}");
+            whLog($changeType ?: 'email', "Quotation email NOT sent: {$r['reason']}");
+        }
+    } catch (\Throwable $e) {
+        if (isset($pdo) && $pdo) CustomerEmailDispatcher::releaseClaim($pdo, "QEMAIL{$quoteId}");
+        whLog($changeType ?: 'email', 'Quotation email errored: ' . $e->getMessage());
+        error_log('[whQuotationEmail] ' . $e->getMessage());
+    }
+}
+
 function whInvoiceCreditScenario(array $invoice, array $client): array
 {
     $total      = (float)($invoice['total'] ?? $invoice['amount'] ?? 0);
@@ -176,7 +283,7 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
                  . '&token=' . urlencode($pdfToken);
 
         $notify->sendDocument('accounts', $phone, $pdfUrl, "{$invoNum}.pdf",
-            "Invoice #{$invoNum} — \${$amount} — Due: {$dueDate}\n— DishNet Africa",
+            "Invoice #{$invoNum} — " . dn_money($amount, $config, null) . " — Due: {$dueDate}\n— DishNet Africa",
             'ops_invoice_pdf');
         return true;
     } catch (\Throwable $e) {
@@ -516,6 +623,23 @@ switch ($changeType) {
             whLog($changeType, "Invoice has no number (likely draft) — notification deferred", ['invoice_id' => $invoiceId, 'status' => $invStatus]);
             whResp(200, 'No invoice number — likely draft, skipped.');
         }
+
+        // EFRIS: queue fiscalisation for approved invoices — test environment
+        // with auto-submit only, and never on the notification path's dime:
+        // any EFRIS trouble is logged and the customer notification proceeds.
+        try {
+            require_once __DIR__ . '/lib/PluginConfig.php';
+            require_once __DIR__ . '/lib/EfrisClient.php';
+            $_efCfg = PluginConfig::load(__DIR__, $dataDir);
+            if (strtolower(trim((string)($_efCfg['efris_environment'] ?? ''))) === EfrisClient::ENV_TEST
+                && PluginConfig::toBool($_efCfg['efris_auto_submit'] ?? false)) {
+                (new EventBus($store->getPdo()))->emit('efris.submit', 'invoice', $invoiceId,
+                    ['invoice_id' => $invoiceId, 'source' => 'webhook'], 4, 'webhook');
+                whLog($changeType, "EFRIS: queued invoice {$invoNum} for TEST fiscalisation");
+            }
+        } catch (\Throwable $_efE) {
+            whLog($changeType, 'EFRIS enqueue error: ' . $_efE->getMessage());
+        }
         if (!in_array($invStatus, [1, 2], true)) {
             whLog($changeType, "Invoice status={$invStatus} not unpaid/partial — skipped", ['invoice_id' => $invoiceId, 'number' => $invoNum]);
             whResp(200, "Invoice status {$invStatus} — not unpaid/partial, skipped.");
@@ -591,6 +715,13 @@ switch ($changeType) {
             whSendInvoiceNotification($notify, $crm, $phone, $name,
                 $invoiceId, $invoNum, $amount, $dueDate ?: 'See invoice',
                 $creditData, $config, $dataDir, $serviceName);
+
+            whCustomerEmail('invoice', (int)$clientId, $name, [
+                'invoice_number' => $invoNum,
+                'amount'         => $amount,
+                'due_date'       => $dueDate ?: 'See invoice',
+                'plan'           => $serviceName,
+            ], "INV{$invoNum}", $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
             try {
@@ -728,7 +859,10 @@ switch ($changeType) {
                         'date'              => date('Y-m-d'),
                         'direction'         => 'in',
                         'amount'            => $amount,
-                        'currency'          => 'USD',
+                        // The payment's own uCRM currencyCode — never a
+                        // literal. A UGX MoMo payment books as UGX; Sudan's
+                        // USD payments still book as USD (their currencyCode).
+                        'currency'          => dn_payment_currency(is_array($payment) ? $payment : [], $config),
                         'category'          => 'Receipt',
                         'category_raw'      => 'Receipt',
                         'person'            => $_cashWith !== 'Office' ? $_cashWith : '',
@@ -744,7 +878,7 @@ switch ($changeType) {
                         'created_at'        => date('Y-m-d H:i:s'),
                     ]);
 
-                    whLog($changeType, "Cashbook auto-post: \${$amount} from {$name} (PAY-{$paymentId})");
+                    whLog($changeType, "Cashbook auto-post: " . dn_money($amount, $config, null) . " from {$name} (PAY-{$paymentId})");
                 } else {
                     whLog($changeType, "Cashbook skip — PAY-{$paymentId} already posted");
                 }
@@ -791,7 +925,13 @@ switch ($changeType) {
             } else {
                 // Send text receipt to customer
                 $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
-                whLog($changeType, "Payment thanks sent: \${$amount} → {$name}");
+
+                whCustomerEmail('payment_received', (int)$clientId, $name, [
+                    'amount'    => $amount,
+                    'reference' => "PAY-{$txnId}",
+                    'paid_on'   => date('j F Y'),
+                ], "PAY{$paymentId}", $config, $dataDir, $crm, $store, $changeType);
+                whLog($changeType, "Payment thanks sent: " . dn_money($amount, $config, null) . " → {$name}");
 
                 // v4.10.4: Queue receipt PDF for cron pickup — background fetch after
                 // fastcgi_finish_request was unreliable (sleep + cURL never completed).
@@ -865,7 +1005,7 @@ switch ($changeType) {
                             // use current payment amount as fallback
                             if ($totalPaid <= 0) $totalPaid = $amount;
 
-                            whLog($changeType, "Credit sale check: quoted=\${$quotedAmount} paid=\${$totalPaid} delivery_sent={$deliveryAlready}");
+                            whLog($changeType, "Credit sale check: quoted=" . dn_money($quotedAmount, $config, null) . " paid=" . dn_money($totalPaid, $config, null) . " delivery_sent={$deliveryAlready}");
 
                             if ($totalPaid >= $quotedAmount || $quotedAmount <= 0) {
                                 // Generate delivery note
@@ -889,7 +1029,7 @@ switch ($changeType) {
                                     whLog($changeType, "Delivery PDF generation failed for {$name}: " . ($delResult['error'] ?? 'unknown'));
                                 }
                             } else {
-                                whLog($changeType, "Delivery note DEFERRED — partial payment (\${$totalPaid} of \${$quotedAmount})");
+                                whLog($changeType, "Delivery note DEFERRED — partial payment (" . dn_money($totalPaid, $config, null) . " of " . dn_money($quotedAmount, $config, null) . ")");
                             }
                         }
                     }
@@ -946,7 +1086,8 @@ switch ($changeType) {
                 if (!class_exists('StarlinkBlockBridge')) {
                     @require_once __DIR__ . '/lib/StarlinkBlockBridge.php';
                 }
-                if (class_exists('StarlinkBlockBridge')) {
+                if (class_exists('StarlinkBlockBridge')
+                    && StarlinkBlockBridge::appliesTo($config)) {
                     $bridge = new StarlinkBlockBridge($store->getPdo(), $store, $config, $dataDir, $notify);
                     $bridgeResult = $bridge->restoreClient((int)$clientId, 'webhook:payment.add');
                     if (($bridgeResult['routers_restored'] ?? 0) > 0) {
@@ -1052,13 +1193,18 @@ switch ($changeType) {
                 . "Your DishNet service *{$svcName}* is now active. 🌐\n\n"
                 . "🔑 Login credentials have been shared via email.\n\n"
                 . "Manage your account:\n"
-                . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-                . "📞 Support: +211 921 443 002\n"
-                . "💬 wa.me/211921443002\n\n"
+                . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
+                . "📞 Support: " . CustomerContact::accounts($config) . "\n"
+                . "💬 " . 'wa.me/' . CustomerContact::supportWa($config) . "\n\n"
                 . "Thank you for choosing DishNet! 🙏\n"
                 . "— DishNet Team",
                 'ops_service_activated');
             whLog($changeType, "Service activated notification -> {$name} ({$svcName})");
+
+            whCustomerEmail('welcome', (int)$clientId, $name, [
+                'plan' => $svcName,
+                'date' => date('j F Y'),
+            ], "SVCADD{$clientId}:{$svcName}", $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
             try {
@@ -1245,7 +1391,7 @@ switch ($changeType) {
                         "🛡️ *VIP Suspension Intercepted*\n\n"
                         . "UCRM marked *{$name}* (CRM #{$clientId}) as suspended.\n"
                         . "Service: *{$svcName}*\n"
-                        . "Outstanding: *\${$outstandingFmt}*\n\n"
+                        . "Outstanding: *" . dn_money($outstandingFmt, $config, null) . "*\n\n"
                         . "Customer received NO message. Devices NOT blocked.\n"
                         . "Tag: NO_AUTO_BLOCK — manual decision required.\n\n"
                         . "Review in CRM and reach out to client finance team if needed.",
@@ -1266,13 +1412,20 @@ switch ($changeType) {
                 . "Dear {$name},\n\n"
                 . "Your DishNet *{$svcName}* service has been suspended due to an unpaid invoice.\n\n"
                 . "To restore your service immediately:\n"
-                . "1️⃣ Pay online: https://dishnetafrica.com/tutorials/index.html\n"
+                . "1️⃣ Pay online: " . CustomerContact::payUrl($config) . "\n"
                 . "2️⃣ Or contact your agent\n\n"
                 . "Service is restored *automatically within minutes* of payment.\n\n"
-                . "📞 +211 921 443 009\n"
+                . "📞 " . CustomerContact::sales($config) . "\n"
                 . "— DishNet Accounts",
                 'ops_service_suspended');
             whLog($changeType, "Suspension WhatsApp sent to {$name} ({$svcName})");
+
+            // "Paused", not "suspended": on a prepaid install the period simply
+            // ended. The template says so, and says how to resume.
+            whCustomerEmail('service_paused', (int)$clientId, $name, [
+                'plan' => $svcName,
+                'date' => date('j F Y'),
+            ], "SUSP{$clientId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
             try {
@@ -1310,7 +1463,8 @@ switch ($changeType) {
             if (!class_exists('StarlinkBlockBridge')) {
                 @require_once __DIR__ . '/lib/StarlinkBlockBridge.php';
             }
-            if (class_exists('StarlinkBlockBridge')) {
+            if (class_exists('StarlinkBlockBridge')
+                && StarlinkBlockBridge::appliesTo($config)) {
                 $bridge = new StarlinkBlockBridge($store->getPdo(), $store, $config, $dataDir, $notify);
                 $bridgeResult = $bridge->suspendClient((int)$clientId, $client, 'webhook:service.suspend');
                 whLog($changeType, sprintf(
@@ -1443,11 +1597,16 @@ switch ($changeType) {
                     . "You're back online!"
                     . $credBlock
                     . "\n\nManage your account:\n"
-                    . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-                    . "📞 +211 921 443 009\n"
+                    . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
+                    . "📞 " . CustomerContact::sales($config) . "\n"
                     . "— DishNet Accounts",
                     'ops_service_restored');
                 whLog($changeType, "Restoration notice sent to {$name}");
+
+                whCustomerEmail('service_resumed', (int)$clientId, $name, [
+                    'plan' => $svcName,
+                    'date' => date('j F Y'),
+                ], "RESUME{$clientId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
             }
 
             // Push notification to customer's app (always — even if WA was deduped)
@@ -1594,7 +1753,7 @@ switch ($changeType) {
                 ? "Please settle by *{$postponedToFmt}* to avoid another suspension.\n\n"
                 : "Please settle the outstanding balance to avoid another suspension.\n\n";
             $balanceLine = $outstanding > 0
-                ? "Outstanding balance: *\${$outstandingFmt}*\n\n"
+                ? "Outstanding balance: *" . dn_money($outstandingFmt, $config, null) . "*\n\n"
                 : "";
 
             $notify->sendVia('accounts', $phone,
@@ -1606,8 +1765,8 @@ switch ($changeType) {
                 . "*Your bill is still pending.*\n\n"
                 . $deadlineLine
                 . "To pay now:\n"
-                . "🔗 https://dishnetafrica.com/tutorials/index.html\n\n"
-                . "📞 +211 921 443 009\n"
+                . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
+                . "📞 " . CustomerContact::sales($config) . "\n"
                 . "— DishNet Accounts",
                 'ops_service_postponed');
             whLog($changeType, "Postpone notice sent to {$name}");
@@ -1759,7 +1918,7 @@ switch ($changeType) {
                 $msg = "🎉 *Welcome to DishNet!*\n\n"
                      . "Hi {$custName},\n\n"
                      . "Your account has been activated. Our team will set up your service shortly.\n\n"
-                     . "For support: +211 927 797 217\n\n"
+                     . "For support: " . CustomerContact::escalation($config) . "\n\n"
                      . "— _DishNet Africa_";
                 $notify->sendVia('support', $custPhone, $msg, 'ops_customer_activated', [
                     'customer_name' => $custName, 'crm_id' => $clientId,
@@ -1819,9 +1978,9 @@ switch ($changeType) {
             $msg = "✅ *Quote Approved — DishNet Africa*\n\n"
                  . "Dear {$name},\n\n"
                  . "Thank you for approving Quote *#{$num}*!\n\n"
-                 . "💰 Amount: \${$totalFmt}\n\n"
+                 . "💰 Amount: " . dn_money($totalFmt, $config, null) . "\n\n"
                  . "Our team will contact you shortly to schedule your installation.\n\n"
-                 . "📞 +211 921 443 006\n"
+                 . "📞 " . CustomerContact::support($config) . "\n"
                  . "— DishNet Africa";
             $notify->sendVia('support', $phone, $msg, 'ops_quote_approved', [
                 'customer_name' => $name, 'quote_num' => $num, 'amount' => $totalFmt,
@@ -1921,6 +2080,14 @@ switch ($changeType) {
             whLog($changeType, "Job #{$jobId} — No user assigned", ['job_title' => $title]);
         }
         
+        // A job is the installation appointment. Until now only the assigned
+        // technician heard about it — the customer was told nothing.
+        whCustomerEmail('install_scheduled', $clientId, $clientName === 'N/A' ? '' : $clientName, [
+            'install_date'   => $dateFormatted,
+            'install_window' => $timeFormatted ?? '',
+            'engineer'       => $techName ?? '',
+        ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
+
         whResp(200, 'job.add processed.');
     }
 
@@ -1938,6 +2105,12 @@ switch ($changeType) {
             ['ticket_id' => (string)$ticketId, 'subject' => $subject]
         );
         whLog($changeType, "Admin notified: ticket #{$ticketId}");
+
+        // The customer has heard nothing until now — only the admin was told.
+        whCustomerEmail('support_received', $clientId, '', [
+            'ticket'  => "#{$ticketId}",
+            'subject' => $subject,
+        ], "TKT{$ticketId}", $config, $dataDir, $crm, $store, $changeType);
         whResp(200, 'ticket.add processed.');
     }
 
@@ -2076,6 +2249,12 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
+        // Before the phone gate below: a customer who gave us an email address
+        // but no phone number should still receive their quotation.
+        whQuotationEmail($quoteId, (int)$clientId, $name, $client,
+                         $config, $dataDir, $crm, $store, $changeType,
+                         $quote, $quoteNum, (float)$amount);
+
         if ($phone && $amount > 0) {
             // ── KYC quote check: let cron_quote_wa handle ALL plugin-generated quotes ──
             // Why: KycService sends the welcome message ("Request Confirmed!") AFTER
@@ -2176,24 +2355,25 @@ switch ($changeType) {
                 $iPrice = (float)($_qi['price'] ?? 0);
                 $iTotal = (float)($_qi['total'] ?? ($qty * $iPrice));
 
+                $qCur = dn_code($config);
                 if ($qty > 1) {
-                    $msg .= "📦 {$lbl} x{$qty} — USD " . number_format($iTotal, 0) . "\n";
+                    $msg .= "📦 {$lbl} x{$qty} — {$qCur} " . number_format($iTotal, 0) . "\n";
                 } else {
-                    $msg .= "📦 {$lbl} — USD " . number_format($iTotal, 0) . "\n";
+                    $msg .= "📦 {$lbl} — {$qCur} " . number_format($iTotal, 0) . "\n";
                 }
             }
 
             if ($hwTotal > 0 && $monthlyTotal > 0) {
-                $msg .= "💰 Hardware: USD " . number_format($hwTotal, 0) . "\n";
-                $msg .= "💰 Monthly: USD " . number_format($monthlyTotal, 0) . "\n";
+                $msg .= "💰 Hardware: " . dn_code($config) . " " . number_format($hwTotal, 0) . "\n";
+                $msg .= "💰 Monthly: " . dn_code($config) . " " . number_format($monthlyTotal, 0) . "\n";
             }
 
-            $msg .= "🏷️ *Total: USD " . number_format($amount, 0) . "*\n\n"
+            $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n\n"
                  . "💳 Cash / Transfer / Card\n"
                  . "✅ Reply *YES* to proceed.\n\n";
 
             // Contact info
-            $msg .= "📞 +211 921 443 009 | 🛒 0923 400 000";
+            $msg .= "📞 " . CustomerContact::sales($config) . " | 🛒 " . CustomerContact::shop($config);
             if ($email) $msg .= "\n📧 {$email}";
             $msg .= "\n\n🚀 *DishNet Internet Services*";
             // Use full rich message as caption (WhatsApp Web supports ~4096 chars)
@@ -2303,7 +2483,7 @@ switch ($changeType) {
                         ]);
 
                         // 2. Then send PDF with short caption
-                        $pdfCaption = "Quote #{$quoteNum} — USD " . number_format($amount, 0) . "\n— DishNet Africa";
+                        $pdfCaption = "Quote #{$quoteNum} — " . dn_code($config) . " " . number_format($amount, 0) . "\n— DishNet Africa";
                         $notify->sendDocument('support', $phone, $pdfServeUrl, "DishNet-Quote-{$quoteNum}.pdf",
                             $pdfCaption,
                             'ops_quote_pdf');
@@ -2393,7 +2573,7 @@ switch ($changeType) {
             if ($phone) {
                 $msg = "💳 *Credit Note Issued*\n\n"
                      . "Hi {$name},\n\n"
-                     . "A credit of *\${$amount}* (#{$cnNum}) has been applied to your account.\n\n"
+                     . "A credit of *" . dn_money($amount, $config, null) . "* (#{$cnNum}) has been applied to your account.\n\n"
                      . "This will be offset against your next invoice.\n\n"
                      . "— _DishNet Africa_";
                 $notify->sendVia('accounts', $phone, $msg, 'ops_credit_note', [
@@ -2466,7 +2646,7 @@ switch ($changeType) {
         // Skip if invoice is already paid
         $balance = $total - $amountPaid;
         if ($invStatus === 3 || $balance <= 0.01) {
-            whLog($changeType, "near_due SKIPPED — invoice #{$invoiceNum} already paid (\${$amountPaid}/\${$total})");
+            whLog($changeType, "near_due SKIPPED — invoice #{$invoiceNum} already paid (" . dn_money($amountPaid, $config, null) . "/" . dn_money($total, $config, null) . ")");
             whResp(200, 'near_due — invoice already paid, skipping.');
         }
 
@@ -2505,7 +2685,7 @@ switch ($changeType) {
             $notify->invoiceDueTomorrow($phone, $name, $invoiceNum, $total, $currency, $dueDate, $svcName);
         }
 
-        whLog($changeType, "Pre-due reminder sent: #{$invoiceNum} \${$total} → {$name} ({$daysUntil} days)");
+        whLog($changeType, "Pre-due reminder sent: #{$invoiceNum} " . dn_money($total, $config, null) . " → {$name} ({$daysUntil} days)");
         whResp(200, 'near_due — notification sent.');
     }
 
@@ -2536,7 +2716,7 @@ switch ($changeType) {
         // already received. This caused false reminders (e.g. Ashish Kareliya #1152).
         $balance = $total - $amountPaid;
         if ($invStatus === 3 || $balance <= 0.01) {
-            whLog($changeType, "overdue SKIPPED — invoice #{$invoiceNum} already paid (\${$amountPaid}/\${$total}, status={$invStatus})");
+            whLog($changeType, "overdue SKIPPED — invoice #{$invoiceNum} already paid (" . dn_money($amountPaid, $config, null) . "/" . dn_money($total, $config, null) . ", status={$invStatus})");
             whResp(200, 'overdue — invoice already paid, skipping notification.');
         }
 
@@ -2574,7 +2754,7 @@ switch ($changeType) {
             $notify->overdueDay5($phone, $name, $invoiceNum, $total, $currency, $svcName);
         }
 
-        whLog($changeType, "Overdue notice sent: #{$invoiceNum} \${$total} → {$name} ({$daysOverdue} days overdue)");
+        whLog($changeType, "Overdue notice sent: #{$invoiceNum} " . dn_money($total, $config, null) . " → {$name} ({$daysOverdue} days overdue)");
         whResp(200, 'overdue — notification sent.');
     }
 
@@ -2618,8 +2798,9 @@ switch ($changeType) {
                     'date'              => date('Y-m-d'),
                     'direction'         => 'out',
                     'amount'            => $originalAmt,
-                    'currency'          => $orig['currency'] ?? 'USD',
+                    'currency'          => dn_payment_currency(['currency' => $orig['currency'] ?? ''], $config ?? null),
                     'category'          => 'Refund',
+                    'txn_type'          => 'REFUND',
                     'category_raw'      => 'CRM Payment Deleted',
                     'person'            => $orig['person'] ?? '',
                     'description'       => 'AUTO-REVERSAL: CRM Payment #' . $paymentId . ' deleted — '
@@ -2643,7 +2824,7 @@ switch ($changeType) {
                     [(int)$orig['id']]
                 );
 
-                whLog($changeType, "Cashbook reversal posted: -\${$originalAmt} (was {$orig['sr']})");
+                whLog($changeType, "Cashbook reversal posted: -" . dn_money($originalAmt, $config, null) . " (was {$orig['sr']})");
             } else {
                 whLog($changeType, "No cashbook entry found for CRM-PAY-{$paymentId} — skip reversal");
             }
@@ -2699,7 +2880,7 @@ switch ($changeType) {
         try {
             if ($reversedCb || $voidedCol) {
                 $alertMsg = "⚠️ *CRM Payment Deleted*\n\n"
-                    . "Payment #*{$paymentId}* (\${$originalAmt}) was deleted from CRM.\n\n";
+                    . "Payment #*{$paymentId}* (" . dn_money($originalAmt, $config, null) . ") was deleted from CRM.\n\n";
                 if ($reversedCb) {
                     $alertMsg .= "✅ Cashbook auto-reversal posted\n";
                 }
@@ -2757,6 +2938,27 @@ switch ($changeType) {
                 $clientId = (int)($pay['clientId'] ?? 0);
             }
         } catch (\Throwable $_) {}
+
+        // EFRIS: a fiscalised invoice that gets edited (or deleted) in uCRM
+        // can no longer match its fiscal record. Flag it for the credit/debit
+        // note flow — fiscal history is never silently rewritten.
+        if (in_array($changeType, ['invoice.edit', 'invoice.delete'], true) && $entId) {
+            try {
+                require_once __DIR__ . '/lib/EfrisStore.php';
+                $_efTx = new EfrisStore($store->getPdo());
+                $_efRow = $_efTx->find($entId);
+                if ($_efRow && $_efRow['status'] === 'FISCALISED') {
+                    $_efTx->update((int)$_efRow['id'], [
+                        'status'           => 'NEEDS_ADJUSTMENT',
+                        'response_message' => 'Invoice ' . $changeType . ' in uCRM after fiscalisation — '
+                            . 'issue a credit/debit note; the fiscal record is never edited.',
+                    ]);
+                    whLog($changeType, "EFRIS: invoice {$_efRow['invoice_number']} flagged NEEDS_ADJUSTMENT");
+                }
+            } catch (\Throwable $_efE) {
+                whLog($changeType, 'EFRIS adjust-flag error: ' . $_efE->getMessage());
+            }
+        }
 
         if ($clientId > 0) {
             try {

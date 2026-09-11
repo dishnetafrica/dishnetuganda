@@ -143,6 +143,18 @@ class StarlinkMailWorker
             $c['confidence'], $c['action_required'] ? 1 : 0, $c['ai_model'], $msgId,
         ]);
 
+        // The kit serial named in this email is already stored, in this row's
+        // extracted_json. It is deliberately NOT pushed into inventory here.
+        //
+        // An email saying Starlink shipped a kit is not the same as holding
+        // one: StockService::install() refuses a unit that is not in stock,
+        // and that discipline is correct. Creating units from an inbox would
+        // put hardware on the books that nobody has received.
+        //
+        // Phase 4 (StarlinkKitSync) reconciles these serials against
+        // StockService properly, from the service-line sync rather than from
+        // mail. Until then the fact is recorded and a person receives the kit.
+
         // ── route ────────────────────────────────────────────────────────
         $needsHuman = $c['action_required'] || $clientId === null || $c['confidence'] < self::MIN_CONFIDENCE;
         if ($needsHuman) {

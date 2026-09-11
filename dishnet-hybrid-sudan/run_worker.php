@@ -14,10 +14,7 @@ require_once __DIR__ . '/lib/error_handler.php';
  * CLI only — refuses to run over HTTP.
  */
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(403);
-    exit("CLI only\n");
-}
+if (PHP_SAPI !== 'cli') return;   // a web request is not ours to serve
 
 require_once __DIR__ . '/lib/bootstrap_data.php';
 $dataDir = getDataDir(__DIR__);
@@ -33,7 +30,7 @@ $store  = SqliteStore::create($dataDir);
 $config = PluginConfig::load(__DIR__, $dataDir);
 
 if (!PluginConfig::toBool($config['ai_enabled'] ?? false)) {
-    exit(0);
+    return;
 }
 
 // WorkerBase::log() writes to stdout, which the spawn discards
@@ -60,6 +57,6 @@ try {
         '[' . gmdate('Y-m-d H:i:s') . '] spawned worker crashed: ' . $e->getMessage() . PHP_EOL,
         FILE_APPEND
     );
-    exit(1);
+    return;
 }
-exit(0);
+return;

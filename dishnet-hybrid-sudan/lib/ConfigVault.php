@@ -48,10 +48,55 @@ class ConfigVault
         'shopbot_ai_url',
         'shopbot_ai_token',
         'ai_tools_token',
+        // EFRIS (Uganda e-invoicing): survive re-install like every other
+        // credential — losing the device binding mid-quarter is not an option.
+        'efris_environment',
+        'efris_auto_submit',
+        'efris_tin',
+        'efris_device_no',
+        'efris_test_api_url',
+        'efris_production_api_url',
+        'efris_private_key',
+        // Ledger currency identity — losing it would silently re-book the
+        // cashbook in the wrong base after a re-install.
+        'currency_symbol',
+        'currency_code',
+        'cashbook_base_currency',
+        'cashbook_currencies',
+        'books_start_date',
+        // Inbound mail: the address the AI reads and its password. A
+        // re-install that lost these would silently stop the draft inbox,
+        // and nobody notices mail that is not being read.
+        'email_ai_jmap_url',
+        'email_ai_mailbox',
+        'email_ai_mailbox_pw',
+        'email_ai_jmap_resolve',
+        'email_ai_jmap_via',
+        // The Starlink account this install syncs from. The session cookie is
+        // NOT here — it lives encrypted in starlink_session.json, because a
+        // vault that survives a re-install should not also survive it holding
+        // somebody's live session.
+        'starlink_account_email',
+        'starlink_account_number',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string
     {
+        // Tests must be able to put the vault somewhere of their own.
+        //
+        // The vault deliberately lives OUTSIDE the data directory so that it
+        // survives a re-install — which also means DN_DATA_DIR does not move
+        // it. A smoke test that ran the tools with a temporary data directory
+        // therefore wrote its fake mailbox into the real vault, and because
+        // the vault gap-fills missing keys, that fake would later be restored
+        // over a genuine one. A test that can corrupt production config is
+        // worse than the bug it was guarding against.
+        //
+        // Read from the environment, so only a CLI process that sets it is
+        // affected; nothing a web request can reach.
+        $override = (string)getenv('DN_VAULT_FILE');
+        if ($override !== '') return $override;
+
         $parent = dirname(rtrim($pluginRoot, '/'));
         if (is_dir($parent) && is_writable($parent)) {
             return $parent . '/.dishnet-sudan.vault.json';
@@ -112,10 +157,81 @@ class ConfigVault
         return $config;
     }
 
+    /**
+     * Put values into the vault directly.
+     *
+     * The ordinary route for configuration is uCRM's own Configuration screen,
+     * and this is not a replacement for it. It exists for the case where uCRM
+     * is still holding an older manifest and has no field to type into yet —
+     * a secret that cannot be entered anywhere is not more secure, it just
+     * ends up in a shell command instead.
+     *
+     * Written through SecureFile deliberately. refresh() writes 0600, which is
+     * right when the web process itself writes it and wrong the moment a tool
+     * run as root through docker exec does: the file becomes root-owned, the
+     * web user can no longer read it, and everything reports "not configured"
+     * while the value sits there perfectly intact. That outage has already
+     * happened once here, to email_settings.json.
+     *
+     * @param array<string,string> $pairs  VAULT_KEYS only; anything else is refused
+     * @return array{ok:bool, error:string, stored:string[]}
+     */
+    public static function store(string $pluginRoot, string $dataDir, array $pairs): array
+    {
+        $stored = [];
+        foreach (array_keys($pairs) as $k) {
+            if (!in_array($k, self::VAULT_KEYS, true)) {
+                return ['ok' => false, 'stored' => [],
+                        'error' => "'{$k}' is not a vault key"];
+            }
+        }
+
+        $file  = self::path($pluginRoot, $dataDir);
+        $vault = [];
+        if (is_file($file)) {
+            $decoded = json_decode((string)@file_get_contents($file), true);
+            if (is_array($decoded)) $vault = $decoded;
+        }
+        if (!isset($vault['config']) || !is_array($vault['config'])) $vault['config'] = [];
+
+        foreach ($pairs as $k => $v) {
+            $v = (string)$v;
+            if (trim($v) === '') { unset($vault['config'][$k]); continue; }
+            $vault['config'][$k] = $v;
+            $stored[] = $k;
+        }
+
+        require_once __DIR__ . '/SecureFile.php';
+        $r = SecureFile::write($file,
+            (string)json_encode($vault, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        if (empty($r['ok'])) {
+            return ['ok' => false, 'stored' => [], 'error' => (string)($r['error'] ?? 'write failed')];
+        }
+        // Names only. A log line is not a place for a password.
+        error_log('[ConfigVault] stored: ' . implode(', ', $stored));
+        return ['ok' => true, 'error' => '', 'stored' => $stored];
+    }
+
     /** Write the vault only when its content actually changed. */
     private static function refresh(string $file, string $dataDir, array $config, array $previous = []): void
     {
+        // Start from what the vault already holds, not from nothing.
+        //
+        // Rebuilding the snapshot purely from $config means any key the caller
+        // happens not to have — because a file was unreadable, because uCRM
+        // wrote it empty, because this code path only loads part of the
+        // configuration — is dropped from the vault entirely. The vault exists
+        // to survive exactly those moments. It already refuses to forget the
+        // webhook secret when the file is briefly absent; the same reasoning
+        // applies to every key in it, and not applying it cost a password.
+        //
+        // Removing a key from the vault is therefore deliberate only:
+        // ConfigVault::store() with an empty value does it, nothing else.
         $snap = ['config' => []];
+        foreach ((array)($previous['config'] ?? []) as $k => $v) {
+            if (in_array($k, self::VAULT_KEYS, true)) $snap['config'][$k] = $v;
+        }
         foreach (self::VAULT_KEYS as $k) {
             if (array_key_exists($k, $config)
                 && !(is_string($config[$k]) && trim($config[$k]) === '')) {
@@ -141,10 +257,17 @@ class ConfigVault
         if (is_file($file) && (string)@file_get_contents($file) === $json) {
             return;
         }
-        $tmp = $file . '.tmp';
-        if (@file_put_contents($tmp, $json) !== false) {
-            @chmod($tmp, 0600);
-            @rename($tmp, $file);
-        }
+
+        // Through SecureFile, not a bare 0600.
+        //
+        // This runs on every config load, under whichever account happens to
+        // be running: root from a docker exec, nginx from a web request. A
+        // 0600 file written by root cannot be read by nginx — and an unreadable
+        // vault reads as an EMPTY vault, which is how a live mailbox password
+        // was lost. The root CLI stored it, a later root load rewrote the file
+        // as root-owned 0600, and the next web request could not read it, so it
+        // rebuilt the vault from a config that no longer had the password in it.
+        require_once __DIR__ . '/SecureFile.php';
+        SecureFile::write($file, $json);
     }
 }
