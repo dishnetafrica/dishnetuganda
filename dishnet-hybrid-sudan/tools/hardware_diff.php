@@ -6,7 +6,9 @@ chdir(dirname(__DIR__));
  *
  *   php tools/hardware_diff.php
  *
- * READ-ONLY. It writes nothing to either side.
+ * It changes NOTHING on either side. It keeps one small snapshot file of its
+ * own, so that the next run can tell you what moved since the last one — a
+ * product that disappeared from uCRM is invisible to a tool with no memory.
  *
  * There are two hardware lists and they are not the same thing:
  *
@@ -59,11 +61,70 @@ foreach ($remote as $r) {
     if (!empty($r['name'])) $byName[$norm((string)$r['name'])] = $r;
 }
 
+$problems = [];
+
+// ── What moved in uCRM since the last run ───────────────────────────────────
+//
+// Two runs of this tool an hour apart reported a different number of uCRM
+// products, and nothing said so — it took comparing two old terminal windows
+// to notice. A product quietly leaving uCRM is exactly the failure this tool
+// exists to catch: the assistant stops being able to quote it, and the screen
+// still shows it as though it were on sale.
+$snapFile = rtrim($dataDir, '/') . '/hardware_diff_last.json';
+$now = [];
+foreach ($remote as $r) {
+    if (!is_array($r) || empty($r['id'])) continue;
+    $now[(string)(int)$r['id']] = [
+        'name'  => (string)($r['name'] ?? ''),
+        'price' => isset($r['price']) ? (float)$r['price'] : null,
+    ];
+}
+$prev = null;
+if (is_file($snapFile)) {
+    $raw  = json_decode((string)@file_get_contents($snapFile), true);
+    if (is_array($raw) && isset($raw['products']) && is_array($raw['products'])) $prev = $raw;
+}
+
+if ($prev !== null) {
+    $was     = (array)$prev['products'];
+    $gone    = array_diff_key($was, $now);
+    $added   = array_diff_key($now, $was);
+    $moved   = [];
+    foreach ($now as $id => $p) {
+        if (!isset($was[$id])) continue;
+        $before = $was[$id]['price'] ?? null;
+        if ($before === null || $p['price'] === null) continue;
+        if (abs((float)$before - (float)$p['price']) >= 0.005) $moved[$id] = [$was[$id], $p];
+    }
+    if ($gone || $added || $moved) {
+        echo "\n  CHANGED IN uCRM SINCE " . (string)($prev['checked_at'] ?? 'the last check') . "\n\n";
+        foreach ($gone as $id => $p) {
+            printf("    REMOVED  %-30s %12s   #%s\n", mb_substr((string)$p['name'], 0, 30), $fmt($p['price'] ?? null), $id);
+            echo "             the assistant could quote this before and cannot now\n";
+            $problems[] = (string)$p['name'] . ' has been removed from uCRM since the last check';
+        }
+        foreach ($added as $id => $p) {
+            printf("    ADDED    %-30s %12s   #%s\n", mb_substr((string)$p['name'], 0, 30), $fmt($p['price'] ?? null), $id);
+        }
+        foreach ($moved as $id => $pair) {
+            printf("    REPRICED %-30s %12s → %s   #%s\n", mb_substr((string)$pair[1]['name'], 0, 30),
+                   $fmt($pair[0]['price'] ?? null), $fmt($pair[1]['price'] ?? null), $id);
+            echo "             every quote from now on uses the new figure\n";
+            $problems[] = (string)$pair[1]['name'] . ' was repriced in uCRM since the last check';
+        }
+    }
+} else {
+    echo "\n  No previous check to compare against. This run becomes the baseline,\n";
+    echo "  so the next one can tell you what moved.\n";
+}
+@file_put_contents($snapFile, json_encode(
+    ['checked_at' => gmdate('Y-m-d H:i') . ' UTC', 'products' => $now],
+    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
 echo "\n  THE ASSISTANT QUOTES FROM uCRM. THE SCREEN IS A SEPARATE LIST.\n\n";
 printf("  %-30s %12s  %12s  %s\n", 'EQUIPMENT', 'SCREEN', 'uCRM', 'STATE');
 echo "  " . str_repeat('-', 76) . "\n";
 
-$problems = [];
 $matchedIds = [];
 foreach ($local as $h) {
     $title = (string)($h['title'] ?? '');
@@ -88,6 +149,22 @@ foreach ($local as $h) {
         printf("  %-30s %12s  %12s  DISAGREE (%s)\n", mb_substr($title, 0, 30), $fmt($sell), $fmt($rp), $how);
         echo "  " . str_repeat(' ', 32) . 'uCRM name: ' . (string)$r['name'] . "\n";
         echo "  " . str_repeat(' ', 32) . 'customers are told ' . $fmt($rp) . ", the screen shows " . $fmt($sell) . "\n";
+
+        // A screen price that is exactly some OTHER product's price is not
+        // drift. It is one row priced from a different product — a package
+        // price typed onto the kit row, most often. Drift is a number nobody
+        // recognises; this is a number that belongs somewhere else.
+        foreach ($remote as $other) {
+            if (!is_array($other) || (int)($other['id'] ?? 0) === (int)($r['id'] ?? 0)) continue;
+            if (!isset($other['price'])) continue;
+            if (abs((float)$other['price'] - $sell) >= 0.005) continue;
+            echo "  " . str_repeat(' ', 32) . '↑ ' . $fmt($sell) . ' is exactly the uCRM price of "'
+               . (string)($other['name'] ?? '?') . '" (#' . (string)($other['id'] ?? '?') . ")\n";
+            echo "  " . str_repeat(' ', 32) . "  so this row is priced from that product, not drift\n";
+            $problems[] = $title . ' on the screen carries the price of ' . (string)($other['name'] ?? '?');
+            break;
+        }
+
         $problems[] = $title . ': screen ' . $fmt($sell) . ' vs uCRM ' . $fmt($rp)
                     . ' — customers hear ' . $fmt($rp);
     } else {

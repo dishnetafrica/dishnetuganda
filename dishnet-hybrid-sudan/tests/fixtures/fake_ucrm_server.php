@@ -66,4 +66,31 @@ if (preg_match('#^/clients/(\d+)$#', $path, $m)) {
     $id = (int)$m[1];
     fu_out(['id' => $id, 'organizationId' => $id === 8 ? 7 : 1]);
 }
+// The product catalogue the assistant quotes from.
+//
+// 'catalogue_five' and 'catalogue_three' are the two readings taken from the
+// live Uganda uCRM roughly an hour apart: the two package products were in
+// the first and not the second. Note that Standard Kit is 2,649,000 while
+// Standard Package is 2,749,000 — the figure the Hardware screen was showing
+// against the KIT.
+if ($path === '/products' || strpos($path, '/products?') === 0) {
+    $MINI_KIT  = ['id' => 1, 'name' => 'Starlink Mini Kit',        'price' => 2249000, 'taxable' => false];
+    $STD_KIT   = ['id' => 2, 'name' => 'Starlink Standard Kit',    'price' => 2649000, 'taxable' => false];
+    $INSTALL   = ['id' => 3, 'name' => 'Professional Installation','price' =>  150000, 'taxable' => false];
+    $MINI_PKG  = ['id' => 4, 'name' => 'Starlink Mini Package',    'price' => 2399000, 'taxable' => false];
+    $STD_PKG   = ['id' => 5, 'name' => 'Starlink Standard Package','price' => 2749000, 'taxable' => false];
+
+    if ($scenario === 'catalogue_three') fu_out([$MINI_KIT, $STD_KIT, $INSTALL]);
+    if ($scenario === 'catalogue_repriced') {
+        $k = $STD_KIT; $k['price'] = 2749000;
+        fu_out([$MINI_KIT, $k, $INSTALL]);
+    }
+    if ($scenario === 'catalogue_taxable') {
+        foreach ([&$MINI_KIT, &$STD_KIT, &$INSTALL] as &$_p) { $_p['taxable'] = true; }
+        unset($_p);
+        fu_out([$MINI_KIT, $STD_KIT, $INSTALL]);
+    }
+    fu_out([$MINI_KIT, $STD_KIT, $INSTALL, $MINI_PKG, $STD_PKG]);
+}
+
 fu_out(['error' => 'FAKE-UCRM-TEST: path not simulated: ' . $path], 404);
