@@ -4,7 +4,20 @@ chdir(dirname(__DIR__));
 /**
  * hardware_diff.php — why the equipment screen and uCRM disagree.
  *
- *   php tools/hardware_diff.php
+ *   php tools/hardware_diff.php                     diagnose, change nothing
+ *   php tools/hardware_diff.php --adopt-ucrm        show what adopting would do
+ *   php tools/hardware_diff.php --adopt-ucrm --yes  set the screen to the uCRM price
+ *   ... --only "Starlink Standard Kit"              just that one row
+ *
+ * --adopt-ucrm writes ONLY to the plugin's own table. It never writes to
+ * uCRM, so it can never change what a customer is quoted — it makes the
+ * screen tell the truth about what is already being quoted. That is the one
+ * direction that is safe to automate. Going the other way (publishing a
+ * screen price to uCRM) changes what customers are charged, so it stays a
+ * deliberate act: open the row and save it.
+ *
+ * It does not touch buy price or margin, and it will not adopt for a row
+ * with no uCRM product behind it — there is nothing to adopt from.
  *
  * It changes NOTHING on either side. It keeps one small snapshot file of its
  * own, so that the next run can tell you what moved since the last one — a
@@ -28,6 +41,12 @@ chdir(dirname(__DIR__));
  * CLI only.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+
+$argv  = $argv ?? [];
+$adopt = in_array('--adopt-ucrm', $argv, true);
+$apply = $adopt && in_array('--yes', $argv, true);
+$onlyAt = array_search('--only', $argv, true);
+$only   = $onlyAt !== false ? trim((string)($argv[$onlyAt + 1] ?? '')) : '';
 
 $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
@@ -126,6 +145,7 @@ printf("  %-30s %12s  %12s  %s\n", 'EQUIPMENT', 'SCREEN', 'uCRM', 'STATE');
 echo "  " . str_repeat('-', 76) . "\n";
 
 $matchedIds = [];
+$adoptable  = [];
 foreach ($local as $h) {
     $title = (string)($h['title'] ?? '');
     $sell  = isset($h['sell_price']) ? (float)$h['sell_price'] : null;
@@ -167,6 +187,8 @@ foreach ($local as $h) {
 
         $problems[] = $title . ': screen ' . $fmt($sell) . ' vs uCRM ' . $fmt($rp)
                     . ' — customers hear ' . $fmt($rp);
+        $adoptable[] = ['id' => (int)($h['id'] ?? 0), 'title' => $title,
+                        'from' => $sell, 'to' => $rp, 'ucrm_name' => (string)($r['name'] ?? '')];
     } else {
         printf("  %-30s %12s  %12s  agree (%s)\n", mb_substr($title, 0, 30), $fmt($sell), $fmt($rp), $how);
     }
@@ -210,12 +232,82 @@ echo "      edit in uCRM   -> the screen keeps showing the old number\n";
 echo "      edit on screen -> uCRM keeps the old number until that row is saved\n\n";
 echo "    Whichever it is, the customer hears the uCRM figure.\n";
 
+// ── Adopting the uCRM price onto the screen ─────────────────────────────────
+//
+// Only ever in this direction. uCRM is what the customer is quoted, so
+// copying it onto the screen changes nothing a customer sees — it stops the
+// screen from lying to staff about a price that is already live. Publishing
+// the other way would change what people are charged, and that stays a
+// deliberate act on the Hardware screen.
+if ($adopt) {
+    $todo = $adoptable;
+    if ($only !== '') {
+        $want = $norm($only);
+        $todo = array_values(array_filter($todo, fn($a) => $norm($a['title']) === $want));
+        if (!$todo) {
+            echo "\n  --only \"" . $only . "\" matches no row that disagrees.\n";
+            echo "  Run without --only to see which rows do.\n\n";
+            exit(1);
+        }
+    }
+    if (!$todo) {
+        echo "\n  Nothing to adopt: no row disagrees with uCRM.\n\n";
+        exit(0);
+    }
+
+    echo "\n  " . ($apply ? 'ADOPTING THE uCRM PRICE' : 'WOULD ADOPT THE uCRM PRICE') . "\n\n";
+    foreach ($todo as $a) {
+        printf("    %-30s %12s → %s\n", mb_substr($a['title'], 0, 30), $fmt($a['from']), $fmt($a['to']));
+        echo "    " . str_repeat(' ', 32) . 'from uCRM "' . $a['ucrm_name'] . "\"\n";
+    }
+
+    if (!$apply) {
+        echo "\n    Nothing was changed. uCRM is not touched either way — this only\n";
+        echo "    corrects the screen to the price customers are already quoted.\n";
+        echo "\n    Add --yes to apply.\n\n";
+        exit(1);
+    }
+
+    // Under a lock: somebody may be saving this very row on the Hardware
+    // screen, and a read-modify-write outside one would silently drop it.
+    $byRowId = [];
+    foreach ($todo as $a) { if ($a['id'] > 0) $byRowId[$a['id']] = $a['to']; }
+
+    $changed = 0; $missed = [];
+    $store->withLock('kyc_devices.json', function (array $records) use ($byRowId, &$changed, &$missed) {
+        $seen = [];
+        foreach ($records as $i => $row) {
+            if (!is_array($row)) continue;
+            $rid = (int)($row['id'] ?? 0);
+            if (!isset($byRowId[$rid])) continue;
+            $seen[$rid] = true;
+            $new = $byRowId[$rid];
+            if ($new === null) continue;
+            if (abs((float)($row['sell_price'] ?? 0) - (float)$new) < 0.005) continue;
+            $records[$i]['sell_price'] = (float)$new;   // price only; cost and margin are ours
+            $changed++;
+        }
+        foreach ($byRowId as $rid => $_) { if (empty($seen[$rid])) $missed[] = $rid; }
+        return ['records' => $records, 'result' => true];
+    });
+
+    if ($missed) {
+        echo "\n    " . count($missed) . " row(s) were not there when the write ran and were\n";
+        echo "    left alone. Re-run to see the current state.\n";
+    }
+    printf("\n    %d row(s) updated on the screen. uCRM was not written to.\n", $changed);
+    echo "    Re-run without --adopt-ucrm to confirm they now agree.\n\n";
+    exit(0);
+}
+
 if ($problems) {
     echo "\n  NEEDS A DECISION\n\n";
     foreach ($problems as $p) echo "    - " . $p . "\n";
     echo "\n  To make uCRM match the screen, open the row on the Hardware screen and\n";
-    echo "  save it — that pushes its price. To make the screen match uCRM, edit the\n";
-    echo "  row to the uCRM figure. Decide which number is right first.\n\n";
+    echo "  save it — that pushes its price and changes what customers are quoted.\n";
+    echo "  To make the screen match uCRM, which changes nothing a customer sees:\n\n";
+    echo "    php tools/hardware_diff.php --adopt-ucrm\n\n";
+    echo "  Decide which number is right first.\n\n";
     exit(1);
 }
 echo "\n  The screen and uCRM agree.\n\n";

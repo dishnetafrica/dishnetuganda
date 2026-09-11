@@ -70,7 +70,7 @@ $dataDir = $tmp . '/data';
 $store   = SqliteStore::create($dataDir);
 $store->save('kyc_devices.json', [
     ['id' => 11, 'title' => 'Starlink Mini Kit',         'sell_price' => 2249000, 'type' => 'starlink', 'ucrm_product_id' => 1],
-    ['id' => 12, 'title' => 'Starlink Standard Kit',     'sell_price' => 2749000, 'type' => 'starlink', 'ucrm_product_id' => 2],
+    ['id' => 12, 'title' => 'Starlink Standard Kit',     'sell_price' => 2749000, 'buy_price' => 2144704, 'type' => 'starlink', 'ucrm_product_id' => 2],
     ['id' => 13, 'title' => 'Professional Installation', 'sell_price' =>  150000, 'type' => 'starlink', 'ucrm_product_id' => 3],
     ['id' => 14, 'title' => 'Starlink Mini Package',     'sell_price' => 2399000, 'type' => 'starlink', 'ucrm_product_id' => 0],
 ]);
@@ -78,9 +78,25 @@ file_put_contents($dataDir . '/config.json', json_encode([
     'crm_base_url' => "http://127.0.0.1:{$port}", 'crm_auth_token' => 'TESTKEY',
 ]));
 
-$run = function () use ($root, $dataDir) {
+// Read what is actually persisted, not what this process has cached. The
+// tool writes from its OWN process, so a cached blob here would report the
+// value from before it ran and every assertion below would be vacuous.
+$onDisk = function (int $id) use ($dataDir) {
+    $pdo = new PDO('sqlite:' . $dataDir . '/plugin.sqlite3');
+    foreach ($pdo->query('SELECT data FROM kyc_devices') as $row) {
+        $r = json_decode((string)$row['data'], true);
+        if (is_array($r) && (int)($r['id'] ?? 0) === $id) return $r;
+    }
+    return null;
+};
+$rowCount = function () use ($dataDir) {
+    $pdo = new PDO('sqlite:' . $dataDir . '/plugin.sqlite3');
+    return (int)$pdo->query('SELECT COUNT(*) FROM kyc_devices')->fetchColumn();
+};
+
+$run = function (string $args = '') use ($root, $dataDir) {
     $cmd = 'DN_DATA_DIR=' . escapeshellarg($dataDir) . ' php '
-         . escapeshellarg($root . '/tools/hardware_diff.php') . ' 2>&1';
+         . escapeshellarg($root . '/tools/hardware_diff.php') . ' ' . $args . ' 2>&1';
     return (string)shell_exec($cmd);
 };
 
@@ -164,13 +180,10 @@ is_(strpos($out4, 'pushes taxable = false') !== false,
 // ── It changes nothing on either side ───────────────────────────────────────
 echo "\nIt is a diagnosis, not an edit\n";
 
-$rows = (array)$store->load('kyc_devices.json');
-$byId = [];
-foreach ($rows as $r) { $byId[(int)$r['id']] = $r; }
-is_((float)$byId[12]['sell_price'] === 2749000.0,
+is_((float)$onDisk(12)['sell_price'] === 2749000.0,
     'the screen price is left exactly as it was',
     'a tool that quietly "fixes" a price removes the decision from the people who own it');
-is_(count($rows) === 4, 'and no row is added or removed');
+is_($rowCount() === 4, 'and no row is added or removed');
 
 $src = (string)file_get_contents($root . '/tools/hardware_diff.php');
 is_(preg_match('/->(post|patch|put|delete)\s*\(/i', $src) !== 1,
@@ -181,6 +194,66 @@ is_(preg_match('/->(post|patch|put|delete)\s*\(/i', $src) !== 1,
 // data dir — beside the plugin, so a uCRM upgrade does not erase the history.
 is_(is_file($dataDir . '/hardware_diff_last.json'),
     'the snapshot it keeps is in the data directory');
+
+// ── Adopting the uCRM price ─────────────────────────────────────────────────
+//
+// The Standard Kit was the real decision: the screen said 2,749,000, uCRM
+// said 2,649,000, and 2,649,000 was the right number. uCRM already held it,
+// so the fix is one-directional — correct the screen, touch nothing a
+// customer sees. That is the only direction safe to automate, and the tool
+// must not be able to go the other way.
+echo "\nAdopting the uCRM price corrects the screen and nothing else\n";
+
+$scenario('catalogue_five');
+
+$dry = $run('--adopt-ucrm');
+is_(strpos($dry, 'WOULD ADOPT') !== false, 'the flag alone only shows what it would do');
+is_(strpos($dry, '2,749,000 → 2,649,000') !== false, 'naming both figures');
+is_(strpos($dry, 'Add --yes to apply') !== false, 'and says how to apply it');
+
+is_((float)$onDisk(12)['sell_price'] === 2749000.0,
+    'and a dry run changes nothing',
+    'a tool whose preview writes is a tool nobody can preview with');
+
+$done = $run('--adopt-ucrm --yes');
+is_(strpos($done, '1 row(s) updated') !== false, '--yes applies it');
+is_(strpos($done, 'uCRM was not written to') !== false, 'and says uCRM was left alone');
+
+is_((float)$onDisk(12)['sell_price'] === 2649000.0,
+    'the screen now shows the price customers are actually quoted',
+    'this was the whole point: the screen was telling staff 2,749,000');
+is_((float)$onDisk(12)['buy_price'] === 2144704.0,
+    'and the cost is untouched',
+    'cost and margin are the plugin\'s own — uCRM has nowhere to hold them');
+is_($rowCount() === 4, 'no row is added or lost');
+is_((float)$onDisk(11)['sell_price'] === 2249000.0, 'a row that already agreed is left as it was');
+
+// And having adopted, the plain run is clean on that row.
+$after = $run();
+is_(preg_match('/Starlink Standard Kit\s+2,649,000\s+2,649,000\s+agree/', $after) === 1,
+    're-running shows them agreeing',
+    'the fix must actually close the finding it was offered for');
+
+is_(strpos($run('--adopt-ucrm'), 'Nothing to adopt') !== false,
+    'and there is then nothing left to adopt');
+
+// --only scopes to one row, because one decision is not a blanket policy.
+echo "\n--only scopes the change to a single row\n";
+$store->save('kyc_devices.json', [
+    ['id' => 11, 'title' => 'Starlink Mini Kit',         'sell_price' => 9999999, 'type' => 'starlink', 'ucrm_product_id' => 1],
+    ['id' => 12, 'title' => 'Starlink Standard Kit',     'sell_price' => 2749000, 'type' => 'starlink', 'ucrm_product_id' => 2],
+    ['id' => 13, 'title' => 'Professional Installation', 'sell_price' =>  150000, 'type' => 'starlink', 'ucrm_product_id' => 3],
+]);
+$one = $run('--adopt-ucrm --yes --only ' . escapeshellarg('Starlink Standard Kit'));
+is_(strpos($one, '1 row(s) updated') !== false, 'only one row is written');
+is_((float)$onDisk(12)['sell_price'] === 2649000.0, 'the named row is corrected');
+is_((float)$onDisk(11)['sell_price'] === 9999999.0,
+    'and the other disagreeing row is deliberately left alone',
+    'scoping that silently widens is worse than no scoping');
+
+is_(strpos($run('--adopt-ucrm --only ' . escapeshellarg('No Such Product')), 'matches no row') !== false,
+    'a name that matches nothing is refused rather than treated as all rows',
+    'a typo must never become "adopt everything"');
 
 proc_terminate($srv); proc_close($srv);
 exec('rm -rf ' . escapeshellarg($tmp));
