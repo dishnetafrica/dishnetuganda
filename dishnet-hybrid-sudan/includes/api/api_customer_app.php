@@ -473,29 +473,21 @@ if (!function_exists('ca_find_clients_by_email')) {
 // OTP request — WhatsApp succeeded, email is a bonus channel).
 if (!function_exists('ca_send_otp_email')) {
     function ca_send_otp_email(array $config, string $dataDir, string $toEmail, string $name, string $code, int $ttlMinutes): array {
-        require_once dirname(__DIR__, 2) . '/lib/MailService.php';
-        require_once dirname(__DIR__, 2) . '/lib/OtpEmailTemplate.php';
+        // The message itself is built in lib/OtpEmail.php, so that the tool
+        // an operator runs to prove this works is running THIS code and not
+        // a copy of it. Sender (system sender if configured, header and
+        // envelope), Reply-To and failure handling all live there.
+        require_once dirname(__DIR__, 2) . '/lib/OtpEmail.php';
 
-        $firstName = explode(' ', trim($name))[0] ?: '';
-        $subject = OtpEmailTemplate::subject($code);
-        $html    = OtpEmailTemplate::html($firstName, $code, $ttlMinutes, $config);
-        $text    = OtpEmailTemplate::text($firstName, $code, $ttlMinutes, $config);
+        $r = OtpEmail::send($config, $dataDir, $toEmail, $name, $code, $ttlMinutes);
 
-        $mailer = new MailService($dataDir);
-        // Reply-To was hardcoded to the Sudan address, so a Uganda customer
-        // replying to their login email reached the wrong operation.
-        require_once dirname(__DIR__, 2) . '/lib/EmailTemplate.php';
-        $result = $mailer->send($toEmail, $name, $subject, $html, $text, [
-            'Reply-To' => EmailTemplate::replyTo($config),
-        ]);
-
-        if (!empty($result['ok'])) {
+        if ($r['ok']) {
             return ['ok' => true, 'error' => ''];
         }
         return [
             'ok'    => false,
-            'error' => $result['error'] ?? 'Unknown SMTP error',
-            'log'   => $result['log'] ?? [],
+            'error' => $r['error'],
+            'log'   => $r['log'] ?? [],
         ];
     }
 }

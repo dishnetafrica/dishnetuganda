@@ -84,8 +84,13 @@ class RecMailer extends MailService
     }
     public function send(string $toEmail, string $toName, string $subject,
                          string $htmlBody, string $textBody = '',
-                         array $extraHeaders = [], array $attachments = []): array {
-        $this->sent[] = compact('toEmail', 'toName', 'subject', 'htmlBody', 'textBody', 'extraHeaders', 'attachments');
+                         array $extraHeaders = [], array $attachments = [],
+                         ?string $fromOverride = null): array {
+        // Recorded, not ignored: a quotation that started going out from the
+        // no-reply address would be a customer unable to answer their own
+        // quote, and the assertion below is what would catch it.
+        $this->sent[] = compact('toEmail', 'toName', 'subject', 'htmlBody', 'textBody',
+                                'extraHeaders', 'attachments', 'fromOverride');
         return $this->sendOk ? ['ok' => true] : ['ok' => false, 'error' => 'SMTP said no'];
     }
 }
@@ -132,6 +137,14 @@ $r = $mkSvc($crm, $mailer)->createCrmQuote(42, $items, 'QUO-2', $retailer);
 t('emailed by plugin', $r['emailed_by_plugin'], true);
 t('uCRM /send NOT called', $crm->patches, []);
 t('billing contact preferred', $mailer->sent[0]['toEmail'] ?? '', 'billing@cust.test');
+// A quotation is correspondence: the customer is meant to answer it. Only
+// login codes go out from the system sender, and this is the line that stops
+// that spreading to mail a person has to be able to reply to.
+// ?? would answer 'MISSING' for a key that IS present and null, which is
+// precisely the value being asserted. array_key_exists tells them apart.
+t('sent from the ordinary sender, not the no-reply one',
+  array_key_exists('fromOverride', $mailer->sent[0] ?? [])
+    ? $mailer->sent[0]['fromOverride'] : 'NOT PASSED AT ALL', null);
 t('subject carries the uCRM number', strpos((string)($mailer->sent[0]['subject'] ?? ''), 'PF007') !== false, true);
 $att = $mailer->sent[0]['attachments'][0] ?? [];
 t('PDF attached under the quote number', $att['name'] ?? '', 'Quotation-PF007.pdf');

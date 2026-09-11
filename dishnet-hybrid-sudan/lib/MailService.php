@@ -53,6 +53,45 @@ class MailService
      * gethostname() is kept as the last resort, but only when it contains a
      * dot — a bare container id never reaches the wire again.
      */
+    /**
+     * The address system mail is sent FROM, as configured, or '' when unset.
+     *
+     * '' is the answer for every install that has never set one, and '' means
+     * "use the ordinary sender" everywhere it is consulted. Nothing downstream
+     * has to know whether the key is absent, blank, or nonsense.
+     */
+    public function systemFrom(): string
+    {
+        $cfg = $this->getConfig();
+        return (string)($cfg['system_from'] ?? '');
+    }
+
+    /**
+     * Accept a From value, or reject it to ''.
+     *
+     * Keeps any display name: '"DishNet" <a@b.c>' comes back whole, because
+     * that is what belongs in the header. What is validated is the address
+     * inside it — a From that is not a deliverable address is a bounced mail
+     * or, worse, a silent relay refusal at MAIL FROM time.
+     */
+    public static function normalizeFrom(string $raw): string
+    {
+        $raw = trim($raw);
+        if ($raw === '') return '';
+        // A newline here would inject headers into every message this sends.
+        if (preg_match('/[\r\n]/', $raw)) return '';
+        return filter_var(self::bareAddress($raw), FILTER_VALIDATE_EMAIL) ? $raw : '';
+    }
+
+    /**
+     * The bare address out of a From value — what SMTP's MAIL FROM takes.
+     * Display names are a header courtesy; the envelope has no room for them.
+     */
+    public static function bareAddress(string $from): string
+    {
+        return preg_match('/<(.+?)>/', $from, $m) ? trim($m[1]) : trim($from);
+    }
+
     public static function ehloName(array $cfg): string
     {
         $explicit = trim((string)($cfg['ehlo'] ?? $cfg['smtp_ehlo'] ?? ''));
@@ -115,6 +154,13 @@ class MailService
             : [];
         $useUcrm = !empty($ec['use_ucrm_email']);
 
+        // v4.24: the address system mail (OTP codes, password resets) is sent
+        // FROM. Distinct from 'from', which is the human mailbox staff reply
+        // to. A customer must not be able to reply to an OTP, and an OTP must
+        // not land in the sales inbox. Empty — Sudan's case — means every mail
+        // keeps going out as 'from', exactly as before this key existed.
+        $systemFrom = self::normalizeFrom((string)($ec['system_from'] ?? ''));
+
         // Build the plugin-SMTP config (if filled in) — used as primary or fallback
         $pluginCfg = null;
         if (!empty(trim($ec['smtp_host'] ?? ''))) {
@@ -125,6 +171,7 @@ class MailService
                 'pass' => trim($ec['smtp_pass'] ?? ''),
                 'enc'  => trim($ec['smtp_enc']  ?? 'tls'),
                 'from' => trim($ec['smtp_from'] ?? '') ?: trim($ec['smtp_user'] ?? ''),
+                'system_from' => $systemFrom,
                 '_source' => 'plugin',
             ];
         }
@@ -133,7 +180,10 @@ class MailService
         if ($useUcrm) {
             $ucrmCfg = $this->tryReadUcrmMailerSettings();
             if ($ucrmCfg !== null) {
-                // UCRM API responded with mailer settings — use them
+                // UCRM API responded with mailer settings — use them.
+                // system_from is ours, not UCRM's: carry it across, or an
+                // install with the toggle ON would lose the system sender.
+                $ucrmCfg['system_from'] = $systemFrom;
                 $this->cfg = $ucrmCfg;
                 return $ucrmCfg;
             }
@@ -274,13 +324,19 @@ class MailService
      *                               'mime' => 'application/pdf',
      *                               'content' => raw bytes].
      *
+     * @param string|null $fromOverride  Send as this address instead of the
+     *   configured sender — header AND envelope, so the two never disagree.
+     *   Pass systemFrom() for mail a customer must not reply to. Null, or an
+     *   address that does not validate, sends as the configured sender.
+     *
      * @return array{ok:bool, error?:string, log?:array}
      *   On success: ['ok' => true, 'log' => [...steps...]]
      *   On failure: ['ok' => false, 'error' => 'human readable', 'log' => [...]]
      */
     public function send(string $toEmail, string $toName, string $subject,
                          string $htmlBody, string $textBody = '',
-                         array $extraHeaders = [], array $attachments = []): array
+                         array $extraHeaders = [], array $attachments = [],
+                         ?string $fromOverride = null): array
     {
         $log = [];
         $cfg = $this->getConfig();
@@ -301,10 +357,29 @@ class MailService
             ), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
 
-        $fromHeader = $cfg['from'];
+        // Who this one message is from. Defaults to the configured sender, so
+        // a caller that passes nothing sends exactly what it always sent.
+        $sender = $cfg['from'];
+        if ($fromOverride !== null && trim($fromOverride) !== '') {
+            $accepted = self::normalizeFrom($fromOverride);
+            if ($accepted !== '') {
+                $sender = $accepted;
+                $log[] = ['step' => 'from_override', 'ok' => true,
+                          'msg' => 'sending as ' . self::bareAddress($sender)];
+            } else {
+                // Refusing it is the safe half; saying so is the other half.
+                // A silent fallback here is a support ticket six weeks later
+                // asking why the OTPs still come from the sales mailbox.
+                $log[] = ['step' => 'from_override', 'ok' => false,
+                          'msg' => 'not a valid sender address, using '
+                                   . self::bareAddress($cfg['from']) . ' instead'];
+            }
+        }
+
+        $fromHeader = $sender;
         // If sender doesn't already have a display name, add "DishNet Africa"
         if (strpos($fromHeader, '<') === false) {
-            $fromHeader = 'DishNet Africa <' . $cfg['from'] . '>';
+            $fromHeader = 'DishNet Africa <' . $sender . '>';
         }
         $toHeader = $toName !== ''
             ? sprintf('"%s" <%s>', addslashes($toName), $toEmail)
@@ -373,9 +448,10 @@ class MailService
             if (!$expect('235', 'auth_pass')) return ['ok' => false, 'error' => 'Password rejected — check UCRM mailer credentials', 'log' => $log];
         }
 
-        // MAIL FROM
-        $envelopeFrom = $cfg['from'];
-        if (preg_match('/<(.+?)>/', $envelopeFrom, $m)) $envelopeFrom = $m[1];
+        // MAIL FROM — the same sender the header claims. A header saying
+        // no-reply@ over an envelope saying accounts@ is what puts replies
+        // and bounces back in the mailbox the header promised they would not.
+        $envelopeFrom = self::bareAddress($sender);
         $write("MAIL FROM:<{$envelopeFrom}>");
         if (!$expect('250', 'mail_from')) return ['ok' => false, 'error' => 'MAIL FROM rejected', 'log' => $log];
 
