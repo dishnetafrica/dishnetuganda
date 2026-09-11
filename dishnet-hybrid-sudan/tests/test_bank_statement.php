@@ -1,0 +1,339 @@
+<?php
+declare(strict_types=1);
+/**
+ * test_bank_statement.php — the statement is the only proof money moved.
+ *
+ * Everything else this system holds is intent: an order placed, a bill
+ * booked, a payment marked as made. The bank says what actually left the
+ * account, and until the two agree the books are a story rather than a
+ * record.
+ *
+ * The assertions that matter most:
+ *
+ *   A STATEMENT THAT DOES NOT ADD UP IS REFUSED. Every row carries the
+ *   balance after it, so the file can check itself; a mistyped digit or a
+ *   dropped row breaks the chain and nothing is imported.
+ *
+ *   BUYING STOCK IS NOT AN EXPENSE. A supplier payment for equipment moves
+ *   bank → inventory, typed TRANSFER, so it never appears as a trading loss
+ *   for kits the business still owns.
+ *
+ *   A PAYMENT WITH NO ORDER IS NOT INVENTORY. It goes to suspense: the bank
+ *   reconciles, nothing false is claimed, and the suspense balance is the
+ *   size of the work left.
+ *
+ *   MONEY ARRIVING IS NOT GUESSED AT. Capital, a director's loan and a
+ *   customer paying look identical to a bank.
+ */
+require_once dirname(__DIR__) . '/lib/StoreInterface.php';
+require_once dirname(__DIR__) . '/lib/JsonStore.php';
+require_once dirname(__DIR__) . '/lib/SqliteStore.php';
+require_once dirname(__DIR__) . '/lib/CashbookService.php';
+require_once dirname(__DIR__) . '/lib/StockService.php';
+require_once dirname(__DIR__) . '/lib/PurchaseService.php';
+require_once dirname(__DIR__) . '/lib/BankStatement.php';
+require_once dirname(__DIR__) . '/lib/BankImport.php';
+
+$pass = 0; $fail = 0;
+function t(string $n, $got, $want) { global $pass, $fail;
+    if ($got === $want) { $pass++; printf("  ok   %s\n", $n); }
+    else { $fail++; printf("  FAIL %s\n       got  %s\n       want %s\n", $n, var_export($got, true), var_export($want, true)); } }
+function is_(bool $c, string $m, string $d = ''): void { global $pass, $fail;
+    if ($c) { $pass++; echo "  ok   $m\n"; } else { $fail++; echo "  FAIL $m" . ($d ? "\n       $d" : '') . "\n"; } }
+
+$root = dirname(__DIR__);
+$tmp  = sys_get_temp_dir() . '/dn_bank_' . bin2hex(random_bytes(4));
+@mkdir($tmp, 0777, true);
+
+// ── Reading the two awkward column types ────────────────────────────────────
+echo "Money and dates as banks actually write them\n";
+t('a plain figure',        BankStatement::money('1859520'), 1859520.0);
+t('with a currency on it', BankStatement::money('UGX 1,859,520.00'), 1859520.0);
+t('with a dollar sign',    BankStatement::money('$ 505.30'), 505.3);
+t('an empty cell',         BankStatement::money(''), 0.0);
+t('a dash for nothing',    BankStatement::money('-'), 0.0);
+t('brackets mean negative',BankStatement::money('(500.00)'), -500.0);
+t('Ecobank writes the month first', BankStatement::date('09/11/2026'), '2026-09-11');
+t('a day past the 12th settles it', BankStatement::date('13/09/2026'), '2026-09-13');
+t('an ISO date passes through',     BankStatement::date('2026-09-07'), '2026-09-07');
+t('an empty date is no date',       BankStatement::date(''), '');
+
+echo "\nWhat a narration can and cannot prove\n";
+t('a card purchase names its supplier',
+    BankStatement::classify('STARLINK GLOBAL INTERNE256781468254 UG - POS PURCHASE (ON-US)', false), 'supplier');
+t('a fee is a fee',      BankStatement::classify('CURRENT ACCOUNT MAINTENANCE FEE', false), 'bank_charge');
+t('so is the VAT on it', BankStatement::classify('VALUE ADDED TAX', false), 'bank_charge');
+t('cash out is a withdrawal', BankStatement::classify('CASH W/D IFO BHAVIN MADLANI', false), 'withdrawal');
+t('money in is only ever a deposit', BankStatement::classify('DEP BY BHAVIN MADLANI', true), 'deposit');
+t('and an unknown debit stays unknown', BankStatement::classify('SUNDRY', false), 'unclassified');
+t('the supplier out of the shouting',
+    BankStatement::supplierName('STARLINK GLOBAL INTERNE256781468254 UG - POS PURCHASE (ON-US)'), 'Starlink');
+
+// ── A statement checks itself ───────────────────────────────────────────────
+echo "\nA statement that does not add up is refused\n";
+$good = <<<CSV
+Posting Date,Description,Debit,Credit,Running Balance,Transaction Reference
+09/02/2026,DEP BY BHAVIN MADLANI,,"UGX 7,000,000.00","UGX 7,000,000.00",2453770313
+09/02/2026,STARLINK GLOBAL INTERNE256781468254 UG - POS PURCHASE (ON-US),"UGX 1,859,520.00",,"UGX 5,140,480.00",2454007677
+09/03/2026,CURRENT ACCOUNT MAINTENANCE FEE,"UGX 25,000.00",,"UGX 5,115,480.00",2450886290
+09/04/2026,Starlink 256781468254 UG - POS PURCHASE (ON-US),"UGX 1,859,520.00",,"UGX 3,255,960.00",2457254136
+09/05/2026,CASH W/D IFO BHAVIN MADLANI,"UGX 500,000.00",,"UGX 2,755,960.00",2455826375
+CSV;
+file_put_contents($tmp . '/good.csv', $good);
+$p = BankStatement::parse($good);
+t('it parses',        $p['ok'], true);
+t('five rows',        count($p['rows']), 5);
+t('the date is read', $p['rows'][0]['date'], '2026-09-02');
+t('the credit is read', $p['rows'][0]['credit'], 7000000.0);
+t('the debit is read',  $p['rows'][1]['debit'], 1859520.0);
+t('and the reference',  $p['rows'][1]['ref'], '2454007677');
+$chain = BankStatement::verifyChain($p['rows']);
+t('the chain holds', $chain['ok'], true);
+t('opening at nil',  $chain['opening'], 0.0);
+t('closing where the bank says', $chain['closing'], 2755960.0);
+
+// One digit changed, nothing else.
+$bad = str_replace('UGX 5,140,480.00', 'UGX 5,140,470.00', $good);
+$pb  = BankStatement::parse($bad);
+$cb_ = BankStatement::verifyChain($pb['rows']);
+t('one wrong digit breaks it', $cb_['ok'], false);
+t('and it says which row', $cb_['breaks'][0]['line'], 3);
+t('and by how much',       $cb_['breaks'][0]['out_by'], -10.0);
+// A mistyped balance shows as a PAIR: the row that carries the wrong figure,
+// and the next row, where the file returns to its own arithmetic. That pair
+// brackets the bad row exactly — what must never happen is every later row
+// reporting a break.
+t('a mistyped figure is bracketed, not smeared down the file', count($cb_['breaks']), 2);
+t('the second break is the mirror of the first', $cb_['breaks'][1]['out_by'], 10.0);
+
+// A dropped row is the same failure.
+$dropped = implode("\n", array_values(array_filter(explode("\n", $good),
+    static fn($l) => strpos($l, '2450886290') === false)));
+$cd = BankStatement::verifyChain(BankStatement::parse($dropped)['rows']);
+t('a missing row breaks it too', $cd['ok'], false);
+
+echo "\nA file that is not a statement\n";
+$r = BankStatement::parse("Name,Amount\nBhavin,100");
+t('is refused', $r['ok'], false);
+is_(strpos((string)$r['error'], 'Columns found: Name, Amount') !== false,
+    'and says what columns it did see', (string)$r['error']);
+
+// ── Into the book ───────────────────────────────────────────────────────────
+echo "\nInto the cashbook\n";
+$store = SqliteStore::create($tmp);
+$pdo   = $store->getPdo();
+$cb    = new CashbookService($store, $tmp);
+$stock = StockService::fromStore($store, $tmp);
+$stock->ensureTables();
+$bank  = (int)($cb->addAccount('Ecobank Uganda – UGX', 'UGX', 'bank')['id'] ?? 0);
+is_($bank > 0, 'there is a bank account to import into');
+
+// One booked purchase, paid — so one of the two card payments has an order
+// behind it and the other does not.
+$pur = new PurchaseService($pdo, $tmp, $stock);
+$kit = (int)($stock->saveCategory(['title' => 'Starlink Kit', 'sku' => 'SL',
+    'service_type' => 'starlink', 'track_mode' => 'serial', 'buy_price' => 1477778])['id'] ?? 0);
+$rec = $pur->receive(['supplier' => 'Starlink', 'invoice_number' => 'INV-DF-UGA-2531-55173-40',
+    'supplier_ref' => 'ORD-DF-1TV9KE23FHG7VBKXHL', 'purchase_date' => '2026-09-02',
+    'currency' => 'UGX', 'total_cost' => 1859520, 'idem_key' => 'starlink-order:ORD-1'],
+    [['category_id' => $kit, 'quantity' => 1, 'unit_cost' => 1575864, 'tax_rate' => 18]],
+    ['id' => 0, 'name' => 'test']);
+$pur->recordPayment((int)$rec['id'], ['amount' => 1859520, 'paid_on' => '2026-09-02',
+    'method' => 'card'], ['id' => 0, 'name' => 'test']);
+
+$imp  = new BankImport($cb, $pdo);
+$rows = BankStatement::parse($good)['rows'];
+
+$dry = $imp->import($rows, $bank, []);
+t('a dry run would book three rows', $dry['posted'], 3);
+t('one matches a real purchase',     $dry['matched'], 1);
+t('one has no order behind it',      $dry['suspense'], 1);
+t('two wait on a person',            $dry['skipped'], 2);
+t('and nothing was written',
+    (int)$pdo->query("SELECT COUNT(*) FROM cb_ledger")->fetchColumn(), 0);
+
+$w = $imp->import($rows, $bank, ['commit' => true]);
+t('committing books them', $w['posted'], 3);
+t('with no errors',        $w['errors'], []);
+
+echo "\nBuying stock is not an expense\n";
+$inv = null;
+foreach ($cb->accounts() as $a) if ($a['kind'] === 'inventory') $inv = $a;
+is_($inv !== null, 'an inventory account exists now');
+t('in the same currency as the bank', $inv['currency'] ?? '', 'UGX');
+t('the matched payment landed in it', $cb->accountBalance((int)$inv['id']), 1859520.0);
+$sus = null;
+foreach ($cb->accounts() as $a) if ($a['kind'] === 'asset') $sus = $a;
+is_($sus !== null, 'and a suspense account for the one with no order');
+t('holding the unmatched payment', $cb->accountBalance((int)$sus['id']), 1859520.0);
+
+$pl = $cb->plByPeriod('', '', '');
+t('neither shows up as a trading expense', $pl['UGX']['expenses']['Bank Transfer'] ?? 0.0, 0.0);
+t('the bank charge does',                  $pl['UGX']['expenses']['Bank Charges'] ?? 0.0, 25000.0);
+t('so the P&L is 25,000 of expense, not 3.7 million', $pl['UGX']['expense_total'], 25000.0);
+
+echo "\nThe bank's own balance is reproduced\n";
+// 7,000,000 in was skipped as needing a decision, so the account is short by
+// exactly that — which is the point of saying so rather than guessing.
+t('the bank account holds what was booked', $cb->accountBalance($bank), -3744040.0);
+$pos = $cb->currencyPositions();
+$ugx = $pos['UGX'] ?? [];
+$kinds = [];
+foreach (($ugx['accounts'] ?? []) as $a) $kinds[$a['kind']] = true;
+is_(!isset($kinds['inventory']) && !isset($kinds['asset']),
+    'inventory and suspense are never counted as cash');
+
+echo "\nThe purchase is tied to the row that proves it\n";
+$pay = $pdo->query("SELECT * FROM stock_purchase_payments")->fetch(PDO::FETCH_ASSOC);
+is_((int)$pay['cb_ledger_id'] > 0, 'the recorded payment now points at a ledger row');
+$led = $pdo->query("SELECT * FROM cb_ledger WHERE id = " . (int)$pay['cb_ledger_id'])->fetch(PDO::FETCH_ASSOC);
+t('the row the bank charged us on', $led['validation_ref'], 'BANK-2454007677');
+t('money leaving the bank',         $led['direction'], 'out');
+t('typed as a transfer',            $led['txn_type'], 'TRANSFER');
+require_once dirname(__DIR__) . '/lib/FinAudit.php';
+$h = FinAudit::history($pdo, 'stock_purchase_payment', (int)$pay['id']);
+is_(count($h) >= 1 && strpos((string)$h[0]['reason'], 'BANK-2454007677') !== false,
+    'and the match itself is on the record', (string)($h[0]['reason'] ?? ''));
+
+echo "\nTwelve identical payments cannot be told apart by amount\n";
+// The live case: one supplier, one amount, nine days, and neither the bank
+// reference nor the order number on the other side. The nearest date is the
+// best key there is — and where more than one order fits, saying so is the
+// whole of the honesty.
+$tmpA = sys_get_temp_dir() . '/dn_bank_amb_' . bin2hex(random_bytes(4));
+@mkdir($tmpA, 0777, true);
+$sA = SqliteStore::create($tmpA); $pA = $sA->getPdo();
+$cbA = new CashbookService($sA, $tmpA);
+$stA = StockService::fromStore($sA, $tmpA); $stA->ensureTables();
+$kA = (int)($stA->saveCategory(['title' => 'Kit', 'sku' => 'K', 'service_type' => 'starlink',
+    'track_mode' => 'serial'])['id'] ?? 0);
+$purA = new PurchaseService($pA, $tmpA, $stA);
+foreach (['2026-09-02', '2026-09-03'] as $i => $d) {
+    $x = $purA->receive(['supplier' => 'Starlink', 'invoice_number' => 'INV-' . $i,
+        'supplier_ref' => 'ORD-' . $i, 'purchase_date' => $d, 'currency' => 'UGX',
+        'total_cost' => 1859520, 'idem_key' => 'o' . $i],
+        [['category_id' => $kA, 'quantity' => 1, 'unit_cost' => 1575864, 'tax_rate' => 18]],
+        ['id' => 0, 'name' => 't']);
+    $purA->recordPayment((int)$x['id'], ['amount' => 1859520, 'paid_on' => $d, 'method' => 'card'],
+        ['id' => 0, 'name' => 't']);
+}
+$bA = (int)($cbA->addAccount('Ecobank – UGX', 'UGX', 'bank')['id'] ?? 0);
+$twoRows = "Posting Date,Description,Debit,Credit,Running Balance,Transaction Reference\n"
+    . "09/02/2026,Starlink POS PURCHASE,\"1,859,520.00\",,\"8,140,480.00\",A1\n"
+    . "09/03/2026,Starlink POS PURCHASE,\"1,859,520.00\",,\"6,280,960.00\",A2";
+$rA = (new BankImport($cbA, $pA))->import(BankStatement::parse($twoRows)['rows'], $bA, ['commit' => true]);
+t('both are matched', $rA['matched'], 2);
+t('neither is forced into suspense', $rA['suspense'], 0);
+t('and both are flagged as date-only matches', $rA['ambiguous'], 2);
+is_(count(array_filter($rA['notes'], static fn($n) => strpos($n, 'best fit, not a certainty') !== false)) === 1,
+    'with one note saying the totals do not depend on it');
+$invA = null;
+foreach ($cbA->accounts() as $a) if ($a['kind'] === 'inventory') $invA = $a;
+t('the money is right whichever way round they went',
+    $cbA->accountBalance((int)$invA['id']), 3719040.0);
+$linked = (int)$pA->query("SELECT COUNT(*) FROM stock_purchase_payments WHERE cb_ledger_id > 0")->fetchColumn();
+t('each payment is claimed exactly once', $linked, 2);
+exec('rm -rf ' . escapeshellarg($tmpA));
+
+echo "\nImporting the same statement again\n";
+$again = $imp->import($rows, $bank, ['commit' => true]);
+t('nothing is booked twice', $again['posted'], 0);
+t('all three are recognised', $again['already'], 3);
+t('still six ledger rows',
+    (int)$pdo->query("SELECT COUNT(*) FROM cb_ledger")->fetchColumn(), 5);
+
+echo "\nMoney arriving, once someone says what it is\n";
+$dep = $imp->import($rows, $bank, ['commit' => true, 'deposits' => 'director']);
+t('the deposit is booked now', $dep['posted'], 1);
+$in = $pdo->query("SELECT * FROM cb_ledger WHERE direction='in' AND source='bank_import'
+                   AND account_id = {$bank}")->fetch(PDO::FETCH_ASSOC);
+t('as a loan from the director', $in['category'], 'Loan Received');
+t('for what the bank received',  (float)$in['amount'], 7000000.0);
+is_(count(array_filter($dep['notes'], static fn($n) => strpos($n, 'arriving a second time') !== false)) === 0,
+    'no duplicate warning when the book had no capital in it');
+$pl2 = $cb->plByPeriod('', '', '');
+t('and a loan is not revenue', $pl2['UGX']['revenue_total'] ?? 0.0, 0.0);
+t('the account now agrees with the bank, less the withdrawal still unexplained',
+    $cb->accountBalance($bank), 3255960.0);
+
+echo "\nThe same money reaching the book twice\n";
+// The live trap: USD 10,000 of share capital was typed in when it arrived,
+// and the statement that records it is about to be imported on top. Counted
+// twice, the company looks twice as funded as it is.
+$tmpD = sys_get_temp_dir() . '/dn_bank_dup_' . bin2hex(random_bytes(4));
+@mkdir($tmpD, 0777, true);
+$sD = SqliteStore::create($tmpD); $cbD = new CashbookService($sD, $tmpD);
+$bD = (int)($cbD->addAccount('Ecobank – UGX', 'UGX', 'bank')['id'] ?? 0);
+$cbD->addEntryRaw(['date' => '2026-06-09', 'direction' => 'in', 'amount' => 7000000,
+    'currency' => 'UGX', 'category' => 'Share Capital', 'status' => 'approved',
+    'source' => 'manual']);
+$dD = (new BankImport($cbD, $sD->getPdo()))->import(
+    BankStatement::parse($good)['rows'], $bD, ['commit' => true, 'deposits' => 'capital']);
+is_(count(array_filter($dD['notes'], static fn($n) => strpos($n, 'arriving a second time') !== false)) === 1,
+    'it warns that the book already holds capital', implode(' | ', $dD['notes']));
+is_(strpos(implode(' ', $dD['notes']), '7,000,000') !== false, 'and how much');
+t('once, not once per deposit',
+    count(array_filter($dD['notes'], static fn($n) => strpos($n, 'arriving a second time') !== false)), 1);
+t('the deposit is still booked — it warns, it does not refuse', $dD['posted'], 4);
+exec('rm -rf ' . escapeshellarg($tmpD));
+
+// ── A second account, a second currency ─────────────────────────────────────
+echo "\nA USD statement cannot land in a UGX account\n";
+$usdAcct = (int)($cb->addAccount('Ecobank Uganda – USD', 'USD', 'bank')['id'] ?? 0);
+$usd = "Posting Date,Description,Debit,Credit,Running Balance,Transaction Reference\n"
+     . "09/03/2026,Starlink 256781468254 UG - POS PURCHASE (ON-US),\$ 505.30,,\$ 9676.30,2455724045";
+$ur  = BankStatement::parse($usd)['rows'];
+$uw  = $imp->import($ur, $usdAcct, ['commit' => true]);
+t('the USD row books against the USD account', $uw['posted'], 1);
+// No UGX order matches a 505.30 USD debit — and it must not be forced into
+// one. It goes to a USD suspense account of its own.
+t('and finds no order behind it', $uw['suspense'], 1);
+$usus = null;
+foreach ($cb->accounts() as $a) if ($a['kind'] === 'asset' && $a['currency'] === 'USD') $usus = $a;
+is_($usus !== null, 'with its own USD suspense account — currencies never merge');
+t('holding dollars', $cb->accountBalance((int)$usus['id']), 505.3);
+t('while the UGX suspense account is untouched by it',
+    $cb->accountBalance((int)$sus['id']), 1859520.0);
+$posU = $cb->currencyPositions();
+is_(isset($posU['USD']) && isset($posU['UGX']), 'and the two currencies stay apart');
+
+// ── The tool ────────────────────────────────────────────────────────────────
+echo "\nThe tool\n";
+$tool = $root . '/tools/bank_statement.php';
+is_(is_file($tool), 'tools/bank_statement.php exists');
+$tmp2 = sys_get_temp_dir() . '/dn_bank2_' . bin2hex(random_bytes(4));
+@mkdir($tmp2, 0777, true);
+file_put_contents($tmp2 . '/good.csv', $good);
+file_put_contents($tmp2 . '/bad.csv', $bad);
+$env = 'DN_DATA_DIR=' . escapeshellarg($tmp2) . ' ';
+
+$o = []; exec($env . 'php ' . escapeshellarg($tool) . ' --file ' . escapeshellarg($tmp2 . '/good.csv') . ' 2>&1', $o, $c);
+$txt = implode("\n", $o);
+t('a bare run exits clean', $c, 0);
+is_(strpos($txt, "agrees with the bank's own running balance") !== false, 'it verifies the chain', $txt);
+is_(strpos($txt, 'Which account is this statement for?') !== false, 'and asks which account');
+
+$o2 = []; exec($env . 'php ' . escapeshellarg($tool) . ' --file ' . escapeshellarg($tmp2 . '/bad.csv') . ' 2>&1', $o2, $c2);
+$txt2 = implode("\n", $o2);
+t('a broken statement is refused', $c2, 1);
+is_(strpos($txt2, 'DOES NOT ADD UP') !== false, 'loudly', $txt2);
+is_(strpos($txt2, 'out by') !== false, 'and by how much');
+
+$o3 = []; exec($env . 'php ' . escapeshellarg($tool) . ' --file ' . escapeshellarg($tmp2 . '/good.csv') . ' --account X 2>&1', $o3, $c3);
+t('a non-numeric account is refused, not ignored', $c3, 2);
+
+$s2 = SqliteStore::create($tmp2);
+$cb2 = new CashbookService($s2, $tmp2);
+$b2 = (int)($cb2->addAccount('Ecobank Uganda – UGX', 'UGX', 'bank')['id'] ?? 0);
+$o4 = []; exec($env . 'php ' . escapeshellarg($tool) . ' --file ' . escapeshellarg($tmp2 . '/good.csv')
+    . ' --account ' . $b2 . ' --commit 2>&1', $o4, $c4);
+$txt4 = implode("\n", $o4);
+t('committing through the tool works', $c4, 0);
+is_((bool)preg_match('/rows booked\s+3/', $txt4), 'three rows booked', $txt4);
+is_(strpos($txt4, 'THESE NEED YOU') !== false, 'and it names what it would not guess');
+t('the ledger has them',
+    (int)$s2->getPdo()->query("SELECT COUNT(*) FROM cb_ledger")->fetchColumn(), 5);
+
+exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($tmp2));
+echo "\n  {$pass} passed, {$fail} failed\n";
+exit($fail === 0 ? 0 : 1);

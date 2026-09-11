@@ -34,7 +34,7 @@ class CashbookService
         'Refund','Discount','Build Africa','Site Expense',
         'Bandwidth','Misc Expense','Customer Refund','Customer Commission',
         // v4.9.10: new structured categories from BookKeeper audit
-        'Govt Fees','Legal Fees','Vehicle','Advertising',
+        'Govt Fees','Legal Fees','Vehicle','Advertising','Bank Charges',
         'Partner Remuneration','Renewal Charges',
         // v4.9.18: SSP Advance chain
         'SSP Advance',
@@ -267,7 +267,8 @@ class CashbookService
      */
     public function recordAccountTransfer(int $fromId, int $toId, float $amountFrom,
                                           float $amountTo, string $date, string $description,
-                                          string $rateSource, string $admin): array
+                                          string $rateSource, string $admin,
+                                          string $ref = '', string $source = 'account_transfer'): array
     {
         $from = $this->account($fromId);
         $to   = $this->account($toId);
@@ -284,8 +285,13 @@ class CashbookService
             return ['ok' => false, 'error' => 'A same-currency transfer must move the same amount'];
         }
 
-        $n   = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FX-%' AND direction='out'")[0]['c'] ?? 0) + 1;
-        $ref = sprintf('FX-%04d', $n);
+        // A caller with its own reference scheme keeps it — a bank import
+        // names both legs after the bank's own transaction id, which is what
+        // makes re-importing the same statement a no-op.
+        if (trim($ref) === '') {
+            $n   = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FX-%' AND direction='out'")[0]['c'] ?? 0) + 1;
+            $ref = sprintf('FX-%04d', $n);
+        }
         $rate = round($amountTo / $amountFrom, 6);
         $legDesc = $description !== '' ? $description
                  : ($isFx
@@ -299,7 +305,7 @@ class CashbookService
             'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
             'description' => $legDesc . " (to {$to['name']})",
             'validation_ref' => $ref, 'validation_status' => 'na',
-            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => $source,
             'account_id' => $fromId, 'txn_type' => 'TRANSFER',
         ]);
         $this->addEntryRaw([
@@ -308,7 +314,7 @@ class CashbookService
             'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
             'description' => $legDesc . " (from {$from['name']})",
             'validation_ref' => $ref, 'validation_status' => 'na',
-            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => $source,
             'account_id' => $toId, 'txn_type' => 'TRANSFER',
             'fx_currency' => $isFx ? (string)$from['currency'] : '',
             'fx_amount'   => $isFx ? $amountFrom : null,
