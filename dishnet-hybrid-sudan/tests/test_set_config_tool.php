@@ -123,5 +123,45 @@ is_(strpos($out, 'encrypted') !== false, 'and points at the uCRM screen',
 is_($saved('claude_api_key') === null, 'nothing was written');
 
 exec('rm -rf ' . escapeshellarg($tmp));
+
+// ── A command that changed nothing must not report success ──────────────────
+//
+// "--set evo_api_url=https://..." printed the whole settings list and exited
+// 0. It looked exactly like it had worked, and it had not: this tool has no
+// --set flag, and evo_api_url is not one of the settings it manages. The
+// operator moved on believing Evolution had been repointed.
+echo "\nAn argument it does not understand is a failure, not a listing\n";
+
+// The same data directory the rest of this file uses — a writable one, so a
+// genuine change can actually be written and its exit code means something.
+$runRaw = function (string $args) use ($root, $tmp) {
+    $cmd = 'DN_DATA_DIR=' . escapeshellarg($tmp)
+         . ' php ' . escapeshellarg($root . '/tools/set_config.php') . ' ' . $args . ' 2>&1';
+    return (string)shell_exec($cmd . '; echo "EXIT:$?"');
+};
+
+$bad = $runRaw('--set evo_api_url=https://evo.dishnetuganda.com');
+is_(strpos($bad, 'EXIT:1') !== false,
+    'an unknown flag exits non-zero',
+    'exit 0 is how a no-op passes for a change');
+is_(strpos($bad, 'Nothing was changed') !== false, 'and says so first');
+is_(strpos($bad, '--set evo_api_url') !== false,
+    'echoing back what it did not understand',
+    'without it the operator cannot see which part was wrong');
+is_(strpos($bad, 'uCRM Configuration screen') !== false,
+    'and points at where Evolution settings actually live',
+    'this tool manages 12 AI settings; evo_api_url is not one of them');
+
+// No arguments is a legitimate request to see the settings.
+$list = $runRaw('');
+is_(strpos($list, 'EXIT:0') !== false,
+    'but bare, with no arguments, listing is still a success',
+    'making the listing an error would break the normal way to read settings');
+is_(strpos($list, 'AI SETTINGS') !== false, 'and it still lists them');
+
+// A real key still works.
+$good = $runRaw('--key ai_qualification --value 1');
+is_(strpos($good, 'EXIT:0') !== false, 'and a genuine change still succeeds');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

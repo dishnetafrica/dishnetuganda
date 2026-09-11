@@ -104,6 +104,21 @@ $show = function () use ($root, $dataDir, $FLAGS) {
 
 $key = trim($value('--key'));
 if ($key === '') {
+    // With no arguments at all, listing IS the job. But arguments that were
+    // MEANT to change something and did not must never exit 0: a command
+    // like --set foo=bar printed this whole list and returned success,
+    // which reads exactly like it worked. It did nothing.
+    if ($args) {
+        echo "\n  Nothing was changed — this tool did not understand:\n\n";
+        echo "      " . implode(' ', $args) . "\n\n";
+        echo "  It takes --key and --value (or --clear):\n\n";
+        echo "      php tools/set_config.php --key ai_qualification --value 1\n";
+        echo "      php tools/set_config.php --key ai_qualification --clear\n\n";
+        echo "  Run it with no arguments to see the settings it manages. Anything\n";
+        echo "  outside that list — every Evolution, uCRM or mail setting, and\n";
+        echo "  every secret — belongs on the uCRM Configuration screen.\n\n";
+        exit(1);
+    }
     $show();
     echo "    php tools/set_config.php --key ai_qualification --value 1\n";
     echo "    php tools/set_config.php --key ai_qualification --clear\n\n";
