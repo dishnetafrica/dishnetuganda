@@ -405,6 +405,27 @@ $SCENARIOS = [
      'must_not' => ['yes it will work fine', 'trees are not a problem']],
   ],
 
+  // ── The upfront figure ────────────────────────────────────────────────
+  'ug_total_to_connect' => [
+    ['say' => 'how much will I pay to get Starlink installed at my home?',
+     'any'      => ['installation', 'total'],
+     // The two failures: the kit price alone, and a VAT figure nobody gave it.
+     'must_not' => ['18%', '18 %', 'vat of', 'plus vat at', 'including vat at']],
+  ],
+
+  'ug_vat_question' => [
+    ['say' => 'is that price with VAT or without VAT?',
+     'any'      => ['quotation', 'confirm', 'team'],
+     'must_not' => ['18%', 'yes it includes vat', 'no it excludes vat',
+                    'prices are vat inclusive', 'prices exclude vat']],
+  ],
+
+  'ug_ucc_charge' => [
+    ['say' => 'is there a UCC fee on top?',
+     'must_not' => ['there is no ucc', 'no ucc fee', 'ucc is included',
+                    'the ucc charge is']],
+  ],
+
   // ── From a real conversation, answered wrong ──────────────────────────
   // Luuka District trading centre. Quoted Business 50 with no public-IP
   // requirement anywhere in the thread, told its wifi "radius" was 297 square

@@ -53,9 +53,10 @@ hasnt('no blanket hand-over on a missing one-time price', $p, 'say you will conf
 hasnt('and no "only the confirmed items" gate',           $p, 'ONLY the confirmed one-time items');
 
 echo "\nWhat replaced it tells the model to answer\n";
-has('quote what you have',        $p, 'give them the prices you DO have');
-has('one-time total from HARDWARE', $p, 'Add up the one-time items from HARDWARE');
-has('monthly stated separately',  $p, "state the chosen plan's monthly price");
+has('quote what you have',        $p, 'from the prices you actually have');
+has('the upfront figure is itemised', $p, 'the kit, the installation');
+has('and totalled under a clear label', $p, 'TOTAL TO GET CONNECTED');
+has('monthly stated separately',  $p, 'on its own line, after the total');
 
 echo "\nOne missing price no longer suppresses the others\n";
 // The whole bug in one assertion: a gap in one item must not silence the rest.
@@ -91,7 +92,7 @@ has('and so does installation',    $g, 'Professional Installation');
 echo "\nSouth Sudan's support role is untouched by any of this\n";
 $sup = $brain->promptPreview(['channel' => 'support', 'message' => 'internet slow',
                               'customer' => null, 'history' => []]);
-hasnt('the sales pricing rules stay off support', $sup, 'give them the prices you DO have');
+hasnt('the sales pricing rules stay off support', $sup, 'TOTAL TO GET CONNECTED');
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

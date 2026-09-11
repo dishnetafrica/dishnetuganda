@@ -160,8 +160,8 @@ $p = $brain->promptPreview($sales + ['products' => $catalogue + [
     'hardware' => [['name' => 'Starlink Standard Kit', 'price' => 600.0],
                    ['name' => 'Professional Installation', 'price' => 50.0]]]]);
 has('monthly vs one-time distinction is a rule', $p, 'MONEY IS TWO SEPARATE THINGS');
-has('upfront = one-time items from HARDWARE',    $p, 'Add up the one-time items from HARDWARE');
-has('monthly price presented separately',        $p, 'monthly price');
+has('upfront is itemised then totalled',         $p, 'TOTAL TO GET CONNECTED');
+has('monthly price presented separately',        $p, 'the monthly plan on its own');
 has('no invented delivery/customs/taxes',        $p, 'Never add delivery, customs, taxes');
 // One missing price used to suppress every other price too, so a customer
 // asking what it costs was told the team would check while the kit price sat

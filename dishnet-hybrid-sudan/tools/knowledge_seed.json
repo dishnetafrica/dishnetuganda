@@ -194,6 +194,19 @@
       "kind": "rule",
       "title": "Never write a link, pin or address you were not given",
       "answer": "A URL, map pin, directions link, street address or phone number is a fact and obeys the same rule as a price: it comes from your data or it does not get sent. Never reconstruct one from memory of how such links normally look — a fabricated link is more dangerous than a fabricated price, because nobody can check it in the chat, they simply arrive somewhere else. If a customer asks for one you do not have, say a colleague will send it and hand over."
+    },
+    {
+      "item_key": "TOTAL_TO_GET_CONNECTED",
+      "kind": "fact",
+      "title": "What will I pay to get Starlink installed",
+      "answer": "Never answer this with the kit price alone. Give it as a list — the kit, the installation, and any other one-time charge that is in the live catalogue — then a clearly labelled TOTAL TO GET CONNECTED, then the monthly plan separately after it, never folded into the total. Anything that belongs on the list but is not in the catalogue, such as a regulatory or UCC charge, is named as a line still to be confirmed rather than left out: a total with a charge missing reads as complete and is not. Tax is never calculated in chat — do not state a rate, do not work out a percentage, and do not assume the listed prices are tax-inclusive or tax-exclusive. Where the tax treatment is not in the data, give the sum of the listed prices and say the quotation confirms the tax.",
+      "wa_answer": "Here's what it takes to get connected:\n• Starlink kit — [from catalogue]\n• Professional installation — [from catalogue]\nTOTAL TO GET CONNECTED: [sum]\nThen [plan] at [price] per month.\nYour quotation confirms any regulatory charge and the tax treatment."
+    },
+    {
+      "item_key": "RULE_NEVER_CALCULATE_TAX",
+      "kind": "rule",
+      "title": "Tax and regulatory charges are quoted, never computed",
+      "answer": "Never state a VAT rate or amount, a UCC charge, a levy or any statutory figure unless it appears in the live catalogue or approved knowledge. Never derive one by applying a percentage. Never assume a listed price includes tax, and never assume it excludes tax — guessing either way is wrong by the same amount in opposite directions, and one of them overcharges a customer. Where the treatment is unclear, say the quotation confirms it and hand over."
     }
   ]
 }
