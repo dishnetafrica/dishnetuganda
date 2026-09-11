@@ -120,6 +120,44 @@ $src = (string)file_get_contents($root . '/tools/block_doctor.php');
 is_(strpos($src, 'dr_wifi_test_block') === false && strpos($src, 'drPost') === false,
     'and contains no code that could');
 
+// ── The gateway URL goes through the same override as every other link ──────
+// uCRM writes the address it was CONFIGURED with, and behind this install's
+// reverse proxy that is crm.dishnetuganda.com:8443 — the port the proxy
+// forwards TO, which nothing outside reaches. The override was added for the
+// links customers were sent; the block gateway resolved its own URL and never
+// learned about it, so it pointed at the dead port too.
+echo "\nThe gateway URL, and the port nobody can reach\n";
+require_once $root . '/lib/crm_url.php';
+file_put_contents($tmp . '/ucrm.json', json_encode([
+    'ucrmPublicUrl' => 'https://crm.dishnetuganda.com:8443/crm/',
+    'pluginAppKey'  => 'x',
+]));
+
+$bridgeUrl = function (array $cfg) use ($tmp): string {
+    // The bridge's own resolution, reproduced — asserting on what it produces
+    // rather than on the source that produces it.
+    $u = json_decode((string)file_get_contents($tmp . '/ucrm.json'), true);
+    $base = preg_replace('#/api/v\d+\.\d+/?$#', '', (string)$u['ucrmPublicUrl']);
+    $base = rtrim($base, '/');
+    if (substr($base, -4) === '/crm') $base = substr($base, 0, -4);
+    return dn_with_override(rtrim($base, '/') . '/crm/_plugins/dishnet-data-report/public.php', $cfg);
+};
+
+$bad = $bridgeUrl([]);
+is_(strpos($bad, ':8443') !== false,
+    'without the override it still points at the proxy port', $bad);
+
+$good = $bridgeUrl(['crm_public_url' => 'https://crm.dishnetuganda.com']);
+is_(strpos($good, ':8443') === false, 'the override takes the port off', $good);
+t('and keeps the path that reaches the plugin', $good,
+  'https://crm.dishnetuganda.com/crm/_plugins/dishnet-data-report/public.php');
+
+// One setting, every link — including this one.
+is_(strpos((string)file_get_contents($root . '/lib/StarlinkBlockBridge.php'), 'dn_with_override(') !== false,
+    'the bridge resolves through that override rather than its own way');
+is_(strpos((string)file_get_contents($root . '/tools/block_doctor.php'), 'dn_with_override(') !== false,
+    'and so does the doctor, so the two cannot report different URLs');
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n  {$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);

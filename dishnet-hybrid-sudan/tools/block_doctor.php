@@ -110,10 +110,28 @@ if ($override !== '') {
     $u = rtrim($u, '/');
     if (substr($u, -4) === '/crm') $u = substr($u, 0, -4);
     $url = rtrim($u, '/') . '/crm/_plugins/dishnet-data-report/public.php';
-    // The :8443 problem bit this install once already, on a different URL.
-    $odd = (strpos($url, ':8443') !== false);
-    $step('gateway URL', $odd ? false : true, $url . ($odd ? '   ← a port nobody browses to' : ''));
-    if ($odd) $fail++;
+
+    // Resolved exactly as the bridge resolves it, through the same override.
+    // A doctor that works it out its own way eventually reports a URL nothing
+    // actually calls, which is worse than not checking.
+    require_once $root . '/lib/crm_url.php';
+    $raw = $url;
+    $url = dn_with_override($url, $config);
+    $viaOverride = ($url !== $raw);
+
+    // uCRM writes the address it was CONFIGURED with, and behind a reverse
+    // proxy that is the port the proxy forwards TO — not one a browser reaches.
+    $odd = (bool)preg_match('#:(8443|8080|8000|9443)(/|$)#', $url);
+    $step('gateway URL', $odd ? false : true,
+          $url . ($viaOverride ? '   (via crm_public_url)' : ''));
+    if ($odd) {
+        $fail++;
+        echo "\n";
+        echo "      That port is what the proxy forwards to, not one anything can\n";
+        echo "      reach from outside. Point the override at the address a browser\n";
+        echo "      uses and every generated link follows, this one included:\n\n";
+        echo "        php tools/crm_url_check.php --set https://crm.dishnetuganda.com\n\n";
+    }
 }
 
 // ── 2. The shared secret ────────────────────────────────────────────────────

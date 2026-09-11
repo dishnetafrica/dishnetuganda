@@ -500,7 +500,17 @@ class StarlinkBlockBridge
         $base = rtrim($base, '/');
         if (substr($base, -4) === '/crm') $base = substr($base, 0, -4);
         $base = rtrim($base, '/') . '/crm';
-        return $base . '/_plugins/dishnet-data-report/public.php';
+        $url = $base . '/_plugins/dishnet-data-report/public.php';
+
+        // Through the same crm_public_url override every other generated link
+        // already uses. uCRM writes the address it was CONFIGURED with, and
+        // behind this install's reverse proxy that is crm.dishnetuganda.com:8443
+        // — the port the proxy forwards TO, which nothing outside can reach.
+        // That override was added for the links customers were being sent; the
+        // block gateway was resolving its own URL and never learned about it,
+        // so it pointed at the dead port too. One setting, both fixed.
+        require_once __DIR__ . '/crm_url.php';
+        return dn_with_override($url, $this->config);
     }
 
     private function drGet(string $action, array $params = []): array
