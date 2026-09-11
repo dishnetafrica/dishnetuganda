@@ -218,6 +218,82 @@ is_(strpos($hwPost, 'move_uploaded_file') === false,
     'and never moves an upload itself');
 is_(strpos($hwPost, 'csrfCheck()') !== false, 'with CSRF checked before writing');
 
+is_(strpos($hwTab, 'caption_hw_media') !== false,
+    'and a caption can be set from the same row',
+    'four files were uploaded from this screen and every one of them sent bare');
+is_(strpos($hwPost, 'MediaLibrary::caption(') !== false,
+    'the caption handler goes through the library too');
+is_(preg_match('/caption_hw_media/', $hwPost) && strpos($hwPost, 'csrfCheck()') !== false,
+    'with CSRF checked before writing');
+
+// ── A caption is what makes a sent file mean something ──────────────────────
+//
+// The Hardware screen submitted the instant a file was chosen, so there was
+// no moment at which a caption could be typed. All four real uploads landed
+// bare: a customer got a PDF attachment and nothing saying what it was.
+//
+// The property worth holding is that setting a caption never touches the
+// file, and that a caption for something not stored fails rather than
+// writing a stray .txt that nothing will ever read.
+echo "\nA caption travels with the file\n";
+
+$capDir = sys_get_temp_dir() . '/dn_cap_' . bin2hex(random_bytes(4));
+@mkdir($capDir . '/photos', 0777, true);
+@mkdir($capDir . '/documents', 0777, true);
+file_put_contents($capDir . '/photos/standard-kit.png', $png);
+file_put_contents($capDir . '/documents/standard-kit.pdf', "%PDF-1.4\ntrailer\n%%EOF\n");
+
+$before = (string)file_get_contents($capDir . '/photos/standard-kit.png');
+
+is_(MediaLibrary::all($capDir)['standard-kit']['caption'] === '',
+    'a file arrives with no caption until one is written');
+
+is_(MediaLibrary::caption($capDir, 'image', 'Standard Kit', 'Dish, stand, router and cable'),
+    'a caption can be set by the product title, not just the file name');
+is_(MediaLibrary::all($capDir)['standard-kit']['caption'] === 'Dish, stand, router and cable',
+    'and it is what the library then reports');
+is_((string)file_get_contents($capDir . '/photos/standard-kit.png') === $before,
+    'writing a caption does not touch the image',
+    'a caption edit must never risk the file itself');
+
+// The photo and the PDF are captioned separately: the sentence that suits an
+// image of the kit is not the sentence that suits a specification sheet.
+is_(MediaLibrary::caption($capDir, 'document', 'standard-kit', 'Full specification sheet'),
+    'a document takes its own caption');
+is_(MediaLibrary::all($capDir)['standard-kit']['caption'] === 'Dish, stand, router and cable'
+    && MediaLibrary::documents($capDir)['standard-kit']['caption'] === 'Full specification sheet',
+    'and the photo keeps its own',
+    'one caption file serving both would send the spec-sheet wording with the photo');
+
+is_(MediaLibrary::caption($capDir, 'image', 'standard-kit', '   ') === true
+    && MediaLibrary::all($capDir)['standard-kit']['caption'] === '',
+    'clearing it goes back to sending the file bare');
+is_(!is_file($capDir . '/photos/standard-kit.txt'),
+    'and leaves no empty caption file behind');
+
+is_(MediaLibrary::caption($capDir, 'image', 'nothing-stored-here', 'text') === false,
+    'captioning something that is not there fails',
+    'otherwise a typo writes a caption no file will ever carry');
+is_(!is_file($capDir . '/photos/nothing-stored-here.txt'),
+    'and writes nothing');
+
+is_(MediaLibrary::caption($capDir, 'image', '', 'text') === false,
+    'an empty name is refused');
+
+// store() and caption() must not drift: one of them is used by the upload
+// form and the other by the edit button, on the same file.
+$lib = (string)file_get_contents($root . '/lib/MediaLibrary.php');
+is_(substr_count($lib, "'.txt'") <= 3,
+    'there is one place that decides where a caption lives',
+    'store() and caption() each computing the path is two rules for one file');
+
+$tool = (string)file_get_contents($root . '/tools/media.php');
+is_(strpos($tool, 'MediaLibrary::caption(') !== false,
+    'the command line sets captions through the library as well');
+is_(strpos($tool, "file_put_contents(\$capFile") === false,
+    'and does not write caption files itself');
+
+exec('rm -rf ' . escapeshellarg($capDir));
 exec('rm -rf ' . escapeshellarg($tmp));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

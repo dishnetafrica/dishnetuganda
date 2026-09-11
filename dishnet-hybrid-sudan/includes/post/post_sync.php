@@ -515,6 +515,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
     redirect('?page=dashboard&tab=hardware');
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'caption_hw_media') {
+    if (function_exists('csrfCheck')) csrfCheck();
+    require_once dirname(__DIR__, 2) . '/lib/MediaLibrary.php';
+    $kind = ($_POST['media_kind'] ?? '') === 'document' ? 'document' : 'image';
+    $nm   = (string)($_POST['media_name'] ?? '');
+    $cap  = trim((string)($_POST['media_caption'] ?? ''));
+    if (!MediaLibrary::caption($dataDir, $kind, $nm, $cap)) {
+        flash('Could not set that caption — there is nothing stored under "' . $nm . '".', 'danger');
+    } else {
+        flash($cap === ''
+            ? ('Caption removed. "' . $nm . '" will now be sent with no message.')
+            : ('"' . $nm . '" will be sent with: ' . $cap), 'success');
+    }
+    redirect('?page=dashboard&tab=hardware');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_hw_media') {
     if (function_exists('csrfCheck')) csrfCheck();
     require_once dirname(__DIR__, 2) . '/lib/MediaLibrary.php';

@@ -124,32 +124,51 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                 </td>
                 <?php
                   $_mk   = MediaLibrary::key((string)($hw['title'] ?? ''));
-                  $_hasP = $_mk !== '' && isset($_hwPhotos[$_mk]);
-                  $_hasD = $_mk !== '' && isset($_hwDocs[$_mk]);
+                  $_pho  = $_mk !== '' ? ($_hwPhotos[$_mk] ?? null) : null;
+                  $_doc  = $_mk !== '' ? ($_hwDocs[$_mk]   ?? null) : null;
                 ?>
                 <td style="text-align:center;font-size:11px;white-space:nowrap;">
-                  <?php foreach ([['image','Photo',$_hasP],['document','PDF',$_hasD]] as $_m): ?>
-                    <?php list($_mKind,$_mLabel,$_mHas) = $_m; ?>
-                    <?php if ($_mHas): ?>
-                      <form method="POST" style="display:inline" onsubmit="return confirm('Remove the <?= $_mLabel ?> for <?= h($hw['title']) ?>?');">
-                        <?= csrfField() ?>
-                        <input type="hidden" name="action" value="delete_hw_media">
-                        <input type="hidden" name="media_kind" value="<?= $_mKind ?>">
-                        <input type="hidden" name="media_name" value="<?= h($_mk) ?>">
-                        <button type="submit" title="Remove the <?= $_mLabel ?> — the assistant will stop sending it"
-                          style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:700;cursor:pointer;">&#10003; <?= $_mLabel ?></button>
-                      </form>
+                  <?php foreach ([['image','Photo',$_pho],['document','PDF',$_doc]] as $_m): ?>
+                    <?php
+                      list($_mKind,$_mLabel,$_mItem) = $_m;
+                      $_cap = $_mItem !== null ? (string)($_mItem['caption'] ?? '') : '';
+                    ?>
+                    <?php if ($_mItem !== null): ?>
+                      <span style="display:inline-block;white-space:nowrap;margin:0 3px;">
+                        <form method="POST" style="display:inline" onsubmit="return confirm('Remove the <?= $_mLabel ?> for <?= h($hw['title']) ?>?');">
+                          <?= csrfField() ?>
+                          <input type="hidden" name="action" value="delete_hw_media">
+                          <input type="hidden" name="media_kind" value="<?= $_mKind ?>">
+                          <input type="hidden" name="media_name" value="<?= h($_mk) ?>">
+                          <button type="submit" title="Remove the <?= $_mLabel ?> — the assistant will stop sending it"
+                            style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:5px;padding:2px 7px 2px 7px;font-size:11px;font-weight:700;cursor:pointer;">&#10003; <?= $_mLabel ?></button>
+                        </form><form method="POST" style="display:inline" onsubmit="return dnCaption(this);">
+                          <?= csrfField() ?>
+                          <input type="hidden" name="action" value="caption_hw_media">
+                          <input type="hidden" name="media_kind" value="<?= $_mKind ?>">
+                          <input type="hidden" name="media_name" value="<?= h($_mk) ?>">
+                          <input type="hidden" name="media_caption" value="<?= h($_cap) ?>">
+                          <input type="hidden" name="dn_label" value="<?= h($hw['title']) ?> — <?= $_mLabel ?>">
+                          <button type="submit"
+                            title="<?= $_cap !== ''
+                                    ? 'Sent with: ' . h($_cap)
+                                    : 'No caption — this ' . strtolower($_mLabel) . ' arrives on its own. Click to write one.' ?>"
+                            style="background:<?= $_cap !== '' ? '#eff6ff' : '#fef3c7' ?>;color:<?= $_cap !== '' ? '#1d4ed8' : '#92400e' ?>;border:1px solid <?= $_cap !== '' ? '#bfdbfe' : '#fde68a' ?>;border-left:none;border-radius:0 5px 5px 0;margin-left:-4px;padding:2px 6px;font-size:11px;font-weight:700;cursor:pointer;"><?= $_cap !== '' ? '&#9998;' : '&#9888;' ?></button>
+                        </form>
+                      </span>
                     <?php else: ?>
-                      <label style="display:inline-block;background:#f3f4f6;color:#6b7280;border:1px dashed #d1d5db;border-radius:5px;padding:2px 7px;font-weight:600;cursor:pointer;"
+                      <label style="display:inline-block;background:#f3f4f6;color:#6b7280;border:1px dashed #d1d5db;border-radius:5px;padding:2px 7px;margin:0 3px;font-weight:600;cursor:pointer;"
                              title="Upload a <?= $_mLabel ?> for <?= h($hw['title']) ?>">+ <?= $_mLabel ?>
                         <form method="POST" enctype="multipart/form-data" style="display:none">
                           <?= csrfField() ?>
                           <input type="hidden" name="action" value="upload_hw_media">
                           <input type="hidden" name="media_kind" value="<?= $_mKind ?>">
                           <input type="hidden" name="hw_title" value="<?= h($hw['title']) ?>">
+                          <input type="hidden" name="media_caption" value="">
+                          <input type="hidden" name="dn_label" value="<?= h($hw['title']) ?> — <?= $_mLabel ?>">
                           <input type="file" name="media_file"
                                  accept="<?= $_mKind === 'document' ? '.pdf' : '.jpg,.jpeg,.png,.webp' ?>"
-                                 onchange="this.form.submit()">
+                                 onchange="dnCaptionOnUpload(this.form); this.form.submit();">
                         </form>
                       </label>
                     <?php endif; ?>
@@ -276,6 +295,36 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
 
 <script>
 const _HW_TK = (document.cookie.match(/hybrid_token=([^;]+)/)||[])[1]||'';
+// A photo or PDF is sent WITH its caption. Without one the customer gets a
+// bare image, or a PDF attachment with nothing telling them what it is.
+function dnCaptionText(form) {
+    return (form.querySelector('input[name="dn_label"]') || {}).value || 'this file';
+}
+
+// On upload: ask, but never lose the file they just chose if they cancel.
+function dnCaptionOnUpload(form) {
+    var answer = window.prompt(
+        'Caption for ' + dnCaptionText(form) + '\n\n' +
+        'This is the message sent with the file. Leave it empty to send the\n' +
+        'file on its own — you can add one later from this screen.',
+        '');
+    form.querySelector('input[name="media_caption"]').value = answer === null ? '' : answer;
+    return true;
+}
+
+// On edit: cancelling means leave it exactly as it is.
+function dnCaption(form) {
+    var field  = form.querySelector('input[name="media_caption"]');
+    var answer = window.prompt(
+        'Caption for ' + dnCaptionText(form) + '\n\n' +
+        'This is the message sent with the file. Clear it to send the file\n' +
+        'on its own.',
+        field.value);
+    if (answer === null) return false;
+    field.value = answer;
+    return true;
+}
+
 function syncHw(hwId, btn) {
     btn.disabled = true; btn.textContent = '⏳';
     fetch('?page=api&action=sync_hardware_to_ucrm', {

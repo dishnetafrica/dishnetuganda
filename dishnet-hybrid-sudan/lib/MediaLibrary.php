@@ -204,12 +204,40 @@ class MediaLibrary
         if (!$moved) return self::fail('Could not save the file. Check the folder is writable.');
         @chmod($dest, 0664);
 
-        $capFile = $dir . '/' . $base . '.txt';
-        $caption = trim($caption);
-        if ($caption !== '') { @file_put_contents($capFile, mb_substr($caption, 0, 400)); }
-        elseif (is_file($capFile)) { @unlink($capFile); }
+        self::caption($dataDir, $kind, $base, $caption);
 
         return ['ok' => true, 'name' => $base, 'error' => ''];
+    }
+
+    /**
+     * Set or clear the caption on something already stored.
+     *
+     * A caption is sent WITH the file. Without one the customer gets a bare
+     * photo, or worse a bare PDF they have no reason to open. Passing an
+     * empty caption removes it and goes back to sending bare.
+     *
+     * Returns false when there is nothing stored under that name, so a
+     * caller never reports success for a file that is not there.
+     */
+    public static function caption(string $dataDir, string $kind, string $name,
+                                   string $caption): bool
+    {
+        $base = self::key($name);
+        if ($base === '') return false;
+        $isDoc = $kind === 'document';
+        $found = $isDoc ? self::findDocument($dataDir, $base) : self::find($dataDir, $base);
+        if ($found === null) return false;
+
+        $capFile = rtrim($dataDir, '/') . '/'
+                 . ($isDoc ? self::DIR_DOC : self::DIR) . '/' . $base . '.txt';
+        $caption = trim($caption);
+        if ($caption === '') {
+            if (is_file($capFile)) @unlink($capFile);
+            return true;
+        }
+        if (@file_put_contents($capFile, mb_substr($caption, 0, 400)) === false) return false;
+        @chmod($capFile, 0664);
+        return true;
     }
 
     /** Remove one item and its caption. Returns false when there was nothing there. */
