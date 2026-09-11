@@ -106,8 +106,8 @@
       "item_key": "BUSINESS_PLANS",
       "kind": "fact",
       "title": "Business plans (priority data + public IP)",
-      "answer": "Our DishNet Business plans run on Starlink Local Priority: a monthly priority-data block (50 GB, 500 GB or 1 TB) plus a PUBLIC IP address and priority support. After the priority data is used, unlimited standard data continues. They are ideal for offices, CCTV/remote access, VPNs and heavy users. Always quote the current prices from the live price list.",
-      "wa_answer": "💼 DishNet Business = priority data (50GB/500GB/1TB) + public IP + priority support. Unlimited standard data after. Great for offices, CCTV & VPN. Want today's prices?"
+      "answer": "DishNet Business runs on Starlink Local Priority. What you are buying is a PUBLIC IP and a monthly block of PRIORITY data (50 GB, 500 GB or 1 TB); after that block is used, unlimited standard data continues. The tier numbers are amounts of priority data — they are NOT speeds, and they are NOT how many people can connect. 50 GB is a small block: a busy site can use it in days or hours, and then it behaves like standard data. So choose a Business tier by how much priority data they need, never by how big the business is. The reason to be on Business at all is the public IP: CCTV viewed from elsewhere, VPN into the network, a server, remote access. A business with no public-IP requirement — a shop, a restaurant, a trading centre selling wifi, a guesthouse — is usually better served by the higher-capacity Residential plan with its unlimited standard data than by a small priority block. Always quote current prices from the live price list.",
+      "wa_answer": "💼 DishNet Business = a public IP + a monthly block of priority data (50GB/500GB/1TB), then unlimited standard data. The numbers are data amounts, not speeds or user counts. It's the right choice when you need CCTV, VPN or remote access from outside. Want me to check today's Business prices?"
     },
     {
       "item_key": "OBJECTION_CHEAPER_KIT",
@@ -168,6 +168,26 @@
       "kind": "rule",
       "title": "Establish the requirement before recommending a plan",
       "answer": "Never answer 'which plan should I buy' with a plan name before you know what it is for. For a household two short questions is enough — town, and how many people. For any organisation, or anyone mentioning CCTV, VPN, a server, remote access or more than one site, establish the public-IP requirement first: those are Business requirements and Residential will not do the job. Getting the recommendation right matters more than answering quickly, but never interrogate — ask one question at a time and stop as soon as you can answer."
+    },
+    {
+      "item_key": "MANY_USERS_HOTSPOT",
+      "kind": "fact",
+      "title": "Many users on one connection — trading centre, hotspot, school, church, hotel",
+      "answer": "A site where a lot of people connect is a network design job before it is a plan choice. One kit on its own does not serve fifty or a hundred people, whatever plan is on it: the dish brings the connection to the building, and a router plus access points, cabling and someone to size it are what carry it to the users. Never quote a number of simultaneous users — it depends on what each of them is doing, and we have no figure to give. Never answer it with the router's coverage area either. Say plainly that a site like theirs needs a proper setup, take the location, how many people they expect and what they will be doing, and hand over for a site assessment. A busy public site with no public-IP requirement usually belongs on the higher-capacity Residential plan with unlimited standard data, not on a small Business priority block.",
+      "wa_answer": "For a site with that many users you need more than the kit alone — a router and access points sized for the space, and a proper setup. I can't promise a number of users, it depends what everyone is doing. Tell me the location and roughly how many people, and I'll arrange a site assessment."
+    },
+    {
+      "item_key": "WIFI_VS_SATELLITE_COVERAGE",
+      "kind": "fact",
+      "title": "Coverage: does it reach my area vs how far does the wifi go",
+      "answer": "Three different questions, and mixing them up has given customers wrong answers. (1) Does Starlink reach my area — yes, it is satellite and covers Uganda nationally. (2) Will MY SITE work — that needs a clear view of the sky, and only a survey settles it; never promise a particular roof, compound or trading centre. (3) How far does the signal reach from the room — that is a WI-FI question, not a Starlink one. The router covers a room or two; walls and floors cut it down, and anything larger needs access points. The manufacturer's coverage figure is an AREA in ideal conditions, never a radius, and must never be offered as the distance the signal travels or used to size a hotspot.",
+      "wa_answer": "Starlink reaches everywhere in Uganda — what matters at your site is a clear view of the sky, which our technician confirms at survey. The wifi range is a separate thing: the router covers a room or two, and a bigger space needs access points. How large an area do you need to cover?"
+    },
+    {
+      "item_key": "RULE_SIZE_IS_NOT_A_PLAN",
+      "kind": "rule",
+      "title": "How big the customer is never decides the plan",
+      "answer": "Never move a customer to Business because they sound large, busy or commercial. Business exists for a public IP. Many users, a big building or a busy shop are reasons to look at the higher-capacity Residential plan and at the network — router, access points, cabling — not reasons to buy a priority-data block. If they have no public-IP requirement, do not quote Business, whatever size they are."
     }
   ]
 }

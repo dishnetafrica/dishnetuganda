@@ -56,7 +56,11 @@ is_(stripos($raw, 'price') === false || stripos($raw, 'NO PRICES') !== false,
 echo "\nThe coverage number never appears without its caveat\n";
 $p = HardwareKnowledge::promptBlock($FILE, '2026-09-10');
 is_(strpos($p, '112 m2') !== false || strpos($p, '112 m') !== false, 'Mini coverage is stated');
-has('and immediately qualified', $p, 'NOT a promise of Wi-Fi everywhere');
+// Strengthened after the figure was given to a customer as a "coverage
+// radius" for a trading centre. It is an area, in ideal conditions, and it
+// sizes nothing public.
+has('and immediately qualified', $p, 'never a RADIUS');
+has('and never sizes a public site', $p, 'never use it to size a trading centre');
 has('the dish and the Wi-Fi are separated explicitly', $p, 'THE DISH IS NOT THE WI-FI');
 has('and a bigger dish is named as the wrong fix', $p, 'does not fix a weak signal');
 

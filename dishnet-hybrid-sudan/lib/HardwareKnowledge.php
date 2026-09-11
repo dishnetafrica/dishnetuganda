@@ -87,9 +87,19 @@ class HardwareKnowledge
             // this number becomes a promise about Wi-Fi in a building, which is
             // the most damaging thing on the page.
             if (!empty($m['coverage_m2'])) {
-                $p .= "  Coverage: about " . (int)$m['coverage_m2'] . " m2 — this is the "
-                    . "hardware's own figure, NOT a promise of Wi-Fi everywhere in a "
-                    . "building of that size.\n";
+                // Asked "what is the coverage radius from the service room?", the
+                // assistant answered "approximately 297 square meters" — an area
+                // reported as a radius, for a trading centre expecting a hundred
+                // users, from a figure that describes a domestic router. The
+                // caveat was there; it was not strong enough to stop the number
+                // being used as an answer it cannot be.
+                $p .= "  Wi-Fi area: the maker quotes about " . (int)$m['coverage_m2']
+                    . " m2 for the router in ideal conditions. It is an AREA, never a RADIUS, "
+                    . "and never a promise — walls, floors and people cut it down hard. Do NOT "
+                    . "offer it as the answer to \"how far does the signal reach\", and never "
+                    . "use it to size a trading centre, a hotspot, a school, a church, a hotel "
+                    . "or anywhere the public connects. Those need access points and someone "
+                    . "to design the network.\n";
             } else {
                 $line('Coverage', null);
             }

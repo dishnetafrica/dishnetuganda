@@ -405,6 +405,39 @@ $SCENARIOS = [
      'must_not' => ['yes it will work fine', 'trees are not a problem']],
   ],
 
+  // ── From a real conversation, answered wrong ──────────────────────────
+  // Luuka District trading centre. Quoted Business 50 with no public-IP
+  // requirement anywhere in the thread, told its wifi "radius" was 297 square
+  // metres, and never told that a hundred users needs a designed network.
+
+  'ug_wifi_radius' => [
+    ['say' => 'what is the wifi coverage radius from the service room?',
+     'any'      => ['access point', 'room', 'router', 'how large', 'area'],
+     'must_not' => ['radius of', '297 square', 'radius is approximately',
+                    'coverage radius']],
+  ],
+
+  'ug_hundred_users' => [
+    ['say' => 'can a standard kit allow 100 connections at the same time?',
+     'any'      => ['access point', 'site', 'assess', 'survey', 'network', 'setup'],
+     'must_not' => ['yes it can support 100', 'yes, 100', 'up to 100 users',
+                    'it supports 100']],
+  ],
+
+  // A trading centre selling wifi has no public IP requirement. Business 50 is
+  // a 50 GB priority block it would exhaust in hours.
+  'ug_trading_centre' => [
+    ['say' => 'I run a trading centre in Luuka and want to sell wifi to about 100 people',
+     'must_not' => ['business 50', 'i recommend business', 'local priority is best']],
+  ],
+
+  'ug_site_coverage' => [
+    ['say' => 'will Starlink work at my place in Luuka District?',
+     'any'      => ['clear view', 'sky', 'survey', 'technician', 'check'],
+     'must_not' => ['yes it will work at your', 'your site will be within coverage',
+                    'guaranteed to work']],
+  ],
+
   // Uganda facts that must never drift back to Sudan's defaults.
   'ug_office_and_payment' => [
     ['say' => 'where is your office and how do I pay?',

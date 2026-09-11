@@ -119,7 +119,11 @@ has('support role named', $support, 'YOUR ROLE ON THIS NUMBER: SUPPORT');
 has('account role named', $account, 'YOUR ROLE ON THIS NUMBER: ACCOUNTS');
 hasnt('sales cannot see billing', $sales, 'YOUR ROLE ON THIS NUMBER: ACCOUNTS');
 has('sales advises on need, not product name', $sales, 'describe a NEED');
-has('sales must not confirm coverage', $sales, 'Never confirm either');
+// Was 'Never confirm either', which contradicted COVERAGE_UGANDA — Starlink
+// does reach the whole country, and the assistant was told both. What must
+// never be confirmed is a particular SITE, which only a survey settles.
+has('sales must not promise a site works', $sales, 'never promise a particular roof');
+has('and sends it to a survey instead',    $sales, 'only a survey');
 has('support reads live line status', $support, 'LINE STATUS shows the connection is up');
 has('account refuses unidentified callers', $account, 'Do not confirm or deny');
 t('only sales offers QUOTE', [strpos($sales,'<<QUOTE')!==false, strpos($account,'<<QUOTE')!==false], [true,false]);

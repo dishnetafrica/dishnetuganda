@@ -55,7 +55,8 @@ $data  = strpos($p, 'PLANS (live');
 t('never-invent rule exists', is_int($rules), true);
 t('rules come before data', $rules !== false && $data !== false && $rules < $data, true);
 has('no-discount rule', $p, 'no authority to discount');
-has('coverage never confirmed', $p, 'Never confirm either');
+// The country is answerable; the site is not. See test_coverage_and_scale.php.
+has('a specific site is never promised', $p, 'never promise a particular roof');
 
 // ── 4. Provider failure = handover, never an exception ──────────────────
 try {
