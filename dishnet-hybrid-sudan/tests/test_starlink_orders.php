@@ -75,6 +75,54 @@ t('the fourth shipped',        $delivered['shipped'], true);
 t('its kit line is delivered', $delivered['lines'][0]['delivered'], true);
 t('and names what arrived',    $delivered['lines'][0]['serial'], 'KIT409033426KFR');
 
+// ── The payment feed ────────────────────────────────────────────────────────
+echo "\nStarlink's own payment feed\n";
+// The ORDER date is not the PAYMENT date. Order ORD-…NCEAA was placed on the
+// 8th and its card charged at 22:18 UTC — which is 01:18 the next morning in
+// Kampala, so it reaches the bank statement on the 9th. Reconciling on the
+// order date puts it two days early and, with twelve identical payments in
+// nine days, quietly ties it to the wrong debit.
+$payRaw = json_decode((string)file_get_contents(__DIR__ . '/fixtures/starlink_payments_raw.json'), true);
+$pf = StarlinkOrderImport::paymentsFromRawApi($payRaw);
+t('four captured payments', count($pf), 4);
+t('keyed by the order they paid for', isset($pf['ORD-DF-E92VQQNWJEYRPN5WQ1']), true);
+t('with the day the card was charged', $pf['ORD-DF-NCEAA5MG73JS68L76B']['date'], '2026-09-08');
+t('and the moment, to the second',
+    $pf['ORD-DF-NCEAA5MG73JS68L76B']['datetime'], '2026-09-08T22:18:29.966295');
+t('the amount',   $pf['ORD-DF-NCEAA5MG73JS68L76B']['amount'], 1859520.0);
+t('the currency', $pf['ORD-DF-NCEAA5MG73JS68L76B']['currency'], 'UGX');
+t('and Starlink\'s own payment id',
+    $pf['ORD-DF-NCEAA5MG73JS68L76B']['ref'], '01a08319-eecd-1a4b-52bf-1da069719292');
+// A declined card is not money. Booking one would show a bill as settled that
+// the supplier is still waiting to be paid.
+t('a failed payment is not a payment', isset($pf['ORD-DF-DECLINED-EXAMPLE']), false);
+
+$tmpP = sys_get_temp_dir() . '/dn_slpay_' . bin2hex(random_bytes(4));
+@mkdir($tmpP, 0777, true);
+$sP = SqliteStore::create($tmpP); $pP = $sP->getPdo();
+$stP = StockService::fromStore($sP, $tmpP); $stP->ensureTables();
+$impP = new StarlinkOrderImport($pP, $tmpP, [], null, $stP);
+$impP->import($orders, $actor, ['commit' => true, 'payments' => $pf]);
+$paid = $pP->query("SELECT s.supplier_ref, p.paid_on, p.reference FROM stock_purchase_payments p
+                    JOIN stock_purchases s ON s.id = p.purchase_id")->fetchAll(PDO::FETCH_ASSOC);
+$byOrder = [];
+foreach ($paid as $row) $byOrder[$row['supplier_ref']] = $row;
+t('the payment is dated when the card was charged',
+    $byOrder['ORD-DF-NCEAA5MG73JS68L76B']['paid_on'], '2026-09-08');
+t('and carries Starlink\'s payment id as its reference',
+    $byOrder['ORD-DF-NCEAA5MG73JS68L76B']['reference'], '01a08319-eecd-1a4b-52bf-1da069719292');
+
+// Without the feed, the order date has to stand in — which is what it is,
+// a stand-in, and the import says so rather than pretending otherwise.
+$tmpQ = sys_get_temp_dir() . '/dn_slpay2_' . bin2hex(random_bytes(4));
+@mkdir($tmpQ, 0777, true);
+$sQ = SqliteStore::create($tmpQ); $pQ = $sQ->getPdo();
+$stQ = StockService::fromStore($sQ, $tmpQ); $stQ->ensureTables();
+(new StarlinkOrderImport($pQ, $tmpQ, [], null, $stQ))->import($orders, $actor, ['commit' => true]);
+$note = $pQ->query("SELECT note FROM stock_purchase_payments LIMIT 1")->fetchColumn();
+t('and says the date is the order date', $note, 'paid to Starlink at order time');
+exec('rm -rf ' . escapeshellarg($tmpP) . ' ' . escapeshellarg($tmpQ));
+
 // ── A dry run writes nothing ────────────────────────────────────────────────
 echo "\nA dry run is a dry run\n";
 $imp = new StarlinkOrderImport($pdo, $tmp, [], null, $stock);
@@ -442,6 +490,10 @@ echo "\nNo secret in the fixture\n";
 $fx = (string)file_get_contents(__DIR__ . '/fixtures/starlink_orders_raw.json');
 foreach (['Starlink.Com.Sso', 'Starlink.Com.Access', 'clientside-cookie', 'dishnetafrica.com'] as $leak) {
     is_(stripos($fx, $leak) === false, "the fixture carries no {$leak}");
+}
+$fp = (string)file_get_contents(__DIR__ . '/fixtures/starlink_payments_raw.json');
+foreach (['Starlink.Com.Sso', 'Starlink.Com.Access', 'clientside-cookie'] as $leak) {
+    is_(stripos($fp, $leak) === false, "nor does the payment fixture carry {$leak}");
 }
 
 foreach ([$tmp, $tmp2, $tmp3, $tmp4, $tmp5] as $dir) exec('rm -rf ' . escapeshellarg($dir));

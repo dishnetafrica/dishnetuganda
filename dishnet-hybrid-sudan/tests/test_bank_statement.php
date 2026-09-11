@@ -195,11 +195,14 @@ $h = FinAudit::history($pdo, 'stock_purchase_payment', (int)$pay['id']);
 is_(count($h) >= 1 && strpos((string)$h[0]['reason'], 'BANK-2454007677') !== false,
     'and the match itself is on the record', (string)($h[0]['reason'] ?? ''));
 
-echo "\nTwelve identical payments cannot be told apart by amount\n";
-// The live case: one supplier, one amount, nine days, and neither the bank
-// reference nor the order number on the other side. The nearest date is the
-// best key there is — and where more than one order fits, saying so is the
-// whole of the honesty.
+echo "\nA bank cannot post a payment before it was made\n";
+// The live case, from Starlink's own payment feed: four payments of the same
+// amount made on the 2nd, the 8th and twice on the 10th, against twelve
+// identical bank debits. A symmetric date window let the debit posted on the
+// 3rd claim the payment made on the 8th — five days in the future — and with
+// twelve identical amounts it looked like a clean match. Starlink stamps UTC
+// and Ecobank posts in EAT, so a posting date is never earlier than the
+// payment date. Same day or after, never before.
 $tmpA = sys_get_temp_dir() . '/dn_bank_amb_' . bin2hex(random_bytes(4));
 @mkdir($tmpA, 0777, true);
 $sA = SqliteStore::create($tmpA); $pA = $sA->getPdo();
@@ -208,31 +211,72 @@ $stA = StockService::fromStore($sA, $tmpA); $stA->ensureTables();
 $kA = (int)($stA->saveCategory(['title' => 'Kit', 'sku' => 'K', 'service_type' => 'starlink',
     'track_mode' => 'serial'])['id'] ?? 0);
 $purA = new PurchaseService($pA, $tmpA, $stA);
-foreach (['2026-09-02', '2026-09-03'] as $i => $d) {
-    $x = $purA->receive(['supplier' => 'Starlink', 'invoice_number' => 'INV-' . $i,
-        'supplier_ref' => 'ORD-' . $i, 'purchase_date' => $d, 'currency' => 'UGX',
-        'total_cost' => 1859520, 'idem_key' => 'o' . $i],
+$order = function (string $ref, string $paidOn) use ($purA, $kA) {
+    $x = $purA->receive(['supplier' => 'Starlink', 'invoice_number' => 'INV-' . $ref,
+        'supplier_ref' => $ref, 'purchase_date' => $paidOn, 'currency' => 'UGX',
+        'total_cost' => 1859520, 'idem_key' => 'o' . $ref],
         [['category_id' => $kA, 'quantity' => 1, 'unit_cost' => 1575864, 'tax_rate' => 18]],
         ['id' => 0, 'name' => 't']);
-    $purA->recordPayment((int)$x['id'], ['amount' => 1859520, 'paid_on' => $d, 'method' => 'card'],
+    $purA->recordPayment((int)$x['id'], ['amount' => 1859520, 'paid_on' => $paidOn, 'method' => 'card'],
         ['id' => 0, 'name' => 't']);
-}
+};
+// Exactly the live shape: one on the 2nd, one on the 8th, two on the 10th.
+$order('ORD-E92VQ', '2026-09-02');
+$order('ORD-NCEAA', '2026-09-08');
+$order('ORD-I1GQ2', '2026-09-10');
+$order('ORD-1TV9K', '2026-09-10');
 $bA = (int)($cbA->addAccount('Ecobank – UGX', 'UGX', 'bank')['id'] ?? 0);
-$twoRows = "Posting Date,Description,Debit,Credit,Running Balance,Transaction Reference\n"
-    . "09/02/2026,Starlink POS PURCHASE,\"1,859,520.00\",,\"8,140,480.00\",A1\n"
-    . "09/03/2026,Starlink POS PURCHASE,\"1,859,520.00\",,\"6,280,960.00\",A2";
-$rA = (new BankImport($cbA, $pA))->import(BankStatement::parse($twoRows)['rows'], $bA, ['commit' => true]);
-t('both are matched', $rA['matched'], 2);
-t('neither is forced into suspense', $rA['suspense'], 0);
-t('and both are flagged as date-only matches', $rA['ambiguous'], 2);
+
+// Twelve identical debits, on the days the bank actually posted them.
+$days = ['09/02', '09/03', '09/03', '09/04', '09/04', '09/07', '09/07', '09/07',
+         '09/07', '09/09', '09/10', '09/10'];
+$csv = "Posting Date,Description,Debit,Credit,Running Balance,Transaction Reference\n";
+$bal = 25000000.0; $n = 0;
+foreach ($days as $d) { $bal -= 1859520; $csv .= "{$d}/2026,Starlink POS PURCHASE,1859520,,{$bal}," . ('B' . ++$n) . "\n"; }
+$rowsA = BankStatement::parse($csv)['rows'];
+t('the statement still adds up', BankStatement::verifyChain($rowsA)['ok'], true);
+
+$rA = (new BankImport($cbA, $pA))->import($rowsA, $bA, ['commit' => true]);
+t('four of the twelve are ours', $rA['matched'], 4);
+t('and eight belong to accounts we have not imported', $rA['suspense'], 8);
+
+$linked = $pA->query(
+    "SELECT s.supplier_ref, l.date FROM stock_purchase_payments p
+     JOIN stock_purchases s ON s.id = p.purchase_id
+     JOIN cb_ledger l ON l.id = p.cb_ledger_id
+     ORDER BY s.supplier_ref")->fetchAll(PDO::FETCH_KEY_PAIR);
+t('the payment made on the 2nd is the debit posted on the 2nd',
+    $linked['ORD-E92VQ'] ?? '', '2026-09-02');
+t('the payment made late on the 8th posted on the 9th, not the 3rd',
+    $linked['ORD-NCEAA'] ?? '', '2026-09-09');
+t('and the two made on the 10th posted on the 10th',
+    [$linked['ORD-I1GQ2'] ?? '', $linked['ORD-1TV9K'] ?? ''], ['2026-09-10', '2026-09-10']);
+is_(!in_array('2026-09-03', $linked, true) && !in_array('2026-09-04', $linked, true)
+    && !in_array('2026-09-07', $linked, true),
+    'no debit claims a payment that had not happened yet', implode(' ', $linked));
+
+// The two made on the same day ARE interchangeable, and it says so.
+t('only the same-day pair is a guess', $rA['ambiguous'], 2);
 is_(count(array_filter($rA['notes'], static fn($n) => strpos($n, 'best fit, not a certainty') !== false)) === 1,
-    'with one note saying the totals do not depend on it');
+    'said once, not per row');
 $invA = null;
 foreach ($cbA->accounts() as $a) if ($a['kind'] === 'inventory') $invA = $a;
 t('the money is right whichever way round they went',
-    $cbA->accountBalance((int)$invA['id']), 3719040.0);
-$linked = (int)$pA->query("SELECT COUNT(*) FROM stock_purchase_payments WHERE cb_ledger_id > 0")->fetchColumn();
-t('each payment is claimed exactly once', $linked, 2);
+    $cbA->accountBalance((int)$invA['id']), 7438080.0);
+t('each payment is claimed exactly once',
+    (int)$pA->query("SELECT COUNT(*) FROM stock_purchase_payments WHERE cb_ledger_id > 0")->fetchColumn(), 4);
+
+// The settlement window has to be ENFORCED, not merely written down. PDO
+// binds an int as a string, and SQLite sorts any text above any number, so
+// `BETWEEN 0 AND ?` with a bound 3 silently accepts every payment ever made.
+// It passed its own tests while matching a debit to a payment three weeks old.
+$far = BankStatement::parse(
+    "Posting Date,Description,Debit,Credit,Running Balance,Transaction Reference\n"
+  . "09/30/2026,Starlink POS PURCHASE,1859520,,1000000,FAR1")['rows'];
+$rFar = (new BankImport($cbA, $pA))->import($far, $bA, []);
+t('a debit three weeks after the last payment matches nothing', $rFar['matched'], 0);
+t('and goes to suspense instead', $rFar['suspense'], 1);
+
 exec('rm -rf ' . escapeshellarg($tmpA));
 
 echo "\nImporting the same statement again\n";

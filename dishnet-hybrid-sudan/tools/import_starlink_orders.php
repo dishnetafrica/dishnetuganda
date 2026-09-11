@@ -48,10 +48,10 @@ $val = function (string $f) use ($args): string {
 };
 foreach ($args as $a) {
     if (strpos($a, '--') !== 0) continue;
-    if (!in_array($a, ['--file', '--category', '--new-category', '--commit', '--supplier'], true)) {
+    if (!in_array($a, ['--file', '--payments', '--category', '--new-category', '--commit', '--supplier'], true)) {
         fwrite(STDERR, "\n  Unknown option: {$a}\n");
-        fwrite(STDERR, "  Known: --file <json> --category <id> --new-category <title>"
-                     . " --supplier <name> --commit\n\n");
+        fwrite(STDERR, "  Known: --file <json> --payments <json> --category <id>"
+                     . " --new-category <title> --supplier <name> --commit\n\n");
         exit(2);
     }
 }
@@ -67,9 +67,8 @@ $stock->ensureTables();
 $file = trim($val('--file'));
 $orders = []; $source = '';
 
-if ($file !== '') {
-    if (!is_file($file)) { fwrite(STDERR, "\n  No such file: {$file}\n\n"); exit(1); }
-    $blob = (string)@file_get_contents($file);
+$readSaved = function (string $path): array {
+    $blob = (string)@file_get_contents($path);
 
     // Checked BEFORE the JSON is parsed. Somebody who saved the whole request
     // rather than the response has a file that is not valid JSON AND has a
@@ -87,12 +86,32 @@ if ($file !== '') {
 
     $raw = json_decode($blob, true);
     if (!is_array($raw)) {
-        fwrite(STDERR, "\n  {$file} is not valid JSON.\n\n");
+        fwrite(STDERR, "\n  {$path} is not valid JSON.\n\n");
         fwrite(STDERR, "  It should be the RESPONSE body on its own — starting {\"content\": —\n");
         fwrite(STDERR, "  with no request headers above it.\n\n");
         exit(1);
     }
-    $orders = StarlinkOrderImport::fromRawApi($raw);
+    return $raw;
+};
+
+// Starlink's payment feed, if it was saved too. It is the only place an order
+// number and the moment its card was charged appear together, which is what
+// lets a bank statement be reconciled to the day rather than to the week.
+$payments = [];
+$payFile  = trim($val('--payments'));
+if ($payFile !== '') {
+    if (!is_file($payFile)) { fwrite(STDERR, "\n  No such file: {$payFile}\n\n"); exit(1); }
+    $payments = StarlinkOrderImport::paymentsFromRawApi($readSaved($payFile));
+    if ($payments === []) {
+        fwrite(STDERR, "\n  {$payFile} has no captured payments in it.\n");
+        fwrite(STDERR, "  Expected the response from /billing/v1/public/payment/with-invoices\n\n");
+        exit(1);
+    }
+}
+
+if ($file !== '') {
+    if (!is_file($file)) { fwrite(STDERR, "\n  No such file: {$file}\n\n"); exit(1); }
+    $orders = StarlinkOrderImport::fromRawApi($readSaved($file));
     $source = $file . ' (full API response — serials included)';
 } else {
     require_once $root . '/lib/SiblingPlugin.php';
@@ -200,10 +219,19 @@ $r = $imp->import($orders, $actor, [
     'commit'      => $commit,
     'category_id' => $catId,
     'supplier'    => trim($val('--supplier')) ?: '',
+    'payments'    => $payments,
 ]);
 
 echo "\n  STARLINK ORDERS → PURCHASES" . ($commit ? '' : '   (dry run — nothing written)') . "\n";
 printf("  source: %s\n", $source);
+if ($payments !== []) {
+    printf("  paid:   %s (%d captured payment(s) — exact payment dates)\n",
+           $payFile, count($payments));
+} else {
+    printf("  paid:   no payment feed given — the ORDER date stands in for the\n"
+         . "          payment date, which can be a day out on a bank statement.\n"
+         . "          Save /billing/v1/public/payment/with-invoices and pass --payments.\n");
+}
 echo "  " . str_repeat('─', 72) . "\n\n";
 
 foreach ($r['planned'] as $p) {

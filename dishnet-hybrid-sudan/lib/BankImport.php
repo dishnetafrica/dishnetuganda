@@ -40,8 +40,25 @@ require_once __DIR__ . '/FinAudit.php';
  */
 final class BankImport
 {
-    /** How close a bank debit and a recorded supplier payment must be to be the same act. */
-    private const MATCH_WINDOW_DAYS = 7;
+    /**
+     * How long after a payment its bank posting may appear.
+     *
+     * DIRECTIONAL, and that is the whole point. A bank cannot post a payment
+     * before it was made. A symmetric window let a debit posted on the 3rd
+     * claim a payment made on the 8th — five days in the future — and because
+     * twelve payments here are the same amount, it looked like a clean match.
+     *
+     * Starlink stamps UTC; Ecobank posts in EAT (UTC+3), so a local posting
+     * date is never earlier than the UTC payment date. Same day or after,
+     * never before.
+     *
+     * Written into the SQL rather than bound, deliberately. PDO binds an int
+     * as a string unless told otherwise, and SQLite sorts any text above any
+     * number — so `BETWEEN 0 AND ?` with a bound 3 has no upper bound at all
+     * and silently matches every payment ever made. It is a compile-time int
+     * constant, so there is nothing to inject.
+     */
+    private const SETTLE_LAG_DAYS = 3;
 
     private CashbookService $cb;
     private \PDO $db;
@@ -290,9 +307,9 @@ final class BankImport
                  WHERE ROUND(p.amount, 2) = ROUND(?, 2)
                    AND UPPER(p.currency) = ?
                    AND (p.cb_ledger_id IS NULL OR p.cb_ledger_id = 0)
-                   AND ABS(julianday(p.paid_on) - julianday(?)) <= ?
-                 ORDER BY ABS(julianday(p.paid_on) - julianday(?))");
-            $st->execute([$r['debit'], $cur, $r['date'], self::MATCH_WINDOW_DAYS, $r['date']]);
+                   AND julianday(?) - julianday(p.paid_on) BETWEEN 0 AND " . (int)self::SETTLE_LAG_DAYS . "
+                 ORDER BY julianday(?) - julianday(p.paid_on)");
+            $st->execute([$r['debit'], $cur, $r['date'], $r['date']]);
             $all = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
             if ($all === []) return null;
 
@@ -304,8 +321,8 @@ final class BankImport
             $cnt = $this->db->prepare(
                 "SELECT COUNT(*) FROM stock_purchase_payments
                  WHERE ROUND(amount, 2) = ROUND(?, 2) AND UPPER(currency) = ?
-                   AND ABS(julianday(paid_on) - julianday(?)) <= ?");
-            $cnt->execute([$r['debit'], $cur, $r['date'], self::MATCH_WINDOW_DAYS]);
+                   AND julianday(?) - julianday(paid_on) BETWEEN 0 AND " . (int)self::SETTLE_LAG_DAYS);
+            $cnt->execute([$r['debit'], $cur, $r['date']]);
             $candidates = max(1, (int)$cnt->fetchColumn());
 
             foreach ($all as $row) {

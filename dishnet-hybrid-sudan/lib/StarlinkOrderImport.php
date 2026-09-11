@@ -137,6 +137,50 @@ final class StarlinkOrderImport
         return $out;
     }
 
+    /**
+     * Payments out of a /billing/payment/with-invoices response.
+     *
+     * This is the only place the two sides meet: a payment carries its exact
+     * timestamp, its amount, and the order numbers it was applied to. Without
+     * it, a bank debit has to be tied to an order by amount and date — and
+     * when twelve payments are the same amount inside nine days, that is a
+     * guess. With it, the order date stops standing in for the payment date,
+     * which is not the same thing: an order placed late on the 8th is paid at
+     * 22:18 UTC and reaches a Kampala bank statement on the 9th.
+     *
+     * @return array<string,array{date:string,amount:float,currency:string,
+     *                            ref:string,status:string}> keyed by order number
+     */
+    public static function paymentsFromRawApi(array $payload): array
+    {
+        $results = $payload['content']['results'] ?? $payload['results'] ?? [];
+        if (!is_array($results)) return [];
+
+        $out = [];
+        foreach ($results as $p) {
+            if (!is_array($p)) continue;
+            // Only money that actually left. A failed or pending authorisation
+            // is not a payment, and booking one would show a bill as settled
+            // that the supplier is still waiting on.
+            if (strcasecmp(trim((string)($p['status'] ?? '')), 'Captured') !== 0) continue;
+            $when = trim((string)($p['paymentDate'] ?? ''));
+            if ($when === '') continue;
+            foreach ((array)($p['appliedOrderNumbers'] ?? []) as $orderNo) {
+                $orderNo = trim((string)$orderNo);
+                if ($orderNo === '') continue;
+                $out[$orderNo] = [
+                    'date'     => substr($when, 0, 10),
+                    'datetime' => $when,
+                    'amount'   => round((float)($p['amount'] ?? 0), 2),
+                    'currency' => strtoupper(trim((string)($p['currencyCode'] ?? ''))) ?: 'UGX',
+                    'ref'      => trim((string)($p['publicId'] ?? '')),
+                    'method'   => trim((string)($p['paymentMethod'] ?? '')),
+                ];
+            }
+        }
+        return $out;
+    }
+
     /** One order, in the shape import() takes. */
     private static function order(array $o, array $lines, bool $complete): array
     {
@@ -162,7 +206,8 @@ final class StarlinkOrderImport
     /**
      * @param array $orders from fromRawApi() or fromDrOrders()
      * @param array $actor  staff row: id, name
-     * @param array $opts   ['commit' => bool, 'category_id' => int, 'supplier' => string]
+     * @param array $opts   ['commit' => bool, 'category_id' => int, 'supplier' => string,
+     *                        'payments' => array from paymentsFromRawApi()]
      *
      * @return array{ok:bool, purchases:int, skipped:int, units:int,
      *               notes:string[], errors:string[], planned:array}
@@ -178,6 +223,7 @@ final class StarlinkOrderImport
         if ($supplier === '') $supplier = 'Starlink';
         $catId    = (int)($opts['category_id'] ?? 0);
 
+        $payments = (array)($opts['payments'] ?? []);
         $made = 0; $skipped = 0; $units = 0; $landed = false;
         $notes = []; $errors = []; $planned = [];
 
@@ -263,12 +309,19 @@ final class StarlinkOrderImport
                     // these bills are settled and must not sit on a report of
                     // what DishNet owes.
                     if ($o['paid']) {
+                        // The payment feed knows WHEN, to the second. The order
+                        // date is only a stand-in for it, and the two differ by
+                        // a day often enough to matter: a bank statement is
+                        // reconciled on the day the money moved.
+                        $pf = $payments[$o['order_number']] ?? null;
                         $p = $this->purchases->recordPayment($existing, [
                             'amount'    => $o['total'],
-                            'paid_on'   => $o['ordered_on'] ?: date('Y-m-d'),
+                            'paid_on'   => $pf['date'] ?? ($o['ordered_on'] ?: date('Y-m-d')),
                             'method'    => 'card',
-                            'reference' => $o['invoice_number'],
-                            'note'      => 'paid to Starlink at order time',
+                            'reference' => $pf['ref'] ?? $o['invoice_number'],
+                            'note'      => $pf
+                                ? 'paid to Starlink ' . $pf['datetime'] . ' UTC'
+                                : 'paid to Starlink at order time',
                         ], $actor);
                         if (empty($p['ok'])) $errors[] = $o['order_number'] . ' payment: ' . (string)$p['error'];
                     }

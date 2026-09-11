@@ -1,0 +1,69 @@
+{
+  "content": {
+    "totalCount": 4,
+    "pageIndex": 0,
+    "limit": 10,
+    "isLastPage": true,
+    "results": [
+      {
+        "publicId": "01a08a8c-5922-71d4-8d69-64964c55acba",
+        "currencyCode": "UGX",
+        "amount": 1859520,
+        "status": "Captured",
+        "failureReason": null,
+        "paymentDate": "2026-09-10T09:00:48.803604",
+        "paymentMethod": "CreditCard",
+        "appliedInvoiceNumbers": ["INV-DF-UGA-2531-55173-40"],
+        "appliedOrderNumbers": ["ORD-DF-1TV9KE23FHG7VBKXHL"]
+      },
+      {
+        "publicId": "01a08a8b-1056-1402-2aed-4ba5a3d65e81",
+        "currencyCode": "UGX",
+        "amount": 1859520,
+        "status": "Captured",
+        "failureReason": null,
+        "paymentDate": "2026-09-10T08:59:24.630836",
+        "paymentMethod": "CreditCard",
+        "appliedInvoiceNumbers": ["INV-DF-UGA-2530-86674-49"],
+        "appliedOrderNumbers": ["ORD-DF-I1GQ2BIFU0B2LK2WFY"]
+      },
+      {
+        "publicId": "01a08319-eecd-1a4b-52bf-1da069719292",
+        "currencyCode": "UGX",
+        "amount": 1859520,
+        "status": "Captured",
+        "failureReason": null,
+        "paymentDate": "2026-09-08T22:18:29.966295",
+        "paymentMethod": "CreditCard",
+        "appliedInvoiceNumbers": ["INV-DF-UGA-2485-92462-50"],
+        "appliedOrderNumbers": ["ORD-DF-NCEAA5MG73JS68L76B"]
+      },
+      {
+        "publicId": "01a063d3-23e1-0be9-57c3-24af8c3f73c6",
+        "currencyCode": "UGX",
+        "amount": 1859520,
+        "status": "Captured",
+        "failureReason": null,
+        "paymentDate": "2026-09-02T20:32:56.803298",
+        "paymentMethod": "CreditCard",
+        "appliedInvoiceNumbers": ["INV-DF-UGA-2172-53582-43"],
+        "appliedOrderNumbers": ["ORD-DF-E92VQQNWJEYRPN5WQ1"]
+      },
+      {
+        "publicId": "01a05555-0000-0000-0000-000000000000",
+        "currencyCode": "UGX",
+        "amount": 1859520,
+        "status": "Failed",
+        "failureReason": "Card declined",
+        "paymentDate": "2026-09-01T10:00:00.000000",
+        "paymentMethod": "CreditCard",
+        "appliedInvoiceNumbers": [],
+        "appliedOrderNumbers": ["ORD-DF-DECLINED-EXAMPLE"]
+      }
+    ]
+  },
+  "errors": [],
+  "warnings": [],
+  "information": [],
+  "isValid": true
+}
