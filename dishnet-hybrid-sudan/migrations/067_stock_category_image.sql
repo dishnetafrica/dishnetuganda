@@ -1,0 +1,14 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- 067: stock_categories.image_url, declared where the rest of the schema is.
+--
+-- The column existed in exactly one place: the CREATE TABLE inside
+-- StockService::ensureTables(), which runs only when stock_categories does
+-- NOT already exist. Migration 036 creates it, and 036 runs first on every
+-- install, so that branch was never taken and the ALTER beside it never ran
+-- either. saveCategory() writes image_url, so saving a stock category threw
+-- "table stock_categories has no column named image_url" on every database
+-- that had ever booted.
+--
+-- Adding it here rather than in the service, because a column that only one
+-- code path knows about is how this happened.
+ALTER TABLE stock_categories ADD COLUMN image_url TEXT DEFAULT '';

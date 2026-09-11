@@ -63,6 +63,45 @@ class MigrationRunner
     }
 
     /**
+     * Remove -- comments, leaving string literals alone.
+     *
+     * Character by character rather than a regular expression: a '--' inside
+     * a quoted string is data, not a comment, and a regex that cannot see
+     * quotes would cut a statement in half at the first default value that
+     * happens to contain two hyphens.
+     *
+     * Newlines are kept so that line numbers in any error still mean
+     * something.
+     */
+    public static function stripComments(string $sql): string
+    {
+        $out = '';
+        $len = strlen($sql);
+        $inString = false;
+        for ($i = 0; $i < $len; $i++) {
+            $c = $sql[$i];
+            if ($inString) {
+                $out .= $c;
+                // '' inside a string is an escaped quote, not the end of it.
+                if ($c === "'") {
+                    if ($i + 1 < $len && $sql[$i + 1] === "'") { $out .= $sql[++$i]; continue; }
+                    $inString = false;
+                }
+                continue;
+            }
+            if ($c === "'") { $inString = true; $out .= $c; continue; }
+            if ($c === '-' && $i + 1 < $len && $sql[$i + 1] === '-') {
+                // Skip to the end of the line, keeping the newline itself.
+                while ($i < $len && $sql[$i] !== "\n") $i++;
+                $out .= "\n";
+                continue;
+            }
+            $out .= $c;
+        }
+        return $out;
+    }
+
+    /**
      * Run all pending migrations.
      *
      * @return array Results: [['file' => '001_...', 'status' => 'ok|skipped|FAILED', ...], ...]
@@ -107,10 +146,17 @@ class MigrationRunner
             $stmtErrors = [];
             $stmtOk     = 0;
 
-            // Split on semicolons; skip empty/comment-only chunks
+            // Comments come out BEFORE the split, because a semicolon inside a
+            // -- comment is not a statement terminator and splitting on it
+            // truncates the statement above ("incomplete input") and feeds the
+            // rest of the English sentence to SQLite as SQL. Both failures are
+            // then swallowed as "partial", so the migration reports progress
+            // and the table it was supposed to create does not exist.
+            //
+            // Eleven comment lines across the existing migrations contain one.
             $rawStmts = array_filter(
-                array_map('trim', explode(';', $sql)),
-                function($s) { return $s !== '' && !preg_match('/^(\s*--[^\n]*\n?)*\s*$/', $s); }
+                array_map('trim', explode(';', self::stripComments($sql))),
+                function($s) { return $s !== ''; }
             );
 
             foreach ($rawStmts as $single) {

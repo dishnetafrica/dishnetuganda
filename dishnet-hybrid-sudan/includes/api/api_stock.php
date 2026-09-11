@@ -217,36 +217,69 @@ if ($act === 'stock_write_off' && $met === 'POST') {
 // ── POST stock_inbound — receive stock from supplier ─────────
 if ($act === 'stock_inbound' && $met === 'POST') {
     if (!$_stockIsPriv) $er2('Access denied', 403);
-    try {
-        $purchase = $_stockSvc->createPurchase($body, $rid, $retailer['name'] ?? 'Staff');
-        // Process items array if provided
-        $items = $body['items'] ?? [];
-        $created = [];
-        foreach ($items as $item) {
-            $catId = (int)($item['category_id'] ?? 0);
-            $cat = $_stockSvc->getCategory($catId);
-            if (!$cat) continue;
+    // Through PurchaseService now, so the delivery and its cost are one
+    // transaction. The old path committed the header, then created units one
+    // at a time: a duplicate serial on the third of five left a half-received
+    // purchase that could not be finished, and retrying made a second header.
+    // It also read items[] to make the stock and then discarded it, so what a
+    // router cost could not be answered minutes after being typed in.
+    require_once dirname(__DIR__, 2) . '/lib/PurchaseService.php';
+    $_purSvc = new PurchaseService($store->getPdo(), $dataDir, $_stockSvc);
+    $actor   = ['id' => $rid, 'name' => $retailer['name'] ?? 'Staff'];
 
-            if ($cat['track_mode'] === 'serial') {
-                $item['reference_type'] = 'purchase';
-                $item['reference_id'] = (string)$purchase['id'];
-                $item['purchase_ref'] = $body['invoice_number'] ?? '';
-                $created[] = $_stockSvc->createUnit($item, $rid, $retailer['name'] ?? 'Staff');
-            } else {
-                $qty = (int)($item['quantity'] ?? 1);
-                if ($qty > 0) {
-                    $item['reference_type'] = 'purchase';
-                    $item['reference_id'] = (string)$purchase['id'];
-                    $item['note'] = 'Received from ' . ($body['supplier'] ?? 'supplier');
-                    $_stockSvc->adjustQuantity($catId, $qty, $item, $rid, $retailer['name'] ?? 'Staff');
-                    $created[] = ['category_id' => $catId, 'quantity' => $qty];
-                }
-            }
-        }
-        $ok2(['purchase' => $purchase, 'items_created' => count($created)], 'Stock received');
-    } catch (\Throwable $e) {
-        $er2($e->getMessage());
+    $r = $_purSvc->receive($body, (array)($body['items'] ?? []), $actor);
+    if (empty($r['ok'])) $er2((string)($r['error'] ?? 'Could not record the purchase'));
+
+    $msg = !empty($r['duplicate'])
+        ? 'Already received — this is the same delivery, not a second one'
+        : 'Stock received';
+    // A supplier total that does not match the lines is kept and reported,
+    // never silently replaced: that difference is a short delivery or a
+    // mis-keyed price, and it is the whole reason to check an invoice.
+    if (abs((float)($r['variance'] ?? 0)) > 0.005) {
+        $msg .= sprintf(' — note: the supplier billed %s but the lines add to %s',
+                        number_format((float)$r['totals']['billed'], 2),
+                        number_format((float)$r['totals']['lines_total'], 2));
     }
+    $ok2([
+        'purchase'      => $_purSvc->detail((int)$r['id']),
+        'duplicate'     => !empty($r['duplicate']),
+        'units_created' => (int)($r['units_created'] ?? 0),
+        'variance'      => (float)($r['variance'] ?? 0),
+    ], $msg);
+}
+
+// ── POST stock_purchase_pay — money paid against a supplier bill ──
+if ($act === 'stock_purchase_pay' && $met === 'POST') {
+    if (!$_stockIsPriv) $er2('Access denied', 403);
+    require_once dirname(__DIR__, 2) . '/lib/PurchaseService.php';
+    $_purSvc = new PurchaseService($store->getPdo(), $dataDir, $_stockSvc);
+    $pid = (int)($body['purchase_id'] ?? 0);
+    if (!$pid) $er2('purchase_id required');
+    $r = $_purSvc->recordPayment($pid, $body, ['id' => $rid, 'name' => $retailer['name'] ?? 'Staff']);
+    if (empty($r['ok'])) $er2((string)($r['error'] ?? 'Payment not recorded'));
+    $ok2($r, 'Payment recorded');
+}
+
+// ── GET stock_purchase — one bill, its lines, payments and balance ──
+if ($act === 'stock_purchase' && $met === 'GET') {
+    if (!$_stockIsPriv) $er2('Access denied', 403);
+    require_once dirname(__DIR__, 2) . '/lib/PurchaseService.php';
+    $_purSvc = new PurchaseService($store->getPdo(), $dataDir, $_stockSvc);
+    $d = $_purSvc->detail((int)($_GET['id'] ?? 0));
+    if (!$d) $er2('Purchase not found', 404);
+    $ok2($d);
+}
+
+// ── GET stock_payables — what DishNet owes each supplier ──
+if ($act === 'stock_payables' && $met === 'GET') {
+    if (!$_stockIsPriv) $er2('Access denied', 403);
+    require_once dirname(__DIR__, 2) . '/lib/PurchaseService.php';
+    $_purSvc = new PurchaseService($store->getPdo(), $dataDir, $_stockSvc);
+    $ok2([
+        'suppliers'       => $_purSvc->supplierBalances(),
+        'inventory_value' => $_purSvc->inventoryValue(),
+    ]);
 }
 
 // ── GET stock_report ─────────────────────────────────────────

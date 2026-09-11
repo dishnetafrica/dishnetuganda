@@ -136,6 +136,29 @@ class StockService
         if (isset($checked[$key])) return;
         $checked[$key] = true;
 
+        // A column named in ONE code path is how image_url went missing: it
+        // lived only in the CREATE TABLE that runs when the table does not
+        // already exist, and migration 036 always creates it first. Every
+        // column this class writes but a migration may predate belongs here,
+        // checked one by one, so a later addition cannot be skipped by an
+        // early return placed for an earlier one.
+        foreach ([
+            'stock_categories' => ['image_url' => "TEXT DEFAULT ''"],
+        ] as $table => $needed) {
+            try {
+                $have = [];
+                foreach ($this->db->query("PRAGMA table_info({$table})") as $r) {
+                    $have[] = (string)($r['name'] ?? '');
+                }
+                if ($have === []) continue;   // table not created yet
+                foreach ($needed as $col => $decl) {
+                    if (in_array($col, $have, true)) continue;
+                    try { $this->db->exec("ALTER TABLE {$table} ADD COLUMN {$col} {$decl}"); }
+                    catch (\Throwable $e) { /* raced with another process */ }
+                }
+            } catch (\Throwable $e) { /* nothing here is worth failing a page load */ }
+        }
+
         try {
             $cols = [];
             foreach ($this->db->query("PRAGMA table_info(stock_units)") as $r) {
