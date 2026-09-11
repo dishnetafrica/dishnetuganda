@@ -48,9 +48,10 @@ $val = function (string $f) use ($args): string {
 };
 foreach ($args as $a) {
     if (strpos($a, '--') !== 0) continue;
-    if (!in_array($a, ['--file', '--category', '--commit', '--supplier'], true)) {
+    if (!in_array($a, ['--file', '--category', '--new-category', '--commit', '--supplier'], true)) {
         fwrite(STDERR, "\n  Unknown option: {$a}\n");
-        fwrite(STDERR, "  Known: --file <json> --category <id> --supplier <name> --commit\n\n");
+        fwrite(STDERR, "  Known: --file <json> --category <id> --new-category <title>"
+                     . " --supplier <name> --commit\n\n");
         exit(2);
     }
 }
@@ -111,8 +112,87 @@ if ($file !== '') {
 
 if ($orders === []) { echo "\n  No orders found in {$source}.\n\n"; exit(1); }
 
-$catId  = (int)$val('--category');
 $commit = in_array('--commit', $args, true);
+
+// ── Which stock item a delivered kit becomes ────────────────────────────────
+//
+// --category N was being read as (int)'N' = 0, which is the same value as "no
+// category given", so the tool quietly booked the bills and left the kit off
+// the shelf while reporting success. A flag that is present must be understood
+// or refused; it must never be silently ignored.
+$catArg = trim($val('--category'));
+$catId  = 0;
+
+$listCats = static function (StockService $stock): array {
+    $out = [];
+    foreach ($stock->getCategories(true) as $c) {
+        if (($c['track_mode'] ?? '') === 'serial') $out[] = $c;
+    }
+    return $out;
+};
+$printCats = static function (array $cats): void {
+    if ($cats === []) { fwrite(STDERR, "  This install has no serial-tracked stock category at all.\n"); return; }
+    fwrite(STDERR, "  Serial-tracked categories on this install:\n\n");
+    foreach ($cats as $c) fwrite(STDERR, sprintf("    %-4s %-38s %s\n", $c['id'], $c['title'], $c['sku'] ?? ''));
+    fwrite(STDERR, "\n");
+};
+
+if ($catArg !== '') {
+    if (!ctype_digit($catArg) || (int)$catArg < 1) {
+        fwrite(STDERR, "\n  --category needs the NUMBER of a stock category, not '{$catArg}'.\n\n");
+        $printCats($listCats($stock));
+        fwrite(STDERR, "  Or create one as part of this import:\n");
+        fwrite(STDERR, "    --new-category 'Starlink Standard Kit (Gen 3)'\n\n");
+        exit(2);
+    }
+    $catId = (int)$catArg;
+    $cat   = $stock->getCategory($catId);
+    if (!$cat) {
+        fwrite(STDERR, "\n  There is no stock category {$catId} on this install.\n\n");
+        $printCats($listCats($stock));
+        exit(2);
+    }
+    if (($cat['track_mode'] ?? '') !== 'serial') {
+        fwrite(STDERR, "\n  Category {$catId} (" . $cat['title'] . ") is counted by quantity, not\n");
+        fwrite(STDERR, "  tracked by serial number. A Starlink kit arrives with a serial on it and\n");
+        fwrite(STDERR, "  has to be tracked as one thing, or it cannot be matched to a customer.\n\n");
+        $printCats($listCats($stock));
+        exit(2);
+    }
+}
+
+// Creating the category here rather than sending someone to another screen
+// mid-import. It goes through the same StockService the Stock screen uses.
+$newCat = trim($val('--new-category'));
+if ($newCat !== '') {
+    if ($catId > 0) {
+        fwrite(STDERR, "\n  Pass either --category or --new-category, not both.\n\n");
+        exit(2);
+    }
+    $kitPrice = 0.0;
+    foreach ($orders as $o) {
+        foreach ($o['lines'] as $l) {
+            if ($l['product_type'] !== 5 && $l['price'] > $kitPrice) $kitPrice = (float)$l['price'];
+        }
+    }
+    if (!$commit) {
+        echo "\n  Would create a serial-tracked stock category '{$newCat}'";
+        if ($kitPrice > 0) echo " at " . number_format($kitPrice, 0) . " a unit";
+        echo ",\n  and put any delivered kit into it. Add --commit to do it.\n";
+    } else {
+        $made = $stock->saveCategory([
+            'title'        => $newCat,
+            'service_type' => 'starlink',
+            'track_mode'   => 'serial',
+            // What the supplier actually charges for one, off these orders.
+            'buy_price'    => $kitPrice,
+            'unit'         => 'piece',
+        ]);
+        $catId = (int)$made['id'];
+        echo "\n  Created stock category {$catId}: {$newCat}"
+           . ($kitPrice > 0 ? ' (buy price ' . number_format($kitPrice, 0) . ')' : '') . "\n";
+    }
+}
 $imp    = new StarlinkOrderImport($pdo, $dataDir, $config);
 $actor  = ['id' => 0, 'name' => 'order import'];
 
@@ -170,14 +250,12 @@ if (!$commit) {
         // A delivered kit has to become something on the shelf, and making the
         // person go and look the number up somewhere else is how they end up
         // guessing it.
-        $cats = [];
-        foreach ($stock->getCategories(true) as $c) {
-            if (($c['track_mode'] ?? '') === 'serial') $cats[] = $c;
-        }
+        $cats = $listCats($stock);
         if ($cats === []) {
             echo "  --category says which stock item a delivered kit becomes, and this\n";
-            echo "  install has no serial-tracked stock category yet. Create one on the\n";
-            echo "  Stock screen first (a Starlink kit is tracked by serial).\n\n";
+            echo "  install has no serial-tracked stock category yet. Create one as part\n";
+            echo "  of the import by swapping --category for:\n\n";
+            echo "    --new-category 'Starlink Standard Kit (Gen 3)'\n\n";
         } else {
             echo "  --category says which stock item a delivered kit becomes:\n\n";
             foreach ($cats as $c) {

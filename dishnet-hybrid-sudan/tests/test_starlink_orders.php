@@ -343,6 +343,86 @@ is_((bool)preg_match('/already booked\s+4/', implode("\n", $outC2)),
 t('still four purchases',
     (int)$p5->query("SELECT COUNT(*) FROM stock_purchases")->fetchColumn(), 4);
 
+echo "\n--category is understood or refused, never ignored\n";
+// --category N was read as (int)'N' = 0 — the same value as "no category" —
+// so the tool booked the bills, left the kit off the shelf, and reported
+// success. A flag that is present is either understood or refused.
+$tmp6 = sys_get_temp_dir() . '/dn_slorders6_' . bin2hex(random_bytes(4));
+@mkdir($tmp6, 0777, true);
+$env6 = 'DN_DATA_DIR=' . escapeshellarg($tmp6) . ' ';
+$run = function (string $flags) use ($env6, $tool): array {
+    $o = []; $c = 0;
+    exec($env6 . 'php ' . escapeshellarg($tool) . ' --file '
+       . escapeshellarg(__DIR__ . '/fixtures/starlink_orders_raw.json') . ' ' . $flags . ' 2>&1', $o, $c);
+    return [implode("\n", $o), $c];
+};
+[$txtN, $codeN] = $run("--category N --commit");
+t('a letter is refused', $codeN, 2);
+is_(strpos($txtN, "not 'N'") !== false, 'and named back', $txtN);
+is_(!is_file($tmp6 . '/plugin.sqlite3')
+    || (int)(new PDO('sqlite:' . $tmp6 . '/plugin.sqlite3'))
+         ->query("SELECT COUNT(*) FROM stock_purchases")->fetchColumn() === 0,
+    'and no bill was booked on the way past it');
+
+$s6  = SqliteStore::create($tmp6);
+$st6 = StockService::fromStore($s6, $tmp6); $st6->ensureTables();
+$bulk = (int)($st6->saveCategory(['title' => 'CAT6 Cable (m)', 'sku' => 'CAT6',
+    'service_type' => 'general', 'track_mode' => 'quantity'])['id'] ?? 0);
+[$txt9, $code9] = $run("--category 999 --commit");
+t('a category that does not exist is refused', $code9, 2);
+is_(strpos($txt9, 'no stock category 999') !== false, 'and said so', $txt9);
+[$txtB, $codeB] = $run("--category {$bulk} --commit");
+t('a quantity-tracked category is refused', $codeB, 2);
+is_(strpos($txtB, 'counted by quantity') !== false,
+    'because a kit arrives with a serial on it', $txtB);
+t('and still nothing is booked',
+    (int)$s6->getPdo()->query("SELECT COUNT(*) FROM stock_purchases")->fetchColumn(), 0);
+
+echo "\nCreating the category as part of the import\n";
+[$txtD, $codeD] = $run("--new-category 'Starlink Standard Kit (Gen 3)'");
+t('a dry run still writes nothing', $codeD, 0);
+is_(strpos($txtD, 'Would create a serial-tracked stock category') !== false,
+    'but says what it would create', $txtD);
+t('and no category was created',
+    (int)$s6->getPdo()->query("SELECT COUNT(*) FROM stock_categories WHERE track_mode='serial'")->fetchColumn(), 0);
+[$txtM, $codeM] = $run("--new-category 'Starlink Standard Kit (Gen 3)' --commit");
+t('with --commit it is created', $codeM, 0);
+is_((bool)preg_match('/units received\s+1/', $txtM), 'and the kit lands in it', $txtM);
+$made = $s6->getPdo()->query("SELECT * FROM stock_categories WHERE track_mode='serial'")->fetch(PDO::FETCH_ASSOC);
+t('tracked by serial',      $made['track_mode'], 'serial');
+t('as Starlink equipment',  $made['service_type'], 'starlink');
+t('priced at what Starlink charges for one', (float)$made['buy_price'], 1477778.0);
+[$txtX, $codeX] = $run("--category 1 --new-category 'Another' --commit");
+t('asking for both at once is refused', $codeX, 2);
+
+echo "\nBills booked first, category chosen afterwards\n";
+// Exactly what happened live: the bills were booked before a stock category
+// existed. The kit must be able to land later without re-booking anything.
+$tmp7 = sys_get_temp_dir() . '/dn_slorders7_' . bin2hex(random_bytes(4));
+@mkdir($tmp7, 0777, true);
+$env7 = 'DN_DATA_DIR=' . escapeshellarg($tmp7) . ' ';
+$o7 = []; exec($env7 . 'php ' . escapeshellarg($tool) . ' --file '
+    . escapeshellarg(__DIR__ . '/fixtures/starlink_orders_raw.json') . ' --commit 2>&1', $o7, $c7);
+is_((bool)preg_match('/purchases booked\s+4/', implode("\n", $o7)), 'four bills, no category');
+$s7 = SqliteStore::create($tmp7); $p7 = $s7->getPdo();
+t('and nothing on the shelf',
+    (int)$p7->query("SELECT COUNT(*) FROM stock_units")->fetchColumn(), 0);
+$o7b = []; exec($env7 . 'php ' . escapeshellarg($tool) . ' --file '
+    . escapeshellarg(__DIR__ . '/fixtures/starlink_orders_raw.json')
+    . " --new-category 'Starlink Standard Kit (Gen 3)' --commit 2>&1", $o7b, $c7b);
+$t7b = implode("\n", $o7b);
+is_((bool)preg_match('/purchases booked\s+0/', $t7b), 'the second run books nothing again', $t7b);
+is_((bool)preg_match('/already booked\s+4/', $t7b), 'it recognises all four');
+is_((bool)preg_match('/units received\s+1/', $t7b), 'and the kit finally lands');
+t('four purchases, not eight',
+    (int)$p7->query("SELECT COUNT(*) FROM stock_purchases")->fetchColumn(), 4);
+t('one unit',
+    (int)$p7->query("SELECT COUNT(*) FROM stock_units")->fetchColumn(), 1);
+$ref = $p7->query("SELECT reference_id FROM stock_movements WHERE movement_type='inbound'")->fetchColumn();
+$owner = (int)$p7->query("SELECT id FROM stock_purchases WHERE supplier_ref='ORD-DF-E92VQQNWJEYRPN5WQ1'")->fetchColumn();
+t('booked against the order that delivered it', (int)$ref, $owner);
+exec('rm -rf ' . escapeshellarg($tmp6) . ' ' . escapeshellarg($tmp7));
+
 echo "\nA file with a session cookie in it is refused\n";
 // Saving the whole request instead of the response body puts a live Starlink
 // login on disk. Reading around it would teach the habit.
