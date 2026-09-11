@@ -75,6 +75,8 @@ $runs = [
     ['wa_conversation.php',       [],         'lists recent conversations'],
     ['hardware_check.php',        [],         'reports what we claim about the dishes'],
     ['price_check.php',           [],         'compares published prices against uCRM'],
+    ['photos.php',                [],         'lists the photos the assistant can send'],
+    ['tax_probe.php',             [],         'reports what uCRM holds about tax'],
 ];
 
 foreach ($runs as [$tool, $flags, $what]) {

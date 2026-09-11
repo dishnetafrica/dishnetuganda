@@ -32,6 +32,7 @@ class DishNetAiBrain
     const MARKER_QUOTE    = 'QUOTE';
     const MARKER_FLYER    = 'FLYER';
     const MARKER_LEAD     = 'LEAD';
+    const MARKER_PHOTO    = 'PHOTO';
 
     /** Hard ceiling on a WhatsApp reply. Long walls of text do not get read. */
     const MAX_REPLY_CHARS = 1200;
@@ -221,6 +222,9 @@ class DishNetAiBrain
 
         // ── What the hardware actually does ─────────────────────────────
         $p .= $this->hardwareBlock($channel);
+
+        // ── Pictures, when the operator has put any there ────────────────
+        $p .= (string)($this->config['photo_block'] ?? '');
 
         // ── Medium ──────────────────────────────────────────────────────
         $p .= $this->mediumRules($ctx);
@@ -657,6 +661,11 @@ class DishNetAiBrain
              . "your normal recommendation for a busy household or small office. Offer the "
              . "lighter, cheaper one when use is genuinely light, or when the customer has told "
              . "you price is the constraint.\n"
+             . "- A PLAN NEVER REQUIRES A PARTICULAR KIT. Asked about Residential Lite, "
+             . "do not tell them they \"will need\" the Mini — the plan and the hardware are "
+             . "two separate choices and you were not told one depends on the other. "
+             . "Recommend each on its own merits, and if someone asks whether a plan works "
+             . "with a particular dish and your data does not say, offer to confirm it.\n"
              . "- ALWAYS SAY WHY, in one short sentence tied to what they told you — \"with "
              . "five of you and video calls, the faster one is the one I would put you on\". "
              . "The reason is what makes it advice instead of a price list.\n"
@@ -1141,6 +1150,15 @@ class DishNetAiBrain
         // Stripped with its own pattern before the generic one: the generic
         // strip is [^>]* and JSON can legitimately contain '>', which would
         // leave half a marker in a message to a customer.
+        // <<PHOTO name>> — which picture to send, from the operator's own
+        // library. A name, never a description: the worker looks it up and
+        // sends nothing if it does not exist, so a hallucinated name costs a
+        // photo rather than a wrong picture.
+        $photo = '';
+        if (preg_match('/<<\s*' . self::MARKER_PHOTO . '\s+([a-z0-9][a-z0-9 _-]*)>>/i', $raw, $m)) {
+            $photo = trim(strtolower($m[1]));
+        }
+
         $lead = null;
         if (preg_match('/<<\s*' . self::MARKER_LEAD . '\s*(\{.*?\})\s*>>/is', $raw, $m)) {
             $decoded = json_decode($m[1], true);
@@ -1163,7 +1181,7 @@ class DishNetAiBrain
         }
 
         return ['reply' => $clean, 'escalate' => $escalate, 'escalate_reason' => $reason,
-                'send_flyer' => $sendFlyer, 'lead' => $lead];
+                'send_flyer' => $sendFlyer, 'lead' => $lead, 'photo' => $photo];
     }
 
     private function handover(string $reason): array

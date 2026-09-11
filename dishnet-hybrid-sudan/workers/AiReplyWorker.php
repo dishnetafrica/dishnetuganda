@@ -23,6 +23,8 @@ class AiReplyWorker extends WorkerBase
 {
     /** wa_messages.media_url tag marking a flyer send, for the cooldown query. */
     const FLYER_MEDIA_TAG = 'flyer:plans';
+    /** Same idea per named photo, so the same picture is never sent twice. */
+    const PHOTO_MEDIA_TAG = 'dishnet:photo:';
 
     private EvolutionApiService $evo;
     private DishNetTools $tools;
@@ -30,6 +32,8 @@ class AiReplyWorker extends WorkerBase
     private $convSvc;
     /** @var array|null FlyerAsset::find() result, resolved once per run */
     private $flyer;
+    /** Where the photo library lives; the worker resolves names against it. */
+    private string $photoDir = '';
 
     public function __construct($store, array $config, int $maxRun = 55, int $batch = 10)
     {
@@ -59,6 +63,17 @@ class AiReplyWorker extends WorkerBase
         $this->flyer = FlyerAsset::find($config, $dataDir);
         if ($this->flyer !== null) {
             $config['flyer_available'] = '1';
+        }
+        // Named photos the operator dropped in <dataDir>/photos. An empty
+        // folder leaves photo_block as '' and the model is never told the
+        // action exists — the same absence story the flyer uses.
+        if (!class_exists('PhotoLibrary')) {
+            $pl = __DIR__ . '/../lib/PhotoLibrary.php';
+            if (is_file($pl)) require_once $pl;
+        }
+        $this->photoDir = $dataDir;
+        if (class_exists('PhotoLibrary')) {
+            $config['photo_block'] = \PhotoLibrary::promptBlock($dataDir);
         }
         $this->brain = new DishNetAiBrain($config);
         $this->config = $config;
@@ -158,6 +173,13 @@ class AiReplyWorker extends WorkerBase
                     'metadata'   => json_encode(['channel' => $channel]),
                 ]);
             }
+            // A named photo the model asked for. Before the flyer, because a
+            // customer who asked to see the kit wants the kit, not the price
+            // list.
+            if (!empty($ai['photo'])) {
+                $this->maybeSendPhoto($convId, $channel, $phone, (string)$ai['photo']);
+            }
+
             // After the text, so a retry of a failed text send can never have
             // already delivered the image once.
             if (!empty($ai['send_flyer'])) {
@@ -413,6 +435,72 @@ class AiReplyWorker extends WorkerBase
         }
         $data = json_decode((string)$raw, true);
         return is_array($data) ? $data : null;
+    }
+
+    /**
+     * Send one named photo from the operator's library.
+     *
+     * A name the library does not have sends nothing and logs it. That is the
+     * safety property: the model picks from a list it was given, and a name it
+     * invented resolves to no file rather than to the wrong picture.
+     */
+    private function maybeSendPhoto(int $convId, string $channel, string $phone, string $name): void
+    {
+        try {
+            if (!class_exists('PhotoLibrary')) return;
+            $photo = \PhotoLibrary::find($this->photoDir, $name);
+            if ($photo === null) {
+                $this->log('warn', "conv {$convId}: no photo named '{$name}' — nothing sent");
+                return;
+            }
+            // Twice is worse than not at all: they already have it, and a
+            // repeat reads as a bot that forgot.
+            if ($convId > 0 && $this->photoSentAlready($convId, $name)) {
+                $this->log('info', "conv {$convId}: photo '{$name}' already sent — not repeating");
+                return;
+            }
+
+            $media = \PhotoLibrary::payload($photo);
+            if ($media === '') {
+                $this->log('warn', "conv {$convId}: photo '{$name}' vanished before sending");
+                return;
+            }
+
+            $send = $this->evo->sendImage($channel, $phone, $media, (string)$photo['caption']);
+            if (empty($send['ok'])) {
+                $this->log('warn', "conv {$convId}: photo '{$name}' failed — "
+                    . (string)($send['error'] ?? '?'));
+                return;
+            }
+            $this->log('info', "conv {$convId}: photo '{$name}' sent");
+
+            if ($convId > 0) {
+                $this->convSvc->storeMessage($convId, [
+                    'direction'  => 'out',
+                    'role'       => 'assistant',
+                    'body'       => $photo['caption'] !== '' ? $photo['caption'] : ('[photo: ' . $name . ']'),
+                    'media_type' => 'image',
+                    'media_url'  => self::PHOTO_MEDIA_TAG . $name,
+                    'agent_name' => 'DishNet AI',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->log('error', 'photo send failed: ' . $e->getMessage());
+        }
+    }
+
+    /** Has this exact photo already gone to this conversation? */
+    private function photoSentAlready(int $convId, string $name): bool
+    {
+        try {
+            $st = $this->pdo->prepare(
+                "SELECT 1 FROM wa_messages WHERE conversation_id = ? AND media_url = ? LIMIT 1"
+            );
+            $st->execute([$convId, self::PHOTO_MEDIA_TAG . $name]);
+            return (bool)$st->fetchColumn();
+        } catch (\Throwable $e) {
+            return false;   // a failed check must never block a photo
+        }
     }
 
     /**
