@@ -3,6 +3,12 @@
 // CRM SYNC / SURVEYS / SIGNATURES
 // ═══════════════════════════════════════════════════════════════
 
+// Data belonging to the other two plugins is read through SiblingPlugin.
+// Every read here used to build its own path, guess between two candidates,
+// and fall through to zero without a word when neither existed — and all of
+// them pointed at <plugin>/data, the directory uCRM deletes on upgrade.
+require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
+
 
     // ── Save customer signature for a job ────────────────────────────────────
 
@@ -2367,10 +2373,7 @@ if ($act === 'sl_audit_suspended' && $met === 'GET') {
     // by uppercase KIT serial. Used for cliff computation (real billing-cycle
     // source) AFTER the per-customer KIT extraction loop completes.
     $kitFinanceByKit = [];
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/sl_kits.json',
-        dirname(__DIR__, 2) . '/../dishnet-starlink-finance/data/sl_kits.json',
-    ] as $p) {
+    foreach (array_filter([SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json')]) as $p) {
         if (file_exists($p)) {
             $raw = @file_get_contents($p);
             if ($raw !== false) {
@@ -2477,10 +2480,7 @@ if ($act === 'sl_audit_suspended' && $met === 'GET') {
         $routerMapPath   = '';
         $routerMapTotal  = 0;
         $routerMapKitsMatched = 0;
-        foreach ([
-            dirname(__DIR__, 3) . '/dishnet-data-report/data/wifi_router_map.json',
-            dirname(__DIR__, 2) . '/../dishnet-data-report/data/wifi_router_map.json',
-        ] as $rp) {
+        foreach (array_filter([SiblingPlugin::path('dishnet-data-report', 'wifi_router_map.json')]) as $rp) {
             if (file_exists($rp)) {
                 $routerMapPath = $rp;
                 $rmRaw = @file_get_contents($rp);
@@ -2553,18 +2553,8 @@ if ($act === 'sl_audit_suspended' && $met === 'GET') {
             'state' => null,
             'map'   => null,
         ];
-        foreach ([
-            dirname(__DIR__, 3) . '/dishnet-data-report/data/wifi_test_block_state.json',
-            dirname(__DIR__, 2) . '/../dishnet-data-report/data/wifi_test_block_state.json',
-        ] as $p) {
-            if (file_exists($p)) { $drPaths['state'] = $p; break; }
-        }
-        foreach ([
-            dirname(__DIR__, 3) . '/dishnet-data-report/data/wifi_router_map.json',
-            dirname(__DIR__, 2) . '/../dishnet-data-report/data/wifi_router_map.json',
-        ] as $p) {
-            if (file_exists($p)) { $drPaths['map'] = $p; break; }
-        }
+        $drPaths['state'] = SiblingPlugin::path('dishnet-data-report', 'wifi_test_block_state.json');
+        $drPaths['map'] = SiblingPlugin::path('dishnet-data-report', 'wifi_router_map.json');
 
         if ($drPaths['state'] && $drPaths['map']) {
             $blockedRouters = json_decode((string)@file_get_contents($drPaths['state']), true) ?: [];
@@ -2608,10 +2598,7 @@ if ($act === 'sl_audit_suspended' && $met === 'GET') {
     $slSvcByKit = [];
     $slSvcCacheStale = false;
     $slSvcCacheLoadedCount = 0;
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-data-report/data/sl_svc_cache.json',
-        dirname(__DIR__, 2) . '/../dishnet-data-report/data/sl_svc_cache.json',
-    ] as $slCachePath) {
+    foreach (array_filter([SiblingPlugin::path('dishnet-data-report', 'sl_svc_cache.json')]) as $slCachePath) {
         if (!file_exists($slCachePath)) continue;
         $age = time() - @filemtime($slCachePath);
         if ($age > 7200) $slSvcCacheStale = true; // older than 2h = warn
@@ -2897,13 +2884,14 @@ if ($act === 'sl_accounts_dump' && $met === 'GET') {
     // verify the accounts file shape so the cliff column can JOIN
     // kit.account_number → account.billing_day.
     if (!$isAdmin) $er2('Admin access required.', 403);
-    $candidates = [
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/sl_accounts.json',
-        dirname(__DIR__, 2) . '/../dishnet-starlink-finance/data/sl_accounts.json',
-        // Also try alternative names — Finance plugin could use any of these
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/accounts.json',
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/sl_account_cycles.json',
-    ];
+    // Still several NAMES, because nobody knows which one Finance writes —
+    // that part is a genuine unknown and the endpoint reports what it tried.
+    // The DIRECTORY is no longer guessed at.
+    $candidates = array_values(array_filter([
+        SiblingPlugin::path('dishnet-starlink-finance', 'sl_accounts.json'),
+        SiblingPlugin::path('dishnet-starlink-finance', 'accounts.json'),
+        SiblingPlugin::path('dishnet-starlink-finance', 'sl_account_cycles.json'),
+    ]));
     $aPath = null;
     $tried = [];
     foreach ($candidates as $p) {
@@ -2912,7 +2900,7 @@ if ($act === 'sl_accounts_dump' && $met === 'GET') {
     }
     if (!$aPath) {
         // List the data directory to see what files Finance actually writes
-        $dataDir = dirname(__DIR__, 3) . '/dishnet-starlink-finance/data';
+        $dataDir = SiblingPlugin::dataDir('dishnet-starlink-finance') ?? '(no data directory)';
         $listing = is_dir($dataDir) ? array_values(array_diff(scandir($dataDir), ['.', '..'])) : [];
         $ok2([
             'exists'        => false,
@@ -2973,12 +2961,7 @@ if ($act === 'sl_kits_dump' && $met === 'GET') {
     // shape so we can wire the cliff column to use the right source.
     if (!$isAdmin) $er2('Admin access required.', 403);
     $kPath = null;
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/sl_kits.json',
-        dirname(__DIR__, 2) . '/../dishnet-starlink-finance/data/sl_kits.json',
-    ] as $p) {
-        if (file_exists($p)) { $kPath = $p; break; }
-    }
+    $kPath = SiblingPlugin::pathOrEmpty('dishnet-starlink-finance', 'sl_kits.json');
     if (!$kPath) $ok2(['exists' => false], 'sl_kits.json not found');
     $raw = @file_get_contents($kPath);
     $kits = json_decode($raw, true) ?: [];
@@ -3033,12 +3016,7 @@ if ($act === 'sl_svc_cache_dump' && $met === 'GET') {
     // only since the cache contains operational fleet info.
     if (!$isAdmin) $er2('Admin access required.', 403);
     $cachePath = null;
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-data-report/data/sl_svc_cache.json',
-        dirname(__DIR__, 2) . '/../dishnet-data-report/data/sl_svc_cache.json',
-    ] as $p) {
-        if (file_exists($p)) { $cachePath = $p; break; }
-    }
+    $cachePath = SiblingPlugin::pathOrEmpty('dishnet-data-report', 'sl_svc_cache.json');
     if (!$cachePath) $ok2(['exists' => false], 'sl_svc_cache.json not found');
     $raw = @file_get_contents($cachePath);
     $cache = json_decode($raw, true) ?: [];
@@ -3363,19 +3341,13 @@ if ($act === 'sl_payment_restore_audit' && $met === 'GET') {
     // 1. Read currently-paused routers from data-report
     $pausedRouters = [];
     $routerMap     = [];
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-data-report/data/wifi_test_block_state.json',
-        dirname(__DIR__, 2) . '/../dishnet-data-report/data/wifi_test_block_state.json',
-    ] as $p) {
+    foreach (array_filter([SiblingPlugin::path('dishnet-data-report', 'wifi_test_block_state.json')]) as $p) {
         if (file_exists($p)) {
             $pausedRouters = json_decode((string)@file_get_contents($p), true) ?: [];
             break;
         }
     }
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-data-report/data/wifi_router_map.json',
-        dirname(__DIR__, 2) . '/../dishnet-data-report/data/wifi_router_map.json',
-    ] as $p) {
+    foreach (array_filter([SiblingPlugin::path('dishnet-data-report', 'wifi_router_map.json')]) as $p) {
         if (file_exists($p)) {
             $routerMap = json_decode((string)@file_get_contents($p), true) ?: [];
             break;
@@ -3432,10 +3404,9 @@ if ($act === 'sl_payment_restore_audit' && $met === 'GET') {
 
     // 3. For each paying client, resolve their KITs and check against pausedKitToRouter
     // Use the same multi-source KIT resolution as the audit endpoint.
-    $slKitsCandidates = [
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/sl_kits.json',
-        dirname(__DIR__, 2) . '/../dishnet-starlink-finance/data/sl_kits.json',
-    ];
+    $slKitsCandidates = array_values(array_filter([
+        SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json'),
+    ]));
     $slKits = null;
     foreach ($slKitsCandidates as $p) {
         if (file_exists($p)) {

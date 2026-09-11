@@ -63,6 +63,45 @@ class MigrationRunner
     }
 
     /**
+     * Remove -- comments, leaving string literals alone.
+     *
+     * Character by character rather than a regular expression: a '--' inside
+     * a quoted string is data, not a comment, and a regex that cannot see
+     * quotes would cut a statement in half at the first default value that
+     * happens to contain two hyphens.
+     *
+     * Newlines are kept so that line numbers in any error still mean
+     * something.
+     */
+    public static function stripComments(string $sql): string
+    {
+        $out = '';
+        $len = strlen($sql);
+        $inString = false;
+        for ($i = 0; $i < $len; $i++) {
+            $c = $sql[$i];
+            if ($inString) {
+                $out .= $c;
+                // '' inside a string is an escaped quote, not the end of it.
+                if ($c === "'") {
+                    if ($i + 1 < $len && $sql[$i + 1] === "'") { $out .= $sql[++$i]; continue; }
+                    $inString = false;
+                }
+                continue;
+            }
+            if ($c === "'") { $inString = true; $out .= $c; continue; }
+            if ($c === '-' && $i + 1 < $len && $sql[$i + 1] === '-') {
+                // Skip to the end of the line, keeping the newline itself.
+                while ($i < $len && $sql[$i] !== "\n") $i++;
+                $out .= "\n";
+                continue;
+            }
+            $out .= $c;
+        }
+        return $out;
+    }
+
+    /**
      * Run all pending migrations.
      *
      * @return array Results: [['file' => '001_...', 'status' => 'ok|skipped|FAILED', ...], ...]
@@ -107,10 +146,17 @@ class MigrationRunner
             $stmtErrors = [];
             $stmtOk     = 0;
 
-            // Split on semicolons; skip empty/comment-only chunks
+            // Comments come out BEFORE the split, because a semicolon inside a
+            // -- comment is not a statement terminator and splitting on it
+            // truncates the statement above ("incomplete input") and feeds the
+            // rest of the English sentence to SQLite as SQL. Both failures are
+            // then swallowed as "partial", so the migration reports progress
+            // and the table it was supposed to create does not exist.
+            //
+            // Eleven comment lines across the existing migrations contain one.
             $rawStmts = array_filter(
-                array_map('trim', explode(';', $sql)),
-                function($s) { return $s !== '' && !preg_match('/^(\s*--[^\n]*\n?)*\s*$/', $s); }
+                array_map('trim', explode(';', self::stripComments($sql))),
+                function($s) { return $s !== ''; }
             );
 
             foreach ($rawStmts as $single) {
@@ -187,9 +233,31 @@ class MigrationRunner
     /**
      * Append a line to the migration log file.
      */
+    /** Never let the log grow past this. Keeps roughly the last few hundred runs. */
+    private const LOG_MAX_BYTES = 262144;
+
     private function log(string $message): void
     {
         $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
+
+        // Now that the log lives in the data directory it is no longer wiped
+        // by every deploy — which was the only thing keeping it small. A local
+        // run reached 1.5MB in an afternoon. Halve it when it gets big, oldest
+        // first, so the recent history that anyone actually reads survives and
+        // the file cannot fill a data directory shared with the database.
+        if (@filesize($this->logFile) > self::LOG_MAX_BYTES) {
+            $keep = @file_get_contents($this->logFile);
+            if ($keep !== false) {
+                $keep = substr($keep, (int)(self::LOG_MAX_BYTES / 2));
+                // Start at a line boundary, not mid-sentence.
+                $nl = strpos($keep, "\n");
+                if ($nl !== false) $keep = substr($keep, $nl + 1);
+                @file_put_contents($this->logFile,
+                    '[' . date('Y-m-d H:i:s') . "] --- earlier entries trimmed ---\n" . $keep,
+                    LOCK_EX);
+            }
+        }
+
         @file_put_contents($this->logFile, $line, FILE_APPEND | LOCK_EX);
     }
 }

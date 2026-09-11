@@ -73,14 +73,25 @@ $settings = function (array $extra = []) use ($tmp): void {
 };
 $GLOBALS['__port'] = $port;
 
-// The probe connection above is session #0; count from what is there now.
+// Only sessions that actually delivered a message count.
+//
+// The port probe above opens a connection, reads the greeting and closes —
+// and the server records that session AFTER the socket closes, so it can
+// land in the transcript at any moment, including after $before was read.
+// Counting raw sessions made the probe look like the first send: mail_from
+// and ehlo came back empty and three assertions failed, intermittently and
+// only under the load of the full suite. A probe never speaks MAIL FROM,
+// so that is the thing to filter on.
 $sessions = function () use ($transcript): array {
     clearstatcache();
-    return json_decode((string)@file_get_contents($transcript), true) ?: [];
+    $all = json_decode((string)@file_get_contents($transcript), true) ?: [];
+    return array_values(array_filter($all, function ($s) {
+        return is_array($s) && trim((string)($s['mail_from'] ?? '')) !== '';
+    }));
 };
 $before = count($sessions());
 $latest = function () use ($sessions, &$before): ?array {
-    for ($i = 0; $i < 40; $i++) {
+    for ($i = 0; $i < 60; $i++) {
         $all = $sessions();
         if (count($all) > $before) { $before = count($all); return end($all); }
         usleep(50000);

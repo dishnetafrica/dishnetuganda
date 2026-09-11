@@ -110,6 +110,52 @@ is_(strpos($src, 'static $_loadCache') === false,
 is_(substr_count($src, 'private static array $loadCache') === 1,
     'and exactly one cache belongs to the class');
 
+
+// ── Keyed caches keep their keys ────────────────────────────────────────────
+//
+// save() auto-detects an assoc array and stores it as one flat row. load()
+// only takes the flat path for a table in $FLAT_TABLES — for any other table
+// array_values() strips the keys, so the caller gets a list where it saved a
+// dictionary. ucrm_invoice_payments_cache is keyed by invoice id and was
+// losing them: $cache[$invoiceId] never matched, the portal's receipt cache
+// never hit, and every request went back to uCRM. It looked like it worked.
+echo "\nKeyed caches survive a round trip\n";
+$kt = sys_get_temp_dir() . '/dn_keyed_' . bin2hex(random_bytes(4));
+@mkdir($kt, 0777, true);
+$ks = SqliteStore::create($kt);
+
+$ks->save('ucrm_invoice_payments_cache.json', [
+    '5001' => ['payments' => [['id' => 900, 'amount' => 2649000]]],
+    '5002' => ['payments' => []],
+]);
+$back = $ks->load('ucrm_invoice_payments_cache.json');
+// PHP casts a numeric string key to an int on the way into an array, so the
+// keys read back as 5001 rather than '5001'. Either form indexes the same
+// slot — what matters is that they are invoice ids and not 0 and 1.
+is_(array_map('strval', array_keys($back)) === ['5001', '5002'],
+    'the invoice ids come back as keys, not positions',
+    'got: ' . json_encode(array_keys($back)));
+is_((float)($back['5001']['payments'][0]['amount'] ?? 0) === 2649000.0,
+    'and a receipt is reachable by its invoice id, looked up as a string');
+
+// Every table declared flat must survive the same trip, so the list and the
+// reader cannot drift apart.
+foreach (['kyc_config', 'email_settings', 'hotspot_config'] as $tbl) {
+    $ks->save($tbl . '.json', ['a-key' => ['v' => 1], 'b-key' => ['v' => 2]]);
+    $r = $ks->load($tbl . '.json');
+    is_(array_keys($r) === ['a-key', 'b-key'], "{$tbl} keeps its keys",
+        'got: ' . json_encode(array_keys($r)));
+}
+
+// A record array is still a record array — the flat path must not swallow it.
+$ks->save('retailers.json', [['id' => 1, 'name' => 'One'], ['id' => 2, 'name' => 'Two']]);
+$rl = $ks->load('retailers.json');
+is_(count($rl) === 2 && ($rl[0]['name'] ?? '') === 'One',
+    'and a list of records still reads back as a list');
+
+exec('rm -rf ' . escapeshellarg($kt));
+
+
 exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg($other));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

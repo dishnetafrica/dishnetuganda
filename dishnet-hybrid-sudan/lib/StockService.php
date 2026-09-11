@@ -28,9 +28,13 @@ class StockService
     private $dataDir;
 
     // Valid statuses
-    const UNIT_STATUSES = ['in_stock', 'checked_out', 'installed', 'returned', 'damaged', 'written_off'];
+    // 'reserved' holds a specific unit for a specific customer between the
+    // sale and the install. Without it the only honest answers were "on the
+    // shelf" and "at the customer", so two jobs booked a week apart could
+    // both be promised the same dish and only the second install found out.
+    const UNIT_STATUSES = ['in_stock', 'reserved', 'checked_out', 'installed', 'returned', 'damaged', 'written_off'];
     const LOCATION_TYPES = ['warehouse', 'field_agent', 'customer', 'transit'];
-    const MOVEMENT_TYPES = ['inbound', 'checkout', 'checkin', 'install', 'return', 'transfer', 'adjust', 'write_off'];
+    const MOVEMENT_TYPES = ['inbound', 'reserve', 'release', 'checkout', 'checkin', 'install', 'return', 'transfer', 'adjust', 'write_off'];
     const SERVICE_TYPES = ['starlink', 'fiber', 'lte', 'general'];
     const TRACK_MODES = ['serial', 'quantity'];
     const CONDITIONS = ['new', 'good', 'fair', 'damaged'];
@@ -135,6 +139,29 @@ class StockService
         $key = spl_object_id($this->db);
         if (isset($checked[$key])) return;
         $checked[$key] = true;
+
+        // A column named in ONE code path is how image_url went missing: it
+        // lived only in the CREATE TABLE that runs when the table does not
+        // already exist, and migration 036 always creates it first. Every
+        // column this class writes but a migration may predate belongs here,
+        // checked one by one, so a later addition cannot be skipped by an
+        // early return placed for an earlier one.
+        foreach ([
+            'stock_categories' => ['image_url' => "TEXT DEFAULT ''"],
+        ] as $table => $needed) {
+            try {
+                $have = [];
+                foreach ($this->db->query("PRAGMA table_info({$table})") as $r) {
+                    $have[] = (string)($r['name'] ?? '');
+                }
+                if ($have === []) continue;   // table not created yet
+                foreach ($needed as $col => $decl) {
+                    if (in_array($col, $have, true)) continue;
+                    try { $this->db->exec("ALTER TABLE {$table} ADD COLUMN {$col} {$decl}"); }
+                    catch (\Throwable $e) { /* raced with another process */ }
+                }
+            } catch (\Throwable $e) { /* nothing here is worth failing a page load */ }
+        }
 
         try {
             $cols = [];
@@ -680,7 +707,7 @@ class StockService
     {
         $unit = $this->getUnitRow($unitId);
         if (!$unit) throw new \InvalidArgumentException('Unit not found');
-        if ($unit['status'] !== 'in_stock' && $unit['status'] !== 'returned') {
+        if (!in_array($unit['status'], ['in_stock', 'returned', 'reserved'], true)) {
             throw new \InvalidArgumentException("Cannot check out: unit status is '{$unit['status']}'");
         }
 
@@ -746,12 +773,128 @@ class StockService
     /**
      * Mark unit as installed at customer site.
      */
+    /**
+     * Hold a specific unit for a specific customer.
+     *
+     * The gap between "we sold them a dish" and "the dish is on their roof"
+     * is days, and for those days the unit was indistinguishable from any
+     * other on the shelf. Two jobs a week apart were both promised it, and
+     * the second install was where that got discovered.
+     *
+     * The unit stays in the warehouse — this changes who it is for, not
+     * where it is.
+     */
+    public function reserve(int $unitId, array $data, int $performedBy, string $performerName): array
+    {
+        $unit = $this->getUnitRow($unitId);
+        if (!$unit) throw new \InvalidArgumentException('Unit not found');
+
+        if ($unit['status'] === 'reserved') {
+            $held = (int)($unit['crm_client_id'] ?? 0);
+            throw new \InvalidArgumentException($held > 0
+                ? "Already reserved for client #{$held}."
+                : 'This unit is already reserved.');
+        }
+        if (!in_array($unit['status'], ['in_stock', 'returned'], true)) {
+            throw new \InvalidArgumentException("Cannot reserve: unit status is '{$unit['status']}'");
+        }
+
+        $clientId = (int)($data['crm_client_id'] ?? 0);
+        if ($clientId <= 0) {
+            // A reservation for nobody is just stock nobody can use.
+            throw new \InvalidArgumentException('A reservation needs the customer it is for (crm_client_id).');
+        }
+        $clientName = trim((string)($data['client_name'] ?? '')) ?: "Client #{$clientId}";
+        $now = date('Y-m-d H:i:s');
+
+        $this->db->prepare("UPDATE stock_units SET status = 'reserved', crm_client_id = ?,
+            crm_service_id = ?, job_id = ?, updated_at = ? WHERE id = ?")
+            ->execute([
+                $clientId,
+                (int)($data['crm_service_id'] ?? 0) ?: null,
+                (int)($data['job_id'] ?? 0) ?: null,
+                $now, $unitId,
+            ]);
+
+        $this->logMovement([
+            'category_id'        => $unit['category_id'],
+            'unit_id'            => $unitId,
+            'movement_type'      => 'reserve',
+            'from_location_type' => $unit['location_type'],
+            'from_location_ref'  => $unit['location_ref'],
+            'from_location_name' => $unit['location_name'],
+            // Where it IS does not change. Who it is FOR does.
+            'to_location_type'   => $unit['location_type'],
+            'to_location_ref'    => $unit['location_ref'],
+            'to_location_name'   => $unit['location_name'],
+            'reference_type'     => $data['reference_type'] ?? 'sale',
+            'reference_id'       => (string)($data['reference_id'] ?? $clientId),
+            'performed_by'       => $performedBy,
+            'performed_by_name'  => $performerName,
+            'note'               => trim((string)($data['note'] ?? '')) ?: "Reserved for {$clientName}",
+        ]);
+
+        return $this->getUnitRow($unitId);
+    }
+
+    /**
+     * Give a reserved unit back to the shelf — the sale fell through, or it
+     * was held for the wrong customer.
+     */
+    public function release(int $unitId, int $performedBy, string $performerName, string $reason = ''): array
+    {
+        $unit = $this->getUnitRow($unitId);
+        if (!$unit) throw new \InvalidArgumentException('Unit not found');
+        if ($unit['status'] !== 'reserved') {
+            throw new \InvalidArgumentException("Cannot release: unit status is '{$unit['status']}', not reserved");
+        }
+
+        $heldFor = (int)($unit['crm_client_id'] ?? 0);
+        $now = date('Y-m-d H:i:s');
+        $this->db->prepare("UPDATE stock_units SET status = 'in_stock', crm_client_id = NULL,
+            crm_service_id = NULL, job_id = NULL, updated_at = ? WHERE id = ?")
+            ->execute([$now, $unitId]);
+
+        $this->logMovement([
+            'category_id'        => $unit['category_id'],
+            'unit_id'            => $unitId,
+            'movement_type'      => 'release',
+            'from_location_type' => $unit['location_type'],
+            'from_location_ref'  => $unit['location_ref'],
+            'from_location_name' => $unit['location_name'],
+            'to_location_type'   => $unit['location_type'],
+            'to_location_ref'    => $unit['location_ref'],
+            'to_location_name'   => $unit['location_name'],
+            'reference_type'     => 'release',
+            'reference_id'       => (string)$heldFor,
+            'performed_by'       => $performedBy,
+            'performed_by_name'  => $performerName,
+            // The customer it was held for is in the note, because the column
+            // holding it is about to be cleared and the movement log is then
+            // the only place that answers who lost the reservation.
+            'note'               => trim($reason) !== ''
+                ? $reason . ($heldFor ? " (was reserved for client #{$heldFor})" : '')
+                : ($heldFor ? "Released from client #{$heldFor}" : 'Reservation released'),
+        ]);
+
+        return $this->getUnitRow($unitId);
+    }
+
     public function install(int $unitId, array $data, int $performedBy, string $performerName): array
     {
         $unit = $this->getUnitRow($unitId);
         if (!$unit) throw new \InvalidArgumentException('Unit not found');
-        if (!in_array($unit['status'], ['in_stock', 'checked_out'])) {
+        if (!in_array($unit['status'], ['in_stock', 'reserved', 'checked_out'])) {
             throw new \InvalidArgumentException("Cannot install: unit status is '{$unit['status']}'");
+        }
+        // A unit reserved for one customer must not be installed at another.
+        // Silently re-pointing it is how the first customer's promised dish
+        // disappears with nothing anywhere recording that it did.
+        $heldFor = (int)($unit['crm_client_id'] ?? 0);
+        if ($unit['status'] === 'reserved' && $heldFor > 0
+            && (int)($data['crm_client_id'] ?? 0) !== $heldFor) {
+            throw new \InvalidArgumentException(
+                "This unit is reserved for client #{$heldFor}. Release the reservation first.");
         }
 
         $crmClientId = (int)($data['crm_client_id'] ?? 0);
@@ -949,13 +1092,17 @@ class StockService
         foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) $byStatus[$r['status']] = (int)$r['cnt'];
         $stats['serial_by_status'] = $byStatus;
         $stats['total_serial'] = array_sum($byStatus);
+        // Reserved is counted separately and NOT as in stock: it is spoken
+        // for. Rolling it into the available figure is the "inventory says we
+        // have it" half of promising the same dish twice.
         $stats['in_stock'] = ($byStatus['in_stock'] ?? 0) + ($byStatus['returned'] ?? 0);
+        $stats['reserved'] = $byStatus['reserved'] ?? 0;
         $stats['checked_out'] = $byStatus['checked_out'] ?? 0;
         $stats['installed'] = $byStatus['installed'] ?? 0;
         $stats['damaged'] = $byStatus['damaged'] ?? 0;
 
         // Total stock value (in_stock units)
-        $val = $this->db->query("SELECT COALESCE(SUM(purchase_cost), 0) FROM stock_units WHERE status IN ('in_stock','returned')")->fetchColumn();
+        $val = $this->db->query("SELECT COALESCE(SUM(purchase_cost), 0) FROM stock_units WHERE status IN ('in_stock','returned','reserved')")->fetchColumn();
         $stats['stock_value'] = round((float)$val, 2);
 
         // Installed value

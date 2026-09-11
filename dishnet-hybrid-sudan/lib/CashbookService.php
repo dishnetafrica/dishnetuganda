@@ -730,10 +730,20 @@ class CashbookService
             return ['ok' => true, 'voided' => (int)$n, 'pair' => true];
         }
 
+        $before = $this->dbq("SELECT * FROM cb_ledger WHERE id=?", [$id])[0] ?? null;
         $this->dbq(
             "UPDATE cb_ledger SET status='voided', description = description || ?, updated_at = ? WHERE id = ?",
             [$stamp, date('Y-m-d H:i:s'), $id]
         );
+        // Void already stamps the row itself, which is why it was the one
+        // operation that never lost anything. It is audited here too so that
+        // one query answers "what happened to entry 412" for every kind of
+        // change, rather than two with different shapes.
+        require_once __DIR__ . '/FinAudit.php';
+        FinAudit::record($this->pdo(), 'cb_ledger', $id, 'void',
+                         ['name' => $actor], $before,
+                         $this->dbq("SELECT * FROM cb_ledger WHERE id=?", [$id])[0] ?? null,
+                         $reason);
         return ['ok' => true, 'voided' => 1, 'pair' => false];
     }
 
@@ -1754,13 +1764,25 @@ class CashbookService
             if (array_key_exists($f, $data)) { $sets[] = "$f=?"; $params[] = $data[$f]; }
         }
         if (!$sets) return ['ok'=>false,'error'=>'Nothing to update'];
+
+        // Read the whole row BEFORE the write. Afterwards the previous amount
+        // is gone and no query can recover it — which is what made an edited
+        // ledger row indistinguishable from one that was always that way.
+        $before = $this->dbq("SELECT * FROM cb_ledger WHERE id=?", [$id])[0] ?? null;
+
         $sets[] = 'updated_at=?'; $params[] = date('Y-m-d H:i:s');
         $params[] = $id;
         $this->dbq("UPDATE cb_ledger SET ".implode(',',$sets)." WHERE id=?", $params);
-        return ['ok'=>true];
+
+        $after = $this->dbq("SELECT * FROM cb_ledger WHERE id=?", [$id])[0] ?? null;
+        require_once __DIR__ . '/FinAudit.php';
+        FinAudit::record($this->pdo(), 'cb_ledger', $id, 'update', $admin,
+                         $before, $after, trim((string)($data['_reason'] ?? '')));
+
+        return ['ok'=>true, 'changed'=>FinAudit::changedKeys($before, $after)];
     }
 
-    public function deleteEntry(int $id, array $admin): array
+    public function deleteEntry(int $id, array $admin, string $reason = ''): array
     {
         $entry = $this->dbq("SELECT id,sr,source FROM cb_ledger WHERE id=?", [$id]);
         if (empty($entry)) return ['ok'=>false,'error'=>'Entry not found'];
@@ -1772,7 +1794,18 @@ class CashbookService
             return ['ok'=>false,'error'=>
                 'This is one leg of a linked two-leg entry — deleting it would break double-entry. Use Void instead (voiding one leg voids both).'];
         }
+        // The entire row, not the three columns the guard above needed. This
+        // snapshot IS the deleted entry from here on: amount, date, category,
+        // who entered it, what it was validated against. Take it before the
+        // DELETE, because after it there is nothing to take.
+        $full = $this->dbq("SELECT * FROM cb_ledger WHERE id=?", [$id])[0] ?? null;
+
         $this->dbq("DELETE FROM cb_ledger WHERE id=?", [$id]);
+
+        require_once __DIR__ . '/FinAudit.php';
+        FinAudit::record($this->pdo(), 'cb_ledger', $id, 'delete', $admin,
+                         $full, null, trim((string)$reason));
+
         return ['ok'=>true, 'sr'=>$entry[0]['sr']??''];
     }
 

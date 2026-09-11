@@ -471,6 +471,12 @@ if (!function_exists('ca_find_clients_by_email')) {
 // Returns ['ok' => bool, 'error' => string]. Caller decides whether
 // failure is fatal (currently: log + audit but DON'T fail the whole
 // OTP request — WhatsApp succeeded, email is a bonus channel).
+// Data belonging to the other two plugins is read through SiblingPlugin,
+// which looks in the directory that survives a plugin upgrade and records
+// a miss rather than leaving an empty array that reads as "this customer
+// has no kit".
+require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
+
 if (!function_exists('ca_send_otp_email')) {
     function ca_send_otp_email(array $config, string $dataDir, string $toEmail, string $name, string $code, int $ttlMinutes): array {
         // The message itself is built in lib/OtpEmail.php, so that the tool
@@ -1353,6 +1359,77 @@ if ($act === 'app_logout') {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ACTION: app_account  (Bearer) — the whole account, in one call
+//
+// app_me answers "who am I and do I owe anything". It cannot answer what
+// equipment is on the roof, what has ever been paid, or when the service
+// started — those lived in four other places and the portal had no way to
+// reach three of them.
+//
+// Assembled by CustomerAccountService, the same class the staff screens and
+// the account doctor use, so a customer and the person they ring about it
+// are reading figures that came from the same place. forCustomer() rebuilds
+// the payload from an explicit list of fields: what a kit cost us is the
+// margin on this customer's own installation and never crosses this line.
+// ═══════════════════════════════════════════════════════════════════
+if ($act === 'app_account' && $met === 'GET') {
+    ca_init_tables($store->getPdo());
+    $pdo = $store->getPdo();
+    $claims = ca_require_auth($config, $pdo, $er2);
+    // The authenticated client, never a parameter. An id off the query string
+    // here would be every customer's account behind one valid token.
+    $clientId = ca_resolve_active_client_id($claims, $er2);
+
+    require_once dirname(__DIR__, 2) . '/lib/CustomerAccountService.php';
+    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo, $config);
+    // Ask uCRM first: a customer who has just paid opens this expecting the
+    // balance to have moved, and a cache is not an explanation.
+    $me = $acct->forCustomer($clientId, ['refresh' => true]);
+    if ($me === null) $er2('Account not found.', 404);
+
+    $ok2($me);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ACTION: app_equipment  (Bearer) — what is installed at this customer
+// ═══════════════════════════════════════════════════════════════════
+if ($act === 'app_equipment' && $met === 'GET') {
+    ca_init_tables($store->getPdo());
+    $pdo = $store->getPdo();
+    $claims = ca_require_auth($config, $pdo, $er2);
+    $clientId = ca_resolve_active_client_id($claims, $er2);
+
+    require_once dirname(__DIR__, 2) . '/lib/CustomerAccountService.php';
+    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo, $config);
+    $me = $acct->forCustomer($clientId);
+
+    $ok2(['equipment' => $me['equipment'] ?? []]);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ACTION: app_payments  (Bearer) — every payment on the account
+//
+// app_invoice_receipts_list answers what was paid against ONE invoice. This
+// is the statement: everything this customer has ever paid, newest first.
+// ═══════════════════════════════════════════════════════════════════
+if ($act === 'app_payments' && $met === 'GET') {
+    ca_init_tables($store->getPdo());
+    $pdo = $store->getPdo();
+    $claims = ca_require_auth($config, $pdo, $er2);
+    $clientId = ca_resolve_active_client_id($claims, $er2);
+
+    require_once dirname(__DIR__, 2) . '/lib/CustomerAccountService.php';
+    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo, $config);
+    $acct->refresh($clientId);
+    $me = $acct->forCustomer($clientId);
+
+    $ok2([
+        'payments' => $me['payments'] ?? [],
+        'billing'  => $me['billing']  ?? [],
+    ]);
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // ACTION: app_me  (Bearer)
 // ═══════════════════════════════════════════════════════════════════
 if ($act === 'app_me' && $met === 'GET') {
@@ -1398,7 +1475,11 @@ if ($act === 'app_me' && $met === 'GET') {
         ]);
         $location = implode(', ', $parts);
     }
-    if (empty($location)) $location = 'Juba';
+    // No fallback. This used to read 'Juba' for any customer without an
+    // address on file — a Sudan default shown to Ugandan customers as though
+    // it were their service address. Empty is the honest answer, and the app
+    // can say "not on file" where it means that.
+    if (trim($location) === '') $location = '';
 
     // Derive service type — v4.21.49 hybrid-aware
     // Same logic as portal_data.php: detect by data presence, not by
@@ -1417,7 +1498,7 @@ if ($act === 'app_me' && $met === 'GET') {
     $hasStarlink = false;
     try {
         $plBase = dirname(__DIR__, 3);
-        $slKitsFile2 = $plBase . '/dishnet-starlink-finance/data/sl_kits.json';
+        $slKitsFile2 = SiblingPlugin::pathOrEmpty('dishnet-starlink-finance', 'sl_kits.json');
         if (is_file($slKitsFile2)) {
             $skRaw = json_decode((string)@file_get_contents($slKitsFile2), true) ?: [];
             foreach ($skRaw as $kKey => $kVal) {
@@ -1488,9 +1569,9 @@ if ($act === 'app_me' && $met === 'GET') {
     $unpaidTotal = 0.0;
     try {
         $pluginsBase = dirname(__DIR__, 3);
-        $blockStateFile = $pluginsBase . '/dishnet-data-report/data/wifi_test_block_state.json';
-        $routerMapFile  = $pluginsBase . '/dishnet-data-report/data/wifi_router_map.json';
-        $slKitsFile     = $pluginsBase . '/dishnet-starlink-finance/data/sl_kits.json';
+        $blockStateFile = SiblingPlugin::pathOrEmpty('dishnet-data-report', 'wifi_test_block_state.json');
+        $routerMapFile = SiblingPlugin::pathOrEmpty('dishnet-data-report', 'wifi_router_map.json');
+        $slKitsFile = SiblingPlugin::pathOrEmpty('dishnet-starlink-finance', 'sl_kits.json');
 
         if (is_file($blockStateFile) && is_file($routerMapFile) && is_file($slKitsFile)) {
             $bs = json_decode((string)@file_get_contents($blockStateFile), true) ?: [];
@@ -1953,7 +2034,7 @@ if ($act === 'app_wifi_get' && $met === 'GET') {
         $fallbackError = null;
 
         try {
-            $drMapFile = dirname(dirname(dirname(__DIR__))) . '/dishnet-data-report/data/wifi_router_map.json';
+            $drMapFile = SiblingPlugin::pathOrEmpty('dishnet-data-report', 'wifi_router_map.json');
             if (file_exists($drMapFile)) {
                 $raw = @file_get_contents($drMapFile);
                 if ($raw !== false && $raw !== '') {
@@ -2200,7 +2281,7 @@ if (!function_exists('ca_site_dish_resolve')) {
         $CACHE_FRESH_SEC    = 15 * 60;  // 15 min — cache usable if younger
         $RATE_LIMIT_SEC     = 5 * 60;   // 5 min — per (client_id, kit) live-fetch interval
 
-        $mapFile = dirname(dirname(dirname(__DIR__))) . '/dishnet-data-report/data/wifi_router_map.json';
+        $mapFile = SiblingPlugin::pathOrEmpty('dishnet-data-report', 'wifi_router_map.json');
         $map = file_exists($mapFile) ? (json_decode(@file_get_contents($mapFile), true) ?? []) : [];
 
         // Locate the entry for this kit (by kit_serial)
@@ -2502,7 +2583,7 @@ if ($act === 'app_site_diagnostics' && $met === 'GET') {
     if (!$kitNumber && !$routerId) $er2('kit or router_id required.', 400);
 
     // ── STEP 1: Authorize — confirm this kit belongs to the customer ──
-    $slKitsFile = dirname(dirname(dirname(__DIR__))) . '/dishnet-starlink-finance/data/sl_kits.json';
+    $slKitsFile = SiblingPlugin::pathOrEmpty('dishnet-starlink-finance', 'sl_kits.json');
     if (!file_exists($slKitsFile)) $er2('Kit registry not available.', 503);
 
     $slKits = json_decode(@file_get_contents($slKitsFile), true);
@@ -2617,7 +2698,7 @@ if ($act === 'app_site_refresh' && $met === 'POST') {
     if (!$kitNumber) $er2('kit required.', 400);
 
     // Reuse the same authorization path
-    $slKitsFile = dirname(dirname(dirname(__DIR__))) . '/dishnet-starlink-finance/data/sl_kits.json';
+    $slKitsFile = SiblingPlugin::pathOrEmpty('dishnet-starlink-finance', 'sl_kits.json');
     if (!file_exists($slKitsFile)) $er2('Kit registry not available.', 503);
     $slKits = json_decode(@file_get_contents($slKitsFile), true);
     if (!is_array($slKits)) $er2('Kit registry unreadable.', 503);
@@ -2972,7 +3053,7 @@ if (!function_exists('ca_hotspot_authz_router')) {
         if ($routerId === '') { $er2('router_id required.', 400); }
         if (strpos($routerId, 'Router-') !== 0) { $routerId = 'Router-' . $routerId; }
 
-        $slKitsFile = dirname(dirname(dirname(__DIR__))) . '/dishnet-starlink-finance/data/sl_kits.json';
+        $slKitsFile = SiblingPlugin::pathOrEmpty('dishnet-starlink-finance', 'sl_kits.json');
         if (!file_exists($slKitsFile)) { $er2('Kit registry not available.', 503); }
 
         $slKits = json_decode(@file_get_contents($slKitsFile), true);
@@ -3003,7 +3084,7 @@ if (!function_exists('ca_hotspot_authz_router')) {
         // for the same kit was empty / unset, so the toggle endpoint's
         // direct lookup returned 404. ────────────────────────────────────
         if (!$matchedKit) {
-            $drMapFile = dirname(dirname(dirname(__DIR__))) . '/dishnet-data-report/data/wifi_router_map.json';
+            $drMapFile = SiblingPlugin::pathOrEmpty('dishnet-data-report', 'wifi_router_map.json');
             if (file_exists($drMapFile)) {
                 $drRaw = @file_get_contents($drMapFile);
                 $drMap = $drRaw !== false ? json_decode($drRaw, true) : null;
