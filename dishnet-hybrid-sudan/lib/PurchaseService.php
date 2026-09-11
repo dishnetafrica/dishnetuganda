@@ -88,7 +88,7 @@ final class PurchaseService
 
         $priced = [];
         foreach ($lines as $i => $raw) {
-            $p = $this->priceLine($raw, $i);
+            $p = $this->priceLine(self::normaliseLine((array)$raw), $i);
             if (isset($p['error'])) return ['ok' => false, 'error' => $p['error']];
             $priced[] = $p;
         }
@@ -163,6 +163,41 @@ final class PurchaseService
             'variance' => $variance,
             'units_created' => $unitsCreated,
         ];
+    }
+
+    /**
+     * Accept the shape the Stock Receive screen has always sent.
+     *
+     * That screen posts one entry PER SERIAL — {category_id, serial_number,
+     * purchase_cost} with no quantity at all — because it was written against
+     * createUnit(), which took exactly that. This service was written around
+     * lines with a quantity and a list of serials, and moving the endpoint
+     * onto it broke the screen: every serialised item failed validation with
+     * "quantity must be more than zero", which is a confusing way to say
+     * "I changed the contract underneath you".
+     *
+     * Both shapes are legitimate. One is a delivery note, the other is a
+     * person entering serials one at a time. Neither caller should have to
+     * know about the other.
+     */
+    public static function normaliseLine(array $raw): array
+    {
+        // Already the new shape.
+        if (isset($raw['serials']) || array_key_exists('unit_cost', $raw)) return $raw;
+
+        $single = trim((string)($raw['serial_number'] ?? $raw['serial'] ?? ''));
+        if ($single !== '') {
+            $raw['serials']   = [$single];
+            $raw['quantity']  = 1;
+            $raw['unit_cost'] = (float)($raw['purchase_cost'] ?? $raw['cost'] ?? 0);
+            return $raw;
+        }
+
+        // A bulk line from the same screen: a quantity and no cost per unit.
+        if (!array_key_exists('unit_cost', $raw)) {
+            $raw['unit_cost'] = (float)($raw['purchase_cost'] ?? $raw['cost'] ?? 0);
+        }
+        return $raw;
     }
 
     /**
