@@ -11,6 +11,12 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
         $editHW = null;
         $hwEditId = (int)($_GET['edit_hw'] ?? 0);
         if ($hwEditId) { foreach ($allHW as $h2) { if ((int)($h2['id']??0)===$hwEditId) { $editHW=$h2; break; } } }
+        // What the assistant can already show for each item. The media name is
+        // the equipment title through the same key rule, so a row and its
+        // picture are matched by name with nothing to maintain by hand.
+        require_once dirname(__DIR__, 2) . '/lib/MediaLibrary.php';
+        $_hwPhotos = MediaLibrary::all($dataDir);
+        $_hwDocs   = MediaLibrary::documents($dataDir);
         $hwByType = ['starlink'=>[],'fiber'=>[],'general'=>[]];
         foreach ($allHW as $h2) { $ht = strtolower($h2['type']??'starlink'); $hwByType[$ht][] = $h2; }
     ?>
@@ -98,7 +104,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
     </div>
     <div class="kyc-card-body" style="padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch;">
         <table class="kyc-table">
-            <thead><tr><th>Equipment</th><th style="text-align:right;">Buy Price</th><th style="text-align:right;">Sell Price</th><th style="text-align:right;">Margin</th><th style="text-align:center;">UCRM</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Equipment</th><th style="text-align:right;">Buy Price</th><th style="text-align:right;">Sell Price</th><th style="text-align:right;">Margin</th><th style="text-align:center;">UCRM</th><th style="text-align:center;">Shown to customers</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
             <?php foreach ($hwByType['starlink']??[] as $hw):
                 $hwProfit = ($hw['sell_price']??0) - ($hw['buy_price']??0);
@@ -116,6 +122,39 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                         <button onclick="syncHw(<?= (int)$hw['id'] ?>,this)" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Sync</button>
                     <?php endif; ?>
                 </td>
+                <?php
+                  $_mk   = MediaLibrary::key((string)($hw['title'] ?? ''));
+                  $_hasP = $_mk !== '' && isset($_hwPhotos[$_mk]);
+                  $_hasD = $_mk !== '' && isset($_hwDocs[$_mk]);
+                ?>
+                <td style="text-align:center;font-size:11px;white-space:nowrap;">
+                  <?php foreach ([['image','Photo',$_hasP],['document','PDF',$_hasD]] as $_m): ?>
+                    <?php list($_mKind,$_mLabel,$_mHas) = $_m; ?>
+                    <?php if ($_mHas): ?>
+                      <form method="POST" style="display:inline" onsubmit="return confirm('Remove the <?= $_mLabel ?> for <?= h($hw['title']) ?>?');">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="action" value="delete_hw_media">
+                        <input type="hidden" name="media_kind" value="<?= $_mKind ?>">
+                        <input type="hidden" name="media_name" value="<?= h($_mk) ?>">
+                        <button type="submit" title="Remove the <?= $_mLabel ?> — the assistant will stop sending it"
+                          style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:700;cursor:pointer;">&#10003; <?= $_mLabel ?></button>
+                      </form>
+                    <?php else: ?>
+                      <label style="display:inline-block;background:#f3f4f6;color:#6b7280;border:1px dashed #d1d5db;border-radius:5px;padding:2px 7px;font-weight:600;cursor:pointer;"
+                             title="Upload a <?= $_mLabel ?> for <?= h($hw['title']) ?>">+ <?= $_mLabel ?>
+                        <form method="POST" enctype="multipart/form-data" style="display:none">
+                          <?= csrfField() ?>
+                          <input type="hidden" name="action" value="upload_hw_media">
+                          <input type="hidden" name="media_kind" value="<?= $_mKind ?>">
+                          <input type="hidden" name="hw_title" value="<?= h($hw['title']) ?>">
+                          <input type="file" name="media_file"
+                                 accept="<?= $_mKind === 'document' ? '.pdf' : '.jpg,.jpeg,.png,.webp' ?>"
+                                 onchange="this.form.submit()">
+                        </form>
+                      </label>
+                    <?php endif; ?>
+                  <?php endforeach; ?>
+                </td>
                 <td><?= !empty($hw['is_active']) ? '<span class="badge-approved">Active</span>' : '<span class="badge-rejected">Inactive</span>' ?></td>
                 <td>
                     <a href="?page=dashboard&tab=hardware&edit_hw=<?= $hw['id'] ?>" style="color:#D41C1C;font-size:11px;font-weight:600;text-decoration:none;margin-right:8px;"><i class="bi bi-pencil"></i> Edit</a>
@@ -123,7 +162,7 @@ $curSym = htmlspecialchars(trim((string)(($config['currency_symbol'] ?? '') ?: '
                     <?= csrfField() ?>
                 </td>
             </tr>
-            <?php endforeach; if(empty($hwByType['starlink']??[])): ?><tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:20px;">No Starlink hardware.</td></tr><?php endif; ?>
+            <?php endforeach; if(empty($hwByType['starlink']??[])): ?><tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:20px;">No Starlink hardware.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>

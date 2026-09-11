@@ -109,6 +109,115 @@ has('the exact wrong phrasing is named', $p, 'will need');
 has('they are separate choices',  $p, 'two separate choices');
 has('and an unknown is confirmed', $p, 'offer to confirm it');
 
+// ══════════════════════════════════════════════════════════════════════════
+//  Uploading, which is how anything gets in here without a shell
+// ══════════════════════════════════════════════════════════════════════════
+echo "\nWhat a file IS decides the extension, not what it is called\n";
+// A browser can claim anything. Everything here reaches a customer, so the
+// name on the upload is never trusted for the stored name or the type.
+$up = $tmp . '/up'; @mkdir($up, 0777, true);
+$mk = function (string $file, string $bytes) use ($up) {
+    file_put_contents($up . '/' . $file, $bytes);
+    return ['name' => $file, 'tmp_name' => $up . '/' . $file,
+            'error' => UPLOAD_ERR_OK, 'size' => strlen($bytes)];
+};
+$store2 = $tmp . '/store'; @mkdir($store2, 0777, true);
+
+$r = MediaLibrary::store($store2, $mk('kit.png', $png), 'image', 'mini-kit', 'The Mini kit');
+is_($r['ok'], 'a real PNG is accepted', $r['error']);
+is_($r['name'] === 'mini-kit', 'and stored under the name given');
+is_(MediaLibrary::find($store2, 'mini-kit') !== null, 'and is findable straight away');
+is_((string)MediaLibrary::find($store2, 'mini-kit')['caption'] === 'The Mini kit',
+    'with its caption written beside it');
+
+echo "\nA file pretending to be an image is refused\n";
+$r = MediaLibrary::store($store2, $mk('evil.jpg', '<?php echo "hello"; ?>'), 'image', 'evil');
+is_(!$r['ok'], 'PHP source named .jpg is rejected', 'it claimed to be an image');
+is_(stripos($r['error'], 'not a JPG') !== false, 'and told why', $r['error']);
+is_(!is_file($store2 . '/photos/evil.jpg'), 'nothing was written');
+
+echo "\nAnd so is a document that is not a PDF\n";
+$r = MediaLibrary::store($store2, $mk('sheet.pdf', 'just text'), 'document', 'sheet');
+is_(!$r['ok'] && stripos($r['error'], 'not a PDF') !== false, 'the %PDF- header is checked', $r['error']);
+$r = MediaLibrary::store($store2, $mk('real.pdf', "%PDF-1.7\n1 0 obj\n"), 'document', 'mini-spec-sheet',
+                         'Starlink Mini specifications');
+is_($r['ok'], 'a real PDF is accepted', $r['error']);
+is_(MediaLibrary::findDocument($store2, 'mini-spec-sheet') !== null, 'and lands in documents');
+is_(MediaLibrary::find($store2, 'mini-spec-sheet') === null,
+    'not in photos — the two folders stay separate');
+
+echo "\nAn upload cannot choose its own path\n";
+// The stored name is rebuilt from the key rule, so traversal and odd
+// characters cannot survive it.
+$r = MediaLibrary::store($store2, $mk('x.png', $png), 'image', '../../etc/passwd');
+is_($r['ok'], 'it still stores');
+is_(strpos($r['name'], '..') === false && strpos($r['name'], '/') === false,
+    'with the path stripped out — got "' . $r['name'] . '"');
+is_(!is_file($tmp . '/etc/passwd'), 'and nothing escaped the folder');
+
+echo "\nOne name means one file\n";
+// Replacing a jpg with a png must not leave two files answering to one name.
+MediaLibrary::store($store2, $mk('a.png', $png), 'image', 'swapme');
+$jpg = imagecreatetruecolor(2, 2);
+ob_start(); imagejpeg($jpg); $jpgBytes = (string)ob_get_clean(); imagedestroy($jpg);
+MediaLibrary::store($store2, $mk('b.jpg', $jpgBytes), 'image', 'swapme');
+$left = glob($store2 . '/photos/swapme.*') ?: [];
+$imgs = array_filter($left, fn($f) => !str_ends_with($f, '.txt'));
+is_(count($imgs) === 1, 'exactly one image survives', implode(', ', $imgs));
+is_(str_ends_with((string)array_values($imgs)[0], '.jpg'), 'and it is the new one');
+
+echo "\nRemoving takes the caption with it\n";
+is_(MediaLibrary::remove($store2, 'image', 'mini-kit'), 'the photo is removed');
+is_(MediaLibrary::find($store2, 'mini-kit') === null, 'and is gone from the library');
+is_(!is_file($store2 . '/photos/mini-kit.txt'), 'the caption file went too');
+is_(!MediaLibrary::remove($store2, 'image', 'never-existed'), 'removing nothing reports false');
+
+echo "\nThe failures a person actually hits are explained, not just refused\n";
+$r = MediaLibrary::store($store2, ['error' => UPLOAD_ERR_NO_FILE], 'image', 'x');
+is_(!$r['ok'] && stripos($r['error'], 'No file') !== false, 'no file chosen', $r['error']);
+$r = MediaLibrary::store($store2, ['error' => UPLOAD_ERR_INI_SIZE, 'tmp_name' => ''], 'image', 'x');
+is_(!$r['ok'] && stripos($r['error'], 'larger than') !== false, 'too large for the server', $r['error']);
+$r = MediaLibrary::store($store2, $mk('blank.png', ''), 'image', 'blank');
+is_(!$r['ok'] && stripos($r['error'], 'empty') !== false, 'an empty file', $r['error']);
+$r = MediaLibrary::store($store2, $mk('c.png', $png), 'image', '!!!');
+is_(!$r['ok'] && stripos($r['error'], 'letters, numbers') !== false,
+    'a name with nothing usable in it', $r['error']);
+
+echo "\nThe admin page calls the library rather than writing files itself\n";
+$tab = (string)file_get_contents($root . '/tabs/engage/wa_ai_setup.php');
+is_(strpos($tab, 'MediaLibrary::store(') !== false, 'upload goes through store()');
+is_(strpos($tab, 'MediaLibrary::remove(') !== false, 'and removal through remove()');
+is_(strpos($tab, 'move_uploaded_file') === false,
+    'the page never moves an upload itself',
+    'validation lives in one place or it lives in none');
+is_(strpos($tab, 'enctype="multipart/form-data"') !== false, 'the form can actually carry a file');
+is_(substr_count($tab, '$_csrf') >= 6, 'and every form on the page is CSRF-stamped');
+
+echo "\nThe equipment screen files a photo under the product's own name\n";
+// "Starlink Mini Kit" -> "starlink-mini-kit", which is also how the product
+// reaches the prompt from uCRM. The row and its picture line up by name, with
+// nothing to keep in step by hand.
+foreach ([['Starlink Mini Kit', 'starlink-mini-kit'],
+          ['Starlink Standard Kit', 'starlink-standard-kit'],
+          ['Professional Installation', 'professional-installation'],
+          ['Residential Lite ( up to 100 Mbps)', 'residential-lite-up-to-100-mbps']] as $pair) {
+    list($title, $expect) = $pair;
+    is_(MediaLibrary::key($title) === $expect,
+        '"' . $title . '" files as "' . $expect . '"', MediaLibrary::key($title));
+}
+
+$hwTab  = (string)file_get_contents($root . '/tabs/sales/hardware.php');
+$hwPost = (string)file_get_contents($root . '/includes/post/post_sync.php');
+is_(strpos($hwTab, 'upload_hw_media') !== false, 'the equipment table can upload');
+is_(strpos($hwTab, 'delete_hw_media') !== false, 'and remove');
+is_(strpos($hwTab, 'MediaLibrary::key(') !== false,
+    'and it derives the name the same way the library does',
+    'a second naming rule is a row whose photo never matches');
+is_(strpos($hwPost, 'MediaLibrary::store(') !== false, 'the handler goes through store()');
+is_(strpos($hwPost, 'move_uploaded_file') === false,
+    'and never moves an upload itself');
+is_(strpos($hwPost, 'csrfCheck()') !== false, 'with CSRF checked before writing');
+
 exec('rm -rf ' . escapeshellarg($tmp));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

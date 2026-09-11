@@ -493,6 +493,38 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_plan'){
     flash(($planId && !isset($plan['created_at']) ? 'Plan updated.' : 'Plan created.') . $ucrmMsg, 'success');
     redirect('?page=dashboard&tab=subscription_plans');
 }
+// ── A photo or spec sheet for one piece of equipment ────────────────────────
+// The media name is derived from the equipment TITLE, so "Starlink Mini Kit"
+// becomes "starlink-mini-kit" — the same name the assistant already sees in
+// HARDWARE from uCRM. It asks for the product by the name it knows, and the
+// file is there under that name. Nothing to keep in step by hand.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'upload_hw_media') {
+    if (function_exists('csrfCheck')) csrfCheck();
+    require_once dirname(__DIR__, 2) . '/lib/MediaLibrary.php';
+    $hwTitle = trim((string)($_POST['hw_title'] ?? ''));
+    $kind    = ($_POST['media_kind'] ?? '') === 'document' ? 'document' : 'image';
+    if ($hwTitle === '') {
+        flash('That equipment has no name to file the upload under.', 'danger');
+    } else {
+        $r = MediaLibrary::store($dataDir, $_FILES['media_file'] ?? [], $kind, $hwTitle,
+                                 (string)($_POST['media_caption'] ?? ''));
+        flash($r['ok']
+            ? ('Saved for ' . $hwTitle . ' as "' . $r['name'] . '". The assistant can send it now.')
+            : $r['error'], $r['ok'] ? 'success' : 'danger');
+    }
+    redirect('?page=dashboard&tab=hardware');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_hw_media') {
+    if (function_exists('csrfCheck')) csrfCheck();
+    require_once dirname(__DIR__, 2) . '/lib/MediaLibrary.php';
+    $kind = ($_POST['media_kind'] ?? '') === 'document' ? 'document' : 'image';
+    $nm   = (string)($_POST['media_name'] ?? '');
+    flash(MediaLibrary::remove($dataDir, $kind, $nm) ? ('Removed "' . $nm . '".')
+        : 'Nothing was removed.', 'success');
+    redirect('?page=dashboard&tab=hardware');
+}
+
 if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_hardware'){
     $auth->requireAdmin();
     $hw = $store->load('kyc_devices.json');

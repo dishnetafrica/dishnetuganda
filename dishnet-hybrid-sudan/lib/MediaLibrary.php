@@ -137,6 +137,104 @@ class MediaLibrary
     }
 
     /**
+     * Take an upload and put it in the library.
+     *
+     * Everything a customer could be sent passes through here, so nothing is
+     * trusted from the browser. The extension comes from what the file
+     * ACTUALLY is, not from what it was called: an image has to survive
+     * getimagesize(), a PDF has to start with %PDF-, and the stored name is
+     * rebuilt from the key rule so no upload can choose its own path.
+     *
+     * @param array $file one entry from $_FILES
+     * @return array{ok:bool, name:string, error:string}
+     */
+    public static function store(string $dataDir, array $file, string $kind,
+                                 string $name = '', string $caption = ''): array
+    {
+        $err = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($err === UPLOAD_ERR_NO_FILE) return self::fail('No file was chosen.');
+        if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) {
+            return self::fail('That file is larger than the server accepts.');
+        }
+        if ($err !== UPLOAD_ERR_OK) return self::fail('The upload did not complete (code ' . $err . ').');
+
+        $tmp = (string)($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_readable($tmp)) return self::fail('The uploaded file could not be read.');
+
+        $isDoc  = $kind === 'document';
+        $max    = $isDoc ? self::MAX_DOC_BYTES : self::MAX_FILE_BYTES;
+        $bytes  = (int)@filesize($tmp);
+        if ($bytes <= 0)    return self::fail('That file is empty.');
+        if ($bytes > $max)  return self::fail('That file is ' . round($bytes / 1048576, 1)
+                                 . ' MB. The limit is ' . (int)($max / 1048576) . ' MB.');
+
+        // What is it really? A name ending .jpg proves nothing.
+        if ($isDoc) {
+            $head = (string)@file_get_contents($tmp, false, null, 0, 5);
+            if (strncmp($head, '%PDF-', 5) !== 0) return self::fail('That is not a PDF file.');
+            $ext = 'pdf';
+        } else {
+            $info = @getimagesize($tmp);
+            $byType = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+            $type = is_array($info) ? (int)($info[2] ?? 0) : 0;
+            if (!isset($byType[$type])) {
+                return self::fail('That is not a JPG, PNG or WebP image.');
+            }
+            $ext = $byType[$type];
+        }
+
+        // The stored name is built from the key rule, never from the upload.
+        $base = self::key($name !== '' ? $name : (string)pathinfo((string)($file['name'] ?? ''), PATHINFO_FILENAME));
+        if ($base === '') return self::fail('Give the file a name using letters, numbers and dashes.');
+
+        $dir = rtrim($dataDir, '/') . '/' . ($isDoc ? self::DIR_DOC : self::DIR);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            return self::fail('Could not create ' . $dir);
+        }
+
+        // One name, one file: replacing mini-kit.jpg with mini-kit.png must
+        // not leave two files answering to "mini-kit".
+        foreach (array_keys($isDoc ? self::DOC_EXTS : self::EXTS) as $old) {
+            $stale = $dir . '/' . $base . '.' . $old;
+            if ($old !== $ext && is_file($stale)) @unlink($stale);
+        }
+
+        $dest = $dir . '/' . $base . '.' . $ext;
+        $moved = is_uploaded_file($tmp) ? @move_uploaded_file($tmp, $dest) : @rename($tmp, $dest);
+        if (!$moved) return self::fail('Could not save the file. Check the folder is writable.');
+        @chmod($dest, 0664);
+
+        $capFile = $dir . '/' . $base . '.txt';
+        $caption = trim($caption);
+        if ($caption !== '') { @file_put_contents($capFile, mb_substr($caption, 0, 400)); }
+        elseif (is_file($capFile)) { @unlink($capFile); }
+
+        return ['ok' => true, 'name' => $base, 'error' => ''];
+    }
+
+    /** Remove one item and its caption. Returns false when there was nothing there. */
+    public static function remove(string $dataDir, string $kind, string $name): bool
+    {
+        $base = self::key($name);
+        if ($base === '') return false;
+        $isDoc = $kind === 'document';
+        $dir   = rtrim($dataDir, '/') . '/' . ($isDoc ? self::DIR_DOC : self::DIR);
+        $gone  = false;
+        foreach (array_keys($isDoc ? self::DOC_EXTS : self::EXTS) as $ext) {
+            $f = $dir . '/' . $base . '.' . $ext;
+            if (is_file($f) && @unlink($f)) $gone = true;
+        }
+        $cap = $dir . '/' . $base . '.txt';
+        if (is_file($cap)) @unlink($cap);
+        return $gone;
+    }
+
+    private static function fail(string $msg): array
+    {
+        return ['ok' => false, 'name' => '', 'error' => $msg];
+    }
+
+    /**
      * The prompt block. Empty string when there are no photos, so a prompt
      * without them is byte-identical to one built before this existed.
      */
