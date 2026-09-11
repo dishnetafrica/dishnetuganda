@@ -121,5 +121,19 @@ is_(strpos($tool, 'NOT stop uCRM redirecting') !== false,
     'and says plainly that it does not stop the redirect');
 is_(strpos($tool, 'cliDataDir(') !== false, 'and resolves its data directory through the guard');
 
+// The curl runs inside the uCRM container. A request from there may never
+// leave the host, so it can reach the internal server directly and see a
+// redirect no customer would. Reporting that as what a browser sees is a
+// confident wrong answer about the one thing being diagnosed.
+is_(strpos($tool, 'Asked from INSIDE the uCRM container') !== false,
+    'it says where it asked from',
+    'a probe inside the host does not speak for a customer on mobile data');
+is_(strpos($tool, '301 is PERMANENT') !== false,
+    'and warns that a 301 is cached by browsers',
+    'fixing the server then re-testing in the same browser looks like the fix failed');
+is_(strpos($tool, 'UISP') !== false && strpos($tool, 'chosen at install') !== false,
+    'and points at UISP when uCRM is already correct',
+    'the port is not in the settings UI, so stopping at uCRM leaves it unfixed');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

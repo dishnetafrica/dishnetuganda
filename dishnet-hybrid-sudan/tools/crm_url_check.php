@@ -111,6 +111,11 @@ if ($override !== '' && dn_public_override($config) === '') {
 $test = dn_crm_web($config);
 if ($test !== '' && function_exists('curl_init')) {
     echo "\n  WHAT THAT ADDRESS ANSWERS\n\n";
+    echo "    Asked from INSIDE the uCRM container. That request may never leave\n";
+    echo "    the host, so it can reach the internal server directly and see a\n";
+    echo "    redirect a customer's browser would not. Evidence about the server,\n";
+    echo "    not proof about the outside world — confirm from a phone on mobile\n";
+    echo "    data before concluding either way.\n\n";
     foreach ([$test . '/crm' => 'the CRM'] as $url => $label) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true,
@@ -130,9 +135,15 @@ if ($test !== '' && function_exists('curl_init')) {
         if ($loc !== '') {
             $lp = dn_probe($loc);
             if ($lp['ok'] && !$lp['normal']) {
-                echo "      ↑ it redirects to port " . $lp['port'] . ". That is the reported\n";
-                echo "        symptom: the link is right, uCRM sends the browser elsewhere.\n";
-                $problems[] = 'the CRM redirects to port ' . $lp['port'];
+                echo "      ↑ redirects to port " . $lp['port'] . ": the link is right, the\n";
+                echo "        server sends the browser elsewhere.\n";
+                if ($code === 301) {
+                    echo "        A 301 is PERMANENT — browsers cache it. Once the server is\n";
+                    echo "        fixed, anyone who hit this keeps being redirected until they\n";
+                    echo "        clear it. Re-test in a private window.\n";
+                }
+                $problems[] = 'the CRM redirects to port ' . $lp['port']
+                            . ' (seen from inside the container)';
             }
         }
     }
@@ -145,10 +156,15 @@ if (!$problems) {
 }
 echo "  NEEDS FIXING\n\n";
 foreach ($problems as $x) echo "    - " . $x . "\n";
-echo "\n  The real fix is in uCRM, because it is uCRM that redirects:\n\n";
-echo "    Settings -> System -> Application\n";
-echo "      Server domain name   the host a customer types\n";
-echo "      Server port          the port a customer's browser opens (443 for https)\n\n";
+echo "\n  The real fix is in whatever redirects, and it is not this plugin:\n\n";
+echo "    uCRM    Settings -> System -> Application\n";
+echo "              Server domain name   the host a customer types\n";
+echo "              Server port          the port their browser opens (443 for https)\n\n";
+echo "    UISP    if uCRM already shows the right values and the redirect stays,\n";
+echo "            the port is UISP's. It is chosen at install and is NOT in the\n";
+echo "            settings UI, so look at the install config and the container:\n\n";
+echo "              grep -riE port /home/unms/app/unms.conf\n";
+echo "              docker inspect unms --format \'{{range .Config.Env}}{{println .}}{{end}}\' | grep -i port\n\n";
 echo "  Until that is done, this makes the plugin's own links correct — it does\n";
 echo "  NOT stop uCRM redirecting, so fix the setting too:\n\n";
 echo "    php tools/crm_url_check.php --set https://" . (dn_probe($ucrmPub)['host'] ?? 'crm.example.com') . "\n\n";
