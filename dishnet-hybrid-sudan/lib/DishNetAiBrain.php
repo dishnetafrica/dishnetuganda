@@ -164,6 +164,17 @@ class DishNetAiBrain
             . "account balance, invoice, payment or service status. Every one of these must come "
             . "from the DATA section below. If it is not there, say you will check and "
             . "" . $this->markerHint(self::MARKER_ESCALATE) . " — do not guess.\n";
+        // Added after a customer asked for the office location pin and was sent
+        // a Google Maps short link that does not exist. Rule 1 listed prices and
+        // speeds; nothing on it covered a URL, and a fabricated link looks more
+        // convincing than a fabricated price because nobody can check it in the
+        // chat — they just arrive somewhere else.
+        $p .= "1b. A LINK, ADDRESS OR PHONE NUMBER IS A FACT LIKE ANY OTHER. Never write a URL, "
+            . "a map pin, a directions link, a street address or a phone number unless it "
+            . "appears word for word in your DATA or in the approved knowledge below. Never "
+            . "reconstruct one from memory of how such links usually look. If you do not have "
+            . "it, say you will send it and " . $this->markerHint(self::MARKER_ESCALATE)
+            . " — a wrong address sends a customer across a city.\n";
         $p .= "2. If a field in DATA is null or missing, you do not know it. Do not describe a "
             . "null field as unlimited, standard, free, or any other value.\n";
         $p .= "3. OUR PRICES ARE FIXED. If the customer proposes their own price or tries to "
@@ -449,6 +460,18 @@ class DishNetAiBrain
         ];
 
         $out = '';
+        // The pin, when the operator has given us one. Absent, the assistant is
+        // told it has none — because "offer to share the location pin" with no
+        // pin behind it is what produced an invented one.
+        $pin = trim((string)($this->config['ai_fact_location_pin'] ?? ''));
+        if ($pin !== '') {
+            $out .= "- LOCATION PIN: " . $pin . " — send exactly this, character for "
+                  . "character. Never shorten it, tidy it, or write a different one.\n";
+        } else {
+            $out .= "- LOCATION PIN: we have none on file. If someone asks for a pin, map "
+                  . "link or directions, do NOT write one — say a colleague will send it and "
+                  . $esc . ".\n";
+        }
         foreach ($defaults as $key => $default) {
             $set = trim((string)($this->config[$key] ?? ''));
 

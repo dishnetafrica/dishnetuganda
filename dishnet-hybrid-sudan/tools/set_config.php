@@ -62,6 +62,8 @@ $FLAGS = [
     // On every quotation the team sends. QuotationService compiles South Sudan
     // defaults for all three, so an unset key is not a blank — it is Juba's
     // phone number printed on a Ugandan customer's quote.
+    'ai_fact_location_pin' => ['text',
+        'Map pin for the office — sent verbatim; unset means the AI must not write one'],
     'quote_company_name' => ['text',
         'Company name on quotations (unset = "DishNet Africa")'],
     'quote_company_phone' => ['text',
@@ -146,6 +148,10 @@ if (!$clear) {
         && strpos(preg_replace('/\D+/', '', $new) ?? '', '211') === 0) {
         $warn[] = 'That is a South Sudan number. It is printed on quotations sent to '
                 . 'Ugandan customers as the number to call.';
+    }
+    if ($key === 'ai_fact_location_pin' && $new !== ''
+        && !preg_match('#^https?://#i', $new)) {
+        $warn[] = 'That is not a URL. It is sent to customers exactly as typed.';
     }
     if ($key === 'ai_handover_message' && mb_strlen($new) > 160) {
         $warn[] = 'That is long for a holding line on WhatsApp. It is sent on its own, before '

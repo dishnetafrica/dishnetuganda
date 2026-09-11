@@ -10,7 +10,7 @@
       "item_key": "OFFICE_LOCATION",
       "kind": "fact",
       "title": "Where is the DishNet Uganda office",
-      "answer": "Our DishNet Uganda office is located on Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda. Customers are welcome to visit; offer to share the directions/location pin.",
+      "answer": "Our DishNet Uganda office is located on Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda. Customers are welcome to visit. Only offer to send a pin or directions link if one is in your data — never write a map link, short link or address from memory. With no pin on file, say a colleague will send it and hand over.",
       "wa_answer": "📍 DishNet Uganda Office — Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda 🇺🇬 You're welcome to visit us at our office. Would you like us to share the directions/location pin?"
     },
     {
@@ -188,6 +188,12 @@
       "kind": "rule",
       "title": "How big the customer is never decides the plan",
       "answer": "Never move a customer to Business because they sound large, busy or commercial. Business exists for a public IP. Many users, a big building or a busy shop are reasons to look at the higher-capacity Residential plan and at the network — router, access points, cabling — not reasons to buy a priority-data block. If they have no public-IP requirement, do not quote Business, whatever size they are."
+    },
+    {
+      "item_key": "RULE_NEVER_INVENT_A_LINK",
+      "kind": "rule",
+      "title": "Never write a link, pin or address you were not given",
+      "answer": "A URL, map pin, directions link, street address or phone number is a fact and obeys the same rule as a price: it comes from your data or it does not get sent. Never reconstruct one from memory of how such links normally look — a fabricated link is more dangerous than a fabricated price, because nobody can check it in the chat, they simply arrive somewhere else. If a customer asks for one you do not have, say a colleague will send it and hand over."
     }
   ]
 }
