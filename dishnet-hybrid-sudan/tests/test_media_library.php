@@ -19,7 +19,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-require_once $root . '/lib/PhotoLibrary.php';
+require_once $root . '/lib/MediaLibrary.php';
 require_once $root . '/lib/DishNetAiBrain.php';
 
 $pass = 0; $fail = 0;
@@ -34,16 +34,16 @@ $tmp = sys_get_temp_dir() . '/dn_photos_' . bin2hex(random_bytes(4));
 $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
 
 echo "\nAn empty folder means the feature does not exist\n";
-is_(PhotoLibrary::all($tmp) === [], 'no photos found');
-is_(PhotoLibrary::promptBlock($tmp) === '', 'and the prompt block is empty',
+is_(MediaLibrary::all($tmp) === [], 'no photos found');
+is_(MediaLibrary::promptBlock($tmp) === '', 'and the prompt block is empty',
     'an install with no photos must be byte-identical to one before this existed');
-is_(PhotoLibrary::all($tmp . '/nope') === [], 'a missing folder is not an error either');
+is_(MediaLibrary::all($tmp . '/nope') === [], 'a missing folder is not an error either');
 
 echo "\nA file name is the name the assistant asks for\n";
 file_put_contents($tmp . '/photos/mini-kit.jpg', $png);
 file_put_contents($tmp . '/photos/Standard Kit.PNG', $png);
 file_put_contents($tmp . '/photos/installed-roof.webp', $png);
-$all = PhotoLibrary::all($tmp);
+$all = MediaLibrary::all($tmp);
 is_(count($all) === 3, 'three photos found', (string)count($all));
 is_(isset($all['mini-kit']), 'mini-kit.jpg is "mini-kit"');
 is_(isset($all['standard-kit']), 'and "Standard Kit.PNG" normalises to "standard-kit"',
@@ -52,31 +52,31 @@ is_(isset($all['installed-roof']), 'webp is accepted too');
 
 echo "\nA caption file beside the image travels with it\n";
 file_put_contents($tmp . '/photos/mini-kit.txt', 'Starlink Mini — dish, built-in wifi, cables, power supply');
-$all = PhotoLibrary::all($tmp);
+$all = MediaLibrary::all($tmp);
 has('the caption is loaded', (string)$all['mini-kit']['caption'], 'built-in wifi');
 is_($all['standard-kit']['caption'] === '', 'and one without a caption stays bare',
     'better bare than captioned from a guess');
 
 echo "\nLookup is exact, and a name we do not hold finds nothing\n";
-is_(PhotoLibrary::find($tmp, 'mini-kit') !== null, 'an exact name resolves');
-is_(PhotoLibrary::find($tmp, 'Mini-Kit') !== null, 'case does not matter');
-is_(PhotoLibrary::find($tmp, 'starlink-v4-dish-2026') === null,
+is_(MediaLibrary::find($tmp, 'mini-kit') !== null, 'an exact name resolves');
+is_(MediaLibrary::find($tmp, 'Mini-Kit') !== null, 'case does not matter');
+is_(MediaLibrary::find($tmp, 'starlink-v4-dish-2026') === null,
     'an invented name resolves to nothing',
     'this is what stops a hallucinated name becoming the wrong picture');
-is_(PhotoLibrary::find($tmp, '') === null, 'and so does an empty one');
+is_(MediaLibrary::find($tmp, '') === null, 'and so does an empty one');
 
 echo "\nOnly real images, only sane sizes\n";
 file_put_contents($tmp . '/photos/notes.txt', 'not an image');
 file_put_contents($tmp . '/photos/contract.pdf', '%PDF-');
 file_put_contents($tmp . '/photos/empty.jpg', '');
-is_(!isset(PhotoLibrary::all($tmp)['notes']), 'a stray .txt is not a photo');
-is_(!isset(PhotoLibrary::all($tmp)['contract']), 'nor a pdf');
-is_(!isset(PhotoLibrary::all($tmp)['empty']), 'nor a zero-byte file');
-is_(PhotoLibrary::payload(['path' => $tmp . '/photos/gone.jpg']) === '',
+is_(!isset(MediaLibrary::all($tmp)['notes']), 'a stray .txt is not a photo');
+is_(!isset(MediaLibrary::all($tmp)['contract']), 'nor a pdf');
+is_(!isset(MediaLibrary::all($tmp)['empty']), 'nor a zero-byte file');
+is_(MediaLibrary::payload(['path' => $tmp . '/photos/gone.jpg']) === '',
     'and a file that vanished yields no payload, not a crash');
 
 echo "\nThe prompt lists exactly what exists, and forbids the rest\n";
-$block = PhotoLibrary::promptBlock($tmp);
+$block = MediaLibrary::promptBlock($tmp);
 has('the marker form is given', $block, '<<PHOTO name>>');
 has('names must match exactly',  $block, 'EXACTLY as written');
 has('mini-kit is listed',        $block, 'mini-kit');

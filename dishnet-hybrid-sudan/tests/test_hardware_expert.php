@@ -69,8 +69,15 @@ echo "\nEthernet is never answered generically\n";
 // differs by generation, so the model has to be established first.
 has('the rule is explicit', $p, 'NEVER answer an Ethernet, router or third-party');
 has('and says to ask which kit', $p, 'Ask which Starlink they have');
-has('Mini needs the adapter', $p, 'Mini Ethernet adapter');
-has('Standard differs by generation', $p, 'differ from Mini and by generation');
+// Corrected against Starlink's own Mini specification sheet, which lists one
+// latching Ethernet LAN port used with the Starlink Plug — and lists that plug
+// in What's In The Box. The earlier entry said no port existed without a
+// separate adapter, and this assertion was holding that wrong answer in place.
+has('Mini has a port, with the plug from the box', $p, 'latching Ethernet LAN port');
+has('and no separate adapter is needed',           $p, 'No separate adapter');
+has('Standard ships Router 3 with two ports',      $p, 'TWO latching Ethernet LAN ports');
+has('older generations still differ',              $p, 'Older Standard generations differ');
+has('and Starlink mesh only, not third-party',     $p, 'NOT with third-party');
 foreach (['MikroTik', 'UniFi', 'Fortinet', 'Cisco'] as $vendor) {
     has('third-party gear named: ' . $vendor, $p, $vendor);
 }

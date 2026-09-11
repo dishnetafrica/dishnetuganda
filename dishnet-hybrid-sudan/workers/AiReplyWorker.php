@@ -67,13 +67,13 @@ class AiReplyWorker extends WorkerBase
         // Named photos the operator dropped in <dataDir>/photos. An empty
         // folder leaves photo_block as '' and the model is never told the
         // action exists — the same absence story the flyer uses.
-        if (!class_exists('PhotoLibrary')) {
-            $pl = __DIR__ . '/../lib/PhotoLibrary.php';
+        if (!class_exists('MediaLibrary')) {
+            $pl = __DIR__ . '/../lib/MediaLibrary.php';
             if (is_file($pl)) require_once $pl;
         }
         $this->photoDir = $dataDir;
-        if (class_exists('PhotoLibrary')) {
-            $config['photo_block'] = \PhotoLibrary::promptBlock($dataDir);
+        if (class_exists('MediaLibrary')) {
+            $config['photo_block'] = \MediaLibrary::promptBlock($dataDir);
         }
         $this->brain = new DishNetAiBrain($config);
         $this->config = $config;
@@ -178,6 +178,9 @@ class AiReplyWorker extends WorkerBase
             // list.
             if (!empty($ai['photo'])) {
                 $this->maybeSendPhoto($convId, $channel, $phone, (string)$ai['photo']);
+            }
+            if (!empty($ai['doc'])) {
+                $this->maybeSendDocument($convId, $channel, $phone, (string)$ai['doc']);
             }
 
             // After the text, so a retry of a failed text send can never have
@@ -447,8 +450,8 @@ class AiReplyWorker extends WorkerBase
     private function maybeSendPhoto(int $convId, string $channel, string $phone, string $name): void
     {
         try {
-            if (!class_exists('PhotoLibrary')) return;
-            $photo = \PhotoLibrary::find($this->photoDir, $name);
+            if (!class_exists('MediaLibrary')) return;
+            $photo = \MediaLibrary::find($this->photoDir, $name);
             if ($photo === null) {
                 $this->log('warn', "conv {$convId}: no photo named '{$name}' — nothing sent");
                 return;
@@ -460,7 +463,7 @@ class AiReplyWorker extends WorkerBase
                 return;
             }
 
-            $media = \PhotoLibrary::payload($photo);
+            $media = \MediaLibrary::payload($photo);
             if ($media === '') {
                 $this->log('warn', "conv {$convId}: photo '{$name}' vanished before sending");
                 return;
@@ -486,6 +489,56 @@ class AiReplyWorker extends WorkerBase
             }
         } catch (\Throwable $e) {
             $this->log('error', 'photo send failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send one named document — a spec sheet, a brochure.
+     *
+     * sendMedia with mediatype 'document' and a real file name, because a PDF
+     * arriving as "file" with no extension is a PDF nobody opens.
+     */
+    private function maybeSendDocument(int $convId, string $channel, string $phone, string $name): void
+    {
+        try {
+            if (!class_exists('MediaLibrary')) return;
+            $doc = \MediaLibrary::findDocument($this->photoDir, $name);
+            if ($doc === null) {
+                $this->log('warn', "conv {$convId}: no document named '{$name}' — nothing sent");
+                return;
+            }
+            if ($convId > 0 && $this->photoSentAlready($convId, 'doc:' . $name)) {
+                $this->log('info', "conv {$convId}: document '{$name}' already sent — not repeating");
+                return;
+            }
+
+            $media = \MediaLibrary::payload($doc);
+            if ($media === '') {
+                $this->log('warn', "conv {$convId}: document '{$name}' vanished before sending");
+                return;
+            }
+
+            $send = $this->evo->sendMedia($channel, $phone, 'document', $media,
+                                          (string)$doc['caption'], (string)$doc['file']);
+            if (empty($send['ok'])) {
+                $this->log('warn', "conv {$convId}: document '{$name}' failed — "
+                    . (string)($send['error'] ?? '?'));
+                return;
+            }
+            $this->log('info', "conv {$convId}: document '{$name}' sent");
+
+            if ($convId > 0) {
+                $this->convSvc->storeMessage($convId, [
+                    'direction'  => 'out',
+                    'role'       => 'assistant',
+                    'body'       => $doc['caption'] !== '' ? $doc['caption'] : ('[document: ' . $doc['file'] . ']'),
+                    'media_type' => 'document',
+                    'media_url'  => self::PHOTO_MEDIA_TAG . 'doc:' . $name,
+                    'agent_name' => 'DishNet AI',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->log('error', 'document send failed: ' . $e->getMessage());
         }
     }
 

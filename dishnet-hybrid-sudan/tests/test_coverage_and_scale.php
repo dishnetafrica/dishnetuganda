@@ -63,7 +63,12 @@ has('one kit does not serve 100', $p, 'one kit alone does not serve fifty or a h
 has('it needs a designed network',$p, 'access points and someone to size it');
 has('and goes to a site assessment', $p, 'site assessment');
 // Single quotes keep a backslash, so the needle is written without escapes.
-has('no invented user count',     $p, 'with a number you have not been given');
+// The spec sheets gave a real figure (128 on Mini, 235 on Router 3), so the
+// rule no longer forbids all numbers — it forbids inventing one, and forbids
+// passing the association limit off as how many people get usable service.
+has('a stated limit may be given',   $p, "maker's figure for how many things may attach");
+has('but never as usable service',   $p, 'never as how many people');
+has('and none is invented',          $p, 'Never invent a number');
 
 echo "\nBeing busy is not a reason to buy a public IP\n";
 // The row that produced the wrong quote: "ideal for ... heavy users".

@@ -23,52 +23,87 @@
   "models": [
     {
       "model": "Starlink Mini",
-      "aka": ["Mini", "mini kit", "small dish", "portable starlink"],
+      "aka": [
+        "Mini",
+        "mini kit",
+        "small dish",
+        "portable starlink"
+      ],
       "status": "current",
       "portable": true,
       "summary": "Compact Starlink hardware for basic internet, fixed or portable.",
-      "wifi": "Wi-Fi is built into the dish itself — there is no separate router in the kit.",
-      "ethernet": "Needs the Mini Ethernet adapter. There is no Ethernet port to use without it.",
-      "power_avg_w": "about 25-40 W average",
+      "wifi": "Wi-Fi is built into the dish — no separate router. WiFi 5 (802.11a/b/g/n/ac), dual band 3x3 MU-MIMO, WPA2. Works with Starlink mesh.",
+      "ethernet": "One latching Ethernet LAN port, used with the Starlink Plug that comes in the box. No separate adapter is needed for it.",
+      "power_avg_w": "25-40 W average (12-48 V, 60 W input)",
       "coverage_m2": 112,
       "field_of_view": "110 degrees",
       "weight_kg": 1.1,
-      "environment": "IP67 rated; operating range about -30C to +50C",
-      "best_for": ["small homes", "light users", "one or two people",
-                   "field teams and temporary sites", "farms and remote workers",
-                   "sites running on solar or a small battery",
-                   "anywhere the kit has to move"],
-      "limitations": ["Built-in Wi-Fi only — a larger building needs access points added.",
-                      "Ethernet requires the adapter.",
-                      "Not the starting point for an office, hotel, factory or school."],
-      "verified_on": "2026-09-10",
-      "source": "https://starlink.com/support — supplied by DishNet"
+      "environment": "IP67 Type 4 with the DC power cable and Starlink Plug fitted; -30C to +50C; operational in wind of 96 kph and above; melts snow up to 25 mm/hour",
+      "best_for": [
+        "small homes",
+        "light users",
+        "one or two people",
+        "field teams and temporary sites",
+        "farms and remote workers",
+        "sites running on solar or a small battery",
+        "anywhere the kit has to move"
+      ],
+      "limitations": [
+        "Built-in Wi-Fi only — a larger building needs access points added.",
+        "Ethernet requires the adapter.",
+        "Not the starting point for an office, hotel, factory or school."
+      ],
+      "verified_on": "2026-09-11",
+      "source": "Starlink Mini / Standard specification sheets, supplied by DishNet",
+      "max_devices": 128,
+      "in_the_box": "dish with integrated WiFi, kickstand, pipe adapter and flat mount, 15 m DC power cable, power supply, Starlink Plug"
     },
     {
       "model": "Starlink Standard",
-      "aka": ["Standard", "standard kit", "Standard 4", "Standard 4X", "normal dish", "big dish"],
+      "aka": [
+        "Standard",
+        "standard kit",
+        "Standard 4",
+        "Standard 4X",
+        "normal dish",
+        "big dish"
+      ],
       "status": "current",
       "portable": false,
       "summary": "The normal fixed installation for higher-demand everyday use.",
-      "wifi": "Ships with a separate Starlink router (Router 3 on current Standard 4X).",
-      "ethernet": "Ethernet arrangements differ from Mini and by generation — establish which kit the customer has before answering.",
-      "power_avg_w": "about 75-100 W average on Standard 4 / 4X",
+      "wifi": "Ships with Router 3: WiFi 6 (802.11a/b/g/n/ac/ax), tri band 4x4 MU-MIMO, WPA2. Meshes only with Starlink Gen 2 and Router 3 nodes, up to 3 — NOT with third-party mesh systems.",
+      "ethernet": "Router 3, which ships with current Standard, has TWO latching Ethernet LAN ports under a removable cover. Older Standard generations differ — establish which kit the customer has before answering.",
+      "power_avg_w": "75-100 W average",
       "coverage_m2": 297,
-      "field_of_view": null,
-      "weight_kg": null,
-      "environment": null,
-      "best_for": ["family homes", "heavier everyday use", "more devices at once",
-                   "a fixed installation that will not move",
-                   "the usual starting point for a small office"],
-      "limitations": ["Physically larger and needs a proper fixed mount.",
-                      "Draws noticeably more power than Mini — matters on solar.",
-                      "Router coverage is not building-wide Wi-Fi on its own."],
-      "verified_on": "2026-09-10",
-      "source": "https://starlink.com/support — supplied by DishNet"
+      "field_of_view": "110 degrees",
+      "weight_kg": 2.9,
+      "environment": "Dish IP67 Type 4, -30C to +50C, operational in wind of 96 kph and above, melts snow up to 40 mm/hour. Router 3 is IP56 and is for indoor use.",
+      "best_for": [
+        "family homes",
+        "heavier everyday use",
+        "more devices at once",
+        "a fixed installation that will not move",
+        "the usual starting point for a small office"
+      ],
+      "limitations": [
+        "Physically larger and needs a proper fixed mount.",
+        "Draws noticeably more power than Mini — matters on solar.",
+        "Router coverage is not building-wide Wi-Fi on its own.",
+        "Router 3 does not mesh with third-party systems — only Starlink nodes."
+      ],
+      "verified_on": "2026-09-11",
+      "source": "Starlink Mini / Standard specification sheets, supplied by DishNet",
+      "max_devices": 235,
+      "in_the_box": "dish, kickstand, Router 3, cables and power supply"
     },
     {
       "model": "Starlink High Performance",
-      "aka": ["High Performance", "HP", "performance", "enterprise dish"],
+      "aka": [
+        "High Performance",
+        "HP",
+        "performance",
+        "enterprise dish"
+      ],
       "status": "current",
       "portable": false,
       "summary": "For demanding sites and harder environments, where it is offered and appropriate.",
@@ -79,12 +114,20 @@
       "field_of_view": null,
       "weight_kg": null,
       "environment": null,
-      "best_for": ["banks and financial sites", "large hotels", "factories and industrial sites",
-                   "large schools", "NGO and government sites", "multi-site organisations",
-                   "sites needing advanced networking"],
-      "limitations": ["Never recommend it just because it costs more — establish the requirement first.",
-                      "A five-person household almost never needs it.",
-                      "Several specifications here are not yet verified: say so and confirm."],
+      "best_for": [
+        "banks and financial sites",
+        "large hotels",
+        "factories and industrial sites",
+        "large schools",
+        "NGO and government sites",
+        "multi-site organisations",
+        "sites needing advanced networking"
+      ],
+      "limitations": [
+        "Never recommend it just because it costs more — establish the requirement first.",
+        "A five-person household almost never needs it.",
+        "Several specifications here are not yet verified: say so and confirm."
+      ],
       "verified_on": "2026-09-10",
       "source": "DishNet Uganda product material"
     }

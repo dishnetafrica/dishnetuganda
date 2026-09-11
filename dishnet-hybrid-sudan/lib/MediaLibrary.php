@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 /**
- * PhotoLibrary — photos the assistant may send, named so it can pick one.
+ * MediaLibrary — photos and documents the assistant may send, named so it can
+ * pick one.
  *
  * A customer asked to see the kit — "I want to see the pictorial of the kit" —
  * and got "I don't want to give you incorrect information. Let me confirm with
@@ -27,9 +28,10 @@ declare(strict_types=1);
  * A caption file alongside an image (mini-kit.txt) is sent with it. Without
  * one the image goes bare rather than captioned from a guess.
  */
-class PhotoLibrary
+class MediaLibrary
 {
-    const DIR = 'photos';
+    const DIR     = 'photos';       // images
+    const DIR_DOC = 'documents';    // PDFs — spec sheets, brochures
 
     /** extension => mime. Matches FlyerAsset: what Evolution reliably accepts. */
     const EXTS = [
@@ -39,8 +41,14 @@ class PhotoLibrary
         'webp' => 'image/webp',
     ];
 
+    /** extension => mime, for documents. */
+    const DOC_EXTS = ['pdf' => 'application/pdf'];
+
     /** Evolution takes base64 inline. Same ceiling as the flyer. */
     const MAX_FILE_BYTES = 4194304;   // 4 MB
+
+    /** A spec sheet is bigger than a snapshot, and still has to fit inline. */
+    const MAX_DOC_BYTES = 10485760;   // 10 MB
 
     /**
      * Every usable photo, keyed by name. Reads no image content, so it is
@@ -50,7 +58,24 @@ class PhotoLibrary
      */
     public static function all(string $dataDir): array
     {
-        $dir = rtrim($dataDir, '/') . '/' . self::DIR;
+        return self::scan($dataDir, self::DIR, self::EXTS, self::MAX_FILE_BYTES, 'image');
+    }
+
+    /**
+     * Documents — spec sheets, brochures. Same naming rule as photos, its own
+     * folder so an operator is never unsure where a PDF goes.
+     *
+     * @return array<string, array{path:string,mime:string,caption:string,bytes:int,kind:string}>
+     */
+    public static function documents(string $dataDir): array
+    {
+        return self::scan($dataDir, self::DIR_DOC, self::DOC_EXTS, self::MAX_DOC_BYTES, 'document');
+    }
+
+    private static function scan(string $dataDir, string $folder, array $exts,
+                                 int $maxBytes, string $kind): array
+    {
+        $dir = rtrim($dataDir, '/') . '/' . $folder;
         if (!is_dir($dir)) return [];
 
         $out = [];
@@ -60,23 +85,23 @@ class PhotoLibrary
             if (!is_file($path)) continue;
 
             $ext = strtolower((string)pathinfo($entry, PATHINFO_EXTENSION));
-            if (!isset(self::EXTS[$ext])) continue;
+            if (!isset($exts[$ext])) continue;
 
             $bytes = (int)@filesize($path);
-            if ($bytes <= 0 || $bytes > self::MAX_FILE_BYTES) continue;
+            if ($bytes <= 0 || $bytes > $maxBytes) continue;
 
             // The key is the file name, lowercased, with anything that is not
             // a letter, digit or dash removed. A name the model cannot type
             // back exactly is a name it cannot ask for.
-            $key = strtolower((string)pathinfo($entry, PATHINFO_FILENAME));
-            $key = trim((string)preg_replace('/[^a-z0-9-]+/', '-', $key), '-');
+            $key = self::key((string)pathinfo($entry, PATHINFO_FILENAME));
             if ($key === '' || isset($out[$key])) continue;
 
             $capFile = $dir . '/' . pathinfo($entry, PATHINFO_FILENAME) . '.txt';
             $caption = is_file($capFile)
                 ? trim((string)@file_get_contents($capFile)) : '';
 
-            $out[$key] = ['path' => $path, 'mime' => self::EXTS[$ext],
+            $out[$key] = ['path' => $path, 'mime' => $exts[$ext], 'kind' => $kind,
+                          'file' => $entry,
                           'caption' => mb_substr($caption, 0, 400), 'bytes' => $bytes];
         }
         ksort($out);
@@ -86,10 +111,20 @@ class PhotoLibrary
     /** One photo by name, or null. Names are matched exactly, never fuzzily. */
     public static function find(string $dataDir, string $name): ?array
     {
-        $key = trim(strtolower($name));
-        $key = trim((string)preg_replace('/[^a-z0-9-]+/', '-', $key), '-');
-        $all = self::all($dataDir);
-        return $all[$key] ?? null;
+        return self::all($dataDir)[self::key($name)] ?? null;
+    }
+
+    /** One document by name, or null. */
+    public static function findDocument(string $dataDir, string $name): ?array
+    {
+        return self::documents($dataDir)[self::key($name)] ?? null;
+    }
+
+    /** The comparable form of a name. A name the model cannot type back is useless. */
+    public static function key(string $name): string
+    {
+        $k = trim(strtolower($name));
+        return trim((string)preg_replace('/[^a-z0-9-]+/', '-', $k), '-');
     }
 
     /** base64 for Evolution, or '' if the file went away since it was listed. */
@@ -122,6 +157,36 @@ class PhotoLibrary
         foreach ($all as $key => $ph) {
             $p .= '  ' . $key;
             if ($ph['caption'] !== '') $p .= ' — ' . $ph['caption'];
+            $p .= "\n";
+        }
+        return $p . self::documentBlock($dataDir);
+    }
+
+    /**
+     * The documents section, appended to the photo block.
+     *
+     * Separate marker because a spec sheet is a different answer from a
+     * picture: somebody asking "what does it look like" wants the photo, and
+     * somebody asking for the details wants the PDF.
+     */
+    public static function documentBlock(string $dataDir): string
+    {
+        $docs = self::documents($dataDir);
+        if (!$docs) return '';
+
+        $p = "\nDOCUMENTS YOU CAN SEND.\n"
+           . "- When someone asks for full specifications, technical details, or the "
+           . "datasheet, send the document rather than typing out figures from memory.\n"
+           . "- Put <<DOC name>> on its own line at the end of your reply, using a name from "
+           . "this list EXACTLY as written.\n"
+           . "- Only these exist. Never name a document that is not here, and never claim to "
+           . "have sent one you did not.\n"
+           . "- Say in your reply what you are sending, so it does not arrive unexplained.\n"
+           . "- A document does not replace the answer. Answer the question in your own words "
+           . "too, briefly.\n";
+        foreach ($docs as $key => $d) {
+            $p .= '  ' . $key;
+            if ($d['caption'] !== '') $p .= ' — ' . $d['caption'];
             $p .= "\n";
         }
         return $p;

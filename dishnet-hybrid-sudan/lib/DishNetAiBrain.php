@@ -33,6 +33,7 @@ class DishNetAiBrain
     const MARKER_FLYER    = 'FLYER';
     const MARKER_LEAD     = 'LEAD';
     const MARKER_PHOTO    = 'PHOTO';
+    const MARKER_DOC      = 'DOC';
 
     /** Hard ceiling on a WhatsApp reply. Long walls of text do not get read. */
     const MAX_REPLY_CHARS = 1200;
@@ -696,8 +697,9 @@ class DishNetAiBrain
              . "the public connects needs a dish, a router, access points and someone to size "
              . "it — one kit alone does not serve fifty or a hundred people however good the "
              . "plan is. Say that plainly, take the site details, and " . $esc . " for a site "
-             . "assessment. Never answer \"how many can connect\" with a number you have not "
-             . "been given.\n"
+             . "assessment. Where HARDWARE gives a device limit you may state it, as the "
+             . "maker's figure for how many things may attach — never as how many people "
+             . "will get usable service, which it is not. Never invent a number.\n"
              . "- Anything large, multi-site, or asking for a contract or guaranteed uptime: "
              . "take the details and " . $esc . " rather than designing it yourself.\n"
              . $this->leadCapture();
@@ -1159,6 +1161,14 @@ class DishNetAiBrain
             $photo = trim(strtolower($m[1]));
         }
 
+        // <<DOC name>> — a spec sheet or brochure. Same lookup discipline as a
+        // photo: a name, resolved against the operator's folder, and nothing
+        // sent when it does not exist.
+        $doc = '';
+        if (preg_match('/<<\s*' . self::MARKER_DOC . '\s+([a-z0-9][a-z0-9 _-]*)>>/i', $raw, $m)) {
+            $doc = trim(strtolower($m[1]));
+        }
+
         $lead = null;
         if (preg_match('/<<\s*' . self::MARKER_LEAD . '\s*(\{.*?\})\s*>>/is', $raw, $m)) {
             $decoded = json_decode($m[1], true);
@@ -1181,7 +1191,7 @@ class DishNetAiBrain
         }
 
         return ['reply' => $clean, 'escalate' => $escalate, 'escalate_reason' => $reason,
-                'send_flyer' => $sendFlyer, 'lead' => $lead, 'photo' => $photo];
+                'send_flyer' => $sendFlyer, 'lead' => $lead, 'photo' => $photo, 'doc' => $doc];
     }
 
     private function handover(string $reason): array

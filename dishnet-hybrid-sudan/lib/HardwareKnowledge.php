@@ -104,6 +104,18 @@ class HardwareKnowledge
                 $line('Coverage', null);
             }
 
+            // A real number, from the maker, for the question that kept getting
+            // a hedge. It is an ASSOCIATION limit — how many things may connect
+            // — and says nothing about how well they are all served at once.
+            if (!empty($m['max_devices'])) {
+                $p .= "  Devices: the maker states up to " . (int)$m['max_devices']
+                    . " connected. That is how many may attach, NOT how many people get "
+                    . "usable service at once — that depends on what each of them is doing, "
+                    . "and on access points to cover the space.\n";
+            }
+            if (!empty($m['in_the_box'])) {
+                $p .= "  In the box: " . (string)$m['in_the_box'] . "\n";
+            }
             if (array_key_exists('portable', $m) && $m['portable'] !== null) {
                 $p .= "  Portable: " . ($m['portable'] ? 'yes, designed to move' : 'no, fixed installation') . "\n";
             }
