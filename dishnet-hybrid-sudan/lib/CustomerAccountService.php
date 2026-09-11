@@ -39,13 +39,15 @@ final class CustomerAccountService
     private $crm;          // CrmApiClient|null — null means caches only
     private string $dataDir;
     private ?\PDO $pdo;
+    private array $config;
 
-    public function __construct($store, $crm, string $dataDir, ?\PDO $pdo = null)
+    public function __construct($store, $crm, string $dataDir, ?\PDO $pdo = null, array $config = [])
     {
         $this->store   = $store;
         $this->crm     = $crm;
         $this->dataDir = $dataDir;
         $this->pdo     = $pdo ?: (method_exists($store, 'getPdo') ? $store->getPdo() : null);
+        $this->config  = $config;
     }
 
     // ── The whole account ───────────────────────────────────────────────────
@@ -475,7 +477,90 @@ final class CustomerAccountService
         if ($account['address'] === '') {
             $g[] = 'No service address on file.';
         }
+
+        // A contact detail that belongs to DishNet rather than to the
+        // customer. It reads as a complete record and it is not one: a login
+        // code sent to it reaches our own staff, and every invoice and
+        // reminder for this customer lands in our own inbox.
+        foreach ($this->ourOwnContacts() as $ours) {
+            if ($ours !== '' && strcasecmp($account['email'], $ours) === 0) {
+                $g[] = 'The email on this account is DishNet\'s own (' . $ours
+                     . ') — login codes and invoices for this customer would come to us.';
+            }
+            if ($ours !== '' && self::samePhone($account['phone'], $ours)) {
+                $g[] = 'The phone on this account is DishNet\'s own (' . $ours . ').';
+            }
+        }
+
+        // A phone from another country than the one this install operates in.
+        // Not necessarily wrong — but on a record with nothing else on it, it
+        // is usually a template that was copied and half-edited, and the
+        // consequence is a login code sent to a stranger.
+        $home = $this->homeDialCode();
+        $theirs = self::dialCode($account['phone']);
+        if ($home !== '' && $theirs !== '' && $home !== $theirs) {
+            $g[] = 'The phone number is a +' . $theirs . ' number on a +' . $home
+                 . ' operation — check it belongs to this customer.';
+        }
+
         return $g;
+    }
+
+    /**
+     * DishNet's own published contact details.
+     *
+     * Read from the same config the customer emails are built from, so a
+     * support address changed there is checked against here without anybody
+     * remembering to update a second list.
+     *
+     * @return string[]
+     */
+    private function ourOwnContacts(): array
+    {
+        $keys = ['email_reply_to', 'email_support_phone', 'email_support_wa',
+                 'company_email', 'support_email'];
+        $out = [];
+        foreach ($keys as $k) {
+            $v = trim((string)($this->config[$k] ?? ''));
+            if ($v !== '') $out[] = $v;
+        }
+        return $out;
+    }
+
+    /** The country code this install operates in, from its own support number. */
+    private function homeDialCode(): string
+    {
+        foreach (['email_support_wa', 'email_support_phone'] as $k) {
+            $c = self::dialCode((string)($this->config[$k] ?? ''));
+            if ($c !== '') return $c;
+        }
+        return '';
+    }
+
+    /**
+     * The country code at the front of a phone number.
+     *
+     * Only the codes this business actually deals in, matched longest first
+     * — guessing generically would read '25' out of a Ugandan number, and a
+     * check that invents a country is worse than no check.
+     */
+    public static function dialCode(string $phone): string
+    {
+        $d = preg_replace('/[^0-9]/', '', $phone) ?? '';
+        if ($d === '') return '';
+        foreach (['256', '211', '254', '255', '250', '243', '971', '44', '1'] as $code) {
+            if (strpos($d, $code) === 0) return $code;
+        }
+        return '';
+    }
+
+    /** Same number, however it was typed. Compared on the last nine digits. */
+    public static function samePhone(string $a, string $b): bool
+    {
+        $a = preg_replace('/[^0-9]/', '', $a) ?? '';
+        $b = preg_replace('/[^0-9]/', '', $b) ?? '';
+        if (strlen($a) < 9 || strlen($b) < 9) return false;
+        return substr($a, -9) === substr($b, -9);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

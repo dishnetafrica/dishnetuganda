@@ -1375,7 +1375,7 @@ if ($act === 'app_account' && $met === 'GET') {
     $clientId = ca_resolve_active_client_id($claims, $er2);
 
     require_once dirname(__DIR__, 2) . '/lib/CustomerAccountService.php';
-    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo);
+    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo, $config);
     // Ask uCRM first: a customer who has just paid opens this expecting the
     // balance to have moved, and a cache is not an explanation.
     $me = $acct->forCustomer($clientId, ['refresh' => true]);
@@ -1394,7 +1394,7 @@ if ($act === 'app_equipment' && $met === 'GET') {
     $clientId = ca_resolve_active_client_id($claims, $er2);
 
     require_once dirname(__DIR__, 2) . '/lib/CustomerAccountService.php';
-    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo);
+    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo, $config);
     $me = $acct->forCustomer($clientId);
 
     $ok2(['equipment' => $me['equipment'] ?? []]);
@@ -1413,7 +1413,7 @@ if ($act === 'app_payments' && $met === 'GET') {
     $clientId = ca_resolve_active_client_id($claims, $er2);
 
     require_once dirname(__DIR__, 2) . '/lib/CustomerAccountService.php';
-    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo);
+    $acct = new CustomerAccountService($store, $crm ?? null, $dataDir, $pdo, $config);
     $acct->refresh($clientId);
     $me = $acct->forCustomer($clientId);
 

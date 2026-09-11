@@ -106,7 +106,14 @@ $pdo->exec("INSERT INTO customer_identities (client_id, email, local_part, statu
             VALUES (4021, 'familyshoppers@dishnetuganda.com', 'familyshoppers', 'provisioned',
                     '2026-09-11T09:20:00Z', '2026-09-11T09:20:00Z')");
 
-$svc = new CustomerAccountService($store, null, $tmp, $pdo);
+// A Uganda install: its own published support number is what tells the
+// contact checks which country this operation is in.
+$ugConfig = [
+    'email_reply_to'      => 'info@dishnetuganda.com',
+    'email_support_phone' => '+256 705 993 348',
+    'email_support_wa'    => '256705993348',
+];
+$svc = new CustomerAccountService($store, null, $tmp, $pdo, $ugConfig);
 
 // ── The whole account ───────────────────────────────────────────────────────
 echo "\nThe account, assembled\n";
@@ -205,6 +212,45 @@ is_(strpos($g, 'lead') !== false,       'still-a-lead is named');
 is_(strpos($g, 'log in') !== false,     'and that they cannot log in at all');
 t('nothing invented for them — no billing', $thin['billing']['invoiced'], 0.0);
 t('no currency guessed either',            $thin['billing']['currency'], '');
+
+// ── Contact details that are not the customer's ─────────────────────────────
+// Both of these came off the live box, on a record that otherwise looked
+// like a customer: DishNet's own inbox as the email, and a South Sudan
+// number on a Uganda operation. Either one sends this customer's login code
+// to somebody who is not them.
+echo "\nA record wearing somebody else's contact details\n";
+$store->save('ucrm_clients_cache.json', array_merge($store->load('ucrm_clients_cache.json'), [
+    ['id' => 7100, 'companyName' => 'Copied Template Ltd', 'isActive' => true, 'clientType' => 2,
+     'street1' => 'Somewhere', 'contacts' => [
+        ['email' => 'info@dishnetuganda.com', 'phone' => '+211927797217']]],
+]));
+$bad = $svc->account(7100);
+$bg = implode(' | ', $bad['gaps']);
+is_(strpos($bg, "DishNet's own") !== false,
+    'our own inbox as the customer email is named — every invoice for them '
+    . 'would come to us', $bg);
+is_(strpos($bg, '+211 number on a +256 operation') !== false,
+    'and a South Sudan number on a Uganda operation is flagged for checking', $bg);
+
+// It must not fire on a perfectly ordinary Ugandan customer.
+is_(!array_filter($a['gaps'], fn($x) => strpos($x, 'operation') !== false),
+    'and a +256 customer is not flagged at all');
+
+echo "\nReading a country off a number\n";
+t('a Ugandan number',    CustomerAccountService::dialCode('+256 772 000 111'), '256');
+t('a South Sudan number',CustomerAccountService::dialCode('+211927797217'), '211');
+t('spaces and dashes do not matter', CustomerAccountService::dialCode('256-705-993-348'), '256');
+// Guessing generically would read '25' out of a Ugandan number. A check that
+// invents a country is worse than no check.
+t('a number from nowhere we operate is left alone',
+  CustomerAccountService::dialCode('+99 555 12345'), '');
+t('and an empty one',    CustomerAccountService::dialCode(''), '');
+t('the same number typed two ways',
+  CustomerAccountService::samePhone('+256 705 993 348', '0705993348'), true);
+t('two different numbers',
+  CustomerAccountService::samePhone('+256705993348', '+256772000111'), false);
+t('and something too short to compare',
+  CustomerAccountService::samePhone('993348', '993348'), false);
 
 echo "\nAn unknown customer\n";
 is_($svc->account(123456) === null, 'is null, not an empty account');

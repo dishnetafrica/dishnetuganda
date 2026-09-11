@@ -33,6 +33,7 @@ require_once $root . '/lib/JsonStore.php';
 require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/CustomerAccountService.php';
+require_once $root . '/lib/CustomerEmailDispatcher.php';
 
 $args = array_slice($argv, 1);
 $val = function (string $f) use ($args): string {
@@ -67,7 +68,11 @@ try {
     $crm = CrmApiClient::fromUcrm($root, $config);
 } catch (\Throwable $e) { /* caches only — this tool still works offline */ }
 
-$svc = new CustomerAccountService($store, $crm, $dataDir, $store->getPdo());
+// The config too: the contact checks compare a customer's phone and email
+// against DishNet's own published ones, and read the country this install
+// operates in out of its own support number.
+$svc = new CustomerAccountService($store, $crm, $dataDir, $store->getPdo(),
+                                  CustomerEmailDispatcher::effectiveConfig($config));
 
 // ── Which customer ──────────────────────────────────────────────────────────
 $clientId = (int)$val('--client');
