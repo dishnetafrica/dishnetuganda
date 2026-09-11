@@ -414,13 +414,13 @@ if (!function_exists('_rawSmtp')) {
             $read = function() use ($sock) { return fgets($sock, 512); };
             $write = function($cmd) use ($sock) { fwrite($sock, $cmd . "\r\n"); };
             $r = $read(); if (substr($r,0,3) !== '220') { $error="Not ready:{$r}"; fclose($sock); return false; }
-            $write("EHLO " . gethostname());
+            $write("EHLO " . MailService::ehloName($s));
             while (($l=fgets($sock,512))!==false){if(substr($l,3,1)===' ')break;}
             if ($s['enc']==='tls') {
                 $write("STARTTLS"); $r=$read();
                 if(substr($r,0,3)!=='220'){$error="STARTTLS failed";fclose($sock);return false;}
                 @stream_socket_enable_crypto($sock,true,STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT|STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT);
-                $write("EHLO ".gethostname());
+                $write("EHLO " . MailService::ehloName($s));
                 while(($l=fgets($sock,512))!==false){if(substr($l,3,1)===' ')break;}
             }
             $write("AUTH LOGIN"); $read();

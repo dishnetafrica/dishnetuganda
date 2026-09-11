@@ -37,6 +37,39 @@ class MailService
     public $unreadableReason = '';
 
     /** @var array Last-resolved config, cached for the request */
+    /**
+     * The name this server introduces itself with at EHLO.
+     *
+     * gethostname() inside a container returns its hex id — "1c8f5997cf51" —
+     * which is not a domain, and a strict server refuses it outright:
+     *
+     *     550 5.5.0 Invalid EHLO domain.
+     *
+     * That is correct of the server and wrong of us. The sender's own domain
+     * is the honest answer: mail from no-reply@dishnetuganda.com is announced
+     * as dishnetuganda.com, which resolves and matches the envelope.
+     *
+     * smtp_ehlo overrides it when an operator needs something specific.
+     * gethostname() is kept as the last resort, but only when it contains a
+     * dot — a bare container id never reaches the wire again.
+     */
+    public static function ehloName(array $cfg): string
+    {
+        $explicit = trim((string)($cfg['ehlo'] ?? $cfg['smtp_ehlo'] ?? ''));
+        if ($explicit !== '') return $explicit;
+
+        foreach (['from', 'user'] as $k) {
+            $addr = trim((string)($cfg[$k] ?? ''));
+            $at   = strrpos($addr, '@');
+            if ($at === false) continue;
+            $dom = trim(substr($addr, $at + 1));
+            if ($dom !== '' && strpos($dom, '.') !== false) return $dom;
+        }
+
+        $hn = (string)gethostname();
+        return (strpos($hn, '.') !== false) ? $hn : 'localhost';
+    }
+
     private $cfg = null;
     private $cfgError = '';
     private $dataDir;
@@ -315,7 +348,7 @@ class MailService
 
         if (!$expect('220', 'greeting')) return ['ok' => false, 'error' => 'Server greeting failed', 'log' => $log];
 
-        $hn = gethostname() ?: 'localhost';
+        $hn = self::ehloName($cfg);
         $write("EHLO {$hn}");
         if (!$expect('250', 'ehlo')) return ['ok' => false, 'error' => 'EHLO rejected', 'log' => $log];
 

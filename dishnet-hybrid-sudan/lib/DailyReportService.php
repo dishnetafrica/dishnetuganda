@@ -312,7 +312,7 @@ Generated at " . date('H:i') . " | DishNet Africa Ltd
             $r = fgets($sock, 512);
             if (substr($r, 0, 3) !== '220') { $error = "Not ready: {$r}"; fclose($sock); return false; }
 
-            fwrite($sock, "EHLO " . gethostname() . "\r\n");
+            fwrite($sock, "EHLO " . MailService::ehloName(['from' => $from, 'user' => $user]) . "\r\n");
             while (($l = fgets($sock, 512)) !== false) { if (substr($l, 3, 1) === ' ') break; }
 
             if ($enc === 'tls') {
@@ -321,7 +321,7 @@ Generated at " . date('H:i') . " | DishNet Africa Ltd
                 $ok = @stream_socket_enable_crypto($sock, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT);
                 if (!$ok) $ok = @stream_socket_enable_crypto($sock, true, STREAM_CRYPTO_METHOD_ANY_CLIENT);
                 if (!$ok) { $error = "TLS failed"; fclose($sock); return false; }
-                fwrite($sock, "EHLO " . gethostname() . "\r\n");
+                fwrite($sock, "EHLO " . MailService::ehloName(['from' => $from, 'user' => $user]) . "\r\n");
                 while (($l = fgets($sock, 512)) !== false) { if (substr($l, 3, 1) === ' ') break; }
             }
 
