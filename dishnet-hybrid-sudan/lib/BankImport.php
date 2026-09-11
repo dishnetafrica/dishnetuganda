@@ -235,6 +235,46 @@ final class BankImport
     }
 
     /**
+     * Does the book now agree with the bank?
+     *
+     * The only question that matters after an import, and the one a ledger
+     * full of correct rows still cannot answer on its own. The statement ends
+     * at a figure the bank will defend; the account holds whatever was
+     * bookable. Where they differ, the difference has to be NAMED — and every
+     * shilling of it should be a row this import refused to guess at.
+     *
+     * An account reading minus twenty-four million is alarming until you can
+     * say "that is the three deposits nobody has classified yet, to the
+     * shilling". If the difference is anything other than those rows, that is
+     * a real problem and deserves to be the loudest thing on the screen.
+     *
+     * @return array{bank:float, book:float, difference:float, pending:float,
+     *               unexplained:float, agrees:bool, rows:array}
+     */
+    public function reconcile(int $acctId, float $statementClosing, array $pendingRows): array
+    {
+        $book = round($this->cb->accountBalance($acctId), 2);
+        $diff = round($statementClosing - $book, 2);
+
+        // What the unbooked rows would move this account by, if they were
+        // booked: money in raises it, money out lowers it.
+        $pending = 0.0;
+        foreach ($pendingRows as $r) {
+            $pending = round($pending + (float)$r['credit'] - (float)$r['debit'], 2);
+        }
+
+        return [
+            'bank'        => round($statementClosing, 2),
+            'book'        => $book,
+            'difference'  => $diff,
+            'pending'     => $pending,
+            'unexplained' => round($diff - $pending, 2),
+            'agrees'      => abs($diff) < 0.005,
+            'rows'        => $pendingRows,
+        ];
+    }
+
+    /**
      * The bank's own transaction id, which is what makes a second import of
      * the same statement do nothing. Statements without one fall back to the
      * row itself, which is stable for the same row and different for another.

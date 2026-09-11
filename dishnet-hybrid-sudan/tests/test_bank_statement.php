@@ -300,6 +300,57 @@ t('and a loan is not revenue', $pl2['UGX']['revenue_total'] ?? 0.0, 0.0);
 t('the account now agrees with the bank, less the withdrawal still unexplained',
     $cb->accountBalance($bank), 3255960.0);
 
+echo "\nDoes the book agree with the bank?\n";
+// The only question that matters after an import. An account reading minus
+// four million is alarming until you can say "that is the rows nobody has
+// classified yet, to the shilling".
+$recA = $imp->reconcile($bank, BankStatement::verifyChain($rows)['closing'], $dep['needs_decision']);
+t('the bank ends where the statement says', $recA['bank'], 2755960.0);
+t('the book is ahead of it',                $recA['book'], 3255960.0);
+t('by the cash withdrawal still unbooked',  $recA['difference'], -500000.0);
+t('which those rows account for exactly',   $recA['pending'], -500000.0);
+t('so nothing is unexplained',              $recA['unexplained'], 0.0);
+t('though it does not claim to agree',      $recA['agrees'], false);
+
+// Before anything was classified, the gap is the deposit and the withdrawal
+// together — still fully explained, just larger.
+$tmpR = sys_get_temp_dir() . '/dn_bank_rec_' . bin2hex(random_bytes(4));
+@mkdir($tmpR, 0777, true);
+$sR = SqliteStore::create($tmpR); $cbR = new CashbookService($sR, $tmpR);
+$bR = (int)($cbR->addAccount('Ecobank – UGX', 'UGX', 'bank')['id'] ?? 0);
+$impR = new BankImport($cbR, $sR->getPdo());
+$rowsR = BankStatement::parse($good)['rows'];
+$closeR = BankStatement::verifyChain($rowsR)['closing'];
+$wR = $impR->import($rowsR, $bR, ['commit' => true]);
+$recR = $impR->reconcile($bR, $closeR, $wR['needs_decision']);
+t('the account is short',        $recR['book'], -3744040.0);
+t('against what the bank says',  $recR['bank'], 2755960.0);
+t('by 6,500,000',                $recR['difference'], 6500000.0);
+t('which is the deposit less the withdrawal', $recR['pending'], 6500000.0);
+t('leaving nothing unexplained', $recR['unexplained'], 0.0);
+
+echo "\nAnd when something else has touched the account\n";
+// A hand-typed entry that is on no statement. This is the case that must be
+// loud: every shilling of a difference should be a row the import refused to
+// guess at, and anything else is money nobody can account for.
+$cbR->addEntryRaw(['date' => '2026-09-06', 'direction' => 'out', 'amount' => 123456,
+    'currency' => 'UGX', 'category' => 'Misc Expense', 'description' => 'Typed in by hand',
+    'status' => 'approved', 'account_id' => $bR]);
+$recX = $impR->reconcile($bR, $closeR, $wR['needs_decision']);
+t('the pending rows no longer cover the gap', $recX['unexplained'], 123456.0);
+t('and it does not agree', $recX['agrees'], false);
+
+$toolPath = $root . '/tools/bank_statement.php';
+file_put_contents($tmpR . '/s.csv', $good);
+$oR = []; exec('DN_DATA_DIR=' . escapeshellarg($tmpR) . ' php ' . escapeshellarg($toolPath)
+    . ' --file ' . escapeshellarg($tmpR . '/s.csv') . ' --account ' . $bR . ' 2>&1', $oR, $cR);
+$tR = implode("\n", $oR);
+is_(strpos($tR, 'AGAINST THE BANK') !== false, 'the tool reports it', $tR);
+is_(strpos($tR, 'NOT accounted for') !== false,
+    'and shouts when the gap is not just the pending rows', $tR);
+is_(strpos($tR, '123,456') !== false, 'naming the amount nobody can explain');
+exec('rm -rf ' . escapeshellarg($tmpR));
+
 echo "\nThe same money reaching the book twice\n";
 // The live trap: USD 10,000 of share capital was typed in when it arrived,
 // and the statement that records it is about to be imported on top. Counted

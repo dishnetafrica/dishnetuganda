@@ -156,6 +156,28 @@ if ($r['errors'] !== []) {
     foreach ($r['errors'] as $e) echo "    ✗ {$e}\n";
 }
 
+// ── Does the book agree with the bank? ──────────────────────────────────────
+$rec = $imp->reconcile($acctId, $chain['closing'], $r['needs_decision']);
+echo "\n  AGAINST THE BANK\n";
+printf("    %-28s %18s\n", 'the bank says', number_format($rec['bank'], 2));
+printf("    %-28s %18s\n", 'this account holds', number_format($rec['book'], 2));
+printf("    %-28s %18s\n", 'difference', number_format($rec['difference'], 2));
+
+if ($rec['agrees']) {
+    echo "\n    ✓ the book agrees with the bank to the " . ($acct['currency'] === 'USD' ? 'cent' : 'shilling') . ".\n";
+} elseif (abs($rec['unexplained']) < 0.005) {
+    printf("\n    That is exactly the %d row(s) still waiting on a decision — %s.\n",
+        count($rec['rows']), number_format($rec['pending'], 2));
+    echo "    Nothing is lost. Classify them and this account agrees with the bank.\n";
+} else {
+    // The loud case. Every shilling of a difference should be a row this
+    // import refused to guess at; anything else is money nobody can explain.
+    printf("\n    ✗ %s of that is NOT accounted for by the rows waiting on a\n",
+        number_format($rec['unexplained'], 2));
+    echo "      decision. Something else has touched this account — an entry made by\n";
+    echo "      hand, or a statement that does not cover the whole period.\n";
+}
+
 if ($r['needs_decision'] !== []) {
     echo "\n  THESE NEED YOU\n";
     foreach ($r['needs_decision'] as $n) {
