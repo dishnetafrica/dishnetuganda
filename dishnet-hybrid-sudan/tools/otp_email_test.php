@@ -84,7 +84,10 @@ foreach (($r['log'] ?? []) as $step) {
     $msg      = (string)($step['msg'] ?? '');
     // The password and its base64 both appear verbatim in an AUTH exchange.
     if ($pass !== '') $msg = str_replace([$pass, base64_encode($pass)], '••••••', $msg);
-    $msg = str_replace("\n", ' / ', $msg);
+    // A multi-line SMTP reply is separated by CRLF, and a bare \r left in the
+    // string sends the terminal's cursor back to column 0 — which overwrote
+    // the previous row and made the EHLO line vanish from this very report.
+    $msg = trim(preg_replace('/[\r\n]+/', ' / ', $msg) ?? $msg);
     printf("    %-5s %-14s %s\n", !empty($step['ok']) ? 'ok' : 'FAIL', $stepName,
            strlen($msg) > 90 ? substr($msg, 0, 87) . '…' : $msg);
     if ($stepName === 'mail_from') $mailFrom = $msg;

@@ -235,6 +235,27 @@ $body = $fn === false ? '' : substr($api, $fn, 1500);
 is_(strpos($body, 'OtpEmail::send(') !== false,
     'ca_send_otp_email() delegates to the code tested above, so the two cannot drift');
 
+// ── otp_email_test.php prints a readable conversation ───────────────────────
+// A relay answers EHLO with several CRLF-separated lines. Printed raw, the
+// bare \r sends the terminal's cursor to column 0 and the next row overwrites
+// this one — which is exactly what happened on the live server: the EHLO step
+// disappeared from a report whose entire job is to show every step.
+echo "\n── the report survives a multi-line relay reply ──\n";
+$settings(['system_from' => 'no-reply@dishnetuganda.com']);
+$envTool = 'DN_DATA_DIR=' . escapeshellarg($tmp);
+$out = [];
+exec(sprintf('%s php %s --to bhavin@dishnetafrica.com 2>&1',
+     $envTool, escapeshellarg($root . '/tools/otp_email_test.php')), $out, $rcTool);
+$printed = implode("\n", $out);
+$latest();   // consume the session this just created
+is_($rcTool === 0, 'the tool exits clean on a successful send', $printed);
+is_(strpos($printed, "\r") === false, 'no carriage return survives into the output');
+is_(preg_match('/^\s+ok\s+ehlo\s+250-/m', $printed) === 1,
+    'the EHLO row is present and on its own line', $printed);
+is_(substr_count($printed, ' / ') >= 1, 'the reply\'s continuation lines are joined, not lost');
+is_(strpos($printed, 'envelope sender  no-reply@dishnetuganda.com') !== false,
+    'the headline names the envelope address, not the relay\'s response code');
+
 // ── set_system_sender.php ───────────────────────────────────────────────────
 echo "\n── the tool an operator without a UI actually runs ──\n";
 $tool = escapeshellarg($root . '/tools/set_system_sender.php');
