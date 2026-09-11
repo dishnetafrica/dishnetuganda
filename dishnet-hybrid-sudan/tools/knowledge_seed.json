@@ -10,8 +10,8 @@
       "item_key": "OFFICE_LOCATION",
       "kind": "fact",
       "title": "Where is the DishNet Uganda office",
-      "answer": "Our DishNet Uganda office is located on Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda. Customers are welcome to visit. Only offer to send a pin or directions link if one is in your data — never write a map link, short link or address from memory. With no pin on file, say a colleague will send it and hand over.",
-      "wa_answer": "📍 DishNet Uganda Office — Mawanda Road, near Mawanda Police Station, next to Family Shoppers Super Market, Kampala, Uganda 🇺🇬 You're welcome to visit us at our office. Would you like us to share the directions/location pin?"
+      "answer": "DishNet Uganda's office is on the 4th floor of Acacia Mall, 14-18 Cooper Road, Kampala (office TT06). Customers are welcome to visit. Only offer to send a pin or directions link if one is in your data — never write a map link, short link or address from memory. With no pin on file, say a colleague will send it and hand over.",
+      "wa_answer": "📍 DishNet Uganda — 4th floor, Acacia Mall, 14-18 Cooper Road, Kampala 🇺🇬 You're very welcome to visit us."
     },
     {
       "item_key": "COMPANY_IDENTITY",

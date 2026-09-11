@@ -23,8 +23,13 @@ foreach ($seed['items'] as $it) {
                    $it['answer'] ?? '', $it['wa_answer'] ?? '']);
 }
 $block = KnowledgeBase::promptBlock($pdo);
-t('office fact present', str_contains($block, 'Mawanda Road'), true);
-t('office fact carries the landmark', str_contains($block, 'Family Shoppers Super Market'), true);
+t('office fact present', str_contains($block, 'Acacia Mall'), true);
+t('office fact carries the street', str_contains($block, 'Cooper Road'), true);
+// The office is in Acacia Mall. A knowledge row said Mawanda Road, near Mawanda
+// Police Station, next to Family Shoppers Super Market, and the assistant told
+// customers that for as long as the row existed. This assertion is what stops it
+// coming back.
+t('and not the old wrong one', str_contains($block, 'Mawanda'), false);
 t('no Sudan office leaks into Uganda knowledge', str_contains($block, 'Juba'), false);
 t('flex gate rule present', str_contains($block, 'Flex'), true);
 t('tbc topics listed', str_contains($block, 'refund policy'), true);
@@ -35,7 +40,7 @@ echo "\nEditing once changes the block (the whole point)\n";
 $pdo->exec("UPDATE knowledge_items SET answer='We moved to Plot 9, Test Street, Kampala.', wa_answer='📍 Plot 9, Test Street, Kampala' WHERE item_key='OFFICE_LOCATION'");
 $block2 = KnowledgeBase::promptBlock($pdo);
 t('new answer flows through', str_contains($block2, 'Plot 9, Test Street'), true);
-t('old answer gone', str_contains($block2, 'Mawanda Road'), false);
+t('old answer gone', str_contains($block2, 'Acacia Mall'), false);
 
 $pdo->exec("UPDATE knowledge_items SET status='disabled' WHERE item_key='OFFICE_LOCATION'");
 t('disabled rows drop out', str_contains(KnowledgeBase::promptBlock($pdo), 'Plot 9'), false);
@@ -51,7 +56,7 @@ $mk = function(array $cfg) {
 $legacy = $mk([]);
 t('without knowledge: legacy Sudan facts remain (Sudan installs unaffected)', str_contains($legacy, 'Juba'), true);
 $modern = $mk(['knowledge_block' => $block]);
-t('with knowledge: Uganda facts in the prompt', str_contains($modern, 'Mawanda Road'), true);
+t('with knowledge: Uganda facts in the prompt', str_contains($modern, 'Acacia Mall'), true);
 t('with knowledge: Sudan facts fully superseded', str_contains($modern, 'Juba'), false);
 t('with knowledge: absolute rules still present', str_contains($modern, 'ABSOLUTE RULES'), true);
 

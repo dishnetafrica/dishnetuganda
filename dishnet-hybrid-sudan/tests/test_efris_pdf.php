@@ -14,7 +14,7 @@ function t(string $n, $got, $want) { global $pass, $fail;
 
 $model = [
     'seller' => ['tin' => '1059140632', 'legal_name' => 'DishNet Africa Limited',
-                 'address' => 'Mawanda Road, Kampala', 'phone' => '256705993348',
+                 'address' => 'Acacia Mall, 14-18 Cooper Road, Kampala', 'phone' => '256705993348',
                  'email' => 'info@dishnetafrica.com', 'device_no' => 'DEV-1'],
     'invoice' => ['ucrm_id' => 101, 'number' => 'INV-2026-00125', 'issued_date' => '2026-09-01',
                   'due_date' => '2026-09-15', 'currency' => 'UGX', 'payment_status' => 'paid'],

@@ -172,7 +172,7 @@
     {
       "key": "efris_address",
       "label": "EFRIS: seller address",
-      "description": "Street and city as registered, e.g. Mawanda Road, Kampala.",
+      "description": "Street and city as registered, e.g. Acacia Mall, 14-18 Cooper Road, Kampala.",
       "required": 0,
       "type": "text"
     },

@@ -19,7 +19,7 @@ function has(array $list, string $needle): bool {
 
 $cfg = [
     'efris_tin' => '1059140632', 'efris_device_no' => 'DEV-TEST-1',
-    'efris_legal_name' => 'DishNet Africa Limited', 'efris_address' => 'Mawanda Road, Kampala',
+    'efris_legal_name' => 'DishNet Africa Limited', 'efris_address' => 'Acacia Mall, 14-18 Cooper Road, Kampala',
 ];
 $client = [
     'id' => 7, 'firstName' => 'Bhavin', 'lastName' => 'M', 'companyName' => 'Kampala Traders Ltd',

@@ -213,7 +213,12 @@ EventBus 'efris.submit' ──► workers/EfrisWorker ──► EfrisService
 |---|---|
 | sellerDetails.tin | config `efris_tin` = 1059140632 |
 | sellerDetails.legalName / businessName | config (DishNet Africa Limited) |
-| sellerDetails.address / mobilePhone / emailAddress | config (Mawanda Road office, info@dishnetafrica.com) |
+| sellerDetails.address / mobilePhone / emailAddress | config (Acacia Mall, 14-18 Cooper Road, Kampala; accounts@dishnetuganda.com) |
+
+> **Check `efris_address` on the server.** Earlier material here said "Mawanda Road",
+> which is not the office. If that value was copied into the EFRIS seller address, every
+> fiscal invoice sent to URA carries the wrong address.
+
 | basicInformation.deviceNo | config `efris_device_no` (issued by URA) |
 | basicInformation.invoiceNo (internal) | uCRM invoice `number` |
 | basicInformation.issuedDate | uCRM invoice `createdDate` |

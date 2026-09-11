@@ -7,7 +7,7 @@
   ],
   "questions": [
     { "q": "Where is your office?", "channel": "sales",
-      "must_contain": ["Mawanda Road"], "must_not_contain": ["Juba", "TBC", "to be confirmed"] },
+      "must_contain": ["Acacia Mall"], "must_not_contain": ["Juba", "TBC", "to be confirmed"] },
     { "q": "Is DishNet the same as Starlink?", "channel": "sales",
       "must_contain": ["DishNet"], "must_not_contain": ["Juba"] },
     { "q": "Is this genuine Starlink or fake?", "channel": "sales",
