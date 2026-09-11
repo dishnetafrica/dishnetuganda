@@ -1121,7 +1121,34 @@ class StarlinkBlockService
 
         $found = [];
 
-        // Source A: sl_kits.json (when present + has the client)
+        // Source 0: this plugin's own stock. A unit installed against a
+        // customer IS the record of which dish is on their roof — it is
+        // written by the install, carries the serial, and is the register
+        // KitRegister was deliberately retired into. It is checked first
+        // because the other two are inferences: a file belonging to another
+        // plugin, and a regular expression run over a service title somebody
+        // typed. On an install with no Finance plugin — which is this one —
+        // it is the only authoritative source there is.
+        try {
+            if ($this->pdo instanceof \PDO) {
+                $st = $this->pdo->prepare(
+                    "SELECT serial_number FROM stock_units
+                     WHERE crm_client_id = ? AND status IN ('installed','reserved')
+                       AND serial_number IS NOT NULL AND serial_number != ''");
+                $st->execute([$clientId]);
+                foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $sn) {
+                    $sn = strtoupper(trim((string)$sn));
+                    if ($sn !== '') $found[] = $sn;
+                }
+            }
+        } catch (\Throwable $e) {
+            // No stock tables on this install — the sources below still apply.
+        }
+
+        // Source A: sl_kits.json (when present + has the client). Still read
+        // even when stock answered — a customer can have a dish recorded in
+        // one and not the other, and blocking half of someone's kit leaves
+        // them online.
         if (is_array($kitsData)) {
             foreach ($kitsData as $key => $val) {
                 if (!is_array($val)) continue;
