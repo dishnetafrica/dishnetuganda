@@ -29,7 +29,7 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/WeafEfrisClient.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 
 $args = [];

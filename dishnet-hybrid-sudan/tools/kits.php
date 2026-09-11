@@ -33,7 +33,7 @@ require_once $root . '/lib/StoreInterface.php';
 require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/StockService.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $pdo = new PDO('sqlite:' . $dataDir . '/plugin.sqlite3');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 

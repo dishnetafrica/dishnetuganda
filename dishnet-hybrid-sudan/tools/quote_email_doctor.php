@@ -25,7 +25,7 @@ require_once $root . '/lib/CrmApiClient.php';
 require_once $root . '/lib/CustomerEmailDispatcher.php';
 require_once $root . '/lib/MailService.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 
 function line(): void { echo str_repeat('─', 66) . "\n"; }

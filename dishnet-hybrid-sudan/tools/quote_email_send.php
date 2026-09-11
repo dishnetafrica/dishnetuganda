@@ -38,7 +38,7 @@ $toOverride = trim((string)($opt['to'] ?? ''));
 
 if ($quoteId <= 0) { fwrite(STDERR, "Usage: php tools/quote_email_send.php --quote <id> [--dry-run] [--to addr] [--force]\n"); exit(1); }
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $GLOBALS['dataDir'] = $dataDir;
 $config  = PluginConfig::load($root, $dataDir);
 

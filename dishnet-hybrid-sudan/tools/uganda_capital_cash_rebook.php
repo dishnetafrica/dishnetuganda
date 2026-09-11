@@ -72,7 +72,7 @@ const UCR_KEEP = [
 ];
 
 $confirm = in_array('--confirm', array_slice($argv, 1), true);
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $store   = SqliteStore::create($dataDir);
 $cb      = new CashbookService($store, $dataDir);
 $pdo     = $store->getPdo();

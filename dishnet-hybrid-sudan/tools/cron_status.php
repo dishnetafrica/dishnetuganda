@@ -37,7 +37,7 @@ if (preg_match("/date_default_timezone_set\(\s*'([^']+)'\s*\)/", $masterSrc, $tz
     date_default_timezone_set($tzm[1]);
 }
 
-$dataDir  = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir  = cliDataDir($root);
 $schedule = SqliteStore::create($dataDir)->load('master_schedule.json') ?? [];
 
 // The job list lives inside master.php's array. Including that file would run

@@ -33,7 +33,7 @@ $value = function (string $f) use ($args) {
     return ($i !== false && isset($args[$i + 1])) ? (string)$args[$i + 1] : '';
 };
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $pdo     = SqliteStore::create($dataDir)->getPdo();
 

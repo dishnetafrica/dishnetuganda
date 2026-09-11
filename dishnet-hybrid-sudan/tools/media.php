@@ -30,7 +30,7 @@ $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/MediaLibrary.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $dir     = rtrim($dataDir, '/') . '/' . MediaLibrary::DIR;
 $docDir  = rtrim($dataDir, '/') . '/' . MediaLibrary::DIR_DOC;
 

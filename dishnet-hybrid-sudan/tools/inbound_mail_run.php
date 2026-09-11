@@ -40,7 +40,7 @@ foreach (['EmailReplyPolicy', 'EmailIntentClassifier', 'EmailCustomerMatcher',
     require_once $root . '/lib/' . $c . '.php';
 }
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = CustomerEmailDispatcher::effectiveConfig(PluginConfig::load($root, $dataDir));
 
 $args  = array_slice($argv, 1);

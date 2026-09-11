@@ -27,7 +27,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/SecureFile.php';
 require_once $root . '/lib/ConfigVault.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $fix     = in_array('--fix', $argv, true);
 
 echo str_repeat('-', 66) . "\n";

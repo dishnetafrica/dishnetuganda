@@ -31,7 +31,7 @@ $value = function (string $f) use ($args) {
     return ($i !== false && isset($args[$i + 1])) ? (string)$args[$i + 1] : '';
 };
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 
 // The flags that change how the assistant behaves. Listed so `set_config.php`
 // with no arguments answers "what is switched on?", which is the question

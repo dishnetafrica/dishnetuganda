@@ -26,7 +26,7 @@ require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/CrmApiClient.php';
 require_once $root . '/lib/QuotePdfSource.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 
 $argvAll  = $argv;

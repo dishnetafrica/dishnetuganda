@@ -30,7 +30,7 @@ require_once $root . '/lib/SecureFile.php';
 require_once $root . '/lib/EmailTemplate.php';
 require_once $root . '/lib/CustomerEmailDispatcher.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 
 $keys = array_values(array_filter(array_slice($argv, 1), function ($a) {
     return strpos($a, '--') !== 0;

@@ -26,7 +26,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/SentCopy.php';
 
 $opt     = getopt('', ['user:', 'pass:', 'host:', 'port:', 'folder:', 'hosts:', 'test', 'off', 'show']);
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $file    = rtrim($dataDir, '/') . '/email_settings.json';
 $es      = is_file($file) ? (json_decode((string)@file_get_contents($file), true) ?: []) : [];
 

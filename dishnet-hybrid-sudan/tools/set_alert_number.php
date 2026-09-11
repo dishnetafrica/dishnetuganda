@@ -52,7 +52,7 @@ require_once $root . '/lib/StoreInterface.php';
 require_once $root . '/lib/JsonStore.php';
 require_once $root . '/lib/SqliteStore.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $evo     = new EvolutionApiService($config);
 $args    = array_slice($argv, 1);

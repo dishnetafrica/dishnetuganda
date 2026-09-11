@@ -57,7 +57,7 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/CrmApiClient.php';
 require_once $root . '/lib/MediaLibrary.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $store   = SqliteStore::create($dataDir);
 $crm     = CrmApiClient::fromUcrm($root, $config);

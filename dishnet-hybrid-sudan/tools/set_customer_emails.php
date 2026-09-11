@@ -27,7 +27,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/CustomerEmailDispatcher.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 
 function show(array $config): void
 {

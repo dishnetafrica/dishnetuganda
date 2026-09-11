@@ -30,7 +30,7 @@ require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/CrmApiClient.php';
 require_once $root . '/lib/wa_webhook_url.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $doFix   = in_array('--fix', $argv, true);
 

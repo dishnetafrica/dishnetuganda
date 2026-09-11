@@ -31,7 +31,7 @@ require_once $root . '/lib/CustomerEmailDispatcher.php';
 // File scope, so this IS $GLOBALS['dataDir'] — which is where effectiveConfig()
 // looks. Without it the tool would read the plugin's own data/ and report on a
 // box other than the one it is running on.
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 
 // Deliberately EMPTY. A caller's array is exactly what cannot be trusted here:
 // the webhook builds its own from the SqliteStore copy, which never learns the

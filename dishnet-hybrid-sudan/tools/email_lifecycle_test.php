@@ -39,7 +39,7 @@ if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
     exit(1);
 }
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $config['email_test_banner'] = 'TEST EMAIL — DishNet system check, not a real customer message';
 

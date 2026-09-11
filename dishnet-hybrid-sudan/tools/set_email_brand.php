@@ -22,7 +22,7 @@ require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EmailTemplate.php';
 require_once $root . '/lib/CustomerContact.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $argvAll = $argv;
 

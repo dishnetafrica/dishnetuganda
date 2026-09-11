@@ -103,6 +103,93 @@ function getDataDir(string $pluginRoot): string
 }
 
 /**
+ * The data directory for a COMMAND-LINE tool, or a clear explanation.
+ *
+ * getDataDir() must never fail — the plugin has to start even when its
+ * preferred location is unavailable. Its LAST RESORT, taken only when the
+ * plugins root is not writable, is a directory inside the plugin itself.
+ * That directory is not where an existing install keeps its data, and uCRM
+ * deletes it on upgrade. A tool that lands there is looking at the wrong
+ * place, and the failure is silent: it creates an empty database, finds no
+ * hardware, and reports "nothing to adopt" as though that were the truth.
+ *
+ * That is the ONLY case this refuses. Specifically:
+ *
+ *   DN_DATA_DIR set          trusted completely and returned as given. An
+ *                            operator or a test that names a directory has
+ *                            aimed deliberately; second-guessing it would
+ *                            break every first run and every test fixture.
+ *   normal resolution        returned as-is, database or not — a new install
+ *                            has no database yet and must be allowed to make
+ *                            one.
+ *   last-resort fallback     refused when it holds no database, because that
+ *   with no database         combination means the real data is elsewhere.
+ *
+ * Even then it names what it found and stops. It never picks: a tool that
+ * writes must be aimed by a person, not at whichever database turned up.
+ *
+ * CLI only; on the web it simply returns getDataDir().
+ */
+function cliDataDir(string $pluginRoot): string
+{
+    $pluginRoot = rtrim($pluginRoot, '/');
+
+    // Named explicitly: that is the whole answer.
+    $explicit = (string)getenv('DN_DATA_DIR');
+    if ($explicit !== '') return rtrim($explicit, '/');
+
+    $dir = getDataDir($pluginRoot);
+    if (PHP_SAPI !== 'cli') return $dir;
+
+    // getDataDir()'s last resort, reproduced exactly: inside the plugin,
+    // reached only because the plugins root could not be written to.
+    $parent   = dirname($pluginRoot);
+    $fellBack = $dir === $pluginRoot . '/data' && !is_writable($parent);
+    if (!$fellBack || is_file($dir . '/plugin.sqlite3')) return $dir;
+
+    // Look only beside this plugin — never anywhere that could belong to a
+    // different install.
+    $candidates = [$parent . '/.' . basename($pluginRoot) . '-data'];
+    $cfg = getUcrmConfig($pluginRoot);
+    if (!empty($cfg['pluginDataDir'])) array_unshift($candidates, rtrim($cfg['pluginDataDir'], '/'));
+    foreach ((glob($parent . '/.*-data') ?: []) as $g) $candidates[] = rtrim($g, '/');
+
+    $found = [];
+    foreach (array_unique($candidates) as $c) {
+        if ($c !== $dir && is_file($c . '/plugin.sqlite3')) $found[$c] = (int)@filesize($c . '/plugin.sqlite3');
+    }
+
+    fwrite(STDERR, "\n  THIS IS NOT WHERE THE DATA LIVES\n\n");
+    fwrite(STDERR, "    would have used   " . $dir . "\n");
+    fwrite(STDERR, "    which is a fallback, taken because " . $parent . "\n");
+    fwrite(STDERR, "    is not writable by this user. uCRM deletes that directory on\n");
+    fwrite(STDERR, "    upgrade, and an existing install does not keep its data there.\n\n");
+
+    if (!$found) {
+        fwrite(STDERR, "    No database was found beside the plugin either. Nothing was\n");
+        fwrite(STDERR, "    created: an empty one would make every tool report an empty\n");
+        fwrite(STDERR, "    system as fact.\n\n");
+        fwrite(STDERR, "    Run as the user that owns the plugin data, or set DN_DATA_DIR\n");
+        fwrite(STDERR, "    to the directory holding plugin.sqlite3.\n\n");
+        exit(2);
+    }
+
+    arsort($found);
+    fwrite(STDERR, "    The database is here:\n\n");
+    foreach ($found as $c => $bytes) {
+        fwrite(STDERR, sprintf("      %-52s %s KB\n", $c, number_format($bytes / 1024, 0)));
+    }
+    $argvList = $GLOBALS['argv'] ?? [];
+    $args = implode(' ', array_map('escapeshellarg', array_slice($argvList, 1)));
+    fwrite(STDERR, "\n    Aim the tool at it and run again:\n\n");
+    fwrite(STDERR, "      DN_DATA_DIR=" . (string)array_key_first($found) . " php "
+                 . ($argvList[0] ?? 'the-tool.php') . ($args !== '' ? ' ' . $args : '') . "\n\n");
+    fwrite(STDERR, "    Not chosen automatically: a tool that writes must be aimed\n");
+    fwrite(STDERR, "    deliberately, not at whichever database it happened to find.\n\n");
+    exit(2);
+}
+
+/**
  * Check if running in UCRM environment (ucrm.json exists).
  * 
  * @param string $pluginRoot

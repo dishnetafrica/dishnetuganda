@@ -17,7 +17,7 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/CashbookService.php';
 require_once $root . '/lib/currency.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $store   = SqliteStore::create($dataDir);
 $cb      = new CashbookService($store, $dataDir);
 $pdo     = $store->getPdo();

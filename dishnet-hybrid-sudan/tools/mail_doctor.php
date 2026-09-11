@@ -27,7 +27,7 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/MailService.php';
 require_once $root . '/lib/EmailTemplate.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 try { $store = SqliteStore::create($dataDir); } catch (\Throwable $e) { $store = null; }
 

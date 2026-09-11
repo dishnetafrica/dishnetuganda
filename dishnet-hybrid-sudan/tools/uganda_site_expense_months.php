@@ -63,7 +63,7 @@ foreach (USM_MONTHS as $key => $label) {
     $dates[$key] = $d;
 }
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $store   = SqliteStore::create($dataDir);
 $cb      = new CashbookService($store, $dataDir);
 $pdo     = $store->getPdo();

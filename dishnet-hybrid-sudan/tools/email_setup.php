@@ -67,7 +67,7 @@ if ($test !== '' && !filter_var($test, FILTER_VALIDATE_EMAIL)) {
     fwrite(STDERR, "--test is not a valid email address\n"); exit(1);
 }
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $file    = rtrim($dataDir, '/') . '/email_settings.json';
 $mask    = str_repeat('•', max(4, strlen($pass) - 4)) . substr($pass, -4);
 

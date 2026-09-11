@@ -35,7 +35,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/CrmApiClient.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
 $crm     = CrmApiClient::fromUcrm($root, $config);
 if (!$crm->isConfigured()) { echo "\n  uCRM is not configured for this plugin.\n\n"; exit(2); }

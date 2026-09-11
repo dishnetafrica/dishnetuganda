@@ -29,7 +29,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/ConfigVault.php';
 require_once $root . '/lib/SecureFile.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 
 // A password given as an argument is already compromised; say so rather than
 // quietly accepting it.

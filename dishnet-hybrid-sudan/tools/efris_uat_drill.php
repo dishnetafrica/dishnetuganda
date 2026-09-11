@@ -27,7 +27,7 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EfrisService.php';
 
-$dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
+$dataDir = cliDataDir($root);
 $store   = SqliteStore::create($dataDir);
 $config  = PluginConfig::load($root, $dataDir);
 $svc     = new EfrisService($store, $config, $dataDir);
