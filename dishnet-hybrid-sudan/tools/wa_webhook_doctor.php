@@ -94,6 +94,14 @@ $evo = new EvolutionApiService($config);
 $live = [];
 foreach ($evo->listInstances() as $i) $live[(string)($i['name'] ?? '')] = $i;
 
+// An EMPTY list is ambiguous and must not be reported as "the instance does
+// not exist". Evolution answers an unauthenticated fetch with an empty list,
+// not an error, so a wrong API key looks exactly like an Evolution with
+// nothing in it. That sent someone hunting for a missing instance that was
+// sitting in the manager, Connected, with 2,273 contacts — the key had been
+// replaced with a 5-character mis-paste seconds earlier.
+$noneAtAll = $live === [];
+
 $mapped = 0;
 foreach ([EvolutionApiService::CHANNEL_SALES,
           EvolutionApiService::CHANNEL_SUPPORT,
@@ -104,6 +112,15 @@ foreach ([EvolutionApiService::CHANNEL_SALES,
     echo "\n== {$chn} → instance '{$inst}' ==\n";
     $st = $live[$inst] ?? null;
     if ($st === null) {
+        if ($noneAtAll) {
+            bad("Evolution returned NO instances at all, so '{$inst}' cannot be checked");
+            echo "        That is usually the API key, not a missing instance: an\n";
+            echo "        unauthenticated fetch comes back empty rather than as an\n";
+            echo "        error. Open the Evolution manager — if the instance is\n";
+            echo "        listed there, the key this plugin holds is wrong.\n";
+            echo "          php tools/set_evolution.php        shows the stored key length\n";
+            continue;
+        }
         bad("Evolution has no instance named '{$inst}' — the mapping points at nothing");
         continue;
     }

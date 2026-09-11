@@ -84,6 +84,32 @@ $stored = function () use ($tmp) {
     return is_file($f) ? (array)json_decode((string)file_get_contents($f), true) : [];
 };
 
+echo "\nA flag this build does not have is refused, not skipped\n";
+
+// --clear-key was run against a deployment that predated it. The flag was
+// ignored, the status printed, and it read as a report of a successful run.
+// Nothing had changed and the broken key was still in place. The operator
+// then had to be told to try something else, mid-outage. A tool must never
+// let an old build look like it did the new thing.
+$r = $run('--clear-key-typo');
+is_($r['code'] !== 0, 'an unknown flag exits non-zero');
+is_(strpos($r['out'], 'Nothing was changed') !== false, 'and says so');
+is_(strpos($r['out'], '--clear-key-typo') !== false, 'echoing it back');
+is_(strpos($r['out'], 'older than the command') !== false,
+    'and naming the likeliest cause',
+    'the flag usually exists — on a newer build than the one deployed');
+
+// A value that happens to look like nothing must not be mistaken for a flag.
+// Use the instance the fake server actually has, so this check leaves the
+// configuration in a state later assertions can rely on. Clearing it again
+// afterwards would NOT work: evo_instance_sales is a vault key, and the
+// vault gap-fills a cleared value straight back on the next load.
+$r = $run('--support dishnet_ug');
+is_(strpos($r['out'], 'does not understand') === false,
+    'a known flag\'s value is not read as an unknown argument',
+    'skipping the value is what makes --url https://... work at all');
+is_(strpos($r['out'], 'support  dishnet_ug') !== false, 'and the value is taken');
+
 echo "\nThe key is never an argument\n";
 
 $r = $run('--key 429683C4C977415CAAFCCE10F7D57E11');
@@ -111,6 +137,61 @@ is_(strpos($r['out'], 'SECRET-KEY-VALUE') === false,
     'a tool that echoes a secret writes it to every terminal log');
 is_(strpos($r['out'], '27 characters') !== false,
     'only its length is reported, which is enough to spot a truncated paste');
+
+echo "\nA key too short to be real is refused\n";
+
+// This happened: a read -rsp captured five characters, the tool stored them
+// over a working 32-character key, and every instance then reported as
+// missing — including one sitting in the manager, Connected, with 2,273
+// contacts. Evolution answers an unauthenticated fetch with an EMPTY LIST
+// rather than an error, so a wrong key is indistinguishable from an empty
+// Evolution unless something refuses the bad key in the first place.
+$before = $stored()['evo_api_key'] ?? '';
+$r = $run('--key -', "12345\n");
+is_($r['code'] !== 0, 'a 5-character key is refused');
+is_(strpos($r['out'], '5-character key') !== false, 'saying how short it was');
+is_(($stored()['evo_api_key'] ?? '') === $before,
+    'and the working key is left exactly as it was',
+    'replacing a good credential with a bad one is the damage being prevented');
+is_(strpos($r['out'], '--force-short') !== false, 'with a deliberate way past');
+
+$r = $run('--key - --force-short', "12345\n");
+is_(($stored()['evo_api_key'] ?? '') === '12345',
+    'which does work when meant',
+    'refusing outright would block a legitimately short key');
+
+// Put the real one back for the checks that follow.
+$run('--key -', $before . "\n");
+is_(($stored()['evo_api_key'] ?? '') === $before, 'and a long key is accepted normally');
+
+echo "\nA stored key can be taken back out of the way\n";
+
+$r = $run('--clear-key');
+is_(!array_key_exists('evo_api_key', $stored()),
+    'the override is removed',
+    'without this, a bad key written here cannot be undone from the CLI at all');
+is_(strpos($r['out'], 'uCRM Configuration screen') !== false,
+    'and it says what is in use instead');
+// Clearing the override alone is not enough, and this is the whole point of
+// the test. ConfigVault keeps its own copy of every vault key and gap-fills
+// it back on the very next load — so a --clear-key that only removed the
+// override reported success and changed the effective key not at all. That
+// shipped, and it was wrong.
+$vault = is_file($tmp . '/vault.json')
+    ? (array)json_decode((string)file_get_contents($tmp . '/vault.json'), true) : [];
+is_(!array_key_exists('evo_api_key', (array)($vault['config'] ?? [])),
+    'and the vault copy goes with it',
+    'otherwise the key is restored on the next load and nothing changed');
+
+$r = $run('');
+is_(strpos($r['out'], 'key        (not set)') !== false,
+    'so a fresh read really does see no key',
+    'this is the check that a clear actually cleared');
+
+$r = $run('--clear-key');
+is_(strpos($r['out'], 'vault') !== false,
+    'clearing twice is harmless and still says what it did');
+$run('--key -', $before . "\n");
 
 echo "\nhttp is refused, because the key rides in a header\n";
 

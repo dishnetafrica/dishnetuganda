@@ -7,6 +7,7 @@ chdir(dirname(__DIR__));
  *   php tools/set_evolution.php                     what is configured, and whether it answers
  *   php tools/set_evolution.php --url <base url>    set the API URL
  *   php tools/set_evolution.php --key -             read the API key from stdin
+ *   php tools/set_evolution.php --clear-key         drop it, use the uCRM screen's
  *   php tools/set_evolution.php --sales <name> --support <name>
  *
  * uCRM's Configuration screen is the ordinary place for these. This exists
@@ -39,6 +40,35 @@ $val     = function (string $flag) use ($args) {
     $i = array_search($flag, $args, true);
     return $i === false ? null : (string)($args[$i + 1] ?? '');
 };
+
+// An argument this build does not know must be refused, not ignored.
+//
+// --clear-key was run against a deployment that predated it. The flag was
+// skipped, the status printed, and the output looked like a report of a
+// successful run. Nothing had changed and the broken key was still in place.
+// set_config.php had exactly this bug and it cost a step mid-outage; this is
+// the same tool family and the same failure.
+$KNOWN = ['--url', '--key', '--clear-key', '--sales', '--support', '--account',
+          '--allow-insecure', '--force-short'];
+$takesValue = ['--url', '--key', '--sales', '--support', '--account'];
+$unknown = [];
+for ($i = 0; $i < count($args); $i++) {
+    $a = $args[$i];
+    if (strpos($a, '--') === 0) {
+        if (!in_array($a, $KNOWN, true)) { $unknown[] = $a; continue; }
+        if (in_array($a, $takesValue, true)) $i++;   // skip its value
+    } elseif ($i === 0) {
+        $unknown[] = $a;
+    }
+}
+if ($unknown) {
+    echo "\n  Nothing was changed — this build does not understand:\n\n";
+    echo "      " . implode(' ', $unknown) . "\n\n";
+    echo "  It understands: " . implode(' ', $KNOWN) . "\n\n";
+    echo "  If you expected one of those to work, the plugin on this server is\n";
+    echo "  older than the command. Deploy, then run it again.\n\n";
+    exit(1);
+}
 
 $changed = [];
 
@@ -86,11 +116,57 @@ if (in_array('--key', $args, true)) {
         echo "\n  Nothing arrived on stdin, so nothing was changed.\n\n";
         exit(1);
     }
+    // A key this short is a mis-paste or a stray Enter, not a credential.
+    // Evolution's own keys are a 32-character hex string or a 36-character
+    // UUID. Storing a short one replaces a WORKING key with a broken one and
+    // every instance then reports as missing, because an unauthenticated
+    // fetch returns an empty list — which looks exactly like an Evolution
+    // with nothing in it. That has already happened here once.
+    if (strlen($key) < 16 && !in_array('--force-short', $args, true)) {
+        echo "\n  Refusing a " . strlen($key) . "-character key — nothing was changed.\n\n";
+        echo "  Evolution keys are 32 hex characters or a 36-character UUID, so\n";
+        echo "  this is a mis-paste or a stray Enter. Storing it would replace a\n";
+        echo "  working key, and every instance would then report as missing:\n";
+        echo "  an unauthenticated fetch returns an empty list, which looks the\n";
+        echo "  same as an Evolution with nothing in it.\n\n";
+        echo "  If the key really is this short, add --force-short.\n\n";
+        exit(1);
+    }
     $existing = PluginConfig::load($root, $dataDir);
     $keepUrl  = (string)($existing['evo_api_url'] ?? '');
     list($ok, $err) = PluginConfig::saveEvolutionCredentials($dataDir, $keepUrl, $key);
     if (!$ok) { echo "\n  " . $err . "\n\n"; exit(1); }
     $changed[] = 'API key  stored, ' . strlen($key) . ' characters (not shown)';
+}
+
+// ── Undo a stored key, so the uCRM screen shows through again ───────────────
+if (in_array('--clear-key', $args, true)) {
+    list($ok, $err) = PluginConfig::clearEvolutionKey($dataDir);
+    if (!$ok) { echo "\n  " . $err . "\n\n"; exit(1); }
+
+    // Clearing the override alone achieves nothing: the vault keeps its own
+    // copy and gap-fills it straight back on the very next load, so the key
+    // just removed returns. Removing it there too is the documented way —
+    // ConfigVault::store() with an empty value, and nothing else, forgets a
+    // key. Without this the command reported success and changed the
+    // effective configuration not at all.
+    require_once $root . '/lib/ConfigVault.php';
+    $v = ConfigVault::store($root, $dataDir, ['evo_api_key' => '']);
+    if (empty($v['ok'])) {
+        echo "\n  The override was removed but the vault still holds a copy:\n";
+        echo "  " . (string)($v['error'] ?? 'unknown error') . "\n";
+        echo "  It will be restored on the next load. Set the correct key instead.\n\n";
+        exit(1);
+    }
+
+    if ($err === 'none') {
+        echo "\n  No key override was stored here; the vault's copy is cleared too.\n";
+    } else {
+        echo "\n  Key override removed, and the vault's copy with it.\n";
+        $changed[] = 'API key  override and vault copy cleared';
+    }
+    echo "  Whatever the uCRM Configuration screen holds is in use again — if\n";
+    echo "  that screen is empty, there is now no key at all.\n";
 }
 
 // ── Instance names ──────────────────────────────────────────────────────────

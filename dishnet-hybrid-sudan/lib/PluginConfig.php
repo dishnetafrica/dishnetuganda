@@ -203,6 +203,33 @@ class PluginConfig
     }
 
     /**
+     * Remove the stored Evolution key so the uCRM Configuration screen's
+     * value shows through again.
+     *
+     * saveEvolutionCredentials() treats an empty key as "keep the stored
+     * one", because the form shows a mask and a blank submit must not wipe
+     * it. That is right for the form and leaves no way back from a key
+     * written in error — which has happened: a mis-paste replaced a working
+     * key and every WhatsApp instance then reported as missing.
+     *
+     * Goes through writeKycFile like every other write, so it keeps the
+     * atomic rename and the ownership hand-back that a root CLI run needs.
+     * Writing this file directly would leave it root-owned and unreadable by
+     * the web user, which is its own outage.
+     *
+     * @return array{0:bool,1:string}
+     */
+    public static function clearEvolutionKey(string $dataDir): array
+    {
+        $path     = $dataDir . '/kyc_config.json';
+        $existing = self::readExistingForSave($path);
+        if (($existing[0] ?? null) === false && is_string($existing[1] ?? null)) return $existing;
+        if (!array_key_exists('evo_api_key', $existing)) return [true, 'none'];
+        unset($existing['evo_api_key']);
+        return self::writeKycFile($path, $existing);
+    }
+
+    /**
      * Store AI settings from an authenticated dashboard screen.
      *
      * Same reasoning as saveEvolutionCredentials(): a named, narrow path so the
