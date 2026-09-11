@@ -120,6 +120,85 @@ $src = (string)file_get_contents($root . '/tools/block_doctor.php');
 is_(strpos($src, 'dr_wifi_test_block') === false && strpos($src, 'drPost') === false,
     'and contains no code that could');
 
+// ── An empty router map is a diagnosis, not a number ────────────────────────
+// A dead Starlink session does not make discovery fail. It runs, succeeds,
+// and writes an EMPTY map — so "0 routers mapped" looks the same whether no
+// account can log in, the account has no service lines, or the dishes are on
+// customer-supplied routers. Three different problems, one number.
+echo "\nAn empty map, and why it is empty\n";
+$plugins = sys_get_temp_dir() . '/dn_bd_' . bin2hex(random_bytes(4));
+$hyb  = $plugins . '/dishnet-hybrid-sudan';
+$drD  = $plugins . '/dishnet-data-report/data';
+$hdat = $plugins . '/.dishnet-hybrid-sudan-data';
+@mkdir($hyb, 0777, true); @mkdir($drD, 0777, true); @mkdir($hdat, 0777, true);
+
+$doctor = function () use ($root, $hyb, $hdat): array {
+    $out = []; $rc = 0;
+    exec(sprintf('DN_PLUGIN_ROOT=%s DN_DATA_DIR=%s php %s 2>&1',
+         escapeshellarg($hyb), escapeshellarg($hdat),
+         escapeshellarg($root . '/tools/block_doctor.php')), $out, $rc);
+    return [implode("\n", $out), $rc];
+};
+
+// A dead session, and the empty map that follows from it.
+file_put_contents($drD . '/dr_accounts.json', json_encode([
+    'ACC-1' => ['session_alive' => false, 'needs_manual_reimport' => true],
+]));
+file_put_contents($drD . '/wifi_router_map.json', json_encode([]));
+[$o, $rc] = $doctor();
+is_(strpos($o, '0 alive, 1 dead') !== false, 'it counts the dead sessions', substr($o, 0, 600));
+is_(strpos($o, 'need a fresh login') !== false, 'and names the account that needs a new cookie');
+is_(strpos($o, 'EMPTY — and no Starlink session is alive') !== false,
+    'an empty map is reported as empty, not as "not written"');
+is_(strpos($o, 'cannot list routers it cannot ask about') !== false,
+    'AND BLAMES THE DEAD SESSION — the number alone explains nothing');
+
+// Same empty map, live session, no service lines: a different conclusion.
+file_put_contents($drD . '/dr_accounts.json', json_encode([
+    'ACC-1' => ['session_alive' => true],
+]));
+[$o, $rc] = $doctor();
+is_(strpos($o, '1 alive, 0 dead') !== false, 'a live session is recognised');
+is_(strpos($o, 'no service lines either') !== false,
+    'and the same empty map now means something else entirely');
+is_(strpos($o, 'customer-supplied routers') !== false,
+    'including the case that can never be blocked this way');
+
+// And the case this operation is actually in: the account is fine, the
+// service lines exist, and the dishes are still on order from Starlink.
+// Nothing is broken — a doctor that calls this a failure is crying wolf on
+// the day the business is simply waiting for a delivery.
+file_put_contents($drD . '/sl_svc_cache.json', json_encode(
+    array_fill_keys(array_map(fn($i) => 'SL-' . $i, range(1, 10)), ['kit_number' => ''])));
+[$o, $rc] = $doctor();
+is_(strpos($o, '10 service line(s) exist, no router online yet') !== false,
+    'ten service lines and no routers is reported as exactly that', substr($o, 0, 900));
+is_(strpos($o, 'Nothing is broken') !== false,
+    'AND NOT AS A FAULT — the dishes are on order, there is nothing to fix');
+is_(strpos($o, 'until its dish is shipped') !== false || strpos($o, 'once its dish is shipped') !== false,
+    'saying what has to happen before a router can appear');
+
+// An un-onboarded account alongside a working one is worth a word, not a failure.
+file_put_contents($drD . '/dr_accounts.json', json_encode([
+    'ACC-1' => ['session_alive' => true],
+    'ACC-2' => ['session_alive' => false],
+    'ACC-3' => ['session_alive' => false],
+]));
+[$o, $rc] = $doctor();
+is_(strpos($o, '1 alive, 2 dead') !== false, 'accounts without a cookie are counted');
+is_(strpos($o, 'cannot be
+         seen or blocked until one is imported') !== false
+    || strpos($o, 'until one is imported') !== false,
+    'and what that costs is said plainly');
+
+// A map that was never written at all is the third state.
+@unlink($drD . '/wifi_router_map.json');
+[$o, $rc] = $doctor();
+is_(strpos($o, 'discovery cron has not completed a run') !== false,
+    'and a missing map is told apart from an empty one');
+
+exec('rm -rf ' . escapeshellarg($plugins));
+
 // ── The gateway URL goes through the same override as every other link ──────
 // uCRM writes the address it was CONFIGURED with, and behind this install's
 // reverse proxy that is crm.dishnetuganda.com:8443 — the port the proxy
