@@ -214,6 +214,31 @@ if ($act === 'stock_write_off' && $met === 'POST') {
     }
 }
 
+// ── POST stock_reserve — hold a unit for a customer ──────────
+if ($act === 'stock_reserve' && $met === 'POST') {
+    if (!$_stockIsPriv) $er2('Access denied', 403);
+    $unitId = (int)($body['unit_id'] ?? 0);
+    if (!$unitId) $er2('unit_id required');
+    try {
+        $ok2($_stockSvc->reserve($unitId, $body, $rid, $retailer['name'] ?? 'Staff'), 'Reserved');
+    } catch (\Throwable $e) {
+        $er2($e->getMessage());
+    }
+}
+
+// ── POST stock_release — give a reserved unit back to the shelf ──
+if ($act === 'stock_release' && $met === 'POST') {
+    if (!$_stockIsPriv) $er2('Access denied', 403);
+    $unitId = (int)($body['unit_id'] ?? 0);
+    if (!$unitId) $er2('unit_id required');
+    try {
+        $ok2($_stockSvc->release($unitId, $rid, $retailer['name'] ?? 'Staff',
+                                 (string)($body['reason'] ?? '')), 'Reservation released');
+    } catch (\Throwable $e) {
+        $er2($e->getMessage());
+    }
+}
+
 // ── POST stock_inbound — receive stock from supplier ─────────
 if ($act === 'stock_inbound' && $met === 'POST') {
     if (!$_stockIsPriv) $er2('Access denied', 403);

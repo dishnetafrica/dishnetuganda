@@ -96,6 +96,13 @@ class SqliteStore implements StoreInterface
         'master_schedule', 'job_assignments_seen',
         'scheduling_cache_meta', 'wa_sync_state',
         'cash_carry_reminder_state',
+        // Keyed by invoice id, so the same shape as hotspot_config below and
+        // the same failure: save() auto-detected the assoc array and stored
+        // one flat row, load() did not recognise the table and array_values()
+        // stripped the invoice ids off it. $cache[$invoiceId] then never
+        // matched, so the portal's receipt cache never hit and every request
+        // for a receipt went back to uCRM. It looked like it worked.
+        'ucrm_invoice_payments_cache',
         // v4.15.4: hotspot_config is keyed by Router-XXX (string keys, assoc dict)
         // Without this, SqliteStore::save writes the assoc array via the auto-detect
         // path (single row with id=0), but SqliteStore::load wraps the result in
@@ -232,10 +239,15 @@ class SqliteStore implements StoreInterface
         // Runs once — subsequent boots skip because data already exists.
         $pluginRoot = $GLOBALS['_PLUGIN_ROOT'] ?? dirname(__DIR__);
         $seedDir = $pluginRoot . '/seed';
+        // No seed directory is the normal state — it ships empty and the
+        // seeding is a one-time convenience for a fresh BlueCard install.
+        // Logging its absence wrote a line on EVERY boot: every uCRM page
+        // load, every cron tick, and the first line of output of every
+        // command-line tool, where it reads like a fault and is the first
+        // thing an operator sees. Silence is the correct report for a
+        // missing optional thing.
         if (is_dir($seedDir)) {
             $store->seedLteData($seedDir);
-        } else {
-            error_log("[LTE seed] seed dir not found: {$seedDir}");
         }
 
         return $store;
@@ -423,7 +435,19 @@ class SqliteStore implements StoreInterface
                     ':data' => json_encode($data, JSON_UNESCAPED_UNICODE),
                 ]);
             } elseif ($this->isAssocArray($data)) {
-                // Auto-detect flat object (for files not in FLAT_TABLES but stored as assoc)
+                // Auto-detect flat object (for files not in FLAT_TABLES but stored as assoc).
+                //
+                // This write is fine. Reading it back is not: load() only takes
+                // the flat path for a table in $FLAT_TABLES, so for any other
+                // table the keys are stripped by array_values() and the caller
+                // gets a list where it saved a dictionary. Two caches have
+                // already been lost to this quietly. Say so, so the third is
+                // found by reading a log rather than by a customer noticing.
+                if (!empty($data)) {
+                    error_log("[SqliteStore] '{$file}' was saved as a keyed object but '{$table}' "
+                            . 'is not in $FLAT_TABLES — its keys will be stripped when it is read '
+                            . 'back. Add the table to that list.');
+                }
                 $stmt->execute([
                     ':id'   => self::FLAT_ID,
                     ':data' => json_encode($data, JSON_UNESCAPED_UNICODE),
