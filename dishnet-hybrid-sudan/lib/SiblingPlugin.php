@@ -53,6 +53,13 @@ final class SiblingPlugin
      */
     public static function pluginRoot(): string
     {
+        // DN_PLUGIN_ROOT first, matching DN_DATA_DIR's role for the data
+        // directory: a way to point this at a different install without
+        // moving the code. __DIR__ resolves through symlinks, so a test that
+        // stages a plugins directory and links the code into it would
+        // otherwise resolve back to the real checkout and find nothing.
+        $env = (string)getenv('DN_PLUGIN_ROOT');
+        if ($env !== '') return rtrim($env, '/');
         $r = (string)($GLOBALS['_PLUGIN_ROOT'] ?? '');
         return $r !== '' ? rtrim($r, '/') : dirname(__DIR__);
     }
