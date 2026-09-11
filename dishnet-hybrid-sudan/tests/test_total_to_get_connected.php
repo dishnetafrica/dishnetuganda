@@ -88,6 +88,26 @@ has('the total row keeps monthly out of the total',
 has('and the rule covers levies too',
     (string)$by['RULE_NEVER_CALCULATE_TAX']['answer'], 'a levy or any statutory figure');
 
+echo "\nA package already contains its parts\n";
+// The catalogue carries Starlink Mini Kit, Professional Installation AND
+// Starlink Mini Package — and the package is exactly the two added together.
+// A flat list invites both mistakes: adding installation on top of a package,
+// and adding the parts up when the package is the cheaper offer. The Luuka
+// customer was quoted kit plus installation while the package sat in the same
+// catalogue for fifty thousand less.
+has('packages are recognised',      $p, 'PACKAGES ALREADY CONTAIN THEIR PARTS');
+has('installation is not added on top', $p, 'never add a separately listed kit or installation');
+has('and why that matters',         $p, 'charges the customer twice');
+has('the package is quoted, not rebuilt', $p, 'quote the package rather than adding its parts');
+has('the two figures may differ',   $p, 'not always the same figure');
+has('and the gap is not explained away', $p, 'do not call it a discount');
+
+echo "\nThe knowledge row says the same\n";
+$pk = (string)($by['PACKAGES_INCLUDE_INSTALLATION']['answer'] ?? '');
+is_($pk !== '', 'PACKAGES_INCLUDE_INSTALLATION exists');
+has('never billed twice', $pk, 'bills the customer twice');
+is_(!preg_match('/UGX\s*[\d,]{4,}/i', $pk), 'and carries no price');
+
 echo "\nThe existing price discipline is untouched\n";
 // Yesterday's fix: quote what you hold even when one line is missing. The new
 // rule must not have reintroduced withholding.

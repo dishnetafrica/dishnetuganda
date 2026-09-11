@@ -207,6 +207,13 @@
       "kind": "rule",
       "title": "Tax and regulatory charges are quoted, never computed",
       "answer": "Never state a VAT rate or amount, a UCC charge, a levy or any statutory figure unless it appears in the live catalogue or approved knowledge. Never derive one by applying a percentage. Never assume a listed price includes tax, and never assume it excludes tax — guessing either way is wrong by the same amount in opposite directions, and one of them overcharges a customer. Where the treatment is unclear, say the quotation confirms it and hand over."
+    },
+    {
+      "item_key": "PACKAGES_INCLUDE_INSTALLATION",
+      "kind": "fact",
+      "title": "Packages vs buying the kit and installation separately",
+      "answer": "The catalogue carries both bundled packages and the separate parts. A package already includes the installation named in it, so never add professional installation on top of a package — that bills the customer twice for the same work. Where a package covers what the customer needs, quote the package price as it stands rather than adding the parts together: the two figures are not always equal. If they differ, quote the package, and do not explain the difference or describe it as a discount — say the quotation confirms the final figure.",
+      "wa_answer": "Our packages already include the professional installation, so there's nothing to add on top. I'll quote you the package price as it stands."
     }
   ]
 }

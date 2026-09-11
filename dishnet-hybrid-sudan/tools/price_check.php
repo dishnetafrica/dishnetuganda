@@ -145,6 +145,61 @@ if ($unlisted) {
     foreach ($unlisted as $u) printf("  - [%s] %s — %s\n", $u['group'], $u['name'], $fmt($u['price']));
 }
 
+// ── Packages against the parts they bundle ──────────────────────────────────
+// The catalogue carries both. A package that does not equal its parts is not
+// necessarily wrong — a bundle discount is a real thing — but nobody can tell
+// from the assistant's side, and a customer holding both figures will ask. It
+// surfaces here as a report instead of as an argument at the counter.
+$hw = (array)($live['data']['hardware'] ?? []);
+$named = function (array $items, array $words) {
+    foreach ($items as $it) {
+        $n = mb_strtolower((string)($it['name'] ?? ''));
+        foreach ($words as $w) if (strpos($n, $w) === false) { continue 2; }
+        return $it;
+    }
+    return null;
+};
+$install = $named($hw, ['install']);
+$packages = [];
+foreach ($hw as $it) {
+    $n = mb_strtolower((string)($it['name'] ?? ''));
+    if (strpos($n, 'package') !== false || strpos($n, 'bundle') !== false) $packages[] = $it;
+}
+if ($packages && $install && ($install['price'] ?? null) !== null) {
+    echo "\nPackages vs the parts they bundle\n\n";
+    foreach ($packages as $pk) {
+        $pkName  = (string)$pk['name'];
+        $pkPrice = $pk['price'] ?? null;
+        // The kit this package is built on: same leading words, minus "package".
+        $stem = trim(str_ireplace(['package', 'bundle'], '', $pkName));
+        $kit  = null;
+        foreach ($hw as $it) {
+            $n = (string)($it['name'] ?? '');
+            if ($n === $pkName) continue;
+            if (stripos($n, 'package') !== false || stripos($n, 'bundle') !== false) continue;
+            if ($stem !== '' && stripos($n, $stem) !== false) { $kit = $it; break; }
+        }
+        if (!$kit || ($kit['price'] ?? null) === null || $pkPrice === null) {
+            printf("  %-30s %14s   (no matching kit to compare)\n", $pkName, $fmt($pkPrice));
+            continue;
+        }
+        $parts = (float)$kit['price'] + (float)$install['price'];
+        $delta = (float)$pkPrice - $parts;
+        printf("  %-30s %14s\n", $pkName, $fmt($pkPrice));
+        printf("  %-30s %14s   %s + %s\n", '  parts separately', $fmt($parts),
+               (string)$kit['name'], (string)$install['name']);
+        if (abs($delta) < 0.005) {
+            printf("  %-30s %14s   identical\n", '', '');
+        } else {
+            printf("  %-30s %14s   %s buying the parts — confirm this is intended\n", '',
+                   $fmt(abs($delta)), $delta < 0 ? 'CHEAPER than' : 'DEARER than');
+            $bad[] = $pkName . ' does not equal its parts (' . $fmt(abs($delta)) . ' apart)';
+        }
+    }
+    echo "\n  A package already includes its installation. Quoting a package AND an\n";
+    echo "  installation charges the customer twice for the same work.\n";
+}
+
 if ($bad) {
     printf("\n%d item(s) need attention. uCRM is what customers are quoted, so either\n"
          . "uCRM is wrong and should be corrected, or the printed material is out of date.\n",
