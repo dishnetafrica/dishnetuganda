@@ -215,10 +215,11 @@ if (($_GET['sl_action'] ?? '') === 'audit_suspended_starlink') {
     // Read sl_kits.json from sibling Starlink Finance plugin
     // (same paths StarlinkBlockService::loadKitsForClient uses)
     $kitsByClient = [];
-    foreach ([
-        dirname(__DIR__, 3) . '/dishnet-starlink-finance/data/sl_kits.json',
-        dirname(__DIR__, 4) . '/dishnet-starlink-finance/data/sl_kits.json',
-    ] as $path) {
+    require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
+    // Two candidates here because this file could not decide whether it was
+    // three or four directories deep. It is neither — the resolver works from
+    // the plugin root rather than from wherever the caller happens to sit.
+    foreach (array_filter([SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json')]) as $path) {
         if (file_exists($path)) {
             $raw = @json_decode(file_get_contents($path), true);
             if (is_array($raw)) {

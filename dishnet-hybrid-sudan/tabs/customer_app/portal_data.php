@@ -263,34 +263,23 @@ if (!$portalAuthError) {
     // Chain: CRM client_id → sl_kits.json → kit_number → sl_usage.json
     $portalUsage = null;
     try {
-        $pluginsBase = dirname(dirname(dirname(__DIR__)));
+        // Through SiblingPlugin now. The path was built by hand here, and it
+        // pointed at <plugin>/data — which is the directory uCRM DELETES when
+        // that plugin is upgraded. The resolver checks the .<plugin>-data
+        // sibling that survives an upgrade first, and records a miss instead
+        // of leaving an empty array that reads as "this customer has no usage".
+        require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
 
-        // KITs data — try both plugins for the mapping
-        $kitsData = [];
-        foreach (['dishnet-starlink-finance', 'dishnet-data-report'] as $kp) {
-            $kf = $pluginsBase . '/' . $kp . '/data/sl_kits.json';
-            if (is_file($kf)) {
-                $kd = portalJsonLoad($kf);
-                if (is_array($kd) && !empty($kd)) { $kitsData = $kd; break; }
-            }
-        }
+        // KITs — Finance holds the register, Data Report has a copy.
+        $kitsData = SiblingPlugin::readJsonFromAny(
+            ['dishnet-starlink-finance', 'dishnet-data-report'], 'sl_kits.json') ?? [];
 
-        // Usage data — Data Report first (fresher), Finance as fallback
-        $allUsage = [];
-        foreach (['dishnet-data-report', 'dishnet-starlink-finance'] as $up) {
-            $uf = $pluginsBase . '/' . $up . '/data/sl_usage.json';
-            if (is_file($uf)) {
-                $ud = portalJsonLoad($uf);
-                if (is_array($ud) && !empty($ud)) { $allUsage = $ud; break; }
-            }
-        }
+        // Usage — Data Report first because it syncs hourly, Finance as fallback.
+        $allUsage = SiblingPlugin::readJsonFromAny(
+            ['dishnet-data-report', 'dishnet-starlink-finance'], 'sl_usage.json') ?? [];
 
-        // Also try the Data Report plugin's service line cache for kit resolution
-        $slSvcCache = [];
-        $svcCacheFile = $pluginsBase . '/dishnet-data-report/data/sl_svc_cache.json';
-        if (is_file($svcCacheFile)) {
-            $slSvcCache = portalJsonLoad($svcCacheFile);
-        }
+        // Service-line cache, for resolving a kit to the line it bills under.
+        $slSvcCache = SiblingPlugin::readJsonOrEmpty('dishnet-data-report', 'sl_svc_cache.json');
 
         if (!empty($kitsData) && !empty($allUsage)) {
             // Find KIT(s) for this customer
@@ -381,19 +370,13 @@ if (!$portalAuthError) {
     // ── WiFi router info: find customer's router from Data Report ──
     $portalRouter = null;
     try {
-        $pluginsBase = dirname(dirname(dirname(__DIR__)));
-        $routerMapFile = $pluginsBase . '/dishnet-data-report/data/wifi_router_map.json';
-        if (is_file($routerMapFile)) {
-            $routerMap = portalJsonLoad($routerMapFile);
+        require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
+        $routerMap = SiblingPlugin::readJson('dishnet-data-report', 'wifi_router_map.json');
+        if ($routerMap !== null) {
             // Also load kits to map CRM client → kit → router
-            $kitsForRouter = [];
-            foreach (['dishnet-starlink-finance', 'dishnet-data-report'] as $kp2) {
-                $kf2 = $pluginsBase . '/' . $kp2 . '/data/sl_kits.json';
-                if (is_file($kf2)) {
-                    $kd2 = portalJsonLoad($kf2);
-                    if (is_array($kd2) && !empty($kd2)) { $kitsForRouter = $kd2; break; }
-                }
-            }
+            $kitsForRouter = SiblingPlugin::readJsonFromAny(
+                ['dishnet-starlink-finance', 'dishnet-data-report'], 'sl_kits.json') ?? [];
+
             // Find KIT serials + service lines + account numbers for this customer
             $myKitSerials = [];
             $myServiceLines = [];
@@ -457,31 +440,13 @@ if (!$portalAuthError) {
     $portalActiveCount = 0;
     $portalTotalUsageGb = 0.0;
     try {
-        $pluginsBase = dirname(dirname(dirname(__DIR__)));
-        // Load KITs
-        $allKitsForSites = [];
-        foreach (['dishnet-starlink-finance', 'dishnet-data-report'] as $kp3) {
-            $kf3 = $pluginsBase . '/' . $kp3 . '/data/sl_kits.json';
-            if (is_file($kf3)) {
-                $kd3 = portalJsonLoad($kf3);
-                if (is_array($kd3) && !empty($kd3)) { $allKitsForSites = $kd3; break; }
-            }
-        }
-        // Load usage
-        $allUsageForSites = [];
-        foreach (['dishnet-data-report', 'dishnet-starlink-finance'] as $up2) {
-            $uf2 = $pluginsBase . '/' . $up2 . '/data/sl_usage.json';
-            if (is_file($uf2)) {
-                $ud2 = portalJsonLoad($uf2);
-                if (is_array($ud2) && !empty($ud2)) { $allUsageForSites = $ud2; break; }
-            }
-        }
-        // Load routers
-        $allRoutersForSites = [];
-        $rmf2 = $pluginsBase . '/dishnet-data-report/data/wifi_router_map.json';
-        if (is_file($rmf2)) {
-            $allRoutersForSites = portalJsonLoad($rmf2);
-        }
+        require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
+        $allKitsForSites = SiblingPlugin::readJsonFromAny(
+            ['dishnet-starlink-finance', 'dishnet-data-report'], 'sl_kits.json') ?? [];
+        $allUsageForSites = SiblingPlugin::readJsonFromAny(
+            ['dishnet-data-report', 'dishnet-starlink-finance'], 'sl_usage.json') ?? [];
+        $allRoutersForSites = SiblingPlugin::readJsonOrEmpty(
+            'dishnet-data-report', 'wifi_router_map.json');
 
         // ── v4.21.104: Data Report KIT registry (Starlink-derived liveness) ──
         // dr_kit_registry.json is owned by dishnet-data-report and rebuilt
@@ -503,10 +468,9 @@ if (!$portalAuthError) {
         // still see SOMETHING (Finance's last-known state) instead of an
         // empty portal.
         $drRegistryByKit = [];
-        $drRegistryFile  = $pluginsBase . '/dishnet-data-report/data/dr_kit_registry.json';
-        if (is_file($drRegistryFile)) {
-            $drDoc = portalJsonLoad($drRegistryFile);
-            if (is_array($drDoc) && isset($drDoc['kits']) && is_array($drDoc['kits'])) {
+        $drDoc = SiblingPlugin::readJson('dishnet-data-report', 'dr_kit_registry.json');
+        if ($drDoc !== null) {
+            if (isset($drDoc['kits']) && is_array($drDoc['kits'])) {
                 foreach ($drDoc['kits'] as $kSerial => $kRec) {
                     if (!is_array($kRec)) continue;
                     $drRegistryByKit[strtoupper(trim((string)$kSerial))] = $kRec;
@@ -736,15 +700,12 @@ $portalAllSitesPaused = false;
 
 if (!$portalAuthError && !empty($portalCustomerId)) {
     try {
-        $pluginsBase = dirname(dirname(dirname(__DIR__)));
-        $blockStateFile = $pluginsBase . '/dishnet-data-report/data/wifi_test_block_state.json';
-        $routerMapFile2 = $pluginsBase . '/dishnet-data-report/data/wifi_router_map.json';
+        require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
+        $blockState = SiblingPlugin::readJson('dishnet-data-report', 'wifi_test_block_state.json');
+        $routerMap  = SiblingPlugin::readJson('dishnet-data-report', 'wifi_router_map.json');
 
-        if (is_file($blockStateFile) && is_file($routerMapFile2)) {
-            $blockState = portalJsonLoad($blockStateFile);
-            $routerMap = portalJsonLoad($routerMapFile2);
-
-            if (is_array($blockState) && is_array($routerMap) && !empty($blockState)) {
+        if ($blockState !== null && $routerMap !== null) {
+            if (!empty($blockState)) {
                 // Build set of THIS customer's KITs (uppercase, trimmed)
                 $myKits = [];
                 foreach ($portalSites as $s) {

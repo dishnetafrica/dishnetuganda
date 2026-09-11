@@ -1105,10 +1105,8 @@ class StarlinkBlockService
     {
         // Plugin sibling path resolution — Hybrid plugin sits at .../_plugins/dishnet-hybrid-telecom
         // Starlink Finance sits at .../_plugins/dishnet-starlink-finance
-        $candidates = [
-            dirname(__DIR__, 2) . '/dishnet-starlink-finance/data/sl_kits.json',
-            dirname(__DIR__, 1) . '/../dishnet-starlink-finance/data/sl_kits.json',
-        ];
+        require_once __DIR__ . '/SiblingPlugin.php';
+        $candidates = array_filter([SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json')]);
 
         $kitsData = null;
         foreach ($candidates as $p) {
@@ -1190,10 +1188,8 @@ class StarlinkBlockService
      */
     private function loadRouterMap(): array
     {
-        $candidates = [
-            dirname(__DIR__, 2) . '/dishnet-data-report/data/wifi_router_map.json',
-            dirname(__DIR__, 1) . '/../dishnet-data-report/data/wifi_router_map.json',
-        ];
+        require_once __DIR__ . '/SiblingPlugin.php';
+        $candidates = array_filter([SiblingPlugin::path('dishnet-data-report', 'wifi_router_map.json')]);
         foreach ($candidates as $p) {
             if (file_exists($p)) {
                 $raw = @file_get_contents($p);

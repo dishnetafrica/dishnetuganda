@@ -337,10 +337,8 @@ class StarlinkBlockBridge
 
         // Source A: sl_kits.json
         $kitsJson = null;
-        foreach ([
-            dirname(__DIR__, 2) . '/dishnet-starlink-finance/data/sl_kits.json',
-            dirname(__DIR__, 1) . '/../dishnet-starlink-finance/data/sl_kits.json',
-        ] as $p) {
+        require_once __DIR__ . '/SiblingPlugin.php';
+        foreach (array_filter([SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json')]) as $p) {
             if (file_exists($p)) {
                 $diag['src_a_path']    = $p;
                 $diag['src_a_present'] = true;
@@ -616,10 +614,8 @@ class StarlinkBlockBridge
      */
     private function readDataReportFile(string $filename): array
     {
-        foreach ([
-            dirname(__DIR__, 2) . '/dishnet-data-report/data/' . $filename,
-            dirname(__DIR__, 1) . '/../dishnet-data-report/data/' . $filename,
-        ] as $p) {
+        require_once __DIR__ . '/SiblingPlugin.php';
+        foreach (array_filter([SiblingPlugin::path('dishnet-data-report', $filename)]) as $p) {
             if (file_exists($p)) {
                 $raw = @file_get_contents($p);
                 if ($raw !== false) {
