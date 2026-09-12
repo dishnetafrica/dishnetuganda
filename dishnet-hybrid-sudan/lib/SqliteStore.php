@@ -51,6 +51,9 @@ require_once __DIR__ . '/StoreInterface.php';
  */
 class SqliteStore implements StoreInterface
 {
+    /** Per-instance table-shape cache — see isProperTable(). */
+    private array $properTableCache = [];
+
     private \PDO   $pdo;
     private string $dir;
 
@@ -1134,18 +1137,23 @@ class SqliteStore implements StoreInterface
      */
     private function isProperTable(string $table): bool
     {
-        static $cache = [];
-        if (isset($cache[$table])) return $cache[$table];
+        // Per-instance. A `static` here is shared by every SqliteStore in the
+        // process, so a second store opened on a DIFFERENT database would be
+        // told the first one's table shape — and would then read a proper
+        // table as a blob, or the reverse. Two other classes have had this
+        // exact bug.
+        if (isset($this->properTableCache[$table])) return $this->properTableCache[$table];
 
         try {
             $cols = $this->pdo->query("PRAGMA table_info([{$table}])")->fetchAll(\PDO::FETCH_COLUMN, 1);
             // A table is "proper" if it exists, has more than 2 columns, and does NOT have a 'data' column
             // (or has >3 columns even with 'data' — e.g. some tables might have a data field legitimately)
-            $cache[$table] = !empty($cols) && count($cols) > 2 && !in_array('data', $cols, true);
+            $this->properTableCache[$table] = !empty($cols) && count($cols) > 2
+                                            && !in_array('data', $cols, true);
         } catch (\Throwable $e) {
-            $cache[$table] = false;
+            $this->properTableCache[$table] = false;
         }
-        return $cache[$table];
+        return $this->properTableCache[$table];
     }
 
     private function ensureIndexes(): void
