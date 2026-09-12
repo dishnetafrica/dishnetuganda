@@ -330,6 +330,59 @@ is_(strpos($txt3, 'not assigned to a CRM customer') !== false, 'saying exactly t
 $o4 = []; exec($env . 'php ' . escapeshellarg($root . '/tools/binding_trace.php') . ' --client X 2>&1', $o4, $c4);
 t('a non-numeric client is refused, not read as zero', $c4, 2);
 
+echo "\nAssigning a kit from the command line\n";
+$assign = $root . '/tools/assign_kit.php';
+is_(is_file($assign), 'tools/assign_kit.php exists');
+$run = function (string $flags) use ($env, $assign): array {
+    $o = []; $c = 0;
+    exec($env . 'php ' . escapeshellarg($assign) . ' ' . $flags . ' 2>&1', $o, $c);
+    return [implode("\n", $o), $c];
+};
+
+// A serial nobody received is a typo, not equipment. Assigning one would
+// invent inventory — and then a customer would appear to own a dish that
+// does not exist anywhere.
+[$tN, $cN] = $run('--kit KITNEVERRECEIVED --client 7');
+t('a serial that is not in stock is refused', $cN, 1);
+is_(strpos($tN, 'is not in stock') !== false, 'and says so', $tN);
+is_(strpos($tN, 'invent inventory') !== false, 'and why that matters');
+
+// A mistyped serial is the likeliest cause, so near misses are offered.
+[$tM, $cM] = $run('--kit KITAAAAXXXXXXX --client 7');
+is_(strpos($tM, 'start the same way') !== false, 'near-miss serials are listed', $tM);
+is_(strpos($tM, 'KITAAAAAAAA0001') !== false, 'naming the one it probably meant');
+
+$kitG = $mkUnit('KITGGGGGGGG0007');
+[$tX, $cX] = $run('--kit KITGGGGGGGG0007 --client X');
+t('a non-numeric client is refused, not read as zero', $cX, 2);
+is_(strpos($tX, 'uCRM client NUMBER') !== false, 'and it says where to find the number', $tX);
+
+[$tD, $cD] = $run('--kit KITGGGGGGGG0007 --client 7');
+t('a dry run exits clean', $cD, 0);
+is_(strpos($tD, 'dry run — nothing written') !== false, 'and writes nothing', $tD);
+t('truly nothing', $ea->activeForUnit($kitG), null);
+
+[$tC, $cC] = $run('--kit KITGGGGGGGG0007 --client 7 --service 42 --commit');
+t('committing assigns it', $cC, 0);
+$mine = $ea->activeForUnit($kitG);
+t('to that customer',  (int)$mine['crm_client_id'], 7);
+t('on that service',   (int)$mine['crm_service_id'], 42);
+t('and the kit resolves back to them',
+    $ea->resolve(['kit_serial' => 'KITGGGGGGGG0007'])['crm_client_id'], 7);
+t('the unit is installed',
+    $pdo->query("SELECT status FROM stock_units WHERE id={$kitG}")->fetchColumn(), 'installed');
+
+// The second assignment is the dangerous one: silently re-pointing a live kit
+// is how a customer loses their connection with nothing recording why.
+[$tR, $cR] = $run('--kit KITGGGGGGGG0007 --client 999 --commit');
+t('a kit already held is refused', $cR, 1);
+is_(strpos($tR, 'Already assigned to client #7') !== false, 'naming who has it', $tR);
+t('and it still belongs to 7',
+    $ea->resolve(['kit_serial' => 'KITGGGGGGGG0007'])['crm_client_id'], 7);
+
+[$tU, $cU] = $run('--wat');
+t('an unknown option is refused', $cU, 2);
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n  {$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);
