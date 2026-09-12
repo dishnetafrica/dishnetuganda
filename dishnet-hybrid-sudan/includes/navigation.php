@@ -85,6 +85,17 @@ $_waNeedsHuman = (int)($_navBadges['wa_human']    ?? 0);
 $_nqFailed     = (int)($_navBadges['nq_failed']   ?? 0);
 $_waLeadBadge2 = (int)($_navBadges['wa_leads']    ?? 0);
 ?>
+<?php
+// The whole WhatsApp section, not only its settings links. The Inbox link sat
+// outside the admin guard, so every signed-in user saw a WhatsApp menu. The
+// backend now refuses them anyway — this stops them being invited to try.
+require_once $GLOBALS['_PLUGIN_ROOT'] . '/lib/WhatsAppAccess.php';
+$_waNavRole = strtolower((string)($retailer['role'] ?? ''));
+$_waNavCfg  = $config ?? [];
+$_waNavShow = $isAdmin
+    || WhatsAppAccess::allowsTab(false, 'wa_inbox', $_waNavCfg, $_waNavRole);
+if ($_waNavShow):
+?>
 <div class="nav-section" style="color:#25D366;">WhatsApp</div>
 <a href="?page=dashboard&tab=wa_inbox" class="kyc-tab <?= $tab==='wa_inbox'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-chat-dots-fill" style="color:#25D366;"></i></span> Inbox
@@ -151,6 +162,8 @@ $_waLeadBadge2 = (int)($_navBadges['wa_leads']    ?? 0);
     if($_lcNeedsAction2 > 0): ?><span class="nav-badge" style="background:#ef4444;"><?= $_lcNeedsAction2 > 99 ? '99+' : $_lcNeedsAction2 ?></span><?php endif; ?>
 </a>
 <?php endif; ?>
+
+<?php endif; /* WhatsApp section */ ?>
 
 <?php if ($can('support_dash') || $can('customer_lookup') || $can('service_status') || $can('tickets')): ?>
 <?php /*  SUPPORT  */ ?>
@@ -433,6 +446,12 @@ try {
 <?php if($isAdmin): ?>
 <a href="?page=dashboard&tab=app_logins" class="kyc-tab <?= $tab==='app_logins'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-phone-fill" style="color:#1565C0;"></i></span> Customer App Logins
+</a>
+<a href="?page=dashboard&tab=starlink_fleet" class="kyc-tab <?= $tab==='starlink_fleet'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-broadcast-pin" style="color:#1565C0;"></i></span> Starlink Fleet
+</a>
+<a href="?page=dashboard&tab=followups" class="kyc-tab <?= $tab==='followups'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-chat-left-heart" style="color:#7C3AED;"></i></span> Customer Follow-ups
 </a>
 <a href="?page=dashboard&tab=starlink_suspensions" class="kyc-tab <?= $tab==='starlink_suspensions'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-shield-slash-fill" style="color:#D41C1C;"></i></span> Starlink Suspensions

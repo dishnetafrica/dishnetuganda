@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/ContactOptOut.php';
+
 /**
  * EvolutionApiService — DishNet's Evolution API adapter.
  *
@@ -50,8 +52,52 @@ class EvolutionApiService
 
     private array $lastError = [];
 
+    /** Resolved lazily; injectable for tests. false = not yet looked for. */
+    private $optOut = false;
+    private ?string $optOutDataDir = null;
+
+    /**
+     * Give this service an opt-out list, or null to disable the check.
+     *
+     * Tests inject one. Production does not need to: the service finds its own,
+     * because there are 27 places this class is constructed and a gate that has
+     * to be wired up 27 times is a gate that is missing somewhere.
+     */
+    public function setOptOut(?ContactOptOut $o): void { $this->optOut = $o; }
+
+    /** @return ContactOptOut|null */
+    private function optOut()
+    {
+        if ($this->optOut === false) {
+            if (!class_exists('ContactOptOut')) {
+                $f = __DIR__ . '/ContactOptOut.php';
+                if (is_file($f)) require_once $f;
+            }
+            $this->optOut = class_exists('ContactOptOut')
+                ? ContactOptOut::resolve($this->optOutDataDir) : null;
+        }
+        return $this->optOut;
+    }
+
+    /**
+     * Refuse a send the customer has opted out of.
+     *
+     * @return array|null the refusal to return to the caller, or null to proceed
+     */
+    private function optOutRefusal(string $phone, string $channel, string $class): ?array
+    {
+        $o = $this->optOut();
+        if ($o === null) return null;
+        $v = $o->blocks($phone, $channel, $class);
+        if (!$v['blocked']) return null;
+        error_log('[evo] send suppressed: ' . $v['reason']);
+        return ['success' => false, 'suppressed' => true, 'optout_id' => $v['optout_id'],
+                'error' => 'recipient has opted out: ' . $v['reason']];
+    }
+
     public function __construct(array $config, int $timeout = 20)
     {
+        $this->optOutDataDir = isset($config['_data_dir']) ? (string)$config['_data_dir'] : null;
         $this->baseUrl = self::normaliseBaseUrl((string)($config['evo_api_url'] ?? ''));
         $this->apiKey  = trim((string)($config['evo_api_key'] ?? ''));
         $this->timeout = $timeout;
@@ -346,8 +392,19 @@ class EvolutionApiService
      * Channel-addressed rather than instance-addressed on purpose: callers
      * should say "reply on the account number", not name an instance.
      */
-    public function sendText(string $channel, string $phone, string $text): array
+    /**
+     * @param string $class ContactOptOut::CLASS_* — what kind of message this is.
+     *   The default is the most restricted one on purpose: a send site added
+     *   later that forgets to classify itself is treated as something we
+     *   started, and an opt-out stops it. Forgetting to label marketing as
+     *   marketing should cost us a send, not cost a customer their choice.
+     */
+    public function sendText(string $channel, string $phone, string $text,
+                             string $class = ContactOptOut::CLASS_PROACTIVE): array
     {
+        $refusal = $this->optOutRefusal($phone, $channel, $class);
+        if ($refusal !== null) return $refusal;
+
         $instance = $this->requireInstance($channel);
         if ($instance === '') {
             return $this->fail("No Evolution instance configured for channel '{$channel}'");
@@ -368,8 +425,12 @@ class EvolutionApiService
         string $mediaType,
         string $media,
         string $caption = '',
-        string $fileName = ''
+        string $fileName = '',
+        string $class = ContactOptOut::CLASS_PROACTIVE
     ): array {
+        $refusal = $this->optOutRefusal($phone, $channel, $class);
+        if ($refusal !== null) return $refusal;
+
         $instance = $this->requireInstance($channel);
         if ($instance === '') {
             return $this->fail("No Evolution instance configured for channel '{$channel}'");
@@ -391,9 +452,11 @@ class EvolutionApiService
     }
 
     /** Invoices and quotations go out this way. */
-    public function sendDocument(string $channel, string $phone, string $media, string $fileName, string $caption = ''): array
+    public function sendDocument(string $channel, string $phone, string $media, string $fileName,
+                                string $caption = '',
+                                string $class = ContactOptOut::CLASS_PROACTIVE): array
     {
-        return $this->sendMedia($channel, $phone, 'document', $media, $caption, $fileName);
+        return $this->sendMedia($channel, $phone, 'document', $media, $caption, $fileName, $class);
     }
 
     public function markAsRead(string $channel, string $remoteJid, string $messageId, bool $fromMe = false): array

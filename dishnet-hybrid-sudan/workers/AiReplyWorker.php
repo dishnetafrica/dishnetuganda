@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/lib/ContactOptOut.php';
+
 /**
  * AiReplyWorker — turns a queued inbound WhatsApp message into a reply.
  *
@@ -128,7 +130,7 @@ class AiReplyWorker extends WorkerBase
         }
 
         // ── Point of no return ───────────────────────────────────────────
-        $send = $this->evo->sendText($channel, $phone, $reply);
+        $send = $this->evo->sendText($channel, $phone, $reply, ContactOptOut::CLASS_REPLY);
         if (!$send['ok']) {
             throw new \RuntimeException('Evolution send failed: ' . $send['error']);
         }
@@ -258,13 +260,23 @@ class AiReplyWorker extends WorkerBase
             $identified = $clientId > 0;
             if ($convId > 0 && $identified) {
                 try {
-                    $this->convSvc->linkToCrm($convId, $clientId, (string)($id['data']['customer']['name'] ?? ''));
+                    $this->convSvc->linkToCrm($convId, $clientId, (string)($id['data']['customer']['name'] ?? ''),
+                                              ConversationService::LINK_AI);
                 } catch (\Throwable $e) { /* non-fatal */ }
             }
         } elseif ($id['ok'] && ($id['data']['reason'] ?? '') === 'ambiguous') {
             // Several customers share this number's last digits. Say so rather
             // than picking one — the AI must ask a verifying question.
             $ctx['identity_ambiguous'] = true;
+            // And remember it. Answering an ambiguous number is fine, because
+            // whoever wrote in is the person reading the reply. STARTING a
+            // conversation with one is not: we would be guessing which of
+            // several customers we are addressing. FollowUpPolicy refuses a
+            // proactive send on this marker.
+            if ($convId > 0) {
+                try { $this->convSvc->markIdentityAmbiguous($convId); }
+                catch (\Throwable $e) { /* non-fatal */ }
+            }
         }
 
         // Cross-channel memory: an anonymous phone that previously chatted on
@@ -519,7 +531,8 @@ class AiReplyWorker extends WorkerBase
             }
 
             $send = $this->evo->sendMedia($channel, $phone, 'document', $media,
-                                          (string)$doc['caption'], (string)$doc['file']);
+                                          (string)$doc['caption'], (string)$doc['file'],
+                                          ContactOptOut::CLASS_REPLY);
             if (empty($send['ok'])) {
                 $this->log('warn', "conv {$convId}: document '{$name}' failed — "
                     . (string)($send['error'] ?? '?'));
@@ -703,7 +716,7 @@ class AiReplyWorker extends WorkerBase
             // the old behaviour exactly.
             $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
             if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
-                $send = $this->evo->sendText($channel, $phone, $holding);
+                $send = $this->evo->sendText($channel, $phone, $holding, ContactOptOut::CLASS_REPLY);
                 if (!empty($send['ok'])) {
                     if ($convId > 0) {
                         $this->convSvc->storeMessage($convId, [

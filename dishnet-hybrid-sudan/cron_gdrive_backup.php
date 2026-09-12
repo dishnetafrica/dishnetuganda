@@ -15,7 +15,7 @@
  */
 
 chdir(__DIR__);
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 require_once __DIR__ . '/lib/GoogleDriveBackup.php';
 require_once __DIR__ . '/lib/bootstrap_data.php';

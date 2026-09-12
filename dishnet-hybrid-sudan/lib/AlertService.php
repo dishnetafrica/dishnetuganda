@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/ContactOptOut.php';
+
 /**
  * AlertService — tell a human, on WhatsApp, that something needs them.
  *
@@ -67,7 +69,7 @@ class AlertService
                 require_once __DIR__ . '/EvolutionApiService.php';
                 $evo = new EvolutionApiService($this->config);
             }
-            $r = $evo->sendText('sales', $to, $text);
+            $r = $evo->sendText('sales', $to, $text, ContactOptOut::CLASS_STAFF);
             if (empty($r['ok'])) {
                 $this->recordSent($key, 0);          // release: let the next run retry
                 return ['sent' => false, 'reason' => 'send_failed: ' . (string)($r['error'] ?? '?')];

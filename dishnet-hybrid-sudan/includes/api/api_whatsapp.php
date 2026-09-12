@@ -4,6 +4,27 @@
 // Uses ConversationService (SQLite) for all conversation data.
 // ═══════════════════════════════════════════════════════════════
 
+    // ── WHATSAPP IS ADMINISTRATOR-ONLY ──────────────────────────────────
+    //
+    // Checked ONCE, here, before any action runs — not per endpoint. Of the 33
+    // wa_* actions in this file, 22 had no permission check at all, including
+    // wa_send_reply, wa_send_image, wa_send_media, wa_send_document and
+    // wa_trigger_sync. Every one of them was reachable by name from any
+    // signed-in session, so a sales agent could send a WhatsApp message to any
+    // customer by typing a URL. Hiding the menu never touched that.
+    //
+    // A blanket guard is also the only kind that stays correct: the next
+    // wa_* action somebody adds is covered the moment it is written, rather
+    // than covered if they remember.
+    if (strpos((string)($act ?? ''), 'wa_') === 0) {
+        require_once $GLOBALS['_PLUGIN_ROOT'] . '/lib/WhatsAppAccess.php';
+        $_waCfg  = $store->load('kyc_config.json') ?? [];
+        $_waRole = strtolower((string)($retailer['role'] ?? $me2['role'] ?? ''));
+        if (!WhatsAppAccess::allows((bool)$isAdmin, (string)$act, $_waCfg, $_waRole)) {
+            $er2(WhatsAppAccess::denial(), 403);
+        }
+    }
+
     // Lazy-load ConversationService
     if (!isset($GLOBALS['_convSvc'])) {
         require_once $GLOBALS['_PLUGIN_ROOT'] . '/lib/ConversationService.php';
@@ -297,7 +318,7 @@
             $cl = svc('crm')->get("clients/{$clientId}");
             $clientName = trim(($cl['firstName'] ?? '') . ' ' . ($cl['lastName'] ?? '')) ?: ($cl['companyName'] ?? "#{$clientId}");
         } catch (Throwable $e) { $clientName = "Client #{$clientId}"; }
-        $_convSvc->linkToCrm($convId, $clientId, $clientName);
+        $_convSvc->linkToCrm($convId, $clientId, $clientName, ConversationService::LINK_MANUAL);
         $ok2(['linked' => true, 'crm_client_id' => $clientId, 'crm_client_name' => $clientName]);
     }
 
@@ -317,7 +338,8 @@
         foreach ($unlinked as $row) {
             $tail = substr(preg_replace('/[^0-9]/', '', $row['phone']), -9);
             $m = $phoneMap[$tail] ?? null;
-            if ($m) { $_convSvc->linkToCrm((int)$row['id'], $m['id'], $m['name']); $linked++; }
+            if ($m) { $_convSvc->linkToCrm((int)$row['id'], $m['id'], $m['name'],
+                ConversationService::LINK_BULK_REMATCH); $linked++; }
             else { $unmatched++; }
         }
         $ok2(['linked' => $linked, 'unmatched' => $unmatched]);
@@ -511,7 +533,8 @@
                 if ($isNew && empty($conv['crm_client_id'])) {
                     $tail = substr($phone, -9);
                     $m = $phoneMap[$tail] ?? null;
-                    if ($m) { $_convSvc->linkToCrm($conv['id'], $m['id'], $m['name']); $linked++; }
+                    if ($m) { $_convSvc->linkToCrm($conv['id'], $m['id'], $m['name'],
+                        ConversationService::LINK_PHONE_TAIL); $linked++; }
                 }
             } catch (Throwable $e) { $errors++; $lastErr = $e->getMessage(); }
         }

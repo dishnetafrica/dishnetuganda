@@ -60,7 +60,7 @@ $CURSOR_FILE = '/www/wwwroot/wa.dishnetafrica.com/data/dishnet_pusher_cursor.txt
 $BATCH_SIZE  = 50;
 // ────────────────────────────────────────────────────────────────────────────
 
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 // Ensure persistent data directory exists
 $_pusherDataDir = '/www/wwwroot/wa.dishnetafrica.com/data';

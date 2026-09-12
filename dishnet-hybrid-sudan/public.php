@@ -27,7 +27,7 @@ if (!function_exists('str_ends_with')) {
 // Read manifest version (store not available yet here - cached after $store init)
 $GLOBALS['_PLUGIN_VER'] = 'v' . (json_decode(@file_get_contents(__DIR__.'/manifest.json'), true)['information']['version'] ?? '4');
 // Timezone  South Sudan is EAT (UTC+3), no DST
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 //  Session hardening (FIX-1: SameSite=Lax for UCRM iframe; FIX-3: 8h lifetime) 
 ini_set('session.cookie_httponly', '1');
@@ -125,6 +125,90 @@ function csrfCheck(): bool {
 // survives plugin updates. We MUST use this to prevent data loss.
 require_once __DIR__ . '/lib/bootstrap_data.php';
 $dataDir = getDataDir(__DIR__);
+
+// ── BINDING LOOKUP (plugin-to-plugin) ───────────────────────────────────────
+//
+// The one question the Starlink data plugin cannot answer on its own: given a
+// kit, a terminal, a router or a service line, WHICH uCRM customer owns it?
+//
+// It used to answer that by parsing uCRM service names for /KIT[A-Z0-9]+/ —
+// so renaming a service silently broke blocking, and a typo could take out a
+// different customer's dish. It now asks here and gets an exact answer or
+// none at all.
+//
+//   GET/POST public.php?action=dn_resolve_owner
+//        &kit_serial= | &terminal_id= | &router_id= | &service_line= | &unit_id=
+//     → {"assigned":true,"crm_client_id":123,"crm_service_id":500,"assignment_id":42}
+//     → {"assigned":false,"reason":"..."}
+//
+//   GET/POST public.php?action=dn_resolve_kits&client_id=123[&service_id=500]
+//     → {"ok":true,"kits":[{"kit_serial":"KIT…","router_id":"…",…}]}
+//
+// Authenticated by the shared internal secret, loopback only. It answers about
+// equipment, never about money or people, and it NEVER guesses: no identifier
+// match means assigned:false.
+if (in_array(($_GET['action'] ?? ''), ['dn_resolve_owner', 'dn_resolve_kits'], true)) {
+    header('Content-Type: application/json; charset=UTF-8');
+    require_once __DIR__ . '/lib/InternalAuth.php';
+    if (!InternalAuth::verify()) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'internal auth required']);
+        exit;
+    }
+
+    require_once __DIR__ . '/lib/StoreInterface.php';
+    require_once __DIR__ . '/lib/JsonStore.php';
+    require_once __DIR__ . '/lib/SqliteStore.php';
+    require_once __DIR__ . '/lib/EquipmentAssignment.php';
+
+    try {
+        $_bStore = SqliteStore::create($dataDir);
+        $_ea     = new EquipmentAssignment($_bStore->getPdo());
+        $_in     = array_merge($_GET, $_POST);
+
+        if (($_GET['action'] ?? '') === 'dn_resolve_owner') {
+            echo json_encode($_ea->resolve([
+                'kit_serial'            => $_in['kit_serial']   ?? '',
+                'terminal_id'           => $_in['terminal_id']  ?? '',
+                'router_id'             => $_in['router_id']    ?? '',
+                'starlink_service_line' => $_in['service_line'] ?? ($_in['starlink_service_line'] ?? ''),
+                'unit_id'               => (int)($_in['unit_id'] ?? 0),
+            ]));
+            exit;
+        }
+
+        $_cid = (int)($_in['client_id'] ?? 0);
+        $_sid = (int)($_in['service_id'] ?? 0);
+        if ($_cid <= 0 && $_sid <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'client_id or service_id required']);
+            exit;
+        }
+        $_rows = $_sid > 0
+            ? array_filter([$_ea->forService($_sid)])
+            : $_ea->forClient($_cid);
+        $_kits = [];
+        foreach ($_rows as $_a) {
+            $_kits[] = [
+                'assignment_id'  => (int)$_a['id'],
+                'crm_client_id'  => (int)$_a['crm_client_id'],
+                'crm_service_id' => $_a['crm_service_id'] === null ? null : (int)$_a['crm_service_id'],
+                'unit_id'        => (int)$_a['unit_id'],
+                'kit_serial'     => (string)$_a['kit_serial'],
+                'terminal_id'    => (string)$_a['terminal_id'],
+                'router_id'      => (string)$_a['router_id'],
+                'service_line'   => (string)$_a['starlink_service_line'],
+                'account_number' => (string)$_a['starlink_account'],
+            ];
+        }
+        echo json_encode(['ok' => true, 'kits' => $_kits, 'count' => count($_kits)]);
+        exit;
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
 
 //  EMERGENCY REPAIR  runs before SqliteStore::create() so a corrupt DB
 // can't crash this endpoint before we get a chance to repair it.
@@ -2112,6 +2196,8 @@ else:
         ['id'=>'activity_log',   'label'=>'Activity Log',             'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'access_log',     'label'=>'Access Log / Login History', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'app_logins',     'label'=>'Customer App Logins',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'starlink_fleet', 'label'=>'Starlink Fleet',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'followups',      'label'=>'Customer Follow-ups',      'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_suspensions','label'=>'Starlink Suspensions',    'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_pauses', 'label'=>'Starlink Block Manager',     'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','accountant','support_leader']],
         ['id'=>'sync_queue',     'label'=>'CRM Sync Queue',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2129,7 +2215,7 @@ else:
         // ['id'=>'sim_cards', 'label'=>'SIM Card Management', 'icon'=>'[Pipeline]', 'group'=>'Admin', 'roles'=>['admin']], // hidden
         ['id'=>'plans',          'label'=>'Subscription Plans',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'hardware',       'label'=>'Hardware Catalog',         'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
-        ['id'=>'wa_inbox',       'label'=>'WA Inbox & Bot',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','support']],
+        ['id'=>'wa_inbox',       'label'=>'WA Inbox & Bot',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'updater',        'label'=>'Plugin Updater',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'settings',       'label'=>'System Settings',          'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'backup',         'label'=>'Backup & Restore',         'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2569,6 +2655,8 @@ $_tabFiles = [
     'ucrm_data'        => 'tabs/admin/ucrm_data.php',
     'smtp_diagnostic'  => 'tabs/admin/smtp_diagnostic.php',
     'email_preview'    => 'tabs/admin/email_preview.php',
+    'starlink_fleet'   => 'tabs/admin/starlink_fleet.php',
+    'followups'        => 'tabs/engage/followups.php',
     'starlink_suspensions' => 'tabs/admin/starlink_suspensions.php',
     'starlink_pauses'  => 'tabs/admin/starlink_pauses.php',
     'maintenance'      => 'tabs/admin/maintenance.php',
@@ -2655,11 +2743,21 @@ $_tabPerms = [
     'lte_bluecard'      => '*admin',
     'bc_my_retailers'   => '*admin',
     // Engage
+    // WHATSAPP IS ADMINISTRATOR-ONLY.
+    //
+    // wa_inbox was 'customer_lookup' and wa_ai_setup had no entry at all —
+    // and a tab with no entry is allowed for EVERY signed-in user, so the
+    // WhatsApp AI configuration screen was open to anyone with a login.
+    // Each of these tabs also guards itself, because a routing table is one
+    // typo away from being wrong.
     'whatsapp'             => '*admin',
-    'wa_inbox'             => 'customer_lookup',
-    'engage_failed_queue'  => ['support_dash', '*admin'],
+    'wa_inbox'             => '*admin',
+    'wa_ai_setup'          => '*admin',
+    'engage_failed_queue'  => '*admin',
     'engage_wa_leads'      => ['support_dash', '*admin'],
     'starlink_orders'      => '*admin',
+    'starlink_fleet'       => '*admin',
+    'followups'            => '*admin',
     'knowledge_base'       => '*admin',
     'lifecycle'            => ['support_dash', '*admin'],
     // Admin

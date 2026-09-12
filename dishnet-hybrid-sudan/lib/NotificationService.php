@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/ContactOptOut.php';
+
 require_once __DIR__ . '/CustomerContact.php';
 
 // PHP 7.4 polyfills
@@ -65,6 +67,9 @@ class NotificationService
     private string $appKey;
     private string $authKey;
     private string $accountsAppKey;
+    /** @var array */         private $evoConfig = [];
+    /** @var object|null */   private $evo = null;
+    /** @var bool */          private $evoTried = false;
     private bool   $forceAccounts = false;
     private string $adminPhone;
     private bool   $enabled;
@@ -126,6 +131,23 @@ class NotificationService
             // only one key is configured.
             $this->appKey = $this->accountsAppKey;
         }
+        // ── Evolution, where this install has it ────────────────────────
+        //
+        // Everything above is WASender, and `enabled` above requires
+        // wa_plugin_url AND wa_app_key AND wa_auth_key. Uganda runs Evolution
+        // and sets none of them, so every send here returned at the guard in
+        // sendVia() having done nothing — no message, no exception, no log
+        // line. 169 call sites go through this class: OTP logins, invoice
+        // notices, lead alerts, cash declarations, technician dispatch. All of
+        // them failed the same invisible way.
+        //
+        // So sendVia() now prefers Evolution when this install has it, and
+        // falls back to WASender when it does not. An install with no
+        // Evolution configuration behaves exactly as it did.
+        $this->evoConfig = $config;
+        $this->evo       = null;                 // built on first use
+        $this->evoTried  = false;
+
         // Dry run mode - log but don't send
         $this->dryRunMode = (bool)($config['dry_run_mode'] ?? false);
         // v4.9.20: Global kill-switch for PDF document sending via WhatsApp.
@@ -1490,9 +1512,12 @@ class NotificationService
      * @param string $caption  Caption text shown below the document
      * @param string $event    Event name for logging
      */
-    public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = ''): void
+    public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = '', string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
-        if (!$this->enabled || empty($toPhone) || empty($publicUrl)) return;
+        if (empty($toPhone) || empty($publicUrl)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+
+        if ($this->optedOut(preg_replace('/[^0-9]/', '', $toPhone) ?? '', $sender, $class, $event)) return;
 
         // v4.9.20: Global PDF kill-switch — skip document sends when disabled
         if (!$this->pdfEnabled) {
@@ -1528,6 +1553,18 @@ class NotificationService
             'message'  => $caption,
         ];
 
+        // ── Evolution first, where this install has it ──────────────────
+        // Both callers already hold a public URL, which is what Evolution's
+        // media field takes. Everything downstream — log, retry queue — is
+        // shared with the WASender branch on purpose.
+        $evoRes = $this->sendMediaViaEvolution($sender, $to, 'document', $publicUrl, $caption, $filename);
+        if ($evoRes !== null) {
+            $success  = $evoRes['ok'];
+            $httpCode = $evoRes['status'];
+            $curlErr  = $evoRes['error'] ?? '';
+            $response = $evoRes['raw'];
+        } else {
+
         $endpoint = rtrim($this->pluginUrl, '/') . '/api/whatsapp-web/send-message';
 
         $ch = curl_init();
@@ -1551,6 +1588,7 @@ class NotificationService
         $respData = json_decode((string)$response, true); // v4.21.72: coerce — curl_exec returns false on failure
         $success  = !$curlErr && $httpCode >= 200 && $httpCode < 300
                     && isset($respData['success']) && $respData['success'] === true;
+        }   // ← end of the WASender branch
 
         // Track result for retry mode
         $this->_lastSendSuccess = $success;
@@ -1590,7 +1628,8 @@ class NotificationService
      */
     public function sendImage(string $sender, string $toPhone, string $publicUrl, string $caption = '', string $event = ''): void
     {
-        if (!$this->enabled || empty($toPhone) || empty($publicUrl)) return;
+        if (empty($toPhone) || empty($publicUrl)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
         $to = preg_replace('/[^0-9]/', '', $toPhone);
         if (empty($to)) return;
@@ -1612,6 +1651,18 @@ class NotificationService
             'url'      => $publicUrl,
             'message'  => $caption,
         ];
+
+        // ── Evolution first, where this install has it ──────────────────
+        // Both callers already hold a public URL, which is what Evolution's
+        // media field takes. Everything downstream — log, retry queue — is
+        // shared with the WASender branch on purpose.
+        $evoRes = $this->sendMediaViaEvolution($sender, $to, 'image', $publicUrl, $caption, '');
+        if ($evoRes !== null) {
+            $success  = $evoRes['ok'];
+            $httpCode = $evoRes['status'];
+            $curlErr  = $evoRes['error'] ?? '';
+            $response = $evoRes['raw'];
+        } else {
 
         $endpoint = rtrim($this->pluginUrl, '/') . '/api/whatsapp-web/send-message';
 
@@ -1636,6 +1687,7 @@ class NotificationService
         $respData = json_decode((string)$response, true); // v4.21.72: coerce — curl_exec returns false on failure
         $success  = !$curlErr && $httpCode >= 200 && $httpCode < 300
                     && isset($respData['success']) && $respData['success'] === true;
+        }   // ← end of the WASender branch
 
         $this->_lastSendSuccess = $success;
         $this->_lastHttpCode    = $httpCode;
@@ -1679,6 +1731,130 @@ class NotificationService
     }
 
     /**
+     * The Evolution channel this sender maps to, or '' when there is none.
+     *
+     * NotificationService says 'support' / 'accounts'; Evolution instances are
+     * keyed 'support' / 'account' / 'sales'. The names nearly match, which is
+     * exactly why the mapping is written down rather than assumed.
+     */
+    private function evoChannelFor(string $sender): string
+    {
+        // wa_force_accounts collapses Support onto Accounts when the Support
+        // number is blocked. It is expressed as an app-key collapse for
+        // WASender; the equivalent here is to route the channel.
+        if ($this->forceAccounts) return 'account';
+        return $sender === self::ACCOUNTS ? 'account' : 'support';
+    }
+
+    /**
+     * Send through Evolution, or return null to mean "not this install".
+     *
+     * Null is the important return: it is the difference between "Evolution
+     * declined" and "Evolution is not how this box sends", and only the second
+     * may fall through to WASender.
+     *
+     * @return array{ok:bool,status:int,error:?string,raw:string}|null
+     */
+    private function evoFor(string $sender)
+    {
+        if (!$this->evoTried) {
+            $this->evoTried = true;
+            $svc = __DIR__ . '/EvolutionApiService.php';
+            if (is_file($svc)) {
+                require_once $svc;
+                require_once __DIR__ . '/ContactOptOut.php';
+                try {
+                    $e = new EvolutionApiService($this->evoConfig);
+                    if ($e->isConfigured()) $this->evo = $e;
+                } catch (\Throwable $ex) { $this->evo = null; }
+            }
+        }
+        if ($this->evo === null) return null;
+        // A channel with no instance is not a failure to report — it is this
+        // install not being set up that way. Fall back rather than error.
+        $chan = $this->evoChannelFor($sender);
+        if (trim((string)($this->evoConfig['evo_instance_' . $chan] ?? '')) === '') return null;
+        return $this->evo;
+    }
+
+    /** Can this install send this sender's traffic through Evolution at all? */
+    private function evoAvailable(string $sender): bool
+    {
+        return $this->evoFor($sender) !== null;
+    }
+
+    /**
+     * Send through Evolution, or null to mean "not this install".
+     *
+     * @return array{ok:bool,status:int,error:?string,raw:string}|null
+     */
+    private function sendViaEvolution(string $sender, string $to, string $message): ?array
+    {
+        $evo = $this->evoFor($sender);
+        if ($evo === null) return null;
+        $chan = $this->evoChannelFor($sender);
+
+        // CLASS_STAFF: the opt-out check that matters already ran in sendVia()
+        // against the caller's real class. Re-running a stricter one here would
+        // suppress messages the caller already established were allowed.
+        $res = $evo->sendText($chan, $to, $message, ContactOptOut::CLASS_STAFF);
+
+        // Claim our own echo. Outbound returns as fromMe, and an unclaimed echo
+        // reads as a colleague typing — which stands the AI down on that thread.
+        $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
+        if ($waId !== '') {
+            try {
+                require_once __DIR__ . '/EvoWebhookGuard.php';
+                (new EvoWebhookGuard($this->store->getPdo(), $this->evoConfig))
+                    ->claim($waId, (string)($this->evoConfig['evo_instance_' . $chan] ?? ''), 'notify.' . $sender);
+            } catch (\Throwable $ex) { /* dedupe is a backstop */ }
+        }
+
+        $ok = empty($res['suppressed'])
+              && (!isset($res['ok']) || !empty($res['ok']))
+              && empty($res['error']);
+        return [
+            'ok'     => $ok,
+            'status' => (int)($res['status'] ?? ($ok ? 200 : 0)),
+            'error'  => $ok ? null : (string)($res['error'] ?? ($res['reason'] ?? 'evolution send failed')),
+            'raw'    => json_encode($res),
+        ];
+    }
+
+    /**
+     * Send media through Evolution, or null for "not this install".
+     *
+     * Both callers already hold a PUBLIC URL, which is what Evolution's media
+     * field takes, so there is nothing to re-encode.
+     *
+     * @return array{ok:bool,status:int,error:?string,raw:string}|null
+     */
+    private function sendMediaViaEvolution(string $sender, string $to, string $kind,
+                                           string $url, string $caption, string $fileName): ?array
+    {
+        $evo = $this->evoFor($sender);
+        if ($evo === null) return null;
+        $chan = $this->evoChannelFor($sender);
+
+        $res = $kind === 'document'
+             ? $evo->sendDocument($chan, $to, $url, $fileName, $caption, ContactOptOut::CLASS_STAFF)
+             : $evo->sendImage($chan, $to, $url, $caption);
+
+        $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
+        if ($waId !== '') {
+            try {
+                require_once __DIR__ . '/EvoWebhookGuard.php';
+                (new EvoWebhookGuard($this->store->getPdo(), $this->evoConfig))
+                    ->claim($waId, (string)($this->evoConfig['evo_instance_' . $chan] ?? ''), 'notify.media');
+            } catch (\Throwable $ex) { /* dedupe is a backstop */ }
+        }
+        $ok = empty($res['suppressed']) && (!isset($res['ok']) || !empty($res['ok'])) && empty($res['error']);
+        return ['ok' => $ok, 'status' => (int)($res['status'] ?? ($ok ? 200 : 0)),
+                'error' => $ok ? null : (string)($res['error'] ?? ($res['reason'] ?? 'evolution media send failed')),
+                'raw' => json_encode($res)];
+    }
+
+    /**
      * Sliding-window rate limiter — protects WASender and WhatsApp number.
      * Sleeps if the send rate exceeds RATE_MAX_PER_WINDOW in RATE_WINDOW_SEC.
      * Called automatically by sendVia() and sendDocument() before each curl call.
@@ -1713,12 +1889,62 @@ class NotificationService
         $this->sendTimestamps[] = microtime(true);
     }
 
-    public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = []): void
+    /** Resolved lazily from the store; injectable for tests. false = not looked for. */
+    private $optOut = false;
+
+    public function setOptOut($o): void { $this->optOut = $o; }
+
+    /** @return ContactOptOut|null */
+    private function optOut()
     {
-        if (!$this->enabled || empty($toPhone)) return;
+        if ($this->optOut === false) {
+            if (!class_exists('ContactOptOut')) {
+                $f = __DIR__ . '/ContactOptOut.php';
+                if (is_file($f)) require_once $f;
+            }
+            $this->optOut = null;
+            if (class_exists('ContactOptOut') && is_object($this->store)
+                && method_exists($this->store, 'getPdo')) {
+                try { $this->optOut = ContactOptOut::fromStore($this->store); }
+                catch (\Throwable $e) { $this->optOut = null; }
+            }
+        }
+        return $this->optOut;
+    }
+
+    /**
+     * True when this recipient has opted out of this kind of message.
+     *
+     * Everything through here is something WE decided to send — an invoice
+     * notice, a quote, a reminder — so the default class is transactional
+     * rather than reply. A 'proactive' opt-out lets these through; only a
+     * scope of 'all' stops them.
+     */
+    private function optedOut(string $phone, string $sender, string $class, string $event): bool
+    {
+        $o = $this->optOut();
+        if ($o === null) return false;
+        $v = $o->blocks($phone, $sender, $class);
+        if (!$v['blocked']) return false;
+        $this->writeLog([
+            'sender' => $sender, 'phone' => $phone,
+            'event'  => ($event ?: 'message') . '_suppressed_optout',
+            'message' => $v['reason'], 'status' => 'suppressed',
+        ]);
+        return true;
+    }
+
+    public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = [], string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
+    {
+        if (empty($toPhone)) return;
+        // `enabled` is WASender's readiness alone. Returning on it was what
+        // made every send on an Evolution-only install disappear in silence.
+        if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
         $to = preg_replace('/[^0-9]/', '', $toPhone);
         if (empty($to)) return;
+
+        if ($this->optedOut($to, $sender, $class, $event)) return;
         
         // DRY RUN GUARD - log but don't send
         if ($this->dryRunMode) {
@@ -1746,6 +1972,18 @@ class NotificationService
         if ($sender)  $formData['sender']  = $sender;
         if ($event)   $formData['event']   = $event;
 
+        // ── Evolution first, where this install has it ──────────────────
+        // Everything downstream — the log, the failure queue, the conversation
+        // store — is shared deliberately: a send is a send, and an operator
+        // reading the log should not have to know which transport carried it.
+        $evoRes = $this->sendViaEvolution($sender, $to, $message);
+        if ($evoRes !== null) {
+            $success  = $evoRes['ok'];
+            $httpCode = $evoRes['status'];
+            $curlErr  = $evoRes['error'] ?? '';
+            $response = $evoRes['raw'];
+        } else {
+
         // Endpoint: base URL + /api/whatsapp-web/send-message
         // e.g. http://wa.dishnetafrica.com/api/whatsapp-web/send-message
         $endpoint = rtrim($this->pluginUrl, '/') . '/api/whatsapp-web/send-message';
@@ -1772,6 +2010,7 @@ class NotificationService
         $respData = json_decode((string)$response, true); // v4.21.72: coerce — curl_exec returns false on failure
         $success = !$curlErr && $httpCode >= 200 && $httpCode < 300
                    && isset($respData['success']) && $respData['success'] === true;
+        }   // ← end of the WASender branch
 
         // Track result for retry mode
         $this->_lastSendSuccess = $success;

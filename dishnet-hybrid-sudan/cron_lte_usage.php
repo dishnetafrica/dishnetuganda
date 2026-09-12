@@ -17,7 +17,7 @@
  * This cron handles DATA USAGE based suspension (type=0 plans only).
  */
 
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 chdir(__DIR__);
 
 require_once __DIR__ . '/lib/StoreInterface.php';

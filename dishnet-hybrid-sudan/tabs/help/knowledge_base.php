@@ -1,4 +1,10 @@
 <?php
+// The support number comes from configuration. This table showed staff
+// "+211 XX XXX XXXX" — a South Sudan placeholder nobody could call, on the
+// page they open when they need help.
+require_once dirname(__DIR__, 2) . '/lib/CustomerContact.php';
+?>
+<?php
 // Tab: knowledge_base
 // Extracted from public.php on 2026-03-15
 ?>
@@ -97,8 +103,8 @@
     <div style="padding:20px;font-size:13px;line-height:1.9;">
     <p>Contact your admin or DishNet support:</p>
     <table class="kyc-table">
-    <tr><td style="font-weight:700;">WhatsApp</td><td>+211 XX XXX XXXX</td></tr>
-    <tr><td style="font-weight:700;">Email</td><td>info@dishnetafrica.com</td></tr>
+    <tr><td style="font-weight:700;">WhatsApp</td><td><?= h(CustomerContact::support($config)) ?></td></tr>
+    <tr><td style="font-weight:700;">Email</td><td><?= h(trim((string)($config['quote_company_email'] ?? '')) ?: 'info@dishnetafrica.com') ?></td></tr>
     <tr><td style="font-weight:700;">CRM Portal</td><td><a href="<?= h(dn_crm_web($config)) ?>" target="_blank"><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></a></td></tr>
     </table>
     </div></div>

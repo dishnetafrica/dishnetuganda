@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * DishNet Hybrid Telecom — Lead Auto-Reassignment Cron

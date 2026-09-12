@@ -1,6 +1,6 @@
 <?php
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 
 // Phase C gate: this is an SSP-book report — on an install without SSP it
 // would compute zeros and silently "report nothing"; say so and stop.

@@ -42,6 +42,7 @@ require_once __DIR__ . '/lib/EventBus.php';
 require_once __DIR__ . '/lib/EvolutionApiService.php';
 require_once __DIR__ . '/lib/EvoWebhookGuard.php';
 require_once __DIR__ . '/lib/ConversationService.php';
+require_once __DIR__ . '/lib/ContactOptOut.php';
 
 /** Always answer Evolution quickly and in a shape it will not retry on. */
 function evoRespond(int $code, string $outcome, array $extra = []): void
@@ -211,6 +212,36 @@ foreach ($messages as $msg) {
         $convId = $convSvc->importEvoMessage($msg, $channel);
     } catch (\Throwable $e) {
         error_log('[evo_webhook] conversation store failed: ' . $e->getMessage());
+    }
+
+    // ── 8b. "STOP" ───────────────────────────────────────────────────────
+    //
+    // Recorded here, before the AI is queued, because the point of an opt-out
+    // is that it takes effect at once — not after the next reply has already
+    // gone out. The message is still stored and still answered: someone who
+    // writes STOP deserves an acknowledgement, and a 'proactive' opt-out does
+    // not stop replies. It stops us starting anything.
+    if ($text !== '') {
+        $stop = ContactOptOut::detect($text);
+        if ($stop['stop']) {
+            try {
+                $oo  = ContactOptOut::fromStore($store);
+                $res = $oo->add($phone, [
+                    'channel'       => '*',
+                    'scope'         => ContactOptOut::SCOPE_PROACTIVE,
+                    'reason'        => 'customer_request',
+                    'source'        => 'keyword',
+                    'evidence'      => $text,
+                    'crm_client_id' => (int)(($convId ? ($convSvc->getConversation((int)$convId) ?? []) : [])['crm_client_id'] ?? 0),
+                ]);
+                if (!empty($res['created'])) {
+                    error_log('[evo_webhook] opt-out recorded for ' . $phone
+                              . ' (matched "' . $stop['matched'] . '")');
+                }
+            } catch (\Throwable $e) {
+                error_log('[evo_webhook] opt-out store failed: ' . $e->getMessage());
+            }
+        }
     }
 
     // ── 9. Queue for the AI ──────────────────────────────────────────────

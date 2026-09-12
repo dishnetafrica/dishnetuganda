@@ -58,10 +58,27 @@ is_(substr_count(MigrationRunner::stripComments("a -- x\nb -- y\nc"), "\n") === 
 echo "\nNo migration loses a statement to its own prose\n";
 $files = glob($root . '/migrations/*.sql');
 is_(count($files) > 50, 'the migrations are where they are expected', count($files) . ' found');
+
+// A trigger body is a list of statements. Split on every semicolon it becomes
+// three fragments, none of them valid SQL — and because 'already exists' is
+// treated as safe, the file would still be marked applied with the trigger
+// silently absent. Same shape as the comment semicolons that cost four tables.
+$trig = MigrationRunner::splitStatements(
+    "CREATE TABLE a (id INT);\n"
+  . "CREATE TRIGGER t BEFORE DELETE ON a FOR EACH ROW\n"
+  . "BEGIN SELECT RAISE(ABORT, 'no; not that'); SELECT 1; END;\n"
+  . "CREATE INDEX i ON a(id);");
+t('a trigger body stays in one piece', count($trig), 3);
+is_(strpos($trig[1], 'END') !== false, 'ending at its own END', $trig[1]);
+t('and BEGIN outside a trigger still splits normally',
+    count(MigrationRunner::splitStatements("BEGIN; INSERT INTO a VALUES (1); COMMIT;")), 3);
 $damaged = [];
 foreach ($files as $f) {
     $sql = (string)file_get_contents($f);
-    foreach (explode(';', MigrationRunner::stripComments($sql)) as $chunk) {
+    // Through the splitter the runner itself uses — testing explode(';') here
+    // would pass while the runner shredded trigger bodies, which is the bug
+    // this file exists to catch.
+    foreach (MigrationRunner::splitStatements($sql) as $chunk) {
         $chunk = trim($chunk);
         if ($chunk === '') continue;
         // Every real chunk must start with a SQL verb. A fragment of English

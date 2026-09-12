@@ -25,7 +25,7 @@
  *   lead_supervisor_phone (string) — override for escalation recipient
  */
 
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 require_once __DIR__ . '/lib/error_handler.php';
 require_once __DIR__ . '/lib/bootstrap_data.php';

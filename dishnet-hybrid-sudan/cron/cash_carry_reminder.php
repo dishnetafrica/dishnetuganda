@@ -10,7 +10,7 @@ require_once __DIR__ . '/../lib/currency.php';
  * Schedule: every 4 hours via master.php (sends max once per day per agent)
  * PHP 7.4 compatible.
  */
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 chdir(dirname(__DIR__));
 
 require_once __DIR__ . '/../lib/StoreInterface.php';

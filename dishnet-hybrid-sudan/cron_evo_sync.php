@@ -18,7 +18,7 @@
  */
 
 chdir(__DIR__);
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains')) {

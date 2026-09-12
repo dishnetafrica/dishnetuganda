@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/timezone.php';
 // ═══════════════════════════════════════════════════════════════
 // CRM SYNC / SURVEYS / SIGNATURES
 // ═══════════════════════════════════════════════════════════════
@@ -4067,7 +4068,7 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
         if ($cid > 0) $clientById[$cid] = $c;
     }
 
-    $today = new \DateTime('now', new \DateTimeZone('Africa/Juba'));
+    $today = new \DateTime('now', dn_tz_obj());
     $startTs = microtime(true);
     $sentEmail = 0; $sentWa = 0;
     $skippedDedup = 0; $skippedNoContact = 0;
@@ -4122,7 +4123,7 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
         }
 
         $dueStr = (string)($inv['dueDate'] ?? '');
-        try { $due = new \DateTime($dueStr, new \DateTimeZone('Africa/Juba')); }
+        try { $due = new \DateTime($dueStr, dn_tz_obj()); }
         catch (\Throwable $e) { $errors[] = ['invoice_number' => $invNum, 'error' => 'bad_due_date']; continue; }
 
         $daysOverdue = (int)$today->diff($due)->days;

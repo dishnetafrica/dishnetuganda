@@ -2,7 +2,7 @@
 <?php
 // ^ shebang on line 1 is correct — PHP ignores it when run via CLI
 // Note: No strict_types — this file is included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * CRM Background Sync Worker

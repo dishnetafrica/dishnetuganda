@@ -41,6 +41,8 @@ $dataDir = cliDataDir($root);
 // true — so a 30-minute cooldown displayed as "OFF", indistinguishable from
 // the 0 that disables the stand-down rule entirely. A settings screen that
 // cannot tell 30 from 0 is worse than no settings screen.
+require_once dirname(__DIR__) . '/lib/timezone.php';
+
 $FLAGS = [
     'ai_qualification' => ['bool',
         'Qualify before recommending; route CCTV/VPN/servers to Business'],
@@ -58,6 +60,34 @@ $FLAGS = [
         'What to say about availability — stated to customers as written'],
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
+
+    // The clock. Everything stamped, scheduled or reported runs on this.
+    // Unset means Africa/Juba, which is what the code said before it was
+    // configurable — so the South Sudan install is unaffected by its absence.
+    // Uganda MUST set it: Africa/Juba has been UTC+2 since South Sudan left
+    // East Africa Time on 31 January 2021, while Kampala is UTC+3.
+    'timezone' => ['tz',
+        'Zone crons, reports and the follow-up window run in (default Africa/Juba)'],
+
+    // Who the cashbook person-picker offers where real history is thin. The
+    // defaults are South Sudan — Juba sites, JEDCO, NRA, Zain and VivaCell.
+    // Merged over per category; [] means offer nothing, which is the right
+    // answer for staff and supplier lists that cannot be guessed.
+    'cashbook_seeds' => ['json',
+        'Cashbook name suggestions per category, e.g. {"Airtime":["MTN","Airtel"]}'],
+    'cashbook_sites' => ['json',
+        'Sites offered in the cashbook picker — a JSON list; [] starts blank'],
+
+    // Customer follow-up. Draft mode only: nothing reaches a customer without
+    // somebody approving it on the Follow-ups screen.
+    'followup_enabled' => ['bool',
+        'Notice quiet enquiries and draft a follow-up for a person to approve'],
+    'followup_not_before' => ['text',
+        'Ignore conversations quiet BEFORE this UTC date — set it when switching on'],
+    'followup_daily_cap' => ['number',
+        'Most follow-ups sent on one channel in a day (default 30)'],
+    'followup_max_age_hours' => ['number',
+        'An enquiry older than this is history, not a live lead (default 336 = 14 days)'],
 
     // On every quotation the team sends. QuotationService compiles South Sudan
     // defaults for all three, so an unset key is not a blank — it is Juba's
@@ -82,7 +112,12 @@ $show = function () use ($root, $dataDir, $FLAGS) {
 
         if (!$set) {
             $shown = 'not set (default)';
+            // Only the cooldown has a 1440 default. Saying so for every
+            // numeric key printed "default: 1440 (24 hours)" directly above a
+            // description reading "(default 30)" — the same screen stating two
+            // different defaults for one key, which is worse than stating none.
             if ($type === 'minutes') $note = 'default: 1440 (24 hours)';
+            if ($type === 'tz')      $note = 'running on ' . dn_tz_label([]);
         } elseif ($type === 'bool') {
             $shown = filter_var($raw, FILTER_VALIDATE_BOOLEAN) ? 'ON' : 'OFF';
         } elseif ($type === 'minutes') {
@@ -92,6 +127,45 @@ $show = function () use ($root, $dataDir, $FLAGS) {
             if ($n === null)   { $shown = '"' . (string)$raw . '"'; $note = 'not a number — treated as the 1440 default'; }
             elseif ($n === 0)  { $shown = '0 minutes'; $note = '⚠ the AI NEVER stands down, even while a colleague is typing'; }
             else               { $shown = $n . ' minutes'; }
+        } elseif ($type === 'tz') {
+            // Never just echo the identifier. A zone name looks right long
+            // after it has stopped meaning what the reader assumes, which is
+            // the whole reason this key exists — so print what it resolves to.
+            $raw = trim((string)$raw);
+            if (!dn_tz_valid($raw)) {
+                $shown = '"' . $raw . '"';
+                $note  = '⚠ not a zone PHP knows — IGNORED, running on ' . dn_tz_label([]);
+            } else {
+                $shown = dn_tz_label(['timezone' => $raw]);
+            }
+        } elseif ($type === 'json') {
+            $dec = json_decode((string)$raw, true);
+            if (!is_array($dec)) {
+                $shown = '"' . mb_strimwidth((string)$raw, 0, 40, '…') . '"';
+                $note  = '⚠ not valid JSON — IGNORED, the defaults are in use';
+            } else {
+                // range(0, -1) is [0, -1], not [], so an empty array must be
+                // settled first or it reads as a map and prints "0 categories".
+                if ($dec === [] || array_keys($dec) === range(0, count($dec) - 1)) {
+                    $shown = count($dec) . ' entries';
+                    $note  = implode(', ', array_slice($dec, 0, 6)) . (count($dec) > 6 ? ', …' : '');
+                } else {
+                    // NOT $k: the outer loop over $FLAGS uses it, PHP does not
+                    // scope a foreach variable, and the clobbered value then
+                    // printed as the setting's own name — this listing showed
+                    // the cashbook override as "Partner Remuneration", the last
+                    // category in the JSON.
+                    $cats = [];
+                    foreach ($dec as $ck => $cv) $cats[] = $ck . ' (' . (is_array($cv) ? count($cv) : '?') . ')';
+                    $shown = count($dec) . ' categories overridden';
+                    $note  = implode(', ', array_slice($cats, 0, 6)) . (count($cats) > 6 ? ', …' : '');
+                }
+            }
+        } elseif ($type === 'number') {
+            // A count, an hour figure, a limit. No unit appended and no
+            // default invented — the description carries both.
+            $shown = is_numeric($raw) ? (string)(int)$raw
+                   : '"' . (string)$raw . '" — not a number, so the default applies';
         } else {
             $shown = '"' . (string)$raw . '"';
         }
@@ -143,6 +217,35 @@ $new = $clear ? '' : $value('--value');
 
 // Some of these are not flags — they are text a customer reads, verbatim.
 // Saying so at the moment of setting is the only time anyone is looking.
+// A refusal, not a warning. Every other key here is text somebody reads: a
+// poor value looks poor and gets fixed. A misspelt zone is invisible — it is
+// silently ignored and the box keeps running on the Africa/Juba default, an
+// hour off Kampala, with every cron, report and follow-up window quietly
+// wrong and nothing anywhere saying so.
+if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {
+    echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
+    echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";
+    echo "  with no error anywhere.\n\n";
+    echo "  Uganda:      Africa/Kampala\n";
+    echo "  South Sudan: Africa/Juba\n\n";
+    exit(1);
+}
+
+if (!$clear && in_array($key, ['cashbook_seeds', 'cashbook_sites'], true) && trim($new) !== ''
+    && !is_array(json_decode(trim($new), true))) {
+    echo "\n  That is not valid JSON, so nothing was saved.\n\n";
+    if ($key === 'cashbook_seeds') {
+        echo "  It takes a category-to-names object, for example:\n\n";
+        echo "      '{\"Airtime\":[\"MTN\",\"Airtel\"],\"Salary\":[]}'\n\n";
+        echo "  An empty list means that category offers no suggestions at all.\n\n";
+    } else {
+        echo "  It takes a list of site names, for example:\n\n";
+        echo "      '[\"Kampala Office\",\"Ntinda Tower\"]'\n\n";
+        echo "  An empty list starts blank and fills from real cashbook history.\n\n";
+    }
+    exit(1);
+}
+
 $warn = [];
 if (!$clear) {
     if ($key === 'ai_currency' && $new !== '' && $new !== mb_strtoupper($new)) {
@@ -167,6 +270,11 @@ if (!$clear) {
     if ($key === 'ai_fact_location_pin' && $new !== ''
         && !preg_match('#^https?://#i', $new)) {
         $warn[] = 'That is not a URL. It is sent to customers exactly as typed.';
+    }
+    if ($key === 'timezone' && trim($new) !== '') {
+        $warn[] = 'Now running as ' . dn_tz_label(['timezone' => trim($new)])
+                . '. Crons, reports, the cashbook day boundary and the 08:00-20:00 '
+                . 'follow-up window all move with it.';
     }
     if ($key === 'ai_handover_message' && mb_strlen($new) > 160) {
         $warn[] = 'That is long for a holding line on WhatsApp. It is sent on its own, before '

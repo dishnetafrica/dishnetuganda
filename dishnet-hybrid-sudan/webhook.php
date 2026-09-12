@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/lib/timezone.php';
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -2670,8 +2671,8 @@ switch ($changeType) {
         // Calculate days until due
         $daysUntil = 0;
         if ($dueDate) {
-            $now = new \DateTime('today', new \DateTimeZone('Africa/Juba'));
-            $due = new \DateTime($dueDate, new \DateTimeZone('Africa/Juba'));
+            $now = new \DateTime('today', dn_tz_obj());
+            $due = new \DateTime($dueDate, dn_tz_obj());
             $daysUntil = (int)$now->diff($due)->format('%r%a');
         }
 
@@ -2740,8 +2741,8 @@ switch ($changeType) {
         // Calculate how many days overdue
         $daysOverdue = 0;
         if ($dueDate) {
-            $now = new \DateTime('today', new \DateTimeZone('Africa/Juba'));
-            $due = new \DateTime($dueDate, new \DateTimeZone('Africa/Juba'));
+            $now = new \DateTime('today', dn_tz_obj());
+            $due = new \DateTime($dueDate, dn_tz_obj());
             $daysOverdue = abs((int)$now->diff($due)->format('%a'));
         }
 

@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/timezone.php';
 // Tab: maintenance
 // Extracted from public.php on 2026-03-15
         $maintLog        = $store->load('maintenance_log.json');
@@ -395,7 +396,7 @@ $healthIssues = $healthStats['missing_dates'] + $healthStats['orphaned_approved'
 
 <!-- Crontab Reference -->
 <div style="background:#1e293b;border-radius:14px;padding:16px;color:#e2e8f0;">
-    <div style="font-weight:800;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">📋 Recommended Crontab (EAT / Africa/Juba)</div>
+    <div style="font-weight:800;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">📋 Recommended Crontab (<?= h(dn_tz_label($config)) ?>)</div>
     <pre style="font-size:11px;color:#a5f3fc;margin:0;line-height:1.8;"><?php
         $syncPath  = h($config['cron_sync_path']        ?? __DIR__.'/cron_sync.php');
         $ltePath   = h($config['lte_cron_path']         ?? __DIR__.'/cron_lte.php');

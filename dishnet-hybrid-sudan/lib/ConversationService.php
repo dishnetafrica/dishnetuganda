@@ -67,6 +67,12 @@ class ConversationService
                 'lead_id'         => "INTEGER DEFAULT NULL",  // linked lead in leads.json
                 'state'           => "TEXT NOT NULL DEFAULT 'bot_active'",  // bot_active | human_active | needs_human
                 'last_human_reply_at' => "TEXT DEFAULT NULL",
+                // HOW we came to believe this conversation belongs to that
+                // customer. Replying to an inbound message tolerates a weak
+                // link; opening an UNSOLICITED one does not, so the method is
+                // recorded and the follow-up policy reads it.
+                'crm_link_method' => "TEXT DEFAULT NULL",
+                'crm_link_at'     => "TEXT DEFAULT NULL",
                 'created_at'      => "TEXT NOT NULL DEFAULT (datetime('now'))",
                 'updated_at'      => "TEXT NOT NULL DEFAULT (datetime('now'))",
             ];
@@ -106,6 +112,8 @@ class ConversationService
                 source          TEXT    DEFAULT 'webhook',
                 state           TEXT    NOT NULL DEFAULT 'bot_active',
                 last_human_reply_at TEXT DEFAULT NULL,
+                crm_link_method TEXT DEFAULT NULL,
+                crm_link_at     TEXT DEFAULT NULL,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
@@ -318,13 +326,49 @@ class ConversationService
         return (int)$stmt->fetchColumn();
     }
 
+    /** How a conversation came to be linked to a customer. */
+    public const LINK_VERIFIED      = 'verified';       // authenticated, or staff-confirmed
+    public const LINK_MANUAL        = 'manual';         // a person linked it
+    public const LINK_AI            = 'ai_identified';  // one unambiguous match
+    public const LINK_PHONE_TAIL    = 'phone_tail';     // 9-digit tail at first contact
+    public const LINK_BULK_REMATCH  = 'bulk_rematch';   // batch re-linking pass
+    public const LINK_AMBIGUOUS     = 'ambiguous';      // several clients share the number
+
     /**
-     * Link a conversation to a CRM client.
+     * Link a conversation to a CRM client, recording HOW.
+     *
+     * The method is not decoration. A 9-digit phone-tail match is good enough
+     * to answer somebody who just wrote to us, and not good enough to open an
+     * unsolicited message with their account details — because the worst
+     * failure this system can have is sending one customer's private
+     * information to another. FollowUpPolicy reads this column and decides
+     * what a proactive message is allowed to contain.
+     *
+     * The method defaults to 'manual' rather than to nothing: an unlabelled
+     * link is most likely a person, and 'manual' is a permissive value, so
+     * leaving it unset must be a deliberate choice by the caller rather than
+     * an accident that silently widens what we may say.
      */
-    public function linkToCrm(int $convId, int $crmClientId, string $crmClientName = ''): void
+    public function linkToCrm(int $convId, int $crmClientId, string $crmClientName = '',
+                              string $method = self::LINK_MANUAL): void
     {
-        $this->db->prepare('UPDATE wa_conversations SET crm_client_id = ?, crm_client_name = ?, updated_at = datetime(\'now\') WHERE id = ?')
-                 ->execute([$crmClientId, $crmClientName, $convId]);
+        $this->db->prepare(
+            'UPDATE wa_conversations
+                SET crm_client_id = ?, crm_client_name = ?,
+                    crm_link_method = ?, crm_link_at = datetime(\'now\'),
+                    updated_at = datetime(\'now\')
+              WHERE id = ?')
+                 ->execute([$crmClientId, $crmClientName, $method, $convId]);
+    }
+
+    /** Record that a number matches several customers — no proactive contact. */
+    public function markIdentityAmbiguous(int $convId): void
+    {
+        $this->db->prepare(
+            'UPDATE wa_conversations
+                SET crm_link_method = ?, crm_link_at = datetime(\'now\'), updated_at = datetime(\'now\')
+              WHERE id = ? AND crm_client_id IS NULL')
+                 ->execute([self::LINK_AMBIGUOUS, $convId]);
     }
 
     public function categorise(int $convId, string $category): void

@@ -19,6 +19,18 @@
  *                                         WhatsApp checkout carrying the
  *                                         visitor's address/pin (window.DN_ADDR)
  *   <span data-live-price="NAME"></span>  one product's price, by uCRM name
+ *   <div data-dishnet-hardware></div>     every kit in uCRM, priced, as cards
+ *   <span data-dishnet-from></span>       "from UGX X/month", cheapest live plan
+ *
+ * A price with no unit is the thing customers actually complained about: a
+ * kit card read "UGX 1,850,000 / VAT inclusive" and nothing on the page said
+ * whether that was once or every month, or that a monthly plan is due as well.
+ * Hardware now always carries "one-off" and the monthly it sits alongside.
+ *
+ * Nothing here is ever blank. A slot whose product is missing from the feed
+ * keeps whatever the page already had inside it — so every slot in the HTML
+ * ships with a real "ask us on WhatsApp" link, and a feed outage degrades to
+ * that instead of to a hole where the price should be.
  *
  * One naming system: the DishNet name from uCRM IS the display name on every
  * channel (site, chat, WhatsApp, invoice). data-service-map on the script tag
@@ -55,6 +67,22 @@
     return /tb/i.test(m[1]) ? m[1].replace(/\s*tb/i, ' TB') : m[1] + ' GB';
   }
 
+  // Home or business, decided once.
+  //
+  // Two independent signals, because either alone goes stale: the DishNet
+  // name (what we sell), and the Starlink service it maps to (Local Priority
+  // is the business tier — a priority-data block plus a public IP). A tier
+  // added in uCRM under a different name still lands in the right group as
+  // long as the service map is updated, and vice versa.
+  //
+  // Neither signal present means home, which is the safer default: a
+  // household shown a business card sees a price that is not for them, while
+  // a business shown the home cards still has a "Business internet" heading
+  // above the ones that are.
+  function isBusiness(p) {
+    return /business/i.test(p.name) || /priority/i.test(SVCMAP[p.name] || '');
+  }
+
   function headlineFirst(plans) {
     var keys = Object.keys(SVCMAP);
     if (!keys.length) return plans;
@@ -67,28 +95,100 @@
     return head.concat(rest);
   }
 
+  // Product photography by name. A kit with no picture still renders — the
+  // card just has no image, rather than a broken one.
+  function kitImage(name) {
+    if (/mini/i.test(name))                 return 'assets/img/products/mini-kit.webp';
+    if (/high\s*performance|performance/i.test(name)) return 'assets/img/products/hp-kit.webp';
+    if (/standard/i.test(name))             return 'assets/img/products/standard-kit.webp';
+    return '';
+  }
+
+  // One shape for every price on the site, so "one-off" never has to be
+  // inferred from context by the person reading it.
+  function priceBlock(cur, amount, kind, fromMonthly) {
+    if (kind === 'month') {
+      return '<span class="lp-amount">' + fmt(cur, amount) + '<small>/month</small></span>' +
+             '<span class="lp-note">VAT inclusive</span>';
+    }
+    return '<span class="lp-amount">' + fmt(cur, amount) + '</span>' +
+           '<span class="lp-kind">one-off payment</span>' +
+           (fromMonthly ? '<span class="lp-then">then internet from <strong>' + fromMonthly + '</strong></span>' : '') +
+           '<span class="lp-note">VAT inclusive &middot; includes delivery, installation and your first month</span>';
+  }
+
   function render(data) {
     var cur = data.currency || 'UGX';
 
-    // Individual price slots (kit cards etc.)
-    var byName = {};
-    (data.plans || []).concat(data.hardware || []).forEach(function (i) {
-      byName[i.name.toLowerCase()] = i;
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-live-price]'), function (el) {
-      var item = byName[(el.getAttribute('data-live-price') || '').toLowerCase()];
-      if (item) {
-        el.innerHTML = '<span class="lp-amount">' + fmt(cur, item.price) + '</span>' +
-                       '<span class="lp-note">VAT inclusive</span>';
-      }
+    // Cheapest live plan — the "and then what?" every hardware price needs.
+    var cheapest = (data.plans || []).filter(function (p) { return !isBusiness(p); })
+                                     .sort(function (a, b) { return a.price - b.price; })[0]
+                || (data.plans || [])[0] || null;
+    var fromMonthly = cheapest ? fmt(cur, cheapest.price) + '/month' : '';
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-dishnet-from]'), function (el) {
+      if (fromMonthly) el.textContent = fromMonthly;
     });
 
-    // Monthly plans grid
+    // Individual price slots (kit cards etc.)
+    var byName = {}, kindOf = {};
+    (data.plans || []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'month'; });
+    (data.hardware || []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'once'; });
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-live-price]'), function (el) {
+      var key  = (el.getAttribute('data-live-price') || '').toLowerCase();
+      var item = byName[key];
+      // No match: leave the page's own fallback standing. Never blank it.
+      if (!item) return;
+      var kind = el.getAttribute('data-live-price-kind') || kindOf[key] || 'once';
+      el.innerHTML = priceBlock(cur, item.price, kind, fromMonthly);
+    });
+
+    // Every kit uCRM sells, priced, in feed order.
+    //
+    // The page used to hand-list three kits and hard-code which two had a
+    // price slot — so the third card showed features and no price at all, and
+    // a customer comparing them could not. Adding a product in uCRM now makes
+    // it appear here with its price; removing it takes the card away.
+    var hwGrid = document.querySelector('[data-dishnet-hardware]');
+    if (hwGrid && (data.hardware || []).length) {
+      var hwCard = function (h) {
+        var img = kitImage(h.name);
+        var label = h.name.replace(/^Starlink\s*/i, '').replace(/\s*Package$/i, '');
+        return '<article class="hw-card">' +
+          (img ? '<div class="hw-shot"><img src="' + img + '" alt="' + esc(h.name) + '" loading="lazy"></div>' : '') +
+          '<h3>' + esc(label) + '</h3>' +
+          '<div class="live-price">' + priceBlock(cur, h.price, 'once', fromMonthly) + '</div>' +
+          (h.description ? '<p class="hw-desc">' + esc(h.description) + '</p>' : '') +
+          '<a class="btn btn-primary hw-cta" href="https://wa.me/' + WA + '?text=' +
+            encodeURIComponent('Hello DishNet, I would like the ' + h.name + '. Please confirm the total and book installation.') +
+          '">Order ' + esc(label) + '</a>' +
+          '</article>';
+      };
+      // Cards marked data-keep survive. A product we genuinely sell but do
+      // not list a fixed price for — High Performance is quoted per site —
+      // must not vanish just because the feed has no number for it. Replacing
+      // the whole grid removed it from the page entirely, which is a worse
+      // answer to "what does it cost" than "quoted on request".
+      var keep = [];
+      Array.prototype.forEach.call(hwGrid.querySelectorAll('[data-keep]'), function (el) {
+        keep.push(el.outerHTML);
+      });
+      hwGrid.innerHTML = (data.hardware || []).map(hwCard).join('') + keep.join('');
+      hwGrid.setAttribute('data-rendered', '1');
+    }
+
+    // Monthly plans grid, split into home and business.
+    //
+    // One flat row of seven asked a household to read past three tiers priced
+    // for an office with a public IP, and asked an office to guess which of
+    // the seven was theirs. The two products answer different questions and
+    // now sit under their own headings.
     var grid = document.querySelector('[data-dishnet-plans]');
     if (grid && (data.plans || []).length) {
-      grid.innerHTML = headlineFirst(data.plans).map(function (p) {
+      var card = function (p) {
         var flex = /flex/i.test(p.name);
-        var biz  = /business/i.test(p.name);
+        var biz  = isBusiness(p);
         var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
           (best ? '<span class="price-pill">Best value</span>' : '') +
@@ -105,7 +205,26 @@
             '?text=' + encodeURIComponent('Hello DishNet, I would like to sign up for ' + p.name) +
           '">Get ' + esc(p.name.replace(/^DishNet\s*/i, '')) + '</a>' +
           '</article>';
-      }).join('') + '<p class="price-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + '</p>';
+      };
+      var head = function (title, sub) {
+        return '<div class="plan-group"><h3>' + esc(title) + '</h3><p>' + esc(sub) + '</p></div>';
+      };
+
+      var ordered = headlineFirst(data.plans);
+      var homeP = ordered.filter(function (p) { return !isBusiness(p); });
+      var bizP  = ordered.filter(isBusiness);
+
+      // Headings only when there is something on both sides of them. A feed
+      // carrying one kind of plan renders exactly as it did before, rather
+      // than growing a lone heading over the whole grid.
+      var body = (homeP.length && bizP.length)
+        ? head('Home internet', 'Unlimited data for households — professional installation and local support.')
+          + homeP.map(card).join('')
+          + head('Business internet', 'Priority data with a public IP, for offices, CCTV and heavy users. Unlimited standard data after the priority block.')
+          + bizP.map(card).join('')
+        : ordered.map(card).join('');
+
+      grid.innerHTML = body + '<p class="price-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + '</p>';
     }
 
     renderOrderFlow(data, cur);
@@ -153,8 +272,8 @@
 
     function planCards() {
       var list = state.hw === '__flex' ? flexPlans : stdPlans;
-      return list.map(function (p) {
-        var biz = /business/i.test(p.name);
+      var one = function (p) {
+        var biz = isBusiness(p);
         return '<button type="button" class="of-card" data-plan="' + esc(p.name) + '">' +
           '<h4>' + esc(p.name) + '</h4>' +
           (SVCMAP[p.name] ? '<div class="of-sub">Starlink service: ' + esc(SVCMAP[p.name]) + '</div>'
@@ -164,7 +283,15 @@
           (biz ? '<div class="of-sub" style="margin-top:6px;">Unlimited standard data after priority data</div>'
                : p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
           '</button>';
-      }).join('');
+      };
+      // Grouped here too. Someone part-way through an order is the last
+      // person who should have to work out which three of seven are priced
+      // for an office.
+      var homeP = list.filter(function (p) { return !isBusiness(p); });
+      var bizP  = list.filter(isBusiness);
+      if (!homeP.length || !bizP.length) return list.map(one).join('');
+      return '<div class="of-group">For home</div>' + homeP.map(one).join('') +
+             '<div class="of-group">For business — priority data + public IP</div>' + bizP.map(one).join('');
     }
 
     function hwLabel() {

@@ -20,7 +20,7 @@
  * @date March 2026
  */
 
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 chdir(__DIR__ . '/..');
 
 require_once __DIR__ . '/../lib/StoreInterface.php';

@@ -2,7 +2,7 @@
 <?php
 require_once __DIR__ . '/../lib/crm_url.php';
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * cron/staff_jobs_summary.php — DishNet Hybrid Telecom
@@ -34,6 +34,7 @@ require_once __DIR__ . '/../lib/StoreInterface.php';
 require_once __DIR__ . '/../lib/JsonStore.php';
 require_once __DIR__ . '/../lib/SqliteStore.php';
 require_once __DIR__ . '/../lib/NotificationService.php';
+require_once __DIR__ . '/../lib/CustomerContact.php';
 require_once __DIR__ . '/../lib/CrmApiClient.php';
 
 require_once dirname(__DIR__) . '/lib/bootstrap_data.php';
@@ -189,7 +190,7 @@ foreach ($staff as $person) {
         $msg .= "🔗 " . dn_plugin_public($config) . "?tab=scheduling\n";
         $msg .= "\nPlease start with pending jobs and work through your list systematically.\n";
         $msg .= "Have a productive day! 🛠\n";
-        $msg .= "Need support? 📞 +211 921 443 002\n";
+        $msg .= "Need support? 📞 " . CustomerContact::support($config) . "\n";
         $msg .= "– DishNET Operations Team";
     }
 

@@ -223,9 +223,8 @@ class ClaudeWaClient
             }
         }
 
-        // ── Time-of-day context (EAT = UTC+3) ───────────────────────────
-        $eatHour = (int)gmdate('G') + 3;
-        if ($eatHour >= 24) $eatHour -= 24;
+        // ── Time-of-day context, in the install's own zone ──────────────
+        $eatHour = dn_tz_hour();   // the install's clock, not a written-in offset
         if ($eatHour >= 5  && $eatHour < 12)  { $timeOfDay = 'morning';   }
         elseif ($eatHour >= 12 && $eatHour < 17) { $timeOfDay = 'afternoon'; }
         elseif ($eatHour >= 17 && $eatHour < 21) { $timeOfDay = 'evening';   }

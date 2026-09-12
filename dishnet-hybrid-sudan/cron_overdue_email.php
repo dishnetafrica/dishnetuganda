@@ -21,6 +21,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 declare(strict_types=1);
+require_once __DIR__ . '/lib/timezone.php';
 require_once __DIR__ . '/lib/currency.php';
 // v4.21.73: bumped from 300 to 1800 — Run Now via fastcgi_finish_request can
 // run as long as PHP-FPM allows. 30 minutes is enough for ~500 invoices at
@@ -259,7 +260,7 @@ $stages = [
     ['min'=>210, 'max'=>9999,'id'=>9, 'type'=>'both',      'label'=>'monthly_recurring'],
 ];
 
-$today   = new \DateTime('now', new \DateTimeZone('Africa/Juba'));
+$today   = new \DateTime('now', dn_tz_obj());
 $sent    = 0; $skipped = 0; $errors = 0;
 // v4.21.74: collect a summary of who got messaged so admin gets ONE
 // digest WhatsApp at the end of the run instead of N pings during it.
@@ -291,7 +292,7 @@ foreach ($allInvoices as $inv) {
     if (in_array($clientId, $excludeClientIds, true)) { $skipped++; $skipReasons['excluded_client']++; continue; }
 
     // Days overdue
-    try { $dueDate = new \DateTime($dueStr, new \DateTimeZone('Africa/Juba')); }
+    try { $dueDate = new \DateTime($dueStr, dn_tz_obj()); }
     catch (\Throwable $e) { $skipped++; $skipReasons['bad_due_date']++; continue; }
     if ($today <= $dueDate) { $skipped++; $skipReasons['not_yet_overdue']++; continue; }
     $daysOverdue = (int)$today->diff($dueDate)->days;

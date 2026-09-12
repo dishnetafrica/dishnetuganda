@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * cron/bidal_summary.php — DishNet Hybrid Telecom

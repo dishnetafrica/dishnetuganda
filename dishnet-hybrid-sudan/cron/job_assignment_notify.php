@@ -2,7 +2,7 @@
 <?php
 require_once __DIR__ . '/../lib/crm_url.php';
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * cron/job_assignment_notify.php — DishNet Hybrid Telecom
@@ -24,6 +24,10 @@ require_once __DIR__ . '/../lib/JsonStore.php';
 require_once __DIR__ . '/../lib/SqliteStore.php';
 require_once __DIR__ . '/../lib/NotificationService.php';
 require_once __DIR__ . '/../lib/CrmApiClient.php';
+require_once __DIR__ . '/../lib/CustomerContact.php';
+require_once __DIR__ . '/../lib/ContactOptOut.php';
+require_once __DIR__ . '/../lib/EvolutionApiService.php';
+require_once __DIR__ . '/../lib/EvoWebhookGuard.php';
 
 require_once __DIR__ . '/../lib/bootstrap_data.php';
 $dataDir = getDataDir(dirname(__DIR__));
@@ -42,6 +46,50 @@ $store   = SqliteStore::create($dataDir);
 $config  = $store->load('kyc_config.json') ?? [];
 $notify  = new NotificationService($store, $config);
 $crm     = CrmApiClient::fromUcrm(dirname(__DIR__), $config);
+
+// ── How a technician is actually reached ────────────────────────────────
+//
+// These messages went out through NotificationService, which posts to
+// WASender and begins `if (!$this->enabled ...) return;` — where enabled
+// needs wa_plugin_url, wa_app_key AND wa_auth_key. Uganda runs Evolution, not
+// WASender, so on that box every job assignment returned without sending and
+// without logging a failure. A technician was never told about the job and
+// nothing anywhere said so.
+//
+// So: send through Evolution when an instance is configured for the channel,
+// and fall back to the old path when it is not. An install with no Evolution
+// support instance — South Sudan — behaves exactly as it did.
+$evoSvc   = new EvolutionApiService($config);
+$JOB_CHAN = 'support';                       // the number technicians know
+$evoLive  = $evoSvc->isConfigured() && trim((string)($config['evo_instance_' . $JOB_CHAN] ?? '')) !== '';
+$evoGuard = $evoLive ? new EvoWebhookGuard($store->getPdo(), $config) : null;
+
+/**
+ * Send one staff message, by whichever path this install has.
+ *
+ * CLASS_STAFF, not transactional: these are colleagues being dispatched to
+ * work, never marketing, and a customer opt-out must not silence them.
+ */
+$sendStaff = function (string $phone, string $msg, string $event)
+             use ($evoSvc, $evoGuard, $evoLive, $JOB_CHAN, $notify, $config): bool {
+    if (!$evoLive) {
+        $notify->sendRaw($phone, $msg, $event);
+        return true;                          // the old path reports nothing
+    }
+    $res = $evoSvc->sendText($JOB_CHAN, $phone, $msg, ContactOptOut::CLASS_STAFF);
+
+    // Claim our own echo before anything else. Outbound comes back as fromMe,
+    // and an unclaimed echo reads as a colleague typing — which stands the AI
+    // down on that thread.
+    $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
+    if ($waId !== '' && $evoGuard) {
+        try { $evoGuard->claim($waId, (string)($config['evo_instance_' . $JOB_CHAN] ?? ''), 'job.assign'); }
+        catch (\Throwable $e) { /* dedupe is a backstop, not the mechanism */ }
+    }
+    $ok = empty($res['suppressed']) && (!isset($res['ok']) || !empty($res['ok'])) && empty($res['error']);
+    if (!$ok) log_ja('SEND FAILED to ' . $phone . ': ' . (string)($res['error'] ?? 'unknown'));
+    return $ok;
+};
 
 if (!$crm->isConfigured()) {
     log_ja('CRM not configured — skipping.');
@@ -172,9 +220,9 @@ foreach ($allJobs as $jobId => $job) {
         $msg .= "• Use JOB COMPLETED when work is finished\n\n";
         $msg .= "---\n";
         $msg .= "For urgent support during installation:\n";
-        $msg .= "📞 +211 921 443 002\n";
+        $msg .= "📞 " . CustomerContact::support($config) . "\n";
         $msg .= "\n— DishNet Africa Team";
-        $notify->sendRaw($phone, $msg, 'ops_scheduling_job_accepted');
+        $sendStaff($phone, $msg, 'ops_scheduling_job_accepted');
         log_ja("Job #{$jobId} accepted → sent completion links to {$name} ({$phone})");
     } elseif ($isNew || $isReassigned) {
         // New or reassigned job → Send ACCEPT link
@@ -193,9 +241,9 @@ foreach ($allJobs as $jobId => $job) {
         $msg .= "✅ *ACCEPT JOB:*\n{$acceptLink}\n\n";
         $msg .= "Once you accept, we will send you the completion links.\n";
         $msg .= "\nFor any questions, just reach out here.\n";
-        $msg .= "📞 +211 921 443 002\n";
-        $msg .= "🌐 dishnetafrica.com";
-        $notify->sendRaw($phone, $msg, $isReassigned ? 'ops_scheduling_job_reassigned' : 'ops_scheduling_job_assigned');
+        $msg .= "📞 " . CustomerContact::support($config) . "\n";
+        $msg .= "🌐 " . preg_replace('#^https?://#', '', CustomerContact::appUrl($config));
+        $sendStaff($phone, $msg, $isReassigned ? 'ops_scheduling_job_reassigned' : 'ops_scheduling_job_assigned');
         log_ja(($isReassigned ? "Reassigned" : "New") . " job #{$jobId} → notified {$name} ({$phone}) [{$resolved['type']}:{$resolved['id']}]");
     }
 

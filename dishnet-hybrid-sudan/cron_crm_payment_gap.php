@@ -19,7 +19,7 @@ require_once __DIR__ . '/lib/PaymentUuids.php';
  * Runs via: cron/master.php → 'crm_pay_gap' every 300s (5 min)
  */
 chdir(__DIR__);
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 require_once __DIR__ . '/lib/StoreInterface.php';
 require_once __DIR__ . '/lib/JsonStore.php';

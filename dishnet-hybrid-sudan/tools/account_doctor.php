@@ -176,7 +176,8 @@ if ($account['services'] === []) {
         $step($s['status'] === 'active' ? 'active service' : 'service (' . $s['status'] . ')',
               $s['status'] === 'active' ? true : null,
               $s['name'] . ' · ' . $cur($s['price'], $s['currency'])
-              . ($s['since'] ? ' · since ' . $s['since'] : ''));
+              . ($s['since'] ? ' · since ' . $s['since'] : '')
+              . (($s['source'] ?? '') === 'live' ? ' · live from uCRM, not yet cached' : ''));
     }
 }
 
@@ -197,9 +198,18 @@ if ($account['equipment'] === []) {
 
 echo "\n  5) BILLING\n";
 $b = $account['billing'];
-$step('invoices', $b['invoice_count'] > 0 ? true : false,
-      $b['invoice_count'] > 0 ? $b['invoice_count'] . ' issued · ' . $cur($b['invoiced'], $b['currency'])
-                              : 'none issued yet');
+// Drafts are deliberately not counted as issued — a draft has not been sent
+// and nobody owes it. Saying so explicitly stops the summary reading like a
+// contradiction of the invoice listed two lines below it.
+$drafts = 0;
+foreach ($account['invoices'] as $i) if (($i['status'] ?? '') === 'draft') $drafts++;
+$step('invoices', $b['invoice_count'] > 0 ? true : ($drafts > 0 ? null : false),
+      $b['invoice_count'] > 0
+          ? $b['invoice_count'] . ' issued · ' . $cur($b['invoiced'], $b['currency'])
+          : ($drafts > 0
+              ? $drafts . ' draft' . ($drafts === 1 ? '' : 's') . ', none issued yet — '
+                . 'a draft is not sent and nobody owes it'
+              : 'none issued yet'));
 // Nothing paid is not a fault on a customer invoiced yesterday.
 $step('paid', $b['paid'] > 0 ? true : null, $cur($b['paid'], $b['currency'])
       . ' across ' . count($account['payments']) . ' payment(s)');
