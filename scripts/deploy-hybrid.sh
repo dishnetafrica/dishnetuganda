@@ -36,6 +36,37 @@ SRC="$REPO/$PLUGIN"
 
 die() { echo "  ✗ $*" >&2; exit 1; }
 
+# Read .deployed-commit from inside the container, waiting out a restart.
+#
+# uCRM recycles its own container when plugin files change, so the read
+# immediately after a copy can land while the container is between tasks.
+# containerd then answers "NotFound: task <id> not found" — ON STDOUT, which
+# went straight into the variable and got compared against a commit. The
+# deploy had worked; the script said it had not, and told the operator not to
+# trust it.
+#
+# So: retry for a bounded window, and accept only something shaped like a
+# short commit. Anything else is "could not read", which is a different
+# outcome from "read, and it is the wrong commit" — one means wait, the other
+# means the deploy failed.
+#
+# Echoes the commit, or nothing. Never echoes an error message.
+read_live() {
+    local tries="${1:-1}" out
+    while [ "$tries" -gt 0 ]; do
+        out="$(docker exec "$CONTAINER" cat "$IN_CONTAINER/.deployed-commit" 2>/dev/null | tail -n 1 | tr -d '[:space:]')" || true
+        case "$out" in
+            *[!0-9a-f]*|'') ;;              # error text, or empty
+            *) echo "$out"; return 0 ;;     # hex only — a commit
+        esac
+        tries=$((tries - 1))
+        # An `if`, not `&&` — under `set -e` a trailing `&&` that short-circuits
+        # leaves the loop body with status 1 and can kill the script.
+        if [ "$tries" -gt 0 ]; then sleep 2; fi
+    done
+    return 1
+}
+
 [ -f "$SRC/manifest.json" ] || die "no plugin at $SRC (manifest.json missing)"
 command -v docker >/dev/null 2>&1 || die "docker not on PATH"
 
@@ -52,7 +83,7 @@ IN_CONTAINER="/data/ucrm/data/plugins/$PLUGIN"
 case "$DEST" in *plugins_staging*) die "refusing to deploy into staging: $DEST";; esac
 [ -f "$DEST/manifest.json" ] || die "no installed plugin at $DEST — install it through uCRM once first"
 
-LIVE="$(docker exec "$CONTAINER" cat "$IN_CONTAINER/.deployed-commit" 2>/dev/null || echo 'unknown')"
+LIVE="$(read_live 3 || echo 'unknown')"
 HEAD="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
 
 echo
@@ -89,11 +120,20 @@ chown -R "$OWNER" "$DEST" 2>/dev/null || echo "  ! could not chown to $OWNER —
 chmod "$MODE" "$DEST" 2>/dev/null || true
 
 # The only verification that counts: read it back from inside the container.
-SEEN="$(docker exec "$CONTAINER" cat "$IN_CONTAINER/.deployed-commit" 2>/dev/null || echo 'unreadable')"
+# Up to ~30s, because the copy itself is what makes uCRM recycle.
+SEEN="$(read_live 15 || true)"
 echo
 if [ "$SEEN" = "$HEAD" ]; then
     echo "  ✓ container now serves $SEEN"
     echo
+elif [ -z "$SEEN" ]; then
+    echo "  ? container did not answer within 30s — it is most likely still"
+    echo "    restarting, which uCRM does by itself when plugin files change."
+    echo "    The files are copied and in place. Confirm once it is up:"
+    echo
+    echo "      bash scripts/deploy-hybrid.sh --check"
+    echo
+    exit 2
 else
     echo "  ✗ container still reports '$SEEN', expected '$HEAD'"
     echo "    The copy succeeded but the container cannot see it. Do not treat"
