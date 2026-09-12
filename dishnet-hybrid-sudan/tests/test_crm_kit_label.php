@@ -169,6 +169,21 @@ $k3 = new CrmKitAttribute($other, $ea);
 t('a second object sees its own uCRM', $k3->planFor($mk(2, 1, 2, 'K'))['cap_gb'], 500.0);
 t('and the first still sees its own',  $kitP->planFor($mk(2, 1, 2, 'K'))['cap_gb'], 6144.0);
 
+echo "\nThe tool says the same thing its code does\n";
+// The first version printed "A plan with no number in it is unlimited" as a
+// footer directly beneath a line reporting UNKNOWN for exactly such a plan.
+// Prose that contradicts the behaviour above it is worse than no prose: it
+// teaches the reader the opposite of what the tool did.
+$toolSrc = (string)file_get_contents(dirname(__DIR__) . '/tools/crm_kit_label.php');
+is_(strpos($toolSrc, 'A plan with no number in it is unlimited') === false,
+    'it no longer states the South Sudan rule it deliberately does not follow');
+is_(strpos($toolSrc, 'UNLIMITED IS CLAIMED, NOT INFERRED') !== false,
+    'it states the rule it actually applies');
+// And the reason given for UNKNOWN has to name the real problem.
+is_(strpos($toolSrc, 'the service names no plan at all') !== false
+    && strpos($toolSrc, 'names no allowance') !== false,
+    'an uninformative plan name is reported as such, not as a missing one');
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n  {$pass} passed, {$fail} failed\n";
 exit($fail === 0 ? 0 : 1);

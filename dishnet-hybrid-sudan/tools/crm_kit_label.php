@@ -88,18 +88,27 @@ if ($plansOnly) {
                    $a['kit_serial'], '—', 'no uCRM service on the assignment');
             continue;
         }
+        // The reason has to name what is actually wrong. "No plan name on the
+        // service" is false when the service HAS one that simply says nothing
+        // about an allowance — and sends somebody looking for a missing field
+        // instead of an uninformative one.
+        if ($p['cap_gb'] > 0)        $allowance = number_format($p['cap_gb'], 0) . ' GB';
+        elseif ($p['unlimited'])     $allowance = 'unlimited';
+        elseif ($p['raw'] === '')    $allowance = 'UNKNOWN — the service names no plan at all';
+        else                         $allowance = 'UNKNOWN — "' . $p['raw'] . '" names no allowance';
         printf("    %-5s #%-7s %-20s %-34s %s\n", $a['id'], $a['crm_client_id'],
-            $a['kit_serial'], mb_substr($p['display'], 0, 34),
-            $p['cap_gb'] > 0
-                ? number_format($p['cap_gb'], 0) . ' GB'
-                : ($p['unlimited'] ? 'unlimited' : 'UNKNOWN — no plan name on the service'));
+            $a['kit_serial'], mb_substr($p['display'], 0, 34), $allowance);
         if ($p['display'] !== $p['raw']) {
             printf("    %-5s   uCRM says \"%s\", masked for customers\n", '', $p['raw']);
         }
     }
-    echo "\n  A plan with no number in it is unlimited. A service with no plan name\n";
-    echo "  at all is UNKNOWN — and must never be shown to a customer as unlimited,\n";
-    echo "  which is the mistake on South Sudan's own customer page today.\n\n";
+    echo "\n  UNLIMITED IS CLAIMED, NOT INFERRED. A plan counts as unlimited when it\n";
+    echo "  says the word, or when it is one of ours. A bare Starlink tier name\n";
+    echo "  like \"Starlink Residential\" names no allowance, so the answer is\n";
+    echo "  UNKNOWN — never unlimited. South Sudan infers it, which is why a\n";
+    echo "  customer on 6TB is shown ∞ on their own page there today.\n\n";
+    echo "  To give a customer a figure, name it on the uCRM service — the\n";
+    echo "  invoice label is read first:  Services Plan : DishNet Business 6TB\n\n";
     exit(0);
 }
 
