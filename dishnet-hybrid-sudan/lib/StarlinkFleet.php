@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/EquipmentAssignment.php';
 require_once __DIR__ . '/ServicePlan.php';
 require_once __DIR__ . '/KitUsage.php';
+require_once __DIR__ . '/StarlinkServiceState.php';
 
 /**
  * StarlinkFleet — every Starlink customer on one list.
@@ -43,24 +44,32 @@ final class StarlinkFleet
 {
     private EquipmentAssignment $ea;
     private KitUsage $usage;
+    private StarlinkServiceState $state;
     private $store;
     /** @var object|null CrmKitAttribute, when uCRM is reachable */
     private $kit;
     private ?array $clients = null;
 
-    public function __construct(EquipmentAssignment $ea, KitUsage $usage, $store, $kit = null)
+    public function __construct(EquipmentAssignment $ea, KitUsage $usage, $store, $kit = null,
+                                ?StarlinkServiceState $state = null)
     {
         $this->ea    = $ea;
         $this->usage = $usage;
         $this->store = $store;
         $this->kit   = $kit;
+        // Default-constructed rather than required, so every existing caller
+        // gains the Starlink state without being edited. It reads one sibling
+        // file and reports honestly when there is none.
+        $this->state = $state ?? new StarlinkServiceState();
     }
 
     /**
      * The fleet.
      *
      * @return array{rows:array<int,array<string,mixed>>, summary:array<string,int>,
-     *               telemetry:array{available:bool, reason:string}}
+     *               telemetry:array{available:bool, reason:string},
+     *               starlink:array{available:bool, lines:int, reason:string},
+     *               unclaimed:array<int,array<string,string>>}
      */
     public function build(): array
     {
@@ -76,11 +85,14 @@ final class StarlinkFleet
             } catch (\Throwable $e) { $labels = []; }
         }
 
-        $rows = [];
+        $rows  = [];
+        $lines = [];
         foreach ($live as $a) {
             $id     = (int)$a['id'];
             $serial = (string)$a['kit_serial'];
+            $line   = (string)($a['starlink_service_line'] ?? '');
             $plan   = $this->planFor($a);
+            if (trim($line) !== '') $lines[] = $line;
 
             $rows[] = [
                 'assignment_id'  => $id,
@@ -95,6 +107,10 @@ final class StarlinkFleet
                 'assigned_at'    => (string)($a['assigned_at'] ?? ''),
                 'plan'           => $plan,
                 'usage'          => $this->usage->against($serial, $plan),
+                // What Starlink says about the line, joined on the service
+                // line. Separate from usage on purpose: a line can be active
+                // with no telemetry collected, and both are worth knowing.
+                'live'           => $this->state->forLine($line),
                 // 'unknown' when uCRM could not be read — which is not the
                 // same as 'missing', and must not be shown as a fault.
                 'label'          => $labels[$id]['state'] ?? 'unknown',
@@ -102,8 +118,14 @@ final class StarlinkFleet
             ];
         }
 
-        return ['rows' => $rows, 'summary' => $this->summarise($rows),
-                'telemetry' => $this->telemetry()];
+        return ['rows'      => $rows,
+                'summary'   => $this->summarise($rows),
+                'telemetry' => $this->telemetry(),
+                'starlink'  => $this->state->available(),
+                // Lines Starlink knows about that no assignment claims —
+                // an unrecorded install, or a subscription still running
+                // for a customer who has gone.
+                'unclaimed' => $this->state->unclaimed($lines)];
     }
 
     /** Whether the data plugin has written anything here at all. */
@@ -123,7 +145,12 @@ final class StarlinkFleet
               'usage_known' => 0, 'usage_silent' => 0,
               'allowance_known' => 0, 'allowance_unknown' => 0,
               'over_cap' => 0,
-              'label_match' => 0, 'label_missing' => 0, 'label_differs' => 0];
+              'label_match' => 0, 'label_missing' => 0, 'label_differs' => 0,
+              // Starlink subscription state, counted separately from usage.
+              'live_known' => 0, 'live_silent' => 0, 'live_stale' => 0,
+              'live_active' => 0, 'live_pending' => 0, 'live_suspended' => 0,
+              'live_paused' => 0, 'live_standby' => 0, 'live_inactive' => 0,
+              'no_service_line' => 0];
 
         $seen = [];
         foreach ($rows as $r) {
@@ -138,6 +165,17 @@ final class StarlinkFleet
             if (($r['usage']['pct'] ?? null) !== null && $r['usage']['pct'] >= 100) $s['over_cap']++;
 
             if (isset($s['label_' . $r['label']])) $s['label_' . $r['label']]++;
+
+            // A line we never recorded is a different failure from one the
+            // data plugin cannot see, and both differ from a silent Starlink.
+            if (trim((string)$r['service_line']) === '') $s['no_service_line']++;
+            if (!empty($r['live']['known'])) {
+                $s['live_known']++;
+                if (isset($s['live_' . $r['live']['status']])) $s['live_' . $r['live']['status']]++;
+                if (!empty($r['live']['stale'])) $s['live_stale']++;
+            } else {
+                $s['live_silent']++;
+            }
         }
         $s['customers'] = count($seen);
         return $s;

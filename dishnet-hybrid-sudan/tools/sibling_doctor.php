@@ -83,6 +83,36 @@ echo "\n";
 $problems = 0;
 $warnings = 0;
 
+/**
+ * How many records a file actually holds, and what to call them.
+ *
+ * Not count() — that was the bug this function exists to stop. Several of
+ * these files are ENVELOPES: a handful of metadata keys wrapping the list
+ * that matters. dr_kit_registry.json carries schema_version, generated_at,
+ * generator, contract, kit_count, auto_discovered and kits. count() on that
+ * returns 7 for a file whose kits list is empty, and 7 reads as seven kits.
+ * A tool written to stop us reporting zero as a fact was reporting seven as
+ * one instead.
+ *
+ * @return array{0:int, 1:string}
+ */
+function dn_record_count(array $data): array
+{
+    // An envelope: every value that is a list lives under a named key, and
+    // the rest are scalars. Count the payload, and say which key it came from.
+    $lists = [];
+    $scalars = 0;
+    foreach ($data as $k => $v) {
+        if (is_array($v)) $lists[(string)$k] = count($v); else $scalars++;
+    }
+    if ($scalars > 0 && count($lists) === 1) {
+        $key = (string)array_key_first($lists);
+        return [$lists[$key], $key];
+    }
+    return [count($data), 'rows'];
+}
+
+
 foreach ($EXPECTED as $plugin => $files) {
     $installed = SiblingPlugin::installed($plugin);
     $dir       = SiblingPlugin::dataDir($plugin);
@@ -137,7 +167,9 @@ foreach ($EXPECTED as $plugin => $files) {
               : ($hours > 6 ? sprintf('%.0f hours old', $hours)
                             : sprintf('%.0f min old', $age / 60));
         if ($hours > 48) $warnings++;
-        printf("      %-28s %-7d rows   %s\n", $file, count($data), $note);
+        [$n, $unit] = dn_record_count($data);
+        if ($n === 0) $warnings++;
+        printf("      %-28s %-7d %-9s %s\n", $file, $n, $unit, $note);
     }
     echo "\n";
 }
@@ -155,7 +187,9 @@ if ($problems > 0) {
     echo "\n";
 }
 if ($warnings > 0) {
-    echo "  {$warnings} warning(s) above — stale data, or data in a directory that\n";
-    echo "  the next upgrade of that plugin will delete.\n\n";
+    echo "  {$warnings} warning(s) above — a file with no records, stale data, or data\n";
+    echo "  in a directory the next upgrade of that plugin will delete. A file that\n";
+    echo "  exists and holds nothing is the quietest of the three: its cron ran and\n";
+    echo "  had nothing to write, which reads on every screen as a fleet at zero.\n\n";
 }
 exit($problems > 0 ? 1 : 0);

@@ -399,6 +399,11 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 **External plugin dependencies (read-only):**
 - `dishnet-starlink-finance/data/sl_kits.json` — must contain client_id + kit_serial
 - `dishnet-data-report/data/wifi_router_map.json` — must contain kit_serial + router_id_full
+- `dishnet-data-report/data/sl_svc_cache.json` — keyed by **service line**; read for live
+  subscription state (StarlinkServiceState). On the Uganda server this is the only Starlink
+  file with content: `sl_usage.json` and `dr_kit_registry.json` are both empty because both
+  are keyed by a kit serial the data plugin does not resolve (`kit_number` is `""` on all 15
+  lines, verified 2026-09-12). Join on the service line, which we record at installation.
 
 **Loopback HTTP target:** `dishnet-data-report/public.php?action=dr_wifi_*` (no auth required for these actions when called without UCRM session cookies — verified in dr_wifi_change.php)
 
@@ -451,6 +456,7 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 | QuotationService | lib/QuotationService.php | Quote generation + WA sending |
 | StaffLedgerService | lib/StaffLedgerService.php | Unified staff cash ledger — one balance query replaces 5 sources |
 | StaffLedgerWriter | lib/StaffLedgerWriter.php | Fail-safe dual-write helper for staff_ledger |
+| StarlinkServiceState | lib/StarlinkServiceState.php | Live Starlink subscription state per service line, read from dishnet-data-report's sl_svc_cache.json. Status precedence pending > suspended > paused > standby > active; `subscription_active: null` reports as unknown, never inactive. Also lists service lines no assignment claims. |
 | StarlinkBlockService | lib/StarlinkBlockService.php | Auto-block Starlink devices on UCRM service.suspend (v4.21.0+). Reads sl_kits.json + wifi_router_map.json, calls dishnet-data-report's gRPC bridge over loopback HTTP. State in sl_suspension_state, audit in sl_suspension_log. VIP guard via NO_AUTO_BLOCK tag or starlink_block_vip_clients config. |
 
 ## External APIs
