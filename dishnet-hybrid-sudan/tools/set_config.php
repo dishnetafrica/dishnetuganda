@@ -65,9 +65,9 @@ $FLAGS = [
         'Notice quiet enquiries and draft a follow-up for a person to approve'],
     'followup_not_before' => ['text',
         'Ignore conversations quiet BEFORE this UTC date — set it when switching on'],
-    'followup_daily_cap' => ['minutes',
+    'followup_daily_cap' => ['number',
         'Most follow-ups sent on one channel in a day (default 30)'],
-    'followup_max_age_hours' => ['minutes',
+    'followup_max_age_hours' => ['number',
         'An enquiry older than this is history, not a live lead (default 336 = 14 days)'],
 
     // On every quotation the team sends. QuotationService compiles South Sudan
@@ -93,6 +93,10 @@ $show = function () use ($root, $dataDir, $FLAGS) {
 
         if (!$set) {
             $shown = 'not set (default)';
+            // Only the cooldown has a 1440 default. Saying so for every
+            // numeric key printed "default: 1440 (24 hours)" directly above a
+            // description reading "(default 30)" — the same screen stating two
+            // different defaults for one key, which is worse than stating none.
             if ($type === 'minutes') $note = 'default: 1440 (24 hours)';
         } elseif ($type === 'bool') {
             $shown = filter_var($raw, FILTER_VALIDATE_BOOLEAN) ? 'ON' : 'OFF';
@@ -103,6 +107,11 @@ $show = function () use ($root, $dataDir, $FLAGS) {
             if ($n === null)   { $shown = '"' . (string)$raw . '"'; $note = 'not a number — treated as the 1440 default'; }
             elseif ($n === 0)  { $shown = '0 minutes'; $note = '⚠ the AI NEVER stands down, even while a colleague is typing'; }
             else               { $shown = $n . ' minutes'; }
+        } elseif ($type === 'number') {
+            // A count, an hour figure, a limit. No unit appended and no
+            // default invented — the description carries both.
+            $shown = is_numeric($raw) ? (string)(int)$raw
+                   : '"' . (string)$raw . '" — not a number, so the default applies';
         } else {
             $shown = '"' . (string)$raw . '"';
         }
