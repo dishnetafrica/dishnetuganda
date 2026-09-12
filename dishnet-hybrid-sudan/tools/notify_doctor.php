@@ -55,8 +55,15 @@ if (is_file($cfgPath)) {
     $raw = @json_decode((string)@file_get_contents($cfgPath), true);
     if (is_array($raw)) $fromFile = $raw;
 }
-$config = $fromStore + $fromFile;          // store wins, file fills gaps
-$cfgSrc = sprintf('store %d key(s), file %d key(s)', count($fromStore), count($fromFile));
+// PluginConfig::load() merges config.json then kyc_config.json, FILE LAST, so
+// the file wins — and that is what webhook.php and followup_send.php read.
+// But 36 crons, job_assignment_notify among them, read $store->load() and see
+// the store ALONE. Two readers with opposite precedence, so a single merged
+// view is a fiction that flatters whichever one happens to be right.
+$config     = $fromFile + $fromStore;      // canonical: PluginConfig::load order
+$storeOnly  = $fromStore;                  // what the 36 store-only crons see
+$cfgSrc = sprintf('file %d key(s) [canonical], store %d key(s) [36 crons read this alone]',
+                  count($fromFile), count($fromStore));
 
 $line = str_repeat('─', 72);
 echo "\n  OUTBOUND WHATSAPP (read-only)\n  {$line}\n";
@@ -70,8 +77,9 @@ if ($fromStore !== [] && $fromFile !== []) {
         if ($a !== $b) $diff[] = $k;
     }
     if ($diff) {
-        echo "  ⚠ store and file DISAGREE — the store wins, so the right column is live:\n";
-        printf("      %-24s %-28s %s\n", '', 'file (set_config writes here)', 'store (LIVE)');
+        echo "  ⚠ store and file DISAGREE. The file is canonical for PluginConfig::load\n";
+        echo "    readers (webhook, follow-ups); the store is ALL that 36 crons see:\n";
+        printf("      %-24s %-28s %s\n", '', 'file (canonical)', 'store (36 crons)');
         foreach ($diff as $k) {
             printf("      %-24s %-28s %s\n", $k,
                 trim((string)($fromFile[$k] ?? '')) ?: '—',
@@ -187,6 +195,21 @@ if ($FIX && $evo->isConfigured()) {
                    $ch, $live, $onDisk, $have[$onDisk]);
             $fixed++;
         }
+        // The store-only crons need the connection keys too, not just the
+        // instance name. A store with an instance and no API URL is still a
+        // cron that cannot send.
+        $synced = [];
+        foreach (['evo_api_url', 'evo_api_key'] as $k) {
+            $f = trim((string)($fromFile[$k] ?? ''));
+            $t = trim((string)($fromStore[$k] ?? ''));
+            if ($f !== '' && $t === '') { $fromStore[$k] = $f; $synced[] = $k; }
+        }
+        if ($synced !== []) {
+            $store->save('kyc_config.json', $fromStore);
+            printf("    ✓ copied into the store for the 36 store-only crons: %s\n",
+                   implode(', ', $synced));
+            $fixed += count($synced);
+        }
         echo $fixed === 0
             ? "    Nothing to repair.\n\n"
             : "\n    Repaired {$fixed}. Re-run without --fix to confirm.\n\n";
@@ -200,13 +223,60 @@ $jobPath = ($evo->isConfigured() && $supportInst !== '')
          ? 'Evolution / ' . $supportInst
          : ($waOn ? 'WASender fallback' : '✗ NOTHING IS SENT');
 
-echo "  WHAT HAPPENS NOW\n  {$line}\n";
-printf("    %-34s %s\n", 'technician job dispatch', $jobPath);
-printf("    %-34s %s\n", 'AI replies / follow-ups',
+// NotificationService::sendVia() prefers Evolution and keeps WASender as the
+// fallback, mapping its own sender names onto Evolution channels:
+//   support  → evo_instance_support      accounts → evo_instance_account
+// and wa_force_accounts routes everything to account. So each class of
+// message has to be reported separately — one verdict for the whole service
+// is what made this doctor claim "nothing is sent" about traffic that sends.
+$force    = ($config['wa_force_accounts'] ?? false) === true
+         || in_array((string)($config['wa_force_accounts'] ?? ''), ['1'], true);
+$instFor  = function (string $sender) use ($config, $force): string {
+    $ch = $force ? 'account' : ($sender === 'accounts' ? 'account' : 'support');
+    return trim((string)($config['evo_instance_' . $ch] ?? ''));
+};
+$pathFor  = function (string $sender) use ($instFor, $evo, $waOn): string {
+    $i = $instFor($sender);
+    if ($evo->isConfigured() && $i !== '') return 'Evolution / ' . $i;
+    return $waOn ? 'WASender' : '✗ NOTHING IS SENT — silently';
+};
+
+$supportPath = $pathFor('support');
+$accountPath = $pathFor('accounts');
+
+// The store-only readers get their own verdict. This is where the technician
+// dispatch actually lives, and a merged view hid that it cannot send.
+$evoStore   = new EvolutionApiService($storeOnly);
+$storeCan   = $evoStore->isConfigured()
+              && trim((string)($storeOnly['evo_instance_support'] ?? '')) !== '';
+
+echo "  WHAT THE 36 STORE-ONLY CRONS SEE\n  {$line}\n";
+printf("    %-30s %s\n", 'evo_api_url', trim((string)($storeOnly['evo_api_url'] ?? '')) ?: '— MISSING');
+printf("    %-30s %s\n", 'evo_api_key', trim((string)($storeOnly['evo_api_key'] ?? '')) !== '' ? 'set' : '— MISSING');
+printf("    %-30s %s\n", 'evo_instance_support', trim((string)($storeOnly['evo_instance_support'] ?? '')) ?: '— MISSING');
+printf("    %-30s %s\n\n", 'so Evolution is', $storeCan ? 'USABLE' : '✗ NOT USABLE — they fall back to WASender');
+if (!$storeCan) {
+    echo "    ⚠ cron/job_assignment_notify.php is one of these. Technician dispatch\n";
+    echo "      therefore still sends NOTHING, whatever the merged view below says.\n";
+    echo "      --fix copies the evo_* keys from the file into the store.\n\n";
+}
+
+echo "  WHAT HAPPENS NOW (PluginConfig::load readers)\n  {$line}\n";
+printf("    %-38s %s\n", 'technician job dispatch', $jobPath);
+printf("    %-38s %s\n", 'AI replies / follow-ups',
     $evo->isConfigured() ? 'Evolution' : '✗ Evolution not configured');
-printf("    %-34s %s\n", 'everything else (OTP, invoices, alerts)',
-    $waOn ? 'WASender' : '✗ NOTHING IS SENT — silently');
-printf("    %-34s %s\n\n", 'support number printed in messages', CustomerContact::support($config));
+printf("    %-38s %s\n", 'support-channel messages (27 sites)', $supportPath);
+printf("    %-38s %s\n", 'accounts-channel messages (20 sites)', $accountPath);
+printf("    %-38s %s\n", 'PDFs and images (sendDocument/Image)',
+    $waOn ? 'WASender' : '✗ NOTHING IS SENT — still WASender-only');
+printf("    %-38s %s\n\n", 'support number printed in messages', CustomerContact::support($config));
+
+if ($accountPath !== $supportPath && strpos($accountPath, 'NOTHING') !== false) {
+    echo "    ⚠ evo_instance_account is empty, so the 20 accounts-channel messages\n";
+    echo "      — invoices, due dates, credits, service end, leave decisions —\n";
+    echo "      still go nowhere. Point it at an instance, or at the same one as\n";
+    echo "      support if one number serves both.\n\n";
+}
 
 // ── Evidence, not just configuration ────────────────────────────────────
 echo "  THE QUEUE SAYS\n  {$line}\n";
@@ -228,14 +298,14 @@ try {
 
 // ── The verdict, stated plainly ─────────────────────────────────────────
 echo "\n  {$line}\n";
-if (!$waOn && !$evo->isConfigured()) {
+$paths = [$supportPath, $accountPath, $jobPath];
+$dead  = array_filter($paths, fn($p) => strpos($p, 'NOTHING') !== false);
+if (!$evo->isConfigured() && !$waOn) {
     echo "  ✗ NEITHER SENDER IS CONFIGURED. Nothing outbound leaves this box.\n\n";
-} elseif (!$waOn) {
-    echo "  ⚠ WASender is OFF, so every send outside Evolution is silently dropped:\n";
-    echo "    OTP logins, invoice notices, lead alerts, cash declarations.\n";
-    echo "    Evolution carries only AI replies, follow-ups and job dispatch.\n\n";
-} elseif (!$evo->isConfigured()) {
-    echo "  ⚠ Evolution is OFF. AI replies and follow-ups cannot send.\n\n";
+} elseif ($dead === []) {
+    echo "  ✓ Every message class has a live path.\n";
+    if (!$waOn) echo "    WASender is off, but nothing depends on it except PDFs and images.\n";
+    echo "\n";
 } else {
-    echo "  ✓ Both senders are configured.\n\n";
+    printf("  ⚠ %d of 3 message classes still send NOTHING, silently. See above.\n\n", count($dead));
 }
