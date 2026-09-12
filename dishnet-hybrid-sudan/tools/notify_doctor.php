@@ -5,9 +5,11 @@ chdir(dirname(__DIR__));
 /**
  * notify_doctor.php — which way does outbound WhatsApp actually leave?
  *
- *   php tools/notify_doctor.php
+ *   php tools/notify_doctor.php           what happens to outbound messages now
+ *   php tools/notify_doctor.php --fix     repair a channel pointing at an instance
+ *                                         the server does not have
  *
- * Read-only. It sends nothing.
+ * Read-only WITHOUT --fix. It never sends a message either way.
  *
  * ── WHY THIS EXISTS ──────────────────────────────────────────────────────
  *
@@ -25,6 +27,7 @@ chdir(dirname(__DIR__));
  * did not prove.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+$FIX = in_array('--fix', array_slice($argv, 1), true);
 
 $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
@@ -116,6 +119,7 @@ if ($evo->isConfigured()) {
     echo "  INSTANCES THE SERVER ACTUALLY HAS\n  {$line}\n";
     try {
         $list = $evo->listInstances();
+        $GLOBALS['__dn_list'] = $list;
         if ($list === []) {
             echo "    UNKNOWN — the API returned no list (unreachable, or no instances).\n";
         } else {
@@ -144,6 +148,50 @@ if ($evo->isConfigured()) {
         echo "    UNKNOWN — " . $e->getMessage() . "\n";
     }
     echo "\n";
+}
+
+// ── Repair, only when asked, and only on evidence ───────────────────────
+//
+// The rule is narrow on purpose: a channel is repaired ONLY when the store's
+// value names an instance the server does not have AND the file's value names
+// one it does. That is not a preference between two config sources — it is one
+// value that cannot possibly work and one that demonstrably can. Anything less
+// clear-cut is reported and left alone.
+if ($FIX && $evo->isConfigured()) {
+    $have = [];
+    foreach (($GLOBALS['__dn_list'] ?? []) as $row) {
+        $n = trim((string)($row['name'] ?? ''));
+        if ($n !== '') $have[$n] = (string)($row['state'] ?? '?');
+    }
+    echo "  REPAIR\n  {$line}\n";
+    if ($have === []) {
+        echo "    Refusing: the server returned no instance list, so there is no\n";
+        echo "    evidence to repair against.\n\n";
+    } else {
+        $fixed = 0;
+        foreach (['sales', 'support', 'account'] as $ch) {
+            $k     = 'evo_instance_' . $ch;
+            $live  = trim((string)($fromStore[$k] ?? ''));
+            $onDisk= trim((string)($fromFile[$k]  ?? ''));
+            if ($live === '' || $onDisk === '' || $live === $onDisk) continue;
+            if (isset($have[$live]))   continue;            // live one works — leave it
+            if (!isset($have[$onDisk])) {                   // neither works — say so
+                printf("    %-22s store '%s' and file '%s' are BOTH absent — not repaired\n",
+                       $ch, $live, $onDisk);
+                continue;
+            }
+            $cfgNew = $fromStore; $cfgNew[$k] = $onDisk;
+            $store->save('kyc_config.json', $cfgNew);
+            $fromStore = $cfgNew;
+            printf("    ✓ %-20s %s → %s  (%s, and the old name is not on this server)\n",
+                   $ch, $live, $onDisk, $have[$onDisk]);
+            $fixed++;
+        }
+        echo $fixed === 0
+            ? "    Nothing to repair.\n\n"
+            : "\n    Repaired {$fixed}. Re-run without --fix to confirm.\n\n";
+        if ($fixed > 0) $config = $fromStore + $fromFile;
+    }
 }
 
 // ── What each kind of message actually does today ───────────────────────
