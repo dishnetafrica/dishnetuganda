@@ -423,6 +423,78 @@ final class EquipmentAssignment
         return ['ok' => true, 'added' => $added];
     }
 
+    /**
+     * Compare what an assignment says about the hardware with what Starlink
+     * says, and report every disagreement.
+     *
+     * addIdentifiers() deliberately never overwrites a value that is already
+     * there, because silently repointing live hardware at a different account
+     * is the failure this class exists to prevent. But that leaves the other
+     * half undone: a WRONG value, typed by a person who guessed, sits there
+     * for ever and nothing says so. A conflict is not resolved by whoever
+     * wrote last — it is reported.
+     *
+     * @param array $truth what Starlink's own data says: starlink_account,
+     *                     starlink_service_line, terminal_id, router_id
+     * @return array<int,array{field:string,ours:string,theirs:string}>
+     */
+    public function conflicts(int $assignmentId, array $truth): array
+    {
+        $a = $this->get($assignmentId);
+        if (!$a || $a['released_at'] !== null) return [];
+
+        $out = [];
+        foreach (['starlink_account', 'starlink_service_line', 'terminal_id', 'router_id'] as $f) {
+            if (!array_key_exists($f, $truth)) continue;
+            $theirs = $f === 'router_id' ? self::routerId($truth[$f]) : self::clean($truth[$f]);
+            $ours   = trim((string)$a[$f]);
+            if ($theirs === '' || $ours === '' || strcasecmp($ours, $theirs) === 0) continue;
+            $out[] = ['field' => $f, 'ours' => $ours, 'theirs' => $theirs];
+        }
+        return $out;
+    }
+
+    /**
+     * Overwrite one identifier, on purpose, with a reason.
+     *
+     * The only path that may replace a non-empty identifier. It exists so a
+     * value somebody typed can be corrected by Starlink's own answer — and it
+     * is separate from addIdentifiers() so that correcting is always a
+     * deliberate act with a name and a reason against it, never a side effect
+     * of a routine sync.
+     */
+    public function correctIdentifier(int $assignmentId, string $field, string $value,
+                                      array $actor, string $reason): array
+    {
+        $allowed = ['starlink_account', 'starlink_service_line', 'terminal_id', 'router_id'];
+        if (!in_array($field, $allowed, true)) {
+            return ['ok' => false, 'error' => "Cannot correct '{$field}'."];
+        }
+        $a = $this->get($assignmentId);
+        if (!$a) return ['ok' => false, 'error' => "There is no assignment #{$assignmentId}."];
+        if ($a['released_at'] !== null) return ['ok' => false, 'error' => 'That assignment is released.'];
+        if (trim($reason) === '') return ['ok' => false, 'error' => 'A correction needs a reason.'];
+
+        $value = $field === 'router_id' ? self::routerId($value) : self::clean($value);
+        if ($value === '') return ['ok' => false, 'error' => 'A correction needs a value.'];
+
+        if (in_array($field, self::KEYS, true)) {
+            $clash = $this->liveBy($field, $value);
+            if ($clash && (int)$clash['id'] !== $assignmentId) {
+                return ['ok' => false, 'error' => sprintf(
+                    '%s %s is already live on assignment #%d (client #%d).',
+                    $field, $value, (int)$clash['id'], (int)$clash['crm_client_id'])];
+            }
+        }
+
+        $was = (string)$a[$field];
+        $this->db->prepare("UPDATE equipment_assignments SET {$field} = ? WHERE id = ?")
+                 ->execute([$value, $assignmentId]);
+        FinAudit::record($this->db, 'equipment_assignment', $assignmentId, 'update', $actor,
+                         [$field => $was], [$field => $value], $reason);
+        return ['ok' => true, 'was' => $was, 'now' => $value];
+    }
+
     // ── Keeping stock_units honest ──────────────────────────────────────────
 
     /**

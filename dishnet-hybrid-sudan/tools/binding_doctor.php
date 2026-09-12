@@ -34,12 +34,14 @@ require_once $root . '/lib/EquipmentAssignment.php';
 
 $args = array_slice($argv, 1);
 foreach ($args as $a) {
-    if (strpos($a, '--') !== 0 || in_array($a, ['--repair', '--learn'], true)) continue;
-    fwrite(STDERR, "\n  Unknown option: {$a}\n  Known: --repair --learn\n\n");
+    if (strpos($a, '--') !== 0
+        || in_array($a, ['--repair', '--learn', '--fix-conflicts'], true)) continue;
+    fwrite(STDERR, "\n  Unknown option: {$a}\n  Known: --repair --learn --fix-conflicts\n\n");
     exit(2);
 }
 $repair = in_array('--repair', $args, true);
 $learn  = in_array('--learn',  $args, true);
+$fixCon = in_array('--fix-conflicts', $args, true);
 
 $dataDir = cliDataDir($root);
 $store   = SqliteStore::create($dataDir);
@@ -181,9 +183,91 @@ if ($repair) {
     echo "\n";
 }
 
+// ── Does the hardware agree with us? ────────────────────────────────────────
+// Starlink's own data says which account a kit lives on. An assignment can
+// carry a different answer, because somebody typed one — and --learn will
+// never correct it, since overwriting a live identifier silently is the one
+// thing that must not happen automatically. So it is reported instead.
+$map = SiblingPlugin::readJsonOrEmpty('dishnet-data-report', 'wifi_router_map.json');
+$truthFor = function (string $kit) use ($map): array {
+    $kit = strtoupper(trim($kit));
+    if ($kit === '') return [];
+    foreach ($map as $rid => $info) {
+        if (!is_array($info)) continue;
+        // Exact serial comparison. Never a substring, never a prefix.
+        if (strcasecmp((string)($info['kit_serial'] ?? ''), $kit) !== 0) continue;
+        return [
+            'starlink_account'      => (string)($info['account_number'] ?? ''),
+            'starlink_service_line' => (string)($info['service_line'] ?? ''),
+            'terminal_id'           => (string)($info['terminal_id'] ?? ''),
+            'router_id'             => (string)($info['router_id'] ?? $rid),
+        ];
+    }
+    return [];
+};
+
+$conflicts = []; $compared = 0; $noTruth = [];
+foreach ($live as $a) {
+    $truth = $truthFor((string)$a['kit_serial']);
+    if ($truth === []) { $noTruth[] = (string)$a['kit_serial']; continue; }
+    $compared++;
+    foreach ($ea->conflicts((int)$a['id'], $truth) as $c) {
+        $conflicts[] = ['assignment' => (int)$a['id'], 'kit' => (string)$a['kit_serial']] + $c;
+    }
+}
+
+echo "  AGAINST STARLINK'S OWN DATA\n";
+if ($compared === 0) {
+    // Never "✓ everything matches" when there was nothing to match against.
+    // A check that cannot run and a check that passes look identical in a
+    // summary, and the difference is the whole value of running it.
+    echo "    – nothing to compare. " . ($map === []
+            ? "wifi_router_map.json is empty or unreadable"
+            : count($noTruth) . " assigned kit(s) are not in the router map yet")
+        . ", so whether our identifiers are right is UNKNOWN, not confirmed.\n";
+    if ($noTruth !== []) {
+        foreach ($noTruth as $k) echo "        {$k}\n";
+    }
+} elseif ($conflicts === []) {
+    printf("    ✓ %d kit(s) checked; every identifier we hold matches what Starlink reports.\n",
+           $compared);
+    if ($noTruth !== []) {
+        printf("    – %d other kit(s) are not in the router map, so they were not checked.\n",
+               count($noTruth));
+    }
+} else {
+    printf("    %d disagreement(s) across %d kit(s) checked\n", count($conflicts), $compared);
+    foreach ($conflicts as $c) {
+        printf("    ! assignment #%-4s %s\n", $c['assignment'], $c['kit']);
+        printf("        %-22s we say    %s\n", $c['field'], $c['ours']);
+        printf("        %-22s Starlink  %s\n", '', $c['theirs']);
+    }
+    echo "\n    A typed value and Starlink's own answer disagree. Starlink is the\n";
+    echo "    authority on where a kit lives, so --fix-conflicts takes its value —\n";
+    echo "    as a deliberate, audited correction, never a silent sync.\n";
+}
+echo "\n";
+
+if ($fixCon && $conflicts !== []) {
+    echo "  CORRECT THEM\n";
+    $fixed = 0;
+    foreach ($conflicts as $c) {
+        $r = $ea->correctIdentifier((int)$c['assignment'], (string)$c['field'],
+            (string)$c['theirs'], $actor,
+            'corrected from Starlink: was ' . $c['ours']);
+        if (!empty($r['ok'])) {
+            $fixed++;
+            printf("    assignment #%-4s %-22s %s → %s\n",
+                $c['assignment'], $c['field'], $r['was'], $r['now']);
+        } else {
+            printf("    ✗ assignment #%-4s %s\n", $c['assignment'], $r['error']);
+        }
+    }
+    printf("\n    %-28s %d\n\n", 'identifiers corrected', $fixed);
+}
+
 // ── Learn Starlink identifiers ──────────────────────────────────────────────
 if ($learn) {
-    $map = SiblingPlugin::readJsonOrEmpty('dishnet-data-report', 'wifi_router_map.json');
     echo "  LEARN FROM THE ROUTER MAP\n";
     if ($map === []) {
         echo "    wifi_router_map.json is empty or unreadable — nothing to learn from.\n";
@@ -191,39 +275,31 @@ if ($learn) {
     } else {
         $added = 0;
         foreach ($live as $a) {
-            $kit = strtoupper(trim((string)$a['kit_serial']));
-            if ($kit === '') continue;
-            foreach ($map as $rid => $info) {
-                if (!is_array($info)) continue;
-                // Exact serial comparison. Not a substring, not a prefix.
-                if (strcasecmp((string)($info['kit_serial'] ?? ''), $kit) !== 0) continue;
-                $r = $ea->addIdentifiers((int)$a['id'], [
-                    'router_id'             => (string)($info['router_id'] ?? $rid),
-                    'terminal_id'           => (string)($info['terminal_id'] ?? ''),
-                    'starlink_service_line' => (string)($info['service_line'] ?? ''),
-                    'starlink_account'      => (string)($info['account_number'] ?? ''),
-                ], $actor);
-                if (!empty($r['ok']) && $r['added'] !== []) {
-                    $added++;
-                    printf("    assignment #%-4s %s ← %s\n", $a['id'], $kit,
-                           implode(', ', array_keys($r['added'])));
-                } elseif (empty($r['ok'])) {
-                    printf("    ✗ assignment #%-4s %s\n", $a['id'], $r['error']);
-                }
-                break;
+            $truth = $truthFor((string)$a['kit_serial']);
+            if ($truth === []) continue;
+            $r = $ea->addIdentifiers((int)$a['id'], $truth, $actor);
+            if (!empty($r['ok']) && $r['added'] !== []) {
+                $added++;
+                printf("    assignment #%-4s %s ← %s\n", $a['id'], $a['kit_serial'],
+                       implode(', ', array_keys($r['added'])));
+            } elseif (empty($r['ok'])) {
+                printf("    ✗ assignment #%-4s %s\n", $a['id'], $r['error']);
             }
         }
         printf("\n    %-28s %d\n\n", 'assignments completed', $added);
     }
 }
 
-if (!$repair && !$learn) {
+if (!$repair && !$learn && !$fixCon) {
     echo "  Nothing was written.\n";
     if (count(array_filter($weak, static fn($w) => $w['kind'] === 'repairable')) > 0) {
         echo "    php tools/binding_doctor.php --repair\n";
     }
     if (count(array_filter($weak, static fn($w) => $w['kind'] === 'learnable')) > 0) {
         echo "    php tools/binding_doctor.php --learn\n";
+    }
+    if ($conflicts !== []) {
+        echo "    php tools/binding_doctor.php --fix-conflicts\n";
     }
     echo "\n";
 }

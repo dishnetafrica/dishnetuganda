@@ -330,6 +330,66 @@ is_(strpos($txt3, 'not assigned to a CRM customer') !== false, 'saying exactly t
 $o4 = []; exec($env . 'php ' . escapeshellarg($root . '/tools/binding_trace.php') . ' --client X 2>&1', $o4, $c4);
 t('a non-numeric client is refused, not read as zero', $c4, 2);
 
+echo "\nA typed identifier that Starlink disagrees with\n";
+// The live case, and it was my own typo in a suggested command: a kit was
+// received with --account ACC-DF-15757047-82765-60 because somebody guessed,
+// and Starlink says it lives on ACC-DF-15973474-59163-60. --learn never
+// touched it, because overwriting a live identifier silently is the one thing
+// that must not happen automatically. So the disagreement has to be REPORTED,
+// or a typed wrong answer sits there for ever with nothing saying so.
+$kitJ = (int)$stock->createUnit(['category_id' => $cat, 'serial_number' => 'KITJJJJJJJJ0010',
+    'starlink_account' => 'ACC-DF-GUESSED-WRONG'], 7, 'Bhavin')['id'];
+$stock->install($kitJ, ['crm_client_id' => 77, 'client_name' => 'African skies Ltd'], 7, 'Bhavin');
+$aJ = (int)$ea->activeForUnit($kitJ)['id'];
+t('it carries what was typed',
+    $ea->get($aJ)['starlink_account'], 'ACC-DF-GUESSED-WRONG');
+
+$truth = ['starlink_account' => 'ACC-DF-15973474-59163-60',
+          'router_id' => 'r-real', 'terminal_id' => 'ut-real'];
+
+// Learning fills the empty ones and leaves the wrong one exactly as it was.
+$learned = $ea->addIdentifiers($aJ, $truth, $staff);
+t('learning fills what was missing', array_keys($learned['added']), ['terminal_id', 'router_id']);
+t('and does not touch the one that disagrees',
+    $ea->get($aJ)['starlink_account'], 'ACC-DF-GUESSED-WRONG');
+
+$c = $ea->conflicts($aJ, $truth);
+t('the disagreement is reported', count($c), 1);
+t('naming the field',  $c[0]['field'],  'starlink_account');
+t('what we say',       $c[0]['ours'],   'ACC-DF-GUESSED-WRONG');
+t('and what they say', $c[0]['theirs'], 'ACC-DF-15973474-59163-60');
+t('agreement is not a conflict',
+    $ea->conflicts($aJ, ['router_id' => 'R-REAL']), []);
+t('nor is an identifier they do not have',
+    $ea->conflicts($aJ, ['starlink_service_line' => '']), []);
+
+echo "\nCorrecting one is deliberate and on the record\n";
+$bad = $ea->correctIdentifier($aJ, 'starlink_account', 'ACC-X', $staff, '');
+t('a correction without a reason is refused', $bad['ok'], false);
+$bad = $ea->correctIdentifier($aJ, 'crm_client_id', '999', $staff, 'nice try');
+t('and the customer is not an identifier you may correct this way', $bad['ok'], false);
+t('so the customer is untouched', (int)$ea->get($aJ)['crm_client_id'], 77);
+
+$fix = $ea->correctIdentifier($aJ, 'starlink_account', 'ACC-DF-15973474-59163-60',
+    $staff, 'corrected from Starlink: was ACC-DF-GUESSED-WRONG');
+t('a correction with a reason works', $fix['ok'], true);
+t('from the wrong value', $fix['was'], 'ACC-DF-GUESSED-WRONG');
+t('to Starlink\'s',      $fix['now'], 'ACC-DF-15973474-59163-60');
+t('and nothing disagrees now', $ea->conflicts($aJ, $truth), []);
+$hJ = FinAudit::history($pdo, 'equipment_assignment', $aJ);
+$last = end($hJ);
+is_(strpos((string)$last['reason'], 'was ACC-DF-GUESSED-WRONG') !== false,
+    'the old value is on the audit trail', (string)$last['reason']);
+
+// A correction may never point two customers at one piece of hardware.
+$kitK = (int)$stock->createUnit(['category_id' => $cat, 'serial_number' => 'KITKKKKKKKK0011'], 7, 'B')['id'];
+$stock->install($kitK, ['crm_client_id' => 88, 'client_name' => 'Other', 'router_id' => 'r-theirs'], 7, 'B');
+$aK = (int)$ea->activeForUnit($kitK)['id'];
+$steal = $ea->correctIdentifier($aK, 'router_id', 'r-real', $staff, 'trying to take it');
+t('a correction onto somebody else\'s router is refused', $steal['ok'], false);
+is_(strpos((string)$steal['error'], 'already live on assignment') !== false,
+    'naming whose it is', (string)$steal['error']);
+
 echo "\nThe Starlink account survives being installed\n";
 // It is recorded when the kit is received — which of DishNet's four accounts
 // supplied it. Installing used to write the assignment's empty value straight
