@@ -1,4 +1,31 @@
 <?php
+// The local currency comes from configuration. This page taught every Ugandan
+// agent about their "<?= htmlspecialchars($_rbCur) ?> Bag" — South Sudanese Pounds, in a country that uses
+// shillings. The cashbook itself has been currency-aware for a while; only the
+// manual describing it was not.
+require_once dirname(__DIR__, 2) . '/lib/currency.php';
+$_rbCur = trim(dn_cur($store->load('kyc_config.json') ?? []));
+?>
+<?php
+// Escalation contacts come from configuration, not from this file.
+//
+// It used to print +211 921 443 002 with a click-to-call link and a WhatsApp
+// link, labelled "Aida (CTO)" — South Sudan's number and South Sudan's CTO. A
+// Ugandan agent following this page during an incident would have phoned
+// Juba. CustomerContact already carries country-aware defaults; the runbook
+// simply never asked it.
+require_once dirname(__DIR__, 2) . '/lib/CustomerContact.php';
+$_rbCfg   = $store->load('kyc_config.json') ?? [];
+$_rbEsc   = CustomerContact::escalation($_rbCfg);
+$_rbSup   = CustomerContact::support($_rbCfg);
+$_rbAcct  = CustomerContact::accounts($_rbCfg);
+$_rbEscWa = preg_replace('/\\D+/', '', $_rbEsc);
+$_rbSupWa = preg_replace('/\\D+/', '', $_rbSup);
+$_rbAccWa = preg_replace('/\\D+/', '', $_rbAcct);
+$_rbTz    = (string)($_rbCfg['report_timezone'] ?? 'Africa/Kampala');
+$_rbTzCity= trim((string)(explode('/', $_rbTz)[1] ?? 'Kampala'));
+?>
+<?php
 /**
  * Runbook — Operations troubleshooting guide
  * DishNet Hybrid v4.11.3
@@ -109,8 +136,8 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
         <p style="font-size:11px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;">rm -f /data/ucrm/data/plugins/<?= h(basename(dirname(__DIR__, 2))) ?>/data/plugin.sqlite3-wal<br>rm -f /data/ucrm/data/plugins/<?= h(basename(dirname(__DIR__, 2))) ?>/data/plugin.sqlite3-shm</p>
         <p><strong>Never do a full server restore for a plugin issue. Data is always safe in plugin.sqlite3.</strong></p>
         <div class="contacts">
-            <a href="tel:+211921443002">📞 Aida (CTO)</a>
-            <a href="https://wa.me/211921443002" target="_blank">💬 WhatsApp Aida</a>
+            <a href="tel:<?= htmlspecialchars($_rbEsc) ?>">📞 Escalation — <?= htmlspecialchars($_rbEsc) ?></a>
+            <a href="https://wa.me/<?= htmlspecialchars($_rbEscWa) ?>" target="_blank">💬 WhatsApp escalation</a>
         </div>
     </div>
 
@@ -125,7 +152,8 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <span class="arrow">▸</span>
         </div>
         <div class="rb-card-body">
-            <div class="rb-alert info">ℹ️ WhatsApp uses two phone lines: Support (211921443002) and Accounts (211921443009). Check which one is affected.</div>
+            <div class="rb-alert info">🔒 <strong>WhatsApp is administrator-only.</strong> If a colleague reports that WhatsApp has vanished from their menu, that is correct and not a fault. Only an Administrator may connect, configure or send. Refer them to an Administrator rather than changing their role.</div>
+            <div class="rb-alert info">ℹ️ WhatsApp uses two phone lines: Support (<?= htmlspecialchars($_rbSupWa) ?>) and Accounts (<?= htmlspecialchars($_rbAccWa) ?>). Check which one is affected.</div>
 
             <strong>Quick diagnosis:</strong>
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Open <a href="https://wa.dishnetafrica.com" target="_blank" class="rb-check-btn">wa.dishnetafrica.com</a> — if it loads, the WhatsML server is alive.</div></div>
@@ -307,7 +335,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
 
             <strong>Verify backup is running:</strong>
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Go to <strong>Admin → Backup & Restore</strong>. The Google Drive section should show the last backup time.</div></div>
-            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Backups run automatically at 3 AM Juba time every day.</div></div>
+            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Backups run automatically at 3 AM <?= htmlspecialchars($_rbTzCity) ?> time every day.</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">You can also click <strong>Run Now</strong> to trigger an immediate backup.</div></div>
 
             <div class="rb-alert warn">⚠️ If the Google Drive section shows "Not connected" or the last backup is more than 2 days old, escalate to Aida immediately.</div>
@@ -372,12 +400,12 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
     <div class="rb-card" id="rb-expenses">
         <div class="rb-card-hdr" onclick="rbToggle('rb-expenses')">
             <div class="ico" style="background:#fef3c7;">🧾</div>
-            <div class="txt"><h4>Expense Approvals & SSP Amounts</h4><p>How to approve expenses, view receipts, and handle SSP</p></div>
+            <div class="txt"><h4>Expense Approvals & <?= htmlspecialchars($_rbCur) ?> Amounts</h4><p>How to approve expenses, view receipts, and handle <?= htmlspecialchars($_rbCur) ?></p></div>
             <span class="arrow">▸</span>
         </div>
         <div class="rb-card-body">
-            <strong>SSP expenses:</strong>
-            <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">SSP amounts now show correctly (was showing 0 before fix). Both <code>cash_expenses.json</code> and <code>staff_expenses</code> SQLite are checked.</div></div>
+            <strong><?= htmlspecialchars($_rbCur) ?> expenses:</strong>
+            <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t"><?= htmlspecialchars($_rbCur) ?> amounts now show correctly (was showing 0 before fix). Both <code>cash_expenses.json</code> and <code>staff_expenses</code> SQLite are checked.</div></div>
             <strong>Receipt photos:</strong>
             <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">Click any receipt → opens in lightbox popup (no more getting stuck on raw image URL in PWA).</div></div>
             <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">Thumbnails are auto-generated (300px, ~30KB) for fast page loads. Full image loads when you click.</div></div>
@@ -390,16 +418,16 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
     <div class="rb-card" id="rb-support-cash">
         <div class="rb-card-hdr" onclick="rbToggle('rb-support-cash')">
             <div class="ico" style="background:#f3e5f5;">🇸🇸</div>
-            <div class="txt"><h4>Support Staff — SSP & USD Cashbooks</h4><p>How Bidal and support team track their SSP and USD</p></div>
+            <div class="txt"><h4>Support Staff — <?= htmlspecialchars($_rbCur) ?> &amp; USD Cashbooks</h4><p>How Bidal and support team track their <?= htmlspecialchars($_rbCur) ?> and USD</p></div>
             <span class="arrow">▸</span>
         </div>
         <div class="rb-card-body">
-            <div class="rb-alert info">ℹ️ Support roles now have dedicated SSP Cashbook and USD Cashbook buttons on My Cash page.</div>
+            <div class="rb-alert info">ℹ️ Support roles now have dedicated <?= htmlspecialchars($_rbCur) ?> Cashbook and USD Cashbook buttons on My Cash page.</div>
             <strong>Hero card shows:</strong>
-            <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">SSP Bag: SSP received from office minus SSP expenses minus handovers</div></div>
+            <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t"><?= htmlspecialchars($_rbCur) ?> Bag: <?= htmlspecialchars($_rbCur) ?> received from office minus <?= htmlspecialchars($_rbCur) ?> expenses minus handovers</div></div>
             <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">USD Cash: USD received (from cash_ins) minus USD expenses. NOT from CRM wallet payments (that was the $45K bug).</div></div>
             <strong>Cashbook views:</strong>
-            <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">SSP Cashbook: every transaction with running balance — who gave SSP, what was spent, returns to office.</div></div>
+            <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t"><?= htmlspecialchars($_rbCur) ?> Cashbook: every transaction with running balance — who gave cash, what was spent, returns to office.</div></div>
             <div class="rb-step"><div class="rb-step-n">•</div><div class="rb-step-t">USD Cashbook: same for USD. Empty if no USD received via cash_ins.</div></div>
         </div>
     </div>
@@ -413,7 +441,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
         </div>
         <div class="rb-card-body">
             <strong>How it works now (v4.11.3):</strong>
-            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Runs daily at 3 AM Juba time (was 6 AM, often got budget-killed by other cron jobs).</div></div>
+            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Runs daily at 3 AM <?= htmlspecialchars($_rbTzCity) ?> time (was 6 AM, often got budget-killed by other cron jobs).</div></div>
             <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Creates TWO ZIPs: <strong>CODE</strong> (~2MB, plugin files only) and <strong>DATA</strong> (~24MB, database + JSON + photos).</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">WhatsApp notification shows both file names and sizes when complete.</div></div>
             <strong>To restore on new CRM:</strong>
@@ -647,7 +675,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div style="margin-top:12px;">
                 <strong>WhatsApp API Keys (for reference):</strong>
                 <div style="font-size:11px;color:#64748b;margin-top:4px;">
-                    Support line: 211921443002 • Accounts line: 211921443009
+                    Support line: <?= htmlspecialchars($_rbSupWa) ?> • Accounts line: <?= htmlspecialchars($_rbAccWa) ?>
                 </div>
             </div>
         </div>

@@ -1,4 +1,14 @@
 <?php
+// The local currency comes from configuration. This page taught every Ugandan
+// agent about their "SSP Bag" — South Sudanese Pounds, in a country that uses
+// shillings. The cashbook itself has been currency-aware for a while; only the
+// manual describing it was not.
+require_once dirname(__DIR__, 2) . '/lib/currency.php';
+$_trCfg    = $store->load('kyc_config.json') ?? [];
+$_trCur    = trim(dn_cur($_trCfg));
+$_trTzCity = trim((string)(explode('/', (string)($_trCfg['report_timezone'] ?? 'Africa/Kampala'))[1] ?? 'Kampala'));
+?>
+<?php
 // Tab: training
 // Extracted from public.php on 2026-03-15
 ?>
@@ -87,10 +97,10 @@ $curriculum = [
         ['id'=>'s7','icon'=>'💰','title'=>'My Cash — Expenses & Handovers',
          'duration'=>'4 min','link'=>'?page=dashboard&tab=my_account',
          'steps'=>[
-            ['head'=>'Hero card','body'=>'Shows your SSP bag (if you hold SSP) and USD cash. The numbers reflect real money you physically hold — collections minus expenses minus handovers.'],
-            ['head'=>'Cash Out (Expenses)','body'=>'Tap Cash Out to record an expense: select SSP or USD, enter amount, choose category (Fuel, Transport, Parts, etc.), add description, take a receipt photo. The system checks you have enough balance before allowing submission.'],
+            ['head'=>'Hero card','body'=>'Shows your ' . $_trCur . ' bag (if you hold local currency) and USD cash. The numbers reflect real money you physically hold — collections minus expenses minus handovers.'],
+            ['head'=>'Cash Out (Expenses)','body'=>'Tap Cash Out to record an expense: select ' . $_trCur . ' or USD, enter amount, choose category (Fuel, Transport, Parts, etc.), add description, take a receipt photo. The system checks you have enough balance before allowing submission.'],
             ['head'=>'Handover','body'=>'When you bring cash to the office, tap Handover → enter amount → select who you\'re handing to (search by name). Accountant confirms receipt — your cash balance goes down, wallet is refilled. No double entry: the revenue was already recorded when you collected the payment.'],
-            ['head'=>'SSP & USD Cashbook','body'=>'Tap the SSP Cashbook or USD Cashbook buttons to see every transaction: who gave you money, what you spent, running balance. Like a bank statement for each currency.'],
+            ['head'=>'' . $_trCur . ' &amp; USD Cashbook','body'=>'Tap the ' . $_trCur . ' Cashbook or USD Cashbook buttons to see every transaction: who gave you money, what you spent, running balance. Like a bank statement for each currency.'],
             ['head'=>'Receipt photos','body'=>'Always take a photo of receipts when spending. Tap the receipt icon on any expense to view the photo in a popup — no need to leave the page.'],
          ]],
     ],
@@ -137,12 +147,12 @@ $curriculum = [
             ['head'=>'Done tab','body'=>'All completed installations. When you mark a ticket resolved, the system auto-creates a job for Rupesh to create the CRM invoice.'],
             ['head'=>'Sync with Splynx','body'=>'Tap "Sync Splynx" to pull latest tickets. This happens automatically every 5 minutes, but you can force it anytime.'],
          ]],
-        ['id'=>'sp6','icon'=>'💰','title'=>'My Cash — SSP & USD Cashbooks',
+        ['id'=>'sp6','icon'=>'💰','title'=>'My Cash — ' . $_trCur . ' &amp; USD Cashbooks',
          'duration'=>'3 min','link'=>'?page=dashboard&tab=my_account',
          'steps'=>[
-            ['head'=>'Dual currency hero','body'=>'Your My Cash page shows SSP Bag (South Sudanese Pounds from office) and USD Cash. Both show real balances: money received minus money spent minus handovers.'],
-            ['head'=>'Recording expenses','body'=>'Tap Cash Out → select SSP or USD → enter amount → choose category (Fuel, Parts, Transport) → take receipt photo → submit. Accountants and field accountants are auto-approved.'],
-            ['head'=>'SSP & USD Cashbook buttons','body'=>'Tap SSP Cashbook or USD Cashbook to see a full bank-statement view: every transaction with date, description, amount, and running balance.'],
+            ['head'=>'Dual currency hero','body'=>'Your My Cash page shows ' . $_trCur . ' Bag (local currency held from the office) and USD Cash. Both show real balances: money received minus money spent minus handovers.'],
+            ['head'=>'Recording expenses','body'=>'Tap Cash Out → select ' . $_trCur . ' or USD → enter amount → choose category (Fuel, Parts, Transport) → take receipt photo → submit. Accountants and field accountants are auto-approved.'],
+            ['head'=>'' . $_trCur . ' &amp; USD Cashbook buttons','body'=>'Tap ' . $_trCur . ' Cashbook or USD Cashbook to see a full bank-statement view: every transaction with date, description, amount, and running balance.'],
             ['head'=>'Handover','body'=>'When returning cash to office, tap Handover → search for recipient → enter amount. Accountant confirms — your cash balance drops, wallet is refilled. Revenue was already in the system when you collected.'],
          ]],
         ['id'=>'sp7','icon'=>'📦','title'=>'Stock Hub',
@@ -202,16 +212,16 @@ $curriculum = [
         ['id'=>'a7','icon'=>'🧾','title'=>'Expense Approvals',
          'duration'=>'3 min','link'=>'?page=dashboard&tab=expense_approvals',
          'steps'=>[
-            ['head'=>'Pending expenses','body'=>'When staff submit expenses (fuel, parts, transport), they appear here for your approval. You see: who submitted, category, amount (SSP or USD), receipt photo, and date.'],
+            ['head'=>'Pending expenses','body'=>'When staff submit expenses (fuel, parts, transport), they appear here for your approval. You see: who submitted, category, amount (' . $_trCur . ' or USD), receipt photo, and date.'],
             ['head'=>'Approve or Reject','body'=>'Tap the receipt photo to verify (opens in popup). If valid: Quick Approve. If not: Reject with reason. Auto-approved expenses (field accountants) show as already approved.'],
             ['head'=>'Filters','body'=>'Filter by status (Pending/Approved/Rejected), category, date range, or flagged only (duplicates, no receipt, overspend).'],
-            ['head'=>'SSP amounts','body'=>'SSP expenses show the amount in SSP (e.g. 30,000 SSP). The system tracks SSP and USD separately.'],
+            ['head'=>'' . $_trCur . ' amounts','body'=>'' . $_trCur . ' expenses show the amount in ' . $_trCur . ' (e.g. 30,000 ' . $_trCur . '). The system tracks ' . $_trCur . ' and USD separately.'],
          ]],
         ['id'=>'a8','icon'=>'📒','title'=>'Staff Cashbooks',
          'duration'=>'4 min','link'=>'?page=dashboard&tab=staff_cashbooks',
          'steps'=>[
             ['head'=>'Per-agent ledger','body'=>'Select any staff member to see their complete cashbook: every collection, expense, handover, advance, and transfer with dates and running balance.'],
-            ['head'=>'USD and SSP tabs','body'=>'Each agent\'s cashbook shows both currencies. SSP balance = SSP received from office minus SSP expenses minus SSP handovers. USD balance = collections minus expenses minus handovers.'],
+            ['head'=>'USD and ' . $_trCur . ' tabs','body'=>'Each agent\'s cashbook shows both currencies. ' . $_trCur . ' balance = ' . $_trCur . ' received from office minus ' . $_trCur . ' expenses minus ' . $_trCur . ' handovers. USD balance = collections minus expenses minus handovers.'],
             ['head'=>'Void and Edit','body'=>'You can void incorrect entries (with reason) or edit pending expenses. Voiding cascades: if you void an expense, the matching cash-in for the recipient is also voided automatically.'],
             ['head'=>'CSV Export','body'=>'Tap the download icon to export any agent\'s cashbook as CSV for your records or Tally import.'],
          ]],
@@ -239,6 +249,7 @@ $curriculum = [
             ['head'=>'Retailers tab','body'=>'Every person who uses this system has a "Retailer" account. This includes Sales Agents, Support Staff, Accountant, and other Admins.'],
             ['head'=>'Creating an account','body'=>'Tap "+ Add Retailer/Staff". Enter name, email, phone, password. Set Role: sales / support / accountant / admin. Set is_admin only for full admins.'],
             ['head'=>'Roles and access','body'=>'SALES: can do KYC, collect payments, manage their leads. SUPPORT: customer lookup, service status, tickets only. ACCOUNTANT: all financial reports, read-only. ADMIN: everything including approvals.'],
+            ['head'=>'WhatsApp is administrator-only','body'=>'Only an Administrator may open, connect or configure WhatsApp. No other role can connect an account, add or change a number, see the connection settings, manage a session, or send a message through the system. This is enforced by the server, not by hiding the menu: if a non-administrator opens a WhatsApp address directly they are refused. There is one optional exception an Administrator can grant — reading and replying in the SHARED team inbox, via the wa_inbox_roles setting. Connection and configuration can never be granted to anyone.'],
             ['head'=>'Importing from CRM','body'=>'If staff already exist in your CRM, use "Import from CRM Staff" to automatically create accounts without re-entering data. Their CRM credentials link the accounts.'],
             ['head'=>'Deactivating an agent','body'=>'Edit the retailer and uncheck "Active". They immediately lose login access. Their transaction history is preserved for auditing.'],
          ]],
@@ -292,7 +303,7 @@ $curriculum = [
         ['id'=>'ad9','icon'=>'☁️','title'=>'Google Drive Backup',
          'duration'=>'2 min','link'=>'?page=dashboard&tab=whatsapp&subtab=gdrive',
          'steps'=>[
-            ['head'=>'Auto backup','body'=>'Runs daily at 3 AM Juba time. Creates two ZIPs: CODE (plugin files, uploadable to UCRM) and DATA (database, JSON, photos). Both uploaded to Google Drive.'],
+            ['head'=>'Auto backup','body'=>'Runs daily at 3 AM ' . $_trTzCity . ' time. Creates two ZIPs: CODE (plugin files, uploadable to UCRM) and DATA (database, JSON, photos). Both uploaded to Google Drive.'],
             ['head'=>'Setup','body'=>'Go to WhatsApp Settings → Backup tab. Enter Google Drive client ID and secret. Click Authorize. Set schedule (daily/twice daily/weekly) and retention (how many backups to keep).'],
             ['head'=>'Manual backup','body'=>'Click "Backup Now" to trigger immediately. You receive a WhatsApp notification with file names and sizes when complete.'],
             ['head'=>'Restore process','body'=>'Download CODE zip from Drive → upload to UCRM Plugins. Download DATA zip → SCP to server → unzip -o → chown 33:33. Update CRM token in Settings. Run Full Sync from UCRM Data tab.'],
