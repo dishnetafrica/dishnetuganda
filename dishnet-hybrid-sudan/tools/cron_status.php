@@ -72,15 +72,32 @@ $all  = in_array('--all', array_slice($argv, 1), true);
 $rows = [];
 $order = 0;
 
+// A JOB CANNOT RUN MORE OFTEN THAN IT IS DISPATCHED.
+//
+// UCRM calls main.php on a ~5 minute heartbeat, and main.php includes
+// cron/master.php — which says so itself at the top of its budget block. So a
+// job declaring interval 30 runs every ~300s no matter what it asks for, and
+// judging it against 30 marked it OVERDUE on a perfectly healthy machine,
+// every single run, for six jobs at once.
+//
+// That is worse than useless. A status tool that always shows red teaches the
+// person reading it to stop reading it, and it cost an hour today: I read
+// these rows as a dead dispatcher and said so, when the dispatcher was fine.
+//
+// Lateness is now measured against what the job can actually achieve.
+$DISPATCH = 300;
+
 foreach ($m as $j) {
     $name     = $j[1];
     $interval = (int)$j[2];
+    // What this job can actually achieve, given how often it is dispatched.
+    $effective = max($interval, $DISPATCH);
     $lastRun  = (int)($schedule[$name]['last_run'] ?? 0);
     $lastAt   = (string)($schedule[$name]['last_run_at'] ?? 'never');
 
     // last_run = 1 is master.php's seed for "tracked but never run".
     $elapsed  = ($lastRun > 1) ? $now - $lastRun : null;
-    $overdue  = ($elapsed === null) ? PHP_INT_MAX : $elapsed - $interval;
+    $overdue  = ($elapsed === null) ? PHP_INT_MAX : $elapsed - $effective;
 
     // master.php writes duration_ms = -1 when it claims the slot and replaces
     // it on completion. Still -1 means the job started and never came back —
@@ -90,8 +107,8 @@ foreach ($m as $j) {
            ? (int)$schedule[$name]['duration_ms'] : 0;
     $died  = ($dur < 0);
 
-    $rows[] = ['name' => $name, 'interval' => $interval, 'at' => $lastAt,
-               'elapsed' => $elapsed, 'overdue' => $overdue, 'died' => $died,
+    $rows[] = ['name' => $name, 'interval' => $interval, 'effective' => $effective,
+               'at' => $lastAt, 'elapsed' => $elapsed, 'overdue' => $overdue, 'died' => $died,
                'hour' => $j['hour'], 'dow' => $j['dow'], 'order' => $order++];
 }
 
@@ -133,11 +150,15 @@ printf("  %-3s %-20s %9s %9s  %-19s %s\n", '#', 'job', 'every', 'last run', 'at'
 $shown = 0;
 foreach ($rows as $r) {
     $daily = ($r['hour'] !== null);
-    $late  = !$daily && $r['overdue'] > $r['interval'];   // missed a whole cycle
+    $late  = !$daily && $r['overdue'] > $r['effective'];  // missed a whole cycle it could have made
     if (!$all && !$late && !$r['died']) continue;
     $shown++;
-    printf("  %-3d %-20s %8ds %9s  %-19s %s\n",
-        $r['order'] + 1, $r['name'], $r['interval'], $ago($r['elapsed']), $r['at'],
+    // "30s*" — it asks for 30s, it gets the dispatch period. The star is the
+    // honest bit: the number in the column is what the job requested, not what
+    // it can have.
+    $every = $r['interval'] . 's' . ($r['effective'] > $r['interval'] ? '*' : '');
+    printf("  %-3d %-20s %9s %9s  %-19s %s\n",
+        $r['order'] + 1, $r['name'], $every, $ago($r['elapsed']), $r['at'],
         $r['died'] ? 'DID NOT FINISH'
           : ($daily ? 'waits ' . sprintf('%02d:00', $r['hour'])
                     . ($r['dow'] !== null ? ' ' . $dayName($r['dow']) : '')
@@ -162,10 +183,26 @@ if ($died !== []) {
     echo "  first — everything stale below it is a symptom, not a cause.\n";
 }
 
+// A star in the "every" column means the job asks to run oftener than UCRM
+// dispatches the plugin. Say so where it is read, or the next person wonders
+// why a 30s job last ran four minutes ago and reads a healthy machine as a
+// broken one.
+$capped = array_filter($rows, function ($r) { return $r['effective'] > $r['interval']; });
+if ($capped !== []) {
+    echo "\n  * asks to run oftener than UCRM dispatches the plugin (every " . $DISPATCH . "s),\n";
+    echo "    so its real period is " . $DISPATCH . "s. Lateness is judged against that — not\n";
+    echo "    against the number it asks for, which no job here could ever meet.\n";
+}
+
 echo "\n  If job #1 is current and everything below it is stale, the cycle is\n";
 echo "  dying inside a job rather than being starved: master.php includes job\n";
 echo "  scripts in its own process, so a top-level exit() in one of them ends\n";
 echo "  the whole run — and the try/catch around the include cannot catch it.\n";
 echo "  A job overdue while several above it are current is budget starvation.\n";
-echo "  If EVERYTHING is stale, master.php itself is not being called.\n\n";
+echo "  If EVERYTHING is stale, run this again a minute later before concluding\n";
+echo "  master.php is not being called. Every job shares one dispatch, so mid-\n";
+echo "  cycle they are all equally old and a healthy machine looks identical to\n";
+echo "  a dead one. The top timestamp moving between two runs is what separates\n";
+echo "  them — and reading a single sample as a dead dispatcher has already\n";
+echo "  caused one wrong diagnosis here.\n\n";
 exit(0);
