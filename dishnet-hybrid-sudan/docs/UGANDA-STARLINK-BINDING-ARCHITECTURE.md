@@ -521,3 +521,164 @@ docker exec -u nginx ucrm php -r '$d="/data/ucrm/data/plugins/dishnet-hybrid-sud
 ```
 
 An overlap is not proof of a collision, but a zero overlap would rule it out cheaply.
+
+---
+
+# ADDENDUM — Uganda is Starlink-only, and Jobs are the anchor
+
+Added after direction from DishNet: *"for uganda we are doing only starlink for now so we have to
+focus on starlink and we have to use Jobs the way we used in south sudan — in south sudan when we
+create job technician gets whatsapp message with link to do installation."*
+
+This resolves the §6 design question. It also changes what I recommend, so the earlier §6.4
+proposal ("a new installations table as the anchor") is **superseded** by §A4 below.
+
+## A1. What the South Sudan job flow actually is **[CODE]**
+
+`cron/job_assignment_notify.php` polls **uCRM scheduling jobs** every 5 minutes and sends WhatsApp
+via `NotificationService::sendRaw()`:
+
+| Trigger | Message | Link sent |
+|---|---|---|
+| New / reassigned job | "New Job Has Been Assigned to You" + job details | **ACCEPT JOB** |
+| Status 0 → 1 (accepted) | "Thank you for accepting" | **JOB COMPLETED**, **RESCHEDULE**, **ADD COMMENTS** |
+| Either | — | Customer gets `installationScheduled(...)` |
+
+Dual-pool assignee identity is already handled: `assignedUserId` → `ucrm_user_id` (admin pool),
+`assignees[].userId` → `ftth_crm_client_id` (client pool). **[CODE]** `cron/job_assignment_notify.php:13–16`
+
+**Every one of those four links is the same URL** **[CODE]** `job_assignment_notify.php:144–147`:
+
+```php
+$acceptLink   = "{$ucrmBase}/crm/scheduling/job/{$jobId}";
+$completeLink = "{$ucrmBase}/crm/scheduling/job/{$jobId}";
+$reschedLink  = "{$ucrmBase}/crm/scheduling/job/{$jobId}";
+$commentsLink = "{$ucrmBase}/crm/scheduling/job/{$jobId}";
+```
+
+**The technician's tool is uCRM's own scheduling-job screen.** It is not a DishNet page. It knows
+nothing about `equipment_assignments`, stock units, or Starlink identifiers — and it cannot be
+made to, because it is uCRM's UI, not ours. **[CODE + INFERENCE]**
+
+The job title is already inspected for the word `starlink` when notifying the customer **[CODE]**
+`job_assignment_notify.php:236`, so Starlink jobs already flow through this path.
+
+## A2. The OTHER installation flow is fibre, and Uganda must not inherit it **[CODE]**
+
+`tabs/support/splynx_my_jobs.php` is a real technician installation screen — assign, photos, notes,
+submit data, ready, reject, commission. But look at what `install_submit_data` captures
+**[CODE]** `includes/api/api_support.php`:
+
+```
+onu_serial      ← Optical Network Unit
+olt_port        ← Optical Line Terminal port
+signal_db       ← optical signal
+testing_status
+```
+
+Those are **FTTH fibre fields**. That whole workflow is South Sudan's fibre installation process,
+keyed on **Splynx ticket ids**, backed by `splynx_tickets.json` and a Splynx API at
+`splynx_url` / `splynx_key` / `splynx_secret`. **[CODE]** `lib/SplynxApiClient.php:11–13`
+
+Uganda is Starlink-only and has no fibre plant. **[per DishNet direction]** So:
+
+- the fibre technician screen is the wrong shape (wrong fields, wrong identity);
+- the install-photo mechanism (§6) hangs off **that** flow, which is why it was keyed to tickets;
+- and the fuzzy-name ticket→customer matching in §6.2 is a **fibre-era** problem Uganda should
+  simply never inherit. **[INFERENCE]**
+
+**This is good news.** We are not fixing the Splynx path for Uganda. We are not using it.
+
+## A3. So the two mechanisms in §6 are now explained
+
+They were never meant to be one system. **[INFERENCE from CODE]**
+
+- **uCRM scheduling job** — the dispatch and notification spine. Generic, all job types.
+- **Splynx ticket** — the fibre installation record.
+
+`install_checkin`'s `job_id ?? ticket_id` **[CODE]** is the seam where somebody once tried to make
+them interchangeable. For Uganda the answer is clean: **one id space, the uCRM scheduling job id.**
+The §6 open question about id collision still matters for the South Sudan install, but it stops
+being an architectural question for Uganda.
+
+## A4. Revised recommendation — the Starlink job page
+
+Supersedes §6.4. Keep the South Sudan *shape* the team already knows, change only where the link
+points and what the page collects. **[INFERENCE]**
+
+```
+Admin creates uCRM scheduling job          ← unchanged, already how SS works
+        │
+        ▼
+cron/job_assignment_notify.php             ← unchanged mechanism, ONE link changed
+        │  WhatsApp to technician
+        ▼
+   "START INSTALLATION" → plugin page, not uCRM's job screen
+        │
+        ▼
+ DishNet Starlink Installation page (new), anchored on the uCRM JOB ID
+        ├── shows: customer, SERVICE, address, phone           (from the job)
+        ├── captures: kit serial (scan/type) → validates against stock_units
+        ├── captures: terminal id, router id, service line, account
+        ├── captures: obstruction result, speed, latency, mount type, dish GPS
+        ├── captures: photos → against the JOB, not a Splynx ticket
+        ├── captures: customer acceptance
+        └── on submit → creates the EQUIPMENT ASSIGNMENT (client + service + all identifiers)
+        │
+        ▼
+  Job completed in uCRM  ·  Fleet resolves any identifier → exactly one customer
+```
+
+**Why this is the right shape here** **[INFERENCE]**:
+
+1. **It reuses the flow the team already understands.** Technicians already receive a WhatsApp link
+   and tap it. Only the destination changes.
+2. **The uCRM job already carries client and service**, which is exactly the `crm_service_id` that
+   is missing today (§1 step 2). Anchoring on the job supplies it for free.
+3. **No new job system.** The uCRM scheduling job *is* the installation record; we attach to it
+   rather than inventing a parallel one. That kills the §6.4 "new installations table" idea as an
+   *anchor* — we may still want a table, but it hangs off the job id, not off a new concept.
+4. **Photos land against the job**, so the fuzzy-name path is bypassed entirely.
+5. **Identifier capture happens while the technician holds the hardware** — the only moment it can.
+
+## A5. Open questions this raises **[OPEN]**
+
+1. **Authentication on that link.** uCRM's job URL requires a uCRM login. Our plugin page — does the
+   technician already have a session on their phone, or does the link need a token? The existing
+   PWA (`splynx_my_jobs`) is behind the normal login and `$isSupportAny2`. **[CODE]** If technicians
+   are already logged in on their phones, this is a non-issue; if not, a scoped one-time job token
+   is needed, and that is a security design in itself. **This must be answered before building.**
+2. **Does the uCRM scheduling job carry the service id**, or only the client id? The notifier reads
+   `clientId`, `clientName`, `clientPhone`, `address` **[CODE]** but I have not confirmed a service
+   id is present on the job payload. If it is not, the technician must pick the service — which is
+   fine, but it changes the screen.
+3. **Should the ACCEPT link stay on uCRM** and only the post-acceptance link change? Probably yes —
+   acceptance is a uCRM status change and uCRM's screen does it properly. **[INFERENCE]**
+4. **One job → one kit, or can one job install two kits?** Affects whether the page binds one
+   assignment or several.
+
+## A6. A live defect found while reading this — not fixed
+
+`cron/job_assignment_notify.php` sends Ugandan technicians a **South Sudan support number**:
+
+```
+:175   $msg .= "📞 +211 921 443 002\n";     // on the job-accepted message
+:196   $msg .= "📞 +211 921 443 002\n";     // on the new-job message
+```
+
+and `cron/staff_jobs_summary.php:192` does the same:
+
+```
+:192   $msg .= "Need support? 📞 +211 921 443 002\n";
+```
+
+**[CODE]** These are live outbound WhatsApp messages to staff, not documentation. A technician on a
+Kampala roof who needs help is being given a Juba number. `job_assignment_notify.php:196` also
+signs off `🌐 dishnetafrica.com` rather than the Uganda site.
+
+This is the same class of residue already corrected in the manuals, and the fix is the same:
+`CustomerContact::support($config)` / `escalation($config)`, which already exist and are already
+config-driven. **[CODE]**
+
+**I have not changed it**, because the standing instruction for this task is research only and no
+production code. It is a small, self-contained fix whenever you want it.
