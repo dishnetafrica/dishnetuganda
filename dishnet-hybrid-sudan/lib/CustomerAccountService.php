@@ -303,9 +303,29 @@ final class CustomerAccountService
     /** @return array<int,array<string,mixed>> */
     public function services(int $clientId): array
     {
-        $out = [];
+        $rows = [];
         foreach ($this->load('ucrm_services_cache.json') as $s) {
-            if ((int)($s['clientId'] ?? 0) !== $clientId) continue;
+            if ((int)($s['clientId'] ?? 0) === $clientId) $rows[] = $s;
+        }
+
+        // The cache is refreshed on a schedule, so a service created today is
+        // not in it yet. Saying "no service — nothing will ever be invoiced"
+        // about a customer who has one is worse than saying nothing: it sends
+        // somebody to create a second service for a customer who is already
+        // billed, and it made two of this plugin's own tools contradict each
+        // other about the same account on the same afternoon. client() has
+        // always fallen back to the live API for exactly this reason.
+        $source = 'cache';
+        if ($rows === [] && $this->crm && method_exists($this->crm, 'get')) {
+            try {
+                $live = $this->crm->get("clients/services?clientId={$clientId}&limit=100");
+                if (is_array($live)) { $rows = $live; $source = 'live'; }
+            } catch (\Throwable $e) { /* offline — the cache was the answer */ }
+        }
+
+        $out = [];
+        foreach ($rows as $s) {
+            if ((int)($s['clientId'] ?? $clientId) !== $clientId) continue;
             // uCRM service status: 0 prepared, 1 active, 2 ended, 3 suspended,
             // 4 prepared-blocked, 5 obsolete, 8 quoted
             $map = [0 => 'prepared', 1 => 'active', 2 => 'ended', 3 => 'suspended',
@@ -318,6 +338,10 @@ final class CustomerAccountService
                 'currency' => strtoupper(trim((string)($s['currencyCode'] ?? ''))),
                 'since'    => substr((string)($s['activeFrom'] ?? ''), 0, 10),
                 'until'    => substr((string)($s['activeTo'] ?? ''), 0, 10),
+                // Which of the two answered, so a report can say that a
+                // service is real but not yet cached rather than implying the
+                // cache is the whole truth.
+                'source'   => $source,
             ];
         }
         return $out;

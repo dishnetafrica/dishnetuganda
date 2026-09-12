@@ -41,6 +41,22 @@ $tmp = sys_get_temp_dir() . '/dn_acct_' . bin2hex(random_bytes(4));
 $store = SqliteStore::create($tmp);
 $pdo   = $store->getPdo();
 
+// A stand-in for uCRM's API, so the live-fallback path can be exercised
+// without a network. get() records what was asked for.
+if (!class_exists('FakeCrmForAccounts')) {
+    class FakeCrmForAccounts {
+        public array $asked = [];
+        public array $reply = [];
+        public function get(string $path) {
+            $this->asked[] = $path;
+            foreach ($this->reply as $needle => $r) {
+                if (strpos($path, (string)$needle) !== false) return $r;
+            }
+            return null;
+        }
+    }
+}
+
 // ── A customer onboarded today, and a second one to leak into ───────────────
 $store->save('ucrm_clients_cache.json', [
     ['id' => 4021, 'companyName' => 'Family Shoppers Ltd', 'userIdent' => 'DN-4021',
@@ -130,6 +146,7 @@ t('the service address', $a['address'], 'Plot 14, Ntinda Road, Kampala');
 
 echo "\nService and onboarding\n";
 t('one service', count($a['services']), 1);
+t('from the cache', $a['services'][0]['source'], 'cache');
 t('active',      $a['services'][0]['status'], 'active');
 t('at its price', $a['services'][0]['price'], 400000.0);
 t('in shillings', $a['services'][0]['currency'], 'UGX');
@@ -256,6 +273,55 @@ echo "\nAn unknown customer\n";
 is_($svc->account(123456) === null, 'is null, not an empty account');
 is_($svc->forCustomer(123456) === null, 'and null for the portal too');
 is_($svc->account(0) === null, 'and id zero is refused');
+
+echo "\nA service created today is not in the cache yet\n";
+// The live failure: a customer signed up this morning has a service, and the
+// account view said "none — nothing will ever be invoiced" because the cache
+// is refreshed on a schedule. Two of this plugin's own tools then contradicted
+// each other about the same account on the same afternoon.
+$tmpL = sys_get_temp_dir() . '/dn_acct_live_' . bin2hex(random_bytes(4));
+@mkdir($tmpL, 0777, true);
+$sL = SqliteStore::create($tmpL);
+$sL->save('ucrm_clients_cache.json', [['id' => 7, 'companyName' => 'African skies Ltd',
+    'isActive' => true, 'clientType' => 2, 'contacts' => []]]);
+$sL->save('ucrm_services_cache.json', []);          // nothing cached yet
+$fake = new FakeCrmForAccounts();
+$fake->reply['clients/services'] = [
+    ['id' => 1, 'clientId' => 7, 'name' => 'Site : KIT404246364BX6  Starlink Residential',
+     'status' => 1, 'price' => 678540, 'currencyCode' => 'UGX', 'activeFrom' => '2026-09-12'],
+];
+$live = new CustomerAccountService($sL, $fake, $tmpL, $sL->getPdo());
+$svc = $live->services(7);
+t('the service is found anyway', count($svc), 1);
+t('with its name',   $svc[0]['name'], 'Site : KIT404246364BX6  Starlink Residential');
+t('active',          $svc[0]['status'], 'active');
+t('at its price',    $svc[0]['price'], 678540.0);
+t('and it says it came from uCRM, not the cache', $svc[0]['source'], 'live');
+is_(count(array_filter($fake->asked, static fn($p) => strpos($p, 'clients/services') !== false)) === 1,
+    'asked uCRM once', implode(', ', $fake->asked));
+
+// And when the cache DOES have it, uCRM is not called at all.
+$sL->save('ucrm_services_cache.json', [
+    ['id' => 1, 'clientId' => 7, 'name' => 'Cached service', 'status' => 1,
+     'price' => 678540, 'currencyCode' => 'UGX'],
+]);
+$fake2 = new FakeCrmForAccounts();
+$live2 = new CustomerAccountService($sL, $fake2, $tmpL, $sL->getPdo());
+$svc2 = $live2->services(7);
+t('the cache answers',      $svc2[0]['name'], 'Cached service');
+t('and says so',            $svc2[0]['source'], 'cache');
+is_(count(array_filter($fake2->asked, static fn($p) => strpos($p, 'clients/services') !== false)) === 0,
+    'without a network round-trip');
+
+// Another customer's service is never borrowed, live or cached.
+$fake3 = new FakeCrmForAccounts();
+$fake3->reply['clients/services'] = [
+    ['id' => 9, 'clientId' => 8, 'name' => 'Somebody else', 'status' => 1],
+];
+$sL->save('ucrm_services_cache.json', []);
+$live3 = new CustomerAccountService($sL, $fake3, $tmpL, $sL->getPdo());
+t('a service belonging to another client is dropped', $live3->services(7), []);
+exec('rm -rf ' . escapeshellarg($tmpL));
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n  {$pass} passed, {$fail} failed\n";
