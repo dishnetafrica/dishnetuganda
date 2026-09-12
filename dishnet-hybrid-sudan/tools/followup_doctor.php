@@ -68,7 +68,11 @@ printf("  %-24s %d\n", 'live opt-outs', count($oo->live(500)));
 
 // What the next scan would pick up.
 $quietSince = gmdate('Y-m-d H:i:s', time() - (int)(FollowUpPolicy::SCHEDULE[1] * 3600));
-$notBefore  = gmdate('Y-m-d H:i:s', time() - (int)(336 * 3600));
+$notBefore  = gmdate('Y-m-d H:i:s', time() - (int)((float)($config['followup_max_age_hours'] ?? 336) * 3600));
+$floor      = trim((string)($config['followup_not_before'] ?? ''));
+if ($floor !== '' && $floor > $notBefore) $notBefore = $floor;
+printf("  %-24s %s\n", 'backlog floor',
+    $floor !== '' ? $floor . ' UTC' : 'NOT SET — the whole history qualifies');
 $st = $pdo->prepare(
     "SELECT c.* FROM wa_conversations c
        LEFT JOIN followups f ON f.conversation_id = c.id AND f.closed_at IS NULL
@@ -104,6 +108,18 @@ foreach ($cands as $c) {
 }
 echo "\n  " . $would . " would open. " . (count($cands) - $would) . " would be skipped"
    . ($showAll ? '' : ' (--gates to see why)') . ".\n";
+
+// The number that matters on the first day. Switching on with no floor means
+// every conversation that has ever gone quiet qualifies in the same morning,
+// and the oldest of them are people who have forgotten they wrote to us.
+if ($floor === '' && $would >= 10) {
+    echo "\n  ⚠ NO BACKLOG FLOOR, AND " . $would . " CONVERSATIONS QUALIFY AT ONCE.\n";
+    echo "    Switching on now would work through the entire history, oldest\n";
+    echo "    enquiries included. Set a floor first so only conversations that go\n";
+    echo "    quiet from now on are considered:\n\n";
+    echo "      php tools/set_config.php --key followup_not_before --value '"
+       . gmdate('Y-m-d H:i:s') . "'\n";
+}
 
 // What the next run would do with rows already open.
 $due = $svc->due($now, 100);

@@ -286,5 +286,31 @@ foreach ([
 t('a fenced block is read',
     FollowUpEvaluator::parse("```json\n{\"verdict\":\"WAIT\",\"reason\":\"x\"}\n```")['verdict'], 'WAIT');
 
+echo "\nThe backlog floor — what stops a fifty-message first morning\n";
+// On the live box, switching on with no floor would have opened 50 follow-ups
+// at once, including a thread that was two colleagues testing the assistant.
+// The floor is a lower bound on the customer's last message.
+$floorTest = function (string $floor, string $lastCustomer): bool {
+    $maxAge    = 336.0;
+    $notBefore = gmdate('Y-m-d H:i:s', time() - (int)($maxAge * 3600));
+    if ($floor !== '' && $floor > $notBefore) $notBefore = $floor;
+    return $lastCustomer >= $notBefore;
+};
+$old   = gmdate('Y-m-d H:i:s', time() - 240 * 3600);   // 10 days quiet
+$fresh = gmdate('Y-m-d H:i:s', time() - 30  * 3600);   // 30 hours quiet
+$setAt = gmdate('Y-m-d H:i:s', time() - 48  * 3600);   // switched on 2 days ago
+
+t('with no floor, a 10-day-old enquiry qualifies', $floorTest('', $old), true);
+t('with a floor, it does not',                     $floorTest($setAt, $old), false);
+t('but one quiet since the floor still does',      $floorTest($setAt, $fresh), true);
+// The floor never widens the window — it only ever narrows it.
+t('a floor older than max age does not widen it',
+    $floorTest(gmdate('Y-m-d H:i:s', time() - 9999 * 3600), $old), true);
+// And the scan actually reads the key.
+$scan = file_get_contents(dirname(__DIR__) . '/cron/followup_scan.php');
+is_(strpos($scan, 'followup_not_before') !== false, 'the scan honours followup_not_before');
+is_(strpos($scan, "if (\$floor !== '' && \$floor > \$notBefore)") !== false,
+    'raising the floor, never lowering it');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

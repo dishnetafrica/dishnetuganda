@@ -56,6 +56,22 @@ $sql = "SELECT c.* FROM wa_conversations c
 $quietSince = gmdate('Y-m-d H:i:s', strtotime($now . ' UTC') - (int)(FollowUpPolicy::SCHEDULE[1] * 3600));
 $notBefore  = gmdate('Y-m-d H:i:s', strtotime($now . ' UTC') - (int)($maxAge * 3600));
 
+// THE BACKLOG GUARD.
+//
+// On the day this is switched on, every conversation that has ever gone quiet
+// qualifies at once. On the live box that was 50 people — including a thread
+// that turned out to be two colleagues testing the assistant, and numbers in
+// three other countries. Fifty strangers receiving a follow-up in one morning
+// is not a soft launch, it is the thing everybody fears about letting an AI
+// talk to customers.
+//
+// followup_not_before is a floor on the customer's last message. Set it to
+// the moment you switch on and the system only ever considers enquiries that
+// have gone quiet SINCE — the backlog is left alone, and the first follow-ups
+// are conversations you can still remember.
+$floor = trim((string)($config['followup_not_before'] ?? ''));
+if ($floor !== '' && $floor > $notBefore) $notBefore = $floor;
+
 $opened = 0; $skipped = 0;
 try {
     $st = $pdo->prepare($sql);

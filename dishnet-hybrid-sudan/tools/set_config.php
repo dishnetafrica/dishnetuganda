@@ -59,6 +59,17 @@ $FLAGS = [
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
 
+    // Customer follow-up. Draft mode only: nothing reaches a customer without
+    // somebody approving it on the Follow-ups screen.
+    'followup_enabled' => ['bool',
+        'Notice quiet enquiries and draft a follow-up for a person to approve'],
+    'followup_not_before' => ['text',
+        'Ignore conversations quiet BEFORE this UTC date — set it when switching on'],
+    'followup_daily_cap' => ['minutes',
+        'Most follow-ups sent on one channel in a day (default 30)'],
+    'followup_max_age_hours' => ['minutes',
+        'An enquiry older than this is history, not a live lead (default 336 = 14 days)'],
+
     // On every quotation the team sends. QuotationService compiles South Sudan
     // defaults for all three, so an unset key is not a blank — it is Juba's
     // phone number printed on a Ugandan customer's quote.
