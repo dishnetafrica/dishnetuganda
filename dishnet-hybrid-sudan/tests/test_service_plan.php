@@ -53,6 +53,33 @@ t('a plan naming no size is unlimited', ServicePlan::capGb('Starlink Unlimited B
 // The distinction the whole file exists for.
 t('and NO plan name is zero, not unlimited', ServicePlan::capGb(''), 0.0);
 
+echo "\nA speed is not an allowance\n";
+// Uganda's live service line, read off Starlink's own subscription page:
+// "Residential - 100 Mbps". The tier above it is "1 Gbps" — and the letters
+// GB are sitting inside Gbps. Read as an allowance, a gigabit-per-second
+// line becomes a ONE GIGABYTE monthly cap and the customer is 2,100% over
+// on 22 GB of ordinary use.
+t('Mbps names no allowance',   ServicePlan::capGb('Residential - 100 Mbps'), -1.0);
+t('and Gbps is not 1 GB',      ServicePlan::capGb('Residential - 1 Gbps'), -1.0);
+t('nor 2.5 GB',                ServicePlan::capGb('Business 2.5 Gbps'), -1.0);
+t('nor is Gbit',               ServicePlan::capGb('Enterprise 10 Gbit/s'), -1.0);
+// The unit has to END there. A plural reads as unknown rather than as a
+// size — a false negative, which is this class's stated bias.
+t('a real size still parses',  ServicePlan::capGb('Priority 2TB/month'), 2048.0);
+t('and one in brackets',       ServicePlan::capGb('Plan (500GB)'), 500.0);
+t('a plural is not a size',    ServicePlan::capGb('Wholesale 500GBs'), -1.0);
+
+// mask() shares the regex: if a speed tier looks like it "states a size",
+// the mask decides the name is ours and shows the customer Starlink's
+// internal tier name.
+t('a speed tier is still hidden', ServicePlan::mask('Residential - 1 Gbps'), 'Starlink Service Plan');
+
+// And end to end: a speed tier must never come back claiming to be known.
+$spd = ServicePlan::fromService(['name' => 'Residential - 1 Gbps']);
+t('a speed tier claims no cap',       $spd['cap_gb'], 0.0);
+t('and is not unlimited either',      $spd['unlimited'], false);
+t('it is simply unknown',             $spd['known'], false);
+
 echo "\nWhat the customer is allowed to see\n";
 t('a DishNet plan passes through',   ServicePlan::mask('DishNet Business 2TB'), 'DishNet Business 2TB');
 t('so does anything naming a size',  ServicePlan::mask('Starlink Priority 6TB'), 'Starlink Priority 6TB');

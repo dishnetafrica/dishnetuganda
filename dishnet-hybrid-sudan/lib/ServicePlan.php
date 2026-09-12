@@ -126,10 +126,24 @@ final class ServicePlan
     {
         $raw = trim($raw);
         if ($raw === '') return 0.0;
+        // A SPEED IS NOT AN ALLOWANCE.
+        //
+        // Uganda's service line is sold as "Residential - 100 Mbps", and the
+        // tier above it is "1 Gbps" — which contains the letters GB. Without
+        // the lookahead, a gigabit-per-second line reads as a ONE GIGABYTE
+        // monthly cap, and mask() then decides the name "states a size", so
+        // it shows the customer Starlink's internal tier name as well. Wrong
+        // twice, and wrong in the expensive direction.
+        //
+        // The lookahead requires the unit to END there: "6TB", "500GB)",
+        // "2TB/month" all count; "Gbps", "Gbit", "TBs" do not. A plural
+        // "500GBs" therefore reads as UNKNOWN rather than as 500GB, which is
+        // this class's stated bias — a false negative over a false positive.
+        //
         // The LARGEST figure named, because "6TB Monthly Plan (500GB Priority)"
         // is a 6TB plan with a priority tranche inside it, not a 500GB plan.
         $best = 0.0;
-        if (preg_match_all('/(\d+(?:\.\d+)?)\s*(TB|GB)/i', $raw, $ms, PREG_SET_ORDER)) {
+        if (preg_match_all('/(\d+(?:\.\d+)?)\s*(TB|GB)(?![A-Za-z])/i', $raw, $ms, PREG_SET_ORDER)) {
             foreach ($ms as $m) {
                 $gb = strtoupper($m[2]) === 'TB' ? (float)$m[1] * 1024.0 : (float)$m[1];
                 if ($gb > $best) $best = $gb;
@@ -151,7 +165,7 @@ final class ServicePlan
         if ($raw === '' || $raw === '—' || $raw === '-') return self::GENERIC_PLAIN;
 
         // Anything that names DishNet or names a size is ours to show.
-        foreach (['/dishnet/i', '/\d+\s*(TB|GB)/i'] as $ok) {
+        foreach (['/dishnet/i', '/\d+\s*(TB|GB)(?![A-Za-z])/i'] as $ok) {
             if (preg_match($ok, $raw)) return $raw;
         }
         foreach ([
