@@ -55,6 +55,22 @@
     return /tb/i.test(m[1]) ? m[1].replace(/\s*tb/i, ' TB') : m[1] + ' GB';
   }
 
+  // Home or business, decided once.
+  //
+  // Two independent signals, because either alone goes stale: the DishNet
+  // name (what we sell), and the Starlink service it maps to (Local Priority
+  // is the business tier — a priority-data block plus a public IP). A tier
+  // added in uCRM under a different name still lands in the right group as
+  // long as the service map is updated, and vice versa.
+  //
+  // Neither signal present means home, which is the safer default: a
+  // household shown a business card sees a price that is not for them, while
+  // a business shown the home cards still has a "Business internet" heading
+  // above the ones that are.
+  function isBusiness(p) {
+    return /business/i.test(p.name) || /priority/i.test(SVCMAP[p.name] || '');
+  }
+
   function headlineFirst(plans) {
     var keys = Object.keys(SVCMAP);
     if (!keys.length) return plans;
@@ -83,12 +99,17 @@
       }
     });
 
-    // Monthly plans grid
+    // Monthly plans grid, split into home and business.
+    //
+    // One flat row of seven asked a household to read past three tiers priced
+    // for an office with a public IP, and asked an office to guess which of
+    // the seven was theirs. The two products answer different questions and
+    // now sit under their own headings.
     var grid = document.querySelector('[data-dishnet-plans]');
     if (grid && (data.plans || []).length) {
-      grid.innerHTML = headlineFirst(data.plans).map(function (p) {
+      var card = function (p) {
         var flex = /flex/i.test(p.name);
-        var biz  = /business/i.test(p.name);
+        var biz  = isBusiness(p);
         var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
           (best ? '<span class="price-pill">Best value</span>' : '') +
@@ -105,7 +126,26 @@
             '?text=' + encodeURIComponent('Hello DishNet, I would like to sign up for ' + p.name) +
           '">Get ' + esc(p.name.replace(/^DishNet\s*/i, '')) + '</a>' +
           '</article>';
-      }).join('') + '<p class="price-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + '</p>';
+      };
+      var head = function (title, sub) {
+        return '<div class="plan-group"><h3>' + esc(title) + '</h3><p>' + esc(sub) + '</p></div>';
+      };
+
+      var ordered = headlineFirst(data.plans);
+      var homeP = ordered.filter(function (p) { return !isBusiness(p); });
+      var bizP  = ordered.filter(isBusiness);
+
+      // Headings only when there is something on both sides of them. A feed
+      // carrying one kind of plan renders exactly as it did before, rather
+      // than growing a lone heading over the whole grid.
+      var body = (homeP.length && bizP.length)
+        ? head('Home internet', 'Unlimited data for households — professional installation and local support.')
+          + homeP.map(card).join('')
+          + head('Business internet', 'Priority data with a public IP, for offices, CCTV and heavy users. Unlimited standard data after the priority block.')
+          + bizP.map(card).join('')
+        : ordered.map(card).join('');
+
+      grid.innerHTML = body + '<p class="price-vat">' + esc(data.vat_note || 'All prices VAT inclusive') + '</p>';
     }
 
     renderOrderFlow(data, cur);
@@ -153,8 +193,8 @@
 
     function planCards() {
       var list = state.hw === '__flex' ? flexPlans : stdPlans;
-      return list.map(function (p) {
-        var biz = /business/i.test(p.name);
+      var one = function (p) {
+        var biz = isBusiness(p);
         return '<button type="button" class="of-card" data-plan="' + esc(p.name) + '">' +
           '<h4>' + esc(p.name) + '</h4>' +
           (SVCMAP[p.name] ? '<div class="of-sub">Starlink service: ' + esc(SVCMAP[p.name]) + '</div>'
@@ -164,7 +204,15 @@
           (biz ? '<div class="of-sub" style="margin-top:6px;">Unlimited standard data after priority data</div>'
                : p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
           '</button>';
-      }).join('');
+      };
+      // Grouped here too. Someone part-way through an order is the last
+      // person who should have to work out which three of seven are priced
+      // for an office.
+      var homeP = list.filter(function (p) { return !isBusiness(p); });
+      var bizP  = list.filter(isBusiness);
+      if (!homeP.length || !bizP.length) return list.map(one).join('');
+      return '<div class="of-group">For home</div>' + homeP.map(one).join('') +
+             '<div class="of-group">For business — priority data + public IP</div>' + bizP.map(one).join('');
     }
 
     function hwLabel() {
