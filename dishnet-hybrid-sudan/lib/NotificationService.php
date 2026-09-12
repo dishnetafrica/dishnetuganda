@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/ContactOptOut.php';
+
 require_once __DIR__ . '/CustomerContact.php';
 
 // PHP 7.4 polyfills
@@ -1490,9 +1492,11 @@ class NotificationService
      * @param string $caption  Caption text shown below the document
      * @param string $event    Event name for logging
      */
-    public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = ''): void
+    public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = '', string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
         if (!$this->enabled || empty($toPhone) || empty($publicUrl)) return;
+
+        if ($this->optedOut(preg_replace('/[^0-9]/', '', $toPhone) ?? '', $sender, $class, $event)) return;
 
         // v4.9.20: Global PDF kill-switch — skip document sends when disabled
         if (!$this->pdfEnabled) {
@@ -1713,12 +1717,59 @@ class NotificationService
         $this->sendTimestamps[] = microtime(true);
     }
 
-    public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = []): void
+    /** Resolved lazily from the store; injectable for tests. false = not looked for. */
+    private $optOut = false;
+
+    public function setOptOut($o): void { $this->optOut = $o; }
+
+    /** @return ContactOptOut|null */
+    private function optOut()
+    {
+        if ($this->optOut === false) {
+            if (!class_exists('ContactOptOut')) {
+                $f = __DIR__ . '/ContactOptOut.php';
+                if (is_file($f)) require_once $f;
+            }
+            $this->optOut = null;
+            if (class_exists('ContactOptOut') && is_object($this->store)
+                && method_exists($this->store, 'getPdo')) {
+                try { $this->optOut = ContactOptOut::fromStore($this->store); }
+                catch (\Throwable $e) { $this->optOut = null; }
+            }
+        }
+        return $this->optOut;
+    }
+
+    /**
+     * True when this recipient has opted out of this kind of message.
+     *
+     * Everything through here is something WE decided to send — an invoice
+     * notice, a quote, a reminder — so the default class is transactional
+     * rather than reply. A 'proactive' opt-out lets these through; only a
+     * scope of 'all' stops them.
+     */
+    private function optedOut(string $phone, string $sender, string $class, string $event): bool
+    {
+        $o = $this->optOut();
+        if ($o === null) return false;
+        $v = $o->blocks($phone, $sender, $class);
+        if (!$v['blocked']) return false;
+        $this->writeLog([
+            'sender' => $sender, 'phone' => $phone,
+            'event'  => ($event ?: 'message') . '_suppressed_optout',
+            'message' => $v['reason'], 'status' => 'suppressed',
+        ]);
+        return true;
+    }
+
+    public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = [], string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
         if (!$this->enabled || empty($toPhone)) return;
 
         $to = preg_replace('/[^0-9]/', '', $toPhone);
         if (empty($to)) return;
+
+        if ($this->optedOut($to, $sender, $class, $event)) return;
         
         // DRY RUN GUARD - log but don't send
         if ($this->dryRunMode) {

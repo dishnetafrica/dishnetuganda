@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/lib/ContactOptOut.php';
+
 require_once __DIR__ . '/../lib/StarlinkMailClassifier.php';
 
 /**
@@ -295,7 +297,7 @@ class StarlinkMailWorker
             };
             if ($text === '') return false;
             $channel = (string)($this->config['starlink_notify_channel'] ?? 'support');
-            $r = $this->evo->sendText($channel, $phone, $text);
+            $r = $this->evo->sendText($channel, $phone, $text, ContactOptOut::CLASS_TRANSACTIONAL);
             return is_array($r) ? !empty($r['ok']) || !isset($r['ok']) : (bool)$r;
         } catch (\Throwable $e) {
             return false;

@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/lib/ContactOptOut.php';
+
 /**
  * AiReplyWorker — turns a queued inbound WhatsApp message into a reply.
  *
@@ -128,7 +130,7 @@ class AiReplyWorker extends WorkerBase
         }
 
         // ── Point of no return ───────────────────────────────────────────
-        $send = $this->evo->sendText($channel, $phone, $reply);
+        $send = $this->evo->sendText($channel, $phone, $reply, ContactOptOut::CLASS_REPLY);
         if (!$send['ok']) {
             throw new \RuntimeException('Evolution send failed: ' . $send['error']);
         }
@@ -519,7 +521,8 @@ class AiReplyWorker extends WorkerBase
             }
 
             $send = $this->evo->sendMedia($channel, $phone, 'document', $media,
-                                          (string)$doc['caption'], (string)$doc['file']);
+                                          (string)$doc['caption'], (string)$doc['file'],
+                                          ContactOptOut::CLASS_REPLY);
             if (empty($send['ok'])) {
                 $this->log('warn', "conv {$convId}: document '{$name}' failed — "
                     . (string)($send['error'] ?? '?'));
@@ -703,7 +706,7 @@ class AiReplyWorker extends WorkerBase
             // the old behaviour exactly.
             $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
             if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
-                $send = $this->evo->sendText($channel, $phone, $holding);
+                $send = $this->evo->sendText($channel, $phone, $holding, ContactOptOut::CLASS_REPLY);
                 if (!empty($send['ok'])) {
                     if ($convId > 0) {
                         $this->convSvc->storeMessage($convId, [
