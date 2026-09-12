@@ -89,6 +89,12 @@ final class EquipmentAssignment
                 (int)$live['crm_client_id'], (int)$live['id'])];
         }
 
+        $wrongBox = self::misplaced($data);
+        if ($wrongBox !== []) {
+            return ['ok' => false, 'error' => implode(' ', $wrongBox)
+                  . ' Nothing was saved — check the labels on the kit.'];
+        }
+
         $serviceId = (int)($data['crm_service_id'] ?? 0) ?: null;
         if ($serviceId !== null) {
             $onService = $this->activeForService($serviceId);
@@ -417,6 +423,14 @@ final class EquipmentAssignment
         if (!$a) return ['ok' => false, 'error' => "There is no assignment #{$assignmentId}."];
         if ($a['released_at'] !== null) return ['ok' => false, 'error' => 'That assignment is released.'];
 
+        // Same guard as assign(). This path is how binding_doctor and the
+        // install screens complete a partial binding later, so a value in the
+        // wrong box arrives here just as easily.
+        $wrongBox = self::misplaced($ids);
+        if ($wrongBox !== []) {
+            return ['ok' => false, 'error' => implode(' ', $wrongBox) . ' Nothing was saved.'];
+        }
+
         $set = []; $vals = []; $added = [];
         foreach (['starlink_account', 'starlink_service_line', 'terminal_id', 'router_id'] as $k) {
             if (!array_key_exists($k, $ids)) continue;
@@ -570,6 +584,63 @@ final class EquipmentAssignment
 
     /** Identifiers are compared exactly, so they are stored exactly once one way. */
     public static function clean($v): string { return strtoupper(trim((string)$v)); }
+
+    /**
+     * Which Starlink identifier does this value LOOK like?
+     *
+     * Returns '' for anything unrecognised. Starlink can change its formats
+     * and a technician holding a real kit must never be blocked by a pattern
+     * written here, so an unknown shape is not an error — it is just unknown.
+     *
+     * Observed on DishNet's own account:
+     *   kit_serial             KIT404246364BX6
+     *   terminal_id            ut01301694-01e07c1c-59d52912
+     *   starlink_service_line  SL-DF-16046613-35504-0
+     *   starlink_account       ACC-DF-15973474-59163-60
+     */
+    public static function shapeOf($v): string
+    {
+        $t = trim((string)$v);
+        if ($t === '') return '';
+        if (preg_match('/^KIT[0-9A-Z]{6,}$/i', $t))                 return 'kit_serial';
+        if (preg_match('/^ut[0-9a-f]{6,}(-[0-9a-f]+)+$/i', $t))     return 'terminal_id';
+        if (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/i', $t))       return 'starlink_service_line';
+        if (preg_match('/^ACC-[0-9A-Z]+(-[0-9A-Z]+)+$/i', $t))      return 'starlink_account';
+        return '';
+    }
+
+    /**
+     * Values that are plainly in the wrong box.
+     *
+     * The unique indexes defend against one identifier meaning two customers.
+     * They cannot defend against a service line typed into the terminal field
+     * — that stores happily, matches nothing the data plugin ever asks for,
+     * and looks complete on the screen. A value that matches ANOTHER field's
+     * known shape is the one case worth refusing outright; everything else is
+     * accepted as typed, because refusing a real identifier is worse.
+     *
+     * @return string[] human-readable problems, empty when there are none
+     */
+    public static function misplaced(array $ids): array
+    {
+        $label = [
+            'kit_serial'            => 'kit serial',
+            'terminal_id'           => 'terminal ID',
+            'starlink_service_line' => 'service line',
+            'starlink_account'      => 'account number',
+        ];
+        $out = [];
+        foreach ($label as $field => $name) {
+            $v = trim((string)($ids[$field] ?? ''));
+            if ($v === '') continue;
+            $looks = self::shapeOf($v);
+            if ($looks !== '' && $looks !== $field) {
+                $out[] = sprintf('"%s" is in the %s box but looks like a %s.',
+                                 $v, $name, $label[$looks]);
+            }
+        }
+        return $out;
+    }
 
     /**
      * The data plugin writes routers both ways — "Router-abc123" as a key and
