@@ -144,7 +144,9 @@ $show = function () use ($root, $dataDir, $FLAGS) {
                 $shown = '"' . mb_strimwidth((string)$raw, 0, 40, '…') . '"';
                 $note  = '⚠ not valid JSON — IGNORED, the defaults are in use';
             } else {
-                if (array_keys($dec) === range(0, count($dec) - 1)) {
+                // range(0, -1) is [0, -1], not [], so an empty array must be
+                // settled first or it reads as a map and prints "0 categories".
+                if ($dec === [] || array_keys($dec) === range(0, count($dec) - 1)) {
                     $shown = count($dec) . ' entries';
                     $note  = implode(', ', array_slice($dec, 0, 6)) . (count($dec) > 6 ? ', …' : '');
                 } else {
