@@ -84,7 +84,15 @@ case "$DEST" in *plugins_staging*) die "refusing to deploy into staging: $DEST";
 [ -f "$DEST/manifest.json" ] || die "no installed plugin at $DEST — install it through uCRM once first"
 
 LIVE="$(read_live 3 || echo 'unknown')"
-HEAD="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+# The version of the PLUGIN, not of the repository.
+#
+# The repo also carries this script, docs and tooling that are never copied
+# into the container. Recording repo HEAD made every commit outside
+# dishnet-hybrid-sudan/ report "NOT up to date" for a served tree that had
+# not changed by a byte — the same cry-wolf that makes an operator stop
+# reading the output.
+HEAD="$(git -C "$REPO" log -1 --format=%h -- "$PLUGIN" 2>/dev/null || echo 'unknown')"
+[ -n "$HEAD" ] || HEAD='unknown'
 
 echo
 echo "  repo      $REPO  ($HEAD)"
