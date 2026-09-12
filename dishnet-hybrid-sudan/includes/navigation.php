@@ -437,6 +437,9 @@ try {
 <a href="?page=dashboard&tab=starlink_fleet" class="kyc-tab <?= $tab==='starlink_fleet'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-broadcast-pin" style="color:#1565C0;"></i></span> Starlink Fleet
 </a>
+<a href="?page=dashboard&tab=followups" class="kyc-tab <?= $tab==='followups'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-chat-left-heart" style="color:#7C3AED;"></i></span> Customer Follow-ups
+</a>
 <a href="?page=dashboard&tab=starlink_suspensions" class="kyc-tab <?= $tab==='starlink_suspensions'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-shield-slash-fill" style="color:#D41C1C;"></i></span> Starlink Suspensions
 </a>

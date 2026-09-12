@@ -190,6 +190,19 @@ $_m_jobs = [
     // customer twice. It is inert here anyway (WASender is not configured),
     // but leaving it registered invites exactly that mistake later.
     // 'wa_bot'     => ['interval' => 60, 'script' => dirname(__DIR__) . '/cron_wa_bot.php'],
+    // ── AI CUSTOMER FOLLOW-UP ────────────────────────────────────────────
+    // All four are no-ops unless followup_enabled is set, so an install that
+    // configures nothing behaves exactly as it does today.
+    //
+    // The order is deliberate: close before scan, so a conversation the
+    // customer just replied to has its follow-up closed in the same cycle
+    // rather than surviving to be evaluated. scan is pure SQL. run is the only
+    // one that costs money. send moves nothing a person has not approved.
+    'followup_close' => ['interval' => 600,                'script' => __DIR__ . '/followup_close.php'],
+    'followup_scan'  => ['interval' => 600,                'script' => __DIR__ . '/followup_scan.php'],
+    'followup_run'   => ['interval' => 600,                'script' => __DIR__ . '/followup_run.php'],
+    'followup_send'  => ['interval' => 300,                'script' => __DIR__ . '/followup_send.php'],
+
     'evo_sync'      => ['interval' => 300,                 'script' => dirname(__DIR__) . '/cron_evo_sync.php'],
     'jobs_cache'    => ['interval' => 600,                 'script' => __DIR__ . '/jobs_cache.php'],
     'photo_retry'   => ['interval' => 600,                 'script' => __DIR__ . '/photo_retry.php'],

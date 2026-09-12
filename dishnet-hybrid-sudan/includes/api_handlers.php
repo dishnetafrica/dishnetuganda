@@ -103,6 +103,7 @@
     require __DIR__ . '/api/api_crm_misc.php';
     require __DIR__ . '/api/api_lte.php';
     require __DIR__ . '/api/api_whatsapp.php';
+    require __DIR__ . '/api/api_followups.php';
     require __DIR__ . '/api/api_support.php';
     require __DIR__ . '/api/api_field_ops.php';
     require __DIR__ . '/api/api_leads.php';

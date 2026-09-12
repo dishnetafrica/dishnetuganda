@@ -2197,6 +2197,7 @@ else:
         ['id'=>'access_log',     'label'=>'Access Log / Login History', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'app_logins',     'label'=>'Customer App Logins',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_fleet', 'label'=>'Starlink Fleet',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'followups',      'label'=>'Customer Follow-ups',      'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_suspensions','label'=>'Starlink Suspensions',    'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_pauses', 'label'=>'Starlink Block Manager',     'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','accountant','support_leader']],
         ['id'=>'sync_queue',     'label'=>'CRM Sync Queue',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2655,6 +2656,7 @@ $_tabFiles = [
     'smtp_diagnostic'  => 'tabs/admin/smtp_diagnostic.php',
     'email_preview'    => 'tabs/admin/email_preview.php',
     'starlink_fleet'   => 'tabs/admin/starlink_fleet.php',
+    'followups'        => 'tabs/engage/followups.php',
     'starlink_suspensions' => 'tabs/admin/starlink_suspensions.php',
     'starlink_pauses'  => 'tabs/admin/starlink_pauses.php',
     'maintenance'      => 'tabs/admin/maintenance.php',
@@ -2747,6 +2749,7 @@ $_tabPerms = [
     'engage_wa_leads'      => ['support_dash', '*admin'],
     'starlink_orders'      => '*admin',
     'starlink_fleet'       => '*admin',
+    'followups'            => '*admin',
     'knowledge_base'       => '*admin',
     'lifecycle'            => ['support_dash', '*admin'],
     // Admin
