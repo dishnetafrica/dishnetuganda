@@ -55,7 +55,9 @@ $has = function (string $t) use ($pdo): bool {
     } catch (\Throwable $e) { return false; }
 };
 
-echo "\n  EQUIPMENT BINDING" . ($repair || $learn ? '' : '   (read-only)') . "\n";
+// --fix-conflicts writes too. Saying "read-only" while correcting a live
+// identifier is a small lie that makes every other line less believable.
+echo "\n  EQUIPMENT BINDING" . ($repair || $learn || $fixCon ? '' : '   (read-only)') . "\n";
 echo "  " . str_repeat('─', 72) . "\n\n";
 
 if (!$has('equipment_assignments')) {
