@@ -278,8 +278,7 @@ printf("    %-38s %s\n", 'AI replies / follow-ups',
     $evo->isConfigured() ? 'Evolution' : '✗ Evolution not configured');
 printf("    %-38s %s\n", 'support-channel messages (27 sites)', $supportPath);
 printf("    %-38s %s\n", 'accounts-channel messages (20 sites)', $accountPath);
-printf("    %-38s %s\n", 'PDFs and images (sendDocument/Image)',
-    $waOn ? 'WASender' : '✗ NOTHING IS SENT — still WASender-only');
+printf("    %-38s %s\n", 'PDFs and images (sendDocument/Image)', $accountPath);
 printf("    %-38s %s\n\n", 'support number printed in messages', CustomerContact::support($config));
 
 if ($accountPath !== $supportPath && strpos($accountPath, 'NOTHING') !== false) {

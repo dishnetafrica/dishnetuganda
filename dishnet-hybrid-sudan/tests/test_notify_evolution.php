@@ -120,14 +120,50 @@ is_(count($forced) === $before + 1, 'the send still goes out');
 is_(strpos(json_encode($f), 'ug-account') !== false,
     'and a SUPPORT send is routed to the accounts instance', json_encode($f));
 
+echo "\nPDFs and images go the same way — they were WASender-only\n";
+[$store5, $dir5] = $mkStore();
+$n5 = new NotificationService($store5, $evoCfg);
+$mBefore = count($state()['media_calls'] ?? []);
+$n5->sendDocument(NotificationService::ACCOUNTS, '256700000006',
+                  'https://example.invalid/quote.pdf', 'quote.pdf', 'Your quotation', 'quote_test');
+$media = $state()['media_calls'] ?? [];
+is_(count($media) === $mBefore + 1, 'sendDocument reached Evolution',
+    'media calls ' . $mBefore . ' → ' . count($media));
+$doc = $media ? $media[count($media)-1] : [];
+is_(($doc['mediatype'] ?? '') === 'document', 'as a document', json_encode($doc['mediatype'] ?? null));
+is_(strpos(json_encode($doc), 'quote.pdf') !== false, 'with the filename');
+is_(strpos(json_encode($doc), 'ug-account') !== false, 'on the accounts instance');
+
+$mBefore = count($state()['media_calls'] ?? []);
+$n5->sendImage(NotificationService::SUPPORT, '256700000007',
+               'https://example.invalid/flyer.jpg', 'Our plans', 'flyer_test');
+$media = $state()['media_calls'] ?? [];
+is_(count($media) === $mBefore + 1, 'sendImage reached Evolution too');
+$img = $media ? $media[count($media)-1] : [];
+is_(($img['mediatype'] ?? '') === 'image', 'as an image');
+is_(strpos(json_encode($img), 'ug-support') !== false, 'on the support instance');
+
+echo "\nAnd an install with neither transport still sends no media\n";
+[$store6, $dir6] = $mkStore();
+$mBefore = count($state()['media_calls'] ?? []);
+$n6 = new NotificationService($store6, []);
+$n6->sendDocument(NotificationService::ACCOUNTS, '256700000008',
+                  'https://example.invalid/x.pdf', 'x.pdf', '', 'quote_test');
+is_(count($state()['media_calls'] ?? []) === $mBefore, 'nothing went out, and nothing threw');
+
 echo "\nThe other senders were not touched\n";
 $src = file_get_contents($root . '/lib/NotificationService.php');
 is_(substr_count($src, 'sendViaEvolution(') === 2,
-    'sendViaEvolution is defined once and called once — sendDocument and '
-  . 'sendImage still take the WASender path', substr_count($src, 'sendViaEvolution(') . ' occurrence(s)');
+    'sendViaEvolution is defined once and called once (text)',
+    substr_count($src, 'sendViaEvolution(') . ' occurrence(s)');
+is_(substr_count($src, 'sendMediaViaEvolution(') === 3,
+    'sendMediaViaEvolution is defined once and called by both media senders',
+    substr_count($src, 'sendMediaViaEvolution(') . ' occurrence(s)');
+is_(substr_count($src, 'end of the WASender branch') === 3,
+    'all three senders keep WASender as the fallback');
 is_(strpos($src, 'if (!$this->enabled && !$this->evoAvailable($sender)) return;') !== false,
     'the guard consults both transports before giving up');
 
-foreach ([$dir, $dir2, $dir3, $dir4] as $d) { @array_map('unlink', glob($d . '/*') ?: []); @rmdir($d); }
+foreach ([$dir, $dir2, $dir3, $dir4, $dir5, $dir6] as $d) { @array_map('unlink', glob($d . '/*') ?: []); @rmdir($d); }
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

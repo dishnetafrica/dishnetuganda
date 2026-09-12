@@ -1514,7 +1514,8 @@ class NotificationService
      */
     public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = '', string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
-        if (!$this->enabled || empty($toPhone) || empty($publicUrl)) return;
+        if (empty($toPhone) || empty($publicUrl)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
         if ($this->optedOut(preg_replace('/[^0-9]/', '', $toPhone) ?? '', $sender, $class, $event)) return;
 
@@ -1552,6 +1553,18 @@ class NotificationService
             'message'  => $caption,
         ];
 
+        // ── Evolution first, where this install has it ──────────────────
+        // Both callers already hold a public URL, which is what Evolution's
+        // media field takes. Everything downstream — log, retry queue — is
+        // shared with the WASender branch on purpose.
+        $evoRes = $this->sendMediaViaEvolution($sender, $to, 'document', $publicUrl, $caption, $filename);
+        if ($evoRes !== null) {
+            $success  = $evoRes['ok'];
+            $httpCode = $evoRes['status'];
+            $curlErr  = $evoRes['error'] ?? '';
+            $response = $evoRes['raw'];
+        } else {
+
         $endpoint = rtrim($this->pluginUrl, '/') . '/api/whatsapp-web/send-message';
 
         $ch = curl_init();
@@ -1575,6 +1588,7 @@ class NotificationService
         $respData = json_decode((string)$response, true); // v4.21.72: coerce — curl_exec returns false on failure
         $success  = !$curlErr && $httpCode >= 200 && $httpCode < 300
                     && isset($respData['success']) && $respData['success'] === true;
+        }   // ← end of the WASender branch
 
         // Track result for retry mode
         $this->_lastSendSuccess = $success;
@@ -1614,7 +1628,8 @@ class NotificationService
      */
     public function sendImage(string $sender, string $toPhone, string $publicUrl, string $caption = '', string $event = ''): void
     {
-        if (!$this->enabled || empty($toPhone) || empty($publicUrl)) return;
+        if (empty($toPhone) || empty($publicUrl)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
         $to = preg_replace('/[^0-9]/', '', $toPhone);
         if (empty($to)) return;
@@ -1636,6 +1651,18 @@ class NotificationService
             'url'      => $publicUrl,
             'message'  => $caption,
         ];
+
+        // ── Evolution first, where this install has it ──────────────────
+        // Both callers already hold a public URL, which is what Evolution's
+        // media field takes. Everything downstream — log, retry queue — is
+        // shared with the WASender branch on purpose.
+        $evoRes = $this->sendMediaViaEvolution($sender, $to, 'image', $publicUrl, $caption, '');
+        if ($evoRes !== null) {
+            $success  = $evoRes['ok'];
+            $httpCode = $evoRes['status'];
+            $curlErr  = $evoRes['error'] ?? '';
+            $response = $evoRes['raw'];
+        } else {
 
         $endpoint = rtrim($this->pluginUrl, '/') . '/api/whatsapp-web/send-message';
 
@@ -1660,6 +1687,7 @@ class NotificationService
         $respData = json_decode((string)$response, true); // v4.21.72: coerce — curl_exec returns false on failure
         $success  = !$curlErr && $httpCode >= 200 && $httpCode < 300
                     && isset($respData['success']) && $respData['success'] === true;
+        }   // ← end of the WASender branch
 
         $this->_lastSendSuccess = $success;
         $this->_lastHttpCode    = $httpCode;
@@ -1791,6 +1819,39 @@ class NotificationService
             'error'  => $ok ? null : (string)($res['error'] ?? ($res['reason'] ?? 'evolution send failed')),
             'raw'    => json_encode($res),
         ];
+    }
+
+    /**
+     * Send media through Evolution, or null for "not this install".
+     *
+     * Both callers already hold a PUBLIC URL, which is what Evolution's media
+     * field takes, so there is nothing to re-encode.
+     *
+     * @return array{ok:bool,status:int,error:?string,raw:string}|null
+     */
+    private function sendMediaViaEvolution(string $sender, string $to, string $kind,
+                                           string $url, string $caption, string $fileName): ?array
+    {
+        $evo = $this->evoFor($sender);
+        if ($evo === null) return null;
+        $chan = $this->evoChannelFor($sender);
+
+        $res = $kind === 'document'
+             ? $evo->sendDocument($chan, $to, $url, $fileName, $caption, ContactOptOut::CLASS_STAFF)
+             : $evo->sendImage($chan, $to, $url, $caption);
+
+        $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
+        if ($waId !== '') {
+            try {
+                require_once __DIR__ . '/EvoWebhookGuard.php';
+                (new EvoWebhookGuard($this->store->getPdo(), $this->evoConfig))
+                    ->claim($waId, (string)($this->evoConfig['evo_instance_' . $chan] ?? ''), 'notify.media');
+            } catch (\Throwable $ex) { /* dedupe is a backstop */ }
+        }
+        $ok = empty($res['suppressed']) && (!isset($res['ok']) || !empty($res['ok'])) && empty($res['error']);
+        return ['ok' => $ok, 'status' => (int)($res['status'] ?? ($ok ? 200 : 0)),
+                'error' => $ok ? null : (string)($res['error'] ?? ($res['reason'] ?? 'evolution media send failed')),
+                'raw' => json_encode($res)];
     }
 
     /**
