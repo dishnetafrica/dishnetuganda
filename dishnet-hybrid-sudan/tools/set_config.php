@@ -150,8 +150,13 @@ $show = function () use ($root, $dataDir, $FLAGS) {
                     $shown = count($dec) . ' entries';
                     $note  = implode(', ', array_slice($dec, 0, 6)) . (count($dec) > 6 ? ', …' : '');
                 } else {
+                    // NOT $k: the outer loop over $FLAGS uses it, PHP does not
+                    // scope a foreach variable, and the clobbered value then
+                    // printed as the setting's own name — this listing showed
+                    // the cashbook override as "Partner Remuneration", the last
+                    // category in the JSON.
                     $cats = [];
-                    foreach ($dec as $k => $v) $cats[] = $k . ' (' . (is_array($v) ? count($v) : '?') . ')';
+                    foreach ($dec as $ck => $cv) $cats[] = $ck . ' (' . (is_array($cv) ? count($cv) : '?') . ')';
                     $shown = count($dec) . ' categories overridden';
                     $note  = implode(', ', array_slice($cats, 0, 6)) . (count($cats) > 6 ? ', …' : '');
                 }

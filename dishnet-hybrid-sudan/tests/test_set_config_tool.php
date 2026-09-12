@@ -163,5 +163,53 @@ is_(strpos($list, 'AI SETTINGS') !== false, 'and it still lists them');
 $good = $runRaw('--key ai_qualification --value 1');
 is_(strpos($good, 'EXIT:0') !== false, 'and a genuine change still succeeds');
 
+echo "\nEvery line of the listing names the setting it describes\n";
+// The JSON renderer looped `foreach ($dec as $k => $v)` while the outer loop
+// over $FLAGS was already using $k. PHP does not scope a foreach variable, so
+// $k survived the inner loop holding the LAST key of the decoded JSON, and the
+// listing printed the cashbook override as "Partner Remuneration" — a setting
+// name that does not exist, sitting where a real one should be.
+$store([
+    'cashbook_seeds' => json_encode(['Airtime' => ['MTN', 'Airtel'], 'Partner Remuneration' => []]),
+    'cashbook_sites' => json_encode(['Kampala Office']),
+    'timezone'       => 'Africa/Kampala',
+]);
+[$c, $out] = $run([]);
+
+// The name occupies a fixed 27-character field (printf "    %-27s %s"), so
+// read that field rather than the first whitespace-delimited token — a stray
+// name of two words ("Partner Remuneration") slips straight through a \S+
+// pattern, which is exactly the value this bug printed.
+$named = [];
+foreach (explode("\n", $out) as $ln) {
+    if (strncmp($ln, '    ', 4) !== 0 || strlen($ln) < 31) continue;
+    if (strncmp(ltrim($ln), 'php ', 4) === 0) continue;   // the usage examples
+    $field = rtrim(substr($ln, 4, 27));
+    if ($field === '' || $field !== ltrim($field)) continue;   // continuation lines
+    $named[] = $field;
+}
+$named = array_values(array_unique($named));
+$managed = [];
+foreach (explode("\n", file_get_contents($root . '/tools/set_config.php')) as $ln) {
+    if (preg_match("/^\s{4}'([a-z_]+)' => \['/", $ln, $mm)) $managed[] = $mm[1];
+}
+is_(count($managed) > 10, 'the flag registry was found', count($managed) . ' keys');
+$strays = array_values(array_diff($named, $managed));
+is_($strays === [], 'no listing line names something that is not a setting',
+    $strays ? implode(', ', $strays) : '');
+is_(in_array('cashbook_seeds', $named, true), 'the JSON setting appears under its own name');
+is_(strpos($out, 'Partner Remuneration (0)') !== false,
+    'its categories still appear, in the detail line where they belong');
+is_(strpos($out, 'Airtime (2)') !== false, 'with their counts');
+
+echo "\nA zone is shown as what it means, and a bad one is refused\n";
+is_(strpos($out, 'Africa/Kampala — EAT (UTC+3)') !== false,
+    'the configured zone renders with its real offset');
+[$c2, $o2] = $run(['--key', 'timezone', '--value', 'Africa/Kampla']);
+is_($c2 !== 0, 'a misspelt zone exits non-zero');
+is_($saved('timezone') === 'Africa/Kampala', 'and does not overwrite the good value');
+[$c3, $o3] = $run(['--key', 'cashbook_seeds', '--value', 'not json']);
+is_($c3 !== 0, 'malformed JSON is refused too');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
