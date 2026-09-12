@@ -20,8 +20,10 @@ if (!function_exists('str_ends_with')) { function str_ends_with(string $h, strin
  *
  * Architecture (data flow per call):
  *
- *   1. UCRM client_id → Starlink Finance plugin's data/sl_kits.json
- *      to get list of KIT serial numbers assigned to this client.
+ *   1. UCRM client_id (or service_id) → equipment_assignments, the one
+ *      authoritative record of which kit a customer holds. Exact integer
+ *      match. No service-name regex, no sl_kits.json, no guessing: a
+ *      customer with no assignment is reported as such and left alone.
  *   2. KIT serial → Data Report plugin's data/wifi_router_map.json
  *      to get router_id, account_number, is_bypassed.
  *   3. For each router:
@@ -53,11 +55,12 @@ if (!function_exists('str_ends_with')) { function str_ends_with(string $h, strin
  * Idempotency: every entry point checks current state first. A repeat
  * webhook for an already-suspended client is a no-op.
  *
- * NOTE on dependencies (data plugin paths):
- *   - dishnet-starlink-finance/data/sl_kits.json
- *   - dishnet-data-report/data/wifi_router_map.json
- *   These are read-only here. If either is missing/stale, the operation
- *   is logged and partial-failed — never throws.
+ * NOTE on dependencies:
+ *   - equipment_assignments (our own table) — WHO owns the kit. Authoritative.
+ *   - dishnet-data-report/data/wifi_router_map.json — WHICH router serves that
+ *     kit. Read-only here; if missing or stale the operation is logged and
+ *     partial-failed, never thrown.
+ *   sl_kits.json is no longer consulted for ownership at all.
  */
 class StarlinkBlockService
 {
@@ -149,11 +152,17 @@ class StarlinkBlockService
             return ['ok' => true, 'skipped_reason' => 'vip', 'routers_processed' => 0];
         }
 
-        // ── 2. Resolve client → KITs → routers ─────────────────────────────
-        $routers = $this->resolveClientRouters($clientId);
+        // ── 2. Resolve service → assignment → router ───────────────────────
+        // Narrowed to the service that was actually suspended. A customer with
+        // two Starlink services used to lose both dishes when one went unpaid,
+        // because the service id came in and was never used.
+        $routers = $this->resolveClientRouters($clientId, $serviceId);
         if (empty($routers)) {
-            $this->log($clientId, '', 'webhook_skipped', true, null, '', 'No Starlink routers found for client');
-            return ['ok' => true, 'skipped_reason' => 'no_routers', 'routers_processed' => 0];
+            $this->log($clientId, '', 'webhook_skipped', true, null, '',
+                       $serviceId > 0
+                           ? "No equipment assignment for uCRM service #{$serviceId} — nothing blocked"
+                           : 'No equipment assignment for this client — nothing blocked');
+            return ['ok' => true, 'skipped_reason' => 'no_assignment', 'routers_processed' => 0];
         }
 
         $routersProcessed = 0;
@@ -244,11 +253,21 @@ class StarlinkBlockService
      * @param string $triggeredBy   'webhook' | 'payment.add' | 'manual:<retailer_id>'
      * @return array { ok, routers_restored, routers_failed }
      */
-    public function restore(int $clientId, string $triggeredBy = 'webhook'): array
+    public function restore(int $clientId, string $triggeredBy = 'webhook', int $serviceId = 0): array
     {
-        // Find all sl_suspension_state rows for this client (multi-router safe)
-        $stmt = $this->pdo->prepare("SELECT * FROM " . self::TABLE_STATE . " WHERE client_id = ?");
-        $stmt->execute([$clientId]);
+        // Restoring reads back what was suspended, so it is already exact —
+        // the state rows were written against a resolved router. Narrowing by
+        // service matters for the mirror-image of the suspend bug: reactivate
+        // one service of two and only that customer's other dish should stay
+        // dark, because its own service is still unpaid.
+        if ($serviceId > 0) {
+            $stmt = $this->pdo->prepare("SELECT * FROM " . self::TABLE_STATE . "
+                                         WHERE client_id = ? AND crm_service_id = ?");
+            $stmt->execute([$clientId, $serviceId]);
+        } else {
+            $stmt = $this->pdo->prepare("SELECT * FROM " . self::TABLE_STATE . " WHERE client_id = ?");
+            $stmt->execute([$clientId]);
+        }
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         if (empty($rows)) {
@@ -1061,153 +1080,120 @@ class StarlinkBlockService
     // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Returns array of router descriptors for this client.
+     * The routers to act on for this customer — or for ONE of their services.
+     *
+     * suspend() has always been handed the service id that was suspended and
+     * never used it, so a customer with two Starlink services lost both dishes
+     * when one went unpaid. The assignment knows which kit runs which service,
+     * so the suspension can finally be as narrow as the event that caused it.
+     *
+     * The router id comes off the assignment when it is known. The router map
+     * is a fallback for kits installed before the router phoned home, and even
+     * then the match is an exact serial comparison, never a substring.
+     *
      * Each item: ['router_id_full', 'kit_serial', 'account_number', 'is_bypassed']
      */
-    private function resolveClientRouters(int $clientId): array
+    private function resolveClientRouters(int $clientId, int $serviceId = 0): array
     {
-        // Step 1: client → KIT serials (Starlink Finance plugin sl_kits.json)
-        $kitSerials = $this->getClientKitSerials($clientId);
-        if (empty($kitSerials)) return [];
+        require_once __DIR__ . '/EquipmentAssignment.php';
 
-        // Step 2: KIT → router (Data Report plugin wifi_router_map.json)
-        $routerMap = $this->loadRouterMap();
-        if (empty($routerMap)) return [];
-
-        $found = [];
-        foreach ($kitSerials as $ks) {
-            foreach ($routerMap as $rid => $rinfo) {
-                if (strcasecmp((string)($rinfo['kit_serial'] ?? ''), $ks) === 0) {
-                    $found[] = [
-                        'router_id_full' => (string)($rinfo['router_id_full'] ?? ('Router-' . $rid)),
-                        'kit_serial'     => $ks,
-                        'account_number' => (string)($rinfo['account_number'] ?? ''),
-                        'is_bypassed'    => !empty($rinfo['is_bypassed']),
-                    ];
+        $assignments = [];
+        try {
+            if ($this->pdo instanceof \PDO) {
+                $ea = new EquipmentAssignment($this->pdo);
+                if ($serviceId > 0) {
+                    $one = $ea->forService($serviceId);
+                    $assignments = $one ? [$one] : [];
+                } else {
+                    $assignments = $ea->forClient($clientId);
                 }
+            }
+        } catch (\Throwable $e) {
+            $this->log($clientId, '', 'kit_lookup_warn', false, null, '',
+                       'equipment_assignments unavailable: ' . $e->getMessage());
+            return [];
+        }
+        if ($assignments === []) return [];
+
+        $routerMap = $this->loadRouterMap();
+        $found = [];
+
+        foreach ($assignments as $a) {
+            $kit = strtoupper(trim((string)($a['kit_serial'] ?? '')));
+            $rid = trim((string)($a['router_id'] ?? ''));
+
+            // The assignment names the router outright.
+            if ($rid !== '') {
+                $info = $routerMap[$rid] ?? $routerMap['Router-' . $rid] ?? [];
+                $found[] = [
+                    'router_id_full' => 'Router-' . $rid,
+                    'kit_serial'     => $kit,
+                    'account_number' => (string)($a['starlink_account'] ?? ($info['account_number'] ?? '')),
+                    'is_bypassed'    => !empty($info['is_bypassed']),
+                ];
+                continue;
+            }
+
+            // It does not, so find the router serving this exact kit serial.
+            if ($kit === '' || $routerMap === []) continue;
+            foreach ($routerMap as $mapKey => $rinfo) {
+                if (!is_array($rinfo)) continue;
+                if (strcasecmp((string)($rinfo['kit_serial'] ?? ''), $kit) !== 0) continue;
+                $found[] = [
+                    'router_id_full' => (string)($rinfo['router_id_full'] ?? ('Router-' . $mapKey)),
+                    'kit_serial'     => $kit,
+                    'account_number' => (string)($rinfo['account_number']
+                                        ?? ($a['starlink_account'] ?? '')),
+                    'is_bypassed'    => !empty($rinfo['is_bypassed']),
+                ];
             }
         }
         return $found;
     }
 
     /**
-     * Read sl_kits.json from sibling Starlink Finance plugin and find KIT serials
-     * assigned to this UCRM client_id. Returns array of kit_serial strings.
+     * The kits this customer has — from the assignment, and from nowhere else.
      *
-     * v4.21.24: also extracts KIT serials from UCRM service.name regex when
-     * sl_kits.json doesn't have the client. Many production customers have
-     * KITs embedded in their service titles (e.g. "Site : ACME (KIT401723651PG7)
-     * : Service Plan Starlink Residential") but no entry in sl_kits.json, so
-     * the json-only lookup returned empty for them. Service-name regex picks
-     * up these cases as a fallback.
+     * This used to try three sources in turn, and the last of them was a
+     * regular expression over a uCRM service NAME:
+     *
+     *     preg_match_all('/\bKIT[A-Z0-9]{8,}\b/i', $service['name'], $m)
+     *
+     * That is how a service rename stopped a customer being blockable, and how
+     * a serial mistyped into a service title could take down a different
+     * customer's dish. Both failures are silent: from the outside a guess that
+     * finds nothing and a guess that finds the wrong thing look identical.
+     *
+     * There is now one source — equipment_assignments — and if it says nothing,
+     * the answer is nothing. Blocking a customer we cannot positively identify
+     * is worse than not blocking them: the money at stake is one month of
+     * service, and the cost of getting it wrong is a working business cut off
+     * with no record of why.
+     *
+     * @param int $serviceId when given, only the kit that uCRM service runs on.
+     *                       A customer with two services and two kits must have
+     *                       exactly one of them suspended, not both.
      */
-    private function getClientKitSerials(int $clientId): array
+    private function getClientKitSerials(int $clientId, int $serviceId = 0): array
     {
-        // Plugin sibling path resolution — Hybrid plugin sits at .../_plugins/dishnet-hybrid-telecom
-        // Starlink Finance sits at .../_plugins/dishnet-starlink-finance
-        require_once __DIR__ . '/SiblingPlugin.php';
-        $candidates = array_filter([SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json')]);
+        if (!($this->pdo instanceof \PDO)) return [];
+        require_once __DIR__ . '/EquipmentAssignment.php';
 
-        $kitsData = null;
-        foreach ($candidates as $p) {
-            if (file_exists($p)) {
-                $raw = @file_get_contents($p);
-                if ($raw !== false) {
-                    $kitsData = json_decode($raw, true);
-                    if (is_array($kitsData)) break;
-                }
-            }
-        }
-
-        $found = [];
-
-        // Source 0: this plugin's own stock. A unit installed against a
-        // customer IS the record of which dish is on their roof — it is
-        // written by the install, carries the serial, and is the register
-        // KitRegister was deliberately retired into. It is checked first
-        // because the other two are inferences: a file belonging to another
-        // plugin, and a regular expression run over a service title somebody
-        // typed. On an install with no Finance plugin — which is this one —
-        // it is the only authoritative source there is.
         try {
-            if ($this->pdo instanceof \PDO) {
-                $st = $this->pdo->prepare(
-                    "SELECT serial_number FROM stock_units
-                     WHERE crm_client_id = ? AND status IN ('installed','reserved')
-                       AND serial_number IS NOT NULL AND serial_number != ''");
-                $st->execute([$clientId]);
-                foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $sn) {
-                    $sn = strtoupper(trim((string)$sn));
-                    if ($sn !== '') $found[] = $sn;
-                }
+            $ea = new EquipmentAssignment($this->pdo);
+            if ($serviceId > 0) {
+                $one = $ea->kitSerialForService($serviceId);
+                return $one !== '' ? [$one] : [];
             }
+            return $ea->kitSerialsForClient($clientId);
         } catch (\Throwable $e) {
-            // No stock tables on this install — the sources below still apply.
+            // No assignment table on this install. Silence is the correct
+            // answer — the caller reports "no equipment assignment", and
+            // nothing is blocked on a guess.
+            $this->log($clientId, '', 'kit_lookup_warn', false, null, '',
+                       'equipment_assignments unavailable: ' . $e->getMessage());
+            return [];
         }
-
-        // Source A: sl_kits.json (when present + has the client). Still read
-        // even when stock answered — a customer can have a dish recorded in
-        // one and not the other, and blocking half of someone's kit leaves
-        // them online.
-        if (is_array($kitsData)) {
-            foreach ($kitsData as $key => $val) {
-                if (!is_array($val)) continue;
-                $cid = (int)(
-                    $val['client_id']
-                    ?? $val['crm_client_id']
-                    ?? $val['ucrm_client_id']
-                    ?? $val['clientId']
-                    ?? $val['crmClientId']
-                    ?? $val['customer_id']
-                    ?? $val['customerId']
-                    ?? 0
-                );
-                if ($cid !== $clientId) continue;
-                $ks = (string)(
-                    $val['kit_serial']
-                    ?? $val['kit']
-                    ?? $val['serial']
-                    ?? $val['kitSerial']
-                    ?? (is_string($key) ? $key : '')
-                );
-                if ($ks !== '') $found[] = strtoupper(trim($ks));
-            }
-        }
-
-        // Source B: UCRM service.name regex fallback. Only call CRM if Source A
-        // came up empty — saves a network round-trip for the common case.
-        if (empty($found)) {
-            try {
-                if (!class_exists('CrmApiClient')) {
-                    @require_once __DIR__ . '/CrmApiClient.php';
-                }
-                if (class_exists('CrmApiClient')) {
-                    $baseUrl = (string)($this->config['crm_base_url'] ?? '');
-                    $token   = (string)($this->config['crm_auth_token'] ?? $this->config['crm_app_key'] ?? '');
-                    if ($baseUrl !== '' && $token !== '') {
-                        $crm = new \CrmApiClient(rtrim($baseUrl, '/'), $token, 'x-auth-token');
-                        $svcs = $crm->get("clients/{$clientId}/services");
-                        if (is_array($svcs)) {
-                            $regex = '/\bKIT[A-Z0-9]{8,}\b/i';
-                            foreach ($svcs as $s) {
-                                $name = (string)($s['name'] ?? '');
-                                if ($name === '') continue;
-                                if (preg_match_all($regex, $name, $m)) {
-                                    foreach ($m[0] as $kit) {
-                                        $found[] = strtoupper(trim($kit));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Best-effort; fall through with whatever we have
-                $this->log($clientId, '', 'kit_lookup_warn', false, null, '', 'service-name regex fallback threw: ' . $e->getMessage());
-            }
-        }
-
-        return array_values(array_unique($found));
     }
 
     /**

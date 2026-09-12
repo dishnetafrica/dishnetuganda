@@ -73,6 +73,67 @@ class MigrationRunner
      * Newlines are kept so that line numbers in any error still mean
      * something.
      */
+    /**
+     * Split a migration into statements.
+     *
+     * A semicolon usually ends a statement. Inside a trigger it does not: the
+     * whole point of a trigger is that its body is a list of statements, and
+     * CREATE TRIGGER … BEGIN … END; split on every semicolon becomes three
+     * fragments, none of which is valid SQL. The first fails, the rest fail,
+     * and because "already exists" and friends are treated as safe the file is
+     * still marked applied — a trigger that silently never existed, which is
+     * the same shape of bug as the comment semicolons that cost four tables.
+     *
+     * BEGIN only opens a body when the statement so far is a CREATE TRIGGER,
+     * so BEGIN TRANSACTION and a column called "begin_date" are unaffected.
+     *
+     * @return string[] non-empty, trimmed
+     */
+    public static function splitStatements(string $sql): array
+    {
+        $sql  = self::stripComments($sql);
+        $len  = strlen($sql);
+        $out  = [];
+        $buf  = '';
+        $inString = false;
+        $bodyDepth = 0;
+
+        for ($i = 0; $i < $len; $i++) {
+            $c = $sql[$i];
+
+            if ($inString) {
+                $buf .= $c;
+                if ($c === "'") {
+                    if ($i + 1 < $len && $sql[$i + 1] === "'") { $buf .= $sql[++$i]; continue; }
+                    $inString = false;
+                }
+                continue;
+            }
+            if ($c === "'") { $inString = true; $buf .= $c; continue; }
+
+            if (($c === 'b' || $c === 'B')
+                && preg_match('/^begin\b/i', substr($sql, $i, 6))
+                && preg_match('/\bcreate\s+trigger\b/i', $buf)) {
+                $bodyDepth++;
+            } elseif (($c === 'e' || $c === 'E') && $bodyDepth > 0
+                      && preg_match('/^end\b/i', substr($sql, $i, 4))) {
+                $bodyDepth--;
+            }
+
+            if ($c === ';' && $bodyDepth === 0) {
+                $t = trim($buf);
+                if ($t !== '') $out[] = $t;
+                $buf = '';
+                continue;
+            }
+            $buf .= $c;
+        }
+
+        $t = trim($buf);
+        if ($t !== '') $out[] = $t;
+        return $out;
+    }
+
     public static function stripComments(string $sql): string
     {
         $out = '';
@@ -154,10 +215,7 @@ class MigrationRunner
             // and the table it was supposed to create does not exist.
             //
             // Eleven comment lines across the existing migrations contain one.
-            $rawStmts = array_filter(
-                array_map('trim', explode(';', self::stripComments($sql))),
-                function($s) { return $s !== ''; }
-            );
+            $rawStmts = self::splitStatements($sql);
 
             foreach ($rawStmts as $single) {
                 try {

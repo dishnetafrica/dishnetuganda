@@ -880,6 +880,15 @@ class StockService
         return $this->getUnitRow($unitId);
     }
 
+    /**
+     * Put a unit at a customer.
+     *
+     * The ownership half of this is no longer written here. It goes through
+     * EquipmentAssignment, which is the one authoritative answer to "whose kit
+     * is this" — with the database enforcing one live owner per unit, per
+     * service and per Starlink identifier. stock_units keeps crm_client_id as
+     * current state, mirrored from that assignment and written nowhere else.
+     */
     public function install(int $unitId, array $data, int $performedBy, string $performerName): array
     {
         $unit = $this->getUnitRow($unitId);
@@ -898,17 +907,51 @@ class StockService
         }
 
         $crmClientId = (int)($data['crm_client_id'] ?? 0);
+        // The screens sent parseInt(...) || 0 and a zero was written as NULL
+        // while the typed customer NAME was kept. The unit then looked
+        // installed at a named customer and was invisible to every lookup that
+        // decides blocking, billing and portal access. A name is not an
+        // identity; refusing is the only honest thing to do with a zero.
+        if ($crmClientId <= 0) {
+            throw new \InvalidArgumentException(
+                'Installing needs the uCRM client id, not just a name. '
+              . 'Pick the customer from the list rather than typing one.');
+        }
+
         $clientName = trim($data['client_name'] ?? 'Customer');
         $now = date('Y-m-d H:i:s');
 
-        $this->db->prepare("UPDATE stock_units SET status = 'installed', location_type = 'customer',
-            location_ref = ?, location_name = ?, crm_client_id = ?, crm_service_id = ?,
-            job_id = ?, assigned_to_rid = NULL, updated_at = ? WHERE id = ?")
-            ->execute([
-                (string)$crmClientId, $clientName, $crmClientId ?: null,
-                (int)($data['crm_service_id'] ?? 0) ?: null,
-                (int)($data['job_id'] ?? 0) ?: null, $now, $unitId
-            ]);
+        require_once __DIR__ . '/EquipmentAssignment.php';
+        $ea  = new EquipmentAssignment($this->db);
+        $own = !$this->db->inTransaction();
+        if ($own) $this->db->beginTransaction();
+        try {
+            $a = $ea->assign([
+                'unit_id'               => $unitId,
+                'crm_client_id'         => $crmClientId,
+                'crm_service_id'        => (int)($data['crm_service_id'] ?? 0),
+                'starlink_account'      => $data['starlink_account'] ?? '',
+                'starlink_service_line' => $data['starlink_service_line'] ?? ($data['service_line'] ?? ''),
+                'terminal_id'           => $data['terminal_id'] ?? '',
+                'router_id'             => $data['router_id'] ?? '',
+                'note'                  => trim((string)($data['note'] ?? '')),
+            ], ['id' => $performedBy, 'name' => $performerName]);
+            if (empty($a['ok'])) throw new \InvalidArgumentException((string)$a['error']);
+
+            $this->db->prepare("UPDATE stock_units SET status = 'installed', location_type = 'customer',
+                location_ref = ?, location_name = ?, job_id = ?, assigned_to_rid = NULL,
+                updated_at = ? WHERE id = ?")
+                ->execute([
+                    (string)$crmClientId, $clientName,
+                    (int)($data['job_id'] ?? 0) ?: null, $now, $unitId
+                ]);
+            $ea->mirrorToUnit($unitId);
+
+            if ($own) $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($own && $this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
 
         $this->logMovement([
             'category_id' => $unit['category_id'],
@@ -924,7 +967,8 @@ class StockService
             'reference_id' => $data['reference_id'] ?? ($data['job_id'] ?? ''),
             'performed_by' => $performedBy,
             'performed_by_name' => $performerName,
-            'note' => $data['note'] ?? "Installed at {$clientName}",
+            'note' => ($data['note'] ?? "Installed at {$clientName}")
+                    . ' [assignment #' . (int)($a['id'] ?? 0) . ']',
         ]);
 
         return $this->getUnitRow($unitId);
@@ -943,11 +987,22 @@ class StockService
 
         $newStatus = $condition === 'damaged' ? 'damaged' : 'returned';
         $now = date('Y-m-d H:i:s');
+
+        // Release the assignment rather than blanking the columns. The row
+        // survives as history — who had it, from when to when, and which unit
+        // took over — instead of the fact simply disappearing.
+        require_once __DIR__ . '/EquipmentAssignment.php';
+        $ea = new EquipmentAssignment($this->db);
+        $ea->release($unitId, [
+            'reason'              => trim($note) !== '' ? $note : ('returned (' . $condition . ')'),
+            'replaced_by_unit_id' => 0,
+        ], ['id' => $performedBy, 'name' => $performerName]);
+
         $this->db->prepare("UPDATE stock_units SET status = ?, location_type = 'warehouse',
-            location_ref = 'main', location_name = ?,
-            crm_client_id = NULL, crm_service_id = NULL, job_id = NULL,
+            location_ref = 'main', location_name = ?, job_id = NULL,
             assigned_to_rid = NULL, condition_grade = ?, updated_at = ? WHERE id = ?")
             ->execute([$newStatus, self::DEFAULT_LOCATION, $condition, $now, $unitId]);
+        $ea->mirrorToUnit($unitId);
 
         $this->logMovement([
             'category_id' => $unit['category_id'],

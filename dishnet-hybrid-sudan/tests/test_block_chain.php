@@ -69,16 +69,26 @@ is_(!in_array('KIT999999999ZZ9', $kits, true),
     . 'or somebody else');
 t('a customer with no dish gets nothing', $ref->invoke($svc, 9999), []);
 
-echo "\nA reserved dish counts too\n";
-// Reserved means sold and held for them. If they never pay for the install,
-// the block has to find it.
+echo "\nA reserved dish is a hold, not an assignment\n";
+// It used to resolve, on the argument that a kit sold and held should still be
+// blockable. It should not, and for a plain reason: a reserved kit is in the
+// warehouse. There is no router at anybody's premises to act on and no live
+// service to suspend, so "blocking" it changed the WiFi on nothing. Ownership
+// now means an assignment, and a reservation is deliberately not one.
 $u2 = (int)$pdo->query("SELECT id FROM stock_units WHERE serial_number='KIT999999999ZZ9'")->fetchColumn();
 $stock->reserve($u2, ['crm_client_id' => 5500, 'client_name' => 'Held Co'], 7, 'Bhavin');
-t('a held kit resolves for its customer', $ref->invoke($svc, 5500), ['KIT999999999ZZ9']);
+t('a held kit is not blockable', $ref->invoke($svc, 5500), []);
+// But the hold is still real and the customer still sees it.
+t('while the hold itself survives on the unit',
+    (int)$pdo->query("SELECT crm_client_id FROM stock_units WHERE id={$u2}")->fetchColumn(), 5500);
+t('and it is still reserved',
+    $pdo->query("SELECT status FROM stock_units WHERE id={$u2}")->fetchColumn(), 'reserved');
 
 echo "\nA released dish stops counting\n";
 $stock->release($u2, 7, 'Bhavin', 'sale fell through');
 t('it is nobody\'s again', $ref->invoke($svc, 5500), []);
+t('and the hold is gone from the unit too',
+    $pdo->query("SELECT crm_client_id FROM stock_units WHERE id={$u2}")->fetchColumn(), null);
 
 echo "\nWithout stock tables at all it does not throw\n";
 $bare = sys_get_temp_dir() . '/dn_block_bare_' . bin2hex(random_bytes(4));

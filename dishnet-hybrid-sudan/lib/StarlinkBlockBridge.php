@@ -13,14 +13,14 @@
  *   audit logging. The Block Manager UI uses it. The webhook handlers should too.
  *
  * What this does:
- *   suspendClient(clientId, freshClient?, triggeredBy) →
+ *   suspendClient(clientId, freshClient?, triggeredBy, serviceId?) →
  *     1. VIP guard (same isVipClient check StarlinkBlockService uses)
  *     2. Resolve client → KIT serials (from UCRM service.name regex; falls back
  *        to sl_kits.json if needed). Same logic as the audit endpoint.
  *     3. For each KIT, GET dr_wifi_lookup_by_kit → router_id
  *     4. POST dr_wifi_test_block {router_id, mode:'pause_only', by:'webhook'}
  *
- *   restoreClient(clientId, triggeredBy) →
+ *   restoreClient(clientId, triggeredBy, serviceId?) →
  *     1. Resolve client → KIT serials
  *     2. Read data-report's wifi_test_block_state.json directly (server-side,
  *        same JSON file) to find which of this client's KITs are currently
@@ -75,7 +75,6 @@ class StarlinkBlockBridge
     /** @var string */ private $drBaseUrl = '';
 
     const HTTP_TIMEOUT_SEC = 25;
-    const KIT_REGEX = '/\bKIT[A-Z0-9]{8,}\b/i';
 
     public function __construct(\PDO $pdo, $store, array $config, string $dataDir, $notify = null)
     {
@@ -99,7 +98,7 @@ class StarlinkBlockBridge
      * @param string $triggeredBy      e.g. 'webhook:service.suspend', 'webhook:postpone_revert'
      * @return array { ok, routers_processed, routers_failed, skipped_reason, attempts: [{router_id, kit, ok, error?}] }
      */
-    public function suspendClient(int $clientId, ?array $freshClient = null, string $triggeredBy = 'webhook'): array
+    public function suspendClient(int $clientId, ?array $freshClient = null, string $triggeredBy = 'webhook', int $serviceId = 0): array
     {
         // 1. VIP guard — reuse existing logic from StarlinkBlockService for parity
         try {
@@ -113,8 +112,10 @@ class StarlinkBlockBridge
             $this->log("VIP guard threw: {$e->getMessage()} — proceeding (fail-open)");
         }
 
-        // 2. Resolve KIT serials for this client (same logic as audit endpoint)
-        $kits = $this->resolveClientKits($clientId);
+        // 2. Which kit — narrowed to the service that was suspended when the
+        // caller knows it, so a customer with two services keeps the one they
+        // are paying for.
+        $kits = $this->resolveClientKits($clientId, $serviceId);
         if (empty($kits)) {
             $noKitResult = [
                 'ok' => true,
@@ -198,9 +199,9 @@ class StarlinkBlockBridge
      *
      * @return array { ok, routers_restored, routers_failed, attempts: [...] }
      */
-    public function restoreClient(int $clientId, string $triggeredBy = 'webhook'): array
+    public function restoreClient(int $clientId, string $triggeredBy = 'webhook', int $serviceId = 0): array
     {
-        $kits = $this->resolveClientKits($clientId);
+        $kits = $this->resolveClientKits($clientId, $serviceId);
         if (empty($kits)) {
             $r = [
                 'ok' => true,
@@ -310,165 +311,65 @@ class StarlinkBlockBridge
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // KIT RESOLUTION (mirrors audit endpoint multi-source approach)
+    // KIT RESOLUTION — one source: equipment_assignments
     // ═════════════════════════════════════════════════════════════════════════
 
     /**
-     * Resolve client_id → KIT serials. Two sources:
-     *   (A) sl_kits.json (Starlink Finance plugin)
-     *   (B) UCRM /clients/{id}/services regex on service.name
-     * Union, deduped, uppercase. Returns empty array if neither yields anything.
+     * Resolve client_id → KIT serials, from the assignment and nothing else.
+     *
+     * This had two sources and both were guesses. One was a file belonging to
+     * a plugin that is not installed. The other read uCRM services and mined
+     * KIT serials out of four free-text fields — name, serviceName, note and
+     * tariffName — with /\bKIT[A-Z0-9]{8,}\b/i.
+     *
+     * So a note reading "replaces KITAAAA1234" would resolve a customer to a
+     * dish they gave back, and a serial pasted into the wrong service took out
+     * the wrong customer. Both failures are invisible: nothing distinguishes a
+     * guess that found nothing from a guess that found somebody else.
+     *
+     * @param int $serviceId narrow to one uCRM service, when the caller knows
+     *                       which one — a suspension should reach exactly the
+     *                       kit whose service was suspended.
      */
-    private function resolveClientKits(int $clientId): array
+    private function resolveClientKits(int $clientId, int $serviceId = 0): array
     {
-        $found = [];
-        $diag  = [
-            'src_a_path'    => null,
-            'src_a_present' => false,
-            'src_a_entries' => 0,
-            'src_a_matched' => 0,
-            'src_b_attempted' => false,
-            'src_b_url'     => '',
-            'src_b_appkey_len' => 0,
-            'src_b_services_count' => 0,
-            'src_b_kits_extracted' => 0,
-            'src_b_error'   => '',
+        require_once __DIR__ . '/EquipmentAssignment.php';
+        $diag = [
+            'source'         => 'equipment_assignments',
+            'client_id'      => $clientId,
+            'service_id'     => $serviceId,
+            'assignments'    => 0,
+            'kits'           => 0,
+            'error'          => '',
         ];
 
-        // Source A: sl_kits.json
-        $kitsJson = null;
-        require_once __DIR__ . '/SiblingPlugin.php';
-        foreach (array_filter([SiblingPlugin::path('dishnet-starlink-finance', 'sl_kits.json')]) as $p) {
-            if (file_exists($p)) {
-                $diag['src_a_path']    = $p;
-                $diag['src_a_present'] = true;
-                $raw = @file_get_contents($p);
-                if ($raw !== false) {
-                    $kitsJson = json_decode((string)$raw, true);
-                    if (is_array($kitsJson)) {
-                        $diag['src_a_entries'] = count($kitsJson);
-                        break;
-                    }
-                }
+        $found = [];
+        try {
+            $ea = new EquipmentAssignment($this->pdo);
+            $rows = $serviceId > 0
+                ? array_filter([$ea->forService($serviceId)])
+                : $ea->forClient($clientId);
+            $diag['assignments'] = count($rows);
+            foreach ($rows as $a) {
+                $k = strtoupper(trim((string)($a['kit_serial'] ?? '')));
+                if ($k !== '') $found[$k] = true;
             }
-        }
-        if (is_array($kitsJson)) {
-            foreach ($kitsJson as $key => $val) {
-                if (!is_array($val)) continue;
-                $cid = (int)(
-                    $val['client_id'] ?? $val['crm_client_id'] ?? $val['ucrm_client_id']
-                    ?? $val['clientId'] ?? $val['crmClientId'] ?? $val['customer_id'] ?? 0
-                );
-                if ($cid !== $clientId) continue;
-                $ks = (string)(
-                    $val['kit_serial'] ?? $val['kit'] ?? $val['serial']
-                    ?? $val['kitSerial'] ?? (is_string($key) ? $key : '')
-                );
-                if ($ks !== '') {
-                    $found[strtoupper(trim($ks))] = true;
-                    $diag['src_a_matched']++;
-                }
-            }
+        } catch (\Throwable $e) {
+            $diag['error'] = $e->getMessage();
+            $this->log("equipment_assignments unavailable: {$e->getMessage()}");
         }
 
-        // Source B: UCRM service.name regex (fallback for clients not in sl_kits.json)
-        // v4.21.35: extensive diagnostics so we can see exactly why this fails.
-        if (empty($found)) {
-            $diag['src_b_attempted'] = true;
-            try {
-                if (!class_exists('CrmApiClient')) {
-                    @require_once __DIR__ . '/CrmApiClient.php';
-                }
-                if (!class_exists('CrmApiClient')) {
-                    $diag['src_b_error'] = 'CrmApiClient class not loadable';
-                } else {
-                    $pluginRoot = dirname(__DIR__);
-                    $crm = \CrmApiClient::fromUcrm($pluginRoot, is_array($this->config) ? $this->config : []);
-                    $diag['src_b_url']        = $crm->getBaseUrl();
-                    $diag['src_b_appkey_len'] = strlen($crm->getAppKey());
-                    if ($crm->getBaseUrl() === '' || $crm->getAppKey() === '') {
-                        $diag['src_b_error'] = 'CrmApiClient unconfigured (base_url or app_key empty after fromUcrm)';
-                    } else {
-                        // v4.21.36: try the same endpoint patterns the audit uses,
-                        // since clients/{id}/services may not be available on this
-                        // UCRM build. Try in order:
-                        //   1. clients/services?clientId=X    (some UCRM versions)
-                        //   2. clients/{clientId}             (single client; .services subkey)
-                        //   3. clients/{clientId}/services    (REST sub-resource)
-                        // Whichever returns an array wins. Diagnostic captures which.
-                        $svcs = null;
-                        $diag['src_b_endpoint_tried'] = '';
-
-                        // Strategy 1: collection endpoint with clientId filter
-                        $r1 = $crm->get("clients/services?clientId={$clientId}&limit=100");
-                        if (is_array($r1)) {
-                            $svcs = $r1;
-                            $diag['src_b_endpoint_tried'] = "clients/services?clientId={$clientId}";
-                        }
-
-                        // Strategy 2: single client (services may be embedded)
-                        if ($svcs === null) {
-                            $r2 = $crm->get("clients/{$clientId}");
-                            if (is_array($r2)) {
-                                if (!empty($r2['services']) && is_array($r2['services'])) {
-                                    $svcs = $r2['services'];
-                                    $diag['src_b_endpoint_tried'] = "clients/{$clientId} (services subkey)";
-                                } elseif (!empty($r2['attributes']) && is_array($r2['attributes'])) {
-                                    // Sometimes service info is in attributes
-                                    $svcs = $r2['attributes'];
-                                    $diag['src_b_endpoint_tried'] = "clients/{$clientId} (attributes)";
-                                } else {
-                                    // Got the client back; try the sub-resource as a last resort
-                                    $diag['src_b_endpoint_tried'] = "clients/{$clientId} (no services subkey)";
-                                }
-                            }
-                        }
-
-                        // Strategy 3: explicit sub-resource (original)
-                        if ($svcs === null) {
-                            $r3 = $crm->get("clients/{$clientId}/services");
-                            if (is_array($r3)) {
-                                $svcs = $r3;
-                                $diag['src_b_endpoint_tried'] = "clients/{$clientId}/services";
-                            }
-                        }
-
-                        if (!is_array($svcs)) {
-                            $diag['src_b_error'] = 'UCRM API returned non-array on all strategies (likely auth or 404)';
-                        } else {
-                            $diag['src_b_services_count'] = count($svcs);
-                            // The client name often appears in the service name; the KIT regex
-                            // matches on service name OR any string field in the row that
-                            // contains "KITxxxx".
-                            foreach ($svcs as $s) {
-                                if (!is_array($s)) continue;
-                                // Try multiple fields where the KIT might be embedded
-                                $candidates = [];
-                                foreach (['name', 'serviceName', 'note', 'tariffName'] as $f) {
-                                    if (!empty($s[$f])) $candidates[] = (string)$s[$f];
-                                }
-                                foreach ($candidates as $haystack) {
-                                    if (preg_match_all(self::KIT_REGEX, $haystack, $m)) {
-                                        foreach ($m[0] as $kit) {
-                                            $found[strtoupper(trim($kit))] = true;
-                                            $diag['src_b_kits_extracted']++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                $diag['src_b_error'] = 'exception: ' . $e->getMessage();
-                $this->log("KIT regex source threw: {$e->getMessage()}");
-            }
+        $diag['kits'] = count($found);
+        if ($found === []) {
+            // Said out loud, because "no kits" used to mean "all three guesses
+            // came up empty" and now means something precise.
+            $diag['error'] = $diag['error'] !== '' ? $diag['error']
+                : ($serviceId > 0
+                    ? "No equipment assignment for uCRM service #{$serviceId}."
+                    : "No equipment assignment for uCRM client #{$clientId}.");
         }
 
-        // Stash diagnostics for the most recent call so suspend/restore can
-        // surface them when no_kits happens.
         $this->lastResolveDiag = $diag;
-
         return array_keys($found);
     }
 
@@ -581,37 +482,10 @@ class StarlinkBlockBridge
      */
     private function internalAuthHeader(): string
     {
-        // Path candidates for the shared secret file. Prefer a sibling
-        // directory both plugins can reach via dirname() jumps.
-        $candidates = [
-            dirname(__DIR__, 2) . '/_dishnet_shared/internal_auth.json',
-            dirname(__DIR__, 1) . '/../_dishnet_shared/internal_auth.json',
-        ];
-        $file = $candidates[0]; // canonical write path
-
-        $secret = '';
-        foreach ($candidates as $p) {
-            if (file_exists($p)) {
-                $j = @json_decode((string)@file_get_contents($p), true);
-                if (is_array($j) && !empty($j['secret'])) {
-                    $secret = (string)$j['secret'];
-                    break;
-                }
-            }
-        }
-        if ($secret === '') {
-            // Generate, write atomically, return new secret
-            try {
-                @mkdir(dirname($file), 0755, true);
-                $secret = bin2hex(random_bytes(24));
-                $payload = json_encode(['secret' => $secret, 'created_at' => date('c'), 'created_by' => 'StarlinkBlockBridge']);
-                @file_put_contents($file, $payload, LOCK_EX);
-                @chmod($file, 0640);
-            } catch (\Throwable $_) {
-                return '';
-            }
-        }
-        return $secret !== '' ? ("X-DishNet-Internal-Auth: " . $secret) : '';
+        // One implementation, shared with the endpoint that verifies it — so
+        // the two halves cannot drift apart over where the secret lives.
+        require_once __DIR__ . '/InternalAuth.php';
+        return InternalAuth::header();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
