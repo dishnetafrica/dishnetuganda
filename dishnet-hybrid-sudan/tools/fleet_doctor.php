@@ -87,11 +87,29 @@ if ($rows === null) {
     echo "    ✗ sl_usage.json NOT FOUND — the data-report plugin has never\n";
     echo "      written usage on this server. Every row will read 'no telemetry'.\n";
     echo "      This is the piece South Sudan has and Uganda does not.\n\n";
+} elseif ($rows === []) {
+    echo "    ⚠ sl_usage.json EXISTS but is EMPTY — the data-report plugin has run\n";
+    echo "      here and collected nothing. That is not the same as 'no telemetry\n";
+    echo "      pipeline': the file is being written, it just has no readings.\n";
+    echo "      Check that plugin's own collection cron and its Starlink session.\n\n";
 } else {
     $kits = [];
     foreach ($rows as $r) { $k = trim((string)($r['kit_number'] ?? '')); if ($k !== '') $kits[$k] = true; }
     printf("    %-28s %d\n", 'usage rows', count($rows));
-    printf("    %-28s %d\n\n", 'distinct kits reported', count($kits));
+    printf("    %-28s %d\n", 'distinct kits reported', count($kits));
+
+    // The question that decides whether the screen is useful is not "is there
+    // telemetry" or "are there customers" — it is whether the two JOIN. Usage
+    // is matched on the kit serial, so a reading for a kit nobody holds, and a
+    // customer whose kit never reports, both leave a row saying nothing.
+    $matched = 0; $serials = [];
+    foreach ($live as $a) { $sn = EquipmentAssignment::clean($a['kit_serial']); if ($sn !== '') $serials[$sn] = true; }
+    foreach (array_keys($kits) as $k) if (isset($serials[EquipmentAssignment::clean($k)])) $matched++;
+    printf("    %-28s %d of %d\n\n", 'reporting kits we assigned', $matched, count($kits));
+    if ($matched === 0 && $kits !== []) {
+        echo "    ⚠ Telemetry is arriving, but not for ANY kit we have assigned —\n";
+        echo "      the serials do not meet. Every row will still say 'silent'.\n\n";
+    }
 }
 
 // ── 3. What the screen will actually render ────────────────────────────
@@ -110,9 +128,22 @@ printf("    %-28s %s\n", 'telemetry available', !empty($t['available']) ? 'yes' 
 if (!empty($t['reason'])) echo "    reason: " . (string)$t['reason'] . "\n";
 
 echo "\n  {$line}\n";
-$ready = $live !== [] && $rows !== null;
+// "Ready" means an operator opening the screen sees a real reading, not a
+// row explaining why there is none. A present-but-empty usage file is not
+// telemetry, and reporting it as ready is the kind of confident wrong answer
+// this tool exists to prevent.
+$known = (int)($s['usage_known'] ?? 0);
+$ready = $live !== [] && $known > 0;
 if ($ready) {
-    echo "  ✓ The Fleet screen has customers AND telemetry — it is ready.\n\n";
+    printf("  ✓ Ready — %d of %d assigned kit(s) are reporting data.\n\n",
+           $known, count($built['rows'] ?? []));
+} elseif ($live !== [] && $rows === []) {
+    echo "  The screen lists your customer(s), but sl_usage.json is empty, so every\n";
+    echo "  row reads 'silent'. The screen is correct; the telemetry is not flowing.\n";
+    echo "  That is the sibling dishnet-data-report plugin's collection, not this one.\n\n";
+} elseif ($live !== [] && $rows !== null && $known === 0) {
+    echo "  The screen lists your customer(s) and telemetry exists, but none of it\n";
+    echo "  matches a kit we have assigned. Check the kit serials on both sides.\n\n";
 } elseif ($live === [] && $rows === null) {
     echo "  The screen is built and reachable (Admin → Starlink Fleet) but has\n";
     echo "  neither assignments nor telemetry yet, so it will render empty.\n\n";
