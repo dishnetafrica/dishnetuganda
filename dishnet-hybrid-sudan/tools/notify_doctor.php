@@ -283,6 +283,10 @@ echo "  WHAT THE 36 STORE-ONLY CRONS SEE\n  {$line}\n";
 printf("    %-30s %s\n", 'evo_api_url', trim((string)($storeOnly['evo_api_url'] ?? '')) ?: '— MISSING');
 printf("    %-30s %s\n", 'evo_api_key', trim((string)($storeOnly['evo_api_key'] ?? '')) !== '' ? 'set' : '— MISSING');
 printf("    %-30s %s\n", 'evo_instance_support', trim((string)($storeOnly['evo_instance_support'] ?? '')) ?: '— MISSING');
+// cron_invoice_notify, cron_overdue_email and cron_quote_wa are store-only AND
+// send on the accounts channel, so this line is the one that decides whether a
+// customer's invoice reaches them.
+printf("    %-30s %s\n", 'evo_instance_account', trim((string)($storeOnly['evo_instance_account'] ?? '')) ?: '— MISSING (invoices, quotes)');
 printf("    %-30s %s\n\n", 'so Evolution is', $storeCan ? 'USABLE' : '✗ NOT USABLE — they fall back to WASender');
 if (!$storeCan) {
     echo "    ⚠ cron/job_assignment_notify.php is one of these. Technician dispatch\n";
@@ -332,7 +336,7 @@ if (!$evo->isConfigured() && !$waOn) {
     echo "  ✗ NEITHER SENDER IS CONFIGURED. Nothing outbound leaves this box.\n\n";
 } elseif ($dead === []) {
     echo "  ✓ Every message class has a live path.\n";
-    if (!$waOn) echo "    WASender is off, but nothing depends on it except PDFs and images.\n";
+    if (!$waOn) echo "    WASender is off and nothing needs it — every class is on Evolution.\n";
     echo "\n";
 } else {
     printf("  ⚠ %d of 3 message classes still send NOTHING, silently. See above.\n\n", count($dead));
