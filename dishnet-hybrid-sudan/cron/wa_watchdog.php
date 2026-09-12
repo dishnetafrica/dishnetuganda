@@ -1,5 +1,6 @@
 #!/usr/bin/env php
 <?php
+require_once dirname(__DIR__) . '/lib/timezone.php';
 // Note: No strict_types — included from master.php
 
 /**
@@ -41,10 +42,11 @@ $_wd_alerts = new AlertService($_wd_store, $_wd_config);
 if ($_wd_alerts->target() === '') {
     echo "wa_watchdog: no alert number set — watching nothing\n";
 } else {
-    // Sudan is UTC+2 (CAT). Waking someone at 03:00 for a message that can
-    // wait until morning teaches them to mute the alerts.
-    $_wd_hour  = (int)gmdate('G') + 2;
-    if ($_wd_hour >= 24) $_wd_hour -= 24;
+    // Waking someone at 03:00 for a message that can wait until morning
+    // teaches them to mute the alerts. This read +2 with "Sudan is UTC+2"
+    // written above it, while three files that greet customers read +3 —
+    // contradicting each other on one box. Both now follow the install.
+    $_wd_hour  = dn_tz_hour();
     $_wd_from  = max(0, min(23, (int)($_wd_config['alert_hours_from'] ?? 7)));
     $_wd_to    = max(1, min(24, (int)($_wd_config['alert_hours_to'] ?? 21)));
 

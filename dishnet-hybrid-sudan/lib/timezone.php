@@ -104,6 +104,19 @@ if (!function_exists('dn_tz')) {
     }
 
     /**
+     * The hour (0-23) it is right now where this install is.
+     *
+     * Four files computed this as (int)gmdate('G') + N with N written in: +3
+     * in the three that greet customers and promise "within the hour", +2 in
+     * the staff-alert quiet-hours guard. They contradicted each other on the
+     * same box, and each was right for only one of the two countries.
+     */
+    function dn_tz_hour(?array $config = null): int
+    {
+        return (int)(new \DateTime('now', dn_tz_obj($config)))->format('G');
+    }
+
+    /**
      * A human label: the identifier and what it currently means.
      * "Africa/Kampala — EAT (UTC+3)". Computed, so it cannot claim an
      * offset the zone does not actually have.

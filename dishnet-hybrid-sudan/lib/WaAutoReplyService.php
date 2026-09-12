@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/timezone.php';
 if (!function_exists('str_contains'))    { function str_contains(string $h, string $n): bool    { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_ends_with'))   { function str_ends_with(string $h, string $n): bool   { return $n===''||substr($h,-strlen($n))===$n; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
@@ -1048,12 +1049,12 @@ class WaAutoReplyService
 
     /**
      * Time-aware escalation message.
-     * Returns "within the hour" during office hours (8 AM–8 PM EAT),
+     * Returns "within the hour" during office hours (8 AM-8 PM local),
      * "first thing tomorrow morning (from 8 AM)" outside hours.
      */
     private function getEscalationMessage(): string
     {
-        $eatHour = ((int)gmdate('G') + 3) % 24;
+        $eatHour = dn_tz_hour();
         $withinHours = ($eatHour >= 8 && $eatHour < 20);
         if ($withinHours) {
             $timings = [

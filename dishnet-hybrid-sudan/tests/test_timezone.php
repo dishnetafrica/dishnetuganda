@@ -121,6 +121,36 @@ $hits = array_values(array_filter($hits, function ($h) {
 is_($hits === [], 'no executable line pins a timezone identifier',
     $hits ? implode("\n       ", $hits) : '');
 
+echo "\nNor does any file write the offset in as arithmetic\n";
+// The zone-name scan above cannot see this form, which is exactly how four
+// files kept their own offsets: +3 in the three that greet customers and
+// promise "within the hour", +2 in the staff-alert quiet-hours guard. They
+// disagreed with each other on the same box, and each was correct for only
+// one of the two countries.
+$arith = [];
+$it2 = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($it2 as $f) {
+    $p = $f->getPathname();
+    if (substr($p, -4) !== '.php') continue;
+    if (strpos($p, '/vendor/') !== false || strpos($p, '/node_modules/') !== false) continue;
+    if (strncmp(basename($p), 'test_', 5) === 0) continue;
+    foreach (file($p) as $i => $line) {
+        $t = ltrim($line);
+        if ($t === '' || $t[0] === '*' || strncmp($t, '//', 2) === 0) continue;
+        if (preg_match("#gmdate\\(\\s*'G'\\s*\\)\\s*\\+\\s*\\d#", $line)
+         || preg_match("#date\\(\\s*'G'\\s*\\)\\s*\\+\\s*\\d#", $line)) {
+            $arith[] = basename($p) . ':' . ($i + 1) . '  ' . trim($line);
+        }
+    }
+}
+is_($arith === [], 'no file adds a written-in UTC offset to an hour',
+    $arith ? implode("\n       ", $arith) : '');
+is_(function_exists('dn_tz_hour'), 'dn_tz_hour() exists as the one way to ask');
+foreach ([['Africa/Kampala', 3], ['Africa/Juba', 2]] as [$z, $o]) {
+    $expect = ((int)gmdate('G') + $o) % 24;
+    is_(dn_tz_hour(['timezone' => $z]) === $expect, "dn_tz_hour() is UTC+$o in $z");
+}
+
 echo "\nThe follow-up window follows the install, not a literal\n";
 $src = file_get_contents($root . '/lib/FollowUpPolicy.php');
 is_(strpos($src, 'new \DateTimeZone(self::TZ)') === false,
