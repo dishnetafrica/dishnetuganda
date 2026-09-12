@@ -282,12 +282,76 @@ class PluginConfig
         $existing = self::readExistingForSave($path);
         if (($existing[0] ?? null) === false && is_string($existing[1] ?? null)) return $existing;
 
+        $cleared = [];
         foreach ($changes as $k => $v) {
             // An empty string clears the override and lets config.json show through.
-            if ($v === null || $v === '') { unset($existing[$k]); continue; }
+            if ($v === null || $v === '') { unset($existing[$k]); $cleared[] = $k; continue; }
             $existing[$k] = $v;
         }
 
-        return self::writeKycFile($path, $existing);
+        [$ok, $err] = self::writeKycFile($path, $existing);
+        if (!$ok) return [$ok, $err];
+
+        // ── And into the store, because half the plugin reads only that ──
+        //
+        // kyc_config.json is read two ways. PluginConfig::load() merges the
+        // FILE last, so the file wins — webhook.php and the follow-up workers
+        // see what is written here immediately. But 66 files read
+        // $store->load('kyc_config.json'), which serves a copy SQLite imported
+        // once and never refreshed. Writing only the file meant a CLI change
+        // was invisible to every one of them.
+        //
+        // That is not theoretical. `set_evolution.php --account dishnet_ug`
+        // reported SAVED, truthfully, and cron_invoice_notify, cron_overdue_email
+        // and cron_quote_wa — all store readers — carried on sending nothing,
+        // because the store had no evo_instance_account at all.
+        //
+        // Failure here is deliberately NOT an error: the file is the canonical
+        // copy and it is already written. A store that cannot be opened (a
+        // tool run before migrations, a read-only mount) must not turn a
+        // successful save into a failed one. The divergence it leaves is what
+        // notify_doctor --fix repairs and reports.
+        self::mirrorToStore($dataDir, $existing, $cleared);
+        return [true, null];
+    }
+
+    /**
+     * Push the saved overrides into the SQLite store, best effort.
+     *
+     * Merged, not replaced: the store legitimately holds keys this file has
+     * never carried — twenty-two screens write it directly — and overwriting
+     * it with the override file alone would delete them.
+     */
+    private static function mirrorToStore(string $dataDir, array $overrides, array $cleared = []): void
+    {
+        // ONLY into a store that already exists — never create one here.
+        //
+        // SqliteStore::create() runs firstBootMigration() when the database is
+        // new, which IMPORTS every *.json in the data directory and renames it
+        // to .migrated. Mirroring into a fresh directory would therefore carry
+        // off the kyc_config.json this function had just written — losing the
+        // canonical copy to fix a stale mirror, which is a worse trade than
+        // the bug. Caught by the test before this shipped.
+        //
+        // When there is no database there are no store readers to serve yet,
+        // and first boot will import the file on its own. Nothing is owed.
+        if (!is_file(rtrim($dataDir, '/') . '/plugin.sqlite3')) return;
+
+        try {
+            require_once __DIR__ . '/StoreInterface.php';
+            require_once __DIR__ . '/JsonStore.php';
+            require_once __DIR__ . '/SqliteStore.php';
+            $store = SqliteStore::create($dataDir);
+            $cur   = $store->load('kyc_config.json');
+            if (!is_array($cur)) $cur = [];
+            $next = array_merge($cur, $overrides);
+            // A cleared override has to be cleared on BOTH sides. Merging alone
+            // would drop it from the file and leave the old value in the store,
+            // so --clear would appear to work and change nothing for the 66.
+            foreach ($cleared as $k) unset($next[$k]);
+            $store->save('kyc_config.json', $next);
+        } catch (\Throwable $e) {
+            // Intentionally silent. See above: the canonical write succeeded.
+        }
     }
 }
