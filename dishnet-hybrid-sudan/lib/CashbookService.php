@@ -34,7 +34,7 @@ class CashbookService
         'Refund','Discount','Build Africa','Site Expense',
         'Bandwidth','Misc Expense','Customer Refund','Customer Commission',
         // v4.9.10: new structured categories from BookKeeper audit
-        'Govt Fees','Legal Fees','Vehicle','Advertising',
+        'Govt Fees','Legal Fees','Vehicle','Advertising','Bank Charges',
         'Partner Remuneration','Renewal Charges',
         // v4.9.18: SSP Advance chain
         'SSP Advance',
@@ -181,6 +181,76 @@ class CashbookService
                    [$active ? 1 : 0, $id]);
     }
 
+    /**
+     * Put an existing ledger row into an account, or move it to another one.
+     *
+     * Every expense in this book was entered without an account: the money
+     * left, and no cash box or bank account was any lighter for it. The UGX
+     * total stayed right — a row with no account still counts in the currency
+     * position — so nothing looked wrong, while not one individual account
+     * balance was true. 7,413,000 of spending sat in a column called
+     * "unassigned rows".
+     *
+     * updateEntry deliberately will not do this: its allow-list covers the
+     * description and the money fields, and an account move is neither. It is
+     * its own act, with its own audit line, and it changes WHERE a row lives
+     * and nothing else — never the amount, the date, or the direction.
+     *
+     * @return array{ok:bool, error?:string, from?:int, to?:int}
+     */
+    public function assignAccount(int $ledgerId, int $accountId, array $actor, string $reason = ''): array
+    {
+        $row = $this->getEntryById($ledgerId);
+        if (!$row) return ['ok' => false, 'error' => "There is no ledger row #{$ledgerId}."];
+        if (in_array((string)($row['status'] ?? ''), ['voided', 'voided_reconcile'], true)) {
+            // A voided row is history. Moving it would rewrite what the book
+            // said at the time, which is the one thing an audit trail is for.
+            return ['ok' => false, 'error' => 'That row is voided — voided rows are kept as they were.'];
+        }
+
+        $acct = $this->account($accountId);
+        if (!$acct)                  return ['ok' => false, 'error' => "There is no account #{$accountId}."];
+        if (!(int)$acct['active'])   return ['ok' => false, 'error' => "'{$acct['name']}' is not an active account."];
+
+        $rowCur = strtoupper(trim((string)($row['currency'] ?? $this->bookBase())));
+        if (strtoupper((string)$acct['currency']) !== $rowCur) {
+            // The same guard addEntryRaw applies on the way in. A UGX row in a
+            // USD account is money that has silently changed currency.
+            return ['ok' => false, 'error' => "'{$acct['name']}' books {$acct['currency']} — "
+                                            . "that row is {$rowCur}."];
+        }
+
+        $was = (int)($row['account_id'] ?? 0);
+        if ($was === $accountId) return ['ok' => true, 'from' => $was, 'to' => $accountId];
+
+        $this->dbq("UPDATE cb_ledger SET account_id = ?, updated_at = datetime('now') WHERE id = ?",
+                   [$accountId, $ledgerId]);
+
+        require_once __DIR__ . '/FinAudit.php';
+        FinAudit::record($this->pdo(), 'cb_ledger', $ledgerId, 'update', $actor,
+                         ['account_id' => $was], ['account_id' => $accountId],
+                         $reason !== '' ? $reason
+                             : ('moved to ' . $acct['name'] . ($was === 0 ? ' (was unassigned)' : '')));
+
+        return ['ok' => true, 'from' => $was, 'to' => $accountId];
+    }
+
+    /**
+     * Rows that belong to no account — the ones making every account balance
+     * a guess.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function unassignedRows(string $currency = ''): array
+    {
+        $w = ["(account_id IS NULL OR account_id = 0)",
+              "status NOT IN ('voided','voided_reconcile')"];
+        $p = [];
+        if ($currency !== '') { $w[] = 'UPPER(currency) = ?'; $p[] = strtoupper($currency); }
+        return $this->query('SELECT * FROM cb_ledger WHERE ' . implode(' AND ', $w)
+                          . ' ORDER BY date, id', $p);
+    }
+
     /** Balance of one account: approved in − approved out, in ITS currency. */
     public function accountBalance(int $id): float
     {
@@ -267,7 +337,8 @@ class CashbookService
      */
     public function recordAccountTransfer(int $fromId, int $toId, float $amountFrom,
                                           float $amountTo, string $date, string $description,
-                                          string $rateSource, string $admin): array
+                                          string $rateSource, string $admin,
+                                          string $ref = '', string $source = 'account_transfer'): array
     {
         $from = $this->account($fromId);
         $to   = $this->account($toId);
@@ -284,8 +355,13 @@ class CashbookService
             return ['ok' => false, 'error' => 'A same-currency transfer must move the same amount'];
         }
 
-        $n   = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FX-%' AND direction='out'")[0]['c'] ?? 0) + 1;
-        $ref = sprintf('FX-%04d', $n);
+        // A caller with its own reference scheme keeps it — a bank import
+        // names both legs after the bank's own transaction id, which is what
+        // makes re-importing the same statement a no-op.
+        if (trim($ref) === '') {
+            $n   = (int)($this->query("SELECT COUNT(*) c FROM cb_ledger WHERE validation_ref LIKE 'FX-%' AND direction='out'")[0]['c'] ?? 0) + 1;
+            $ref = sprintf('FX-%04d', $n);
+        }
         $rate = round($amountTo / $amountFrom, 6);
         $legDesc = $description !== '' ? $description
                  : ($isFx
@@ -299,7 +375,7 @@ class CashbookService
             'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
             'description' => $legDesc . " (to {$to['name']})",
             'validation_ref' => $ref, 'validation_status' => 'na',
-            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => $source,
             'account_id' => $fromId, 'txn_type' => 'TRANSFER',
         ]);
         $this->addEntryRaw([
@@ -308,7 +384,7 @@ class CashbookService
             'category' => 'Bank Transfer', 'category_raw' => 'Bank Transfer',
             'description' => $legDesc . " (from {$from['name']})",
             'validation_ref' => $ref, 'validation_status' => 'na',
-            'status' => 'approved', 'approved_by' => $admin, 'source' => 'account_transfer',
+            'status' => 'approved', 'approved_by' => $admin, 'source' => $source,
             'account_id' => $toId, 'txn_type' => 'TRANSFER',
             'fx_currency' => $isFx ? (string)$from['currency'] : '',
             'fx_amount'   => $isFx ? $amountFrom : null,

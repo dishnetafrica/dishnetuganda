@@ -165,24 +165,100 @@ $step('sl_kits.json', $slKits !== null ? true : null,
       $slKits !== null ? $slKits
         : 'absent — stock is the register now, so this is not needed');
 
-// ── 4. Which router is behind the dish ──────────────────────────────────────
-echo "\n  4) DISH → ROUTER\n";
-$map = SiblingPlugin::readJson('dishnet-data-report', 'wifi_router_map.json');
-if ($map === null) {
-    $step('wifi_router_map.json', false, 'unreadable — nothing can be resolved to a router');
+// ── 4. Can we still talk to Starlink at all ─────────────────────────────────
+//
+// Everything downstream is built from Starlink API calls, and those need a
+// live session cookie. When a session dies, discovery still runs, still
+// succeeds, and writes an EMPTY map — so "0 routers mapped" and "no Starlink
+// account has a working login" look identical from the map alone. They are
+// completely different problems.
+echo "\n  4) THE STARLINK SESSION\n";
+$accts = SiblingPlugin::readJson('dishnet-data-report', 'dr_accounts.json');
+$alive = 0; $dead = 0; $needReimport = [];
+if ($accts === null) {
+    $step('Starlink accounts', false, 'dr_accounts.json unreadable — no account is configured');
+    $fail++;
+} elseif ($accts === []) {
+    $step('Starlink accounts', false, 'none configured — add one in the Data Report session manager');
     $fail++;
 } else {
-    $step('wifi_router_map.json', count($map) > 0, count($map) . ' router(s) mapped');
-    if (count($map) === 0) $fail++;
-    $age = time() - (int)@filemtime((string)SiblingPlugin::path('dishnet-data-report', 'wifi_router_map.json'));
+    foreach ($accts as $num => $a) {
+        if (!is_array($a)) continue;
+        if (!empty($a['session_alive'])) { $alive++; continue; }
+        $dead++;
+        if (!empty($a['needs_manual_reimport'])) $needReimport[] = (string)$num;
+    }
+    $step('accounts configured', true, count($accts) . ' account(s)');
+    $step('sessions alive', $alive > 0, $alive . ' alive, ' . $dead . ' dead');
+    if ($alive === 0) $fail++;
+    // An account with no cookie is not broken, it is un-onboarded — its
+    // service lines are simply invisible until somebody imports one.
+    if ($dead > 0 && $alive > 0) {
+        echo "         " . $dead . " account(s) have no working cookie. Their dishes cannot be\n";
+        echo "         seen or blocked until one is imported for them.\n";
+    }
+    if ($needReimport !== []) {
+        $step('need a fresh login', false, implode(', ', $needReimport));
+        echo "\n";
+        echo "      Their cookie has failed enough times that the plugin gave up on it.\n";
+        echo "      Paste a new session cookie in the Data Report session manager —\n";
+        echo "      nothing downstream works until that account can call Starlink.\n\n";
+    }
+}
+
+// ── 5. Which router is behind the dish ──────────────────────────────────────
+echo "\n  5) DISH → ROUTER\n";
+$map     = SiblingPlugin::readJson('dishnet-data-report', 'wifi_router_map.json');
+$mapPath = SiblingPlugin::path('dishnet-data-report', 'wifi_router_map.json');
+if ($map === null) {
+    $step('wifi_router_map.json', false,
+          'not written yet — the discovery cron has not completed a run');
+    echo "\n";
+    echo "      It runs hourly, and also self-triggers when an admin opens any\n";
+    echo "      Data Report page. Opening one is the quickest way to find out.\n\n";
+    $fail++;
+} elseif (count($map) === 0) {
+    // The distinction that matters. The file is there, so discovery ran and
+    // completed; it simply came back with nothing. WHY it came back with
+    // nothing is a different question for each of these, and the number on
+    // its own answers none of them.
+    $svc  = SiblingPlugin::readJson('dishnet-data-report', 'sl_svc_cache.json') ?? [];
+    $nSvc = count($svc);
+
+    if ($alive === 0 && $accts !== null && $accts !== []) {
+        $step('wifi_router_map.json', false, 'EMPTY — and no Starlink session is alive');
+        $fail++;
+        echo "\n";
+        echo "      Discovery cannot list routers it cannot ask about, and it writes\n";
+        echo "      an empty map rather than failing loudly. Import a cookie first.\n\n";
+    } elseif ($nSvc > 0) {
+        // Service lines exist, no router has ever answered. On a new
+        // operation that is not a fault at all — the dishes are on order.
+        // Marked informational, because there is nothing here to fix.
+        $step('wifi_router_map.json', null,
+              'empty — ' . $nSvc . ' service line(s) exist, no router online yet');
+        echo "\n";
+        echo "      Nothing is broken. A router appears here once its dish is shipped,\n";
+        echo "      powered on and reachable. Until hardware is on the ground there is\n";
+        echo "      nothing to block, and that is the whole of it.\n\n";
+    } else {
+        $step('wifi_router_map.json', false, 'EMPTY — and no service lines either');
+        $fail++;
+        echo "\n";
+        echo "      Starlink answered and listed nothing. Either this account has no\n";
+        echo "      active service, or its dishes are on customer-supplied routers,\n";
+        echo "      which cannot be blocked this way at all.\n\n";
+    }
+} else {
+    $step('wifi_router_map.json', true, count($map) . ' router(s) mapped');
+    $age = time() - (int)@filemtime((string)$mapPath);
     // A map from last month blocks whoever used to own that dish.
-    $step('freshness', $age < 172800 ? true : false,
-          sprintf('%.1f days old', $age / 86400));
+    $step('freshness', $age < 172800, sprintf('%.1f days old', $age / 86400));
     if ($age >= 172800) $fail++;
 }
 
 // ── 5. Who must never be blocked ────────────────────────────────────────────
-echo "\n  5) THE VIP GUARD\n";
+echo "\n  6) THE VIP GUARD\n";
 $vipTag  = (int)($config['starlink_block_vip_tag_id'] ?? 84);
 $vipList = trim((string)($config['starlink_block_vip_clients'] ?? ''));
 $step('uCRM tag', true, '#' . $vipTag . ' ('
@@ -197,7 +273,7 @@ $step('explicit never-block list', $vipList !== '' ? true : null,
 
 // ── 6. One customer, if asked ───────────────────────────────────────────────
 if ($clientId > 0) {
-    echo "\n  6) CLIENT #{$clientId}\n";
+    echo "\n  7) CLIENT #{$clientId}\n";
     $st = $pdo->prepare("SELECT serial_number, status FROM stock_units
                          WHERE crm_client_id = ? AND status IN ('installed','reserved')");
     $st->execute([$clientId]);

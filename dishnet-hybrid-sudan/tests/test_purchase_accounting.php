@@ -195,6 +195,80 @@ t('and the difference is reported, not swallowed',    $var['variance'], 50000.0)
 t('the payable follows the supplier, not our arithmetic',
   (float)$pur->totalsFor((int)$var['id'])['outstanding'], 250000.0);
 
+// ── The shape the Receive screen actually sends ─────────────────────────────
+// That screen posts one entry PER SERIAL — {category_id, serial_number,
+// purchase_cost}, no quantity — because it was written against createUnit().
+// Moving the endpoint onto this service broke it: every serialised item
+// failed with "quantity must be more than zero", which is a confusing way to
+// say the contract changed underneath it. These assertions use the payload
+// the screen builds, field for field, rather than a tidied version of it.
+echo "\nThe payload the Receive screen builds\n";
+$ui = $pur->receive([
+    'supplier'       => 'Starlink Uganda',
+    'invoice_number' => 'SL-UI-1',
+    'purchase_date'  => '2026-09-11',
+    'total_cost'     => 4289408,
+    'payment_method' => 'cash',
+    'notes'          => '',
+    'idem_key'       => 'ui-1',
+], [
+    // Two serialised items, one per serial, exactly as the screen sends them.
+    ['category_id' => $kit, 'serial_number' => 'KIT-UI-001', 'purchase_cost' => 2144704],
+    ['category_id' => $kit, 'serial_number' => 'KIT-UI-002', 'purchase_cost' => 2144704],
+    // And a bulk line, which the screen sends as a bare quantity.
+    ['category_id' => $cable, 'quantity' => 50],
+], $bhavin);
+t('the delivery is accepted', $ui['ok'], true);
+t('both kits were created', (int)$ui['units_created'], 2);
+t('at the cost typed into the screen',
+  (float)$pdo->query("SELECT purchase_cost FROM stock_units WHERE serial_number='KIT-UI-001'")->fetchColumn(),
+  2144704.0);
+$uid = $pur->detail((int)$ui['id']);
+t('three lines were stored', count($uid['items']), 3);
+t('each serial line is one unit', (float)$uid['items'][0]['quantity'], 1.0);
+t('carrying its serial', $uid['items'][0]['serials'], ['KIT-UI-001']);
+// A bulk line with no cost is legitimate — free-issue, or priced later.
+t('a bulk line with no cost is accepted', (float)$uid['items'][2]['quantity'], 50.0);
+
+echo "\nNormalising one line at a time\n";
+$n = PurchaseService::normaliseLine(['category_id' => 1, 'serial_number' => 'S1', 'purchase_cost' => 99]);
+t('a serial becomes a one-unit line', [$n['quantity'], $n['unit_cost'], $n['serials']], [1, 99.0, ['S1']]);
+$n = PurchaseService::normaliseLine(['category_id' => 1, 'quantity' => 5, 'unit_cost' => 10, 'tax_rate' => 18]);
+t('a line already in the new shape is untouched',
+  [$n['quantity'], $n['unit_cost'], $n['tax_rate']], [5, 10, 18]);
+$n = PurchaseService::normaliseLine(['category_id' => 1, 'quantity' => 5]);
+t('a bare quantity gets a zero cost rather than an error', $n['unit_cost'], 0.0);
+$n = PurchaseService::normaliseLine(['category_id' => 1, 'quantity' => 2, 'serials' => ['A', 'B']]);
+t('and a line with serials keeps its own quantity', [$n['quantity'], count($n['serials'])], [2, 2]);
+
+// The screen reads items_created off the response. Renaming it turns a
+// successful delivery into "0 items created" on screen.
+is_(strpos((string)file_get_contents(dirname(__DIR__) . '/includes/api/api_stock.php'),
+    "'items_created'") !== false,
+    'the endpoint still returns the field the screen reads');
+
+// ── Every action a screen calls still exists ────────────────────────────────
+// The receive break was not caught by any test because the service was tested
+// and the screen's contract with it was not. This is the general form of that
+// question: the admin screens call these by name over HTTP, and a renamed or
+// removed action fails silently in a browser nobody is watching.
+echo "\nThe screens and the API still agree\n";
+$root  = dirname(__DIR__);
+$api   = (string)file_get_contents($root . '/includes/api/api_stock.php');
+$calls = [];
+foreach (glob($root . '/tabs/*/*.php') as $f) {
+    if (preg_match_all("/api\('(stock_[a-z_]+)'/", (string)file_get_contents($f), $m)) {
+        foreach ($m[1] as $a) $calls[$a] = basename($f);
+    }
+}
+is_(count($calls) > 10, 'the screens do call the stock API', count($calls) . ' action(s) found');
+$missing = [];
+foreach ($calls as $act => $from) {
+    if (strpos($api, "'{$act}'") === false) $missing[] = "{$act} (called by {$from})";
+}
+is_($missing === [], 'and every action they call is handled',
+    implode("\n       ", $missing));
+
 // ── Audited ─────────────────────────────────────────────────────────────────
 echo "\nEvery purchase leaves a trail\n";
 require_once dirname(__DIR__) . '/lib/FinAudit.php';

@@ -270,6 +270,10 @@ if ($act === 'stock_inbound' && $met === 'POST') {
         'purchase'      => $_purSvc->detail((int)$r['id']),
         'duplicate'     => !empty($r['duplicate']),
         'units_created' => (int)($r['units_created'] ?? 0),
+        // The Receive screen has read items_created since before this endpoint
+        // went through PurchaseService. Renaming a field the UI reads turns a
+        // successful delivery into "0 items created" on screen.
+        'items_created' => (int)($r['units_created'] ?? 0),
         'variance'      => (float)($r['variance'] ?? 0),
     ], $msg);
 }
