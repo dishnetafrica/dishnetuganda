@@ -42,6 +42,7 @@ require_once $root . '/lib/EquipmentAssignment.php';
 require_once $root . '/lib/ServicePlan.php';
 require_once $root . '/lib/CrmKitAttribute.php';
 require_once $root . '/lib/CrmApiClient.php';
+require_once $root . '/lib/KitUsage.php';
 
 $args  = array_slice($argv, 1);
 $KNOWN = ['--commit', '--overwrite', '--plans'];
@@ -79,8 +80,9 @@ if ($live === []) { echo "  No live assignments, so there is nothing to label.\n
 
 // ── What each service sells ─────────────────────────────────────────────────
 if ($plansOnly) {
-    echo "  WHAT EACH SERVICE SELLS\n";
-    printf("    %-5s %-8s %-20s %-34s %s\n", '#', 'CLIENT', 'KIT', 'PLAN (as the customer sees it)', 'ALLOWANCE');
+    $usage = new KitUsage($ea);
+    echo "  WHAT EACH SERVICE SELLS, AND WHAT HAS BEEN USED\n";
+    printf("    %-5s %-8s %-20s %-30s %s\n", '#', 'CLIENT', 'KIT', 'PLAN (as the customer sees it)', 'ALLOWANCE');
     foreach ($live as $a) {
         $p = $kit->planFor($a);
         if ($p === null) {
@@ -96,10 +98,26 @@ if ($plansOnly) {
         elseif ($p['unlimited'])     $allowance = 'unlimited';
         elseif ($p['raw'] === '')    $allowance = 'UNKNOWN — the service names no plan at all';
         else                         $allowance = 'UNKNOWN — "' . $p['raw'] . '" names no allowance';
-        printf("    %-5s #%-7s %-20s %-34s %s\n", $a['id'], $a['crm_client_id'],
-            $a['kit_serial'], mb_substr($p['display'], 0, 34), $allowance);
+        printf("    %-5s #%-7s %-20s %-30s %s\n", $a['id'], $a['crm_client_id'],
+            $a['kit_serial'], mb_substr($p['display'], 0, 30), $allowance);
         if ($p['display'] !== $p['raw']) {
             printf("    %-5s   uCRM says \"%s\", masked for customers\n", '', $p['raw']);
+        }
+        // And what the data-report plugin has actually measured, joined on the
+        // serial the assignment holds. No telemetry is said as no telemetry —
+        // never as zero.
+        $u = $usage->against((string)$a['kit_serial'], $p);
+        if ($u['used_gb'] === null) {
+            printf("    %-5s   usage: %s\n", '', $u['reason']);
+        } elseif ($u['pct'] !== null) {
+            printf("    %-5s   usage: %s GB of %s GB (%s%%) this cycle%s\n", '',
+                number_format($u['used_gb'], 1), number_format($u['cap_gb'], 0),
+                $u['pct'], $u['cycle'] !== '' ? ' — ' . $u['cycle'] : '');
+        } else {
+            printf("    %-5s   usage: %s GB this cycle%s%s\n", '',
+                number_format($u['used_gb'], 1),
+                $u['cycle'] !== '' ? ' — ' . $u['cycle'] : '',
+                $u['unlimited'] ? ', unlimited plan' : ', allowance unknown');
         }
     }
     echo "\n  UNLIMITED IS CLAIMED, NOT INFERRED. A plan counts as unlimited when it\n";
