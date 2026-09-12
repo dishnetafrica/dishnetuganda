@@ -66,7 +66,16 @@ if ($fromStore !== [] && $fromFile !== []) {
         $a = trim((string)($fromStore[$k] ?? '')); $b = trim((string)($fromFile[$k] ?? ''));
         if ($a !== $b) $diff[] = $k;
     }
-    if ($diff) printf("  ⚠ store and file DISAGREE on: %s\n\n", implode(', ', $diff));
+    if ($diff) {
+        echo "  ⚠ store and file DISAGREE — the store wins, so the right column is live:\n";
+        printf("      %-24s %-28s %s\n", '', 'file (set_config writes here)', 'store (LIVE)');
+        foreach ($diff as $k) {
+            printf("      %-24s %-28s %s\n", $k,
+                trim((string)($fromFile[$k] ?? '')) ?: '—',
+                trim((string)($fromStore[$k] ?? '')) ?: '—');
+        }
+        echo "\n";
+    }
 }
 
 // ── WASender ────────────────────────────────────────────────────────────
@@ -99,6 +108,43 @@ foreach (['sales', 'support', 'account'] as $ch) {
         $inst === '' ? '' : ($state !== '' ? $state : 'UNKNOWN — could not reach the API'));
 }
 echo "\n";
+
+// Ask the server what it actually has. A config key naming an instance is not
+// evidence the instance exists — evo_instance_support can name anything, and
+// a name that resolves to nothing fails at send time, not at configuration.
+if ($evo->isConfigured()) {
+    echo "  INSTANCES THE SERVER ACTUALLY HAS\n  {$line}\n";
+    try {
+        $list = $evo->listInstances();
+        if ($list === []) {
+            echo "    UNKNOWN — the API returned no list (unreachable, or no instances).\n";
+        } else {
+            printf("    %-24s %-12s %-18s %s\n", 'NAME', 'STATE', 'PHONE', 'USED AS');
+            $usedBy = [];
+            foreach (['sales', 'support', 'account'] as $ch) {
+                $n = trim((string)($config['evo_instance_' . $ch] ?? ''));
+                if ($n !== '') $usedBy[$n][] = $ch;
+            }
+            foreach ($list as $row) {
+                $n = (string)($row['name'] ?? '');
+                printf("    %-24s %-12s %-18s %s\n", $n,
+                    (string)($row['state'] ?? '?'),
+                    (string)($row['phone'] ?? ($row['number'] ?? '—')),
+                    isset($usedBy[$n]) ? implode(', ', $usedBy[$n]) : '— not wired to a channel');
+            }
+            // Named in config but absent from the server: the silent failure.
+            foreach ($usedBy as $n => $chs) {
+                $found = false;
+                foreach ($list as $row) if ((string)($row['name'] ?? '') === $n) { $found = true; break; }
+                if (!$found) printf("    ✗ %-22s %s\n", $n,
+                    'NAMED for ' . implode(', ', $chs) . ' BUT DOES NOT EXIST HERE');
+            }
+        }
+    } catch (\Throwable $e) {
+        echo "    UNKNOWN — " . $e->getMessage() . "\n";
+    }
+    echo "\n";
+}
 
 // ── What each kind of message actually does today ───────────────────────
 $supportInst = trim((string)($config['evo_instance_support'] ?? ''));
