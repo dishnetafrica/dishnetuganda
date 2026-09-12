@@ -1,6 +1,6 @@
 <?php
 // The local currency comes from configuration. This page taught every Ugandan
-// agent about their "<?= htmlspecialchars($_rbCur) ?> Bag" — South Sudanese Pounds, in a country that uses
+// agent about their "SSP Bag" (South Sudanese Pounds) in a country that uses
 // shillings. The cashbook itself has been currency-aware for a while; only the
 // manual describing it was not.
 require_once dirname(__DIR__, 2) . '/lib/currency.php';
@@ -22,8 +22,12 @@ $_rbAcct  = CustomerContact::accounts($_rbCfg);
 $_rbEscWa = preg_replace('/\\D+/', '', $_rbEsc);
 $_rbSupWa = preg_replace('/\\D+/', '', $_rbSup);
 $_rbAccWa = preg_replace('/\\D+/', '', $_rbAcct);
-$_rbTz    = (string)($_rbCfg['report_timezone'] ?? 'Africa/Kampala');
-$_rbTzCity= trim((string)(explode('/', $_rbTz)[1] ?? 'Kampala'));
+// East Africa Time. The code names the zone Africa/Juba in 43 places and
+// Uganda shares UTC+3 with South Sudan, so every clock is already correct for
+// Kampala — only the identifier is inherited. Naming the offset is true
+// whichever label a given file happens to use, and does not invent a config
+// key that nothing in the system reads.
+$_rbTz    = 'East Africa Time (UTC+3)';
 ?>
 <?php
 /**
@@ -31,7 +35,7 @@ $_rbTzCity= trim((string)(explode('/', $_rbTz)[1] ?? 'Kampala'));
  * DishNet Hybrid v4.11.3
  *
  * Written for Rupesh, Diko, and any staff who need to diagnose
- * issues when Aida is unavailable. Uses plain language, live
+ * issues when the administrator is unavailable. Uses plain language, live
  * health checks, and step-by-step recovery procedures.
  */
 
@@ -148,26 +152,30 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
     <div class="rb-card" id="rb-wa">
         <div class="rb-card-hdr" onclick="rbToggle('rb-wa')">
             <div class="ico" style="background:#dcfce7;">💬</div>
-            <div class="txt"><h4>WhatsApp messages not sending</h4><p>Customers not receiving notifications, invoices, or reminders</p></div>
-            <span class="arrow">▸</span>
+            <div class="txt"><h4>WhatsApp messages not sending</h4><p>Customers not receiving replies, notifications or reminders</p></div>
+            <span class="arrow">&#9654;</span>
         </div>
         <div class="rb-card-body">
-            <div class="rb-alert info">🔒 <strong>WhatsApp is administrator-only.</strong> If a colleague reports that WhatsApp has vanished from their menu, that is correct and not a fault. Only an Administrator may connect, configure or send. Refer them to an Administrator rather than changing their role.</div>
-            <div class="rb-alert info">ℹ️ WhatsApp uses two phone lines: Support (<?= htmlspecialchars($_rbSupWa) ?>) and Accounts (<?= htmlspecialchars($_rbAccWa) ?>). Check which one is affected.</div>
+            <div class="rb-alert info">&#128274; <strong>WhatsApp is administrator-only.</strong> If a colleague reports that WhatsApp has vanished from their menu, that is correct and not a fault. Only an Administrator may connect, configure or send. Refer them to an Administrator rather than changing their role.</div>
+            <div class="rb-alert info">&#8505; This system talks to WhatsApp through <strong>Evolution API</strong>, with one instance per channel (sales, support, accounts). It is not WASender and there is no QR page to visit.</div>
 
-            <strong>Quick diagnosis:</strong>
-            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Open <a href="https://wa.dishnetafrica.com" target="_blank" class="rb-check-btn">wa.dishnetafrica.com</a> — if it loads, the WhatsML server is alive.</div></div>
-            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Go to <strong>Engage → WA Inbox</strong> in CRM. If recent messages are showing, sync is working.</div></div>
-            <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">Check the last sync time: Go to <strong>Admin → Maintenance</strong> tab. Look for "WA Sync" — it should show a time within the last 2 minutes.</div></div>
+            <strong>One command answers the whole question:</strong>
+            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t"><code>php tools/wa_answering.php</code> &mdash; checks the entire path and refuses to call it healthy unless every part is: the instance is connected, the webhook is ours, messages are arriving, replies are going out, nothing is stuck in the queue, and nobody is waiting unanswered.</div></div>
+            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Add <code>--channel sales</code> to check one number instead of all of them.</div></div>
 
-            <strong>If WA sync stopped:</strong>
-            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Check <a href="https://cron-job.org" target="_blank" class="rb-check-btn">cron-job.org</a> — log in and verify the WA sync cron is enabled and running. It should fire every 60 seconds.</div></div>
-            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">If the cron shows errors, it usually means the WhatsML server (<code>134.199.215.120</code>) is down. Wait 10 minutes and check again.</div></div>
-            <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">If the WhatsML server is up but messages still aren't syncing, the WhatsApp session may have expired. <strong>Escalate to Aida</strong> — she needs to re-scan the QR code on the WhatsML dashboard.</div></div>
+            <strong>If it reports the instance is not connected:</strong>
+            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t"><code>php tools/wa_connect.php</code> shows the state of every mapped number.</div></div>
+            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t"><code>php tools/wa_connect.php --pair &lt;instance&gt;</code> issues a pairing CODE you can read down a phone line. The person with the handset types it into WhatsApp &rarr; Linked devices &rarr; Link with phone number. No QR scan, nobody has to be in the same room.</div></div>
 
-            <div class="rb-alert warn">⚠️ Common false alarm: WhatsApp has a 24-hour window for sending messages after the customer's last message. If 24 hours have passed, messages will silently fail — this is a WhatsApp rule, not a bug.</div>
+            <strong>If the webhook is wrong or missing:</strong>
+            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t"><code>php tools/wa_webhook_doctor.php --check</code> diagnoses without changing anything; without <code>--check</code> it registers the webhook and prints Evolution&rsquo;s raw verdict.</div></div>
+
+            <div class="rb-alert warn">&#9888; A registered webhook is not a working number. An instance can hold a correct webhook while sitting at state=close, which means Evolution has nothing to forward &mdash; every check passes and the assistant answers nobody. <code>wa_answering.php</code> is the one that catches this.</div>
+            <div class="rb-alert warn">&#9888; Sessions drop on their own. One instance went from open to close inside seven minutes. If a number stops answering for no apparent reason, re-pair it before looking for anything cleverer.</div>
+            <div class="rb-alert info">&#8505; If nobody has written in for an hour, zero messages is a quiet hour, not a fault. Judge it on the &ldquo;waiting unanswered&rdquo; line instead.</div>
         </div>
     </div>
+
 
     <!-- Payments not syncing -->
     <div class="rb-card" id="rb-pay">
@@ -189,7 +197,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Log into UCRM directly: <a href="<?= h(dn_crm_link($config, '')) ?>" target="_blank" class="rb-check-btn"><?= h(preg_replace('#^https?://#', '', dn_crm_link($config, ''))) ?></a>. Go to Billing → Payments and search for the payment.</div></div>
             <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">If the payment exists in UCRM but not in the plugin, the webhook may have failed. Go to <strong>Admin → Maintenance</strong> and look for recent webhook errors.</div></div>
 
-            <div class="rb-alert danger">🚨 If 5+ payments are missing in the same day, this is a webhook failure. Escalate to Aida immediately — there may be a UCRM webhook configuration issue.</div>
+            <div class="rb-alert danger">🚨 If 5+ payments are missing in the same day, this is a webhook failure. Escalate to the administrator immediately — there may be a UCRM webhook configuration issue.</div>
         </div>
     </div>
 
@@ -226,7 +234,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">If the balance chain is broken (running balance jumps), look for voided or duplicate entries. Search for the amount in question.</div></div>
             <div class="rb-step"><div class="rb-step-n">4</div><div class="rb-step-t">Check for duplicate CRM payments: <strong>Accounts → Cashbook</strong> → filter by <code>CRM-PAY</code> reference. If two entries have the same reference, one is a duplicate.</div></div>
 
-            <div class="rb-alert warn">⚠️ <strong>Never manually edit</strong> entries with a 🔒 lock icon — these are auto-synced from CRM or field merge. Editing them breaks the chain. Contact Aida if you need to fix a locked entry.</div>
+            <div class="rb-alert warn">⚠️ <strong>Never manually edit</strong> entries with a 🔒 lock icon — these are auto-synced from CRM or field merge. Editing them breaks the chain. Contact the administrator if you need to fix a locked entry.</div>
         </div>
     </div>
 
@@ -261,7 +269,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">If sync is stale, check <a href="https://cron-job.org" target="_blank" class="rb-check-btn">cron-job.org</a> — verify the LTE sync cron is enabled.</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">If the cron is running but data isn't updating, the BlueCard server may be down. Try accessing <code>http://162.241.149.144/lte_feed.php?action=health</code> directly.</div></div>
 
-            <div class="rb-alert danger">🚨 The BlueCard server (162.241.149.144) is a WHM/cPanel server. If it's completely down, LTE renewals and subscriber management will stop until it's restored. Escalate to Aida.</div>
+            <div class="rb-alert danger">🚨 The BlueCard server (162.241.149.144) is a WHM/cPanel server. If it's completely down, LTE renewals and subscriber management will stop until it's restored. Escalate to the administrator.</div>
         </div>
     </div>
 
@@ -283,7 +291,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             </div>
 
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Log into <a href="https://cron-job.org" target="_blank" class="rb-check-btn">cron-job.org</a> and check the master cron job. It should run every 1-2 minutes.</div></div>
-            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Check the cron history — if recent runs show HTTP 500 errors, the plugin may have a PHP error. Escalate to Aida.</div></div>
+            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Check the cron history — if recent runs show HTTP 500 errors, the plugin may have a PHP error. Escalate to the administrator.</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">If cron-job.org shows "success" but nothing is happening, the individual cron jobs may be disabled. Check <strong>Admin → Maintenance</strong> for cron status.</div></div>
 
             <strong>Key cron jobs and what they do:</strong>
@@ -335,10 +343,10 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
 
             <strong>Verify backup is running:</strong>
             <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Go to <strong>Admin → Backup & Restore</strong>. The Google Drive section should show the last backup time.</div></div>
-            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Backups run automatically at 3 AM <?= htmlspecialchars($_rbTzCity) ?> time every day.</div></div>
+            <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Backups run automatically at 3 AM <?= htmlspecialchars($_rbTz) ?> every day.</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">You can also click <strong>Run Now</strong> to trigger an immediate backup.</div></div>
 
-            <div class="rb-alert warn">⚠️ If the Google Drive section shows "Not connected" or the last backup is more than 2 days old, escalate to Aida immediately.</div>
+            <div class="rb-alert warn">⚠️ If the Google Drive section shows "Not connected" or the last backup is more than 2 days old, escalate to the administrator immediately.</div>
         </div>
     </div>
 
@@ -441,7 +449,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
         </div>
         <div class="rb-card-body">
             <strong>How it works now (v4.11.3):</strong>
-            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Runs daily at 3 AM <?= htmlspecialchars($_rbTzCity) ?> time (was 6 AM, often got budget-killed by other cron jobs).</div></div>
+            <div class="rb-step"><div class="rb-step-n">1</div><div class="rb-step-t">Runs daily at 3 AM <?= htmlspecialchars($_rbTz) ?> (was 6 AM, often got budget-killed by other cron jobs).</div></div>
             <div class="rb-step"><div class="rb-step-n">2</div><div class="rb-step-t">Creates TWO ZIPs: <strong>CODE</strong> (~2MB, plugin files only) and <strong>DATA</strong> (~24MB, database + JSON + photos).</div></div>
             <div class="rb-step"><div class="rb-step-n">3</div><div class="rb-step-t">WhatsApp notification shows both file names and sizes when complete.</div></div>
             <strong>To restore on new CRM:</strong>
@@ -537,7 +545,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
     <div class="rb-detail">
         <div class="rb-step"><div class="rb-step-n">+0m</div><div class="rb-step-t">Lead assigned → WA to agent immediately</div></div>
         <div class="rb-step"><div class="rb-step-n">+45m</div><div class="rb-step-t">Still not called → Warning WA to agent: "15 minutes left"</div></div>
-        <div class="rb-step"><div class="rb-step-n">+60m</div><div class="rb-step-t">Still not called → Escalation WA to admin (Aida)</div></div>
+        <div class="rb-step"><div class="rb-step-n">+60m</div><div class="rb-step-t">Still not called &rarr; escalation WhatsApp to the administrator</div></div>
         <div class="rb-step"><div class="rb-step-n">3x no answer</div><div class="rb-step-t">Lead auto-marked Dead + farewell WA sent to customer</div></div>
         <div class="rb-alert info">ℹ️ All timers configurable: Settings → System → lead_call_deadline_minutes</div>
     </div>
@@ -617,12 +625,12 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
         <div class="rb-alert info">ℹ️ Evolution API diagnostic: WhatsApp → Conversations → Diagnose button</div>
     </div>
 
-    <div class="rb-section-hdr">📞 When to escalate to Aida</div>
+    <div class="rb-section-hdr">📞 When to escalate to the administrator</div>
 
     <div class="rb-card" id="rb-escalate">
         <div class="rb-card-hdr" onclick="rbToggle('rb-escalate')">
             <div class="ico" style="background:#fef2f2;">🆘</div>
-            <div class="txt"><h4>Escalation triggers — when to call Aida</h4><p>Issues that staff cannot fix themselves</p></div>
+            <div class="txt"><h4>Escalation triggers — when to call the administrator</h4><p>Issues that staff cannot fix themselves</p></div>
             <span class="arrow">▸</span>
         </div>
         <div class="rb-card-body">
@@ -643,7 +651,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
             <div class="rb-step"><div class="rb-step-n">🟡</div><div class="rb-step-t">Fiber install job not created for a specific customer (Rupesh can create invoice manually in CRM)</div></div>
             <div class="rb-step"><div class="rb-step-n">🟡</div><div class="rb-step-t">Receipt photo not showing (check if support_leader role has access — should be fixed in v4.11.3)</div></div>
 
-            <div class="rb-alert success">✅ <strong>When reporting to Aida:</strong> Include the exact error message (screenshot if possible), what you were trying to do, which browser/device, and what time it happened. This saves hours of debugging.</div>
+            <div class="rb-alert success">✅ <strong>When reporting to the administrator:</strong> Include the exact error message (screenshot if possible), what you were trying to do, which browser/device, and what time it happened. This saves hours of debugging.</div>
         </div>
     </div>
 
@@ -661,7 +669,7 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
                 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;width:35%;">CRM (UCRM)</td><td style="padding:8px;border:1px solid #e2e8f0;"><?= h(preg_replace('#^https?://#', '', dn_crm_web($config))) ?></td></tr>
                 <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">Plugin Dashboard</td><td style="padding:8px;border:1px solid #e2e8f0;"><?= h(preg_replace('#^https?://#', '', dn_plugin_public($config))) ?></td></tr>
                 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">Standalone Scanner</td><td style="padding:8px;border:1px solid #e2e8f0;">...public.php?page=scanner</td></tr>
-                <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">WhatsML Server</td><td style="padding:8px;border:1px solid #e2e8f0;">wa.dishnetafrica.com (134.199.215.120)</td></tr>
+                <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">WhatsApp</td><td style="padding:8px;border:1px solid #e2e8f0;">Evolution API — one instance per channel. See <code>tools/wa_answering.php</code>. There is no separate WhatsApp gateway server in this install.</td></tr>
                 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">BlueCard Server</td><td style="padding:8px;border:1px solid #e2e8f0;">162.241.149.144 (WHM/cPanel)</td></tr>
                 <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">Cron Scheduler</td><td style="padding:8px;border:1px solid #e2e8f0;">cron-job.org (external trigger)</td></tr>
                 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;font-weight:700;">App Install Page</td><td style="padding:8px;border:1px solid #e2e8f0;">...public.php?page=install</td></tr>

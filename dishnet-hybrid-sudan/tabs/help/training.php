@@ -6,7 +6,11 @@
 require_once dirname(__DIR__, 2) . '/lib/currency.php';
 $_trCfg    = $store->load('kyc_config.json') ?? [];
 $_trCur    = trim(dn_cur($_trCfg));
-$_trTzCity = trim((string)(explode('/', (string)($_trCfg['report_timezone'] ?? 'Africa/Kampala'))[1] ?? 'Kampala'));
+// East Africa Time. The code still names the zone Africa/Juba in 43 places
+// and Uganda shares UTC+3 with South Sudan, so every clock in the system is
+// correct for Kampala — only the identifier is inherited. Stating the offset
+// is true whichever label a given file uses.
+$_trTz = 'East Africa Time (UTC+3)';
 ?>
 <?php
 // Tab: training
@@ -63,7 +67,7 @@ $curriculum = [
          'steps'=>[
             ['head'=>'KYC = Know Your Customer','body'=>'Before a customer can subscribe to DishNet, you must capture their details: name, phone, address, ID document, and photo. This creates their account in the CRM system.'],
             ['head'=>'Step 1 — Service Type','body'=>'Choose: New Connection, Shifting (moving address), or Ownership Change. Then pick the service: Starlink, Fiber, or DishNet 4G.'],
-            ['head'=>'Step 2 — Customer Details','body'=>'Full name, phone (with country code e.g. +211...), email, address. Tap "Detect GPS" to automatically capture the customer\'s location coordinates.'],
+            ['head'=>'Step 2 — Customer Details','body'=>'Full name, phone (with country code e.g. +256...), email, address. Tap "Detect GPS" to automatically capture the customer\'s location coordinates.'],
             ['head'=>'Step 3 — Plan & Hardware','body'=>'Select the subscription plan. Then on the hardware screen, tap + on each item to add it to your cart. You can add multiple items (e.g. 2 Starlink Mini kits + 1 MikroTik router) with qty controls. The system shows your total wallet deduction in real time.'],
             ['head'=>'Step 4 — KYC Documents','body'=>'Upload customer photo (clear face photo) and National ID / Passport. Also set: sales person, cash or credit payment, referral source.'],
             ['head'=>'Step 5 — Review & Submit','body'=>'Check everything in the summary. If correct, tap Submit. For Cash: your wallet debits immediately. For Credit: no deduction. Customer syncs to CRM in the background.'],
@@ -303,10 +307,45 @@ $curriculum = [
         ['id'=>'ad9','icon'=>'☁️','title'=>'Google Drive Backup',
          'duration'=>'2 min','link'=>'?page=dashboard&tab=whatsapp&subtab=gdrive',
          'steps'=>[
-            ['head'=>'Auto backup','body'=>'Runs daily at 3 AM ' . $_trTzCity . ' time. Creates two ZIPs: CODE (plugin files, uploadable to UCRM) and DATA (database, JSON, photos). Both uploaded to Google Drive.'],
+            ['head'=>'Auto backup','body'=>'Runs daily at 3 AM ' . $_trTz . '. Creates two ZIPs: CODE (plugin files, uploadable to UCRM) and DATA (database, JSON, photos). Both uploaded to Google Drive.'],
             ['head'=>'Setup','body'=>'Go to WhatsApp Settings → Backup tab. Enter Google Drive client ID and secret. Click Authorize. Set schedule (daily/twice daily/weekly) and retention (how many backups to keep).'],
             ['head'=>'Manual backup','body'=>'Click "Backup Now" to trigger immediately. You receive a WhatsApp notification with file names and sizes when complete.'],
             ['head'=>'Restore process','body'=>'Download CODE zip from Drive → upload to UCRM Plugins. Download DATA zip → SCP to server → unzip -o → chown 33:33. Update CRM token in Settings. Run Full Sync from UCRM Data tab.'],
+         ]],
+        ['id'=>'ug1','icon'=>'🇺🇬','title'=>'Uganda: money, VAT and EFRIS',
+         'duration'=>'6 min','link'=>'?page=dashboard&tab=efris',
+         'steps'=>[
+            ['head'=>'The currency is ' . $_trCur, 'body'=>'Every price, invoice and cashbook figure is in ' . $_trCur . '. The books also hold USD, because Starlink bills DishNet in dollars — the two are kept in separate columns and are never added together or converted automatically. If you see one number that mixes them, that is a fault: report it.'],
+            ['head'=>'Clocks', 'body'=>'The system runs on ' . $_trTz . ', which is Kampala time. Message timestamps are STORED in UTC and converted for display, so a time you read on screen is local but a time in an export may be three hours behind. Reports and the daily backup run on local time.'],
+            ['head'=>'VAT is 18%', 'body'=>'Standard-rated, URA tax category A. Starlink hardware, shipping and monthly service are all standard-rated. VAT is configured once in uCRM under Billing → Taxes and applied by uCRM, not by this plugin. Never type a VAT figure by hand onto an invoice.'],
+            ['head'=>'EFRIS — check which mode you are in', 'body'=>'EFRIS (URA e-invoicing) has three settings: disabled, test and production. TEST fiscalises against URA\'s sandbox and the documents it produces are NOT valid tax invoices — they are labelled as tests. Before telling a customer their invoice is fiscalised, open Admin → EFRIS and read which environment is shown. If it says test, the invoice is a rehearsal.'],
+            ['head'=>'What EFRIS does automatically', 'body'=>'When enabled, invoices are queued for fiscalisation and the fiscal document number comes back from URA. Credit notes (T110) and cancellations (T114) are wired through the same queue. Goods registration (T130) and stock maintenance (T131) are available from the EFRIS tab. Nothing is sent to URA without the queue running, so a stuck queue means unfiscalised invoices — check Admin → EFRIS.'],
+            ['head'=>'Mobile money — what the system does and does not do', 'body'=>'MTN Mobile Money and Airtel Money exist as CASHBOOK ACCOUNTS in ' . $_trCur . '. You record money against them the same way you record bank or cash. There is NO automatic collection from MTN or Airtel: the system does not poll for payments, does not confirm transactions, and cannot reverse one. Somebody reads the phone and enters what arrived. Treat any claim otherwise as not yet implemented.'],
+         ]],
+        ['id'=>'ug2','icon'=>'📡','title'=>'Uganda: Starlink kits and customers',
+         'duration'=>'6 min','link'=>'?page=dashboard&tab=starlink_fleet',
+         'steps'=>[
+            ['head'=>'A kit belongs to a customer by ID, never by name', 'body'=>'Admin → Starlink Fleet lists every kit in the field and the uCRM customer it is bound to. That binding lives in equipment_assignments and is made of identifiers — kit serial, terminal, router, service line — not customer names. Renaming a service or mistyping a name cannot move a dish to the wrong customer, and cannot stop the right one being blocked.'],
+            ['head'=>'Assigning a kit', 'body'=>'Receive it into stock first, then bind it with tools/assign_kit.php giving the unit, the uCRM client id and the service id. The service id is required. There is no screen for this yet — it is a command an administrator runs.'],
+            ['head'=>'Usage figures', 'body'=>'The Fleet screen shows what each kit used this cycle, joined from the data-report plugin by exact kit serial. If it says no telemetry has been collected, that is usually a dead Starlink session rather than a dead dish. An unknown allowance is shown as unknown — it is never shown as unlimited, because a plan that names no size may still be capped.'],
+            ['head'=>'Labelling the service in uCRM', 'body'=>'The kit serial is also written onto the uCRM service as a custom attribute named starlinkDetails, so the data report and the CRM agree. tools/crm_kit_label.php writes it and will not overwrite a different serial somebody typed without being told to.'],
+         ]],
+        ['id'=>'ug3','icon'=>'💬','title'=>'Uganda: WhatsApp, the AI and follow-ups',
+         'duration'=>'5 min','link'=>'?page=dashboard&tab=followups',
+         'steps'=>[
+            ['head'=>'WhatsApp is administrator-only', 'body'=>'Only an Administrator may open, connect or configure WhatsApp, or send through it. If WhatsApp is missing from a colleague\'s menu, that is correct. The server enforces it, so opening a WhatsApp address directly is refused as well — there is nothing to work around.'],
+            ['head'=>'The assistant answers, you approve follow-ups', 'body'=>'The AI replies to inbound WhatsApp messages on its own. It does NOT contact anybody first. When a customer goes quiet after an enquiry, the system opens a follow-up and the assistant drafts a message — which waits for a person at Admin → Customer Follow-ups. Nothing is sent until somebody approves it.'],
+            ['head'=>'Reading a draft', 'body'=>'Each card shows the conversation, what they asked about, what is holding them back, the assistant\'s reasoning, and how sure we are who this is. If it says "phone match only", the message may discuss the enquiry but must never mention their account — check it does not before approving.'],
+            ['head'=>'When follow-ups stop', 'body'=>'After two attempts, roughly 24 and 72 hours after the customer went quiet, and never on a Sunday or outside 08:00–20:00. They also stop the moment the customer replies, says they are not interested, asks us to stop, or a colleague takes the conversation over.'],
+            ['head'=>'STOP means stop', 'body'=>'A customer writing STOP, unsubscribe or "do not contact me" is recorded automatically and never receives another message we started. They still get answers when they write in, and still get their invoices. An administrator can lift it from the Follow-ups screen if they ask to hear from us again.'],
+         ]],
+        ['id'=>'ug4','icon'=>'🔄','title'=>'Uganda: the customer lifecycle',
+         'duration'=>'4 min','link'=>'?page=dashboard&tab=lifecycle',
+         'steps'=>[
+            ['head'=>'Where a customer comes from', 'body'=>'A WhatsApp enquiry, a web chat, or a walk-in. The assistant captures a lead in uCRM when it recognises a real opportunity. A KYC registration turns that into a uCRM client with a service.'],
+            ['head'=>'uCRM is the source of truth', 'body'=>'Customers, services, prices, invoices and payments all live in uCRM. This plugin reads them and adds what uCRM does not do — cash control, stock, WhatsApp, EFRIS. If a price is wrong, fix it in uCRM; never type a price into this plugin.'],
+            ['head'=>'The Lifecycle screen', 'body'=>'Engage → Lifecycle tracks customers from registration to active service across Starlink, Fiber, LTE and SIM. Use it to find registrations that never became services.'],
+            ['head'=>'Support contacts', 'body'=>'The support, accounts and escalation numbers shown in the Runbook come from configuration, so they are whatever this install is set to. Check them there rather than memorising a number from a manual.'],
          ]],
     ],
 ];
@@ -455,7 +494,7 @@ $rmDark = adjustColor($rm['color']);
     <div class="trn-ref-card-head">📋 KYC Checklist</div>
     <div class="trn-ref-item"><span>Customer photo</span><strong>Required</strong></div>
     <div class="trn-ref-item"><span>NID / Passport</span><strong>Required</strong></div>
-    <div class="trn-ref-item"><span>Phone (+211...)</span><strong>Required</strong></div>
+    <div class="trn-ref-item"><span>Phone (+256...)</span><strong>Required</strong></div>
     <div class="trn-ref-item"><span>GPS location</span><strong>Recommended</strong></div>
     <div class="trn-ref-item"><span>Sales person</span><strong>Required</strong></div>
 </div>
@@ -602,7 +641,7 @@ $rmDark = adjustColor($rm['color']);
     <div style="background:#E3F2FD;border:2px solid #1565C0;border-radius:10px;padding:12px;margin-bottom:6px;">
         <div style="font-size:12px;font-weight:700;color:#1565C0;margin-bottom:6px;">Sales Agent fills KYC form:</div>
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
-            <?php foreach (['Customer photo','National ID','Phone +211...','Address + GPS','Subscription plan','Cash or Credit'] as $f): ?>
+            <?php foreach (['Customer photo','National ID','Phone +256...','Address + GPS','Subscription plan','Cash or Credit'] as $f): ?>
             <span style="background:#fff;border:1px solid #1565C0;border-radius:5px;padding:2px 8px;font-size:10px;font-weight:600;color:#D41C1C;"><?= $f ?></span>
             <?php endforeach; ?>
         </div>
@@ -844,7 +883,7 @@ renderProgress();
 var scenariosByRole = {
     'sales': [
         {q:'A customer wants to subscribe to Starlink and is ready to pay cash today.',
-         steps:['Go to New KYC tab','Select Starlink → New Connection','Fill customer name, phone (+211...), address','Tap Detect GPS for location','Upload customer photo + NID scan','Select plan and hardware kit','Set Sales Type = Cash','Submit — wallet debits automatically']},
+         steps:['Go to New KYC tab','Select Starlink → New Connection','Fill customer name, phone (+256...), address','Tap Detect GPS for location','Upload customer photo + NID scan','Select plan and hardware kit','Set Sales Type = Cash','Submit — wallet debits automatically']},
         {q:'A customer is interested but says "I need to think about it." You want to track them.',
          steps:['Go to My Leads tab','Tap + Add New Lead','Fill their name and phone','Set service = Starlink/Fiber/SIM (whatever they want)','Set status = Contacted','Set a follow-up date (2-3 days)','Add a note: what they said, their hesitation','They stay in your pipeline — you see them every time you open Leads']},
         {q:'Your wallet balance is too low to process a collection.',
@@ -860,7 +899,7 @@ var scenariosByRole = {
         {q:'A customer says they were charged twice for the same month.',
          steps:['Ask for their name and CRM ID if they have it','Go to Customer Lookup → find their account','Look at their service type and plan amount','Go to Support Tickets → create a ticket (category=Billing)','Set priority = Medium','Note: "Customer reports duplicate charge for [month]"','Tag it for Admin/Accountant to investigate','Tell customer: "I have logged this as a priority ticket and our accounts team will review within 24 hours."']},
         {q:'You cannot find a customer in the Customer Lookup.',
-         steps:['Try searching by phone (include +211 prefix)','Try searching by just part of their name','Ask the customer for their CRM Client ID (on their registration receipt)','If still not found: they may not be registered yet','Direct them to contact their sales agent to register','Or: create a support ticket anyway with the details they gave you and flag for Admin to investigate']},
+         steps:['Try searching by phone (include +256 prefix)','Try searching by just part of their name','Ask the customer for their CRM Client ID (on their registration receipt)','If still not found: they may not be registered yet','Direct them to contact their sales agent to register','Or: create a support ticket anyway with the details they gave you and flag for Admin to investigate']},
     ],
     'accountant': [
         {q:'It is 9am. What do you do first?',
@@ -960,7 +999,7 @@ var cheatSheetData = {
         color: '#2E7D32',
         sections: [
             {head:'💰 Wallet Rules', items:['Cash KYC → Wallet debits immediately','Credit KYC → No deduction (lead in CRM)','Collect Payment → Wallet debits','Admin Top-up → Wallet credits','CRM sync fail → Auto-refund within 1 min']},
-            {head:'📋 KYC Checklist', items:['Customer passport photo (clear face)','National ID or Passport scan','Phone number with +211 prefix','Full address + GPS coordinates','Subscription plan selected','Cash or Credit selected','Sales person filled in']},
+            {head:'📋 KYC Checklist', items:['Customer passport photo (clear face)','National ID or Passport scan','Phone number with +256 prefix','Full address + GPS coordinates','Subscription plan selected','Cash or Credit selected','Sales person filled in']},
             {head:'🎯 Lead Stages', items:['NEW → Just added','CONTACTED → Called or messaged','INTERESTED → Wants to subscribe','QUOTED → Price shared','QUALIFIED ✅ → Admin approved','WON → Converted to KYC']},
             {head:'⚡ Daily Workflow', items:['Check wallet balance at start of day','Process new KYCs with valid documents','Collect payments as requested','Add leads from every prospect contact','Recharge wallet when low (upload proof)','Check My Applications for sync failures']},
             {head:'🆘 Common Problems', items:['Low wallet → Go to Recharge Wallet','KYC failed → Check My Applications for error','Customer not found → Register them first (New KYC)','Application stuck → Contact Admin (check Sync Queue)','Wallet not credited → Check pending recharge requests']},
@@ -970,7 +1009,7 @@ var cheatSheetData = {
         title: 'Support Staff Cheat Sheet — DishNet Africa',
         color: '#7B1FA2',
         sections: [
-            {head:'🔍 Customer Lookup First Steps', items:['Search by name, phone (+211...), or CRM ID','Check Status: Active/Suspended/Cancelled/Prepared','Suspended = unpaid bill (→ Sales agent)','Active + no internet = technical issue (→ Log ticket)','Always verify identity before sharing details']},
+            {head:'🔍 Customer Lookup First Steps', items:['Search by name, phone (+256...), or CRM ID','Check Status: Active/Suspended/Cancelled/Prepared','Suspended = unpaid bill (→ Sales agent)','Active + no internet = technical issue (→ Log ticket)','Always verify identity before sharing details']},
             {head:'📡 Service Status Guide', items:['ACTIVE = Running normally','SUSPENDED = Unpaid invoice or admin action','CANCELLED = Subscription ended','PREPARED = Registered, not yet activated','Refresh page if status seems outdated']},
             {head:'🎫 Ticket Guide', items:['Always include CRM Client ID','Set priority honestly: High = complete outage','Update status as you work','RESOLVED = Fixed | CLOSED = Customer confirmed','Escalate field issues to tech team via WhatsApp']},
             {head:'📞 What to Tell Customers', items:['Suspended: "Account suspended — outstanding balance. Contact your sales agent to pay."','Active no internet: "Account active — logging technical ticket now."','Not found: "Not in our system — contact your sales agent to register."','Billing dispute: "Logging a priority ticket for accounts team."']},

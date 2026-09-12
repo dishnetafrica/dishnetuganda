@@ -55,13 +55,27 @@ foreach (['wa_update_keys', 'wa_toggle_bot', 'wa_test_webhook', 'wa_run_sync',
         WhatsAppAccess::allows(false, $a, $granted, 'support'), false);
 }
 
-echo "\nThe inbox seam — the one thing that IS grantable\n";
+echo "\nSENDING IS NEVER GRANTABLE\n";
+// The requirement names sending alongside keys and sessions. No configuration
+// value reaches it, so these are tested WITH the grant switched on.
+foreach (['wa_send_reply', 'wa_reply', 'wa_send_image', 'wa_send_media',
+          'wa_send_document', 'wa_send_quote_pdf', 'wa_upload_media'] as $a) {
+    t("even granted, support cannot {$a}",
+        WhatsAppAccess::allows(false, $a, $granted, 'support'), false);
+}
+// Nor may a grant quietly rewrite CRM bindings or close a customer's thread.
+foreach (['wa_link_client', 'wa_close_thread', 'wa_categorise',
+          'wa_update_ticket', 'wa_quick_action'] as $a) {
+    t("nor write: {$a}", WhatsAppAccess::allows(false, $a, $granted, 'support'), false);
+}
+
+echo "\nThe seam that remains is READ-ONLY, and off by default\n";
 t('support cannot read the inbox by default',
     WhatsAppAccess::allows(false, 'wa_conversations', [], 'support'), false);
-t('and can once granted',
+t('and can read once granted',
     WhatsAppAccess::allows(false, 'wa_conversations', $granted, 'support'), true);
-t('and may then reply',
-    WhatsAppAccess::allows(false, 'wa_send_reply', $granted, 'support'), true);
+t('reading one thread',
+    WhatsAppAccess::allows(false, 'wa_thread_messages', $granted, 'support'), true);
 t('but a role not on the list still cannot',
     WhatsAppAccess::allows(false, 'wa_conversations', $granted, 'sales_agent'), false);
 

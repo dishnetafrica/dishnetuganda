@@ -41,11 +41,15 @@ is_(strpos($rb, 'CustomerContact::escalation') !== false,
     'runbook takes the escalation contact from CustomerContact');
 is_(strpos($rb, 'CustomerContact::support') !== false, 'and the support line');
 is_(strpos($rb, 'CustomerContact::accounts') !== false, 'and the accounts line');
-is_(strpos($rb, 'report_timezone') !== false, 'and the backup hour from the timezone');
+// Not a config key — the system has none for this. It states the offset,
+// which is true whichever zone identifier a given file uses.
+is_(strpos($rb, 'East Africa Time') !== false, 'and names the timezone by its offset');
+is_(strpos($rb, 'report_timezone') === false, 'without inventing a config key nothing reads');
 
 $tr = (string)file_get_contents($root . '/tabs/help/training.php');
 is_(strpos($tr, 'dn_cur(') !== false, 'training takes the currency from dn_cur');
-is_(strpos($tr, 'report_timezone') !== false, 'and the backup hour from the timezone');
+is_(strpos($tr, 'East Africa Time') !== false, 'and names the timezone by its offset');
+is_(strpos($tr, 'report_timezone') === false, 'without inventing a config key nothing reads');
 
 echo "\nThe substitutions are PHP, not literal tags\n";
 // training.php is a data array of single-quoted strings. A short-echo tag

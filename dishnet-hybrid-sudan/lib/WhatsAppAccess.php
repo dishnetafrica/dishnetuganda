@@ -34,20 +34,32 @@ declare(strict_types=1);
 final class WhatsAppAccess
 {
     /**
-     * Actions that are reading or replying in the SHARED team inbox.
+     * The only actions wa_inbox_roles could ever open — and they are READS.
      *
-     * These are the only ones wa_inbox_roles can ever open up. Everything not
-     * on this list — keys, webhooks, sync control, bot toggles, diagnostics —
-     * is administrator-only whatever the configuration says.
+     * SENDING IS NEVER GRANTABLE. Not a reply, not an image, not a document,
+     * not a quotation PDF, not media. The requirement names sending alongside
+     * keys and sessions as administrator-only, so no configuration value
+     * reaches it, and the difference matters: reading a conversation is
+     * looking at what a customer said, while sending one puts words in the
+     * company's mouth on a number customers trust.
+     *
+     * An earlier version of this list included the reply paths, reasoning
+     * that answering in a shared inbox is not the same as holding a
+     * connection of your own. That reasoning was not mine to apply — the rule
+     * says sending is administrator-only, and it now is.
+     *
+     * Writes are off the list too: linking a conversation to a customer,
+     * closing a thread, categorising, updating a ticket. A read-only grant
+     * that can quietly rewrite CRM bindings is not read-only.
      */
     public const INBOX_ACTIONS = [
-        'wa_conversations', 'wa_thread_messages', 'wa_mark_read',
-        'wa_crm_client_info', 'wa_customer_360', 'wa_close_thread',
-        'wa_close_conversation', 'wa_categorise', 'wa_tickets',
-        'wa_update_ticket', 'wa_quick_replies', 'wa_quick_action',
-        'wa_send_reply', 'wa_reply', 'wa_send_document', 'wa_send_image',
-        'wa_send_media', 'wa_upload_media', 'wa_send_quote_pdf',
-        'wa_link_client',
+        'wa_conversations',     // list the threads
+        'wa_thread_messages',   // read one
+        'wa_crm_client_info',   // who is this
+        'wa_customer_360',      // their account, read-only
+        'wa_tickets',           // their tickets, read-only
+        'wa_quick_replies',     // the canned-reply list itself
+        'wa_mark_read',         // inseparable from reading
     ];
 
     /** Tabs this rule governs. */
