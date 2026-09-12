@@ -1,4 +1,16 @@
 <?php
+// WhatsApp is administrator-only. Guarded here as well as in the routing
+// table, because a permission map is one typo away from opening a screen and
+// this screen holds the connection to every customer we talk to.
+require_once dirname(__DIR__, 2) . '/lib/WhatsAppAccess.php';
+if (!WhatsAppAccess::allowsTab((bool)($retailer['is_admin'] ?? false), 'wa_inbox',
+        $store->load('kyc_config.json') ?? [],
+        strtolower((string)($retailer['role'] ?? '')))) {
+    echo '<div class="alert alert-danger">' . htmlspecialchars(WhatsAppAccess::denial()) . '</div>';
+    return;
+}
+?>
+<?php
 // Tab: wa_inbox — WhatsApp Unified Inbox
 // Uses ConversationService (SQLite) — replaces old WaBotService JSON inbox
 require_once $GLOBALS['_PLUGIN_ROOT'] . '/lib/ConversationService.php';

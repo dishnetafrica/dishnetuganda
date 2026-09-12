@@ -1,4 +1,16 @@
 <?php
+// WhatsApp is administrator-only. Guarded here as well as in the routing
+// table, because a permission map is one typo away from opening a screen and
+// this screen holds the connection to every customer we talk to.
+require_once dirname(__DIR__, 2) . '/lib/WhatsAppAccess.php';
+if (!WhatsAppAccess::allowsTab((bool)($retailer['is_admin'] ?? false), 'whatsapp',
+        $store->load('kyc_config.json') ?? [],
+        strtolower((string)($retailer['role'] ?? '')))) {
+    echo '<div class="alert alert-danger">' . htmlspecialchars(WhatsAppAccess::denial()) . '</div>';
+    return;
+}
+?>
+<?php
 // Tab: whatsapp
 // Extracted from public.php on 2026-03-15
 

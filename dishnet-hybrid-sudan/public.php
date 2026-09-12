@@ -2215,7 +2215,7 @@ else:
         // ['id'=>'sim_cards', 'label'=>'SIM Card Management', 'icon'=>'[Pipeline]', 'group'=>'Admin', 'roles'=>['admin']], // hidden
         ['id'=>'plans',          'label'=>'Subscription Plans',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'hardware',       'label'=>'Hardware Catalog',         'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
-        ['id'=>'wa_inbox',       'label'=>'WA Inbox & Bot',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','support']],
+        ['id'=>'wa_inbox',       'label'=>'WA Inbox & Bot',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'updater',        'label'=>'Plugin Updater',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'settings',       'label'=>'System Settings',          'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'backup',         'label'=>'Backup & Restore',         'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2743,9 +2743,17 @@ $_tabPerms = [
     'lte_bluecard'      => '*admin',
     'bc_my_retailers'   => '*admin',
     // Engage
+    // WHATSAPP IS ADMINISTRATOR-ONLY.
+    //
+    // wa_inbox was 'customer_lookup' and wa_ai_setup had no entry at all —
+    // and a tab with no entry is allowed for EVERY signed-in user, so the
+    // WhatsApp AI configuration screen was open to anyone with a login.
+    // Each of these tabs also guards itself, because a routing table is one
+    // typo away from being wrong.
     'whatsapp'             => '*admin',
-    'wa_inbox'             => 'customer_lookup',
-    'engage_failed_queue'  => ['support_dash', '*admin'],
+    'wa_inbox'             => '*admin',
+    'wa_ai_setup'          => '*admin',
+    'engage_failed_queue'  => '*admin',
     'engage_wa_leads'      => ['support_dash', '*admin'],
     'starlink_orders'      => '*admin',
     'starlink_fleet'       => '*admin',
