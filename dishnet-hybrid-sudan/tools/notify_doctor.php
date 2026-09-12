@@ -189,7 +189,25 @@ if ($FIX && $evo->isConfigured()) {
             $k     = 'evo_instance_' . $ch;
             $live  = trim((string)($fromStore[$k] ?? ''));
             $onDisk= trim((string)($fromFile[$k]  ?? ''));
-            if ($live === '' || $onDisk === '' || $live === $onDisk) continue;
+            if ($onDisk === '' || $live === $onDisk) continue;
+            // A store that has NOTHING for this channel is the case that let
+            // set_evolution.php --account look like it worked: it writes the
+            // file, the file is canonical for PluginConfig::load, and the 36
+            // store-only crons — cron_invoice_notify and cron_quote_wa among
+            // them — never see it. Copying is safe on the same evidence as a
+            // repair: the file names an instance this server actually has.
+            if ($live === '') {
+                if (!isset($have[$onDisk])) {
+                    printf("    %-22s file '%s' is not on this server — not copied\n", $ch, $onDisk);
+                    continue;
+                }
+                $cfgNew = $fromStore; $cfgNew[$k] = $onDisk;
+                $store->save('kyc_config.json', $cfgNew);
+                $fromStore = $cfgNew;
+                printf("    ✓ %-20s (store had none) → %s  (%s)\n", $ch, $onDisk, $have[$onDisk]);
+                $fixed++;
+                continue;
+            }
             if (isset($have[$live]))   continue;            // live one works — leave it
             if (!isset($have[$onDisk])) {                   // neither works — say so
                 printf("    %-22s store '%s' and file '%s' are BOTH absent — not repaired\n",
