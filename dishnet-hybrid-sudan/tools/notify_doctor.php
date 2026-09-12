@@ -128,6 +128,7 @@ if ($evo->isConfigured()) {
     try {
         $list = $evo->listInstances();
         $GLOBALS['__dn_list'] = $list;
+        $notOpen = [];
         if ($list === []) {
             echo "    UNKNOWN — the API returned no list (unreachable, or no instances).\n";
         } else {
@@ -139,10 +140,17 @@ if ($evo->isConfigured()) {
             }
             foreach ($list as $row) {
                 $n = (string)($row['name'] ?? '');
+                $st = strtolower((string)($row['state'] ?? ''));
+                if (isset($usedBy[$n]) && $st !== 'open') {
+                    $notOpen[] = $n . ' (' . $st . ') serving ' . implode(', ', $usedBy[$n]);
+                }
                 printf("    %-24s %-12s %-18s %s\n", $n,
                     (string)($row['state'] ?? '?'),
                     (string)($row['phone'] ?? ($row['number'] ?? '—')),
                     isset($usedBy[$n]) ? implode(', ', $usedBy[$n]) : '— not wired to a channel');
+            }
+            foreach ($notOpen as $w) {
+                printf("    ⚠ %s — not 'open', so sends on that channel will fail\n", $w);
             }
             // Named in config but absent from the server: the silent failure.
             foreach ($usedBy as $n => $chs) {
@@ -246,6 +254,9 @@ $accountPath = $pathFor('accounts');
 
 // The store-only readers get their own verdict. This is where the technician
 // dispatch actually lives, and a merged view hid that it cannot send.
+// Re-read: --fix may have just written these, and a stale copy would report
+// MISSING about keys that now exist — telling the operator the repair failed.
+$storeOnly  = $store->load('kyc_config.json') ?? $storeOnly;
 $evoStore   = new EvolutionApiService($storeOnly);
 $storeCan   = $evoStore->isConfigured()
               && trim((string)($storeOnly['evo_instance_support'] ?? '')) !== '';
