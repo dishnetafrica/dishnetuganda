@@ -260,13 +260,23 @@ class AiReplyWorker extends WorkerBase
             $identified = $clientId > 0;
             if ($convId > 0 && $identified) {
                 try {
-                    $this->convSvc->linkToCrm($convId, $clientId, (string)($id['data']['customer']['name'] ?? ''));
+                    $this->convSvc->linkToCrm($convId, $clientId, (string)($id['data']['customer']['name'] ?? ''),
+                                              ConversationService::LINK_AI);
                 } catch (\Throwable $e) { /* non-fatal */ }
             }
         } elseif ($id['ok'] && ($id['data']['reason'] ?? '') === 'ambiguous') {
             // Several customers share this number's last digits. Say so rather
             // than picking one — the AI must ask a verifying question.
             $ctx['identity_ambiguous'] = true;
+            // And remember it. Answering an ambiguous number is fine, because
+            // whoever wrote in is the person reading the reply. STARTING a
+            // conversation with one is not: we would be guessing which of
+            // several customers we are addressing. FollowUpPolicy refuses a
+            // proactive send on this marker.
+            if ($convId > 0) {
+                try { $this->convSvc->markIdentityAmbiguous($convId); }
+                catch (\Throwable $e) { /* non-fatal */ }
+            }
         }
 
         // Cross-channel memory: an anonymous phone that previously chatted on

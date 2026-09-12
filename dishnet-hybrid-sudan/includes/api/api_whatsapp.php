@@ -297,7 +297,7 @@
             $cl = svc('crm')->get("clients/{$clientId}");
             $clientName = trim(($cl['firstName'] ?? '') . ' ' . ($cl['lastName'] ?? '')) ?: ($cl['companyName'] ?? "#{$clientId}");
         } catch (Throwable $e) { $clientName = "Client #{$clientId}"; }
-        $_convSvc->linkToCrm($convId, $clientId, $clientName);
+        $_convSvc->linkToCrm($convId, $clientId, $clientName, ConversationService::LINK_MANUAL);
         $ok2(['linked' => true, 'crm_client_id' => $clientId, 'crm_client_name' => $clientName]);
     }
 
@@ -317,7 +317,8 @@
         foreach ($unlinked as $row) {
             $tail = substr(preg_replace('/[^0-9]/', '', $row['phone']), -9);
             $m = $phoneMap[$tail] ?? null;
-            if ($m) { $_convSvc->linkToCrm((int)$row['id'], $m['id'], $m['name']); $linked++; }
+            if ($m) { $_convSvc->linkToCrm((int)$row['id'], $m['id'], $m['name'],
+                ConversationService::LINK_BULK_REMATCH); $linked++; }
             else { $unmatched++; }
         }
         $ok2(['linked' => $linked, 'unmatched' => $unmatched]);
@@ -511,7 +512,8 @@
                 if ($isNew && empty($conv['crm_client_id'])) {
                     $tail = substr($phone, -9);
                     $m = $phoneMap[$tail] ?? null;
-                    if ($m) { $_convSvc->linkToCrm($conv['id'], $m['id'], $m['name']); $linked++; }
+                    if ($m) { $_convSvc->linkToCrm($conv['id'], $m['id'], $m['name'],
+                        ConversationService::LINK_PHONE_TAIL); $linked++; }
                 }
             } catch (Throwable $e) { $errors++; $lastErr = $e->getMessage(); }
         }

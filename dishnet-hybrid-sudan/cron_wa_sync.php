@@ -221,7 +221,8 @@ foreach ($rows as $row) {
             $phoneTail = substr($phone, -9);
             $match = $clientPhoneMap[$phoneTail] ?? null;
             if ($match) {
-                $convSvc->linkToCrm($conv['id'], $match['id'], $match['name']);
+                $convSvc->linkToCrm($conv['id'], $match['id'], $match['name'],
+                                    ConversationService::LINK_PHONE_TAIL);
                 $linked++;
             }
             $newConvs++;
