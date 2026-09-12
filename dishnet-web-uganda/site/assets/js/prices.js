@@ -19,6 +19,18 @@
  *                                         WhatsApp checkout carrying the
  *                                         visitor's address/pin (window.DN_ADDR)
  *   <span data-live-price="NAME"></span>  one product's price, by uCRM name
+ *   <div data-dishnet-hardware></div>     every kit in uCRM, priced, as cards
+ *   <span data-dishnet-from></span>       "from UGX X/month", cheapest live plan
+ *
+ * A price with no unit is the thing customers actually complained about: a
+ * kit card read "UGX 1,850,000 / VAT inclusive" and nothing on the page said
+ * whether that was once or every month, or that a monthly plan is due as well.
+ * Hardware now always carries "one-off" and the monthly it sits alongside.
+ *
+ * Nothing here is ever blank. A slot whose product is missing from the feed
+ * keeps whatever the page already had inside it — so every slot in the HTML
+ * ships with a real "ask us on WhatsApp" link, and a feed outage degrades to
+ * that instead of to a hole where the price should be.
  *
  * One naming system: the DishNet name from uCRM IS the display name on every
  * channel (site, chat, WhatsApp, invoice). data-service-map on the script tag
@@ -83,21 +95,88 @@
     return head.concat(rest);
   }
 
+  // Product photography by name. A kit with no picture still renders — the
+  // card just has no image, rather than a broken one.
+  function kitImage(name) {
+    if (/mini/i.test(name))                 return 'assets/img/products/mini-kit.webp';
+    if (/high\s*performance|performance/i.test(name)) return 'assets/img/products/hp-kit.webp';
+    if (/standard/i.test(name))             return 'assets/img/products/standard-kit.webp';
+    return '';
+  }
+
+  // One shape for every price on the site, so "one-off" never has to be
+  // inferred from context by the person reading it.
+  function priceBlock(cur, amount, kind, fromMonthly) {
+    if (kind === 'month') {
+      return '<span class="lp-amount">' + fmt(cur, amount) + '<small>/month</small></span>' +
+             '<span class="lp-note">VAT inclusive</span>';
+    }
+    return '<span class="lp-amount">' + fmt(cur, amount) + '</span>' +
+           '<span class="lp-kind">one-off payment</span>' +
+           (fromMonthly ? '<span class="lp-then">then internet from <strong>' + fromMonthly + '</strong></span>' : '') +
+           '<span class="lp-note">VAT inclusive &middot; includes delivery, installation and your first month</span>';
+  }
+
   function render(data) {
     var cur = data.currency || 'UGX';
 
+    // Cheapest live plan — the "and then what?" every hardware price needs.
+    var cheapest = (data.plans || []).filter(function (p) { return !isBusiness(p); })
+                                     .sort(function (a, b) { return a.price - b.price; })[0]
+                || (data.plans || [])[0] || null;
+    var fromMonthly = cheapest ? fmt(cur, cheapest.price) + '/month' : '';
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-dishnet-from]'), function (el) {
+      if (fromMonthly) el.textContent = fromMonthly;
+    });
+
     // Individual price slots (kit cards etc.)
-    var byName = {};
-    (data.plans || []).concat(data.hardware || []).forEach(function (i) {
-      byName[i.name.toLowerCase()] = i;
-    });
+    var byName = {}, kindOf = {};
+    (data.plans || []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'month'; });
+    (data.hardware || []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'once'; });
+
     Array.prototype.forEach.call(document.querySelectorAll('[data-live-price]'), function (el) {
-      var item = byName[(el.getAttribute('data-live-price') || '').toLowerCase()];
-      if (item) {
-        el.innerHTML = '<span class="lp-amount">' + fmt(cur, item.price) + '</span>' +
-                       '<span class="lp-note">VAT inclusive</span>';
-      }
+      var key  = (el.getAttribute('data-live-price') || '').toLowerCase();
+      var item = byName[key];
+      // No match: leave the page's own fallback standing. Never blank it.
+      if (!item) return;
+      var kind = el.getAttribute('data-live-price-kind') || kindOf[key] || 'once';
+      el.innerHTML = priceBlock(cur, item.price, kind, fromMonthly);
     });
+
+    // Every kit uCRM sells, priced, in feed order.
+    //
+    // The page used to hand-list three kits and hard-code which two had a
+    // price slot — so the third card showed features and no price at all, and
+    // a customer comparing them could not. Adding a product in uCRM now makes
+    // it appear here with its price; removing it takes the card away.
+    var hwGrid = document.querySelector('[data-dishnet-hardware]');
+    if (hwGrid && (data.hardware || []).length) {
+      var hwCard = function (h) {
+        var img = kitImage(h.name);
+        var label = h.name.replace(/^Starlink\s*/i, '').replace(/\s*Package$/i, '');
+        return '<article class="hw-card">' +
+          (img ? '<div class="hw-shot"><img src="' + img + '" alt="' + esc(h.name) + '" loading="lazy"></div>' : '') +
+          '<h3>' + esc(label) + '</h3>' +
+          '<div class="live-price">' + priceBlock(cur, h.price, 'once', fromMonthly) + '</div>' +
+          (h.description ? '<p class="hw-desc">' + esc(h.description) + '</p>' : '') +
+          '<a class="btn btn-primary hw-cta" href="https://wa.me/' + WA + '?text=' +
+            encodeURIComponent('Hello DishNet, I would like the ' + h.name + '. Please confirm the total and book installation.') +
+          '">Order ' + esc(label) + '</a>' +
+          '</article>';
+      };
+      // Cards marked data-keep survive. A product we genuinely sell but do
+      // not list a fixed price for — High Performance is quoted per site —
+      // must not vanish just because the feed has no number for it. Replacing
+      // the whole grid removed it from the page entirely, which is a worse
+      // answer to "what does it cost" than "quoted on request".
+      var keep = [];
+      Array.prototype.forEach.call(hwGrid.querySelectorAll('[data-keep]'), function (el) {
+        keep.push(el.outerHTML);
+      });
+      hwGrid.innerHTML = (data.hardware || []).map(hwCard).join('') + keep.join('');
+      hwGrid.setAttribute('data-rendered', '1');
+    }
 
     // Monthly plans grid, split into home and business.
     //
