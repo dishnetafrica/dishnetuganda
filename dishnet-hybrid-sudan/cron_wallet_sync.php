@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * cron_wallet_sync.php — CRM Org-7 Wallet Balance Auto-Sync

@@ -24,6 +24,7 @@
 //   close_reason='paid'. Idempotent; no-op if no matching row.
 // ═══════════════════════════════════════════════════════════════════════════
 declare(strict_types=1);
+require_once __DIR__ . '/timezone.php';
 require_once __DIR__ . '/currency.php';
 
 if (!function_exists('str_contains'))    { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
@@ -119,7 +120,7 @@ class OverdueWorkbenchService
             if ($cid > 0) $clientById[$cid] = $c;
         }
 
-        $today = new \DateTime('now', new \DateTimeZone('Africa/Juba'));
+        $today = new \DateTime('now', dn_tz_obj());
         $rows = [];
 
         foreach ($rawInvoices as $inv) {
@@ -130,7 +131,7 @@ class OverdueWorkbenchService
             if ($invNum === '' || $clientId <= 0 || $amtDue <= 0 || $dueStr === '') continue;
             if (in_array($clientId, $excludeIds, true)) continue;
 
-            try { $dueDate = new \DateTime($dueStr, new \DateTimeZone('Africa/Juba')); }
+            try { $dueDate = new \DateTime($dueStr, dn_tz_obj()); }
             catch (\Throwable $e) { continue; }
             if ($today <= $dueDate) continue;
             $daysOverdue = (int)$today->diff($dueDate)->days;
@@ -546,7 +547,7 @@ class OverdueWorkbenchService
             'unassigned_count' => 0,
             'untouched_30d'    => 0,
         ];
-        $cutoff = (new \DateTime('-30 days', new \DateTimeZone('Africa/Juba')))->format('Y-m-d H:i:s');
+        $cutoff = (new \DateTime('-30 days', dn_tz_obj()))->format('Y-m-d H:i:s');
         foreach ($rows as $r) {
             $sum['total_due'] += (float)$r['amount_due'];
             if (isset($sum['by_bucket'][$r['bucket']])) {
@@ -596,8 +597,8 @@ class OverdueWorkbenchService
         $days = 0;
         if ($dueStr !== '') {
             try {
-                $today = new \DateTime('now', new \DateTimeZone('Africa/Juba'));
-                $due   = new \DateTime($dueStr, new \DateTimeZone('Africa/Juba'));
+                $today = new \DateTime('now', dn_tz_obj());
+                $due   = new \DateTime($dueStr, dn_tz_obj());
                 if ($today > $due) $days = (int)$today->diff($due)->days;
             } catch (\Throwable $e) {}
         }

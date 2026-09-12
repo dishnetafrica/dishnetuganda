@@ -27,7 +27,7 @@ if (!function_exists('str_ends_with')) {
 // Read manifest version (store not available yet here - cached after $store init)
 $GLOBALS['_PLUGIN_VER'] = 'v' . (json_decode(@file_get_contents(__DIR__.'/manifest.json'), true)['information']['version'] ?? '4');
 // Timezone  South Sudan is EAT (UTC+3), no DST
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 //  Session hardening (FIX-1: SameSite=Lax for UCRM iframe; FIX-3: 8h lifetime) 
 ini_set('session.cookie_httponly', '1');

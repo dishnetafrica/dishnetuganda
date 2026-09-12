@@ -165,47 +165,11 @@ foreach ($_catToPersons as &$_cpArr) {
 unset($_cpArr);
 
 // ── Seed defaults from BookKeeper history (fills gaps where cb_ledger person is empty) ──
-$_bkSeeds = [
-    // Staff payments
-    'Salary'         => ['Bidal','Emmanuel','Ochiti','Kamanda','Modi Mawa Francis','Diko','Amos','Mackline Anena'],
-    'Transport Allowance' => ['Bidal','Emmanuel','Diko','Mackline Anena','Modi Mawa Francis','Kamanda'],
-    'Food Allowance' => ['Bidal','Emmanuel','Ochiti','Kamanda','Diko','Mackline Anena','Modi Mawa Francis'],
-    'Bonus'          => ['Bidal','Emmanuel','Ochiti','Kamanda','Amos','Diko','Modi Mawa Francis','Mackline Anena'],
-    'Employee Benefit'=> ['Kamanda','Emmanuel','Bidal','Ochiti','Diko','Amos'],
-    'Staff Advance'  => ['BBC','Bidal','Emmanuel','Kamanda','Diko','Ochiti','Amos','Justus','Meckline','Modi Mawa Francis'],
-    'SSP Advance'    => ['BBC','Bidal','Emmanuel','Kamanda','Diko','Ochiti','Amos','Modi Mawa Francis'],
-    'Commission'     => ['Christine','NID Bank','Robert','Sokiri','Peter','Stephen Eku','Ahmed - ICAP','Charles - Afenet','Kennedy Bidali - Afenet','Emmanuel Alli - AFENET'],
-    // Sites
-    'Site Power'     => ['JEDCO','Electricity - Tomping','Electricity - Munuki','Electricity - City Mall'],
-    'Site Rent'      => ['Tomping Branch','City Mall Office','Tower GMSH','UAP Tower','Guest House','Tower Nimule','Gudele Medical','UNMISS Accommodation'],
-    'Site Expense'   => ['Emmanuel','Kamanda','Bidal','Kennedy','Geoffrey','Sokiri'],
-    // Suppliers & Vendors (from BookKeeper narrations)
-    'Local Purchase' => ['Atul','Francis','Kamanda','Amos','Gukina Electricals','Chesco Hi-Tech','CVL General Supply','Bimot Enterprises','Dubai Store','C/C Electrical Shop','Dubai For Exhibition'],
-    'Capital Purchase'=> ['Bimot Enterprises','Friends IT','OYEI Times','Flyfine Digital','CVL General Supply'],
-    'Bandwidth'      => ['4G Telecom','Bentley Walker','Intersat / BSS Africa','LEOKONNECT','Liquid Telecom','Digital Trend / Wilken','XCEED NET'],
-    'Airtime'        => ['MTN','Zain','VivaCell'],
-    'Travel & Field' => ['Kamanda','Emmanuel','Francis','Amos','Bidal','Junubin Logistics','Sokiri'],
-    // Finance
-    'Exchange'       => ['Diko','Rupesh','BBC','Juba Trading'],
-    'Tax'            => ['NRA Audit','BPT Tax','PIT Tax','Excise Tax','WT Rental Tax'],
-    'Loan Given'     => ['Harpal Bapu','Arkangelo','Dynamic Construction','Build Africa','Bhavin','Staff Advance'],
-    'Loan Received'  => ['Waka General Trading','4G Telecom Advance','BBC'],
-    'Interco Out'    => ['DishNet 4G','BlueCARD','Build Africa'],
-    'Bank Transfer'  => ['ECO Bank','Stanbic Bank','Equity Bank'],
-    'Discount'       => ['Customer Discount','Promotional'],
-    'Build Africa'   => ['Build Africa','Tax & Work Permit','Iron Bed'],
-    'Misc Expense'   => ['Arkangelo','Charles','Rupesh','Chirag Patel','Amos','Yash','Manoj Bhai'],
-    'Refund'         => ['Customer Refund'],
-    'Customer Refund'=> ['Customer Refund','Overpayment','Service Issue','Cancelled Subscription'],
-    'Customer Commission' => ['Referral Bonus','Loyalty Discount','Promotional','Agent Bonus'],
-    // v4.9.10: new categories from BookKeeper audit
-    'Govt Fees'      => ['NCA Administrative Fees','NCA Operation Fees','NRA Audit Fees','USAF (Universal Service Fund)','Excise Tax','PIT Tax','BPT Tax','Rental Tax (WT)'],
-    'Legal Fees'     => ['Lawyer Fees','Court Fees','Work Permit','Visa Fees','Registration'],
-    'Vehicle'        => ['Maintenance','Fuel / Diesel','Insurance','Spare Parts','Registration','Tyre'],
-    'Advertising'    => ['Facebook Ads','Google Ads','Print / Billboard','Promotional Material'],
-    'Partner Remuneration' => ['Tom (Joseph Luate)','Bhavin (Madlani)','Nirmal (Samani)','Paji (Shamshare Singh)','Rupesh'],
-    'Renewal Charges'=> ['License Renewal','Domain / Hosting','Software Charges','Splynx','Zoom','SSL Certificate','AFRINIC'],
-];
+// Suggestions only, and the defaults are South Sudan. `cashbook_seeds` in
+// config overrides them per category; [] offers nothing, which is the right
+// answer for staff and vendor lists that cannot be guessed for a new country.
+require_once dirname(__DIR__, 2) . '/lib/CashbookSeeds.php';
+$_bkSeeds = CashbookSeeds::map($config ?? []);
 foreach ($_bkSeeds as $seedCat => $seedNames) {
     $existing = count($_catToPersons[$seedCat] ?? []);
     if ($existing >= 6) continue; // v4.9.10: raised from 4 to fill more categories
@@ -2483,18 +2447,7 @@ if (document.readyState === 'loading') {
         <div class="cb4-site-drop" id="cb4SiteDrop">
           <?php
           // v4.9.10: Comprehensive site list — BookKeeper locations + cb_ledger history
-          $_siteNames = [
-              'Tomping Branch — JEDCO','Tomping Branch — M-Gurush',
-              'City Mall Office','Munuki','Hai Saura','Wamo Site',
-              'Kator New Site','Konyo Konyo / Yatco','Jebel Market',
-              'Custom Market','Jabrona','Home / Office — JEDCO',
-              'Tomping Branch Office','City Mall Office — Rent',
-              'Tower GMSH','UAP Tower','Tower Nimule',
-              'Guest House (Dishnet)','Gudele Medical — Server Room',
-              'Shop — Advance Rent','UNMISS Accommodation',
-              'JEDCO','SSEC (Govt Power)',
-              'Generator — Fuel','Generator — Maintenance',
-          ];
+          $_siteNames = CashbookSeeds::sites($config ?? []);
           foreach (['Site Power','Site Rent'] as $_sc) {
               foreach ($_catToPersons[$_sc] ?? [] as $_sp) {
                   $_sn = trim($_sp['name'] ?? '');

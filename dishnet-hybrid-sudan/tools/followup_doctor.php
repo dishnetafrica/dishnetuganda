@@ -22,6 +22,7 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/ConversationService.php';
 require_once $root . '/lib/ContactOptOut.php';
+require_once $root . '/lib/timezone.php';
 require_once $root . '/lib/FollowUpPolicy.php';
 require_once $root . '/lib/FollowUpService.php';
 
@@ -65,6 +66,23 @@ printf("  %-24s %d\n", 'open follow-ups', count($openRows));
 printf("  %-24s %d\n", 'drafts awaiting a person', count($pending));
 printf("  %-24s %d\n", 'approved, not yet sent', count($approved));
 printf("  %-24s %d\n", 'live opt-outs', count($oo->live(500)));
+
+// The 08:00–20:00 courtesy window is measured in the configured zone, and an
+// unset key is not a blank — it is Africa/Juba, which has been UTC+2 since
+// South Sudan left East Africa Time in 2021. On a Kampala box that silently
+// moves the whole window an hour earlier, and nothing else would ever say so.
+$tzSet = trim((string)($config['timezone'] ?? ''));
+printf("  %-24s %s\n", 'clock', dn_tz_label($config)
+    . ($tzSet === '' ? '  ← NOT SET, using the default' : ''));
+if ($tzSet === '') {
+    echo "\n  ⚠ timezone is not configured, so the send window is measured in\n";
+    echo "    Africa/Juba (UTC+2). In Kampala (UTC+3) that opens and closes an\n";
+    echo "    hour early — the first follow-up of the day would go at 07:00 local.\n";
+    echo "      php tools/set_config.php --key timezone --value Africa/Kampala\n";
+}
+// No "...but you wanted Kampala" note here. This file runs on both installs,
+// and the clock line above already states the zone and what it resolves to —
+// which is the whole point of printing the offset rather than the name.
 
 // What the next scan would pick up.
 $quietSince = gmdate('Y-m-d H:i:s', time() - (int)(FollowUpPolicy::SCHEDULE[1] * 3600));

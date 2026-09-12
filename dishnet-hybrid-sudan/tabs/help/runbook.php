@@ -22,11 +22,11 @@ $_rbAcct  = CustomerContact::accounts($_rbCfg);
 $_rbEscWa = preg_replace('/\\D+/', '', $_rbEsc);
 $_rbSupWa = preg_replace('/\\D+/', '', $_rbSup);
 $_rbAccWa = preg_replace('/\\D+/', '', $_rbAcct);
-// East Africa Time. The code names the zone Africa/Juba in 43 places and
-// Uganda shares UTC+3 with South Sudan, so every clock is already correct for
-// Kampala — only the identifier is inherited. Naming the offset is true
-// whichever label a given file happens to use, and does not invent a config
-// key that nothing in the system reads.
+// East Africa Time, stated as an offset because that is what staff need.
+// The zone identifier now comes from config (dn_tz), defaulting to
+// Africa/Juba so the South Sudan install is unchanged. Those two are NOT
+// the same clock: South Sudan left EAT on 31 Jan 2021, so Africa/Juba is
+// UTC+2 and Africa/Kampala is UTC+3.
 $_rbTz    = 'East Africa Time (UTC+3)';
 ?>
 <?php

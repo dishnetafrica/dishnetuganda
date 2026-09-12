@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/timezone.php';
 
 require_once __DIR__ . '/ContactOptOut.php';
 require_once __DIR__ . '/EmailReplyPolicy.php';
@@ -39,9 +40,14 @@ final class FollowUpPolicy
     /** Link methods we trust enough to discuss somebody's account. */
     public const TRUSTED_LINKS = ['verified', 'manual', 'ai_identified'];
 
-    /** Kampala. Uganda and South Sudan are both UTC+3, so the offset is the
-     *  same as the box's Africa/Juba — the NAME is what stops somebody
-     *  "correcting" it later and changing behaviour by accident. */
+    /** The zone the 08:00–20:00 courtesy window is measured in.
+     *
+     *  Uganda and South Sudan are NOT the same offset, whatever the old
+     *  comment here claimed: South Sudan left EAT on 31 January 2021 and
+     *  Africa/Juba has been CAT (UTC+2) ever since, while Africa/Kampala
+     *  is EAT (UTC+3). The window follows the install via dn_tz(); this
+     *  constant is the Uganda value it resolves to there, kept because the
+     *  design document names it. */
     public const TZ = 'Africa/Kampala';
 
     public const HOUR_OPEN  = 8;    // 08:00 — not before
@@ -81,6 +87,16 @@ final class FollowUpPolicy
      *
      * @return array{ok:bool, reason:string, next:string} next = UTC 'Y-m-d H:i:s'
      */
+    /** The city the window is measured in — "Kampala", not "Africa/Kampala".
+     *  Taken from the configured zone so the refusal reason cannot claim a
+     *  city the clock is not actually set to. */
+    public static function where(): string
+    {
+        $z = dn_tz();
+        $p = strrchr($z, '/');
+        return str_replace('_', ' ', $p === false ? $z : substr($p, 1));
+    }
+
     public static function withinSendingWindow(string $utcNow): array
     {
         try {
@@ -88,7 +104,7 @@ final class FollowUpPolicy
         } catch (\Throwable $e) {
             return ['ok' => false, 'reason' => 'unreadable time', 'next' => ''];
         }
-        $local = $t->setTimezone(new \DateTimeZone(self::TZ));
+        $local = $t->setTimezone(dn_tz_obj());
         $h     = (int)$local->format('G');
         $dow   = (int)$local->format('w');   // 0 = Sunday
 
@@ -97,11 +113,11 @@ final class FollowUpPolicy
                     'next' => self::nextWindow($local)];
         }
         if ($h < self::HOUR_OPEN) {
-            return ['ok' => false, 'reason' => 'before ' . self::HOUR_OPEN . ':00 Kampala',
+            return ['ok' => false, 'reason' => 'before ' . self::HOUR_OPEN . ':00 ' . self::where(),
                     'next' => self::nextWindow($local)];
         }
         if ($h >= self::HOUR_CLOSE) {
-            return ['ok' => false, 'reason' => 'after ' . self::HOUR_CLOSE . ':00 Kampala',
+            return ['ok' => false, 'reason' => 'after ' . self::HOUR_CLOSE . ':00 ' . self::where(),
                     'next' => self::nextWindow($local)];
         }
         return ['ok' => true, 'reason' => '', 'next' => ''];

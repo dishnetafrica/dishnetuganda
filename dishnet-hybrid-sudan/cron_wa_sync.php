@@ -11,7 +11,7 @@
  * PHP 7.4 compatible.
  */
 
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 chdir(__DIR__);
 
 require_once __DIR__ . '/lib/error_handler.php';

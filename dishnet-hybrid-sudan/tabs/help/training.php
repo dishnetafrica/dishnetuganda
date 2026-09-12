@@ -6,10 +6,11 @@
 require_once dirname(__DIR__, 2) . '/lib/currency.php';
 $_trCfg    = $store->load('kyc_config.json') ?? [];
 $_trCur    = trim(dn_cur($_trCfg));
-// East Africa Time. The code still names the zone Africa/Juba in 43 places
-// and Uganda shares UTC+3 with South Sudan, so every clock in the system is
-// correct for Kampala — only the identifier is inherited. Stating the offset
-// is true whichever label a given file uses.
+// East Africa Time, stated as an offset because that is what staff need.
+// The zone identifier now comes from config (dn_tz), defaulting to
+// Africa/Juba so the South Sudan install is unchanged. Those two are NOT
+// the same clock: South Sudan left EAT on 31 Jan 2021, so Africa/Juba is
+// UTC+2 and Africa/Kampala is UTC+3.
 $_trTz = 'East Africa Time (UTC+3)';
 ?>
 <?php

@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 // Note: No strict_types here — this file is included from public.php piggyback cron
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 require_once dirname(__DIR__) . '/lib/error_handler.php';
 
 /**

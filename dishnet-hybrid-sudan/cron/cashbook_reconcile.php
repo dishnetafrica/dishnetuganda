@@ -2,7 +2,7 @@
 <?php
 require_once __DIR__ . '/../lib/currency.php';
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 
 /**
  * cron/cashbook_reconcile.php — DishNet Hybrid Telecom v4.4.27

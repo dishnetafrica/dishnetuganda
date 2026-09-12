@@ -18,7 +18,7 @@ require_once __DIR__ . '/lib/crm_url.php';
  * so invoices caught by webhook are not re-sent by this cron.
  */
 
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 chdir(__DIR__);
 
 require_once __DIR__ . '/lib/bootstrap_data.php';

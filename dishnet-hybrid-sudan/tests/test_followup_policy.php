@@ -13,11 +13,28 @@ declare(strict_types=1);
  *   follow-up — it is sending one customer's account details to somebody else
  *   whose phone number happened to share nine digits.
  *
- *   THE WINDOW, because storage is UTC and the window is Kampala. Comparing a
+ *   THE WINDOW, because storage is UTC and the window is local. Comparing a
  *   UTC hour against 08:00–20:00 would shift it three hours and start
  *   messaging customers at five in the morning, and every test would pass.
+ *
+ * The window follows the install's configured timezone, so this file sets one
+ * rather than inheriting whatever the machine running the suite happens to
+ * use. It sets Africa/Kampala explicitly: these are Ugandan customers' waking
+ * hours, and an unset config would silently measure them against the
+ * Africa/Juba default, which has been UTC+2 since 2021 — an hour out, with
+ * every assertion below still reading plausibly.
  */
+require_once dirname(__DIR__) . '/lib/timezone.php';
 require_once dirname(__DIR__) . '/lib/FollowUpPolicy.php';
+
+$_tzDir = sys_get_temp_dir() . '/dn_fu_tz_' . getmypid();
+@mkdir($_tzDir, 0700, true);
+putenv('DN_DATA_DIR=' . $_tzDir);
+file_put_contents($_tzDir . '/kyc_config.json', json_encode(['timezone' => 'Africa/Kampala']));
+dn_tz_reset();
+register_shutdown_function(function () use ($_tzDir) {
+    @unlink($_tzDir . '/kyc_config.json'); @rmdir($_tzDir);
+});
 
 $pass = 0; $fail = 0;
 function t(string $n, $got, $want) { global $pass, $fail;
@@ -192,6 +209,20 @@ t('a colleague has it — no',
 t('a closed conversation — no',
     FollowUpPolicy::isFollowable(['last_customer_at' => '2026-09-11 07:00:00',
                                   'state' => 'bot_active', 'status' => 'closed'], $now)['ok'], false);
+
+echo "\nThe window is measured in the install's zone, not a literal\n";
+is_(FollowUpPolicy::where() === 'Kampala', 'refusals name Kampala on this install');
+file_put_contents($_tzDir . '/kyc_config.json', json_encode(['timezone' => 'Africa/Juba']));
+dn_tz_reset();
+is_(FollowUpPolicy::where() === 'Juba', 'and would name Juba on the other one');
+t('05:00 UTC is 07:00 in Juba — too early there',
+  FollowUpPolicy::withinSendingWindow('2026-09-14 05:00:00')['ok'], false);
+is_(strpos(FollowUpPolicy::withinSendingWindow('2026-09-14 05:00:00')['reason'], 'Juba') !== false,
+    'and says so, rather than blaming a Kampala clock it is not using');
+file_put_contents($_tzDir . '/kyc_config.json', json_encode(['timezone' => 'Africa/Kampala']));
+dn_tz_reset();
+t('the same instant is exactly 08:00 in Kampala — open',
+  FollowUpPolicy::withinSendingWindow('2026-09-14 05:00:00')['ok'], true);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -39,7 +39,7 @@ require_once __DIR__ . '/lib/crm_url.php';
  * RUNS VIA: cron/master.php → 'paid_access' every 60s
  */
 chdir(__DIR__);
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 require_once __DIR__ . '/lib/StoreInterface.php';
 require_once __DIR__ . '/lib/JsonStore.php';

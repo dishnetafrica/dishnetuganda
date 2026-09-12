@@ -2,7 +2,7 @@
 <?php
 require_once __DIR__ . '/lib/currency.php';
 // Note: No strict_types - included from master.php
-date_default_timezone_set('Africa/Juba');
+require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();
 
 // PHP 7.4 polyfills
 if (!function_exists('str_starts_with')) {
@@ -567,7 +567,7 @@ try {
         mlog("  SKIP — CRM not configured");
         $results['pre_due_reminders'] = ['skipped' => 'CRM not configured'];
     } else {
-        $today    = new DateTimeImmutable('today', new DateTimeZone('Africa/Juba'));
+        $today    = new DateTimeImmutable('today', dn_tz_obj());
         $sentPre7 = 0;
         $sentPre3 = 0;
         $sentPre1 = 0;
@@ -856,7 +856,7 @@ try {
         mlog("  SKIP — CRM not configured (crm_base_url / ucrm.json missing)");
         $results['overdue_escalation'] = ['skipped' => 'CRM not configured'];
     } else {
-        $today       = new DateTimeImmutable('today', new DateTimeZone('Africa/Juba'));
+        $today       = new DateTimeImmutable('today', dn_tz_obj());
         $sentD1      = 0;
         $sentD3      = 0;
         $sentD5      = 0;

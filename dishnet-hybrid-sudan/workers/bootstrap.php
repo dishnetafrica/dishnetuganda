@@ -53,7 +53,7 @@ if (!is_dir($dataDir)) {
 }
 
 // Set timezone
-date_default_timezone_set('Africa/Juba');
+require_once dirname(__DIR__) . '/lib/timezone.php'; dn_tz_apply();
 
 // Make dataDir available to workers
 $GLOBALS['dataDir'] = $dataDir;
