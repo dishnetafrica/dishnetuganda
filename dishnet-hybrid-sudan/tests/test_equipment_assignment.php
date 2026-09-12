@@ -330,6 +330,28 @@ is_(strpos($txt3, 'not assigned to a CRM customer') !== false, 'saying exactly t
 $o4 = []; exec($env . 'php ' . escapeshellarg($root . '/tools/binding_trace.php') . ' --client X 2>&1', $o4, $c4);
 t('a non-numeric client is refused, not read as zero', $c4, 2);
 
+echo "\nThe Starlink account survives being installed\n";
+// It is recorded when the kit is received — which of DishNet's four accounts
+// supplied it. Installing used to write the assignment's empty value straight
+// over it, so the answer was lost at exactly the moment it started to matter.
+$kitH = (int)$stock->createUnit(['category_id' => $cat, 'serial_number' => 'KITHHHHHHHH0008',
+    'starlink_account' => 'ACC-DF-15757047-82765-60'], 7, 'Bhavin')['id'];
+t('received with its account',
+    $pdo->query("SELECT starlink_account FROM stock_units WHERE id={$kitH}")->fetchColumn(),
+    'ACC-DF-15757047-82765-60');
+$stock->install($kitH, ['crm_client_id' => 55, 'client_name' => 'Someone'], 7, 'Bhavin');
+t('the assignment inherits it rather than asking again',
+    $ea->activeForUnit($kitH)['starlink_account'], 'ACC-DF-15757047-82765-60');
+t('and the unit still has it',
+    $pdo->query("SELECT starlink_account FROM stock_units WHERE id={$kitH}")->fetchColumn(),
+    'ACC-DF-15757047-82765-60');
+// An account given at install still wins over the one on the unit.
+$kitI = (int)$stock->createUnit(['category_id' => $cat, 'serial_number' => 'KITIIIIIIII0009',
+    'starlink_account' => 'ACC-OLD'], 7, 'Bhavin')['id'];
+$stock->install($kitI, ['crm_client_id' => 56, 'client_name' => 'Other',
+    'starlink_account' => 'ACC-NEW'], 7, 'Bhavin');
+t('an account given at install wins', $ea->activeForUnit($kitI)['starlink_account'], 'ACC-NEW');
+
 echo "\nAssigning a kit from the command line\n";
 $assign = $root . '/tools/assign_kit.php';
 is_(is_file($assign), 'tools/assign_kit.php exists');

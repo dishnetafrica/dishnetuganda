@@ -103,7 +103,12 @@ final class EquipmentAssignment
             'unit_id'               => $unitId,
             'crm_client_id'         => $clientId,
             'crm_service_id'        => $serviceId,
-            'starlink_account'      => self::clean($data['starlink_account'] ?? ''),
+            // Inherited from the unit when the caller does not say. Which of
+            // DishNet's Starlink accounts supplied a kit is recorded when it is
+            // received; making somebody retype it at install is how it ends up
+            // blank on half the fleet.
+            'starlink_account'      => self::clean($data['starlink_account'] ?? '')
+                                       ?: self::clean($unit['starlink_account'] ?? ''),
             'starlink_service_line' => self::clean($data['starlink_service_line'] ?? ''),
             'terminal_id'           => self::clean($data['terminal_id'] ?? ''),
             'router_id'             => self::routerId($data['router_id'] ?? ''),
@@ -446,7 +451,12 @@ final class EquipmentAssignment
                 ->execute([
                     $a ? (int)$a['crm_client_id'] : null,
                     $a && $a['crm_service_id'] !== null ? (int)$a['crm_service_id'] : null,
-                    $a ? (string)$a['starlink_account'] : '',
+                    // Never blanked: the account is recorded at receipt, and an
+                    // assignment that does not happen to carry one must not
+                    // erase it. Writing '' here lost it on every install.
+                    $a && (string)$a['starlink_account'] !== ''
+                        ? (string)$a['starlink_account']
+                        : (string)($this->unit($unitId)['starlink_account'] ?? ''),
                     date('Y-m-d H:i:s'), $unitId,
                 ]);
         } catch (\Throwable $e) { /* no stock tables on this install */ }
