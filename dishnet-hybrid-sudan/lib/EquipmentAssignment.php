@@ -351,6 +351,22 @@ final class EquipmentAssignment
         return $a ? strtoupper(trim((string)$a['kit_serial'])) : '';
     }
 
+    /**
+     * Every kit in the field right now, one row per assignment.
+     *
+     * Ordered by customer so a fleet list groups a customer's kits together.
+     * Released rows are excluded here and nowhere else deletes them — the
+     * history stays, it simply is not the fleet.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function liveAssignments(): array
+    {
+        return $this->rows("SELECT * FROM equipment_assignments
+                            WHERE released_at IS NULL
+                            ORDER BY crm_client_id, id", []);
+    }
+
     // ── Reading ─────────────────────────────────────────────────────────────
 
     public function get(int $id): ?array

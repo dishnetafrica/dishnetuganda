@@ -434,6 +434,9 @@ try {
 <a href="?page=dashboard&tab=app_logins" class="kyc-tab <?= $tab==='app_logins'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-phone-fill" style="color:#1565C0;"></i></span> Customer App Logins
 </a>
+<a href="?page=dashboard&tab=starlink_fleet" class="kyc-tab <?= $tab==='starlink_fleet'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-broadcast-pin" style="color:#1565C0;"></i></span> Starlink Fleet
+</a>
 <a href="?page=dashboard&tab=starlink_suspensions" class="kyc-tab <?= $tab==='starlink_suspensions'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-shield-slash-fill" style="color:#D41C1C;"></i></span> Starlink Suspensions
 </a>

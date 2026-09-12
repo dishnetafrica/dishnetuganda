@@ -67,9 +67,7 @@ if (!$crm || !$crm->isConfigured()) {
     exit(1);
 }
 
-$live = $store->getPdo()->query(
-    "SELECT * FROM equipment_assignments WHERE released_at IS NULL ORDER BY crm_client_id, id"
-)->fetchAll(\PDO::FETCH_ASSOC);
+$live = $ea->liveAssignments();
 
 $kit = new CrmKitAttribute($crm, $ea);
 
