@@ -185,7 +185,12 @@ if (strtolower((string)($found['state'] ?? '')) !== 'open') {
 
 $text = $val('--text') ?: ('DishNet test message — ' . gmdate('Y-m-d H:i:s') . ' UTC. '
       . 'Sent from the uCRM plugin via Evolution instance ' . $instance . '. No reply needed.');
-printf("  %-14s %s\n\n", 'text', mb_strimwidth($text, 0, 60, '…'));
+// In --pdf mode the text is never sent; the caption travels with the
+// document. Printing an unused preview invites the wrong conclusion if the
+// document does not arrive.
+printf("  %-14s %s\n\n", $wantPdf ? 'caption' : 'text',
+       mb_strimwidth($wantPdf ? (trim($val('--text')) ?: 'DishNet Africa — test quotation')
+                              : $text, 0, 60, '…'));
 
 // CLASS_STAFF: a test to our own number is not marketing, and an opt-out on
 // the destination must not make this silently report success.
