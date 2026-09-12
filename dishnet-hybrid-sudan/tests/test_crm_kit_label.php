@@ -180,6 +180,8 @@ is_(strpos($toolSrc, 'A plan with no number in it is unlimited') === false,
 is_(strpos($toolSrc, 'UNLIMITED IS CLAIMED, NOT INFERRED') !== false,
     'it states the rule it actually applies');
 // And the reason given for UNKNOWN has to name the real problem.
+is_(strpos($toolSrc, 'PLANS AND USAGE') !== false,
+    '--plans gets a header about plans, not about writing labels');
 is_(strpos($toolSrc, 'the service names no plan at all') !== false
     && strpos($toolSrc, 'names no allowance') !== false,
     'an uninformative plan name is reported as such, not as a missing one');

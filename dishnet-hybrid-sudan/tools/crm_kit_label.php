@@ -73,7 +73,11 @@ $live = $store->getPdo()->query(
 
 $kit = new CrmKitAttribute($crm, $ea);
 
-echo "\n  KIT LABEL ON THE uCRM SERVICE" . ($commit ? '' : '   (dry run — nothing written)') . "\n";
+// --plans is a report, not a write path, so it gets its own honest header
+// rather than "KIT LABEL … (dry run)" above a page about allowances.
+echo "\n  " . ($plansOnly
+        ? 'PLANS AND USAGE   (read-only)'
+        : 'KIT LABEL ON THE uCRM SERVICE' . ($commit ? '' : '   (dry run — nothing written)')) . "\n";
 echo "  " . str_repeat('─', 72) . "\n\n";
 
 if ($live === []) { echo "  No live assignments, so there is nothing to label.\n\n"; exit(0); }
