@@ -94,6 +94,8 @@ class StarlinkPortalConnector implements StarlinkConnector
     /** @var StarlinkSessionStore */ private $store;
     /** @var array */                private $config;
     /** @var callable|null */        private $http;
+    /** Account to ask as, or null for whichever the cookie signed in as. */
+    private ?string $accountScope = null;
     /** @var string */               private $lastDetail = '';
 
     /**
@@ -108,7 +110,70 @@ class StarlinkPortalConnector implements StarlinkConnector
         $this->http   = $http;
     }
 
-    public function describe(): string { return 'Starlink web session (imported cookie)'; }
+    public function describe(): string
+    {
+        return 'Starlink web session (imported cookie)'
+             . ($this->accountScope !== null ? ' · scoped to ' . $this->accountScope : '');
+    }
+
+    /**
+     * Ask as a different account, on the same cookie.
+     *
+     * ── WHY THIS IS HOW STARLINK WORKS ──────────────────────────────────
+     *
+     * One login can switch between accounts in the browser, and the thing that
+     * selects WHICH account a request is about is the starlink.com.account_number
+     * cookie — not a path parameter. Send an account in the path that the cookie
+     * does not agree with and Starlink scopes the request to the cookie's
+     * account instead, then answers not_found. That is indistinguishable from an
+     * endpoint that does not exist, and it cost this repository two wrong
+     * conclusions in one afternoon: first that the usage endpoint was not real,
+     * then that a separate cookie was needed per account.
+     *
+     * Neither was true. dishnet-data-report has done it this way for years, and
+     * its own commit message is blunt about it: "vault cookies were NEVER
+     * strictly required ... Now: primary cookie with account_number swap,
+     * always." Its full_history_scan.php calls the swap the fallback that
+     * "always works if primary cookie alive".
+     *
+     * The swap is applied when the request headers are built and NEVER written
+     * back to the store: the stored cookie keeps the account it was signed in
+     * as, so a rotated cookie merged after a scoped call does not quietly move
+     * the session to somebody else's account.
+     */
+    public function scopeTo(string $account): self
+    {
+        $a = strtoupper(trim($account));
+        $this->accountScope = $a === '' ? null : $a;
+        return $this;
+    }
+
+    /** Which account this connector is asking as, or '' for the cookie's own. */
+    public function scopedTo(): string { return (string)$this->accountScope; }
+
+    /**
+     * Put $account into the cookie's account_number segment, or append it.
+     *
+     * Lifted deliberately from dishnet-data-report's $primarySwapCookie rather
+     * than reinvented, so two plugins asking Starlink the same question build
+     * the same cookie.
+     */
+    public static function swapAccount(string $cookie, string $account): string
+    {
+        $account = strtoupper(trim($account));
+        if ($cookie === '' || $account === '') return $cookie;
+        if (preg_match('/starlink\.com\.account_number=/', $cookie)) {
+            return (string)preg_replace('/starlink\.com\.account_number=[^;]*/',
+                'starlink.com.account_number=' . $account, $cookie);
+        }
+        return $cookie . '; starlink.com.account_number=' . $account;
+    }
+
+    /** The cookie as it goes out on the wire — scoped, never persisted scoped. */
+    private function onWire(string $cookie): string
+    {
+        return $this->accountScope === null ? $cookie : self::swapAccount($cookie, $this->accountScope);
+    }
 
     public function isConfigured(): bool { return $this->store->cookie() !== ''; }
 
@@ -212,15 +277,19 @@ class StarlinkPortalConnector implements StarlinkConnector
             return $fail('no Starlink session has been imported for this account');
         }
         if ($this->store->needsReimport()) {
-            return $fail('the session is dead and needs a fresh cookie imported '
-                       . '(php tools/starlink_session.php --import)');
+            // Name the account. With several sessions held, "the session" is
+            // ambiguous and somebody re-imports the wrong one.
+            return $fail('the session for ' . ($this->store->active() ?: 'this account')
+                       . ' has expired and needs a fresh cookie — paste one under '
+                       . 'Admin → Starlink Sessions, or run '
+                       . 'php tools/starlink_session.php --import');
         }
         if ($this->store->isThrottled()) {
             return $fail('backing off until ' . $this->store->throttledUntil()
                        . ' after Starlink asked us to slow down', 429, true);
         }
 
-        $r = $this->send($method, self::HOST . $path, $this->headers($cookie));
+        $r = $this->send($method, self::HOST . $path, $this->headers($this->onWire($cookie)));
 
         // Keep whatever the response handed back, even on a failure: a
         // rotated cookie arriving with a 401 is still the newer cookie.
@@ -309,6 +378,10 @@ class StarlinkPortalConnector implements StarlinkConnector
 
         $path = self::REFRESH_PATHS[(int)gmdate('z') % count(self::REFRESH_PATHS)];
         $r    = $this->send('POST', self::HOST . $path,
+                            // NOT scoped: a refresh mints a token for the
+                            // session, not for an account, and scoping it
+                            // would tie the new token to whichever account a
+                            // caller happened to be reading at the time.
                             array_merge($this->headers($cookie), ['content-length: 0']));
 
         $code = (int)($r['code'] ?? 0);
@@ -357,7 +430,7 @@ class StarlinkPortalConnector implements StarlinkConnector
                     'snippet' => '', 'sets' => [], 'location' => ''];
         }
 
-        $headers = $this->headers($cookie);
+        $headers = $this->headers($this->onWire($cookie));
         if ($method === 'POST') $headers[] = 'content-length: 0';
 
         $r    = $this->send($method, self::HOST . $path, $headers);
@@ -369,6 +442,40 @@ class StarlinkPortalConnector implements StarlinkConnector
             'snippet'  => str_replace(["\n", "\r"], ' ', substr($body, 0, 120)),
             'sets'     => array_keys((array)($r['cookies'] ?? [])),
             'location' => (string)($r['location'] ?? ''),
+            // The body itself, for a diagnostic that needs to see what came
+            // back rather than whether something did. request() is the way to
+            // FETCH data — it refreshes, retries, and refuses a session the
+            // store has given up on. This is the way to LOOK, and a tool
+            // working out why the store and the server disagree needs to look
+            // even when the store says not to bother.
+            'body'     => $body,
+        ];
+    }
+
+    /**
+     * One hop of a redirect chain, with a cookie jar we carry ourselves.
+     *
+     * A diagnostic seam, and the only way to follow an auth flow: cURL is
+     * configured not to follow redirects, so every probe of the SSO endpoints
+     * so far stopped at the first 302 and reported it as a dead end. A browser
+     * gets its access token at the END of that chain.
+     *
+     * Takes the jar explicitly rather than reading the store, because walking a
+     * chain means carrying cookies picked up along the way — and writes
+     * nothing, so a failed walk cannot damage the stored session.
+     *
+     * @return array{code:int, location:string, cookies:array, bytes:int, snippet:string}
+     */
+    public function hop(string $url, string $cookie): array
+    {
+        $r    = $this->send('GET', $url, $this->headers($cookie));
+        $body = (string)($r['body'] ?? '');
+        return [
+            'code'     => (int)($r['code'] ?? 0),
+            'location' => (string)($r['location'] ?? ''),
+            'cookies'  => (array)($r['cookies'] ?? []),
+            'bytes'    => strlen($body),
+            'snippet'  => str_replace(["\n", "\r"], ' ', substr($body, 0, 100)),
         ];
     }
 

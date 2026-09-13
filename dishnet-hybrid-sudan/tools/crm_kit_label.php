@@ -82,7 +82,7 @@ if ($live === []) { echo "  No live assignments, so there is nothing to label.\n
 
 // ── What each service sells ─────────────────────────────────────────────────
 if ($plansOnly) {
-    $usage = new KitUsage($ea);
+    $usage = new KitUsage($ea, $dataDir);
     echo "  WHAT EACH SERVICE SELLS, AND WHAT HAS BEEN USED\n";
     printf("    %-5s %-8s %-20s %-30s %s\n", '#', 'CLIENT', 'KIT', 'PLAN (as the customer sees it)', 'ALLOWANCE');
     foreach ($live as $a) {

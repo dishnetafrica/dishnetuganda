@@ -42,41 +42,118 @@ require_once $pluginRoot . '/lib/bootstrap_data.php';
 require_once $pluginRoot . '/lib/PluginConfig.php';
 require_once $pluginRoot . '/lib/StarlinkSessionStore.php';
 require_once $pluginRoot . '/lib/StarlinkPortalConnector.php';
+require_once $pluginRoot . '/lib/StarlinkUsage.php';
 
 $dataDir = getDataDir($pluginRoot);
 $config  = PluginConfig::load($pluginRoot, $dataDir);
 $store   = new StarlinkSessionStore($pluginRoot, $dataDir);
 
-if ($store->cookie() === '') return;             // nothing imported here
+// EVERY account, not just the selected one. Uganda has several Starlink
+// accounts; a keep-alive that touches only the active session lets the others
+// expire, and the account with the customers on it is not always the one
+// somebody was last looking at. The active account is restored at the end, so
+// this cron changes no operator's selection.
+$accounts = $store->accounts();
+if ($accounts === []) return;                    // nothing imported here
 
-$status = $store->status();
+$restore = $store->active();
 
-// A session already declared expired or dead cannot be revived by asking
-// again. Leave it for a person and say so once, not every five minutes.
-if (in_array($status['state'], [StarlinkSessionStore::STATE_EXPIRED,
-                                StarlinkSessionStore::STATE_DEAD], true)) {
-    if (($status['last_checked_at'] ?? '') !== ''
-        && strtotime((string)$status['last_checked_at']) < time() - 3600) {
-        error_log('[starlink_keepalive] session is ' . $status['state']
-                . ' — a person must re-import: php tools/starlink_session.php --import');
+foreach ($accounts as $_ka_acct) {
+    if (!$store->useAccount($_ka_acct)) continue;
+    if ($store->cookie() === '') continue;        // held, but never imported
+
+    $status = $store->status();
+
+    // ── An expired session gets one cheap attempt an hour ────────────────
+    //
+    // This used to log and skip, on the assumption that an expired session
+    // "cannot be revived by asking again". That was never measured, and it had
+    // a consequence nobody intended: ONE missed heartbeat marked a session
+    // expired permanently, and no amount of later ticks would touch it again.
+    // A person had to notice and paste. With a heartbeat that was slower than
+    // the token's life, that happened constantly.
+    //
+    // South Sudan runs the same mechanism on pasted cookies and syncs every two
+    // hours without anyone re-pasting, so sessions there plainly survive. An
+    // attempt costs one request; being wrong costs a working session and a
+    // person's afternoon. So try, at a rate that could not be mistaken for
+    // hammering, and let the result decide rather than the label.
+    if (in_array($status['state'], [StarlinkSessionStore::STATE_EXPIRED,
+                                    StarlinkSessionStore::STATE_DEAD], true)) {
+        $_ka_last = (string)($status['last_checked_at'] ?? '');
+        if ($_ka_last !== '' && strtotime($_ka_last) >= time() - 3600) continue;
+
+        $_ka_try = (new StarlinkPortalConnector($store, $config))
+            ->raw('GET', StarlinkPortalConnector::LINES_LIGHT_PATH);
+        $_ka_body = ltrim((string)($_ka_try['body'] ?? ''));
+        if ((int)$_ka_try['code'] === 200 && $_ka_body !== ''
+            && ($_ka_body[0] === '{' || $_ka_body[0] === '[')) {
+            // It answers. The verdict was wrong, or the session recovered.
+            $store->markOk();
+            error_log('[starlink_keepalive] ' . $_ka_acct
+                    . ' answered again after being marked ' . $status['state'] . ' — revived');
+            continue;
+        }
+
+        error_log('[starlink_keepalive] ' . $_ka_acct . ' is ' . $status['state']
+                . ' and still not answering (HTTP ' . (int)$_ka_try['code'] . ') — paste a fresh '
+                . 'cookie under Admin → Starlink Sessions');
         $store->markExpired((string)$status['last_error']);   // refresh the timestamp
+        continue;
     }
-    return;
+
+    // A fresh connector per account: it caches nothing across accounts, and
+    // reusing one would have it answer for the session it was built with.
+    $conn = new StarlinkPortalConnector($store, $config);
+    $r    = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
+
+    if (!empty($r['ok'])) {
+        // ── The second auth layer ────────────────────────────────────────
+        //
+        // Starlink authorises telemetryagg.* separately from the account
+        // endpoints. A cookie can pass the one this call just used and be
+        // rejected by the other — which is exactly what was happening here:
+        // starlink_session.php reported "session accepted YES" while every
+        // usage call answered 401 token_expired, minutes after an import.
+        //
+        // dishnet-data-report learned this the expensive way. Its v2.7.23 note
+        // says the Sessions tab showed 42 of 42 sessions alive while a sync
+        // took 279 telemetry 401s, and its heartbeat has probed both layers
+        // ever since.
+        //
+        // Using a layer is what keeps it alive, and the response carries
+        // rotated tokens that get() merges and stores. So keeping only the
+        // account layer warm let the telemetry one expire on its own — and a
+        // usage collector that runs hourly would find it dead every time.
+        $_ka_lines = [];
+        array_walk_recursive((array)($r['data'] ?? []), static function ($v) use (&$_ka_lines) {
+            $t = strtoupper(trim((string)$v));
+            if (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $_ka_lines[] = $t;
+        });
+        if ($_ka_lines !== []) {
+            sort($_ka_lines);
+            $_ka_tel = $conn->get(sprintf(StarlinkUsage::PATH,
+                rawurlencode($_ka_acct), rawurlencode($_ka_lines[0])));
+            if (empty($_ka_tel['ok']) && (int)$_ka_tel['code'] < 500) {
+                error_log('[starlink_keepalive] ' . $_ka_acct
+                        . ' passes the account layer but NOT telemetry: '
+                        . (string)$_ka_tel['error']
+                        . ' — usage collection will fail until a cookie is re-imported');
+            }
+        }
+        continue;   // markOk() already ran inside the request
+    }
+
+    // A 5xx is Starlink's weather and costs the session nothing; the connector
+    // has already decided that. Anything else is worth a line, because a
+    // session that has stopped working is a sync that has stopped running.
+    if ((int)$r['code'] < 500) {
+        error_log('[starlink_keepalive] ' . $_ka_acct
+                . ' session no longer working: ' . (string)$r['error']);
+    }
 }
 
-$conn = new StarlinkPortalConnector($store, $config);
-$r    = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
-
-if (!empty($r['ok'])) {
-    // markOk() already ran inside the request. Nothing to say — a keep-alive
-    // that logs every success drowns the one line that matters.
-    return;
-}
-
-// A 5xx is Starlink's weather and costs the session nothing; the connector
-// has already decided that. Anything else is worth a line, because a session
-// that has stopped working is a sync that has stopped running.
-if ((int)$r['code'] < 500) {
-    error_log('[starlink_keepalive] session no longer working: ' . (string)$r['error']);
-}
+// Put the selection back. An operator who switched to an account to look at
+// it should not find the cron has moved them somewhere else.
+if ($restore !== '') $store->useAccount($restore);
 return;

@@ -39,8 +39,22 @@ final class KitUsage
     private ?EquipmentAssignment $ea;
     /** Per-instance — a `static` would let one object's read answer another's. */
     private ?array $rows = null;
+    private ?string $ownDir;
+    private string $source = '';
 
-    public function __construct(?EquipmentAssignment $ea = null) { $this->ea = $ea; }
+    /**
+     * @param string|null $ownDir this plugin's data directory. When our own
+     *        collector has written usage there, it is read in preference to the
+     *        sibling's — same row shape, so nothing downstream changes.
+     */
+    public function __construct(?EquipmentAssignment $ea = null, ?string $ownDir = null)
+    {
+        $this->ea     = $ea;
+        $this->ownDir = $ownDir;
+    }
+
+    /** Where the figures on screen came from, for a doctor or a banner. */
+    public function source(): string { $this->rows(); return $this->source; }
 
     /**
      * Every usage row the data plugin has written, or null if there is no
@@ -49,8 +63,26 @@ final class KitUsage
     public function rows(): ?array
     {
         if ($this->rows !== null) return $this->rows === [] ? [] : $this->rows;
+
+        // Ours first. cron/starlink_usage.php collects from our own Starlink
+        // session, against the binding we already hold, and writes the same row
+        // shape into our own data directory — which survives an upgrade of
+        // either plugin. The sibling stays as the fallback it has always been:
+        // on the South Sudan box it is the one doing the collecting.
+        if ($this->ownDir !== null) {
+            $mine = rtrim($this->ownDir, '/') . '/' . self::USAGE_FILE;
+            if (is_file($mine)) {
+                $d = json_decode((string)@file_get_contents($mine), true);
+                if (is_array($d) && $d !== []) {
+                    $this->source = 'this plugin (' . self::USAGE_FILE . ')';
+                    return $this->rows = array_values(array_filter($d, 'is_array'));
+                }
+            }
+        }
+
         $raw = SiblingPlugin::readJson(self::PLUGIN, self::USAGE_FILE);
         if ($raw === null) return null;                  // plugin or file absent
+        $this->source = self::PLUGIN;
         return $this->rows = array_values(array_filter($raw, 'is_array'));
     }
 

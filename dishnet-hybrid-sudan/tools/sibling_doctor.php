@@ -27,6 +27,8 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
 $root = dirname(__DIR__);
 $GLOBALS['_PLUGIN_ROOT'] = $root;
 require_once $root . '/lib/SiblingPlugin.php';
+require_once $root . '/lib/bootstrap_data.php';
+require_once $root . '/lib/DrSnapshot.php';
 
 /**
  * The files this plugin actually reads, and what stops working without each.
@@ -83,6 +85,36 @@ echo "\n";
 $problems = 0;
 $warnings = 0;
 
+/**
+ * How many records a file actually holds, and what to call them.
+ *
+ * Not count() — that was the bug this function exists to stop. Several of
+ * these files are ENVELOPES: a handful of metadata keys wrapping the list
+ * that matters. dr_kit_registry.json carries schema_version, generated_at,
+ * generator, contract, kit_count, auto_discovered and kits. count() on that
+ * returns 7 for a file whose kits list is empty, and 7 reads as seven kits.
+ * A tool written to stop us reporting zero as a fact was reporting seven as
+ * one instead.
+ *
+ * @return array{0:int, 1:string}
+ */
+function dn_record_count(array $data): array
+{
+    // An envelope: every value that is a list lives under a named key, and
+    // the rest are scalars. Count the payload, and say which key it came from.
+    $lists = [];
+    $scalars = 0;
+    foreach ($data as $k => $v) {
+        if (is_array($v)) $lists[(string)$k] = count($v); else $scalars++;
+    }
+    if ($scalars > 0 && count($lists) === 1) {
+        $key = (string)array_key_first($lists);
+        return [$lists[$key], $key];
+    }
+    return [count($data), 'rows'];
+}
+
+
 foreach ($EXPECTED as $plugin => $files) {
     $installed = SiblingPlugin::installed($plugin);
     $dir       = SiblingPlugin::dataDir($plugin);
@@ -137,10 +169,53 @@ foreach ($EXPECTED as $plugin => $files) {
               : ($hours > 6 ? sprintf('%.0f hours old', $hours)
                             : sprintf('%.0f min old', $age / 60));
         if ($hours > 48) $warnings++;
-        printf("      %-28s %-7d rows   %s\n", $file, count($data), $note);
+        [$n, $unit] = dn_record_count($data);
+        if ($n === 0) $warnings++;
+        printf("      %-28s %-7d %-9s %s\n", $file, $n, $unit, $note);
     }
     echo "\n";
 }
+
+// ── What we hold if that plugin's directory goes ────────────────────────────
+//
+// uCRM deletes <plugin>/data on upgrade. cron/dr_snapshot.php copies the ten
+// files that matter into ours every day. This says whether that is actually
+// happening, because a snapshot nobody has taken is worth nothing on the day
+// it is needed — and if the live data has already gone, it says so and gives
+// the one command that puts it back.
+$snapRoot = DrSnapshot::root(cliDataDir($root));
+$snaps    = DrSnapshot::snapshots($snapRoot);
+$drLive   = SiblingPlugin::dataDir(DrSnapshot::PLUGIN);
+$drGone   = $drLive === null || DrSnapshot::survey($drLive)['present'] === [];
+
+echo "  snapshots of " . DrSnapshot::PLUGIN . "\n";
+if ($snaps === []) {
+    echo "    NONE HELD. If that plugin is upgraded today, its Starlink cookies,\n";
+    echo "    its router map and the record of who is currently blocked go with it.\n";
+    echo "    cron/dr_snapshot.php takes one daily — check master.php ran it, or:\n";
+    echo "      php tools/dr_snapshot.php --save\n";
+    $problems++;
+} else {
+    $newest = (string)end($snaps);
+    $age    = time() - (int)@filemtime($snapRoot . '/' . $newest);
+    $files  = count((array)glob($snapRoot . '/' . $newest . '/*.json'));
+    printf("    %d held · newest %s (%s) · %d file(s)\n",
+        count($snaps), $newest,
+        $age < 7200 ? sprintf('%d min old', (int)($age / 60)) : sprintf('%.0f hours old', $age / 3600),
+        $files);
+    if ($age > 48 * 3600) {
+        echo "    STALE — the daily cron has not run for two days. Anything that\n";
+        echo "    plugin has learned since is not held anywhere.\n";
+        $warnings++;
+    }
+    if ($drGone) {
+        echo "\n    THAT PLUGIN'S LIVE DATA IS GONE and this snapshot is all there is.\n";
+        echo "    Put it back with:\n";
+        echo "      php tools/dr_snapshot.php --restore {$newest} --yes\n";
+        $problems++;
+    }
+}
+echo "\n";
 
 echo "  " . str_repeat('─', 72) . "\n";
 $misses = SiblingPlugin::misses();
@@ -155,7 +230,9 @@ if ($problems > 0) {
     echo "\n";
 }
 if ($warnings > 0) {
-    echo "  {$warnings} warning(s) above — stale data, or data in a directory that\n";
-    echo "  the next upgrade of that plugin will delete.\n\n";
+    echo "  {$warnings} warning(s) above — a file with no records, stale data, or data\n";
+    echo "  in a directory the next upgrade of that plugin will delete. A file that\n";
+    echo "  exists and holds nothing is the quietest of the three: its cron ran and\n";
+    echo "  had nothing to write, which reads on every screen as a fleet at zero.\n\n";
 }
 exit($problems > 0 ? 1 : 0);

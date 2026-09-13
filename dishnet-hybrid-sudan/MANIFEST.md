@@ -399,6 +399,11 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 **External plugin dependencies (read-only):**
 - `dishnet-starlink-finance/data/sl_kits.json` — must contain client_id + kit_serial
 - `dishnet-data-report/data/wifi_router_map.json` — must contain kit_serial + router_id_full
+- `dishnet-data-report/data/sl_svc_cache.json` — keyed by **service line**; read for live
+  subscription state (StarlinkServiceState). On the Uganda server this is the only Starlink
+  file with content: `sl_usage.json` and `dr_kit_registry.json` are both empty because both
+  are keyed by a kit serial the data plugin does not resolve (`kit_number` is `""` on all 15
+  lines, verified 2026-09-12). Join on the service line, which we record at installation.
 
 **Loopback HTTP target:** `dishnet-data-report/public.php?action=dr_wifi_*` (no auth required for these actions when called without UCRM session cookies — verified in dr_wifi_change.php)
 
@@ -451,6 +456,11 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 | QuotationService | lib/QuotationService.php | Quote generation + WA sending |
 | StaffLedgerService | lib/StaffLedgerService.php | Unified staff cash ledger — one balance query replaces 5 sources |
 | StaffLedgerWriter | lib/StaffLedgerWriter.php | Fail-safe dual-write helper for staff_ledger |
+| StarlinkUsage | lib/StarlinkUsage.php | Collects Starlink usage on OUR session at `/api/telemetryagg/v1/data-usage/account/{acc}/service-line/{sl}/annotated` (proven 2026-09-13), keyed off equipment_assignments. Writes rows in KitUsage's existing shape into this plugin's data dir, so the Fleet screen needs no change. Drops billing cycles that closed before the subscription began — Starlink returns the line's whole history and those are not this customer's zeros. Refuses to write an empty file. One session per account: the account_number swap does NOT carry this endpoint. Cron: `starlink_usage`, hourly. |
+| StarlinkPortalConnector | lib/StarlinkPortalConnector.php | Starlink web-session client. **Account selection is the `starlink.com.account_number` COOKIE, not a path parameter** — `scopeTo($acct)` swaps that segment so ONE cookie reaches every account the login can switch to (the mechanism dishnet-data-report calls "primary cookie with account_number swap, always"). An account in the path that the cookie disagrees with returns not_found, indistinguishable from a missing endpoint. The swap is applied when headers are built and never persisted, so a rotated-cookie merge cannot move the stored session to another account. Refresh calls are deliberately NOT scoped. |
+| StarlinkSessionStore | lib/StarlinkSessionStore.php | Encrypted Starlink web sessions, **one per account** (schema 2: `{active, accounts{}}`). Starlink lets one login switch accounts and DishNet Uganda has several; importing a cookie ADDS the account it names rather than replacing the selected one. `accounts()`, `active()`, `useAccount()`, `forgetAccount()`; every other method acts on the active account. Reads the pre-schema-2 flat file without rewriting it. |
+| DrSnapshot | lib/DrSnapshot.php | Copies dishnet-data-report's ten data files into this plugin's data directory, which survives an upgrade of either plugin. uCRM DELETES `<plugin>/data` on upgrade and that plugin still uses that shape. cron/dr_snapshot.php runs it daily, skipping days where nothing changed and keeping 14. Restore is never automatic — `tools/dr_snapshot.php --restore <name> --yes`. |
+| StarlinkServiceState | lib/StarlinkServiceState.php | Live Starlink subscription state per service line, read from dishnet-data-report's sl_svc_cache.json. Status precedence pending > suspended > paused > standby > active; `subscription_active: null` reports as unknown, never inactive. Also lists service lines no assignment claims. |
 | StarlinkBlockService | lib/StarlinkBlockService.php | Auto-block Starlink devices on UCRM service.suspend (v4.21.0+). Reads sl_kits.json + wifi_router_map.json, calls dishnet-data-report's gRPC bridge over loopback HTTP. State in sl_suspension_state, audit in sl_suspension_log. VIP guard via NO_AUTO_BLOCK tag or starlink_block_vip_clients config. |
 
 ## External APIs

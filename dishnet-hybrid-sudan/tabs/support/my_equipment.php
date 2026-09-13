@@ -36,6 +36,9 @@
 .meq-modal{background:#fff;border-radius:16px;padding:24px;max-width:450px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,.2);}
 .meq-modal h3{margin:0 0 16px;font-size:18px;font-weight:800;}
 .meq-field{margin-bottom:12px;}
+.meq-idbox{border:1px solid #E2E8F0;border-radius:10px;padding:12px 12px 2px;margin:12px 0;background:#F8FAFC;}
+.meq-idhead{font-size:12px;font-weight:800;color:#334155;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.meq-idhead span{display:block;font-size:11px;font-weight:500;color:#64748B;text-transform:none;letter-spacing:0;margin-top:2px;}
 .meq-field label{display:block;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;margin-bottom:4px;}
 .meq-field input,.meq-field select{width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box;}
 </style>
@@ -130,7 +133,18 @@ window.meqDoCheckin = function(unitId){
 window.meqInstall = function(unitId, serial){
     var h = '<div class="meq-field"><label>Customer CRM ID</label><input id="meqCrmId" type="number" placeholder="e.g. 851"></div>';
     h += '<div class="meq-field"><label>Customer Name</label><input id="meqClient" placeholder="Customer name"></div>';
+    h += '<div class="meq-field"><label>uCRM Service ID</label><input id="meqSvcId" type="number" placeholder="Which subscription this kit serves"></div>';
     h += '<div class="meq-field"><label>Job ID (optional)</label><input id="meqJob" type="number" placeholder="From scheduling"></div>';
+    // Read off the hardware while you are standing at it. Nothing here is
+    // required — an identifier we do not have is left empty and can be added
+    // later — but this is the only moment anyone holds the kit, and the
+    // terminal ID outlives the kit serial when a dish is swapped.
+    h += '<div class="meq-idbox">';
+    h += '<div class="meq-idhead">Starlink identifiers <span>from the kit &amp; app — optional, add later if not to hand</span></div>';
+    h += '<div class="meq-field"><label>Terminal ID</label><input id="meqTerm" placeholder="ut01301694-01e07c1c-59d52912" autocapitalize="off" spellcheck="false"></div>';
+    h += '<div class="meq-field"><label>Router ID</label><input id="meqRouter" placeholder="Router ID (no Router- prefix needed)" autocapitalize="off" spellcheck="false"></div>';
+    h += '<div class="meq-field"><label>Service line</label><input id="meqLine" placeholder="SL-DF-…" autocapitalize="off" spellcheck="false"></div>';
+    h += '</div>';
     h += '<div class="meq-field"><label>Note</label><input id="meqInstNote" placeholder="Installation notes"></div>';
     h += '<div style="display:flex;gap:8px;margin-top:16px;">';
     h += '<button class="meq-btn install" onclick="meqDoInstall('+unitId+')">✅ Confirm Install</button>';
@@ -145,8 +159,14 @@ window.meqDoInstall = function(unitId){
     api('stock_install', {method:'POST', body:{
         unit_id: unitId,
         crm_client_id: parseInt($('meqCrmId').value) || 0,
+        crm_service_id: parseInt($('meqSvcId').value) || 0,
         client_name: $('meqClient').value,
         job_id: parseInt($('meqJob').value) || 0,
+        // Sent as typed. The server normalises and refuses a value that is
+        // plainly in the wrong box; it never invents one that was left blank.
+        terminal_id: ($('meqTerm') ? $('meqTerm').value : '').trim(),
+        router_id: ($('meqRouter') ? $('meqRouter').value : '').trim(),
+        starlink_service_line: ($('meqLine') ? $('meqLine').value : '').trim(),
         note: $('meqInstNote').value,
     }}, function(err, r){
         if(err||!r||r.status==='error'){alert('Error: '+(r&&r.message||err));return;}

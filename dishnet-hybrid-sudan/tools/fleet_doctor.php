@@ -1,0 +1,156 @@
+<?php
+declare(strict_types=1);
+chdir(dirname(__DIR__));
+
+/**
+ * fleet_doctor.php — is the Starlink Fleet screen ready, and if not, why?
+ *
+ *   php tools/fleet_doctor.php
+ *
+ * Read-only. This is the South Sudan "data report" equivalent: which customer
+ * holds which kit and how much data it has used. It runs the SAME
+ * StarlinkFleet::build() the screen runs, so what it prints is what an
+ * administrator sees — not a second opinion that can drift from the page.
+ *
+ * The screen needs two things that arrive from different places, and the
+ * common failure is having one without the other:
+ *
+ *   1. Live equipment assignments, from OUR database. Without these the
+ *      screen has no customers to list, however much telemetry exists.
+ *   2. sl_usage.json, written by the SIBLING dishnet-data-report plugin.
+ *      Without it every row is present but silent.
+ *
+ * A check that cannot be established says UNKNOWN. It never reports a pass it
+ * did not prove.
+ */
+if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
+
+$root = dirname(__DIR__);
+require_once $root . '/lib/bootstrap_data.php';
+require_once $root . '/lib/StoreInterface.php';
+require_once $root . '/lib/JsonStore.php';
+require_once $root . '/lib/SqliteStore.php';
+require_once $root . '/lib/PluginConfig.php';
+require_once $root . '/lib/EquipmentAssignment.php';
+require_once $root . '/lib/KitUsage.php';
+require_once $root . '/lib/StarlinkFleet.php';
+
+$dataDir = getDataDir($root);
+$store   = SqliteStore::create($dataDir);
+$line    = str_repeat('─', 72);
+
+echo "\n  STARLINK FLEET / DATA REPORT (read-only)\n  {$line}\n";
+printf("  %-24s %s\n\n", 'data directory', $dataDir);
+
+// ── 1. Do we have the table at all? ────────────────────────────────────
+try {
+    $pdo = $store->getPdo();
+    $has = (bool)$pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='equipment_assignments'")->fetch();
+} catch (\Throwable $e) { $has = false; }
+if (!$has) {
+    echo "  ✗ equipment_assignments does not exist — the migrations have not run.\n";
+    echo "      php tools/schema_doctor.php --repair\n\n";
+    exit(1);
+}
+
+$ea = new EquipmentAssignment($pdo);
+$live = $ea->liveAssignments();
+
+echo "  1. WHO HOLDS A KIT (our database)\n  {$line}\n";
+printf("    %-28s %d\n", 'live assignments', count($live));
+if ($live === []) {
+    echo "\n    The screen will be EMPTY — not broken, just nothing assigned yet.\n";
+    echo "    A kit becomes visible here when it is installed to a uCRM client:\n";
+    echo "    Stock → issue the unit to a customer, which writes the assignment.\n\n";
+} else {
+    $withSerial = $withTerminal = $withService = 0;
+    foreach ($live as $a) {
+        if (trim((string)$a['kit_serial'])  !== '') $withSerial++;
+        if (trim((string)$a['terminal_id']) !== '') $withTerminal++;
+        if ($a['crm_service_id'] !== null)          $withService++;
+    }
+    printf("    %-28s %d of %d\n", 'with a kit serial',  $withSerial,  count($live));
+    printf("    %-28s %d of %d\n", 'with a terminal id', $withTerminal, count($live));
+    printf("    %-28s %d of %d\n", 'bound to a service', $withService, count($live));
+    if ($withSerial < count($live)) {
+        echo "\n    ⚠ Usage is joined on the KIT SERIAL. An assignment without one can\n";
+        echo "      never show data, however healthy the telemetry pipeline is.\n";
+    }
+    echo "\n";
+}
+
+// ── 2. Is the sibling plugin feeding us? ───────────────────────────────
+$usage = new KitUsage($ea, $dataDir);
+$rows  = $usage->rows();
+echo "  2. TELEMETRY (sibling dishnet-data-report plugin)\n  {$line}\n";
+if ($rows === null) {
+    echo "    ✗ sl_usage.json NOT FOUND — the data-report plugin has never\n";
+    echo "      written usage on this server. Every row will read 'no telemetry'.\n";
+    echo "      This is the piece South Sudan has and Uganda does not.\n\n";
+} elseif ($rows === []) {
+    echo "    ⚠ sl_usage.json EXISTS but is EMPTY — the data-report plugin has run\n";
+    echo "      here and collected nothing. That is not the same as 'no telemetry\n";
+    echo "      pipeline': the file is being written, it just has no readings.\n";
+    echo "      Check that plugin's own collection cron and its Starlink session.\n\n";
+} else {
+    $kits = [];
+    foreach ($rows as $r) { $k = trim((string)($r['kit_number'] ?? '')); if ($k !== '') $kits[$k] = true; }
+    printf("    %-28s %d\n", 'usage rows', count($rows));
+    printf("    %-28s %d\n", 'distinct kits reported', count($kits));
+
+    // The question that decides whether the screen is useful is not "is there
+    // telemetry" or "are there customers" — it is whether the two JOIN. Usage
+    // is matched on the kit serial, so a reading for a kit nobody holds, and a
+    // customer whose kit never reports, both leave a row saying nothing.
+    $matched = 0; $serials = [];
+    foreach ($live as $a) { $sn = EquipmentAssignment::clean($a['kit_serial']); if ($sn !== '') $serials[$sn] = true; }
+    foreach (array_keys($kits) as $k) if (isset($serials[EquipmentAssignment::clean($k)])) $matched++;
+    printf("    %-28s %d of %d\n\n", 'reporting kits we assigned', $matched, count($kits));
+    if ($matched === 0 && $kits !== []) {
+        echo "    ⚠ Telemetry is arriving, but not for ANY kit we have assigned —\n";
+        echo "      the serials do not meet. Every row will still say 'silent'.\n\n";
+    }
+}
+
+// ── 3. What the screen will actually render ────────────────────────────
+$fleet = new StarlinkFleet($ea, $usage, $store, null);
+$built = $fleet->build();
+$s     = $built['summary'] ?? [];
+echo "  3. WHAT THE SCREEN SHOWS\n  {$line}\n";
+printf("    %-28s %d\n", 'rows', count($built['rows'] ?? []));
+foreach (['usage_known' => 'kits reporting data',
+          'usage_silent' => 'kits silent',
+          'over_cap' => 'over their allowance'] as $k => $label) {
+    if (array_key_exists($k, $s)) printf("    %-28s %d\n", $label, (int)$s[$k]);
+}
+$t = $built['telemetry'] ?? [];
+printf("    %-28s %s\n", 'telemetry available', !empty($t['available']) ? 'yes' : 'no');
+if (!empty($t['reason'])) echo "    reason: " . (string)$t['reason'] . "\n";
+
+echo "\n  {$line}\n";
+// "Ready" means an operator opening the screen sees a real reading, not a
+// row explaining why there is none. A present-but-empty usage file is not
+// telemetry, and reporting it as ready is the kind of confident wrong answer
+// this tool exists to prevent.
+$known = (int)($s['usage_known'] ?? 0);
+$ready = $live !== [] && $known > 0;
+if ($ready) {
+    printf("  ✓ Ready — %d of %d assigned kit(s) are reporting data.\n\n",
+           $known, count($built['rows'] ?? []));
+} elseif ($live !== [] && $rows === []) {
+    echo "  The screen lists your customer(s), but sl_usage.json is empty, so every\n";
+    echo "  row reads 'silent'. The screen is correct; the telemetry is not flowing.\n";
+    echo "  That is the sibling dishnet-data-report plugin's collection, not this one.\n\n";
+} elseif ($live !== [] && $rows !== null && $known === 0) {
+    echo "  The screen lists your customer(s) and telemetry exists, but none of it\n";
+    echo "  matches a kit we have assigned. Check the kit serials on both sides.\n\n";
+} elseif ($live === [] && $rows === null) {
+    echo "  The screen is built and reachable (Admin → Starlink Fleet) but has\n";
+    echo "  neither assignments nor telemetry yet, so it will render empty.\n\n";
+} elseif ($live === []) {
+    echo "  Telemetry is arriving, but no kit is assigned to a customer yet, so\n";
+    echo "  there is nothing to attribute it to.\n\n";
+} else {
+    echo "  Customers hold kits, but no telemetry has been collected here — the\n";
+    echo "  rows will list every customer and say so, rather than showing 0 GB.\n\n";
+}

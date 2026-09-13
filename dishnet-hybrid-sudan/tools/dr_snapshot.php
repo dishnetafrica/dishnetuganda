@@ -6,7 +6,9 @@ chdir(dirname(__DIR__));
  * dr_snapshot.php — copy dishnet-data-report's data somewhere an upgrade cannot reach.
  *
  *   php tools/dr_snapshot.php              what is there, and what a snapshot would take
- *   php tools/dr_snapshot.php --save       take one
+ *   php tools/dr_snapshot.php --save       take one (the ten files worth keeping)
+ *   php tools/dr_snapshot.php --save --full  copy the WHOLE data directory
+ *                                            — before a deliberate uninstall
  *   php tools/dr_snapshot.php --list       snapshots already taken
  *   php tools/dr_snapshot.php --restore <name>   put one back
  *
@@ -43,10 +45,18 @@ $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/SiblingPlugin.php';
 require_once $root . '/lib/SecureFile.php';
+require_once $root . '/lib/DrSnapshot.php';
 
 $GLOBALS['_PLUGIN_ROOT'] = ((string)getenv('DN_PLUGIN_ROOT')) ?: $root;
 
-const DR_PLUGIN = 'dishnet-data-report';
+const DR_PLUGIN = DrSnapshot::PLUGIN;
+
+/**
+ * What to take, and why. The list itself lives in lib/DrSnapshot.php so that
+ * cron/dr_snapshot.php — which runs daily and unattended — cannot end up
+ * taking a different set of files from the one a person sees here.
+ */
+const SNAPSHOT_FILES = DrSnapshot::FILES;
 
 /**
  * What to take, and why it is worth taking. Ordered by how badly it hurts to
@@ -73,15 +83,15 @@ $val  = function (string $f) use ($args): string {
 };
 foreach ($args as $a) {
     if (strpos($a, '--') !== 0) continue;
-    if (!in_array($a, ['--save', '--list', '--restore', '--yes'], true)) {
+    if (!in_array($a, ['--save', '--list', '--restore', '--yes', '--full'], true)) {
         fwrite(STDERR, "\n  Unknown option: {$a}\n");
-        fwrite(STDERR, "  Known: --save, --list, --restore <name>\n\n");
+        fwrite(STDERR, "  Known: --save, --save --full, --list, --restore <name>\n\n");
         exit(2);
     }
 }
 
 $dataDir  = cliDataDir($root);
-$snapRoot = rtrim($dataDir, '/') . '/dr_snapshots';
+$snapRoot = DrSnapshot::root($dataDir);
 $drData   = SiblingPlugin::dataDir(DR_PLUGIN);
 
 echo "\n  DATA REPORT SNAPSHOT — " . gmdate('Y-m-d H:i') . " UTC\n\n";
@@ -187,23 +197,41 @@ if (!$has('--save')) {
     exit(0);
 }
 
-$name = gmdate('Ymd-His');
-$dest = $snapRoot . '/' . $name;
-if (!@mkdir($dest, 0750, true) && !is_dir($dest)) {
-    fwrite(STDERR, "  Could not create {$dest}\n\n");
+// ── --save --full: everything, for a deliberate uninstall ───────────────────
+if ($has('--full')) {
+    $r = DrSnapshot::takeFull($snapRoot, $drData, $dataDir);
+    if ($r['name'] === '') {
+        fwrite(STDERR, "  Could not copy: {$r['reason']}\n\n");
+        exit(1);
+    }
+    printf("  ✔ %d file(s), %s bytes copied to %s\n", $r['saved'], number_format($r['bytes']), $r['name']);
+    if ($r['status'] !== 'saved') echo "    WARNING: {$r['reason']}\n";
+    echo "\n  This is the WHOLE directory, including the files the curated snapshot\n";
+    echo "  leaves out — .enc_salt among them, which is what makes that plugin's\n";
+    echo "  stored Starlink cookies readable. Restore it by hand after a reinstall:\n\n";
+    printf("    docker cp <the snapshot dir>/. ucrm:%s/\n\n", $drData);
+    echo "  On this box the snapshot is at:\n";
+    echo "    {$snapRoot}/{$r['name']}\n\n";
+    exit($r['status'] === 'saved' ? 0 : 1);
+}
+
+// A person asking for a snapshot gets one, even if it duplicates the last:
+// they are usually about to upgrade, and want to see it taken.
+$r = DrSnapshot::take($snapRoot, $drData, $dataDir, false);
+if ($r['status'] !== 'saved' && $r['name'] === '') {
+    fwrite(STDERR, "  Could not take a snapshot: {$r['reason']}\n\n");
     exit(1);
 }
-$saved = 0;
-foreach ($present as $file => $i) {
-    $t = $dest . '/' . $file;
-    if (@copy($i['path'], $t)) { SecureFile::adopt($t, $dataDir); $saved++; }
-    else echo "    FAILED to copy {$file}\n";
-}
-// dr_accounts.json holds session cookies. Readable by the web user and
-// nobody else, the same as every other secret this plugin keeps.
-@chmod($dest, 0750);
+$name  = $r['name'];
+$saved = $r['saved'];
+if ($saved < $r['total']) echo "    FAILED to copy " . ($r['total'] - $saved) . " file(s)\n";
 
-echo "  ✔ {$saved} file(s) saved to {$name}\n\n";
-echo "  Restore after an upgrade with:\n";
+echo "  ✔ {$saved} file(s) saved to {$name}\n";
+$pruned = DrSnapshot::prune($snapRoot);
+if ($pruned) {
+    echo "  · " . count($pruned) . " older snapshot(s) removed, keeping the newest "
+       . DrSnapshot::KEEP . "\n";
+}
+echo "\n  Restore after an upgrade with:\n";
 echo "    php tools/dr_snapshot.php --restore {$name} --yes\n\n";
-exit($saved === count($present) ? 0 : 1);
+exit($saved === $r['total'] ? 0 : 1);

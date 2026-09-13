@@ -328,6 +328,12 @@ window._shOpenActionImpl = function(action){
         h+='<div id="shDpClientList" style="max-height:220px;overflow-y:auto;border:1px solid #E2E8F0;border-radius:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.06);background:#fff;margin-top:4px;"></div>';
         h+='<div id="shDpClientPicked" style="display:none;padding:10px 12px;margin-top:6px;border:2px solid #2563EB;border-radius:10px;background:#EFF6FF;font-weight:700;font-size:14px;"></div>';
         h+='</div>';
+        h+='<div class="sh-field"><label>uCRM Service ID</label><input id="shDpSvc" type="number" placeholder="Which subscription this kit serves"></div>';
+        // Optional, but this is where a kit gets bound to a customer — an
+        // identifier captured here is one nobody has to chase afterwards.
+        h+='<div class="sh-field"><label>Terminal ID</label><input id="shDpTerm" placeholder="ut… (optional)" autocapitalize="off" spellcheck="false"></div>';
+        h+='<div class="sh-field"><label>Router ID</label><input id="shDpRouter" placeholder="optional" autocapitalize="off" spellcheck="false"></div>';
+        h+='<div class="sh-field"><label>Service line</label><input id="shDpLine" placeholder="SL-… (optional)" autocapitalize="off" spellcheck="false"></div>';
         h+='<div class="sh-field"><label>Note</label><input id="shDpNote" placeholder="Job ref, site location..."></div>';
         h+='<button class="sh-submit" id="shDpBtn" onclick="shDoDeploy()" disabled style="margin-top:8px;background:#059669;">📦 Deploy to Client</button>';
         h+='<div id="shDpMsg" style="margin-top:10px;"></div>';
@@ -678,7 +684,11 @@ window.shDoDeploy = function(){
     api('stock_install',{method:'POST',body:{
         unit_id:_dpUnitId,
         crm_client_id:_dpCrmId||0,
+        crm_service_id:($('shDpSvc')?parseInt($('shDpSvc').value):0)||0,
         client_name:_dpCrmName,
+        terminal_id:($('shDpTerm')?$('shDpTerm').value:'').trim(),
+        router_id:($('shDpRouter')?$('shDpRouter').value:'').trim(),
+        starlink_service_line:($('shDpLine')?$('shDpLine').value:'').trim(),
         note:($('shDpNote')?$('shDpNote').value:'')||'Deployed via Stock Hub',
     }},function(err,r){
         if(err||!r||r.status==='error'){

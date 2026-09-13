@@ -392,6 +392,10 @@ function buildDirectInstallForm(){
         + '<div id="sioDiCrmList" style="max-height:200px;overflow-y:auto;border:1px solid #E2E8F0;border-radius:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.06);background:#fff;margin-top:4px;"></div>'
         + '<div id="sioDiCrmPicked" style="display:none;padding:10px 12px;margin-top:6px;border:2px solid #2563EB;border-radius:10px;background:#EFF6FF;font-weight:700;font-size:14px;"></div>'
         + '</div>'
+        + '<div class="sio-field"><label>uCRM Service ID</label><input id="sioDiSvc" type="number" placeholder="Which subscription this kit serves"></div>'
+        + '<div class="sio-field"><label>Terminal ID</label><input id="sioDiTerm" placeholder="ut… (optional)" autocapitalize="off" spellcheck="false"></div>'
+        + '<div class="sio-field"><label>Router ID</label><input id="sioDiRouter" placeholder="optional" autocapitalize="off" spellcheck="false"></div>'
+        + '<div class="sio-field"><label>Service line</label><input id="sioDiLine" placeholder="SL-… (optional)" autocapitalize="off" spellcheck="false"></div>'
         + '<div class="sio-field"><label>Note</label><input id="sioDiNote" placeholder="Job ref, site location..."></div>'
         + '<div class="sio-btn-row"><button class="sio-btn secondary" onclick="closeModal()">Cancel</button>'
         + '<button class="sio-btn primary" id="sioDiBtn" onclick="sioDoDirectInstall()" disabled>📦 Deploy</button></div>';
@@ -733,6 +737,10 @@ window.sioDoDirectInstall = function(){
     if(!_diCrmName){alert('Select a customer');return;}
     api('stock_install',{method:'POST',body:{
         unit_id:_diUnitId, crm_client_id:_diCrmId||0, client_name:_diCrmName,
+        crm_service_id:($('sioDiSvc')?parseInt($('sioDiSvc').value):0)||0,
+        terminal_id:($('sioDiTerm')?$('sioDiTerm').value:'').trim(),
+        router_id:($('sioDiRouter')?$('sioDiRouter').value:'').trim(),
+        starlink_service_line:($('sioDiLine')?$('sioDiLine').value:'').trim(),
         note:$('sioDiNote')?($('sioDiNote').value||'Direct install'):'Direct install',
     }},function(err,r){
         if(err||!r||r.status==='error'){$('sioModalResult').innerHTML='<div style="color:#DC2626;">❌ '+(r&&r.message||err)+'</div>';return;}
