@@ -109,6 +109,27 @@ if (in_array('--accounts', array_slice($argv, 1), true)) {
     printf("    accounts       %d\n", count($accounts));
     foreach (array_keys($accounts) as $a) echo "                   {$a}\n";
     printf("    service lines  %d\n", count($lines));
+    // Print them. A count alone cannot be reconciled against anything, and
+    // the whole question now is which of these our assignments point at.
+    foreach (array_keys($lines) as $l) echo "                   {$l}\n";
+
+    // The cookie carries the account it was signed in as: the browser sets
+    // starlink.com.account_number and the store reads it there, so it is not
+    // a note somebody typed. If the payload reports a DIFFERENT value, the
+    // two are most likely different kinds of identifier rather than a
+    // contradiction — which is why the key name is printed above. Say that,
+    // rather than declaring one of them wrong.
+    $remembered = strtoupper(trim((string)($store->load()['account_number'] ?? '')));
+    if ($remembered !== '') {
+        printf("\n    the cookie signed in as   %s\n", $remembered);
+        echo   "                              (from the browser's own starlink.com.account_number)\n";
+        if (!isset($accounts[$remembered])) {
+            echo "\n    The payload did not carry that value. Note the key the identifiers\n";
+            echo "    above were found under: if it is not an account NUMBER field, these\n";
+            echo "    are two different identifiers and neither is wrong. Match our\n";
+            echo "    assignments on the SERVICE LINE, which is unambiguous.\n";
+        }
+    }
 
     // The question that matters: are the accounts on OUR OWN assignments
     // among them? A line we cannot see is a line every probe result about it
