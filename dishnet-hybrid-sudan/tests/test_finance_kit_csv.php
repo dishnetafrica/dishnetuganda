@@ -52,7 +52,19 @@ is_(strpos($code, 'sl_kits.json') === false,
     'no code names the file it would be tempting to write');
 is_(preg_match('#dishnet-(starlink-finance|data-report)/#', $code) === 0,
     'and no code builds a path into another plugin');
-is_(strpos($code, 'SiblingPlugin') === false, 'it does not even read one');
+// Reading a sibling file is allowed by that contract and is how the Starlink
+// account is recovered when the assignment holds none. What must not happen is
+// a write, so the check is on writes, not on whether a sibling is touched.
+$writes = [];
+preg_match_all('/\b(?:file_put_contents|fopen|unlink|rename|mkdir|touch|copy)\s*\(\s*([^,)]+)/',
+               $code, $wm);
+foreach ($wm[1] as $target) $writes[] = trim($target);
+// Every call that can touch the filesystem must aim at the path the operator
+// named, or at an in-memory stream. Anything else is a write we did not intend.
+$stray = array_values(array_filter($writes, static fn(string $t): bool =>
+    $t !== '$out' && strpos($t, 'php://') === false));
+is_($stray === [], 'every write targets $out or an in-memory stream')
+    or print('       stray: ' . implode(' | ', $stray) . "\n");
 is_(substr_count($code, 'file_put_contents') === 1,
     'it writes exactly one file — the CSV the operator asked for');
 is_(preg_match('/file_put_contents\(\$out,/', $code) === 1,

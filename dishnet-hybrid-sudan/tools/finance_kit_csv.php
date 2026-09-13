@@ -45,6 +45,8 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EquipmentAssignment.php';
 require_once $root . '/lib/CrmApiClient.php';
+require_once $root . '/lib/SiblingPlugin.php';
+require_once $root . '/lib/StarlinkServiceState.php';
 
 $args = array_slice($argv, 1);
 $out  = '';
@@ -63,6 +65,19 @@ $ea      = new EquipmentAssignment($store->getPdo());
 $crm = null;
 try { $crm = CrmApiClient::fromUcrm($root, $config); } catch (\Throwable $e) {}
 $reachable = $crm && $crm->isConfigured();
+
+/**
+ * The Starlink account a kit sits on.
+ *
+ * Finance's account screen groups kits by starlink_account_number, so a row
+ * that carries none lands under no account and the screen still reads "No
+ * KITs". The assignment is the first source; when it holds none, the sibling
+ * service cache may know the account for the line. When neither does, the row
+ * is still emitted — a kit bound to the right customer with no account beats
+ * no kit at all — but we say so, because a blank here has a visible effect
+ * the operator would otherwise be left to discover.
+ */
+$slState = new StarlinkServiceState();
 
 $live = $ea->liveAssignments();
 if ($live === []) {
@@ -99,12 +114,19 @@ $cols = ['kit_number', 'serial_number', 'status', 'location', 'customer', 'plan'
          'assigned_client_id', 'assigned_name', 'crm_client_id', 'contact_number'];
 
 $rows = [];
+$blankAccount = [];
 foreach ($live as $a) {
     $clientId  = (int)$a['crm_client_id'];
     $serviceId = (int)($a['crm_service_id'] ?? 0);
     $kit       = strtoupper(trim((string)$a['kit_serial']));
     if ($kit === '') continue;                       // a binding with no serial is not a kit row
     $look($clientId, $serviceId);
+
+    $acct = trim((string)($a['starlink_account'] ?? ''));
+    if ($acct === '') {
+        $acct = trim((string)$slState->forLine((string)($a['starlink_service_line'] ?? ''))['account']);
+    }
+    if ($acct === '') $blankAccount[] = $kit;
 
     $rows[] = [
         'kit_number'              => $kit,
@@ -113,7 +135,7 @@ foreach ($live as $a) {
         'location'                => (string)($a['note'] ?? ''),
         'customer'                => $clientName[$clientId] ?? '',
         'plan'                    => $servicePlan[$serviceId] ?? '',
-        'starlink_account_number' => (string)($a['starlink_account'] ?? ''),
+        'starlink_account_number' => $acct,
         'starlink_account_status' => 'Active',
         // BOTH, because data-report reads crm_client_id ?? assigned_client_id
         // and a reader that finds neither shows the customer nothing.
@@ -131,15 +153,26 @@ rewind($fh);
 $csv = (string)stream_get_contents($fh);
 fclose($fh);
 
+// Warnings go to stderr in both modes, so that piping the CSV somewhere does
+// not silently drop the part that says what is missing from it.
+if (!$reachable) {
+    fwrite(STDERR, "\n  uCRM was unreachable, so customer and plan names are blank —\n"
+                 . "  Finance matches on kit_number and crm_client_id, which are correct.\n");
+}
+if ($blankAccount !== []) {
+    fwrite(STDERR, "\n  No Starlink account number for: " . implode(', ', $blankAccount) . "\n"
+                 . "  Neither the assignment nor the sibling service cache knows which\n"
+                 . "  account these sit on. They will import, bound to the right customer,\n"
+                 . "  but Finance's account screen groups by account and will not list them\n"
+                 . "  under one. Fill starlink_account_number in the CSV, or set the account\n"
+                 . "  on the kit in Finance after importing.\n");
+}
+
 if ($out !== '') {
     if (@file_put_contents($out, $csv) === false) {
         fwrite(STDERR, "\n  Could not write {$out}\n\n"); exit(1);
     }
     fwrite(STDERR, "\n  " . count($rows) . " kit(s) written to {$out}\n");
-    if (!$reachable) {
-        fwrite(STDERR, "  uCRM was unreachable, so customer and plan names are blank —\n"
-                     . "  Finance matches on kit_number and crm_client_id, which are correct.\n");
-    }
     fwrite(STDERR, "\n  Upload it in Finance → Inventory → the CSV box beside \"+ Add New KIT\".\n"
                  . "  Finance keys on kit_number, so re-importing updates rather than duplicates.\n\n");
     return;
