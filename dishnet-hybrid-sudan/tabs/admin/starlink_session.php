@@ -32,6 +32,7 @@ require_once dirname(__DIR__, 2) . '/lib/SqliteStore.php';
 require_once dirname(__DIR__, 2) . '/lib/EquipmentAssignment.php';
 require_once dirname(__DIR__, 2) . '/lib/StarlinkUsage.php';
 require_once dirname(__DIR__, 2) . '/lib/KitSlMap.php';
+require_once dirname(__DIR__, 2) . '/lib/StarlinkLineDiscovery.php';
 
 /**
  * Collect usage NOW, for whichever account is selected.
@@ -68,7 +69,10 @@ function ssCollectNow(StarlinkSessionStore $store, array $config, string $dataDi
     // Same gap-fill the cron applies, so this button and the schedule collect
     // the same set rather than two sets that merely look alike.
     $map = new KitSlMap($dataDir);
-    if ($map->count() > 0) $live = $map->apply($live, new StarlinkServiceState())['assignments'];
+    $map->overlay(StarlinkLineDiscovery::load($dataDir));
+    if ($map->count() > 0 || $map->discoveredCount() > 0) {
+        $live = $map->apply($live, new StarlinkServiceState())['assignments'];
+    }
 
     $u   = new StarlinkUsage($store, $config);
     $res = $u->collect($live);
@@ -90,6 +94,7 @@ $ssConfig  = PluginConfig::load($ssRoot, $ssDataDir);
 $ssStore   = new StarlinkSessionStore($ssRoot, $ssDataDir);
 
 $ssFlash = null;
+$ssDiscoverReport = null;
 
 // ── Import ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
@@ -147,8 +152,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         : ['bad', 'No session held for ' . htmlspecialchars(strtoupper($a)) . '.'];
 }
 
+// ── Ask Starlink which kit is on which line ─────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['ss_action'] ?? '') === 'discover' && csrfCheck()) {
+    $d = (new StarlinkLineDiscovery($ssStore, $ssConfig))->discover();
+    $bits = [];
+    if ($d['pairs'] !== []) {
+        $w = StarlinkLineDiscovery::save($ssDataDir, $d['pairs']);
+        $bits[] = !empty($w['ok'])
+            ? 'Starlink named the kit on ' . count($d['pairs']) . ' line(s).'
+            : 'Found ' . count($d['pairs']) . ' but could not store them: ' . $w['why'];
+    }
+    if ($d['unpaired'] !== []) {
+        $bits[] = count($d['unpaired']) . ' line(s) came back with no kit serial — '
+                . 'those are the ones to type in below.';
+    }
+    if ($d['ambiguous'] !== []) {
+        $bits[] = count($d['ambiguous']) . ' line(s) have more than one terminal; '
+                . 'which is fitted now is not in the payload, so they are left for you.';
+    }
+    foreach ($d['report'] as $r) {
+        if (($r['status'] ?? '') === 'failed') $bits[] = $r['account'] . ': ' . $r['why'];
+    }
+    if ($bits === []) $bits[] = 'Starlink returned no service lines at all for the '
+                              . 'account(s) held — the session is probably dead.';
+    $ssFlash = [$d['pairs'] !== [] ? 'good' : 'warn', implode(' ', $bits)];
+    $ssDiscoverReport = $d;
+}
+
 // ── KIT → service line map ──────────────────────────────────────────────
 $ssMap = new KitSlMap($ssDataDir);
+$ssMap->overlay(StarlinkLineDiscovery::load($ssDataDir));
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_POST['ss_action'] ?? '') === 'map' && csrfCheck()) {
     $r = $ssMap->replace((string)($_POST['ss_map'] ?? ''));
@@ -163,16 +197,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     $ssFlash = [!empty($r['ok']) ? ($r['errors'] === [] ? 'good' : 'warn') : 'bad',
                 implode('. ', $bits)];
     $ssMap = new KitSlMap($ssDataDir);
+    $ssMap->overlay(StarlinkLineDiscovery::load($ssDataDir));
 }
 
 // What the map would actually do to the bindings we hold, shown rather than
 // promised — a map is only worth what it fills in.
-$ssGap = ['filled_lines' => 0, 'filled_accounts' => 0, 'disagreements' => [], 'unused' => []];
+$ssGap = ['filled_lines' => 0, 'filled_accounts' => 0, 'filled_typed' => 0,
+          'filled_discovered' => 0, 'disagreements' => [], 'conflicts' => [], 'unused' => []];
 $ssLiveCount = null;
 try {
     $ssLive = EquipmentAssignment::fromStore(SqliteStore::create($ssDataDir))->liveAssignments();
     $ssLiveCount = count($ssLive);
-    if ($ssMap->count() > 0) $ssGap = $ssMap->apply($ssLive, new StarlinkServiceState());
+    if ($ssMap->count() > 0 || $ssMap->discoveredCount() > 0) {
+        $ssGap = $ssMap->apply($ssLive, new StarlinkServiceState());
+    }
 } catch (\Throwable $e) { /* the map card simply shows no preview */ }
 
 $h      = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -327,15 +365,53 @@ textarea.ss-paste{width:100%;min-height:110px;font-family:'Courier New',monospac
   <div class="ss-card">
     <h3>KIT &rarr; service line map</h3>
     <div class="ss-sub" style="margin-bottom:12px;">
-      Starlink's own listing does not reliably carry a kit serial — every service line in
-      our cache came back without one, and a Mini never has one. This is where that pairing
-      is typed in. It is not a workaround: in South Sudan <b>295 of 367</b> service lines are
-      reachable only through the typed map.
+      <b>Ask Starlink first.</b> Its service-line listing nests each line's terminal inside
+      the line, so for any line that <em>has</em> a terminal the pairing is already there and
+      nobody needs to type it. That button asks, per account, and stores what comes back.
+      <br><br>
+      What it cannot find is a line Starlink has no terminal against — one still
+      <code>pendingActivation</code>, which is every Uganda line so far. The pairing does not
+      exist at Starlink either, so no amount of asking will produce it. Those are what the box
+      below is for, and it is not a workaround: <b>295 of South Sudan's 367</b> lines run on
+      exactly this.
       <br><br>
       One per line, <code>KIT…=SL…</code>. Blank lines and <code>#</code> comments are fine.
       Saving <b>replaces</b> the whole map with what is in the box, so removing a line here
-      removes it for good.
+      removes it for good. What you type wins over what Starlink reports, and any
+      disagreement is shown below rather than settled quietly.
     </div>
+
+    <form method="post" style="margin-bottom:14px;">
+      <?= csrfField() ?><input type="hidden" name="ss_action" value="discover">
+      <button class="ss-btn" type="submit">Ask Starlink now</button>
+      <span class="ss-id" style="margin-left:10px;">
+        <?php if ($ssMap->discoveredCount() > 0): ?>
+          <?= (int)$ssMap->discoveredCount() ?> pair(s) stored from Starlink<?=
+            StarlinkLineDiscovery::discoveredAt($ssDataDir) !== ''
+              ? ', asked ' . $h(StarlinkLineDiscovery::discoveredAt($ssDataDir)) . ' UTC' : '' ?>.
+          The hourly collector asks again on every run.
+        <?php else: ?>
+          Nothing stored from Starlink yet. The hourly collector asks on every run; this is
+          the same question, now.
+        <?php endif; ?>
+      </span>
+    </form>
+
+    <?php if ($ssDiscoverReport !== null && ($ssDiscoverReport['unpaired'] !== []
+              || $ssDiscoverReport['ambiguous'] !== [])): ?>
+      <div class="ss-note ss-grey2" style="margin:0 0 14px;">
+        <?php foreach (array_slice($ssDiscoverReport['report'], 0, 20) as $r): ?>
+          <?php if (($r['status'] ?? '') !== 'no_terminal') continue; ?>
+          <div><code><?= $h((string)($r['line'] ?? '')) ?></code> — <?= $h($r['why']) ?></div>
+        <?php endforeach; ?>
+        <?php foreach ($ssDiscoverReport['ambiguous'] as $l => $ks): ?>
+          <div>⚠ <code><?= $h((string)$l) ?></code> has <?= count($ks) ?> terminals
+            (<?= $h(implode(', ', $ks)) ?>) — a swapped dish. Which is fitted now is not in
+            the payload, so type the right one below.</div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
     <form method="post" autocomplete="off">
       <?= csrfField() ?>
       <input type="hidden" name="ss_action" value="map">
@@ -353,12 +429,18 @@ textarea.ss-paste{width:100%;min-height:110px;font-family:'Courier New',monospac
       </div>
     </form>
 
-    <?php if ($ssMap->count() > 0 && $ssLiveCount !== null): ?>
+    <?php if (($ssMap->count() > 0 || $ssMap->discoveredCount() > 0) && $ssLiveCount !== null): ?>
       <div class="ss-note <?= $ssGap['disagreements'] !== [] ? 'ss-amber' : 'ss-grey2' ?>"
            style="margin:14px 0 0;">
         <strong>Against the <?= (int)$ssLiveCount ?> live binding(s) we hold:</strong>
         fills in <?= (int)$ssGap['filled_lines'] ?> service line(s)
-        and <?= (int)$ssGap['filled_accounts'] ?> account(s).
+        (<?= (int)$ssGap['filled_typed'] ?> typed, <?= (int)$ssGap['filled_discovered'] ?>
+        from Starlink) and <?= (int)$ssGap['filled_accounts'] ?> account(s).
+        <?php foreach ($ssGap['conflicts'] as $c): ?>
+          <br><br><strong>⚠ <?= $h($c['kit']) ?></strong> — you typed
+          <code><?= $h($c['typed']) ?></code>, Starlink reports
+          <code><?= $h($c['discovered']) ?></code>. Yours is used. Delete whichever is wrong.
+        <?php endforeach; ?>
         <?php foreach ($ssGap['disagreements'] as $d): ?>
           <br><br><strong>⚠ <?= $h($d['kit']) ?></strong> — the map says
           <code><?= $h($d['map']) ?></code>, the install record says

@@ -56,8 +56,10 @@ final class KitSlMap
     /** Plain JSON, in our own data directory. No secret is in it. */
     public const FILE = 'kit_sl_map.json';
 
-    /** @var array<string,string> KIT serial => service line */
+    /** @var array<string,string> KIT serial => service line, typed by a person */
     private array $pairs = [];
+    /** @var array<string,string> the same, as Starlink itself reported it */
+    private array $discovered = [];
     private string $savedAt = '';
     private string $dir;
 
@@ -135,22 +137,53 @@ final class KitSlMap
     /** @return array<string,string> */
     public function pairs(): array { return $this->pairs; }
     public function count(): int   { return count($this->pairs); }
+    public function discoveredCount(): int { return count($this->discovered); }
+
+    /**
+     * Lay what Starlink told us underneath what a person typed.
+     *
+     * Underneath, not over. Discovery is the better source in principle — it
+     * is Starlink's own answer — but a typed line exists precisely because
+     * somebody looked at a case discovery could not settle, and quietly
+     * overriding a deliberate human instruction is the move this plugin keeps
+     * refusing to make. Where the two disagree, apply() reports it and the
+     * person decides which to delete.
+     *
+     * @param array<string,string> $pairs from StarlinkLineDiscovery
+     */
+    public function overlay(array $pairs): void
+    {
+        foreach ($pairs as $kit => $line) {
+            $k = EquipmentAssignment::clean((string)$kit);
+            $l = StarlinkServiceState::normalise((string)$line);
+            if ($k !== '' && $l !== '') $this->discovered[$k] = $l;
+        }
+    }
+
+    /** 'typed', 'discovered', or '' — which layer answered for this kit. */
+    public function sourceFor(string $kit): string
+    {
+        $k = EquipmentAssignment::clean($kit);
+        if (isset($this->pairs[$k]))      return 'typed';
+        if (isset($this->discovered[$k])) return 'discovered';
+        return '';
+    }
     public function savedAt(): string { return $this->savedAt; }
     public function path(): string { return $this->dir . '/' . self::FILE; }
 
-    /** The service line for a kit, or '' when it is not mapped. */
+    /** The service line for a kit, or '' when neither layer has one. */
     public function lineFor(string $kit): string
     {
-        return $this->pairs[EquipmentAssignment::clean($kit)] ?? '';
+        $k = EquipmentAssignment::clean($kit);
+        return $this->pairs[$k] ?? $this->discovered[$k] ?? '';
     }
 
     /** The kit for a service line, or '' when it is not mapped. */
     public function kitFor(string $serviceLine): string
     {
         $sl = StarlinkServiceState::normalise($serviceLine);
-        foreach ($this->pairs as $kit => $line) {
-            if ($line === $sl) return $kit;
-        }
+        foreach ($this->pairs as $kit => $line)      if ($line === $sl) return $kit;
+        foreach ($this->discovered as $kit => $line) if ($line === $sl) return $kit;
         return '';
     }
 
@@ -229,13 +262,18 @@ final class KitSlMap
      *
      * @param array<int,array<string,mixed>> $assignments liveAssignments() rows
      * @return array{assignments:array, filled_lines:int, filled_accounts:int,
-     *               disagreements:array<int,array<string,string>>, unused:array<int,string>}
+     *               filled_typed:int, filled_discovered:int,
+     *               disagreements:array<int,array<string,string>>,
+     *               conflicts:array<int,array<string,string>>, unused:array<int,string>}
      */
     public function apply(array $assignments, ?StarlinkServiceState $svc = null): array
     {
         $filledLines = 0;
         $filledAccts = 0;
+        $filledTyped = 0;
+        $filledDisc  = 0;
         $disagree    = [];
+        $conflicts   = [];
         $usedKits    = [];
 
         foreach ($assignments as $i => $a) {
@@ -244,12 +282,21 @@ final class KitSlMap
             $line = StarlinkServiceState::normalise((string)($a['starlink_service_line'] ?? ''));
             $mapped = $this->lineFor($kit);
 
+            // Where a person typed one thing and Starlink reported another,
+            // neither is silently preferred — the person is told.
+            if (isset($this->pairs[$kit]) && isset($this->discovered[$kit])
+                && $this->pairs[$kit] !== $this->discovered[$kit]) {
+                $conflicts[] = ['kit' => $kit, 'typed' => $this->pairs[$kit],
+                                'discovered' => $this->discovered[$kit]];
+            }
+
             if ($mapped !== '') {
                 $usedKits[$kit] = true;
                 if ($line === '') {
                     $assignments[$i]['starlink_service_line'] = $mapped;
                     $line = $mapped;
                     $filledLines++;
+                    if ($this->sourceFor($kit) === 'typed') $filledTyped++; else $filledDisc++;
                 } elseif ($line !== $mapped) {
                     // The install record wins. Say so, loudly enough to fix.
                     $disagree[] = ['kit' => $kit, 'assignment' => $line, 'map' => $mapped];
@@ -276,6 +323,7 @@ final class KitSlMap
 
         return ['assignments' => array_values($assignments),
                 'filled_lines' => $filledLines, 'filled_accounts' => $filledAccts,
-                'disagreements' => $disagree, 'unused' => $unused];
+                'filled_typed' => $filledTyped, 'filled_discovered' => $filledDisc,
+                'disagreements' => $disagree, 'conflicts' => $conflicts, 'unused' => $unused];
     }
 }
