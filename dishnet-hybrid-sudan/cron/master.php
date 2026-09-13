@@ -130,7 +130,13 @@ $_m_jobs = [
     // ~300s heartbeat: at 300 the elapsed check lands on the boundary and a
     // late cycle defers it another five minutes, which is how a token with
     // minutes of life gets missed.
-    'starlink_alive' => ['interval' => 240,                 'script' => __DIR__ . '/starlink_keepalive.php'],
+    // 120s, not 240s. The one session we have timing for was imported at
+    // 21:33:09 and last accepted at 21:36:34 — it survived 3m25s, INSIDE a
+    // 4-minute keep-alive interval, so the heartbeat could never land in time
+    // and the session expired between ticks every time. No refresh endpoint
+    // mints a new token, so using the session often enough is the only defence
+    // there is. Two cheap calls per account per tick.
+    'starlink_alive' => ['interval' => 120,                 'script' => __DIR__ . '/starlink_keepalive.php'],
 
     // ── FAST & FREQUENT (run every cycle) ────────────────────────────────
     'event_processor'=> ['interval' => 30,                  'script' => __DIR__ . '/event_processor.php'],

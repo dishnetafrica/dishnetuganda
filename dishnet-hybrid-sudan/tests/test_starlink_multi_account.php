@@ -136,6 +136,15 @@ is_(strpos($ka, 'StarlinkUsage::PATH') !== false,
 is_(strpos($ka, 'NOT telemetry') !== false,
     'and says so plainly when one layer passes and the other does not');
 
+// The observed session survived 3m25s. A heartbeat slower than that can never
+// land in time, and no refresh endpoint mints a new token — so the interval is
+// the only thing holding a session up.
+$masterSrc = (string)file_get_contents(dirname(__DIR__) . '/cron/master.php');
+preg_match("/'starlink_alive'\s*=>\s*\['interval'\s*=>\s*(\d+)/", $masterSrc, $km);
+is_(isset($km[1]) && (int)$km[1] <= 180,
+    'and runs faster than the shortest session we have measured ('
+    . ($km[1] ?? '?') . 's)');
+
 // ── The swap: one cookie, every account ─────────────────────────────────
 //
 // Starlink selects the account from the starlink.com.account_number COOKIE,
