@@ -6,6 +6,9 @@ if (!function_exists('str_ends_with'))   { function str_ends_with(string $h, str
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
 require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/CustomerIdentity.php';
+require_once __DIR__ . '/AiMinimalContext.php';
+require_once __DIR__ . '/CustomerDataTools.php';
+require_once __DIR__ . '/UcrmCustomerDataGateway.php';
 
 /**
  * WaAutoReplyService — Unified WhatsApp Auto-Reply (v4.11.3)
@@ -626,7 +629,7 @@ class WaAutoReplyService
     //  CRM LOOKUP
     // ══════════════════════════════════════════════════════════════════════
 
-    private function getCrm(): ?\CrmApiClient
+    public function getCrm(): ?\CrmApiClient
     {
         if ($this->crm !== null) return $this->crm;
         try {
@@ -689,7 +692,7 @@ class WaAutoReplyService
                                        'candidates' => []];
     }
 
-    private function getClientServices(int $clientId): array
+    public function getClientServices(int $clientId): array
     {
         $crm = $this->getCrm();
         if (!$crm) return [];
@@ -698,7 +701,7 @@ class WaAutoReplyService
         } catch (\Throwable $e) { return []; }
     }
 
-    private function getLastPayment(int $clientId): ?array
+    public function getLastPayment(int $clientId): ?array
     {
         $crm = $this->getCrm();
         if (!$crm) return null;
@@ -1119,107 +1122,69 @@ class WaAutoReplyService
      * Provider is selected by config key 'ai_provider' ('claude' or 'openai').
      * Returns null if API key not configured, message is trivial, or API fails.
      */
+    /**
+     * Ask the AI for a reply, giving it nothing about the customer.
+     *
+     * What used to be here assembled twenty-six context keys and pushed them
+     * into the system prompt on every message, whatever had been asked:
+     * balance, currency, last payment, plan, expiry, service id, address,
+     * open ticket count, the latest ticket's title, and from Splynx the
+     * assigned IP, MAC address, NAS identifier, session IP, session start,
+     * bytes up and down and committed speeds. Someone saying "hi" had their
+     * balance and their router's MAC address sent to an AI provider.
+     *
+     * Now the model starts with three facts — whether we know who this is,
+     * their name, and which number they wrote to — and asks for anything else
+     * through CustomerDataTools, which supplies the customer id from the
+     * server. Data reaches the model because the question needs it, not
+     * because it exists.
+     */
     private function getAiReply(string $phone, string $text, string $channel, array $conv): ?string
     {
-        $provider    = trim($this->config['ai_provider'] ?? 'claude');   // 'claude' or 'openai'
+        $provider    = trim($this->config['ai_provider'] ?? 'claude');
         $customInstr = trim($this->config['bot_custom_instructions'] ?? '');
-        $instrMode   = trim($this->config['bot_instructions_mode'] ?? 'append'); // 'append' or 'override'
+        $instrMode   = trim($this->config['bot_instructions_mode'] ?? 'append');
 
-        // Pick the right API key based on provider
-        if ($provider === 'openai') {
-            $apiKey = trim($this->config['openai_api_key'] ?? '');
-        } else {
-            $apiKey = trim($this->config['claude_api_key'] ?? '');
-        }
-        if (empty($apiKey)) return null;
+        $apiKey = $provider === 'openai'
+            ? trim($this->config['openai_api_key'] ?? '')
+            : trim($this->config['claude_api_key'] ?? '');
+        if ($apiKey === '') return null;
 
         try {
-            // Load provider client
+            // Identity first, and from the server. The id comes from
+            // CustomerIdentity, never from the message, the conversation row,
+            // or anything the model says.
+            $this->lookupCrmClient($phone);
+            $identity = $this->lastIdentity();
+
+            $ctx   = \AiMinimalContext::build($identity, $channel);
+            $tools = new \CustomerDataTools($identity, new UcrmCustomerDataGateway($this));
+
+            // The conversation so far: the customer's own words and our own
+            // replies, not a record we fetched about them.
+            $history = '';
+            if (!empty($conv['id']) && $this->convSvc) {
+                $msgs  = $this->convSvc->getMessages((int)$conv['id'], 8, 0);
+                $lines = [];
+                foreach ($msgs as $m) {
+                    $who = ($m['direction'] ?? '') === 'in' ? 'Customer' : 'DishNet';
+                    $lines[] = $who . ': ' . trim((string)($m['body'] ?? ''));
+                }
+                $history = implode("\n", $lines);
+            }
+
             if ($provider === 'openai') {
                 require_once dirname(__FILE__) . '/GptWaClient.php';
                 $aiClient = new \GptWaClient($apiKey, $this->pdo);
-            } else {
-                require_once dirname(__FILE__) . '/ClaudeWaClient.php';
-                $aiClient = new \ClaudeWaClient($apiKey, $this->pdo);
+                // No tool support on this client yet, so it FAILS SAFE: same
+                // empty context, and it is told it cannot look anything up,
+                // rather than falling back to the old unrestricted block.
+                return $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode);
             }
 
-            // Build customer context from CRM
-            $ctx = [];
-            $client = $this->lookupCrmClient($phone);
-            if ($client) {
-                $ctx['name']         = $client['name'] ?? null;
-                $ctx['balance']      = $client['balance'] ?? null;
-                $ctx['currency']     = dn_cur($this->config);
-                $ctx['status']       = $client['isLead'] ?? false ? 'Lead' : ($client['isActive'] ?? true ? 'Active' : 'Suspended');
-                // Try to get service info
-                $services = $this->getClientServices((int)($client['id'] ?? 0));
-                if (!empty($services)) {
-                    $svc = $services[0];
-                    $ctx['service_type'] = $svc['name'] ?? null;
-                    $ctx['plan_name']    = $svc['servicePlanName'] ?? null;
-                    // Plan expiry — UCRM field is 'activeTo' (ISO date string)
-                    if (!empty($svc['activeTo'])) {
-                        $ctx['active_to'] = substr($svc['activeTo'], 0, 10); // "2026-04-05"
-                    }
-                }
-                // Last payment
-                $lastPay = $this->getLastPayment((int)($client['id'] ?? 0));
-                if ($lastPay) {
-                    $ctx['last_payment'] = dn_cur($this->config) . number_format((float)($lastPay['amount'] ?? 0), 2)
-                        . ' on ' . substr($lastPay['createdDate'] ?? '', 0, 10);
-                }
-            }
-
-            // ── Splynx live data enrichment ──────────────────────────────
-            // Triggers when:
-            //   a) CRM identifies this as a fiber/FTTH customer, OR
-            //   b) CRM found no client at all — they may be fiber-only in Splynx
-            // Gives Claude: live online/offline status, plan speeds, open tickets, IP.
-            $serviceType = strtolower($ctx['service_type'] ?? '');
-            $isFiber     = ($serviceType === 'fiber' || $serviceType === 'ftth');
-            $noClient    = empty($client);
-
-            if ($isFiber || $noClient) {
-                $splynxCtx = $this->getFiberSplynxContext($phone);
-                if (!empty($splynxCtx)) {
-                    $ctx['splynx'] = $splynxCtx;
-
-                    // If CRM had no client, fill ctx from Splynx
-                    if ($noClient) {
-                        if (!empty($splynxCtx['customer_name']))  $ctx['name']         = $splynxCtx['customer_name'];
-                        if (!empty($splynxCtx['plan_name']))      $ctx['plan_name']     = $splynxCtx['plan_name'];
-                        if (!empty($splynxCtx['service_address'])) $ctx['address']      = $splynxCtx['service_address'];
-                        $ctx['service_type'] = 'fiber';
-                    }
-
-                    // Always prefer Splynx account status for fiber (more accurate)
-                    if (!empty($splynxCtx['customer_status'])) {
-                        $splynxStatus = strtolower($splynxCtx['customer_status']);
-                        // Map Splynx statuses to friendly labels
-                        $statusMap = [
-                            'active'   => 'Active',
-                            'blocked'  => 'Suspended',
-                            'inactive' => 'Inactive',
-                            'new'      => 'New',
-                        ];
-                        $ctx['status'] = $statusMap[$splynxStatus] ?? ucfirst($splynxCtx['customer_status']);
-                    }
-                }
-            }
-
-            // Recent conversation history (last 8 messages for context)
-            $history = '';
-            try {
-                $msgs = $this->convSvc->getMessages((int)$conv['id'], 8, 0);
-                $lines = [];
-                foreach ($msgs as $m) {
-                    $role = ($m['direction'] ?? 'in') === 'in' ? 'Customer' : 'DishNet';
-                    $lines[] = $role . ': ' . mb_substr($m['body'] ?? '', 0, 150);
-                }
-                $history = implode("\n", $lines);
-            } catch (\Throwable $e) {}
-
-            return $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode);
+            require_once dirname(__FILE__) . '/ClaudeWaClient.php';
+            $aiClient = new \ClaudeWaClient($apiKey, $this->pdo);
+            return $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode, $tools);
         } catch (\Throwable $e) {
             error_log('[WaAutoReply] AI reply failed: ' . $e->getMessage());
             return null;

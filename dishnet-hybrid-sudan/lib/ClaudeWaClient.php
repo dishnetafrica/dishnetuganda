@@ -36,14 +36,30 @@ class ClaudeWaClient
      * @param string $conversationHistory  Recent messages for context (optional)
      * @return string|null  Reply text, or null on failure
      */
+    /**
+     * How the request reaches Anthropic. Replaceable so the tool loop can be
+     * driven by a test: a security property that can only be checked against
+     * a live API is a security property that is never checked.
+     *
+     * @var callable|null fn(array $payload): array{code:int, body:?string}
+     */
+    public $transport = null;
+
     public function getReply(
         string $customerMessage,
         array  $customerContext = [],
         string $channel = 'support',
         string $conversationHistory = '',
         string $customInstructions = '',
-        string $instructionsMode = 'append'  // 'append' or 'override'
+        string $instructionsMode = 'append',  // 'append' or 'override'
+        $tools = null                          // ?CustomerDataTools
     ): ?string {
+        // Customer data reaches the model through the tool layer or not at
+        // all. A context assembled elsewhere -- an un-updated caller, a merge
+        // that brings the old 26-key block back -- is reduced to the
+        // allowlist here rather than trusted.
+        require_once __DIR__ . '/AiMinimalContext.php';
+        $customerContext = \AiMinimalContext::enforce($customerContext);
         if (empty($this->apiKey) || !str_starts_with($this->apiKey, 'sk-ant-')) {
             return null;
         }
@@ -113,7 +129,8 @@ class ClaudeWaClient
         // Now override replaces the BUSINESS prompt only.
         require_once __DIR__ . '/AiSecurityPolicy.php';
         $systemPrompt = \AiSecurityPolicy::compose(
-            $this->buildSystemPrompt($customerContext, $channel, ''),
+            $this->buildSystemPrompt($customerContext, $channel, '')
+                . "\n\n" . self::dataAccessNote($customerContext, $tools),
             $customInstructions,
             $instructionsMode
         );
@@ -155,6 +172,123 @@ class ClaudeWaClient
             'system'     => $systemPrompt,
             'messages'   => $messages,
         ];
+        if ($tools instanceof \CustomerDataTools && $tools->isAuthenticated()) {
+            $payload['tools'] = self::toolSchema();
+        }
+
+        $reply = $this->converse($payload, $tools, $channel, $customerMessage);
+        return $reply;
+    }
+
+    /**
+     * Tell the model, plainly, that it starts with nothing.
+     *
+     * Without this it would answer an account question from memory or
+     * invention, because the account data it used to be handed is simply
+     * absent now. The instruction to use a tool is what turns "I do not know"
+     * into "let me look that up".
+     */
+    private static function dataAccessNote(array $ctx, $tools): string
+    {
+        $has = ($tools instanceof \CustomerDataTools) && $tools->isAuthenticated();
+        if (!$has) {
+            return "ACCOUNT DATA: you have none, and no way to look any up in this "
+                 . "conversation. Answer from public DishNet and Starlink information "
+                 . "only. For anything about this person's own account, say a colleague "
+                 . "will check it for them. Never state or guess a balance, a plan, an "
+                 . "expiry date, a payment or a kit number.";
+        }
+        return "ACCOUNT DATA: you start with NONE of this customer's account "
+             . "information — no balance, no plan, no expiry, no payments, no "
+             . "equipment, no network details. That is deliberate.\n"
+             . "When their question needs one of those, call the matching tool and "
+             . "answer from what it returns. Ask for one thing at a time: the tool "
+             . "for the question actually asked, not everything available.\n"
+             . "A tool answers only for THIS customer. If one returns nothing, say "
+             . "you could not find it and offer to have a colleague check — do not "
+             . "fill the gap from memory, and do not retry with different arguments.";
+    }
+
+    /** The catalogue, in the shape the Messages API expects. */
+    public static function toolSchema(): array
+    {
+        require_once __DIR__ . '/CustomerDataTools.php';
+        $out = [];
+        foreach (\CustomerDataTools::catalogue() as $name => $def) {
+            $props = []; $req = [];
+            foreach ($def['args'] as $a) {
+                $props[$a] = ['type' => 'string'];
+                $req[] = $a;
+            }
+            $out[] = [
+                'name'         => $name,
+                'description'  => $def['about'],
+                'input_schema' => ['type' => 'object', 'properties' => (object)$props,
+                                   'required' => $req],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Run the exchange, serving any tool the model asks for.
+     *
+     * Every tool call goes through CustomerDataTools, which supplies the
+     * customer id from the server. Whatever the model puts in the arguments
+     * is irrelevant to whose data comes back.
+     */
+    private function converse(array $payload, $tools, string $channel, string $customerMessage): ?string
+    {
+        $rounds = 0;
+        while (true) {
+            $res = $this->send($payload);
+            if ($res === null) return null;
+            $data = $res;
+
+            $stop = (string)($data['stop_reason'] ?? '');
+            $blocks = is_array($data['content'] ?? null) ? $data['content'] : [];
+
+            if ($stop !== 'tool_use' || !($tools instanceof \CustomerDataTools) || $rounds >= 4) {
+                $text = '';
+                foreach ($blocks as $b) {
+                    if (($b['type'] ?? '') === 'text') $text .= (string)($b['text'] ?? '');
+                }
+                $text = trim($text);
+                if ($text === '') return null;
+                $this->logUsage($channel, $customerMessage, $text,
+                                (int)($data['usage']['input_tokens'] ?? 0),
+                                (int)($data['usage']['output_tokens'] ?? 0));
+                return $text;
+            }
+
+            // Serve the tools, then let the model continue with the answers.
+            $payload['messages'][] = ['role' => 'assistant', 'content' => $blocks];
+            $results = [];
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? '') !== 'tool_use') continue;
+                $out = $tools->call((string)($b['name'] ?? ''), (array)($b['input'] ?? []));
+                $results[] = [
+                    'type'        => 'tool_result',
+                    'tool_use_id' => (string)($b['id'] ?? ''),
+                    'content'     => json_encode(($out['ok'] ?? false)
+                        ? ($out['data'] ?? [])
+                        : ['error' => (string)($out['error'] ?? 'not available')]),
+                ];
+            }
+            $payload['messages'][] = ['role' => 'user', 'content' => $results];
+            $rounds++;
+        }
+    }
+
+    /** One HTTP round trip, through the transport seam. */
+    private function send(array $payload): ?array
+    {
+        if (is_callable($this->transport)) {
+            $r = ($this->transport)($payload);
+            if ((int)($r['code'] ?? 0) !== 200 || empty($r['body'])) return null;
+            $d = json_decode((string)$r['body'], true);
+            return is_array($d) ? $d : null;
+        }
 
         $ch = curl_init('https://api.anthropic.com/v1/messages');
         curl_setopt_array($ch, [
@@ -179,30 +313,8 @@ class ClaudeWaClient
             return null;
         }
 
-        $data  = json_decode($raw, true);
-        $reply = $data['content'][0]['text'] ?? null;
-
-        if (!$reply || !is_string($reply)) {
-            return null;
-        }
-
-        $reply = trim($reply);
-
-        // ── Cache the response (only for generic non-personalized replies) ─
-        if (!$hasCustomerData) {
-            $this->cache($cacheKey, $reply, $channel);
-        }
-
-        // ── Log usage ───────────────────────────────────────────────────
-        $this->logUsage(
-            $channel,
-            $customerMessage,
-            $reply,
-            (int)($data['usage']['input_tokens'] ?? 0),
-            (int)($data['usage']['output_tokens'] ?? 0)
-        );
-
-        return $reply;
+        $data = json_decode((string)$raw, true);
+        return is_array($data) ? $data : null;
     }
 
     /**
@@ -212,6 +324,17 @@ class ClaudeWaClient
      */
     private function buildSystemPrompt(array $ctx, string $channel, string $customInstructions = ''): string
     {
+        // Enforced HERE as well as in getReply(), so this function is safe
+        // whoever calls it. Everything below that reads a customer field --
+        // balance, plan, expiry, the Splynx block -- therefore finds nothing
+        // and renders nothing: those branches are now unreachable by
+        // construction rather than by the caller remembering to strip first.
+        // They are left in place for now because deleting three hundred lines
+        // of prompt is a separate, riskier change; this makes them provably
+        // dead in the meantime.
+        require_once __DIR__ . '/AiMinimalContext.php';
+        $ctx = \AiMinimalContext::enforce($ctx);
+
         $name     = $ctx['name']         ?? null;
         $service  = $ctx['service_type'] ?? null;
         $balance  = isset($ctx['balance']) ? ($ctx['currency'] ?? '$ ') . number_format((float)$ctx['balance'], 2) : null;
