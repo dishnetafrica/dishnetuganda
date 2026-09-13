@@ -70,5 +70,27 @@ echo "\nIt tells the operator where accounts actually go\n";
 is_(strpos($src, 'Add Account') !== false, 'it names Finance\'s own screen');
 is_(strpos($src, 'Nothing here writes them') !== false, 'and says it will not do it for them');
 
+echo "\nAn account with no service line is still an account\n";
+// sl_svc_cache.json only names accounts that own a line, so counting accounts
+// from it alone loses any account that has none -- which is how the fourth
+// Uganda account went missing from the first version of this report.
+is_(strpos($code, 'dr_accounts.json') !== false, "the data plugin's own account list is read");
+is_(preg_match('/stripos\(\$n, \'ACC-\'\) !== 0/', $code) === 1,
+    'and only keys shaped like an account number are taken from it');
+is_(strpos($code, '$drAccounts === null') !== false,
+    'an unreadable list is reported as unreadable, not as no accounts');
+
+echo "\nNo session material leaves that file\n";
+// dr_accounts.json holds Starlink session cookies. Only its keys are read.
+is_(preg_match('/foreach\s*\(\s*array_keys\(\$list\)/', $code) === 1,
+    'it iterates keys, never values');
+is_(preg_match('/\$(drAccounts|list)\[[^\]]*\]\s*\[/', $code) === 0,
+    'no value inside an account entry is indexed');
+foreach (['cookie', 'Cookie', 'session', 'token', 'password'] as $secret) {
+    is_(strpos($code, "'" . $secret . "'") === false
+        && strpos($code, '"' . $secret . '"') === false,
+        "no code reads a '$secret' field");
+}
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -85,6 +85,27 @@ if (is_array($rows)) {
     }
 }
 
+// ── the data plugin's account list itself ───────────────────────────────
+//
+// sl_svc_cache.json only names an account that owns a service line, so an
+// account with none is invisible there — and "no lines" is not "no account".
+// dr_accounts.json is that plugin's list of the accounts themselves, keyed by
+// account number.
+//
+// That file also holds session cookies. Only the keys are read here; no value
+// inside it is read, printed or stored.
+$drAccounts = SiblingPlugin::readJson('dishnet-data-report', 'dr_accounts.json');
+$drKnown    = 0;
+if (is_array($drAccounts)) {
+    $list = is_array($drAccounts['accounts'] ?? null) ? $drAccounts['accounts'] : $drAccounts;
+    foreach (array_keys($list) as $key) {
+        $n = trim((string)$key);
+        if ($n === '' || stripos($n, 'ACC-') !== 0) continue;
+        $remember($n);
+        $drKnown++;
+    }
+}
+
 // ── what Finance already holds ──────────────────────────────────────────
 $finance = SiblingPlugin::readJson('dishnet-starlink-finance', 'sl_accounts.json');
 $inFinance = [];
@@ -107,6 +128,13 @@ if ($rows === null) {
     echo "                         are not visible from this box at all.\n";
 } else {
     printf("  sl_svc_cache.json      %d service line(s) cached by the data plugin\n", $cacheLines);
+}
+if ($drAccounts === null) {
+    echo "  dr_accounts.json       NOT READABLE — the data plugin's own account list\n";
+    echo "                         is unavailable, so an account with no service line\n";
+    echo "                         cannot be seen from here at all.\n";
+} else {
+    printf("  dr_accounts.json       %d account(s) the data plugin holds a login for\n", $drKnown);
 }
 if ($finance === null) {
     echo "  sl_accounts.json       Finance holds no accounts file yet\n";
