@@ -112,17 +112,23 @@ final class KitAttributeIntake
      * @return array{proposals:array<int,array<string,mixed>>,
      *               refusals:array<int,array<string,mixed>>,
      *               settled:array<int,array<string,mixed>>,
-     *               services:int, scanned:int}
+     *               services:int, scanned:int, reachable:bool}
+     *
+     * `reachable` false means uCRM did not answer. It is NOT the same as
+     * "there are no services", and a caller that renders both as three empty
+     * sections tells an operator everything is fine when nothing was read at
+     * all — the empty-reads-as-zero confusion this codebase keeps undoing.
      */
     public function scan(): array
     {
         $out = ['proposals' => [], 'refusals' => [], 'settled' => [],
-                'services' => 0, 'scanned' => 0];
+                'services' => 0, 'scanned' => 0, 'reachable' => false];
         if ($this->crm === null) return $out;
 
         $services = $this->crm->get('clients/services?limit=1000');
         if (!is_array($services)) return $out;
-        $out['services'] = count($services);
+        $out['reachable'] = true;
+        $out['services']  = count($services);
 
         foreach ($services as $svc) {
             if (!is_array($svc)) continue;
