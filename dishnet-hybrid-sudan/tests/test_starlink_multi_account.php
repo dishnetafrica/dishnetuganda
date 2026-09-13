@@ -145,6 +145,16 @@ is_(isset($km[1]) && (int)$km[1] <= 180,
     'and runs faster than the shortest session we have measured ('
     . ($km[1] ?? '?') . 's)');
 
+// An expired session used to be skipped forever, so one missed beat cost a
+// working session until a person noticed. South Sudan syncs every two hours on
+// pasted cookies without re-pasting, so sessions plainly survive — the label
+// was an assumption and it must not be the last word.
+is_(strpos($ka, "->raw('GET', StarlinkPortalConnector::LINES_LIGHT_PATH)") !== false,
+    'an expired session is actually retried, not just logged');
+is_(strpos($ka, '$store->markOk()') !== false, 'and revived when it answers');
+is_(strpos($ka, 'time() - 3600') !== false, 'at most once an hour, so it is not hammering');
+is_(strpos($ka, 'revived') !== false, 'saying so, because a silent recovery teaches nobody');
+
 // ── The swap: one cookie, every account ─────────────────────────────────
 //
 // Starlink selects the account from the starlink.com.account_number COOKIE,

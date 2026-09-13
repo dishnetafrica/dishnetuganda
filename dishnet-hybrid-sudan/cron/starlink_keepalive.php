@@ -64,16 +64,41 @@ foreach ($accounts as $_ka_acct) {
 
     $status = $store->status();
 
-    // A session already declared expired or dead cannot be revived by asking
-    // again. Leave it for a person and say so once, not every five minutes.
+    // ── An expired session gets one cheap attempt an hour ────────────────
+    //
+    // This used to log and skip, on the assumption that an expired session
+    // "cannot be revived by asking again". That was never measured, and it had
+    // a consequence nobody intended: ONE missed heartbeat marked a session
+    // expired permanently, and no amount of later ticks would touch it again.
+    // A person had to notice and paste. With a heartbeat that was slower than
+    // the token's life, that happened constantly.
+    //
+    // South Sudan runs the same mechanism on pasted cookies and syncs every two
+    // hours without anyone re-pasting, so sessions there plainly survive. An
+    // attempt costs one request; being wrong costs a working session and a
+    // person's afternoon. So try, at a rate that could not be mistaken for
+    // hammering, and let the result decide rather than the label.
     if (in_array($status['state'], [StarlinkSessionStore::STATE_EXPIRED,
                                     StarlinkSessionStore::STATE_DEAD], true)) {
-        if (($status['last_checked_at'] ?? '') !== ''
-            && strtotime((string)$status['last_checked_at']) < time() - 3600) {
-            error_log('[starlink_keepalive] ' . $_ka_acct . ' is ' . $status['state']
-                    . ' — a person must re-import: php tools/starlink_session.php --import');
-            $store->markExpired((string)$status['last_error']);   // refresh the timestamp
+        $_ka_last = (string)($status['last_checked_at'] ?? '');
+        if ($_ka_last !== '' && strtotime($_ka_last) >= time() - 3600) continue;
+
+        $_ka_try = (new StarlinkPortalConnector($store, $config))
+            ->raw('GET', StarlinkPortalConnector::LINES_LIGHT_PATH);
+        $_ka_body = ltrim((string)($_ka_try['body'] ?? ''));
+        if ((int)$_ka_try['code'] === 200 && $_ka_body !== ''
+            && ($_ka_body[0] === '{' || $_ka_body[0] === '[')) {
+            // It answers. The verdict was wrong, or the session recovered.
+            $store->markOk();
+            error_log('[starlink_keepalive] ' . $_ka_acct
+                    . ' answered again after being marked ' . $status['state'] . ' — revived');
+            continue;
         }
+
+        error_log('[starlink_keepalive] ' . $_ka_acct . ' is ' . $status['state']
+                . ' and still not answering (HTTP ' . (int)$_ka_try['code'] . ') — paste a fresh '
+                . 'cookie under Admin → Starlink Sessions');
+        $store->markExpired((string)$status['last_error']);   // refresh the timestamp
         continue;
     }
 
