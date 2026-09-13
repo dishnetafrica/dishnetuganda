@@ -12,6 +12,7 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php --usage    find the endpoint that returns data usage
  *   php tools/starlink_probe.php --usage --line SL-DF-...   test a line you name
  *   php tools/starlink_probe.php --accounts  which accounts this ONE cookie can see
+ *   php tools/starlink_probe.php --mint     hunt what mints a fresh access token
  *   php tools/starlink_probe.php --swap-check --account ACC-... --line SL-...
  *                                           does the account_number swap carry
  *                                           telemetryagg to ANOTHER account?
@@ -44,6 +45,114 @@ if (!$conn->isConfigured()) {
     echo "\n  No session imported yet.\n\n";
     echo "    docker exec -it ucrm php tools/starlink_session.php --import\n\n";
     exit(1);
+}
+
+// ── 0. Mint: what gives a browser a fresh access token? ─────────────────
+//
+// The whole manual-paste problem is this one gap. A Starlink access token dies
+// in minutes and USING it does not extend it — measured here: imported
+// 07:58:08, last accepted 08:05:03, expired, with the keep-alive dispatching
+// on schedule throughout. But the SSO cookie stays valid for days, and the
+// browser turns that into a fresh access token without anybody signing in
+// again. Find how, and the session sustains itself.
+//
+// Every previous hunt stopped early for a reason I only noticed today: cURL
+// here is set CURLOPT_FOLLOWLOCATION => false, so a probe of an auth endpoint
+// reported the first 302 and went no further. The token is minted at the END
+// of a redirect chain, and nobody had walked one.
+//
+// So this walks them, carrying cookies picked up along the way exactly as a
+// browser would, and watches every hop for a Set-Cookie of
+// Starlink.Com.Access.V1. It writes nothing: a mint found here gets wired in
+// deliberately afterwards, not adopted by a diagnostic.
+if (in_array('--mint', array_slice($argv, 1), true)) {
+    $TOKEN = 'Starlink.Com.Access.V1';
+    $jar0  = $store->cookie();
+    if ($jar0 === '') { echo "\n  No session imported.\n\n"; exit(1); }
+
+    $before = StarlinkSessionStore::cookieValue($jar0, $TOKEN);
+    echo "\n  current access token   " . ($before === '' ? '(none)' : strlen($before) . ' bytes') . "\n";
+    echo "  SSO cookie             "
+       . (StarlinkSessionStore::cookieValue($jar0, 'Starlink.Com.Sso') !== '' ? 'present' : 'MISSING') . "\n";
+
+    // Entry points a browser actually uses, plus the auth-layer paths. The
+    // account page is first because that is what a person opens, and the flow
+    // that refreshes their token is whatever it triggers.
+    $entries = [
+        'https://starlink.com/account',
+        'https://starlink.com/auth-rp/auth/refresh',
+        'https://starlink.com/auth-rp/signin-oidc',
+        'https://starlink.com/auth-rp/auth/authorize',
+        'https://starlink.com/auth-rp/auth/user',
+        'https://api.starlink.com/auth-rp/auth/user',
+        'https://starlink.com/api/auth/v1/session/refresh',
+    ];
+
+    $minted = [];
+    foreach ($entries as $entry) {
+        echo "\n  ── " . $entry . "\n";
+        $jar = $jar0;          // each entry starts from the real session
+        $url = $entry;
+        for ($hop = 1; $hop <= 8; $hop++) {
+            $r    = $conn->hop($url, $jar);
+            $code = (int)$r['code'];
+            $sets = array_keys((array)$r['cookies']);
+
+            printf("     %d. %-3d %-54s %s\n", $hop, $code,
+                substr(preg_replace('#^https?://#', '', $url) ?? '', 0, 52),
+                $sets === [] ? '' : 'sets: ' . implode(',', array_map(
+                    static fn(string $n): string => substr($n, 0, 24), $sets)));
+
+            if ($r['cookies'] !== []) {
+                $jar = StarlinkPortalConnector::mergeCookies($jar, (array)$r['cookies']);
+                $now = StarlinkSessionStore::cookieValue($jar, $TOKEN);
+                if ($now !== '' && $now !== $before) {
+                    echo "        ★ A FRESH " . $TOKEN . " WAS MINTED HERE\n";
+                    $minted[$entry] = ['url' => $url, 'hop' => $hop, 'jar' => $jar];
+                    break 1;
+                }
+            }
+
+            $loc = (string)$r['location'];
+            if ($loc === '') break;
+            // Relative Location headers are normal in an auth flow.
+            if (strpos($loc, 'http') !== 0) {
+                $base = parse_url($url);
+                $loc  = ($base['scheme'] ?? 'https') . '://' . ($base['host'] ?? 'starlink.com')
+                      . (strpos($loc, '/') === 0 ? $loc : '/' . $loc);
+            }
+            $url = $loc;
+        }
+    }
+
+    echo "\n  " . str_repeat('─', 68) . "\n";
+    if ($minted === []) {
+        echo "  NOTHING MINTED A TOKEN. Every chain ended without a fresh " . $TOKEN . ".\n\n";
+        echo "  That is a real result: it means the browser gets its token some way\n";
+        echo "  these requests do not reproduce — most likely JavaScript in the page\n";
+        echo "  calling an endpoint we have not seen, or a header we are not sending.\n";
+        echo "  The next evidence is a HAR: open DevTools → Network → Preserve log,\n";
+        echo "  leave the Starlink account page open until the token refreshes, and\n";
+        echo "  find the response carrying Set-Cookie: " . $TOKEN . ".\n";
+        echo "  Send the request LINE only — method, URL, and which headers it used.\n";
+        echo "  Never the cookie value itself.\n\n";
+        exit(1);
+    }
+
+    foreach ($minted as $entry => $m) {
+        echo "  ★ " . $entry . "\n";
+        echo "    minted at hop {$m['hop']}: {$m['url']}\n";
+    }
+    echo "\n  Verifying the new token actually works before anything is wired to it.\n";
+    $first = reset($minted);
+    $v = $conn->hop(StarlinkPortalConnector::HOST . StarlinkPortalConnector::VERIFY_PATH, $first['jar']);
+    printf("    verify: HTTP %d\n", (int)$v['code']);
+    echo (int)$v['code'] === 200
+        ? "\n  IT WORKS. This is the refresh the session store has been missing —\n"
+        . "  wire it into refresh() and the manual paste becomes occasional.\n\n"
+        : "\n  A token was set but it does not authenticate. Worth reporting, not wiring.\n\n";
+    echo "  Nothing was saved. The store still holds the session you imported.\n\n";
+    exit((int)$v['code'] === 200 ? 0 : 1);
 }
 
 // ── 0. Swap check: a controlled experiment, not another single reading ───

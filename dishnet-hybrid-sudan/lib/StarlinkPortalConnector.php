@@ -453,6 +453,33 @@ class StarlinkPortalConnector implements StarlinkConnector
     }
 
     /**
+     * One hop of a redirect chain, with a cookie jar we carry ourselves.
+     *
+     * A diagnostic seam, and the only way to follow an auth flow: cURL is
+     * configured not to follow redirects, so every probe of the SSO endpoints
+     * so far stopped at the first 302 and reported it as a dead end. A browser
+     * gets its access token at the END of that chain.
+     *
+     * Takes the jar explicitly rather than reading the store, because walking a
+     * chain means carrying cookies picked up along the way — and writes
+     * nothing, so a failed walk cannot damage the stored session.
+     *
+     * @return array{code:int, location:string, cookies:array, bytes:int, snippet:string}
+     */
+    public function hop(string $url, string $cookie): array
+    {
+        $r    = $this->send('GET', $url, $this->headers($cookie));
+        $body = (string)($r['body'] ?? '');
+        return [
+            'code'     => (int)($r['code'] ?? 0),
+            'location' => (string)($r['location'] ?? ''),
+            'cookies'  => (array)($r['cookies'] ?? []),
+            'bytes'    => strlen($body),
+            'snippet'  => str_replace(["\n", "\r"], ' ', substr($body, 0, 100)),
+        ];
+    }
+
+    /**
      * Is the SSO session still alive, whatever the access token is doing?
      *
      * @return array{ok:bool, email:string, code:int}
