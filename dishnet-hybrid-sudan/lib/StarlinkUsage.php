@@ -188,19 +188,27 @@ final class StarlinkUsage
             $ok = 0;
             foreach ($jobs as $j) {
                 $path = sprintf(self::PATH, rawurlencode($acct), rawurlencode($j['line']));
-                $r    = $conn->raw('GET', $path);
-                $code = (int)$r['code'];
-                $body = (string)($r['body'] ?? '');
-                $data = json_decode($body, true);
 
-                if ($code !== 200 || !is_array($data)) {
+                // get(), not raw(). This is a data fetch, not a diagnostic, and
+                // request() does three things raw() deliberately does not:
+                // refresh once on a 401 and retry, MERGE the rotated cookie the
+                // response carries and store it, and record the outcome against
+                // the session.
+                //
+                // Collecting through raw() threw all three away. Every hourly
+                // run discarded the token rotation that keeps a session alive
+                // and then reported token_expired — the collector was causing
+                // the condition it was complaining about.
+                $r = $conn->get($path);
+
+                if (empty($r['ok'])) {
+                    $why = (string)$r['error'];
                     $report[] = ['kit' => $j['kit'], 'line' => $j['line'], 'status' => 'failed',
-                                 'why' => $code === 200
-                                    ? '200 but not JSON — the sign-in page, so the session is dead'
-                                    : 'HTTP ' . $code . ' ' . trim((string)$r['snippet'])];
+                                 'why' => $why !== '' ? $why : 'HTTP ' . (int)$r['code']];
                     continue;
                 }
 
+                $data  = (array)($r['data'] ?? []);
                 $these = self::rowsFrom($data, $j['kit'], $j['line']);
                 if ($these === []) {
                     $report[] = ['kit' => $j['kit'], 'line' => $j['line'], 'status' => 'no_cycles',

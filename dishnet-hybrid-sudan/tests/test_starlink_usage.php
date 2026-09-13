@@ -195,6 +195,37 @@ $ku2 = new KitUsage($e['ea'], $e['dir']);
 t('the sibling is read',   $ku2->forKit(KIT)['available'], true);
 t('and named as the source', $ku2->source(), 'dishnet-data-report');
 
+echo "\nCollecting keeps the session alive instead of wearing it out\n";
+// The first version fetched through raw(), which skips refresh, retry AND the
+// rotated-cookie merge. Every hourly run threw away the token rotation that
+// keeps a session alive and then reported token_expired — the collector was
+// causing the condition it complained about. It fetches through get() now, and
+// this is the property that must not regress.
+$src = (string)file_get_contents(dirname(__DIR__) . '/lib/StarlinkUsage.php');
+is_(strpos($src, "\$conn->get(\$path)") !== false, 'it fetches through get()');
+is_(strpos($src, "\$conn->raw('GET', \$path)") === false, 'and not through raw()');
+
+$e4 = usageEnv();
+$u4 = (int)$e4['stock']->createUnit(['category_id' => $e4['cat'], 'serial_number' => KIT], 7, 'b')['id'];
+$e4['stock']->install($u4, ['crm_client_id' => 7, 'crm_service_id' => 1,
+    'starlink_service_line' => LINE, 'starlink_account' => ACCT], 7, 'b');
+$e4['session']->importCookie(
+    'Starlink.Com.Sso=s; Starlink.Com.Access.V1=OLDTOKEN; starlink.com.account_number=' . ACCT, 'tester');
+$before = $e4['session']->cookie();
+is_(strpos($before, 'OLDTOKEN') !== false, 'the stored session starts on the old token');
+
+// Starlink rotates the access token on a good call and hands it back.
+$rotating = static fn(string $m, string $u, array $h): array => [
+    'code' => 200, 'body' => json_encode(payload()),
+    'cookies' => ['Starlink.Com.Access.V1' => 'FRESHTOKEN'], 'headers' => []];
+$res4 = (new StarlinkUsage($e4['session'], [], $rotating))->collect($e4['ea']->liveAssignments());
+t('it still collected', count($res4['rows']), 1);
+$after = $e4['session']->cookie();
+is_(strpos($after, 'FRESHTOKEN') !== false, 'and the rotated token was STORED', $after);
+is_(strpos($after, 'OLDTOKEN') === false, 'replacing the old one');
+is_(strpos($after, 'Starlink.Com.Sso=s') !== false, 'while the rest of the jar survived');
+exec('rm -rf ' . escapeshellarg($e4['base']));
+
 echo "\nThe cron is wired and safe to include\n";
 $src = (string)file_get_contents(dirname(__DIR__) . '/cron/starlink_usage.php');
 is_(preg_match('/^\s*exit\s*[(;]/m', $src) === 0, 'it never exit()s — master.php includes it');
