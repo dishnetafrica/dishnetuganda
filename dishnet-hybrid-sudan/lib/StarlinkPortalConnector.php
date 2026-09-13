@@ -277,8 +277,12 @@ class StarlinkPortalConnector implements StarlinkConnector
             return $fail('no Starlink session has been imported for this account');
         }
         if ($this->store->needsReimport()) {
-            return $fail('the session is dead and needs a fresh cookie imported '
-                       . '(php tools/starlink_session.php --import)');
+            // Name the account. With several sessions held, "the session" is
+            // ambiguous and somebody re-imports the wrong one.
+            return $fail('the session for ' . ($this->store->active() ?: 'this account')
+                       . ' has expired and needs a fresh cookie — paste one under '
+                       . 'Admin → Starlink Sessions, or run '
+                       . 'php tools/starlink_session.php --import');
         }
         if ($this->store->isThrottled()) {
             return $fail('backing off until ' . $this->store->throttledUntil()
