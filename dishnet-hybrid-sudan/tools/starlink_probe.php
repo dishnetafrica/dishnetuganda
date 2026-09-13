@@ -61,6 +61,17 @@ if (!$conn->isConfigured()) {
 // found under — so the answer and the field names arrive together, and
 // neither is guessed.
 if (in_array('--accounts', array_slice($argv, 1), true)) {
+    // --account scopes the whole listing, so this can interrogate any account
+    // the login can switch to rather than only the one the cookie was taken
+    // from. Without the swap the listing silently answers for the cookie's own
+    // account, which reads as "that account looks exactly like this one".
+    $_acArgs = array_slice($argv, 1);
+    $_acIdx  = array_search('--account', $_acArgs, true);
+    if ($_acIdx !== false && isset($_acArgs[$_acIdx + 1])) {
+        $_acWant = strtoupper(trim((string)$_acArgs[$_acIdx + 1]));
+        $conn->scopeTo($_acWant);
+        echo "\n  asking as account " . $_acWant . " (cookie scoped to match)\n";
+    }
     $walk = static function ($v, string $key, array &$acc, array &$lines) use (&$walk): void {
         if (is_array($v)) {
             foreach ($v as $k => $sub) $walk($sub, (string)$k, $acc, $lines);
@@ -283,22 +294,42 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     // Asked as the account under test: the listing is scoped by the cookie, so
     // checking visibility without the swap would report the wrong account's
     // lines and call a perfectly reachable line invisible.
-    $visible = null;
+    $visible = null; $seenLines = [];
     $vd = $conn->raw('GET', '/api/accounts/v1/accounts/service-line-numbers');
     $vj = json_decode((string)($vd['body'] ?? ''), true);
     if ((int)$vd['code'] === 200 && is_array($vj)) {
         $seen = [];
         array_walk_recursive($vj, static function ($v) use (&$seen) {
-            if (is_string($v)) $seen[strtoupper(trim($v))] = true;
+            $t = strtoupper(trim((string)$v));
+            if (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $seen[$t] = true;
         });
+        $seenLines = array_keys($seen);
+        sort($seenLines);
         $visible = isset($seen[$line]);
         printf("  visible to this cookie      %s\n", $visible ? 'yes' : 'NO');
+    } else {
+        printf("  visibility check            HTTP %d — could not tell\n", (int)$vd['code']);
     }
+
     if ($visible === false) {
         echo "\n  STOP. Every path below would answer not_found for a line this cookie\n";
-        echo "  cannot see, whether or not it exists — so the sweep would prove\n";
-        echo "  nothing. Run --accounts to list the lines it CAN see, and pass one:\n\n";
-        echo "    php tools/starlink_probe.php --usage --line <a visible line>\n\n";
+        echo "  cannot see, whether or not it exists — so the sweep would prove nothing.\n";
+
+        // A verdict without its evidence is what sent this round wrong twice.
+        // Print what the account under test DID return, because the three
+        // explanations look identical from a bare "NO" and are entirely
+        // different problems.
+        echo "\n  Asked as " . ($acct !== '' ? $acct : 'the cookie\'s own account')
+           . ", Starlink listed " . count($seenLines) . " service line(s):\n\n";
+        foreach (array_slice($seenLines, 0, 40) as $sl) echo "    {$sl}\n";
+        if (count($seenLines) > 40) echo "    … and " . (count($seenLines) - 40) . " more\n";
+
+        echo "\n  Which of these it is decides what to fix:\n\n";
+        echo "    · the SAME lines as the cookie's own account — the swap did not\n";
+        echo "      take, so this login cannot reach " . ($acct !== '' ? $acct : 'that account') . " at all\n";
+        echo "    · DIFFERENT lines — the account IS reachable and " . $line . "\n";
+        echo "      is not on it, so the line or account recorded on the assignment is wrong\n";
+        echo "    · NONE — the account is reachable and empty\n\n";
         exit(1);
     }
 
