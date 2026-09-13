@@ -131,7 +131,9 @@ echo "\nRunning it again changes nothing\n";
 $s2 = $in->scan();
 t('no proposal',      count($s2['proposals']), 0);
 t('no refusal',       count($s2['refusals']), 0);
-t('counted as settled', $s2['settled'], 1);
+t('listed as already bound', count($s2['settled']), 1);
+is_(strpos((string)$s2['settled'][0]['detail'], 'assignment #') !== false,
+    'naming the authoritative row it agrees with');
 t('still one assignment', count($ea->liveAssignments()), 1);
 
 // ── 3 · A kit already belonging to another customer ─────────────────────
@@ -215,7 +217,7 @@ $ea5->assign(['unit_id' => $u, 'crm_client_id' => 7, 'crm_service_id' => 1], $st
 $second = new KitAttributeIntake($pdo5, $ea5, new FakeCrm([
     svc(1, 7, ['attributes' => [attr('starlinkDetails', KIT_A . ', ' . KIT_B)]])]));
 $s8 = $second->scan();
-t('the bound one is settled', $s8['settled'], 1);
+t('the bound one is settled', count($s8['settled']), 1);
 t('the other is refused',     count($s8['refusals']), 1);
 t('because the service is taken', $s8['refusals'][0]['reason'], 'service_taken');
 

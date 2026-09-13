@@ -111,11 +111,12 @@ final class KitAttributeIntake
      *
      * @return array{proposals:array<int,array<string,mixed>>,
      *               refusals:array<int,array<string,mixed>>,
-     *               settled:int, services:int, scanned:int}
+     *               settled:array<int,array<string,mixed>>,
+     *               services:int, scanned:int}
      */
     public function scan(): array
     {
-        $out = ['proposals' => [], 'refusals' => [], 'settled' => 0,
+        $out = ['proposals' => [], 'refusals' => [], 'settled' => [],
                 'services' => 0, 'scanned' => 0];
         if ($this->crm === null) return $out;
 
@@ -135,8 +136,8 @@ final class KitAttributeIntake
                 $out['scanned']++;
                 $verdict = $this->judge($serial, $clientId, $serviceId, (string)($svc['name'] ?? ''));
                 if ($verdict['action'] === 'assign')      $out['proposals'][] = $verdict;
-                elseif ($verdict['action'] === 'settled') $out['settled']++;
-                else                                      $out['refusals'][] = $verdict;
+                elseif ($verdict['action'] === 'settled') $out['settled'][]   = $verdict;
+                else                                      $out['refusals'][]  = $verdict;
             }
         }
         return $out;
@@ -172,7 +173,10 @@ final class KitAttributeIntake
                         'detail' => 'assignment #' . (int)$held['id'] . ' is on service #' . $onService
                                   . ', the attribute is on service #' . $serviceId]);
                 }
-                return array_merge($base, ['action' => 'settled', 'reason' => 'already_bound']);
+                return array_merge($base, ['action' => 'settled', 'reason' => 'already_bound',
+                    'assignment' => (int)$held['id'],
+                    'detail' => 'assignment #' . (int)$held['id'] . ' already binds it to client #'
+                              . $clientId . ' on service #' . $serviceId]);
             }
             return array_merge($base, ['action' => 'refuse', 'reason' => 'held_elsewhere',
                 'detail' => 'assignment #' . (int)$held['id'] . ' already gives it to client #'
@@ -231,6 +235,27 @@ final class KitAttributeIntake
             }
         }
         return $out;
+    }
+
+    /**
+     * A fingerprint of the whole binding table.
+     *
+     * Taken before and after a scan, an unchanged value is evidence rather
+     * than assurance: "the dry run wrote nothing" should be something the run
+     * itself demonstrates, not something the reader has to take on trust.
+     *
+     * @return array{rows:int, live:int, digest:string}
+     */
+    public function fingerprint(): array
+    {
+        $rows = (int)$this->db->query('SELECT COUNT(*) FROM equipment_assignments')->fetchColumn();
+        $live = (int)$this->db->query(
+            'SELECT COUNT(*) FROM equipment_assignments WHERE released_at IS NULL')->fetchColumn();
+        $all = $this->db->query(
+            'SELECT id, crm_client_id, crm_service_id, kit_serial, released_at
+               FROM equipment_assignments ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        return ['rows' => $rows, 'live' => $live,
+                'digest' => hash('sha256', (string)json_encode($all))];
     }
 
     // ── plumbing ────────────────────────────────────────────────────────
