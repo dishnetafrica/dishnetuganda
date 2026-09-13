@@ -118,6 +118,24 @@ if (in_array('--accounts', array_slice($argv, 1), true)) {
         exit(1);
     }
 
+    // Did the swap actually take? The payload names the account it answered
+    // for. If that is the cookie's own account rather than the one requested,
+    // this endpoint ignores the account_number cookie — which is a fact about
+    // the ENDPOINT, not proof that the account is unreachable. The telemetryagg
+    // paths take the account in the path and are where the swap is known to
+    // work, so a listing that ignores it says nothing about them.
+    if (isset($_acWant) && $_acWant !== '') {
+        $answered = array_keys($accounts);
+        if ($answered !== [] && !in_array($_acWant, $answered, true)) {
+            echo "\n  ⚠ Asked as {$_acWant}, answered for " . implode(', ', $answered) . ".\n";
+            echo "    This listing ignores the account_number swap, so it cannot tell you\n";
+            echo "    whether {$_acWant} is reachable. Test a telemetryagg path instead,\n";
+            echo "    which takes the account in the path AND honours the swap:\n\n";
+            echo "      php tools/starlink_probe.php --shape-usage \\\n";
+            echo "        '/api/telemetryagg/v1/data-usage/account/{$_acWant}/service-line/<SL>/annotated'\n";
+        }
+    }
+
     echo "\n  ── What this ONE cookie can see ──\n\n";
     printf("    accounts       %d\n", count($accounts));
     foreach (array_keys($accounts) as $a) echo "                   {$a}\n";
@@ -309,6 +327,18 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
         printf("  visible to this cookie      %s\n", $visible ? 'yes' : 'NO');
     } else {
         printf("  visibility check            HTTP %d — could not tell\n", (int)$vd['code']);
+    }
+
+    // The gate is only trustworthy for the cookie's OWN account. Asked about
+    // another, the listing answers for the cookie's account regardless of the
+    // swap — watched happening on 2026-09-13 — so blocking on it would refuse
+    // the one test that can settle a cross-account question.
+    $namedOther = ($iAcct !== false) && $acct !== '' && $acct !== $fromCookieAcct;
+    if ($visible === false && $namedOther) {
+        echo "\n  ⚠ Not in the listing — but the listing answers for the cookie's own\n";
+        echo "    account whatever we scope it to, so it cannot speak for {$acct}.\n";
+        echo "    Sweeping anyway: the telemetryagg paths DO honour the swap.\n\n";
+        $visible = null;
     }
 
     if ($visible === false) {
