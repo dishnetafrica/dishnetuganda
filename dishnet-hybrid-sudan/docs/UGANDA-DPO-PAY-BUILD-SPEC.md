@@ -24,9 +24,18 @@ docker exec -it ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/dpo_
 
 It lists every payment method on the instance with its UUID, finds a DPO one,
 and if none exists **asks uCRM to create it** — then reports verbatim what uCRM
-answered. If uCRM exposes payment methods read-only over the API (possible, and
-not something this tool pretends to know in advance), it prints the refusal and
-the manual path:
+answered.
+
+**Settled on the live instance, 2026-09-13:** uCRM **does** accept
+`POST /payment-methods`. The tool created `DPO Pay` against
+`http://localhost/crm/api/v2.1` on an instance that already held 21 methods
+(Cash, Bank transfer, Eco Bank UGX/USD, and the built-in gateway entries), and
+returned its UUID. This was genuinely unknown before — the API could equally
+have been read-only — so it is recorded here rather than assumed for the next
+install.
+
+If a future instance does refuse, the tool prints the refusal and the manual
+path:
 
 > uCRM → System → Billing → Payment methods → Add → name `DPO Pay`
 

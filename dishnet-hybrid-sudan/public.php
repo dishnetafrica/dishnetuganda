@@ -787,6 +787,26 @@ if ($page === 'evo_webhook') {
     exit;
 }
 
+// ── DPO Pay: the customer's browser comes back here after checkout ──
+// URL: public.php?page=dpo_return  (and &cancelled=1 as DPO's BackURL)
+// Public by necessity — a customer returning from DPO carries no session.
+// Nothing in the query string is read as a result; see the file.
+if ($page === 'dpo_return') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/dpo_return.php';
+    exit;
+}
+
+// ── DPO Pay: DPO's own server posts the result here ──
+// URL: public.php?page=dpo_push
+// Public by necessity and UNSIGNED by DPO, so it is treated as a doorbell:
+// it says when to look, and verifyToken says what is true.
+if ($page === 'dpo_push') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/dpo_push.php';
+    exit;
+}
+
 //  EFRIS fiscal e-invoice PDF (HMAC-tokened link from the admin tab)
 // URL: public.php?page=efris_pdf&file=…&token=…
 if ($page === 'efris_pdf') {
