@@ -79,6 +79,18 @@ foreach (['kit_number', 'serial_number', 'status', 'location', 'customer', 'plan
     is_(strpos($tool, "'" . $c . "'") !== false, "maps $c");
 }
 
+echo "\nLocation is a place, or it is blank\n";
+// The assignment's note is an audit trail ("assigned via assign_kit"). Shipping
+// it as Finance's location would put a false answer in a column a person reads
+// as the install site. Pull the mapped expression out and check what feeds it.
+preg_match("/'location'\s*=>(.*?),\n\s*'customer'/s", $code, $lm);
+is_($lm !== [], 'the location column is mapped');
+$locExpr = $lm[1] ?? '';
+is_(strpos($locExpr, 'note') === false, 'and never fed by the assignment note');
+is_(strpos($locExpr, 'Addr') !== false, 'it is fed by an address');
+is_(strpos($code, "'street1'") !== false && strpos($code, "'city'") !== false,
+    'assembled from uCRM address fields');
+
 echo "\nThe client id is written to BOTH fields data-report reads\n";
 // Its filter is crm_client_id ?? assigned_client_id ?? crm_id. A reader that
 // finds neither shows the customer nothing at all.

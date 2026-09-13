@@ -87,9 +87,25 @@ if ($live === []) {
 }
 
 /** uCRM client names and their service plans, once each. */
-$clientName = [];
+$clientName  = [];
+$clientAddr  = [];
 $servicePlan = [];
-$look = function (int $clientId, int $serviceId) use ($crm, $reachable, &$clientName, &$servicePlan): void {
+$serviceAddr = [];
+
+/** uCRM spells an address the same way on a client and on a service. */
+$address = static function ($rec): string {
+    if (!is_array($rec)) return '';
+    $parts = [];
+    foreach (['street1', 'street2', 'city'] as $f) {
+        $v = trim((string)($rec[$f] ?? ''));
+        if ($v !== '') $parts[] = $v;
+    }
+    return implode(', ', $parts);
+};
+
+$look = function (int $clientId, int $serviceId) use ($crm, $reachable, $address,
+                                                      &$clientName, &$clientAddr,
+                                                      &$servicePlan, &$serviceAddr): void {
     if (!$reachable) return;
     if (!array_key_exists($clientId, $clientName)) {
         $c = $crm->get('clients/' . $clientId);
@@ -99,11 +115,13 @@ $look = function (int $clientId, int $serviceId) use ($crm, $reachable, &$client
             if ($n === '') $n = trim((string)($c['firstName'] ?? '') . ' ' . (string)($c['lastName'] ?? ''));
         }
         $clientName[$clientId] = $n;
+        $clientAddr[$clientId] = $address($c);
     }
     if ($serviceId > 0 && !array_key_exists($serviceId, $servicePlan)) {
         $s = $crm->get('clients/services/' . $serviceId);
         $servicePlan[$serviceId] = is_array($s)
             ? trim((string)($s['servicePlanName'] ?? $s['servicePlan']['name'] ?? $s['name'] ?? '')) : '';
+        $serviceAddr[$serviceId] = $address($s);
     }
 };
 
@@ -132,7 +150,15 @@ foreach ($live as $a) {
         'kit_number'              => $kit,
         'serial_number'           => $kit,
         'status'                  => 'Deployed',
-        'location'                => (string)($a['note'] ?? ''),
+        // Where the kit physically is. The service address is the install
+        // site, the client address is where they are billed, and an
+        // assignment has neither -- its note is an audit trail ("assigned
+        // via assign_kit"), not a place. Putting that in Finance's location
+        // column would be a false answer to a question we cannot answer, so
+        // an unknown location stays blank for a person to fill in.
+        'location'                => ($serviceAddr[$serviceId] ?? '') !== ''
+                                        ? $serviceAddr[$serviceId]
+                                        : ($clientAddr[$clientId] ?? ''),
         'customer'                => $clientName[$clientId] ?? '',
         'plan'                    => $servicePlan[$serviceId] ?? '',
         'starlink_account_number' => $acct,
