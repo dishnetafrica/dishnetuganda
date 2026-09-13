@@ -80,6 +80,18 @@ final class CustomerDataTools
     private CustomerDataGateway $gw;
     /** @var array<int,array<string,mixed>> */
     private array $audit = [];
+    /**
+     * Every scalar this layer has actually handed to the model this turn.
+     *
+     * The output guard needs to recognise another customer's identifiers
+     * without holding any other customer's data. It does not need to: what it
+     * needs is what THIS customer was permitted, and that is exactly what
+     * passed through here. The allowlist is a by-product of authorization,
+     * not a second copy of the database.
+     *
+     * @var array<int,string>
+     */
+    private array $disclosed = [];
 
     /**
      * @param array $identity exactly what CustomerIdentity::resolve() returned
@@ -182,6 +194,7 @@ final class CustomerDataTools
         }
 
         $data = $this->{$tool}(...$this->positional($tool, $args));
+        if (is_array($data)) $this->remember($data);
         $this->note($tool, $data === null ? 'not_found' : 'ok', $stripped);
         return $data === null
             ? ['ok' => false, 'tool' => $tool, 'error' => 'not found', 'stripped' => $stripped]
@@ -208,6 +221,24 @@ final class CustomerDataTools
 
     /** @return array<int,array<string,mixed>> */
     public function auditTrail(): array { return $this->audit; }
+
+    /** Record every scalar leaf of a tool result, however deeply nested. */
+    private function remember(array $data): void
+    {
+        foreach ($data as $v) {
+            if (is_array($v)) { $this->remember($v); continue; }
+            if ($v === null || is_bool($v)) continue;
+            $s = trim((string)$v);
+            if ($s !== '') $this->disclosed[] = $s;
+        }
+    }
+
+    /**
+     * What this customer was actually permitted to be told, this turn.
+     *
+     * @return array<int,string>
+     */
+    public function disclosed(): array { return array_values(array_unique($this->disclosed)); }
 
     // ── The tools. Every one filters on $this->customerId. ──────────────────
 

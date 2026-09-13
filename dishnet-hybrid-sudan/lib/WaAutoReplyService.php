@@ -9,6 +9,7 @@ require_once __DIR__ . '/CustomerIdentity.php';
 require_once __DIR__ . '/AiMinimalContext.php';
 require_once __DIR__ . '/CustomerDataTools.php';
 require_once __DIR__ . '/UcrmCustomerDataGateway.php';
+require_once __DIR__ . '/ReplyPrivacyGuard.php';
 
 /**
  * WaAutoReplyService — Unified WhatsApp Auto-Reply (v4.11.3)
@@ -1179,15 +1180,91 @@ class WaAutoReplyService
                 // No tool support on this client yet, so it FAILS SAFE: same
                 // empty context, and it is told it cannot look anything up,
                 // rather than falling back to the old unrestricted block.
-                return $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode);
+                $reply = $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode);
+                return $this->guard($reply, $tools, $aiClient, [
+                    'customer_id'     => (int)($identity['client_id'] ?? 0),
+                    'conversation_id' => (int)($conv['id'] ?? 0),
+                    'channel'         => $channel,
+                    'provider'        => 'openai',
+                    'customer_said'   => $text,
+                ]);
             }
 
             require_once dirname(__FILE__) . '/ClaudeWaClient.php';
             $aiClient = new \ClaudeWaClient($apiKey, $this->pdo);
-            return $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode, $tools);
+            $reply = $aiClient->getReply($text, $ctx, $channel, $history, $customInstr, $instrMode, $tools);
+
+            return $this->guard($reply, $tools, $aiClient, [
+                'customer_id'     => (int)($identity['client_id'] ?? 0),
+                'conversation_id' => (int)($conv['id'] ?? 0),
+                'channel'         => $channel,
+                'provider'        => 'claude',
+                'customer_said'   => $text,
+            ]);
         } catch (\Throwable $e) {
             error_log('[WaAutoReply] AI reply failed: ' . $e->getMessage());
             return null;
+        }
+    }
+
+    /**
+     * The last check before a reply becomes something a person reads.
+     *
+     * Placed on the single return path of getAiReply so that all six callers
+     * -- every sendReply site in this class -- are covered by one check. A
+     * guard that each caller has to remember to call is a guard that one
+     * caller will not call.
+     *
+     * Deliberately takes a string and a permitted set and returns a string:
+     * it knows nothing about WhatsApp and nothing about how the reply was
+     * produced, so the same call serves voice, image and document replies
+     * when those arrive.
+     */
+    protected function guard(?string $reply, $tools, $aiClient, array $meta): ?string
+    {
+        if ($reply === null || trim($reply) === '') return null;
+
+        // The allowlist IS the authorization layer's output: what the tools
+        // actually returned, plus what the customer told us in their own
+        // message. No other customer's data is fetched, held or consulted.
+        $values = [];
+        if ($tools instanceof \CustomerDataTools) $values = $tools->disclosed();
+        $said = trim((string)($meta['customer_said'] ?? ''));
+        if ($said !== '') {
+            foreach (preg_split('/\s+/', $said) ?: [] as $w) {
+                $w = trim($w, ".,;:!?()[]\"'");
+                if ($w !== '') $values[] = $w;
+            }
+        }
+
+        $prompt = method_exists($aiClient, 'lastSystemPrompt')
+            ? (string)$aiClient->lastSystemPrompt() : '';
+
+        $res = \ReplyPrivacyGuard::check($reply, ['values' => $values, 'prompt' => $prompt]);
+        if ($res['safe']) return $res['reply'];
+
+        $tools_called = [];
+        if ($tools instanceof \CustomerDataTools) {
+            foreach ($tools->auditTrail() as $a) $tools_called[] = (string)($a['tool'] ?? '');
+        }
+        // Metadata only. The blocked text is not written anywhere: recording a
+        // leaked credential in a log to prove it was caught merely moves it
+        // somewhere with fewer controls.
+        $this->logSecurityEvent(\ReplyPrivacyGuard::auditEvent($res, $meta + [
+            'tools_called'   => $tools_called,
+            'blocked_length' => strlen($reply),
+        ]));
+
+        return \ReplyPrivacyGuard::SAFE_FALLBACK;
+    }
+
+    /** Append one guard event. Overridable so tests can observe it. */
+    protected function logSecurityEvent(array $event): void
+    {
+        try {
+            $this->store->append('ai_security_events.json', $event);
+        } catch (\Throwable $e) {
+            error_log('[WaAutoReply] guard event not stored: ' . $e->getMessage());
         }
     }
 

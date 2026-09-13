@@ -45,6 +45,11 @@ class ClaudeWaClient
      */
     public $transport = null;
 
+    /** The last composed system prompt, so the output guard can tell a public
+     *  figure from a disclosed one, and spot verbatim recitation of it. */
+    private string $lastSystem = '';
+    public function lastSystemPrompt(): string { return $this->lastSystem; }
+
     public function getReply(
         string $customerMessage,
         array  $customerContext = [],
@@ -176,8 +181,8 @@ class ClaudeWaClient
             $payload['tools'] = self::toolSchema();
         }
 
-        $reply = $this->converse($payload, $tools, $channel, $customerMessage);
-        return $reply;
+        $this->lastSystem = $systemPrompt;
+        return $this->converse($payload, $tools, $channel, $customerMessage);
     }
 
     /**
