@@ -80,7 +80,7 @@ if ($live === []) {
 }
 
 // ── 2. Is the sibling plugin feeding us? ───────────────────────────────
-$usage = new KitUsage($ea);
+$usage = new KitUsage($ea, $dataDir);
 $rows  = $usage->rows();
 echo "  2. TELEMETRY (sibling dishnet-data-report plugin)\n  {$line}\n";
 if ($rows === null) {

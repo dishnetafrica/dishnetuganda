@@ -23,6 +23,10 @@ require_once dirname(__DIR__, 2) . '/lib/crm_url.php';
 
 $config = $store->load('kyc_config.json') ?? [];
 $ea     = EquipmentAssignment::fromStore($store);
+// Our own data directory: when cron/starlink_usage.php has collected from our
+// Starlink session, those figures are preferred over the sibling plugin's.
+require_once dirname(__DIR__, 2) . '/lib/bootstrap_data.php';
+$dnDataDir = getDataDir(dirname(__DIR__, 2));
 
 // uCRM gives the plan and the label state. Without it the fleet still lists —
 // with the allowance and label columns saying so, rather than guessing.
@@ -35,7 +39,7 @@ try {
 } catch (\Throwable $e) {}
 $kitAttr = $crm ? new CrmKitAttribute($crm, $ea) : null;
 
-$fleet = (new StarlinkFleet($ea, new KitUsage($ea), $store, $kitAttr))->build();
+$fleet = (new StarlinkFleet($ea, new KitUsage($ea, $dnDataDir), $store, $kitAttr))->build();
 $rows  = $fleet['rows'];
 $sum   = $fleet['summary'];
 $tel   = $fleet['telemetry'];

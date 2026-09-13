@@ -178,6 +178,9 @@ $_m_jobs = [
     // its cookies, router map and block state there. Daily, skipped when
     // nothing changed. Restoring stays a person's decision.
     'dr_snapshot'   => ['interval' => 86400,               'script' => __DIR__ . '/dr_snapshot.php'],
+    // Usage from our own Starlink session. data-report collects none for
+    // Uganda: it only fetches for KITs typed into its manual map.
+    'starlink_usage'=> ['interval' => 3600,                'script' => __DIR__ . '/starlink_usage.php'],
 
     // ── Unanswered-customer watchdog ─────────────────────────────────────
     // Ported from the South Sudan bot. Every 15 minutes in business hours:
