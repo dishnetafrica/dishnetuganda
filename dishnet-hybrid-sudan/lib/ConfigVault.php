@@ -78,6 +78,20 @@ class ConfigVault
         // somebody's live session.
         'starlink_account_email',
         'starlink_account_number',
+        // DPO Pay. The company token is a bearer secret carried INSIDE the
+        // request body — DPO uses no header and no signature — so it belongs
+        // here and nowhere else. dpo_environment matters as much: test and
+        // live share one URL and differ only by which token is sent, so
+        // losing this pair in a re-install could point live traffic at a
+        // test account, or worse.
+        'dpo_enabled',
+        'dpo_environment',
+        'dpo_company_token',
+        'dpo_service_type',
+        'dpo_company_acc_ref',
+        'dpo_payment_method_uuid',
+        'dpo_ptl',
+        'dpo_ptl_type',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

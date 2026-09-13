@@ -7,14 +7,22 @@ declare(strict_types=1);
  * tools/org_probe.php output), including the fields nothing was reading —
  * bank details, TIN, logo.
  *
+ * Extended for DPO Pay with invoices, payments and payment methods, so the
+ * settlement path can be exercised through the REAL CrmApiClient — including
+ * its own duplicate guard — and so a test can COUNT how many uCRM payments a
+ * scenario actually created. That count is the whole point of the duplicate
+ * and race cases.
+ *
  * /__test/scenario?name=... reshapes it: uganda | two_orgs | no_phone |
- * no_org | unreachable
+ * no_org | unreachable | payments_down
+ * /__test/payments returns every payment created, for counting.
+ * /__test/reset clears them between cases.
  *
  *     php -S 127.0.0.1:9699 tests/fixtures/fake_ucrm_server.php
  */
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['scenario' => 'uganda'];
+$state += ['scenario' => 'uganda', 'payments' => [], 'pay_seq' => 0];
 
 function fu_out($data, int $http = 200): void
 {
@@ -33,6 +41,54 @@ if ($path === '/__test/scenario') {
     fu_out(['scenario' => $state['scenario'], 'marker' => 'FAKE-UCRM-TEST']);
 }
 if ($path === '/__test/state') fu_out($state + ['marker' => 'FAKE-UCRM-TEST']);
+if ($path === '/__test/payments') fu_out(['payments' => $state['payments'], 'count' => count($state['payments'])]);
+if ($path === '/__test/reset') { $state['payments'] = []; $state['pay_seq'] = 0; fu_out(['reset' => true]); }
+
+// ── Invoices, payments and payment methods (DPO Pay) ────────────────────
+//
+// Invoice ids ARE the scenario here, so a test names the case it wants by the
+// invoice it asks to pay.
+if (preg_match('#^/invoices/(\d+)$#', $path, $m)) {
+    $id = (int)$m[1];
+    $inv = ['id' => $id, 'clientId' => 7, 'number' => 'INV-2026-' . str_pad((string)$id, 5, '0', STR_PAD_LEFT),
+            'total' => 299000.0, 'amountPaid' => 0.0, 'currencyCode' => 'UGX', 'status' => 1,
+            'createdDate' => '2026-09-01', 'dueDate' => '2026-09-15',
+            'items' => [['label' => 'DishNet Home - Monthly Internet Service']]];
+    switch ($id) {
+        case 126: $inv['amountPaid'] = 100000.0; $inv['status'] = 2; break;   // part-paid elsewhere
+        case 127: $inv['amountPaid'] = 299000.0; $inv['status'] = 4; break;   // already settled
+        case 128: $inv['status'] = 9; break;                                   // a blocked status
+        case 129: $inv['clientId'] = 999; break;                               // someone else's
+        case 130: $inv['currencyCode'] = 'KES'; break;                         // a currency we do not take
+        case 131: $inv['currencyCode'] = ''; break;                            // no currency recorded
+        case 999: fu_out(['error' => 'FAKE-UCRM-TEST: no such invoice'], 404);
+    }
+    fu_out($inv);
+}
+if ($path === '/payment-methods') {
+    fu_out([['id' => '6efe0fa8-36b2-4dd1-b049-427bffc7d369', 'name' => 'Cash'],
+            ['id' => '4145b5f5-3bbc-45e3-8fc5-9cda970c62fb', 'name' => 'Bank Transfer']]);
+}
+if ($path === '/payments' || strpos($path, '/payments?') === 0) {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        // The one failure a settlement must survive without losing the money.
+        if ($state['scenario'] === 'payments_down') {
+            fu_out(['error' => 'FAKE-UCRM-TEST: payments unavailable'], 500);
+        }
+        $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
+        $state['pay_seq']++;
+        $p = ['id' => 7000 + $state['pay_seq'], 'clientId' => (int)($body['clientId'] ?? 0),
+              'amount' => (float)($body['amount'] ?? 0), 'note' => (string)($body['note'] ?? ''),
+              'methodId' => (string)($body['methodId'] ?? ''),
+              'currencyCode' => (string)($body['currencyCode'] ?? ''),
+              'createdDate' => gmdate('Y-m-d')];
+        $state['payments'][] = $p;
+        fu_out($p);
+    }
+    // createPaymentSafe scans this before creating. Returning what we hold is
+    // what makes its duplicate guard real rather than simulated.
+    fu_out($state['payments']);
+}
 
 $UG = [
     'id' => 1, 'name' => 'DishNet Africa Limited', 'selected' => true,

@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS dpo_payments (
 
     crm_payment_id      INTEGER,                    -- the uCRM payment we created
     settled_at          TEXT,                       -- verified success
+    -- A short lease, taken before the uCRM call and released after it.
+    -- The push, the browser return and the reconcile cron can all arrive
+    -- within the same second; without a claim, two of them could each post a
+    -- payment to uCRM and only the second would be refused by
+    -- idx_dpo_crm_payment — leaving an orphan payment already created. The
+    -- claim is a lease, not a lock, so a process that dies mid-settle does
+    -- not strand the row: it expires and the next attempt proceeds.
+    settle_claim_at     TEXT,
     verified_at         TEXT,                       -- last server-to-server verify
     callback_at         TEXT,                       -- last push received
     failure_reason      TEXT,
