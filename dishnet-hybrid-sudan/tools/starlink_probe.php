@@ -405,7 +405,10 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
             $code ?: ($d['error'] !== '' ? 'ERR' : '0'), substr($path, 0, 56),
             $d['bytes'], $src, $verdict);
         if ($d['snippet'] !== '') echo "         " . substr($d['snippet'], 0, 100) . "\n";
-        if ($code === 200 && $json && $d['bytes'] > 0) $hit[] = $path;
+        // Keyed, not appended: the same path is harvested from several of that
+        // plugin's files, and listing one endpoint four times reads as four
+        // endpoints. It is one.
+        if ($code === 200 && $json && $d['bytes'] > 0) $hit[$path] = true;
     }
 
     echo "\n";
@@ -418,9 +421,10 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
             echo "  would explain sl_usage.json being [] on every run.\n";
         }
     } else {
-        echo "  " . count($hit) . " endpoint(s) returned JSON. Re-run with --shape-usage to see the\n";
+        $hits = array_keys($hit);
+        echo "  " . count($hits) . " endpoint(s) returned JSON. Re-run with --shape-usage to see the\n";
         echo "  payload before anything is written against it:\n";
-        foreach ($hit as $h) echo "    php tools/starlink_probe.php --shape-usage " . escapeshellarg($h) . "\n";
+        foreach ($hits as $h) echo "    php tools/starlink_probe.php --shape-usage " . escapeshellarg($h) . "\n";
     }
     echo "\n";
     exit($hit === [] ? 1 : 0);
