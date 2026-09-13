@@ -174,6 +174,10 @@ $_m_jobs = [
     // Daily is often enough for a retention period measured in months, and the
     // normal outcome is that it deletes nothing.
     'web_chat_retention' => ['interval' => 86400,          'script' => __DIR__ . '/web_chat_retention.php'],
+    // uCRM deletes <plugin>/data on upgrade, and dishnet-data-report keeps
+    // its cookies, router map and block state there. Daily, skipped when
+    // nothing changed. Restoring stays a person's decision.
+    'dr_snapshot'   => ['interval' => 86400,               'script' => __DIR__ . '/dr_snapshot.php'],
 
     // ── Unanswered-customer watchdog ─────────────────────────────────────
     // Ported from the South Sudan bot. Every 15 minutes in business hours:

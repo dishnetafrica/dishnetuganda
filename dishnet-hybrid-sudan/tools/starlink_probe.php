@@ -9,6 +9,7 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php --verify   verify only, one request
  *   php tools/starlink_probe.php --shape    what the response actually looks like
  *   php tools/starlink_probe.php --info     who the account is, and what it owes
+ *   php tools/starlink_probe.php --usage    find the endpoint that returns data usage
  *
  * Phase 1 ends here. This reads and prints; it stores no Starlink data, posts
  * nothing to the books, and changes nothing except the session's own
@@ -38,7 +39,125 @@ if (!$conn->isConfigured()) {
     exit(1);
 }
 
-// ── 0a. Shape: what does the payload actually contain? ───────────────────
+// ── 0a. Usage: which endpoint actually returns consumption? ──────────────
+//
+// On the Uganda server sl_usage.json is `[]` and dr_kit_registry.json has
+// kit_count 0, while sl_svc_cache.json holds 15 live service lines — every
+// one with kit_number "". Both empty files are keyed by a kit serial the
+// data plugin never resolves, so they will stay empty however long we wait.
+// The lines themselves say has_telemetry: true, which means Starlink holds
+// readings we are not asking for.
+//
+// This finds the endpoint that returns them. Candidates are HARVESTED from
+// the data plugin's own source before any are invented: whatever path it
+// calls is the one Starlink actually answers, and reading it beats guessing
+// at the shape of somebody else's API. Our own families are tried after, and
+// clearly marked as guesses.
+//
+// Read-only. It stores nothing, writes nothing, and reports what answered.
+if (in_array('--usage', array_slice($argv, 1), true)) {
+    require_once $root . '/lib/SiblingPlugin.php';
+    $GLOBALS['_PLUGIN_ROOT'] = ((string)getenv('DN_PLUGIN_ROOT')) ?: $root;
+
+    // A real service line to substitute in. Prefer one the data plugin has
+    // already resolved; fall back to a live assignment of our own.
+    $line = ''; $acct = '';
+    foreach ((array)SiblingPlugin::readJson('dishnet-data-report', 'sl_svc_cache.json') as $k => $rec) {
+        if (!is_array($rec)) continue;
+        $line = trim((string)($rec['service_line'] ?? $k));
+        $acct = trim((string)($rec['account_number'] ?? ''));
+        if ($line !== '') break;
+    }
+    if ($line === '') {
+        echo "\n  No service line to test with — sl_svc_cache.json is empty or absent,\n";
+        echo "  and without a real line every templated endpoint returns 404 whether\n";
+        echo "  or not it exists.\n\n";
+        exit(1);
+    }
+    echo "\n  testing with service line   {$line}\n";
+    if ($acct !== '') echo "  on account                  {$acct}\n";
+
+    // ── Harvested from dishnet-data-report's source ─────────────────────
+    $harvested = [];
+    $drRoot = dirname(SiblingPlugin::pluginRoot()) . '/dishnet-data-report';
+    if (is_dir($drRoot)) {
+        foreach ((array)glob($drRoot . '/*.php') as $f) {
+            $src = (string)@file_get_contents($f);
+            if (!preg_match_all('#[\'"](/api/[A-Za-z0-9/_.\-{}$\\[\]:?&=]+)[\'"]#', $src, $m)) continue;
+            foreach ($m[1] as $path) {
+                if (!preg_match('/usage|telemetry|data-usage|consumption|billing-cycle/i', $path)) continue;
+                $harvested[$path] = basename($f);
+            }
+        }
+    }
+    echo "  harvested from that plugin  " . (count($harvested) ?: 'none — it may not fetch usage at all') . "\n\n";
+
+    // ── Ours, clearly marked as guesses ─────────────────────────────────
+    $L = rawurlencode($line);
+    $guesses = [
+        '/api/webagg/v1/service-lines/' . $L . '/data-usage',
+        '/api/webagg/v2/service-lines/' . $L . '/data-usage',
+        '/api/webagg/v1/accounts/service-lines/' . $L . '/data-usage',
+        '/api/accounts/v1/service-lines/' . $L . '/data-usage',
+        '/api/accounts/v1/service-lines/' . $L . '/usage',
+        '/api/telemetry/v1/service-lines/' . $L . '/usage',
+    ];
+
+    $tries = [];
+    foreach ($harvested as $path => $where) {
+        // Templated paths in that plugin's source carry a placeholder where
+        // the line goes. Put a real one in, whatever the placeholder looks like.
+        $real = preg_replace('#\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*#', $L, $path);
+        $tries[] = ['GET', (string)$real, 'data-report/' . $where];
+    }
+    foreach ($guesses as $g) $tries[] = ['GET', $g, 'guess'];
+
+    printf("  %-6s %-58s %-7s %s\n", 'CODE', 'PATH', 'BYTES', 'SOURCE');
+    printf("  %s\n", str_repeat('-', 96));
+    $hit = [];
+    foreach ($tries as [$m, $path, $src]) {
+        $d = $conn->raw($m, $path);
+        printf("  %-6s %-58s %-7d %s\n",
+            $d['code'] ?: ($d['error'] !== '' ? 'ERR' : '0'), substr($path, 0, 56), $d['bytes'], $src);
+        if ((int)$d['code'] === 200 && $d['bytes'] > 0) $hit[] = $path;
+        elseif ($d['snippet'] !== '') echo "         " . substr($d['snippet'], 0, 100) . "\n";
+    }
+
+    echo "\n";
+    if ($hit === []) {
+        echo "  Nothing answered 200. That is a result, not a dead end: it means the\n";
+        echo "  usage endpoint is not one of these, and the next place to look is the\n";
+        echo "  browser's own network tab on starlink.com while a usage chart loads.\n";
+        if ($harvested === []) {
+            echo "  It also means dishnet-data-report never asks for usage at all, which\n";
+            echo "  would explain sl_usage.json being [] on every run.\n";
+        }
+    } else {
+        echo "  " . count($hit) . " endpoint(s) answered. Re-run with --shape-usage to see the\n";
+        echo "  payload before anything is written against it:\n";
+        foreach ($hit as $h) echo "    php tools/starlink_probe.php --shape-usage " . escapeshellarg($h) . "\n";
+    }
+    echo "\n";
+    exit($hit === [] ? 1 : 0);
+}
+
+// ── 0b. Shape one usage payload, so a collector maps read fields ─────────
+$_su = array_search('--shape-usage', array_slice($argv, 1), true);
+if ($_su !== false) {
+    $args = array_slice($argv, 1);
+    $path = (string)($args[$_su + 1] ?? '');
+    if ($path === '' || strpos($path, '/api/') !== 0) {
+        echo "\n  --shape-usage needs a path, e.g. /api/webagg/v1/...\n\n";
+        exit(2);
+    }
+    $r = $conn->get($path);
+    if (empty($r['ok'])) { echo "\n  " . (string)$r['error'] . "\n\n"; exit(1); }
+    echo "\n  " . $path . "\n\n";
+    echo substr(json_encode($r['data'] ?? $r, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), 0, 4000) . "\n\n";
+    exit(0);
+}
+
+// ── 0c. Shape: what does the payload actually contain? ───────────────────
 // Guessing field names is what produced a table of em-dashes: the kit serial
 // was read from userTerminals[0].serialNumber because that is where the fleet
 // plugin found it, and this account's response evidently puts it elsewhere.

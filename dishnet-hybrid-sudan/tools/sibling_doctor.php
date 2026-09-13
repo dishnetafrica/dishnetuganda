@@ -27,6 +27,8 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
 $root = dirname(__DIR__);
 $GLOBALS['_PLUGIN_ROOT'] = $root;
 require_once $root . '/lib/SiblingPlugin.php';
+require_once $root . '/lib/bootstrap_data.php';
+require_once $root . '/lib/DrSnapshot.php';
 
 /**
  * The files this plugin actually reads, and what stops working without each.
@@ -173,6 +175,47 @@ foreach ($EXPECTED as $plugin => $files) {
     }
     echo "\n";
 }
+
+// ── What we hold if that plugin's directory goes ────────────────────────────
+//
+// uCRM deletes <plugin>/data on upgrade. cron/dr_snapshot.php copies the ten
+// files that matter into ours every day. This says whether that is actually
+// happening, because a snapshot nobody has taken is worth nothing on the day
+// it is needed — and if the live data has already gone, it says so and gives
+// the one command that puts it back.
+$snapRoot = DrSnapshot::root(cliDataDir($root));
+$snaps    = DrSnapshot::snapshots($snapRoot);
+$drLive   = SiblingPlugin::dataDir(DrSnapshot::PLUGIN);
+$drGone   = $drLive === null || DrSnapshot::survey($drLive)['present'] === [];
+
+echo "  snapshots of " . DrSnapshot::PLUGIN . "\n";
+if ($snaps === []) {
+    echo "    NONE HELD. If that plugin is upgraded today, its Starlink cookies,\n";
+    echo "    its router map and the record of who is currently blocked go with it.\n";
+    echo "    cron/dr_snapshot.php takes one daily — check master.php ran it, or:\n";
+    echo "      php tools/dr_snapshot.php --save\n";
+    $problems++;
+} else {
+    $newest = (string)end($snaps);
+    $age    = time() - (int)@filemtime($snapRoot . '/' . $newest);
+    $files  = count((array)glob($snapRoot . '/' . $newest . '/*.json'));
+    printf("    %d held · newest %s (%s) · %d file(s)\n",
+        count($snaps), $newest,
+        $age < 7200 ? sprintf('%d min old', (int)($age / 60)) : sprintf('%.0f hours old', $age / 3600),
+        $files);
+    if ($age > 48 * 3600) {
+        echo "    STALE — the daily cron has not run for two days. Anything that\n";
+        echo "    plugin has learned since is not held anywhere.\n";
+        $warnings++;
+    }
+    if ($drGone) {
+        echo "\n    THAT PLUGIN'S LIVE DATA IS GONE and this snapshot is all there is.\n";
+        echo "    Put it back with:\n";
+        echo "      php tools/dr_snapshot.php --restore {$newest} --yes\n";
+        $problems++;
+    }
+}
+echo "\n";
 
 echo "  " . str_repeat('─', 72) . "\n";
 $misses = SiblingPlugin::misses();

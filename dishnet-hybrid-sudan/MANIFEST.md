@@ -456,6 +456,7 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 | QuotationService | lib/QuotationService.php | Quote generation + WA sending |
 | StaffLedgerService | lib/StaffLedgerService.php | Unified staff cash ledger — one balance query replaces 5 sources |
 | StaffLedgerWriter | lib/StaffLedgerWriter.php | Fail-safe dual-write helper for staff_ledger |
+| DrSnapshot | lib/DrSnapshot.php | Copies dishnet-data-report's ten data files into this plugin's data directory, which survives an upgrade of either plugin. uCRM DELETES `<plugin>/data` on upgrade and that plugin still uses that shape. cron/dr_snapshot.php runs it daily, skipping days where nothing changed and keeping 14. Restore is never automatic — `tools/dr_snapshot.php --restore <name> --yes`. |
 | StarlinkServiceState | lib/StarlinkServiceState.php | Live Starlink subscription state per service line, read from dishnet-data-report's sl_svc_cache.json. Status precedence pending > suspended > paused > standby > active; `subscription_active: null` reports as unknown, never inactive. Also lists service lines no assignment claims. |
 | StarlinkBlockService | lib/StarlinkBlockService.php | Auto-block Starlink devices on UCRM service.suspend (v4.21.0+). Reads sl_kits.json + wifi_router_map.json, calls dishnet-data-report's gRPC bridge over loopback HTTP. State in sl_suspension_state, audit in sl_suspension_log. VIP guard via NO_AUTO_BLOCK tag or starlink_block_vip_clients config. |
 
