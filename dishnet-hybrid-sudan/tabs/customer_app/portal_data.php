@@ -14,7 +14,7 @@
 //   $portalSites, $portalActiveCount, $portalTotalUsageGb,
 //   $portalCustomerId, $portalClaims, $portalCustomerName, $portalFirstName,
 //   $portalServiceType, $portalLocation, $portalPrice, $portalCurrency,
-//   $portalNextBill, $portalDaysLeft
+//   $portalNextBill, $portalDaysLeft, $portalDpoEnabled
 //
 // Sets on failure:
 //   $portalAuthError (string)  — templates should check this first
@@ -119,6 +119,18 @@ $portalCustomer = null;
 $portalFullClient = null;
 $portalService = null;
 $portalPlanName = '';
+// ── DPO Pay availability ────────────────────────────────────────────
+// Display only. It decides whether a Pay Now button is drawn; it decides
+// nothing about money. The server re-checks the flag, the invoice, the
+// owner and the amount on every initiate call, so a button that should not
+// be there is a cosmetic bug, not a financial one.
+$portalDpoEnabled = false;
+try {
+    require_once dirname(__DIR__, 2) . '/lib/DpoBootstrap.php';
+    $_pdDpo = DpoBootstrap::readiness($config);
+    $portalDpoEnabled = $_pdDpo['enabled'] && $_pdDpo['ready'];
+} catch (\Throwable $_pdE) {}
+
 $portalInvoices = [];
 
 // ── v4.20.7 — UCRM Client Zone deep-link base URL ──────────────────

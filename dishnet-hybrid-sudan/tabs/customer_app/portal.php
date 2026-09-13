@@ -1359,6 +1359,28 @@ elseif ($view === 'invoice_detail'):
     <?php endif; ?>
   </div>
 
+  <?php if (!empty($portalDpoEnabled) && $inv['status'] !== 'paid' && $inv['due'] > 0): ?>
+  <!-- Pay Now. The amount shown is the cached outstanding; the SERVER re-reads
+       the invoice live when this is pressed, so what is charged is whatever is
+       actually owed at that moment — not this figure, and never a figure the
+       browser could send. -->
+  <div class="sec-lbl" style="margin-top:18px">Pay this invoice</div>
+  <div class="list-card" style="padding:14px 16px">
+    <button id="dpo-pay-btn" onclick="DishNet.payNow(<?= (int)$inv['id'] ?>)"
+      style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:15px;
+             background:var(--dark);color:#fff;border:none;border-radius:12px;
+             font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.2px">
+      <span id="dpo-pay-label">Pay Now · <?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?></span>
+    </button>
+    <div id="dpo-pay-err" style="display:none;margin-top:10px;padding:10px 12px;border-radius:9px;
+         background:var(--danger-bg,#FEF2F2);color:var(--danger-text,#B91C1C);font-size:12.5px;line-height:1.5"></div>
+    <div style="margin-top:10px;font-size:11.5px;color:var(--gray);text-align:center;line-height:1.5">
+      Card or mobile money. You will be taken to DPO Pay to complete payment —
+      DishNet never sees your card or PIN.
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- v4.12.20 — Invoice PDF + WhatsApp send -->
   <div class="sec-lbl" style="margin-top:18px">Invoice document</div>
   <div class="list-card" style="padding:4px">
@@ -6628,6 +6650,47 @@ window.DishNet = {
     u.searchParams.set('view', 'home');
     if (this._token) u.searchParams.set('token', this._token);
     location.href = u.toString();
+  },
+
+  // Pay an invoice through DPO Pay.
+  //
+  // It sends ONE thing: the invoice id. No amount — the server reads the
+  // invoice live and charges what is actually outstanding. A browser that
+  // could name the amount could name 1,000 instead of 299,000.
+  //
+  // The button disables on click so a double tap cannot open two attempts,
+  // and it stays disabled while the browser navigates away.
+  payNow: function(invoiceId) {
+    var btn = document.getElementById('dpo-pay-btn');
+    var lbl = document.getElementById('dpo-pay-label');
+    var err = document.getElementById('dpo-pay-err');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.style.opacity = '.6';
+    if (lbl) lbl.textContent = 'Processing payment…';
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+
+    this.apiFetch(location.pathname + '?page=api&action=dpo_initiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoice_id: invoiceId })
+    }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+      .then(function(res) {
+        if (res.ok && res.body && res.body.data && res.body.data.checkout_url) {
+          location.href = res.body.data.checkout_url;
+          return;
+        }
+        throw new Error((res.body && res.body.message) || 'Payment could not be started.');
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        if (lbl) lbl.textContent = 'Try again';
+        if (err) {
+          err.textContent = e.message || 'Payment could not be started. Please try again.';
+          err.style.display = 'block';
+        }
+      });
   },
 
   // Wrapper around fetch() that injects the active-account header + bearer token.
