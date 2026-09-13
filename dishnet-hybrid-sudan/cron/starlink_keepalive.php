@@ -42,6 +42,7 @@ require_once $pluginRoot . '/lib/bootstrap_data.php';
 require_once $pluginRoot . '/lib/PluginConfig.php';
 require_once $pluginRoot . '/lib/StarlinkSessionStore.php';
 require_once $pluginRoot . '/lib/StarlinkPortalConnector.php';
+require_once $pluginRoot . '/lib/StarlinkUsage.php';
 
 $dataDir = getDataDir($pluginRoot);
 $config  = PluginConfig::load($pluginRoot, $dataDir);
@@ -81,7 +82,42 @@ foreach ($accounts as $_ka_acct) {
     $conn = new StarlinkPortalConnector($store, $config);
     $r    = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
 
-    if (!empty($r['ok'])) continue;   // markOk() already ran inside the request
+    if (!empty($r['ok'])) {
+        // ── The second auth layer ────────────────────────────────────────
+        //
+        // Starlink authorises telemetryagg.* separately from the account
+        // endpoints. A cookie can pass the one this call just used and be
+        // rejected by the other — which is exactly what was happening here:
+        // starlink_session.php reported "session accepted YES" while every
+        // usage call answered 401 token_expired, minutes after an import.
+        //
+        // dishnet-data-report learned this the expensive way. Its v2.7.23 note
+        // says the Sessions tab showed 42 of 42 sessions alive while a sync
+        // took 279 telemetry 401s, and its heartbeat has probed both layers
+        // ever since.
+        //
+        // Using a layer is what keeps it alive, and the response carries
+        // rotated tokens that get() merges and stores. So keeping only the
+        // account layer warm let the telemetry one expire on its own — and a
+        // usage collector that runs hourly would find it dead every time.
+        $_ka_lines = [];
+        array_walk_recursive((array)($r['data'] ?? []), static function ($v) use (&$_ka_lines) {
+            $t = strtoupper(trim((string)$v));
+            if (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $_ka_lines[] = $t;
+        });
+        if ($_ka_lines !== []) {
+            sort($_ka_lines);
+            $_ka_tel = $conn->get(sprintf(StarlinkUsage::PATH,
+                rawurlencode($_ka_acct), rawurlencode($_ka_lines[0])));
+            if (empty($_ka_tel['ok']) && (int)$_ka_tel['code'] < 500) {
+                error_log('[starlink_keepalive] ' . $_ka_acct
+                        . ' passes the account layer but NOT telemetry: '
+                        . (string)$_ka_tel['error']
+                        . ' — usage collection will fail until a cookie is re-imported');
+            }
+        }
+        continue;   // markOk() already ran inside the request
+    }
 
     // A 5xx is Starlink's weather and costs the session nothing; the connector
     // has already decided that. Anything else is worth a line, because a

@@ -128,6 +128,14 @@ is_(strpos($ka, 'if ($restore !== \'\') $store->useAccount($restore)') !== false
 is_(preg_match('/^\s*exit\s*[(;]/m', $ka) === 0,
     'and still never exit()s — master.php includes it');
 
+// Starlink authorises telemetryagg separately. A keep-alive that exercises
+// only the account layer lets the telemetry one expire, which reads as
+// "session accepted YES" beside a usage call answering 401.
+is_(strpos($ka, 'StarlinkUsage::PATH') !== false,
+    'it also touches the TELEMETRY layer, not just the account one');
+is_(strpos($ka, 'NOT telemetry') !== false,
+    'and says so plainly when one layer passes and the other does not');
+
 // ── The swap: one cookie, every account ─────────────────────────────────
 //
 // Starlink selects the account from the starlink.com.account_number COOKIE,
