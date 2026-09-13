@@ -11,6 +11,7 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php --info     who the account is, and what it owes
  *   php tools/starlink_probe.php --usage    find the endpoint that returns data usage
  *   php tools/starlink_probe.php --usage --line SL-DF-...   test a line you name
+ *   php tools/starlink_probe.php --accounts  which accounts this ONE cookie can see
  *
  * Phase 1 ends here. This reads and prints; it stores no Starlink data, posts
  * nothing to the books, and changes nothing except the session's own
@@ -38,6 +39,115 @@ if (!$conn->isConfigured()) {
     echo "\n  No session imported yet.\n\n";
     echo "    docker exec -it ucrm php tools/starlink_session.php --import\n\n";
     exit(1);
+}
+
+// ── 0. Accounts: does one cookie see one account, or all of them? ────────
+//
+// It decides how much of the rest is trustworthy. dishnet-data-report was
+// built around one cookie PER ACCOUNT, and the finance plugin has a note
+// about a cookie that "can't see this account at all" — so that design
+// assumed one login, one account. But the API knows a managed-accounts
+// endpoint, which is the shape of one login managing many.
+//
+// It also decides whether a 404 means anything. Asked about a service line
+// on an account the cookie cannot see, a perfectly real endpoint answers
+// not_found — identically to one that does not exist. Every negative result
+// from --usage is worthless until this is settled.
+//
+// Nothing here assumes a field name. It walks whatever comes back and picks
+// out values SHAPED like Starlink identifiers, reporting the key each was
+// found under — so the answer and the field names arrive together, and
+// neither is guessed.
+if (in_array('--accounts', array_slice($argv, 1), true)) {
+    $walk = static function ($v, string $key, array &$acc, array &$lines) use (&$walk): void {
+        if (is_array($v)) {
+            foreach ($v as $k => $sub) $walk($sub, (string)$k, $acc, $lines);
+            return;
+        }
+        if (!is_string($v)) return;
+        $t = strtoupper(trim($v));
+        if (preg_match('/^ACC-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $acc[$t][$key] = true;
+        elseif (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $lines[$t][$key] = true;
+    };
+
+    $accounts = []; $lines = []; $answered = 0;
+    foreach ([
+        '/api/webagg/v2/accounts/service-lines?limit=200&page=0&isConverting=false&onlyActive=false',
+        '/api/accounts/v1/accounts/service-line-numbers',
+        '/api/accounts/v1/managed-accounts/settings',
+    ] as $path) {
+        $d    = $conn->raw('GET', $path);
+        $code = (int)$d['code'];
+        $body = (string)($d['body'] ?? '');
+        $data = json_decode($body, true);
+        $ok   = $code === 200 && is_array($data);
+        printf("\n  %-3d %s\n", $code, $path);
+        if (!$ok) {
+            echo "      " . ($code === 200 ? 'NOT JSON — the sign-in page' : substr($d['snippet'], 0, 90)) . "\n";
+            continue;
+        }
+        $answered++;
+        $a = []; $l = [];
+        $walk($data, '', $a, $l);
+        printf("      %d account(s), %d service line(s)\n", count($a), count($l));
+        foreach ($a as $k => $keys) { $accounts[$k] = true; }
+        foreach ($l as $k => $keys) { $lines[$k] = true; }
+        // The key names are worth having: a collector maps them later.
+        $keyNames = [];
+        foreach ($a as $keys) foreach (array_keys($keys) as $kn) if ($kn !== '') $keyNames[$kn] = true;
+        foreach ($l as $keys) foreach (array_keys($keys) as $kn) if ($kn !== '') $keyNames[$kn] = true;
+        if ($keyNames) echo "      found under: " . implode(', ', array_keys($keyNames)) . "\n";
+    }
+
+    if ($answered === 0) {
+        echo "\n  Nothing answered with JSON. The session is not live — import a fresh\n";
+        echo "  cookie and run this again before trusting any other result.\n\n";
+        exit(1);
+    }
+
+    echo "\n  ── What this ONE cookie can see ──\n\n";
+    printf("    accounts       %d\n", count($accounts));
+    foreach (array_keys($accounts) as $a) echo "                   {$a}\n";
+    printf("    service lines  %d\n", count($lines));
+
+    // The question that matters: are the accounts on OUR OWN assignments
+    // among them? A line we cannot see is a line every probe result about it
+    // was meaningless for.
+    require_once $root . '/lib/StoreInterface.php';
+    require_once $root . '/lib/JsonStore.php';
+    require_once $root . '/lib/SqliteStore.php';
+    require_once $root . '/lib/EquipmentAssignment.php';
+    $ours = [];
+    try {
+        $ea = EquipmentAssignment::fromStore(SqliteStore::create($dataDir));
+        foreach ($ea->liveAssignments() as $as) {
+            $an = strtoupper(trim((string)($as['starlink_account'] ?? '')));
+            $sl = strtoupper(trim((string)($as['starlink_service_line'] ?? '')));
+            if ($an !== '' || $sl !== '') $ours[] = [$an, $sl];
+        }
+    } catch (\Throwable $e) {}
+
+    if ($ours === []) {
+        echo "\n    No live assignment carries a Starlink account or line to check.\n";
+    } else {
+        echo "\n  ── Our own assignments, against that ──\n\n";
+        foreach ($ours as [$an, $sl]) {
+            $seenA = $an !== '' && isset($accounts[$an]);
+            $seenL = $sl !== '' && isset($lines[$sl]);
+            printf("    %-26s %-24s %s\n", $sl !== '' ? $sl : '(no line)',
+                $an !== '' ? $an : '(no account)',
+                $seenL ? 'VISIBLE' : ($seenA ? 'account visible, line not listed' : 'NOT VISIBLE to this cookie'));
+        }
+        echo "\n    A line marked NOT VISIBLE cannot be probed with this cookie: a real\n";
+        echo "    endpoint and a made-up one both answer not_found for it.\n";
+    }
+
+    echo "\n  " . (count($accounts) > 1
+        ? 'MORE THAN ONE ACCOUNT — one cookie covers several, and per-account'
+          . "\n  cookies are not required."
+        : 'ONE ACCOUNT ONLY — this cookie sees a single account, so each other'
+          . "\n  account needs its own cookie, which is what data-report assumes.") . "\n\n";
+    exit(0);
 }
 
 // ── 0a. Usage: which endpoint actually returns consumption? ──────────────
