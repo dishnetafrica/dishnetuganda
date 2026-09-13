@@ -12,6 +12,8 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php --usage    find the endpoint that returns data usage
  *   php tools/starlink_probe.php --usage --line SL-DF-...   test a line you name
  *   php tools/starlink_probe.php --accounts  which accounts this ONE cookie can see
+ *   php tools/starlink_probe.php --usage --line SL-... --account ACC-...
+ *                                           ask as another account on the SAME cookie
  *
  * Phase 1 ends here. This reads and prints; it stores no Starlink data, posts
  * nothing to the books, and changes nothing except the session's own
@@ -257,14 +259,30 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     $fromCookieAcct = strtoupper(trim((string)($store->load()['account_number'] ?? '')));
     if ($fromCookieAcct !== '') $acct = $fromCookieAcct;
 
+    // An account named on the command line wins. Starlink selects the account
+    // from the COOKIE, not the path, so naming one here also scopes the cookie
+    // to it — which is the whole difference between asking about another
+    // account and asking the wrong question about your own.
+    $iAcct = array_search('--account', $argsAll, true);
+    if ($iAcct !== false && isset($argsAll[$iAcct + 1])) {
+        $acct = strtoupper(trim((string)$argsAll[$iAcct + 1]));
+    }
+    if ($acct !== '') $conn->scopeTo($acct);
+
     echo "\n  testing with service line   {$line}\n";
     echo "  taken from                  {$from}\n";
-    if ($acct !== '') echo "  on account                  {$acct}\n";
+    if ($acct !== '') {
+        echo "  asking as account           {$acct}\n";
+        echo "  cookie scoped to it         yes (starlink.com.account_number swapped)\n";
+    }
 
     // A line this cookie cannot see makes every result below meaningless: a
     // real endpoint and an invented one both answer not_found for it. That
     // already happened once and cost a whole round, so check before sweeping
     // rather than reasoning about it afterwards.
+    // Asked as the account under test: the listing is scoped by the cookie, so
+    // checking visibility without the swap would report the wrong account's
+    // lines and call a perfectly reachable line invisible.
     $visible = null;
     $vd = $conn->raw('GET', '/api/accounts/v1/accounts/service-line-numbers');
     $vj = json_decode((string)($vd['body'] ?? ''), true);
@@ -439,6 +457,16 @@ if ($_su !== false) {
         echo "\n  --shape-usage needs a path, e.g. /api/webagg/v1/...\n\n";
         exit(2);
     }
+    // An /account/ACC-.../ segment in the path is also an instruction about
+    // WHICH account to ask as, because Starlink takes that from the cookie.
+    // Reading it out of the path and scoping the cookie to match means a
+    // pasted URL does what it looks like it does — the earlier cross-account
+    // 404 was this mismatch and nothing more.
+    if (preg_match('#/account/(ACC-[0-9A-Z-]+)#i', $path, $pm)) {
+        $conn->scopeTo($pm[1]);
+        echo "\n  asking as account " . strtoupper($pm[1]) . " (cookie scoped to match the path)\n";
+    }
+
     // raw(), not get(): request() refuses outright once the store has marked
     // the session as needing a re-import, and the whole point of this command
     // is to settle whether the server agrees with the store.

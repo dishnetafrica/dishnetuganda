@@ -128,5 +128,65 @@ is_(strpos($ka, 'if ($restore !== \'\') $store->useAccount($restore)') !== false
 is_(preg_match('/^\s*exit\s*[(;]/m', $ka) === 0,
     'and still never exit()s — master.php includes it');
 
+// ── The swap: one cookie, every account ─────────────────────────────────
+//
+// Starlink selects the account from the starlink.com.account_number COOKIE,
+// not from the path. dishnet-data-report has done it this way for years and
+// its own commit message says so: "primary cookie with account_number swap,
+// always." Sending an account in the path that the cookie disagrees with gets
+// a not_found that looks exactly like a missing endpoint — which produced two
+// wrong conclusions here before the mechanism was read rather than inferred.
+require_once dirname(__DIR__) . '/lib/StarlinkPortalConnector.php';
+
+echo "\nThe account_number swap\n";
+$jar = '_ga=x; Starlink.Com.Sso=abc; starlink.com.account_number=' . A1 . '; __stripe_mid=y';
+$sw  = StarlinkPortalConnector::swapAccount($jar, strtolower(A2));
+is_(strpos($sw, 'starlink.com.account_number=' . A2) !== false, 'the account is replaced and upper-cased');
+is_(strpos($sw, A1) === false,                    'the old account is gone');
+is_(strpos($sw, 'Starlink.Com.Sso=abc') !== false, 'every other cookie survives');
+is_(strpos($sw, '__stripe_mid=y') !== false,       'including ones after it');
+t('and only one account segment remains',
+    substr_count($sw, 'account_number='), 1);
+
+$none = '_ga=x; Starlink.Com.Sso=abc';
+is_(strpos(StarlinkPortalConnector::swapAccount($none, A2),
+    '; starlink.com.account_number=' . A2) !== false,
+    'a jar without the segment gets one appended');
+
+t('an empty account changes nothing', StarlinkPortalConnector::swapAccount($jar, ''), $jar);
+t('an empty cookie stays empty',      StarlinkPortalConnector::swapAccount('', A2), '');
+t('swapping twice does not stack',
+    substr_count(StarlinkPortalConnector::swapAccount(
+        StarlinkPortalConnector::swapAccount($jar, A2), A1), 'account_number='), 1);
+
+echo "\nScoping a connector, without corrupting the stored session\n";
+[$s6, $base6] = freshStore();
+$s6->importCookie($jar, 'tester', '', A1);
+$seen = [];
+$conn = new StarlinkPortalConnector($s6, [], function (string $m, string $u, array $h) use (&$seen) {
+    foreach ($h as $line) {
+        if (stripos($line, 'cookie:') === 0) $seen[] = $line;
+    }
+    return ['code' => 200, 'body' => '{"ok":true}', 'cookies' => [], 'headers' => []];
+});
+$conn->raw('GET', '/api/anything');
+is_(strpos($seen[0] ?? '', A1) !== false, 'unscoped, it asks as the cookie\'s own account', $seen[0] ?? '(no header)');
+
+$conn->scopeTo(A2);
+$conn->raw('GET', '/api/anything');
+is_(strpos($seen[1] ?? '', A2) !== false, 'scoped, it asks as the other account', $seen[1] ?? '(no header)');
+t('and describe() says so',  strpos($conn->describe(), A2) !== false, true);
+t('scopedTo() reports it',   $conn->scopedTo(), A2);
+
+// The swap must never be written back: the stored cookie keeps the account it
+// was signed in as, or a rotated-cookie merge quietly moves the session.
+$s6->useAccount(A1);
+is_(strpos($s6->cookie(), A1) !== false && strpos($s6->cookie(), A2) === false,
+    'the STORED cookie still says ' . A1 . ' — the swap never persisted', $s6->cookie());
+
+$conn->scopeTo('');
+$conn->raw('GET', '/api/anything');
+is_(strpos($seen[2] ?? '', A1) !== false, 'clearing the scope goes back to the cookie\'s own account');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
