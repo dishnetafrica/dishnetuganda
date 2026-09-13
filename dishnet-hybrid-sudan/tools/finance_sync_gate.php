@@ -53,10 +53,11 @@ require_once $root . '/lib/EquipmentAssignment.php';
 require_once $root . '/lib/CrmApiClient.php';
 
 $args = array_slice($argv, 1);
-$fix  = in_array('--fix', $args, true);
+$fix     = in_array('--fix', $args, true);
+$fixPlan = in_array('--fix-plan', $args, true);
 foreach ($args as $a) {
-    if (strpos($a, '--') === 0 && $a !== '--fix') {
-        fwrite(STDERR, "\n  Unknown option: {$a}\n  Known: --fix\n\n"); exit(2);
+    if (strpos($a, '--') === 0 && $a !== '--fix' && $a !== '--fix-plan') {
+        fwrite(STDERR, "\n  Unknown option: {$a}\n  Known: --fix, --fix-plan\n\n"); exit(2);
     }
 }
 
@@ -86,6 +87,19 @@ function financeStarlink(string $planName): bool {
     return stripos($planName, 'tarlink') !== false;
 }
 /**
+ * The plan name Finance judges, reproduced exactly:
+ *
+ *     $planName = $svc['servicePlanName'] ?? $svc['name'] ?? '';
+ *
+ * Note ??, not ||. When servicePlanName is present the service name is never
+ * consulted, even if servicePlanName is an empty string. Checking both fields
+ * with an OR -- which this tool did at first -- reports a service ready that
+ * Finance will skip.
+ */
+function financePlanName(array $svc): string {
+    return (string)($svc['servicePlanName'] ?? $svc['name'] ?? '');
+}
+/**
  * Whether Finance's regex could ever match this kit number.
  *
  * KIT[A-Z0-9]{8,} needs eight characters after the letters KIT. A shorter kit
@@ -103,10 +117,16 @@ if ($live === []) {
 }
 
 echo "\n", str_repeat('=', 74), "\n";
-echo "  FINANCE SYNC GATE", $fix ? "  —  FIX" : "  —  REPORT ONLY (add --fix to write)", "\n";
+$mode = [];
+if ($fix)     $mode[] = 'FIX NOTE';
+if ($fixPlan) $mode[] = 'RENAME PLAN';
+echo "  FINANCE SYNC GATE  —  ",
+     $mode === [] ? 'REPORT ONLY  (--fix writes the kit number, --fix-plan renames the plan)'
+                  : implode(' + ', $mode), "\n";
 echo str_repeat('=', 74), "\n";
 
 $blocked = 0; $written = 0; $ready = 0;
+$planDone = [];   // plan ids renamed in this run — two kits on one plan rename it once
 
 foreach ($live as $a) {
     $kit  = strtoupper(trim((string)$a['kit_serial']));
@@ -130,22 +150,26 @@ foreach ($live as $a) {
     }
 
     $status   = (int)($svc['status'] ?? 0);
-    $planName = (string)($svc['servicePlanName'] ?? '');
+    $planName = financePlanName($svc);
     $svcName  = (string)($svc['name'] ?? '');
     $note     = (string)($svc['note'] ?? '');
     $noteText = financeNoteText($svc);
     $found    = financeKit($noteText);
 
     $gActive   = ($status === 1 || $status === 3);
-    $gStarlink = financeStarlink($planName) || financeStarlink($svcName);
+    $gStarlink = financeStarlink($planName);
     $gKit      = ($found === $kit);
 
     printf("    service #%-6d status %d       %s\n", $sid, $status,
            $gActive ? 'ACTIVE — passes' : 'NOT ACTIVE — Finance skips it (needs 1 or 3)');
-    printf("    servicePlanName  %s\n", $planName === '' ? '(none)' : $planName);
     printf("    service name     %s\n", $svcName === '' ? '(none)' : $svcName);
-    printf("    \"starlink\" in either?  %s\n",
-           $gStarlink ? 'yes — passes' : 'NO — Finance skips it');
+    printf("    plan Finance judges  %s\n", $planName === '' ? '(none)' : $planName);
+    printf("    \"starlink\" in it?      %s\n",
+           $gStarlink ? 'yes — passes' : 'NO — Finance skips this service');
+    if (!$gStarlink && financeStarlink($svcName)) {
+        echo "    (the service NAME does contain it, but Finance reads\n";
+        echo "     servicePlanName ?? name — so the name is never reached.)\n";
+    }
     printf("    kit number findable?   %s\n",
            $gKit ? 'yes — passes' : ($found === '' ? 'NO — no KIT… in any field Finance scans'
                                                    : 'NO — it finds ' . $found . ', not this kit'));
@@ -156,13 +180,43 @@ foreach ($live as $a) {
     }
 
     if (!$gStarlink) {
+        $planId  = (int)($svc['servicePlanId'] ?? 0);
+        $newPlan = 'Starlink ' . ($planName !== '' ? $planName : 'Residential');
+
         echo "\n    Finance only looks at services whose plan name contains \"starlink\".\n";
         echo "    This one does not, so it is invisible to the sync however the kit\n";
-        echo "    number is recorded. Renaming a plan changes what every customer on\n";
-        echo "    it sees on their invoice, so it is not something to change from here.\n";
-        echo "    Remedy: in uCRM, name the service plan so it contains Starlink —\n";
-        echo "    e.g. \"Starlink ", ($planName !== '' ? $planName : 'Residential'), "\".\n";
-        $blocked++;
+        echo "    number is recorded.\n\n";
+        echo "      plan #", ($planId > 0 ? (string)$planId : '?'), "  now    \"", $planName, "\"\n";
+        echo "                 would become \"", $newPlan, "\"\n\n";
+        echo "    This renames the PLAN in uCRM. The plan name appears on invoices and\n";
+        echo "    in the client zone for every service on it, not only this one. Only\n";
+        echo "    the name is sent — no price, no billing period, nothing else.\n";
+
+        if (!$fixPlan) {
+            echo "    (not changed — pass --fix-plan to rename it)\n";
+            $blocked++;
+        } elseif ($planId <= 0) {
+            echo "    BLOCKED  uCRM did not say which plan this service is on.\n";
+            $blocked++;
+        } elseif (isset($planDone[$planId])) {
+            echo "    already renamed earlier in this run\n";
+            $gStarlink = true;
+        } else {
+            $pres = $crm->patch('service-plans/' . $planId, ['name' => $newPlan]);
+            // uCRM accepting the PATCH is not the same as the name having
+            // changed, so judge the reply by Finance's own test.
+            $got  = is_array($pres) ? (string)($pres['name'] ?? '') : '';
+            if ($got !== '' && financeStarlink($got)) {
+                echo "    RENAMED  the plan is now \"", $got, "\" — Finance will see it.\n";
+                $planDone[$planId] = true;
+                $written++;
+                $gStarlink = true;
+            } else {
+                echo "    FAILED   uCRM did not rename the plan",
+                     $got !== '' ? " — it still reads \"" . $got . "\".\n" : ".\n";
+                $blocked++;
+            }
+        }
     }
 
     if (!$gKit && financeTooShort($kit)) {
@@ -187,6 +241,7 @@ foreach ($live as $a) {
                 if ($after === $kit) {
                     echo "    WRITTEN  uCRM now carries the kit number where Finance looks.\n";
                     $written++;
+                    $gKit = true;
                 } else {
                     echo "    UNSURE   uCRM accepted the change but the kit is still not\n";
                     echo "             findable in what it returned. Nothing else was done.\n";
@@ -194,6 +249,14 @@ foreach ($live as $a) {
                 }
             }
         }
+    }
+
+    // Re-judged after the remedies, because a gate this run just cleared is
+    // the whole point of running with a flag. Only a kit that passes all
+    // three now is one Finance will actually create.
+    if ($gActive && $gStarlink && $gKit) {
+        echo "    NOW READY  all three gates pass — Finance's sync will create this kit.\n";
+        $ready++;
     }
 }
 

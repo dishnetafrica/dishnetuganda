@@ -74,18 +74,53 @@ is_(financeStarlink('Residential Lite ( up to 100 Mbps)') === false,
     'our Uganda plan does NOT match — which is why Finance skips it');
 is_(financeStarlink('') === false, 'an empty plan name does not match');
 
-echo "\nIt writes one field, and only to uCRM\n";
-// The kit number goes where uCRM services already carry it in South Sudan.
-// Anything else written from here would be us deciding something that is not
-// ours to decide.
-preg_match_all('/->patch\(\s*([^,]+),\s*(\[[^\]]*\])/', $code, $pm);
-t('exactly one patch call', count($pm[0]), 1);
-is_(strpos($pm[1][0] ?? '', 'clients/services/') !== false, 'against the service endpoint');
-t('carrying only the note', trim($pm[2][0] ?? ''), "['note' => \$newNote]");
+echo "\nIt reproduces Finance's plan-name expression, ?? and not ||\n";
+// $planName = $svc['servicePlanName'] ?? $svc['name'] ?? '';
+// This tool first checked both fields with an OR and reported a service READY
+// that Finance will skip. ?? stops at the first key that is set, so a present
+// servicePlanName means the service name is never consulted at all.
+t('servicePlanName wins outright',
+  financePlanName(['servicePlanName' => 'Residential Lite', 'name' => 'Starlink Residential']),
+  'Residential Lite');
+is_(financeStarlink(financePlanName(
+        ['servicePlanName' => 'Residential Lite ( up to 100 Mbps)',
+         'name' => 'Site : KIT404246364BX6  Service Plan: Starlink Residential'])) === false,
+    'the real Uganda service FAILS the gate, however Starlink-ish its name is');
+t('an empty servicePlanName does not fall through either',
+  financePlanName(['servicePlanName' => '', 'name' => 'Starlink Residential']), '');
+t('only an absent one reaches the name',
+  financePlanName(['name' => 'Starlink Residential']), 'Starlink Residential');
+t('and absent both is empty', financePlanName([]), '');
 
-is_(strpos($code, "'servicePlanName' =>") === false, 'it never writes a plan name');
-is_(strpos($code, "'price' =>") === false, 'and never a price');
+echo "\nIt writes two fields at most, each behind its own flag\n";
+// The note carries the kit number. The plan name is a separate, louder change
+// -- it shows on every invoice for every service on that plan -- so it has its
+// own flag and is never done as a side effect of --fix.
+preg_match_all('/->patch\(\s*([^,]+),\s*(\[[^\]]*\])/', $code, $pm);
+t('exactly two patch calls', count($pm[0]), 2);
+$patches = [];
+foreach ($pm[1] as $i => $path) $patches[trim($pm[2][$i])] = trim($path);
+is_(isset($patches["['note' => \$newNote]"]), 'one sends only the note');
+is_(strpos($patches["['note' => \$newNote]"] ?? '', 'clients/services/') !== false,
+    'to the service endpoint');
+is_(isset($patches["['name' => \$newPlan]"]), 'the other sends only the plan name');
+is_(strpos($patches["['name' => \$newPlan]"] ?? '', 'service-plans/') !== false,
+    'to the service-plan endpoint');
+
+is_(strpos($code, "'price' =>") === false, 'neither ever carries a price');
 is_(preg_match('/->(post|put|delete)\(/', $code) === 0, 'no other write verb is used');
+
+echo "\nThe plan rename is opted into separately\n";
+is_(preg_match('/\$fixPlan\s*=\s*in_array\(\'--fix-plan\'/', $code) === 1, '--fix-plan exists');
+is_(preg_match('/if\s*\(!\$fixPlan\)/', $code) === 1, 'and without it the rename is skipped');
+is_(preg_match('/\$fix\s*\|\|\s*\$fixPlan|\$fixPlan\s*\|\|\s*\$fix/', $code) === 0,
+    'the two flags are never conflated');
+is_(strpos($src, 'every service on it, not only this one') !== false,
+    'the blast radius is stated before it is done');
+is_(preg_match('/financeStarlink\(\$got\)/', $code) === 1,
+    'the rename is judged by Finance\'s own test on what uCRM returned');
+is_(strpos($code, '$planDone[$planId]') !== false,
+    'a plan shared by two kits is renamed once');
 
 echo "\nThe note is appended, never replaced\n";
 // A service note can hold an engineer's comment. Overwriting it to insert a
