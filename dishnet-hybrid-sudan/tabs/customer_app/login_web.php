@@ -25,6 +25,20 @@ if (file_exists($_manifestFile)) {
 require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
 $legalVer = dnLegalVersion();
 
+// The country hint. This page used to tell every customer "South Sudan: +211"
+// wherever it ran, which on the Uganda install is an instruction to type the
+// wrong country's number on the one screen where they cannot know better.
+require_once dirname(__DIR__, 2) . '/lib/PortalLocale.php';
+require_once dirname(__DIR__, 2) . '/lib/ConfigVault.php';
+require_once dirname(__DIR__, 2) . '/lib/bootstrap_data.php';
+// Through the vault: public.php builds $config from kyc_config.json alone, and
+// currency_code is a vault key — so an install whose currency lives only in the
+// vault would fall back to the wrong country here.
+$_lwRoot = dirname(__DIR__, 2);
+$dial = PortalLocale::dialHint(ConfigVault::fill(
+    $_lwRoot, getDataDir($_lwRoot), is_array($config ?? null) ? $config : [],
+    ['currency_code', 'cashbook_base_currency']));
+
 // Check if already logged in via cookie
 $existingToken = $_COOKIE['dn_customer_token'] ?? '';
 if ($existingToken) {
@@ -156,8 +170,9 @@ body{display:flex;flex-direction:column;min-height:100vh}
       <div class="field">
         <label>Phone number</label>
         <div class="phone-wrap">
-          <input type="tel" id="phone" placeholder="+211 9XX XXX XXX" autofocus>
-          <div class="phone-hint">Include country code. South Sudan: <strong>+211</strong></div>
+          <input type="tel" id="phone" placeholder="<?= htmlspecialchars($dial['example'], ENT_QUOTES, 'UTF-8') ?>" autofocus>
+          <div class="phone-hint">Include country code. <?= htmlspecialchars($dial['country'], ENT_QUOTES, 'UTF-8') ?>:
+            <strong><?= htmlspecialchars($dial['code'], ENT_QUOTES, 'UTF-8') ?></strong></div>
         </div>
       </div>
       <button class="btn" id="btn-phone" onclick="sendOtp()" style="margin-top:22px">Send code via WhatsApp</button>
