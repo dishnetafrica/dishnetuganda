@@ -90,5 +90,26 @@ $adminBlock = substr($nav, (int)strpos($nav, 'if($isAdmin)'));
 is_(strpos($adminBlock, 'tab=starlink_session') !== false,
     'inside the admin-only section of the sidebar');
 
+echo "\nImporting collects, because that is the only moment a session is warm\n";
+// A Starlink token lasts minutes and USING it does not extend it: imported
+// 07:58:08, last accepted 08:05:03, expired — with the keep-alive dispatching
+// on schedule throughout. So an hourly collector finds a dead session almost
+// every time, and the paste is the only reliable trigger.
+is_(strpos($page, 'function ssCollectNow') !== false, 'the page can collect');
+is_(preg_match('/verify\(\).*\n(.*\n)*?.*ssCollectNow/', $page) === 1,
+    'and does it straight after the import is VERIFIED, not before');
+is_(strpos($page, "=== 'collect'") !== false && strpos($page, 'value="collect"') !== false,
+    'with a button for the window just after a paste');
+is_(strpos($page, 'using it does not extend it') !== false,
+    'and the page tells the operator why, so the cadence is not a mystery');
+
+// Collecting must go through the same guards as everything else here.
+$collectBlock = substr($page, (int)strpos($page, "=== 'collect'"), 200);
+is_(strpos($collectBlock, 'csrfCheck()') !== false, 'the collect action checks CSRF too');
+is_(strpos($page, "\$u->save(\$dataDir, \$res['rows'])") !== false,
+    'it saves through StarlinkUsage, so the empty-file refusal still applies');
+is_(strpos($page, 'no usage collected') !== false,
+    'and reports a failed collection rather than showing success');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -26,6 +26,54 @@ require_once dirname(__DIR__, 2) . '/lib/bootstrap_data.php';
 require_once dirname(__DIR__, 2) . '/lib/PluginConfig.php';
 require_once dirname(__DIR__, 2) . '/lib/StarlinkSessionStore.php';
 require_once dirname(__DIR__, 2) . '/lib/StarlinkPortalConnector.php';
+require_once dirname(__DIR__, 2) . '/lib/StoreInterface.php';
+require_once dirname(__DIR__, 2) . '/lib/JsonStore.php';
+require_once dirname(__DIR__, 2) . '/lib/SqliteStore.php';
+require_once dirname(__DIR__, 2) . '/lib/EquipmentAssignment.php';
+require_once dirname(__DIR__, 2) . '/lib/StarlinkUsage.php';
+
+/**
+ * Collect usage NOW, for whichever account is selected.
+ *
+ * ── WHY THIS RUNS AT IMPORT RATHER THAN ON A SCHEDULE ───────────────────
+ *
+ * A Starlink access token lasts minutes, and USING it does not extend it.
+ * Measured on this box: imported 07:58:08, last accepted 08:05:03, expired —
+ * seven minutes, with the keep-alive dispatching on schedule throughout and
+ * the SSO session still valid. No endpoint we have found mints a fresh access
+ * token from that SSO session.
+ *
+ * So an hourly collector will find a dead session almost every time, and the
+ * only moment a session is reliably alive is the moment somebody has just
+ * pasted one. That is when the fetch should happen.
+ *
+ * Billing cycles move once a day, so "paste a cookie, get today's usage" is a
+ * perfectly good cadence — it just has to be the paste that triggers it,
+ * rather than a clock that cannot know when the session is warm.
+ */
+function ssCollectNow(StarlinkSessionStore $store, array $config, string $dataDir): array
+{
+    try {
+        $ea   = EquipmentAssignment::fromStore(SqliteStore::create($dataDir));
+        $live = $ea->liveAssignments();
+    } catch (\Throwable $e) {
+        return ['ok' => false, 'msg' => 'could not read assignments: ' . $e->getMessage()];
+    }
+    if ($live === []) return ['ok' => false, 'msg' => 'nothing is bound to a customer yet'];
+
+    $u   = new StarlinkUsage($store, $config);
+    $res = $u->collect($live);
+    if ($res['rows'] === []) {
+        $why = [];
+        foreach ($res['report'] as $r) $why[] = $r['kit'] . ': ' . $r['why'];
+        return ['ok' => false, 'msg' => 'no usage collected — ' . implode('; ', array_slice($why, 0, 3))];
+    }
+    $w = $u->save($dataDir, $res['rows']);
+    return !empty($w['ok'])
+        ? ['ok' => true, 'msg' => $w['written'] . ' usage row(s) collected and saved. '
+                                . 'The Fleet screen reads them now.']
+        : ['ok' => false, 'msg' => (string)$w['why']];
+}
 
 $ssRoot    = dirname(__DIR__, 2);
 $ssDataDir = getDataDir($ssRoot);
@@ -50,18 +98,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         // Prove it before calling it good — an accepted paste that Starlink
         // rejects is worse than a rejected paste, because nothing looks wrong.
         $v = (new StarlinkPortalConnector($ssStore, $ssConfig))->verify();
-        $ssFlash = !empty($v['ok'])
-            ? ['good', 'Imported ' . count($r['names']) . ' cookie(s) for '
-                     . $r['account'] . ' — and Starlink accepted it. '
-                     . $r['accounts_held'] . ' account(s) held.']
-            : ['warn', 'Imported ' . count($r['names']) . ' cookie(s) for ' . $r['account']
+        if (empty($v['ok'])) {
+            $ssFlash = ['warn', 'Imported ' . count($r['names']) . ' cookie(s) for ' . $r['account']
                      . ', but Starlink did NOT accept it: ' . (string)($v['error'] ?? 'unknown')
                      . '. Sign in again on starlink.com and copy the header fresh.'];
+        } else {
+            // Collect immediately, while the session is certainly alive. It has
+            // minutes, not hours, and this is the only moment we can be sure of.
+            $c = ssCollectNow($ssStore, $ssConfig, $ssDataDir);
+            $ssFlash = [$c['ok'] ? 'good' : 'warn',
+                'Imported ' . count($r['names']) . ' cookie(s) for ' . $r['account']
+                . ' — Starlink accepted it. ' . $r['accounts_held'] . ' account(s) held. '
+                . $c['msg']];
+        }
     }
     $_POST['ss_cookie'] = '';   // never round-trips into the form
 }
 
 // ── Switch / forget ─────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['ss_action'] ?? '') === 'collect' && csrfCheck()) {
+    $c = ssCollectNow($ssStore, $ssConfig, $ssDataDir);
+    $ssFlash = [$c['ok'] ? 'good' : 'warn', $c['msg']];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_POST['ss_action'] ?? '') === 'use' && csrfCheck()) {
     $a = (string)($_POST['ss_account'] ?? '');
@@ -148,10 +208,20 @@ textarea.ss-paste{width:100%;min-height:110px;font-family:'Courier New',monospac
       <textarea class="ss-paste" name="ss_cookie" spellcheck="false"
                 placeholder="cookie: _ga=…; Starlink.Com.Sso=…; starlink.com.account_number=ACC-DF-…"></textarea>
       <div style="margin-top:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <button class="ss-btn" type="submit">Import</button>
+        <button class="ss-btn" type="submit">Import &amp; collect usage</button>
         <span class="ss-id">Stored encrypted. Never displayed again, here or anywhere.</span>
       </div>
     </form>
+    <div class="ss-note ss-amber" style="margin:14px 0 0;">
+      <strong>A Starlink token lasts minutes, and using it does not extend it.</strong>
+      Measured here: imported 07:58:08, last accepted 08:05:03, expired — seven minutes,
+      with the keep-alive running throughout and the SSO session still valid. Nothing we
+      have found mints a fresh access token from that SSO session.
+      <br><br>
+      So importing collects usage <em>immediately</em>, while the session is certainly
+      alive. Billing figures move once a day, so pasting a cookie when you want today's
+      numbers is the workable cadence — a clock cannot know when a session is warm.
+    </div>
   </div>
 
   <div class="ss-card">
@@ -207,6 +277,12 @@ textarea.ss-paste{width:100%;min-height:110px;font-family:'Courier New',monospac
         <?php endforeach; $ssStore->useAccount($active); ?>
         </tbody>
       </table>
+      <form method="post" style="margin-top:12px;">
+        <?= csrfField() ?><input type="hidden" name="ss_action" value="collect">
+        <button class="ss-btn" type="submit">Collect usage now</button>
+        <span class="ss-id" style="margin-left:10px;">Only works while a session is still
+          warm — within a few minutes of a paste.</span>
+      </form>
     <?php endif; ?>
   </div>
 
