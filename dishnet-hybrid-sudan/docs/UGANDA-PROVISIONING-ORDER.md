@@ -193,6 +193,29 @@ its usage is empty, the fix is its Cookie Sync, not anything here.
     php tools/starlink_accounts_list.php     # accounts, and which Finance lacks
     php tools/binding_doctor.php             # one kit end to end
 
+## Container dependency: poppler-utils
+
+`dishnet-starlink-finance` extracts text from uploaded Starlink invoice PDFs
+with `pdftotext`, which is not in the uCRM image. Without it, its
+`PDFTextExtractor::commandExists()` passes the `null` from a failed `which`
+straight into `trim()`, and PHP 8 turns a missing dependency into a fatal that
+takes the whole page down:
+
+    Uncaught TypeError: trim(): Argument #1 ($string) must be of type string,
+    null given in .../lib/PDFTextExtractor.php:65
+
+Install it in the container:
+
+    docker exec -u root ucrm apk add --no-cache poppler-utils
+
+**This does not survive a container rebuild.** A uCRM upgrade or an Easypanel
+redeploy gives a fresh container without poppler and the same fatal returns.
+Re-run it after any such change, or put it in the image.
+
+Nothing in this plugin uses poppler; the dependency is Finance's alone. And
+installing it hides rather than fixes the `trim(null)`, which will do the same
+thing for any other binary that plugin probes for and does not find.
+
 ## Figures not to trust yet
 
 Finance's dashboard shows monthly profit equal to monthly revenue at 100%
