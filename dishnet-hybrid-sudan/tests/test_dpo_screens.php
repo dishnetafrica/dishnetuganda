@@ -138,5 +138,46 @@ is_(strpos($admin, "DishNet absorbs DPO's fee") !== false,
     'the fee arrangement is stated on the screen');
 is_(strpos($admin, 'Match on the') !== false, 'and it says what to reconcile on');
 
+echo "\nThe portal reads the same binding the admin screens trust\n";
+// The bug: the portal resolved a customer to a kit through sl_kits.json, a
+// sibling plugin's file. On the Uganda box dishnet-starlink-finance is not
+// installed at all and dishnet-data-report has no sl_kits.json, so a bound
+// customer whose usage WE had collected saw nothing — while the Fleet screen
+// showed 52 GB for the same kit.
+is_(strpos($pdata, 'EquipmentAssignment::fromStore($store)') !== false,
+    'it resolves the customer through equipment_assignments');
+is_(strpos($pdata, 'new KitUsage(') !== false,
+    'and reads usage through KitUsage, which prefers our own collection');
+is_(preg_match("/if \\(!empty\\(\\\$allUsage\\) && \\(!empty\\(\\\$kitsData\\) \\|\\| !empty\\(\\\$customerKits\\)\\)\\)/", $pdata) === 1,
+    'and no longer requires the sibling kit file to be present at all');
+is_(strpos($pdata, "\$pdEa->forClient(\$portalCustomerId)") !== false,
+    'the assignment is read for this customer specifically');
+
+echo "\nAnd the sibling chain still works where it is the collector\n";
+// South Sudan's box IS collected by the sibling. That path must be untouched.
+is_(strpos($pdata, "SiblingPlugin::readJsonFromAny(\n            ['dishnet-starlink-finance', 'dishnet-data-report'], 'sl_kits.json')") !== false
+    || strpos($pdata, "'dishnet-starlink-finance', 'dishnet-data-report'], 'sl_kits.json'") !== false,
+    'sl_kits.json is still read');
+is_(strpos($pdata, "readJsonOrEmpty('dishnet-data-report', 'sl_svc_cache.json')") !== false,
+    'and the service-line cache still contributes');
+
+echo "\nA case difference cannot silently drop a customer's usage\n";
+is_(preg_match("/\\\$uKit = strtoupper\\(trim\\(/", $pdata) === 1, 'usage kit serials are normalised');
+is_(preg_match("/\\\$uSl  = strtoupper\\(trim\\(/", $pdata) === 1, 'and so are service lines');
+
+echo "\nThe usage source is reported honestly\n";
+// It was basename(dirname($uf)) against a variable that never existed, so the
+// portal always claimed an empty source.
+// Parsed, not grepped: the comment explaining this bug necessarily names the
+// variable, and a substring search would fail on the explanation rather than
+// on the code.
+$pdUf = 0;
+foreach (token_get_all($pdata) as $pdT) {
+    if (is_array($pdT) && $pdT[0] === T_VARIABLE && $pdT[1] === '$uf') $pdUf++;
+}
+t('the undefined variable is gone from the code', $pdUf, 0);
+is_(strpos($pdata, "'source' => \$pdSource") !== false,
+    'and the real collector is named instead');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
