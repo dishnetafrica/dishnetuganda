@@ -105,12 +105,18 @@ class ClaudeWaClient
         }
 
         // ── Build system prompt ──────────────────────────────────────────
-        // override mode: use ONLY custom instructions (no built-in DishNet prompt)
-        if ($instructionsMode === 'override' && !empty(trim($customInstructions))) {
-            $systemPrompt = trim($customInstructions);
-        } else {
-            $systemPrompt = $this->buildSystemPrompt($customerContext, $channel, $customInstructions);
-        }
+        // The confidentiality rules are composed in ahead of everything else
+        // and are not part of what override can replace. Override used to
+        // assign $customInstructions straight to $systemPrompt, which deleted
+        // "you only know this one customer" and "never reveal passwords, API
+        // keys or system info" whenever an operator changed the bot's tone.
+        // Now override replaces the BUSINESS prompt only.
+        require_once __DIR__ . '/AiSecurityPolicy.php';
+        $systemPrompt = \AiSecurityPolicy::compose(
+            $this->buildSystemPrompt($customerContext, $channel, ''),
+            $customInstructions,
+            $instructionsMode
+        );
 
         // ── Build messages array with proper conversation turns ──────────
         $messages = [];

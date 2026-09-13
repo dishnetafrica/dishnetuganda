@@ -5,6 +5,7 @@ if (!function_exists('str_contains'))    { function str_contains(string $h, stri
 if (!function_exists('str_ends_with'))   { function str_ends_with(string $h, string $n): bool   { return $n===''||substr($h,-strlen($n))===$n; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
 require_once __DIR__ . '/currency.php';
+require_once __DIR__ . '/CustomerIdentity.php';
 
 /**
  * WaAutoReplyService — Unified WhatsApp Auto-Reply (v4.11.3)
@@ -35,6 +36,9 @@ class WaAutoReplyService
     private $config;
     private $convSvc;
     private $crm = null;
+    /** @var array|null the last identity answer — see lookupCrmClient() */
+    private ?array $lastIdentity = null;
+
 
     public function __construct($store, \PDO $pdo, $notify, array $config, $convSvc)
     {
@@ -639,58 +643,50 @@ class WaAutoReplyService
     /**
      * Find CRM client by phone number.
      */
+    /**
+     * Which customer is on this number, or none.
+     *
+     * The matching lives in CustomerIdentity. What used to be here was a
+     * bidirectional suffix comparison with a minimum length on the incoming
+     * number only, so a client record holding a short fragment matched any
+     * number ending in those digits, first match won, and that customer's
+     * balance and payment history were answered to whoever had messaged.
+     *
+     * Returning null now covers three different answers — unknown, ambiguous
+     * and unusable — which differ in what a human should do but not in what
+     * may be disclosed: nothing. lastIdentity() carries the distinction for
+     * callers that need it.
+     */
     private function lookupCrmClient(string $phone): ?array
     {
-        $phone = preg_replace('/[^0-9]/', '', $phone);
-        if (strlen($phone) < 8) return null;
+        $ident = new \CustomerIdentity($this->store, $this->getCrm());
+        $r = $ident->resolve($phone);
+        $this->lastIdentity = $r;
 
-        // 1. Try local search index first (fast)
-        try {
-            $searchIdx = $this->store->load('client_search_index.json') ?? [];
-            foreach ($searchIdx as $c) {
-                $cPhone = preg_replace('/[^0-9]/', '', $c['phone'] ?? '');
-                if ($cPhone && (str_ends_with($cPhone, $phone) || str_ends_with($phone, $cPhone))) {
-                    // Found in index — fetch full client from CRM
-                    $crm = $this->getCrm();
-                    if ($crm) {
-                        $full = $crm->get("clients/{$c['id']}");
-                        if ($full) {
-                            $full['name'] = trim(($full['firstName'] ?? '') . ' ' . ($full['lastName'] ?? ''))
-                                         ?: ($full['companyName'] ?? 'Customer');
-                            return $full;
-                        }
-                    }
-                    // Return index data as fallback
-                    return $c;
-                }
-            }
-        } catch (\Throwable $e) {}
+        if ($r['status'] !== \CustomerIdentity::IDENTIFIED) return null;
 
-        // 2. Try CRM API search
-        $crm = $this->getCrm();
-        if (!$crm) return null;
+        $c = $r['client'];
+        if (!is_array($c)) return null;
+        // The index row carries only a name; the full record is worth fetching
+        // once we know WHICH record, which is the safe order to do it in.
+        if (!isset($c['balance']) && ($crm = $this->getCrm())) {
+            try {
+                $full = $crm->get('clients/' . (int)$r['client_id']);
+                if (is_array($full) && $full !== []) $c = $full;
+            } catch (\Throwable $e) {}
+        }
+        $c['id']   = (int)$r['client_id'];
+        $c['name'] = trim((string)($c['firstName'] ?? '') . ' ' . (string)($c['lastName'] ?? ''))
+                  ?: trim((string)($c['companyName'] ?? '')) ?: (string)($c['name'] ?? 'Customer');
+        return $c;
+    }
 
-        try {
-            // Search by phone suffix (last 9 digits)
-            $suffix = substr($phone, -9);
-            $results = $crm->get("clients?phone={$suffix}&limit=5") ?? [];
-            if (empty($results)) {
-                $results = $crm->get("clients?search={$suffix}&limit=5") ?? [];
-            }
-            foreach ($results as $r) {
-                // Verify phone match
-                foreach (($r['contacts'] ?? []) as $ct) {
-                    $ctPhone = preg_replace('/[^0-9]/', '', $ct['phone'] ?? '');
-                    if ($ctPhone && (str_ends_with($ctPhone, $suffix) || str_ends_with($suffix, $ctPhone))) {
-                        $r['name'] = trim(($r['firstName'] ?? '') . ' ' . ($r['lastName'] ?? ''))
-                                  ?: ($r['companyName'] ?? 'Customer');
-                        return $r;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        return null;
+    /** The full identity answer from the last lookup, for callers that care. */
+    public function lastIdentity(): array
+    {
+        return $this->lastIdentity ?? ['status' => \CustomerIdentity::UNKNOWN, 'client_id' => 0,
+                                       'client' => null, 'reason' => 'no lookup has run',
+                                       'candidates' => []];
     }
 
     private function getClientServices(int $clientId): array
