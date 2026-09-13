@@ -75,5 +75,20 @@ echo "\nThe listing restores the operator's selection\n";
 is_(preg_match('/endforeach;\s*\$ssStore->useAccount\(\$active\);/', $page) === 1,
     'after listing, the active account is put back');
 
+echo "\nAnd it is reachable by a person, not only by URL\n";
+// The sidebar is hand-written links, not generated from the tab array in
+// public.php. Registering a route and a permission makes a tab addressable;
+// only this file makes it findable, and a tab nobody can see is a tab nobody
+// uses.
+$nav = (string)file_get_contents(dirname(__DIR__) . '/includes/navigation.php');
+is_(strpos($nav, 'tab=starlink_session') !== false, 'the sidebar links to it');
+is_(strpos($nav, 'Starlink Sessions') !== false,    'with a label a person can read');
+is_(strpos($nav, "\$tab==='starlink_session'?'active'") !== false,
+    'and highlights when you are on it');
+// It sits in the admin block — the same guard the page and the map assert.
+$adminBlock = substr($nav, (int)strpos($nav, 'if($isAdmin)'));
+is_(strpos($adminBlock, 'tab=starlink_session') !== false,
+    'inside the admin-only section of the sidebar');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
