@@ -10,6 +10,7 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php --shape    what the response actually looks like
  *   php tools/starlink_probe.php --info     who the account is, and what it owes
  *   php tools/starlink_probe.php --usage    find the endpoint that returns data usage
+ *   php tools/starlink_probe.php --usage --line SL-DF-...   test a line you name
  *
  * Phase 1 ends here. This reads and prints; it stores no Starlink data, posts
  * nothing to the books, and changes nothing except the session's own
@@ -59,22 +60,67 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     require_once $root . '/lib/SiblingPlugin.php';
     $GLOBALS['_PLUGIN_ROOT'] = ((string)getenv('DN_PLUGIN_ROOT')) ?: $root;
 
-    // A real service line to substitute in. Prefer one the data plugin has
-    // already resolved; fall back to a live assignment of our own.
-    $line = ''; $acct = '';
-    foreach ((array)SiblingPlugin::readJson('dishnet-data-report', 'sl_svc_cache.json') as $k => $rec) {
-        if (!is_array($rec)) continue;
-        $line = trim((string)($rec['service_line'] ?? $k));
-        $acct = trim((string)($rec['account_number'] ?? ''));
-        if ($line !== '') break;
+    // A real service line to substitute in. Three sources, in the order of
+    // how much we trust them — and the last two matter, because the first one
+    // vanished the day this was needed: dishnet-data-report's data directory
+    // is the one uCRM deletes, and sl_svc_cache.json went with it.
+    //
+    // Our own equipment_assignments is the authoritative binding. It is why
+    // the Fleet screen works without that plugin, and a diagnostic that falls
+    // over when a sibling does has no business calling itself one.
+    $line = ''; $acct = ''; $from = '';
+
+    $argsAll = array_slice($argv, 1);
+    $iLine   = array_search('--line', $argsAll, true);
+    if ($iLine !== false && isset($argsAll[$iLine + 1])) {
+        $line = strtoupper(trim((string)$argsAll[$iLine + 1]));
+        $from = 'named on the command line';
     }
+
     if ($line === '') {
-        echo "\n  No service line to test with — sl_svc_cache.json is empty or absent,\n";
-        echo "  and without a real line every templated endpoint returns 404 whether\n";
-        echo "  or not it exists.\n\n";
+        require_once $root . '/lib/StoreInterface.php';
+        require_once $root . '/lib/JsonStore.php';
+        require_once $root . '/lib/SqliteStore.php';
+        require_once $root . '/lib/EquipmentAssignment.php';
+        try {
+            $ea = EquipmentAssignment::fromStore(SqliteStore::create($dataDir));
+            foreach ($ea->liveAssignments() as $a) {
+                $cand = trim((string)($a['starlink_service_line'] ?? ''));
+                if ($cand === '') continue;
+                $line = strtoupper($cand);
+                $acct = trim((string)($a['starlink_account'] ?? ''));
+                $from = 'equipment_assignments — our own binding';
+                break;
+            }
+        } catch (\Throwable $e) {
+            // Falls through to the sibling below, and then to the message.
+        }
+    }
+
+    if ($line === '') {
+        foreach ((array)SiblingPlugin::readJson('dishnet-data-report', 'sl_svc_cache.json') as $k => $rec) {
+            if (!is_array($rec)) continue;
+            $cand = trim((string)($rec['service_line'] ?? $k));
+            if ($cand === '') continue;
+            $line = strtoupper($cand);
+            $acct = trim((string)($rec['account_number'] ?? ''));
+            $from = 'dishnet-data-report/sl_svc_cache.json';
+            break;
+        }
+    }
+
+    if ($line === '') {
+        echo "\n  No service line to test with, from any of three places:\n\n";
+        echo "    · --line SL-...                    nothing named\n";
+        echo "    · equipment_assignments            no live assignment carries one\n";
+        echo "    · data-report/sl_svc_cache.json    absent or empty\n\n";
+        echo "  Without a real line every templated path answers the same way whether\n";
+        echo "  or not it exists, so the sweep would prove nothing. Name one:\n\n";
+        echo "    php tools/starlink_probe.php --usage --line SL-DF-15754766-41032-7\n\n";
         exit(1);
     }
     echo "\n  testing with service line   {$line}\n";
+    echo "  taken from                  {$from}\n";
     if ($acct !== '') echo "  on account                  {$acct}\n";
 
     // ── Harvested from dishnet-data-report's source ─────────────────────
