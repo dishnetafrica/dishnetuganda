@@ -194,6 +194,75 @@ final class DrSnapshot
     }
 
     /**
+     * Copy the WHOLE data directory, not the ten files worth keeping.
+     *
+     * FILES is a curated list, chosen for what hurts most to lose in an
+     * upgrade nobody saw coming. That is the wrong tool for a DELIBERATE
+     * uninstall, where the question is not "what would we miss" but "can this
+     * be put back exactly as it was".
+     *
+     * Two things on that box are outside the curated list and would not
+     * survive it. .enc_salt is 64 bytes and, if that plugin derives its key
+     * the way this one does, it is what makes dr_accounts.json readable —
+     * restore the cookies without it and you have restored 38 KB of noise.
+     * auto_block.sqlite3 is the auto-block state, and losing it while
+     * customers are blocked is the failure SAFETY.md calls the dangerous
+     * direction: they stay cut off after paying.
+     *
+     * So this takes everything, subdirectories included, and reports what it
+     * took. Small enough to be free — that directory is well under a megabyte.
+     *
+     * @return array{status:string, name:string, saved:int, bytes:int, reason:string}
+     */
+    public static function takeFull(string $snapRoot, ?string $drData, string $dataDir): array
+    {
+        $out = ['status' => 'failed', 'name' => '', 'saved' => 0, 'bytes' => 0, 'reason' => ''];
+        if ($drData === null || !is_dir($drData)) {
+            $out['status'] = 'not_installed';
+            $out['reason'] = self::PLUGIN . ' is not installed — nothing to copy';
+            return $out;
+        }
+
+        $name = gmdate('Ymd-His') . '-full';
+        $dest = $snapRoot . '/' . $name;
+        if (!@mkdir($dest, 0750, true) && !is_dir($dest)) {
+            $out['reason'] = 'could not create ' . $dest;
+            return $out;
+        }
+
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($drData, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST);
+
+        $failed = 0;
+        foreach ($it as $item) {
+            /** @var \SplFileInfo $item */
+            $rel = ltrim(substr($item->getPathname(), strlen(rtrim($drData, '/'))), '/');
+            if ($rel === '') continue;
+            $target = $dest . '/' . $rel;
+            if ($item->isDir()) {
+                if (!is_dir($target) && !@mkdir($target, 0750, true)) $failed++;
+                continue;
+            }
+            $dir = dirname($target);
+            if (!is_dir($dir)) @mkdir($dir, 0750, true);
+            if (@copy($item->getPathname(), $target)) {
+                SecureFile::adopt($target, $dataDir);
+                $out['saved']++;
+                $out['bytes'] += (int)$item->getSize();
+            } else {
+                $failed++;
+            }
+        }
+        @chmod($dest, 0750);
+
+        $out['name']   = $name;
+        $out['status'] = $failed === 0 ? 'saved' : 'failed';
+        if ($failed > 0) $out['reason'] = "{$failed} item(s) could not be copied";
+        return $out;
+    }
+
+    /**
      * Keep the newest $keep and delete the rest.
      *
      * Unbounded daily snapshots fill a disk, and a full disk on this box

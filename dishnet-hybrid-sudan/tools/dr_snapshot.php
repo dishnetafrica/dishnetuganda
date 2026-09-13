@@ -6,7 +6,9 @@ chdir(dirname(__DIR__));
  * dr_snapshot.php — copy dishnet-data-report's data somewhere an upgrade cannot reach.
  *
  *   php tools/dr_snapshot.php              what is there, and what a snapshot would take
- *   php tools/dr_snapshot.php --save       take one
+ *   php tools/dr_snapshot.php --save       take one (the ten files worth keeping)
+ *   php tools/dr_snapshot.php --save --full  copy the WHOLE data directory
+ *                                            — before a deliberate uninstall
  *   php tools/dr_snapshot.php --list       snapshots already taken
  *   php tools/dr_snapshot.php --restore <name>   put one back
  *
@@ -81,9 +83,9 @@ $val  = function (string $f) use ($args): string {
 };
 foreach ($args as $a) {
     if (strpos($a, '--') !== 0) continue;
-    if (!in_array($a, ['--save', '--list', '--restore', '--yes'], true)) {
+    if (!in_array($a, ['--save', '--list', '--restore', '--yes', '--full'], true)) {
         fwrite(STDERR, "\n  Unknown option: {$a}\n");
-        fwrite(STDERR, "  Known: --save, --list, --restore <name>\n\n");
+        fwrite(STDERR, "  Known: --save, --save --full, --list, --restore <name>\n\n");
         exit(2);
     }
 }
@@ -193,6 +195,24 @@ if (!$has('--save')) {
     echo "  Nothing written. Take one with:\n\n";
     echo "    php tools/dr_snapshot.php --save\n\n";
     exit(0);
+}
+
+// ── --save --full: everything, for a deliberate uninstall ───────────────────
+if ($has('--full')) {
+    $r = DrSnapshot::takeFull($snapRoot, $drData, $dataDir);
+    if ($r['name'] === '') {
+        fwrite(STDERR, "  Could not copy: {$r['reason']}\n\n");
+        exit(1);
+    }
+    printf("  ✔ %d file(s), %s bytes copied to %s\n", $r['saved'], number_format($r['bytes']), $r['name']);
+    if ($r['status'] !== 'saved') echo "    WARNING: {$r['reason']}\n";
+    echo "\n  This is the WHOLE directory, including the files the curated snapshot\n";
+    echo "  leaves out — .enc_salt among them, which is what makes that plugin's\n";
+    echo "  stored Starlink cookies readable. Restore it by hand after a reinstall:\n\n";
+    printf("    docker cp <the snapshot dir>/. ucrm:%s/\n\n", $drData);
+    echo "  On this box the snapshot is at:\n";
+    echo "    {$snapRoot}/{$r['name']}\n\n";
+    exit($r['status'] === 'saved' ? 0 : 1);
 }
 
 // A person asking for a snapshot gets one, even if it duplicates the last:

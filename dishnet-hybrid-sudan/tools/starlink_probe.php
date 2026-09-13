@@ -254,6 +254,29 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     echo "  taken from                  {$from}\n";
     if ($acct !== '') echo "  on account                  {$acct}\n";
 
+    // A line this cookie cannot see makes every result below meaningless: a
+    // real endpoint and an invented one both answer not_found for it. That
+    // already happened once and cost a whole round, so check before sweeping
+    // rather than reasoning about it afterwards.
+    $visible = null;
+    $vd = $conn->raw('GET', '/api/accounts/v1/accounts/service-line-numbers');
+    $vj = json_decode((string)($vd['body'] ?? ''), true);
+    if ((int)$vd['code'] === 200 && is_array($vj)) {
+        $seen = [];
+        array_walk_recursive($vj, static function ($v) use (&$seen) {
+            if (is_string($v)) $seen[strtoupper(trim($v))] = true;
+        });
+        $visible = isset($seen[$line]);
+        printf("  visible to this cookie      %s\n", $visible ? 'yes' : 'NO');
+    }
+    if ($visible === false) {
+        echo "\n  STOP. Every path below would answer not_found for a line this cookie\n";
+        echo "  cannot see, whether or not it exists — so the sweep would prove\n";
+        echo "  nothing. Run --accounts to list the lines it CAN see, and pass one:\n\n";
+        echo "    php tools/starlink_probe.php --usage --line <a visible line>\n\n";
+        exit(1);
+    }
+
     // ── Harvested from dishnet-data-report's source ─────────────────────
     $harvested = [];
     $drRoot = dirname(SiblingPlugin::pluginRoot()) . '/dishnet-data-report';
@@ -269,8 +292,35 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     }
     echo "  harvested from that plugin  " . (count($harvested) ?: 'none — it may not fetch usage at all') . "\n\n";
 
-    // ── Ours, clearly marked as guesses ─────────────────────────────────
+    // ── Built from routes we have WATCHED answer ────────────────────────
+    //
+    // The first six candidates were invented and all six were wrong. Two
+    // routes are known to work, and they share a shape my guesses did not:
+    //
+    //   /api/webagg/v2/accounts/service-lines
+    //   /api/accounts/v1/accounts/service-line-numbers
+    //
+    // Both carry an `accounts/` segment that five of my six dropped. These
+    // extend the observed prefixes rather than inventing new ones, which is
+    // a different quality of guess and is labelled differently.
     $L = rawurlencode($line);
+    $A = $acct !== '' ? rawurlencode($acct) : '';
+
+    $patterned = [
+        '/api/webagg/v2/accounts/service-lines/' . $L . '/data-usage',
+        '/api/webagg/v2/accounts/service-lines/' . $L . '/usage',
+        '/api/webagg/v1/accounts/service-lines/' . $L . '/usage',
+        '/api/accounts/v1/accounts/service-lines/' . $L . '/data-usage',
+        '/api/accounts/v1/accounts/service-lines/' . $L . '/usage',
+    ];
+    if ($A !== '') {
+        $patterned[] = '/api/accounts/v1/accounts/' . $A . '/service-lines/' . $L . '/usage';
+        $patterned[] = '/api/webagg/v2/accounts/' . $A . '/service-lines/' . $L . '/data-usage';
+    }
+
+    // The originals, kept so a re-run against a VISIBLE line finally says
+    // something about them. Every 404 they returned before was asked about a
+    // line the cookie could not see, which is not an answer.
     $guesses = [
         '/api/webagg/v1/service-lines/' . $L . '/data-usage',
         '/api/webagg/v2/service-lines/' . $L . '/data-usage',
@@ -287,7 +337,8 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
         $real = preg_replace('#\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*#', $L, $path);
         $tries[] = ['GET', (string)$real, 'data-report/' . $where];
     }
-    foreach ($guesses as $g) $tries[] = ['GET', $g, 'guess'];
+    foreach ($patterned as $g) $tries[] = ['GET', $g, 'from observed routes'];
+    foreach ($guesses as $g)   $tries[] = ['GET', $g, 'guess'];
 
     printf("  %-6s %-58s %-7s %s\n", 'CODE', 'PATH', 'BYTES', 'SOURCE');
     printf("  %s\n", str_repeat('-', 96));

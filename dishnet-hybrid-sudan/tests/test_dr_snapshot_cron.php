@@ -101,6 +101,42 @@ $r = DrSnapshot::take($snapRoot, null, $data, true);
 t('and no plugin at all',  $r['status'], 'not_installed');
 is_(strpos($r['reason'], 'not installed') !== false, 'each with its own words');
 
+echo "\nA deliberate uninstall needs the WHOLE directory, not the curated ten\n";
+// The two that decide whether a reinstall is recoverable are both outside
+// FILES: .enc_salt, which is what makes the stored cookies readable, and the
+// auto-block database, whose loss leaves paying customers cut off.
+file_put_contents($drData . '/.enc_salt', 'saltysalt');
+file_put_contents($drData . '/auto_block.sqlite3', 'SQLITEBYTES');
+@mkdir($drData . '/backups', 0777, true);
+file_put_contents($drData . '/backups/older.zip', 'zipbytes');
+file_put_contents($drData . '/sync_log.json', json_encode(['ran' => true]));
+
+$curated = DrSnapshot::take($snapRoot, $live(), $data, false);
+$curatedNames = array_map('basename', (array)glob($snapRoot . '/' . $curated['name'] . '/*'));
+is_(!in_array('.enc_salt', $curatedNames, true),
+    'the curated snapshot does NOT hold .enc_salt — which is the whole point');
+
+$full = DrSnapshot::takeFull($snapRoot, $live(), $data);
+t('the full copy succeeds', $full['status'], 'saved');
+is_(substr($full['name'], -5) === '-full', 'and is named so it cannot be confused for the other kind');
+$got = [];
+foreach ((array)glob($snapRoot . '/' . $full['name'] . '/{,.}*', GLOB_BRACE) as $f) {
+    $b = basename($f);
+    if ($b === '.' || $b === '..') continue;
+    $got[$b] = true;
+}
+is_(isset($got['.enc_salt']),          'it takes the dotfile the curated list omits');
+is_(isset($got['auto_block.sqlite3']), 'and the sqlite database');
+is_(isset($got['sync_log.json']),      'and files no curated list ever named');
+is_(is_file($snapRoot . '/' . $full['name'] . '/backups/older.zip'),
+    'and recurses into subdirectories');
+t('the salt survives byte for byte',
+    file_get_contents($snapRoot . '/' . $full['name'] . '/.enc_salt'), 'saltysalt');
+is_($full['bytes'] > 0, 'and it reports how much it took');
+
+$r = DrSnapshot::takeFull($snapRoot, null, $data);
+t('with no plugin it says so', $r['status'], 'not_installed');
+
 echo "\nThe cron itself\n";
 $cron = dirname(__DIR__) . '/cron/dr_snapshot.php';
 $src  = (string)file_get_contents($cron);
