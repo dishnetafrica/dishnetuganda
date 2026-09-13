@@ -369,6 +369,13 @@ class StarlinkPortalConnector implements StarlinkConnector
             'snippet'  => str_replace(["\n", "\r"], ' ', substr($body, 0, 120)),
             'sets'     => array_keys((array)($r['cookies'] ?? [])),
             'location' => (string)($r['location'] ?? ''),
+            // The body itself, for a diagnostic that needs to see what came
+            // back rather than whether something did. request() is the way to
+            // FETCH data — it refreshes, retries, and refuses a session the
+            // store has given up on. This is the way to LOOK, and a tool
+            // working out why the store and the server disagree needs to look
+            // even when the store says not to bother.
+            'body'     => $body,
         ];
     }
 

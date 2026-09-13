@@ -114,18 +114,28 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
 
     printf("  %-6s %-58s %-7s %s\n", 'CODE', 'PATH', 'BYTES', 'SOURCE');
     printf("  %s\n", str_repeat('-', 96));
+    // A 200 is not an answer. Starlink serves its sign-in page with one, and
+    // an SPA shell is comfortably bigger than a usage payload — so a code and
+    // a byte count together still say nothing. Only a body that starts like
+    // JSON counts as a hit, and every body is shown either way.
     $hit = [];
     foreach ($tries as [$m, $path, $src]) {
-        $d = $conn->raw($m, $path);
-        printf("  %-6s %-58s %-7d %s\n",
-            $d['code'] ?: ($d['error'] !== '' ? 'ERR' : '0'), substr($path, 0, 56), $d['bytes'], $src);
-        if ((int)$d['code'] === 200 && $d['bytes'] > 0) $hit[] = $path;
-        elseif ($d['snippet'] !== '') echo "         " . substr($d['snippet'], 0, 100) . "\n";
+        $d    = $conn->raw($m, $path);
+        $code = (int)$d['code'];
+        $head = ltrim($d['snippet']);
+        $json = $head !== '' && ($head[0] === '{' || $head[0] === '[');
+
+        $verdict = $code !== 200 ? '' : ($json ? '  ← JSON' : '  ← 200 but NOT JSON');
+        printf("  %-6s %-58s %-7d %s%s\n",
+            $code ?: ($d['error'] !== '' ? 'ERR' : '0'), substr($path, 0, 56),
+            $d['bytes'], $src, $verdict);
+        if ($d['snippet'] !== '') echo "         " . substr($d['snippet'], 0, 100) . "\n";
+        if ($code === 200 && $json && $d['bytes'] > 0) $hit[] = $path;
     }
 
     echo "\n";
     if ($hit === []) {
-        echo "  Nothing answered 200. That is a result, not a dead end: it means the\n";
+        echo "  Nothing returned JSON. That is a result, not a dead end: it means the\n";
         echo "  usage endpoint is not one of these, and the next place to look is the\n";
         echo "  browser's own network tab on starlink.com while a usage chart loads.\n";
         if ($harvested === []) {
@@ -133,7 +143,7 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
             echo "  would explain sl_usage.json being [] on every run.\n";
         }
     } else {
-        echo "  " . count($hit) . " endpoint(s) answered. Re-run with --shape-usage to see the\n";
+        echo "  " . count($hit) . " endpoint(s) returned JSON. Re-run with --shape-usage to see the\n";
         echo "  payload before anything is written against it:\n";
         foreach ($hit as $h) echo "    php tools/starlink_probe.php --shape-usage " . escapeshellarg($h) . "\n";
     }
@@ -150,9 +160,29 @@ if ($_su !== false) {
         echo "\n  --shape-usage needs a path, e.g. /api/webagg/v1/...\n\n";
         exit(2);
     }
-    $r = $conn->get($path);
-    if (empty($r['ok'])) { echo "\n  " . (string)$r['error'] . "\n\n"; exit(1); }
-    $data = $r['data'] ?? $r;
+    // raw(), not get(): request() refuses outright once the store has marked
+    // the session as needing a re-import, and the whole point of this command
+    // is to settle whether the server agrees with the store.
+    $d    = $conn->raw('GET', $path);
+    $code = (int)$d['code'];
+    $body = (string)($d['body'] ?? '');
+    if ($code !== 200) {
+        echo "\n  HTTP {$code}" . ($d['error'] !== '' ? ' — ' . $d['error'] : '') . "\n";
+        if ($d['snippet'] !== '') echo "  " . $d['snippet'] . "\n";
+        echo "\n";
+        exit(1);
+    }
+    $data = json_decode($body, true);
+    if (!is_array($data)) {
+        echo "\n  200, " . strlen($body) . " bytes, but NOT JSON — "
+           . json_last_error_msg() . "\n";
+        echo "  This is almost certainly the sign-in page, which Starlink serves\n";
+        echo "  with a 200. The session needs a fresh cookie:\n";
+        echo "    docker exec -it ucrm php tools/starlink_session.php --import\n\n";
+        echo "  First 200 characters of what came back:\n";
+        echo "  " . str_replace(["\n", "\r"], ' ', substr($body, 0, 200)) . "\n\n";
+        exit(1);
+    }
 
     // A usage payload is mostly repetition — one entry per bucket, thousands
     // of bytes of it. Truncating the JSON at a fixed length shows the first
