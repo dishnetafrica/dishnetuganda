@@ -382,7 +382,15 @@ if (!$portalAuthError) {
                 }
                 if ($bestUsage) {
                     $totalGb = (float)($bestUsage['total_gb'] ?? 0);
-                    $allowance = $bestUsage['local_priority_allowance'] ?? $bestUsage['other_data_allowance'] ?? null;
+                    // The sibling plugin and our own collector name the same
+                    // facts differently. Reading both means one screen renders
+                    // fully whichever collected the figures — and until this,
+                    // a row of ours showed the headline with a blank cycle,
+                    // no allowance and no chart.
+                    $allowance = $bestUsage['local_priority_allowance']
+                              ?? $bestUsage['other_data_allowance']
+                              ?? $bestUsage['limit_gb']
+                              ?? null;
                     $isUnlimited = ($allowance === 'Unlimited' || $allowance === null || $allowance === '');
                     $limitGb = $isUnlimited ? null : (int)$allowance;
                     $pct = ($limitGb && $limitGb > 0) ? min(100, (int)round($totalGb / $limitGb * 100)) : null;
@@ -401,11 +409,11 @@ if (!$portalAuthError) {
                         'unlimited' => $isUnlimited,
                         'pct' => $pct,
                         'cycle_label' => $bestUsage['cycle_label'] ?? '',
-                        'cycle_start' => $bestUsage['axis_left'] ?? '',
-                        'cycle_end' => $bestUsage['axis_right'] ?? '',
-                        'updated' => $bestUsage['updated_at'] ?? '',
+                        'cycle_start' => $bestUsage['axis_left']  ?? $bestUsage['cycle_start'] ?? '',
+                        'cycle_end'   => $bestUsage['axis_right'] ?? $bestUsage['cycle_end']   ?? '',
+                        'updated'     => $bestUsage['updated_at'] ?? $bestUsage['collected_at'] ?? '',
                         'daily' => $dailyTotal,
-                        'plan_id' => $bestUsage['plan_id'] ?? '',
+                        'plan_id' => $bestUsage['plan_id'] ?? $bestUsage['product_id'] ?? '',
                         // Which collector this figure came from. It was
                         // basename(dirname($uf)) against a variable that
                         // never existed, so it was always an empty string.

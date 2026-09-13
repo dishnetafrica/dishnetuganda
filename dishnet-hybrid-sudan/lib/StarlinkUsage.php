@@ -87,6 +87,17 @@ final class StarlinkUsage
         if (!is_array($content)) return [];
 
         $plan      = is_array($content['servicePlan'] ?? null) ? $content['servicePlan'] : [];
+
+        // Which data bucket is which. Starlink sends dailyData as one value per
+        // BUCKET INDEX per day, so without this map the daily series cannot be
+        // split into priority and standard data — and a chart that adds them
+        // together hides the thing a customer actually watches, which is how
+        // fast the priority allowance is going.
+        $buckets = [];
+        foreach ((array)($content['dataBuckets'] ?? []) as $bi => $b) {
+            $buckets[$bi] = stripos((string)($b['name'] ?? ''), 'Local Priority') !== false
+                ? 'priority' : 'standard';
+        }
         $activeRaw = (string)($plan['subscriptionActiveFrom'] ?? $plan['activeFrom'] ?? '');
         $activeTs  = $activeRaw !== '' ? strtotime($activeRaw) : false;
 
@@ -102,6 +113,9 @@ final class StarlinkUsage
             // customer's cycle at all.
             if ($activeTs !== false && $endTs !== false && $endTs <= $activeTs) continue;
 
+            [$dailyP, $dailyS] = self::dailySeries($c, $buckets);
+            $allow = self::priorityAllowance($c, $buckets);
+
             $rows[] = [
                 'kit_number'   => EquipmentAssignment::clean($kitSerial),
                 'service_line' => StarlinkServiceState::normalise($serviceLine),
@@ -116,12 +130,66 @@ final class StarlinkUsage
                 'limit_gb'     => isset($plan['usageLimitGB']) ? (float)$plan['usageLimitGB'] : null,
                 'product_id'   => (string)($plan['productId'] ?? ''),
                 'currency'     => (string)($plan['isoCurrencyCode'] ?? ''),
+                // The daily series, split the way Starlink itself splits it.
+                // Named as the customer portal already reads them so one
+                // collector can feed both screens without a translation layer.
+                'daily_blue'   => $dailyP,      // Local Priority
+                'daily_white'  => $dailyS,      // standard / other data
+                'local_priority_allowance' => $allow,
                 'collected_at' => gmdate('Y-m-d H:i:s'),
                 'source'       => 'dishnet-hybrid-sudan',
             ];
         }
         usort($rows, static fn(array $a, array $b): int => strcmp($a['cycle_key'], $b['cycle_key']));
         return $rows;
+    }
+
+    /**
+     * One cycle's daily usage, split into priority and standard.
+     *
+     * dailyData is an array of days; each day is an array of numbers, one per
+     * bucket index. A day that arrives as a bare number (older shape) is
+     * counted as standard rather than dropped — a figure we cannot attribute
+     * is still a figure the customer used.
+     *
+     * @return array{0:array<int,float>,1:array<int,float>}
+     */
+    private static function dailySeries(array $cycle, array $buckets): array
+    {
+        $p = []; $s = [];
+        foreach ((array)($cycle['dailyData'] ?? []) as $day) {
+            if (!is_array($day)) { $p[] = 0.0; $s[] = round((float)$day, 6); continue; }
+            $dp = 0.0; $ds = 0.0;
+            foreach ($day as $bi => $v) {
+                if (($buckets[$bi] ?? 'standard') === 'priority') $dp += (float)$v;
+                else                                             $ds += (float)$v;
+            }
+            $p[] = round($dp, 6);
+            $s[] = round($ds, 6);
+        }
+        return [$p, $s];
+    }
+
+    /**
+     * The priority allowance for this cycle, as Starlink states it per bucket.
+     *
+     * Only summary lines that represent CONSUMPTION count — types 4 and 6.
+     * The others are overage flags, and summing them would invent an allowance
+     * nobody has. Returns '' when Starlink states none, which is different
+     * from stating zero.
+     */
+    private static function priorityAllowance(array $cycle, array $buckets): string
+    {
+        foreach ((array)($cycle['dataUsageSummaryLines'] ?? []) as $line) {
+            if (!is_array($line)) continue;
+            $type = (int)($line['summaryLineType'] ?? 0);
+            if ($type !== 4 && $type !== 6) continue;
+            $bi = $line['dataBucketIndex'] ?? -1;
+            if (($buckets[$bi] ?? 'standard') !== 'priority') continue;
+            $limit = (float)($line['usageLimitGB'] ?? 0);
+            if ($limit > 0) return (string)$limit;
+        }
+        return '';
     }
 
     /** "11 Mar – 11 Apr 2026", for a person rather than a sort. */

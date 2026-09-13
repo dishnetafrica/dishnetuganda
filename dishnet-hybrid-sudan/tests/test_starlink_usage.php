@@ -235,5 +235,53 @@ is_(strpos($master, "'starlink_usage'") !== false, 'master.php dispatches it');
 is_((bool)preg_match("/'starlink_usage'\s*=>\s*\['interval'\s*=>\s*3600/", $master), 'hourly');
 
 exec('rm -rf ' . escapeshellarg($e['base']) . ' ' . escapeshellarg($e2['base']));
+echo "\nThe daily series Starlink sends is kept, not discarded\n";
+// The customer portal draws a per-day chart. Starlink puts the numbers in the
+// SAME payload we already fetch — dailyData, one value per bucket index — and
+// we were throwing them away, so the chart was empty for every Uganda kit.
+$dp = ['content' => [
+    'servicePlan' => ['usageLimitGB' => 1000],
+    'dataBuckets' => [
+        ['name' => 'Local Priority'],
+        ['name' => 'Residential Data'],
+    ],
+    'billingCyclesAnnotated' => [[
+        'startDate' => '2026-09-11T00:00:00+00:00',
+        'endDate'   => '2026-10-11T00:00:00+00:00',
+        'totalAmountGB' => 52.0,
+        'dailyData' => [[1.5, 4.0], [0.5, 2.0], [0.0, 3.25]],
+        'dataUsageSummaryLines' => [
+            ['dataBucketIndex' => 0, 'consumedAmountGB' => 2.0, 'usageLimitGB' => 40, 'summaryLineType' => 6],
+            ['dataBucketIndex' => 1, 'consumedAmountGB' => 9.25, 'usageLimitGB' => 0,  'summaryLineType' => 4],
+            // An overage flag. Counting it would invent an allowance nobody has.
+            ['dataBucketIndex' => 0, 'consumedAmountGB' => 0.0, 'usageLimitGB' => 999, 'summaryLineType' => 5],
+        ],
+    ]],
+]];
+$d = StarlinkUsage::rowsFrom($dp, KIT, LINE)[0];
+t('priority data, day by day', $d['daily_blue'],  [1.5, 0.5, 0.0]);
+t('standard data, day by day', $d['daily_white'], [4.0, 2.0, 3.25]);
+t('the priority allowance Starlink states', $d['local_priority_allowance'], '40');
+t('and the headline total is unchanged',    $d['total_gb'], 52.0);
+
+echo "\nBuckets decide which column a day belongs in, not their order\n";
+// If the two buckets arrive the other way round, the split must follow the
+// NAME. Keying off position would silently swap priority and standard.
+$sw = $dp;
+$sw['content']['dataBuckets'] = [['name' => 'Residential Data'], ['name' => 'Local Priority']];
+$d2 = StarlinkUsage::rowsFrom($sw, KIT, LINE)[0];
+t('priority follows the bucket name', $d2['daily_blue'],  [4.0, 2.0, 3.25]);
+t('and so does standard',             $d2['daily_white'], [1.5, 0.5, 0.0]);
+
+echo "\nA cycle with no daily data is empty, never invented\n";
+$nd = $dp; unset($nd['content']['billingCyclesAnnotated'][0]['dailyData']);
+$d3 = StarlinkUsage::rowsFrom($nd, KIT, LINE)[0];
+t('no priority series', $d3['daily_blue'],  []);
+t('no standard series', $d3['daily_white'], []);
+
+echo "\nAnd an allowance Starlink does not state is not guessed\n";
+$na = $dp; $na['content']['billingCyclesAnnotated'][0]['dataUsageSummaryLines'] = [];
+t('empty, not zero', StarlinkUsage::rowsFrom($na, KIT, LINE)[0]['local_priority_allowance'], '');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
