@@ -152,8 +152,39 @@ if ($_su !== false) {
     }
     $r = $conn->get($path);
     if (empty($r['ok'])) { echo "\n  " . (string)$r['error'] . "\n\n"; exit(1); }
-    echo "\n  " . $path . "\n\n";
-    echo substr(json_encode($r['data'] ?? $r, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), 0, 4000) . "\n\n";
+    $data = $r['data'] ?? $r;
+
+    // A usage payload is mostly repetition — one entry per bucket, thousands
+    // of bytes of it. Truncating the JSON at a fixed length shows the first
+    // few buckets and hides the field that says which cycle they belong to,
+    // which is the one a collector cannot work without. So print the SHAPE:
+    // every key with its type, arrays with their length and one worked
+    // example, and leave the repetition out.
+    $shape = static function ($v, int $depth = 0, string $key = '') use (&$shape): string {
+        $pad = str_repeat('  ', $depth + 1);
+        if (is_array($v)) {
+            $isList = $v === [] || array_keys($v) === range(0, count($v) - 1);
+            if ($isList) {
+                $out = $pad . ($key !== '' ? $key . ': ' : '') . 'list[' . count($v) . ']';
+                if ($v === []) return $out . " (empty)\n";
+                $out .= " — first entry:\n";
+                return $out . $shape($v[0], $depth + 1);
+            }
+            $out = $key !== '' ? $pad . $key . ": {\n" : '';
+            foreach ($v as $k => $sub) $out .= $shape($sub, $depth + ($key !== '' ? 1 : 0), (string)$k);
+            return $out . ($key !== '' ? $pad . "}\n" : '');
+        }
+        $t = is_bool($v) ? ($v ? 'true' : 'false')
+           : (is_null($v) ? 'null'
+           : (is_string($v) ? '"' . (strlen($v) > 48 ? substr($v, 0, 45) . '…' : $v) . '"'
+           : (string)$v));
+        return $pad . $key . ' = ' . $t . "\n";
+    };
+
+    echo "\n  " . $path . "\n";
+    echo "  " . strlen((string)json_encode($data)) . " bytes\n\n";
+    echo $shape($data);
+    echo "\n  Field names above are READ, not guessed. A collector maps these.\n\n";
     exit(0);
 }
 
