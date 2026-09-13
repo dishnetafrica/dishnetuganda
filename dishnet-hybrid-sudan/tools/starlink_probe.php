@@ -197,6 +197,43 @@ if (in_array('--accounts', array_slice($argv, 1), true)) {
         elseif (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $lines[$t][$key] = true;
     };
 
+    // ── The account list, from the endpoint that actually lists accounts ──
+    //
+    // /api/accounts/v3/accounts/contact returns EVERY account the login can
+    // reach. dishnet-data-report's Phase 0 is exactly this one call, and on the
+    // South Sudan box it returns 51 accounts — including Uganda's — from a
+    // single cookie. Its knowledge_hub says so in as many words: "Call
+    // /api/accounts/v3/accounts/contact to list all Starlink accounts
+    // accessible".
+    //
+    // This connector has had that path all along as VERIFY_PATH, and used it
+    // only to ask "is the session alive?", throwing the account list away. I
+    // then concluded ONE ACCOUNT ONLY from service-lines, which is scoped to
+    // whichever account is selected — the wrong endpoint for the question, and
+    // the answer it gave was about selection, not access.
+    $reachable = [];
+    $cd = $conn->raw('GET', StarlinkPortalConnector::VERIFY_PATH);
+    $cj = json_decode((string)($cd['body'] ?? ''), true);
+    if ((int)$cd['code'] === 200 && is_array($cj)) {
+        // Shapes differ by version; data-report reads all three.
+        $rows = $cj['accounts'] ?? $cj['content']
+              ?? (isset($cj['accountNumber']) ? [$cj] : []);
+        foreach ((array)$rows as $a) {
+            if (!is_array($a)) continue;
+            $n = strtoupper(trim((string)($a['accountNumber'] ?? $a['account_number'] ?? '')));
+            if ($n === '') continue;
+            $reachable[$n] = trim((string)($a['accountName'] ?? $a['name'] ?? ''));
+        }
+    }
+    printf("\n  %-3d %s\n", (int)$cd['code'], StarlinkPortalConnector::VERIFY_PATH);
+    if ($reachable !== []) {
+        printf("      %d account(s) REACHABLE by this one cookie\n", count($reachable));
+        foreach ($reachable as $n => $name) printf("        %-28s %s\n", $n, $name);
+    } else {
+        echo "      no account list returned — "
+           . ((int)$cd['code'] === 200 ? "200 but not the expected shape" : trim((string)$cd['snippet'])) . "\n";
+    }
+
     $accounts = []; $lines = []; $answered = 0;
     foreach ([
         '/api/webagg/v2/accounts/service-lines?limit=200&page=0&isConverting=false&onlyActive=false',
@@ -308,11 +345,27 @@ if (in_array('--accounts', array_slice($argv, 1), true)) {
         echo "    endpoint and a made-up one both answer not_found for it.\n";
     }
 
-    echo "\n  " . (count($accounts) > 1
-        ? 'MORE THAN ONE ACCOUNT — one cookie covers several, and per-account'
-          . "\n  cookies are not required."
-        : 'ONE ACCOUNT ONLY — this cookie sees a single account, so each other'
-          . "\n  account needs its own cookie, which is what data-report assumes.") . "\n\n";
+    // The verdict comes from what the cookie can REACH, not from what the
+    // service-lines listing happened to be scoped to. Those are different
+    // questions and answering the second as though it were the first is how
+    // "ONE ACCOUNT ONLY" got printed under a cookie that reaches many.
+    echo "\n  ";
+    if ($reachable === []) {
+        echo "COULD NOT LIST ACCOUNTS. Without "
+           . StarlinkPortalConnector::VERIFY_PATH . " answering,\n"
+           . "  nothing here says how many accounts this cookie reaches — the\n"
+           . "  service-line listing above is scoped to the selected account and\n"
+           . "  cannot be read as an account count.\n";
+    } elseif (count($reachable) > 1) {
+        echo "THIS ONE COOKIE REACHES " . count($reachable) . " ACCOUNTS.\n"
+           . "  Per-account cookies are not required. The service-line listing above\n"
+           . "  shows only the SELECTED account — scope to another with --account, or\n"
+           . "  put the account in a telemetryagg path, which takes it there.\n";
+    } else {
+        echo "ONE ACCOUNT REACHABLE: " . (string)array_key_first($reachable) . ".\n"
+           . "  Another account would need its own cookie.\n";
+    }
+    echo "\n";
     exit(0);
 }
 
