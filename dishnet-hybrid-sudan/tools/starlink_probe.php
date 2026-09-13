@@ -12,6 +12,9 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_probe.php --usage    find the endpoint that returns data usage
  *   php tools/starlink_probe.php --usage --line SL-DF-...   test a line you name
  *   php tools/starlink_probe.php --accounts  which accounts this ONE cookie can see
+ *   php tools/starlink_probe.php --swap-check --account ACC-... --line SL-...
+ *                                           does the account_number swap carry
+ *                                           telemetryagg to ANOTHER account?
  *   php tools/starlink_probe.php --usage --line SL-... --account ACC-...
  *                                           ask as another account on the SAME cookie
  *
@@ -40,6 +43,117 @@ echo "  " . str_repeat('─', 64) . "\n";
 if (!$conn->isConfigured()) {
     echo "\n  No session imported yet.\n\n";
     echo "    docker exec -it ucrm php tools/starlink_session.php --import\n\n";
+    exit(1);
+}
+
+// ── 0. Swap check: a controlled experiment, not another single reading ───
+//
+// Every telemetryagg 200 so far came from a cookie already signed in to the
+// account it was asking about. No swap was involved, so nothing yet says the
+// swap carries that endpoint to a DIFFERENT account — and without that, every
+// cross-account 404 is unreadable: it could be the swap failing, the pair not
+// existing, or the account being unreachable.
+//
+// So run both halves together, in one session, before the token expires:
+//
+//   CONTROL  the cookie's own account and one of its own lines, unscoped.
+//            A 200 proves the endpoint, the session and the path shape.
+//   TEST     an account and line you have verified exist, scoped by the swap.
+//
+// CONTROL 200 + TEST 200 → the swap carries; one cookie reaches every account.
+// CONTROL 200 + TEST 404 → it does not; that endpoint is per-account, and a
+//                          cookie is needed for each — assuming the pair you
+//                          passed really does exist, which is why you pass one
+//                          you have seen rather than one we guessed.
+// CONTROL not 200        → the session or the path is the problem and the TEST
+//                          says nothing at all. Reported as such, not as a
+//                          negative result.
+if (in_array('--swap-check', array_slice($argv, 1), true)) {
+    $scArgs = array_slice($argv, 1);
+    $scVal  = static function (string $f) use ($scArgs): string {
+        $i = array_search($f, $scArgs, true);
+        return ($i !== false && isset($scArgs[$i + 1])) ? strtoupper(trim((string)$scArgs[$i + 1])) : '';
+    };
+    $wantAcct = $scVal('--account');
+    $wantLine = $scVal('--line');
+    if ($wantAcct === '' || $wantLine === '') {
+        echo "\n  --swap-check needs an account and a line on ANOTHER account that you\n";
+        echo "  know exist — one you can see in the Starlink portal. A pair we guessed\n";
+        echo "  would make a 404 mean nothing again.\n\n";
+        echo "    php tools/starlink_probe.php --swap-check \\\n";
+        echo "      --account ACC-DF-... --line SL-DF-...\n\n";
+        exit(2);
+    }
+
+    $tel = static function (string $acct, string $line): string {
+        return '/api/telemetryagg/v1/data-usage/account/' . rawurlencode($acct)
+             . '/service-line/' . rawurlencode($line) . '/annotated';
+    };
+    $verdict = static function (array $d): array {
+        $code = (int)$d['code'];
+        $head = ltrim((string)$d['snippet']);
+        $json = $head !== '' && ($head[0] === '{' || $head[0] === '[');
+        return [$code, $json, $code === 200 && $json];
+    };
+
+    $ownAcct = strtoupper(trim((string)($store->load()['account_number'] ?? '')));
+    echo "\n  the cookie signed in as   " . ($ownAcct !== '' ? $ownAcct : '(unknown)') . "\n";
+    if ($ownAcct !== '' && $ownAcct === $wantAcct) {
+        echo "\n  That is the same account you asked about, so nothing would be swapped\n";
+        echo "  and the test would prove nothing. Import a cookie from a DIFFERENT\n";
+        echo "  account, or name a different one.\n\n";
+        exit(2);
+    }
+
+    // A line belonging to the cookie's own account, for the control.
+    $ld  = $conn->raw('GET', '/api/accounts/v1/accounts/service-line-numbers');
+    $lj  = json_decode((string)($ld['body'] ?? ''), true);
+    $own = [];
+    if ((int)$ld['code'] === 200 && is_array($lj)) {
+        array_walk_recursive($lj, static function ($v) use (&$own) {
+            $t = strtoupper(trim((string)$v));
+            if (preg_match('/^SL-[0-9A-Z]+(-[0-9A-Z]+)+$/', $t)) $own[] = $t;
+        });
+    }
+    if ($own === []) {
+        echo "\n  Could not list a line on the cookie's own account (HTTP "
+           . (int)$ld['code'] . "), so there is no control to compare against.\n";
+        echo "  Import a fresh cookie and try again.\n\n";
+        exit(1);
+    }
+    sort($own);
+    $ownLine = $own[0];
+
+    echo "\n  CONTROL  " . $ownAcct . " / " . $ownLine . "  (no swap)\n";
+    $conn->scopeTo('');
+    [$c1, $j1, $ok1] = $verdict($conn->raw('GET', $tel($ownAcct, $ownLine)));
+    printf("           HTTP %d %s\n", $c1, $ok1 ? '· JSON' : ($c1 === 200 ? '· NOT JSON (sign-in page)' : ''));
+
+    echo "\n  TEST     " . $wantAcct . " / " . $wantLine . "  (cookie swapped)\n";
+    $conn->scopeTo($wantAcct);
+    [$c2, $j2, $ok2] = $verdict($conn->raw('GET', $tel($wantAcct, $wantLine)));
+    printf("           HTTP %d %s\n", $c2, $ok2 ? '· JSON' : ($c2 === 200 ? '· NOT JSON (sign-in page)' : ''));
+
+    echo "\n  " . str_repeat('─', 66) . "\n";
+    if (!$ok1) {
+        echo "  The CONTROL failed, so the TEST says nothing. The session or the path\n";
+        echo "  is the problem, not the account. Import a fresh cookie and re-run —\n";
+        echo "  the access token expires in minutes.\n\n";
+        exit(1);
+    }
+    if ($ok2) {
+        echo "  THE SWAP CARRIES. One cookie reaches both accounts: the control and a\n";
+        echo "  different account both answered with data. Per-account cookies are not\n";
+        echo "  needed for telemetry, and a 404 on some other pair means that pair does\n";
+        echo "  not exist rather than that the account is out of reach.\n\n";
+        exit(0);
+    }
+    echo "  THE SWAP DOES NOT CARRY telemetryagg. The control answered and the same\n";
+    echo "  request for another account did not, on one session, moments apart.\n";
+    echo "  So this endpoint is per-account: each account needs its own cookie,\n";
+    echo "  which the session store now holds (--import adds, it no longer replaces).\n\n";
+    echo "  It also means every cross-account 404 today was unreadable, including\n";
+    echo "  the one against our own assignment — that pair is still unjudged.\n\n";
     exit(1);
 }
 
