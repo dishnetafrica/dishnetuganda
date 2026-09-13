@@ -9,7 +9,16 @@ chdir(dirname(__DIR__));
  *   php tools/starlink_session.php --import-file /tmp/cookie.txt
  *   docker exec -it ucrm php .../starlink_session.php --import
  *   php tools/starlink_session.php --account ops@dishnetuganda.com --number 000-1
- *   php tools/starlink_session.php --forget
+ *   php tools/starlink_session.php --use ACC-DF-...     switch to another account
+ *   php tools/starlink_session.php --forget [ACC-DF-...]  drop one, or the active one
+ *
+ * ─── More than one account ───────────────────────────────────────────────
+ * Starlink lets one login switch between accounts, and DishNet Uganda has
+ * several. Switch account on starlink.com, copy the cookie header again, and
+ * import it: the cookie names the account it came from, so importing ADDS that
+ * account here instead of replacing the last one. Every held account is kept
+ * alive by cron/starlink_keepalive.php; --use decides which one the probe and
+ * the collector talk to.
  *
  * There is no Starlink password to give this tool, and that is deliberate: the
  * account is entered in a browser, and only the resulting session cookie comes
@@ -58,6 +67,11 @@ $value = function (string $f) use ($args) {
     return ($i !== false && isset($args[$i + 1])) ? (string)$args[$i + 1] : '';
 };
 $has = function (string $f) use ($args) { return in_array($f, $args, true); };
+$val = function (string $f) use ($args): string {
+    $i = array_search($f, $args, true);
+    return ($i !== false && isset($args[$i + 1]) && strpos((string)$args[$i + 1], '--') !== 0)
+        ? (string)$args[$i + 1] : '';
+};
 
 // A cookie on a command line is already compromised.
 foreach ($args as $a) {
@@ -70,8 +84,30 @@ foreach ($args as $a) {
     }
 }
 
+/** Every account held, so one dead session among four is visible at a glance. */
+function roster(StarlinkSessionStore $store): void
+{
+    $accounts = $store->accounts();
+    if (count($accounts) < 2) return;   // nothing to compare, detail below says it
+
+    $active = $store->active();
+    echo "\n  ACCOUNTS HELD\n\n";
+    printf("    %-2s %-28s %-10s %s\n", '', 'ACCOUNT', 'STATE', 'LAST ACCEPTED');
+    foreach ($accounts as $a) {
+        if (!$store->useAccount($a)) continue;
+        $r = $store->load();
+        printf("    %-2s %-28s %-10s %s\n",
+            $a === $active ? '▸' : '', $a,
+            (string)$r['state'],
+            (string)$r['last_ok_at'] !== '' ? (string)$r['last_ok_at'] : '—');
+    }
+    $store->useAccount($active);
+    echo "\n    ▸ is the one every other command acts on. Change it with --use.\n";
+}
+
 function show(StarlinkSessionStore $store, array $config): void
 {
+    roster($store);
     $s = $store->status();
     $label = [
         StarlinkSessionStore::STATE_ACTIVE => 'ACTIVE',
@@ -124,7 +160,42 @@ function show(StarlinkSessionStore $store, array $config): void
     echo "\n";
 }
 
+if ($has('--use')) {
+    $want = trim($val('--use'));
+    if ($want === '') {
+        fwrite(STDERR, "\n  --use needs an account number. Held here:\n");
+        foreach ($store->accounts() as $a) fwrite(STDERR, "    {$a}\n");
+        fwrite(STDERR, "\n");
+        exit(2);
+    }
+    if (!$store->useAccount($want)) {
+        fwrite(STDERR, "\n  No session held for " . strtoupper($want) . ".\n");
+        fwrite(STDERR, "  Switch to that account on starlink.com, copy the cookie header,\n");
+        fwrite(STDERR, "  and import it — the cookie names its own account.\n\n");
+        fwrite(STDERR, "  Held here:\n");
+        foreach ($store->accounts() as $a) fwrite(STDERR, "    {$a}\n");
+        fwrite(STDERR, "\n");
+        exit(1);
+    }
+    echo "\n  Now using " . $store->active() . ".\n";
+    show($store, $config);
+    exit(0);
+}
+
 if ($has('--forget')) {
+    // A named account is dropped entirely. With no name, the ACTIVE account's
+    // cookie is cleared but the account is kept — the old behaviour, because
+    // forgetting a cookie and forgetting an account are different intentions.
+    $which = trim($val('--forget'));
+    if ($which !== '') {
+        if (!$store->forgetAccount($which)) {
+            fwrite(STDERR, "\n  No session held for " . strtoupper($which) . ".\n\n");
+            exit(1);
+        }
+        echo "\n  Dropped " . strtoupper($which) . ". Sign out of starlink.com too if that\n";
+        echo "  session should be revoked.\n\n";
+        exit(0);
+    }
     $store->save(['cookie_enc' => '', 'state' => StarlinkSessionStore::STATE_ABSENT,
                   'consecutive_failures' => 0, 'last_error' => '', 'throttled_until' => '',
                   'account_email' => (string)$store->load()['account_email'],

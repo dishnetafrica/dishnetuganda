@@ -99,28 +99,151 @@ class StarlinkSessionStore
         return $out === false ? '' : $out;
     }
 
-    /** @return array the stored record, or the empty shape */
-    public function load(): array
+    // ── MANY ACCOUNTS, ONE ACTIVE ─────────────────────────────────────────
+    //
+    // Starlink lets one login switch between accounts, and DishNet Uganda has
+    // several: the account a cookie was taken from turned out to have no
+    // active kit, while the customer we have bound sits on another one. A store
+    // that holds a single session can only ever see whichever account somebody
+    // last happened to be looking at.
+    //
+    // So the file holds a map of accounts and a note of which is active, and
+    // load()/save() address the active one. Every other method in this class
+    // goes through those two, which is why none of them had to change: markOk,
+    // markFailure, the throttle and the rest act on whichever account is
+    // selected, exactly as they always acted on the only one there was.
+    //
+    // dishnet-data-report solved the same problem the same way — "per-account
+    // session keep-alive", its sessions keyed by account in dr_accounts.json.
+    // This is not a new idea, it is the one we were missing.
+
+    /** A session that has never been imported. */
+    public static function emptyRecord(): array
     {
-        $empty = [
+        return [
             'account_email'   => '', 'account_number' => '',
             'cookie_enc'      => '', 'imported_at'    => '', 'imported_by' => '',
             'last_ok_at'      => '', 'last_checked_at' => '',
             'consecutive_failures' => 0, 'state' => self::STATE_ABSENT,
             'last_error'      => '', 'throttled_until' => '',
         ];
-        if (!is_file($this->file)) return $empty;
-        $d = json_decode((string)@file_get_contents($this->file), true);
-        return is_array($d) ? array_merge($empty, $d) : $empty;
     }
 
-    /** Write through SecureFile: 0640, owned by whoever owns the data dir. */
-    public function save(array $record): bool
+    /** One spelling for an account key. Blank becomes a named placeholder. */
+    public static function keyFor(string $account): string
+    {
+        $a = strtoupper(trim($account));
+        return $a === '' ? self::KEY_UNKNOWN : $a;
+    }
+
+    /** Used when a cookie carries no account number to key itself by. */
+    const KEY_UNKNOWN = 'UNKNOWN';
+
+    /**
+     * The whole file: every account, and which one is active.
+     *
+     * Reads the single-session shape too. A file written before this existed
+     * is one account whose key is its own account_number — migrated on read,
+     * never rewritten until something saves, so a rollback loses nothing.
+     *
+     * @return array{accounts:array<string,array>, active:string}
+     */
+    public function readAll(): array
+    {
+        if (!is_file($this->file)) return ['accounts' => [], 'active' => ''];
+        $d = json_decode((string)@file_get_contents($this->file), true);
+        if (!is_array($d)) return ['accounts' => [], 'active' => ''];
+
+        if (isset($d['accounts']) && is_array($d['accounts'])) {
+            $out = [];
+            foreach ($d['accounts'] as $k => $rec) {
+                if (is_array($rec)) $out[self::keyFor((string)$k)] = array_merge(self::emptyRecord(), $rec);
+            }
+            $active = self::keyFor((string)($d['active'] ?? ''));
+            if (!isset($out[$active])) $active = $out === [] ? '' : (string)array_key_first($out);
+            return ['accounts' => $out, 'active' => $active];
+        }
+
+        // The old shape: one flat record.
+        $rec = array_merge(self::emptyRecord(), $d);
+        $key = self::keyFor((string)$rec['account_number']);
+        return ['accounts' => [$key => $rec], 'active' => $key];
+    }
+
+    /** @param array{accounts:array<string,array>, active:string} $all */
+    public function writeAll(array $all): bool
     {
         require_once __DIR__ . '/SecureFile.php';
-        $r = SecureFile::write($this->file,
-            (string)json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $r = SecureFile::write($this->file, (string)json_encode([
+            'schema'   => 2,
+            'active'   => (string)($all['active'] ?? ''),
+            'accounts' => (array)($all['accounts'] ?? []),
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         return !empty($r['ok']);
+    }
+
+    /** Account keys held, in a stable order. @return array<int,string> */
+    public function accounts(): array
+    {
+        $k = array_keys($this->readAll()['accounts']);
+        sort($k);
+        return $k;
+    }
+
+    /** Which account every other method in this class is talking about. */
+    public function active(): string
+    {
+        return (string)$this->readAll()['active'];
+    }
+
+    /**
+     * Point this store at another account it already holds.
+     *
+     * Refuses an account it does not hold rather than quietly creating a blank
+     * one: "switched to an account with no cookie" and "switched to an account
+     * that does not exist" must not look the same to a caller.
+     */
+    public function useAccount(string $account): bool
+    {
+        $all = $this->readAll();
+        $key = self::keyFor($account);
+        if (!isset($all['accounts'][$key])) return false;
+        if ($all['active'] === $key) return true;
+        $all['active'] = $key;
+        return $this->writeAll($all);
+    }
+
+    /** Drop one account's session. Returns false if it was not held. */
+    public function forgetAccount(string $account): bool
+    {
+        $all = $this->readAll();
+        $key = self::keyFor($account);
+        if (!isset($all['accounts'][$key])) return false;
+        unset($all['accounts'][$key]);
+        if ($all['active'] === $key) {
+            $all['active'] = $all['accounts'] === [] ? '' : (string)array_key_first($all['accounts']);
+        }
+        return $this->writeAll($all);
+    }
+
+    /** @return array the ACTIVE account's record, or the empty shape */
+    public function load(): array
+    {
+        $all = $this->readAll();
+        $key = $all['active'];
+        return $key !== '' && isset($all['accounts'][$key])
+            ? $all['accounts'][$key] : self::emptyRecord();
+    }
+
+    /** Write the ACTIVE account's record. 0640, owned by the data dir's owner. */
+    public function save(array $record): bool
+    {
+        $all = $this->readAll();
+        $key = $all['active'];
+        if ($key === '') $key = self::keyFor((string)($record['account_number'] ?? ''));
+        $all['accounts'][$key] = array_merge(self::emptyRecord(), $record);
+        $all['active'] = $key;
+        return $this->writeAll($all);
     }
 
     /** The cookie in the clear, for the connector only. */
@@ -146,26 +269,41 @@ class StarlinkSessionStore
                                             . '(expected name=value; name=value)'];
         }
 
-        $rec = $this->load();
+        // WHICH account this cookie belongs to is decided before anything is
+        // loaded, because it decides WHAT to load. The browser puts the account
+        // in the jar, so a cookie taken after switching accounts in Starlink
+        // identifies itself — and importing it adds that account rather than
+        // overwriting whichever one happened to be selected here.
+        //
+        // That overwriting is the bug this fixes. Every second account imported
+        // used to silently replace the first, so a box with four Starlink
+        // accounts could only ever hold the most recently pasted one.
+        $acct = $accountNumber !== ''
+            ? $accountNumber
+            : self::cookieValue($cookie, 'starlink.com.account_number');
+        $key  = self::keyFor($acct);
+
+        $all = $this->readAll();
+        $rec = $all['accounts'][$key] ?? self::emptyRecord();
+
         $rec['cookie_enc']  = $this->encrypt($cookie);
         $rec['imported_at'] = gmdate('Y-m-d H:i:s');
         $rec['imported_by'] = $who;
         $rec['state']       = self::STATE_ACTIVE;
         $rec['consecutive_failures'] = 0;
         $rec['last_error']  = '';
-        if ($accountEmail  !== '') $rec['account_email']  = $accountEmail;
-        if ($accountNumber !== '') $rec['account_number'] = $accountNumber;
+        $rec['throttled_until'] = '';
+        if ($accountEmail !== '') $rec['account_email'] = $accountEmail;
+        if ($acct !== '')         $rec['account_number'] = strtoupper(trim($acct));
 
-        // The browser already knows the account number and puts it in the jar.
-        // Reading it here saves waiting for a service-line listing to learn
-        // something the session has been carrying all along.
-        if (trim((string)$rec['account_number']) === '') {
-            $fromCookie = self::cookieValue($cookie, 'starlink.com.account_number');
-            if ($fromCookie !== '') $rec['account_number'] = $fromCookie;
-        }
+        $all['accounts'][$key] = $rec;
+        // The one just imported becomes active: it is the freshest session on
+        // the box and the reason somebody went to get it.
+        $all['active'] = $key;
 
-        return $this->save($rec)
-            ? ['ok' => true, 'error' => '', 'names' => self::cookieNames($cookie)]
+        return $this->writeAll($all)
+            ? ['ok' => true, 'error' => '', 'names' => self::cookieNames($cookie),
+               'account' => $key, 'accounts_held' => count($all['accounts'])]
             : ['ok' => false, 'error' => 'could not write the session store'];
     }
 

@@ -1,0 +1,132 @@
+<?php
+declare(strict_types=1);
+/**
+ * test_starlink_multi_account.php — one login, several Starlink accounts.
+ *
+ * Starlink lets one login switch between accounts, and DishNet Uganda has
+ * several. The account whose cookie we first imported turned out to have no
+ * active kit, while the one customer bound in uCRM sits on a different
+ * account — so a store holding a single session could only ever see whichever
+ * account somebody last happened to be looking at.
+ *
+ * The bug that made this urgent: importCookie() loaded the ACTIVE record and
+ * overwrote it, so every second account imported silently replaced the first.
+ * A box with four Starlink accounts could hold exactly one.
+ *
+ * What these insist on:
+ *
+ *   · importing a second account ADDS it; the first keeps its own cookie
+ *   · the cookie names its own account, so a person need not type it
+ *   · switching is explicit, and switching to an account we do not hold FAILS
+ *     rather than quietly creating a blank one
+ *   · the single-session file already on the server reads without being
+ *     rewritten, keeps its cookie and its state, and survives a second import
+ *   · the keep-alive touches EVERY account and puts the selection back
+ */
+require_once dirname(__DIR__) . '/lib/StarlinkSessionStore.php';
+
+$pass = 0; $fail = 0;
+function t(string $n, $got, $want) { global $pass, $fail;
+    if ($got === $want) { $pass++; printf("  ok   %s\n", $n); }
+    else { $fail++; printf("  FAIL %s\n       got  %s\n       want %s\n", $n, var_export($got, true), var_export($want, true)); } }
+function is_(bool $c, string $m, string $d = ''): void { global $pass, $fail;
+    if ($c) { $pass++; echo "  ok   $m\n"; } else { $fail++; echo "  FAIL $m" . ($d ? "\n       $d" : '') . "\n"; } }
+
+const A1 = 'ACC-DF-15744579-40001-43';
+const A2 = 'ACC-DF-15973474-59163-60';
+
+function freshStore(): array
+{
+    $base = sys_get_temp_dir() . '/dn_sl_multi_' . bin2hex(random_bytes(4));
+    @mkdir($base . '/plugins/dishnet-hybrid-sudan', 0777, true);
+    @mkdir($base . '/data', 0777, true);
+    putenv('DN_PLUGIN_ROOT=' . $base . '/plugins/dishnet-hybrid-sudan');
+    return [new StarlinkSessionStore($base . '/plugins/dishnet-hybrid-sudan', $base . '/data'), $base];
+}
+
+echo "\nA second account is added, not substituted\n";
+[$s] = freshStore();
+$r1 = $s->importCookie('Starlink.Com.Sso=aaa; starlink.com.account_number=' . A1, 'tester');
+$r2 = $s->importCookie('Starlink.Com.Sso=bbb; starlink.com.account_number=' . A2, 'tester');
+t('the first import names its account', $r1['account'], A1);
+t('and holds one',                      $r1['accounts_held'], 1);
+t('the second names its own',           $r2['account'], A2);
+t('and holds two',                      $r2['accounts_held'], 2);
+t('both are listed',                    $s->accounts(), [A1, A2]);
+t('the newest is active',               $s->active(), A2);
+t('with its own cookie',                $s->cookie(), 'Starlink.Com.Sso=bbb; starlink.com.account_number=' . A2);
+
+echo "\nSwitching, and refusing to invent\n";
+is_($s->useAccount(strtolower(A1)), 'a switch ignores case');
+t('the selection moved',   $s->active(), A1);
+t('and the cookie with it', $s->cookie(), 'Starlink.Com.Sso=aaa; starlink.com.account_number=' . A1);
+t('an account we do not hold is refused', $s->useAccount('ACC-NOT-HERE-1'), false);
+t('and the selection is unchanged',       $s->active(), A1);
+is_(!in_array('ACC-NOT-HERE-1', $s->accounts(), true), 'no blank account was created');
+
+echo "\nPer-account state does not leak between accounts\n";
+$s->useAccount(A1);
+$s->markFailure('A1 is unwell');
+$s->useAccount(A2);
+t('A2 is untouched',            (string)$s->load()['state'], StarlinkSessionStore::STATE_ACTIVE);
+t('and carries no error',       (string)$s->load()['last_error'], '');
+$s->useAccount(A1);
+is_(strpos((string)$s->load()['last_error'], 'A1 is unwell') !== false, 'while A1 kept its own');
+t('and its own failure count',  (int)$s->load()['consecutive_failures'], 1);
+
+echo "\nForgetting one leaves the other\n";
+t('dropping an account we hold',     $s->forgetAccount(A2), true);
+t('leaves just the one',             $s->accounts(), [A1]);
+t('active falls back to it',         $s->active(), A1);
+t('dropping one we do not hold fails', $s->forgetAccount(A2), false);
+
+echo "\nA cookie with no account number still has somewhere to live\n";
+[$s2] = freshStore();
+$r = $s2->importCookie('Starlink.Com.Sso=ccc', 'tester');
+t('it is held under a named placeholder', $r['account'], StarlinkSessionStore::KEY_UNKNOWN);
+t('and its cookie is retrievable',        $s2->cookie(), 'Starlink.Com.Sso=ccc');
+is_(strpos($r['account'], 'ACC') === false, 'and is not passed off as an account number');
+
+echo "\nThe single-session file already on the server\n";
+[$s3, $base3] = freshStore();
+file_put_contents($s3->path(), json_encode([
+    'account_email'  => 'accounts@dishnetuganda.com',
+    'account_number' => A1,
+    'cookie_enc'     => $s3->encrypt('Starlink.Com.Sso=legacy'),
+    'imported_at'    => '2026-09-13 05:45:00', 'imported_by' => 'root',
+    'state'          => StarlinkSessionStore::STATE_EXPIRED,
+    'consecutive_failures' => 0,
+], JSON_PRETTY_PRINT));
+$s4 = new StarlinkSessionStore($base3 . '/plugins/dishnet-hybrid-sudan', $base3 . '/data');
+t('it reads as one account, keyed by its own number', $s4->accounts(), [A1]);
+t('which is active',        $s4->active(), A1);
+t('its cookie survives',    $s4->cookie(), 'Starlink.Com.Sso=legacy');
+t('and its state',          (string)$s4->load()['state'], StarlinkSessionStore::STATE_EXPIRED);
+t('and the email it knew',  (string)$s4->load()['account_email'], 'accounts@dishnetuganda.com');
+is_(strpos((string)file_get_contents($s4->path()), '"accounts"') === false,
+    'and the file is NOT rewritten on a read — a rollback loses nothing');
+$s4->importCookie('Starlink.Com.Sso=new; starlink.com.account_number=' . A2, 'tester');
+t('adding a second keeps the legacy one', $s4->accounts(), [A1, A2]);
+$s4->useAccount(A1);
+t('with its cookie intact',               $s4->cookie(), 'Starlink.Com.Sso=legacy');
+
+echo "\nAn empty store answers honestly\n";
+[$s5] = freshStore();
+t('no accounts',         $s5->accounts(), []);
+t('no active one',       $s5->active(), '');
+t('no cookie',           $s5->cookie(), '');
+t('nothing to switch to', $s5->useAccount(A1), false);
+t('state is absent',     (string)$s5->load()['state'], StarlinkSessionStore::STATE_ABSENT);
+
+echo "\nThe keep-alive visits every account and puts the selection back\n";
+$ka = (string)file_get_contents(dirname(__DIR__) . '/cron/starlink_keepalive.php');
+is_(strpos($ka, '$store->accounts()') !== false, 'it iterates the accounts');
+is_(strpos($ka, 'foreach ($accounts as') !== false, 'in a loop, not once');
+is_(strpos($ka, '$restore = $store->active()') !== false, 'remembering the selection');
+is_(strpos($ka, 'if ($restore !== \'\') $store->useAccount($restore)') !== false,
+    'and restoring it at the end');
+is_(preg_match('/^\s*exit\s*[(;]/m', $ka) === 0,
+    'and still never exit()s — master.php includes it');
+
+printf("\n%d passed, %d failed\n", $pass, $fail);
+exit($fail === 0 ? 0 : 1);

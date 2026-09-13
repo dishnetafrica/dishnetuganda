@@ -47,36 +47,52 @@ $dataDir = getDataDir($pluginRoot);
 $config  = PluginConfig::load($pluginRoot, $dataDir);
 $store   = new StarlinkSessionStore($pluginRoot, $dataDir);
 
-if ($store->cookie() === '') return;             // nothing imported here
+// EVERY account, not just the selected one. Uganda has several Starlink
+// accounts; a keep-alive that touches only the active session lets the others
+// expire, and the account with the customers on it is not always the one
+// somebody was last looking at. The active account is restored at the end, so
+// this cron changes no operator's selection.
+$accounts = $store->accounts();
+if ($accounts === []) return;                    // nothing imported here
 
-$status = $store->status();
+$restore = $store->active();
 
-// A session already declared expired or dead cannot be revived by asking
-// again. Leave it for a person and say so once, not every five minutes.
-if (in_array($status['state'], [StarlinkSessionStore::STATE_EXPIRED,
-                                StarlinkSessionStore::STATE_DEAD], true)) {
-    if (($status['last_checked_at'] ?? '') !== ''
-        && strtotime((string)$status['last_checked_at']) < time() - 3600) {
-        error_log('[starlink_keepalive] session is ' . $status['state']
-                . ' — a person must re-import: php tools/starlink_session.php --import');
-        $store->markExpired((string)$status['last_error']);   // refresh the timestamp
+foreach ($accounts as $_ka_acct) {
+    if (!$store->useAccount($_ka_acct)) continue;
+    if ($store->cookie() === '') continue;        // held, but never imported
+
+    $status = $store->status();
+
+    // A session already declared expired or dead cannot be revived by asking
+    // again. Leave it for a person and say so once, not every five minutes.
+    if (in_array($status['state'], [StarlinkSessionStore::STATE_EXPIRED,
+                                    StarlinkSessionStore::STATE_DEAD], true)) {
+        if (($status['last_checked_at'] ?? '') !== ''
+            && strtotime((string)$status['last_checked_at']) < time() - 3600) {
+            error_log('[starlink_keepalive] ' . $_ka_acct . ' is ' . $status['state']
+                    . ' — a person must re-import: php tools/starlink_session.php --import');
+            $store->markExpired((string)$status['last_error']);   // refresh the timestamp
+        }
+        continue;
     }
-    return;
+
+    // A fresh connector per account: it caches nothing across accounts, and
+    // reusing one would have it answer for the session it was built with.
+    $conn = new StarlinkPortalConnector($store, $config);
+    $r    = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
+
+    if (!empty($r['ok'])) continue;   // markOk() already ran inside the request
+
+    // A 5xx is Starlink's weather and costs the session nothing; the connector
+    // has already decided that. Anything else is worth a line, because a
+    // session that has stopped working is a sync that has stopped running.
+    if ((int)$r['code'] < 500) {
+        error_log('[starlink_keepalive] ' . $_ka_acct
+                . ' session no longer working: ' . (string)$r['error']);
+    }
 }
 
-$conn = new StarlinkPortalConnector($store, $config);
-$r    = $conn->get(StarlinkPortalConnector::LINES_LIGHT_PATH);
-
-if (!empty($r['ok'])) {
-    // markOk() already ran inside the request. Nothing to say — a keep-alive
-    // that logs every success drowns the one line that matters.
-    return;
-}
-
-// A 5xx is Starlink's weather and costs the session nothing; the connector
-// has already decided that. Anything else is worth a line, because a session
-// that has stopped working is a sync that has stopped running.
-if ((int)$r['code'] < 500) {
-    error_log('[starlink_keepalive] session no longer working: ' . (string)$r['error']);
-}
+// Put the selection back. An operator who switched to an account to look at
+// it should not find the cron has moved them somewhere else.
+if ($restore !== '') $store->useAccount($restore);
 return;
