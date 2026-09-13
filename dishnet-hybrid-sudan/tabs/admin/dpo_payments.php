@@ -25,7 +25,10 @@ require_once dirname(__DIR__, 2) . '/lib/crm_url.php';
 
 $dpRoot    = dirname(__DIR__, 2);
 $dpDataDir = getDataDir($dpRoot);
-$dpConfig  = $store->load('kyc_config.json') ?? [];
+// Through the vault: public.php builds $config from kyc_config.json alone, so
+// a credential that lives only in the vault would read here as "not set"
+// while working perfectly everywhere else.
+$dpConfig  = DpoBootstrap::vaulted($store->load('kyc_config.json') ?? []);
 $dpNotice  = null;
 $dpError   = null;
 

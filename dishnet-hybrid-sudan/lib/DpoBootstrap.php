@@ -5,6 +5,8 @@ require_once __DIR__ . '/DpoClient.php';
 require_once __DIR__ . '/DpoPaymentStore.php';
 require_once __DIR__ . '/DpoPaymentService.php';
 require_once __DIR__ . '/crm_url.php';
+require_once __DIR__ . '/ConfigVault.php';
+require_once __DIR__ . '/bootstrap_data.php';
 
 /**
  * DpoBootstrap — one place that builds the DPO service.
@@ -24,6 +26,27 @@ require_once __DIR__ . '/crm_url.php';
  */
 final class DpoBootstrap
 {
+    /** The DPO settings that live in the vault. */
+    const KEYS = ['dpo_enabled', 'dpo_environment', 'dpo_company_token', 'dpo_service_type',
+                  'dpo_company_acc_ref', 'dpo_payment_method_uuid', 'dpo_ptl', 'dpo_ptl_type'];
+
+    /**
+     * The config with anything DPO needs restored from the vault.
+     *
+     * Every caller hands us whatever $config it happens to hold, and in a web
+     * request that is kyc_config.json straight off disk — public.php never
+     * calls PluginConfig::load(), so it carries no vault values at all. A
+     * company token stored ONLY in the vault would therefore read as "not
+     * configured" on the admin screen AND refuse every payment, while sitting
+     * safely on disk the whole time. Filling here means one answer everywhere.
+     */
+    public static function vaulted(array $config): array
+    {
+        $root = dirname(__DIR__);
+        try { $dataDir = getDataDir($root); } catch (\Throwable $e) { $dataDir = $root . '/data'; }
+        return ConfigVault::fill($root, $dataDir, $config, self::KEYS);
+    }
+
     /** Where DPO sends the customer back. Also what you paste into DPO's portal. */
     public static function returnUrl(array $config): string
     {
@@ -48,6 +71,7 @@ final class DpoBootstrap
     /** @param object $store SqliteStore */
     public static function service($store, array $config, $crm, ?callable $log = null): DpoPaymentService
     {
+        $config = self::vaulted($config);
         $env = ((string)($config['dpo_environment'] ?? 'test')) === 'live' ? 'live' : 'test';
 
         $dpo = new DpoClient([
@@ -122,6 +146,7 @@ final class DpoBootstrap
     /** What the admin screen shows, and what a preflight check asks. */
     public static function readiness(array $config): array
     {
+        $config  = self::vaulted($config);
         $missing = [];
         if ((string)($config['dpo_company_token'] ?? '') === '')       $missing[] = 'company token';
         if ((string)($config['dpo_service_type'] ?? '') === '')        $missing[] = 'service type';

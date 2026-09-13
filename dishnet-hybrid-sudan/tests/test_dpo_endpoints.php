@@ -166,5 +166,44 @@ $mk = function ($v) use ($root) {
 foreach ([true, 1, '1', 'yes', 'on'] as $on)  is_($mk($on)->isEnabled(),  'on for ' . var_export($on, true));
 foreach ([false, 0, '0', '', 'no', null] as $off) is_(!$mk($off)->isEnabled(), 'off for ' . var_export($off, true));
 
+echo "\nA credential that lives only in the vault is still found\n";
+// The bug this pins: public.php builds its $config from kyc_config.json
+// straight off disk and never calls PluginConfig::load(), so a value stored
+// ONLY in the vault was invisible to every screen — the admin page read
+// "uCRM payment method: missing" while the UUID sat safely in the vault, and
+// initiate() would have refused every payment for the same reason.
+$vBase = sys_get_temp_dir() . '/dn_vault_' . bin2hex(random_bytes(4));
+@mkdir($vBase, 0777, true);
+putenv('DN_PLUGIN_ROOT=' . $root);
+putenv('DN_DATA_DIR=' . $vBase);
+putenv('DN_VAULT_FILE=' . $vBase . '/vault.json');
+require_once $root . '/lib/ConfigVault.php';
+ConfigVault::store($root, $vBase, [
+    'dpo_payment_method_uuid' => 'uuid-from-the-vault',
+    'dpo_company_token'       => 'token-from-the-vault',
+    'dpo_service_type'        => '3854',
+]);
+$vFilled = DpoBootstrap::vaulted([]);
+t('the payment method is restored', $vFilled['dpo_payment_method_uuid'] ?? '', 'uuid-from-the-vault');
+t('and the company token',          $vFilled['dpo_company_token'] ?? '', 'token-from-the-vault');
+$vReady = DpoBootstrap::readiness([]);
+is_(!in_array('uCRM payment method', $vReady['missing'], true),
+    'so readiness no longer calls it missing');
+is_(!in_array('company token', $vReady['missing'], true), 'nor the token');
+is_(in_array('accepted currencies', $vReady['missing'], true),
+    'and something genuinely unset is still reported');
+// A value a person typed must never be overwritten by an older vaulted one.
+t('an explicit value wins over the vault',
+  DpoBootstrap::vaulted(['dpo_service_type' => 'typed-by-hand'])['dpo_service_type'], 'typed-by-hand');
+// fill() must not write. apply() refreshes the vault; a screen must not.
+$vBefore = (string)file_get_contents($vBase . '/vault.json');
+DpoBootstrap::vaulted(['dpo_service_type' => 'something-else']);
+t('and reading the vault never rewrites it',
+  (string)file_get_contents($vBase . '/vault.json'), $vBefore);
+$vAdmin = (string)file_get_contents($root . '/tabs/admin/dpo_payments.php');
+is_(strpos($vAdmin, 'DpoBootstrap::vaulted(') !== false,
+    'the admin screen reads through the vault');
+
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
