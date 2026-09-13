@@ -100,7 +100,16 @@ is_(preg_match('/verify\(\).*\n(.*\n)*?.*ssCollectNow/', $page) === 1,
     'and does it straight after the import is VERIFIED, not before');
 is_(strpos($page, "=== 'collect'") !== false && strpos($page, 'value="collect"') !== false,
     'with a button for the window just after a paste');
-is_(strpos($page, 'using it does not extend it') !== false,
+// This used to assert the page said a token "lasts minutes, and using it does
+// not extend it". It said that because one reading here was misread — import
+// 07:58 to last SUCCESSFUL call 08:05 is not a token lifetime — and because
+// the collector was fetching through raw(), discarding the rotated cookie that
+// keeps a session alive. The working South Sudan installation holds one pasted
+// cookie "auto-refreshed 3058×" across 51 accounts. So the page now explains
+// the real cadence, and the test pins that instead.
+is_(strpos($page, 'lasts minutes, and using it does not extend it') === false,
+    'the page no longer repeats the claim the evidence overturned');
+is_(strpos($page, 'auto-refreshed') !== false && strpos($page, 'One paste should be enough') !== false,
     'and the page tells the operator why, so the cadence is not a mystery');
 
 // Collecting must go through the same guards as everything else here.

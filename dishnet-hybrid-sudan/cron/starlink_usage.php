@@ -42,6 +42,7 @@ require_once $_su_root . '/lib/PluginConfig.php';
 require_once $_su_root . '/lib/EquipmentAssignment.php';
 require_once $_su_root . '/lib/StarlinkSessionStore.php';
 require_once $_su_root . '/lib/StarlinkUsage.php';
+require_once $_su_root . '/lib/KitSlMap.php';
 
 $_su_dataDir = getDataDir($_su_root);
 $_su_config  = PluginConfig::load($_su_root, $_su_dataDir);
@@ -57,6 +58,23 @@ try {
     return;
 }
 if ($_su_live === []) return;                  // nothing bound, nothing to ask about
+
+// The pairings a person typed, for the kits Starlink's own listing carries no
+// serial for. In South Sudan this is not a fallback: 295 of that fleet's 367
+// service lines are reachable only through the typed map. Gap-fill only —
+// where the install record and the map disagree, the install record wins and
+// the disagreement is logged, because a transcription error here moves one
+// customer's gigabytes onto another's bill.
+$_su_map = new KitSlMap($_su_dataDir);
+if ($_su_map->count() > 0) {
+    $_su_gap  = $_su_map->apply($_su_live, new StarlinkServiceState());
+    $_su_live = $_su_gap['assignments'];
+    foreach ($_su_gap['disagreements'] as $_su_d) {
+        error_log('[starlink_usage] ' . $_su_d['kit'] . ': manual map says ' . $_su_d['map']
+                . ' but the install record says ' . $_su_d['assignment']
+                . ' — keeping the install record. Fix one of them.');
+    }
+}
 
 $_su_res  = (new StarlinkUsage($_su_session, $_su_config))->collect($_su_live);
 $_su_rows = $_su_res['rows'];
@@ -79,5 +97,6 @@ if (empty($_su_saved['ok'])) {
 }
 
 unset($_su_root, $_su_dataDir, $_su_config, $_su_session, $_su_ea, $_su_live,
+      $_su_map, $_su_gap, $_su_d,
       $_su_res, $_su_rows, $_su_saved, $_su_why, $_su_bits);
 return;

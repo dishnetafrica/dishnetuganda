@@ -31,25 +31,29 @@ require_once dirname(__DIR__, 2) . '/lib/JsonStore.php';
 require_once dirname(__DIR__, 2) . '/lib/SqliteStore.php';
 require_once dirname(__DIR__, 2) . '/lib/EquipmentAssignment.php';
 require_once dirname(__DIR__, 2) . '/lib/StarlinkUsage.php';
+require_once dirname(__DIR__, 2) . '/lib/KitSlMap.php';
 
 /**
  * Collect usage NOW, for whichever account is selected.
  *
- * ── WHY THIS RUNS AT IMPORT RATHER THAN ON A SCHEDULE ───────────────────
+ * ── WHY THIS STILL RUNS AT IMPORT ───────────────────────────────────────
  *
- * A Starlink access token lasts minutes, and USING it does not extend it.
- * Measured on this box: imported 07:58:08, last accepted 08:05:03, expired —
- * seven minutes, with the keep-alive dispatching on schedule throughout and
- * the SSO session still valid. No endpoint we have found mints a fresh access
- * token from that SSO session.
+ * This note used to say a Starlink token "lasts minutes, and using it does not
+ * extend it", from one reading here: imported 07:58:08, last accepted
+ * 08:05:03, expired. That reading was wrong twice over. The span is import to
+ * last SUCCESSFUL call, not a token lifetime; and the collector was fetching
+ * through raw(), which threw away the rotated cookie every response carries —
+ * so it was discarding the very thing that keeps a session alive and then
+ * reporting that the session had died.
  *
- * So an hourly collector will find a dead session almost every time, and the
- * only moment a session is reliably alive is the moment somebody has just
- * pasted one. That is when the fetch should happen.
+ * The working installation settles it. dishnet-data-report, South Sudan, one
+ * pasted cookie: "Cookie fresh (0.4h old) — 51 accounts · auto-refreshed
+ * 3058×", syncing every two hours with nobody re-pasting. A session survives
+ * indefinitely as long as every call persists the rotation it is handed.
  *
- * Billing cycles move once a day, so "paste a cookie, get today's usage" is a
- * perfectly good cadence — it just has to be the paste that triggers it,
- * rather than a clock that cannot know when the session is warm.
+ * Collecting at import stays, but for a smaller reason: it is the one moment
+ * the session is certainly alive, so a paste gives an immediate answer instead
+ * of a wait for the next tick.
  */
 function ssCollectNow(StarlinkSessionStore $store, array $config, string $dataDir): array
 {
@@ -60,6 +64,11 @@ function ssCollectNow(StarlinkSessionStore $store, array $config, string $dataDi
         return ['ok' => false, 'msg' => 'could not read assignments: ' . $e->getMessage()];
     }
     if ($live === []) return ['ok' => false, 'msg' => 'nothing is bound to a customer yet'];
+
+    // Same gap-fill the cron applies, so this button and the schedule collect
+    // the same set rather than two sets that merely look alike.
+    $map = new KitSlMap($dataDir);
+    if ($map->count() > 0) $live = $map->apply($live, new StarlinkServiceState())['assignments'];
 
     $u   = new StarlinkUsage($store, $config);
     $res = $u->collect($live);
@@ -138,6 +147,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         : ['bad', 'No session held for ' . htmlspecialchars(strtoupper($a)) . '.'];
 }
 
+// ── KIT → service line map ──────────────────────────────────────────────
+$ssMap = new KitSlMap($ssDataDir);
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['ss_action'] ?? '') === 'map' && csrfCheck()) {
+    $r = $ssMap->replace((string)($_POST['ss_map'] ?? ''));
+    $bits = [];
+    if (!empty($r['ok'])) $bits[] = $r['stored'] . ' pair(s) saved';
+    else                  $bits[] = $r['why'];
+    if ($r['errors'] !== []) {
+        $bits[] = count($r['errors']) . ' line(s) not stored: '
+                . implode(' · ', array_slice($r['errors'], 0, 4))
+                . (count($r['errors']) > 4 ? ' …' : '');
+    }
+    $ssFlash = [!empty($r['ok']) ? ($r['errors'] === [] ? 'good' : 'warn') : 'bad',
+                implode('. ', $bits)];
+    $ssMap = new KitSlMap($ssDataDir);
+}
+
+// What the map would actually do to the bindings we hold, shown rather than
+// promised — a map is only worth what it fills in.
+$ssGap = ['filled_lines' => 0, 'filled_accounts' => 0, 'disagreements' => [], 'unused' => []];
+$ssLiveCount = null;
+try {
+    $ssLive = EquipmentAssignment::fromStore(SqliteStore::create($ssDataDir))->liveAssignments();
+    $ssLiveCount = count($ssLive);
+    if ($ssMap->count() > 0) $ssGap = $ssMap->apply($ssLive, new StarlinkServiceState());
+} catch (\Throwable $e) { /* the map card simply shows no preview */ }
+
 $h      = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 $active = $ssStore->active();
 $held   = $ssStore->accounts();
@@ -213,14 +250,15 @@ textarea.ss-paste{width:100%;min-height:110px;font-family:'Courier New',monospac
       </div>
     </form>
     <div class="ss-note ss-amber" style="margin:14px 0 0;">
-      <strong>A Starlink token lasts minutes, and using it does not extend it.</strong>
-      Measured here: imported 07:58:08, last accepted 08:05:03, expired — seven minutes,
-      with the keep-alive running throughout and the SSO session still valid. Nothing we
-      have found mints a fresh access token from that SSO session.
+      <strong>One paste should be enough.</strong> A session stays alive by being used and
+      having the rotated cookie written back each time — South Sudan's data plugin holds one
+      pasted cookie across 51 accounts and reports it <em>auto-refreshed 3,058&times;</em>,
+      syncing every two hours with nobody re-pasting. Our keep-alive now does the same every
+      two minutes, and retries an account it had written off once an hour.
       <br><br>
-      So importing collects usage <em>immediately</em>, while the session is certainly
-      alive. Billing figures move once a day, so pasting a cookie when you want today's
-      numbers is the workable cadence — a clock cannot know when a session is warm.
+      Importing still collects immediately, because that is the one moment the session is
+      certainly warm. If <b>last accepted</b> below stops moving, the session really has
+      gone and wants a fresh paste.
     </div>
   </div>
 
@@ -283,6 +321,57 @@ textarea.ss-paste{width:100%;min-height:110px;font-family:'Courier New',monospac
         <span class="ss-id" style="margin-left:10px;">Only works while a session is still
           warm — within a few minutes of a paste.</span>
       </form>
+    <?php endif; ?>
+  </div>
+
+  <div class="ss-card">
+    <h3>KIT &rarr; service line map</h3>
+    <div class="ss-sub" style="margin-bottom:12px;">
+      Starlink's own listing does not reliably carry a kit serial — every service line in
+      our cache came back without one, and a Mini never has one. This is where that pairing
+      is typed in. It is not a workaround: in South Sudan <b>295 of 367</b> service lines are
+      reachable only through the typed map.
+      <br><br>
+      One per line, <code>KIT…=SL…</code>. Blank lines and <code>#</code> comments are fine.
+      Saving <b>replaces</b> the whole map with what is in the box, so removing a line here
+      removes it for good.
+    </div>
+    <form method="post" autocomplete="off">
+      <?= csrfField() ?>
+      <input type="hidden" name="ss_action" value="map">
+      <textarea class="ss-paste" name="ss_map" spellcheck="false"
+                placeholder="KIT404246364BX6=SL-DF-16046613-35504-0"><?= $h($ssMap->asText()) ?></textarea>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <button class="ss-btn" type="submit">Save map</button>
+        <span class="ss-id">
+          <?php if ($ssMap->count() === 0): ?>
+            Empty. Export what we already hold with <code>php tools/dr_kit_map.php --paste</code>.
+          <?php else: ?>
+            <?= (int)$ssMap->count() ?> pair(s)<?= $ssMap->savedAt() !== '' ? ', saved ' . $h($ssMap->savedAt()) . ' UTC' : '' ?>.
+          <?php endif; ?>
+        </span>
+      </div>
+    </form>
+
+    <?php if ($ssMap->count() > 0 && $ssLiveCount !== null): ?>
+      <div class="ss-note <?= $ssGap['disagreements'] !== [] ? 'ss-amber' : 'ss-grey2' ?>"
+           style="margin:14px 0 0;">
+        <strong>Against the <?= (int)$ssLiveCount ?> live binding(s) we hold:</strong>
+        fills in <?= (int)$ssGap['filled_lines'] ?> service line(s)
+        and <?= (int)$ssGap['filled_accounts'] ?> account(s).
+        <?php foreach ($ssGap['disagreements'] as $d): ?>
+          <br><br><strong>⚠ <?= $h($d['kit']) ?></strong> — the map says
+          <code><?= $h($d['map']) ?></code>, the install record says
+          <code><?= $h($d['assignment']) ?></code>. The install record is used. One of the
+          two is wrong and it is worth knowing which, because the usage follows it.
+        <?php endforeach; ?>
+        <?php if ($ssGap['unused'] !== []): ?>
+          <br><br><?= count($ssGap['unused']) ?> mapped kit(s) no live binding claims:
+          <code><?= $h(implode(', ', array_slice($ssGap['unused'], 0, 8))) ?></code><?=
+            count($ssGap['unused']) > 8 ? ' …' : '' ?>.
+          Normal for stock or released kits — and exactly what a mistyped serial looks like.
+        <?php endif; ?>
+      </div>
     <?php endif; ?>
   </div>
 
