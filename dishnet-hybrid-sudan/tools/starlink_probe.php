@@ -250,6 +250,13 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
         echo "    php tools/starlink_probe.php --usage --line SL-DF-15754766-41032-7\n\n";
         exit(1);
     }
+    // The usage endpoint is keyed by account AND line. The cookie carries the
+    // account it signed in as — the browser sets starlink.com.account_number —
+    // so prefer that over whatever an assignment recorded, because it is the
+    // account this request will actually be authorised for.
+    $fromCookieAcct = strtoupper(trim((string)($store->load()['account_number'] ?? '')));
+    if ($fromCookieAcct !== '') $acct = $fromCookieAcct;
+
     echo "\n  testing with service line   {$line}\n";
     echo "  taken from                  {$from}\n";
     if ($acct !== '') echo "  on account                  {$acct}\n";
@@ -278,15 +285,29 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     }
 
     // ── Harvested from dishnet-data-report's source ─────────────────────
+    // Harvest every path, however it is written. The first version of this
+    // matched only quoted strings STARTING with /api/ — and dishnet-data-report
+    // writes full URLs, "https://starlink.com/api/...", inside double quotes
+    // with {$var} interpolation. So it harvested nothing and I reported that
+    // as the plugin never asking for usage. It asks; my pattern could not see
+    // it. Match the path wherever it appears, absolute or host-qualified, and
+    // search subdirectories too.
     $harvested = [];
     $drRoot = dirname(SiblingPlugin::pluginRoot()) . '/dishnet-data-report';
     if (is_dir($drRoot)) {
-        foreach ((array)glob($drRoot . '/*.php') as $f) {
+        $files = array_merge((array)glob($drRoot . '/*.php'),
+                             (array)glob($drRoot . '/*/*.php'));
+        foreach ($files as $f) {
             $src = (string)@file_get_contents($f);
-            if (!preg_match_all('#[\'"](/api/[A-Za-z0-9/_.\-{}$\\[\]:?&=]+)[\'"]#', $src, $m)) continue;
+            if (!preg_match_all('#(?:https?://[A-Za-z0-9._-]*starlink\.com)?(/api/[A-Za-z0-9/_.\-{}$\\[\]]+)#i',
+                    $src, $m)) continue;
             foreach ($m[1] as $path) {
-                if (!preg_match('/usage|telemetry|data-usage|consumption|billing-cycle/i', $path)) continue;
-                $harvested[$path] = basename($f);
+                if (!preg_match('/usage|telemetry|consumption|billing-cycle/i', $path)) continue;
+                // First file wins: glob is alphabetical, so a diagnostic in
+                // public.php would otherwise take the credit for a path the
+                // cron is the real caller of.
+                $k = rtrim($path, '/');
+                if (!isset($harvested[$k])) $harvested[$k] = basename($f);
             }
         }
     }
@@ -331,10 +352,36 @@ if (in_array('--usage', array_slice($argv, 1), true)) {
     ];
 
     $tries = [];
+
+    // The endpoint dishnet-data-report actually uses, taken from its source
+    // rather than guessed. Its own knowledge_hub records a previous attempt
+    // getting this wrong by inventing /api/billing/v2/... — so this is the one
+    // path in the list that is evidenced rather than reasoned about.
+    if ($acct !== '') {
+        $A2 = rawurlencode($acct);
+        $tries[] = ['GET', "/api/telemetryagg/v1/data-usage/account/{$A2}/service-line/{$L}/annotated",
+                    'PROVEN in data-report cron.php'];
+        $tries[] = ['GET', "/api/telemetryagg/v1/data-usage/account/{$A2}/service-line/{$L}",
+                    'data-report (plain)'];
+        $tries[] = ['GET', "/api/telemetryagg/v2/data-usage/account/{$A2}/service-line/{$L}/annotated",
+                    'data-report (v2)'];
+        // Starlink Mini dishes (KIT4M*) answer on a different family.
+        $tries[] = ['GET', "/api/telemetryagg/v1/mini/account/{$A2}/service-line/{$L}/annotated",
+                    'data-report (Mini dishes)'];
+    }
+    $tries[] = ['GET', "/api/telemetryagg/v1/data-usage/service-line/{$L}/annotated",
+                'data-report (no account)'];
+
     foreach ($harvested as $path => $where) {
-        // Templated paths in that plugin's source carry a placeholder where
-        // the line goes. Put a real one in, whatever the placeholder looks like.
-        $real = preg_replace('#\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*#', $L, $path);
+        // A placeholder says what it holds: {$accNum} and {acc} want the
+        // account, {$slNum} and {sl} want the line. Substituting by position
+        // would put the line where the account goes and 404 for the wrong
+        // reason — which is the kind of false negative that cost a whole round.
+        $real = preg_replace_callback('#\{\$?[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*#',
+            static function (array $mm) use ($L, $acct): string {
+                return stripos($mm[0], 'acc') !== false && $acct !== ''
+                    ? rawurlencode($acct) : $L;
+            }, $path);
         $tries[] = ['GET', (string)$real, 'data-report/' . $where];
     }
     foreach ($patterned as $g) $tries[] = ['GET', $g, 'from observed routes'];
