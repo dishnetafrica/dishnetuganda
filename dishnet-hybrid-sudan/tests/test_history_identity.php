@@ -177,6 +177,62 @@ t('and a customer identity sees nothing of it either', $svc->getMessagesForAi($w
 t('an empty session is not an identity', ConversationService::sessionIdentityKey(''),
   ConversationService::ID_UNKNOWN);
 
+echo "\nOne anonymous session never sees another's\n";
+// Two real visitors, two conversations, two sessions. The isolation has to
+// hold between them as firmly as it does between two customers.
+$wA = conv($svc, 'web:aaa111', 'web');
+$kA = ConversationService::sessionIdentityKey('aaa111');
+$svc->beginTurn($wA, $kA);
+say($svc, $wA, 'in', 'visitor A asks about the Mini kit');
+$wB = conv($svc, 'web:bbb222', 'web');
+$kB = ConversationService::sessionIdentityKey('bbb222');
+$svc->beginTurn($wB, $kB);
+say($svc, $wB, 'in', 'visitor B asks about business plans');
+t('A sees only A', bodies($svc->getMessagesForAi($wA, $kA, 20)),
+  ['visitor A asks about the Mini kit']);
+t('B sees only B', bodies($svc->getMessagesForAi($wB, $kB, 20)),
+  ['visitor B asks about business plans']);
+t('A cannot read B\'s conversation', $svc->getMessagesForAi($wB, $kA, 20), []);
+t('B cannot read A\'s conversation', $svc->getMessagesForAi($wA, $kB, 20), []);
+
+echo "\nAn anonymous session is NOT a customer identity\n";
+// The distinction the whole design rests on: a session may own a sales
+// conversation, and may never own an account.
+t('a session is the anonymous state',
+  ConversationService::identityState($kA), ConversationService::STATE_ANONYMOUS);
+t('a client key is the identified state',
+  ConversationService::identityState(A), ConversationService::STATE_IDENTIFIED);
+t('unknown is the unknown state',
+  ConversationService::identityState(ConversationService::ID_UNKNOWN),
+  ConversationService::STATE_UNKNOWN);
+t('ambiguous is the ambiguous state',
+  ConversationService::identityState(ConversationService::ID_AMBIGUOUS),
+  ConversationService::STATE_AMBIGUOUS);
+is_(!ConversationService::isCustomerIdentity($kA),
+    'a session is NOT a customer identity');
+is_(ConversationService::isCustomerIdentity(A), 'a client key is');
+t('and no customer id can be extracted from a session',
+  ConversationService::customerIdOf($kA), null);
+t('while a client key yields one', ConversationService::customerIdOf(A), 7);
+foreach ([ConversationService::ID_UNKNOWN, ConversationService::ID_AMBIGUOUS] as $k) {
+    is_(!ConversationService::isCustomerIdentity($k), "\"{$k}\" is not a customer identity");
+    t("no customer id from \"{$k}\"", ConversationService::customerIdOf($k), null);
+}
+
+echo "\nBecoming identified does not inherit the anonymous conversation\n";
+// The same browser, later recognised as a customer. The sales chat they had
+// while anonymous is not thereby customer-owned history: it was written
+// under a different authorisation domain and stays there.
+$svc->beginTurn($wA, A);
+t('the customer sees none of the anonymous turns', $svc->getMessagesForAi($wA, A, 20), []);
+t('the epoch advanced rather than the history transferring',
+  (int)$svc->getConversation($wA)['identity_epoch'], 2);
+t('and the anonymous session cannot read back across it either',
+  $svc->getMessagesForAi($wA, $kA, 20), []);
+// Nor does being identified retroactively make the session a customer.
+is_(!ConversationService::isCustomerIdentity($kA),
+    'the session key is still not a customer identity afterwards');
+
 echo "\nThe caps and the ordering are unchanged\n";
 $c6 = conv($svc, '+256700999000', 'support');
 $svc->beginTurn($c6, A);

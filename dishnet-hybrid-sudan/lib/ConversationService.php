@@ -419,6 +419,63 @@ class ConversationService
     /** Several customers match. Never replayable. */
     public const ID_AMBIGUOUS = 'ambiguous';
 
+    // ── FOUR STATES, AND TWO OF THEM ARE NOT THE SAME THING ──────────────
+    //
+    // There are exactly four things an identity can be, and the distinction
+    // that matters most is between the first two:
+    //
+    //   IDENTIFIED  'client:7'      a CRM customer. Their own account data
+    //                               may be disclosed to them.
+    //   ANONYMOUS   'session:ab12'  a website visitor. They own a SALES
+    //                               conversation and nothing else. There is
+    //                               no account behind this, and there is no
+    //                               way to get one from here.
+    //   UNKNOWN     'unknown'       nobody could be identified — including
+    //                               when the CRM is merely unreachable.
+    //   AMBIGUOUS   'ambiguous'     several customers share the number.
+    //
+    // Both of the first two may replay their own history. Only the FIRST is
+    // a customer. Anyone reaching for "can this identity have account data"
+    // wants isCustomerIdentity(), never replayableIdentity() — the two
+    // questions look alike and are not, and conflating them would let an
+    // anonymous session inherit a customer's authority, which is the exact
+    // shape of the bug this whole phase exists to remove.
+    public const STATE_IDENTIFIED = 'identified';
+    public const STATE_ANONYMOUS  = 'anonymous';
+    public const STATE_UNKNOWN    = 'unknown';
+    public const STATE_AMBIGUOUS  = 'ambiguous';
+
+    /** Which of the four this key is. */
+    public static function identityState(string $key): string
+    {
+        if (strncmp($key, 'client:', 7) === 0)  return self::STATE_IDENTIFIED;
+        if (strncmp($key, 'session:', 8) === 0) return self::STATE_ANONYMOUS;
+        if ($key === self::ID_AMBIGUOUS)        return self::STATE_AMBIGUOUS;
+        return self::STATE_UNKNOWN;
+    }
+
+    /**
+     * Is this a CRM customer — the only state that may see account data?
+     *
+     * An anonymous session is deliberately NOT one. A visitor holding a
+     * session id has proved they are the same browser as last time, which is
+     * enough to continue a sales conversation and is not evidence about any
+     * account. Session history can never become proof of customer identity,
+     * and this is the function that says so.
+     */
+    public static function isCustomerIdentity(string $key): bool
+    {
+        return self::identityState($key) === self::STATE_IDENTIFIED;
+    }
+
+    /** The customer id behind an identified key, or null for every other state. */
+    public static function customerIdOf(string $key): ?int
+    {
+        if (!self::isCustomerIdentity($key)) return null;
+        $id = (int)substr($key, 7);
+        return $id > 0 ? $id : null;
+    }
+
     /**
      * The identity key for a resolved CRM customer.
      *
@@ -447,10 +504,18 @@ class ConversationService
         return $s === '' ? self::ID_UNKNOWN : 'session:' . $s;
     }
 
-    /** Can turns written under this identity ever be replayed to a model? */
+    /**
+     * Can turns written under this identity ever be replayed to a model?
+     *
+     * True for a customer AND for an anonymous session — they are separate
+     * authorisation domains that each own their own conversation. This
+     * answers "may this identity see its own history", never "may this
+     * identity see account data": that is isCustomerIdentity().
+     */
     public static function replayableIdentity(string $key): bool
     {
-        return strncmp($key, 'client:', 7) === 0 || strncmp($key, 'session:', 8) === 0;
+        $s = self::identityState($key);
+        return $s === self::STATE_IDENTIFIED || $s === self::STATE_ANONYMOUS;
     }
 
     /**
