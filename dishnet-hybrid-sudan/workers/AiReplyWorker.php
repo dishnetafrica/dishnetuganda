@@ -296,27 +296,10 @@ class AiReplyWorker extends WorkerBase
             }
         }
 
-        // Cross-channel memory: an anonymous phone that previously chatted on
-        // the website (web_chat_leads) is greeted as a returning contact
-        // instead of being asked everything again.
-        if (!$identified) {
-            try {
-                $digits = preg_replace('/\D+/', '', $phone) ?? '';
-                $last9  = strlen($digits) >= 9 ? substr($digits, -9) : $digits;
-                if ($last9 !== '') {
-                    foreach (($this->store->load('web_chat_leads.json') ?? []) as $wl) {
-                        $lp = preg_replace('/\D+/', '', (string)($wl['phone'] ?? '')) ?? '';
-                        if (strlen($lp) >= 9 && substr($lp, -9) === $last9) {
-                            $ctx['webchat_lead'] = [
-                                'name'  => (string)($wl['name'] ?? ''),
-                                'topic' => (string)($wl['note'] ?? ($wl['topic'] ?? ($wl['message'] ?? ''))),
-                            ];
-                            break;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) { /* memory is a bonus, never a blocker */ }
-        }
+        // The website-lead lookup that used to live here is gone. It matched
+        // on trailing nine digits with no country check — the same defect
+        // fixed in DishNetTools — and put a South Sudan visitor's typed name
+        // into a Ugandan caller's prompt. It bought a greeting.
 
         switch ($channel) {
             case EvolutionApiService::CHANNEL_SALES:
@@ -343,10 +326,12 @@ class AiReplyWorker extends WorkerBase
                     $svc = $this->tools->getCustomerServices($clientId);
                     if ($svc['ok']) $ctx['services'] = $svc['data'];
                 }
-                // Live line status works from the phone number alone, so it is
-                // still useful for a customer we could not identify in UCRM.
-                $line = $this->tools->getLineStatus($phone);
-                if ($line['ok']) $ctx['line_status'] = $line['data'];
+                // Splynx line status removed for Uganda: Splynx is the South
+                // Sudan fibre stack and this deployment is Starlink-only.
+                // The triage it gave for callers we could NOT identify is a
+                // deliberate loss, not an oversight. Starlink operational
+                // status, if it is wanted, gets its own capability with its
+                // own authoritative source.
                 break;
 
             case EvolutionApiService::CHANNEL_ACCOUNT:
@@ -394,6 +379,33 @@ class AiReplyWorker extends WorkerBase
                     ];
                 }
             } catch (\Throwable $e) { /* history is optional */ }
+        }
+
+        // ── The B3.2 contract, for the callers that lose nothing by it ──
+        //
+        // Sales never rendered account data, so it adopts the twelve-key
+        // contract today. Support and accounts do not: their prompts carry
+        // the customer's plan, status, expiry, balance, invoice and last
+        // payment, and the tool layer that will answer those on demand is
+        // B3.3. Enforcing the contract on them now would make them tell a
+        // customer asking what they owe that we will check — a functionality
+        // regression bought with no security gain. They migrate in B3.5,
+        // accounts last, after B3.4 has shown the tool answers match.
+        if ($channel === EvolutionApiService::CHANNEL_SALES) {
+            require_once dirname(__DIR__) . '/lib/BrainContext.php';
+            $products = $ctx['products'] ?? [];
+            $products['stock'] = (string)($this->config['stock_statement'] ?? '');
+            return \BrainContext::build(
+                \ConversationService::identityState($identityKey),
+                [
+                    'customer'  => $ctx['customer'] ?? null,
+                    'channel'   => $channel,
+                    'transport' => 'whatsapp',
+                    'medium'    => '',
+                    'products'  => $products,
+                    'message'   => $message,
+                    'history'   => $ctx['history'] ?? [],
+                ]);
         }
 
         return $ctx;

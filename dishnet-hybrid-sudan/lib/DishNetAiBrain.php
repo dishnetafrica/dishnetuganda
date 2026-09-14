@@ -186,15 +186,6 @@ class DishNetAiBrain
         // ── Transport rules ─────────────────────────────────────────────
         $p .= $this->webTransportRules($transport);
 
-        // Cross-channel memory: the same person, met again on another channel.
-        if (!empty($ctx['webchat_lead']) && is_array($ctx['webchat_lead'])) {
-            $wl = $ctx['webchat_lead'];
-            $p .= "\nPRIOR CONTACT: this phone previously chatted on our WEBSITE"
-                . (!empty($wl['name'])  ? " as \"" . $wl['name'] . "\"" : '')
-                . (!empty($wl['topic']) ? ", about: " . mb_substr((string)$wl['topic'], 0, 160) : '')
-                . ". Greet them as a returning contact and continue from what they already told us — do not make them repeat it.\n";
-        }
-
         // ── Markers ─────────────────────────────────────────────────────
         $p .= $this->actionMarkers($channel, $transport);
 
@@ -993,7 +984,8 @@ class DishNetAiBrain
     {
         $d = "DATA — the ONLY facts you may state:\n";
 
-        if (!empty($ctx['identity_ambiguous'])) {
+        if (!empty($ctx['identity_ambiguous'])
+            || ($ctx['identity_state'] ?? '') === 'ambiguous') {
             $d .= "\nIDENTITY: This number matches MORE THAN ONE customer. You have NOT identified "
                 . "them. Ask for their full name or account number. Reveal nothing until then.\n";
         }

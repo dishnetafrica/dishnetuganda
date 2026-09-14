@@ -55,18 +55,20 @@ final class ShopBotPayload
      * A '*' means the scalar itself travels.
      */
     public const CONTRACT = [
+        // The backend's answer about WHO this is — identified, anonymous,
+        // unknown or ambiguous. Never a customer id: it describes the
+        // authorisation posture, not the customer.
+        'identity_state'     => ['*'],
         'channel'            => ['*'],
         'transport'          => ['*'],
         'medium'             => ['*'],
         'message'            => ['*'],
         'identity_ambiguous' => ['*'],
         'customer'           => ['name', 'is_lead'],
-        'webchat_lead'       => ['name', 'topic'],
         'products'           => ['products.name', 'products.price', 'products.period_months',
                                  'products.download_speed', 'products.upload_speed',
                                  'products.data_limit', 'hardware.name', 'hardware.price'],
         'services'           => ['name', 'plan_name', 'status', 'active_to'],
-        'line_status'        => ['available', 'customer_status', 'services_count'],
         'account'            => ['balance', 'invoice.number', 'invoice.amount_due',
                                  'invoice.due_date', 'last_payment.amount', 'last_payment.date'],
         'history'            => ['role', 'text'],
@@ -101,6 +103,10 @@ final class ShopBotPayload
         'customer_phone'    => 'the customer identifies themselves to US; a third party does not need the number',
         'whatsapp_instance' => 'our own infrastructure identifier',
         'conversation_id'   => 'our own database key',
+        'line_status'       => 'Splynx is the South Sudan fibre stack; Uganda is Starlink-only, '
+                             . 'so this concept no longer exists in the Uganda contract at all',
+        'webchat_lead'      => 'a website visitor\'s typed name and topic — untrusted content that '
+                             . 'read like identity. Removed in B3.2 rather than renamed.',
         'push_name'         => 'never read by the brain',
     ];
 
@@ -113,6 +119,9 @@ final class ShopBotPayload
     public static function project(array $ctx): array
     {
         $out = [];
+
+        $state = self::str($ctx['identity_state'] ?? null);
+        if ($state !== '') $out['identity_state'] = $state;
 
         foreach (['channel', 'transport', 'medium', 'message', 'thread', 'signature'] as $k) {
             $v = self::str($ctx[$k] ?? null);
@@ -129,13 +138,6 @@ final class ShopBotPayload
             $out['customer'] = [
                 'name'    => self::str($c['name'] ?? null),
                 'is_lead' => !empty($c['is_lead']),
-            ];
-        }
-
-        if (!empty($ctx['webchat_lead']) && is_array($ctx['webchat_lead'])) {
-            $out['webchat_lead'] = [
-                'name'  => self::str($ctx['webchat_lead']['name']  ?? null),
-                'topic' => self::str($ctx['webchat_lead']['topic'] ?? null),
             ];
         }
 
@@ -172,20 +174,6 @@ final class ShopBotPayload
             ];
         }
         if ($svcs) $out['services'] = $svcs;
-
-        // Line status. The brain renders whether it is available, the account
-        // status, and a COUNT of services — never the services themselves,
-        // which are Splynx network records. So a count is what travels. A
-        // consumer that wanted the records now finds the key absent and fails
-        // where it can be seen, rather than silently receiving less.
-        $line = $ctx['line_status'] ?? null;
-        if (is_array($line) && !empty($line['available'])) {
-            $out['line_status'] = [
-                'available'       => true,
-                'customer_status' => self::str($line['customer_status'] ?? null),
-                'services_count'  => count(self::rows($line['services'] ?? null)),
-            ];
-        }
 
         // Money. Only the six leaves the brain renders.
         $acct = $ctx['account'] ?? null;

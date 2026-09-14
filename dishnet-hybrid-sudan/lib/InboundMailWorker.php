@@ -263,14 +263,15 @@ class InboundMailWorker
         // Account facts, only when we actually know whose account it is. A
         // draft written against a guessed account is worse than one written
         // against none: a person reviewing it would have no way to tell.
-        if ($client !== null && EmailCustomerMatcher::isCertain((string)$match['confidence'])) {
+        $identified = ($client !== null
+            && EmailCustomerMatcher::isCertain((string)$match['confidence']));
+        if ($identified) {
             $context['customer'] = [
                 'name'    => trim((string)($client['companyName'] ?? ''))
                           ?: trim(($client['firstName'] ?? '') . ' ' . ($client['lastName'] ?? ''))
                           ?: (string)($mail['from_name'] ?? ''),
                 'is_lead' => !empty($client['isLead']),
             ];
-            $context['account'] = ['id' => (int)($client['id'] ?? 0)];
         }
 
         // What a person must decide, stated as rules the model is given before
@@ -285,6 +286,15 @@ class InboundMailWorker
                 'Confirm that a payment has been received',
             ];
         }
+
+        // The B3.2 contract. account.id used to travel here and was never
+        // rendered; it does not travel now.
+        require_once dirname(__FILE__) . '/BrainContext.php';
+        require_once dirname(__FILE__) . '/ConversationService.php';
+        $context = \BrainContext::build(
+            $identified ? \ConversationService::STATE_IDENTIFIED
+                        : \ConversationService::STATE_UNKNOWN,
+            $context);
 
         try {
             $r = $this->brain->reply($context);

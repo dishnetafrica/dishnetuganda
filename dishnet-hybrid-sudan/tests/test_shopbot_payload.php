@@ -162,8 +162,11 @@ is_(strpos($sj, '249000') === false || strpos($sj, '"balance"') === false,
 is_(!isset(ShopBotPayload::project($sales)['account']), 'and there is no account block');
 
 echo "\nOnly the contract is serialised\n";
+// B3.2: identity_state joins the contract; line_status and webchat_lead
+// leave it — Uganda is Starlink-only, and a visitor's typed name was never
+// identity.
 $expected = ['channel', 'transport', 'message', 'thread', 'signature', 'customer',
-             'webchat_lead', 'products', 'services', 'line_status', 'account',
+             'products', 'services', 'account',
              'history', 'attachments', 'constraints'];
 sort($expected);
 $got = array_keys($out); sort($got);
@@ -174,7 +177,15 @@ foreach (array_keys($out) as $k) {
 
 echo "\nEvery dropped key is named, and the list is what we think it is\n";
 t('dropped keys', ShopBotPayload::dropped($ctx),
-  ['conversation_id', 'customer_phone', 'medium', 'push_name', 'whatsapp_instance']);
+  ['conversation_id', 'customer_phone', 'line_status', 'medium', 'push_name',
+   'webchat_lead', 'whatsapp_instance']);
+is_(!array_key_exists('line_status', ShopBotPayload::CONTRACT),
+    'line_status is not in the contract at all — Uganda is Starlink-only');
+is_(!array_key_exists('webchat_lead', ShopBotPayload::CONTRACT),
+    'nor webchat_lead');
+t('identity_state survives projection',
+  ShopBotPayload::project(['identity_state' => 'identified'])['identity_state'] ?? null,
+  'identified');
 // 'medium' is dropped only because it is empty here; it travels when set.
 $em = ShopBotPayload::project(['medium' => 'email', 'message' => 'x']);
 t('medium travels when it has a value', $em['medium'] ?? null, 'email');
