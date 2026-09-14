@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/WaInbound.php';
+require_once __DIR__ . '/PromptRiskSignal.php';
 
 /**
  * WaMessageProcessor — the one pipeline, whichever transport delivered.
@@ -142,6 +143,26 @@ final class WaMessageProcessor
                                                'replied' => true]);
         }
 
+        // ── notice, then carry on ────────────────────────────────────────
+        //
+        // Assessed over EVERY piece of customer content, not just the typed
+        // message — a caption today, a transcript or an extracted document
+        // when those phases land. It records what it saw and changes nothing:
+        // the message is handled exactly as it would have been, because the
+        // containment is downstream and does not depend on this noticing.
+        $signal = \PromptRiskSignal::assessAll([
+            'text'    => (string)($msg['text'] ?? ''),
+            'caption' => (string)($msg['caption'] ?? ''),
+        ]);
+        if ($signal['risk']) {
+            $this->noteRisk(\PromptRiskSignal::auditEvent($signal, [
+                'conversation_id' => $convId,
+                'message_id'      => (string)($msg['message_id'] ?? ''),
+                'channel'         => $channel,
+                'source'          => (string)($msg['source'] ?? ''),
+            ]), $signal, $msg, $phone);
+        }
+
         // ── the secured path: identity, tools, model, guard ──────────────
         //
         // Media WITH a caption comes through here too. The caption is the
@@ -157,6 +178,34 @@ final class WaMessageProcessor
             'conversation_id' => $convId,
             'replied'         => (bool)($result['replied'] ?? false),
         ]);
+    }
+
+    /**
+     * Record a risk signal, and tell a person when it is serious.
+     *
+     * Neither of those is an access decision. The message proceeds either
+     * way; what changes is that somebody knows to look. A HIGH signal earns a
+     * human's attention because the containment holding is not the same as
+     * nobody needing to know it was tested.
+     */
+    protected function noteRisk(array $event, array $signal, array $msg, string $phone): void
+    {
+        try {
+            if ($this->notify && method_exists($this->notify, 'sendAdmin')
+                && ($signal['severity'] ?? '') === \PromptRiskSignal::HIGH) {
+                $who = trim((string)($msg['push_name'] ?? '')) ?: $phone;
+                // Categories, not content: the message itself is already in
+                // the conversation, where access to it is controlled.
+                $this->notify->sendAdmin(
+                    "⚠️ Unusual request from {$who} ({$phone})\n"
+                    . 'Noticed: ' . implode(', ', (array)$signal['categories'])
+                    . "\nHandled normally — no data was exposed. Review in the WA Inbox.",
+                    'wa_prompt_risk');
+            }
+            error_log('[WaProcessor] risk signal: ' . json_encode($event));
+        } catch (\Throwable $e) {
+            error_log('[WaProcessor] risk signal not recorded: ' . $e->getMessage());
+        }
     }
 
     /** Send, and record what was sent, so the thread stays complete. */

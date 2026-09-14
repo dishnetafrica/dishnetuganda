@@ -77,43 +77,24 @@ class ClaudeWaClient
             return null;
         }
 
-        // ── Security: detect prompt injection / data extraction attempts ──
-        // Block messages trying to override instructions or extract other customers' data.
-        // Return a fixed safe response — never pass these to Claude.
-        $injectionPatterns = [
-            '/ignore (previous|all|your) (instructions?|rules?|prompt)/i',
-            '/forget (everything|instructions?|rules?|your training)/i',
-            '/you are now|pretend (you are|to be)|act as (admin|system|root)/i',
-            '/show (me )?(all |every |other )?customer(s| data| record| list)/i',
-            '/give me (all |every |other )?customer/i',
-            '/what is .{0,30}(password|api.?key|secret|token)/i',
-            '/reveal|expose|dump|extract.{0,20}(data|record|customer|account)/i',
-            '/override|bypass|disable|unlock (the )?(filter|rule|restriction)/i',
-            '/system prompt|your instructions?|your (rule|prompt|training)/i',
-            '/DAN|jailbreak|unrestricted mode/i',
-        ];
-        foreach ($injectionPatterns as $pattern) {
-            if (preg_match($pattern, $customerMessage)) {
-                return "I can only help with your own DishNet account and services. For account queries, please call our office or visit us in Juba.";
-            }
-        }
-
-        // ── Scope check: out-of-scope technical questions ─────────────────
-        // DishNet's bot should not become a general IT helpdesk.
-        // Redirect specific third-party device config questions to support team.
-        $outOfScope = [
-            '/mikrotik|routeros|winbox/i',
-            '/cisco|ubiquiti|unifi|fortinet|pfsense/i',
-            '/how (to |do I )?(configure|setup|install|program) (a |the )?(router|firewall|switch|server)/i',
-            '/iptables|nat rules?|port forward(ing)?|vlan|bgp|ospf/i',
-            '/hack|crack|bypass.*password|brute.?force/i',
-            '/telegram bot|whatsapp (api|bot)|make money|investment/i',
-        ];
-        foreach ($outOfScope as $pattern) {
-            if (preg_match($pattern, $customerMessage)) {
-                return "That's a bit outside what I can help with here. For technical configuration questions, our team can assist — just reply *HELP* and we'll connect you with a technician.";
-            }
-        }
+        // ── Customer content is DATA, not instruction ────────────────────
+        //
+        // Two regex denylists used to sit here and return a canned refusal
+        // before the API was called, under a comment reading "never pass
+        // these to Claude". The audit found they could never GRANT anything --
+        // no customer id, no tool, no identity -- so removing them takes
+        // nothing from the boundary. What they could do was DENY, and that was
+        // the defect: /what is .{0,30}(password|...)/ matched "what is my
+        // password for the customer portal?", so a paying customer asking an
+        // ordinary question got a brush-off.
+        //
+        // The patterns now live in PromptRiskSignal, which records what it
+        // noticed and decides nothing. Containment is where it always was:
+        // CustomerIdentity establishes who this is, AiMinimalContext gives the
+        // model nothing of theirs, CustomerDataTools supplies the customer id
+        // from the server, and ReplyPrivacyGuard checks what leaves. A message
+        // that says "ignore your instructions" is answered by a model that has
+        // those instructions, using tools that cannot reach another customer.
 
         // ── Cache check (skip for personalized/CRM-enriched responses) ──
         $hasCustomerData = !empty($customerContext['name']) || !empty($customerContext['balance']);
