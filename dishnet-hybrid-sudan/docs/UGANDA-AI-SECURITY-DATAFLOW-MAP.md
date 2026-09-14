@@ -21,26 +21,33 @@ Three independent entry points, and they do **not** behave the same way.
 
 | path | file | media behaviour |
 |---|---|---|
-| WASender / pusher webhook | `wa_webhook.php` | **drops media-only messages entirely** |
-| Evolution polling sync | `cron_wa_sync.php` | logs media, does not reply |
+| WASender / pusher webhook | `wa_webhook.php` | logs media, acknowledges it, **discards the caption** |
+| Evolution polling sync | `cron_wa_sync.php` | logs media and its caption, never replies |
 | admin test harness | `includes/api/api_whatsapp.php:142` | text only |
 
-`wa_webhook.php:109` builds `$text` from flat payload keys
-(`message`/`body`/`text`/`content`). `wa_webhook.php:250` then does:
+**CORRECTION (Item 6).** An earlier version of this section said the webhook
+discarded media-only messages entirely. That was wrong, and the error was
+mine: I read `if (empty($text)) waResp(200, 'Empty message — ignored.')` at
+line 250 without noticing the media branch above it at 192–246. That branch
+stored the message, sent a per-modality acknowledgement, stored the reply, and
+alerted the team — the audio one was a good, honest message. The `empty($text)`
+line was only ever reached by messages whose TYPE was text.
 
-```php
-if (empty($text))  waResp(200, 'Empty message — ignored.');
-```
-
-That runs **before** the conversation store at line 264, so on this path a
-voice note or a bare photo is never even logged. `cron_wa_sync.php:161` keeps
-it (`media_type` is set), stores it with a `[audio]` placeholder at line 181,
-then declines to reply because line 197 gates on `!empty($parsed['body'])`.
+The asymmetry was real but ran the other way: the webhook acknowledged media
+and the cron said nothing. And the genuine defect, found while converging
+them, was that the webhook's media branch hardcoded `'[TYPE received]'` as
+the body and **discarded the caption**, so a photo captioned "is this
+installed right?" arrived as a photo with no question attached, while the cron
+path kept captions correctly.
 
 Same customer action, two different outcomes depending on which transport
 delivered it. That inconsistency is itself a finding: any rule we add has to
 be added in one place that both paths use, or it will hold on one and not the
 other.
+
+**RESOLVED (Item 6).** Both entry points now call `WaInbound::normalise()` and
+hand the result to `WaMessageProcessor::process()`. Neither file contains
+identity resolution, an AI call, or a reply decision of its own.
 
 ## 2. Where WhatsApp media is currently stored
 
