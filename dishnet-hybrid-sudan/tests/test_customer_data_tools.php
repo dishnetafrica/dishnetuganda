@@ -104,9 +104,10 @@ echo "\nThe honest path works\n";
 $gw = new TwoCustomerGateway();
 $T  = new CustomerDataTools($ours, $gw);
 is_($T->isAuthenticated(), 'an identified customer is authenticated');
-t('their plan',        $T->call('get_my_plan')['data']['plan'],           'Starlink Residential Lite');
-t('their balance',     $T->call('get_my_balance')['data']['balance'],     249000.0);
-t('their expiry',      $T->call('get_my_service_status')['data']['active_to'], '2026-10-11');
+t('their plan',        $T->call('get_my_plan')['data']['services'][0]['name'], 'Starlink Residential Lite');
+t('their balance',     $T->call('get_my_balance')['data']['amount'],      249000.0);
+t('and which way round it is', $T->call('get_my_balance')['data']['state'], 'owed');
+t('their expiry',      $T->call('get_my_service_status')['data']['services'][0]['active_to'], '2026-10-11');
 t('their own invoice', $T->call('get_my_invoice', ['number' => 'INV-7-001'])['data']['number'], 'INV-7-001');
 t('their own kit',     $T->call('get_my_kit', ['serial' => 'KIT404246364BX6'])['data']['kit'], 'KIT404246364BX6');
 
@@ -221,10 +222,12 @@ echo "\nTools return the minimum, not a customer object\n";
 // "When does my service expire?" must not return a record that happens to
 // contain an expiry date.
 $svc = $T2->call('get_my_service_status')['data'];
-t('service status has exactly two fields', array_keys($svc), ['status', 'active_to']);
-is_(!isset($svc['balance']) && !isset($svc['price']), 'and no money in it');
+t('service status is a list of services', array_keys($svc), ['services']);
+t('each with exactly two fields', array_keys($svc['services'][0]), ['status', 'active_to']);
+is_(!isset($svc['services'][0]['balance']) && !isset($svc['services'][0]['price']),
+    'and no money in it');
 $bal = $T2->call('get_my_balance')['data'];
-t('balance has exactly two fields', array_keys($bal), ['balance', 'currency']);
+t('balance has exactly three fields', array_keys($bal), ['amount', 'currency', 'state']);
 is_(!isset($bal['plan']) && !isset($bal['status']), 'and no plan or status in it');
 
 printf("\n%d passed, %d failed\n", $pass, $fail);

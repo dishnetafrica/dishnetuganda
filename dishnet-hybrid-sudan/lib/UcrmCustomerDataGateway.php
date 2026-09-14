@@ -61,6 +61,12 @@ final class UcrmCustomerDataGateway implements CustomerDataGateway
                     'price'     => (float)($s['totalPrice'] ?? $s['price'] ?? 0),
                     'currency'  => (string)($s['currencyCode'] ?? ''),
                     'status'    => ((int)($s['status'] ?? 0) === 1) ? 'active' : 'not active',
+                    // The raw uCRM code, ADDITIVE. 'status' above is unchanged
+                    // for every existing caller; the customer tools need the
+                    // code because "not active" collapses prepared, ended and
+                    // suspended into one word, and a suspended customer needs
+                    // to hear "suspended" rather than a shrug.
+                    'status_code' => (int)($s['status'] ?? -1),
                     'active_to' => substr((string)($s['activeTo'] ?? ''), 0, 10),
                 ];
             }
@@ -108,6 +114,9 @@ final class UcrmCustomerDataGateway implements CustomerDataGateway
             // field that makes "is this yours" answerable at all.
             'client_id' => (int)($i['clientId'] ?? 0),
             'date'      => substr((string)($i['createdDate'] ?? ''), 0, 10),
+            // When it is actually due, which is the thing a customer asks.
+            // Additive: no existing caller reads this key.
+            'due_date'  => substr((string)($i['dueDate'] ?? ''), 0, 10),
             'total'     => $total,
             'due'       => round($total - $paid, 2),
             'currency'  => (string)($i['currencyCode'] ?? ''),

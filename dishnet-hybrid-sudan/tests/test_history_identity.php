@@ -292,9 +292,20 @@ foreach (token_get_all((string)file_get_contents($root . '/lib/CustomerDataTools
     if (is_array($k)) { if (in_array($k[0], [T_COMMENT, T_DOC_COMMENT], true)) continue; $toolCode .= $k[1]; }
     else $toolCode .= $k;
 }
-foreach (['history', 'wa_messages', 'ConversationService'] as $needle) {
+foreach (['history', 'wa_messages', 'getMessages', 'getMessagesForAi'] as $needle) {
     is_(strpos($toolCode, $needle) === false, "the tool layer never reads {$needle}");
 }
+// It does name ConversationService, for exactly one thing: the identity-state
+// vocabulary at the construction site. The invariant is that history is never
+// an authorisation source, not that the class name never appears — so this
+// asserts the reference is the constant and nothing more.
+$csRefs = [];
+preg_match_all('/ConversationService::([A-Za-z_]+)/', $toolCode, $m);
+foreach ($m[1] as $ref) $csRefs[$ref] = true;
+t('the only ConversationService reference is the identity state constant',
+  array_keys($csRefs), ['STATE_IDENTIFIED']);
+is_(strpos($toolCode, 'new ConversationService') === false,
+    'and it never constructs one');
 
 echo "\nRetrieval never takes identity from the conversation row\n";
 $svcCode = '';

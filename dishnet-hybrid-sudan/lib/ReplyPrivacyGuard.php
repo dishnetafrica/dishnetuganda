@@ -176,6 +176,30 @@ final class ReplyPrivacyGuard
         return strtoupper((string)preg_replace('/[^A-Za-z0-9]/', '', $s));
     }
 
+    /**
+     * The normalised spellings of one ISO date, or nothing.
+     *
+     * Deliberately only reorderings and zero-stripping of a date the tools
+     * ACTUALLY returned. It never invents a date, so it cannot permit one
+     * that was not disclosed this turn.
+     *
+     * @return array<int,string>
+     */
+    private static function dateForms(string $v): array
+    {
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', trim($v), $m) !== 1) return [];
+        [, $y, $mo, $d] = $m;
+        $dn = ltrim($d, '0'); $mn = ltrim($mo, '0');
+        return array_values(array_unique([
+            $y . $mo . $d,          // 20261001
+            $y . $mn . $dn,         // 2026101
+            $d . $mo . $y,          // 01102026
+            $dn . $mn . $y,         // 1102026
+            $mo . $d . $y,          // 10012026
+            $mn . $dn . $y,         // 1012026
+        ]));
+    }
+
     /** @return array<string,true> */
     private static function normaliseSet(array $values): array
     {
@@ -188,6 +212,16 @@ final class ReplyPrivacyGuard
             // 249000 and 249,000.00 are the same permission.
             if (preg_match('/^\d+$/', $s) === 1) $out[ltrim($s, '0') ?: '0'] = true;
             if (substr($s, -2) === '00' && strlen($s) > 2) $out[substr($s, 0, -2)] = true;
+            // A date the tools returned, written the ordinary ways.
+            //
+            // This matters more than it looks: an ISO date matches the PHONE
+            // shape — 2026-10-01 is a digit, then eight of [digit space dash],
+            // then a digit — so an expiry the customer is entitled to hear
+            // gets scanned as an identifier. Permitting only the exact ISO
+            // spelling means a reply saying "2026-10-1" has the whole message
+            // replaced by the fallback. Normalising is the fix; loosening the
+            // shape is not.
+            foreach (self::dateForms((string)$v) as $d) $out[$d] = true;
         }
         return $out;
     }

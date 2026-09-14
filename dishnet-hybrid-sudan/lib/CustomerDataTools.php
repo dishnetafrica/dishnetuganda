@@ -110,6 +110,30 @@ final class CustomerDataTools
     public function isAuthenticated(): bool { return $this->authenticated; }
 
     /**
+     * Build tools for a BrainContext identity state.
+     *
+     * The one construction site the brain may use, and the reason it exists is
+     * that there are four states and only one of them is a customer. An
+     * anonymous website session is a real, replayable identity — it owns its
+     * own conversation — and it is NOT a customer: it has no account, and
+     * treating it as one would hand a stranger a tool that answers "what do I
+     * owe". unknown and ambiguous are refused for the ordinary reason.
+     *
+     * Identity still comes from CustomerIdentity, never from the context. The
+     * state is a gate in front of it, not a substitute for it.
+     */
+    public static function forIdentityState(string $identityState, array $identity,
+                                            CustomerDataGateway $gw): self
+    {
+        require_once __DIR__ . '/ConversationService.php';
+        if ($identityState !== \ConversationService::STATE_IDENTIFIED) {
+            // Nothing of the caller's identity is trusted in any other state.
+            $identity = [];
+        }
+        return new self($identity, $gw);
+    }
+
+    /**
      * What the model is allowed to ask for.
      *
      * Note that no tool takes a customer id. The two that take a reference
@@ -128,6 +152,8 @@ final class CustomerDataTools
                 'about' => 'What this customer currently owes.'],
             'get_my_last_payment' => ['args' => [],
                 'about' => 'Their most recent payment: amount, date, method.'],
+            'get_my_latest_invoice' => ['args' => [],
+                'about' => 'This customer\'s most recent invoice: number, amount due, due date.'],
             'get_my_invoices' => ['args' => [],
                 'about' => 'A short list of this customer\'s recent invoices.'],
             'get_my_invoice' => ['args' => ['number'],
@@ -139,6 +165,27 @@ final class CustomerDataTools
             'get_my_support_cases' => ['args' => [],
                 'about' => 'This customer\'s open support cases.'],
         ];
+    }
+
+    /**
+     * What the BRAIN may call — five, not ten.
+     *
+     * Kits, tickets, account status and the invoice list are not here because
+     * the prompts these tools replace never carried them. get_my_invoice is
+     * not here for a stronger reason: it is the only tool in this class whose
+     * backend read is not customer-scoped, and excluding it is what makes
+     * "another customer's record is never read" true rather than merely
+     * "never returned".
+     */
+    public const BRAIN_TOOLS = [
+        'get_my_balance', 'get_my_plan', 'get_my_service_status',
+        'get_my_latest_invoice', 'get_my_last_payment',
+    ];
+
+    /** The brain's slice of the catalogue, in catalogue order. */
+    public static function brainCatalogue(): array
+    {
+        return array_intersect_key(self::catalogue(), array_flip(self::BRAIN_TOOLS));
     }
 
     /**
@@ -249,31 +296,97 @@ final class CustomerDataTools
         return ['status' => (string)($c['status'] ?? 'unknown')];
     }
 
+    /**
+     * Every service, not the first one.
+     *
+     * Returning services[0] silently discards the second, and a customer with
+     * two Starlink lines asking what they pay would be told about one of them
+     * with no hint that the other exists. Nothing in the schema or the sync
+     * code limits a client to one service, so the shape carries a list
+     * whether or not today's data happens to have any.
+     */
     private function get_my_plan(): ?array
     {
-        $s = $this->gw->services($this->customerId);
-        if ($s === []) return null;
-        $first = $s[0];
-        return ['plan' => (string)($first['plan'] ?? ''),
-                'price' => (float)($first['price'] ?? 0),
-                'currency' => (string)($first['currency'] ?? '')];
+        $rows = [];
+        foreach ($this->gw->services($this->customerId) as $s) {
+            $rows[] = ['name'     => (string)($s['plan'] ?? ''),
+                       'price'    => (float)($s['price'] ?? 0),
+                       'currency' => (string)($s['currency'] ?? '')];
+        }
+        return $rows === [] ? null : ['services' => $rows];
     }
+
+    /**
+     * uCRM service status, as uCRM means it.
+     *
+     *   0 prepared · 1 active · 2 ended · 3 suspended
+     *   4 blocked  · 5 obsolete · 8 quoted
+     *
+     * Confirmed from CustomerAccountService:329 and KitAttributeIntake:54,
+     * not assumed. 3 is SUSPENDED, not active — Finance counts 1 and 3 alike
+     * because a suspended customer still holds a kit to track, which is a
+     * different question from whether their internet is running.
+     *
+     * The gateway's own 'status' collapses everything but 1 into "not active".
+     * That is right for its callers and wrong here: a suspended customer needs
+     * to hear "suspended", because the support prompt routes that to billing
+     * rather than to a fault.
+     */
+    private const SERVICE_STATUS = [
+        0 => 'prepared', 1 => 'active',   2 => 'ended',  3 => 'suspended',
+        4 => 'blocked',  5 => 'obsolete', 8 => 'quoted',
+    ];
 
     private function get_my_service_status(): ?array
     {
-        $s = $this->gw->services($this->customerId);
-        if ($s === []) return null;
-        $first = $s[0];
-        return ['status' => (string)($first['status'] ?? ''),
-                'active_to' => (string)($first['active_to'] ?? '')];
+        $rows = [];
+        foreach ($this->gw->services($this->customerId) as $s) {
+            // When the gateway gave us the code, the code decides — and a
+            // code outside the confirmed map is 'unknown', never the
+            // gateway's collapsed word, because reporting an unseen state as
+            // "not active" claims a certainty we do not have.
+            $status = array_key_exists('status_code', $s)
+                ? (self::SERVICE_STATUS[(int)$s['status_code']] ?? 'unknown')
+                : ((string)($s['status'] ?? '') ?: 'unknown');
+            $rows[] = ['status' => $status, 'active_to' => (string)($s['active_to'] ?? '')];
+        }
+        return $rows === [] ? null : ['services' => $rows];
     }
 
+    /**
+     * The most recent invoice, with no argument at all.
+     *
+     * Deliberately not get_my_invoice(number): that one asks the gateway for
+     * ANY invoice with a number and checks ownership afterwards, so another
+     * customer's record is read before it is refused. This asks only for
+     * theirs, so no other customer's record is touched at any point.
+     */
+    private function get_my_latest_invoice(): ?array
+    {
+        $rows = $this->gw->invoices($this->customerId);
+        if ($rows === []) return null;
+        $i = $rows[0];
+        return ['number'     => (string)($i['number'] ?? ''),
+                'amount_due' => (float)($i['due'] ?? 0),
+                'due_date'   => (string)($i['due_date'] ?? $i['date'] ?? '')];
+    }
+
+    /**
+     * What they owe, and which way round it is.
+     *
+     * 'state' is derived HERE rather than left to the model. A signed float is
+     * a thing a model can get backwards, and getting it backwards tells a
+     * customer in credit that they owe money. The thresholds are the ones the
+     * legacy prompt already used, not new ones.
+     */
     private function get_my_balance(): ?array
     {
         $c = $this->gw->client($this->customerId);
         if ($c === null) return null;
-        return ['balance' => (float)($c['balance'] ?? 0),
-                'currency' => (string)($c['currency'] ?? '')];
+        $amount = (float)($c['balance'] ?? 0);
+        return ['amount'   => $amount,
+                'currency' => (string)($c['currency'] ?? ''),
+                'state'    => $amount > 0.01 ? 'owed' : ($amount < -0.01 ? 'credit' : 'clear')];
     }
 
     private function get_my_last_payment(): ?array
