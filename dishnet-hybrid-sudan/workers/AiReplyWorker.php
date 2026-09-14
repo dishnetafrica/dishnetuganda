@@ -411,8 +411,15 @@ class AiReplyWorker extends WorkerBase
      *
      *   POST {shopbot_ai_url}
      *   Authorization: Bearer {shopbot_ai_token}
-     *   body:     the context envelope above
+     *   body:     ShopBotPayload::project($context) — NOT the raw context
      *   response: {"reply": "...", "escalate": false, "escalate_reason": ""}
+     *
+     * The body used to be the raw envelope, which carried the complete uCRM
+     * client record, internal ids, the Splynx id and service address, and the
+     * customer's balance on channels that never render one — none of it read
+     * by the brain, all of it leaving the process. It is now projected against
+     * an explicit contract: see ShopBotPayload, which also records what it
+     * refuses to send and why. The response contract is unchanged.
      */
     private function askShopBot(array $context): ?array
     {
@@ -423,6 +430,17 @@ class AiReplyWorker extends WorkerBase
             return null;
         }
 
+        // Default deny, before anything is encoded. Nothing between here and
+        // curl sees the unprojected context.
+        require_once dirname(__DIR__) . '/lib/ShopBotPayload.php';
+        $payload = \ShopBotPayload::project($context);
+        $dropped = \ShopBotPayload::dropped($context);
+        if ($dropped !== []) {
+            // Key names only. The values are the thing being withheld.
+            $this->log('info', 'shopbot: withheld ' . count($dropped) . ' context key(s): '
+                . implode(', ', $dropped));
+        }
+
         $headers = ['Content-Type: application/json'];
         if ($token !== '') $headers[] = 'Authorization: Bearer ' . $token;
 
@@ -430,7 +448,7 @@ class AiReplyWorker extends WorkerBase
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode($context),
+            CURLOPT_POSTFIELDS     => json_encode($payload),
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_TIMEOUT        => 45,      // LLM round trips are slow
             CURLOPT_CONNECTTIMEOUT => 8,
