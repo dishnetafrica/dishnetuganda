@@ -495,15 +495,36 @@ class DishNetTools
     //  Internals
     // ══════════════════════════════════════════════════════════════════════
 
+    /**
+     * One matching rule, and it lives in CustomerIdentity.
+     *
+     * This used to compare the trailing nine digits and stop there. Nine
+     * digits are a subscriber number, not a person: DishNet's client base
+     * spans +256 and +211, so a stored South Sudan number and an incoming
+     * Uganda one that happen to share their last nine match — and because
+     * only ONE of them is in the index, that is not an ambiguous result the
+     * caller asks a question about. It is a single confident match, and the
+     * wrong customer's balance is disclosed to whoever wrote in.
+     *
+     * CustomerIdentity::same() adds the part that was missing: the country
+     * code must agree too, when both numbers state one. A local number
+     * written 0700123456 states no country, and an unstated code is not
+     * evidence of disagreement, so those still match as they did.
+     *
+     * The rule is not reimplemented here. The hardened WhatsApp path and this
+     * one now decide identity by the same function, which is the only way
+     * they stay decided the same way.
+     *
+     * @param string $needle unused outside legacy mode — kept so the legacy
+     *                       escape hatch below reads unchanged.
+     */
     private function phoneMatches(string $stored, string $incoming, string $needle, bool $legacy): bool
     {
         if ($legacy) {
             return $this->endsWith($stored, $incoming) || $this->endsWith($incoming, $stored);
         }
-        // Both numbers must carry at least the comparison length, and their
-        // trailing MIN_PHONE_MATCH_DIGITS must agree exactly.
-        if (strlen($stored) < self::MIN_PHONE_MATCH_DIGITS) return false;
-        return substr($stored, -self::MIN_PHONE_MATCH_DIGITS) === $needle;
+        require_once __DIR__ . '/CustomerIdentity.php';
+        return \CustomerIdentity::same($stored, $incoming);
     }
 
     private function endsWith(string $haystack, string $needle): bool
