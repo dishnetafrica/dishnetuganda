@@ -381,6 +381,14 @@ class AiReplyWorker extends WorkerBase
             } catch (\Throwable $e) { /* history is optional */ }
         }
 
+        // ── B3.4: does the tool layer agree with the prompt? ────────────
+        //
+        // Runs both readers and compares them; the customer still gets the
+        // legacy answer. Nothing below this line may reach $ctx, and nothing
+        // it produces may reach the reply — see shadowCompare().
+        $this->shadowCompare($channel, $convId, $clientId,
+                             $identified && empty($ctx['identity_ambiguous']), $ctx);
+
         // ── The B3.2 contract, for the callers that lose nothing by it ──
         //
         // Sales never rendered account data, so it adopts the twelve-key
@@ -409,6 +417,93 @@ class AiReplyWorker extends WorkerBase
         }
 
         return $ctx;
+    }
+
+    /**
+     * B3.4 — run the controlled tools beside the legacy prompt and compare.
+     *
+     * B3.5 takes the customer's balance, invoice, payment, plan and service
+     * status out of the prompt and lets the model ask for them instead. This
+     * is how we find out, on real customers and real uCRM data, whether the
+     * answers are the same BEFORE the customer depends on the new one.
+     *
+     * ── IT CANNOT CHANGE THE REPLY ──────────────────────────────────────
+     *
+     * It takes $ctx by value and returns void, so there is no expression by
+     * which a shadow result reaches the prompt. It runs after the context is
+     * finished. Every failure is swallowed. If this method were deleted the
+     * customer would not be able to tell.
+     *
+     * ── IT CANNOT WIDEN A LIVE ALLOWLIST ────────────────────────────────
+     *
+     * The CustomerDataTools instance is built here and dropped here. A tool
+     * call records what it disclosed, and ReplyPrivacyGuard checks a reply
+     * against that record; a shadow that shared an instance with a live
+     * caller would quietly permit values the live prompt never carried. The
+     * worker has no live instance today, and this is why it must not acquire
+     * one by borrowing this.
+     *
+     * ── IT LOGS VERDICTS, NEVER VALUES ──────────────────────────────────
+     *
+     * ShadowCompare returns reason codes built from its own constants. What
+     * lands in the log is "conv 412: shadow account balance=same
+     * invoice=differ:number payment=same" — not a second at-rest copy of
+     * everybody's financial position. Even the exception path logs the class
+     * and not the message, because a database error carries its query.
+     *
+     * The conversation id is the diagnostic handle, and it is usually enough
+     * to find the case. A turn that arrived without a conversation row logs
+     * "conv 0" and names a divergence nobody can trace to a customer — still
+     * worth having, because knowing a class of divergence exists is what
+     * tells you to go looking, but it is not a case you can open.
+     *
+     * ── COST ────────────────────────────────────────────────────────────
+     *
+     * Roughly doubles the uCRM reads on these two channels: accounts adds a
+     * client, an invoice and a payment read, support adds two service reads
+     * (get_my_plan and get_my_service_status each fetch). Off by default, and
+     * one flag turns it off again.
+     */
+    private function shadowCompare(string $channel, int $convId, int $clientId,
+                                   bool $identified, array $ctx): void
+    {
+        if (empty($this->config['ai_shadow_compare'])) return;
+        if (!$identified || $clientId <= 0) return;
+
+        // Inside the try, all of it. A missing file is a broken deploy, but a
+        // broken deploy must not be a broken reply: the whole promise of this
+        // method is that deleting it would make no difference to the customer,
+        // and a require that can fatal outside a catch does not keep it.
+        try {
+            $root = dirname(__DIR__);
+            require_once $root . '/lib/ShadowCompare.php';
+            if (!isset(\ShadowCompare::CHANNEL_FACTS[$channel])) return;
+
+            require_once $root . '/lib/CrmApiClient.php';
+            require_once $root . '/lib/UcrmCustomerDataGateway.php';
+            require_once $root . '/lib/CustomerIdentity.php';
+
+            $crm = \CrmApiClient::fromUcrm($root, $this->config);
+            if (!$crm->isConfigured()) {
+                $this->log('warn', 'conv ' . $convId . ': shadow skipped — CRM not configured');
+                return;
+            }
+
+            // The id is the one the backend resolved for this turn, in the
+            // shape CustomerIdentity::resolve() returns. It is not read from
+            // the context, the message or the model, and this method has no
+            // parameter by which a different customer could be named.
+            $tools = \CustomerDataTools::forIdentityState(
+                \ConversationService::STATE_IDENTIFIED,
+                ['status' => \CustomerIdentity::IDENTIFIED, 'client_id' => $clientId],
+                new \UcrmCustomerDataGateway(new \UcrmGatewayHost($crm, $this->pdo)));
+
+            $r = \ShadowCompare::compare($channel, $ctx, $tools);
+            $this->log($r['divergent'] === [] ? 'info' : 'warn',
+                       sprintf('conv %d: shadow %s', $convId, $r['line']));
+        } catch (\Throwable $e) {
+            $this->log('warn', sprintf('conv %d: shadow failed — %s', $convId, get_class($e)));
+        }
     }
 
     /**

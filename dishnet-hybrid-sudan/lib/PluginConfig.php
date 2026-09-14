@@ -40,6 +40,11 @@ class PluginConfig
         'tools_legacy_phone_match',
         'identity_enabled',
         'starlink_mail_enabled',
+        // B3.4, and it leaves with B3.5. Runs the controlled customer tools
+        // beside the legacy support/accounts prompt and logs whether the two
+        // readers agree. Changes nothing the customer sees; costs roughly one
+        // extra uCRM read per fact compared.
+        'ai_shadow_compare',
     ];
 
     public static function load(string $pluginRoot, string $dataDir): array

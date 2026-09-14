@@ -195,3 +195,65 @@ final class UcrmCustomerDataGateway implements CustomerDataGateway
         return $out;
     }
 }
+
+/**
+ * UcrmGatewayHost — the object UcrmCustomerDataGateway reads uCRM through.
+ *
+ * The gateway is duck-typed against WaAutoReplyService: getCrm(),
+ * getClientServices(), getLastPayment(), and a pdo for the kit table. That
+ * class belongs to the hardened WhatsApp path, which is not the path running
+ * in production, and constructing the whole of it to reach three accessors
+ * would drag its config surface along with it.
+ *
+ * So this is those three accessors and nothing else, over a CrmApiClient the
+ * caller already holds.
+ *
+ * The two query methods are deliberately IDENTICAL to WaAutoReplyService's —
+ * same endpoints, same parameters, same fallbacks. A gateway that read
+ * different rows depending on which host it was given would make every
+ * comparison built on it meaningless, because a difference would no longer
+ * tell you whether the readers disagree or merely the plumbing.
+ */
+final class UcrmGatewayHost
+{
+    /** @var \CrmApiClient|null */
+    private $crm;
+    /** @var \PDO|null */
+    private $pdo;
+
+    public function __construct($crm, $pdo = null)
+    {
+        $this->crm = $crm;
+        $this->pdo = $pdo instanceof \PDO ? $pdo : null;
+    }
+
+    public function getCrm()
+    {
+        return $this->crm;
+    }
+
+    /** @return array<int,mixed> */
+    public function getClientServices(int $clientId): array
+    {
+        if (!$this->crm || $clientId <= 0) return [];
+        try {
+            return (array)($this->crm->get("clients/{$clientId}/services") ?? []);
+        } catch (\Throwable $e) { return []; }
+    }
+
+    public function getLastPayment(int $clientId): ?array
+    {
+        if (!$this->crm || $clientId <= 0) return null;
+        try {
+            $payments = (array)($this->crm->get("payments?clientId={$clientId}&limit=1") ?? []);
+            $p = $payments[0] ?? null;
+            return is_array($p) ? $p : null;
+        } catch (\Throwable $e) { return null; }
+    }
+
+    /** Null is honest: the gateway answers "unreadable", not "no kits". */
+    public function getPdo()
+    {
+        return $this->pdo;
+    }
+}

@@ -61,6 +61,14 @@ $FLAGS = [
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
 
+    // A migration instrument with an end date, not a business setting. It
+    // runs the controlled customer tools beside the legacy support/accounts
+    // prompt and logs whether the two readers agree — verdicts only, never
+    // values. The customer still gets the legacy answer either way. It is
+    // deleted when B3.5 migrates those two callers.
+    'ai_shadow_compare' => ['bool',
+        'B3.4: compare the customer tools against the legacy prompt, and log which disagree'],
+
     // The clock. Everything stamped, scheduled or reported runs on this.
     // Unset means Africa/Juba, which is what the code said before it was
     // configurable — so the South Sudan install is unaffected by its absence.
