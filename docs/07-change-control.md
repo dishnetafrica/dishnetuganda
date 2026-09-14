@@ -66,3 +66,5 @@ as a worked example.
 | Date | Change | Applied by | Rollback | Status |
 | --- | --- | --- | --- | --- |
 | — | Repo created: inspection tooling and plans. No server changes. | Claude | n/a | Documentation only |
+| 2026-09-14 | Sent-folder archive routed to `stalwart` with verification off (`set_sent_copy.php --host stalwart --hosts ''`). Workaround for Stalwart's placeholder certificate. See [09](09-mail-and-pdf-delivery.md). | Bhavin | `--host mail.dishnetuganda.com --hosts stalwart`, seconds | Applied, verified by `--test` |
+| 2026-09-14 | `crm_public_url` written into `kyc_config.json` so `webhook.php` can see it, moving quotation PDF URLs off `:8443`. Workaround for the webhook's single-source config read. See [09](09-mail-and-pdf-delivery.md). | Bhavin | `saveOverrides(..., ['crm_public_url' => ''])`, seconds | Applied; awaiting confirmation by a real quotation send |
