@@ -67,24 +67,43 @@ while [ $# -gt 0 ]; do
 done
 
 # ── Find the installed plugin ───────────────────────────────────────────
+# ── Find the installed plugin ───────────────────────────────────────────
+#
+# ALWAYS the full search, never a shortcut. The first version checked four
+# known locations first and stopped at the first hit — which on the real
+# server matched the uCRM plugins directory and never noticed the other two
+# copies of this plugin on the same box. A tool that claims it will not choose
+# for you has to actually look before it can say there was only one.
+#
+# A manifest under pwa/ or retailer/ is not an install: the candidate is
+# filtered to directories named for the plugin whose manifest declares it.
 if [ -z "$TARGET" ]; then
-  head_ "Looking for the installed plugin"
+  head_ "Looking for installed copies (this takes a moment)"
   FOUND=()
-  for base in /home/unms/data/ucrm/ucrm/data/plugins /data/ucrm/data/plugins \
-              /usr/src/ucrm/data/plugins /var/www/ucrm/data/plugins; do
-    [ -f "$base/$PLUGIN/manifest.json" ] && FOUND+=("$base/$PLUGIN")
-  done
-  if [ "${#FOUND[@]}" -eq 0 ]; then
-    say "not in the usual places; searching (up to 45s)"
-    while IFS= read -r d; do FOUND+=("$d"); done < <(
-      timeout 45 find / -maxdepth 8 -name manifest.json -path "*/$PLUGIN/*" \
-           -not -path "$SRC/*" 2>/dev/null | xargs -r -n1 dirname | sort -u)
-  fi
+  while IFS= read -r m; do
+    d="$(dirname "$m")"
+    [ "$(basename "$d")" = "$PLUGIN" ] || continue
+    grep -q "\"name\": *\"$PLUGIN\"" "$m" 2>/dev/null || continue
+    case "$d" in "$SRC"|"$SRC"/*) continue ;; esac
+    FOUND+=("$d")
+  done < <(timeout 120 find / -xdev -name manifest.json -path "*/$PLUGIN/*" 2>/dev/null | sort -u)
+  mapfile -t FOUND < <(printf '%s\n' "${FOUND[@]:-}" | grep -v '^$' | sort -u)
+
   case "${#FOUND[@]}" in
     0) die "no installed $PLUGIN found. Name it: --target /path/to/plugins/$PLUGIN" ;;
     1) TARGET="${FOUND[0]}"; say "found  $TARGET" ;;
-    *) printf '\n  MORE THAN ONE INSTALL FOUND\n\n'; printf '    %s\n' "${FOUND[@]}"
-       die "name the one you mean: --target <path>" ;;
+    *) printf '\n  %d COPIES OF THIS PLUGIN ARE INSTALLED\n\n' "${#FOUND[@]}"
+       for d in "${FOUND[@]}"; do
+         v="$(grep -oE '"version": *"[0-9.]+"' "$d/manifest.json" | tail -1 | grep -oE '[0-9.]+' || echo '?')"
+         w="$(grep -c 'shadowCompare' "$d/workers/AiReplyWorker.php" 2>/dev/null || echo 0)"
+         printf '    %s\n      version %s, shadow path %s, modified %s\n' \
+                "$d" "$v" "$( [ "$w" = "3" ] && echo present || echo absent )" \
+                "$(date -r "$d/manifest.json" '+%Y-%m-%d' 2>/dev/null || echo '?')"
+       done
+       printf '\n    These are different things and they are not interchangeable. The AI\n'
+       printf '    worker runs from the uCRM plugins directory; another copy may be a\n'
+       printf '    deploy checkout or the EasyPanel web project serving web_chat.\n'
+       die "name the one you mean: --target <path>  (run it once per copy if more than one is live)" ;;
   esac
 fi
 
@@ -93,6 +112,76 @@ fi
 grep -q "\"name\": *\"$PLUGIN\"" "$TARGET/manifest.json" || die "$TARGET is not $PLUGIN"
 TARGET="$(cd "$TARGET" && pwd)"
 [ "$TARGET" != "$SRC" ] || die "the target is this checkout — nothing to do"
+
+# ── Find a PHP that can see the target ──────────────────────────────────
+#
+# On a UISP box there is no php on the host: uCRM runs in a container and the
+# plugin directory is bind-mounted into it. So the installer copies host-side
+# (no php needed for that) and runs every php through `docker exec`, against
+# the path as the CONTAINER sees it — worked out from the container's own
+# mount table rather than guessed.
+PHP_MODE=''; DOCKER_C=''; CPATH=''; RUNUSER=''
+
+if command -v php >/dev/null 2>&1; then
+  PHP_MODE=host; CPATH="$TARGET"
+elif command -v docker >/dev/null 2>&1; then
+  head_ "No php on the host — looking for the uCRM container"
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    while IFS='|' read -r msrc mdst; do
+      [ -n "$msrc" ] && [ -n "$mdst" ] || continue
+      case "$TARGET/" in
+        "$msrc"/*)
+          cand="${mdst%/}${TARGET#$msrc}"
+          if docker exec "$c" test -f "$cand/manifest.json" 2>/dev/null \
+             && docker exec "$c" sh -lc 'command -v php >/dev/null' 2>/dev/null; then
+            PHP_MODE=docker; DOCKER_C="$c"; CPATH="$cand"
+            say "container  $c"
+            say "plugin at  $cand  (inside it)"
+            break 2
+          fi ;;
+      esac
+    done < <(docker inspect -f '{{range .Mounts}}{{.Source}}|{{.Destination}}{{"\n"}}{{end}}' "$c" 2>/dev/null)
+  done < <(docker ps --format '{{.Names}}' 2>/dev/null)
+fi
+
+if [ -z "$PHP_MODE" ]; then
+  printf '\n  NO PHP FOUND FOR THIS PLUGIN\n\n'
+  printf '    host php        %s\n' "$(command -v php || echo 'not installed')"
+  printf '    docker          %s\n' "$(command -v docker || echo 'not installed')"
+  if command -v docker >/dev/null 2>&1; then
+    printf '    containers      %s\n' "$(docker ps --format '{{.Names}}' 2>/dev/null | tr '\n' ' ')"
+    printf '\n    Mounts that cover %s:\n' "$TARGET"
+    for c in $(docker ps --format '{{.Names}}' 2>/dev/null); do
+      docker inspect -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}' "$c" 2>/dev/null \
+        | sed "s|^|      $c: |"
+    done
+  fi
+  die "no php on the host and no container serving this plugin — send the block above"
+fi
+
+# Whoever owns the plugin is who php should run as. Writing config as root
+# into a bind mount leaves a file the web and cron processes cannot rewrite —
+# PluginConfig's own docblock describes that failure, from a 0600 root:root
+# kyc_config.json left behind by a `docker exec` config change.
+OWNER_UID="$(stat -c %u "$TARGET" 2>/dev/null || echo 0)"
+OWNER_GID="$(stat -c %g "$TARGET" 2>/dev/null || echo 0)"
+[ "$PHP_MODE" = docker ] && RUNUSER="$OWNER_UID:$OWNER_GID"
+
+# php, wherever it lives. Paths handed to it must already be container paths.
+# php, wherever it lives, always with the plugin root as its working
+# directory — so every caller below can use plain relative paths and neither
+# mode needs to know about the other.
+phprun() {
+  if [ "$PHP_MODE" = host ]; then ( cd "$TARGET" && php "$@" )
+  else docker exec ${RUNUSER:+-u "$RUNUSER"} -w "$CPATH" "$DOCKER_C" php "$@"; fi
+}
+# How the operator will invoke the tool afterwards.
+if [ "$PHP_MODE" = host ]; then
+  RUNCMD="cd $TARGET && php tools/shadow_observe.php"
+else
+  RUNCMD="docker exec -u $RUNUSER -w $CPATH $DOCKER_C php tools/shadow_observe.php"
+fi
 
 # ── Rollback ────────────────────────────────────────────────────────────
 if [ "$ROLLBACK" -eq 1 ]; then
@@ -110,25 +199,30 @@ if [ "$ROLLBACK" -eq 1 ]; then
   say "BrainContext or ShopBotPayload. Remove them by hand if you want the"
   say "tree bit-identical to what it was."
   say "If the observation was running, close it too:"
-  say "    php $TARGET/tools/shadow_observe.php --end"
+  say "    $RUNCMD --end"
   printf '\n'
   exit 0
 fi
 
 # ── Check the source before touching anything ───────────────────────────
 head_ "Checking the source"
-command -v php >/dev/null || die "php is not on PATH; this needs php-cli"
 command -v tar >/dev/null || die "tar is not on PATH"
 for f in manifest.json lib/ShadowCompare.php lib/ShadowObservation.php \
          tools/shadow_observe.php workers/AiReplyWorker.php; do
   [ -f "$SRC/$f" ] || die "missing from this checkout: $f  (wrong branch?)"
 done
-BAD=0
-while IFS= read -r f; do
-  php -l "$f" >/dev/null 2>&1 || { say "does not parse: ${f#$SRC/}"; BAD=$((BAD+1)); }
-done < <(find "$SRC" -name '*.php' -not -path "$SRC/data/*" -not -path "$SRC/.git/*")
-[ "$BAD" -eq 0 ] || die "$BAD source file(s) do not parse — refusing to copy them"
-say "every PHP file in the source parses"
+if [ "$PHP_MODE" = host ]; then
+  BAD=0
+  while IFS= read -r f; do
+    php -l "$f" >/dev/null 2>&1 || { say "does not parse: ${f#$SRC/}"; BAD=$((BAD+1)); }
+  done < <(find "$SRC" -name '*.php' -not -path "$SRC/data/*" -not -path "$SRC/.git/*")
+  [ "$BAD" -eq 0 ] || die "$BAD source file(s) do not parse — refusing to copy them"
+  say "every PHP file in the source parses"
+else
+  # The container cannot see /tmp/dn, so the source cannot be linted before
+  # the copy. It is linted after, inside the container, where it matters.
+  say "source present (linted after the copy, inside the container)"
+fi
 say "from    $SRC"
 say "commit  $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout')"
 say "into    $TARGET"
@@ -152,25 +246,53 @@ say "$(tar -tzf "$BACKUP" | grep -vc '/$') file(s) -> $BACKUP"
 
 # ── Copy ────────────────────────────────────────────────────────────────
 head_ "Installing"
+FILELIST="$( cd "$SRC" && tar -cf - "${EXCLUDES[@]}" . | tar -tf - )"
 ( cd "$SRC" && tar -cf - "${EXCLUDES[@]}" . ) | ( cd "$TARGET" && tar -xf - )
-say "$(cd "$SRC" && tar -cf - "${EXCLUDES[@]}" . | tar -tf - | grep -vc '/$') file(s) copied"
+say "$(printf '%s\n' "$FILELIST" | grep -vc '/$') file(s) copied"
+# Root extracting into a bind mount leaves root-owned files the uCRM process
+# may not be able to rewrite. Hand them to whoever owns the plugin.
+if [ "$(id -u)" = "0" ] && [ "$OWNER_UID" != "0" ]; then
+  ( cd "$TARGET" && printf '%s\n' "$FILELIST" | tr '\n' '\0' \
+      | xargs -0 -r chown -h "$OWNER_UID:$OWNER_GID" 2>/dev/null ) || true
+  say "owned by $OWNER_UID:$OWNER_GID, matching the plugin directory"
+fi
 say "data/ untouched, nothing deleted"
 
 # ── Verify, rather than assume ──────────────────────────────────────────
 head_ "Verifying"
 fails=0
+
+# Everything we just copied has to parse where it will actually run.
+#
+# In ONE shell, not one docker exec per file: there are about eight hundred
+# PHP files here and a round trip each would take minutes.
+LINT='find . -name "*.php" -not -path "./data/*" -not -path "./.git/*" \
+      | while IFS= read -r f; do php -l "$f" >/dev/null 2>&1 || echo "$f"; done'
+if [ "$PHP_MODE" = host ]; then
+  badfiles="$( cd "$TARGET" && sh -c "$LINT" )"
+else
+  badfiles="$( docker exec ${RUNUSER:+-u "$RUNUSER"} -w "$CPATH" "$DOCKER_C" sh -c "$LINT" )"
+fi
+if [ -z "$badfiles" ]; then
+  say "ok    every copied PHP file parses where it will run"
+else
+  say "FAIL  $(printf '%s\n' "$badfiles" | grep -c .) file(s) do not parse:"
+  printf '%s\n' "$badfiles" | head -5 | sed 's/^/          /'
+  fails=$((fails+1))
+fi
+
 n=$(grep -c 'shadowCompare' "$TARGET/workers/AiReplyWorker.php" || true)
 [ "$n" = "3" ] && say "ok    the worker carries the shadow path" \
                || { say "FAIL  worker has $n shadowCompare references, expected 3"; fails=$((fails+1)); }
-php -r 'require $argv[1]."/lib/ShadowCompare.php";
-        exit(count(ShadowCompare::FACTS) === 5 ? 0 : 1);' "$TARGET" \
+phprun -r 'require getcwd()."/lib/ShadowCompare.php";
+           exit(count(ShadowCompare::FACTS) === 5 ? 0 : 1);' \
   && say "ok    ShadowCompare loads and declares its five facts" \
   || { say "FAIL  ShadowCompare did not load"; fails=$((fails+1)); }
-php -r 'require $argv[1]."/lib/ShadowObservation.php";
-        exit(ShadowObservation::MIN_CUSTOMERS === 3 ? 0 : 1);' "$TARGET" \
+phprun -r 'require getcwd()."/lib/ShadowObservation.php";
+           exit(ShadowObservation::MIN_CUSTOMERS === 3 ? 0 : 1);' \
   && say "ok    ShadowObservation loads" \
   || { say "FAIL  ShadowObservation did not load"; fails=$((fails+1)); }
-[ -f "$TARGET/data/ucrm.json" ] || [ -f "$TARGET/ucrm.json" ] \
+{ [ -f "$TARGET/data/ucrm.json" ] || [ -f "$TARGET/ucrm.json" ]; } \
   && say "ok    ucrm.json is still in place" \
   || say "note  no ucrm.json found — normal on a test install, not on a live one"
 
@@ -194,7 +316,7 @@ if [ -d "$TARGET/tests" ]; then
   tot=0; bad=0
   for t in "${GATE[@]}"; do
     [ -f "$TARGET/tests/$t.php" ] || { say "FAIL  missing  $t"; bad=$((bad+1)); continue; }
-    line="$( cd "$TARGET" && php "tests/$t.php" 2>&1 | tail -1 )"
+    line="$( phprun "tests/$t.php" 2>&1 | tail -1 )"
     n="$(printf '%s' "$line" | grep -oE '^[0-9]+' || echo 0)"
     f="$(printf '%s' "$line" | grep -oE '[0-9]+ failed' | grep -oE '^[0-9]+' || echo 1)"
     tot=$((tot+n))
@@ -211,21 +333,23 @@ if [ "$fails" -gt 0 ]; then
 fi
 
 head_ "Current state"
-( cd "$TARGET" && php tools/shadow_observe.php --status ) || true
+phprun tools/shadow_observe.php --status || true
 
 cat <<EOF
   ------------------------------------------------------------------
   Installed. NOTHING IS ENABLED — the customer-facing path is
   unchanged, and ai_shadow_compare stays off until you say otherwise.
 
+  php runs $( [ "$PHP_MODE" = docker ] && echo "in container $DOCKER_C as $RUNUSER" || echo "on this host" ).
+
   Start the observation when you are ready:
-      cd $TARGET && php tools/shadow_observe.php --begin
+      $RUNCMD --begin
 
   Check on it any time (read-only, safe to repeat):
-      php tools/shadow_observe.php --report
+      $RUNCMD --report
 
   Close it and restore the exact previous config:
-      php tools/shadow_observe.php --end
+      $RUNCMD --end
 
   Undo this install:
       bash $SELF --target $TARGET --rollback
