@@ -73,6 +73,14 @@ class ConversationService
                 // recorded and the follow-up policy reads it.
                 'crm_link_method' => "TEXT DEFAULT NULL",
                 'crm_link_at'     => "TEXT DEFAULT NULL",
+                // WHO this conversation currently belongs to, and how many
+                // times that has changed. A phone number is a bearer token
+                // that gets reassigned; these two columns are what stop the
+                // next holder inheriting the last one's conversation.
+                // Epoch 0 means "written before this existed", which is never
+                // a current epoch and therefore never replayed to a model.
+                'identity_epoch'  => "INTEGER NOT NULL DEFAULT 0",
+                'identity_key'    => "TEXT DEFAULT NULL",
                 'created_at'      => "TEXT NOT NULL DEFAULT (datetime('now'))",
                 'updated_at'      => "TEXT NOT NULL DEFAULT (datetime('now'))",
             ];
@@ -87,6 +95,22 @@ class ConversationService
             )->fetchColumn();
             if (!$msgExists) {
                 $this->createWaMessagesTable();
+            } else {
+                // The same additive treatment for messages, which this branch
+                // never did: the table was checked for existence and nothing
+                // else, so a column added here would never reach an existing
+                // install.
+                $mcols = $this->db->query("PRAGMA table_info(wa_messages)")->fetchAll(PDO::FETCH_COLUMN, 1);
+                foreach (['identity_epoch' => "INTEGER NOT NULL DEFAULT 0",
+                          'identity_key'   => "TEXT DEFAULT NULL"] as $col => $def) {
+                    if (!in_array($col, $mcols, true)) {
+                        try { $this->db->exec("ALTER TABLE wa_messages ADD COLUMN {$col} {$def}"); } catch (\Throwable $e) {}
+                    }
+                }
+                try {
+                    $this->db->exec('CREATE INDEX IF NOT EXISTS idx_wa_msg_conv_epoch
+                                     ON wa_messages(conversation_id, identity_epoch, sent_at)');
+                } catch (\Throwable $e) {}
             }
             return; // Done — never DROP existing data
         }
@@ -114,6 +138,8 @@ class ConversationService
                 last_human_reply_at TEXT DEFAULT NULL,
                 crm_link_method TEXT DEFAULT NULL,
                 crm_link_at     TEXT DEFAULT NULL,
+                identity_epoch  INTEGER NOT NULL DEFAULT 0,
+                identity_key    TEXT    DEFAULT NULL,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
@@ -135,11 +161,14 @@ class ConversationService
                 wa_message_id   TEXT,
                 event_key       TEXT,
                 metadata        TEXT,
+                identity_epoch  INTEGER NOT NULL DEFAULT 0,
+                identity_key    TEXT    DEFAULT NULL,
                 sent_at         TEXT    NOT NULL DEFAULT (datetime('now')),
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
         ");
         $this->db->exec("CREATE INDEX idx_wa_msg_conv_time ON wa_messages(conversation_id, sent_at)");
+        $this->db->exec("CREATE INDEX idx_wa_msg_conv_epoch ON wa_messages(conversation_id, identity_epoch, sent_at)");
         $this->db->exec("CREATE UNIQUE INDEX idx_wa_msg_wamid ON wa_messages(wa_message_id) WHERE wa_message_id IS NOT NULL");
         $this->db->exec("CREATE INDEX idx_wa_msg_direction ON wa_messages(direction, sent_at)");
     }
@@ -159,11 +188,14 @@ class ConversationService
                 wa_message_id   TEXT,
                 event_key       TEXT,
                 metadata        TEXT,
+                identity_epoch  INTEGER NOT NULL DEFAULT 0,
+                identity_key    TEXT    DEFAULT NULL,
                 sent_at         TEXT    NOT NULL DEFAULT (datetime('now')),
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
         ");
         $this->db->exec("CREATE INDEX idx_wa_msg_conv_time ON wa_messages(conversation_id, sent_at)");
+        $this->db->exec("CREATE INDEX idx_wa_msg_conv_epoch ON wa_messages(conversation_id, identity_epoch, sent_at)");
         $this->db->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_msg_wamid ON wa_messages(wa_message_id) WHERE wa_message_id IS NOT NULL");
         $this->db->exec("CREATE INDEX idx_wa_msg_direction ON wa_messages(direction, sent_at)");
     }
@@ -361,6 +393,147 @@ class ConversationService
                  ->execute([$crmClientId, $crmClientName, $method, $convId]);
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  IDENTITY EPOCHS — who a conversation belongs to, and since when
+    //
+    //  A conversation is keyed by (phone, channel). A phone number is a
+    //  bearer token: it gets reassigned, and it gets shared. Before this,
+    //  replay followed the key, so the next holder of a number inherited the
+    //  last holder's conversation — including an assistant reply stating
+    //  their balance, replayed into the new person's prompt as the model's
+    //  own previous turn.
+    //
+    //  So identity is resolved fresh every turn by the backend, stamped onto
+    //  each message as it is written, and retrieval refuses to cross from one
+    //  identity to another. History is context. It is never authorisation,
+    //  and nothing here may be read as proof that anybody is entitled to
+    //  anything.
+    //
+    //  Epoch 0 is "written before this existed". It is never a current epoch,
+    //  so pre-existing conversations stay whole for staff and are never
+    //  replayed to a model.
+    // ══════════════════════════════════════════════════════════════════════
+
+    /** No customer could be identified. Never replayable. */
+    public const ID_UNKNOWN   = 'unknown';
+    /** Several customers match. Never replayable. */
+    public const ID_AMBIGUOUS = 'ambiguous';
+
+    /**
+     * The identity key for a resolved CRM customer.
+     *
+     * @param int|null $clientId  the id the BACKEND resolved this turn
+     * @param bool     $ambiguous several customers matched
+     */
+    public static function identityKey(?int $clientId, bool $ambiguous = false): string
+    {
+        if ($ambiguous) return self::ID_AMBIGUOUS;
+        return ($clientId !== null && $clientId > 0) ? 'client:' . $clientId : self::ID_UNKNOWN;
+    }
+
+    /**
+     * The identity key for an anonymous website visitor.
+     *
+     * A session is not a customer, and this is deliberately NOT 'unknown'. A
+     * web conversation holds no account data — web_chat passes customer=null
+     * and no account block — so there is nothing of anybody's to leak into
+     * it, and the session id is held by one browser rather than reassigned
+     * the way a phone number is. Treating it as unknown would end multi-turn
+     * sales conversations on the website for no security gain.
+     */
+    public static function sessionIdentityKey(string $session): string
+    {
+        $s = preg_replace('/[^a-f0-9]/', '', strtolower($session)) ?? '';
+        return $s === '' ? self::ID_UNKNOWN : 'session:' . $s;
+    }
+
+    /** Can turns written under this identity ever be replayed to a model? */
+    public static function replayableIdentity(string $key): bool
+    {
+        return strncmp($key, 'client:', 7) === 0 || strncmp($key, 'session:', 8) === 0;
+    }
+
+    /**
+     * Open this turn under the identity the backend resolved for it.
+     *
+     * Returns the epoch messages written now belong to. When the identity has
+     * changed — a different customer, or none, or several — the epoch
+     * advances and the stored CRM link is cleared, because a link recorded
+     * for somebody else is worse than no link at all: FollowUpPolicy reads
+     * that column to decide whether a proactive message may carry account
+     * content. A caller that has just identified somebody re-links straight
+     * after this, so the clear costs nothing it should keep.
+     *
+     * Epoch 0 never survives contact: the first turn under this rule advances
+     * to 1 whatever the identity, so nothing written before it is replayable.
+     */
+    public function beginTurn(int $convId, string $identityKey): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT identity_key, identity_epoch FROM wa_conversations WHERE id = ?');
+        $stmt->execute([$convId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $current = (string)($row['identity_key'] ?? '');
+        $epoch   = (int)($row['identity_epoch'] ?? 0);
+
+        if ($current === $identityKey && $epoch >= 1) {
+            return $epoch;
+        }
+
+        $epoch++;
+        $this->db->prepare(
+            'UPDATE wa_conversations
+                SET identity_epoch = ?, identity_key = ?,
+                    crm_client_id = NULL, crm_client_name = NULL,
+                    crm_link_method = NULL, crm_link_at = NULL,
+                    updated_at = datetime(\'now\')
+              WHERE id = ?')
+                 ->execute([$epoch, $identityKey, $convId]);
+        return $epoch;
+    }
+
+    /**
+     * The turns a model may see, for the identity resolved THIS turn.
+     *
+     * Empty unless all of these hold, and each is a separate refusal rather
+     * than one combined condition, so a future edit cannot relax them by
+     * accident:
+     *
+     *   - the identity is one that can own a conversation at all;
+     *   - the conversation is at a real epoch (never 0, never pre-existing);
+     *   - the conversation's identity is the one asking now;
+     *   - and the message itself was written under both.
+     *
+     * The caller's own limit still applies on top. Ordering is the same
+     * newest-first-then-reversed shape as getMessages(), including the id
+     * tiebreaker, because an AI reply lands in the same second as the
+     * question it answers.
+     */
+    public function getMessagesForAi(int $convId, string $identityKey, int $limit = 20): array
+    {
+        if (!self::replayableIdentity($identityKey)) return [];
+
+        $stmt = $this->db->prepare(
+            'SELECT identity_key, identity_epoch FROM wa_conversations WHERE id = ?');
+        $stmt->execute([$convId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return [];
+
+        $epoch = (int)($row['identity_epoch'] ?? 0);
+        if ($epoch < 1) return [];
+        if ((string)($row['identity_key'] ?? '') !== $identityKey) return [];
+
+        $stmt = $this->db->prepare(
+            'SELECT * FROM (
+                SELECT * FROM wa_messages
+                 WHERE conversation_id = ? AND identity_epoch = ? AND identity_key = ?
+                 ORDER BY sent_at DESC, id DESC LIMIT ?
+             ) sub ORDER BY sent_at ASC, id ASC');
+        $stmt->execute([$convId, $epoch, $identityKey, $limit]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** Record that a number matches several customers — no proactive contact. */
     public function markIdentityAmbiguous(int $convId): void
     {
@@ -395,10 +568,27 @@ class ConversationService
             if ($stmt->fetch()) return null; // Already exists
         }
 
+        // Stamp the identity this message is written under, from the
+        // conversation rather than from the caller. Every writer — the two
+        // webhooks, the worker, web chat, the admin API, the importer — is
+        // then correct without having to remember, and a message can never
+        // end up in an epoch its conversation is not in.
+        $ep  = 0;
+        $key = null;
+        try {
+            $idq = $this->db->prepare(
+                'SELECT identity_epoch, identity_key FROM wa_conversations WHERE id = ?');
+            $idq->execute([$conversationId]);
+            if ($idrow = $idq->fetch(PDO::FETCH_ASSOC)) {
+                $ep  = (int)($idrow['identity_epoch'] ?? 0);
+                $key = $idrow['identity_key'] ?? null;
+            }
+        } catch (\Throwable $e) { /* pre-migration row: epoch 0, never replayed */ }
+
         $stmt = $this->db->prepare(
-            'INSERT INTO wa_messages (conversation_id, direction, role, body, media_type, media_url, 
-             agent_name, wa_message_id, event_key, metadata, sent_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))'
+            'INSERT INTO wa_messages (conversation_id, direction, role, body, media_type, media_url,
+             agent_name, wa_message_id, event_key, metadata, identity_epoch, identity_key, sent_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))'
         );
         $stmt->execute([
             $conversationId,
@@ -411,6 +601,8 @@ class ConversationService
             $waMsgId,
             $msg['event_key'] ?? null,
             isset($msg['metadata']) ? json_encode($msg['metadata']) : null,
+            $ep,
+            $key,
             // gmdate, not date(): sent_at was written by whichever entry point
             // happened to run -- the webhook under Africa/Juba, the spawned CLI
             // worker under UTC -- so one conversation carried two clocks, and

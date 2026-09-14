@@ -299,7 +299,16 @@ try {
 
     // Read the prior turns BEFORE recording this one, or the current message
     // would arrive twice: once as history and once as the message being asked.
-    foreach ($convSvc->getMessages($convId, 20, 0) as $m) {
+    //
+    // Identity-bound since B3.1, to the SESSION rather than to a customer.
+    // A website visitor is anonymous by design and this conversation holds no
+    // account data — customer is null below and no account block is ever
+    // built — so there is nothing of anybody's to inherit. What a session
+    // does have is a holder: one browser, not a phone number that gets
+    // reassigned. Replay stays inside it.
+    $webIdentity = ConversationService::sessionIdentityKey($session);
+    $convSvc->beginTurn($convId, $webIdentity);
+    foreach ($convSvc->getMessagesForAi($convId, $webIdentity, 20) as $m) {
         $history[] = [
             'role' => ($m['direction'] ?? 'in') === 'in' ? 'customer' : 'dishnet',
             'text' => mb_substr((string)($m['body'] ?? ''), 0, 400),

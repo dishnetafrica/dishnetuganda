@@ -1149,9 +1149,18 @@ class DishNetAiBrain
         foreach (($ctx['history'] ?? []) as $h) {
             $text = trim((string)($h['text'] ?? ''));
             if ($text === '') continue;
+            $isCustomer = ($h['role'] ?? 'customer') === 'customer';
+            $text = mb_substr($text, 0, 400);
+            // A customer's earlier words are the customer's CONTENT, exactly
+            // as rule 7 says, and they arrive here already truncated and
+            // stripped of any context that said so. Replayed bare they read
+            // like any other turn, so an instruction the customer typed three
+            // messages ago gets a second hearing every turn thereafter.
+            // Labelling costs one short prefix and makes what it is legible.
+            if ($isCustomer) $text = '[earlier message from the customer] ' . $text;
             $turns[] = [
-                'role'    => ($h['role'] ?? 'customer') === 'customer' ? 'user' : 'assistant',
-                'content' => mb_substr($text, 0, 400),
+                'role'    => $isCustomer ? 'user' : 'assistant',
+                'content' => $text,
             ];
         }
         // Ten entries is five exchanges, and a qualification flow -- hello, home

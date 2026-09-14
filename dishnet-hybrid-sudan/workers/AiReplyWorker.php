@@ -258,16 +258,33 @@ class AiReplyWorker extends WorkerBase
             $ctx['customer'] = $id['data']['customer'];
             $clientId   = (int)($id['data']['customer']['id'] ?? 0);
             $identified = $clientId > 0;
-            if ($convId > 0 && $identified) {
+        } elseif ($id['ok'] && ($id['data']['reason'] ?? '') === 'ambiguous') {
+            $ctx['identity_ambiguous'] = true;
+        }
+
+        // Open the turn under the identity just resolved, BEFORE anything is
+        // linked or stored. beginTurn advances the epoch and clears a stale
+        // CRM link when the identity has changed, so it has to run first —
+        // after linkToCrm it would wipe the link that had just been made.
+        $identityKey = ConversationService::identityKey(
+            $identified ? $clientId : null, !empty($ctx['identity_ambiguous']));
+        if ($convId > 0) {
+            try { $this->convSvc->beginTurn($convId, $identityKey); }
+            catch (\Throwable $e) { $this->log('warn', 'conv ' . $convId . ': beginTurn failed — '
+                . $e->getMessage()); }
+        }
+
+        if ($identified) {
+            if ($convId > 0) {
                 try {
                     $this->convSvc->linkToCrm($convId, $clientId, (string)($id['data']['customer']['name'] ?? ''),
                                               ConversationService::LINK_AI);
                 } catch (\Throwable $e) { /* non-fatal */ }
             }
-        } elseif ($id['ok'] && ($id['data']['reason'] ?? '') === 'ambiguous') {
-            // Several customers share this number's last digits. Say so rather
-            // than picking one — the AI must ask a verifying question.
-            $ctx['identity_ambiguous'] = true;
+        } elseif (!empty($ctx['identity_ambiguous'])) {
+            // Several customers share this number's last digits, so the AI
+            // must ask a verifying question rather than pick one.
+            //
             // And remember it. Answering an ambiguous number is fine, because
             // whoever wrote in is the person reading the reply. STARTING a
             // conversation with one is not: we would be guessing which of
@@ -346,7 +363,15 @@ class AiReplyWorker extends WorkerBase
                 // Twenty, to match the website: a WhatsApp customer answers in single
                 // words even more than a web one, so the model needs to still see the
                 // question those words are answering.
-                $msgs = $this->convSvc->getMessages($convId, 20, 0);
+                //
+                // Identity-bound since B3.1, using the key resolved above —
+                // never the conversation row. A phone number is reassigned and
+                // shared, and following it was how the next holder of a number
+                // inherited the last one's balance. This returns nothing at all
+                // when the identity is unknown or ambiguous, including when the
+                // CRM is merely down: not being able to check who somebody is
+                // is the same thing as not knowing.
+                $msgs = $this->convSvc->getMessagesForAi($convId, $identityKey, 20);
                 foreach ($msgs as $m) {
                     $inbound = ($m['direction'] ?? 'in') === 'in';
                     $text    = mb_substr((string)($m['body'] ?? ''), 0, 400);

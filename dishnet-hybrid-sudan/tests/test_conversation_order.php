@@ -102,12 +102,18 @@ $r = new ReflectionMethod('DishNetAiBrain', 'buildTurns'); $r->setAccessible(tru
 $turns = $r->invoke($brain, ['message' => 'and installation?', 'history' => $history]);
 
 $asModelSees = array_map(function ($x) { return $x['role'] . ': ' . $x['content']; }, $turns);
-t('the model reads the request before the location', 
-  array_search('user: I need Starlink for my home.', $asModelSees, true)
-  < array_search("user: I'm in Sudan.", $asModelSees, true), true);
+// Position by substance, not by the whole line: history turns now carry an
+// untrusted-content label, and what is under test here is the ORDER.
+$at = function (string $needle) use ($asModelSees): int {
+    foreach ($asModelSees as $i => $line) if (str_contains($line, $needle)) return $i;
+    return -1;
+};
+t('every line was found', min($at('I need Starlink for my home.'),
+    $at("I'm in Sudan."), $at('How much?')) >= 0, true);
+t('the model reads the request before the location',
+  $at('I need Starlink for my home.') < $at("I'm in Sudan."), true);
 t('and the location before the price question',
-  array_search("user: I'm in Sudan.", $asModelSees, true)
-  < array_search('user: How much?', $asModelSees, true), true);
+  $at("I'm in Sudan.") < $at('How much?'), true);
 t('the newest message is the one being answered', end($turns)['content'], 'and installation?');
 t('roles alternate as they did in life',
   array_column($turns, 'role'),
