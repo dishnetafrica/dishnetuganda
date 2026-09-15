@@ -104,6 +104,12 @@ $bc2 = BrainContext::build('identified', ['channel' => 'sales', 'transport' => '
         'customer' => ['id' => 13, 'name' => 'Julius Newcomer', 'is_lead' => false]]);
 t('and not when nobody looked',                                    array_keys($bc2['customer'] ?? []), ['name', 'is_lead']);
 
+echo "\n   …and a product named like a plan is the plan\n";
+require_once $root . '/lib/DishNetTools.php';
+t('two spellings of one plan compare equal',
+  DishNetTools::catalogueKey('Starlink Residential Lite ( up to 100 Mbps)'), DishNetTools::catalogueKey('Residential Lite (up to 100 Mbps)'));
+is_(DishNetTools::catalogueKey('Starlink Mini Kit') !== DishNetTools::catalogueKey('Starlink Standard Kit'), 'different things stay different');
+
 // ═════════════════════════════════════════════════
 echo "\n2. The lead: a typed email lands on the record, validated\n";
 // ═════════════════════════════════════════════════
@@ -193,6 +199,12 @@ else {
     t('turn 1: the prospect is unknown to billing',               $one['ctx']['identity_state'] ?? null, 'unknown');
     t('turn 1: no history yet',                                    count($one['ctx']['history'] ?? []), 0);
     is_(strpos($one['log'], 'identity=unknown history=0') !== false, 'and the log says so, without content', $one['log']);
+    $hwNames   = array_map(fn($h) => $h['name'], $one['ctx']['products']['hardware'] ?? []);
+    $planNames = array_map(fn($p) => $p['name'], $one['ctx']['products']['products'] ?? []);
+    t('the catalogue carries the plans as monthly',                 $planNames, ['Starlink Residential Lite ( up to 100 Mbps)', 'Residential (up to 400 Mbps)']);
+    t('and the one-time items without the plan mirrors',            $hwNames, ['Starlink Mini Kit', 'Professional Installation']);
+    is_(strpos($one['log'], '2 plan mirror(s) dropped from hardware') !== false, 'and the log says two mirrors were dropped', $one['log']);
+
     // What the worker stores after a real turn: the inbound, then its reply.
     $convSvc->storeMessage($cid, ['direction' => 'in',  'role' => 'customer',  'body' => 'Hi Bhavin']);
     $convSvc->storeMessage($cid, ['direction' => 'out', 'role' => 'assistant', 'body' => 'Hi — Bhavin is tied up, I am the DishNet assistant covering the chat. What can I set up for you?', 'agent_name' => 'DishNet AI']);

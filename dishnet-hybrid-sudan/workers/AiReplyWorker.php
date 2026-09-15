@@ -324,9 +324,11 @@ class AiReplyWorker extends WorkerBase
                 $products = $this->tools->getProducts();
                 if ($products['ok']) {
                     $ctx['products'] = $products['data'];
-                    $this->log('info', sprintf('conv %d: catalogue loaded, %d plan(s), %d hardware item(s)',
+                    $mirrors = (int)($products['data']['hardware_plan_mirrors'] ?? 0);
+                    $this->log('info', sprintf('conv %d: catalogue loaded, %d plan(s), %d hardware item(s)%s',
                         $convId, (int)($products['data']['count'] ?? 0),
-                        (int)($products['data']['hardware_count'] ?? 0)));
+                        (int)($products['data']['hardware_count'] ?? 0),
+                        $mirrors > 0 ? sprintf(', %d plan mirror(s) dropped from hardware', $mirrors) : ''));
                     if (!empty($products['data']['hardware_error'])) {
                         $this->log('warn', 'conv ' . $convId . ': hardware lookup failed — '
                             . (string)$products['data']['hardware_error']);

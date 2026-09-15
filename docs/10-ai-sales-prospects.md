@@ -158,3 +158,32 @@ It prints which rows were corrected and which were protected because an
 operator had edited them. `PLAN_SERVICE_MAP` should appear under corrected;
 if it appears under protected, the row was edited in Admin → Knowledge Base
 and the new wording has to be applied there by hand.
+
+---
+
+## 5.18.5 — a product named like a plan is the plan
+
+Listing the catalogue exactly as the assistant receives it showed the uCRM
+Products tab carrying two entries named like the monthly plans,
+"Residential (up to 400 Mbps)" and "Residential Lite (up to 100 Mbps)". uCRM
+builds quotations from Products, so the operator mirrored each plan there to
+put it on a quote. To the prompt every product is a ONE-TIME charge, so the
+assistant held each plan twice: once at its monthly price and once as a
+one-off of the same amount — the exact way a model calls a monthly plan a
+one-off, or adds it into the "total to get connected".
+
+`DishNetTools::getProducts()` now drops any product whose name is a plan's
+name before anything reads the list. Names are compared through
+`catalogueKey()`: lower-case, the word "Starlink" removed, letters and digits
+only, so "Starlink Residential Lite ( up to 100 Mbps)" and "Residential Lite
+(up to 100 Mbps)" are recognised as one thing. The count of dropped mirrors
+is returned and logged (`… 2 plan mirror(s) dropped from hardware`). The
+mirrors stay in uCRM, where quotations need them.
+
+Prices themselves were never the problem: every plan and kit price the
+assistant states comes from uCRM on each turn, cached for one minute, and
+the prompt forbids any price not in that list.
+
+| Check | Result |
+| --- | --- |
+| `tests/test_prospect_sales.php` | 60 checks: the two spellings compare equal; through the real worker against a catalogue shaped like the live one, PLANS carries both plans as monthly and HARDWARE carries the kit and the installation only, with the drop logged |

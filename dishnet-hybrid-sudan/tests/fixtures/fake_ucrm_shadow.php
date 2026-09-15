@@ -114,6 +114,22 @@ if ($path === '/clients/21/services') {
           'activeTo' => '2035-05-05T00:00:00+0000']]);
 }
 
+// ── The catalogue, as the live install had it on 15 Sep ──────────────────
+// Two plans, spelled one way as service plans and another as products: the
+// operator mirrored each monthly plan into the Products tab so a quotation
+// can carry it as a line. The tool must drop those mirrors from HARDWARE.
+if ($path === '/service-plans') {
+    out([['id' => 1, 'name' => 'Starlink Residential Lite ( up to 100 Mbps)', 'price' => 249000, 'isActive' => true,
+          'periodMonths' => 1, 'downloadSpeed' => 100, 'uploadSpeed' => 20],
+         ['id' => 2, 'name' => 'Residential (up to 400 Mbps)', 'price' => 329000, 'isActive' => true, 'periodMonths' => 1]]);
+}
+if ($path === '/products') {
+    out([['id' => 10, 'name' => 'Starlink Mini Kit', 'price' => 2249000, 'unit' => 'pc'],
+         ['id' => 11, 'name' => 'Professional Installation', 'price' => 150000, 'unit' => 'pc'],
+         ['id' => 12, 'name' => 'Residential Lite (up to 100 Mbps)', 'price' => 249000, 'unit' => 'pc'],
+         ['id' => 13, 'name' => 'Residential (up to 400 Mbps)', 'price' => 329000, 'unit' => 'pc']]);
+}
+
 // Identity resolution probes uCRM as a shortlist; an empty answer sends it
 // back to the local index, which is where this test's identity comes from.
 if ($path === '/clients') out([]);

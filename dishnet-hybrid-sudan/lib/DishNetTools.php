@@ -311,6 +311,19 @@ class DishNetTools
      * are quoted. A top-level `price`, where a UCRM version provides one, is
      * still honoured first.
      */
+    /**
+     * The comparable form of a catalogue name: lower-case, the word
+     * "starlink" removed, letters and digits only. "Starlink Residential Lite
+     * ( up to 100 Mbps)" and "Residential Lite (up to 100 Mbps)" are the same
+     * thing spelled twice, and this says so.
+     */
+    public static function catalogueKey(string $name): string
+    {
+        $k = mb_strtolower(trim($name));
+        $k = preg_replace('/\bstarlink\b/u', '', $k) ?? $k;
+        return preg_replace('/[^a-z0-9]+/u', '', $k) ?? '';
+    }
+
     public static function mapServicePlan(array $p): array
     {
         $price  = isset($p['price']) && $p['price'] !== null ? (float)$p['price'] : null;
@@ -406,11 +419,32 @@ class DishNetTools
             } catch (\Throwable $e) {
                 $hardwareError = $e->getMessage();
             }
+            // uCRM builds quotations from Products, so an operator mirrors each
+            // monthly plan as a product to put it on a quote — seen live on
+            // 15 Sep: "Residential Lite (up to 100 Mbps)" in both lists, once
+            // at 249,000 a month and once as a 249,000 one-time item. To the
+            // prompt every product is a ONE-TIME charge, so the mirror would
+            // have the model call a monthly plan a one-off, or add it into the
+            // total to get connected. A product whose name is a plan's name is
+            // the plan, and is dropped here before anything reads it.
+            $planKeys = [];
+            foreach ($out as $p) {
+                $k = self::catalogueKey((string)($p['name'] ?? ''));
+                if ($k !== '') $planKeys[$k] = true;
+            }
+            $mirrors  = 0;
+            $hardware = array_values(array_filter($hardware, function (array $h) use ($planKeys, &$mirrors): bool {
+                $k = self::catalogueKey((string)($h['name'] ?? ''));
+                if ($k !== '' && isset($planKeys[$k])) { $mirrors++; return false; }
+                return true;
+            }));
+
             $result = $this->ok([
                 'products'         => $out,
                 'count'            => count($out),
                 'hardware'         => $hardware,
                 'hardware_count'   => count($hardware),
+                'hardware_plan_mirrors' => $mirrors,
                 'hardware_error'   => $hardwareError,
                 '_schema_verified' => false,
                 '_note'            => 'Fields absent from UCRM are null. Never present a null field as a fact.',
