@@ -326,7 +326,14 @@ e-mail goes only to a customer who also has a phone number, because it sits
 inside the WhatsApp block's gate as before; and it carries no "Pay online"
 link — `contact_pay_url` defaults to the Sudan tutorials page, which the
 WhatsApp invoice text prints unless the key is configured, and the e-mail
-was not given the same default.
+was not given the same default. Checked on the live install the same day:
+the key IS configured, to the Uganda pay page, so a "Pay" button that
+appears only when the key is set is a safe later addition. A second gap
+stands: an invoice that reaches the customer through the 15-minute catch-up
+cron (`cron_invoice_notify.php`, for invoices uCRM creates without firing
+the webhook) gets WhatsApp only — the cron does not call the e-mail
+dispatcher, and because the two share the `INV<number>` dedupe key, the
+webhook arriving second skips the e-mail as well.
 
 ## What was never at risk
 
