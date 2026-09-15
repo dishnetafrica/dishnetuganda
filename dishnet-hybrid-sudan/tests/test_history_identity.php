@@ -13,7 +13,8 @@ declare(strict_types=1);
  *
  *   Identity is resolved fresh every turn, by the backend. History is
  *   replayed only under the identity it was written under, and only at the
- *   conversation's current epoch. Unknown or ambiguous means no history at
+ *   conversation's current epoch. Ambiguous means no history at all; unknown
+ *   (since 5.18.3) means only its own recent turns, never anybody else's;
  *   all — including when the CRM is merely down, because not being able to
  *   check who somebody is is the same thing as not knowing.
  */
@@ -92,27 +93,46 @@ t('a proactive message may no longer carry account content',
   FollowUpPolicy::contentLevel($svc->getConversation($c2)),
   FollowUpPolicy::CONTENT_ENQUIRY);
 
-echo "\nUnknown identity replays nothing\n";
+echo "\nAn unknown caller replays their own recent turns — and nobody else's\n";
+// Until 5.18.3 unknown replayed nothing, and every prospect on the sales
+// number — anyone not yet in billing — was answered one message at a time.
+// The epoch is what protects a customer's turns, and it still does: below,
+// the customer's balance line is in a different epoch under a different key.
 $c3 = conv($svc, '+256700333444');
 $svc->beginTurn($c3, A);
 say($svc, $c3, 'out', BAL, 'assistant');
 $svc->beginTurn($c3, ConversationService::ID_UNKNOWN);
-t('no turns for an unidentified caller',
+t('a customer\'s turns never replay to an unidentified caller on the same number',
   $svc->getMessagesForAi($c3, ConversationService::ID_UNKNOWN, 20), []);
-is_(!ConversationService::replayableIdentity(ConversationService::ID_UNKNOWN),
-    'unknown is not a replayable identity');
+is_(ConversationService::replayableIdentity(ConversationService::ID_UNKNOWN),
+    'unknown may replay its own history');
 
-// And it must still replay nothing when the turns were WRITTEN while
-// unknown — the case that matters, because those rows do carry the unknown
-// key and would otherwise match on it.
+// Turns WRITTEN while unknown — a prospect's own conversation — come back to
+// the same unknown caller, in order.
 $c3b = conv($svc, '+256700343434');
 $svc->beginTurn($c3b, ConversationService::ID_UNKNOWN);
-say($svc, $c3b, 'in', 'hello, who is this');
-say($svc, $c3b, 'out', 'Could you tell me your account number?', 'assistant');
+say($svc, $c3b, 'in', 'hello, this is Hari from Bidco');
+say($svc, $c3b, 'out', 'Hi Hari — home, business, or both?', 'assistant');
 t('turns written while unknown are stored', count($svc->getMessages($c3b, 100, 0)), 2);
 $svc->beginTurn($c3b, ConversationService::ID_UNKNOWN);
-t('but an unknown caller still gets none of them back',
-  $svc->getMessagesForAi($c3b, ConversationService::ID_UNKNOWN, 20), []);
+t('and the same unknown caller gets them back',
+  bodies($svc->getMessagesForAi($c3b, ConversationService::ID_UNKNOWN, 20)),
+  ['hello, this is Hari from Bidco', 'Hi Hari — home, business, or both?']);
+t('the epoch did not advance for an unchanged identity',
+  (int)$svc->getConversation($c3b)['identity_epoch'], 1);
+
+// The residual of that permission is a number the network later hands to a
+// stranger who is also unknown to us. A sales conversation is days; a
+// reassignment is months; the window keeps one and drops the other.
+$stale = gmdate('Y-m-d H:i:s', time() - (ConversationService::UNKNOWN_REPLAY_DAYS + 1) * 86400);
+$fresh = gmdate('Y-m-d H:i:s', time() - (ConversationService::UNKNOWN_REPLAY_DAYS - 1) * 86400);
+$svc->storeMessage($c3b, ['direction' => 'in', 'role' => 'customer', 'body' => 'STALE-PROSPECT-TURN', 'sent_at' => $stale]);
+$svc->storeMessage($c3b, ['direction' => 'in', 'role' => 'customer', 'body' => 'RECENT-PROSPECT-TURN', 'sent_at' => $fresh]);
+$b = bodies($svc->getMessagesForAi($c3b, ConversationService::ID_UNKNOWN, 20));
+is_(!in_array('STALE-PROSPECT-TURN', $b, true), 'a turn older than the window is not replayed');
+is_(in_array('RECENT-PROSPECT-TURN', $b, true),  'a turn inside the window is');
+t('a customer identified on that number later sees none of the unknown turns',
+  (function () use ($svc, $c3b) { $svc->beginTurn($c3b, A); return $svc->getMessagesForAi($c3b, A, 20); })(), []);
 
 echo "\nAmbiguous identity replays nothing\n";
 $svc->beginTurn($c3, ConversationService::ID_AMBIGUOUS);
@@ -129,16 +149,21 @@ t('nor when the turns were written while ambiguous',
 
 echo "\nA CRM outage is treated as not knowing, not as yesterday's answer\n";
 // identifyCustomerByPhone returns an honest failure when the CRM is
-// unreachable. The caller maps that to unknown, and unknown means no history
-// — deliberately, because the alternative is trusting a stale identity, which
-// is the authorisation defect this whole change exists to remove.
+// unreachable. The caller maps that to unknown, and the customer's own turns
+// do not follow — deliberately, because the alternative is trusting a stale
+// identity, which is the authorisation defect this whole change exists to
+// remove. What is said DURING the outage carries no account data and stays
+// in the conversation while it lasts.
 $c4 = conv($svc, '+256700555666');
 $svc->beginTurn($c4, A);
 say($svc, $c4, 'out', BAL, 'assistant');
 $outage = ConversationService::identityKey(null, false);
 t('a failed lookup maps to unknown', $outage, ConversationService::ID_UNKNOWN);
 $svc->beginTurn($c4, $outage);
-t('and replays nothing', $svc->getMessagesForAi($c4, $outage, 20), []);
+t('and replays none of the customer\'s turns', $svc->getMessagesForAi($c4, $outage, 20), []);
+say($svc, $c4, 'in', 'is the network down?');
+t('a turn written during the outage replays while it lasts',
+  bodies($svc->getMessagesForAi($c4, $outage, 20)), ['is the network down?']);
 // And the customer coming back afterwards does NOT resurrect the old turns:
 // the epoch moved on twice.
 $svc->beginTurn($c4, A);

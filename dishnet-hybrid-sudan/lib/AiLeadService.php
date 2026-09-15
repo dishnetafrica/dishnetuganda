@@ -34,7 +34,7 @@ class AiLeadService
 {
     /** Fields the AI may set. Anything else it emits is ignored. */
     private const FIELDS = [
-        'customer_name', 'company', 'location', 'customer_type', 'requirement',
+        'customer_name', 'company', 'email', 'location', 'customer_type', 'requirement',
         'users_devices', 'existing_internet', 'recommended_solution',
         'recommended_plan', 'recommended_hardware', 'public_ip_required',
         'cctv_remote_access', 'quote_requested', 'ai_summary',
@@ -161,6 +161,12 @@ class AiLeadService
                      : (in_array($v, ['no', 'false', '0', false, 0], true) ? 'no' : null);
         }
         $out['quote_requested'] = filter_var($in['quote_requested'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        // An email address is either an address or nothing. A salesperson
+        // handed "kris at bul dot co" as a field would type it into a mailer.
+        if (isset($out['email'])) {
+            $e = mb_strtolower(trim((string)$out['email']));
+            $out['email'] = filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : null;
+        }
         return $out;
     }
 

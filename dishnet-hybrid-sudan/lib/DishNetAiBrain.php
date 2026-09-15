@@ -153,6 +153,9 @@ class DishNetAiBrain
         // ── Channel role ────────────────────────────────────────────────
         $p .= $this->channelRules($channel);
 
+        // ── A prospect is a sale to make, not a question to deflect ──────
+        $p .= $this->prospectRules($ctx, $channel);
+
         // ── Qualify before recommending ─────────────────────────────────
         $p .= $this->qualification($channel);
 
@@ -332,6 +335,65 @@ class DishNetAiBrain
             . "by you. Treat it as true and keep any promise in it, but never claim you said it, "
             . "and do not repeat what they have already told the customer.\n\n";
         return $p;
+    }
+
+    /**
+     * Somebody we cannot match in billing, on a number whose job is selling.
+     *
+     * Written from a real conversation on 15 Sep. A prospect said who he was
+     * and which company he was from, gave an email address for a quotation,
+     * said he had just spoken to us by phone, and asked twice for a basic
+     * quote for his business and his home. Every reply was a version of "how
+     * can I help you today?". Half of that was the model never being shown
+     * the conversation (ConversationService::replayableIdentity, fixed the
+     * same day); the other half is that nothing in this prompt said what a
+     * salesperson does with a name, an email address, a reference to a call,
+     * or a plain request for prices — so "qualify before you recommend" read
+     * as "ask before you tell", and a typed email address read as a message
+     * with no question in it.
+     *
+     * Only where selling happens, only when nobody in billing matched, and
+     * never for an ambiguous number (that case asks for a name and reveals
+     * nothing). An identified customer on the sales number is in service
+     * mode, above.
+     */
+    private function prospectRules(array $ctx, string $channel): string
+    {
+        $sells = $channel === 'sales'
+              || filter_var($this->config['ai_sales_on_all_numbers'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (!$sells) return '';
+        if (!empty($ctx['customer'])) return '';
+        if (!empty($ctx['identity_ambiguous']) || ($ctx['identity_state'] ?? '') === 'ambiguous') return '';
+
+        $esc  = $this->markerHint(self::MARKER_ESCALATE);
+        $lead = filter_var($this->config['ai_lead_capture'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $inLead = $lead ? ' Put it in the LEAD line.' : '';
+
+        return "\nNOBODY IN OUR BILLING SYSTEM MATCHES THIS CONVERSATION — treat them as a "
+             . "prospective customer, and sell the way a good salesperson would.\n"
+             . "- READ THE CONVERSATION ABOVE FIRST and build on it. Never open with \"how can I "
+             . "help you today?\", and never ask what they want once they have told you.\n"
+             . "- WHEN THEY GIVE YOU A DETAIL — their name, company, role, email address, town — "
+             . "that is progress, not a question. Thank them in a few words, use the name from "
+             . "then on, and move the sale forward in the same message." . $inLead . " A typed "
+             . "email address answered with \"how can I assist you?\" is a customer ignored.\n"
+             . "- WHEN THEY ASK WHAT IT COSTS — a quote, a \"basic quote\", prices, packages, "
+             . "\"send me the options\" — ANSWER FIRST. Give the plans from PLANS with their "
+             . "prices, both residential and business when they asked for both; where Business "
+             . "pricing is not in PLANS, say the team confirms that one and " . $esc . ". Then ask "
+             . "ONE qualifying question after the list, never instead of it. A prospect who asks "
+             . "for prices twice and gets two questions back has been told nothing.\n"
+             . "- WHEN THEY ADDRESS A COLLEAGUE BY NAME, or say they just spoke, met or emailed "
+             . "with someone from our team: you are the DishNet assistant covering the chat. Say "
+             . "so in one clause, do not pretend to be that person or to know what was said, "
+             . "carry on from there, and " . $esc . " so the colleague sees this thread.\n"
+             . "- WHEN THEY WANT SOMETHING SENT — a quotation, a proposal, a price list — to an "
+             . "email address: confirm you have the address and that the team will send it"
+             . ($lead ? ", record quote_requested and the email in the LEAD line," : ',')
+             . " and " . $esc . ". Never say it has been sent, and never promise a time.\n"
+             . "- If they ask about a balance, an invoice or a fault on \"my line\", they may "
+             . "well be a customer on another number. Do not deny it; ask for the name or number "
+             . "on the account and " . $esc . ".\n";
     }
 
     /**
@@ -857,10 +919,12 @@ class DishNetAiBrain
              . "  <<LEAD {\"requirement\":\"...\",\"location\":\"...\",\"customer_type\":\"...\"}>>\n"
              . "- The customer never sees it; it is removed before the message is sent.\n"
              . "- Keys you may use, all optional except requirement: requirement, location, "
-             . "customer_type, customer_name, company, users_devices, existing_internet, "
+             . "customer_type, customer_name, company, email, users_devices, existing_internet, "
              . "recommended_solution, recommended_plan, recommended_hardware, "
              . "public_ip_required (yes/no), cctv_remote_access (yes/no), quote_requested "
              . "(true/false), ai_summary.\n"
+             . "- email: an address they typed, exactly as typed, when they gave one for a "
+             . "quotation or a follow-up. Never one you inferred.\n"
              . "- ONLY WHAT THEY ACTUALLY TOLD YOU. Leave a key out entirely rather than "
              . "guessing it. Never infer a location from a dialling code, a business size from "
              . "a tone, or a budget from anything at all.\n"

@@ -352,10 +352,13 @@ class AiReplyWorker extends WorkerBase
                 // Identity-bound since B3.1, using the key resolved above —
                 // never the conversation row. A phone number is reassigned and
                 // shared, and following it was how the next holder of a number
-                // inherited the last one's balance. This returns nothing at all
-                // when the identity is unknown or ambiguous, including when the
-                // CRM is merely down: not being able to check who somebody is
-                // is the same thing as not knowing.
+                // inherited the last one's balance. Nothing replays across an
+                // identity change, and nothing at all for an ambiguous number.
+                // Since 5.18.3 an UNKNOWN caller — a prospect, or a customer
+                // while the CRM is down — does get their own recent turns back:
+                // those were written with no account data in the prompt, and
+                // without them the sales number answered every prospect one
+                // message at a time. See ConversationService::replayableIdentity().
                 $msgs = $this->convSvc->getMessagesForAi($convId, $identityKey, 20);
                 foreach ($msgs as $m) {
                     $inbound = ($m['direction'] ?? 'in') === 'in';
@@ -380,6 +383,10 @@ class AiReplyWorker extends WorkerBase
                 }
             } catch (\Throwable $e) { /* history is optional */ }
         }
+        // One line, no content: whether the model had the conversation in
+        // front of it, or answered this message on its own.
+        $this->log('info', sprintf('conv %d: identity=%s history=%d turn(s)', $convId,
+            ConversationService::identityState($identityKey), count($ctx['history'])));
 
         // ── B3.4: does the tool layer agree with the prompt? ────────────
         //

@@ -434,12 +434,14 @@ class ConversationService
     //                               when the CRM is merely unreachable.
     //   AMBIGUOUS   'ambiguous'     several customers share the number.
     //
-    // Both of the first two may replay their own history. Only the FIRST is
-    // a customer. Anyone reaching for "can this identity have account data"
-    // wants isCustomerIdentity(), never replayableIdentity() — the two
-    // questions look alike and are not, and conflating them would let an
-    // anonymous session inherit a customer's authority, which is the exact
-    // shape of the bug this whole phase exists to remove.
+    // The first THREE may replay their own history — UNKNOWN only its own
+    // recent turns (UNKNOWN_REPLAY_DAYS); see replayableIdentity() for why
+    // that changed in 5.18.3. Only the FIRST is a customer. Anyone reaching
+    // for "can this identity have account data" wants isCustomerIdentity(),
+    // never replayableIdentity() — the two questions look alike and are not,
+    // and conflating them would let a session or an unknown caller inherit a
+    // customer's authority, which is the exact shape of the bug this whole
+    // phase exists to remove.
     public const STATE_IDENTIFIED = 'identified';
     public const STATE_ANONYMOUS  = 'anonymous';
     public const STATE_UNKNOWN    = 'unknown';
@@ -505,17 +507,48 @@ class ConversationService
     }
 
     /**
+     * How long an UNKNOWN caller's own turns stay replayable.
+     *
+     * A sales conversation is days, not months; a phone number reassigned by
+     * the network is months. The window keeps the first and rules out the
+     * second — the one residual of letting an unknown caller see their own
+     * history is a stranger who later holds the same number.
+     */
+    public const UNKNOWN_REPLAY_DAYS = 14;
+
+    /**
      * Can turns written under this identity ever be replayed to a model?
      *
-     * True for a customer AND for an anonymous session — they are separate
-     * authorisation domains that each own their own conversation. This
-     * answers "may this identity see its own history", never "may this
-     * identity see account data": that is isCustomerIdentity().
+     * True for a customer, for an anonymous website session and — since
+     * 5.18.3 — for an UNKNOWN WhatsApp caller, each within its own epoch.
+     * They are separate authorisation domains that each own their own
+     * conversation. This answers "may this identity see its own history",
+     * never "may this identity see account data": that is isCustomerIdentity().
+     *
+     * Unknown was refused until 5.18.3, and the refusal had a cost nobody
+     * priced: every prospect on the sales number — anyone not yet in our
+     * billing system, which is who a sales number is for — was answered one
+     * message at a time with no memory. On 15 Sep a prospect gave his name
+     * and company, gave an email address for a quotation, said he had just
+     * spoken to us by phone, and asked twice for a basic quote; every reply
+     * was a version of "how can I help you today?".
+     *
+     * The refusal bought nothing, because the epoch already does the work. A
+     * turn written under 'unknown' was produced with no account data in the
+     * prompt — customer null, no services, no balance — so replaying it to
+     * the same key in the same epoch discloses nothing of anybody's. What
+     * the epoch forbids stays forbidden: a customer's turns never replay to
+     * an unknown caller (the key changed, so the epoch advanced); turns from
+     * a CRM outage never come back once the customer is identified again;
+     * and several customers sharing one number (ambiguous) still get
+     * nothing. The residual — a number reassigned to a second unknown
+     * person — is bounded by UNKNOWN_REPLAY_DAYS in getMessagesForAi().
      */
     public static function replayableIdentity(string $key): bool
     {
         $s = self::identityState($key);
-        return $s === self::STATE_IDENTIFIED || $s === self::STATE_ANONYMOUS;
+        return $s === self::STATE_IDENTIFIED || $s === self::STATE_ANONYMOUS
+            || $s === self::STATE_UNKNOWN;
     }
 
     /**
@@ -568,7 +601,8 @@ class ConversationService
      *   - the identity is one that can own a conversation at all;
      *   - the conversation is at a real epoch (never 0, never pre-existing);
      *   - the conversation's identity is the one asking now;
-     *   - and the message itself was written under both.
+     *   - and the message itself was written under both;
+     *   - and, for an UNKNOWN caller, it is no older than UNKNOWN_REPLAY_DAYS.
      *
      * The caller's own limit still applies on top. Ordering is the same
      * newest-first-then-reversed shape as getMessages(), including the id
@@ -589,13 +623,19 @@ class ConversationService
         if ($epoch < 1) return [];
         if ((string)($row['identity_key'] ?? '') !== $identityKey) return [];
 
+        // sent_at is UTC everywhere (see storeMessage), so a UTC floor compares
+        // correctly as text. '' is a floor every row clears.
+        $since = self::identityState($identityKey) === self::STATE_UNKNOWN
+            ? gmdate('Y-m-d H:i:s', time() - self::UNKNOWN_REPLAY_DAYS * 86400)
+            : '';
         $stmt = $this->db->prepare(
             'SELECT * FROM (
                 SELECT * FROM wa_messages
                  WHERE conversation_id = ? AND identity_epoch = ? AND identity_key = ?
+                   AND sent_at >= ?
                  ORDER BY sent_at DESC, id DESC LIMIT ?
              ) sub ORDER BY sent_at ASC, id ASC');
-        $stmt->execute([$convId, $epoch, $identityKey, $limit]);
+        $stmt->execute([$convId, $epoch, $identityKey, $since, $limit]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

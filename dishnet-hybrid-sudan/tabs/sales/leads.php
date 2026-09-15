@@ -364,6 +364,9 @@
             <a href="https://wa.me/<?= h(ltrim($phClean,'+')) ?>" target="_blank" class="wa"><i class="bi bi-whatsapp"></i></a>
         </div>
         <?php endif; ?>
+        <?php if (!empty($ld['email'])): ?>
+        <div class="lc-phone"><a href="mailto:<?= h($ld['email']) ?>"><i class="bi bi-envelope-fill"></i> <?= h($ld['email']) ?></a></div>
+        <?php endif; ?>
         <div class="lc-meta">
             <?php if ($isMyDaily): ?>
                 <!-- This caller's own daily lead -->
