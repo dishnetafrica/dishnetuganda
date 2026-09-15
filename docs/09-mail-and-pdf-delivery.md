@@ -335,6 +335,68 @@ the webhook) gets WhatsApp only — the cron does not call the e-mail
 dispatcher, and because the two share the `INV<number>` dedupe key, the
 webhook arriving second skips the e-mail as well.
 
+## The five remaining lifecycle e-mails — 5.18.7, 15 September
+
+Asked to switch on the other five (installation, welcome, paused, resumed,
+support), the same read was done first. Every one had the invoice's defect:
+the webhook passed keys the template does not read (`plan`, `date`,
+`install_date`, `engineer`, `ticket`), so the facts tables would have been
+empty. Two subjects were built around a missing fact and would have gone out
+as "paused —  to resume" and "We have your request — ". And two fired on
+events that do not mean what the e-mail says: uCRM's `service.activate`
+announces a first activation and a resumption alike, so a brand-new customer
+would have been told "your payment has been received and your internet is
+active again"; and `job.add` fires for a repair visit or a survey as much as
+for an installation, each of which would have been announced as "your
+installation is booked".
+
+What changed, in `webhook.php` and `lib/CustomerEmails.php`:
+
+- **The facts, from records the handler already holds.** `whServiceFacts()`
+  reads plan (`servicePlanName`), monthly price (only for a monthly plan),
+  activation date, address and account number (`userIdent`); dates are
+  formatted from the calendar date uCRM wrote, in uCRM's own offset, so the
+  day never shifts with the server's timezone. `whUnpaidInvoiceFacts()` names
+  what resumes a paused service — the unpaid invoice numbers and their sum,
+  or the outstanding balance. A "Pay" button appears on the invoice and the
+  paused e-mail only when `contact_pay_url` is configured (it is, on the live
+  install); the Sudan default that WhatsApp prints is never used.
+- **Paused and resumed are paired.** A suspension is remembered against the
+  service (`plugin_kv`, `paused_svc_<id>`; the table is created on demand,
+  since only the admin UI created it before). On `service.activate`, a
+  remembered pause means the resumption e-mail, which says "your payment has
+  been received" only when a receipt went out moments before or nothing is
+  outstanding; no remembered pause and an active service means a first
+  activation, so the welcome. A cancelled pending suspension sends nothing; a
+  postponement (temporary restore, unpaid) leaves the pause remembered for the
+  real resumption. Unlike the WhatsApp text, the e-mail does not stand aside
+  for a receipt sent seconds earlier.
+- **Guards on the two loose events.** An installation e-mail needs a client,
+  a title matching `install|setup|set-up|mount`, and a date; anything else is
+  logged with the reason and sent to nobody. A support acknowledgement needs
+  a client on the ticket. The technician's phone is not passed to the customer.
+- **Templates that stand on their own.** The paused, support and installation
+  subjects are whole without their optional fact; the resumed template reads
+  `paid`; the catalogue's "fires when" texts now describe the real triggers.
+
+Evidence: `tests/test_lifecycle_email_wiring.php` drives the real handler as
+the invoice test does — welcome with every account fact; paused with invoice,
+amount and pay link and the pause remembered; resumed after a payment
+(acknowledged) and after a staff restore (not claimed); a never-paused
+activation is a welcome, not a resumption; a cancelled suspension, a repair
+visit, an undated installation and a client-less ticket send nothing; the
+audit log matches the wire; and a structural pin that every key a webhook
+passes is one its template prints. Five breaks (unread key back, pause
+forgotten, every job an installation, every resumption a payment, subject
+dependent on the amount) each failed the suite.
+
+Limits that stand: a job whose date is added after creation sends nothing
+(`job.edit` is not handled); the installation match is by title; the paused
+e-mail is one per customer per day; all lifecycle e-mails go only to a
+customer who also has a phone number, as the WhatsApp gates decide; and the
+WhatsApp text for a first activation still reads "Service Restored" — the
+e-mail was corrected, the WhatsApp copy was not touched.
+
 ## What was never at risk
 
 Customers received their quotations throughout. The summary went out as

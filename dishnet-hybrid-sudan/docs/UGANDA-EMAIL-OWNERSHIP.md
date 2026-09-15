@@ -55,11 +55,11 @@ sends. One owner either way.
 |---|---|---|
 | Invoice | `invoice.add` | `INV<number>` |
 | Payment received | `payment.add` | `PAY<payment id>` |
-| Welcome / activated | `service.add` | `SVCADD<client>:<service>` |
+| Welcome / activated | `service.add` (created active) or `service.activate` with no remembered pause | `SVCADD<client>:<service id>` |
 | Service paused | `service.suspend` | `SUSP<client>:<date>` |
-| Service resumed | `service.activate` / `unsuspend` | `RESUME<client>:<date>` |
+| Service resumed | `service.activate` after a remembered pause (`paused_svc_<id>`) | `RESUME<client>:<service id>:<date>` |
 | Support acknowledgement | `ticket.add` | `TKT<ticket id>` |
-| Installation scheduled | `job.add` | `JOB<job id>` |
+| Installation scheduled | `job.add` — installation title, dated, with a client | `JOB<job id>` |
 
 Since 5.18.6 the invoice e-mail carries uCRM's invoice PDF, fetched once per
 webhook and shared with the WhatsApp document, and the template says
@@ -87,14 +87,14 @@ control flow, which is a larger change than this one and is not attempted here.
 |---|---|---|---|
 | Quotation | **Plugin** | Email + WhatsApp | live; PDF attached; uCRM send suppressed by the toggle |
 | Order confirmed / payment received | **Plugin** | Email + WhatsApp | wired to `payment.add`; **switched on 15 Sep 2026** |
-| Installation scheduled | **Plugin** | Email + WhatsApp | wired to `job.add`, switched off |
-| Welcome / service active | **Plugin** | Email + WhatsApp | wired to `service.add`, switched off |
+| Installation scheduled | **Plugin** | Email + WhatsApp | wired to `job.add` (installation jobs with a date); facts corrected in 5.18.7, ready to switch on |
+| Welcome / service active | **Plugin** | Email + WhatsApp | wired to `service.add` and first `service.activate`; facts corrected in 5.18.7, ready to switch on |
 | Invoice issued | **Plugin** | Email + WhatsApp | wired to `invoice.add`, uCRM's PDF attached (5.18.6); **switched on 15 Sep 2026** — uCRM's own invoice notification not yet confirmed off in the browser, so a duplicate is possible until it is |
 | Payment reminder (pre-due) | **WhatsApp only** | WhatsApp | email here reads as nagging; WhatsApp already covers d7/d3/d1 |
-| Service paused | **Plugin** | Email + WhatsApp | replaces the postpaid dunning ladder |
-| Service resumed | **Plugin** | Email + WhatsApp | wired to `service.activate`, switched off |
+| Service paused | **Plugin** | Email + WhatsApp | replaces the postpaid dunning ladder; names the unpaid invoice and amount, offers the configured pay link (5.18.7), ready to switch on |
+| Service resumed | **Plugin** | Email + WhatsApp | wired to `service.activate` after a remembered pause; payment claimed only when seen (5.18.7), ready to switch on |
 | Login code (OTP) | **Plugin** | Email | live, via `OtpEmailTemplate` |
-| Support acknowledgement | **Plugin** | Email | wired to `ticket.add`, switched off |
+| Support acknowledgement | **Plugin** | Email | wired to `ticket.add` for a client's ticket; reference and account passed (5.18.7), ready to switch on |
 | Overdue chase (9 stages) | **nobody, on prepaid** | — | gated off; see below |
 
 ---
