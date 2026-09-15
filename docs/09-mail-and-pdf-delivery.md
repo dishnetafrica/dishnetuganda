@@ -19,7 +19,7 @@ webhook.php reads a partial config                 ── root cause, OPEN
    └── crm_public_url invisible to it
          └── PDF URLs built on :8443
                └── UISP's self-signed cert there
-                     └── Evolution refuses, HTTP 500, no PDF   ── FIXED (workaround)
+                     └── Evolution refuses, HTTP 500, no PDF   ── FIXED (workaround, confirmed 15 Sep)
 ```
 
 Both workarounds sit on top of a real cause. Neither cause is fixed.
@@ -160,9 +160,9 @@ PluginConfig::saveOverrides('<dataDir>', ['crm_public_url' => ''])
 An empty value unsets the override, leaving the original `config.json` entry
 untouched.
 
-**Not yet verified by a real send.** The chain is proven as far as the URL the
-webhook builds and the 200 that URL returns. The next quotation created in
-uCRM is the real test: `ops_quote_pdf` should read `✓ sent / 200`.
+**Verified by a real send on 15 September.** A quotation created in uCRM the
+next morning delivered its PDF on WhatsApp — `ops_quote_pdf` went from
+`✗ fail / 500` to sent. The inference chain above was correct end to end.
 
 ---
 
