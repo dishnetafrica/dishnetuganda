@@ -1468,13 +1468,34 @@ class NotificationService
         );
     }
 
+    /**
+     * Send a WhatsApp message for a named event — the text the caller wrote.
+     *
+     * Until 5.18.4 this built its own text from the variables it was handed:
+     * "*EVENT CLIENT ADD*", "To: Julius Peter", "Crm id: 13", one line per
+     * key — a debugging format that became a customer message the day
+     * client.add started calling it as a "welcome", and that the overdue
+     * follow-ups were sending with their real text tacked on as "Raw message:".
+     *
+     * The text of a customer message is the caller's to write, in
+     * $data['_raw_message']. That is sent, exactly, and nothing else. With no
+     * text there is nothing to send: the omission is logged and the customer
+     * receives nothing, which is better than receiving our variable names.
+     * $toName is kept for the callers' sake; it was only ever a line in the dump.
+     */
     public function send(string $event, string $toPhone, string $toName, array $data, string $sender = self::SUPPORT): void
     {
-        $lines = ['*' . str_replace('_', ' ', strtoupper($event)) . '*', "To: {$toName}"];
-        foreach ($data as $k => $v) {
-            if (!is_array($v)) $lines[] = ucfirst(str_replace('_', ' ', $k)) . ': ' . $v;
+        $message = trim((string)($data['_raw_message'] ?? ''));
+        if ($message === '') {
+            $this->writeLog([
+                'sender' => $sender, 'event' => $event ?: 'send', 'to' => $toPhone,
+                'status' => 'skipped', 'reason' => 'no message text for this event — nothing sent',
+            ]);
+            return;
         }
-        $this->sendVia($sender, $toPhone, implode("\n", $lines), $event, $data);
+        $vars = $data;
+        unset($vars['_raw_message']);
+        $this->sendVia($sender, $toPhone, $message, $event, $vars);
     }
 
     public function sendAdmin(string $message, string $event = '', array $vars = []): void

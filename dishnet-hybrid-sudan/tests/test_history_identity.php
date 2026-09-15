@@ -131,8 +131,11 @@ $svc->storeMessage($c3b, ['direction' => 'in', 'role' => 'customer', 'body' => '
 $b = bodies($svc->getMessagesForAi($c3b, ConversationService::ID_UNKNOWN, 20));
 is_(!in_array('STALE-PROSPECT-TURN', $b, true), 'a turn older than the window is not replayed');
 is_(in_array('RECENT-PROSPECT-TURN', $b, true),  'a turn inside the window is');
-t('a customer identified on that number later sees none of the unknown turns',
-  (function () use ($svc, $c3b) { $svc->beginTurn($c3b, A); return $svc->getMessagesForAi($c3b, A, 20); })(), []);
+$svc->beginTurn($c3b, A);                                             // the sign-up moment
+$carried = bodies($svc->getMessagesForAi($c3b, A, 20));
+is_(in_array('RECENT-PROSPECT-TURN', $carried, true) && in_array('hello, this is Hari from Bidco', $carried, true),
+    'a customer identified on that number straight after sees the recent unknown turns — the sign-up moment');
+is_(!in_array('STALE-PROSPECT-TURN', $carried, true),                '…but not the stale one');
 
 echo "\nAmbiguous identity replays nothing\n";
 $svc->beginTurn($c3, ConversationService::ID_AMBIGUOUS);
@@ -167,7 +170,59 @@ t('a turn written during the outage replays while it lasts',
 // And the customer coming back afterwards does NOT resurrect the old turns:
 // the epoch moved on twice.
 $svc->beginTurn($c4, A);
-t('nor do they come back when the CRM recovers', $svc->getMessagesForAi($c4, A, 20), []);
+$back = bodies($svc->getMessagesForAi($c4, A, 20));
+is_(!in_array(BAL, $back, true), 'the pre-outage turns do not come back when the CRM recovers — the epoch moved on twice');
+t('what the customer said during the outage follows them — written with no account data in the prompt',
+  $back, ['is the network down?']);
+
+echo "\nThe sign-up moment: a prospect created in billing mid-conversation keeps the thread\n";
+// 15 Sep, 12:31–12:39: a prospect asked for Residential Lite, said Lira, four
+// people. A colleague created the client in uCRM at 12:32. The identity went
+// from unknown to a customer, the epoch advanced, and the model — correctly
+// denied the previous epoch — asked how many people again. The turns it lost
+// were written under 'unknown', with no account data in the prompt, so the
+// customer that phone has just become may see them. Only in this direction,
+// only the epoch immediately before, only inside the unknown window.
+const NEWC = 'client:13';
+$c6 = conv($svc, '+256776000111', 'sales');
+$svc->beginTurn($c6, ConversationService::ID_UNKNOWN);
+say($svc, $c6, 'in', 'I would like to sign up for Residential Lite');
+say($svc, $c6, 'out', 'Which town, and how many people?', 'assistant');
+say($svc, $c6, 'in', 'Lira, four people');
+$svc->beginTurn($c6, NEWC);                                          // created in billing
+t('the epoch advanced on identification', (int)$svc->getConversation($c6)['identity_epoch'], 2);
+t('and the new customer still has the conversation in front of them',
+  bodies($svc->getMessagesForAi($c6, NEWC, 20)),
+  ['I would like to sign up for Residential Lite', 'Which town, and how many people?', 'Lira, four people']);
+say($svc, $c6, 'in', 'Browsing and streaming');
+t('new turns follow the carried ones, in order',
+  bodies($svc->getMessagesForAi($c6, NEWC, 20)), 
+  ['I would like to sign up for Residential Lite', 'Which town, and how many people?', 'Lira, four people', 'Browsing and streaming']);
+$svc->beginTurn($c6, ConversationService::ID_UNKNOWN);               // never the other way
+t('a later unknown caller on that number sees none of it', $svc->getMessagesForAi($c6, ConversationService::ID_UNKNOWN, 20), []);
+
+$c7 = conv($svc, '+256776000222', 'sales');
+$svc->beginTurn($c7, A);
+say($svc, $c7, 'out', BAL, 'assistant');                              // customer A, epoch 1
+$svc->beginTurn($c7, ConversationService::ID_UNKNOWN);                // number reassigned, epoch 2
+say($svc, $c7, 'in', 'hello, new here');
+$svc->beginTurn($c7, B);                                              // new customer B, epoch 3
+$got = bodies($svc->getMessagesForAi($c7, B, 20));
+is_(!in_array(BAL, $got, true), 'customer B never sees customer A\'s balance line two epochs back');
+t('B does see the unknown turn directly before', $got, ['hello, new here']);
+
+$c8 = conv($svc, '+256776000333', 'sales');
+$svc->beginTurn($c8, ConversationService::ID_AMBIGUOUS);
+say($svc, $c8, 'in', 'which of us is it');
+$svc->beginTurn($c8, A);
+t('an ambiguous epoch before identification is not carried', $svc->getMessagesForAi($c8, A, 20), []);
+
+$c9 = conv($svc, '+256776000444', 'sales');
+$svc->beginTurn($c9, ConversationService::ID_UNKNOWN);
+$svc->storeMessage($c9, ['direction' => 'in', 'role' => 'customer', 'body' => 'OLD-PROSPECT-TURN',
+    'sent_at' => gmdate('Y-m-d H:i:s', time() - (ConversationService::UNKNOWN_REPLAY_DAYS + 1) * 86400)]);
+$svc->beginTurn($c9, A);
+t('nor an unknown turn older than the window', $svc->getMessagesForAi($c9, A, 20), []);
 
 echo "\nPre-existing history (epoch 0) is never replayed\n";
 // Everything written before this change. It stays whole for staff and is

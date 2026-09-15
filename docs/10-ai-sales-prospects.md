@@ -84,3 +84,77 @@ read as a message with no question in it.
 
 Re-upload the 5.18.2 ZIP. The prospect posture disappears with it and
 `unknown` callers stop receiving history again.
+
+---
+
+## Follow-up the same afternoon — 5.18.4: the sign-up moment, and what else the transcript showed
+
+At 12:31 a prospect wrote to the sales number asking for Residential Lite,
+then said Lira, four people. At 12:32 a colleague created the client in uCRM
+by hand and sent a quotation. At 12:38 the prospect answered the assistant's
+question ("browsing and streaming"); the assistant asked how many people
+again and recommended "our DishNet Home plan". In between, the customer had
+received a WhatsApp reading `EVENT CLIENT ADD / To: … / Customer name: … /
+Crm id: 13`.
+
+### Four causes, four changes
+
+1. **The sign-up moment wiped the model's memory.** The identity went from
+   `unknown` to a CRM client, so the epoch advanced, and by the rule above
+   the prospect's turns stopped replaying — correctly for a reassigned
+   number, wrongly for the same person one minute after being created in
+   billing. Now a customer identified mid-conversation also sees the epoch
+   immediately before, if its turns were written while the caller was
+   `unknown` and inside the 14-day window. Only in that direction: a
+   customer's turns never follow a number into `unknown`; nothing crosses
+   two epochs (customer A → unknown → customer B: B sees the unknown turn,
+   never A's); an ambiguous epoch is never carried; a stale unknown turn is
+   not either.
+2. **Service mode for someone in the middle of buying.** An identified
+   customer on the sales number was told "existing customer — do not pitch".
+   A client created five minutes ago with no service is a sign-up in
+   progress. The worker now reads an identified customer's own services (one
+   call, their own data) and passes `has_service`; with none live, the
+   prompt carries an onboarding posture: carry the sale through, do not
+   re-qualify, refer to the chosen plan by its exact name and price from
+   PLANS, escalate when they say yes or ask to pay or about installation.
+   `has_service` travels through `BrainContext` and `ShopBotPayload` only
+   when established; absent means "not looked up" and keeps the old posture.
+3. **"DishNet Home".** Knowledge-base row `PLAN_SERVICE_MAP` told the model
+   to "present the DishNet plan name first" and mapped DishNet Home =
+   Starlink Residential, DishNet Lite = Starlink Residential Lite. The uCRM
+   plans were renamed; the row was not. The seed now says: use plan names
+   exactly as they appear in PLANS; if a customer uses an old name, map it
+   to the closest current plan and confirm the exact name and price. It
+   reaches the live row through `tools/seed_knowledge.php --refresh-seeded`,
+   which corrects rows still as seeded and reports, without touching, any
+   row an operator edited. `tools/ai_eval_questions.json` updated likewise.
+4. **"EVENT CLIENT ADD".** `NotificationService::send()` had no template
+   behind it: it built one line per variable and sent that to the customer
+   as the welcome for a client created by hand. It now sends exactly the
+   text its caller wrote in `_raw_message`, or nothing at all, logging the
+   omission. The `client.add` handler writes a real welcome with the support
+   contact from config. The overdue WhatsApp follow-ups used the same method
+   and were going out as the dump with their real text appended as "Raw
+   message:"; they now go out as their text.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `tests/test_history_identity.php` | 94 checks: the carried turns, the direction, the two-epoch case, the ambiguous case, the window; the outage case re-stated (pre-outage turns never return; what the customer said during the outage follows them) |
+| `tests/test_prospect_sales.php` | 55 checks: the onboarding posture with `has_service=false`, service mode with `true` or absent; the projection carries the leaf only when established; the real worker against the fake uCRM marks client 13 (no service) and client 14 (active) correctly and logs the count |
+| `tests/test_client_add_welcome.php` | 13 checks: `send()` with no text sends nothing; with text sends exactly that text and none of the variable names; the handler and both overdue callers write their own text |
+| Prompt corpus | unchanged from the 5.18.3 baseline (`6cf66458…`): the onboarding block appears only when `has_service` is present |
+| Full suite | 168 suites, exit 0; seven break tests caught |
+
+### On the server after upload
+
+```
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/seed_knowledge.php --refresh-seeded
+```
+
+It prints which rows were corrected and which were protected because an
+operator had edited them. `PLAN_SERVICE_MAP` should appear under corrected;
+if it appears under protected, the row was edited in Admin → Knowledge Base
+and the new wording has to be applied there by hand.

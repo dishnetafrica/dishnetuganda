@@ -173,14 +173,34 @@ class DishNetAiBrain
         // about people already paying. The identity lookup already runs on
         // every message; this is the posture that was missing on sales.
         if (!empty($ctx['customer']) && $channel === 'sales') {
-            $p .= "\nTHIS IS AN EXISTING DISHNET CUSTOMER (matched in our billing system).\n";
-            $p .= "- You are in service mode. Do not pitch kits or plans, and do not treat them "
-                . "as a new lead.\n";
-            $p .= "- If they report any problem (slow, down, offline, billing), acknowledge it, "
-                . "ask at most one clarifying question, and " . $this->markerHint(self::MARKER_ESCALATE)
-                . " in the same reply so a person follows up.\n";
-            $p .= "- Only sell if THEY ask to upgrade, add another line, or buy for a new "
-                . "location — then handle it as a normal sale.\n";
+            $cust = (array)$ctx['customer'];
+            if (array_key_exists('has_service', $cust) && !$cust['has_service']) {
+                // In billing, nothing active: a colleague has just opened the
+                // account mid-conversation, probably with a quotation. Service
+                // mode here told the model not to sell to someone in the
+                // middle of buying (15 Sep, 12:32).
+                $p .= "\nTHIS PERSON IS IN OUR BILLING SYSTEM BUT HAS NO ACTIVE SERVICE YET — a sign-up "
+                    . "in progress. A colleague has probably just created their account and sent a "
+                    . "quotation.\n";
+                $p .= "- Carry the sale through; do not restart it. The conversation above shows what "
+                    . "they asked for. Do not re-qualify from scratch, and do not pitch a different plan "
+                    . "unless they ask.\n";
+                $p .= "- Refer to the plan they chose by its exact name and price from PLANS. Asked about "
+                    . "the quotation, answer only from what is in DATA and the conversation, and say the "
+                    . "team confirms anything else.\n";
+                $p .= "- When they say yes, ask how to pay, or ask when installation happens, "
+                    . $this->markerHint(self::MARKER_ESCALATE) . " so a person completes it. Never invent "
+                    . "a date or a payment instruction.\n";
+            } else {
+                $p .= "\nTHIS IS AN EXISTING DISHNET CUSTOMER (matched in our billing system).\n";
+                $p .= "- You are in service mode. Do not pitch kits or plans, and do not treat them "
+                    . "as a new lead.\n";
+                $p .= "- If they report any problem (slow, down, offline, billing), acknowledge it, "
+                    . "ask at most one clarifying question, and " . $this->markerHint(self::MARKER_ESCALATE)
+                    . " in the same reply so a person follows up.\n";
+                $p .= "- Only sell if THEY ask to upgrade, add another line, or buy for a new "
+                    . "location — then handle it as a normal sale.\n";
+            }
         }
 
         // ── Where we operate ────────────────────────────────────────────
@@ -1084,6 +1104,9 @@ class DishNetAiBrain
             $d .= '- Name: ' . ($cust['name'] ?? 'unknown') . "\n";
             if (array_key_exists('is_lead', $cust)) {
                 $d .= '- Status: ' . (!empty($cust['is_lead']) ? 'Prospect, not yet a customer' : 'Existing customer') . "\n";
+            }
+            if (array_key_exists('has_service', $cust)) {
+                $d .= '- Service: ' . (!empty($cust['has_service']) ? 'has a live service with us' : 'none active yet — sign-up in progress') . "\n";
             }
         } else {
             $d .= "\nCUSTOMER: Not identified. This number is not linked to a DishNet account.\n";

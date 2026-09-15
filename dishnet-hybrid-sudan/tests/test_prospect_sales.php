@@ -84,6 +84,26 @@ $over = (new DishNetAiBrain($on + ['bot_instructions_mode' => 'override', 'bot_c
     ->promptPreview(['channel' => 'sales', 'message' => 'price?', 'identity_state' => 'unknown'] + $plans);
 is_(strpos($over, $MARK) === false && strpos($over, 'ABSOLUTE RULES') !== false, 'an operator override replaces the wording, never the absolute rules — the posture is wording');
 
+echo "\n   …and a customer just created in billing, with nothing active yet, is a sign-up in progress\n";
+$onb = $brain->promptPreview(['channel' => 'sales', 'message' => 'Browsing and streaming', 'identity_state' => 'identified',
+                              'customer' => ['id' => 13, 'name' => 'Julius Newcomer', 'is_lead' => false, 'has_service' => false]] + $plans);
+is_(strpos($onb, 'NO ACTIVE SERVICE YET') !== false,             'no live service → the sign-up posture');
+is_(strpos($onb, 'Carry the sale through') !== false,             '— carry the sale through, do not restart it');
+is_(strpos($onb, 'EXISTING DISHNET CUSTOMER') === false,          '— and not service mode');
+is_(strpos($onb, 'none active yet') !== false,                    '— DATA says so too');
+is_(strpos($onb, $MARK) === false,                                '— and not the stranger posture either');
+$sub = $brain->promptPreview(['channel' => 'sales', 'message' => 'my line is slow', 'identity_state' => 'identified',
+                              'customer' => ['id' => 14, 'name' => 'Grace Subscriber', 'is_lead' => false, 'has_service' => true]] + $plans);
+is_(strpos($sub, 'EXISTING DISHNET CUSTOMER') !== false && strpos($sub, 'NO ACTIVE SERVICE YET') === false, 'a live service → service mode, as before');
+is_(strpos($cust, 'EXISTING DISHNET CUSTOMER') !== false && strpos($cust, 'NO ACTIVE SERVICE YET') === false, 'not looked up → service mode, as before');
+require_once $root . '/lib/BrainContext.php';
+$bc = BrainContext::build('identified', ['channel' => 'sales', 'transport' => 'whatsapp', 'message' => 'hi',
+        'customer' => ['id' => 13, 'name' => 'Julius Newcomer', 'is_lead' => false, 'has_service' => false, '_raw' => ['secret' => 'x']]]);
+t('BrainContext carries has_service when established',            $bc['customer'] ?? null, ['name' => 'Julius Newcomer', 'is_lead' => false, 'has_service' => false]);
+$bc2 = BrainContext::build('identified', ['channel' => 'sales', 'transport' => 'whatsapp', 'message' => 'hi',
+        'customer' => ['id' => 13, 'name' => 'Julius Newcomer', 'is_lead' => false]]);
+t('and not when nobody looked',                                    array_keys($bc2['customer'] ?? []), ['name', 'is_lead']);
+
 // ═════════════════════════════════════════════════
 echo "\n2. The lead: a typed email lands on the record, validated\n";
 // ═════════════════════════════════════════════════
@@ -198,6 +218,19 @@ else {
     $c2 = $build('sales', $OURS, 'fine', $cid7);
     t('and still gets their own history',                          count($c2['ctx']['history'] ?? []), 2);
 
+    // The sign-up moment, through the worker: client 13 exists in billing with no
+    // service; client 14 has one active. The prompt gets the fact, the log the count.
+    $pdo->prepare('INSERT INTO client_search_index (id, name, phone, phone_norm) VALUES (13, ?, ?, ?)')->execute(['Julius Newcomer', '+256776000555', '256776000555']);
+    $pdo->prepare('INSERT INTO client_search_index (id, name, phone, phone_norm) VALUES (14, ?, ?, ?)')->execute(['Grace Subscriber', '+256776000666', '256776000666']);
+    $cid13 = (int)($convSvc->ensureConversation('256776000555', 'sales')['id'] ?? 0);
+    $n = $build('sales', '256776000555', 'Browsing and streaming', $cid13);
+    t('a just-created client is identified',                        $n['ctx']['identity_state'] ?? null, 'identified');
+    t('…and known to have no live service',                         $n['ctx']['customer']['has_service'] ?? 'MISSING', false);
+    is_(strpos($n['log'], '0 live service(s)') !== false,           'and the log counts it, without content', $n['log']);
+    $cid14 = (int)($convSvc->ensureConversation('256776000666', 'sales')['id'] ?? 0);
+    $g = $build('sales', '256776000666', 'my line is slow', $cid14);
+    t('a subscriber is known to have one',                          $g['ctx']['customer']['has_service'] ?? 'MISSING', true);
+
     // The number leaves billing (client deleted, or the CRM lookup fails): the
     // customer's turns must not follow it into the unknown epoch.
     $pdo->exec('DELETE FROM client_search_index');
@@ -207,6 +240,23 @@ else {
 
     putenv('DN_DATA_DIR');
 }
+
+// ═════════════════════════════════════════════════
+echo "\n4. The knowledge seed no longer teaches old plan names\n";
+// ═════════════════════════════════════════════════
+// "DishNet Home" reached a customer on 15 Sep from the PLAN_SERVICE_MAP row,
+// which told the model to present a DishNet marketing name first and mapped
+// the old names onto the Starlink ones. The uCRM plans were renamed; the row
+// was not. Plan names come from PLANS, exactly as they appear there.
+$seed = json_decode((string)file_get_contents($root . '/tools/knowledge_seed.json'), true);
+$map  = null;
+foreach ((array)($seed['items'] ?? []) as $it) { if (($it['item_key'] ?? '') === 'PLAN_SERVICE_MAP') { $map = $it; break; } }
+is_($map !== null,                                                       'the PLAN_SERVICE_MAP row is still seeded');
+is_(strpos((string)($map['answer'] ?? ''), 'exactly as they appear') !== false, 'and says plan names are used exactly as PLANS names them');
+is_(strpos((string)($map['answer'] ?? ''), 'present the DishNet plan name first') === false, 'and no longer tells the model to present a marketing name first');
+is_(strpos((string)($map['answer'] ?? ''), 'DishNet Home = ') === false,  'and carries no old-name mapping to present');
+$evalq = (string)file_get_contents($root . '/tools/ai_eval_questions.json');
+is_(strpos($evalq, 'DishNet Home') === false,                           'the eval questions name live plans, not old ones');
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

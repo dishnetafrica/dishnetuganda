@@ -60,7 +60,7 @@ final class BrainContext
      */
     public const CONTRACT = [
         'identity_state' => ['*'],
-        'customer'       => ['name', 'is_lead'],
+        'customer'       => ['name', 'is_lead', 'has_service'],
         'channel'        => ['*'],
         'transport'      => ['*'],
         'medium'         => ['*'],
@@ -142,6 +142,13 @@ final class BrainContext
                 'name'    => self::str($in['customer']['name'] ?? ''),
                 'is_lead' => !empty($in['customer']['is_lead']),
             ];
+            // Whether they have a live service — only when the caller looked.
+            // Absent means "not looked up", which the prompt must never read
+            // as "no service": a customer created in billing five minutes ago,
+            // mid-conversation, is a sign-up in progress, not a subscriber.
+            if (array_key_exists('has_service', $in['customer'])) {
+                $out['customer']['has_service'] = (bool)$in['customer']['has_service'];
+            }
         }
 
         // The public catalogue. Not customer data — identical for every

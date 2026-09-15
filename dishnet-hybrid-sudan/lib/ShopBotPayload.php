@@ -64,7 +64,7 @@ final class ShopBotPayload
         'medium'             => ['*'],
         'message'            => ['*'],
         'identity_ambiguous' => ['*'],
-        'customer'           => ['name', 'is_lead'],
+        'customer'           => ['name', 'is_lead', 'has_service'],
         'products'           => ['products.name', 'products.price', 'products.period_months',
                                  'products.download_speed', 'products.upload_speed',
                                  'products.data_limit', 'hardware.name', 'hardware.price'],
@@ -132,13 +132,17 @@ final class ShopBotPayload
         }
 
         // Who they are: the greeting and the posture, and nothing else. The
-        // brain reads exactly these two.
+        // brain reads exactly these — and has_service only when the caller
+        // established it, because absent means "not looked up", never "none".
         if (!empty($ctx['customer']) && is_array($ctx['customer'])) {
             $c = $ctx['customer'];
             $out['customer'] = [
                 'name'    => self::str($c['name'] ?? null),
                 'is_lead' => !empty($c['is_lead']),
             ];
+            if (array_key_exists('has_service', $c)) {
+                $out['customer']['has_service'] = (bool)$c['has_service'];
+            }
         }
 
         // Public catalogue. Not customer data — the same for every visitor,

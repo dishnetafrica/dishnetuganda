@@ -587,10 +587,20 @@ switch ($changeType) {
             // Welcome message — only if NOT already sent by plugin (check local apps)
             $existingApp = $store->findOne('kyc_applications.json', 'crm_client_id', (string)$clientId);
             if (!$existingApp) {
-                // Client created directly in UCRM (not via our KYC form) — send welcome
+                // Client created directly in UCRM (not via our KYC form) — send welcome.
+                // The text is written here on purpose: NotificationService::send()
+                // sends exactly what it is handed since 5.18.4. Before that it built
+                // "*EVENT CLIENT ADD* / To: … / Crm id: 13" out of these variables and
+                // sent THAT to the customer — seen live on 15 Sep.
+                $welcome = "🎉 *Welcome to DishNet!*\n\n"
+                         . "Hi {$name},\n\n"
+                         . "Your account has been created. Our team will be in touch to complete your connection.\n\n"
+                         . "For support: " . CustomerContact::escalation($config) . "\n\n"
+                         . "— _DishNet Africa_";
                 $notify->send('event_client_add', $phone, $name, [
                     'customer_name' => $name,
                     'crm_id'        => (string)$clientId,
+                    '_raw_message'  => $welcome,
                 ]);
                 whLog($changeType, "Welcome sent to {$name} ({$phone})", ['crm_id' => $clientId]);
             } else {

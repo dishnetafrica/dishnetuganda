@@ -85,6 +85,23 @@ if ($path === '/payments' || strpos($path, '/payments') === 0) {
           'createdDate' => '2029-02-14T00:00:00+0000', 'methodName' => 'ZPAYMETHODZ']]);
 }
 
+// ── Just created, nothing active yet: client 13 — a sign-up in progress. ──
+// And client 14, a subscriber with one active service, so a test can tell
+// the two postures apart.
+if ($path === '/clients/13') {
+    out(['id' => 13, 'firstName' => 'Julius', 'lastName' => 'Newcomer',
+         'isLead' => false, 'isActive' => true, 'accountBalance' => 0.0, 'currencyCode' => 'ZCURRZ']);
+}
+if ($path === '/clients/13/services') out([]);
+if ($path === '/clients/14') {
+    out(['id' => 14, 'firstName' => 'Grace', 'lastName' => 'Subscriber',
+         'isLead' => false, 'isActive' => true, 'accountBalance' => 0.0, 'currencyCode' => 'ZCURRZ']);
+}
+if ($path === '/clients/14/services') {
+    out([['id' => 514, 'name' => 'Residential Lite', 'servicePlanName' => 'Residential Lite',
+          'totalPrice' => 249000.0, 'status' => 1, 'activeTo' => '2027-01-01T00:00:00+0000']]);
+}
+
 // ── Somebody else: client 21. Nothing may ever read this. ───────────────
 if ($path === '/clients/21') {
     out(['id' => 21, 'firstName' => 'ZOTHERCUSTOMERZ', 'lastName' => 'Neighbour',

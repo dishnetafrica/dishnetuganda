@@ -604,6 +604,11 @@ class ConversationService
      *   - and the message itself was written under both;
      *   - and, for an UNKNOWN caller, it is no older than UNKNOWN_REPLAY_DAYS.
      *
+     * One addition, in one direction only: a customer identified mid-
+     * conversation also sees the turns of the epoch immediately before, if
+     * those were written while the caller was UNKNOWN and inside that window
+     * — the sign-up moment (see below). Never the reverse.
+     *
      * The caller's own limit still applies on top. Ordering is the same
      * newest-first-then-reversed shape as getMessages(), including the id
      * tiebreaker, because an AI reply lands in the same second as the
@@ -628,15 +633,35 @@ class ConversationService
         $since = self::identityState($identityKey) === self::STATE_UNKNOWN
             ? gmdate('Y-m-d H:i:s', time() - self::UNKNOWN_REPLAY_DAYS * 86400)
             : '';
-        $stmt = $this->db->prepare(
-            'SELECT * FROM (
+        $sql = 'SELECT * FROM (
                 SELECT * FROM wa_messages
                  WHERE conversation_id = ? AND identity_epoch = ? AND identity_key = ?
                    AND sent_at >= ?
                  ORDER BY sent_at DESC, id DESC LIMIT ?
-             ) sub ORDER BY sent_at ASC, id ASC');
+             ) sub ORDER BY sent_at ASC, id ASC';
+        $stmt = $this->db->prepare($sql);
         $stmt->execute([$convId, $epoch, $identityKey, $since, $limit]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // The sign-up moment. A prospect talking to us as 'unknown' who is
+        // then created in billing mid-conversation changes identity, so the
+        // epoch advances — and the model lost the thread at the exact point a
+        // salesperson would have said "so, the Residential Lite you asked
+        // for" (15 Sep, 12:32). Those earlier turns were written with no
+        // account data in the prompt, nobody having been identified, so
+        // carrying them forward to the customer this phone has just become
+        // discloses nothing of anybody's. Only in this direction — a
+        // customer's turns never follow a number into 'unknown' — only the
+        // epoch immediately before, and only inside the same window an
+        // unknown caller gets for their own turns.
+        if (self::identityState($identityKey) === self::STATE_IDENTIFIED && $epoch >= 2) {
+            $prev = $this->db->prepare($sql);
+            $prev->execute([$convId, $epoch - 1, self::ID_UNKNOWN,
+                            gmdate('Y-m-d H:i:s', time() - self::UNKNOWN_REPLAY_DAYS * 86400), $limit]);
+            $rows = array_merge($prev->fetchAll(PDO::FETCH_ASSOC), $rows);
+            if (count($rows) > $limit) $rows = array_slice($rows, -$limit);
+        }
+        return $rows;
     }
 
     /** Record that a number matches several customers — no proactive contact. */

@@ -303,6 +303,24 @@ class AiReplyWorker extends WorkerBase
 
         switch ($channel) {
             case EvolutionApiService::CHANNEL_SALES:
+                // A customer we can name is not necessarily a subscriber. The
+                // one a colleague created five minutes ago, mid-chat, has an
+                // account and a quotation and no service yet — a sign-up in
+                // progress, not an existing customer to put in service mode.
+                // One read of their own services says which; a failed read
+                // leaves the key out and the prompt keeps its old posture.
+                if ($identified && empty($ctx['identity_ambiguous']) && is_array($ctx['customer'])) {
+                    $svc = $this->tools->getCustomerServices($clientId);
+                    if ($svc['ok']) {
+                        $live = 0;
+                        foreach ((array)$svc['data'] as $s) {
+                            // 1 active, 3 suspended: a service that exists and bills.
+                            if (in_array((int)($s['status'] ?? -1), [1, 3], true)) $live++;
+                        }
+                        $ctx['customer']['has_service'] = $live > 0;
+                        $this->log('info', sprintf('conv %d: identified customer, %d live service(s)', $convId, $live));
+                    }
+                }
                 $products = $this->tools->getProducts();
                 if ($products['ok']) {
                     $ctx['products'] = $products['data'];
