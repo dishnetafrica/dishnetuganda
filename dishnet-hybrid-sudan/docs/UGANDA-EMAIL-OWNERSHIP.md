@@ -1,6 +1,6 @@
 # One owner per customer email event
 
-**Status: audit complete; all eight lifecycle e-mails are wired. Switched on: quotation, payment receipt, invoice (15 Sep 2026). Everything else off.** Read the sequencing warning
+**Status: audit complete; all eight lifecycle e-mails are wired and switched on (15 Sep 2026, plugin 5.18.7).** Read the sequencing warning
 before switching anything off in uCRM.
 
 Every fact below was established by reading the code, not by assumption.
@@ -87,14 +87,14 @@ control flow, which is a larger change than this one and is not attempted here.
 |---|---|---|---|
 | Quotation | **Plugin** | Email + WhatsApp | live; PDF attached; uCRM send suppressed by the toggle |
 | Order confirmed / payment received | **Plugin** | Email + WhatsApp | wired to `payment.add`; **switched on 15 Sep 2026** |
-| Installation scheduled | **Plugin** | Email + WhatsApp | wired to `job.add` (installation jobs with a date); facts corrected in 5.18.7, ready to switch on |
-| Welcome / service active | **Plugin** | Email + WhatsApp | wired to `service.add` and first `service.activate`; facts corrected in 5.18.7, ready to switch on |
+| Installation scheduled | **Plugin** | Email + WhatsApp | wired to `job.add` (installation jobs with a date); facts corrected in 5.18.7; **switched on 15 Sep 2026** |
+| Welcome / service active | **Plugin** | Email + WhatsApp | wired to `service.add` and first `service.activate`; facts corrected in 5.18.7; **switched on 15 Sep 2026** |
 | Invoice issued | **Plugin** | Email + WhatsApp | wired to `invoice.add`, uCRM's PDF attached (5.18.6); **switched on 15 Sep 2026** — uCRM's own invoice notification not yet confirmed off in the browser, so a duplicate is possible until it is |
 | Payment reminder (pre-due) | **WhatsApp only** | WhatsApp | email here reads as nagging; WhatsApp already covers d7/d3/d1 |
-| Service paused | **Plugin** | Email + WhatsApp | replaces the postpaid dunning ladder; names the unpaid invoice and amount, offers the configured pay link (5.18.7), ready to switch on |
-| Service resumed | **Plugin** | Email + WhatsApp | wired to `service.activate` after a remembered pause; payment claimed only when seen (5.18.7), ready to switch on |
+| Service paused | **Plugin** | Email + WhatsApp | replaces the postpaid dunning ladder; names the unpaid invoice and amount, offers the configured pay link (5.18.7); **switched on 15 Sep 2026** |
+| Service resumed | **Plugin** | Email + WhatsApp | wired to `service.activate` after a remembered pause; payment claimed only when seen (5.18.7); **switched on 15 Sep 2026** |
 | Login code (OTP) | **Plugin** | Email | live, via `OtpEmailTemplate` |
-| Support acknowledgement | **Plugin** | Email | wired to `ticket.add` for a client's ticket; reference and account passed (5.18.7), ready to switch on |
+| Support acknowledgement | **Plugin** | Email | wired to `ticket.add` for a client's ticket; reference and account passed (5.18.7); **switched on 15 Sep 2026** |
 | Overdue chase (9 stages) | **nobody, on prepaid** | — | gated off; see below |
 
 ---
