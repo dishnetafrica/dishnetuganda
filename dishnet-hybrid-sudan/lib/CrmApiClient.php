@@ -537,96 +537,9 @@ class CrmApiClient
         return null;
     }
 
-    /**
-     * Auto-setup: Create or update webhook for this plugin
-     *
-     * @param string $pluginRoot  Plugin directory (to read ucrm.json for public URL)
-     * @param string $secret      Webhook secret (will be set in endpoint header)
-     * @param array  $events      Events to subscribe to
-     * @return array ['success' => bool, 'message' => string, 'webhook_id' => int|null]
-     */
-    public function autoSetupWebhook(string $pluginRoot, string $secret, array $events = []): array
-    {
-        // Get public URL from ucrm.json
-        $ucrmConfig = [];
-        foreach ([$pluginRoot . '/ucrm.json', $pluginRoot . '/data/ucrm.json'] as $path) {
-            if (file_exists($path)) {
-                $c = json_decode(file_get_contents($path), true);
-                if (is_array($c) && !empty($c)) { $ucrmConfig = $c; break; }
-            }
-        }
-        
-        $publicUrl = rtrim($ucrmConfig['ucrmPublicUrl'] ?? '', '/');
-        if (empty($publicUrl)) {
-            return ['success' => false, 'message' => 'Cannot determine public URL from ucrm.json', 'webhook_id' => null];
-        }
-        
-        // Build the correct webhook URL - must go through public.php
-        // UCRM only exposes public.php, not webhook.php directly
-        $webhookUrl = $publicUrl . '/_plugins/' . basename(dirname(__DIR__)) . '/public.php?page=webhook';
-        
-        // Default events if not specified
-        if (empty($events)) {
-            $events = [
-                'client.add',
-                'client.edit',
-                'invoice.add',
-                'payment.add',
-                'service.add',
-                'service.suspend',
-                'service.suspend_cancel',
-                'service.end',
-            ];
-        }
-        
-        // Check if webhook already exists (search for our plugin)
-        $existing = $this->findWebhookByUrl('/_plugins/' . basename(dirname(__DIR__)) . '/');
-        
-        if ($existing) {
-            // Update existing webhook
-            $updated = $this->updateWebhook((int)$existing['id'], [
-                'url'                  => $webhookUrl,
-                'isActive'             => true,
-                'verifySslCertificate' => true,
-                'eventTypes'           => $events,
-            ]);
-            
-            if ($updated) {
-                return [
-                    'success' => true,
-                    'message' => "Webhook updated (ID: {$existing['id']})",
-                    'webhook_id' => (int)$existing['id'],
-                    'url' => $webhookUrl,
-                    'events' => $events,
-                ];
-            } else {
-                return [
-                    'success' => false,
-                    'message' => 'Failed to update webhook: ' . json_encode($this->lastError),
-                    'webhook_id' => (int)$existing['id'],
-                ];
-            }
-        } else {
-            // Create new webhook
-            $created = $this->createWebhook($webhookUrl, $events, true);
-            
-            if ($created && isset($created['id'])) {
-                return [
-                    'success' => true,
-                    'message' => "Webhook created (ID: {$created['id']})",
-                    'webhook_id' => (int)$created['id'],
-                    'url' => $webhookUrl,
-                    'events' => $events,
-                ];
-            } else {
-                return [
-                    'success' => false,
-                    'message' => 'Failed to create webhook: ' . json_encode($this->lastError),
-                    'webhook_id' => null,
-                ];
-            }
-        }
-    }
+    // autoSetupWebhook() lived here until 5.18.2. It registered a fixed list of
+    // eight events (no quote.add among them) and replaced the endpoint's address
+    // with the public one from ucrm.json. The one policy is lib/WebhookRegistrar.php.
 
     // ── CRIT-03 FIX: SSL helpers ──────────────────────────────────────────────
     //

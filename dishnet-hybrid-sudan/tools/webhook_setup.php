@@ -104,133 +104,70 @@ if ($endpointUrl === '') {
 
 line();
 echo "2) Which address can uCRM actually reach?\n";
-// The public base the operator configured, plus the loopback the API itself
-// is reached on — which is proof that address works from in here.
-$base      = rtrim(wa_ai_public_base($config), '/');
-$apiBase   = rtrim($crm->getBaseUrl(), '/');
-$localRoot = preg_replace('#/api/v[0-9.]+$#', '', $apiBase);
-
-// uCRM serves only public.php from a plugin directory; webhook.php at its own
-// path returns uCRM's 404, which is exactly what the first run of this tool
-// found. The handler is routed through public.php?page=crm_webhook.
-// Public address FIRST when it works. Both are reachable from inside the uCRM
-// container, but localhost is only correct if the process dispatching webhooks
-// is the same container this tool ran in — and if uCRM ever moves delivery to
-// a worker, a localhost endpoint points at the wrong place and fails silently.
-// The public name is right from anywhere.
-$candidates = [];
-foreach ([$base, $localRoot . '/_plugins/dishnet-hybrid-sudan'] as $b) {
-    $b = rtrim((string)$b, '/');
-    if ($b === '') continue;
-    $candidates[] = $b . '/public.php?page=crm_webhook';
+// One policy with the Settings button: lib/WebhookRegistrar.php. It probes the
+// way uCRM will call — an empty POST that webhook.php answers 400 "Empty
+// body." (a GET gets 405 "POST required."). Anything else — uCRM's own 404, a
+// login redirect, no connection — is not the plugin.
+require_once $root . '/lib/WebhookRegistrar.php';
+$name = basename($root);
+$plan = WebhookRegistrar::plan($hooks, $config, $name, [WebhookRegistrar::class, 'reaches'], $apiBase);
+foreach ($plan['probed'] as $u => $p) {
+    printf("    %-72s %s\n", $u, $p['reached']
+        ? 'REACHED' . ($p['verify_ssl'] ? '' : ' (certificate not verifiable — registered with verification off)')
+        : 'not our webhook / no connection');
 }
-$candidates = array_values(array_unique(array_filter($candidates)));
-
-$working = '';
-foreach ($candidates as $url) {
-    // POST, because that is what uCRM does and what webhook.php requires — a
-    // GET is answered 405 "POST required.", which the first run of this tool
-    // mistook for a failure. An empty POST body reaches the handler and is
-    // refused at its first check with 400 "Empty body.", which is exactly the
-    // proof wanted: the route resolved, the file ran, nothing was processed.
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8,
-        CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_CUSTOMREQUEST  => 'POST',
-        CURLOPT_POSTFIELDS     => '',
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-    ]);
-    $body = (string)curl_exec($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-
-    // Either answer proves the handler ran. Anything else — uCRM's own 404
-    // page, a redirect to a login screen, no connection — does not.
-    $reached = (stripos($body, 'Empty body') !== false)
-            || (stripos($body, 'POST required') !== false);
-    printf("    %-72s %s\n", $url,
-        $reached ? "REACHED (HTTP {$code})"
-                 : ($code > 0 ? "HTTP {$code} — not our webhook" : 'no connection: ' . $err));
-    if ($reached && $working === '') $working = $url;
-}
-
-if ($working === '') {
+if ($plan['action'] === 'unreachable') {
     no('uCRM cannot reach the plugin webhook at any address tried');
     echo "        Set plugin_public_url in the plugin Settings to the address the\n";
     echo "        plugin is served at, then rerun. If the public name is the only\n";
     echo "        option and it fails, that is the container hairpin problem again.\n";
     exit(1);
 }
-ok("uCRM can reach {$working}");
-if (count($candidates) > 1 && strpos($working, 'localhost') !== false) {
+ok("uCRM can reach {$plan['url']}");
+if (strpos($plan['url'], 'localhost') !== false || strpos($plan['url'], '127.0.0.1') !== false) {
     wr('that is the loopback address — it only works if webhook delivery runs in '
      . 'this same container. Prefer the public URL if it is also REACHED above.');
 }
 
 line();
 echo "3) Registering\n";
-$already = false;
-foreach ($hooks as $h) {
-    if (rtrim((string)($h['url'] ?? ''), '/') === rtrim($working, '/') && !empty($h['isActive'])) {
-        $already = true;
-    }
-}
-if ($already) { ok('that address is already registered and active — nothing to do'); exit(0); }
+foreach ($plan['reasons'] as $r) echo "    - {$r}\n";
+if ($plan['action'] === 'keep') { ok('registered, active, reachable, every event — nothing to do'); exit(0); }
 
 // No API resource means --fix cannot help, so say so now rather than sending
 // the operator round a loop that ends here anyway.
 if ($endpointUrl === '') {
     no('this uCRM exposes no webhook resource over the API — register it by hand');
     echo "\n  uCRM → System → Webhooks → Add:\n";
-    echo "      URL     {$working}\n";
+    echo "      URL     {$plan['url']}\n";
     echo "      Events  leave empty (all events)\n";
     echo "      Active  yes\n\n";
     echo "  Then create a quote and run tools/quote_email_doctor.php.\n";
     exit(1);
 }
+if (substr($endpointUrl, -18) !== 'webhooks/endpoints') {
+    no('this uCRM answers at ' . str_replace($root2, '', $endpointUrl)
+     . " but the plugin's client speaks webhooks/endpoints — register by hand as above");
+    exit(1);
+}
 
+$what = $plan['action'] === 'create'
+    ? "create an endpoint for every event at {$plan['url']}"
+    : 'repair endpoint #' . ($plan['endpoint']['id'] ?? '?') . ': ' . implode(', ', array_map(
+        function ($k, $v) { return $k === 'events' ? 'widen the event list' : ($k === 'url' ? "address → {$v}" : 'activate'); },
+        array_keys($plan['changes']), $plan['changes']));
 if (!$doFix) {
-    wr('not registered. Rerun with --fix to register it:');
+    wr("would {$what}. Rerun with --fix to do it:");
     echo "          php tools/webhook_setup.php --fix\n";
     exit(0);
 }
 
-// Empty event list = every event, which is what this plugin wants: it decides
-// per changeType in its own switch, and a narrow list would silently drop any
-// event added later.
-
-$ch = curl_init($endpointUrl);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
-    CURLOPT_CUSTOMREQUEST  => 'POST',
-    CURLOPT_HTTPHEADER     => [$authHdr . ': ' . $appKey, 'Content-Type: application/json'],
-    CURLOPT_POSTFIELDS     => json_encode([
-        'url' => $working, 'isActive' => true, 'verifySslCertificate' => false,
-    ]),
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$raw  = (string)curl_exec($ch);
-$code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-$res  = json_decode($raw, true);
-
-if ($code >= 300 || !is_array($res) || empty($res['id'])) {
-    no("registration failed (HTTP {$code}): " . substr($raw, 0, 300));
-    echo "\n  Add it by hand in uCRM → System → Webhooks:\n";
-    echo "      URL     {$working}\n";
-    echo "      Events  leave empty (all events)\n";
-    exit(1);
+$res = WebhookRegistrar::apply($crm, $plan);
+foreach ($res['steps'] as $st) {
+    printf("    %-10s %s %s\n", $st['step'], $st['ok'] ? 'ok' : 'FAILED', $st['ok'] ? '' : json_encode($st['error']));
 }
-ok("registered as endpoint #{$res['id']}");
-
-$after = $probe($endpointUrl);
-$seen  = false;
-foreach ((array)($after['json'] ?? []) as $h) {
-    if ((int)($h['id'] ?? 0) === (int)$res['id']) $seen = true;
-}
-$seen ? ok('uCRM confirms it on re-read') : no('uCRM did not list it back — check the UI');
+if (!$res['success']) { no($res['message']); exit(1); }
+ok($res['message']);
 
 line();
 echo "Create a quote now. The plugin should send the branded email, and\n";

@@ -81,31 +81,30 @@
             $er2('Admin login required. Current user: ' . ($currentUser['username'] ?? 'none') . ', is_admin: ' . ($isAdminDebug ? 'yes' : 'no'), 403);
         }
         
-        $secret = $config['webhook_secret'] ?? '';
-        if (empty($secret)) {
-            // Generate secret if not set
-            $secret = bin2hex(random_bytes(16));
-            $config['webhook_secret'] = $secret;
-            $store->save('kyc_config.json', $config);
-        }
-        
-        $result = $crm->autoSetupWebhook(__DIR__ . '/..', $secret);
-        
+        // Creates the endpoint when none exists; otherwise repairs only what is
+        // wrong — an address uCRM cannot reach, an inactive flag, a narrowed
+        // event list. Never narrows events, never replaces a reachable address,
+        // and never touches webhook_secret: that value also derives the customer
+        // app's JWT key and gates the debug_key API, so generating it here as a
+        // side line logged every customer out. See lib/WebhookRegistrar.php.
+        require_once dirname(__DIR__, 2) . '/lib/WebhookRegistrar.php';
+        $result = WebhookRegistrar::run($crm, (array)$config, basename(dirname(__DIR__, 2)));
+
         // Add debug info
         $result['debug'] = [
             'crm_configured' => $crm->isConfigured(),
             'crm_base_url' => $crm->getBaseUrl() ? substr($crm->getBaseUrl(), 0, 60) : '(empty)',
             'current_user' => $currentUser['username'] ?? 'unknown',
         ];
-        
+
         if ($result['success']) {
-            // Save to config
+            // Remember what is registered, for display; the registrar re-reads uCRM every time.
             $config['webhook_auto_setup_done'] = true;
             $config['webhook_id'] = $result['webhook_id'] ?? null;
             $config['webhook_url'] = $result['url'] ?? null;
             $store->save('kyc_config.json', $config);
-            
-            $ok2($result, 'Webhook configured successfully');
+
+            $ok2($result, $result['message'] ?? 'Webhook configured');
         } else {
             // Return error with debug info
             $result['crm_last_error'] = $crm->getLastError();
