@@ -15,7 +15,7 @@ Stalwart serves a placeholder certificate          ── root cause, OPEN
          └── it was doing so over the host's public IP
                └── that route died; the archive went quiet   ── FIXED (workaround)
 
-webhook.php reads a partial config                 ── root cause, OPEN
+webhook.php reads a partial config                 ── root cause, FIXED IN CODE 15 Sep
    └── crm_public_url invisible to it
          └── PDF URLs built on :8443
                └── UISP's self-signed cert there
@@ -173,26 +173,48 @@ be verified and Change 1 stays a workaround. A valid certificate for
 `mail.dishnetuganda.com` already exists on this host for webmail; Stalwart
 needs its own copy.
 
-**`webhook.php` resolves config from one source.** Every other part of the
-plugin uses `PluginConfig::load()`, which merges `config.json`,
-`kyc_config.json` and the vault. The webhook reads the store's copy of
-`kyc_config.json` alone, so it is blind to every key held in the other two.
-`crm_public_url` is the one that surfaced; it will not be the last. The fix
-is a code change with a wide blast radius inside a very large file, and
-belongs with the test suite rather than in a live edit.
+**`webhook.php` resolves config from one source — fixed in code, 15 Sep.**
+Every other part of the plugin uses `PluginConfig::load()`, which merges
+`config.json`, `kyc_config.json` and the vault. The webhook read the store's
+copy of `kyc_config.json` alone, so it was blind to every key held in the
+other two. `crm_public_url` was the one that surfaced.
 
-## Found while diagnosing, not changed
+The fix is one line and one operator, `$config = (array)$config +
+PluginConfig::load(__DIR__, $dataDir)`, applied after whichever entry path
+built `$config` — uCRM posting to `webhook.php` directly, or `public.php`
+including it. `+` is the whole safety argument: the store copy still wins
+every key it holds, including a blank (a blank already beat everything the
+day before), and disk fills only what was absent. Fifteen admin screens
+write the store copy directly, so a fix that let disk win would have dropped
+settings saved through the UI; this one cannot change any value the webhook
+could see before. Pinned by `tests/test_webhook_config.php`, which runs the
+real bootstrap on both entry paths.
 
-- **The quotation audit trail does not exist.** `quote_mail.log` is written
-  only by `QuotationService::emailQuotePdf()` — the app-created path. Quotes
-  typed into uCRM take the webhook path, which never writes it. The only
-  durable record of a quotation email is a `QEMAIL{id}` row in
-  `notification_dedup`, a table whose purpose is deduplication.
-- **`SentCopy`'s error message misleads.** It reports a failed TLS handshake
-  as "connect failed on every route" and then recommends
-  `docker network connect`. The network was fine; the certificate was not.
-  That advice cost a detour and would cost the next person one too.
-- **Quotation PDF tokens never expire.** `serve_quote_pdf` accepts a daily
+Once 5.17.0 is deployed, the `crm_public_url` duplicate written into
+`kyc_config.json` on 14 Sep is unnecessary and can be cleared with
+`PluginConfig::saveOverrides('<dataDir>', ['crm_public_url' => ''])`; the
+value in `config.json` is then seen directly. Leaving it does no harm.
+
+## Found while diagnosing — two fixed in code on 15 Sep, one still open
+
+- **The quotation audit trail did not exist — fixed.** `quote_mail.log` is
+  written only by `QuotationService::emailQuotePdf()`, the app-created path.
+  Quotes typed into uCRM take the webhook path, which recorded nothing but a
+  `QEMAIL{id}` dedup row. The webhook now hands the dispatcher the quote id as
+  its dedupe key, so every quotation send lands in `customer_email_log` —
+  template, recipient, outcome, failure reason, time, and a new `sender`
+  column (added additively to existing tables). `tools/quote_email_send.php
+  --clear-claim` clears that row alongside the claim, or its promise "the
+  webhook may send again" would have become false. `tests/test_quotation_audit.php`.
+- **`SentCopy`'s error message misled — fixed.** It reported a failed TLS
+  handshake as "connect failed on every route" and recommended `docker
+  network connect`. After a failed handshake it now probes plain TCP: a port
+  that answers is classed `tls_failed`, one that does not `unreachable`, and
+  the message — and `set_sent_copy.php`'s advice — follows the evidence. The
+  live shape from 14 Sep (a configured route that answers, a public name that
+  does not) now reads as a certificate fault and names the host the
+  certificate must be valid for. `tests/test_sent_copy_diagnosis.php`.
+- **Quotation PDF tokens never expire — still open.** `serve_quote_pdf` accepts a daily
   rotating HMAC *or* a permanent token stored in the PDF's `.meta` file. Any
   quotation URL that has appeared in `webhook_log.json` is fetchable by
   anyone holding it, indefinitely.

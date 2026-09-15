@@ -75,10 +75,25 @@ if ($claimPdo) {
         $st->execute(["QEMAIL{$quoteId}"]);
         $held = (string)($st->fetchColumn() ?: '');
     } catch (\Throwable $e) {}
+    // The webhook also records its sends in customer_email_log, and a row
+    // marked 'sent' there blocks it exactly as the claim does. Report both,
+    // clear both — or "the webhook may send again" is a promise this tool
+    // cannot keep.
+    $logRow = '';
+    try {
+        $st = $claimPdo->prepare('SELECT status FROM customer_email_log WHERE dedupe_key = ?');
+        $st->execute(["quotation:{$quoteId}"]);
+        $logRow = (string)($st->fetchColumn() ?: '');
+    } catch (\Throwable $e) {}
+    if ($logRow !== '') step("customer_email_log has quotation:{$quoteId} as '{$logRow}'");
+
     if ($held) {
         if (isset($opt['clear-claim'])) {
             CustomerEmailDispatcher::releaseClaim($claimPdo, "QEMAIL{$quoteId}");
-            ok("claim QEMAIL{$quoteId} (taken {$held}) cleared — the webhook may send again");
+            $forgot = CustomerEmailDispatcher::forget($claimPdo, 'quotation', (string)$quoteId);
+            ok("claim QEMAIL{$quoteId} (taken {$held}) cleared"
+               . ($forgot ? ", and the customer_email_log row forgotten" : '')
+               . " — the webhook may send again");
         } else {
             no("a claim on QEMAIL{$quoteId} is held from {$held}");
             echo "       The webhook already took this quote and did not give it back, so\n";

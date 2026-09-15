@@ -87,7 +87,11 @@ class SentCopy
         $purpose      = (string)($opts['purpose'] ?? 'Sent');
 
         $out = ['ok' => false, 'error' => '', 'folder' => '', 'listed' => [], 'created' => '',
-                'via' => '', 'tried' => []];
+                'via' => '', 'tried' => [],
+                // Which failed routes answered on TCP (so the fault is TLS) and
+                // which did not (so the fault is reachability). Callers giving
+                // advice must look here before naming a cause.
+                'tls_failed' => [], 'unreachable' => []];
         if (empty($settings['sent_copy_enabled'])) {
             $out['error'] = 'disabled';
             return $out;
@@ -174,14 +178,43 @@ class SentCopy
                 if ($why === '') $why = $errno ? "errno {$errno}" : 'no reason reported';
                 $ip  = filter_var($connectHost, FILTER_VALIDATE_IP) ? $connectHost
                      : (gethostbyname($connectHost) ?: '');
+                // Was that the network, or the certificate? stream_socket_client
+                // reports both as "unable to connect", and the advice for one is
+                // wrong for the other. Told to reattach a docker network, an
+                // operator spent an evening on a host that answered every TCP
+                // probe in a millisecond while its rcgen placeholder certificate
+                // failed every handshake. A plain TCP connect afterwards tells
+                // the two apart in a few milliseconds.
+                $probe = @fsockopen($connectHost, $port, $pe, $ps, 3);
+                if ($probe) {
+                    fclose($probe);
+                    $out['tls_failed'][] = $connectHost;
+                    $why .= ' [port answers; the TLS handshake failed]';
+                } else {
+                    $out['unreachable'][] = $connectHost;
+                    $why .= ' [unreachable]';
+                }
                 $tried[] = $connectHost . ($ip && $ip !== $connectHost ? " ({$ip})" : '') . ': ' . $why;
             }
             if (!$fp) {
-                $out['error'] = 'connect failed on every route — ' . implode('; ', $tried)
-                    . ($manual ? '. A configured route stopped working: if the container was '
-                               . 'recreated it will have lost the docker network it was attached to '
-                               . '(docker network connect <mail network> ucrm).' : '');
                 $out['tried'] = $tried;
+                if ($out['tls_failed'] !== []) {
+                    // At least one route answered. Whatever else is wrong, it
+                    // is not connectivity, and saying so is the whole point.
+                    $mustMatch = filter_var($host, FILTER_VALIDATE_IP) ? '' : $host;
+                    $out['error'] = 'TLS failed on ' . implode(', ', $out['tls_failed'])
+                        . ' although the port answers — a certificate problem, not a network one. '
+                        . ($mustMatch !== ''
+                            ? "The server must present a certificate valid for {$mustMatch}; "
+                            : 'Check the certificate the server presents; ')
+                        . 'a self-signed placeholder (SAN localhost) can never verify. '
+                        . 'Do not reattach docker networks for this. Routes: ' . implode('; ', $tried);
+                } else {
+                    $out['error'] = 'connect failed on every route — ' . implode('; ', $tried)
+                        . ($manual ? '. A configured route stopped working: if the container was '
+                                   . 'recreated it will have lost the docker network it was attached to '
+                                   . '(docker network connect <mail network> ucrm).' : '');
+                }
                 return $out;
             }
             stream_set_timeout($fp, 15);

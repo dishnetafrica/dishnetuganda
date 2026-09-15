@@ -90,6 +90,27 @@ if (!isset($store)) {
 if (!isset($config)) {
     $config = $store->load('kyc_config.json') ?? [];
 }
+// ── One config, the way every cron and tool already sees it ─────────────
+//
+// Whatever arrived above — the store copy loaded here on a direct hit, or
+// the one public.php built before including this file — is only ONE of the
+// three sources PluginConfig::load() merges: the manifest-materialised
+// config.json, the kyc_config.json FILE that the CLI tools write, and the
+// vault. Fifteen admin screens and APIs write the store copy directly, and
+// those settings must keep winning; but a key that lives only in the other
+// two was invisible here, and that is how quotation PDF URLs went out on
+// :8443 while crm_public_url sat correctly configured in config.json.
+//
+// Three consumers had already patched around this locally — currency.php,
+// OverdueDunningHelpers, CustomerEmailDispatcher::effectiveConfig() — each
+// finding the same stale array one layer down. This is the source.
+//
+// '+' is deliberate and is the whole safety argument: the left operand's
+// keys win, so no key this file could see before changes value — a blank in
+// the store already beat everything — and keys it could not see are simply
+// filled in. Nothing that worked yesterday reads differently today.
+require_once __DIR__ . '/lib/PluginConfig.php';
+$config = (array)$config + PluginConfig::load(__DIR__, $dataDir);
 // Contacts and currency symbols in the message copy below come from config,
 // defaulting to the exact values these lines have always printed.
 require_once __DIR__ . '/lib/CustomerContact.php';
@@ -206,6 +227,12 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             : [];
 
         $d = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        // The quote id as the dedupe key, so the dispatcher records this send
+        // in customer_email_log — reference, recipient, sender, outcome, time.
+        // Until now the only durable evidence a quotation was ever emailed was
+        // the QEMAIL row above, in a table whose job is deduplication. That
+        // claim still decides whether the send HAPPENS; this decides whether
+        // it is REMEMBERED.
         $r = $d->send('quotation', ['client_id' => $clientId], $name, [
             // A person is greeted by first name; a company account has none,
             // and is then greeted by its full name rather than its first word.
@@ -213,7 +240,7 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             'quote_number' => $number,
             'total'        => $total,
             'amount'       => $total,
-        ], '', $atts);
+        ], (string)$quoteId, $atts);
 
         if ($r['sent']) {
             whLog($changeType ?: 'email', "Quotation email sent to {$r['to']} (PDF: {$src})");
