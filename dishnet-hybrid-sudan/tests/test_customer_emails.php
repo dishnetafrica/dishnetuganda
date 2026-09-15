@@ -211,5 +211,29 @@ t('receipt text mirrors the HTML facts when they are known',
   && strpos($full['text'], 'Service period: 1–30 Oct 2026') !== false
   && strpos($full['text'], 'What happens next: We will call you.') !== false, true);
 
+echo "\nNo subject goes out half-written (5.18.7)\n";
+// Read before switching the last five e-mails on: two subjects were built
+// around a fact the webhook never passed, so they would have read "paused —
+// to resume" and "We have your request — ". The facts are passed now, and the
+// subjects also stand on their own without them.
+t('paused, amount unknown: a whole subject',
+  CustomerEmails::render('service_paused', $UG, ['name' => 'X'])['subject'], 'Your DishNet service is paused');
+t('paused, amount known: names it',
+  CustomerEmails::render('service_paused', $UG, ['name' => 'X', 'amount' => 329000])['subject'],
+  'Your DishNet service is paused — UGX 329,000 to resume');
+t('support, no reference: a whole subject',
+  CustomerEmails::render('support_received', $UG, ['name' => 'X'])['subject'], 'We have your request');
+t('installation, no date: a whole subject',
+  CustomerEmails::render('install_scheduled', $UG, ['name' => 'X'])['subject'], 'Your DishNet installation is booked');
+$resumedPaid   = CustomerEmails::render('service_resumed', $UG, ['name' => 'X', 'paid' => true, 'plan_name' => 'Residential']);
+$resumedStaff  = CustomerEmails::render('service_resumed', $UG, ['name' => 'X', 'plan_name' => 'Residential']);
+t('resumed after a payment says so',
+  strpos($resumedPaid['html'], 'Your payment has been received and your internet is active again') !== false
+  && strpos($resumedPaid['text'], 'Your payment has been received') !== false, true);
+t('resumed by staff claims no payment',
+  stripos($resumedStaff['html'] . $resumedStaff['text'], 'payment has been received'), false);
+t('resumed by staff still says the service is back',
+  strpos($resumedStaff['text'], 'Your internet is active again.') !== false && strpos($resumedStaff['text'], 'Plan: Residential') !== false, true);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

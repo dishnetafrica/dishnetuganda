@@ -78,6 +78,7 @@ $C = [
     'technician_phone' => EmailTemplate::brand($config)['support_phone'],
     'activated_on'     => '14 September 2026',
     'period_ended'     => '30 September 2026',
+    'paid'             => true,
     'code'             => '482913',
     'ttl_minutes'      => 15,
     'ticket_ref'       => 'SUP-1180',

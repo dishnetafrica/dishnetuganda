@@ -59,6 +59,7 @@ $_epSample = [
     'technician_phone' => $_epBrand['support_phone'],
     'activated_on'     => '14 September 2026',
     'period_ended'     => '30 September 2026',
+    'paid'             => true,     // the resumed e-mail after a payment; staff restores render without the claim
     'portal_url'       => 'https://' . $_epBrand['website'] . '/app',
     'pay_url'          => '',
     'code'             => '482913',

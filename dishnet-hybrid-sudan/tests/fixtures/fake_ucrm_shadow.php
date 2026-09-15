@@ -57,11 +57,45 @@ if ($path === '/clients/7/services') {
 // invoice 901 is one uCRM can render, 903 and 905 ones it cannot. The PDF bytes are
 // a fixed string, so a test can prove the attachment is THE file, not a file.
 if ($path === '/clients/15') {
-    out(['id' => 15, 'firstName' => 'Irene', 'lastName' => 'Invoiced',
-         'isLead' => false, 'isActive' => true, 'accountBalance' => 0.0, 'currencyCode' => 'UGX',
+    out(['id' => 15, 'firstName' => 'Irene', 'lastName' => 'Invoiced', 'userIdent' => 'DN-UG-10015',
+         'isLead' => false, 'isActive' => true, 'accountBalance' => 0.0, 'accountOutstandingRaw' => 0.0,
+         'currencyCode' => 'UGX', 'street1' => 'Plot 14, Nakawa', 'city' => 'Kampala',
          'contacts' => [['phone' => '+256700000015', 'email' => 'irene@example.test', 'isBilling' => true]]]);
 }
 if ($path === '/clients/15/services') out([]);
+
+// ── The lifecycle e-mails (5.18.7): client 16 owes one invoice and has two ──
+// suspended services; services 601/604 (client 15) are active, 601 created
+// active, 604 activated later. Jobs 701-703 and user 5 serve the
+// installation e-mail; tickets arrive in the webhook payload itself.
+if ($path === '/clients/16') {
+    out(['id' => 16, 'firstName' => 'Moses', 'lastName' => 'Paused', 'userIdent' => 'DN-UG-10016',
+         'isLead' => false, 'isActive' => true, 'accountBalance' => -329000.0, 'accountOutstandingRaw' => 329000.0,
+         'currencyCode' => 'UGX', 'street1' => 'Plot 9, Ntinda', 'city' => 'Kampala',
+         'contacts' => [['phone' => '+256700000016', 'email' => 'moses@example.test', 'isBilling' => true]]]);
+}
+if ($path === '/clients/16/services') out([]);
+$fwService = function (int $id, int $clientId, int $status): array {
+    return ['id' => $id, 'clientId' => $clientId, 'status' => $status,
+            'name' => 'Residential (up to 400 Mbps)', 'servicePlanName' => 'Residential (up to 400 Mbps)',
+            'servicePlanPeriod' => 1, 'price' => 329000.0, 'totalPrice' => 329000.0,
+            'activeFrom' => '2026-09-14T00:00:00+0300', 'activeTo' => null,
+            'street1' => $clientId === 15 ? 'Plot 14, Nakawa' : 'Plot 9, Ntinda', 'city' => 'Kampala'];
+};
+if ($path === '/clients/services/601') out($fwService(601, 15, 1));
+if ($path === '/clients/services/604') out($fwService(604, 15, 1));
+if ($path === '/clients/services/602') out($fwService(602, 16, 3));
+if ($path === '/clients/services/603') out($fwService(603, 16, 3));
+$fwJob = function (int $id, string $title, string $date): array {
+    return ['id' => $id, 'title' => $title, 'clientId' => 15, 'status' => 0, 'assignedUserId' => 5,
+            'address' => 'Plot 14, Nakawa, Kampala', 'date' => $date,
+            'timeFrom' => $date !== '' ? substr($date, 0, 10) . 'T09:00:00+0300' : '',
+            'timeTo'   => $date !== '' ? substr($date, 0, 10) . 'T12:00:00+0300' : ''];
+};
+if ($path === '/scheduling/jobs/701') out($fwJob(701, 'Starlink installation', '2026-10-05T00:00:00+0300'));
+if ($path === '/scheduling/jobs/702') out($fwJob(702, 'Repair visit - slow speeds', '2026-10-06T00:00:00+0300'));
+if ($path === '/scheduling/jobs/703') out($fwJob(703, 'Installation', ''));
+if ($path === '/users/5') out(['id' => 5, 'firstName' => 'Joseph', 'lastName' => 'Tech', 'email' => 'tech@example.test', 'phone' => '']);
 $fwInvoice = function (int $id, string $num): array {
     return ['id' => $id, 'clientId' => 15, 'number' => $num, 'status' => 1,
             'total' => 329000.0, 'amountPaid' => 0.0, 'amountToPay' => 329000.0,
@@ -84,6 +118,14 @@ if ($path === '/invoices/903/pdf' || $path === '/invoices/905/pdf') out(['messag
 
 if ($path === '/invoices' || strpos($path, '/invoices') === 0) {
     $cid = (int)($q['clientId'] ?? 0);
+    if ($cid === 16) {
+        if (isset($q['statuses'])) {
+            out([['id' => 916, 'number' => 'INV-000916', 'clientId' => 16, 'status' => 1,
+                  'total' => 329000.0, 'amountPaid' => 0.0, 'amountToPay' => 329000.0,
+                  'maturityDate' => '2026-09-10T00:00:00+0300', 'currencyCode' => 'UGX']]);
+        }
+        out([]);
+    }
     if ($cid === 21) {
         out([['id' => 9021, 'number' => 'INV-ZOTHERCUSTOMERZ', 'clientId' => 21,
               'total' => 8675309.0, 'amountPaid' => 0.0, 'amountToPay' => 8675309.0,

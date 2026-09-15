@@ -32,11 +32,11 @@ class CustomerEmails
     const CATALOGUE = [
         'quotation'         => ['Quotation',            'Quote created for a customer',            'sales'],
         'payment_received'  => ['Payment received',     'Payment recorded against the account',    'billing'],
-        'install_scheduled' => ['Installation scheduled','Installation date agreed',               'onboarding'],
-        'welcome'           => ['Welcome — service active','Service activated after installation', 'onboarding'],
+        'install_scheduled' => ['Installation scheduled','Installation job created with a date',   'onboarding'],
+        'welcome'           => ['Welcome — service active','Service activated for the first time',  'onboarding'],
         'invoice'           => ['Invoice',              'Invoice issued for the next period',      'billing'],
         'service_paused'    => ['Service paused',       'Period ended with no payment received',   'billing'],
-        'service_resumed'   => ['Service resumed',      'Payment received on a paused account',    'billing'],
+        'service_resumed'   => ['Service resumed',      'Paused service switched back on',         'billing'],
         'login_code'        => ['Login code',           'Customer requests a portal login code',   'transactional'],
         'support_received'  => ['Support request received','Support ticket opened for a customer', 'support'],
     ];
@@ -255,7 +255,7 @@ class CustomerEmails
     {
         $e = fn($s) => EmailTemplate::e((string)$s);
         $date = (string)($d['date'] ?? '');
-        $sub  = 'Your DishNet installation is booked for ' . $date;
+        $sub  = 'Your DishNet installation is booked' . ($date !== '' ? ' for ' . $date : '');
 
         $body = EmailTemplate::h1('Your installation is booked')
               . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
@@ -412,7 +412,7 @@ class CustomerEmails
         $e = fn($s) => EmailTemplate::e((string)$s);
         $amt = self::amt($c, $d['amount'] ?? '');
         $num = (string)($d['invoice_number'] ?? '');
-        $sub = 'Your DishNet service is paused — ' . $amt . ' to resume';
+        $sub = 'Your DishNet service is paused' . ($amt !== '' ? ' — ' . $amt . ' to resume' : '');
 
         $body = EmailTemplate::h1('Your service is paused')
               . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
@@ -455,12 +455,18 @@ class CustomerEmails
     {
         $e = fn($s) => EmailTemplate::e((string)$s);
         $sub = 'Your DishNet service is back on';
+        // "Your payment has been received" only when the sender saw one. A
+        // service switched back on by staff, or after a postponement, is
+        // active again all the same — and is told exactly that.
+        $paid = !empty($d['paid']);
 
         $body = EmailTemplate::h1('You are back online')
               . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
-              . EmailTemplate::p('Your payment has been received and your internet is active again. '
+              . EmailTemplate::p(($paid ? 'Your payment has been received and your internet is active again. '
+                                        : 'Your internet is active again. ')
                 . 'Thank you.')
               . EmailTemplate::facts([
+                    'Plan'             => (string)($d['plan_name'] ?? ''),
                     'Payment received' => self::amt($c, $d['amount'] ?? ''),
                     'Service period'   => (string)($d['period'] ?? ''),
                     'Next payment due' => (string)($d['next_due'] ?? ''),
@@ -469,8 +475,10 @@ class CustomerEmails
                 . self::supportLine($c));
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
-              . "Your payment has been received and your internet is active again.\r\n\r\n"
+              . ($paid ? "Your payment has been received and your internet is active again.\r\n\r\n"
+                       : "Your internet is active again.\r\n\r\n")
               . self::textFacts([
+                    'Plan'             => (string)($d['plan_name'] ?? ''),
                     'Payment received' => self::amt($c, $d['amount'] ?? ''),
                     'Service period'   => (string)($d['period'] ?? ''),
                     'Next payment due' => (string)($d['next_due'] ?? ''),
@@ -515,7 +523,7 @@ class CustomerEmails
     {
         $e   = fn($s) => EmailTemplate::e((string)$s);
         $ref = (string)($d['ticket_ref'] ?? '');
-        $sub = 'We have your request — ' . $ref;
+        $sub = 'We have your request' . ($ref !== '' ? ' — ' . $ref : '');
 
         $body = EmailTemplate::h1('We are on it')
               . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
