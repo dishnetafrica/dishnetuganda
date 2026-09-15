@@ -112,6 +112,9 @@ if (!isset($config)) {
 // filled in. Nothing that worked yesterday reads differently today.
 require_once __DIR__ . '/lib/PluginConfig.php';
 $config = (array)$config + PluginConfig::load(__DIR__, $dataDir);
+// The quotation-link secret: already present when public.php built $config,
+// generated here on a direct hit that found none. Reads the store itself.
+QuotePdfToken::ensureSecret($store, $config);
 // Contacts and currency symbols in the message copy below come from config,
 // defaulting to the exact values these lines have always printed.
 require_once __DIR__ . '/lib/CustomerContact.php';

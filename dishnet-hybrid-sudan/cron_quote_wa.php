@@ -41,6 +41,7 @@ $pluginRoot = __DIR__;
 $dataDir    = getDataDir($pluginRoot);
 $store      = SqliteStore::create($dataDir);
 $config     = $store->load('kyc_config.json') ?? [];
+QuotePdfToken::ensureSecret($store, $config);   // the quotation-link secret, generated once if missing
 require_once __DIR__ . '/lib/currency.php';
 
 if (($config['quote_wa_cron_enabled'] ?? true) === false) {

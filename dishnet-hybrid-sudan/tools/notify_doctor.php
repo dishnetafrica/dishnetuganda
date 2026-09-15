@@ -70,13 +70,19 @@ echo "\n  OUTBOUND WHATSAPP (read-only)\n  {$line}\n";
 printf("  %-22s %s\n", 'data directory', $dataDir);
 printf("  %-22s %s\n", 'config source', $cfgSrc);
 // serve_quote_pdf (run by public.php) signs and checks quotation-PDF links
-// with webhook_secret as the STORE holds it. With none set, the links are
-// signed with a published default, and a guessable file name is all it takes
-// to fetch a quotation during the ~48h a link lives.
+// with the STORE's quote_pdf_secret — a key of its own, generated once at the
+// first plugin page load or quote cron run since 5.18.1. Until then the links
+// fall back to webhook_secret, else a published default, and a guessable file
+// name is all it takes to fetch a quotation during the ~48h a link lives.
 require_once $root . '/lib/QuotePdfToken.php';
-printf("  %-22s %s\n", 'quote PDF link secret', QuotePdfToken::hasRealSecret($storeOnly)
-    ? 'set — webhook_secret in the store, as serve_quote_pdf reads it'
-    : '⚠ DEFAULT — webhook_secret is unset in the store; quotation links are signed with a published default. Do NOT fix this with Settings → Setup Webhook: that button also rewrites the uCRM webhook endpoint (URL and event list). See docs/09-mail-and-pdf-delivery.md.');
+if (QuotePdfToken::hasOwnSecret($storeOnly)) {
+    $_qsMsg = 'set — quote_pdf_secret in the store, shared with nothing else';
+} elseif (QuotePdfToken::hasRealSecret($storeOnly)) {
+    $_qsMsg = 'set — falling back to webhook_secret (shared with uCRM auth, the JWT key and debug_key); quote_pdf_secret is generated at the next plugin page load';
+} else {
+    $_qsMsg = '⚠ DEFAULT — signed with a published default until the next plugin page load or quote cron run generates quote_pdf_secret (5.18.1+). Do NOT use Settings → Setup Webhook for this: it rewrites the uCRM webhook endpoint (URL and event list).';
+}
+printf("  %-22s %s\n", 'quote PDF link secret', $_qsMsg);
 printf("  %-22s %s\n\n", 'config', $config === [] ? '⚠ EMPTY — nothing below is meaningful' : count($config) . ' keys');
 if ($fromStore !== [] && $fromFile !== []) {
     $diff = [];

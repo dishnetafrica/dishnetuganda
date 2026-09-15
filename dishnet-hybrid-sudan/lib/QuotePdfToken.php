@@ -30,12 +30,20 @@ declare(strict_types=1);
  * than re-sent to be refused. No caller computes the HMAC itself —
  * tests/test_quote_pdf_token.php pins that against the source.
  *
- * The secret is `webhook_secret` from the store copy of kyc_config.json — the
- * value Settings → Setup Webhook writes and public.php reads. Where it is
- * unset, every caller has always fallen back to the same default, and this
- * class keeps that so such an install goes on working exactly as it did. But
- * a guessable file name plus a published default is no secret: hasRealSecret()
- * exists so a doctor can say so.
+ * The secret is `quote_pdf_secret`, a key of its own in the store copy of
+ * kyc_config.json, generated once by ensureSecret() the first time an entry
+ * point (public.php, webhook.php, the quote cron) finds none. It is shared
+ * with nothing: `webhook_secret`, the obvious candidate, also derives the
+ * customer app's JWT key, acts as the debug_key bearer for diagnostic
+ * actions and authenticates the n8n customer-context API, so setting it to
+ * protect PDF links would log every customer out and open two other doors.
+ *
+ * Until the key exists, secret() falls back to what every caller used
+ * before 5.18.1 — `webhook_secret`, else a published default — so nothing
+ * changes until the very first boot after the upgrade writes the key, and a
+ * link minted seconds before that boot is re-signed by the retry path
+ * rather than lost. hasRealSecret() exists so a doctor can say which state
+ * an install is in.
  */
 final class QuotePdfToken
 {
@@ -48,17 +56,74 @@ final class QuotePdfToken
     /** What every caller used when webhook_secret was unset. Kept for continuity, not chosen. */
     public const LEGACY_DEFAULT_SECRET = 'dishnet';
 
-    /** The signing secret as every caller has always resolved it. */
+    /** The store key holding this install's own quotation-link secret. */
+    public const SECRET_KEY = 'quote_pdf_secret';
+
+    /** Hex characters in a generated secret (16 random bytes). */
+    public const SECRET_LENGTH = 32;
+
+    /**
+     * The signing secret: the install's own key when it exists, otherwise
+     * exactly what every caller resolved before 5.18.1.
+     */
     public static function secret(array $config): string
     {
+        $own = trim((string)($config[self::SECRET_KEY] ?? ''));
+        if ($own !== '') return $own;
         return (string)($config['webhook_secret'] ?? self::LEGACY_DEFAULT_SECRET);
+    }
+
+    /** True once the install signs with a key of its own. */
+    public static function hasOwnSecret(array $config): bool
+    {
+        return trim((string)($config[self::SECRET_KEY] ?? '')) !== '';
     }
 
     /** False when the install signs with the published default or nothing. */
     public static function hasRealSecret(array $config): bool
     {
+        if (self::hasOwnSecret($config)) return true;
         $s = trim((string)($config['webhook_secret'] ?? ''));
         return $s !== '' && $s !== self::LEGACY_DEFAULT_SECRET;
+    }
+
+    /**
+     * Make sure this install has a quotation-link secret, generating and
+     * storing one the first time. Called at the top of every entry point
+     * that mints or checks a link, with the store copy of the config.
+     *
+     * Reads the store fresh rather than trusting $config: a caller holding a
+     * merged or stale view must not write a second secret over the one
+     * another process just stored. After writing, the store is read back and
+     * whatever it holds is adopted, so two first boots racing each other end
+     * up agreeing. Persistence failure leaves $config untouched — the
+     * fallback then applies here exactly as it does in every other process,
+     * and a boot never dies for the sake of a PDF link.
+     *
+     * @param object $store anything with load(string) and save(string, array)
+     * @return string the secret in force, or '' when none could be stored
+     */
+    public static function ensureSecret($store, array &$config): string
+    {
+        $have = trim((string)($config[self::SECRET_KEY] ?? ''));
+        if ($have !== '') return $have;
+        if (!is_object($store) || !method_exists($store, 'load') || !method_exists($store, 'save')) return '';
+        try {
+            $cur = $store->load('kyc_config.json');
+            if (!is_array($cur)) $cur = [];
+            $s = trim((string)($cur[self::SECRET_KEY] ?? ''));
+            if ($s === '') {
+                $cur[self::SECRET_KEY] = bin2hex(random_bytes(self::SECRET_LENGTH / 2));
+                $store->save('kyc_config.json', $cur);
+                $again = $store->load('kyc_config.json');
+                $s = trim((string)((is_array($again) ? $again : $cur)[self::SECRET_KEY] ?? ''));
+            }
+            if ($s === '') return '';
+            $config[self::SECRET_KEY] = $s;
+            return $s;
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /** The UTC day a token is minted for. $now exists for tests. */

@@ -22,6 +22,7 @@ class PluginConfig
     const SECRET_KEYS = [
         'evo_api_key',
         'evo_webhook_secret',
+        'quote_pdf_secret',
         'claude_api_key',
         'openai_api_key',
         'ai_tools_token',

@@ -41,8 +41,12 @@ $tmp = sys_get_temp_dir() . '/qtoken_' . getmypid();
 exec('rm -rf ' . escapeshellarg($tmp)); @mkdir($tmp . '/quote_pdfs', 0777, true);
 register_shutdown_function(function () use ($tmp) { exec('rm -rf ' . escapeshellarg($tmp)); });
 
-$secret = 'test-secret-' . bin2hex(random_bytes(6));
-$cfg    = ['webhook_secret' => $secret];
+// The install's own key — and the shared uCRM secret it must NOT fall back to
+// once the key exists (that one also derives the customer app's JWT key and
+// acts as the debug_key bearer, so it cannot double as a PDF-link key).
+$secret = 'own-' . bin2hex(random_bytes(6));
+$shared = 'shared-' . bin2hex(random_bytes(6));
+$cfg    = ['webhook_secret' => $shared, 'quote_pdf_secret' => $secret];
 $file   = 'DishNet-Quote-000016.pdf';
 $now    = time();
 $DAY    = 86400;
@@ -54,11 +58,18 @@ t('mint() is the daily HMAC every generator and the endpoint have always used',
   QuotePdfToken::mint($file, $cfg, $now), hash_hmac('sha256', $file . gmdate('Ymd', $now), $secret));
 t('a path mints the same token as its file name (the endpoint sees only the name)',
   QuotePdfToken::mint('/data/quote_pdfs/' . $file, $cfg, $now), QuotePdfToken::mint($file, $cfg, $now));
-t('an install without webhook_secret signs with the same default it always did',
+t('the install\'s own key wins',                         QuotePdfToken::secret($cfg), $secret);
+t('a whitespace-only key is no key',                     QuotePdfToken::secret(['webhook_secret' => $shared, 'quote_pdf_secret' => "  \n"]), $shared);
+t('before the key exists, the shared webhook_secret signs — exactly as before 5.18.1',
+  QuotePdfToken::secret(['webhook_secret' => $shared]), $shared);
+t('an install with neither signs with the same default it always did',
   QuotePdfToken::mint($file, [], $now), hash_hmac('sha256', $file . gmdate('Ymd', $now), 'dishnet'));
-t('…and hasRealSecret() says so',                    QuotePdfToken::hasRealSecret([]), false);
-t('…also when the default was typed in by hand',     QuotePdfToken::hasRealSecret(['webhook_secret' => 'dishnet']), false);
-t('…and not for a configured one',                   QuotePdfToken::hasRealSecret($cfg), true);
+t('hasRealSecret(): nothing set → false',                QuotePdfToken::hasRealSecret([]), false);
+t('hasRealSecret(): the default typed in by hand → false', QuotePdfToken::hasRealSecret(['webhook_secret' => 'dishnet']), false);
+t('only the shared secret: real yes, own no',            [QuotePdfToken::hasRealSecret(['webhook_secret' => $shared]), QuotePdfToken::hasOwnSecret(['webhook_secret' => $shared])], [true, false]);
+t('the key itself: real yes, own yes',                   [QuotePdfToken::hasRealSecret($cfg), QuotePdfToken::hasOwnSecret($cfg)], [true, true]);
+t('a token signed with the shared uCRM secret is refused once the key exists',
+  QuotePdfToken::verify($file, QuotePdfToken::mint($file, ['webhook_secret' => $shared], $now), $cfg, $now), false);
 
 $today = QuotePdfToken::mint($file, $cfg, $now);
 $yday  = QuotePdfToken::mint($file, $cfg, $now - $DAY);
@@ -171,6 +182,8 @@ else {
     t('a token from the future: 403',                         $r['code'], 403);
     $r = $get($port, $url($file, QuotePdfToken::mint($file, ['webhook_secret' => 'other'])));
     t('a token signed with another secret: 403',              $r['code'], 403);
+    $r = $get($port, $url($file, hash_hmac('sha256', $file . gmdate('Ymd'), $shared)));
+    t('a token signed with the shared uCRM webhook_secret: 403', $r['code'], 403);
     $r = $get($port, 'action=serve_quote_pdf&file=' . urlencode($file));
     t('no token at all: 400',                                 $r['code'], 400);
     $r = $get($port, $url('DishNet-Quote-999999.pdf', QuotePdfToken::mint('DishNet-Quote-999999.pdf', $cfg)));
@@ -245,6 +258,16 @@ foreach ($gen as [$where, $window]) {
 }
 is_(strpos(codeNC($root . '/lib/NotificationService.php'), 'QuotePdfToken::refreshUrl(') !== false,
     'NotificationService::retryOne re-signs through QuotePdfToken');
+foreach (['public.php' => 'every plugin page, API call and routed webhook',
+          'webhook.php' => 'a direct webhook hit',
+          'cron_quote_wa.php' => 'the WhatsApp quote cron'] as $f => $what) {
+    is_(strpos(codeNC($root . '/' . $f), 'QuotePdfToken::ensureSecret(') !== false, "$f generates the key at boot ($what)");
+}
+require_once $root . '/lib/PluginConfig.php';
+is_(in_array('quote_pdf_secret', PluginConfig::SECRET_KEYS, true), 'quote_pdf_secret is a secret to PluginConfig');
+t('…so redacted() hides it',                                PluginConfig::redacted(['quote_pdf_secret' => $secret])['quote_pdf_secret'] ?? null, '[set]');
+[$okSO, $errSO] = PluginConfig::saveOverrides($tmp . '/never-created', ['quote_pdf_secret' => 'x']);
+t('…and saveOverrides() refuses to write it',               $okSO, false);
 
 // ═════════════════════════════════════════════════
 echo "\n5. The admin retry, for real: a queued quotation send goes out re-signed\n";
@@ -285,6 +308,66 @@ t('the quotation retry went out for the same file',            $qq['file'] ?? nu
 is_(($qq['token'] ?? '') !== $permanent,                       'with a new token — not the dead one from the queue row');
 is_(QuotePdfToken::verify($file, (string)($qq['token'] ?? ''), $cfg), 'that the endpoint will accept today');
 t('the receipt retry went out exactly as queued',              $sentUrls[1] ?? null, $receiptUrl);
+
+// ═════════════════════════════════════════════════
+echo "\n6. The key is generated once, stored, and adopted by every process\n";
+// ═════════════════════════════════════════════════
+$sdir = $tmp . '/store'; @mkdir($sdir, 0777, true);
+$s1 = SqliteStore::create($sdir);
+$c1 = ['webhook_secret' => $shared];
+$k1 = QuotePdfToken::ensureSecret($s1, $c1);
+is_(preg_match('/^[0-9a-f]{32}$/', $k1) === 1,               'a fresh install gets a 32-hex key of its own', $k1);
+t('…placed into this process\'s config',                     $c1['quote_pdf_secret'] ?? null, $k1);
+t('…and stored beside everything else in kyc_config.json',   SqliteStore::create($sdir)->load('kyc_config.json')['quote_pdf_secret'] ?? null, $k1);
+t('…leaving the shared secret where it was',                 SqliteStore::create($sdir)->load('kyc_config.json')['webhook_secret'] ?? null, null);
+$c2 = [];
+t('another process with a stale config adopts the stored key, not a new one', QuotePdfToken::ensureSecret(SqliteStore::create($sdir), $c2), $k1);
+t('…and secret() then resolves to it',                       QuotePdfToken::secret($c2), $k1);
+$c3 = ['quote_pdf_secret' => 'already-here'];
+t('a config that already carries the key is left alone',     QuotePdfToken::ensureSecret($s1, $c3), 'already-here');
+t('…and the store keeps its own',                            $s1->load('kyc_config.json')['quote_pdf_secret'] ?? null, $k1);
+$s1->save('kyc_config.json', ['quote_pdf_secret' => '   ', 'other' => 'kept']);
+$c4 = [];
+$k4 = QuotePdfToken::ensureSecret($s1, $c4);
+is_($k4 !== '' && $k4 !== $k1 && preg_match('/^[0-9a-f]{32}$/', $k4) === 1, 'a blank stored value is replaced');
+t('…without disturbing the other keys in the store',         $s1->load('kyc_config.json')['other'] ?? null, 'kept');
+$broken = new class { public function load(string $f): array { throw new RuntimeException('database is locked'); } public function save(string $f, array $d): void {} };
+$c5 = ['webhook_secret' => $shared];
+t('a store that cannot be read yields no key and no exception', QuotePdfToken::ensureSecret($broken, $c5), '');
+t('…and the config is left as it was, so the fallback applies here as everywhere else', $c5, ['webhook_secret' => $shared]);
+t('no store at all yields the same',                         QuotePdfToken::ensureSecret(null, $c5), '');
+
+// ═════════════════════════════════════════════════
+echo "\n7. A direct webhook hit on an install without the key generates it — for real\n";
+// ═════════════════════════════════════════════════
+$bdir = $tmp . '/boot'; @mkdir($bdir, 0777, true);
+SqliteStore::create($bdir)->save('kyc_config.json', ['webhook_secret' => $shared]);
+$boot = function () use ($root, $bdir): array {
+    $code = <<<'SUB'
+$__root = __ROOT__; $dataDir = __TMP__;
+register_shutdown_function(function () use ($__root, $dataDir) {
+    global $config;
+    while (ob_get_level() > 0) ob_end_clean();
+    $s = SqliteStore::create($dataDir)->load('kyc_config.json') ?? [];
+    echo json_encode(['in_config' => $config['quote_pdf_secret'] ?? null, 'in_store' => $s['quote_pdf_secret'] ?? null,
+                      'shared_kept' => $s['webhook_secret'] ?? null]);
+});
+ob_start();
+require $__root . '/webhook.php';
+SUB;
+    $code = str_replace(['__ROOT__', '__TMP__'], [var_export($root, true), var_export($bdir, true)], $code);
+    $out = [];
+    exec('DN_VAULT_FILE=' . escapeshellarg((string)getenv('DN_VAULT_FILE')) . ' php -r ' . escapeshellarg($code) . ' 2>/dev/null', $out);
+    $j = json_decode(trim(implode("\n", $out)), true);
+    return is_array($j) ? $j : ['_raw' => implode("\n", $out)];
+};
+$b1 = $boot();
+is_(!isset($b1['_raw']), 'the webhook bootstrap ran and reported back' . (isset($b1['_raw']) ? ': ' . $b1['_raw'] : ''));
+is_(preg_match('/^[0-9a-f]{32}$/', (string)($b1['in_store'] ?? '')) === 1, 'the store now holds a key', var_export($b1, true));
+t('…the running process saw the same one',                   $b1['in_config'] ?? null, $b1['in_store'] ?? '?');
+t('…and the shared secret was not touched',                  $b1['shared_kept'] ?? null, $shared);
+$b2 = $boot();
+t('a second boot keeps the key',                             $b2['in_store'] ?? null, $b1['in_store'] ?? '?');
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

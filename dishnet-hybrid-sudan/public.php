@@ -510,6 +510,11 @@ if (empty($config)) {
     ];
     $store->save('kyc_config.json', $config);
 }
+// Quotation PDF links are signed with a secret of their own, generated here
+// once, the first time this install has none. Every other entry point that
+// mints or checks a link does the same. See lib/QuotePdfToken.php.
+require_once __DIR__ . '/lib/QuotePdfToken.php';
+QuotePdfToken::ensureSecret($store, $config);
 // Ensure defaults for existing configs
 if (!isset($config['commission_rate']))            $config['commission_rate'] = 5;
 if (!isset($config['lte_commission_rate']))        $config['lte_commission_rate'] = 5;

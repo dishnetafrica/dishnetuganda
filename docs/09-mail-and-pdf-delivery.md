@@ -231,11 +231,34 @@ value in `config.json` is then seen directly. Leaving it does no harm.
   minted before the upgrade still verify after it. Receipt, delivery-note
   and temporary-invoice links were not part of this decision and are
   unchanged. `tests/test_quote_pdf_token.php` runs the endpoint for real
-  over HTTP. Residual: where `webhook_secret` is unset in the store, links
-  are signed with the published default `dishnet`, and a guessable file
-  name is enough to fetch a quotation during those 48 hours —
-  `tools/notify_doctor.php` now prints `quote PDF link secret` so this can be
-  checked without reading the database.
+  over HTTP. `tools/notify_doctor.php` prints `quote PDF link secret` so the
+  state can be checked without reading the database. On 15 Sep, minutes
+  after 5.18.0 went live, it read `DEFAULT`: `webhook_secret` was unset in
+  the store, so links were signed with the published default `dishnet`, and
+  a guessable file name was enough to fetch a quotation during those 48
+  hours.
+- **Quotation links signed with a published default — fixed in 5.18.1.**
+  Setting `webhook_secret` was the obvious fix and the wrong one: that value
+  also derives the customer app's JWT signing key (setting it logs every
+  customer out at once), acts as the `debug_key` bearer for diagnostic API
+  actions, and authenticates the n8n customer-context API. Quotation links
+  now have a key of their own, `quote_pdf_secret`, generated once into the
+  store copy of `kyc_config.json` by the first entry point that finds none
+  (`public.php`, a direct `webhook.php` hit, or the quote cron) and shared
+  with nothing. Until it exists, links fall back to exactly what they used
+  before, and a link minted seconds before that first boot is re-signed by
+  the retry path rather than lost. `PluginConfig::redacted()` hides the key;
+  `saveOverrides()` refuses to write it. No operator step: the key appears at
+  the first plugin page load after the upgrade, and the doctor line then
+  reads `set — quote_pdf_secret in the store`. `tests/test_quote_pdf_token.php`
+  boots the real webhook path in a subprocess and shows the key appear in
+  the store.
+- **Standing hazard, not fixed: Settings → "Setup Webhook" / "Re-Setup
+  Webhook".** Besides generating `webhook_secret`, the button updates the
+  plugin's existing uCRM webhook endpoint: its URL, and its event list to a
+  fixed eight that omits `quote.add`. On an endpoint that today delivers all
+  events, one click would stop quotation webhooks, silently. Do not use it to
+  set a secret. A fix to the button is a separate change.
 
 ## What was never at risk
 
