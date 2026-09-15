@@ -53,6 +53,35 @@ if ($path === '/clients/7/services') {
           // 'unknown' and the comparison must report unmapped_status.
           'status' => 42, 'activeTo' => '2033-03-03T00:00:00+0000']]);
 }
+// ── The invoice e-mail path (5.18.6): client 15 has a billing e-mail; ────
+// invoice 901 is one uCRM can render, 903 and 905 ones it cannot. The PDF bytes are
+// a fixed string, so a test can prove the attachment is THE file, not a file.
+if ($path === '/clients/15') {
+    out(['id' => 15, 'firstName' => 'Irene', 'lastName' => 'Invoiced',
+         'isLead' => false, 'isActive' => true, 'accountBalance' => 0.0, 'currencyCode' => 'UGX',
+         'contacts' => [['phone' => '+256700000015', 'email' => 'irene@example.test', 'isBilling' => true]]]);
+}
+if ($path === '/clients/15/services') out([]);
+$fwInvoice = function (int $id, string $num): array {
+    return ['id' => $id, 'clientId' => 15, 'number' => $num, 'status' => 1,
+            'total' => 329000.0, 'amountPaid' => 0.0, 'amountToPay' => 329000.0,
+            'maturityDate' => '2026-09-20T00:00:00+0300', 'currencyCode' => 'UGX',
+            'items' => [['label' => 'Site : Irene Invoiced (000015) : Service Plan Residential (up to 400 Mbps) : Period 1 Oct 2026 – 31 Oct 2026',
+                         'total' => 329000.0]]];
+};
+if ($path === '/invoices/901') out($fwInvoice(901, 'INV-000901'));
+if ($path === '/invoices/903') out($fwInvoice(903, 'INV-000903'));
+if ($path === '/invoices/905') out($fwInvoice(905, 'INV-000905'));
+if ($path === '/invoices/901/pdf') {
+    // Raw bytes, not JSON — what uCRM's PDF endpoint returns. Long enough to
+    // clear getRawContent()'s 100-byte floor.
+    file_put_contents($GLOBALS['stateFile'], json_encode($GLOBALS['state']));
+    header('Content-Type: application/pdf');
+    echo "%PDF-1.4\n%FAKE-UCRM-INVOICE-901\n" . str_repeat("0 0 obj << /Type /Fake >> endobj\n", 6) . "%%EOF\n";
+    exit;
+}
+if ($path === '/invoices/903/pdf' || $path === '/invoices/905/pdf') out(['message' => 'uCRM has no PDF for this one'], 404);
+
 if ($path === '/invoices' || strpos($path, '/invoices') === 0) {
     $cid = (int)($q['clientId'] ?? 0);
     if ($cid === 21) {

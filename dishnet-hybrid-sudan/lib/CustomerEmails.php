@@ -121,6 +121,23 @@ class CustomerEmails
              . "\r\n";
     }
 
+    /**
+     * The plain-text twin of EmailTemplate::facts(): one "Label: value" line
+     * per fact, and a fact with no value is left out. The HTML side always
+     * did this; the text side printed "Service period:" with nothing after
+     * it, which on a receipt reads as a field somebody forgot to fill in.
+     */
+    private static function textFacts(array $rows): string
+    {
+        $out = '';
+        foreach ($rows as $label => $value) {
+            $v = trim((string)$value);
+            if ($v === '') continue;
+            $out .= $label . ': ' . $v . "\r\n";
+        }
+        return $out;
+    }
+
     private static function supportLine(array $c): string
     {
         $b = EmailTemplate::brand($c);
@@ -150,11 +167,17 @@ class CustomerEmails
         $total = self::amt($c, $d['total'] ?? '');
         $days  = (int)($d['valid_days'] ?? 7);
         $sub   = "Quotation {$num} — " . EmailTemplate::brand($c)['company_name'];
+        // "Attached" only when the sender attached one. Every sender passes
+        // pdf_attached; a render without it (a preview, a doctor) gets the
+        // wording for a message that carries no file.
+        $pdf   = !empty($d['pdf_attached']);
 
-        $body = EmailTemplate::h1('Your quotation is attached')
+        $body = EmailTemplate::h1($pdf ? 'Your quotation is attached' : 'Your quotation')
               . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
               . EmailTemplate::p('Thank you for your interest in DishNet. Quotation <strong>' . $e($num)
-                . '</strong> is attached to this email as a PDF, with the full breakdown of items and prices.')
+                . '</strong>' . ($pdf
+                    ? ' is attached to this email as a PDF, with the full breakdown of items and prices.'
+                    : ' is summarised below.'))
               . EmailTemplate::facts([
                     'Quotation'  => $num,
                     'Total'      => $total,
@@ -162,18 +185,20 @@ class CustomerEmails
                     'Reference'  => $num . ' (use this when you pay)',
                 ])
               . EmailTemplate::h1('What happens next')
-              . EmailTemplate::steps([
-                    'Read the quotation — page 2 explains how we work and our terms of service.',
+              . EmailTemplate::steps(array_values(array_filter([
+                    $pdf ? 'Read the quotation — page 2 explains how we work and our terms of service.' : '',
                     'To go ahead, simply <strong>reply to confirm</strong> or <strong>make payment</strong>. Either one confirms your order.',
                     'We contact you to agree an installation date.',
                     'Our team installs, activates your service and shows you it working.',
-                ])
+                ], 'strlen')))
               . self::payHow($c)
               . EmailTemplate::p(self::supportLine($c));
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
-              . "Thank you for your interest in DishNet. Quotation {$num} is attached as a PDF.\r\n\r\n"
-              . "Total: {$total}\r\nValid for: {$days} days\r\nPayment reference: {$num}\r\n\r\n"
+              . "Thank you for your interest in DishNet. Quotation {$num} "
+              . ($pdf ? "is attached as a PDF." : "is summarised below.") . "\r\n\r\n"
+              . self::textFacts(['Total' => $total, 'Valid for' => "{$days} days", 'Payment reference' => $num])
+              . "\r\n"
               . "To go ahead, reply to confirm or make payment - either one confirms your order.\r\n"
               . "We will then contact you to arrange installation.\r\n\r\n"
               . self::payHowText($c);
@@ -209,11 +234,18 @@ class CustomerEmails
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Thank you - we have received your payment. This email is your receipt.\r\n\r\n"
-              . "Amount: {$amt}\r\n"
-              . "Received on: " . (string)($d['paid_on'] ?? '') . "\r\n"
-              . "Reference: " . (string)($d['reference'] ?? '') . "\r\n"
-              . "Service period: " . (string)($d['period'] ?? '') . "\r\n"
-              . "Next payment due: " . (string)($d['next_due'] ?? '') . "\r\n\r\n";
+              . self::textFacts([
+                    'Amount received'  => $amt,
+                    'Received on'      => (string)($d['paid_on'] ?? ''),
+                    'Method'           => (string)($d['method'] ?? ''),
+                    'Reference'        => (string)($d['reference'] ?? ''),
+                    'Applied to'       => (string)($d['applied_to'] ?? ''),
+                    'Service period'   => (string)($d['period'] ?? ''),
+                    'Next payment due' => (string)($d['next_due'] ?? ''),
+                    'Balance now'      => isset($d['balance']) ? self::amt($c, $d['balance']) : '',
+                ])
+              . (($d['next_step'] ?? '') !== '' ? "\r\nWhat happens next: " . (string)$d['next_step'] . "\r\n" : '')
+              . "\r\n";
 
         return self::pack($c, $sub, $body, $text, 'Receipt for ' . $amt);
     }
@@ -248,9 +280,14 @@ class CustomerEmails
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your DishNet installation is scheduled.\r\n\r\n"
-              . "Date: {$date}\r\nTime: " . (string)($d['window'] ?? '') . "\r\n"
-              . "Address: " . (string)($d['address'] ?? '') . "\r\n"
-              . "Technician: " . (string)($d['technician'] ?? '') . "\r\n\r\n"
+              . self::textFacts([
+                    'Date'       => $date,
+                    'Time'       => (string)($d['window'] ?? ''),
+                    'Address'    => (string)($d['address'] ?? ''),
+                    'Technician' => (string)($d['technician'] ?? ''),
+                    'Contact'    => (string)($d['technician_phone'] ?? ''),
+                ])
+              . "\r\n"
               . "Please have ready: someone who can approve the dish position, a clear view of the sky,\r\n"
               . "mains power near the router, and landlord permission if renting.\r\n\r\n"
               . "To change the date, reply to this email or WhatsApp us.\r\n\r\n";
@@ -302,10 +339,15 @@ class CustomerEmails
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Welcome to DishNet - your internet is live.\r\n\r\n"
-              . "Plan: {$plan}\r\nMonthly price: {$price}\r\n"
-              . "Activated on: " . (string)($d['activated_on'] ?? '') . "\r\n"
-              . "Account number: " . (string)($d['account_number'] ?? '') . "\r\n"
-              . "Next payment due: " . (string)($d['next_due'] ?? '') . "\r\n\r\n"
+              . self::textFacts([
+                    'Plan'             => $plan,
+                    'Monthly price'    => $price,
+                    'Activated on'     => (string)($d['activated_on'] ?? ''),
+                    'Account number'   => (string)($d['account_number'] ?? ''),
+                    'Service address'  => (string)($d['address'] ?? ''),
+                    'Next payment due' => (string)($d['next_due'] ?? ''),
+                ])
+              . "\r\n"
               . "HOW BILLING WORKS\r\n"
               . "Your service is prepaid: you pay for each month before it starts. We send the invoice\r\n"
               . "before the due date. If a month is unpaid the service pauses at the end of the paid\r\n"
@@ -324,11 +366,13 @@ class CustomerEmails
         $amt = self::amt($c, $d['amount'] ?? '');
         $due = (string)($d['due_date'] ?? '');
         $sub = "Invoice {$num} — {$amt} due {$due}";
+        // "A PDF copy is attached" only when the sender attached one.
+        $pdf = !empty($d['pdf_attached']);
 
         $body = EmailTemplate::h1('Your invoice is ready')
               . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
-              . EmailTemplate::p('Here is your invoice for the coming service period. '
-                . 'A PDF copy is attached for your records.')
+              . EmailTemplate::p('Here is your invoice for the coming service period.'
+                . ($pdf ? ' A PDF copy is attached for your records.' : ''))
               . EmailTemplate::facts([
                     'Invoice'        => $num,
                     'Plan'           => (string)($d['plan_name'] ?? ''),
@@ -346,10 +390,16 @@ class CustomerEmails
               . EmailTemplate::p(self::supportLine($c));
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
-              . "Your invoice for the coming service period is ready (PDF attached).\r\n\r\n"
-              . "Invoice: {$num}\r\nPlan: " . (string)($d['plan_name'] ?? '') . "\r\n"
-              . "Service period: " . (string)($d['period'] ?? '') . "\r\n"
-              . "Amount due: {$amt}\r\nDue date: {$due}\r\nPayment reference: {$num}\r\n\r\n"
+              . "Your invoice for the coming service period is ready" . ($pdf ? " (PDF attached)" : "") . ".\r\n\r\n"
+              . self::textFacts([
+                    'Invoice'           => $num,
+                    'Plan'              => (string)($d['plan_name'] ?? ''),
+                    'Service period'    => (string)($d['period'] ?? ''),
+                    'Amount due'        => $amt,
+                    'Due date'          => $due,
+                    'Payment reference' => $num,
+                ])
+              . "\r\n"
               . self::payHowText($c)
               . "Your service is prepaid - paying before {$due} keeps your internet running.\r\n\r\n";
 
@@ -386,7 +436,13 @@ class CustomerEmails
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your paid service period has ended, so your internet is paused. Nothing is cancelled.\r\n\r\n"
-              . "Invoice: {$num}\r\nAmount to resume: {$amt}\r\nPayment reference: {$num}\r\n\r\n"
+              . self::textFacts([
+                    'Invoice'           => $num,
+                    'Amount to resume'  => $amt,
+                    'Paid period ended' => (string)($d['period_ended'] ?? ''),
+                    'Payment reference' => $num,
+                ])
+              . "\r\n"
               . "There is no reconnection fee - your service resumes as soon as payment reaches us.\r\n\r\n"
               . self::payHowText($c)
               . "Already paid? Send us the confirmation and we will check immediately.\r\n\r\n";
@@ -414,8 +470,12 @@ class CustomerEmails
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Your payment has been received and your internet is active again.\r\n\r\n"
-              . "Service period: " . (string)($d['period'] ?? '') . "\r\n"
-              . "Next payment due: " . (string)($d['next_due'] ?? '') . "\r\n\r\n"
+              . self::textFacts([
+                    'Payment received' => self::amt($c, $d['amount'] ?? ''),
+                    'Service period'   => (string)($d['period'] ?? ''),
+                    'Next payment due' => (string)($d['next_due'] ?? ''),
+                ])
+              . "\r\n"
               . "If a device is still offline, restart your router and wait two minutes.\r\n\r\n";
 
         return self::pack($c, $sub, $body, $text, 'Service restored — thank you');
@@ -474,8 +534,13 @@ class CustomerEmails
 
         $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
               . "Thank you for contacting DishNet support. Your request is logged.\r\n\r\n"
-              . "Reference: {$ref}\r\nSubject: " . (string)($d['subject'] ?? '') . "\r\n"
-              . "Logged: " . (string)($d['logged_at'] ?? '') . "\r\n\r\n"
+              . self::textFacts([
+                    'Reference' => $ref,
+                    'Subject'   => (string)($d['subject'] ?? ''),
+                    'Logged'    => (string)($d['logged_at'] ?? ''),
+                    'Account'   => (string)($d['account_number'] ?? ''),
+                ])
+              . "\r\n"
               . "Reply to this email to add anything. For anything urgent, WhatsApp is fastest.\r\n\r\n";
 
         return self::pack($c, $sub, $body, $text, 'Reference ' . $ref);

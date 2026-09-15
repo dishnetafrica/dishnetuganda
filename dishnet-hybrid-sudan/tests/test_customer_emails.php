@@ -163,5 +163,53 @@ t('a company is never greeted by its first word only',
       ['name' => 'Family Shoppers', 'quote_number' => 'Q1'])['text'], 'Dear Family,'), false);
 
 
+echo "\nA PDF is claimed only when one is attached (5.18.6)\n";
+// The webhook attached nothing to the invoice e-mail while the template told
+// the customer "A PDF copy is attached for your records". Every sender now
+// says whether it attached one, and the wording follows.
+$withPdf = CustomerEmails::render('invoice', $UG, $D + ['pdf_attached' => true]);
+$noPdf   = CustomerEmails::render('invoice', $UG, $D);
+t('invoice with a PDF says so in the HTML',   strpos($withPdf['html'], 'A PDF copy is attached') !== false, true);
+t('...and in the text',                        strpos($withPdf['text'], '(PDF attached)') !== false, true);
+t('invoice without a PDF claims none (HTML)', stripos($noPdf['html'], 'attached'), false);
+t('invoice without a PDF claims none (text)', stripos($noPdf['text'], 'attached'), false);
+$qWith = CustomerEmails::render('quotation', $UG, $D + ['pdf_attached' => true]);
+$qNo   = CustomerEmails::render('quotation', $UG, $D);
+t('quotation with a PDF says so',
+  strpos($qWith['html'], 'is attached to this email as a PDF') !== false && strpos($qWith['text'], 'is attached as a PDF') !== false, true);
+t('quotation without a PDF claims none',      stripos($qNo['html'] . $qNo['text'], 'attached'), false);
+t('quotation without a PDF drops the "read page 2" step', stripos($qNo['html'], 'page 2'), false);
+t('quotation with a PDF keeps it',            stripos($qWith['html'], 'page 2') !== false, true);
+
+echo "\nThe invoice prints the plan and period it is given\n";
+t('plan_name is the key the invoice reads',
+  strpos($withPdf['html'], 'DishNet Residential') !== false && strpos($withPdf['text'], 'Plan: DishNet Residential') !== false, true);
+t('period is printed',                        strpos($withPdf['text'], 'Service period: 1–30 Oct 2026') !== false, true);
+
+echo "\nThe plain-text part lists no fact it does not have\n";
+// The HTML side always skipped an empty fact; the text side printed
+// "Service period:" with nothing after it on every real receipt.
+$sparse = ['name' => 'Sample Customer', 'amount' => 329000, 'invoice_number' => 'INV-1', 'quote_number' => 'Q-1',
+           'reference' => 'PAY-1', 'paid_on' => '15 September 2026', 'date' => '1 Oct 2026', 'ticket_ref' => 'SUP-1'];
+// Two lines end in a colon on purpose and are not facts: "How to pay:"
+// heads the indented bank block, and "Your login code is:" introduces the
+// code on the line below it.
+foreach (array_keys(CustomerEmails::CATALOGUE) as $k) {
+    if ($k === 'login_code') continue;
+    $m = CustomerEmails::render($k, $UG, $sparse);
+    t("{$k}: no label printed without a value",
+      preg_match('/^(?!How to pay:)[^\r\n:]{1,40}:[ \t]*\r?$/m', $m['text']), 0);
+}
+$rcpt = CustomerEmails::render('payment_received', $UG, $sparse);
+t('receipt text keeps the facts it has',
+  strpos($rcpt['text'], 'Amount received: UGX 329,000') !== false && strpos($rcpt['text'], 'Reference: PAY-1') !== false, true);
+t('receipt text has no "Service period:" line when none is known', strpos($rcpt['text'], 'Service period:'), false);
+$full = CustomerEmails::render('payment_received', $UG,
+    $D + ['method' => 'Bank transfer', 'applied_to' => 'Invoice INV-0428', 'next_step' => 'We will call you.']);
+t('receipt text mirrors the HTML facts when they are known',
+  strpos($full['text'], 'Method: Bank transfer') !== false && strpos($full['text'], 'Applied to: Invoice INV-0428') !== false
+  && strpos($full['text'], 'Service period: 1–30 Oct 2026') !== false
+  && strpos($full['text'], 'What happens next: We will call you.') !== false, true);
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

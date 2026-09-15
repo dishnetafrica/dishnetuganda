@@ -163,16 +163,19 @@ function whLog(string $event, string $msg, array $data = []): void {
  * on. It never throws and never blocks: the WhatsApp message and the CRM work
  * have already happened by the time it is called, and an SMTP hiccup must not
  * turn a successful payment into a failed webhook.
+ *
+ * $attachments travel with the message as [name, mime, content] entries —
+ * the invoice PDF rides here, the same bytes the WhatsApp document carries.
  */
 function whCustomerEmail(string $key, int $clientId, string $name, array $data,
                          string $dedupe, array $config, string $dataDir,
-                         $crm, $store, string $changeType = ''): void
+                         $crm, $store, string $changeType = '', array $attachments = []): void
 {
     try {
         if (!CustomerEmailDispatcher::enabled($key, $config)) return;   // off is not an error
         $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
         $d   = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
-        $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe);
+        $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe, $attachments);
         if ($r['sent']) {
             whLog($changeType ?: 'email', "Customer email sent: {$key} → {$r['to']}");
         } elseif ($r['reason'] !== 'already sent' && $r['reason'] !== 'switched off') {
@@ -244,6 +247,7 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             'quote_number' => $number,
             'total'        => $total,
             'amount'       => $total,
+            'pdf_attached' => $pdf !== '',
         ], (string)$quoteId, $atts);
 
         if ($r['sent']) {
@@ -285,13 +289,37 @@ function whInvoiceCreditScenario(array $invoice, array $client): array
 }
 
 /**
- * Send invoice PDF via WhatsML. Returns true on success.
+ * The invoice as uCRM renders it, as raw PDF bytes — or '' when uCRM has none.
+ *
+ * Fetched ONCE per webhook and handed to both channels: the WhatsApp document
+ * and the e-mail attachment are the same file, and one render is all uCRM
+ * should be asked for. Anything that is not a PDF (an HTML error page behind a
+ * 200, a truncated body) counts as absent, so a customer is never sent a
+ * broken attachment. Never throws.
  */
-function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoiceId, string $invoNum, float $amount, string $dueDate, array $config, string $dataDir): bool
+function whInvoicePdfBytes(object $crm, int $invoiceId): string
 {
     try {
-        $pdfRaw = $crm->getRawContent("invoices/{$invoiceId}/pdf");
-        if (!$pdfRaw) return false;
+        $b64 = $crm->getRawContent("invoices/{$invoiceId}/pdf");
+        if (!$b64) return '';
+        $bytes = base64_decode((string)$b64, true);
+        if ($bytes === false || strncmp($bytes, '%PDF', 4) !== 0) return '';
+        return $bytes;
+    } catch (\Throwable $e) {
+        whLog('pdf_error', 'Invoice PDF fetch failed: ' . $e->getMessage(), ['invoice_id' => $invoiceId]);
+        return '';
+    }
+}
+
+/**
+ * Send invoice PDF via WhatsML. Returns true on success.
+ * $pdfBytes: the bytes whInvoicePdfBytes() already fetched, or null to fetch here.
+ */
+function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoiceId, string $invoNum, float $amount, string $dueDate, array $config, string $dataDir, ?string $pdfBytes = null): bool
+{
+    try {
+        $bytes = $pdfBytes ?? whInvoicePdfBytes($crm, $invoiceId);
+        if ($bytes === '') return false;
 
         $tempDir = $dataDir . '/temp_pdf';
         if (!is_dir($tempDir)) mkdir($tempDir, 0755, true);
@@ -303,7 +331,7 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
         $pdfPath  = $tempDir . '/' . $pdfFile;
         $pdfToken = hash_hmac('sha256', $pdfFile, ($config['webhook_secret'] ?? 'dishnet') . date('Ymd'));
 
-        file_put_contents($pdfPath, base64_decode($pdfRaw));
+        file_put_contents($pdfPath, $bytes);
         file_put_contents($pdfPath . '.meta', json_encode([
             'token' => $pdfToken, 'created' => time(), 'invoice' => $invoNum,
         ]));
@@ -330,7 +358,8 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
  */
 function whSendInvoiceNotification(object $notify, object $crm, string $phone, string $name,
     int $invoiceId, string $invoNum, float $amount, string $dueDate,
-    array $creditData, array $config, string $dataDir, string $serviceName = ''): void
+    array $creditData, array $config, string $dataDir, string $serviceName = '',
+    ?string $pdfBytes = null): void
 {
     $scenario = $creditData['scenario'];
     $sendPdf  = true; // always send PDF so customer has the record
@@ -354,7 +383,7 @@ function whSendInvoiceNotification(object $notify, object $crm, string $phone, s
     }
 
     // Always send PDF so customer has the invoice document
-    $pdfOk = whSendInvoicePdf($crm, $notify, $phone, $invoiceId, $invoNum, $amount, $dueDate, $config, $dataDir);
+    $pdfOk = whSendInvoicePdf($crm, $notify, $phone, $invoiceId, $invoNum, $amount, $dueDate, $config, $dataDir, $pdfBytes);
     whLog('invoice_notify', "PDF send: " . ($pdfOk ? 'OK' : 'FAILED'), ['invoice' => $invoNum]);
 }
 
@@ -694,14 +723,19 @@ switch ($changeType) {
         // We parse out just Plan + Period for a clean WhatsApp message line.
         $invItems = $invoice['items'] ?? [];
         $itemLabels = [];
+        $planNames  = [];   // for the e-mail: the plan and the period as separate facts
+        $periods    = [];
         foreach ($invItems as $item) {
             $raw = trim($item['label'] ?? $item['name'] ?? $item['description'] ?? '');
             if (!$raw) continue;
             // Match "Service(s) Plan {name} Duration/Period {dates}" — plan can be multi-word
             if (preg_match('/Services?\s+Plan\s+(.+?)\s*:?\s*(?:Duration|Period)\s+(.+)$/ui', $raw, $m)) {
                 $itemLabels[] = trim($m[1]) . ' · ' . trim($m[2]);
+                $planNames[]  = trim($m[1]);
+                $periods[]    = trim($m[2]);
             } elseif (preg_match('/Services?\s+Plan\s+(.+?)$/ui', $raw, $m)) {
                 $itemLabels[] = trim($m[1]);
+                $planNames[]  = trim($m[1]);
             } else {
                 $itemLabels[] = $raw; // fallback: use as-is
             }
@@ -715,6 +749,14 @@ switch ($changeType) {
         } else {
             $serviceName = implode(', ', array_slice($itemLabels, 0, 2)) . ' + ' . ($totalItems - 2) . ' more';
         }
+        // The e-mail template prints the plan and the period as two facts.
+        // Several lines for one plan collapse to one name; several different
+        // periods print none rather than a wrong one. With no parsable
+        // service line the label text stands in for the plan, as WhatsApp does.
+        $planNames   = array_values(array_unique($planNames));
+        $periods     = array_values(array_unique($periods));
+        $emailPlan   = $planNames ? implode(', ', $planNames) : $serviceName;
+        $emailPeriod = count($periods) === 1 ? $periods[0] : '';
 
         if (!$clientId) {
             whLog($changeType, 'No clientId on invoice — skipped');
@@ -754,16 +796,31 @@ switch ($changeType) {
                 whResp(200, 'invoice.add already notified — skipped.');
             }
 
+            // One uCRM render of the invoice PDF serves both channels.
+            $invoicePdf = whInvoicePdfBytes($crm, $invoiceId);
+
             whSendInvoiceNotification($notify, $crm, $phone, $name,
                 $invoiceId, $invoNum, $amount, $dueDate ?: 'See invoice',
-                $creditData, $config, $dataDir, $serviceName);
+                $creditData, $config, $dataDir, $serviceName, $invoicePdf);
 
+            // The e-mail carries the same PDF, and says so only when it does:
+            // when uCRM has no PDF to give, the facts still go out and the
+            // claim does not. The template reads plan_name and period; the
+            // first wiring passed 'plan', which it never printed.
+            $dueNice = ($dueDate !== '' && strtotime($dueDate) !== false)
+                ? date('j F Y', strtotime($dueDate)) : ($dueDate ?: 'See invoice');
             whCustomerEmail('invoice', (int)$clientId, $name, [
+                'first_name'     => (string)($client['firstName'] ?? ''),
                 'invoice_number' => $invoNum,
                 'amount'         => $amount,
-                'due_date'       => $dueDate ?: 'See invoice',
-                'plan'           => $serviceName,
-            ], "INV{$invoNum}", $config, $dataDir, $crm, $store, $changeType);
+                'due_date'       => $dueNice,
+                'plan_name'      => $emailPlan,
+                'period'         => $emailPeriod,
+                'pdf_attached'   => $invoicePdf !== '',
+            ], "INV{$invoNum}", $config, $dataDir, $crm, $store, $changeType,
+                $invoicePdf !== ''
+                    ? [['name' => "Invoice-{$invoNum}.pdf", 'mime' => 'application/pdf', 'content' => $invoicePdf]]
+                    : []);
 
             // Push notification to customer's app
             try {

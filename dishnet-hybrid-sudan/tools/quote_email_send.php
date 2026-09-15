@@ -163,6 +163,7 @@ $built = CustomerEmails::quotation($config, [
     'name' => $name, 'first_name' => (string)($client['firstName'] ?? ''),
     'quote_number' => $number,
     'total' => (float)($quote['total'] ?? 0), 'amount' => (float)($quote['total'] ?? 0),
+    'pdf_attached' => $pdf !== '',
 ]);
 ok('subject: ' . (string)$built['subject']);
 step('html ' . strlen((string)$built['html']) . ' bytes, text ' . strlen((string)$built['text']) . ' bytes');

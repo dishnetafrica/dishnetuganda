@@ -42,6 +42,7 @@ $_epSample = [
     'total'            => 2868000,
     'valid_days'       => 7,
     'invoice_number'   => 'INV-2026-0428',
+    'pdf_attached'     => true,     // the live paths attach the PDF; preview the wording they send
     'amount'           => 329000,
     'due_date'         => '20 September 2026',
     'period'           => '1–30 October 2026',
