@@ -14,6 +14,19 @@ declare(strict_types=1);
  */
 class ConversationService
 {
+    /**
+     * agent_name for a message our number sent by itself — the WhatsApp
+     * Business app's greeting or away message. Not a colleague, not the
+     * assistant: it never stands the AI down and history labels it as such.
+     */
+    const AGENT_AUTO_REPLY = 'WhatsApp auto-reply';
+    /** A handset text this short is always a person ("Ok", "Yes we do"). */
+    const CANNED_MIN_LENGTH = 40;
+    /** ...seen in this many OTHER conversations... */
+    const CANNED_OTHER_CONVERSATIONS = 3;
+    /** ...inside this many days, is canned. */
+    const CANNED_WINDOW_DAYS = 7;
+
     private $db; // PDO
     private string $dataDir;
 
@@ -834,6 +847,72 @@ class ConversationService
      * colleague typing on the handset at 19:18, 19:21, 19:24 and 19:49 with
      * the assistant answering over the top of them every time.
      */
+    /**
+     * Is this text, leaving our number as fromMe, something the WhatsApp
+     * Business app sends by itself rather than something a person typed?
+     *
+     * A single message cannot say. Several can: the same sentence, word for
+     * word, already sent from our side to CANNED_OTHER_CONVERSATIONS other
+     * conversations within CANNED_WINDOW_DAYS is a greeting or away message.
+     * Rows already labelled AGENT_AUTO_REPLY count, and so do the 'Team'
+     * rows written before this existed, which is what lets it recognise a
+     * greeting that has been running for weeks. Short texts never qualify:
+     * "Ok" typed by hand in four chats is four people. Any error answers
+     * false — when in doubt, a person, since standing the AI down wrongly is
+     * the smaller failure than talking over a colleague.
+     */
+    public function isCannedHandsetText(int $convId, string $text): bool
+    {
+        $text = trim($text);
+        if (mb_strlen($text) < self::CANNED_MIN_LENGTH) return false;
+        try {
+            $st = $this->db->prepare(
+                "SELECT COUNT(DISTINCT conversation_id) FROM wa_messages
+                  WHERE direction = 'out' AND role = 'agent'
+                    AND agent_name IN ('Team', ?)
+                    AND conversation_id <> ?
+                    AND sent_at >= ?
+                    AND TRIM(body) = ?"
+            );
+            $st->execute([
+                self::AGENT_AUTO_REPLY,
+                $convId,
+                gmdate('Y-m-d H:i:s', time() - self::CANNED_WINDOW_DAYS * 86400),
+                $text,
+            ]);
+            return (int)$st->fetchColumn() >= self::CANNED_OTHER_CONVERSATIONS;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Has a person on our side written in this conversation after $sinceUtc
+     * ('Y-m-d H:i:s', UTC like sent_at)? Strictly after: a reply in the same
+     * second as the customer's message was not a reply to it.
+     *
+     * Only a colleague counts: not the assistant, not the plugin's own
+     * notifications, not the app's canned greeting. The worker asks this
+     * when a parked question comes back — if somebody answered it while the
+     * AI was standing aside, the AI has nothing to add.
+     */
+    public function humanRepliedSince(int $convId, string $sinceUtc): bool
+    {
+        try {
+            $st = $this->db->prepare(
+                "SELECT 1 FROM wa_messages
+                  WHERE conversation_id = ? AND direction = 'out' AND role = 'agent'
+                    AND COALESCE(agent_name, '') NOT IN ('', 'DishNet AI', 'DishNet Plugin', ?)
+                    AND sent_at > ?
+                  LIMIT 1"
+            );
+            $st->execute([$convId, self::AGENT_AUTO_REPLY, $sinceUtc]);
+            return (bool)$st->fetchColumn();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function markHumanHandling(int $convId): void
     {
         if ($convId <= 0) return;

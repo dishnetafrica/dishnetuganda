@@ -48,6 +48,7 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/DishNetAiBrain.php';
         require_once $root . '/lib/KnowledgeBase.php';
         require_once $root . '/lib/FlyerAsset.php';
+        require_once $root . '/lib/UtcClock.php';
 
         // Same override the tools and crons honour, so tests and one-shots can
         // point the worker at their own data directory.
@@ -101,10 +102,20 @@ class AiReplyWorker extends WorkerBase
             return;   // not retryable; a retry cannot make the payload valid
         }
 
-        // A human has taken this conversation — stay out of it.
-        if ($convId > 0 && $this->humanIsHandling($convId)) {
-            $this->log('info', "conv {$convId}: human active, skipping AI");
-            return;
+        // A colleague has this conversation. The question is not dropped —
+        // "human active, skipping AI" acked the event, and that is how a
+        // customer's follow-up went unanswered by anyone. It is parked and
+        // comes back when the pause ends, unless somebody answered it by then.
+        if ($convId > 0) {
+            $wait = $this->humanPauseRemaining($convId);
+            if ($wait > 0) {
+                $this->parkBehindHuman($event, $convId, $wait);   // throws WorkerDefer, or drops
+                return;
+            }
+            if ($this->answeredMeanwhile($event, $convId)) {
+                $this->log('info', "conv {$convId}: a colleague replied after this message arrived — nothing to add");
+                return;
+            }
         }
 
         // One line per message: enough to trace the pipeline, no content.
@@ -147,19 +158,7 @@ class AiReplyWorker extends WorkerBase
             // but the echo is a separate HTTP request that could in principle
             // arrive first; claiming the id here means it is dropped at the
             // webhook's idempotency check before it can be misread.
-            $ourId = (string)($send['data']['key']['id'] ?? '');
-            if ($ourId !== '') {
-                try {
-                    if (!class_exists('EvoWebhookGuard')) {
-                        $g = __DIR__ . '/../lib/EvoWebhookGuard.php';
-                        if (is_file($g)) require_once $g;
-                    }
-                    if (class_exists('EvoWebhookGuard')) {
-                        (new \EvoWebhookGuard($this->pdo, $this->config))
-                            ->claim($ourId, (string)($p['whatsapp_instance'] ?? ''), 'ai.reply');
-                    }
-                } catch (\Throwable $e) { /* dedupe is a backstop, not a requirement */ }
-            }
+            $this->claimOwnEcho($send, $channel, 'ai.reply');
 
             if ($convId > 0) {
                 $this->convSvc->storeMessage($convId, [
@@ -391,7 +390,11 @@ class AiReplyWorker extends WorkerBase
                     // the AI reads it, honours it, and does not claim it.
                     if (!$inbound) {
                         $who = trim((string)($m['agent_name'] ?? ''));
-                        if (($m['role'] ?? '') === 'agent' && $who !== '' && $who !== 'DishNet AI') {
+                        if ($who === ConversationService::AGENT_AUTO_REPLY) {
+                            // The WhatsApp Business app's own greeting or away
+                            // message: not a colleague, not the assistant.
+                            $text = '[automatic message from our WhatsApp app] ' . $text;
+                        } elseif (($m['role'] ?? '') === 'agent' && $who !== '' && $who !== 'DishNet AI') {
                             $text = '[' . $who . ', from our team] ' . $text;
                         }
                     }
@@ -666,6 +669,7 @@ class AiReplyWorker extends WorkerBase
             }
             $this->log('info', "conv {$convId}: photo '{$name}' sent");
 
+            $ourId = $this->claimOwnEcho($send, $channel, 'ai.photo');
             if ($convId > 0) {
                 $this->convSvc->storeMessage($convId, [
                     'direction'  => 'out',
@@ -674,6 +678,7 @@ class AiReplyWorker extends WorkerBase
                     'media_type' => 'image',
                     'media_url'  => self::PHOTO_MEDIA_TAG . $name,
                     'agent_name' => 'DishNet AI',
+                    'wa_message_id' => $ourId,
                 ]);
             }
         } catch (\Throwable $e) {
@@ -717,6 +722,7 @@ class AiReplyWorker extends WorkerBase
             }
             $this->log('info', "conv {$convId}: document '{$name}' sent");
 
+            $ourId = $this->claimOwnEcho($send, $channel, 'ai.document');
             if ($convId > 0) {
                 $this->convSvc->storeMessage($convId, [
                     'direction'  => 'out',
@@ -725,6 +731,7 @@ class AiReplyWorker extends WorkerBase
                     'media_type' => 'document',
                     'media_url'  => self::PHOTO_MEDIA_TAG . 'doc:' . $name,
                     'agent_name' => 'DishNet AI',
+                    'wa_message_id' => $ourId,
                 ]);
             }
         } catch (\Throwable $e) {
@@ -779,6 +786,7 @@ class AiReplyWorker extends WorkerBase
             }
             $this->log('info', "conv {$convId}: plans flyer sent (" . (string)$this->flyer['kind'] . ")");
 
+            $ourId = $this->claimOwnEcho($send, $channel, 'ai.flyer');
             if ($convId > 0) {
                 // Stored as a media message: the Inbox shows it happened, and
                 // the model sees it in history — which is how "already sent,
@@ -790,6 +798,7 @@ class AiReplyWorker extends WorkerBase
                     'media_type' => 'image',
                     'media_url'  => self::FLYER_MEDIA_TAG,
                     'agent_name' => 'DishNet AI',
+                    'wa_message_id' => $ourId,
                 ]);
             }
         } catch (\Throwable $e) {
@@ -820,32 +829,152 @@ class AiReplyWorker extends WorkerBase
 
     private function humanIsHandling(int $convId): bool
     {
+        return $this->humanPauseRemaining($convId) > 0;
+    }
+
+    /**
+     * Seconds left on a colleague's pause for this conversation; 0 when none.
+     */
+    private function humanPauseRemaining(int $convId): int
+    {
         try {
             $stmt = $this->pdo->prepare('SELECT state, last_human_reply_at FROM wa_conversations WHERE id = ?');
             $stmt->execute([$convId]);
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-            if (!$row || ($row['state'] ?? '') !== 'human_active') return false;
+            if (!$row || ($row['state'] ?? '') !== 'human_active') return 0;
 
-            // How long the AI stays quiet after a colleague replies.
-            //
-            // The point of the pause is that two answers to one question, from
-            // a person and a bot at the same time, is worse than a slow answer.
-            // But 24 hours meant one staff reply took a customer off the AI for
-            // the rest of the day, which is far longer than anyone is actually
-            // still typing. It is a setting now: minutes, and 0 means the AI
-            // never stands down -- it simply reads what the colleague said and
-            // carries on from there.
-            $mins = $this->config['wa_human_cooldown_minutes'] ?? null;
-            $mins = ($mins === null || $mins === '' || !is_numeric($mins))
-                  ? 1440                      // unchanged default: 24 hours
-                  : max(0, (int)$mins);
-            if ($mins === 0) return false;
+            $mins = $this->cooldownMinutes();
+            if ($mins === 0) return 0;
 
-            $last = strtotime((string)($row['last_human_reply_at'] ?? '2000-01-01'));
-            return (time() - $last) < $mins * 60;
+            // The stamp is UTC (markHumanHandling writes gmdate) and is read
+            // as UTC. strtotime() applied the process zone, and this worker
+            // runs under two of them: UTC when the webhook spawns it, Africa/
+            // Kampala when cron/master.php runs it. On the scheduled path the
+            // stamp read three hours old and the pause never held.
+            $last = UtcClock::parse($row['last_human_reply_at'] ?? '');
+            if ($last <= 0) return 0;
+            $left = $last + $mins * 60 - time();
+            return $left > 0 ? $left : 0;
         } catch (\Throwable $e) {
-            return false;
+            return 0;
         }
+    }
+
+    /**
+     * How long the AI stays quiet after a colleague replies, in minutes.
+     *
+     * The point of the pause is that two answers to one question, from a
+     * person and a bot at the same time, is worse than a slow answer. But 24
+     * hours meant one staff reply took a customer off the AI for the rest of
+     * the day, which is far longer than anyone is actually still typing. It
+     * is a setting: minutes, and 0 means the AI never stands down -- it
+     * simply reads what the colleague said and carries on from there.
+     */
+    private function cooldownMinutes(): int
+    {
+        $mins = $this->config['wa_human_cooldown_minutes'] ?? null;
+        return ($mins === null || $mins === '' || !is_numeric($mins))
+             ? 1440                      // unchanged default: 24 hours
+             : max(0, (int)$mins);
+    }
+
+    /**
+     * Park this question behind a colleague's pause.
+     *
+     * Throws WorkerDefer, so WorkerBase puts the event back unchanged for
+     * when the pause should be over — never less than half a minute, never
+     * more than ten, since the pause can be extended and is re-read each
+     * time. A question that has waited longer than wa_parked_max_minutes
+     * (default 120) is dropped with a log line: by then the colleague has
+     * dealt with it or the watchdog has paged the team about it, and an
+     * answer two hours late from a bot reads worse than none.
+     */
+    private function parkBehindHuman(array $event, int $convId, int $wait): void
+    {
+        $received = $this->receivedAt($event);
+        $maxMin   = $this->config['wa_parked_max_minutes'] ?? null;
+        $maxMin   = ($maxMin === null || $maxMin === '' || !is_numeric($maxMin)) ? 120 : max(1, (int)$maxMin);
+        if ($received > 0 && (time() - $received) > $maxMin * 60) {
+            $this->log('info', "conv {$convId}: human active for over {$maxMin} min — parked question dropped");
+            return;
+        }
+        $wait = max(30, min(600, $wait));
+        $this->log('info', "conv {$convId}: human active — parked for {$wait}s");
+        throw new WorkerDefer($wait, 'parked: a colleague is active on this conversation');
+    }
+
+    /**
+     * Did a person on our side write in this conversation after this message
+     * arrived? Then the question has been dealt with and the AI adds nothing.
+     *
+     * Only when a cooldown is set: 0 means the AI always answers, reading
+     * what the colleague said, which is that setting's whole meaning.
+     */
+    private function answeredMeanwhile(array $event, int $convId): bool
+    {
+        if ($this->cooldownMinutes() === 0) return false;
+        $received = $this->receivedAt($event);
+        if ($received <= 0) return false;
+        return $this->convSvc->humanRepliedSince($convId, UtcClock::stamp($received));
+    }
+
+    /** When the customer's message reached the webhook, as unix time (0 if unknown). */
+    private function receivedAt(array $event): int
+    {
+        $p = $event['_payload'] ?? [];
+        $t = UtcClock::parse($p['received_at'] ?? '');
+        if ($t <= 0) $t = UtcClock::parse($event['created_at'] ?? '');
+        return $t;
+    }
+
+    /**
+     * Claim the echo of a message we just sent, and hand back its id.
+     *
+     * Every outbound message returns through the webhook as fromMe. The text
+     * reply has always claimed its id; the photo, document and flyer sends
+     * did not, and stored no wa_message_id either, so each caption came
+     * back, inserted as a 'Team' message and stood the AI down for the whole
+     * cooldown — the bot went quiet right after showing someone the kit.
+     * Claim in the guard's table first (the echo can arrive before the store
+     * that follows), then the id goes on the row so the store dedupes too.
+     */
+    private function claimOwnEcho(array $send, string $channel, string $source): ?string
+    {
+        $ourId = trim((string)($send['data']['key']['id'] ?? ''));
+        if ($ourId === '') return null;
+        try {
+            if (!class_exists('EvoWebhookGuard')) {
+                $g = __DIR__ . '/../lib/EvoWebhookGuard.php';
+                if (is_file($g)) require_once $g;
+            }
+            if (class_exists('EvoWebhookGuard')) {
+                (new \EvoWebhookGuard($this->pdo, $this->config))
+                    ->claim($ourId, $this->evo->instanceFor($channel), $source);
+            }
+        } catch (\Throwable $e) { /* dedupe is a backstop, not a requirement */ }
+        return $ourId;
+    }
+
+    /**
+     * The retry budget for a customer's message is spent.
+     *
+     * Five attempts over about forty minutes have failed — the model
+     * unreachable, Evolution refusing — and the event is a dead letter
+     * nobody reads. The customer has heard nothing for all of that time.
+     * Hand over the way an unanswerable question is handed over: the thread
+     * goes red for the team, the alert number buzzes, and the customer gets
+     * the holding line, once.
+     */
+    protected function onDead(array $event, \Throwable $e): void
+    {
+        $p       = $event['_payload'] ?? [];
+        $channel = (string)($p['channel'] ?? '');
+        $phone   = (string)($p['customer_phone'] ?? '');
+        $convId  = (int)($event['entity_id'] ?? 0);
+        if ($channel === '' || $phone === '') return;
+        $attempts = (int)($event['attempts'] ?? 0) + 1;
+        $this->escalate($convId, $channel, $phone,
+            "no reply after {$attempts} attempts (" . mb_substr($e->getMessage(), 0, 80) . ')');
     }
 
     /**

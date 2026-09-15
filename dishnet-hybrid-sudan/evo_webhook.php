@@ -168,13 +168,29 @@ foreach ($messages as $msg) {
         if ($custPhone !== '' && $ownText !== '') {
             try {
                 $conv = $convSvc->ensureConversation($custPhone, $channel, null, 'import');
+
+                // A person, or the WhatsApp Business app talking by itself?
+                //
+                // The app's greeting and away messages leave our number as
+                // fromMe with an id nothing here claimed — per message, they
+                // look exactly like a colleague typing. Across conversations
+                // they do not: a person writes something different to each
+                // customer, the app sends every new contact the same sentence.
+                // A text our side has already sent word for word to several
+                // other conversations this week is canned. It is stored so
+                // the Inbox shows what the customer saw, labelled so the model
+                // does not read it as a colleague's promise, and it never
+                // stands the AI down. That greeting had reached 49 customers
+                // in a week here, each one silencing the AI for the whole
+                // cooldown at the moment the customer was asking.
+                $canned = $convSvc->isCannedHandsetText((int)$conv['id'], $ownText);
                 $stored = $convSvc->storeMessage((int)$conv['id'], [
                     'direction'     => 'out',
                     'role'          => 'agent',
                     'body'          => $ownText,
-                    'agent_name'    => 'Team',
+                    'agent_name'    => $canned ? ConversationService::AGENT_AUTO_REPLY : 'Team',
                     'wa_message_id' => $messageId,
-                    'metadata'      => json_encode(['channel' => $channel, 'source' => 'handset']),
+                    'metadata'      => json_encode(['channel' => $channel, 'source' => 'handset', 'canned' => $canned]),
                 ]);
 
                 // Was this a person, or our own reply echoing back?
@@ -185,8 +201,10 @@ foreach ($messages as $msg) {
                 // typed it on the handset — and that is what has to stand the
                 // AI down. Before this, nothing on the Evolution path ever set
                 // human_active, so the stand-down rule had never once fired.
-                if ($stored !== null) {
+                if ($stored !== null && !$canned) {
                     $convSvc->markHumanHandling((int)$conv['id']);
+                } elseif ($canned) {
+                    error_log(EvoWebhookGuard::safeLogLine($event, $instance, 'canned_auto_reply'));
                 }
             } catch (\Throwable $e) {
                 error_log('[evo_webhook] outbound store failed: ' . $e->getMessage());

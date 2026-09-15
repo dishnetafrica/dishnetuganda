@@ -2065,13 +2065,26 @@ class NotificationService
                     $convSvc = new ConversationService($dataDir, $this->store->getPdo());
                     $channel = ($sender === self::ACCOUNTS) ? 'accounts' : 'support';
                     $conv    = $convSvc->ensureConversation($to, $channel);
+                    // The id Evolution gave the message, when it was Evolution
+                    // that carried it: the echo then dedupes on the row as well
+                    // as at the guard.
+                    $echoRes = json_decode((string)$response, true);
+                    $echoId  = is_array($echoRes)
+                             ? (string)($echoRes['data']['key']['id'] ?? ($echoRes['key']['id'] ?? ''))
+                             : '';
                     $convSvc->storeMessage($conv['id'], [
                         'direction'  => 'out',
                         'role'       => 'agent',
                         'body'       => $message,
                         'event_key'  => $event ?: null,
                         'agent_name' => 'DishNet Plugin',
-                        'sent_at'    => date('Y-m-d H:i:s'),
+                        // UTC like every other sent_at. date() here ran under
+                        // Africa/Kampala and stamped these rows three hours
+                        // ahead: the Inbox showed a reminder after messages
+                        // that came later, and last_agent_at sat in the future,
+                        // so the watchdog thought a waiting customer answered.
+                        'sent_at'    => gmdate('Y-m-d H:i:s'),
+                        'wa_message_id' => $echoId !== '' ? $echoId : null,
                     ]);
                 }
             } catch (\Throwable $e) {

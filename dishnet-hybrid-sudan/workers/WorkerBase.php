@@ -18,6 +18,21 @@ declare(strict_types=1);
  *
  * PHP 7.4 compatible.
  */
+/**
+ * Thrown by a handler that wants its event back later, unchanged, without
+ * that counting as a failure. WorkerBase turns it into EventBus::defer().
+ */
+class WorkerDefer extends \RuntimeException
+{
+    public int $seconds;
+
+    public function __construct(int $seconds, string $note = '')
+    {
+        parent::__construct($note);
+        $this->seconds = max(1, $seconds);
+    }
+}
+
 abstract class WorkerBase
 {
     protected \PDO $pdo;
@@ -62,6 +77,17 @@ abstract class WorkerBase
     abstract protected function handle(array $event): void;
 
     /**
+     * Called once, after the attempt that made an event dead.
+     *
+     * Default: nothing. A worker whose events stand for a waiting person
+     * overrides this to tell them, and the team, that the automatic path has
+     * given up — instead of the silence a dead letter otherwise is.
+     */
+    protected function onDead(array $event, \Throwable $e): void
+    {
+    }
+
+    /**
      * Run the worker: acquire lock, consume events, process, release.
      * @return array Summary of processing results
      */
@@ -74,6 +100,7 @@ abstract class WorkerBase
 
         $processed = 0;
         $failed    = 0;
+        $deferred  = 0;
         $types     = $this->getEventTypes();
 
         try {
@@ -96,10 +123,26 @@ abstract class WorkerBase
                         $this->handle($event);
                         $this->bus->ack($eid);
                         $processed++;
+                    } catch (WorkerDefer $d) {
+                        // Parked, not failed: back in the queue for later with
+                        // the attempt count untouched.
+                        $this->bus->defer($eid, $d->seconds, $d->getMessage());
+                        $deferred++;
+                        $this->log("INFO", "Event #{$eid} ({$event['event_type']}) parked {$d->seconds}s: " . $d->getMessage());
                     } catch (\Throwable $e) {
-                        $this->bus->fail($eid, $e->getMessage());
+                        $dead = $this->bus->fail($eid, $e->getMessage());
                         $failed++;
                         $this->log("ERROR", "Event #{$eid} ({$event['event_type']}): " . $e->getMessage());
+                        if ($dead) {
+                            // The last attempt has gone. Nothing looks at the
+                            // dead letters unless someone runs SQL, so the
+                            // handler gets one call to say so.
+                            try {
+                                $this->onDead($event, $e);
+                            } catch (\Throwable $ignore) {
+                                $this->log("ERROR", "Event #{$eid} onDead failed: " . $ignore->getMessage());
+                            }
+                        }
                     }
                 }
             }
@@ -107,7 +150,7 @@ abstract class WorkerBase
             $this->releaseLock();
         }
 
-        return ['processed' => $processed, 'failed' => $failed, 'worker' => static::class];
+        return ['processed' => $processed, 'failed' => $failed, 'deferred' => $deferred, 'worker' => static::class];
     }
 
     /**

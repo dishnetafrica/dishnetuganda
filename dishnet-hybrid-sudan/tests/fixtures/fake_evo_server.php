@@ -70,6 +70,8 @@ if (preg_match('#^/message/sendMedia/(.+)$#', $path, $m)) {
         'media_len'    => strlen($media),
         'media_prefix' => substr($media, 0, 48),
     ];
-    fe2_out(['key' => ['id' => 'FAKE-EVO-MEDIA'], 'status' => 'PENDING']);
+    // Unique like the real thing: the worker now records this id on the row
+    // and a constant would make every second media send dedupe to nothing.
+    fe2_out(['key' => ['id' => 'FAKE-EVO-MEDIA-' . count($state['media_calls'])], 'status' => 'PENDING']);
 }
 fe2_out(['error' => 'FAKE-EVO-TEST: path not simulated: ' . $path], 404);

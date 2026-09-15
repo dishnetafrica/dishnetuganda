@@ -41,11 +41,12 @@ ob_start();
 try {
     $result = (new AiReplyWorker($store, $config, 45, 10))->run();
     $trace = ob_get_clean();
-    if ($trace !== '' || !empty($result['processed']) || !empty($result['failed'])) {
+    if ($trace !== '' || !empty($result['processed']) || !empty($result['failed']) || !empty($result['deferred'])) {
         @file_put_contents(
             $dataDir . '/ai_platform.log',
-            $trace . sprintf("[%s] spawned worker: processed=%d failed=%d\n",
-                gmdate('Y-m-d H:i:s'), $result['processed'] ?? 0, $result['failed'] ?? 0),
+            $trace . sprintf("[%s] spawned worker: processed=%d failed=%d deferred=%d\n",
+                gmdate('Y-m-d H:i:s'), $result['processed'] ?? 0, $result['failed'] ?? 0,
+                $result['deferred'] ?? 0),
             FILE_APPEND
         );
     }
