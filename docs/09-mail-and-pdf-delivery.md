@@ -283,6 +283,51 @@ value in `config.json` is then seen directly. Leaving it does no harm.
   uCRM whose request log shows what was written, and that a second press
   writes nothing.
 
+## The invoice e-mail — 5.18.6, 15 September
+
+Turning the payment-receipt e-mail on (15 Sep) prompted a read of the invoice
+e-mail before switching it on too. It would have told every customer "A PDF
+copy is attached for your records" and attached nothing: `CustomerEmailDispatcher::send()`
+accepts attachments, `whCustomerEmail()` never passed any. It also handed the
+template `plan` where the template reads `plan_name`, so the plan line was
+silently dropped, and its plain-text part — like every template's — printed a
+label for each fact whether or not it had a value.
+
+What changed, all in `webhook.php` and `lib/CustomerEmails.php`:
+
+- **One render, two channels.** `whInvoicePdfBytes()` asks uCRM for the
+  invoice PDF once per webhook (strict base64, must begin `%PDF`, anything
+  else counts as absent) and hands the same bytes to the WhatsApp document
+  and to the e-mail, attached as `Invoice-<number>.pdf`. The WhatsApp path
+  still fetches for itself when called without bytes, so nothing else changed.
+- **The template tells the truth about the attachment.** Every sender that
+  renders the invoice or the quotation passes `pdf_attached`; the wording
+  ("A PDF copy is attached", "is attached as a PDF", the "read page 2" step)
+  appears only when it is true. When uCRM has no PDF to give, the facts still
+  go out and the claim does not. This closed the same latent gap in the
+  quotation e-mail, whose webhook path sends with no attachment when the PDF
+  fetch fails.
+- **The right facts.** Plan and service period are parsed from uCRM's own
+  line-item label (the WhatsApp text already did this), the due date is
+  written out, and a person is greeted by first name as on the quotation.
+- **Plain text lists no fact it does not have.** `textFacts()` gives every
+  template's text part the rule the HTML side always had.
+
+Evidence: `tests/test_invoice_email_attachment.php` serves the real handler
+under `php -S` with the plugin's own uCRM client pointed at the fake uCRM and
+its own `MailService` pointed at the fake SMTP relay, then reads the relay's
+transcript: exactly one message, to the billing contact, one attachment whose
+bytes equal the file the fake served, uCRM asked for the PDF once, a replayed
+webhook sends and fetches nothing, and an invoice uCRM cannot render produces
+an e-mail with the facts and no claim. Five deliberate breaks (attachment
+dropped, key reverted, claim made unconditional, blanks reprinted, second
+render) each failed the suite. Two things it does not change: the invoice
+e-mail goes only to a customer who also has a phone number, because it sits
+inside the WhatsApp block's gate as before; and it carries no "Pay online"
+link — `contact_pay_url` defaults to the Sudan tutorials page, which the
+WhatsApp invoice text prints unless the key is configured, and the e-mail
+was not given the same default.
+
 ## What was never at risk
 
 Customers received their quotations throughout. The summary went out as
