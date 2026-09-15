@@ -123,17 +123,27 @@ class CustomerEmailDispatcher
      */
     public static function effectiveConfig(array $config = []): array
     {
-        static $fromDisk = null;
-        if ($fromDisk === null) {
+        // Cached per request, keyed by the files' size and modification time,
+        // so a write earlier in the same process is seen by the next call.
+        // A one-shot static here made tools/set_customer_emails.php --all-off
+        // report every switch still ON after it had just cleared them all:
+        // the "Before" display filled the cache, the "After" display re-read
+        // it. The stop worked; the read-back lied.
+        static $fromDisk = null, $stamp = null;
+        $root    = dirname(__DIR__);
+        $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
+        $files   = [$root . '/data/config.json', $dataDir . '/config.json', $dataDir . '/kyc_config.json'];
+        clearstatcache();
+        $now = '';
+        foreach ($files as $p) $now .= is_file($p) ? (filemtime($p) . ':' . filesize($p) . ';') : '-;';
+        if ($fromDisk === null || $stamp !== $now) {
             $fromDisk = [];
-            $root    = dirname(__DIR__);
-            $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
-            foreach ([$root . '/data/config.json', $dataDir . '/config.json',
-                      $dataDir . '/kyc_config.json'] as $p) {
+            foreach ($files as $p) {
                 if (!is_file($p)) continue;
                 $d = json_decode((string)@file_get_contents($p), true);
                 if (is_array($d)) $fromDisk = array_merge($fromDisk, $d);
             }
+            $stamp = $now;
         }
         // Disk wins, EXCEPT where disk is empty and the caller has a value.
         //

@@ -87,9 +87,35 @@ echo "\nBefore:\n"; show($config);
 list($ok, $err) = PluginConfig::saveOverrides($dataDir, $changes);
 if (!$ok) { fwrite(STDERR, "FAILED: {$err}\n"); exit(1); }
 
-// Read back from disk: this is what the webhook will actually see.
-$fresh = PluginConfig::load($root, $dataDir);
+// Read back from disk: this is what the webhook will actually see. Then
+// CHECK it against what was asked. On 15 Sep --all-off cleared every switch
+// and this display still showed them ON, because the dispatcher's disk
+// snapshot was cached from the "Before" display; the operator was left
+// believing the stop had failed. A tool that changes what customers receive
+// must not describe a state it has not verified.
+$fresh  = PluginConfig::load($root, $dataDir);
+$states = CustomerEmailDispatcher::states($fresh);
+$wrong  = [];
+foreach ($changes as $k => $v) {
+    $wantOn = $v !== '';
+    if ($k === 'customer_emails_enabled') {
+        $isOn = CustomerEmailDispatcher::masterEnabled($fresh);
+        if ($isOn !== $wantOn) $wrong[] = "master reads " . ($isOn ? 'ON' : 'off') . ", wanted " . ($wantOn ? 'ON' : 'off');
+        continue;
+    }
+    $ev   = substr($k, strlen('customer_email_'));
+    // With the master off every event reads off, which is the state asked for.
+    $isOn = !empty($states[$ev]['on']);
+    if ($wantOn && !$isOn && CustomerEmailDispatcher::masterEnabled($fresh)) $wrong[] = "{$ev} reads off, wanted ON";
+    if (!$wantOn && $isOn) $wrong[] = "{$ev} reads ON, wanted off";
+}
 echo "After (read back from {$dataDir}/kyc_config.json):\n"; show($fresh);
+if ($wrong) {
+    fwrite(STDERR, "FAILED — the file was written but the switches do not read back as asked:\n");
+    foreach ($wrong as $w) fwrite(STDERR, "  {$w}\n");
+    fwrite(STDERR, "Something else supplies the old value. Trace it: php tools/config_trace.php " . implode(' ', array_keys($changes)) . "\n");
+    exit(1);
+}
 
 $live = array_filter(CustomerEmailDispatcher::states($fresh), function ($s) { return $s['on']; });
 if ($live && CustomerEmailDispatcher::masterEnabled($fresh)) {
