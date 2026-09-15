@@ -76,7 +76,7 @@ printf("  %-22s %s\n", 'config source', $cfgSrc);
 require_once $root . '/lib/QuotePdfToken.php';
 printf("  %-22s %s\n", 'quote PDF link secret', QuotePdfToken::hasRealSecret($storeOnly)
     ? 'set — webhook_secret in the store, as serve_quote_pdf reads it'
-    : '⚠ DEFAULT — webhook_secret is unset in the store; quotation links are signed with a published default. Settings → Setup Webhook generates one (uCRM webhooks that send no key keep working).');
+    : '⚠ DEFAULT — webhook_secret is unset in the store; quotation links are signed with a published default. Do NOT fix this with Settings → Setup Webhook: that button also rewrites the uCRM webhook endpoint (URL and event list). See docs/09-mail-and-pdf-delivery.md.');
 printf("  %-22s %s\n\n", 'config', $config === [] ? '⚠ EMPTY — nothing below is meaningful' : count($config) . ' keys');
 if ($fromStore !== [] && $fromFile !== []) {
     $diff = [];
