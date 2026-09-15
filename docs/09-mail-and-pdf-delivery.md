@@ -214,10 +214,28 @@ value in `config.json` is then seen directly. Leaving it does no harm.
   live shape from 14 Sep (a configured route that answers, a public name that
   does not) now reads as a certificate fault and names the host the
   certificate must be valid for. `tests/test_sent_copy_diagnosis.php`.
-- **Quotation PDF tokens never expire — still open.** `serve_quote_pdf` accepts a daily
-  rotating HMAC *or* a permanent token stored in the PDF's `.meta` file. Any
-  quotation URL that has appeared in `webhook_log.json` is fetchable by
-  anyone holding it, indefinitely.
+- **Quotation PDF tokens never expire — fixed in 5.18.0.** `serve_quote_pdf`
+  accepted a daily rotating HMAC *or* a permanent token stored in the PDF's
+  `.meta` file, so any quotation URL that had appeared in `webhook_log.json`
+  was fetchable by anyone holding it, indefinitely. The permanent token is no
+  longer accepted. One helper, `lib/QuotePdfToken.php`, now signs and checks
+  every quotation link — `HMAC-SHA256(file_name . day, webhook_secret)` with
+  the day in UTC, good for today and yesterday and then refused — and all
+  four generators (`webhook.php`, `cron_quote_wa.php`, `PluginQuotePdf`,
+  `QuotePdfService`) mint through it, so a link lives between 24 and 48
+  hours. The `.meta` file is metadata only (display name); the endpoint
+  serves `.pdf` files from that directory and nothing else (the `.meta` files
+  carry the customer's name and the total); and an admin retry from the
+  failed queue re-signs a stale link instead of re-sending one the endpoint
+  refuses. The construction is the one both sides already used, so links
+  minted before the upgrade still verify after it. Receipt, delivery-note
+  and temporary-invoice links were not part of this decision and are
+  unchanged. `tests/test_quote_pdf_token.php` runs the endpoint for real
+  over HTTP. Residual: where `webhook_secret` is unset in the store, links
+  are signed with the published default `dishnet`, and a guessable file
+  name is enough to fetch a quotation during those 48 hours —
+  `tools/notify_doctor.php` now prints `quote PDF link secret` so this can be
+  checked without reading the database.
 
 ## What was never at risk
 

@@ -2202,7 +2202,12 @@ class NotificationService
             $vars = json_decode($row['vars'] ?? '{}', true) ?: [];
             $isDoc = ($vars['_type'] ?? '') === 'document' && !empty($vars['url']);
             if ($isDoc) {
-                $this->sendDocument($row['sender'], $row['phone'], $vars['url'], $vars['filename'] ?? 'document.pdf', $row['message'], $row['event'] ?? '');
+                // A quotation PDF link is signed for the day it was minted and
+                // dies the day after. Re-sign it, or the retry re-sends a link
+                // the endpoint will refuse. Any other URL passes through as is.
+                require_once __DIR__ . '/QuotePdfToken.php';
+                $url = QuotePdfToken::refreshUrl((string)$vars['url'], $this->evoConfig);
+                $this->sendDocument($row['sender'], $row['phone'], $url, $vars['filename'] ?? 'document.pdf', $row['message'], $row['event'] ?? '');
             } else {
                 $this->sendVia($row['sender'], $row['phone'], $row['message'], $row['event'] ?? '', $vars);
             }

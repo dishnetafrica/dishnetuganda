@@ -69,6 +69,14 @@ $line = str_repeat('─', 72);
 echo "\n  OUTBOUND WHATSAPP (read-only)\n  {$line}\n";
 printf("  %-22s %s\n", 'data directory', $dataDir);
 printf("  %-22s %s\n", 'config source', $cfgSrc);
+// serve_quote_pdf (run by public.php) signs and checks quotation-PDF links
+// with webhook_secret as the STORE holds it. With none set, the links are
+// signed with a published default, and a guessable file name is all it takes
+// to fetch a quotation during the ~48h a link lives.
+require_once $root . '/lib/QuotePdfToken.php';
+printf("  %-22s %s\n", 'quote PDF link secret', QuotePdfToken::hasRealSecret($storeOnly)
+    ? 'set — webhook_secret in the store, as serve_quote_pdf reads it'
+    : '⚠ DEFAULT — webhook_secret is unset in the store; quotation links are signed with a published default. Settings → Setup Webhook generates one (uCRM webhooks that send no key keep working).');
 printf("  %-22s %s\n\n", 'config', $config === [] ? '⚠ EMPTY — nothing below is meaningful' : count($config) . ' keys');
 if ($fromStore !== [] && $fromFile !== []) {
     $diff = [];

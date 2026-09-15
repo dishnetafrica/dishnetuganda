@@ -6,6 +6,7 @@
  */
 
 require_once __DIR__ . '/currency.php';
+require_once __DIR__ . '/QuotePdfToken.php';
 
 if (!function_exists('str_contains')) {
     function str_contains(string $h, string $n): bool { return $n === '' || strpos($h, $n) !== false; }
@@ -228,11 +229,10 @@ class PluginQuotePdf
 
         file_put_contents($pdfFile, $pdfContent);
 
-        // ── Generate serve URL ──
-        $secret   = ($this->config['webhook_secret'] ?? 'dishnet');
-        $pdfToken = hash_hmac('sha256', basename($pdfFile) . date('Ymd'), $secret);
+        // ── Generate serve URL — daily token (QuotePdfToken); .meta is metadata only ──
+        $pdfToken = QuotePdfToken::mint(basename($pdfFile), $this->config);
         file_put_contents($pdfFile . '.meta', json_encode([
-            'token' => $pdfToken, 'created' => time(), 'quote' => $quoteNum, 'filename' => $filename,
+            'created' => time(), 'quote' => $quoteNum, 'filename' => $filename,
         ]));
 
         $siteUrl = dn_crm_web($this->config);

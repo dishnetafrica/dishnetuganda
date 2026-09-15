@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib/timezone.php';
+require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -2488,11 +2489,12 @@ switch ($changeType) {
 
                         $pdfFile  = "DishNet-Quote-" . preg_replace('/[^A-Za-z0-9\-]/', '', $quoteNum) . '.pdf';
                         $pdfPath  = $pdfDir . '/' . $pdfFile;
-                        $secret   = ($config['webhook_secret'] ?? 'dishnet');
-                        $pdfToken = hash_hmac('sha256', $pdfFile . date('Ymd'), $secret);
+                        // Daily token (QuotePdfToken): good today and tomorrow, then dead.
+                        $pdfToken = QuotePdfToken::mint($pdfFile, $config);
                         file_put_contents($pdfPath, base64_decode($pdfRaw));
+                        // .meta is metadata only — the token is recomputed per day, never stored
                         file_put_contents($pdfPath . '.meta', json_encode([
-                            'token' => $pdfToken, 'created' => time(), 'quote' => $quoteNum,
+                            'created' => time(), 'quote' => $quoteNum,
                             'filename' => "Quote-{$quoteNum}.pdf",
                         ]));
 
