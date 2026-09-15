@@ -1,6 +1,6 @@
 # One owner per customer email event
 
-**Status: audit complete; all eight lifecycle e-mails are wired and switched on (15 Sep 2026, plugin 5.18.7).** Read the sequencing warning
+**Status: audit complete; all eight lifecycle e-mails are wired (plugin 5.18.7). Switched on 15 Sep 2026, then all switched off again the same afternoon by `--all-off` (the tool's read-back wrongly showed them still on — fixed in 5.18.8). Whether they are on now is answered only by `php tools/set_customer_emails.php --show`.** Read the sequencing warning
 before switching anything off in uCRM.
 
 Every fact below was established by reading the code, not by assumption.

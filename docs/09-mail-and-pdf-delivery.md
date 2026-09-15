@@ -397,6 +397,38 @@ customer who also has a phone number, as the WhatsApp gates decide; and the
 WhatsApp text for a first activation still reads "Service Restored" — the
 e-mail was corrected, the WhatsApp copy was not touched.
 
+## The stop that reported failure — 5.18.8, 15 September
+
+Minutes after all eight e-mails were switched on, the operator tried the
+panic switch, `set_customer_emails.php --all-off`. It cleared every switch —
+and then displayed all eight still ON and warned that eight events would
+e-mail customers. The cause was one line: `CustomerEmailDispatcher::effectiveConfig()`
+read the config files into a one-shot static, filled by the "Before" display
+and reused by the "After" one. The stop had worked; the read-back lied; and an
+operator who believed it would either have hunted for a fault that did not
+exist or, worse, left customers un-notified while believing they were not.
+
+Two changes. The disk snapshot is now keyed by the files' size and
+modification time, so a write earlier in the same process is seen by the next
+call — nothing else about the merge changed. And the switch tool now compares
+what it reads back with what it was asked for: a switch that reads the wrong
+way prints FAILED, names the switch, points at `config_trace.php`, and exits
+non-zero, because something else (data/config.json, which the tool does not
+edit) is supplying the value. `tests/test_switch_tool_readback.php` drives the
+tool as a subprocess through on, all-off and a value held elsewhere.
+
+Also in 5.18.8: `tools/wa_lifecycle_test.php`, the WhatsApp twin of the
+e-mail lifecycle test. It sends the ten customer messages the notification
+service composes as functions — invoice, three pre-due reminders, low
+balance, receipt, credit-covered and partly-covered invoices, installation
+booked, renewal — with invented data to one number, between a header and a
+footer that say TEST, and reports each outcome from the service's own audit
+log. `--dry-run` logs without sending; `--only` narrows the run. The four
+customer texts that live inline in `webhook.php` (account created, service
+activated, suspended, restored) and the quotation WhatsApp with its PDF are
+sent only by the real uCRM events, so a test of those is a test client in
+uCRM. `tests/test_wa_lifecycle_tool.php`.
+
 ## What was never at risk
 
 Customers received their quotations throughout. The summary went out as
