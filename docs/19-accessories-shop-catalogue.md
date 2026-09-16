@@ -103,6 +103,52 @@ For slanted roofs; swivelling head for fine adjustment of angle and direction.
 **20. Wall Mount | Mini** · fits: Mini  
 Exterior wall installation for the Mini; clears an eave overhang of up to about 10 cm (4 in).
 
+## Photos
+
+Starlink's own store images for each product, 500 × 500, filed in the plugin
+at `dishnet-hybrid-sudan/assets/shop/` under a catalogue slug, with
+`index.json` mapping slug → exact product name → file. The shop tab matches
+on the product name, which is also the uCRM product name, so the picture,
+the price and the assistant's catalogue line all hang off one string. The
+logos, wordmark and interface icons that came with the downloads were not
+kept. The CSV has an `image` column.
+
+The originals are PNG and JPEG as Starlink serves them (4.4 MB for 22). When
+the shop tab is built it should serve resized WebP copies made from these,
+not the originals; PHP GD with WebP is available on this stack.
+
+| Product | File | Size |
+|---|---|---:|
+| Router Mini | `router-mini.png` | 278 KB |
+| Roof Rack Mount \| Standard 4 or 4 X | `roof-rack-mount-standard.png` | 394 KB |
+| Standard 4 or 4 X to Standard Actuated Mount Adapter | `standard-to-actuated-mount-adapter.png` | 452 KB |
+| X-Frame Base \| Standard 4 or 4 X, Enterprise | `x-frame-base-standard.png` | 612 KB |
+| Ridgeline Mount \| Standard 4 or 4 X | `ridgeline-mount-standard.png` | 332 KB |
+| Router 3 Mount | `router-3-mount.png` | 338 KB |
+| Mobility Mount \| Standard 4 or 4 X | `mobility-mount-standard.png` | 219 KB |
+| Power Supply Mount \| Standard 4 X | `power-supply-mount-standard-4x.png` | 40 KB |
+| Pivot Mount \| Standard 4 and 4 X, Enterprise | `pivot-mount-standard.png` | 376 KB |
+| Wall Mount \| Standard 4 or 4 X | `wall-mount-standard.png` | 304 KB |
+| Pipe Adapter \| Standard 4 or 4 X | `pipe-adapter-standard.png` | 312 KB |
+| Router 3 \| Starlink V4 or V5, Mini | `router-3.png` | 356 KB |
+| Travel Kit \| Mini | `travel-kit-mini.jpg` | 28 KB |
+| Car Adapter \| Mini | `car-adapter-mini.jpg` | 31 KB |
+| Starlink Mini USB-C Cable 5m | `mini-usb-c-cable-5m.jpg` | 14 KB |
+| Mobility Mount \| Mini | `mobility-mount-mini.jpg` | 46 KB |
+| Roof Rack Mount \| Mini | `roof-rack-mount-mini.jpg` | 50 KB |
+| Starlink Mini Ethernet Cable 15m | `mini-ethernet-cable-15m.jpg` | 12 KB |
+| Pivot Mount \| Mini | `pivot-mount-mini.jpg` | 48 KB |
+| Wall Mount \| Mini | `wall-mount-mini.jpg` | 47 KB |
+| Starlink Standard Kit (kit photo) | `standard-kit.png` | 83 KB |
+| Starlink Mini Kit (kit photo) | `mini-kit.png` | 31 KB |
+
+The assistant's photo library (`<dataDir>/photos/<name>.jpg` + optional
+`<name>.txt` caption, sent with `<<PHOTO name>>`) uses the same file-name-as-
+key rule. Dropping these files there, with captions, would let the assistant
+show a customer the Pivot Mount when asked. That changes the prompt (the
+photo list is offered to the model), so it is a separate decision, not done
+here.
+
 ## Not in this list, also in the store
 
 Worth pricing from the store before the shop goes live, since installers and
