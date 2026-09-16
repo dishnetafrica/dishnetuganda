@@ -1,6 +1,6 @@
 # 19 — Accessories shop: the catalogue to configure
 
-**Date:** 16 September 2026 · **Status:** list prepared, nothing built · **Source of prices:** the Starlink store for Uganda, as read by the operator on 16 September 2026 · **Margin:** 30% on the store price
+**Date:** 16 September 2026 · **Status:** list prepared, nothing built · **Source of prices:** the Starlink store for Uganda, Standard and Mini accessory pages, as read by the operator on 16 September 2026 · **Margin:** 30% on the store price
 
 ## The rule for every price
 
@@ -24,8 +24,16 @@ the VAT as they do today.
 | 10 | Wall Mount \| Standard 4 or 4 X | Mount | 289,333 | 376,132.90 | **377,000** |
 | 11 | Pipe Adapter \| Standard 4 or 4 X | Adapter | 173,333 | 225,332.90 | **226,000** |
 | 12 | Router 3 \| Starlink V4 or V5, Mini | Router | 636,000 | 826,800.00 | **827,000** |
+| 13 | Travel Kit \| Mini | Case | 231,481 | 300,925.30 | **301,000** |
+| 14 | Car Adapter \| Mini | Power | 231,481 | 300,925.30 | **301,000** |
+| 15 | Starlink Mini USB-C Cable 5m | Cable | 115,741 | 150,463.30 | **151,000** |
+| 16 | Mobility Mount \| Mini | Mount | 173,333 | 225,332.90 | **226,000** |
+| 17 | Roof Rack Mount \| Mini | Mount | 173,333 | 225,332.90 | **226,000** |
+| 18 | Starlink Mini Ethernet Cable 15m | Cable | 115,741 | 150,463.30 | **151,000** |
+| 19 | Pivot Mount \| Mini | Mount | 289,333 | 376,132.90 | **377,000** |
+| 20 | Wall Mount \| Mini | Mount | 231,481 | 300,925.30 | **301,000** |
 
-Twelve items. Store total 4,337,887; shelf total 5,646,000.
+Twenty items: twelve from the Standard accessories page, eight from the Mini page (Router Mini, Router 3 and the Router 3 Mount appear on both and are listed once). Store total 5,899,811; shelf total 7,680,000.
 
 ## What each item is
 
@@ -71,14 +79,37 @@ Fits the dish to an existing metal pole of 31–63.5 mm (1.25–2.5 in) diameter
 **12. Router 3 | Starlink V4 or V5, Mini** · fits: Standard 4, Standard 4 X, Mini, Gen 2 and Gen 3 kits  
 Tri-band Wi-Fi 6; coverage up to 297 m² (3,200 ft²); 2 latching Ethernet LAN ports; up to 235 devices; IP56; WPA2; 300 × 120 × 55 mm, about 1 kg; separate power supply 100–240 V; primary router or mesh node. The router shipped in the Standard 4 X kit.
 
+**13. Travel Kit | Mini** · fits: Mini  
+Protects the Mini on the move: a custom-fitted Bumper Case for drop protection, a Sleeve that doubles as a carrying case and shields against dirt, scrapes and bumps, and an Accessory Pouch that holds everything needed to power the Mini.
+
+**14. Car Adapter | Mini** · fits: Mini  
+Powers the Mini from a vehicle's 12–24 V auxiliary (cigarette-lighter) socket over USB-C, in place of the Mini power supply and DC cable. Pair with the 5 m USB-C cable for reach from socket to dish.
+
+**15. Starlink Mini USB-C Cable 5m** · fits: Mini  
+5 m USB-C cable to power the Mini from a USB-C Power Delivery source: the Car Adapter or a power bank. Starlink's guidance is a PD source of at least 65 W, 100 W recommended, for full performance.
+
+**16. Mobility Mount | Mini** · fits: Mini  
+Permanent vehicle or boat installation for the Mini; bolted down with a sealed footprint, for use while parked.
+
+**17. Roof Rack Mount | Mini** · fits: Mini  
+Removable installation of the Mini on vehicle roof-rack crossbars; clamps on and comes off when not in use; for use while parked.
+
+**18. Starlink Mini Ethernet Cable 15m** · fits: Mini, Performance (Gen 3) dish → Router 3 or a third-party router  
+15 m Ethernet run from the Mini (or the Performance Gen 3 dish) to a Router 3 or any third-party router, with a weather-sealed latching plug on the dish end and standard RJ45 at the router. This is how a Mini feeds a Router 3 for a bigger house.
+
+**19. Pivot Mount | Mini** · fits: Mini  
+For slanted roofs; swivelling head for fine adjustment of angle and direction.
+
+**20. Wall Mount | Mini** · fits: Mini  
+Exterior wall installation for the Mini; clears an eave overhang of up to about 10 cm (4 in).
+
 ## Not in this list, also in the store
 
 Worth pricing from the store before the shop goes live, since installers and
 Mini customers ask for them: Starlink Cable 15 m and 45 m (Standard),
 Standard Power Supply (replacement), Router Mini power supply (replacement),
-and the Mini line: Mini Pipe Adapter, Mini Wall Mount, Mini Pivot Mount, Mini
-Car Adapter, Mini Travel Kit, Mini DC Power Cable, Mini Power Supply. The
-Ethernet Adapter is for Gen 2 kits only: Router 3 and Router Mini have their
+and, from the Mini line, the Mini Pipe Adapter, Mini DC Power Cable and
+Mini Power Supply (the rest of the Mini line is above). The Ethernet Adapter is for Gen 2 kits only: Router 3 and Router Mini have their
 own Ethernet ports.
 
 ## Two things to know before adding them to uCRM
