@@ -5,10 +5,24 @@
 ## The rule for every price
 
 Store price × 1.30, then rounded **up** to the next 1,000 shillings so no item
-ever falls under the 30% margin. That shelf price is what goes on the uCRM
-product. The plugin never adds a tax figure: enter each price with the same
-tax treatment every other uCRM product uses, and let uCRM and EFRIS carry
-the VAT as they do today.
+ever falls under the 30% margin. **The shelf price is the final customer
+price, VAT included** (operator's decision, 16 Sep 2026: "that 30% is tax
+inclusive for all the products"). The plugin never adds a tax figure. What
+that means at the point of entry:
+
+- uCRM has one pricing mode for all products, set in its billing settings:
+  prices entered *with* tax or *without* tax. If the existing kits are entered
+  as customer-facing figures with the VAT tax attached (pricing mode "with
+  taxes"), the shelf prices go in exactly as listed, with the same VAT tax
+  attached. If uCRM is in "without taxes" mode, the shelf price must be
+  entered net of VAT so the invoice total comes back to the shelf price; the
+  sync tool (Part 1) reads the mode and the existing kits first and refuses
+  to guess, rather than dividing by a rate itself.
+- EFRIS and the invoice carry the VAT from uCRM's tax, as they do today.
+- The assistant currently hedges on tax ("the quotation confirms the tax
+  treatment") because it has no fact to stand on. Part 1 adds a business
+  fact, `ai_fact_prices`, set by the operator ("All listed prices include
+  VAT"), so it can say so plainly without calculating anything.
 
 | # | Product (Starlink name) | Type | Store price USh | +30% exact | Shelf price USh |
 |---|---|---|---:|---:|---:|
@@ -172,6 +186,8 @@ own Ethernet ports.
 2. **One source of truth.** The shop tab, the assistant and the quotation
    must all read the same uCRM product. Nothing should hold a second copy of
    a price.
+3. **Still open:** whether the two kit products already in uCRM appear in the
+   shop as well, with the kit photos filed above.
 
 ## The shop tab, when it is built
 
