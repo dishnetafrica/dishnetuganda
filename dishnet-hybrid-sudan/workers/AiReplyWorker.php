@@ -320,24 +320,7 @@ class AiReplyWorker extends WorkerBase
                         $this->log('info', sprintf('conv %d: identified customer, %d live service(s)', $convId, $live));
                     }
                 }
-                $products = $this->tools->getProducts();
-                if ($products['ok']) {
-                    $ctx['products'] = $products['data'];
-                    $mirrors = (int)($products['data']['hardware_plan_mirrors'] ?? 0);
-                    $this->log('info', sprintf('conv %d: catalogue loaded, %d plan(s), %d hardware item(s)%s',
-                        $convId, (int)($products['data']['count'] ?? 0),
-                        (int)($products['data']['hardware_count'] ?? 0),
-                        $mirrors > 0 ? sprintf(', %d plan mirror(s) dropped from hardware', $mirrors) : ''));
-                    if (!empty($products['data']['hardware_error'])) {
-                        $this->log('warn', 'conv ' . $convId . ': hardware lookup failed — '
-                            . (string)$products['data']['hardware_error']);
-                    }
-                } else {
-                    // The brain falls back to "PLANS unavailable" and hands
-                    // over — safe, but it must never be invisible in the log.
-                    $this->log('error', 'conv ' . $convId . ': product lookup FAILED — '
-                        . (string)($products['error'] ?? 'unknown') . ' (AI will not quote prices)');
-                }
+                $this->loadCatalogue($ctx, $convId);
                 break;
 
             case EvolutionApiService::CHANNEL_SUPPORT:
@@ -345,6 +328,14 @@ class AiReplyWorker extends WorkerBase
                     $svc = $this->tools->getCustomerServices($clientId);
                     if ($svc['ok']) $ctx['services'] = $svc['data'];
                 }
+                // A number that sells needs the price list. With
+                // ai_sales_on_all_numbers the prompt tells this number to
+                // answer what-it-costs questions "from PLANS" — and until
+                // 5.18.10 PLANS was fetched for the sales number alone, so
+                // the model here was instructed to quote from a list it did
+                // not have. Every support-channel turn in the 16 Sep log has
+                // no catalogue line after it; every sales turn does.
+                if ($this->sellsOnAllNumbers()) $this->loadCatalogue($ctx, $convId);
                 // Splynx line status removed for Uganda: Splynx is the South
                 // Sudan fibre stack and this deployment is Starlink-only.
                 // The triage it gave for callers we could NOT identify is a
@@ -359,6 +350,7 @@ class AiReplyWorker extends WorkerBase
                     $acct = $this->tools->getAccount($clientId);
                     if ($acct['ok']) $ctx['account'] = $acct['data'];
                 }
+                if ($this->sellsOnAllNumbers()) $this->loadCatalogue($ctx, $convId);
                 break;
         }
 
@@ -547,13 +539,17 @@ class AiReplyWorker extends WorkerBase
     private function askBrain(array $context): ?array
     {
         if (trim((string)($this->config['shopbot_ai_url'] ?? '')) !== '') {
-            return $this->askShopBot($context);
+            $external = $this->askShopBot($context);
+            // Same guard, same permitted set. The prompt reference is the one
+            // this brain would have built — the data section is identical.
+            return $external === null ? null
+                 : $this->guardReply($external, $context, $this->brain->promptPreview($context));
         }
         if (!$this->brain->isConfigured()) {
             $this->log('error', 'No AI provider key configured');
             return null;
         }
-        $result = $this->brain->reply($context);
+        $result = $this->guardReply($this->brain->reply($context), $context, $this->brain->lastSystemPrompt());
 
         $usage = $this->brain->getLastUsage();
         if ($usage) {
@@ -563,6 +559,179 @@ class AiReplyWorker extends WorkerBase
             ));
         }
         return $result;
+    }
+
+    /** Is every number in the selling business, not only the sales one? */
+    private function sellsOnAllNumbers(): bool
+    {
+        return filter_var($this->config['ai_sales_on_all_numbers'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * The live price list into the context, or a loud log line.
+     *
+     * The brain falls back to "PLANS unavailable" and hands over when this
+     * fails — safe, but it must never be invisible in the log.
+     */
+    private function loadCatalogue(array &$ctx, int $convId): void
+    {
+        $products = $this->tools->getProducts();
+        if ($products['ok']) {
+            $ctx['products'] = $products['data'];
+            $mirrors = (int)($products['data']['hardware_plan_mirrors'] ?? 0);
+            $this->log('info', sprintf('conv %d: catalogue loaded, %d plan(s), %d hardware item(s)%s',
+                $convId, (int)($products['data']['count'] ?? 0),
+                (int)($products['data']['hardware_count'] ?? 0),
+                $mirrors > 0 ? sprintf(', %d plan mirror(s) dropped from hardware', $mirrors) : ''));
+            if (!empty($products['data']['hardware_error'])) {
+                $this->log('warn', 'conv ' . $convId . ': hardware lookup failed — '
+                    . (string)$products['data']['hardware_error']);
+            }
+        } else {
+            $this->log('error', 'conv ' . $convId . ': product lookup FAILED — '
+                . (string)($products['error'] ?? 'unknown') . ' (AI will not quote prices)');
+        }
+    }
+
+    /**
+     * The last check before a reply reaches a person — on this path for the
+     * first time.
+     *
+     * ReplyPrivacyGuard has carried the rule this needs since B3: money the
+     * tools did not return and the prompt does not contain is refused, and
+     * the whole reply goes. It was wired into the WASender webhook and never
+     * into this worker, which is the path Uganda runs. On 16 Sep a prospect
+     * on the support number was quoted a kit, an installation and two
+     * monthly plans — four figures, none in uCRM, all invented — because
+     * that number was never handed the catalogue and nothing between the
+     * model and the customer looked at the numbers. "Never invent a price"
+     * is a prompt instruction; this is the boundary.
+     *
+     * On a block the customer gets the safe fallback, the thread is handed to
+     * a person with the category as the reason, and an event is stored with
+     * metadata only. The blocked text is written nowhere.
+     */
+    private function guardReply(array $ai, array $ctx, string $prompt): array
+    {
+        $reply = (string)($ai['reply'] ?? '');
+        if (trim($reply) === '') return $ai;   // nothing to send; the escalate flag stands
+
+        if (!class_exists('ReplyPrivacyGuard')) {
+            require_once dirname(__DIR__) . '/lib/ReplyPrivacyGuard.php';
+        }
+        try {
+            $res = \ReplyPrivacyGuard::check($reply, [
+                'values' => $this->permittedValues($ctx, $prompt),
+                'prompt' => $prompt,
+            ]);
+        } catch (\Throwable $e) {
+            // Fail closed: a reply nobody checked is the failure this exists
+            // to end, and the fallback is a smaller one than a wrong price.
+            $this->log('error', 'guard failed, reply withheld: ' . $e->getMessage());
+            $res = ['safe' => false, 'reply' => \ReplyPrivacyGuard::SAFE_FALLBACK, 'categories' => ['guard_error']];
+        }
+        if (!empty($res['safe'])) return $ai;
+
+        $convId = (int)($ctx['conversation_id'] ?? 0);
+        $cats   = implode(',', (array)($res['categories'] ?? []));
+        $this->log('warn', sprintf('conv %d: reply BLOCKED by guard — %s (len=%d)', $convId, $cats, mb_strlen($reply)));
+        try {
+            $this->store->append('ai_security_events.json', \ReplyPrivacyGuard::auditEvent($res, [
+                'conversation_id' => $convId,
+                'customer_id'     => (int)($ctx['customer']['id'] ?? 0),
+                'channel'         => (string)($ctx['channel'] ?? ''),
+                'provider'        => 'ai_reply_worker',
+                'blocked_length'  => strlen($reply),
+            ]));
+        } catch (\Throwable $e) {
+            $this->log('warn', 'guard event not stored: ' . $e->getMessage());
+        }
+
+        return [
+            'reply'           => \ReplyPrivacyGuard::SAFE_FALLBACK,
+            'escalate'        => true,
+            'escalate_reason' => 'reply blocked by guard: ' . $cats,
+            'send_flyer'      => false,
+            'lead'            => null,
+            'photo'           => '',
+            'doc'             => '',
+        ];
+    }
+
+    /**
+     * What this reply is allowed to contain, by number.
+     *
+     * Everything in the context the model was given: the catalogue, the
+     * customer's own services and account, their name and number. Then the
+     * arithmetic a correct sales answer needs and the prompt itself does not
+     * spell out: every sum of the one-time items (TOTAL TO GET CONNECTED is
+     * kit plus installation) and whole-month multiples of each plan (a year
+     * of a plan is not an invention). Then the customer's own words, this
+     * turn and earlier — a figure they typed may be echoed back. Then every
+     * number already in the prompt, so our own phone number reformatted is
+     * still ours. Prices are added with and without .00, since the guard
+     * compares digit strings and the model writes either.
+     *
+     * Nothing here reaches beyond this conversation's context. No other
+     * customer, no other record, is consulted.
+     *
+     * @return string[]
+     */
+    private function permittedValues(array $ctx, string $prompt): array
+    {
+        $values = [];
+        $walk = function ($node) use (&$walk, &$values): void {
+            if (is_array($node)) { foreach ($node as $v) $walk($v); return; }
+            if ($node === null || is_bool($node)) return;
+            $values[] = (string)$node;
+        };
+        foreach (['products', 'customer', 'services', 'account', 'customer_phone', 'push_name'] as $k) {
+            if (isset($ctx[$k])) $walk($ctx[$k]);
+        }
+
+        $hw = [];
+        foreach ((array)($ctx['products']['hardware'] ?? []) as $h) {
+            if (isset($h['price']) && is_numeric($h['price'])) $hw[] = (float)$h['price'];
+        }
+        $hw = array_slice($hw, 0, 10);                 // at most 1023 sums
+        $n  = count($hw);
+        for ($mask = 1; $mask < (1 << $n); $mask++) {
+            $sum = 0.0;
+            for ($i = 0; $i < $n; $i++) if ($mask & (1 << $i)) $sum += $hw[$i];
+            $values[] = self::money($sum);
+        }
+        foreach ((array)($ctx['products']['products'] ?? []) as $p) {
+            if (!isset($p['price']) || !is_numeric($p['price'])) continue;
+            for ($m = 1; $m <= 12; $m++) $values[] = self::money((float)$p['price'] * $m);
+        }
+
+        $said = [(string)($ctx['message'] ?? '')];
+        foreach ((array)($ctx['history'] ?? []) as $h) {
+            if (($h['role'] ?? '') === 'customer') $said[] = (string)($h['text'] ?? '');
+        }
+        foreach ($said as $s) {
+            foreach (preg_split('/\s+/', $s) ?: [] as $w) {
+                $w = trim($w, ".,;:!?()[]\"'");
+                if ($w !== '') $values[] = $w;
+            }
+        }
+
+        if ($prompt !== '' && preg_match_all('/\+?\d[\d\s,.-]{4,}\d/', $prompt, $m) > 0) {
+            foreach ($m[0] as $found) $values[] = $found;
+        }
+
+        $out = [];
+        foreach ($values as $v) {
+            $out[] = $v;
+            if (preg_match('/^\d+(\.\d+)?$/', $v) === 1) $out[] = number_format((float)$v, 2, '.', '');
+        }
+        return $out;
+    }
+
+    /** A price as the prompt prints it: no trailing zeros, no dangling point. */
+    private static function money(float $v): string
+    {
+        return rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
     }
 
     /**

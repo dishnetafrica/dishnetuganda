@@ -43,6 +43,8 @@ class DishNetAiBrain
     private string $apiKey;
     private string $model;
     private array  $lastUsage = [];
+    /** The system prompt the last reply() built — the guard's public-figure reference. */
+    protected string $lastSystemPrompt = '';
 
     public function __construct(array $config)
     {
@@ -76,6 +78,13 @@ class DishNetAiBrain
     public function getLastUsage(): array { return $this->lastUsage; }
 
     /**
+     * The system prompt reply() last sent. ReplyPrivacyGuard is given it so a
+     * figure the model was handed publicly — a catalogue price, our own
+     * phone number — is never mistaken for a disclosure.
+     */
+    public function lastSystemPrompt(): string { return $this->lastSystemPrompt; }
+
+    /**
      * Turn a context envelope into a customer-ready reply.
      *
      * Never throws. A failure returns escalate=true with an empty reply, so the
@@ -104,6 +113,7 @@ class DishNetAiBrain
         }
 
         $system = $this->buildSystemPrompt($context);
+        $this->lastSystemPrompt = $system;
         $turns  = $this->buildTurns($context);
 
         try {
@@ -1137,9 +1147,18 @@ class DishNetAiBrain
             // settings, and it is used verbatim; unset, the careful old
             // behaviour stands.
             $d .= $this->currencyRule();
-        } elseif (($ctx['channel'] ?? '') === 'sales') {
-            $d .= "\nPLANS: unavailable right now. Do not name any plan or price. Take their "
-                . "requirements and hand over.\n";
+        } else {
+            // On EVERY channel, not only sales. The support number was told
+            // (ALSO ON THIS NUMBER: SALES ENQUIRIES) to answer what-it-costs
+            // questions from PLANS, and was never handed PLANS — and nothing
+            // in its data section said so. On 16 Sep it quoted a kit, an
+            // installation and two monthly plans from memory, four figures
+            // with no relation to uCRM. An absence the model is not told
+            // about is a gap it fills.
+            $d .= "\nPLANS: unavailable right now. Do not name any plan or price from memory — a "
+                . "price you were not given does not exist. Asked what we offer or what it "
+                . "costs, take their requirements and hand over. Amounts shown under THEIR "
+                . "SERVICES or ACCOUNT are the customer's own and may be stated.\n";
         }
 
         $hardware = $ctx['products']['hardware'] ?? null;
@@ -1169,7 +1188,7 @@ class DishNetAiBrain
                     . "will confirm and take their details. Never guess.\n";
             }
             $d .= $this->currencyRule();
-        } elseif (($ctx['channel'] ?? '') === 'sales') {
+        } else {
             $d .= "\nHARDWARE: no kit or installation prices are in your data. If asked what "
                 . "equipment costs, say you will confirm and take their details.\n";
         }
