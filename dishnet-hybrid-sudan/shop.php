@@ -53,8 +53,16 @@ if (!is_array($feed)) {
     if (!is_array($feed) && $cached !== false) $feed = json_decode($cached, true);
 }
 
+// Both lists: the feed now separates accessories from kits (so the website's
+// kits grid does not show twenty mounts), and the shop wants both.
+$priced = [];
+if (is_array($feed)) {
+    foreach (['hardware', 'accessories'] as $k) {
+        foreach ((array)($feed[$k] ?? []) as $row) $priced[] = $row;
+    }
+}
 $catalogue = ShopCatalogue::load(__DIR__);
-$resolved  = ShopCatalogue::resolve($catalogue, is_array($feed) ? (array)($feed['hardware'] ?? []) : []);
+$resolved  = ShopCatalogue::resolve($catalogue, $priced);
 
 if (($_GET['format'] ?? '') === 'json') {
     $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';

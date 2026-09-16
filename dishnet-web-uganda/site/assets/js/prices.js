@@ -174,7 +174,14 @@
       Array.prototype.forEach.call(hwGrid.querySelectorAll('[data-keep]'), function (el) {
         keep.push(el.outerHTML);
       });
-      hwGrid.innerHTML = (data.hardware || []).map(hwCard).join('') + keep.join('');
+      // Kits only. The feed's hardware list also carries Professional
+      // Installation, which is a service, not something anybody shops for as
+      // a card headed "one-off payment, includes delivery, installation and
+      // your first month". Accessories are their own list (shop.html) and
+      // never reached this grid.
+      var kits = (data.hardware || []).filter(function (h) { return /kit|package/i.test(h.name); });
+      if (!kits.length) return;
+      hwGrid.innerHTML = kits.map(hwCard).join('') + keep.join('');
       hwGrid.setAttribute('data-rendered', '1');
     }
 

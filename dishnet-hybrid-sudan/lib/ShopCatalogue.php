@@ -72,6 +72,22 @@ final class ShopCatalogue
         return $out;
     }
 
+    /**
+     * The catalogue slug for a uCRM product name, or ''. Used by the public
+     * feed so the website can build the photo URL without holding a second
+     * copy of the mapping.
+     */
+    public static function slugForName(string $pluginRoot, string $name): string
+    {
+        $k = self::nameKey($name);
+        foreach (self::load($pluginRoot)['items'] as $it) {
+            foreach ($it['match'] as $m) {
+                if (self::nameKey($m) === $k) return $it['slug'];
+            }
+        }
+        return '';
+    }
+
     public static function bySlug(array $catalogue, string $slug): ?array
     {
         foreach ((array)($catalogue['items'] ?? []) as $it) {
