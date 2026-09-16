@@ -102,6 +102,12 @@ $FLAGS = [
     // phone number printed on a Ugandan customer's quote.
     'ai_fact_location_pin' => ['text',
         'Map pin for the office — sent verbatim; unset means the AI must not write one'],
+    // 5.18.11: the tax treatment of listed prices, as a stated fact. Without
+    // it the assistant hedges ("the quotation confirms the tax treatment") on
+    // every price; with it, it says what the operator says, and still may
+    // not calculate a tax amount or rate.
+    'ai_fact_prices' => ['text',
+        'What to say about tax on listed prices, e.g. "All our listed prices include VAT." (unset = the AI hedges)'],
     'quote_company_name' => ['text',
         'Company name on quotations (unset = "DishNet Africa")'],
     'quote_company_phone' => ['text',
@@ -283,6 +289,10 @@ if (!$clear) {
         $warn[] = 'Now running as ' . dn_tz_label(['timezone' => trim($new)])
                 . '. Crons, reports, the cashbook day boundary and the 08:00-20:00 '
                 . 'follow-up window all move with it.';
+    }
+    if ($key === 'ai_fact_prices' && $new !== '' && preg_match('/\d/', $new)) {
+        $warn[] = 'This is repeated to customers as a fact. A figure in it (a rate, an amount) '
+                . 'will be repeated too — make sure it is exactly right and stays right.';
     }
     if ($key === 'ai_handover_message' && mb_strlen($new) > 160) {
         $warn[] = 'That is long for a holding line on WhatsApp. It is sent on its own, before '

@@ -159,8 +159,11 @@ $products = fn() => json_decode((string)$hit($port, '/products'), true) ?: [];
 [$rc, $out] = $run('');
 is_($rc === 0 && substr_count($out, 'would CREATE') === 20 && strpos($out, 'dry run') !== false,
     'dry run: 20 would be created, nothing changed', $out);
-is_(strpos($out, 'tax setting copied from: Starlink Mini Kit') !== false && strpos($out, 'taxId 3') !== false,
-    'the tax setting is taken from the kit already in uCRM');
+is_(strpos($out, 'tax setting copied from: Starlink Mini Kit') !== false && strpos($out, 'taxable yes') !== false
+    && strpos($out, 'no taxId on it') !== false,
+    'the tax setting is taken from the kit already in uCRM: taxable, no taxId');
+is_(preg_match('/uCRM product names:\n(  - .*\n){4}/', $out) === 1 && strpos($out, '  - Professional Installation') !== false,
+    'the dry run prints the exact product names uCRM holds');
 is_(count($products()) === 4, 'and uCRM still has its 4 products');
 
 [$rc, $out] = $run('--apply');
@@ -174,9 +177,9 @@ $live = $products();
 is_(count($live) === 24, 'uCRM now has 24 products');
 $byName = []; foreach ($live as $p) $byName[$p['name']] = $p;
 is_(isset($byName['Wall Mount | Mini']) && (float)$byName['Wall Mount | Mini']['price'] === 301000.0
-    && ($byName['Wall Mount | Mini']['taxId'] ?? null) === 3 && ($byName['Wall Mount | Mini']['unit'] ?? '') === 'pc'
-    && strpos((string)($byName['Wall Mount | Mini']['description'] ?? ''), 'Fits: Mini') === 0,
-    'exact name, seed price, the kit\'s tax, unit pc, and the fit line as description', json_encode($byName['Wall Mount | Mini'] ?? null));
+    && ($byName['Wall Mount | Mini']['taxable'] ?? null) === true && ($byName['Wall Mount | Mini']['taxId'] ?? null) === null
+    && ($byName['Wall Mount | Mini']['unit'] ?? '') === 'pc' && !array_key_exists('description', $byName['Wall Mount | Mini']),
+    'exact name, seed price, taxable like the kit, no taxId, unit pc, and only uCRM\'s own fields', json_encode($byName['Wall Mount | Mini'] ?? null));
 is_(isset($byName['Ridgeline Mount | Standard 4 or 4 X']) && (float)$byName['Ridgeline Mount | Standard 4 or 4 X']['price'] === 1881000.0,
     'the dearest item carries its shelf price');
 

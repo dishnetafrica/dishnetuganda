@@ -197,19 +197,26 @@ if ($path === '/service-plans') {
 }
 // A created product (5.18.11, shop_products_sync) is remembered across
 // requests, so a second run of the tool finds it and creates nothing.
+// Strict like the real one: uCRM's product has exactly name, invoiceLabel,
+// unit, price, taxable, taxId, and answers 422 "This field is not allowed"
+// to anything else — which is what the first live run of the sync tool hit.
 if ($path === '/products' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
-    $row  = ['id' => 100 + count($state['posted_products']), 'name' => (string)($body['name'] ?? ''),
-             'price' => $body['price'] ?? null, 'unit' => $body['unit'] ?? null,
-             'description' => $body['description'] ?? null];
-    if (array_key_exists('taxId', $body)) $row['taxId'] = $body['taxId'];
+    $allowed = ['name', 'invoiceLabel', 'unit', 'price', 'taxable', 'taxId'];
+    $errors  = [];
+    foreach (array_keys($body) as $k) if (!in_array($k, $allowed, true)) $errors[$k] = ['This field is not allowed.'];
+    if ($errors) out(['code' => 422, 'message' => 'Validation failed.', 'errors' => $errors], 422);
+    $row = ['id' => 100 + count($state['posted_products']), 'name' => (string)($body['name'] ?? ''),
+            'invoiceLabel' => $body['invoiceLabel'] ?? null, 'unit' => $body['unit'] ?? null,
+            'price' => $body['price'] ?? null, 'taxable' => $body['taxable'] ?? false, 'taxId' => $body['taxId'] ?? null];
     $state['posted_products'][] = $row;
     out($row, 201);
 }
 if ($path === '/products') {
     out(array_merge(
-        [['id' => 10, 'name' => 'Starlink Mini Kit', 'price' => 2249000, 'unit' => 'pc', 'taxId' => 3],
-         ['id' => 11, 'name' => 'Professional Installation', 'price' => 150000, 'unit' => 'pc', 'taxId' => 3],
+        // The live Mini Kit on 16 Sep: taxable, no taxId (uCRM's default tax applies).
+        [['id' => 10, 'name' => 'Starlink Mini Kit', 'invoiceLabel' => null, 'unit' => 'pc', 'price' => 2249000, 'taxable' => true, 'taxId' => null],
+         ['id' => 11, 'name' => 'Professional Installation', 'invoiceLabel' => null, 'unit' => 'pc', 'price' => 150000, 'taxable' => true, 'taxId' => 3],
          ['id' => 12, 'name' => 'Residential Lite (up to 100 Mbps)', 'price' => 249000, 'unit' => 'pc'],
          ['id' => 13, 'name' => 'Residential (up to 400 Mbps)', 'price' => 329000, 'unit' => 'pc']],
         $state['posted_products']));

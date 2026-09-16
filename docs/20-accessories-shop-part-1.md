@@ -1,6 +1,6 @@
 # 20 — The accessories shop, part 1: products in uCRM, a public page, and the assistant kept honest
 
-**Date:** 16 September 2026 · **Plugin:** 5.18.11 · **Status:** built, pending upload · **Follows:** [19](19-accessories-shop-catalogue.md)
+**Date:** 16 September 2026 · **Plugin:** 5.18.11, corrected as 5.18.12 · **Status:** 5.18.11 applied; its sync run created nothing (uCRM refused a `description` field); 5.18.12 built, pending upload · **Follows:** [19](19-accessories-shop-catalogue.md)
 
 ## What part 1 delivers
 
@@ -21,8 +21,14 @@ hidden rather than shown at a stale figure.
    create, and any seed price that disagrees with uCRM (reported as drift,
    never written; uCRM is right by definition). `--apply` creates the
    missing ones by exact name, copies the tax setting from the kit already in
-   uCRM (or `--tax-like "<product>"`), sets unit `pc` and the fit line as the
-   description. `--apply` refuses without `--prices-include-tax`, the
+   uCRM (or `--tax-like "<product>"`: `taxable`, and `taxId` when the kit has
+   one) and sets unit `pc`. uCRM's product record has exactly `name`,
+   `invoiceLabel`, `unit`, `price`, `taxable` and `taxId`; the first live run
+   sent a `description` too and uCRM refused all twenty with 422, creating
+   nothing — 5.18.12 sends only those fields, and the fake uCRM in the tests
+   is now as strict as the real one. The report also prints the exact
+   product names uCRM holds, which is how the kit cards' spellings are
+   confirmed. `--apply` refuses without `--prices-include-tax`, the
    operator's statement that uCRM enters prices with tax included and the
    seed prices are VAT-inclusive customer prices; the tool never divides by
    a rate to guess a net price. It never edits an existing product.
@@ -57,7 +63,8 @@ hidden rather than shown at a stale figure.
 6. **`ai_fact_prices`** is a new business fact. Set it once ("All our listed
    prices include VAT.") and the assistant states it instead of hedging; the
    fact carries the fence that it permits no tax arithmetic. Unset, nothing
-   is said, as before.
+   is said, as before. `tools/set_config.php` manages the key from 5.18.12
+   (5.18.11 shipped the fact without registering it there).
 
 ## What did not change
 
@@ -69,7 +76,7 @@ nothing else; the assistant's catalogue still comes from uCRM alone.
 
 ## Tests
 
-`tests/test_shop_part1.php` (47 assertions): the content file's integrity
+`tests/test_shop_part1.php` (48 assertions): the content file's integrity
 and its lack of any price key; resolution against a fake uCRM by exact name
 whatever the spacing or case, with unpriced or missing items hidden; the
 page's prices, order links, image routes, stock line, VAT note, group order,
@@ -88,7 +95,7 @@ missing).
 ## Server steps after upload
 
 ```
-docker exec ucrm grep -c '"version": "5.18.11"' /data/ucrm/data/plugins/dishnet-hybrid-sudan/manifest.json
+docker exec ucrm grep -c '"version": "5.18.12"' /data/ucrm/data/plugins/dishnet-hybrid-sudan/manifest.json
 docker exec ucrm cat /data/ucrm/data/plugins/dishnet-hybrid-sudan/build.json
 ```
 

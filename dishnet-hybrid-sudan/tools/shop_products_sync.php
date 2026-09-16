@@ -22,8 +22,13 @@ chdir(dirname(__DIR__));
  *     and that the seed prices are VAT-inclusive customer prices. It never
  *     divides by a rate to work out a net price;
  *   - the tax setting is copied from an existing product (--tax-like, or the
- *     first kit the catalogue recognises), so a new product carries the same
- *     VAT the kits do. Nothing here invents a tax figure.
+ *     first kit the catalogue recognises): `taxable`, and `taxId` when the
+ *     reference has one. Nothing here invents a tax figure.
+ *
+ * uCRM's product record has exactly these writable fields: name,
+ * invoiceLabel, unit, price, taxable, taxId. Anything else is refused with
+ * 422 "This field is not allowed" — the first live run sent a description
+ * and created nothing. Only those fields are sent.
  *
  * The seed (assets/shop/seed-2026-09-16.csv) is read by this tool only.
  * Nothing at runtime — not the shop, not the assistant — reads it.
@@ -92,14 +97,22 @@ if ($taxLike !== '') {
     }
     if ($ref === null && $live) $ref = is_array($live[0]) ? $live[0] : null;
 }
-$taxId = ($ref !== null && array_key_exists('taxId', $ref) && $ref['taxId'] !== null) ? (int)$ref['taxId'] : null;
+$taxId   = ($ref !== null && array_key_exists('taxId', $ref) && $ref['taxId'] !== null) ? (int)$ref['taxId'] : null;
+$taxable = ($ref !== null && array_key_exists('taxable', $ref)) ? (bool)$ref['taxable'] : null;
 
 printf("shop_products_sync — data dir %s\n", $dataDir);
 printf("uCRM products: %d · catalogue accessories: %d · seed rows: %d\n",
     count($live), count(array_filter($catalogue['items'], fn($i) => $i['kind'] === 'accessory')), count($seedPrices));
+// The exact spellings uCRM holds: the shop's kit cards match on these.
+echo "uCRM product names:\n";
+foreach ($live as $p) {
+    if (is_array($p)) printf("  - %s\n", (string)($p['name'] ?? '?'));
+}
 if ($ref !== null) {
-    printf("tax setting copied from: %s (fields: %s)%s\n", (string)($ref['name'] ?? '?'),
-        implode(', ', array_keys($ref)), $taxId === null ? ' — no taxId on it; new products get uCRM\'s default tax' : " — taxId {$taxId}");
+    printf("tax setting copied from: %s (fields: %s) — taxable %s, %s\n", (string)($ref['name'] ?? '?'),
+        implode(', ', array_keys($ref)),
+        $taxable === null ? 'not stated' : ($taxable ? 'yes' : 'no'),
+        $taxId === null ? 'no taxId on it (uCRM applies its default tax)' : "taxId {$taxId}");
 }
 echo "\n";
 printf("%-58s %14s  %-8s %s\n", 'product', 'seed price', 'uCRM', 'action');
@@ -147,9 +160,11 @@ if (!$taxOk) {
 $failed = 0;
 foreach ($toCreate as $c) {
     $it = $c['item'];
+    // Exactly uCRM's writable product fields. No description: the record has
+    // none, and sending one refused all twenty on the first live run.
     $payload = ['name' => $it['name'], 'price' => $c['price'], 'unit' => 'pc'];
-    if ($it['fits'] !== '') $payload['description'] = 'Fits: ' . mb_substr($it['fits'], 0, 200);
-    if ($taxId !== null) $payload['taxId'] = $taxId;
+    if ($taxable !== null) $payload['taxable'] = $taxable;
+    if ($taxId !== null)   $payload['taxId']   = $taxId;
     $res = $crm->post('products', $payload);
     if (is_array($res) && !empty($res['id'])) {
         printf("created  id %-5d %s\n", (int)$res['id'], $it['name']);
