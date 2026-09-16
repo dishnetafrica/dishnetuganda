@@ -1,6 +1,8 @@
 # 21 — The shop on the website, and the kits page it broke
 
-**Date:** 16 September 2026 · **Plugin:** 5.18.13 · **Website:** `dishnet-web-uganda` · **Follows:** [20](20-accessories-shop-part-1.md)
+**Date:** 16 September 2026 · **Plugin:** 5.18.13, applied 16 September · **Website:** `dishnet-web-uganda`, built and verified, awaiting its own deploy · **Follows:** [20](20-accessories-shop-part-1.md)
+
+Verified live after upload, with the ten-minute price cache cleared: the feed returns `hardware` 3 (Professional Installation and the two kits) and `accessories` 20.
 
 ## The regression, first
 
