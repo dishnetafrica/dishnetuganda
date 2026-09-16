@@ -1,6 +1,6 @@
 # 20 — The accessories shop, part 1: products in uCRM, a public page, and the assistant kept honest
 
-**Date:** 16 September 2026 · **Plugin:** 5.18.11, corrected as 5.18.12 · **Status:** 5.18.11 applied; its sync run created nothing (uCRM refused a `description` field); 5.18.12 built, pending upload · **Follows:** [19](19-accessories-shop-catalogue.md)
+**Date:** 16 September 2026 · **Plugin:** 5.18.11, corrected as 5.18.12 · **Status:** applied 16 September 2026 as 5.18.12 (5.18.11's sync run created nothing: uCRM refused a `description` field, and the 5.18.12 upload had to be confirmed by `build.json` before it took). Twenty products created, ids 8–27 · **Follows:** [19](19-accessories-shop-catalogue.md)
 
 ## What part 1 delivers
 
@@ -119,6 +119,27 @@ serves `prices.php`), and link it from the website menu. Two or three test
 chats on the sales number afterwards: ask what it costs to get connected and
 read that the total is kit plus installation with no mount in it, then ask
 for a wall mount and read that it is offered as an extra with its fit named.
+
+## What the live run settled
+
+The five products uCRM already held: `Starlink Mini Kit`, `Starlink Standard
+Kit`, `Professional Installation`, `Residential (up to 400 Mbps)`,
+`Residential Lite (up to 100 Mbps)`. Both kit spellings are in the shop
+catalogue's `match` lists, so both kit cards resolve. The installation is a
+service and is deliberately not a shop item; the two plan mirrors are dropped
+from hardware as before.
+
+**One open question for the operator, not a defect.** `Starlink Mini Kit`
+carries `taxable: false` in uCRM, so the sync tool copied that to all twenty
+accessories — which is the tool doing exactly what it promises, matching the
+kit rather than inventing a tax treatment. The consequence is worth stating
+plainly: an invoice line for any of these carries no VAT, and the fiscal
+mapper reads tax from the invoice line and never assumes one, so a fiscal
+invoice will show them as carrying none either. The customer pays the listed
+price, which is what "VAT inclusive" means to them. Whether these supplies
+should be VAT-taxable in uCRM is an accounting decision, and it applies to
+the kits first: the accessories merely match them. Changing it means changing
+the products in uCRM, not the plugin.
 
 ## Part 2
 
