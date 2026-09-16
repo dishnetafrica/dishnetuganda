@@ -1,6 +1,6 @@
 # 18 — Four prices that did not exist: the support number and the missing guard
 
-**Date:** 16 September 2026 · **Plugin:** 5.18.10 · **Status:** built, pending upload
+**Date:** 16 September 2026 · **Plugin:** 5.18.10 · **Status:** applied 16 September 2026 (manifest verified; baseline at install 0 blocks, 0 support turns with the catalogue — none had arrived yet)
 
 ## What happened
 
