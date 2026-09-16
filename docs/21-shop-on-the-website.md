@@ -1,6 +1,6 @@
 # 21 — The shop on the website, and the kits page it broke
 
-**Date:** 16 September 2026 · **Plugin:** 5.18.13, applied 16 September · **Website:** `dishnet-web-uganda`, built and verified, awaiting its own deploy · **Follows:** [20](20-accessories-shop-part-1.md)
+**Date:** 16 September 2026 · **Plugin:** 5.18.13, applied 16 September · **Website:** `dishnet-web-uganda`, deployed and live 16 September · **Follows:** [20](20-accessories-shop-part-1.md)
 
 Verified live after upload, with the ten-minute price cache cleared: the feed returns `hardware` 3 (Professional Installation and the two kits) and `accessories` 20.
 
@@ -96,6 +96,11 @@ curl -s 'https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.
 ```
 
 The website is a separate deployment: rebuild and redeploy the
-`dishnet-web-uganda` container for `shop.html` and the nav to appear. Until
-then the plugin's own page at `public.php?page=shop` serves the same
-catalogue.
+`dishnet-web-uganda` container for `shop.html` and the nav to appear. Done on
+16 September and confirmed live.
+
+**A trap for next time.** This work sits on `claude/study-this-jhe2eg`,
+which was 93 commits ahead of `main`, and `main` carried no `shop.html`.
+A website rebuild pointed at `main` would have deployed the site
+unchanged and looked like a failed deploy. Whichever branch the
+EasyPanel app builds from has to be the one carrying the change.
