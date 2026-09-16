@@ -13,17 +13,17 @@ the VAT as they do today.
 | # | Product (Starlink name) | Type | Store price USh | +30% exact | Shelf price USh |
 |---|---|---|---:|---:|---:|
 | 1 | Router Mini | Router | 231,481 | 300,925.30 | **301,000** |
-| 2 | Roof Rack Mount | Standard 4 or 4 X | Mount | 346,667 | 450,667.10 | **451,000** |
+| 2 | Roof Rack Mount \| Standard 4 or 4 X | Mount | 346,667 | 450,667.10 | **451,000** |
 | 3 | Standard 4 or 4 X to Standard Actuated Mount Adapter | Adapter | 173,333 | 225,332.90 | **226,000** |
-| 4 | X-Frame Base | Standard 4 or 4 X, Enterprise | Mount | 289,333 | 376,132.90 | **377,000** |
-| 5 | Ridgeline Mount | Standard 4 or 4 X | Mount | 1,446,667 | 1,880,667.10 | **1,881,000** |
+| 4 | X-Frame Base \| Standard 4 or 4 X, Enterprise | Mount | 289,333 | 376,132.90 | **377,000** |
+| 5 | Ridgeline Mount \| Standard 4 or 4 X | Mount | 1,446,667 | 1,880,667.10 | **1,881,000** |
 | 6 | Router 3 Mount | Mount | 173,333 | 225,332.90 | **226,000** |
-| 7 | Mobility Mount | Standard 4 or 4 X | Mount | 173,333 | 225,332.90 | **226,000** |
-| 8 | Power Supply Mount | Standard 4 X | Mount | 115,741 | 150,463.30 | **151,000** |
-| 9 | Pivot Mount | Standard 4 and 4 X, Enterprise | Mount | 289,333 | 376,132.90 | **377,000** |
-| 10 | Wall Mount | Standard 4 or 4 X | Mount | 289,333 | 376,132.90 | **377,000** |
-| 11 | Pipe Adapter | Standard 4 or 4 X | Adapter | 173,333 | 225,332.90 | **226,000** |
-| 12 | Router 3 | Starlink V4 or V5, Mini | Router | 636,000 | 826,800.00 | **827,000** |
+| 7 | Mobility Mount \| Standard 4 or 4 X | Mount | 173,333 | 225,332.90 | **226,000** |
+| 8 | Power Supply Mount \| Standard 4 X | Mount | 115,741 | 150,463.30 | **151,000** |
+| 9 | Pivot Mount \| Standard 4 and 4 X, Enterprise | Mount | 289,333 | 376,132.90 | **377,000** |
+| 10 | Wall Mount \| Standard 4 or 4 X | Mount | 289,333 | 376,132.90 | **377,000** |
+| 11 | Pipe Adapter \| Standard 4 or 4 X | Adapter | 173,333 | 225,332.90 | **226,000** |
+| 12 | Router 3 \| Starlink V4 or V5, Mini | Router | 636,000 | 826,800.00 | **827,000** |
 
 Twelve items. Store total 4,337,887; shelf total 5,646,000.
 
