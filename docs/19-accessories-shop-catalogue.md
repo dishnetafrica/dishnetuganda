@@ -1,6 +1,6 @@
 # 19 — Accessories shop: the catalogue to configure
 
-**Date:** 16 September 2026 · **Status:** list prepared, nothing built · **Source of prices:** the Starlink store for Uganda, Standard and Mini accessory pages, as read by the operator on 16 September 2026 · **Margin:** 30% on the store price
+**Date:** 16 September 2026 · **Status:** list prepared; part 1 built as 5.18.11, see [20](20-accessories-shop-part-1.md) · **Source of prices:** the Starlink store for Uganda, Standard and Mini accessory pages, as read by the operator on 16 September 2026 · **Margin:** 30% on the store price
 
 ## The rule for every price
 

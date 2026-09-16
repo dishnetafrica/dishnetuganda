@@ -709,6 +709,15 @@ class DishNetAiBrain
             $out .= '- ' . $customLabels[$key] . ': ' . $set
                   . ' If you cannot answer fully from this, ' . $esc . ".\n";
         }
+        // PRICES (5.18.11): the tax treatment, stated by the operator. The
+        // TAX rule forbids assuming either way; a stated fact is not an
+        // assumption, and without one the assistant hedged on every price.
+        // No default: unset, nothing is said, as before.
+        $prices = trim((string)($this->config['ai_fact_prices'] ?? ''));
+        if ($prices !== '' && strtolower($prices) !== 'omit') {
+            $out .= '- PRICES: ' . $prices . ' This is a stated fact you may repeat; it does not '
+                  . "permit you to calculate a tax amount or rate.\n";
+        }
         return $out;
     }
 
@@ -1191,6 +1200,27 @@ class DishNetAiBrain
         } else {
             $d .= "\nHARDWARE: no kit or installation prices are in your data. If asked what "
                 . "equipment costs, say you will confirm and take their details.\n";
+        }
+
+        // Optional extras, apart from the kit. Twenty mounts, routers and
+        // cables arrived in uCRM Products with the accessories shop; listed
+        // under HARDWARE they would read as parts of getting connected.
+        $accessories = $ctx['products']['accessories'] ?? null;
+        if (is_array($accessories) && $accessories) {
+            $d .= "\nACCESSORIES (optional extras, one-time, live from our system — quote these exactly):\n";
+            foreach ($accessories as $a) {
+                $d .= '- ' . ($a['name'] ?? 'Unnamed');
+                $d .= isset($a['price']) && $a['price'] !== null
+                    ? ' — price ' . rtrim(rtrim(number_format((float)$a['price'], 2, '.', ''), '0'), '.')
+                    : ' — price not listed (say you will confirm)';
+                $d .= " one-time\n";
+            }
+            $d .= "Offer an accessory only when the customer asks for one or describes the need it "
+                . "meets — a wall or pole to mount on, a vehicle, a house too large for one router. "
+                . "Never add an accessory into TOTAL TO GET CONNECTED unless the customer chose it; "
+                . "then it is its own named line. Fit matters: an item marked Mini fits the Mini, one "
+                . "marked Standard 4 or 4 X fits the Standard dish — say which before quoting.\n";
+            $d .= $this->currencyRule();
         }
 
         // Support

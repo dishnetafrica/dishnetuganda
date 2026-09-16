@@ -439,6 +439,20 @@ class DishNetTools
                 return true;
             }));
 
+            // Accessories (5.18.11). The shop catalogue names the optional
+            // extras — mounts, routers, cables. Held apart from the kit and
+            // the installation so the prompt can say "these are extras, not
+            // part of getting connected" instead of handing the model twenty
+            // three one-time items in one list and hoping.
+            if (!class_exists('ShopCatalogue')) require_once __DIR__ . '/ShopCatalogue.php';
+            $accessoryKeys = ShopCatalogue::accessoryNameKeys($this->pluginRoot);
+            $accessories   = [];
+            $hardware = array_values(array_filter($hardware, function (array $h) use ($accessoryKeys, &$accessories): bool {
+                $k = ShopCatalogue::nameKey((string)($h['name'] ?? ''));
+                if ($k !== '' && isset($accessoryKeys[$k])) { $accessories[] = $h; return false; }
+                return true;
+            }));
+
             $result = $this->ok([
                 'products'         => $out,
                 'count'            => count($out),
@@ -446,6 +460,8 @@ class DishNetTools
                 'hardware_count'   => count($hardware),
                 'hardware_plan_mirrors' => $mirrors,
                 'hardware_error'   => $hardwareError,
+                'accessories'      => $accessories,
+                'accessory_count'  => count($accessories),
                 '_schema_verified' => false,
                 '_note'            => 'Fields absent from UCRM are null. Never present a null field as a fact.',
             ]);

@@ -767,6 +767,20 @@ if ($page === 'prices') {
     exit;
 }
 
+// ── Public accessories shop (5.18.11) ──────────────────────────────────
+// URL: public.php?page=shop            the page (add &format=json for the website)
+//      public.php?page=shop_img&s=…    a product photo, sized (&w=240|480)
+if ($page === 'shop') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/shop.php';
+    exit;
+}
+if ($page === 'shop_img') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/shop_img.php';
+    exit;
+}
+
 // ── uCRM event webhook ───────────────────────────────────────────────
 // URL: public.php?page=crm_webhook
 //

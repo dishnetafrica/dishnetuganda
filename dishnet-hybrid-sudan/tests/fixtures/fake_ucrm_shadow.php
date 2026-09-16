@@ -15,7 +15,7 @@ declare(strict_types=1);
  */
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_shadow_' . ($_SERVER['SERVER_PORT'] ?? '0') . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['requests' => []];
+$state += ['requests' => [], 'posted_products' => []];
 
 function out($data, int $http = 200): void
 {
@@ -34,6 +34,7 @@ if ($path === '/__test/state')    out(['marker' => 'FAKE-UCRM-SHADOW']);
 if ($path === '/__test/requests') out(['requests' => $state['requests'],
                                        'count' => count($state['requests'])]);
 if ($path === '/__test/reset')    { $state['requests'] = []; out(['reset' => true]); }
+if ($path === '/__test/clear_products') { $state['posted_products'] = []; out(['cleared' => true]); }
 
 // Everything else is a real read, and every real read is recorded verbatim.
 $state['requests'][] = $uri;
@@ -194,11 +195,24 @@ if ($path === '/service-plans') {
           'periodMonths' => 1, 'downloadSpeed' => 100, 'uploadSpeed' => 20],
          ['id' => 2, 'name' => 'Residential (up to 400 Mbps)', 'price' => 329000, 'isActive' => true, 'periodMonths' => 1]]);
 }
+// A created product (5.18.11, shop_products_sync) is remembered across
+// requests, so a second run of the tool finds it and creates nothing.
+if ($path === '/products' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
+    $row  = ['id' => 100 + count($state['posted_products']), 'name' => (string)($body['name'] ?? ''),
+             'price' => $body['price'] ?? null, 'unit' => $body['unit'] ?? null,
+             'description' => $body['description'] ?? null];
+    if (array_key_exists('taxId', $body)) $row['taxId'] = $body['taxId'];
+    $state['posted_products'][] = $row;
+    out($row, 201);
+}
 if ($path === '/products') {
-    out([['id' => 10, 'name' => 'Starlink Mini Kit', 'price' => 2249000, 'unit' => 'pc'],
-         ['id' => 11, 'name' => 'Professional Installation', 'price' => 150000, 'unit' => 'pc'],
+    out(array_merge(
+        [['id' => 10, 'name' => 'Starlink Mini Kit', 'price' => 2249000, 'unit' => 'pc', 'taxId' => 3],
+         ['id' => 11, 'name' => 'Professional Installation', 'price' => 150000, 'unit' => 'pc', 'taxId' => 3],
          ['id' => 12, 'name' => 'Residential Lite (up to 100 Mbps)', 'price' => 249000, 'unit' => 'pc'],
-         ['id' => 13, 'name' => 'Residential (up to 400 Mbps)', 'price' => 329000, 'unit' => 'pc']]);
+         ['id' => 13, 'name' => 'Residential (up to 400 Mbps)', 'price' => 329000, 'unit' => 'pc']],
+        $state['posted_products']));
 }
 
 // Identity resolution probes uCRM as a shortlist; an empty answer sends it

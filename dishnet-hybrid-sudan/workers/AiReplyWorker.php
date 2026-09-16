@@ -579,9 +579,11 @@ class AiReplyWorker extends WorkerBase
         if ($products['ok']) {
             $ctx['products'] = $products['data'];
             $mirrors = (int)($products['data']['hardware_plan_mirrors'] ?? 0);
-            $this->log('info', sprintf('conv %d: catalogue loaded, %d plan(s), %d hardware item(s)%s',
+            $acc = (int)($products['data']['accessory_count'] ?? 0);
+            $this->log('info', sprintf('conv %d: catalogue loaded, %d plan(s), %d hardware item(s)%s%s',
                 $convId, (int)($products['data']['count'] ?? 0),
                 (int)($products['data']['hardware_count'] ?? 0),
+                $acc > 0 ? sprintf(', %d accessor%s', $acc, $acc === 1 ? 'y' : 'ies') : '',
                 $mirrors > 0 ? sprintf(', %d plan mirror(s) dropped from hardware', $mirrors) : ''));
             if (!empty($products['data']['hardware_error'])) {
                 $this->log('warn', 'conv ' . $convId . ': hardware lookup failed — '
@@ -693,12 +695,27 @@ class AiReplyWorker extends WorkerBase
         foreach ((array)($ctx['products']['hardware'] ?? []) as $h) {
             if (isset($h['price']) && is_numeric($h['price'])) $hw[] = (float)$h['price'];
         }
-        $hw = array_slice($hw, 0, 10);                 // at most 1023 sums
+        $hw = array_slice($hw, 0, 6);                  // at most 63 non-empty subsets
+        // Accessories (5.18.11): a customer may take the kit, the
+        // installation and a wall mount. Every hardware subset, alone and
+        // with one or two accessories — a total with three mounts in it is
+        // one to confirm by hand, not to wave through.
+        $acc = [];
+        foreach ((array)($ctx['products']['accessories'] ?? []) as $a) {
+            if (isset($a['price']) && is_numeric($a['price'])) $acc[] = (float)$a['price'];
+        }
+        $acc = array_slice($acc, 0, 24);
+        $accSums = [];
+        foreach ($acc as $i => $a) {
+            $accSums[] = $a;
+            for ($j = $i + 1; $j < count($acc); $j++) $accSums[] = $a + $acc[$j];
+        }
         $n  = count($hw);
-        for ($mask = 1; $mask < (1 << $n); $mask++) {
+        for ($mask = 0; $mask < (1 << $n); $mask++) {
             $sum = 0.0;
             for ($i = 0; $i < $n; $i++) if ($mask & (1 << $i)) $sum += $hw[$i];
-            $values[] = self::money($sum);
+            if ($mask > 0) $values[] = self::money($sum);
+            foreach ($accSums as $extra) $values[] = self::money($sum + $extra);
         }
         foreach ((array)($ctx['products']['products'] ?? []) as $p) {
             if (!isset($p['price']) || !is_numeric($p['price'])) continue;
