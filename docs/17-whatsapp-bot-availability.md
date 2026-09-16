@@ -1,6 +1,6 @@
 # 17 — The assistant that went quiet: why, and what 5.18.9 changes
 
-**Date:** 15 September 2026 · **Plugin:** 5.18.9 · **Status:** built, pending upload
+**Date:** 15 September 2026 · **Plugin:** 5.18.9 · **Status:** applied 16 September 2026. The repair tool found 41 rows in 18 conversations, all from the notification record, and fixed them (remaining 0). Log baseline at install: `human active, skipping AI` 208; the four replacement lines 0.
 
 ## What happened
 
@@ -45,7 +45,7 @@ Around that, four smaller faults, all found in the same log:
    minutes) the queue marks a message dead. Nothing told the customer or the
    team.
 4. **Notification rows stamped ahead.** The record the notification service
-   writes into the conversation store used the local clock: 36 rows sat
+   writes into the conversation store used the local clock: 41 rows sat
    three hours ahead of their own creation, so the Inbox showed a reminder
    after messages sent later, and `last_agent_at` in the future made the
    watchdog think that customer had been answered.
