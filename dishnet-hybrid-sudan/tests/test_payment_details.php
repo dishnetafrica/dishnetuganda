@@ -92,5 +92,21 @@ is_(strpos($src, 'Read it back against the bank statement') !== false,
 is_(strpos($src, 'That names a South Sudan place') !== false,
     'an office or delivery text naming Juba is flagged on a Uganda box');
 
+echo "\n6. And the example template cannot be pasted straight through\n";
+// It was. The 5.18.14 deploy note carried "<BANK>, account <NUMBER>" as a
+// shape to fill in; it went in verbatim and the assistant began telling
+// customers to pay into "account <NUMBER>" — worse than the refusal it had
+// replaced. Angle-bracketed capitals are never something a customer should
+// read, so the tool refuses the value rather than warning about it.
+is_(preg_match('/<\[A-Z\]\[A-Z0-9 _-\]\{1,30\}>/', $src) === 1,
+    'set_config refuses a value still carrying a placeholder');
+is_(strpos($src, 'nothing was saved') !== false, 'and says nothing was saved');
+is_(strpos($src, 'or use --clear to leave the setting unset') !== false,
+    'offering the way back when the real value is not to hand');
+$refusal = strpos($src, 'That still has the example placeholder');
+$tzCheck  = strpos($src, "\$key === 'timezone' && trim(\$new) !== ''");
+is_($refusal !== false && $tzCheck !== false && $refusal < $tzCheck,
+    'the check runs before anything is written');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

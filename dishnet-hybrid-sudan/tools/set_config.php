@@ -248,6 +248,18 @@ $new = $clear ? '' : $value('--value');
 // silently ignored and the box keeps running on the Africa/Juba default, an
 // hour off Kampala, with every cron, report and follow-up window quietly
 // wrong and nothing anywhere saying so.
+// A template pasted straight through, placeholders and all. The example in
+// the 5.18.14 deploy notes used <BANK> and <NUMBER>; it was pasted verbatim
+// and the assistant began telling customers to pay into "account <NUMBER>",
+// which is worse than the refusal it replaced. Angle-bracketed capitals are
+// never a value a customer should read, so this is a refusal, not a warning.
+if (!$clear && preg_match('/<[A-Z][A-Z0-9 _-]{1,30}>/', $new, $ph)) {
+    echo "\n  That still has the example placeholder " . $ph[0] . " in it, so nothing was saved.\n\n";
+    echo "  Customers would have read it exactly as typed. Replace every <...> with the\n";
+    echo "  real value and run it again, or use --clear to leave the setting unset.\n\n";
+    exit(1);
+}
+
 if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {
     echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
     echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";

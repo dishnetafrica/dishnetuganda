@@ -1,6 +1,6 @@
 # 22 — The sale that stopped at "which number do I pay to?"
 
-**Date:** 17 September 2026 · **Plugin:** 5.18.14 · **Status:** built, pending upload
+**Date:** 17 September 2026 · **Plugin:** 5.18.14, corrected by 5.18.15 · **Status:** live
 
 ## What happened
 
@@ -70,19 +70,42 @@ insists on verbatim — a correct answer withheld is a smaller failure than a
 wrong one sent, but it still costs the customer their answer, so the model
 is told plainly not to retype the number its own way.
 
-The account number lives in exactly one place, the config value. It is not
-in the code, not in the catalogue, not in the website.
+The assistant's copy of the account number lives in exactly one place, the
+config value: not in the plugin code, not in the catalogue, not on the
+website. The company's banking details do also appear as the shipped
+defaults in `tools/set_email_brand.php`, which is where the quotation and
+invoice PDF templates read them from — that is the right place for them and
+always was. It does mean there are two copies to keep in step, so a change
+at the bank is a change in both: the branding defaults and this fact.
 
 ## Setting it
 
+The account number is not repeated in this record. Read it off the company's
+own quotation, a bank statement, or the branding defaults in
+`tools/set_email_brand.php` at the moment of setting — the value on the
+quotation the customer already holds is the one they must pay into, so the
+quotation is the better source of the two. What follows is the **shape** of
+the command, not a command to run:
+
 ```
-docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_payment --value "pay into DishNet Africa Ltd, <BANK>, account <NUMBER>, branch <BRANCH>. Mobile money: <TILL>. Send the deposit slip here and we confirm within the hour."
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_payment --value "Pay by bank transfer to <ACCOUNT NAME> at <BANK>, <BRANCH>, <BANK ADDRESS>. UGX account number <NUMBER>. Enter the account name and number exactly as written. Use your own name as the payment reference, then send the transfer confirmation here so we can match it to your order."
 ```
+
+Since 5.18.15 that exact text is **refused**: every `<...>` has to be
+replaced with a real value first. See below for why that refusal exists.
 
 Read the number back against a bank statement before leaving the terminal:
 the assistant repeats it character for character, and a digit changed at the
 bank without changing it here is a customer paying into an account that is
 no longer ours.
+
+**One account, not two.** The company holds a UGX account and a USD account
+whose numbers differ only in the final digit. Only the UGX one belongs in
+this fact. Two near-identical numbers in the same prompt is an invitation to
+transpose them, and a customer who pays the right amount into the wrong
+account of ours has still lost their money for a fortnight. International
+payers are a hand-over to a person, which is what the assistant does anyway
+for anything this fact does not answer.
 
 Check the other two while there — unset, they are still answering as South
 Sudan:
@@ -90,6 +113,45 @@ Sudan:
 ```
 docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php | grep -A2 "ai_fact_"
 ```
+
+## 5.18.15 — the template that went live
+
+The command block above, in its 5.18.14 form, was written as an example with
+`<BANK>`, `<NUMBER>`, `<BRANCH>` and `<TILL>` in it. It was pasted into the
+terminal and run exactly as published, and the setting saved: the assistant
+was then configured to tell paying customers to pay into `account <NUMBER>`
+at `<BANK>`. Worse than the refusal it replaced, and entirely my doing — a
+deploy note that can be copied and run *is* copied and run, which is the
+whole point of writing self-contained commands.
+
+Three things were wrong and only one of them was the operator's keyboard:
+
+- the example was indistinguishable from the real commands around it — same
+  block, same prefix, same shape;
+- nothing between the paste and the customer looked at the value. The
+  account-number warning fired and was printed, but a warning after a
+  successful save is a note, not a stop;
+- the tool had no idea what a placeholder was.
+
+`tools/set_config.php` now refuses any value containing an angle-bracketed
+run of capitals, before it writes anything, on every key:
+
+```
+  That still has the example placeholder <BANK> in it, so nothing was saved.
+
+  Customers would have read it exactly as typed. Replace every <...> with the
+  real value and run it again, or use --clear to leave the setting unset.
+```
+
+It exits non-zero and the previous value stands. The check is deliberately
+crude — `<` followed by capitals is never something a customer should read,
+in any of these settings — and deliberately a refusal rather than a warning,
+because the failure it prevents is silent: a saved placeholder looks exactly
+like a saved value in the listing, and only a customer finds out.
+
+The documentation fix matters as much as the code one. Example values in
+these records now say so in the prose above the block, and the one command
+worth running is the one with real values in it.
 
 ## The part the plugin cannot fix
 
@@ -104,15 +166,17 @@ worth doing before the account number goes live.
 
 ## Tests
 
-`tests/test_payment_details.php` (20 assertions): the default refusal and
+`tests/test_payment_details.php` (24 assertions): the default refusal and
 the South Sudan pay page when unset; the operator's text replacing both
 entirely when set; the verbatim instruction present for payment and absent
 from every other fact; the guard sending the configured account, blocking a
 different one with the fallback, blocking a re-spaced one, and leaving a
 figure-free reply alone; and all three keys managed by the settings tool with
-their warnings. Four mutations each fail it: the verbatim rule dropped, the
-operator text ignored, the key unmanaged, the guard's identifier check
-disabled.
+their warnings. Since 5.18.15 it also asserts that a placeholder value is refused, that
+nothing is saved when it is, that the message names `--clear`, and that the
+check runs before any write. Five mutations each fail it: the verbatim rule
+dropped, the operator text ignored, the key unmanaged, the guard's identifier
+check disabled, the placeholder refusal removed.
 
 ## Two rotted tests, found and fixed on the way
 
