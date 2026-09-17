@@ -108,6 +108,18 @@ $FLAGS = [
     // not calculate a tax amount or rate.
     'ai_fact_prices' => ['text',
         'What to say about tax on listed prices, e.g. "All our listed prices include VAT." (unset = the AI hedges)'],
+    // The three business facts that shipped with South Sudan wording and had
+    // no way to change them: not on the uCRM Configuration screen, not in the
+    // Engage tab, not here. Unset, a Ugandan customer is told the office is
+    // in Juba and that kits cross at the Joda border, and that we never share
+    // bank details. "omit" drops a fact entirely, which beats saying the
+    // wrong thing while the right words are still being decided.
+    'ai_fact_payment' => ['text',
+        'How customers pay — the AI repeats it verbatim; "omit" says nothing (unset = the South Sudan pay page, and a refusal to give bank details)'],
+    'ai_fact_office' => ['text',
+        'Where the office is and its hours (unset = the Juba office, South Sudan)'],
+    'ai_fact_delivery' => ['text',
+        'How kits reach the customer (unset = flown to Renk and across the Joda border into Sudan)'],
     'quote_company_name' => ['text',
         'Company name on quotations (unset = "DishNet Africa")'],
     'quote_company_phone' => ['text',
@@ -289,6 +301,18 @@ if (!$clear) {
         $warn[] = 'Now running as ' . dn_tz_label(['timezone' => trim($new)])
                 . '. Crons, reports, the cashbook day boundary and the 08:00-20:00 '
                 . 'follow-up window all move with it.';
+    }
+    if ($key === 'ai_fact_payment' && $new !== '' && strtolower($new) !== 'omit'
+        && preg_match('/\d[\d\s-]{6,}\d/', $new)) {
+        $warn[] = 'That looks like an account or till number. The AI repeats it to customers '
+                . 'character for character, and the reply guard refuses any figure that is not '
+                . 'in this text — so a typo here is a customer paying into nothing, and a digit '
+                . 'changed later without changing this is a customer paying into the old one. '
+                . 'Read it back against the bank statement before you leave the terminal.';
+    }
+    if (in_array($key, ['ai_fact_office', 'ai_fact_delivery'], true) && $new !== ''
+        && preg_match('/\b(juba|sudan|renk|joda)\b/i', $new)) {
+        $warn[] = 'That names a South Sudan place. This box answers Ugandan customers.';
     }
     if ($key === 'ai_fact_prices' && $new !== '' && preg_match('/\d/', $new)) {
         $warn[] = 'This is repeated to customers as a fact. A figure in it (a rate, an amount) '

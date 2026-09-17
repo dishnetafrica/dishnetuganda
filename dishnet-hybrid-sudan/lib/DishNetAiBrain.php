@@ -706,8 +706,20 @@ class DishNetAiBrain
             }
             // An operator's own words, plus the escalation mechanism, which is
             // machinery rather than a fact and must not be lost with the text.
-            $out .= '- ' . $customLabels[$key] . ': ' . $set
-                  . ' If you cannot answer fully from this, ' . $esc . ".\n";
+            $out .= '- ' . $customLabels[$key] . ': ' . $set;
+            // A payment fact usually carries an account number, and a number
+            // the model retypes its own way is a number the reply guard
+            // refuses (it permits what the prompt contains, character for
+            // character). Re-spacing an account number costs the customer
+            // their answer; inventing one costs them their money. Same rule
+            // the location pin has carried since it was invented once.
+            if ($key === 'ai_fact_payment') {
+                $out .= ' Write any account number, till number or address in this'
+                      . ' EXACTLY as written above, character for character — never'
+                      . ' reformat it, never add or remove spaces, never shorten it.'
+                      . ' If you are not certain of a digit, do not write it: ' . $esc . '.';
+            }
+            $out .= ' If you cannot answer fully from this, ' . $esc . ".\n";
         }
         // PRICES (5.18.11): the tax treatment, stated by the operator. The
         // TAX rule forbids assuming either way; a stated fact is not an
