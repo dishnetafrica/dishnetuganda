@@ -101,11 +101,17 @@ final class ReplyPrivacyGuard
      * Inspect a reply.
      *
      * @param string $reply     what the model produced
-     * @param array  $permitted ['values' => string[], 'prompt' => string]
+     * @param array  $permitted ['values' => string[], 'prompt' => string,
+     *                           'public' => string[]]
      *                          values: what the tools returned, plus what the
      *                          customer themselves said. prompt: the system
      *                          prompt, so a figure already public in it is
      *                          allowed, and so a verbatim run FROM it is caught.
+     *                          public: operator-written text that is MEANT to
+     *                          reach customers word for word — the business
+     *                          facts typed into the settings. Without it the
+     *                          leak rule below refuses the payment fact the
+     *                          prompt orders the model to repeat verbatim.
      * @return array{safe:bool, reply:string, categories:array<int,string>}
      */
     public static function check(string $reply, array $permitted = []): array
@@ -161,8 +167,10 @@ final class ReplyPrivacyGuard
             }
         }
 
-        // A verbatim run out of our own instructions.
-        if ($prompt !== '' && self::quotesPrompt($text, $prompt)) $cats[] = 'system_prompt';
+        // A verbatim run out of our own instructions — except the parts an
+        // operator wrote for customers to read.
+        $public = (array)($permitted['public'] ?? []);
+        if ($prompt !== '' && self::quotesPrompt($text, $prompt, $public)) $cats[] = 'system_prompt';
 
         $cats = array_values(array_unique($cats));
         return $cats === []
@@ -238,12 +246,37 @@ final class ReplyPrivacyGuard
      * Sentence-level rather than word-level: a model repeating one phrase it
      * was told is ordinary, reciting a whole instruction is not.
      */
-    private static function quotesPrompt(string $reply, string $prompt): bool
+    /**
+     * A run of our own instructions, repeated back.
+     *
+     * $public is the operator's own customer-facing text — the business facts
+     * typed into the settings. A sentence that came from there is not a leak:
+     * it is the answer. This is not a hole in the rule, it is the rule's
+     * missing half. The prompt tells the model to repeat the payment fact
+     * character for character, and without this the guard refused exactly the
+     * replies that obeyed — a customer asking which account to pay into got
+     * the safe fallback and a hand-over, which is the failure the fact was set
+     * to end.
+     *
+     * Only the operator's raw text is exempted, never the sentences the plugin
+     * writes around it ("If you cannot answer fully from this, escalate"), so
+     * the machinery stays as protected as it was.
+     *
+     * @param array<int,string> $public
+     */
+    private static function quotesPrompt(string $reply, string $prompt, array $public = []): bool
     {
+        $quotable = '';
+        foreach ($public as $text) {
+            $text = trim((string)$text);
+            if ($text !== '') $quotable .= $text . "\n";
+        }
         foreach (preg_split('/(?<=[.\n])\s+/', $prompt) ?: [] as $line) {
             $line = trim((string)$line);
             if (strlen($line) < 45) continue;
-            if (stripos($reply, $line) !== false) return true;
+            if (stripos($reply, $line) === false) continue;
+            if ($quotable !== '' && stripos($quotable, $line) !== false) continue;
+            return true;
         }
         return false;
     }

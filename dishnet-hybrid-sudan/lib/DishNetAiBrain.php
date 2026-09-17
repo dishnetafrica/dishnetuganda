@@ -646,6 +646,42 @@ class DishNetAiBrain
      * is the right answer while an operator knows the Sudan text is wrong and
      * does not yet have their own: saying nothing beats saying that.
      */
+    /**
+     * The operator's own words that are written to be read by a customer.
+     *
+     * The settings tool says as much on every one of these keys: "stated to
+     * customers as written", "the AI repeats it verbatim", "sent exactly this,
+     * character for character". The reply guard needs the same list, because
+     * its prompt-leak rule cannot otherwise tell an operator's answer from our
+     * instructions and refuses both.
+     *
+     * Only what the operator actually set. A built-in default is not returned:
+     * the South Sudan defaults carry instructions ("Say exactly that", "Do NOT
+     * promise a number of days") that no customer should be shown, and a
+     * default is nobody's deliberate choice.
+     *
+     * @param  array<string,mixed> $config
+     * @return array<int,string>
+     */
+    public static function operatorText(array $config): array
+    {
+        $keys = [
+            'ai_fact_location_pin',
+            'ai_fact_office',
+            'ai_fact_delivery',
+            'ai_fact_payment',
+            'ai_fact_prices',
+            'stock_statement',
+        ];
+        $out = [];
+        foreach ($keys as $k) {
+            $v = trim((string)($config[$k] ?? ''));
+            if ($v === '' || strtolower($v) === 'omit') continue;
+            $out[] = $v;
+        }
+        return $out;
+    }
+
     private function localFacts(): string
     {
         $esc = $this->markerHint(self::MARKER_ESCALATE);

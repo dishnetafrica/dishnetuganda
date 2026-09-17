@@ -625,6 +625,11 @@ class AiReplyWorker extends WorkerBase
             $res = \ReplyPrivacyGuard::check($reply, [
                 'values' => $this->permittedValues($ctx, $prompt),
                 'prompt' => $prompt,
+                // The business facts an operator typed for customers to read.
+                // The prompt orders the payment fact repeated character for
+                // character; without this the guard refused the replies that
+                // obeyed it.
+                'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
             ]);
         } catch (\Throwable $e) {
             // Fail closed: a reply nobody checked is the failure this exists

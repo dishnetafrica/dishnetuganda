@@ -10,6 +10,7 @@ require_once __DIR__ . '/AiMinimalContext.php';
 require_once __DIR__ . '/CustomerDataTools.php';
 require_once __DIR__ . '/UcrmCustomerDataGateway.php';
 require_once __DIR__ . '/ReplyPrivacyGuard.php';
+require_once __DIR__ . '/DishNetAiBrain.php';   // operatorText(): what may be quoted verbatim
 
 /**
  * WaAutoReplyService — Unified WhatsApp Auto-Reply (v4.11.3)
@@ -1240,7 +1241,13 @@ class WaAutoReplyService
         $prompt = method_exists($aiClient, 'lastSystemPrompt')
             ? (string)$aiClient->lastSystemPrompt() : '';
 
-        $res = \ReplyPrivacyGuard::check($reply, ['values' => $values, 'prompt' => $prompt]);
+        $res = \ReplyPrivacyGuard::check($reply, [
+            'values' => $values,
+            'prompt' => $prompt,
+            // Same list the Evolution worker passes: an operator's
+            // business facts are the answer, not a leak of the prompt.
+            'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
+        ]);
         if ($res['safe']) return $res['reply'];
 
         $tools_called = [];

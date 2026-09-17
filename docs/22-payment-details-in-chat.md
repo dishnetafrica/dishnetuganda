@@ -153,6 +153,68 @@ The documentation fix matters as much as the code one. Example values in
 these records now say so in the prose above the block, and the one command
 worth running is the one with real values in it.
 
+## 5.18.16 — the fact the assistant could not actually say
+
+Found by testing the live value rather than a sample one, an hour after the
+real account number went in.
+
+The prompt tells the model to write the payment fact **"EXACTLY as written
+above, character for character"**. `ReplyPrivacyGuard` also has a rule, older
+than any of this, that a 45-character run of the system prompt appearing in a
+reply is a prompt leak: the reply is discarded and the customer gets the safe
+fallback and a hand-over.
+
+Those two rules met for the first time when the payment fact was set. The
+more exactly the model obeyed, the more certainly its answer was thrown away.
+Against the brain's real prompt and the real configured value:
+
+| The assistant replies with | Before | After |
+|---|---|---|
+| the payment fact, word for word — what the prompt orders | blocked, `system_prompt` | sent |
+| the same with "Of course." in front | blocked | sent |
+| the account number, reworded around it | sent | sent |
+| a different account number | blocked, `foreign:phone` | blocked |
+| the number re-spaced | blocked | blocked |
+| any of our own 112 instruction sentences | blocked | blocked |
+
+So the customer who asked which account to pay into would have been handed to
+a person again — the same dead end as 17 September at 00:59, reached by a
+different road, and silent, because a hand-over looks like a hand-over and
+not like a fault. The office and delivery facts had it too.
+
+**The fix is not to soften the leak rule.** It is to tell the guard which part
+of the prompt an operator wrote *for customers*:
+`DishNetAiBrain::operatorText()` returns the business facts the operator
+actually set — pin, office, delivery, payment, prices, stock statement — and
+both reply paths pass them to the guard as `public`. A prompt sentence that
+came from there is an answer, not a leak. Everything else is refused exactly
+as before.
+
+Three boundaries hold it in place:
+
+- **only what the operator set.** A built-in default is never quotable: the
+  South Sudan defaults contain instructions ("Say exactly that", "Do NOT
+  promise a number of days") that no customer should be shown, and a default
+  is nobody's deliberate choice. `omit` is a decision to say nothing, so it
+  is not a string to quote either.
+- **only the operator's raw text**, never the sentences the plugin wraps
+  around it. "If you cannot answer fully from this, escalate" stays
+  protected — it is machinery, and it reads like an instruction because it
+  is one.
+- **verified by sweep, not by sample.** The test splits the real generated
+  prompt into every sentence of 45 characters or more and checks all of them:
+  the operator's are sent, and all 112 of ours are still refused. A hole in
+  this rule is invisible until a customer is reading our own prompt back to
+  us, so it is not something to spot-check.
+
+This also means what the settings tool has always said is now literally true:
+whatever is typed into these facts can reach a customer word for word. It is
+worth reading them back as a customer would.
+
+Four mutations fail the suite: the public list ignored (the bug as it
+shipped), the exemption widened to the whole prompt, `omit` treated as text,
+and the worker no longer passing the list.
+
 ## The part the plugin cannot fix
 
 The transcript is headed **Secure-Africa Solutions Limited**, because the

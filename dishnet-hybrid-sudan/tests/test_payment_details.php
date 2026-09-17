@@ -108,5 +108,81 @@ $tzCheck  = strpos($src, "\$key === 'timezone' && trim(\$new) !== ''");
 is_($refusal !== false && $tzCheck !== false && $refusal < $tzCheck,
     'the check runs before anything is written');
 
+echo "\n7. And the assistant can actually deliver it — the fact is quotable\n";
+// The one that nearly shipped. The prompt orders the payment fact repeated
+// "EXACTLY as written above, character for character"; the guard's leak rule
+// refuses any 45+ character run of the prompt echoed back. So the more
+// obediently the model answered "which account do I pay to?", the more
+// certainly its reply was replaced by the safe fallback and handed to a
+// person — the same dead end the fact was set to end, arriving by a
+// different road, and silent, because a hand-over looks like a hand-over.
+//
+// The fix is not to soften the leak rule. It is to tell the guard which part
+// of the prompt an operator wrote FOR customers. Nothing else is exempted.
+$cfg7 = ['ai_provider' => 'openai', 'openai_api_key' => 'k', 'ai_fact_payment' => $PAY];
+$b7   = new DishNetAiBrain($cfg7);
+$p7   = $b7->promptPreview(['channel' => 'sales', 'message' => 'where do I pay?',
+                            'identity_state' => 'unknown']);
+$pub7 = DishNetAiBrain::operatorText($cfg7);
+
+$verbatim = ReplyPrivacyGuard::check($PAY, ['values' => [], 'prompt' => $p7, 'public' => $pub7]);
+is_(!empty($verbatim['safe']), 'the payment fact repeated word for word is sent',
+    'categories: ' . implode(',', (array)($verbatim['categories'] ?? []))
+    . ' — the prompt ORDERS this reply, so blocking it blocks the answer');
+
+$wrapped = ReplyPrivacyGuard::check('Of course. ' . $PAY . ' Let me know once it is done.',
+    ['values' => [], 'prompt' => $p7, 'public' => $pub7]);
+is_(!empty($wrapped['safe']), 'and so is the same text with a greeting around it');
+
+// Without the list it is refused — which is what was happening live.
+$without = ReplyPrivacyGuard::check($PAY, ['values' => [], 'prompt' => $p7]);
+is_(empty($without['safe']) && in_array('system_prompt', (array)($without['categories'] ?? []), true),
+    'while the same reply with no public list is still refused as a leak',
+    'if this passes, the leak rule is no longer doing anything');
+
+// The rule itself must be untouched: every sentence of OUR instructions, and
+// the machinery wrapped around the operator's text, still refused. Swept
+// exhaustively rather than sampled, because a hole here is a hole nobody
+// sees until a customer is reading our prompt back to us.
+$segments = [];
+foreach (preg_split('/(?<=[.\n])\s+/', $p7) ?: [] as $s) {
+    $s = trim((string)$s);
+    if (strlen($s) >= 45) $segments[] = $s;
+}
+$quotable = implode("\n", $pub7);
+$ours = 0; $escaped = [];
+foreach ($segments as $s) {
+    if (stripos($quotable, $s) !== false) continue;          // the operator's own words
+    $ours++;
+    $r = ReplyPrivacyGuard::check('Sure — ' . $s, ['values' => [], 'prompt' => $p7, 'public' => $pub7]);
+    if (!empty($r['safe'])) $escaped[] = substr($s, 0, 70);
+}
+is_($ours >= 20, 'the sweep found our instructions to check against', $ours . ' sentences');
+is_($escaped === [], 'and not one sentence of them can be read back to a customer',
+    count($escaped) . ' escaped, first: ' . ($escaped[0] ?? '-'));
+
+// The exemption covers the operator's text only, never the sentence the
+// plugin appends to it. That sentence is machinery and reads like an
+// instruction, which is exactly what must not reach a customer.
+$machinery = 'If you cannot answer fully from this, tell them you will have a colleague confirm';
+$isMachinery = false;
+foreach ($segments as $s) { if (stripos($s, 'If you cannot answer fully from this') !== false) $isMachinery = true; }
+is_($isMachinery, 'the appended escalation sentence is in the prompt at all');
+is_(stripos($quotable, 'If you cannot answer fully from this') === false,
+    'and it is NOT in the quotable list — only the operator typed text is');
+
+echo "\n8. Both reply paths hand the guard that list\n";
+foreach (['workers/AiReplyWorker.php', 'lib/WaAutoReplyService.php'] as $f) {
+    $s = (string)file_get_contents($root . '/' . $f);
+    is_(strpos($s, "'public' => \\DishNetAiBrain::operatorText((array)(\$this->config ?? []))") !== false,
+        basename($f) . ' passes the operator facts to the guard');
+}
+// Only what the operator set. A built-in default carries instructions a
+// customer must never be shown ("Say exactly that", "Do NOT promise").
+is_(DishNetAiBrain::operatorText(['ai_provider' => 'openai']) === [],
+    'nothing is quotable when the operator has set nothing');
+is_(DishNetAiBrain::operatorText(['ai_fact_payment' => 'omit']) === [],
+    'and "omit" is a decision to say nothing, not a string to quote');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);
