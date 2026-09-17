@@ -1439,6 +1439,59 @@ class DishNetAiBrain
     // ══════════════════════════════════════════════════════════════════════
 
     /**
+     * Take <<LEAD {json}>> out of a reply, however the model closed it.
+     *
+     * A model wrote the marker with ONE closing angle bracket. The pattern
+     * required two, so nothing matched: the lead was never recorded, and the
+     * whole marker — the customer's own name and location, in JSON — was sent
+     * to that customer as the end of the message. Both halves of that are bad,
+     * and the second is the worse one.
+     *
+     * So the JSON is walked rather than matched: braces counted, strings
+     * respected, which also means a '}' or a '>' inside a value cannot end it
+     * early. Then however many '>' the model chose to close with, including
+     * none at all, are consumed.
+     *
+     * When the JSON never closes, there is no lead to save and everything from
+     * the marker onwards is machine syntax — so it is cut, rather than left to
+     * be read by somebody.
+     *
+     * @return array{0:?array<string,mixed>,1:string} the lead, and the reply without the marker
+     */
+    private static function takeLeadMarker(string $raw): array
+    {
+        if (!preg_match('/<<\s*' . self::MARKER_LEAD . '\s*/i', $raw, $m, PREG_OFFSET_CAPTURE)) {
+            return [null, $raw];
+        }
+        $start = (int)$m[0][1];
+        $open  = $start + strlen((string)$m[0][0]);
+        if (($raw[$open] ?? '') !== '{') return [null, $raw];
+
+        $depth = 0; $inStr = false; $esc = false; $end = null;
+        for ($i = $open, $n = strlen($raw); $i < $n; $i++) {
+            $c = $raw[$i];
+            if ($inStr) {
+                if ($esc)        { $esc = false; continue; }
+                if ($c === '\\') { $esc = true;  continue; }
+                if ($c === '"')  { $inStr = false; }
+                continue;
+            }
+            if ($c === '"') { $inStr = true; continue; }
+            if ($c === '{') { $depth++; continue; }
+            if ($c === '}') { $depth--; if ($depth === 0) { $end = $i; break; } }
+        }
+        if ($end === null) return [null, rtrim(substr($raw, 0, $start))];
+
+        $decoded = json_decode(substr($raw, $open, $end - $open + 1), true);
+        $after   = $end + 1;
+        while (($raw[$after] ?? '') === ' ')  $after++;
+        while (($raw[$after] ?? '') === '>')  $after++;
+
+        return [is_array($decoded) ? $decoded : null,
+                substr($raw, 0, $start) . substr($raw, $after)];
+    }
+
+    /**
      * Strip action markers and return the customer-facing text.
      *
      * Stripping is unconditional: a marker that reaches WhatsApp is a leak of
@@ -1450,11 +1503,11 @@ class DishNetAiBrain
         $escalate = false;
         $reason   = '';
 
-        if (preg_match('/<<\s*' . self::MARKER_ESCALATE . '\s*([^>]*)>>/i', $raw, $m)) {
+        if (preg_match('/<<\s*' . self::MARKER_ESCALATE . '\s*([^>]*)>{1,2}/i', $raw, $m)) {
             $escalate = true;
             $reason   = trim($m[1]) !== '' ? trim($m[1]) : 'AI requested handover';
         }
-        if (preg_match('/<<\s*' . self::MARKER_QUOTE . '\s*([^>]*)>>/i', $raw, $m)) {
+        if (preg_match('/<<\s*' . self::MARKER_QUOTE . '\s*([^>]*)>{1,2}/i', $raw, $m)) {
             // Quoting is a staff action today. Flag it for a human rather than
             // implying to the customer that a document is already on its way.
             $escalate = true;
@@ -1463,7 +1516,7 @@ class DishNetAiBrain
         // The flyer flag survives even when no flyer is configured: the worker
         // is the one who knows whether an image exists, and ignores the flag
         // when it does not. The marker itself is stripped below either way.
-        $sendFlyer = (bool)preg_match('/<<\s*' . self::MARKER_FLYER . '\b[^>]*>>/i', $raw);
+        $sendFlyer = (bool)preg_match('/<<\s*' . self::MARKER_FLYER . '\b[^>]*>{1,2}/i', $raw);
 
         // <<LEAD {json}>> — what the conversation established, for the sales
         // record. Carried as JSON because these are structured facts, not a
@@ -1477,7 +1530,7 @@ class DishNetAiBrain
         // sends nothing if it does not exist, so a hallucinated name costs a
         // photo rather than a wrong picture.
         $photo = '';
-        if (preg_match('/<<\s*' . self::MARKER_PHOTO . '\s+([a-z0-9][a-z0-9 _-]*)>>/i', $raw, $m)) {
+        if (preg_match('/<<\s*' . self::MARKER_PHOTO . '\s+([a-z0-9][a-z0-9 _-]*)>{1,2}/i', $raw, $m)) {
             $photo = trim(strtolower($m[1]));
         }
 
@@ -1485,20 +1538,23 @@ class DishNetAiBrain
         // photo: a name, resolved against the operator's folder, and nothing
         // sent when it does not exist.
         $doc = '';
-        if (preg_match('/<<\s*' . self::MARKER_DOC . '\s+([a-z0-9][a-z0-9 _-]*)>>/i', $raw, $m)) {
+        if (preg_match('/<<\s*' . self::MARKER_DOC . '\s+([a-z0-9][a-z0-9 _-]*)>{1,2}/i', $raw, $m)) {
             $doc = trim(strtolower($m[1]));
         }
 
-        $lead = null;
-        if (preg_match('/<<\s*' . self::MARKER_LEAD . '\s*(\{.*?\})\s*>>/is', $raw, $m)) {
-            $decoded = json_decode($m[1], true);
-            // Malformed JSON is dropped, never guessed at. The marker is still
-            // stripped, so a bad emission costs a lead, not a mangled reply.
-            if (is_array($decoded)) $lead = $decoded;
-            $raw = preg_replace('/<<\s*' . self::MARKER_LEAD . '\s*\{.*?\}\s*>>/is', '', $raw) ?? $raw;
-        }
+        // Malformed JSON is dropped, never guessed at, and the marker is removed
+        // either way: a bad emission costs a lead, not a mangled reply.
+        [$lead, $raw] = self::takeLeadMarker($raw);
 
         $clean = preg_replace('/<<[^>]*>>/', '', $raw);
+        // The net. Everything above expects the model to close a marker the way
+        // it was told to; this expects nothing. Any run that opens with << and
+        // names a marker we know is removed to its closer, or to the end of the
+        // message when it has none. Only our own names, so a customer's text
+        // that happens to contain << is untouched.
+        $names = implode('|', [self::MARKER_ESCALATE, self::MARKER_QUOTE, self::MARKER_FLYER,
+                               self::MARKER_LEAD, self::MARKER_PHOTO, self::MARKER_DOC]);
+        $clean = preg_replace('/<<\s*(?:' . $names . ')\b.*?(?:>+|$)/is', '', (string)$clean);
         $clean = trim(preg_replace("/\n{3,}/", "\n\n", (string)$clean));
 
         if (mb_strlen($clean) > self::MAX_REPLY_CHARS) {
