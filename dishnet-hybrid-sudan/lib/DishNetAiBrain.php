@@ -447,6 +447,17 @@ class DishNetAiBrain
         $kb = trim((string)($this->config['knowledge_block'] ?? ''));
         if ($kb !== '') {
             $p .= "\n" . $kb . "\n";
+            // The operator's OWN facts, alongside the knowledge base — never
+            // instead of it. See businessFactsBlock() for why this exists.
+            //
+            // false: only what the operator actually SET. The built-in
+            // defaults are South Sudan's (a Juba office, kits crossing at
+            // Joda) and exist as a fallback for an install with no knowledge
+            // base. Emitting them HERE would push Juba into a prompt whose
+            // knowledge base already answers the office question for its own
+            // country — the conflict this release exists to remove, recreated
+            // one paragraph lower down.
+            $p .= $this->businessFactsBlock(false);
         } else {
         $p .= "\nWHERE WE OPERATE:\n";
         $p .= "- This is DishNet SUDAN. If the customer's location is in South Sudan "
@@ -456,15 +467,7 @@ class DishNetAiBrain
         $p .= "- If you are not sure which country a place is in, ask which city they are in "
             . "rather than assuming.\n";
 
-        // ── Business facts the operator has stated ──────────────────────
-        // Dictated by the owner on 28 Aug 2026, with the office address taken
-        // verbatim from the South Sudan operation's own bot. These exist
-        // because customers asked and the AI had nothing: conv 15 asked for a
-        // branch, conv 34 asked how to pay. A stated fact beats an escalation;
-        // an invented one is worse than either -- so each fact carries its own
-        // fence around what may NOT be added to it.
-        $p .= "\nBUSINESS FACTS (answer from these directly):\n";
-        $p .= $this->localFacts();
+        $p .= $this->businessFactsBlock();
 
         $p .= "- HOW PRIORITY PLANS WORK (Starlink's standard behaviour, and what the "
             . "\"unlimited\" on our posters means): each plan includes the priority-data "
@@ -682,7 +685,52 @@ class DishNetAiBrain
         return $out;
     }
 
-    private function localFacts(): string
+    /**
+     * The facts an operator configured, in the words they configured.
+     *
+     * ── Why this is its own method ──────────────────────────────────────
+     *
+     * It used to live inside the `else` of coverageRules(), so a deployment
+     * with a seeded knowledge base got the knowledge base INSTEAD of these.
+     * On the Uganda install — 34 entries seeded — that meant every business
+     * fact set from tools/set_config.php reached nothing:
+     *
+     *   ai_fact_payment       the Ecobank account, set 17 Sep — never in a prompt
+     *   ai_fact_office        the Acacia Mall address — never in a prompt
+     *   ai_fact_delivery      how kits reach a customer — never in a prompt
+     *   ai_fact_prices        the VAT line — never in a prompt
+     *   ai_fact_location_pin  the map pin — never in a prompt
+     *
+     * Three releases (5.18.14, .15, .16) were written against a code path that
+     * does not execute on that install. The comment above the if/else called
+     * the legacy block a fallback "for installs that have not seeded a
+     * knowledge base", which is right about the South Sudan coverage text and
+     * wrong about these: a knowledge base is company policy, and these are
+     * this deployment's configuration. One does not supersede the other.
+     *
+     * The legacy coverage paragraphs stay in the `else` where they were, so a
+     * South Sudan install's prompt is byte-identical to before this change.
+     */
+    private function businessFactsBlock(bool $useDefaults = true): string
+    {
+        // ── Business facts the operator has stated ──────────────────────
+        // Dictated by the owner on 28 Aug 2026, with the office address taken
+        // verbatim from the South Sudan operation's own bot. These exist
+        // because customers asked and the AI had nothing: conv 15 asked for a
+        // branch, conv 34 asked how to pay. A stated fact beats an escalation;
+        // an invented one is worse than either -- so each fact carries its own
+        // fence around what may NOT be added to it.
+        $facts = $this->localFacts($useDefaults);
+        if (trim($facts) === '') return '';
+        return "\nBUSINESS FACTS (answer from these directly):\n" . $facts;
+    }
+
+    /**
+     * @param bool $useDefaults true keeps the built-in South Sudan fallbacks for
+     *                          facts the operator has not set; false omits them,
+     *                          which is what a knowledge-base install wants.
+     */
+    private function localFacts(bool $useDefaults = true): string
     {
         $esc = $this->markerHint(self::MARKER_ESCALATE);
 
@@ -726,7 +774,7 @@ class DishNetAiBrain
         if ($pin !== '') {
             $out .= "- LOCATION PIN: " . $pin . " — send exactly this, character for "
                   . "character. Never shorten it, tidy it, or write a different one.\n";
-        } else {
+        } elseif ($useDefaults) {
             $out .= "- LOCATION PIN: we have none on file. If someone asks for a pin, map "
                   . "link or directions, do NOT write one — say a colleague will send it and "
                   . $esc . ".\n";
@@ -737,7 +785,7 @@ class DishNetAiBrain
             if (strtolower($set) === 'omit') continue;
 
             if ($set === '') {
-                $out .= '- ' . $labels[$key] . ': ' . $default . "\n";
+                if ($useDefaults) $out .= '- ' . $labels[$key] . ': ' . $default . "\n";
                 continue;
             }
             // An operator's own words, plus the escalation mechanism, which is

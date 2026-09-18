@@ -14,6 +14,30 @@ refer to the invoice you receive after confirming your order for the
 official payment details."* There was no order and therefore no invoice. The
 sale stopped there.
 
+## Correction — 18 September 2026
+
+**The diagnosis below is wrong, and 5.18.21 explains why.** It is left in place
+because the reasoning it led to is still sound and the code it produced is
+still right; only the cause was misidentified.
+
+This record says the refusal came from the South Sudan default of
+`ai_fact_payment`. It did not. This install has 34 knowledge-base entries
+seeded, and `DishNetAiBrain::coverageRules()` was an if/else: a seeded
+knowledge base replaced the whole block containing `localFacts()`, so
+**neither the default nor any configured value was ever in the prompt**.
+
+The refusal came from a knowledge-base conduct rule, `RULE_PAYMENT_SAFETY`:
+
+> "Payments only via the official DishNet payment details **on the invoice**."
+
+which is nearly word for word what the customer was told.
+
+The consequence is that 5.18.14, 5.18.15 and 5.18.16 were all written against
+a code path that does not execute here. The Ecobank account set on 17
+September has never reached a customer. 5.18.21 makes the operator's facts
+unconditional; the knowledge rule still has to be reworded before the
+assistant will use them, and that is a separate, approved change.
+
 ## Why
 
 That refusal is not a defect in the model. It is the **default text of the
