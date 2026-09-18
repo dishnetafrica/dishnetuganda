@@ -129,7 +129,45 @@ $r2 = (new UcrmLeadSync($s2, $ON + ['ucrm_lead_organization_id' => '7'], $crm())
 $c2 = $created();
 is_((end($c2['clients'])['organizationId'] ?? null) === 7, 'and config overrides the evidence');
 
+echo "\n2b. When clients carry no country, the organization's is used\n";
+// org_probe.php on the live install found one organization (id 1, Kampala,
+// countryId 247) and all 47 clients on it. It did not show a country on the
+// clients themselves, and uCRM does not require one — the KYC payload passes
+// null. Leaving a Ugandan lead with no country at all is worse than reading
+// the country of the company it belongs to, and that is still evidence.
+$reset(); $scenario('clients_no_country');
+$s = $freshStore($LEAD);
+$r = (new UcrmLeadSync($s, $ON, $crm()))->syncLead(1);
+is_($r['ok'] === true, 'the lead is still created', json_encode($r));
+$made = ($created()['clients'][0] ?? []);
+is_(($made['organizationId'] ?? null) === 1, 'the organization still comes from the clients');
+is_(($made['countryId'] ?? null) === 247,
+    "and the country from the organization", json_encode($made['countryId'] ?? null));
+
+// A fresh install with no clients at all: one organization is not a choice.
+$reset(); $scenario('fresh_install');
+$s = $freshStore($LEAD);
+$r = (new UcrmLeadSync($s, $ON, $crm()))->syncLead(1);
+is_($r['ok'] === true, 'an install with no clients yet can still file a lead', json_encode($r));
+$made = ($created()['clients'][0] ?? []);
+is_(($made['organizationId'] ?? null) === 1, 'because a single organization is unambiguous');
+
+// ...but two organizations and no clients is a guess, and is refused.
+$reset(); $scenario('fresh_two_orgs');
+$s = $freshStore($LEAD);
+$r = (new UcrmLeadSync($s, $ON, $crm()))->syncLead(1);
+is_($r['ok'] === false && $r['action'] === 'skipped',
+    'two organizations and nothing to choose between them: refused', json_encode($r));
+is_(strpos($r['reason'], 'organizationId') !== false, 'and it names what is missing', $r['reason']);
+is_(count($created()['clients']) === 0, 'nothing filed under a guessed company');
+
 echo "\n3. The coordinates land on the client, by the proven mechanism\n";
+// Its own run. Reading patches left behind by an earlier section made this
+// depend on the order the file happens to be written in, and inserting a case
+// above it silently emptied it.
+$reset(); $scenario('uganda');
+$s = $freshStore($LEAD);
+(new UcrmLeadSync($s, $ON, $crm()))->syncLead(1);
 $patches = $created()['patches'] ?? [];
 $gps = null;
 foreach ($patches as $p) if (isset($p['gpsLat'])) $gps = $p;

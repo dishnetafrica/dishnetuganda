@@ -120,6 +120,12 @@ if ($path === '/organizations') {
     // would put Juba's letterhead on a Kampala quote.
     if ($scenario === 'two_orgs') fu_out([$SS, $UG]);
     if ($scenario === 'no_phone') { $o = $UG; $o['phone'] = ''; $o['name'] = ''; fu_out([$o]); }
+    if ($scenario === 'clients_no_country' || $scenario === 'fresh_install') {
+        fu_out([['id' => 1, 'name' => 'DishNet Africa Limited',
+                 'selected' => true, 'countryId' => 247]]);
+    }
+    // No clients AND two organizations: whichever is picked is a guess.
+    if ($scenario === 'fresh_two_orgs') fu_out([$SS, $UG]);
     fu_out([$UG]);
 }
 // ── Lead sync (Phase 2): create, search and patch clients ───────────────
@@ -172,6 +178,12 @@ if ($path === '/clients' || strpos($path, '/clients?') === 0) {
         }
         if ($needle === '') {
             // The sample read used to establish organizationId / countryId.
+            // 'clients_no_country' is the live shape org_probe found: clients
+            // that carry an organization but no country of their own.
+            if ($scenario === 'clients_no_country') {
+                fu_out([['id' => 9, 'organizationId' => 1], ['id' => 8, 'organizationId' => 1]]);
+            }
+            if ($scenario === 'fresh_install' || $scenario === 'fresh_two_orgs') fu_out([]);
             fu_out([
                 ['id' => 9, 'organizationId' => 1, 'countryId' => 220],
                 ['id' => 8, 'organizationId' => 1, 'countryId' => 220],

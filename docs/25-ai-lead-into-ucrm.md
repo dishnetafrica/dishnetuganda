@@ -1,6 +1,6 @@
 # 25 — The lead that stopped at leads.json
 
-**Date:** 18 September 2026 · **Plugin:** 5.18.19 · **Status:** built, pending upload, **switched OFF**
+**Date:** 18 September 2026 · **Plugin:** 5.18.20 · **Status:** built, pending upload, **switched OFF**
 **Phase:** 2 of 3. Phase 1 (location) shipped in 5.18.18. Phase 3 (quotation) is not started.
 
 ## What was happening
@@ -68,6 +68,33 @@ install has and take the commonest value. `ucrm_lead_organization_id` and
 **refuses** and says so, rather than falling back to a literal — a lead filed
 under the wrong company is a lead somebody has to find and move.
 
+## What org_probe found, and what it changed
+
+Run on the live install before switching anything on:
+
+```
+ORGANIZATIONS IN THIS uCRM
+  id 1   DishNet Africa Limited   [selected/default]   countryId 247
+WHICH ORGANIZATION DO CLIENTS BELONG TO?
+  org 1   DishNet Africa Limited   47 of 47 sampled client(s)
+```
+
+One organization, every client on it. So the run-time derivation returns 1 and
+no configuration is needed. Worth noting separately: the KYC payload's
+`organizationId => 2` is **wrong for this install** — organization 2 does not
+exist here.
+
+The probe also showed what the sampling could not: clients carry an
+organization but the country lives on the **organization** (247). uCRM does not
+require a country on a client and the KYC payload passes null, so the first
+version simply omitted it. Leaving a Ugandan lead with no country is worse than
+reading the country of the company it belongs to, so the organization is now
+consulted when the clients are silent — still evidence, still not a literal.
+
+The same fallback covers an install whose clients are all new: where there is
+exactly **one** organization, it is not a choice. Where there are two and no
+clients, it refuses — picking one would be a guess, and that case is asserted.
+
 ## An outage is not an answer
 
 The first version of this had the same bug in two places, and the tests found
@@ -112,7 +139,7 @@ invented surname a salesperson would then greet them by.
 
 ## Tests
 
-`tests/test_ucrm_lead_sync.php` — 54 assertions, driven through the real
+`tests/test_ucrm_lead_sync.php` — 62 assertions, driven through the real
 `CrmApiClient` against the fake uCRM, which was extended with client create,
 search and patch and **refuses unknown fields** the way the real one does
 (5.18.11 shipped a payload with one extra key and every create 422'd).
@@ -134,7 +161,7 @@ One mutation deliberately does **not** fail it: removing the early
 `crm_client_id` check. The lock's re-read still prevents the duplicate, which
 is defence in depth working, not a hole.
 
-Full suite: 178 suites, 6609 assertions, 0 failed. Prompt corpus unchanged
+Full suite: 178 suites, 6617 assertions, 0 failed. Prompt corpus unchanged
 (`ba05b3dd`) — nothing in this touches the prompt.
 
 ## Switching it on

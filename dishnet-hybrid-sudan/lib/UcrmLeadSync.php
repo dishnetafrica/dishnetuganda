@@ -410,6 +410,39 @@ final class UcrmLeadSync
                 arsort($countries);
                 $country = (int)array_key_first($countries);
             }
+
+            // Clients need not carry a country — the KYC payload passes null
+            // for it and uCRM accepts that. But the organization always has
+            // one, and on this install it is the company whose address is in
+            // Kampala. That is better evidence than leaving a Ugandan lead
+            // with no country at all, and it is still evidence rather than a
+            // literal. Only consulted when the clients are silent.
+            if ($country === null) {
+                try {
+                    $orgRows = $this->crm->get('organizations');
+                    if (is_array($orgRows)) {
+                        $pick = null;
+                        foreach ($orgRows as $o) {
+                            if (!empty($o['selected'])) { $pick = $o; break; }
+                            if ($pick === null) $pick = $o;
+                        }
+                        $c = (int)($pick['countryId'] ?? 0);
+                        if ($c > 0) $country = $c;
+                    }
+                } catch (\Throwable $e) { /* a country is optional; a lead is not */ }
+            }
+
+            // Same for the organization itself, for an install whose clients
+            // are all new: one organization is not a choice.
+            if ($org === null) {
+                try {
+                    $orgRows = $this->crm->get('organizations');
+                    if (is_array($orgRows) && count($orgRows) === 1) {
+                        $o = (int)($orgRows[0]['id'] ?? 0);
+                        if ($o > 0) $org = $o;
+                    }
+                } catch (\Throwable $e) { /* the caller refuses when this stays null */ }
+            }
         }
 
         $resolved = ['org' => $org, 'country' => $country, 'error' => $error];
