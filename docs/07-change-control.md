@@ -129,3 +129,46 @@ Changed:
 Tests: 159 files green, 0 failures. `test_ai_qualification.php` lost two
 assertions pinning the old Business steer; they were replaced, not deleted, so
 the protection moved rather than disappearing.
+
+## 5.18.23 — the follow-up evaluator asks which provider this install uses
+
+**18 September 2026** · `lib/FollowUpEvaluator.php`, `cron/followup_run.php`,
+`tools/set_config.php`, `tests/test_followup_provider.php` (new)
+
+`cron/followup_run.php` read `claude_api_key`, and only that, then built a
+`ClaudeWaClient` with it. The Uganda install runs `ai_provider=openai`, so the
+key was empty, the script returned at its guard on every run, and the only
+trace was one `error_log` line. Confirmed four independent ways: 2,300 log
+occurrences over ~5.3 days matching the queue's age, `DONE followup_run in
+14ms` where a real evaluation takes seconds, the explicit message, and
+`sales_stage = 'unknown'` on all 264 open rows — a column written only after
+the evaluator returns.
+
+`followup_scan` needs no key (SQL only), so it kept opening rows. 261
+follow-ups accumulated and not one draft was ever written.
+
+Changed:
+
+- **`FollowUpEvaluator::clientFor()`** — provider selection as a function a test
+  can call, because the four lines it replaces lived in a cron script with no
+  seam, which is why nothing caught them for five days. Every other
+  provider-consuming site in the plugin already branched on `ai_provider`;
+  this was the only one that did not.
+- **The error names the provider.** `no API key` told nobody which of two keys
+  to set.
+- **`followup_run_limit` registered in `set_config.php`.** It was read at
+  `followup_run.php:47` but never registered, so the per-run evaluation limit
+  could not be turned down. At the default 5, a 257-row backlog is seven hours
+  of drafting.
+
+Not changed, deliberately: sending. `followup_send.php` still sends only drafts
+a person approved, and `followup_run.php` still has no path to Evolution. A test
+asserts both, so fixing evaluation cannot quietly turn the engine into an
+autoresponder.
+
+The two clients are not interchangeable in general — `ClaudeWaClient::getReply()`
+takes a seventh `$tools` argument `GptWaClient` does not have. They are
+interchangeable here because `evaluate()` passes six, and a test pins that.
+
+Tests: 160 files green, 0 failures. A mutation reinstating the original bug
+fails 8 assertions.

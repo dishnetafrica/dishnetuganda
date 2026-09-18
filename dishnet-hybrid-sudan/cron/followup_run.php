@@ -36,12 +36,18 @@ $convSvc = new ConversationService($dataDir, $pdo);
 $oo      = ContactOptOut::fromStore($store);
 $now     = gmdate('Y-m-d H:i:s');
 
-$apiKey = (string)($config['claude_api_key'] ?? $config['anthropic_api_key'] ?? '');
-if ($apiKey === '') {
-    error_log('[followup_run] no API key — cannot evaluate');
+// Which brain, and whose key — decided by ai_provider, exactly as every other
+// AI path in this plugin decides it. This file used to read claude_api_key and
+// only that, so an OpenAI install returned here on every run for five days
+// while the queue filled up behind it. The selection now lives in a function a
+// test can call; the error names the provider, so the log says which key is
+// missing instead of leaving somebody to guess.
+$sel = FollowUpEvaluator::clientFor($config, $pdo);
+if ($sel['client'] === null) {
+    error_log('[followup_run] ' . $sel['error']);
     return;
 }
-$evaluator = new FollowUpEvaluator(new ClaudeWaClient($apiKey, $pdo), $config);
+$evaluator = new FollowUpEvaluator($sel['client'], $config);
 
 $cap      = (int)($config['followup_daily_cap'] ?? 30);
 $perRun   = (int)($config['followup_run_limit'] ?? 5);   // model calls cost money

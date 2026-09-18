@@ -102,6 +102,8 @@ $FLAGS = [
         'Most follow-ups sent on one channel in a day (default 30)'],
     'followup_max_age_hours' => ['number',
         'An enquiry older than this is history, not a live lead (default 336 = 14 days)'],
+    'followup_run_limit' => ['number',
+        'Follow-ups EVALUATED per run (default 5) — set 1 or 2 on a large backlog'],
 
     // On every quotation the team sends. QuotationService compiles South Sudan
     // defaults for all three, so an unset key is not a blank — it is Juba's
