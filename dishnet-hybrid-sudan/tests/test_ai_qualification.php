@@ -59,10 +59,25 @@ foreach (['CCTV they want to view from elsewhere', 'VPN', 'a server', 'remote de
 has('and a public IP is what they need',   $p, 'A BUSINESS PLAN IS FOR ONE THING');
 has('which no Residential plan carries',   $p, 'not part of any Residential plan');
 
-echo "\nThe expensive mistake is forbidden explicitly\n";
-has('never sell Residential to that customer', $p, 'Never quote a '
-    . "Residential plan to that customer as though it would do the job");
-has('and the reason is stated, not just the rule', $p, 'cannot reach their own cameras');
+echo "\nRecommending Residential is never a claim that remote access works\n";
+// 5.18.22 REVERSED the steer these two assertions used to pin. Until then the
+// rule was "where the requirement is real, recommend Business, and never quote
+// Residential to that customer as though it would do the job". The operator's
+// decision on 18 September is to lead with the higher-capacity Residential plan
+// for everyone, remote-access customers included. That is a commercial call and
+// it is theirs to make.
+//
+// What it does NOT license is telling a customer their cameras will be
+// reachable from outside a connection sitting behind CGNAT. Selling the plan is
+// a preference; claiming the capability is the assistant inventing network
+// availability, which is the one thing the guardrails exist to stop. So the old
+// assertions are replaced rather than removed — the protection moves, it does
+// not disappear.
+has('Residential is still what it leads with', $p, 'still lead with the higher-capacity');
+has('but the capability is never claimed',     $p, 'never claim it provides remote access');
+has('the public IP is named as a separate quotation', $p, 'quoted separately');
+has('and the prompt says why that is not negotiable',
+    $p, 'fact about the network, not a preference');
 
 echo "\nWhen it cannot tell, it asks — once\n";
 has('the proactive question', $p, 'ask once');

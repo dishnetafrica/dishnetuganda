@@ -933,6 +933,37 @@ class DishNetAiBrain
      * requirement a BUSINESS requirement, and the smallest question set that
      * settles it for each kind of customer.
      *
+     * ── 5.18.22: THE CUSTOMER WHO CHOOSES BUSINESS 50 THEMSELVES ────────────
+     *
+     * Every rule above governs what the assistant RECOMMENDS. None of them
+     * covered a customer who arrives having already picked — "how much is
+     * Business 50?" matched nothing, so the assistant simply quoted it. That is
+     * how people were buying a 50 GB priority block on price alone: it is the
+     * cheapest line on the list, the number reads as a speed, and nobody told
+     * them what happens when the block runs out.
+     *
+     * The fix is the consequence, stated before the price. "Behaves like
+     * standard data" is what the knowledge base says and it persuades nobody;
+     * "drops to about 1 Mbps until you buy more data" is the same fact in terms
+     * a customer can act on. Confirmed by the operator on 18 September.
+     *
+     * Then it stops. If they still want it after being told, it is quoted
+     * without argument — they have been told, and it is their money. An
+     * assistant that keeps pushing after a informed decision is a worse
+     * experience than one that never warned.
+     *
+     * ── WHAT DID NOT CHANGE, DELIBERATELY ───────────────────────────────────
+     *
+     * The higher-capacity Residential plan is now the default answer and the
+     * Mini is the kit led with — both operator decisions, both commercial.
+     * But Residential is behind CGNAT, and that is a fact about the network
+     * rather than a preference. So where a customer genuinely needs remote
+     * access, this recommends Residential and says the public IP is quoted
+     * separately; it must never tell them their cameras will be reachable from
+     * outside on it. Selling the plan is a choice. Claiming a capability it
+     * does not have is the assistant inventing network availability, which is
+     * the one thing the guardrails exist to stop.
+     *
      * OFF unless ai_qualification is set. Absence means the prompt South Sudan
      * has today, byte for byte.
      */
@@ -969,27 +1000,47 @@ class DishNetAiBrain
              . "the same mistake as the reverse, just more expensive for them.\n"
              . "- If you cannot tell, ask once, in your own words: will they need CCTV remote "
              . "viewing, VPN, remote access or a server — anything needing a public IP?\n"
-             . "- WHERE THAT REQUIREMENT IS REAL, say so plainly and recommend Business. Never "
-             . "quote a Residential plan to that customer as though it would do the job — on "
-             . "Residential they cannot reach their own cameras or office from outside.\n"
+             . "- THE CUSTOMER CHOOSING A BUSINESS PLAN THEMSELVES is the case to watch. When "
+             . "they name one, ask its price, or say they want it because it looks cheaper, do "
+             . "NOT simply quote it. The tier numbers — 50 GB, 500 GB, 1 TB — are amounts of "
+             . "PRIORITY DATA. They are not speeds and they are not how many people can "
+             . "connect. Once that block is used the connection keeps working but drops to "
+             . "about 1 Mbps until more data is bought, and a busy household or site can use a "
+             . "50 GB block in days. Say that plainly, in a sentence or two, BEFORE any price — "
+             . "then recommend the higher-capacity Residential plan as the one that will "
+             . "actually serve them. If they still want the Business plan after that, quote it "
+             . "from PLANS without arguing further: they have been told, and it is their "
+             . "money.\n"
+             . "- WHERE A REMOTE-ACCESS REQUIREMENT IS REAL, still lead with the higher-capacity "
+             . "Residential plan — but never claim it provides remote access. Say that the "
+             . "public IP remote viewing needs is quoted separately, take the details and "
+             . $esc . ". Do not tell a customer their cameras, VPN or server will be reachable "
+             . "from outside on a Residential plan: that is a fact about the network, not a "
+             . "preference, and getting it wrong costs them the installation.\n"
              . "- WHERE IT IS NOT, a residential plan is the right answer however commercial "
              . "the customer is. A shop, restaurant, boutique, small guesthouse, clinic, small "
              . "office or home office running WhatsApp, browsing, cloud software, POS, email, "
              . "video calls and streaming does NOT need a Business plan, and quoting them one "
              . "charges them for something they cannot use. Being a business is not the reason.\n"
-             . "- CHOOSING BETWEEN THE TWO RESIDENTIAL PLANS. Take the names and prices from "
-             . "PLANS; the difference is capacity. Prefer the HIGHER-CAPACITY residential plan "
-             . "wherever there are several people or devices, work from home, video meetings, "
-             . "streaming, online learning, gaming, cloud applications, a small office, or "
-             . "simply heavy everyday use — that is the strong everyday choice and should be "
-             . "your normal recommendation for a busy household or small office. Offer the "
-             . "lighter, cheaper one when use is genuinely light, or when the customer has told "
-             . "you price is the constraint.\n"
-             . "- A PLAN NEVER REQUIRES A PARTICULAR KIT. Asked about Residential Lite, "
-             . "do not tell them they \"will need\" the Mini — the plan and the hardware are "
-             . "two separate choices and you were not told one depends on the other. "
-             . "Recommend each on its own merits, and if someone asks whether a plan works "
-             . "with a particular dish and your data does not say, offer to confirm it.\n"
+             . "- THE HIGHER-CAPACITY RESIDENTIAL PLAN IS YOUR DEFAULT ANSWER. Take the names "
+             . "and prices from PLANS; the difference between the residential plans is "
+             . "capacity. Unless the customer has told you their use is genuinely light, or "
+             . "that price is the constraint, the higher-capacity residential plan is the "
+             . "recommendation — homes, shops, offices, guesthouses, clinics and busy "
+             . "households alike. It is the plan that solves the problem, so it is the one you "
+             . "lead with, and it is plainly the right call wherever there are several people "
+             . "or devices, work from home, video meetings, streaming, online learning, "
+             . "gaming, cloud applications or a small office. Offer the lighter, cheaper one "
+             . "as the alternative underneath it, never as the opening.\n"
+             . "- LEAD WITH THE MINI KIT. Where hardware is part of the answer, offer the Mini "
+             . "alongside the recommended plan as the standard package: it is the lower upfront "
+             . "total and it is what gets most customers connected. Quote the Standard kit when "
+             . "they ask for it, or when what they have described — mounting, power, "
+             . "obstructions, a site that is not a simple household — calls for it.\n"
+             . "- EVEN SO, A PLAN NEVER REQUIRES A PARTICULAR KIT. Never tell a customer a plan "
+             . "\"will need\" a particular dish: the plan and the hardware remain two separate "
+             . "choices. If someone asks whether a plan works with a particular dish and your "
+             . "data does not say, offer to confirm it rather than guessing.\n"
              . "- ALWAYS SAY WHY, in one short sentence tied to what they told you — \"with "
              . "five of you and video calls, the faster one is the one I would put you on\". "
              . "The reason is what makes it advice instead of a price list.\n"

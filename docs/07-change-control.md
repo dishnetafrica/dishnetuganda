@@ -90,3 +90,42 @@ as a worked example.
 | 2026-09-18 | Plugin 5.18.18 built for upload via uCRM → Settings → Plugins. **Phase 1 of 3 — location.** A customer answering "which area?" with a WhatsApp location pin got no reply at all: `evoExtractText()` knew eight message shapes and `locationMessage` was not one, so the text came out empty and the queue step dropped the message; the coordinates were never read out of the payload. New `lib/WaLocation.php` parses a pin, refuses `0,0` and anything off the globe, and keeps but flags a pin outside the deployment country (derived from `timezone`, overridable with `geo_country`); `WaLocation::mergeText()` gives the AI something to answer so the message is queued; migration 072 stores `location_lat`/`location_lng` on `wa_messages` and the inbox body shows the coordinates; the worker attaches the conversation's most recent pin to the lead it writes, while a coordinate the MODEL supplies can never be written (not in `FIELDS`); the assistant is told it has no map and must not name a town, estimate distance, or judge coverage. `storeMessage()` builds its insert from the columns the database has, so a migration that has not run cannot stop the inbox. Prompt corpus unchanged. Code in this commit; record in [24](24-location-pins.md). | Bhavin | Re-upload the 5.18.17 ZIP, minutes; migration 072 only adds columns and is not reversed by a downgrade | Pending upload. After upload, send a location pin to the sales number from a phone not in the CRM: the reply must acknowledge it, and `grep 'location pin' ` the AI log should show `in area` |
 | 2026-09-18 | Plugin 5.18.20 built for upload via uCRM → Settings → Plugins. **Phase 2 of 3 — the AI lead reaches uCRM.** Qualified leads have been written to `leads.json` since 5.18.3 and nothing ever carried them into uCRM. New `lib/UcrmLeadSync.php` creates them as lead clients (`isLead: true`) through the existing `CrmApiClient` and the payload `cron/kyc_crm_sync.php` already uses, driven by a new `crm.lead.sync` event and `workers/UcrmLeadWorker.php` so a customer never waits on uCRM for their reply. Idempotent four ways: an existing `crm_client_id` patches, a known phone links, two clients on one number REFUSE and flag for a person, and a create happens once under a lock that re-reads the lead. `organizationId`/`countryId` are read off the clients this install has (overridable with `ucrm_lead_organization_id` / `ucrm_lead_country_id`), never copied from the KYC literals. Coordinates go on as `gpsLat`/`gpsLon` and the patch rewrites nothing else. A uCRM outage is distinguished from an empty result, so an unreachable CRM is retried rather than read as "nobody has this number". **Ships OFF** — set `ai_crm_lead_sync` to enable. Prompt corpus unchanged. Code in this commit; record in [25](25-ai-lead-into-ucrm.md). | Bhavin | Re-upload the 5.18.18 ZIP, or set `ai_crm_lead_sync --clear` which stops all uCRM writes immediately | Pending upload. `tools/org_probe.php` was run on 18 Sep before release: **one organization, id 1 DishNet Africa Limited, all 47 of 47 sampled clients on it**, so the run-time derivation returns 1 and no config is needed — and the KYC literal `organizationId => 2` is wrong for this install. The probe also showed the country lives on the organization (247) rather than on clients, so 5.18.20 consults the organization when the clients are silent, and refuses where two organizations and no clients make it a guess |
 | 2026-09-18 | Plugin 5.18.21 built for upload via uCRM → Settings → Plugins. **The operator's business facts were never in the prompt on this install.** `DishNetAiBrain::coverageRules()` was an if/else and `localFacts()` had its only call site inside the `else`; with 34 knowledge entries seeded (confirmed by a read-only query on the live box) that branch never runs, so `ai_fact_payment` (the Ecobank account), `ai_fact_office`, `ai_fact_delivery`, `ai_fact_prices` and `ai_fact_location_pin` all reached nothing — and 5.18.14/15/16 were written against a dead path. The payment refusal came from the knowledge rule `RULE_PAYMENT_SAFETY` ("details on the invoice"), not from the `ai_fact_payment` default; doc 22 is corrected. `businessFactsBlock()` is now called from both branches, the knowledge-base branch taking operator-SET facts only so South Sudan defaults cannot leak into a Uganda prompt. Legacy path byte-identical. **Prompt corpus deliberately changed** `ba05b3dd` → `f770081e`. Code in this commit; record in [26](26-operator-facts-vs-knowledge-base.md). | Bhavin | Re-upload the 5.18.20 ZIP, minutes; no data or config is touched by this change | Pending upload. **This alone will not make the assistant give out the bank account** — `RULE_PAYMENT_SAFETY` still tells it to use the invoice. That reword is proposed separately and awaits approval |
+
+## 5.18.22 — the customer who picks Business 50 themselves
+
+**18 September 2026** · `lib/DishNetAiBrain.php` (`qualification()`),
+`tests/test_plan_recommendation.php` (new), `tests/test_ai_qualification.php`
+
+A real conversation on 18 September: home, ten people, asked the price. The
+assistant recommended Residential and did it well — that path was never broken.
+The broken path is the other one. Every rule in `qualification()` governs what
+the assistant RECOMMENDS; none of them covered a customer who arrives having
+already chosen. "How much is Business 50?" matched nothing, so it was simply
+quoted — and Business 50 is the cheapest line on the list, the number reads as a
+speed, and a 50 GB priority block is gone in days on a busy household.
+
+Changed:
+
+- **Self-selected Business plans.** When the customer names one, asks its price
+  or says it looks cheaper, the consequence is stated BEFORE any price: the tier
+  numbers are priority data, not speeds; after the block the line drops to about
+  1 Mbps until more data is bought. Then the higher-capacity Residential plan is
+  recommended. If they still want Business, it is quoted without argument — they
+  have been told, and it is their money.
+- **The 1 Mbps figure**, confirmed by the operator. `BUSINESS_PLANS` in the
+  knowledge base says "behaves like standard data", which is true and persuades
+  nobody. *(The knowledge-base entry itself is unchanged and awaits approval.)*
+- **The higher-capacity Residential plan is now the default answer**, not merely
+  preferred — operator decision.
+- **The Mini is the kit led with**, as the lower upfront total. The rule that no
+  plan requires a particular kit survives unchanged.
+- **The Business steer is reversed**: where a remote-access requirement is real,
+  the assistant still leads with Residential. It must never claim remote access
+  works on it — the public IP is named as a separate quotation and the
+  conversation is handed over. Selling the plan is a commercial choice; claiming
+  a capability CGNAT does not provide is the assistant inventing network
+  availability.
+
+Tests: 159 files green, 0 failures. `test_ai_qualification.php` lost two
+assertions pinning the old Business steer; they were replaced, not deleted, so
+the protection moved rather than disappearing.
