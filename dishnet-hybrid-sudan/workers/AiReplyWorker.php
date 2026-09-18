@@ -200,7 +200,13 @@ class AiReplyWorker extends WorkerBase
                     }
                     if (class_exists('AiLeadService')) {
                         $svc = new \AiLeadService($this->store, $this->config, $this->pdo);
-                        $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai');
+                        // The pin this conversation actually sent, looked up
+                        // rather than believed. A model asked for a latitude
+                        // will produce one; it will be the middle of the
+                        // country it has heard of, and an installer would
+                        // drive to it.
+                        $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai',
+                                             $this->latestPin($convId, $ctx));
                         $this->log($r['ok'] ? 'info' : 'info', sprintf(
                             'conv %d: lead %s%s', $convId, $r['action'],
                             $r['reason'] !== '' ? ' — ' . $r['reason'] : ' #' . (int)$r['lead_id']
@@ -243,6 +249,10 @@ class AiReplyWorker extends WorkerBase
             'conversation_id'   => $convId,
             'customer'          => null,
             'history'           => [],
+            // Set by evo_webhook when this very message was a pin. Data, not
+            // prose: the description the model reads is in 'message', but what
+            // gets written down comes from here.
+            'location'          => is_array($p['location'] ?? null) ? $p['location'] : null,
         ];
 
         // Identity is shared across all three numbers.
@@ -684,6 +694,48 @@ class AiReplyWorker extends WorkerBase
      *
      * @return string[]
      */
+    /**
+     * The most recent location pin in this conversation.
+     *
+     * Looked up rather than taken from the turn, because the pin and the
+     * sentence that qualifies the lead are usually different messages: a
+     * customer sends the pin, and two replies later says "yes, quote me".
+     * Reading only the current turn would attach coordinates to a lead only
+     * when the qualifying message happened to be the pin itself.
+     *
+     * Falls back to the turn's own pin when there is no database handle, so a
+     * pin is never lost merely because this ran without one.
+     *
+     * @return array{location_lat?:float,location_lng?:float}
+     */
+    private function latestPin(int $convId, array $ctx): array
+    {
+        $turn = $ctx['location'] ?? null;
+        $fallback = (is_array($turn) && isset($turn['lat'], $turn['lng']))
+            ? ['location_lat' => (float)$turn['lat'], 'location_lng' => (float)$turn['lng']]
+            : [];
+
+        if ($this->pdo === null || $convId <= 0) return $fallback;
+        try {
+            $q = $this->pdo->prepare(
+                'SELECT location_lat, location_lng FROM wa_messages
+                  WHERE conversation_id = ? AND location_lat IS NOT NULL
+                  ORDER BY sent_at DESC, id DESC LIMIT 1');
+            $q->execute([$convId]);
+            $row = $q->fetch(\PDO::FETCH_ASSOC);
+            if ($row && is_numeric($row['location_lat']) && is_numeric($row['location_lng'])) {
+                return ['location_lat' => (float)$row['location_lat'],
+                        'location_lng' => (float)$row['location_lng']];
+            }
+        } catch (\Throwable $e) {
+            // Pre-migration database, or no column yet. The turn's own pin
+            // still works, and a lead without coordinates is the old
+            // behaviour rather than a new failure.
+            $this->log('warn', 'pin lookup failed: ' . $e->getMessage());
+        }
+        return $fallback;
+    }
+
     private function permittedValues(array $ctx, string $prompt): array
     {
         $values = [];

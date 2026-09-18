@@ -27,6 +27,11 @@ class ConversationService
     /** ...inside this many days, is canned. */
     const CANNED_WINDOW_DAYS = 7;
 
+    /** Cached PRAGMA result; null until asked. */
+
+    private ?bool $hasLocationCols = null;
+
+
     private $db; // PDO
     private string $dataDir;
 
@@ -701,6 +706,37 @@ class ConversationService
      * Store a message. Returns the message ID.
      * Handles dedup via wa_message_id.
      */
+    /** Sentinel for a bind value that must not be sent at all. */
+    private const OMIT = "\x00__omit__";
+
+    /**
+     * Does this database carry the location columns (migration 072)?
+     *
+     * Asked once per process. A plugin upgrade runs migrations at boot, so in
+     * practice this is true everywhere within a second of the ZIP landing —
+     * but "in practice" is not a thing to bet every WhatsApp message on.
+     */
+    private function hasLocationColumns(): bool
+    {
+        if ($this->hasLocationCols !== null) return $this->hasLocationCols;
+        $this->hasLocationCols = false;
+        try {
+            foreach ($this->db->query('PRAGMA table_info(wa_messages)')->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                if (($c['name'] ?? '') === 'location_lat') { $this->hasLocationCols = true; break; }
+            }
+        } catch (\Throwable $e) {
+            $this->hasLocationCols = false;
+        }
+        if (!$this->hasLocationCols) {
+            // Said once, not swallowed: a pin that cannot be stored is the
+            // failure this whole change exists to end.
+            error_log('[ConversationService] wa_messages has no location columns — '
+                    . 'migration 072 has not run, so location pins are stored without '
+                    . 'their coordinates');
+        }
+        return $this->hasLocationCols;
+    }
+
     public function storeMessage(int $conversationId, array $msg): ?int
     {
         // Dedup check
@@ -728,12 +764,27 @@ class ConversationService
             }
         } catch (\Throwable $e) { /* pre-migration row: epoch 0, never replayed */ }
 
+        // Built from the columns this database actually has.
+        //
+        // location_lat/lng arrive in migration 072, and this method runs for
+        // every message in and out. Naming them unconditionally would mean a
+        // migration that has not run yet — or that failed, which stops the
+        // runner dead and skips the rest — takes the entire inbox down with a
+        // PDOException on each message. A pin is worth having; it is not worth
+        // that. Where the columns are absent the coordinates are dropped and
+        // said out loud, which is the old behaviour plus a warning.
+        $cols = ['conversation_id', 'direction', 'role', 'body', 'media_type', 'media_url',
+                 'agent_name', 'wa_message_id', 'event_key', 'metadata',
+                 'identity_epoch', 'identity_key'];
+        $hasLoc = $this->hasLocationColumns();
+        if ($hasLoc) { $cols[] = 'location_lat'; $cols[] = 'location_lng'; }
+        $cols[] = 'sent_at';
+
         $stmt = $this->db->prepare(
-            'INSERT INTO wa_messages (conversation_id, direction, role, body, media_type, media_url,
-             agent_name, wa_message_id, event_key, metadata, identity_epoch, identity_key, sent_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))'
+            'INSERT INTO wa_messages (' . implode(', ', $cols) . ', created_at) VALUES ('
+            . implode(', ', array_fill(0, count($cols), '?')) . ', datetime(\'now\'))'
         );
-        $stmt->execute([
+        $bind = array_filter([
             $conversationId,
             $msg['direction'],
             $msg['role'],
@@ -746,6 +797,17 @@ class ConversationService
             isset($msg['metadata']) ? json_encode($msg['metadata']) : null,
             $ep,
             $key,
+            // A pin's coordinates, when the caller had one AND this database
+            // can hold them. Numeric or null — never a string, so a malformed
+            // value cannot be stored as though it were a place.
+            'location_lat' => $hasLoc
+                ? ((isset($msg['location_lat']) && is_numeric($msg['location_lat']))
+                    ? (float)$msg['location_lat'] : null)
+                : self::OMIT,
+            'location_lng' => $hasLoc
+                ? ((isset($msg['location_lng']) && is_numeric($msg['location_lng']))
+                    ? (float)$msg['location_lng'] : null)
+                : self::OMIT,
             // gmdate, not date(): sent_at was written by whichever entry point
             // happened to run -- the webhook under Africa/Juba, the spawned CLI
             // worker under UTC -- so one conversation carried two clocks, and
@@ -753,7 +815,8 @@ class ConversationService
             // question it answered. Both the Inbox and the model's history read
             // it that way. Storage is UTC everywhere; display localises.
             $msg['sent_at'] ?? gmdate('Y-m-d H:i:s'),
-        ]);
+        ], function ($v) { return $v !== self::OMIT; });
+        $stmt->execute(array_values($bind));
 
         $msgId = (int)$this->db->lastInsertId();
 
@@ -1111,12 +1174,26 @@ class ConversationService
         if (isset($message['audioMessage']))    $mediaType = 'audio';
         if (isset($message['videoMessage']))    $mediaType = 'video';
         if (isset($message['stickerMessage'])) $mediaType = 'sticker';
-        if (isset($message['locationMessage'])) $mediaType = 'location';
+        if (isset($message['locationMessage']))  $mediaType = 'location';
+        if (isset($message['liveLocationMessage'])) $mediaType = 'location';
+
+        // A pin carries the coordinates in the payload. Read them here so the
+        // admin inbox shows a place rather than the word "[LOCATION]", and so
+        // the worker has something to attach to a lead.
+        if (!class_exists('WaLocation')) require_once __DIR__ . '/WaLocation.php';
+        $loc = \WaLocation::fromMessage($message);
 
         // For media-only messages (no caption): use a placeholder body so the
         // message is stored in the conversation log instead of being dropped.
         if (empty($body) && $mediaType) {
             $body = '[' . strtoupper($mediaType) . ']';
+        }
+        // A pin says where. "[LOCATION]" said only that one arrived, which is
+        // what a colleague opening the inbox had to work with.
+        if ($loc !== null) {
+            $body = '[LOCATION] ' . \WaLocation::format($loc['lat'])
+                  . ', ' . \WaLocation::format($loc['lng'])
+                  . ($loc['name'] !== '' ? ' — ' . $loc['name'] : '');
         }
 
         if (empty($body)) return null; // truly empty — skip
@@ -1131,7 +1208,7 @@ class ConversationService
         $conv = $this->ensureConversation($phone, $channel, $pushName, 'import');
 
         // Store message
-        return $this->storeMessage($conv['id'], [
+        $row = [
             'direction'     => $fromMe ? 'out' : 'in',
             'role'          => $fromMe ? 'agent' : 'customer',
             'body'          => $body,
@@ -1139,7 +1216,13 @@ class ConversationService
             'wa_message_id' => $msgId,
             'sent_at'       => $sentAt,
             'agent_name'    => $fromMe ? 'DishNet' : null,
-        ]) ? $conv['id'] : null;
+        ];
+        if ($loc !== null) {
+            $row['location_lat'] = $loc['lat'];
+            $row['location_lng'] = $loc['lng'];
+            $row['metadata']     = ['location' => $loc];
+        }
+        return $this->storeMessage($conv['id'], $row) ? $conv['id'] : null;
     }
 
     // ══════════════════════════════════════════════════════════════════════

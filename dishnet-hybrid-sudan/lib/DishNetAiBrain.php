@@ -1179,6 +1179,38 @@ class DishNetAiBrain
             $d .= "\nCUSTOMER: Not identified. This number is not linked to a DishNet account.\n";
         }
 
+        // A location pin the customer dropped on this turn.
+        //
+        // Conditional, so a deployment that never receives one has exactly the
+        // prompt it had before — the corpus hash is unchanged by this feature
+        // existing, only by a customer using it.
+        //
+        // The coordinates are here so the assistant can confirm them back and
+        // sound like it received something, NOT so it can reason about them.
+        // It has no map. It must not name the place, estimate a distance, or
+        // decide the site is reachable: a confident guess about where somebody
+        // lives is worse than asking.
+        $loc = $ctx['location'] ?? null;
+        if (is_array($loc) && isset($loc['lat'], $loc['lng'])) {
+            if (!class_exists('WaLocation')) require_once __DIR__ . '/WaLocation.php';
+            $d .= "\nLOCATION PIN JUST RECEIVED:\n";
+            $d .= '- Coordinates: ' . \WaLocation::format((float)$loc['lat'])
+                . ', ' . \WaLocation::format((float)$loc['lng']) . "\n";
+            if (trim((string)($loc['name'] ?? '')) !== '') {
+                $d .= '- The pin is labelled: ' . $loc['name'] . "\n";
+            }
+            $d .= empty($loc['in_bounds'])
+                ? "- This point is OUTSIDE our service area. Say so plainly, ask them to"
+                  . " confirm the site or send another pin, and do not treat it as their"
+                  . " installation address.\n"
+                : "- Acknowledge that you have received their location and that it is saved"
+                  . " for the installation team.\n";
+            $d .= "- You have NO map and NO place names for it. Do NOT say which town,"
+                . " district or road it is in, do NOT estimate a distance or travel time,"
+                . " and do NOT say whether we cover it — a colleague confirms coverage."
+                . " If they ask any of that, say a colleague will check it.\n";
+        }
+
         // Sales
         $products = $ctx['products']['products'] ?? null;
         if (is_array($products) && $products) {

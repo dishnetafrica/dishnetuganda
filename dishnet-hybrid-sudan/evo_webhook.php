@@ -43,6 +43,7 @@ require_once __DIR__ . '/lib/EvolutionApiService.php';
 require_once __DIR__ . '/lib/EvoWebhookGuard.php';
 require_once __DIR__ . '/lib/ConversationService.php';
 require_once __DIR__ . '/lib/ContactOptOut.php';
+require_once __DIR__ . '/lib/WaLocation.php';
 
 /** Always answer Evolution quickly and in a shape it will not retry on. */
 function evoRespond(int $code, string $outcome, array $extra = []): void
@@ -222,6 +223,34 @@ foreach ($messages as $msg) {
     $text = evoExtractText($msg);
     $pushName = trim((string)($msg['pushName'] ?? ''));
 
+    // ── 7b. A location pin ────────────────────────────────────────────────
+    //
+    // evoExtractText knows eight message shapes and locationMessage was never
+    // one of them, so a pin produced an empty string and was dropped by the
+    // queue step below as "media-only". A customer answering "where should we
+    // install?" with the single most useful thing they could send got silence,
+    // and nothing anywhere recorded that it had happened.
+    //
+    // The description replaces the empty text, so the AI is queued and the
+    // customer is answered. The coordinates travel separately, because the
+    // model must never be the thing that decides what they are.
+    $loc      = WaLocation::fromMessage((array)($msg['message'] ?? []));
+    $locEvent = null;
+    if ($loc !== null) {
+        $country  = WaLocation::country($config);
+        $inArea   = WaLocation::inBounds($loc['lat'], $loc['lng'], $country);
+        $locEvent = $loc + ['in_bounds' => $inArea, 'country' => $country];
+        $text = WaLocation::mergeText($text, $loc, $inArea, $country);
+        error_log(sprintf('[evo_webhook] location pin received (%s, %s) %s',
+            $channel, $country, $inArea ? 'in area' : 'OUT OF AREA — will ask to confirm'));
+    } elseif (isset($msg['message']['locationMessage'])
+           || isset($msg['message']['liveLocationMessage'])) {
+        // A pin whose numbers are missing, unreadable or 0,0. Not silently
+        // dropped: this is the case that used to be invisible.
+        error_log('[evo_webhook] location pin UNUSABLE — coordinates missing or out of range ('
+                  . $channel . ')');
+    }
+
     // ── 8. Persist the inbound message ───────────────────────────────────
     // Storing before queueing means the conversation is complete in the admin
     // inbox even if AI processing later fails.
@@ -264,8 +293,16 @@ foreach ($messages as $msg) {
 
     // ── 9. Queue for the AI ──────────────────────────────────────────────
     // Media-only messages are stored and surfaced to staff but not sent to the
-    // AI, which cannot act on them yet.
-    if ($text === '') { $skipped++; continue; }
+    // AI, which cannot act on them yet. A location pin is no longer one of
+    // these — it carries its description above — but a photo still is, and a
+    // customer who sends one and hears nothing is the same failure in a
+    // smaller coat. So it is logged rather than counted silently.
+    if ($text === '') {
+        error_log(sprintf('[evo_webhook] no text to answer — %s message stored, AI not queued (%s)',
+            (string)(array_keys((array)($msg['message'] ?? []))[0] ?? 'unknown'), $channel));
+        $skipped++;
+        continue;
+    }
 
     try {
         $bus->emit(
@@ -281,6 +318,8 @@ foreach ($messages as $msg) {
                 'wa_message_id'     => $messageId,
                 'remote_jid'        => $remoteJid,
                 'received_at'       => gmdate('c'),
+                // Carried as data, never as prose the model could rewrite.
+                'location'          => $locEvent,
             ],
             3,                 // above normal: a waiting customer
             'evo_webhook'
