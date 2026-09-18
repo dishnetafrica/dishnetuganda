@@ -211,6 +211,17 @@ class AiReplyWorker extends WorkerBase
                             'conv %d: lead %s%s', $convId, $r['action'],
                             $r['reason'] !== '' ? ' — ' . $r['reason'] : ' #' . (int)$r['lead_id']
                         ));
+                        // Phase 2: hand it to the queue, never do it here. A
+                        // customer must not wait on uCRM for their reply, and
+                        // a uCRM that is restarting must not cost us the lead.
+                        // Emitted for an update as well as a create: a lead
+                        // that gained a location or a quote request is a lead
+                        // uCRM should hear about again.
+                        if (!empty($r['ok']) && (int)$r['lead_id'] > 0) {
+                            $this->bus->emit('crm.lead.sync', 'lead', (int)$r['lead_id'],
+                                ['lead_id' => (int)$r['lead_id'], 'conversation_id' => $convId],
+                                5, 'ai_reply_worker');
+                        }
                     }
                 } catch (\Throwable $e) {
                     $this->log('warn', 'lead capture failed: ' . $e->getMessage());

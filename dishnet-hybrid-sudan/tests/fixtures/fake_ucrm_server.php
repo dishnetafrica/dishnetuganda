@@ -22,7 +22,8 @@ declare(strict_types=1);
  */
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['scenario' => 'uganda', 'payments' => [], 'pay_seq' => 0];
+$state += ['scenario' => 'uganda', 'payments' => [], 'pay_seq' => 0,
+           'clients' => [], 'client_seq' => 0, 'patches' => []];
 
 function fu_out($data, int $http = 200): void
 {
@@ -42,7 +43,11 @@ if ($path === '/__test/scenario') {
 }
 if ($path === '/__test/state') fu_out($state + ['marker' => 'FAKE-UCRM-TEST']);
 if ($path === '/__test/payments') fu_out(['payments' => $state['payments'], 'count' => count($state['payments'])]);
-if ($path === '/__test/reset') { $state['payments'] = []; $state['pay_seq'] = 0; fu_out(['reset' => true]); }
+if ($path === '/__test/reset') { $state['payments'] = []; $state['pay_seq'] = 0;
+    $state['clients'] = []; $state['client_seq'] = 0; $state['patches'] = [];
+    fu_out(['reset' => true]); }
+if ($path === '/__test/clients') fu_out(['clients' => $state['clients'] ?? [],
+    'count' => count($state['clients'] ?? []), 'patches' => $state['patches'] ?? []]);
 
 // ── Invoices, payments and payment methods (DPO Pay) ────────────────────
 //
@@ -117,6 +122,80 @@ if ($path === '/organizations') {
     if ($scenario === 'no_phone') { $o = $UG; $o['phone'] = ''; $o['name'] = ''; fu_out([$o]); }
     fu_out([$UG]);
 }
+// ── Lead sync (Phase 2): create, search and patch clients ───────────────
+//
+// Clients created through here are REMEMBERED, so a test can count them. The
+// count is the point: idempotence means a retry must not add a second one.
+$method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+
+if ($path === '/clients' && $method === 'POST') {
+    if ($scenario === 'crm_down') fu_out(['message' => 'FAKE: uCRM unavailable'], 503);
+    $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
+    // The real uCRM refuses unknown fields with a 422. 5.18.11 shipped a
+    // payload carrying 'description' and every create failed; the fake was
+    // made strict afterwards so a test catches that class of mistake here.
+    $allowed = ['clientType','isLead','firstName','lastName','companyName','organizationId',
+                'countryId','stateId','street1','street2','city','zipCode','note','username',
+                'contacts','registrationNumber','taxId'];
+    foreach (array_keys($body) as $k) {
+        if (!in_array($k, $allowed, true)) {
+            fu_out(['message' => 'FAKE: this field is not allowed: ' . $k], 422);
+        }
+    }
+    if (($body['organizationId'] ?? null) === null) {
+        fu_out(['message' => 'FAKE: organizationId is required'], 422);
+    }
+    $state['client_seq'] = (int)($state['client_seq'] ?? 0) + 1;
+    $id = 500 + $state['client_seq'];
+    $row = $body + ['id' => $id];
+    $state['clients'][] = $row;
+    fu_out($row, 201);
+}
+
+if (preg_match('#^/clients/(\d+)$#', $path, $m) && $method === 'PATCH') {
+    $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
+    $state['patches'][] = ['id' => (int)$m[1]] + $body;
+    fu_out(['id' => (int)$m[1]] + $body);
+}
+
+// Search. 'dup_phone' puts two clients on one number — the case that must
+// never be resolved by guessing.
+if ($path === '/clients' || strpos($path, '/clients?') === 0) {
+    if ($method === 'GET') {
+        if ($scenario === 'crm_down') fu_out(['message' => 'FAKE: uCRM unavailable'], 503);
+        $needle = (string)($q['phone'] ?? $q['search'] ?? '');
+        // Only the SEARCH is down. The dangerous case: a lookup that fails
+        // while the caller already knows its defaults, so nothing else stops
+        // it concluding "nobody has this number" and creating a duplicate.
+        if ($scenario === 'lookup_down' && $needle !== '') {
+            fu_out(['message' => 'FAKE: search unavailable'], 503);
+        }
+        if ($needle === '') {
+            // The sample read used to establish organizationId / countryId.
+            fu_out([
+                ['id' => 9, 'organizationId' => 1, 'countryId' => 220],
+                ['id' => 8, 'organizationId' => 1, 'countryId' => 220],
+                ['id' => 7, 'organizationId' => 7, 'countryId' => 220],
+            ]);
+        }
+        if ($scenario === 'dup_phone') {
+            fu_out([
+                ['id' => 41, 'contacts' => [['phone' => '+256700000001']]],
+                ['id' => 42, 'contacts' => [['phone' => '0700000001']]],
+            ]);
+        }
+        if ($scenario === 'known_phone') {
+            fu_out([['id' => 77, 'contacts' => [['phone' => '+256700000001']]]]);
+        }
+        // A fuzzy hit that is NOT actually this number: the caller must
+        // confirm the digits rather than trusting the endpoint.
+        if ($scenario === 'fuzzy_miss') {
+            fu_out([['id' => 88, 'contacts' => [['phone' => '+256799999999']]]]);
+        }
+        fu_out([]);
+    }
+}
+
 if (preg_match('#^/clients/(\d+)$#', $path, $m)) {
     // client 9 belongs to the Uganda org; client 8 to the other one
     $id = (int)$m[1];
