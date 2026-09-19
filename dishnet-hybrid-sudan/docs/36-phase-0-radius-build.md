@@ -81,17 +81,17 @@ database is on the public Internet.
 ### 2.3 The FreeRADIUS schema — taken from the image, not hand-written
 
 ```bash
-docker pull freeradius/freeradius-server:3.2
+docker pull freeradius/freeradius-server:3.2.10
 
 # locate it rather than assuming the path — it moves between versions
-docker run --rm freeradius/freeradius-server:3.2 \
+docker run --rm freeradius/freeradius-server:3.2.10 \
   find / -name schema.sql -path '*postgresql*' 2>/dev/null
 ```
 
 **REQUIRES VERIFICATION — record the path it prints.** Then, substituting it:
 
 ```bash
-docker run --rm freeradius/freeradius-server:3.2 \
+docker run --rm freeradius/freeradius-server:3.2.10 \
   cat <THE PATH FROM ABOVE> > /opt/dn-phase0/schema.sql
 wc -l /opt/dn-phase0/schema.sql
 
@@ -113,14 +113,14 @@ writes; a typo appears as silently missing accounting months later.
 Extract the stock config so it can be edited outside the container:
 
 ```bash
-docker create --name dn-tmp freeradius/freeradius-server:3.2
-docker cp dn-tmp:/opt/etc/raddb/. /opt/dn-phase0/raddb/
+docker create --name dn-tmp freeradius/freeradius-server:3.2.10
+docker cp dn-tmp:/etc/freeradius/. /opt/dn-phase0/raddb/
 docker rm dn-tmp
 ls /opt/dn-phase0/raddb/
 ```
 
 **REQUIRES VERIFICATION** — if `/opt/etc/raddb` is wrong for this image, find
-it with `docker run --rm freeradius/freeradius-server:3.2 find / -name radiusd.conf`.
+it with `docker run --rm freeradius/freeradius-server:3.2.10 find / -name radiusd.conf`.
 
 **Three edits, and only three.**
 
@@ -187,8 +187,8 @@ fleet-wide secret means one recovered router compromises every other.
 docker run --rm -it \
   --name dn-phase0-radius-debug \
   --network host \
-  -v /opt/dn-phase0/raddb:/opt/etc/raddb \
-  freeradius/freeradius-server:3.2 \
+  -v /opt/dn-phase0/raddb:/etc/freeradius \
+  freeradius/freeradius-server:3.2.10 \
   -X
 ```
 
@@ -200,8 +200,8 @@ docker run -d \
   --name dn-phase0-radius \
   --network host \
   --restart unless-stopped \
-  -v /opt/dn-phase0/raddb:/opt/etc/raddb \
-  freeradius/freeradius-server:3.2
+  -v /opt/dn-phase0/raddb:/etc/freeradius \
+  freeradius/freeradius-server:3.2.10
 
 docker logs dn-phase0-radius --tail 20
 ss -ulnp | grep -E '1812|1813'      # MUST show 10.66.0.1
@@ -294,6 +294,40 @@ The container diff shows **exactly two additions**. The iptables diff will
 nothing existing.
 
 ---
+
+## 3.5 Verified against the real image — 19 September 2026
+
+The placeholders in §2 are resolved. **Three of the assumed values were
+wrong**, which is why §2.3 and §2.4 said to discover rather than assume.
+
+| | documented guess | **verified** |
+|---|---|---|
+| image tag | `3.2` | **`3.2.10`** — a bare `3.2` tag does not exist |
+| config root | `/opt/etc/raddb` | **`/etc/freeradius`** |
+| schema | unknown | **`/etc/freeradius/mods-config/sql/main/postgresql/schema.sql`** |
+| queries | unknown | `/etc/freeradius/mods-config/sql/main/postgresql/queries.conf` |
+| daemon binary | `radiusd` | **`freeradius`** — Debian naming |
+| entrypoint | — | `/docker-entrypoint.sh`, CMD `freeradius` |
+
+**`radtest` and `radclient` are in the image**, at `/usr/bin/`. §3.1 and §3.2
+run inside the container and need nothing on the host.
+
+**An install was avoided by simulating it.** `apt-get install -s
+freeradius-utils` on the host would have pulled seven packages —
+`freeradius-common`, `freeradius-config`, `libfreeradius3`, `libtalloc2`,
+`ssl-cert` and `make` — onto a production server, to provide tools the
+container already had. The simulate-first rule from docs/34 §5 paid for
+itself a second time.
+
+**Pin the patch version, not the line.** `latest-3.2` moves; `3.2.10` does
+not. A staging environment whose RADIUS version changes under it produces
+test results that cannot be reproduced.
+
+**Note the `main` schema.** The image ships six `postgresql/schema.sql`
+files — ippool, dhcp, ippool-dhcp, main, moonshot-targeted-ids, cui. Only
+`main` carries `radcheck`, `radreply` and `radacct`. Applying the wrong one
+would create a valid-looking database with none of the tables FreeRADIUS
+writes during accounting.
 
 ## 4. What is still NOT built
 
