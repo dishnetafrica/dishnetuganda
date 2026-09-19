@@ -371,6 +371,57 @@ pass; 7–10 (exposure and production-untouched) remain.
 | 5 | Interim updates that row | **PASS** — after §6.4 |
 | 6 | Stop closes it | **PASS** — one row, 600s, `User-Request` |
 
+### 6.1b Items 7–10 — exposure and isolation
+
+| # | check | result |
+|---|---|---|
+| 7 | RADIUS unreachable on the public IP | **PASS** |
+| 8 | PostgreSQL unreachable on the public IP | **PASS** — `5433/tcp Connection refused` |
+| 9 | existing production containers healthy | **PASS** — exactly +2, all 18 unchanged, 9/9 ports answering |
+| 10 | WireGuard configuration unchanged | **PASS** — same public key, port, address |
+
+**On what proves item 7, because two of the three tests are weaker than they
+look.** The dispositive evidence is the bind list:
+
+```
+UNCONN 10.66.0.1:1812 · 10.66.0.1:1813 · [::1]:1812 · [::1]:1813 · 127.0.0.1:18120
+```
+
+The kernel cannot deliver a packet addressed to `209.97.137.203` to a socket
+bound to `10.66.0.1`. That is not inference.
+
+A `radclient` probe to the public address got no reply — **consistent, but
+not conclusive on its own**, since FreeRADIUS is also silent to an unknown
+client, so a non-reply has two possible causes.
+
+`nc -u -z` reported **"succeeded!"** on both 1812 and 1813. **That result is
+worthless**: `nc` declares UDP success whenever no ICMP port-unreachable
+returns, and DigitalOcean rate-limits or filters those. It reports success
+against ports where nothing listens. Anyone repeating this test should not
+treat that line as a failure — or, worse, as a pass for the opposite reason.
+
+### 6.1c The iptables diff, read line by line
+
+Item 9 could not be a byte-identical ruleset this time, because publishing
+`127.0.0.1:5433` makes Docker write rules. Every added line was scoped to
+`br-eaf6dda29f33`, the new `dn-phase0` bridge:
+
+```
++ DOCKER                    -d 172.21.0.2/32 ... --dport 5432 -j ACCEPT
++ DOCKER-ISOLATION-STAGE-1  -i br-eaf6dda29f33 ...
++ DOCKER-ISOLATION-STAGE-2  -o br-eaf6dda29f33 -j DROP
++ FORWARD                   (four rules, all bridge-scoped)
+```
+
+**No line was modified or removed.** The diff contains additions only — none
+of the original 54 rules changed. `DOCKER-ISOLATION-STAGE-2 ... -j DROP` is
+Docker fencing this network off from the other seven, which is the property
+that makes "isolated" more than a label.
+
+Docker allocated `172.21.0.0/16` to the new bridge — another draw from its
+address pool, and a reminder of docs/34 §3.2: the pool is not reserved
+around us. It did not collide today.
+
 ### 6.2 Five things the plan got wrong
 
 Recorded because the pattern is the point: **every one was a value written
