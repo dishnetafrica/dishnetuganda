@@ -352,3 +352,113 @@ rm -rf /opt/dn-phase0
 
 The host returns to its post-WireGuard state. No production container,
 network, volume or rule is involved at any point.
+
+---
+
+## 6. Execution record — 19 September 2026
+
+Built on the live production host. Items 1–6 of the operator's evidence list
+pass; 7–10 (exposure and production-untouched) remain.
+
+### 6.1 Evidence
+
+| # | check | result |
+|---|---|---|
+| 1 | PostgreSQL exposed only on 127.0.0.1:5433 | **PASS** — `LISTEN 127.0.0.1:5433` |
+| 2 | FreeRADIUS listens only on 10.66.0.1:1812/1813 | **PASS** — after §6.3 |
+| 3 | `radtest` → Access-Accept **with attributes** | **PASS** — `Mikrotik-Rate-Limit = "5M/5M"`, `Session-Timeout = 3600`, `Acct-Interim-Interval = 300` |
+| 4 | Accounting-Start creates a `radacct` row | **PASS** |
+| 5 | Interim updates that row | **PASS** — after §6.4 |
+| 6 | Stop closes it | **PASS** — one row, 600s, `User-Request` |
+
+### 6.2 Five things the plan got wrong
+
+Recorded because the pattern is the point: **every one was a value written
+from memory instead of read from the thing itself.**
+
+| | assumed | actual |
+|---|---|---|
+| image tag | `3.2` | `3.2.10` — bare `3.2` does not exist |
+| config root | `/opt/etc/raddb` | `/etc/freeradius` |
+| daemon binary | `radiusd` | `freeradius` |
+| `sql` module | a minimal block written by hand | needed 9 more variables the stock file defines |
+| verification regex | `^[[:space:]]+sql$` | missed `-sql`, reported a correct file as broken |
+
+The `sql` one cost three rounds. Writing the module config from scratch
+discarded exactly the parts that were not memorable — eight table names, then
+`group_attribute`. **Diffing the variable names against the stock file found
+all of them at once**; the error-at-a-time loop before it found one per run:
+
+```bash
+docker run --rm --entrypoint cat <image> /etc/freeradius/mods-available/sql \
+  | grep -oE '^[[:space:]]*[a-z_]+[[:space:]]*=' | sed 's/[[:space:]]//g; s/=$//' | sort -u > stock.v
+grep -oE '^[[:space:]]*[a-z_]+[[:space:]]*=' mods-available/sql \
+  | sed 's/[[:space:]]//g; s/=$//' | sort -u > mine.v
+comm -23 stock.v mine.v
+```
+
+### 6.3 Two listeners the plan never mentioned
+
+`sed` rewrote `ipaddr = *`, and the first `-X` run then showed:
+
+```
+Listening on auth address :: port 1812        ← ALL IPv6
+Listening on acct address :: port 1813
+Listening on proxy address * port 35821
+```
+
+Separate `listen` blocks use `ipv6addr`, not `ipaddr`. **The droplet has only
+link-local IPv6 today, so nothing was reachable — but enabling IPv6 in the
+DigitalOcean panel is a checkbox, and the shared secret would have become
+answerable from the Internet with no change here.**
+
+Worse, **the planned exposure test would have passed anyway**:
+`nmap -sU -p 1812,1813 <ipv4>` cannot see an IPv6 listener. A test that only
+looks where you expect the problem is not a test.
+
+Fixed with `ipv6addr = ::1` and `proxy_requests = no`. Both seds needed a
+second attempt — one line carried a trailing comment that defeated a `$`
+anchor, the other had **two spaces** before its `=`.
+
+### 6.4 Accounting split into two rows, and it was the test's fault
+
+Interim inserted a second row instead of updating the first. Both rows had a
+populated `acctuniqueid` — **and the two hashes differed**, which is what
+named the cause: `rlm_acct_unique` hashes a fixed attribute set, and the
+hand-built Start packet carried `NAS-Port=0` while Interim and Stop did not.
+
+`acct_unique` was working correctly throughout. Identical attributes across
+all three packets produced one row.
+
+**This hands the hardware test something specific.** A real MikroTik should
+send a consistent attribute set, but "should" is not "verified". During A12,
+**count the `radacct` rows for one hotspot session.** More than one means
+RouterOS varies its attributes between packet types, and the fix is narrowing
+`acct_unique`'s key list — not a mystery to debug from scratch.
+
+Had #4 alone been checked, this would have passed: the Start row appears
+correctly either way. Splitting #4, #5 and #6 is what caught it.
+
+### 6.5 Secrets handled during the build
+
+- **The PostgreSQL password was printed by `rlm_sql_postgresql`** in `-X`
+  output, which bypasses FreeRADIUS's own `<<secret>>` suppression. Rotated
+  via `ALTER USER`, and the log deleted. **Standing rule: an `-X` log
+  contains the database password. Treat it as a secret and delete it.**
+- `mods-available/sql` was created mode 644 by `cat >`. Now 640, group
+  `freerad` (gid 101).
+- `docker cp` chowns extracted files to the local user, which **stripped the
+  `freerad` group** from `accounting`, `clients.conf`, `radiusd.conf` and the
+  whole `certs/` tree. FreeRADIUS drops privileges before instantiating
+  modules, so it could not read its own config. Fixed with a recursive
+  `chgrp` to gid 101 rather than by loosening permissions.
+
+### 6.6 Owed before any of this faces a real router
+
+- `client dn-localtest` (ipaddr `10.66.0.1`) — a test client pointing at the
+  gateway itself. **Remove.**
+- `client localhost` and `client localhost_ipv6` ship with the secret
+  `testing123`. Harmless now (loopback only, and nothing listens on
+  `127.0.0.1:1812`), but they are stock defaults in a config that will face
+  real routers. **Remove.**
+- Test rows `t1-TESTCODE01` and `dnp0-test-002`.
