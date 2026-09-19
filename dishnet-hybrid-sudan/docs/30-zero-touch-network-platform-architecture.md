@@ -21,7 +21,30 @@ assumes, and all four change scope, cost or sequence. They are here rather
 than buried at artifact 7 because each one is cheaper to settle now than
 after a sprint.
 
-### 0.1 The actor the whole brief depends on does not exist
+### 0.1 CORRECTED 19 Sep 2026 — the customer actor DOES exist
+
+> **This section was wrong.** See docs/37 for the audit that found it.
+>
+> A complete customer-facing application already exists:
+> `includes/api/api_customer_app.php` (5,104 lines), OTP login, JWT with
+> `kind='app'`, a token blacklist, an installable PWA at
+> `tabs/customer_app/portal.php`, and **a working hotspot feature** with
+> time-based paid access, device tracking and per-router authorisation.
+>
+> The error was looking in one place. `api/v2/router.php` is a staff field
+> API — that much was right — but the search stopped at the `api/` directory
+> and never reached `includes/api/`.
+>
+> **Consequence:** Phase 1 below should read *build tenancy*, not *build the
+> customer principal*. Authentication, the app shell, billing views and push
+> notifications all exist and must not be rebuilt. docs/37 §8 has the revised
+> reuse boundary.
+>
+> The original text is kept below because the reasoning built on it appears
+> throughout this document, and silently editing it would leave those
+> passages unexplained.
+
+### 0.1 (original, incorrect) The actor the whole brief depends on does not exist
 
 The brief's central sentence is *"Customer opens the DishNet App"* and every
 screen in sections 12–13 is a customer looking at their own routers.
