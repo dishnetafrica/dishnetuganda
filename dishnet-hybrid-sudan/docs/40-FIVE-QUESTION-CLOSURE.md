@@ -5,8 +5,8 @@
 created. Source lines pass a literal redactor. No cookie, token, password or key value was
 read into any output.
 
-**Status: four closed, one not.** Q5 is unresolved because of a coverage gap in my own
-probe, described plainly in §5 rather than papered over.
+**Status: all five closed.** Q5 initially failed on a coverage gap in my own
+probe; it was re-run with full coverage and is answered decisively in Q5.
 
 ---
 
@@ -164,60 +164,107 @@ file we could not. Recorded, not fixed.
 
 ---
 
-## Q5 — NOT CLOSED: my probe had a coverage gap
+## Q5 — CLOSED: the hotspot has never been used, and the schema was never created
 
-### What the probe returned
+The follow-up scan covered the whole plugins root including dot-directories and found
+**13 SQLite databases**. The result is not ambiguous.
 
-```
-hotspot_paid_access:  TABLE DOES NOT EXIST
-hotspot_session_log:  TABLE DOES NOT EXIST
-```
+### Which database is live
 
-### Why I am not reporting that as the answer
+| | Path | Size | Tables | wa_conversations | wa_messages | followups |
+|---|---|---|---|---|---|---|
+| **DB11** | `.dishnet-hybrid-sudan-data/plugin.sqlite3` | **17,804 KB** | **209** | **705** | **5,833** | **391** |
+| DB13 | `dishnet-hybrid-sudan/data/plugin.sqlite3` | 2,064 KB | 112 | 0 | 0 | 0 |
 
-Two `plugin.sqlite3` files exist:
+**DB11 is live.** Its mtime was `2026-09-19 13:46:33` — the exact second the probe ran — so
+it is being written continuously. It sits in the **persistent** directory.
 
-| | Path | Size | Age |
-|---|---|---|---|
-| A | `.dishnet-hybrid-sudan-data/plugin.sqlite3` | not measured | — |
-| B | `dishnet-hybrid-sudan/data/plugin.sqlite3` | 2,064 KB | 6.5 h |
+### The answer, with 15 days of longitudinal evidence
 
-**My Q1 walk only descended into the three plugin directories.**
-`.dishnet-hybrid-sudan-data` is a *sibling* of those, not inside them, so database A was
-never scanned or table-listed. Q5 opened A and checked two table names; Q1b listed B's
-tables in full.
+| Table | DB1–DB8 (daily/weekly backups, 12–18 Sep) | DB9–DB10 (4 Sep) | DB11 (live) | DB13 |
+|---|---|---|---|---|
+| `hotspot_paid_access` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+| `hotspot_session_log` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+| `hotspot_seen_devices` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+| `app_jwt_blacklist` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
 
-Neither shows the hotspot tables. But B also reports `wa_conversations = 0` and
-`wa_messages = 0`, which is **known to be false** for this production system — there are
-real conversations. So B is not the live database, and I have no table listing for A.
+Absent from **all thirteen databases**, including every retained backup from
+**4 September to 19 September**. This is not "absent today" — it is absent across the
+entire retained history.
 
-**Conclusion I can support:** the hotspot tables are absent from both files inspected.
-**Conclusion I cannot yet support:** that this means zero hotspot usage.
+### What that proves
 
-### Why the two databases exist
+`ca_init_tables()` creates thirteen tables in one call: `app_otp_pending`, `app_otp_rate`,
+**`app_jwt_blacklist`**, `app_audit_log`, `app_fcm_tokens`, `app_push_log`,
+`app_wifi_cache`, `app_wa_send_cooldown`, `app_tos_consent`, `app_site_refresh_log`,
+**`hotspot_seen_devices`**, **`hotspot_paid_access`**, **`hotspot_session_log`**.
 
-`lib/bootstrap_data.php:85-95` performs a one-time rescue: when the persistent directory
-has no `plugin.sqlite3` but the legacy one does, it **copies** every file across —
-*"Copy, never move -- if anything here goes wrong the original must still be there."*
-That rescue has run, which is why both exist. The persistent copy should be live and the
-legacy one the original left behind.
+It is called at the top of **44 customer-app handlers**, including `app_send_otp` — the
+first call any PWA session makes.
 
-### The hypothesis this points to, stated as a hypothesis
+None of its exclusive tables exists anywhere. Therefore:
 
-`ca_init_tables()` creates `hotspot_paid_access`, `hotspot_session_log` and
-`hotspot_seen_devices`, and it is called at the top of **44 customer-app handlers** —
-including `app_send_otp` and `app_me`. If the PWA had ever been exercised against the live
-database, those tables would exist.
+> **`ca_init_tables()` has never executed in production. No customer-app API request has
+> ever been served. The PWA has never been used. Live hotspot usage is zero.**
 
-Their absence suggests **the customer app has never been used in production, and the
-hotspot schema was never created** — making live hotspot usage zero.
+The counts requested are all the same number:
 
-If that holds it is the single most consequential fact for MikroTik planning: the system
-being frozen would have no users at all. Which is exactly why I am verifying it rather
-than asserting it. The probe in the accompanying message lists every SQLite file under the
-plugins root including dot-directories, and compares the databases side by side.
+| Metric | Value |
+|---|---|
+| Rows in `hotspot_paid_access` | **table does not exist** |
+| Active grants | **0** |
+| Expired / revoked grants | **0** |
+| Distinct router IDs | **0** |
+| Distinct customer/device identifiers | **0** |
+| `hotspot_session_log` rows | **table does not exist** |
+| Recent sessions | **0** |
 
----
+No customer names, phone numbers, MAC addresses, tokens or cookies were read — there is
+nothing there to read.
+
+### `cron_paid_access.php` has been a no-op since deployment
+
+`cron_paid_access.php:65-70` wraps `SELECT 1 FROM hotspot_paid_access LIMIT 1` in a
+try/catch and `return`s when it throws. With the table absent, **every scheduled run since
+deployment has exited at that line.** It has never called the Starlink dealer API.
+
+### What this changes
+
+The system being frozen is **code and data, not live users**. That reframes the freeze:
+it protects a working implementation and its Starlink registry, not a customer base. The
+twelve gated actions have never been invoked; the four `app_paid_access_*` billing actions
+have never taken a payment.
+
+It also re-rates the upgrade risk in §Q4 and docs/39 §2. Losing `sl_kits.json` would still
+break the **admin and reporting** paths that read it — `api_crm_misc.php`, the Fleet
+screen, `portal_data.php`, `tools/block_doctor.php`, `tools/starlink_accounts_list.php` —
+and would break the hotspot **if it were ever launched**. But it would not interrupt any
+customer today, because no customer is being served. The risk is to data and to future
+launch, not to current service.
+
+### One new finding: the legacy database is still being touched
+
+DB13 is stale by content — zero conversations, 112 tables against the live 209 — yet its
+mtime is `2026-09-19 07:08:01`, the same day as the audit, and its `_migrations` count is
+**72, identical to live**. Something is still opening it and running migrations against it.
+
+Two reasons to record this:
+
+1. **Split-brain risk.** A tool that resolves `dataDir` to the legacy path would write real
+   data into a database nothing else reads.
+2. **A latent restore hazard.** `bootstrap_data.php:87` performs its rescue copy only when
+   the persistent directory has **no** `plugin.sqlite3`. If DB11 were ever lost, that
+   rescue would restore DB13 — the near-empty one — and the plugin would come back up
+   looking healthy with 705 conversations gone.
+
+Not investigated further here, and not touched.
+
+### Backup posture, for the record
+
+`.dishnet-hybrid-sudan-data/_backups/` holds 7 daily sets (13–19 Sep) plus a weekly, taken
+at 23:00 daily, growing steadily from 13,828 KB to 17,308 KB. This plugin's own database
+is well protected. That is a useful contrast with §Q4: this plugin backs itself up
+properly, and the sibling snapshot it takes is the one missing `sl_kits.json`.
 
 ## Recorded for Phase 2 — data isolation
 
