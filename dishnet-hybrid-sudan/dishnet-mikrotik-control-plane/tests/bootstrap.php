@@ -1,0 +1,70 @@
+<?php
+declare(strict_types=1);
+// Dependency-free harness, matching the plugin's convention: t()/is_()/ok()/bad().
+require __DIR__ . '/../src/autoload.php';
+
+$GLOBALS['__t_pass'] = 0;
+$GLOBALS['__t_fail'] = 0;
+$GLOBALS['__t_name'] = '';
+
+function t(string $name): void { $GLOBALS['__t_name'] = $name; echo "\n-- {$name}\n"; }
+function ok(string $msg): void  { $GLOBALS['__t_pass']++; echo "  ok    {$msg}\n"; }
+function bad(string $msg): void { $GLOBALS['__t_fail']++; echo "  FAIL  {$msg}\n"; }
+
+function is_($actual, $expected, string $msg): void
+{
+    if ($actual === $expected) { ok($msg); return; }
+    bad($msg . ' — expected ' . var_export($expected, true)
+             . ', got ' . var_export($actual, true));
+}
+
+/** Assert a callable throws, optionally matching a substring. */
+function throws_(callable $fn, string $needle, string $msg): void
+{
+    try { $fn(); } catch (Throwable $e) {
+        if ($needle === '' || stripos($e->getMessage(), $needle) !== false) { ok($msg); return; }
+        bad($msg . " — threw, but message lacked '{$needle}': " . $e->getMessage());
+        return;
+    }
+    bad($msg . ' — did not throw');
+}
+
+function t_summary(): int
+{
+    $p = $GLOBALS['__t_pass']; $f = $GLOBALS['__t_fail'];
+    echo "\n" . str_repeat('-', 56) . "\n";
+    echo $f ? "FAILED  {$f} of " . ($p + $f) . "\n" : "PASSED  all {$p} assertions\n";
+    return $f ? 1 : 0;
+}
+
+/** Seed two customers with a full object graph each. Owner connection. */
+function seed_two_customers(\Dn\Db\Database $owner): array
+{
+    foreach (['mt_idempotency','mt_sites','mt_entitlements','mt_services',
+              'mt_auth_sessions','mt_principals'] as $tbl) {
+        $owner->exec("DELETE FROM {$tbl}");
+    }
+    $owner->pdo()->exec('ALTER TABLE mt_audit_log DISABLE TRIGGER mt_audit_no_delete');
+    $owner->exec('DELETE FROM mt_audit_log');
+    $owner->pdo()->exec('ALTER TABLE mt_audit_log ENABLE TRIGGER mt_audit_no_delete');
+    $owner->exec('DELETE FROM mt_customers');
+
+    $out = [];
+    foreach ([['A','Riverside Hotel',1001], ['B','Kabale Hostel',1002]] as [$k,$name,$ucrm]) {
+        $c = $owner->one('INSERT INTO mt_customers (name, ucrm_client_id) VALUES (?,?) RETURNING id',
+                         [$name, $ucrm]);
+        $p = $owner->one("INSERT INTO mt_principals (customer_id, kind, display_name, phone)
+                          VALUES (?, 'owner', ?, ?) RETURNING id",
+                         [$c['id'], $name . ' owner', '+25670000' . $ucrm]);
+        $s = $owner->one("INSERT INTO mt_services (customer_id, kind)
+                          VALUES (?, 'mikrotik_hotspot') RETURNING id", [$c['id']]);
+        $e = $owner->one("INSERT INTO mt_entitlements (service_id, customer_id, key, int_value)
+                          VALUES (?,?, 'max_routers', 2) RETURNING id", [$s['id'], $c['id']]);
+        $si = $owner->one('INSERT INTO mt_sites (customer_id, service_id, name, location)
+                           VALUES (?,?,?,?) RETURNING id',
+                          [$c['id'], $s['id'], $name . ' lobby', 'ground floor']);
+        $out[$k] = ['customer' => $c['id'], 'principal' => $p['id'], 'service' => $s['id'],
+                    'entitlement' => $e['id'], 'site' => $si['id']];
+    }
+    return $out;
+}
