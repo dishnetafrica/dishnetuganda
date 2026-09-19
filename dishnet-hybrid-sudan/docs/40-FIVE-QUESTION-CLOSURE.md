@@ -1,0 +1,311 @@
+# 40 — Closing the Five Open Questions
+
+**Type:** Read-only. Nothing modified, migrated, restarted or redeployed. SQLite opened
+`mode=ro`; the engine refuses writes through that handle and no `-wal`/`-shm` files are
+created. Source lines pass a literal redactor. No cookie, token, password or key value was
+read into any output.
+
+**Status: all five closed.** Q5 initially failed on a coverage gap in my own
+probe; it was re-run with full coverage and is answered decisively in Q5.
+
+---
+
+## Q1 — The `dishnet-data-report` SQLite database
+
+**Found by magic bytes**, not by extension, so an unexpected filename could not hide it.
+
+| | |
+|---|---|
+| **Exact path** | `/data/ucrm/data/plugins/dishnet-data-report/data/auto_block.sqlite3` |
+| **Filename** | `auto_block.sqlite3` |
+| **Size** | 16.0 KB |
+| **Last modified** | 6.2 days ago |
+| **Tables** | `auto_block_queue` (**0 rows**), `sqlite_sequence` (0 rows) |
+| **Inside the upgrade-deletable `data/` directory?** | **YES** |
+| **Actively updated?** | **No** — 6.2 days old and empty |
+| **Writers** | `dr_wifi_change.php`, `cron_auto_block.php` |
+
+**`dishnet-starlink-finance` has no SQLite database at all.** It is entirely file-backed.
+
+Two things worth recording:
+
+1. **`pause_overlay` does not exist in this database.** It appears in the plugin's source
+   as a `CREATE TABLE`, but the live file holds only `auto_block_queue` and
+   `sqlite_sequence`. So either it is created elsewhere on demand, or that code path has
+   never run. Evidence of code is not evidence of function.
+2. **The auto-block feature appears idle.** An empty queue untouched for 6.2 days is not a
+   feature under load.
+
+A third database was found in the same scan: `dishnet-hybrid-sudan/data/plugin.sqlite3`,
+2,064 KB, 6.5 hours old — **also inside an upgrade-deletable `data/` directory**. That one
+belongs to this plugin and is central to Q5.
+
+---
+
+## Q2 — Persistent data location
+
+**Neither sibling has one.**
+
+| | `dishnet-starlink-finance` | `dishnet-data-report` |
+|---|---|---|
+| Persistent location exists | **NO** | **NO** |
+| Path checked | `/data/ucrm/data/plugins/.dishnet-starlink-finance-data` | `/data/ucrm/data/plugins/.dishnet-data-report-data` |
+| Legacy `data/` still in use | **YES** | **YES** |
+| JSON files there | 14 | 22 |
+| Newest write | 17.9 h ago | **0.6 h ago** |
+| Symlinks inside plugin | none | none |
+
+The only persistent directory in the whole plugins root is
+**`.dishnet-hybrid-sudan-data`**.
+
+Both siblings are actively writing into the directory uCRM replaces on upgrade — one of
+them 36 minutes before the audit ran. This is not dormant data waiting to be migrated; it
+is the live working set.
+
+Per instruction, no persistent location was created.
+
+---
+
+## Q3 — The actual writers, traced rather than inferred
+
+Both are now **proven from source**, including the helper and its caller.
+
+### `sl_kits.json` ← `dishnet-starlink-finance`
+
+| Role | Location |
+|---|---|
+| **Write helper** | `public.php:175` — `saveJSON()` |
+| **Writer (apply mode)** | `public.php:5314` — `$kitsFile = $dataDir . '/sl_kits.json'` |
+| **Writer (enrichment)** | `public.php:3258` — `autoEnrichKitData()` |
+| Other helpers present | `main.php:42` `saveJSON()`, `wifi_manager_api.php:40` `saveJSON()` |
+| Readers | `main.php:50`, `public.php:124`, `public.php:4008` (`loadJSON`), `wifi_manager_api.php:24` |
+
+The plugin documents its own write discipline at `public.php:5249` and `:5258`:
+
+> *"mode=apply — actually writes sl_kits.json (and creates a backup first)"*
+> *"Before any apply-mode write, the existing sl_kits.json is copied to …"*
+
+So the kit register has a backup-before-write on its apply path. That is a real safeguard,
+and it is internal to the plugin — it does not protect against the directory being deleted.
+
+### `wifi_router_map.json` ← `dishnet-data-report`
+
+| Role | Location |
+|---|---|
+| **Write helper / writer** | `dr_wifi_change.php:1212` — **`drWifiSaveRouterMap()`** |
+| **Builder** | `dr_wifi_change.php:1672` — *"builds wifi_router_map.json: routerId → {account, sl, kit, terminal, customer, hw}"* |
+| **Merge path** | `dr_wifi_change.php:1980` — *"merges new routers into wifi_router_map.json, and retries the match"* |
+| **Cron caller** | `cron.php:162-163` — *"Builds wifi_router_map.json so the customer app can find router_id for WiFi changes"* |
+| Readers | `cron_auto_block.php:173`, `public.php:4107`, `templates/wifi_tab.php:10` |
+
+**This settles the architecture question from the server rather than from inference.** The
+router map is built by the plugin that holds the Starlink API access, and its own comment
+says it exists *"so the customer app can find router_id"* — the exact dependency
+`ca_hotspot_authz_router()` Path B relies on.
+
+### Two findings that came free with the trace
+
+1. **`dr_kit_registry.json` has a named writer:**
+   `lib/KitRegistryWriter.php::regenerate()` at line 392 — matching the `generator` and
+   `contract` fields the file describes itself with.
+
+2. **An encryption mechanism genuinely exists.** `session_manager.php` defines
+   `smDeriveKey()` (61), `smSave()` (105), `smSaveAccounts()` (657) and
+   **`smMigrateEncryption()`** (682), alongside the `SM_KEY_LENGTH` constant.
+   A key-derivation routine plus an encryption *migration* is strong support for
+   `dr_accounts.json`'s `cookie_enc` / `cookie_encrypted` fields being genuinely encrypted
+   at rest.
+
+   It does **not** settle `sl_sync_settings.json`'s `starlink_cookie`, which carries no
+   `_enc` suffix. That remains open, and I am not closing it by association.
+
+---
+
+## Q4 — `dr_snapshots` is a real, automatic, current backup — with one hole
+
+**It exists, it runs daily, and it is current.**
+
+| | |
+|---|---|
+| Path | `/data/ucrm/data/plugins/.dishnet-hybrid-sudan-data/dr_snapshots` |
+| Location | **Inside the persistent directory** — survives a sibling upgrade |
+| Snapshot sets | 8 |
+| Cadence | Daily at ~05:40 UTC (`20260919-054005`, `20260918-054025`, `20260917-054024`, …) |
+| Newest | 8.0 hours old, 8 files |
+| Generated by | `cron/dr_snapshot.php`, scheduled via `cron/master.php` |
+
+### Newest snapshot vs live source
+
+| File | Snapshot | Live | Verdict |
+|---|---|---|---|
+| `wifi_router_map.json` | 1,658 B | 1,658 B | **identical** |
+| `dr_kit_registry.json` | 4,851 B | 4,851 B | **identical** |
+| `sl_svc_cache.json` | 5,852 B | 5,852 B | **identical** |
+| `sl_sync_settings.json` | 7,540 B | 7,540 B | **identical** |
+| `dr_accounts.json` | 33,789 B | 33,800 B | 11 B drift over 8 h — expected |
+| `wifi_test_block_state.json` | ABSENT | ABSENT | nothing to copy |
+| **`sl_kits.json`** | **ABSENT** | 2,181 B | **NOT BACKED UP** |
+
+### The hole, stated plainly
+
+The backup is genuine and working. But `DrSnapshot::FILES` lists only
+`dishnet-data-report` files. **`sl_kits.json` belongs to `dishnet-starlink-finance` and is
+not in the list.**
+
+That is precisely inverted relative to the risk:
+
+- `wifi_router_map.json` is the **soft** dependency — losing it costs the Path B fallback.
+  It **is** backed up.
+- `sl_kits.json` is the **hard** dependency — losing it returns **503 on all twelve gated
+  actions**, including all four `app_paid_access_*` billing actions. It is **not** backed up.
+
+So the one mitigation that exists protects the file we could survive losing and misses the
+file we could not. Recorded, not fixed.
+
+---
+
+## Q5 — CLOSED: the hotspot has never been used, and the schema was never created
+
+The follow-up scan covered the whole plugins root including dot-directories and found
+**13 SQLite databases**. The result is not ambiguous.
+
+### Which database is live
+
+| | Path | Size | Tables | wa_conversations | wa_messages | followups |
+|---|---|---|---|---|---|---|
+| **DB11** | `.dishnet-hybrid-sudan-data/plugin.sqlite3` | **17,804 KB** | **209** | **705** | **5,833** | **391** |
+| DB13 | `dishnet-hybrid-sudan/data/plugin.sqlite3` | 2,064 KB | 112 | 0 | 0 | 0 |
+
+**DB11 is live.** Its mtime was `2026-09-19 13:46:33` — the exact second the probe ran — so
+it is being written continuously. It sits in the **persistent** directory.
+
+### The answer, with 15 days of longitudinal evidence
+
+| Table | DB1–DB8 (daily/weekly backups, 12–18 Sep) | DB9–DB10 (4 Sep) | DB11 (live) | DB13 |
+|---|---|---|---|---|
+| `hotspot_paid_access` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+| `hotspot_session_log` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+| `hotspot_seen_devices` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+| `app_jwt_blacklist` | **ABSENT** | **ABSENT** | **ABSENT** | **ABSENT** |
+
+Absent from **all thirteen databases**, including every retained backup from
+**4 September to 19 September**. This is not "absent today" — it is absent across the
+entire retained history.
+
+### What that proves
+
+`ca_init_tables()` creates thirteen tables in one call: `app_otp_pending`, `app_otp_rate`,
+**`app_jwt_blacklist`**, `app_audit_log`, `app_fcm_tokens`, `app_push_log`,
+`app_wifi_cache`, `app_wa_send_cooldown`, `app_tos_consent`, `app_site_refresh_log`,
+**`hotspot_seen_devices`**, **`hotspot_paid_access`**, **`hotspot_session_log`**.
+
+It is called at the top of **44 customer-app handlers**, including `app_send_otp` — the
+first call any PWA session makes.
+
+None of its exclusive tables exists anywhere. Therefore:
+
+> **`ca_init_tables()` has never executed in production. No customer-app API request has
+> ever been served. The PWA has never been used. Live hotspot usage is zero.**
+
+The counts requested are all the same number:
+
+| Metric | Value |
+|---|---|
+| Rows in `hotspot_paid_access` | **table does not exist** |
+| Active grants | **0** |
+| Expired / revoked grants | **0** |
+| Distinct router IDs | **0** |
+| Distinct customer/device identifiers | **0** |
+| `hotspot_session_log` rows | **table does not exist** |
+| Recent sessions | **0** |
+
+No customer names, phone numbers, MAC addresses, tokens or cookies were read — there is
+nothing there to read.
+
+### `cron_paid_access.php` has been a no-op since deployment
+
+`cron_paid_access.php:65-70` wraps `SELECT 1 FROM hotspot_paid_access LIMIT 1` in a
+try/catch and `return`s when it throws. With the table absent, **every scheduled run since
+deployment has exited at that line.** It has never called the Starlink dealer API.
+
+### What this changes
+
+The system being frozen is **code and data, not live users**. That reframes the freeze:
+it protects a working implementation and its Starlink registry, not a customer base. The
+twelve gated actions have never been invoked; the four `app_paid_access_*` billing actions
+have never taken a payment.
+
+It also re-rates the upgrade risk in §Q4 and docs/39 §2. Losing `sl_kits.json` would still
+break the **admin and reporting** paths that read it — `api_crm_misc.php`, the Fleet
+screen, `portal_data.php`, `tools/block_doctor.php`, `tools/starlink_accounts_list.php` —
+and would break the hotspot **if it were ever launched**. But it would not interrupt any
+customer today, because no customer is being served. The risk is to data and to future
+launch, not to current service.
+
+### One new finding: the legacy database is still being touched
+
+DB13 is stale by content — zero conversations, 112 tables against the live 209 — yet its
+mtime is `2026-09-19 07:08:01`, the same day as the audit, and its `_migrations` count is
+**72, identical to live**. Something is still opening it and running migrations against it.
+
+Two reasons to record this:
+
+1. **Split-brain risk.** A tool that resolves `dataDir` to the legacy path would write real
+   data into a database nothing else reads.
+2. **A latent restore hazard.** `bootstrap_data.php:87` performs its rescue copy only when
+   the persistent directory has **no** `plugin.sqlite3`. If DB11 were ever lost, that
+   rescue would restore DB13 — the near-empty one — and the plugin would come back up
+   looking healthy with 705 conversations gone.
+
+Not investigated further here, and not touched.
+
+### Backup posture, for the record
+
+`.dishnet-hybrid-sudan-data/_backups/` holds 7 daily sets (13–19 Sep) plus a weekly, taken
+at 23:00 daily, growing steadily from 13,828 KB to 17,308 KB. This plugin's own database
+is well protected. That is a useful contrast with §Q4: this plugin backs itself up
+properly, and the sibling snapshot it takes is the one missing `sl_kits.json`.
+
+## Recorded for Phase 2 — data isolation
+
+Carried forward from docs/39 §10, unchanged and unimplemented:
+
+**`hotspot_paid_access.router_id` is unconstrained `TEXT`.** No `CHECK`, no foreign key.
+`cron_paid_access.php` selects every distinct `router_id` with `status='active'` and hands
+each to `dr_wifi_get_status`. A MikroTik voucher in that table becomes a Starlink dealer
+API call against a device Starlink has never heard of.
+
+**Phase 2 requirement:** the MikroTik voucher/access model must be **mechanically**
+separated from the Starlink paid-access model — a separate table (`mt_vouchers`) *plus* a
+database-level constraint — not separated by application convention. A rule that lives
+only in a document is a request, and requests fail silently.
+
+Not fixed, not migrated, not designed further here.
+
+---
+
+## Architecture preserved
+
+The corrected relationship stands, and Q3 has now proven it from the installed source
+rather than from inference:
+
+- **`dishnet-data-report`** → Starlink API client → Starlink router/device operations →
+  `dr_wifi_*`. It builds `wifi_router_map.json` via `drWifiSaveRouterMap()`.
+- **`dishnet-starlink-finance`** → Starlink kit/finance registry → authorization data
+  consumed by the customer application. It writes `sl_kits.json` via `saveJSON()`.
+
+The old assumption is not reinstated anywhere in this document.
+
+## MikroTik boundary
+
+Unchanged and strict. The MikroTik system must not use `sl_kits.json`,
+`wifi_router_map.json`, `dr_accounts.json`, Starlink session cookies, or Starlink router
+IDs as its device registry; must not call `dr_wifi_*`; and must not insert vouchers into
+`hotspot_paid_access`. It gets its own device registry and its own voucher/access tables.
+Nothing in the Phase 0 RADIUS build touches any of them.
+
+## Constraints honoured
+
+Read-only throughout. No migration, no fix, no plugin change, no MikroTik implementation.
+No snapshot created or modified. No writer triggered. The existing Starlink HotSpot is
+untouched.

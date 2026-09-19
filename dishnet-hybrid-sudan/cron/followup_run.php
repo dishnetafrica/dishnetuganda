@@ -4,9 +4,19 @@ declare(strict_types=1);
 /**
  * followup_run.php — for each due follow-up, run the gates and ask the AI.
  *
- * Writes a draft. Sends nothing. In this release nothing in the system sends
- * a follow-up without a person approving it first, and that is enforced by
- * there being no send here to disable.
+ * Writes a draft. Sends nothing — there is still no send in this file, and
+ * nothing here can reach Evolution.
+ *
+ * What changed in 5.18.24: where followup_auto_send is on AND the assistant
+ * said SEND AND the content level is enquiry, the draft is APPROVED here, by
+ * 'auto', instead of waiting for a person. followup_send.php then sends it
+ * exactly as it sends a human-approved one, which is the point — every
+ * re-check it performs between approval and delivery applies to the automatic
+ * path too. An operator who has not set followup_auto_send sees no change at
+ * all: absent means off, and every draft still waits.
+ *
+ * Email is deliberately NOT part of this. EmailReplyPolicy keeps its own
+ * split, holds thirteen categories back unconditionally, and stays as it is.
  */
 if (PHP_SAPI !== 'cli') return;
 
@@ -36,16 +46,22 @@ $convSvc = new ConversationService($dataDir, $pdo);
 $oo      = ContactOptOut::fromStore($store);
 $now     = gmdate('Y-m-d H:i:s');
 
-$apiKey = (string)($config['claude_api_key'] ?? $config['anthropic_api_key'] ?? '');
-if ($apiKey === '') {
-    error_log('[followup_run] no API key — cannot evaluate');
+// Which brain, and whose key — decided by ai_provider, exactly as every other
+// AI path in this plugin decides it. This file used to read claude_api_key and
+// only that, so an OpenAI install returned here on every run for five days
+// while the queue filled up behind it. The selection now lives in a function a
+// test can call; the error names the provider, so the log says which key is
+// missing instead of leaving somebody to guess.
+$sel = FollowUpEvaluator::clientFor($config, $pdo);
+if ($sel['client'] === null) {
+    error_log('[followup_run] ' . $sel['error']);
     return;
 }
-$evaluator = new FollowUpEvaluator(new ClaudeWaClient($apiKey, $pdo), $config);
+$evaluator = new FollowUpEvaluator($sel['client'], $config);
 
 $cap      = (int)($config['followup_daily_cap'] ?? 30);
 $perRun   = (int)($config['followup_run_limit'] ?? 5);   // model calls cost money
-$drafted  = 0; $closed = 0; $deferred = 0; $skipped = 0;
+$drafted  = 0; $closed = 0; $deferred = 0; $skipped = 0; $autoSent = 0;
 
 foreach ($svc->due($now, $perRun) as $fu) {
     $conv = $convSvc->getConversation((int)$fu['conversation_id']);
@@ -135,14 +151,33 @@ foreach ($svc->due($now, $perRun) as $fu) {
         continue;
     }
 
-    // SEND — which in this release means "propose". A person decides.
+    // SEND — a proposal. A person decides, unless the operator has said that
+    // an enquiry follow-up on this channel may decide for itself.
     $r = $svc->draft((int)$fu['id'], $verdict,
         'quiet since ' . (string)$fu['last_customer_at'] . '; attempt '
         . ((int)$fu['attempts'] + 1) . '; identity ' . $level);
-    if ($r['ok']) $drafted++;
+    if (!$r['ok']) continue;
+    $drafted++;
+
+    // Auto-send approves the draft; it does not send it. followup_send.php
+    // still does that, and still re-checks everything that can change between
+    // now and then — opted out since, colleague took over, customer replied,
+    // outside the window. Routing through approve() rather than around it is
+    // what keeps those checks on the automatic path too, and leaves
+    // decided_by = 'auto' in the trail so the two are told apart afterwards.
+    $auto = FollowUpPolicy::mayAutoSend($verdict, $level, $config, $conv);
+    if ($auto['auto']) {
+        $ok = $svc->approve((int)$r['id'], 'auto', '', $auto['reason']);
+        if (empty($ok['ok'])) {
+            error_log('[followup_run] auto-approve refused: ' . (string)($ok['error'] ?? ''));
+        } else {
+            $autoSent++;
+        }
+    }
 }
 
 if ($drafted || $closed || $deferred || $skipped) {
     echo date('Y-m-d H:i:s')
-       . " [followup_run] drafted={$drafted} closed={$closed} deferred={$deferred} skipped={$skipped}\n";
+       . " [followup_run] drafted={$drafted} auto_approved={$autoSent}"
+       . " closed={$closed} deferred={$deferred} skipped={$skipped}\n";
 }

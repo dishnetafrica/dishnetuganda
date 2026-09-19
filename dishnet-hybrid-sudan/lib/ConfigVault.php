@@ -78,6 +78,20 @@ class ConfigVault
         // somebody's live session.
         'starlink_account_email',
         'starlink_account_number',
+        // DPO Pay. The company token is a bearer secret carried INSIDE the
+        // request body — DPO uses no header and no signature — so it belongs
+        // here and nowhere else. dpo_environment matters as much: test and
+        // live share one URL and differ only by which token is sent, so
+        // losing this pair in a re-install could point live traffic at a
+        // test account, or worse.
+        'dpo_enabled',
+        'dpo_environment',
+        'dpo_company_token',
+        'dpo_service_type',
+        'dpo_company_acc_ref',
+        'dpo_payment_method_uuid',
+        'dpo_ptl',
+        'dpo_ptl_type',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string
@@ -110,6 +124,41 @@ class ConfigVault
      * Returns the possibly-augmented config. Never throws: configuration
      * loading must not be able to fail because of the safety net around it.
      */
+    /**
+     * Gap-fill $config from the vault and return it. Reads only.
+     *
+     * apply() is the boot path: it also restores the webhook secret and
+     * REFRESHES the vault from the effective config. That is right once per
+     * request and wrong for a screen or a service that only wants to know what
+     * is stored — public.php builds its $config straight from kyc_config.json
+     * and never calls PluginConfig::load(), so a value that lives ONLY in the
+     * vault is invisible to every tab unless something fills it in.
+     *
+     * @param array<int,string> $keys limit to these vault keys; empty means all
+     */
+    public static function fill(string $pluginRoot, string $dataDir, array $config,
+                                array $keys = []): array
+    {
+        try {
+            $file = self::path($pluginRoot, $dataDir);
+            if (!is_file($file)) return $config;
+            $decoded = json_decode((string)@file_get_contents($file), true);
+            if (!is_array($decoded)) return $config;
+            $vault = $decoded['config'] ?? [];
+            if (!is_array($vault)) return $config;
+
+            $want = $keys === [] ? self::VAULT_KEYS : array_intersect($keys, self::VAULT_KEYS);
+            foreach ($want as $k) {
+                $missing = !array_key_exists($k, $config)
+                    || (is_string($config[$k]) && trim($config[$k]) === '');
+                if ($missing && array_key_exists($k, $vault)) $config[$k] = $vault[$k];
+            }
+        } catch (\Throwable $e) {
+            error_log('[ConfigVault] fill: ' . $e->getMessage());
+        }
+        return $config;
+    }
+
     public static function apply(string $pluginRoot, string $dataDir, array $config): array
     {
         try {

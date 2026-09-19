@@ -60,14 +60,19 @@ t('with knowledge: Uganda facts in the prompt', str_contains($modern, 'Acacia Ma
 t('with knowledge: Sudan facts fully superseded', str_contains($modern, 'Juba'), false);
 t('with knowledge: absolute rules still present', str_contains($modern, 'ABSOLUTE RULES'), true);
 
-echo "\nCross-channel prior-contact rendering\n";
+echo "\nCross-channel prior-contact is GONE (B3.2)\n";
+// It matched a website lead to a WhatsApp caller on trailing nine digits with
+// no country check — the same defect fixed in DishNetTools — and put a South
+// Sudan visitor's typed name and topic into a Ugandan caller's live prompt.
+// It bought a greeting. Removed rather than renamed, and asserted absent so
+// it cannot come back quietly.
 $b = new DishNetAiBrain(['knowledge_block' => $block]);
 $m = new ReflectionMethod($b, 'buildSystemPrompt'); $m->setAccessible(true);
 $withLead = $m->invoke($b, ['channel'=>'sales','transport'=>'whatsapp','message'=>'hi',
     'webchat_lead'=>['name'=>'John','topic'=>'lodge in Fort Portal, 12 rooms']]);
-t('prior website contact is announced to the AI', str_contains($withLead, 'previously chatted on our WEBSITE'), true);
-t('lead name carried', str_contains($withLead, 'John'), true);
-t('lead topic carried', str_contains($withLead, 'Fort Portal'), true);
+t('a visitor-supplied name is not announced', str_contains($withLead, 'previously chatted on our WEBSITE'), false);
+t('the name does not reach the prompt', str_contains($withLead, 'John'), false);
+t('nor the topic', str_contains($withLead, 'Fort Portal'), false);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail ? 1 : 0);

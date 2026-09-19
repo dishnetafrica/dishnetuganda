@@ -119,10 +119,25 @@ table.sf tr:last-child td{border-bottom:none;}
   <?php elseif ($sum['live_silent'] > 0): ?>
     <div class="sf-note grey">
       <strong><?= (int)$sum['live_silent'] ?> of <?= (int)$sum['kits'] ?> kits have no Starlink state.</strong>
-      The data plugin holds <?= (int)$slk['lines'] ?> service line<?= $slk['lines'] === 1 ? '' : 's' ?>,
-      and these kits are not among them
-      <?php if ($sum['no_service_line']): ?>— <?= (int)$sum['no_service_line'] ?> because no service line was
-      recorded at installation, which <code>tools/binding_doctor.php --learn</code> can fill in<?php endif; ?>.
+      <?php
+      // These are two different faults and the old wording claimed the first
+      // for both: a kit whose line IS in the cache but carries no subscription
+      // status is not a kit "not among them". The unclaimed count proves it —
+      // a line that matched an assignment is excluded from that list, so a
+      // fleet showing 15 unclaimed of 16 has its one line right there.
+      $sfBound = max(0, (int)$sum['live_silent'] - (int)$sum['no_service_line']);
+      ?>
+      The data plugin holds <?= (int)$slk['lines'] ?> service line<?= $slk['lines'] === 1 ? '' : 's' ?>.
+      <?php if ($sum['no_service_line']): ?>
+        <?= (int)$sum['no_service_line'] ?> of these kits <?= $sum['no_service_line'] === 1 ? 'is' : 'are' ?>
+        not among them because no service line was recorded at installation, which
+        <code>tools/binding_doctor.php --learn</code> can fill in.
+      <?php endif; ?>
+      <?php if ($sfBound): ?>
+        <?= $sfBound ?> <?= $sfBound === 1 ? 'is' : 'are' ?> bound to a line Starlink knows about,
+        but Starlink has not reported a subscription state for it — usually a line that is
+        provisioned and not yet activated.
+      <?php endif; ?>
       A kit with no state is not a kit that is switched off.
     </div>
   <?php endif; ?>

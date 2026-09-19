@@ -174,6 +174,11 @@ $_m_jobs = [
     // This catches anything stranded when that spawn is unavailable.
     'ai_reply'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/run_worker.php'],
     'efris'         => ['interval' => 120,                 'script' => __DIR__ . '/efris_sync.php'],
+    // DPO Pay's third leg: the customer who paid on their phone and closed
+    // the browser. Silent when no payment is open, which is most of the time.
+    // Runs even when DPO is switched off — money already taken must still
+    // reach an invoice.
+    'dpo_reconcile' => ['interval' => 300,                 'script' => __DIR__ . '/dpo_reconcile.php'],
 
     // ── Website chat retention ───────────────────────────────────────────
     // Deletes leads and transcripts past web_chat_retention_days (default 90).

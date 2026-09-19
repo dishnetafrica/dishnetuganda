@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/currency.php';
+require_once __DIR__ . '/QuotePdfToken.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains'))  { function str_contains(string $h, string $n): bool  { return $n===''||strpos($h,$n)!==false; } }
@@ -321,13 +322,11 @@ class QuotePdfService
             return ['ok' => false, 'error' => 'PDF generation failed'];
         }
 
-        // ── 6. Create HMAC token for public URL ──────────────────────────
-        $secret   = $this->config['webhook_secret'] ?? 'dishnet';
-        $pdfToken = hash_hmac('sha256', $pdfFile . date('Ymd'), $secret);
+        // ── 6. Daily token for the public URL (QuotePdfToken) ────────────
+        $pdfToken = QuotePdfToken::mint($pdfFile, $this->config);
 
-        // Save meta for serve_quote_pdf endpoint
+        // Save meta — display name and listing data only; the token is never stored
         file_put_contents($pdfPath . '.meta', json_encode([
-            'token'       => $pdfToken,
             'created'     => time(),
             'quote_ref'   => $ref,
             'customer'    => $quoteData['customer_name'] ?? '',

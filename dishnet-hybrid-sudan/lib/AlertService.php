@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/ContactOptOut.php';
+require_once __DIR__ . '/UtcClock.php';
 
 /**
  * AlertService — tell a human, on WhatsApp, that something needs them.
@@ -135,8 +136,12 @@ class AlertService
     {
         $out = [];
         foreach ($rows as $r) {
-            $cust  = strtotime((string)($r['last_customer_at'] ?? '')) ?: 0;
-            $agent = strtotime((string)($r['last_agent_at'] ?? '')) ?: 0;
+            // The stamps are UTC and are read as UTC. strtotime() applied the
+            // process zone, and this runs from cron/master.php under Africa/
+            // Kampala: a customer who had waited two minutes read as three
+            // hours, and staff were paged for a question the AI was answering.
+            $cust  = UtcClock::parse($r['last_customer_at'] ?? '');
+            $agent = UtcClock::parse($r['last_agent_at'] ?? '');
             if ($cust === 0) continue;                       // never spoke
             if ($agent >= $cust) continue;                   // answered
             if ($cust > $now - $patienceMin * 60) continue;  // still inside patience

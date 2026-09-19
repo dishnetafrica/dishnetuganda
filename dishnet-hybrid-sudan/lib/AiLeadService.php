@@ -33,8 +33,14 @@ require_once __DIR__ . '/LeadMatcher.php';
 class AiLeadService
 {
     /** Fields the AI may set. Anything else it emits is ignored. */
+    /**
+     * Written by the system, never by the model, so they are NOT in FIELDS —
+     * clean() would otherwise accept a coordinate the model made up.
+     */
+    private const TRUSTED_FIELDS = ['location_lat', 'location_lng', 'location_source'];
+
     private const FIELDS = [
-        'customer_name', 'company', 'location', 'customer_type', 'requirement',
+        'customer_name', 'company', 'email', 'location', 'customer_type', 'requirement',
         'users_devices', 'existing_internet', 'recommended_solution',
         'recommended_plan', 'recommended_hardware', 'public_ip_required',
         'cctv_remote_access', 'quote_requested', 'ai_summary',
@@ -68,7 +74,10 @@ class AiLeadService
         if (!$has('requirement')) {
             return 'no requirement stated — a question about price or coverage is not an opportunity';
         }
-        if (!$has('location') && !$has('customer_type')
+        // A dropped pin is a location — a better one than a typed place name,
+        // since it is the only kind an installer can drive to.
+        $pinned = isset($f['location_lat']) && isset($f['location_lng']);
+        if (!$has('location') && !$pinned && !$has('customer_type')
             && !filter_var($f['quote_requested'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return 'a requirement but nothing to act on — no location, no customer type, no quote asked for';
         }
@@ -80,12 +89,22 @@ class AiLeadService
      *
      * @return array{ok:bool, action:string, lead_id:int|null, reason:string}
      */
-    public function capture(array $fields, string $phone, int $convId, string $source = 'whatsapp_ai'): array
+    public function capture(array $fields, string $phone, int $convId,
+                            string $source = 'whatsapp_ai', array $trusted = []): array
     {
         if (!$this->enabled())  return $this->no('disabled', 'ai_lead_capture is off');
         if (LeadMatcher::key($phone) === '') return $this->no('skipped', 'no usable phone number');
 
         $clean = $this->clean($fields);
+
+        // Facts the SYSTEM established, merged after the model's have been
+        // filtered. Coordinates are the first of these and the reason the
+        // parameter exists: a latitude is not an opinion, and a model that
+        // writes one has invented it. clean() whitelists to FIELDS, which
+        // these keys are deliberately not in, so a model-supplied coordinate
+        // is dropped before it can reach here and be overwritten — it never
+        // arrives at all.
+        foreach ($this->cleanTrusted($trusted) as $k => $v) $clean[$k] = $v;
 
         // The floor gates CREATION, not enrichment. Once a lead exists the
         // opportunity is established, and a later message adding "they already
@@ -138,6 +157,30 @@ class AiLeadService
     // ── internals ────────────────────────────────────────────────────────────
 
     /** Keep only known fields; blank and "unknown" both become null. */
+    /**
+     * Fields supplied by the worker from its own records, not by the model.
+     *
+     * Validated all the same. "Trusted" means we know where it came from, not
+     * that it is exempt from being a number in the range a latitude has.
+     *
+     * @return array<string,mixed>
+     */
+    private function cleanTrusted(array $in): array
+    {
+        $out = [];
+        $lat = $in['location_lat'] ?? null;
+        $lng = $in['location_lng'] ?? null;
+        if (is_numeric($lat) && is_numeric($lng)) {
+            if (!class_exists('WaLocation')) require_once __DIR__ . '/WaLocation.php';
+            if (\WaLocation::isSane((float)$lat, (float)$lng)) {
+                $out['location_lat']    = (float)$lat;
+                $out['location_lng']    = (float)$lng;
+                $out['location_source'] = 'whatsapp_pin';
+            }
+        }
+        return $out;
+    }
+
     private function clean(array $in): array
     {
         $out = [];
@@ -161,6 +204,12 @@ class AiLeadService
                      : (in_array($v, ['no', 'false', '0', false, 0], true) ? 'no' : null);
         }
         $out['quote_requested'] = filter_var($in['quote_requested'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        // An email address is either an address or nothing. A salesperson
+        // handed "kris at bul dot co" as a field would type it into a mailer.
+        if (isset($out['email'])) {
+            $e = mb_strtolower(trim((string)$out['email']));
+            $out['email'] = filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : null;
+        }
         return $out;
     }
 
@@ -195,7 +244,7 @@ class AiLeadService
      */
     private function merge(array $lead, array $f, int $convId, string $now): array
     {
-        foreach (self::FIELDS as $k) {
+        foreach (array_merge(self::FIELDS, self::TRUSTED_FIELDS) as $k) {
             if ($k === 'ai_summary' || $k === 'quote_requested') continue;
             $new = $f[$k] ?? null;
             if ($new === null || $new === '') continue;
@@ -240,7 +289,7 @@ class AiLeadService
     /** Anything worth writing at all? An all-null emission is not an update. */
     private function hasAnything(array $f): bool
     {
-        foreach (self::FIELDS as $k) {
+        foreach (array_merge(self::FIELDS, self::TRUSTED_FIELDS) as $k) {
             if ($k === 'quote_requested') continue;
             if (($f[$k] ?? null) !== null && $f[$k] !== '') return true;
         }

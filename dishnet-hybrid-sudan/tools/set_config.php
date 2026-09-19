@@ -48,6 +48,12 @@ $FLAGS = [
         'Qualify before recommending; route CCTV/VPN/servers to Business'],
     'ai_lead_capture' => ['bool',
         'Write a CRM lead when the assistant qualifies a real opportunity'],
+    'ai_crm_lead_sync' => ['bool',
+        'Also create that lead in uCRM as a lead client (needs ai_lead_capture)'],
+    'ucrm_lead_organization_id' => ['text',
+        'uCRM organization new leads belong to (unset = the one existing clients use)'],
+    'ucrm_lead_country_id' => ['text',
+        'uCRM country id for new leads (unset = the one existing clients use)'],
     'ai_hardware_expert' => ['bool',
         'Know the dishes: coverage vs Wi-Fi, Ethernet per model, solar'],
     'ai_sales_on_all_numbers' => ['bool',
@@ -60,6 +66,14 @@ $FLAGS = [
         'What to say about availability — stated to customers as written'],
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
+
+    // A migration instrument with an end date, not a business setting. It
+    // runs the controlled customer tools beside the legacy support/accounts
+    // prompt and logs whether the two readers agree — verdicts only, never
+    // values. The customer still gets the legacy answer either way. It is
+    // deleted when B3.5 migrates those two callers.
+    'ai_shadow_compare' => ['bool',
+        'B3.4: compare the customer tools against the legacy prompt, and log which disagree'],
 
     // The clock. Everything stamped, scheduled or reported runs on this.
     // Unset means Africa/Juba, which is what the code said before it was
@@ -88,12 +102,42 @@ $FLAGS = [
         'Most follow-ups sent on one channel in a day (default 30)'],
     'followup_max_age_hours' => ['number',
         'An enquiry older than this is history, not a live lead (default 336 = 14 days)'],
+    'followup_run_limit' => ['number',
+        'Follow-ups EVALUATED per run (default 5) — set 1 or 2 on a large backlog'],
+    'followup_auto_send' => ['bool',
+        'Send WhatsApp enquiry follow-ups WITHOUT a person approving them '
+        . '(account-level and escalated ones still wait; e-mail is unaffected)'],
 
     // On every quotation the team sends. QuotationService compiles South Sudan
     // defaults for all three, so an unset key is not a blank — it is Juba's
     // phone number printed on a Ugandan customer's quote.
     'ai_fact_location_pin' => ['text',
         'Map pin for the office — sent verbatim; unset means the AI must not write one'],
+    // 5.18.11: the tax treatment of listed prices, as a stated fact. Without
+    // it the assistant hedges ("the quotation confirms the tax treatment") on
+    // every price; with it, it says what the operator says, and still may
+    // not calculate a tax amount or rate.
+    'ai_fact_prices' => ['text',
+        'What to say about tax on listed prices, e.g. "All our listed prices include VAT." (unset = the AI hedges)'],
+    // Appended by PlanFenceGuard to any reply that names a Business plan
+    // without naming Residential. It is here, and not in the prompt, because
+    // the prompt version was measured: 18 of 21 replies ignored it. "omit"
+    // switches the fence off; unset uses PlanFenceGuard::DEFAULT_NOTE.
+    'ai_fact_business_cap' => ['text',
+        'Appended when the AI quotes a Business plan without offering Residential — the priority-data '
+      . 'cap and the 1 Mbps drop ("omit" = never append; unset = the built-in wording)'],
+    // The three business facts that shipped with South Sudan wording and had
+    // no way to change them: not on the uCRM Configuration screen, not in the
+    // Engage tab, not here. Unset, a Ugandan customer is told the office is
+    // in Juba and that kits cross at the Joda border, and that we never share
+    // bank details. "omit" drops a fact entirely, which beats saying the
+    // wrong thing while the right words are still being decided.
+    'ai_fact_payment' => ['text',
+        'How customers pay — the AI repeats it verbatim; "omit" says nothing (unset = the South Sudan pay page, and a refusal to give bank details)'],
+    'ai_fact_office' => ['text',
+        'Where the office is and its hours (unset = the Juba office, South Sudan)'],
+    'ai_fact_delivery' => ['text',
+        'How kits reach the customer (unset = flown to Renk and across the Joda border into Sudan)'],
     'quote_company_name' => ['text',
         'Company name on quotations (unset = "DishNet Africa")'],
     'quote_company_phone' => ['text',
@@ -222,6 +266,18 @@ $new = $clear ? '' : $value('--value');
 // silently ignored and the box keeps running on the Africa/Juba default, an
 // hour off Kampala, with every cron, report and follow-up window quietly
 // wrong and nothing anywhere saying so.
+// A template pasted straight through, placeholders and all. The example in
+// the 5.18.14 deploy notes used <BANK> and <NUMBER>; it was pasted verbatim
+// and the assistant began telling customers to pay into "account <NUMBER>",
+// which is worse than the refusal it replaced. Angle-bracketed capitals are
+// never a value a customer should read, so this is a refusal, not a warning.
+if (!$clear && preg_match('/<[A-Z][A-Z0-9 _-]{1,30}>/', $new, $ph)) {
+    echo "\n  That still has the example placeholder " . $ph[0] . " in it, so nothing was saved.\n\n";
+    echo "  Customers would have read it exactly as typed. Replace every <...> with the\n";
+    echo "  real value and run it again, or use --clear to leave the setting unset.\n\n";
+    exit(1);
+}
+
 if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {
     echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
     echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";
@@ -275,6 +331,27 @@ if (!$clear) {
         $warn[] = 'Now running as ' . dn_tz_label(['timezone' => trim($new)])
                 . '. Crons, reports, the cashbook day boundary and the 08:00-20:00 '
                 . 'follow-up window all move with it.';
+    }
+    if ($key === 'ai_fact_payment' && $new !== '' && strtolower($new) !== 'omit'
+        && preg_match('/\d[\d\s-]{6,}\d/', $new)) {
+        $warn[] = 'That looks like an account or till number. The AI repeats it to customers '
+                . 'character for character, and the reply guard refuses any figure that is not '
+                . 'in this text — so a typo here is a customer paying into nothing, and a digit '
+                . 'changed later without changing this is a customer paying into the old one. '
+                . 'Read it back against the bank statement before you leave the terminal.';
+    }
+    if (in_array($key, ['ai_fact_office', 'ai_fact_delivery'], true) && $new !== ''
+        && preg_match('/\b(juba|sudan|renk|joda)\b/i', $new)) {
+        $warn[] = 'That names a South Sudan place. This box answers Ugandan customers.';
+    }
+    if ($key === 'ai_fact_business_cap' && $new !== ''
+        && preg_match('/\b\d{1,3}[, ]\d{3}\b|UGX|shillings?/i', $new)) {
+        $warn[] = 'That looks like a price. Prices come from uCRM so they stay current — a figure '
+                . 'here becomes a second catalogue that goes stale silently.';
+    }
+    if ($key === 'ai_fact_prices' && $new !== '' && preg_match('/\d/', $new)) {
+        $warn[] = 'This is repeated to customers as a fact. A figure in it (a rate, an amount) '
+                . 'will be repeated too — make sure it is exactly right and stays right.';
     }
     if ($key === 'ai_handover_message' && mb_strlen($new) > 160) {
         $warn[] = 'That is long for a holding line on WhatsApp. It is sent on its own, before '

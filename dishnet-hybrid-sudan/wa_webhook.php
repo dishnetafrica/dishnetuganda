@@ -189,123 +189,56 @@ if (!in_array(strtolower($type), ['text', 'chat', 'conversation', ''])) {
     } catch (Throwable $e) {}
 }
 
-// ── Media message handling ─────────────────────────────────────────────────
-// Map WASender type → human-readable and acknowledgment text
-$_waMediaAck = [
-    'image'    => "Thanks for the photo 📷 Could you also describe the issue in a message so we can help faster? Our team will review the image.",
-    'video'    => "Thanks for the video. Could you also type a brief description of the issue? Our team will review it.",
-    'audio'    => "We received your voice note. We're not able to listen to audio messages automatically — could you also type a quick message describing what you need? Our team will listen and respond.",
-    'ptt'      => "We received your voice note. We're not able to listen to audio messages automatically — could you also type a quick message describing what you need?",
-    'document' => "Got your document. What is this regarding? Our team will review it.",
-    'location' => "Got your location 📍 Are you requesting a site visit or installation? Type YES to confirm or tell us more.",
-    'sticker'  => null,  // ignore silently
-    'contact'  => "Got the contact. What would you like us to do with it?",
-    'vcard'    => "Got the contact. What would you like us to do with it?",
-];
-$_waTypeNorm = strtolower($type);
-if (!in_array($_waTypeNorm, ['text', 'chat', 'conversation', ''])) {
-    $ackMsg = $_waMediaAck[$_waTypeNorm] ?? null;
-    if ($ackMsg && !empty($phone) && (!empty($config['wa_bot_enabled']) || !empty($config['wa_auto_reply_enabled']))) {
-        // Don't ack on accounts number if accounts autoreply is disabled
-        if (($waChannel ?? 'support') === 'accounts' && empty($config['wa_accounts_autoreply_enabled'])) {
-            waLog('accounts_autoreply_off', "Accounts auto-reply disabled — media from {$phone} logged only");
-        } else {
-        try {
-            require_once __DIR__ . '/lib/ConversationService.php';
-            $_waMedConvSvc = new ConversationService($dataDir, $store->getPdo());
-            $_waMedConv    = $_waMedConvSvc->ensureConversation($phone, $waChannel ?? 'support', $name ?: null, 'webhook');
-            $_waMedConvSvc->storeMessage($_waMedConv['id'], [
-                'direction'  => 'in',
-                'role'       => 'customer',
-                'body'       => '[' . strtoupper($_waTypeNorm) . ' received]',
-                'media_type' => $_waTypeNorm,
-                'sent_at'    => date('Y-m-d H:i:s'),
-            ]);
-            // Send ack
-            require_once __DIR__ . '/lib/NotificationService.php';
-            $_waMedNotify = new NotificationService($store, $config);
-            $_waMedNotify->sendRaw($phone, $ackMsg, 'wa_media_ack');
-            // Store reply
-            $_waMedConvSvc->storeMessage($_waMedConv['id'], [
-                'direction'  => 'out',
-                'role'       => 'agent',
-                'body'       => $ackMsg,
-                'agent_name' => 'DishNet Bot',
-                'sent_at'    => date('Y-m-d H:i:s'),
-            ]);
-            // Alert team
-            $_waMedNotify->sendAdmin(
-                "📎 *Media received from " . ($name ?: $phone) . "* ({$phone})\nType: " . strtoupper($_waTypeNorm) . "\n\n_Auto-acknowledged. Please review in WA Inbox._",
-                'wa_media_received'
-            );
-        } catch (Throwable $e) { /* non-fatal */ }
-        } // end else (accounts autoreply enabled)
-    } elseif (!$ackMsg) {
-        waLog('skipped', "Sticker/unknown media type: {$type}", ['phone' => $phone]);
-    }
-    waResp(200, "Media message ({$type}) acknowledged.");
-}
-
-if (empty($phone)) waResp(400, 'Missing sender phone.');
-if (empty($text))  waResp(200, 'Empty message — ignored.');
-
-// ── Store in conversation SQLite store (always, even if bot disabled) ─────
-// Determine channel: match app_key to support or accounts
-$incomingAppKey = $payload['app_key'] ?? '';
-$waChannel = 'support'; // default
-if ($incomingAppKey && $incomingAppKey === ($config['wa_accounts_app_key'] ?? '')) {
-    $waChannel = 'accounts';
-}
-
-try {
-    require_once __DIR__ . '/lib/ConversationService.php';
-    $convSvc = new ConversationService($dataDir, $store->getPdo());
-    $conv2 = $convSvc->ensureConversation($phone, $waChannel, $name ?: null, 'webhook');
-    $convSvc->storeMessage($conv2['id'], [
-        'direction'     => 'in',
-        'role'          => 'customer',
-        'body'          => $text,
-        'wa_message_id' => $payload['message_id'] ?? $payload['id'] ?? null,
-        'sent_at'       => date('Y-m-d H:i:s'),
-    ]);
-} catch (Throwable $e) {
-    // Never break webhook for conversation logging
-    waLog('conv_store_error', $e->getMessage());
-}
-
-// ── Check bot is enabled ───────────────────────────────────────────────────
-// ── Check auto-reply is enabled ───────────────────────────────────────
-if (empty($config['wa_bot_enabled']) && empty($config['wa_auto_reply_enabled'])) {
-    waLog('bot_disabled', "Auto-reply disabled — message from {$phone} logged only");
-    waResp(200, 'Auto-reply disabled — message logged only.');
-}
-
-// ── Per-channel guard: Accounts number can be silenced independently ───────
-// wa_accounts_autoreply_enabled = false  →  log only, no auto-reply on Accounts WA
-// Support channel is completely unaffected by this flag.
-if ($waChannel === 'accounts' && empty($config['wa_accounts_autoreply_enabled'])) {
-    waLog('accounts_autoreply_off', "Accounts auto-reply disabled — message from {$phone} logged only");
-    waResp(200, 'Accounts auto-reply disabled — message logged only.');
-}
-
-// ── Process via WaAutoReplyService (channel-aware) ──────────────────
+// ── One pipeline, whichever transport delivered ────────────────────────────
+//
+// What used to be here decided for itself what to store, whether to reply and
+// what to do about media — and had drifted from cron_wa_sync.php in ways
+// nobody chose. Its media branch hardcoded '[TYPE received]' as the body and
+// DISCARDED the caption, so a photo captioned "is this installed right?"
+// arrived as a photo with no question attached. The cron path kept captions
+// but never acknowledged anything.
+//
+// Neither difference was intended, and a security fix applied to one would
+// have missed the other. Now this file receives, normalises, and hands over.
+// Identity, authorization, the model and the output guard all live behind
+// WaMessageProcessor, so there is no weaker path for an attacker to choose.
+require_once __DIR__ . '/lib/WaInbound.php';
+require_once __DIR__ . '/lib/WaMessageProcessor.php';
+require_once __DIR__ . '/lib/ConversationService.php';
 require_once __DIR__ . '/lib/WaAutoReplyService.php';
-$notify = new NotificationService($store, $config);
+require_once __DIR__ . '/lib/NotificationService.php';
+
+$inbound = WaInbound::normalise($payload, 'webhook', $waChannel ?? 'support');
+
+if (!$inbound['usable']) {
+    waLog('skipped', 'Not usable: ' . $inbound['why'], ['phone' => $inbound['phone']]);
+    waResp(200, 'Ignored — ' . $inbound['why']);
+}
 
 try {
-    require_once __DIR__ . '/lib/ConversationService.php';
-    $_arConvSvc = new ConversationService($dataDir, $store->getPdo());
-    $autoReply = new WaAutoReplyService($store, $store->getPdo(), $notify, $config, $_arConvSvc);
-    $result = $autoReply->handleIncoming($phone, $text, $waChannel, $name ?: null, $conv2['id'] ?? null);
-    waLog('message_received', "Processed via WaAutoReply ({$waChannel})", [
-        'phone'   => $phone,
-        'text'    => substr($text, 0, 100),
-        'channel' => $waChannel,
-        'replied' => $result['replied'],
-        'action'  => $result['action'],
+    $_wConv   = new ConversationService($dataDir, $store->getPdo());
+    $_wNotify = new NotificationService($store, $config);
+    $_wAuto   = new WaAutoReplyService($store, $store->getPdo(), $_wNotify, $config, $_wConv);
+    $_wProc   = new WaMessageProcessor($_wConv, $_wAuto, $_wNotify, $config);
+
+    $res = $_wProc->process($inbound);
+
+    waLog('message_received', 'Processed via WaMessageProcessor (' . $inbound['channel'] . ')', [
+        'phone'     => $inbound['phone'],
+        'modality'  => $res['modality'],
+        'action'    => $res['action'],
+        'replied'   => $res['replied'],
+        'duplicate' => $res['duplicate'],
     ]);
-    waResp(200, 'Message processed.', ['channel' => $waChannel, 'replied' => $result['replied'], 'action' => $result['action']]);
+    waResp(200, 'Message processed.', [
+        'channel'   => $inbound['channel'],
+        'modality'  => $res['modality'],
+        'action'    => $res['action'],
+        'replied'   => $res['replied'],
+        'duplicate' => $res['duplicate'],
+    ]);
 } catch (Throwable $e) {
-    waLog('error', 'Exception: ' . $e->getMessage(), ['phone' => $phone, 'trace' => substr($e->getTraceAsString(), 0, 300)]);
+    waLog('error', 'Exception: ' . $e->getMessage(),
+          ['phone' => $inbound['phone'], 'trace' => substr($e->getTraceAsString(), 0, 300)]);
     waResp(500, 'Internal error: ' . $e->getMessage());
 }

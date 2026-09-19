@@ -69,6 +69,20 @@ $line = str_repeat('─', 72);
 echo "\n  OUTBOUND WHATSAPP (read-only)\n  {$line}\n";
 printf("  %-22s %s\n", 'data directory', $dataDir);
 printf("  %-22s %s\n", 'config source', $cfgSrc);
+// serve_quote_pdf (run by public.php) signs and checks quotation-PDF links
+// with the STORE's quote_pdf_secret — a key of its own, generated once at the
+// first plugin page load or quote cron run since 5.18.1. Until then the links
+// fall back to webhook_secret, else a published default, and a guessable file
+// name is all it takes to fetch a quotation during the ~48h a link lives.
+require_once $root . '/lib/QuotePdfToken.php';
+if (QuotePdfToken::hasOwnSecret($storeOnly)) {
+    $_qsMsg = 'set — quote_pdf_secret in the store, shared with nothing else';
+} elseif (QuotePdfToken::hasRealSecret($storeOnly)) {
+    $_qsMsg = 'set — falling back to webhook_secret (shared with uCRM auth, the JWT key and debug_key); quote_pdf_secret is generated at the next plugin page load';
+} else {
+    $_qsMsg = '⚠ DEFAULT — signed with a published default until the next plugin page load or quote cron run generates quote_pdf_secret (5.18.1+). Do NOT use Settings → Setup Webhook for this: it rewrites the uCRM webhook endpoint (URL and event list).';
+}
+printf("  %-22s %s\n", 'quote PDF link secret', $_qsMsg);
 printf("  %-22s %s\n\n", 'config', $config === [] ? '⚠ EMPTY — nothing below is meaningful' : count($config) . ' keys');
 if ($fromStore !== [] && $fromFile !== []) {
     $diff = [];

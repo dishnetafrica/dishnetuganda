@@ -25,6 +25,7 @@ require_once __DIR__ . '/lib/PluginConfig.php';
 require_once __DIR__ . '/lib/EventBus.php';
 require_once __DIR__ . '/workers/WorkerBase.php';
 require_once __DIR__ . '/workers/AiReplyWorker.php';
+require_once __DIR__ . '/workers/UcrmLeadWorker.php';
 
 $store  = SqliteStore::create($dataDir);
 $config = PluginConfig::load(__DIR__, $dataDir);
@@ -40,12 +41,21 @@ if (!PluginConfig::toBool($config['ai_enabled'] ?? false)) {
 ob_start();
 try {
     $result = (new AiReplyWorker($store, $config, 45, 10))->run();
+
+    // The lead sync rides the same spawn. It is off unless ai_crm_lead_sync is
+    // set, and a short budget because a customer is never waiting on it.
+    try {
+        (new UcrmLeadWorker($store, $config, 10, 5))->run();
+    } catch (\Throwable $e) {
+        error_log('[run_worker] lead sync worker: ' . $e->getMessage());
+    }
     $trace = ob_get_clean();
-    if ($trace !== '' || !empty($result['processed']) || !empty($result['failed'])) {
+    if ($trace !== '' || !empty($result['processed']) || !empty($result['failed']) || !empty($result['deferred'])) {
         @file_put_contents(
             $dataDir . '/ai_platform.log',
-            $trace . sprintf("[%s] spawned worker: processed=%d failed=%d\n",
-                gmdate('Y-m-d H:i:s'), $result['processed'] ?? 0, $result['failed'] ?? 0),
+            $trace . sprintf("[%s] spawned worker: processed=%d failed=%d deferred=%d\n",
+                gmdate('Y-m-d H:i:s'), $result['processed'] ?? 0, $result['failed'] ?? 0,
+                $result['deferred'] ?? 0),
             FILE_APPEND
         );
     }

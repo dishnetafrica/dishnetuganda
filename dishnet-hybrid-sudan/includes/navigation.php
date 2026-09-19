@@ -450,6 +450,15 @@ try {
 <a href="?page=dashboard&tab=starlink_fleet" class="kyc-tab <?= $tab==='starlink_fleet'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-broadcast-pin" style="color:#1565C0;"></i></span> Starlink Fleet
 </a>
+<a href="?page=dashboard&tab=starlink_accounts" class="kyc-tab <?= $tab==='starlink_accounts'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-diagram-3-fill" style="color:#1565C0;"></i></span> Starlink Accounts
+</a>
+<a href="?page=dashboard&tab=dpo_payments" class="kyc-tab <?= $tab==='dpo_payments'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-credit-card-2-front-fill" style="color:#1565C0;"></i></span> DPO Pay
+</a>
+<a href="?page=dashboard&tab=kit_intake" class="kyc-tab <?= $tab==='kit_intake'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-link-45deg" style="color:#1565C0;"></i></span> Kit Number Review
+</a>
 <a href="?page=dashboard&tab=starlink_session" class="kyc-tab <?= $tab==='starlink_session'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-key-fill" style="color:#1565C0;"></i></span> Starlink Sessions
 </a>

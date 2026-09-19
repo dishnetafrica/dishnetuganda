@@ -755,6 +755,7 @@ class QuotationService
                 'quote_number'  => $number,
                 'total'         => $total > 0 ? $total : '',
                 'valid_days'    => $days,
+                'pdf_attached'  => true,   // this path returned above when there was no PDF
             ]);
             $subject = $built['subject'];
 

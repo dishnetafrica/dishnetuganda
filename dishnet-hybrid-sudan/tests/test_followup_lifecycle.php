@@ -221,8 +221,15 @@ foreach (['I want a refund', 'my lawyer will contact you', 'I am reporting this 
 }
 
 echo "\nCASE J — due outside the window, deferred into it\n";
-$gJ = FollowUpPolicy::gate(['enabled' => true, 'now' => '2026-09-14 20:30:00',  // 23:30 Kampala
-    'conv' => $convA, 'followup' => ['attempts' => 0, 'max_attempts' => 2, 'due_at' => '2026-09-14 20:00:00'],
+// Today at 20:30 UTC (23:30 Kampala), not a fixed date. $convA is built from
+// the real clock (quiet 48h ago), so a hard-coded "now" of 14 Sep fell BEHIND
+// the fixture as real time moved on: the conversation read as still live and
+// the gate answered 'active_conversation' instead of the quiet hours this
+// case exists to test. The hour is the point here; the date is not.
+$jNow = gmdate('Y-m-d') . ' 20:30:00';
+$jDue = gmdate('Y-m-d') . ' 20:00:00';
+$gJ = FollowUpPolicy::gate(['enabled' => true, 'now' => $jNow,  // 23:30 Kampala
+    'conv' => $convA, 'followup' => ['attempts' => 0, 'max_attempts' => 2, 'due_at' => $jDue],
     'daily_cap' => 50]);
 t('it defers',              $gJ['action'], 'defer');
 t('for quiet hours',        $gJ['gate'], 'quiet_hours');

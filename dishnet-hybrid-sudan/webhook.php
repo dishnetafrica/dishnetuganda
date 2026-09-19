@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib/timezone.php';
+require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -90,6 +91,30 @@ if (!isset($store)) {
 if (!isset($config)) {
     $config = $store->load('kyc_config.json') ?? [];
 }
+// ── One config, the way every cron and tool already sees it ─────────────
+//
+// Whatever arrived above — the store copy loaded here on a direct hit, or
+// the one public.php built before including this file — is only ONE of the
+// three sources PluginConfig::load() merges: the manifest-materialised
+// config.json, the kyc_config.json FILE that the CLI tools write, and the
+// vault. Fifteen admin screens and APIs write the store copy directly, and
+// those settings must keep winning; but a key that lives only in the other
+// two was invisible here, and that is how quotation PDF URLs went out on
+// :8443 while crm_public_url sat correctly configured in config.json.
+//
+// Three consumers had already patched around this locally — currency.php,
+// OverdueDunningHelpers, CustomerEmailDispatcher::effectiveConfig() — each
+// finding the same stale array one layer down. This is the source.
+//
+// '+' is deliberate and is the whole safety argument: the left operand's
+// keys win, so no key this file could see before changes value — a blank in
+// the store already beat everything — and keys it could not see are simply
+// filled in. Nothing that worked yesterday reads differently today.
+require_once __DIR__ . '/lib/PluginConfig.php';
+$config = (array)$config + PluginConfig::load(__DIR__, $dataDir);
+// The quotation-link secret: already present when public.php built $config,
+// generated here on a direct hit that found none. Reads the store itself.
+QuotePdfToken::ensureSecret($store, $config);
 // Contacts and currency symbols in the message copy below come from config,
 // defaulting to the exact values these lines have always printed.
 require_once __DIR__ . '/lib/CustomerContact.php';
@@ -138,16 +163,19 @@ function whLog(string $event, string $msg, array $data = []): void {
  * on. It never throws and never blocks: the WhatsApp message and the CRM work
  * have already happened by the time it is called, and an SMTP hiccup must not
  * turn a successful payment into a failed webhook.
+ *
+ * $attachments travel with the message as [name, mime, content] entries —
+ * the invoice PDF rides here, the same bytes the WhatsApp document carries.
  */
 function whCustomerEmail(string $key, int $clientId, string $name, array $data,
                          string $dedupe, array $config, string $dataDir,
-                         $crm, $store, string $changeType = ''): void
+                         $crm, $store, string $changeType = '', array $attachments = []): void
 {
     try {
         if (!CustomerEmailDispatcher::enabled($key, $config)) return;   // off is not an error
         $pdo = method_exists($store, 'getPdo') ? $store->getPdo() : null;
         $d   = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
-        $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe);
+        $r   = $d->send($key, ['client_id' => $clientId], $name, $data, $dedupe, $attachments);
         if ($r['sent']) {
             whLog($changeType ?: 'email', "Customer email sent: {$key} → {$r['to']}");
         } elseif ($r['reason'] !== 'already sent' && $r['reason'] !== 'switched off') {
@@ -206,6 +234,12 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             : [];
 
         $d = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        // The quote id as the dedupe key, so the dispatcher records this send
+        // in customer_email_log — reference, recipient, sender, outcome, time.
+        // Until now the only durable evidence a quotation was ever emailed was
+        // the QEMAIL row above, in a table whose job is deduplication. That
+        // claim still decides whether the send HAPPENS; this decides whether
+        // it is REMEMBERED.
         $r = $d->send('quotation', ['client_id' => $clientId], $name, [
             // A person is greeted by first name; a company account has none,
             // and is then greeted by its full name rather than its first word.
@@ -213,7 +247,8 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             'quote_number' => $number,
             'total'        => $total,
             'amount'       => $total,
-        ], '', $atts);
+            'pdf_attached' => $pdf !== '',
+        ], (string)$quoteId, $atts);
 
         if ($r['sent']) {
             whLog($changeType ?: 'email', "Quotation email sent to {$r['to']} (PDF: {$src})");
@@ -254,13 +289,138 @@ function whInvoiceCreditScenario(array $invoice, array $client): array
 }
 
 /**
- * Send invoice PDF via WhatsML. Returns true on success.
+ * The facts a lifecycle e-mail prints about a uCRM service, from the service
+ * and client records the handler already holds. Dates are formatted from the
+ * calendar date uCRM wrote (its own offset), never re-interpreted in the
+ * server's zone — the day a customer was activated does not move with PHP's
+ * default timezone. Anything unknown is '' and the template leaves it out.
  */
-function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoiceId, string $invoNum, float $amount, string $dueDate, array $config, string $dataDir): bool
+function whServiceFacts(array $service, array $client): array
+{
+    $day = function ($iso): string {
+        $d = substr((string)$iso, 0, 10);
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? date('j F Y', (int)strtotime($d)) : '';
+    };
+    $plan = trim((string)($service['servicePlanName'] ?? ''));
+    if ($plan === '') $plan = trim((string)($service['name'] ?? ''));
+    // "Monthly price" is only true of a monthly plan; a plan billed over
+    // several months prints no price rather than a wrong one.
+    $months = (int)($service['servicePlanPeriod'] ?? 1);
+    $price  = $service['totalPrice'] ?? $service['price'] ?? '';
+    $price  = ($months === 1 && is_numeric($price) && (float)$price > 0) ? (float)$price : '';
+    $addr   = implode(', ', array_filter([
+        trim((string)($service['street1'] ?? $client['street1'] ?? '')),
+        trim((string)($service['city'] ?? $client['city'] ?? '')),
+    ], 'strlen'));
+    return [
+        'plan_name'      => $plan,
+        'monthly_price'  => $price,
+        'activated_on'   => $day($service['activeFrom'] ?? ''),
+        'active_to'      => $day($service['activeTo'] ?? ''),
+        'address'        => $addr,
+        'account_number' => trim((string)($client['userIdent'] ?? '')),
+    ];
+}
+
+/**
+ * What resumes a paused service: the unpaid invoice numbers and their total.
+ * One invoice: its number and amount. Several: the numbers and the sum. None
+ * readable: the client's outstanding balance, which is what WhatsApp prints.
+ *
+ * @return array{0:string,1:float|string}  [invoice numbers, amount]
+ */
+function whUnpaidInvoiceFacts(object $crm, int $clientId, float $fallbackAmount): array
 {
     try {
-        $pdfRaw = $crm->getRawContent("invoices/{$invoiceId}/pdf");
-        if (!$pdfRaw) return false;
+        $rows = $crm->get("invoices?clientId={$clientId}&statuses[]=1&statuses[]=2&limit=10")
+             ?? $crm->get("billing/invoices?clientId={$clientId}&statuses[]=1&statuses[]=2&limit=10") ?? [];
+        $nums = []; $sum = 0.0;
+        foreach ((array)$rows as $r) {
+            $due = (float)($r['amountToPay'] ?? 0);
+            if ($due <= 0) continue;
+            $n = trim((string)($r['number'] ?? ''));
+            if ($n !== '') $nums[] = $n;
+            $sum += $due;
+        }
+        if ($sum > 0) return [implode(', ', $nums), $sum];
+    } catch (\Throwable $e) {}
+    return ['', $fallbackAmount > 0 ? $fallbackAmount : ''];
+}
+
+/**
+ * The "Pay" link for an e-mail: only a URL somebody configured for this
+ * install. CustomerContact::payUrl() falls back to the Sudan tutorials page,
+ * which WhatsApp has always printed; an e-mail button is not given that default.
+ */
+function whPayUrlIfConfigured(array $config): string
+{
+    $u = trim((string)($config['contact_pay_url'] ?? ''));
+    return filter_var($u, FILTER_VALIDATE_URL) ? $u : '';
+}
+
+/** The key-value table the admin UI creates — created here too, so a webhook that runs first can use it. */
+function whKvTable($store): PDO
+{
+    $pdo = $store->getPdo();
+    $pdo->exec("CREATE TABLE IF NOT EXISTS plugin_kv (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now')))");
+    return $pdo;
+}
+
+/** Remember that we paused this service, so its next activation reads as a resumption. */
+function whMarkPaused($store, int $serviceId, bool $paused): void
+{
+    try {
+        $pdo = whKvTable($store);
+        if ($paused) {
+            $pdo->prepare("INSERT OR REPLACE INTO plugin_kv (key, value, updated_at) VALUES (?, ?, datetime('now'))")
+                ->execute(['paused_svc_' . $serviceId, (string)time()]);
+        } else {
+            $pdo->prepare("DELETE FROM plugin_kv WHERE key = ?")->execute(['paused_svc_' . $serviceId]);
+        }
+    } catch (\Throwable $e) {}
+}
+
+function whWasPaused($store, int $serviceId): bool
+{
+    try {
+        $q = whKvTable($store)->prepare("SELECT value FROM plugin_kv WHERE key = ? LIMIT 1");
+        $q->execute(['paused_svc_' . $serviceId]);
+        return $q->fetchColumn() !== false;
+    } catch (\Throwable $e) { return false; }
+}
+
+/**
+ * The invoice as uCRM renders it, as raw PDF bytes — or '' when uCRM has none.
+ *
+ * Fetched ONCE per webhook and handed to both channels: the WhatsApp document
+ * and the e-mail attachment are the same file, and one render is all uCRM
+ * should be asked for. Anything that is not a PDF (an HTML error page behind a
+ * 200, a truncated body) counts as absent, so a customer is never sent a
+ * broken attachment. Never throws.
+ */
+function whInvoicePdfBytes(object $crm, int $invoiceId): string
+{
+    try {
+        $b64 = $crm->getRawContent("invoices/{$invoiceId}/pdf");
+        if (!$b64) return '';
+        $bytes = base64_decode((string)$b64, true);
+        if ($bytes === false || strncmp($bytes, '%PDF', 4) !== 0) return '';
+        return $bytes;
+    } catch (\Throwable $e) {
+        whLog('pdf_error', 'Invoice PDF fetch failed: ' . $e->getMessage(), ['invoice_id' => $invoiceId]);
+        return '';
+    }
+}
+
+/**
+ * Send invoice PDF via WhatsML. Returns true on success.
+ * $pdfBytes: the bytes whInvoicePdfBytes() already fetched, or null to fetch here.
+ */
+function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoiceId, string $invoNum, float $amount, string $dueDate, array $config, string $dataDir, ?string $pdfBytes = null): bool
+{
+    try {
+        $bytes = $pdfBytes ?? whInvoicePdfBytes($crm, $invoiceId);
+        if ($bytes === '') return false;
 
         $tempDir = $dataDir . '/temp_pdf';
         if (!is_dir($tempDir)) mkdir($tempDir, 0755, true);
@@ -272,7 +432,7 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
         $pdfPath  = $tempDir . '/' . $pdfFile;
         $pdfToken = hash_hmac('sha256', $pdfFile, ($config['webhook_secret'] ?? 'dishnet') . date('Ymd'));
 
-        file_put_contents($pdfPath, base64_decode($pdfRaw));
+        file_put_contents($pdfPath, $bytes);
         file_put_contents($pdfPath . '.meta', json_encode([
             'token' => $pdfToken, 'created' => time(), 'invoice' => $invoNum,
         ]));
@@ -299,7 +459,8 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
  */
 function whSendInvoiceNotification(object $notify, object $crm, string $phone, string $name,
     int $invoiceId, string $invoNum, float $amount, string $dueDate,
-    array $creditData, array $config, string $dataDir, string $serviceName = ''): void
+    array $creditData, array $config, string $dataDir, string $serviceName = '',
+    ?string $pdfBytes = null): void
 {
     $scenario = $creditData['scenario'];
     $sendPdf  = true; // always send PDF so customer has the record
@@ -323,7 +484,7 @@ function whSendInvoiceNotification(object $notify, object $crm, string $phone, s
     }
 
     // Always send PDF so customer has the invoice document
-    $pdfOk = whSendInvoicePdf($crm, $notify, $phone, $invoiceId, $invoNum, $amount, $dueDate, $config, $dataDir);
+    $pdfOk = whSendInvoicePdf($crm, $notify, $phone, $invoiceId, $invoNum, $amount, $dueDate, $config, $dataDir, $pdfBytes);
     whLog('invoice_notify', "PDF send: " . ($pdfOk ? 'OK' : 'FAILED'), ['invoice' => $invoNum]);
 }
 
@@ -556,10 +717,20 @@ switch ($changeType) {
             // Welcome message — only if NOT already sent by plugin (check local apps)
             $existingApp = $store->findOne('kyc_applications.json', 'crm_client_id', (string)$clientId);
             if (!$existingApp) {
-                // Client created directly in UCRM (not via our KYC form) — send welcome
+                // Client created directly in UCRM (not via our KYC form) — send welcome.
+                // The text is written here on purpose: NotificationService::send()
+                // sends exactly what it is handed since 5.18.4. Before that it built
+                // "*EVENT CLIENT ADD* / To: … / Crm id: 13" out of these variables and
+                // sent THAT to the customer — seen live on 15 Sep.
+                $welcome = "🎉 *Welcome to DishNet!*\n\n"
+                         . "Hi {$name},\n\n"
+                         . "Your account has been created. Our team will be in touch to complete your connection.\n\n"
+                         . "For support: " . CustomerContact::escalation($config) . "\n\n"
+                         . "— _DishNet Africa_";
                 $notify->send('event_client_add', $phone, $name, [
                     'customer_name' => $name,
                     'crm_id'        => (string)$clientId,
+                    '_raw_message'  => $welcome,
                 ]);
                 whLog($changeType, "Welcome sent to {$name} ({$phone})", ['crm_id' => $clientId]);
             } else {
@@ -653,14 +824,19 @@ switch ($changeType) {
         // We parse out just Plan + Period for a clean WhatsApp message line.
         $invItems = $invoice['items'] ?? [];
         $itemLabels = [];
+        $planNames  = [];   // for the e-mail: the plan and the period as separate facts
+        $periods    = [];
         foreach ($invItems as $item) {
             $raw = trim($item['label'] ?? $item['name'] ?? $item['description'] ?? '');
             if (!$raw) continue;
             // Match "Service(s) Plan {name} Duration/Period {dates}" — plan can be multi-word
             if (preg_match('/Services?\s+Plan\s+(.+?)\s*:?\s*(?:Duration|Period)\s+(.+)$/ui', $raw, $m)) {
                 $itemLabels[] = trim($m[1]) . ' · ' . trim($m[2]);
+                $planNames[]  = trim($m[1]);
+                $periods[]    = trim($m[2]);
             } elseif (preg_match('/Services?\s+Plan\s+(.+?)$/ui', $raw, $m)) {
                 $itemLabels[] = trim($m[1]);
+                $planNames[]  = trim($m[1]);
             } else {
                 $itemLabels[] = $raw; // fallback: use as-is
             }
@@ -674,6 +850,14 @@ switch ($changeType) {
         } else {
             $serviceName = implode(', ', array_slice($itemLabels, 0, 2)) . ' + ' . ($totalItems - 2) . ' more';
         }
+        // The e-mail template prints the plan and the period as two facts.
+        // Several lines for one plan collapse to one name; several different
+        // periods print none rather than a wrong one. With no parsable
+        // service line the label text stands in for the plan, as WhatsApp does.
+        $planNames   = array_values(array_unique($planNames));
+        $periods     = array_values(array_unique($periods));
+        $emailPlan   = $planNames ? implode(', ', $planNames) : $serviceName;
+        $emailPeriod = count($periods) === 1 ? $periods[0] : '';
 
         if (!$clientId) {
             whLog($changeType, 'No clientId on invoice — skipped');
@@ -713,16 +897,32 @@ switch ($changeType) {
                 whResp(200, 'invoice.add already notified — skipped.');
             }
 
+            // One uCRM render of the invoice PDF serves both channels.
+            $invoicePdf = whInvoicePdfBytes($crm, $invoiceId);
+
             whSendInvoiceNotification($notify, $crm, $phone, $name,
                 $invoiceId, $invoNum, $amount, $dueDate ?: 'See invoice',
-                $creditData, $config, $dataDir, $serviceName);
+                $creditData, $config, $dataDir, $serviceName, $invoicePdf);
 
+            // The e-mail carries the same PDF, and says so only when it does:
+            // when uCRM has no PDF to give, the facts still go out and the
+            // claim does not. The template reads plan_name and period; the
+            // first wiring passed 'plan', which it never printed.
+            $dueNice = ($dueDate !== '' && strtotime($dueDate) !== false)
+                ? date('j F Y', strtotime($dueDate)) : ($dueDate ?: 'See invoice');
             whCustomerEmail('invoice', (int)$clientId, $name, [
+                'first_name'     => (string)($client['firstName'] ?? ''),
                 'invoice_number' => $invoNum,
                 'amount'         => $amount,
-                'due_date'       => $dueDate ?: 'See invoice',
-                'plan'           => $serviceName,
-            ], "INV{$invoNum}", $config, $dataDir, $crm, $store, $changeType);
+                'due_date'       => $dueNice,
+                'plan_name'      => $emailPlan,
+                'period'         => $emailPeriod,
+                'pdf_attached'   => $invoicePdf !== '',
+                'pay_url'        => whPayUrlIfConfigured($config),
+            ], "INV{$invoNum}", $config, $dataDir, $crm, $store, $changeType,
+                $invoicePdf !== ''
+                    ? [['name' => "Invoice-{$invoNum}.pdf", 'mime' => 'application/pdf', 'content' => $invoicePdf]]
+                    : []);
 
             // Push notification to customer's app
             try {
@@ -1202,10 +1402,19 @@ switch ($changeType) {
                 'ops_service_activated');
             whLog($changeType, "Service activated notification -> {$name} ({$svcName})");
 
+            // The template reads plan_name, monthly_price, activated_on,
+            // account_number and address; the first wiring passed 'plan' and
+            // 'date', which it never printed. Keyed by service id, so the
+            // first activation of the same service (below) cannot send a second.
+            $svcFacts = whServiceFacts($service, $client);
             whCustomerEmail('welcome', (int)$clientId, $name, [
-                'plan' => $svcName,
-                'date' => date('j F Y'),
-            ], "SVCADD{$clientId}:{$svcName}", $config, $dataDir, $crm, $store, $changeType);
+                'first_name'     => (string)($client['firstName'] ?? ''),
+                'plan_name'      => $svcFacts['plan_name'] !== '' ? $svcFacts['plan_name'] : $svcName,
+                'monthly_price'  => $svcFacts['monthly_price'],
+                'activated_on'   => $svcFacts['activated_on'] !== '' ? $svcFacts['activated_on'] : date('j F Y'),
+                'account_number' => $svcFacts['account_number'],
+                'address'        => $svcFacts['address'],
+            ], "SVCADD{$clientId}:{$serviceId}", $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
             try {
@@ -1407,6 +1616,11 @@ switch ($changeType) {
             whLog($changeType, 'VIP guard error: ' . $e->getMessage() . ' — falling through to standard suspend');
         }
 
+        // Remembered whether or not the customer can be reached: the next
+        // activation of this service is then told as a resumption, and a first
+        // activation as a welcome — the same uCRM event announces both.
+        whMarkPaused($store, (int)$serviceId, true);
+
         if ($phone) {
             $notify->sendVia('accounts', $phone,
                 "🚫 *Service Suspended — DishNet Africa*\n\n"
@@ -1423,9 +1637,19 @@ switch ($changeType) {
 
             // "Paused", not "suspended": on a prepaid install the period simply
             // ended. The template says so, and says how to resume.
+            // The template reads invoice_number and amount — what resumes the
+            // service — and a pay_url when one is configured. The first wiring
+            // passed 'plan' and 'date', which it never printed, so the subject
+            // would have gone out as "paused —  to resume".
+            [$pausedInv, $pausedAmt] = whUnpaidInvoiceFacts($crm, (int)$clientId, $outstandingRaw);
+            $pausedFacts = whServiceFacts($service, $client);
             whCustomerEmail('service_paused', (int)$clientId, $name, [
-                'plan' => $svcName,
-                'date' => date('j F Y'),
+                'first_name'     => (string)($client['firstName'] ?? ''),
+                'invoice_number' => $pausedInv,
+                'amount'         => $pausedAmt,
+                'period_ended'   => ($pausedFacts['active_to'] !== '' && strtotime($pausedFacts['active_to']) <= time())
+                                        ? $pausedFacts['active_to'] : '',
+                'pay_url'        => whPayUrlIfConfigured($config),
             ], "SUSP{$clientId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
@@ -1603,11 +1827,43 @@ switch ($changeType) {
                     . "— DishNet Accounts",
                     'ops_service_restored');
                 whLog($changeType, "Restoration notice sent to {$name}");
+            }
 
-                whCustomerEmail('service_resumed', (int)$clientId, $name, [
-                    'plan' => $svcName,
-                    'date' => date('j F Y'),
-                ], "RESUME{$clientId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
+            // The e-mail, chosen by what actually happened to this service.
+            // uCRM fires service.activate for a first activation and for a
+            // resumption alike; only a pause we recorded makes it the latter.
+            // A cancelled pending suspension changes nothing for the customer.
+            // A postponement is a temporary restore without payment, so the
+            // resumption e-mail waits for the real one. Unlike the WhatsApp
+            // text above, the e-mail does not stand aside for a receipt sent
+            // moments earlier: "your internet is active again" is the point.
+            $actFacts   = whServiceFacts($service, $client);
+            $wasPaused  = whWasPaused($store, (int)$serviceId);
+            $outstanding = (float)($client['accountOutstandingRaw'] ?? $client['accountOutstanding'] ?? 0);
+            if ($changeType === 'service.suspend_cancel') {
+                // nothing to tell
+            } elseif ($wasPaused) {
+                if (!$recentPostpone) {
+                    whCustomerEmail('service_resumed', (int)$clientId, $name, [
+                        'first_name' => (string)($client['firstName'] ?? ''),
+                        'plan_name'  => $actFacts['plan_name'] !== '' ? $actFacts['plan_name'] : $svcName,
+                        // "Your payment has been received" only when one was:
+                        // a receipt moments ago, or nothing left outstanding.
+                        'paid'       => $recentPayment || $outstanding <= 0,
+                    ], "RESUME{$clientId}:{$serviceId}:" . date('Y-m-d'), $config, $dataDir, $crm, $store, $changeType);
+                    whMarkPaused($store, (int)$serviceId, false);
+                }
+            } elseif ((int)($service['status'] ?? 0) === 1) {
+                // First activation — a service created "prepared" and switched
+                // on after installation never passes through service.add active.
+                whCustomerEmail('welcome', (int)$clientId, $name, [
+                    'first_name'     => (string)($client['firstName'] ?? ''),
+                    'plan_name'      => $actFacts['plan_name'] !== '' ? $actFacts['plan_name'] : $svcName,
+                    'monthly_price'  => $actFacts['monthly_price'],
+                    'activated_on'   => $actFacts['activated_on'] !== '' ? $actFacts['activated_on'] : date('j F Y'),
+                    'account_number' => $actFacts['account_number'],
+                    'address'        => $actFacts['address'],
+                ], "SVCADD{$clientId}:{$serviceId}", $config, $dataDir, $crm, $store, $changeType);
             }
 
             // Push notification to customer's app (always — even if WA was deduped)
@@ -2081,13 +2337,34 @@ switch ($changeType) {
             whLog($changeType, "Job #{$jobId} — No user assigned", ['job_title' => $title]);
         }
         
-        // A job is the installation appointment. Until now only the assigned
-        // technician heard about it — the customer was told nothing.
-        whCustomerEmail('install_scheduled', $clientId, $clientName === 'N/A' ? '' : $clientName, [
-            'install_date'   => $dateFormatted,
-            'install_window' => $timeFormatted ?? '',
-            'engineer'       => $techName ?? '',
-        ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
+        // The customer's copy: only for an installation, only once it has a
+        // date, only when the job belongs to a client. Any other job — a
+        // repair visit, a survey, a collection — would otherwise be announced
+        // as "your installation is booked". The template reads date, window,
+        // address and technician; the first wiring passed install_date,
+        // install_window and engineer, which it never printed, so the subject
+        // would have gone out as "booked for " with nothing after it.
+        // Dates and times are formatted from uCRM's own offset, so the day the
+        // office picked is the day the customer reads.
+        $isInstall = (bool)preg_match('/install|setup|set-up|mount/i', (string)$title);
+        if ($clientId > 0 && $isInstall && $date !== '') {
+            $dayOnly   = substr((string)$date, 0, 10);
+            $dateLong  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dayOnly) ? date('l j F Y', (int)strtotime($dayOnly)) : '';
+            $clock     = function ($iso): string {
+                try { return $iso ? (new DateTime((string)$iso))->format('g:i A') : ''; } catch (\Throwable $e) { return ''; }
+            };
+            $window = $clock($timeFrom) . ($timeFrom && $timeTo ? ' - ' . $clock($timeTo) : '');
+            whCustomerEmail('install_scheduled', $clientId, $clientName === 'N/A' ? '' : $clientName, [
+                'first_name' => (string)(($client ?? [])['firstName'] ?? ''),
+                'date'       => $dateLong !== '' ? $dateLong : $dateFormatted,
+                'window'     => $window,
+                'address'    => (string)$address,
+                'technician' => (string)($techName ?? ''),
+            ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
+        } else {
+            whLog($changeType, "Job #{$jobId}: no customer e-mail — "
+                . (!$clientId ? 'no client on the job' : (!$isInstall ? 'not an installation job' : 'no date yet')));
+        }
 
         whResp(200, 'job.add processed.');
     }
@@ -2107,11 +2384,21 @@ switch ($changeType) {
         );
         whLog($changeType, "Admin notified: ticket #{$ticketId}");
 
-        // The customer has heard nothing until now — only the admin was told.
-        whCustomerEmail('support_received', $clientId, '', [
-            'ticket'  => "#{$ticketId}",
-            'subject' => $subject,
-        ], "TKT{$ticketId}", $config, $dataDir, $crm, $store, $changeType);
+        // The customer's acknowledgement — only when the ticket belongs to a
+        // client; a ticket with no client has nobody to acknowledge to. The
+        // template reads ticket_ref, subject, logged_at and account_number;
+        // the first wiring passed 'ticket', which it never printed, so the
+        // subject would have gone out as "We have your request — ".
+        if ($clientId > 0) {
+            $tClient = $crm->get("clients/{$clientId}") ?? [];
+            whCustomerEmail('support_received', $clientId, '', [
+                'first_name'     => (string)($tClient['firstName'] ?? ''),
+                'ticket_ref'     => "#{$ticketId}",
+                'subject'        => $subject,
+                'logged_at'      => date('j F Y, H:i'),
+                'account_number' => trim((string)($tClient['userIdent'] ?? '')),
+            ], "TKT{$ticketId}", $config, $dataDir, $crm, $store, $changeType);
+        }
         whResp(200, 'ticket.add processed.');
     }
 
@@ -2461,11 +2748,12 @@ switch ($changeType) {
 
                         $pdfFile  = "DishNet-Quote-" . preg_replace('/[^A-Za-z0-9\-]/', '', $quoteNum) . '.pdf';
                         $pdfPath  = $pdfDir . '/' . $pdfFile;
-                        $secret   = ($config['webhook_secret'] ?? 'dishnet');
-                        $pdfToken = hash_hmac('sha256', $pdfFile . date('Ymd'), $secret);
+                        // Daily token (QuotePdfToken): good today and tomorrow, then dead.
+                        $pdfToken = QuotePdfToken::mint($pdfFile, $config);
                         file_put_contents($pdfPath, base64_decode($pdfRaw));
+                        // .meta is metadata only — the token is recomputed per day, never stored
                         file_put_contents($pdfPath . '.meta', json_encode([
-                            'token' => $pdfToken, 'created' => time(), 'quote' => $quoteNum,
+                            'created' => time(), 'quote' => $quoteNum,
                             'filename' => "Quote-{$quoteNum}.pdf",
                         ]));
 

@@ -49,19 +49,28 @@ echo "\nA recorded alert can be read back\n";
 $warnings = [];
 set_error_handler(function ($no, $str) use (&$warnings) { $warnings[] = $str; return true; });
 
-$record->invoke($alerts, 'conv:109:handoff', 1789000000);
+// Relative, not absolute. These were fixed epoch seconds from 10 Sep 2026,
+// and recordSent() prunes anything older than seven days — so on 17 Sep the
+// write was dropped by its own housekeeping the moment it landed, and five
+// assertions here began failing on a clock tick rather than on a code
+// change. A cooldown is always "a moment ago", so say that instead.
+$T1 = time() - 3600;          // an hour ago
+$T2 = $T1 + 900;              // same key, fifteen minutes later
+$T3 = $T1 + 1000;             // a different key
+
+$record->invoke($alerts, 'conv:109:handoff', $T1);
 $got = (int)$last->invoke($alerts, 'conv:109:handoff');
 
 restore_error_handler();
 
-is_($got === 1789000000, 'the timestamp survives the write',
+is_($got === $T1, 'the timestamp survives the write',
     'read back ' . $got . ' — a lost cooldown means the alert repeats');
 is_($warnings === [], 'and it writes without a single warning',
     implode(' | ', $warnings));
 
 echo "\nUpdating an existing key replaces it rather than duplicating\n";
-$record->invoke($alerts, 'conv:109:handoff', 1789000900);
-is_((int)$last->invoke($alerts, 'conv:109:handoff') === 1789000900,
+$record->invoke($alerts, 'conv:109:handoff', $T2);
+is_((int)$last->invoke($alerts, 'conv:109:handoff') === $T2,
     'the newer timestamp wins');
 $rows = $store->load(AlertService::LOCK_FILE);
 $mine = array_filter((array)$rows, function ($r) { return ($r['key'] ?? '') === 'conv:109:handoff'; });
@@ -69,10 +78,10 @@ is_(count($mine) === 1, 'and there is still exactly one row for that key',
     count($mine) . ' rows — duplicates would make lastSent() order-dependent');
 
 echo "\nA second key does not disturb the first\n";
-$record->invoke($alerts, 'conv:127:handoff', 1789001000);
-is_((int)$last->invoke($alerts, 'conv:109:handoff') === 1789000900,
+$record->invoke($alerts, 'conv:127:handoff', $T3);
+is_((int)$last->invoke($alerts, 'conv:109:handoff') === $T2,
     'the earlier key is still readable');
-is_((int)$last->invoke($alerts, 'conv:127:handoff') === 1789001000,
+is_((int)$last->invoke($alerts, 'conv:127:handoff') === $T3,
     'and so is the new one');
 
 foreach (glob($tmp . '/*') ?: [] as $f) @unlink($f);

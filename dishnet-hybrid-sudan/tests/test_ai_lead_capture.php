@@ -203,6 +203,86 @@ is_(strpos($p, 'RECORDING A SALES OPPORTUNITY') !== false, 'present when switche
 is_(strpos($p, 'ONLY WHAT THEY ACTUALLY TOLD YOU') !== false, 'and forbids guessing');
 is_(strpos($p, 'are enquiries, not') !== false, 'with the non-examples named');
 
+echo "\nHowever the model closes the marker, the customer never sees it\n";
+// 17 September, 09:36. A prospect gave their name and their village and got
+// back a polite reply with this on the end of it:
+//
+//   <<LEAD {"requirement":"...","location":"...","customer_name":"..."}>
+//
+// One closing angle bracket instead of two. The pattern required two, so
+// nothing matched: the lead was never written, and the marker — that person's
+// own name and location, as JSON — was sent to them as part of the message.
+// A sales record was lost; a customer was shown the machinery. The second is
+// the worse one, and neither should depend on the model's punctuation.
+$mk = new ReflectionMethod('DishNetAiBrain', 'parseMarkers');
+$mk->setAccessible(true);
+$brain = new DishNetAiBrain(['claude_api_key' => 'k']);
+$body  = 'Thank you! Our team will be in touch shortly.';
+$J     = '{"requirement":"Starlink Residential","location":"Mukono","customer_name":"A Name"}';
+
+$closers = ['>>' => 'as instructed', '>' => 'one bracket — what happened live',
+            ''   => 'no closer at all', '>>>' => 'three brackets'];
+foreach ($closers as $close => $label) {
+    $r = $mk->invoke($brain, $body . "\n\n" . '<<LEAD ' . $J . $close);
+    $reply = (string)($r['reply'] ?? '');
+    is_(strpos($reply, '<<') === false && strpos($reply, 'requirement') === false
+        && strpos($reply, 'A Name') === false,
+        'closed ' . $label . ': nothing of the marker reaches the customer',
+        'sent: ' . $reply);
+    is_(is_array($r['lead'] ?? null) && ($r['lead']['location'] ?? '') === 'Mukono',
+        'closed ' . $label . ': and the lead is still recorded');
+}
+
+// The JSON is walked, not matched, so a brace or an angle bracket inside a
+// value cannot end it early and leave the rest on display.
+foreach ([
+    '{"requirement":"x","note":"they wrote a } brace"}' => 'a brace inside a value',
+    '{"requirement":"x","note":"speed > 100 Mbps"}'     => 'an angle bracket inside a value',
+    '{"requirement":"x","meta":{"nested":true}}'        => 'a nested object',
+] as $json => $label) {
+    $r = $mk->invoke($brain, $body . ' <<LEAD ' . $json . '>');
+    $reply = (string)($r['reply'] ?? '');
+    is_(strpos($reply, '<<') === false && strpos($reply, 'requirement') === false,
+        $label . ': stripped whole', 'sent: ' . $reply);
+    is_(is_array($r['lead'] ?? null), $label . ': and still decoded');
+}
+
+// Unterminated JSON has no lead in it and cannot be trusted to end, so
+// everything from the marker on is cut rather than shown to somebody.
+$r = $mk->invoke($brain, $body . ' <<LEAD {"requirement":"x"');
+is_(strpos((string)$r['reply'], '<<') === false && strpos((string)$r['reply'], 'requirement') === false,
+    'unterminated JSON is cut, not displayed', 'sent: ' . (string)$r['reply']);
+is_(trim((string)$r['reply']) === $body, 'and the sentence before it survives intact');
+
+echo "\nThe same for every other marker the model may emit\n";
+foreach ([
+    '<<ESCALATE customer is angry>' => 'escalate',
+    '<<FLYER>'                      => 'flyer',
+    '<<PHOTO mini kit>'             => 'photo',
+    '<<DOC spec sheet>'             => 'doc',
+    '<<QUOTE please>'               => 'quote',
+] as $marker => $label) {
+    $r = $mk->invoke($brain, $body . ' ' . $marker);
+    $reply = (string)($r['reply'] ?? '');
+    is_(strpos($reply, '<<') === false
+        && preg_match('/\b(ESCALATE|FLYER|PHOTO|DOC|QUOTE)\b/i', $reply) !== 1,
+        $label . ' with one closing bracket is not shown to the customer',
+        'sent: ' . $reply);
+}
+// And the intent behind a malformed marker is still acted on, rather than
+// silently dropped along with the text.
+$r = $mk->invoke($brain, $body . ' <<ESCALATE customer is angry>');
+is_(!empty($r['escalate']), 'a malformed escalate still hands over');
+is_(strpos((string)$r['escalate_reason'], 'angry') !== false, 'with its reason intact');
+$r = $mk->invoke($brain, $body . ' <<PHOTO mini kit>');
+is_(($r['photo'] ?? '') === 'mini kit', 'a malformed photo marker still names the photo');
+
+// The net matches our own marker names only: a customer's text that happens
+// to contain "<<" is not ours to rewrite.
+$r = $mk->invoke($brain, 'Our supplier is called << Nordic Systems and they ship weekly.');
+is_(strpos((string)$r['reply'], 'Nordic Systems') !== false,
+    'text that merely contains << is left alone', 'sent: ' . (string)$r['reply']);
+
 exec('rm -rf ' . escapeshellarg($tmp));
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

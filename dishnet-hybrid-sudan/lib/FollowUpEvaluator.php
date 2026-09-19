@@ -40,6 +40,56 @@ final class FollowUpEvaluator
     }
 
     /**
+     * Which brain answers, and with whose key.
+     *
+     * ── WHY THIS IS A FUNCTION AND NOT FOUR LINES IN THE CRON ───────────
+     *
+     * Because the four lines in the cron were wrong for five days and nothing
+     * could see it. followup_run.php read claude_api_key and only that, then
+     * built a ClaudeWaClient. This install runs ai_provider=openai, so the key
+     * was empty, the script returned at its guard on every run, and the only
+     * trace was one error_log line: 2300 of them, 766 runs, five days, while
+     * 261 follow-ups piled up and not one draft was ever written.
+     *
+     * Every other provider-consuming site in the plugin branches on
+     * ai_provider — DishNetAiBrain, WaAutoReplyService, StarlinkMailClassifier,
+     * the settings screen, the preflight. followup_run was the only one that
+     * did not, and being a cron script it had no seam a test could reach.
+     * Now it has one, and the test drives this rather than reading the source.
+     *
+     * The two clients are NOT interchangeable in general: ClaudeWaClient's
+     * getReply() takes a seventh $tools argument that GptWaClient does not
+     * have. They are interchangeable HERE because evaluate() passes six. A
+     * test pins that, so adding a seventh argument fails loudly instead of
+     * silently breaking whichever provider is not being tested that day.
+     *
+     * @return array{client:?object, provider:string, error:string}
+     */
+    public static function clientFor(array $config, \PDO $pdo): array
+    {
+        $provider = strtolower(trim((string)($config['ai_provider'] ?? 'claude'))) === 'openai'
+                  ? 'openai' : 'claude';
+
+        if ($provider === 'openai') {
+            $key = trim((string)($config['openai_api_key'] ?? ''));
+            if ($key === '') {
+                return ['client' => null, 'provider' => $provider,
+                        'error' => 'no openai API key — cannot evaluate'];
+            }
+            require_once __DIR__ . '/GptWaClient.php';
+            return ['client' => new \GptWaClient($key, $pdo), 'provider' => $provider, 'error' => ''];
+        }
+
+        $key = trim((string)($config['claude_api_key'] ?? $config['anthropic_api_key'] ?? ''));
+        if ($key === '') {
+            return ['client' => null, 'provider' => $provider,
+                    'error' => 'no claude API key — cannot evaluate'];
+        }
+        require_once __DIR__ . '/ClaudeWaClient.php';
+        return ['client' => new \ClaudeWaClient($key, $pdo), 'provider' => $provider, 'error' => ''];
+    }
+
+    /**
      * @param array  $fu        the followups row
      * @param array  $messages  the thread, oldest first: [['role'=>..,'body'=>..,'sent_at'=>..], ..]
      * @param string $level     FollowUpPolicy::CONTENT_* — what may be discussed

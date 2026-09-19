@@ -70,7 +70,7 @@ if ($_wd_alerts->target() === '') {
         $_wd_waiting = AlertService::findUnanswered($_wd_rows, $_wd_seen, time(), $_wd_patience);
 
         foreach ($_wd_waiting as $c) {
-            $mins  = (int)floor((time() - strtotime((string)$c['last_customer_at'])) / 60);
+            $mins  = (int)floor((time() - UtcClock::parse($c['last_customer_at'] ?? '')) / 60);
             $who   = trim((string)($c['display_name'] ?? '')) ?: (string)$c['phone'];
             $where = ($c['channel'] ?? '') === 'web' ? 'website chat' : 'WhatsApp (' . $c['channel'] . ')';
             $r = $_wd_alerts->notify(

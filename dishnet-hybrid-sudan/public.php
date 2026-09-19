@@ -510,6 +510,11 @@ if (empty($config)) {
     ];
     $store->save('kyc_config.json', $config);
 }
+// Quotation PDF links are signed with a secret of their own, generated here
+// once, the first time this install has none. Every other entry point that
+// mints or checks a link does the same. See lib/QuotePdfToken.php.
+require_once __DIR__ . '/lib/QuotePdfToken.php';
+QuotePdfToken::ensureSecret($store, $config);
 // Ensure defaults for existing configs
 if (!isset($config['commission_rate']))            $config['commission_rate'] = 5;
 if (!isset($config['lte_commission_rate']))        $config['lte_commission_rate'] = 5;
@@ -762,6 +767,20 @@ if ($page === 'prices') {
     exit;
 }
 
+// ── Public accessories shop (5.18.11) ──────────────────────────────────
+// URL: public.php?page=shop            the page (add &format=json for the website)
+//      public.php?page=shop_img&s=…    a product photo, sized (&w=240|480)
+if ($page === 'shop') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/shop.php';
+    exit;
+}
+if ($page === 'shop_img') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/shop_img.php';
+    exit;
+}
+
 // ── uCRM event webhook ───────────────────────────────────────────────
 // URL: public.php?page=crm_webhook
 //
@@ -784,6 +803,26 @@ if ($page === 'crm_webhook') {
 if ($page === 'evo_webhook') {
     while (ob_get_level() > 0) ob_end_clean();
     require __DIR__ . '/evo_webhook.php';
+    exit;
+}
+
+// ── DPO Pay: the customer's browser comes back here after checkout ──
+// URL: public.php?page=dpo_return  (and &cancelled=1 as DPO's BackURL)
+// Public by necessity — a customer returning from DPO carries no session.
+// Nothing in the query string is read as a result; see the file.
+if ($page === 'dpo_return') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/dpo_return.php';
+    exit;
+}
+
+// ── DPO Pay: DPO's own server posts the result here ──
+// URL: public.php?page=dpo_push
+// Public by necessity and UNSIGNED by DPO, so it is treated as a doorbell:
+// it says when to look, and verifyToken says what is true.
+if ($page === 'dpo_push') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/dpo_push.php';
     exit;
 }
 
@@ -2197,6 +2236,9 @@ else:
         ['id'=>'access_log',     'label'=>'Access Log / Login History', 'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'app_logins',     'label'=>'Customer App Logins',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_fleet', 'label'=>'Starlink Fleet',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'starlink_accounts','label'=>'Starlink Accounts',      'icon'=>'[Account]',  'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'dpo_payments',   'label'=>'DPO Pay',                  'icon'=>'[Card]',     'group'=>'Admin',      'roles'=>['admin']],
+        ['id'=>'kit_intake',     'label'=>'Kit Number Review',        'icon'=>'[Link]',     'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_session','label'=>'Starlink Sessions',        'icon'=>'[Key]',      'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'followups',      'label'=>'Customer Follow-ups',      'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'starlink_suspensions','label'=>'Starlink Suspensions',    'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2657,6 +2699,9 @@ $_tabFiles = [
     'smtp_diagnostic'  => 'tabs/admin/smtp_diagnostic.php',
     'email_preview'    => 'tabs/admin/email_preview.php',
     'starlink_fleet'   => 'tabs/admin/starlink_fleet.php',
+    'starlink_accounts'=> 'tabs/admin/starlink_accounts.php',
+    'dpo_payments'     => 'tabs/admin/dpo_payments.php',
+    'kit_intake'       => 'tabs/admin/kit_intake.php',
     'starlink_session' => 'tabs/admin/starlink_session.php',
     'followups'        => 'tabs/engage/followups.php',
     'starlink_suspensions' => 'tabs/admin/starlink_suspensions.php',
@@ -2759,6 +2804,9 @@ $_tabPerms = [
     'engage_wa_leads'      => ['support_dash', '*admin'],
     'starlink_orders'      => '*admin',
     'starlink_fleet'       => '*admin',
+    'starlink_accounts'    => '*admin',
+    'dpo_payments'         => '*admin',
+    'kit_intake'           => '*admin',
     'starlink_session'     => '*admin',
     'followups'            => '*admin',
     'knowledge_base'       => '*admin',

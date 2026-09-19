@@ -1,0 +1,278 @@
+{
+  "_note": "Accessories shop content. Names are matched exactly against uCRM Products; a product missing in uCRM is hidden from the shop. NO PRICE LIVES HERE: prices come from uCRM at request time. Photos are in this folder; seed-2026-09-16.csv was used once by tools/shop_products_sync.php to create the products and is never read by the shop or the assistant.",
+  "version": 1,
+  "items": [
+    {
+      "slug": "router-mini",
+      "kind": "accessory",
+      "name": "Router Mini",
+      "match": [
+        "Router Mini"
+      ],
+      "category": "Router",
+      "fits": "Standard 4, Standard 4 X, Mini, Gen 2 kits (not Gen 1)",
+      "specs": "Wi-Fi 6, dual-band; coverage up to 112 m² (1,200 ft²); 1 latching Ethernet LAN port (Starlink Plug); 137 × 84 × 25 mm; removable stand doubles as a wall mount; separate power supply 100–240 V; works as the primary router or as a mesh node with Router 3, Gen 2 and Mini routers. The router shipped in the Standard 4 kit.",
+      "image": "router-mini.png"
+    },
+    {
+      "slug": "roof-rack-mount-standard",
+      "kind": "accessory",
+      "name": "Roof Rack Mount | Standard 4 or 4 X",
+      "match": [
+        "Roof Rack Mount | Standard 4 or 4 X"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4, Standard 4 X, Enterprise",
+      "specs": "Clamps to vehicle roof-rack crossbars 15–44.5 mm thick and up to 95 mm wide, or to T-slot racks; quick to detach when not in use; for use while parked.",
+      "image": "roof-rack-mount-standard.png"
+    },
+    {
+      "slug": "standard-to-actuated-mount-adapter",
+      "kind": "accessory",
+      "name": "Standard 4 or 4 X to Standard Actuated Mount Adapter",
+      "match": [
+        "Standard 4 or 4 X to Standard Actuated Mount Adapter"
+      ],
+      "category": "Adapter",
+      "fits": "Standard 4 / 4 X dish onto an existing Standard Actuated (Gen 2) mount",
+      "specs": "Lets a new Standard 4 / 4 X dish use a mount already installed for the older Standard Actuated dish, without replacing the mount: Short Wall Mount, Long Wall Mount, Pivot Mount, Ground Pole Mount, Ridgeline Mount. Mast and hardware included. For customers upgrading a Gen 2 dish.",
+      "image": "standard-to-actuated-mount-adapter.png"
+    },
+    {
+      "slug": "x-frame-base-standard",
+      "kind": "accessory",
+      "name": "X-Frame Base | Standard 4 or 4 X, Enterprise",
+      "match": [
+        "X-Frame Base | Standard 4 or 4 X, Enterprise"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4, Standard 4 X, Enterprise",
+      "specs": "Folding X-shaped base for a ground-level installation or a quick set-up, holding the dish slightly off the ground; no drilling.",
+      "image": "x-frame-base-standard.png"
+    },
+    {
+      "slug": "ridgeline-mount-standard",
+      "kind": "accessory",
+      "name": "Ridgeline Mount | Standard 4 or 4 X",
+      "match": [
+        "Ridgeline Mount | Standard 4 or 4 X"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4, Standard 4 X",
+      "specs": "Non-penetrating roof mount: adjustable legs straddle the roof ridge or lie flat on a flat roof, no holes drilled; held down by four ballast weights of about 5 kg each (kit also has cable routing clips); rated to 80 km/h wind; for shingle and metal roofs, not recommended for clay tile. Heavy to ship.",
+      "image": "ridgeline-mount-standard.png"
+    },
+    {
+      "slug": "router-3-mount",
+      "kind": "accessory",
+      "name": "Router 3 Mount",
+      "match": [
+        "Router 3 Mount"
+      ],
+      "category": "Mount",
+      "fits": "Router 3",
+      "specs": "Bracket to fix the Router 3 to a wall or other surface.",
+      "image": "router-3-mount.png"
+    },
+    {
+      "slug": "mobility-mount-standard",
+      "kind": "accessory",
+      "name": "Mobility Mount | Standard 4 or 4 X",
+      "match": [
+        "Mobility Mount | Standard 4 or 4 X"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4, Standard 4 X, Enterprise",
+      "specs": "Permanent mount for vehicles, boats and cabins: forms a watertight seal on wood, fibreglass, metal, plastic and slotted rack rails; fixed 8° tilt; for use while parked.",
+      "image": "mobility-mount-standard.png"
+    },
+    {
+      "slug": "power-supply-mount-standard-4x",
+      "kind": "accessory",
+      "name": "Power Supply Mount | Standard 4 X",
+      "match": [
+        "Power Supply Mount | Standard 4 X"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4 X power supply only",
+      "specs": "Bracket to fix the Standard 4 X dish power supply (the separate brick) to a wall. Not for the Standard 4 dual-port supply.",
+      "image": "power-supply-mount-standard-4x.png"
+    },
+    {
+      "slug": "pivot-mount-standard",
+      "kind": "accessory",
+      "name": "Pivot Mount | Standard 4 and 4 X, Enterprise",
+      "match": [
+        "Pivot Mount | Standard 4 and 4 X, Enterprise"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4, Standard 4 X, Enterprise",
+      "specs": "For slanted, shingled roofs; swivelling head for fine adjustment of angle and direction. Kit: pivot mount, 20 routing clips, 2 lag screws, silicone sealant, sealing tape.",
+      "image": "pivot-mount-standard.png"
+    },
+    {
+      "slug": "wall-mount-standard",
+      "kind": "accessory",
+      "name": "Wall Mount | Standard 4 or 4 X",
+      "match": [
+        "Wall Mount | Standard 4 or 4 X"
+      ],
+      "category": "Mount",
+      "fits": "Standard 4, Standard 4 X",
+      "specs": "Exterior wall mount that holds the dish clear of the wall and eaves. Kit: wall mount, 20 routing clips, 2 lag screws, silicone sealant.",
+      "image": "wall-mount-standard.png"
+    },
+    {
+      "slug": "pipe-adapter-standard",
+      "kind": "accessory",
+      "name": "Pipe Adapter | Standard 4 or 4 X",
+      "match": [
+        "Pipe Adapter | Standard 4 or 4 X"
+      ],
+      "category": "Adapter",
+      "fits": "Standard 4, Standard 4 X",
+      "specs": "Fits the dish to an existing metal pole of 31–63.5 mm (1.25–2.5 in) diameter; metal pipes only, not PVC; hardware included. The usual part for a pole installation.",
+      "image": "pipe-adapter-standard.png"
+    },
+    {
+      "slug": "router-3",
+      "kind": "accessory",
+      "name": "Router 3 | Starlink V4 or V5, Mini",
+      "match": [
+        "Router 3 | Starlink V4 or V5, Mini"
+      ],
+      "category": "Router",
+      "fits": "Standard 4, Standard 4 X, Mini, Gen 2 and Gen 3 kits",
+      "specs": "Tri-band Wi-Fi 6; coverage up to 297 m² (3,200 ft²); 2 latching Ethernet LAN ports; up to 235 devices; IP56; WPA2; 300 × 120 × 55 mm, about 1 kg; separate power supply 100–240 V; primary router or mesh node. The router shipped in the Standard 4 X kit.",
+      "image": "router-3.png"
+    },
+    {
+      "slug": "travel-kit-mini",
+      "kind": "accessory",
+      "name": "Travel Kit | Mini",
+      "match": [
+        "Travel Kit | Mini"
+      ],
+      "category": "Case",
+      "fits": "Mini",
+      "specs": "Protects the Mini on the move: a custom-fitted Bumper Case for drop protection, a Sleeve that doubles as a carrying case and shields against dirt, scrapes and bumps, and an Accessory Pouch that holds everything needed to power the Mini.",
+      "image": "travel-kit-mini.jpg"
+    },
+    {
+      "slug": "car-adapter-mini",
+      "kind": "accessory",
+      "name": "Car Adapter | Mini",
+      "match": [
+        "Car Adapter | Mini"
+      ],
+      "category": "Power",
+      "fits": "Mini",
+      "specs": "Powers the Mini from a vehicle's 12–24 V auxiliary (cigarette-lighter) socket over USB-C, in place of the Mini power supply and DC cable. Pair with the 5 m USB-C cable for reach from socket to dish.",
+      "image": "car-adapter-mini.jpg"
+    },
+    {
+      "slug": "mini-usb-c-cable-5m",
+      "kind": "accessory",
+      "name": "Starlink Mini USB-C Cable 5m",
+      "match": [
+        "Starlink Mini USB-C Cable 5m"
+      ],
+      "category": "Cable",
+      "fits": "Mini",
+      "specs": "5 m USB-C cable to power the Mini from a USB-C Power Delivery source: the Car Adapter or a power bank. Starlink's guidance is a PD source of at least 65 W, 100 W recommended, for full performance.",
+      "image": "mini-usb-c-cable-5m.jpg"
+    },
+    {
+      "slug": "mobility-mount-mini",
+      "kind": "accessory",
+      "name": "Mobility Mount | Mini",
+      "match": [
+        "Mobility Mount | Mini"
+      ],
+      "category": "Mount",
+      "fits": "Mini",
+      "specs": "Permanent vehicle or boat installation for the Mini; bolted down with a sealed footprint, for use while parked.",
+      "image": "mobility-mount-mini.jpg"
+    },
+    {
+      "slug": "roof-rack-mount-mini",
+      "kind": "accessory",
+      "name": "Roof Rack Mount | Mini",
+      "match": [
+        "Roof Rack Mount | Mini"
+      ],
+      "category": "Mount",
+      "fits": "Mini",
+      "specs": "Removable installation of the Mini on vehicle roof-rack crossbars; clamps on and comes off when not in use; for use while parked.",
+      "image": "roof-rack-mount-mini.jpg"
+    },
+    {
+      "slug": "mini-ethernet-cable-15m",
+      "kind": "accessory",
+      "name": "Starlink Mini Ethernet Cable 15m",
+      "match": [
+        "Starlink Mini Ethernet Cable 15m"
+      ],
+      "category": "Cable",
+      "fits": "Mini, Performance (Gen 3) dish → Router 3 or a third-party router",
+      "specs": "15 m Ethernet run from the Mini (or the Performance Gen 3 dish) to a Router 3 or any third-party router, with a weather-sealed latching plug on the dish end and standard RJ45 at the router. This is how a Mini feeds a Router 3 for a bigger house.",
+      "image": "mini-ethernet-cable-15m.jpg"
+    },
+    {
+      "slug": "pivot-mount-mini",
+      "kind": "accessory",
+      "name": "Pivot Mount | Mini",
+      "match": [
+        "Pivot Mount | Mini"
+      ],
+      "category": "Mount",
+      "fits": "Mini",
+      "specs": "For slanted roofs; swivelling head for fine adjustment of angle and direction.",
+      "image": "pivot-mount-mini.jpg"
+    },
+    {
+      "slug": "wall-mount-mini",
+      "kind": "accessory",
+      "name": "Wall Mount | Mini",
+      "match": [
+        "Wall Mount | Mini"
+      ],
+      "category": "Mount",
+      "fits": "Mini",
+      "specs": "Exterior wall installation for the Mini; clears an eave overhang of up to about 10 cm (4 in).",
+      "image": "wall-mount-mini.jpg"
+    },
+    {
+      "slug": "mini-kit",
+      "kind": "kit",
+      "name": "Starlink Mini Kit",
+      "match": [
+        "Starlink Mini Kit",
+        "Mini Kit",
+        "Starlink Mini"
+      ],
+      "category": "Kit",
+      "fits": "Residential Lite and Residential plans",
+      "specs": "Compact all-in-one dish with the Wi-Fi router built in; kickstand, pipe adapter, power supply and cable in the box. Powered from mains, a vehicle or a USB-C power bank.",
+      "image": "mini-kit.png"
+    },
+    {
+      "slug": "standard-kit",
+      "kind": "kit",
+      "name": "Starlink Standard Kit",
+      "match": [
+        "Starlink Standard Kit",
+        "Standard Kit",
+        "Starlink Standard 4 X Kit",
+        "Standard 4 X Kit",
+        "Starlink Standard 4 Kit",
+        "Standard 4 Kit",
+        "Starlink Standard"
+      ],
+      "category": "Kit",
+      "fits": "Residential, Business and Priority plans",
+      "specs": "The Standard dish with its router (Router Mini in the Standard 4 kit, Router 3 in the Standard 4 X kit), power supply, 15 m Starlink cable and kickstand. The dish every mount on this page marked Standard 4 or 4 X is made for.",
+      "image": "standard-kit.png"
+    }
+  ]
+}

@@ -1479,8 +1479,14 @@ foreach ([__DIR__ . '/ucrm.json', __DIR__ . '/data/ucrm.json', $dataDir . '/ucrm
         if (is_array($c) && !empty($c)) { $ucrmConfig = $c; break; }
     }
 }
-$expectedUrl = dn_plugin_public($config) . '?page=webhook';
-$urlCorrect = $ourWebhook && ($ourWebhook['url'] ?? '') === $expectedUrl;
+// Either route reaches webhook.php through public.php. The address itself is
+// whatever uCRM can reach from inside its own container — the registrar probes
+// that when the button is pressed; a page render does not.
+require_once dirname(__DIR__, 2) . '/lib/WebhookRegistrar.php';
+$whPluginDir   = basename(dirname(__DIR__, 2));
+$urlCorrect    = $ourWebhook && WebhookRegistrar::routesToPlugin((string)($ourWebhook['url'] ?? ''), $whPluginDir);
+$expectedUrl   = preg_replace('#/public\.php$#', '', dn_plugin_public($config)) . '/' . WebhookRegistrar::ROUTE;
+$missingEvents = $ourWebhook ? WebhookRegistrar::missingEvents($ourWebhook) : [];
 
 // Recent webhook log
 $webhookLogFile = $dataDir . '/webhook_log.json';
@@ -1495,7 +1501,7 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
 <div class="st-card">
     <div class="st-card-title"> UCRM Webhook Status</div>
     
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
         <div style="background:<?= $ourWebhook ? '#dcfce7' : '#fee2e2' ?>;border-radius:10px;padding:14px;text-align:center;">
             <div style="font-size:24px;"><?= $ourWebhook ? '' : '' ?></div>
             <div style="font-size:12px;font-weight:700;color:<?= $ourWebhook ? '#166534' : '#991b1b' ?>;">
@@ -1511,7 +1517,13 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
         <div style="background:<?= $urlCorrect ? '#dcfce7' : '#fee2e2' ?>;border-radius:10px;padding:14px;text-align:center;">
             <div style="font-size:24px;"><?= $urlCorrect ? '' : '' ?></div>
             <div style="font-size:12px;font-weight:700;color:<?= $urlCorrect ? '#166534' : '#991b1b' ?>;">
-                <?= $urlCorrect ? 'URL Correct' : 'URL Wrong' ?>
+                <?= $urlCorrect ? 'Route OK' : 'Route wrong' ?>
+            </div>
+        </div>
+        <div style="background:<?= ($ourWebhook && !$missingEvents) ? '#dcfce7' : '#fee2e2' ?>;border-radius:10px;padding:14px;text-align:center;">
+            <div style="font-size:24px;"></div>
+            <div style="font-size:12px;font-weight:700;color:<?= ($ourWebhook && !$missingEvents) ? '#166534' : '#991b1b' ?>;">
+                <?= !$ourWebhook ? 'No events' : ($missingEvents ? count($missingEvents) . ' events missing' : 'Events OK') ?>
             </div>
         </div>
     </div>
@@ -1528,9 +1540,15 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
         <div style="margin-top:8px;font-size:11px;color:#6b7280;">
             Events: <?php 
             $events = $ourWebhook['eventTypes'] ?? [];
-            echo empty($events) ? '<em>All events</em>' : h(implode(', ', $events));
+            echo (empty($events) || !empty($ourWebhook['anyEvent'])) ? '<em>All events</em>' : h(implode(', ', $events));
             ?>
         </div>
+        <?php if ($missingEvents): ?>
+        <div style="margin-top:6px;padding:8px;background:#fef2f2;border-radius:6px;font-size:11px;color:#991b1b;">
+            <strong>Not delivered, though this plugin acts on them:</strong> <?= h(implode(', ', $missingEvents)) ?>.
+            "Setup Webhook" widens the list; it never narrows one.
+        </div>
+        <?php endif; ?>
     </div>
     <?php else: ?>
     <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:12px;">
@@ -1552,12 +1570,18 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
         </a>
         <?php endif; ?>
     </div>
+    <div style="margin-top:10px;font-size:11px;color:#6b7280;line-height:1.5;">
+        "Setup Webhook" creates the endpoint when none exists — for every event, at the first address uCRM can reach from inside its own container.
+        With an endpoint present it repairs only what is wrong: an address uCRM cannot reach, an inactive flag, a narrowed event list.
+        It never narrows the event list, never replaces an address that works, and never touches the webhook secret.
+    </div>
 </div>
 
 <div class="st-card">
     <div class="st-card-title"> Webhook Secret</div>
     <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
-        This secret is used to verify webhook requests from UCRM. It's auto-generated on first setup.
+        Optional. uCRM sends no secret with its webhooks and the plugin accepts them without one; when this is set, a uCRM request carrying a <em>different</em> key is refused.
+        The same value also derives the customer app's login (JWT) key and gates the debug_key API, so "Setup Webhook" never generates it as a side effect.
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
         <input type="text" id="webhookSecretDisplay" value="<?= h($config['webhook_secret'] ?? '') ?>" 
@@ -1567,7 +1591,7 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
         </button>
     </div>
     <?php if (empty($config['webhook_secret'])): ?>
-    <div style="margin-top:8px;font-size:11px;color:#dc2626;"> No secret set. Click "Setup Webhook" to generate one.</div>
+    <div style="margin-top:8px;font-size:11px;color:#6b7280;">Not set. Nothing on this page needs it; quotation PDF links have a key of their own (quote_pdf_secret).</div>
     <?php endif; ?>
 </div>
 
@@ -1614,7 +1638,7 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
 
 <script>
 function setupWebhook() {
-    if (!confirm('This will create or update the UCRM webhook for this plugin. Continue?')) return;
+    if (!confirm('Creates the uCRM webhook endpoint if none exists; otherwise repairs only what is wrong (an address uCRM cannot reach, inactive, missing events). Never narrows events, never changes a working address, never touches the secret. Continue?')) return;
     
     fetch('?page=api&action=webhook_setup', {
           credentials:'same-origin',

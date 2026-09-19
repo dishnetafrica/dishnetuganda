@@ -156,11 +156,16 @@ $drafting = array_values(array_filter($brain->calls, function ($c) { return empt
 is_(count($drafting) === 1, 'the brain was asked for exactly one draft');
 $ctx = $drafting[0];
 $brainSrc = (string)file_get_contents($root . '/lib/DishNetAiBrain.php');
-foreach (['customer', 'account', 'constraints', 'medium'] as $k) {
+foreach (['customer', 'constraints', 'medium'] as $k) {
     is_(isset($ctx[$k]), "it is given '{$k}'", json_encode(array_keys($ctx)));
     is_(strpos($brainSrc, "\$ctx['" . $k . "']") !== false,
         "and the brain actually reads '{$k}'");
 }
+// 'account' used to travel here carrying nothing but the uCRM client id,
+// which no prompt rendered. B3.2's contract has no account key at all.
+is_(!isset($ctx['account']), "and NOT 'account' — the contract has no such key");
+is_(($ctx['identity_state'] ?? '') === 'identified',
+    'it is told the identity STATE instead', json_encode($ctx['identity_state'] ?? null));
 is_(($ctx['customer']['name'] ?? '') === 'Subterra Limited',
     'the customer is named from the uCRM record', json_encode($ctx['customer'] ?? null));
 is_(($ctx['medium'] ?? '') === 'email', 'and told this is email, not a chat window');

@@ -231,24 +231,32 @@ class EventBus
     /**
      * Mark an event as failed with exponential backoff.
      * After max_attempts, status becomes 'dead' (requires manual intervention).
+     *
+     * @return bool true when this failure made the event dead
      */
-    public function fail(int $eventId, string $error): void
+    public function fail(int $eventId, string $error): bool
     {
         // Get current attempt count
         $stmt = $this->pdo->prepare('SELECT attempts, max_attempts FROM events WHERE id = ?');
         $stmt->execute([$eventId]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        if (!$row) return;
+        if (!$row) return false;
 
         $newAttempts = (int)$row['attempts'] + 1;
         $maxAttempts = (int)$row['max_attempts'];
         $isDead      = $newAttempts >= $maxAttempts;
 
         // Calculate next retry time in PHP (avoids fragile SQLite datetime concatenation)
+        //
+        // gmdate, not date(): consume() compares this column with SQLite's
+        // datetime('now'), which is UTC. The worker that runs from
+        // cron/master.php inherits Africa/Kampala, so a retry written with
+        // date() there sat three hours in the future — a model timeout at
+        // 21:58 meant the customer's second attempt came at 01:00.
         $backoffSeconds = [10, 30, 300, 1800, 7200]; // 10s, 30s, 5m, 30m, 2h
         $backoffKey     = min($newAttempts - 1, count($backoffSeconds) - 1);
-        $nextRetry      = date('Y-m-d H:i:s', time() + $backoffSeconds[$backoffKey]);
+        $nextRetry      = gmdate('Y-m-d H:i:s', time() + $backoffSeconds[$backoffKey]);
 
         $update = $this->pdo->prepare("
             UPDATE events
@@ -269,6 +277,34 @@ class EventBus
             $isDead ? 1 : 0,
             $eventId,
         ]);
+        return $isDead;
+    }
+
+    /**
+     * Put an event back for later without counting a failure.
+     *
+     * A pause is not an error. The AI worker parks a customer's question
+     * while a colleague is active on the thread and picks it up again when
+     * the pause ends; attempts is untouched, so a long pause cannot spend the
+     * retry budget and land the question in the dead letters. The note goes
+     * into `error` so the queue view says why it is waiting.
+     */
+    public function defer(int $eventId, int $seconds, string $note = ''): void
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE events
+            SET status        = 'pending',
+                next_retry_at = ?,
+                error         = ?,
+                locked_by     = NULL,
+                locked_at     = NULL
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            gmdate('Y-m-d H:i:s', time() + max(1, $seconds)),
+            $note !== '' ? $note : null,
+            $eventId,
+        ]);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -281,7 +317,8 @@ class EventBus
      */
     private function releaseStale(): void
     {
-        $cutoff = date('Y-m-d H:i:s', time() - self::LOCK_TIMEOUT);
+        // UTC: locked_at is written by datetime('now').
+        $cutoff = gmdate('Y-m-d H:i:s', time() - self::LOCK_TIMEOUT);
         $stmt = $this->pdo->prepare("
             UPDATE events
             SET status    = 'failed',

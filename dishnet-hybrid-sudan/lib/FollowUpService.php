@@ -366,10 +366,15 @@ final class FollowUpService
                 "UPDATE followup_drafts SET status = 'sent' WHERE id = ?")->execute([$draftId]);
 
             // Spend the attempt and arm the next one. When there is no next
-            // attempt, dueAt returns '' and the row is closed as exhausted by
+            // attempt, this returns '' and the row is closed as exhausted by
             // the gate on its next look — the cadence ends by arithmetic
             // rather than by a special case.
-            $next = FollowUpPolicy::dueAt((string)$fu['last_customer_at'], $attempt + 1);
+            //
+            // Anchored to the send, not only to the customer's last message:
+            // a late attempt 1 used to leave attempt 2 already overdue, so the
+            // two went out minutes apart. See FollowUpPolicy::nextDueAfterSend.
+            $next = FollowUpPolicy::nextDueAfterSend(
+                (string)$fu['last_customer_at'], gmdate('Y-m-d H:i:s'), $attempt + 1);
             $this->db->prepare(
                 "UPDATE followups SET attempts = ?, last_sent_at = datetime('now'), due_at = ?
                   WHERE id = ? AND closed_at IS NULL")

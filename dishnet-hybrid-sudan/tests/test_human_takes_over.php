@@ -121,8 +121,8 @@ echo "\nThe webhook acts on exactly that distinction\n";
 $src = (string)file_get_contents($root . '/evo_webhook.php');
 is_(strpos($src, '$stored = $convSvc->storeMessage') !== false,
     'the webhook keeps the return value');
-is_(preg_match('/if\s*\(\s*\$stored\s*!==\s*null\s*\)\s*\{\s*\$convSvc->markHumanHandling/s', $src) === 1,
-    'and marks human handling only when it inserted',
+is_(preg_match('/if\s*\(\s*\$stored\s*!==\s*null\s*&&\s*!\$canned\s*\)\s*\{\s*\$convSvc->markHumanHandling/s', $src) === 1,
+    'and marks human handling only when it inserted and is not a canned app message',
     'marking on every fromMe would silence the AI after each of its own replies');
 
 echo "\nAnd the worker claims its own echo before the webhook can see it\n";

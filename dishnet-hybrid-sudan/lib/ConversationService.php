@@ -14,6 +14,24 @@ declare(strict_types=1);
  */
 class ConversationService
 {
+    /**
+     * agent_name for a message our number sent by itself — the WhatsApp
+     * Business app's greeting or away message. Not a colleague, not the
+     * assistant: it never stands the AI down and history labels it as such.
+     */
+    const AGENT_AUTO_REPLY = 'WhatsApp auto-reply';
+    /** A handset text this short is always a person ("Ok", "Yes we do"). */
+    const CANNED_MIN_LENGTH = 40;
+    /** ...seen in this many OTHER conversations... */
+    const CANNED_OTHER_CONVERSATIONS = 3;
+    /** ...inside this many days, is canned. */
+    const CANNED_WINDOW_DAYS = 7;
+
+    /** Cached PRAGMA result; null until asked. */
+
+    private ?bool $hasLocationCols = null;
+
+
     private $db; // PDO
     private string $dataDir;
 
@@ -73,6 +91,14 @@ class ConversationService
                 // recorded and the follow-up policy reads it.
                 'crm_link_method' => "TEXT DEFAULT NULL",
                 'crm_link_at'     => "TEXT DEFAULT NULL",
+                // WHO this conversation currently belongs to, and how many
+                // times that has changed. A phone number is a bearer token
+                // that gets reassigned; these two columns are what stop the
+                // next holder inheriting the last one's conversation.
+                // Epoch 0 means "written before this existed", which is never
+                // a current epoch and therefore never replayed to a model.
+                'identity_epoch'  => "INTEGER NOT NULL DEFAULT 0",
+                'identity_key'    => "TEXT DEFAULT NULL",
                 'created_at'      => "TEXT NOT NULL DEFAULT (datetime('now'))",
                 'updated_at'      => "TEXT NOT NULL DEFAULT (datetime('now'))",
             ];
@@ -87,6 +113,22 @@ class ConversationService
             )->fetchColumn();
             if (!$msgExists) {
                 $this->createWaMessagesTable();
+            } else {
+                // The same additive treatment for messages, which this branch
+                // never did: the table was checked for existence and nothing
+                // else, so a column added here would never reach an existing
+                // install.
+                $mcols = $this->db->query("PRAGMA table_info(wa_messages)")->fetchAll(PDO::FETCH_COLUMN, 1);
+                foreach (['identity_epoch' => "INTEGER NOT NULL DEFAULT 0",
+                          'identity_key'   => "TEXT DEFAULT NULL"] as $col => $def) {
+                    if (!in_array($col, $mcols, true)) {
+                        try { $this->db->exec("ALTER TABLE wa_messages ADD COLUMN {$col} {$def}"); } catch (\Throwable $e) {}
+                    }
+                }
+                try {
+                    $this->db->exec('CREATE INDEX IF NOT EXISTS idx_wa_msg_conv_epoch
+                                     ON wa_messages(conversation_id, identity_epoch, sent_at)');
+                } catch (\Throwable $e) {}
             }
             return; // Done — never DROP existing data
         }
@@ -114,6 +156,8 @@ class ConversationService
                 last_human_reply_at TEXT DEFAULT NULL,
                 crm_link_method TEXT DEFAULT NULL,
                 crm_link_at     TEXT DEFAULT NULL,
+                identity_epoch  INTEGER NOT NULL DEFAULT 0,
+                identity_key    TEXT    DEFAULT NULL,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
@@ -135,11 +179,14 @@ class ConversationService
                 wa_message_id   TEXT,
                 event_key       TEXT,
                 metadata        TEXT,
+                identity_epoch  INTEGER NOT NULL DEFAULT 0,
+                identity_key    TEXT    DEFAULT NULL,
                 sent_at         TEXT    NOT NULL DEFAULT (datetime('now')),
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
         ");
         $this->db->exec("CREATE INDEX idx_wa_msg_conv_time ON wa_messages(conversation_id, sent_at)");
+        $this->db->exec("CREATE INDEX idx_wa_msg_conv_epoch ON wa_messages(conversation_id, identity_epoch, sent_at)");
         $this->db->exec("CREATE UNIQUE INDEX idx_wa_msg_wamid ON wa_messages(wa_message_id) WHERE wa_message_id IS NOT NULL");
         $this->db->exec("CREATE INDEX idx_wa_msg_direction ON wa_messages(direction, sent_at)");
     }
@@ -159,11 +206,14 @@ class ConversationService
                 wa_message_id   TEXT,
                 event_key       TEXT,
                 metadata        TEXT,
+                identity_epoch  INTEGER NOT NULL DEFAULT 0,
+                identity_key    TEXT    DEFAULT NULL,
                 sent_at         TEXT    NOT NULL DEFAULT (datetime('now')),
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )
         ");
         $this->db->exec("CREATE INDEX idx_wa_msg_conv_time ON wa_messages(conversation_id, sent_at)");
+        $this->db->exec("CREATE INDEX idx_wa_msg_conv_epoch ON wa_messages(conversation_id, identity_epoch, sent_at)");
         $this->db->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_msg_wamid ON wa_messages(wa_message_id) WHERE wa_message_id IS NOT NULL");
         $this->db->exec("CREATE INDEX idx_wa_msg_direction ON wa_messages(direction, sent_at)");
     }
@@ -361,6 +411,277 @@ class ConversationService
                  ->execute([$crmClientId, $crmClientName, $method, $convId]);
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  IDENTITY EPOCHS — who a conversation belongs to, and since when
+    //
+    //  A conversation is keyed by (phone, channel). A phone number is a
+    //  bearer token: it gets reassigned, and it gets shared. Before this,
+    //  replay followed the key, so the next holder of a number inherited the
+    //  last holder's conversation — including an assistant reply stating
+    //  their balance, replayed into the new person's prompt as the model's
+    //  own previous turn.
+    //
+    //  So identity is resolved fresh every turn by the backend, stamped onto
+    //  each message as it is written, and retrieval refuses to cross from one
+    //  identity to another. History is context. It is never authorisation,
+    //  and nothing here may be read as proof that anybody is entitled to
+    //  anything.
+    //
+    //  Epoch 0 is "written before this existed". It is never a current epoch,
+    //  so pre-existing conversations stay whole for staff and are never
+    //  replayed to a model.
+    // ══════════════════════════════════════════════════════════════════════
+
+    /** No customer could be identified. Never replayable. */
+    public const ID_UNKNOWN   = 'unknown';
+    /** Several customers match. Never replayable. */
+    public const ID_AMBIGUOUS = 'ambiguous';
+
+    // ── FOUR STATES, AND TWO OF THEM ARE NOT THE SAME THING ──────────────
+    //
+    // There are exactly four things an identity can be, and the distinction
+    // that matters most is between the first two:
+    //
+    //   IDENTIFIED  'client:7'      a CRM customer. Their own account data
+    //                               may be disclosed to them.
+    //   ANONYMOUS   'session:ab12'  a website visitor. They own a SALES
+    //                               conversation and nothing else. There is
+    //                               no account behind this, and there is no
+    //                               way to get one from here.
+    //   UNKNOWN     'unknown'       nobody could be identified — including
+    //                               when the CRM is merely unreachable.
+    //   AMBIGUOUS   'ambiguous'     several customers share the number.
+    //
+    // The first THREE may replay their own history — UNKNOWN only its own
+    // recent turns (UNKNOWN_REPLAY_DAYS); see replayableIdentity() for why
+    // that changed in 5.18.3. Only the FIRST is a customer. Anyone reaching
+    // for "can this identity have account data" wants isCustomerIdentity(),
+    // never replayableIdentity() — the two questions look alike and are not,
+    // and conflating them would let a session or an unknown caller inherit a
+    // customer's authority, which is the exact shape of the bug this whole
+    // phase exists to remove.
+    public const STATE_IDENTIFIED = 'identified';
+    public const STATE_ANONYMOUS  = 'anonymous';
+    public const STATE_UNKNOWN    = 'unknown';
+    public const STATE_AMBIGUOUS  = 'ambiguous';
+
+    /** Which of the four this key is. */
+    public static function identityState(string $key): string
+    {
+        if (strncmp($key, 'client:', 7) === 0)  return self::STATE_IDENTIFIED;
+        if (strncmp($key, 'session:', 8) === 0) return self::STATE_ANONYMOUS;
+        if ($key === self::ID_AMBIGUOUS)        return self::STATE_AMBIGUOUS;
+        return self::STATE_UNKNOWN;
+    }
+
+    /**
+     * Is this a CRM customer — the only state that may see account data?
+     *
+     * An anonymous session is deliberately NOT one. A visitor holding a
+     * session id has proved they are the same browser as last time, which is
+     * enough to continue a sales conversation and is not evidence about any
+     * account. Session history can never become proof of customer identity,
+     * and this is the function that says so.
+     */
+    public static function isCustomerIdentity(string $key): bool
+    {
+        return self::identityState($key) === self::STATE_IDENTIFIED;
+    }
+
+    /** The customer id behind an identified key, or null for every other state. */
+    public static function customerIdOf(string $key): ?int
+    {
+        if (!self::isCustomerIdentity($key)) return null;
+        $id = (int)substr($key, 7);
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * The identity key for a resolved CRM customer.
+     *
+     * @param int|null $clientId  the id the BACKEND resolved this turn
+     * @param bool     $ambiguous several customers matched
+     */
+    public static function identityKey(?int $clientId, bool $ambiguous = false): string
+    {
+        if ($ambiguous) return self::ID_AMBIGUOUS;
+        return ($clientId !== null && $clientId > 0) ? 'client:' . $clientId : self::ID_UNKNOWN;
+    }
+
+    /**
+     * The identity key for an anonymous website visitor.
+     *
+     * A session is not a customer, and this is deliberately NOT 'unknown'. A
+     * web conversation holds no account data — web_chat passes customer=null
+     * and no account block — so there is nothing of anybody's to leak into
+     * it, and the session id is held by one browser rather than reassigned
+     * the way a phone number is. Treating it as unknown would end multi-turn
+     * sales conversations on the website for no security gain.
+     */
+    public static function sessionIdentityKey(string $session): string
+    {
+        $s = preg_replace('/[^a-f0-9]/', '', strtolower($session)) ?? '';
+        return $s === '' ? self::ID_UNKNOWN : 'session:' . $s;
+    }
+
+    /**
+     * How long an UNKNOWN caller's own turns stay replayable.
+     *
+     * A sales conversation is days, not months; a phone number reassigned by
+     * the network is months. The window keeps the first and rules out the
+     * second — the one residual of letting an unknown caller see their own
+     * history is a stranger who later holds the same number.
+     */
+    public const UNKNOWN_REPLAY_DAYS = 14;
+
+    /**
+     * Can turns written under this identity ever be replayed to a model?
+     *
+     * True for a customer, for an anonymous website session and — since
+     * 5.18.3 — for an UNKNOWN WhatsApp caller, each within its own epoch.
+     * They are separate authorisation domains that each own their own
+     * conversation. This answers "may this identity see its own history",
+     * never "may this identity see account data": that is isCustomerIdentity().
+     *
+     * Unknown was refused until 5.18.3, and the refusal had a cost nobody
+     * priced: every prospect on the sales number — anyone not yet in our
+     * billing system, which is who a sales number is for — was answered one
+     * message at a time with no memory. On 15 Sep a prospect gave his name
+     * and company, gave an email address for a quotation, said he had just
+     * spoken to us by phone, and asked twice for a basic quote; every reply
+     * was a version of "how can I help you today?".
+     *
+     * The refusal bought nothing, because the epoch already does the work. A
+     * turn written under 'unknown' was produced with no account data in the
+     * prompt — customer null, no services, no balance — so replaying it to
+     * the same key in the same epoch discloses nothing of anybody's. What
+     * the epoch forbids stays forbidden: a customer's turns never replay to
+     * an unknown caller (the key changed, so the epoch advanced); turns from
+     * a CRM outage never come back once the customer is identified again;
+     * and several customers sharing one number (ambiguous) still get
+     * nothing. The residual — a number reassigned to a second unknown
+     * person — is bounded by UNKNOWN_REPLAY_DAYS in getMessagesForAi().
+     */
+    public static function replayableIdentity(string $key): bool
+    {
+        $s = self::identityState($key);
+        return $s === self::STATE_IDENTIFIED || $s === self::STATE_ANONYMOUS
+            || $s === self::STATE_UNKNOWN;
+    }
+
+    /**
+     * Open this turn under the identity the backend resolved for it.
+     *
+     * Returns the epoch messages written now belong to. When the identity has
+     * changed — a different customer, or none, or several — the epoch
+     * advances and the stored CRM link is cleared, because a link recorded
+     * for somebody else is worse than no link at all: FollowUpPolicy reads
+     * that column to decide whether a proactive message may carry account
+     * content. A caller that has just identified somebody re-links straight
+     * after this, so the clear costs nothing it should keep.
+     *
+     * Epoch 0 never survives contact: the first turn under this rule advances
+     * to 1 whatever the identity, so nothing written before it is replayable.
+     */
+    public function beginTurn(int $convId, string $identityKey): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT identity_key, identity_epoch FROM wa_conversations WHERE id = ?');
+        $stmt->execute([$convId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $current = (string)($row['identity_key'] ?? '');
+        $epoch   = (int)($row['identity_epoch'] ?? 0);
+
+        if ($current === $identityKey && $epoch >= 1) {
+            return $epoch;
+        }
+
+        $epoch++;
+        $this->db->prepare(
+            'UPDATE wa_conversations
+                SET identity_epoch = ?, identity_key = ?,
+                    crm_client_id = NULL, crm_client_name = NULL,
+                    crm_link_method = NULL, crm_link_at = NULL,
+                    updated_at = datetime(\'now\')
+              WHERE id = ?')
+                 ->execute([$epoch, $identityKey, $convId]);
+        return $epoch;
+    }
+
+    /**
+     * The turns a model may see, for the identity resolved THIS turn.
+     *
+     * Empty unless all of these hold, and each is a separate refusal rather
+     * than one combined condition, so a future edit cannot relax them by
+     * accident:
+     *
+     *   - the identity is one that can own a conversation at all;
+     *   - the conversation is at a real epoch (never 0, never pre-existing);
+     *   - the conversation's identity is the one asking now;
+     *   - and the message itself was written under both;
+     *   - and, for an UNKNOWN caller, it is no older than UNKNOWN_REPLAY_DAYS.
+     *
+     * One addition, in one direction only: a customer identified mid-
+     * conversation also sees the turns of the epoch immediately before, if
+     * those were written while the caller was UNKNOWN and inside that window
+     * — the sign-up moment (see below). Never the reverse.
+     *
+     * The caller's own limit still applies on top. Ordering is the same
+     * newest-first-then-reversed shape as getMessages(), including the id
+     * tiebreaker, because an AI reply lands in the same second as the
+     * question it answers.
+     */
+    public function getMessagesForAi(int $convId, string $identityKey, int $limit = 20): array
+    {
+        if (!self::replayableIdentity($identityKey)) return [];
+
+        $stmt = $this->db->prepare(
+            'SELECT identity_key, identity_epoch FROM wa_conversations WHERE id = ?');
+        $stmt->execute([$convId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return [];
+
+        $epoch = (int)($row['identity_epoch'] ?? 0);
+        if ($epoch < 1) return [];
+        if ((string)($row['identity_key'] ?? '') !== $identityKey) return [];
+
+        // sent_at is UTC everywhere (see storeMessage), so a UTC floor compares
+        // correctly as text. '' is a floor every row clears.
+        $since = self::identityState($identityKey) === self::STATE_UNKNOWN
+            ? gmdate('Y-m-d H:i:s', time() - self::UNKNOWN_REPLAY_DAYS * 86400)
+            : '';
+        $sql = 'SELECT * FROM (
+                SELECT * FROM wa_messages
+                 WHERE conversation_id = ? AND identity_epoch = ? AND identity_key = ?
+                   AND sent_at >= ?
+                 ORDER BY sent_at DESC, id DESC LIMIT ?
+             ) sub ORDER BY sent_at ASC, id ASC';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$convId, $epoch, $identityKey, $since, $limit]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // The sign-up moment. A prospect talking to us as 'unknown' who is
+        // then created in billing mid-conversation changes identity, so the
+        // epoch advances — and the model lost the thread at the exact point a
+        // salesperson would have said "so, the Residential Lite you asked
+        // for" (15 Sep, 12:32). Those earlier turns were written with no
+        // account data in the prompt, nobody having been identified, so
+        // carrying them forward to the customer this phone has just become
+        // discloses nothing of anybody's. Only in this direction — a
+        // customer's turns never follow a number into 'unknown' — only the
+        // epoch immediately before, and only inside the same window an
+        // unknown caller gets for their own turns.
+        if (self::identityState($identityKey) === self::STATE_IDENTIFIED && $epoch >= 2) {
+            $prev = $this->db->prepare($sql);
+            $prev->execute([$convId, $epoch - 1, self::ID_UNKNOWN,
+                            gmdate('Y-m-d H:i:s', time() - self::UNKNOWN_REPLAY_DAYS * 86400), $limit]);
+            $rows = array_merge($prev->fetchAll(PDO::FETCH_ASSOC), $rows);
+            if (count($rows) > $limit) $rows = array_slice($rows, -$limit);
+        }
+        return $rows;
+    }
+
     /** Record that a number matches several customers — no proactive contact. */
     public function markIdentityAmbiguous(int $convId): void
     {
@@ -385,6 +706,37 @@ class ConversationService
      * Store a message. Returns the message ID.
      * Handles dedup via wa_message_id.
      */
+    /** Sentinel for a bind value that must not be sent at all. */
+    private const OMIT = "\x00__omit__";
+
+    /**
+     * Does this database carry the location columns (migration 072)?
+     *
+     * Asked once per process. A plugin upgrade runs migrations at boot, so in
+     * practice this is true everywhere within a second of the ZIP landing —
+     * but "in practice" is not a thing to bet every WhatsApp message on.
+     */
+    private function hasLocationColumns(): bool
+    {
+        if ($this->hasLocationCols !== null) return $this->hasLocationCols;
+        $this->hasLocationCols = false;
+        try {
+            foreach ($this->db->query('PRAGMA table_info(wa_messages)')->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                if (($c['name'] ?? '') === 'location_lat') { $this->hasLocationCols = true; break; }
+            }
+        } catch (\Throwable $e) {
+            $this->hasLocationCols = false;
+        }
+        if (!$this->hasLocationCols) {
+            // Said once, not swallowed: a pin that cannot be stored is the
+            // failure this whole change exists to end.
+            error_log('[ConversationService] wa_messages has no location columns — '
+                    . 'migration 072 has not run, so location pins are stored without '
+                    . 'their coordinates');
+        }
+        return $this->hasLocationCols;
+    }
+
     public function storeMessage(int $conversationId, array $msg): ?int
     {
         // Dedup check
@@ -395,12 +747,44 @@ class ConversationService
             if ($stmt->fetch()) return null; // Already exists
         }
 
+        // Stamp the identity this message is written under, from the
+        // conversation rather than from the caller. Every writer — the two
+        // webhooks, the worker, web chat, the admin API, the importer — is
+        // then correct without having to remember, and a message can never
+        // end up in an epoch its conversation is not in.
+        $ep  = 0;
+        $key = null;
+        try {
+            $idq = $this->db->prepare(
+                'SELECT identity_epoch, identity_key FROM wa_conversations WHERE id = ?');
+            $idq->execute([$conversationId]);
+            if ($idrow = $idq->fetch(PDO::FETCH_ASSOC)) {
+                $ep  = (int)($idrow['identity_epoch'] ?? 0);
+                $key = $idrow['identity_key'] ?? null;
+            }
+        } catch (\Throwable $e) { /* pre-migration row: epoch 0, never replayed */ }
+
+        // Built from the columns this database actually has.
+        //
+        // location_lat/lng arrive in migration 072, and this method runs for
+        // every message in and out. Naming them unconditionally would mean a
+        // migration that has not run yet — or that failed, which stops the
+        // runner dead and skips the rest — takes the entire inbox down with a
+        // PDOException on each message. A pin is worth having; it is not worth
+        // that. Where the columns are absent the coordinates are dropped and
+        // said out loud, which is the old behaviour plus a warning.
+        $cols = ['conversation_id', 'direction', 'role', 'body', 'media_type', 'media_url',
+                 'agent_name', 'wa_message_id', 'event_key', 'metadata',
+                 'identity_epoch', 'identity_key'];
+        $hasLoc = $this->hasLocationColumns();
+        if ($hasLoc) { $cols[] = 'location_lat'; $cols[] = 'location_lng'; }
+        $cols[] = 'sent_at';
+
         $stmt = $this->db->prepare(
-            'INSERT INTO wa_messages (conversation_id, direction, role, body, media_type, media_url, 
-             agent_name, wa_message_id, event_key, metadata, sent_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))'
+            'INSERT INTO wa_messages (' . implode(', ', $cols) . ', created_at) VALUES ('
+            . implode(', ', array_fill(0, count($cols), '?')) . ', datetime(\'now\'))'
         );
-        $stmt->execute([
+        $bind = array_filter([
             $conversationId,
             $msg['direction'],
             $msg['role'],
@@ -411,6 +795,19 @@ class ConversationService
             $waMsgId,
             $msg['event_key'] ?? null,
             isset($msg['metadata']) ? json_encode($msg['metadata']) : null,
+            $ep,
+            $key,
+            // A pin's coordinates, when the caller had one AND this database
+            // can hold them. Numeric or null — never a string, so a malformed
+            // value cannot be stored as though it were a place.
+            'location_lat' => $hasLoc
+                ? ((isset($msg['location_lat']) && is_numeric($msg['location_lat']))
+                    ? (float)$msg['location_lat'] : null)
+                : self::OMIT,
+            'location_lng' => $hasLoc
+                ? ((isset($msg['location_lng']) && is_numeric($msg['location_lng']))
+                    ? (float)$msg['location_lng'] : null)
+                : self::OMIT,
             // gmdate, not date(): sent_at was written by whichever entry point
             // happened to run -- the webhook under Africa/Juba, the spawned CLI
             // worker under UTC -- so one conversation carried two clocks, and
@@ -418,7 +815,8 @@ class ConversationService
             // question it answered. Both the Inbox and the model's history read
             // it that way. Storage is UTC everywhere; display localises.
             $msg['sent_at'] ?? gmdate('Y-m-d H:i:s'),
-        ]);
+        ], function ($v) { return $v !== self::OMIT; });
+        $stmt->execute(array_values($bind));
 
         $msgId = (int)$this->db->lastInsertId();
 
@@ -512,6 +910,72 @@ class ConversationService
      * colleague typing on the handset at 19:18, 19:21, 19:24 and 19:49 with
      * the assistant answering over the top of them every time.
      */
+    /**
+     * Is this text, leaving our number as fromMe, something the WhatsApp
+     * Business app sends by itself rather than something a person typed?
+     *
+     * A single message cannot say. Several can: the same sentence, word for
+     * word, already sent from our side to CANNED_OTHER_CONVERSATIONS other
+     * conversations within CANNED_WINDOW_DAYS is a greeting or away message.
+     * Rows already labelled AGENT_AUTO_REPLY count, and so do the 'Team'
+     * rows written before this existed, which is what lets it recognise a
+     * greeting that has been running for weeks. Short texts never qualify:
+     * "Ok" typed by hand in four chats is four people. Any error answers
+     * false — when in doubt, a person, since standing the AI down wrongly is
+     * the smaller failure than talking over a colleague.
+     */
+    public function isCannedHandsetText(int $convId, string $text): bool
+    {
+        $text = trim($text);
+        if (mb_strlen($text) < self::CANNED_MIN_LENGTH) return false;
+        try {
+            $st = $this->db->prepare(
+                "SELECT COUNT(DISTINCT conversation_id) FROM wa_messages
+                  WHERE direction = 'out' AND role = 'agent'
+                    AND agent_name IN ('Team', ?)
+                    AND conversation_id <> ?
+                    AND sent_at >= ?
+                    AND TRIM(body) = ?"
+            );
+            $st->execute([
+                self::AGENT_AUTO_REPLY,
+                $convId,
+                gmdate('Y-m-d H:i:s', time() - self::CANNED_WINDOW_DAYS * 86400),
+                $text,
+            ]);
+            return (int)$st->fetchColumn() >= self::CANNED_OTHER_CONVERSATIONS;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Has a person on our side written in this conversation after $sinceUtc
+     * ('Y-m-d H:i:s', UTC like sent_at)? Strictly after: a reply in the same
+     * second as the customer's message was not a reply to it.
+     *
+     * Only a colleague counts: not the assistant, not the plugin's own
+     * notifications, not the app's canned greeting. The worker asks this
+     * when a parked question comes back — if somebody answered it while the
+     * AI was standing aside, the AI has nothing to add.
+     */
+    public function humanRepliedSince(int $convId, string $sinceUtc): bool
+    {
+        try {
+            $st = $this->db->prepare(
+                "SELECT 1 FROM wa_messages
+                  WHERE conversation_id = ? AND direction = 'out' AND role = 'agent'
+                    AND COALESCE(agent_name, '') NOT IN ('', 'DishNet AI', 'DishNet Plugin', ?)
+                    AND sent_at > ?
+                  LIMIT 1"
+            );
+            $st->execute([$convId, self::AGENT_AUTO_REPLY, $sinceUtc]);
+            return (bool)$st->fetchColumn();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function markHumanHandling(int $convId): void
     {
         if ($convId <= 0) return;
@@ -710,12 +1174,26 @@ class ConversationService
         if (isset($message['audioMessage']))    $mediaType = 'audio';
         if (isset($message['videoMessage']))    $mediaType = 'video';
         if (isset($message['stickerMessage'])) $mediaType = 'sticker';
-        if (isset($message['locationMessage'])) $mediaType = 'location';
+        if (isset($message['locationMessage']))  $mediaType = 'location';
+        if (isset($message['liveLocationMessage'])) $mediaType = 'location';
+
+        // A pin carries the coordinates in the payload. Read them here so the
+        // admin inbox shows a place rather than the word "[LOCATION]", and so
+        // the worker has something to attach to a lead.
+        if (!class_exists('WaLocation')) require_once __DIR__ . '/WaLocation.php';
+        $loc = \WaLocation::fromMessage($message);
 
         // For media-only messages (no caption): use a placeholder body so the
         // message is stored in the conversation log instead of being dropped.
         if (empty($body) && $mediaType) {
             $body = '[' . strtoupper($mediaType) . ']';
+        }
+        // A pin says where. "[LOCATION]" said only that one arrived, which is
+        // what a colleague opening the inbox had to work with.
+        if ($loc !== null) {
+            $body = '[LOCATION] ' . \WaLocation::format($loc['lat'])
+                  . ', ' . \WaLocation::format($loc['lng'])
+                  . ($loc['name'] !== '' ? ' — ' . $loc['name'] : '');
         }
 
         if (empty($body)) return null; // truly empty — skip
@@ -730,7 +1208,7 @@ class ConversationService
         $conv = $this->ensureConversation($phone, $channel, $pushName, 'import');
 
         // Store message
-        return $this->storeMessage($conv['id'], [
+        $row = [
             'direction'     => $fromMe ? 'out' : 'in',
             'role'          => $fromMe ? 'agent' : 'customer',
             'body'          => $body,
@@ -738,7 +1216,13 @@ class ConversationService
             'wa_message_id' => $msgId,
             'sent_at'       => $sentAt,
             'agent_name'    => $fromMe ? 'DishNet' : null,
-        ]) ? $conv['id'] : null;
+        ];
+        if ($loc !== null) {
+            $row['location_lat'] = $loc['lat'];
+            $row['location_lng'] = $loc['lng'];
+            $row['metadata']     = ['location' => $loc];
+        }
+        return $this->storeMessage($conv['id'], $row) ? $conv['id'] : null;
     }
 
     // ══════════════════════════════════════════════════════════════════════

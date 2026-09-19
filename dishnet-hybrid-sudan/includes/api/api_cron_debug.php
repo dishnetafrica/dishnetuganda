@@ -655,9 +655,13 @@
         exit;
     }
 
-    // ── PUBLIC: Serve permanent quote PDF files (no auth — WhatsML fetches these) ──
+    // ── PUBLIC: Serve quotation PDF files (no auth — Evolution fetches these) ──
     // GET ?page=api&action=serve_quote_pdf&file=quote_123_abc.pdf&token=HMAC
-    // Token is daily HMAC(file+date, webhook_secret) — accepts today and yesterday.
+    // The token is QuotePdfToken::mint(): a daily HMAC over the file name,
+    // accepted for today and yesterday (UTC), then dead. The .meta file beside
+    // the PDF is metadata only — the display name — and is never consulted for
+    // authorization. Its stored token was accepted until 5.18.0; it never
+    // rotated, so every quotation URL ever logged stayed fetchable for good.
     if ($act === 'serve_quote_pdf') {
         $file  = basename(trim($_GET['file']  ?? ''));
         $token = trim($_GET['token'] ?? '');
@@ -667,22 +671,14 @@
         $path     = $pdfDir . '/' . $file;
         $metaPath = $path . '.meta';
 
-        if (!file_exists($path)) $er2('Quote PDF not found', 404);
+        // Only the PDFs: the same directory holds the .meta files, which carry
+        // the customer's name and the quote total.
+        if (!preg_match('/\.pdf$/i', $file) || !file_exists($path)) $er2('Quote PDF not found', 404);
 
-        // Verify token — stored in .meta OR recompute from daily HMAC
-        $secret = ($config['webhook_secret'] ?? 'dishnet');
-        $valid  = false;
-        if (file_exists($metaPath)) {
-            $meta = json_decode(file_get_contents($metaPath), true) ?: [];
-            if (hash_equals($meta['token'] ?? '', $token)) $valid = true;
-        }
-        // Also accept recomputed token for today and yesterday (daily rotation)
-        if (!$valid) {
-            $todayTok = hash_hmac('sha256', $file . date('Ymd'), $secret);
-            $ydayTok  = hash_hmac('sha256', $file . date('Ymd', strtotime('-1 day')), $secret);
-            if (hash_equals($todayTok, $token) || hash_equals($ydayTok, $token)) $valid = true;
-        }
-        if (!$valid) $er2('Invalid token', 403);
+        require_once dirname(__DIR__, 2) . '/lib/QuotePdfToken.php';
+        if (!QuotePdfToken::verify($file, $token, (array)$config)) $er2('Invalid or expired token', 403);
+
+        $meta = file_exists($metaPath) ? (json_decode((string)file_get_contents($metaPath), true) ?: []) : [];
 
         while (ob_get_level() > 0) ob_end_clean();
         header('Content-Type: application/pdf');
@@ -1153,34 +1149,13 @@
     // GET ?page=api&action=webhook_register
     if ($act === 'webhook_register') {
         $crm = svc('crm');
-
-        // Build webhook URL
-        $pluginUrl = rtrim($config['crm_base_url'] ?? '', '/');
-        $pluginUrl = preg_replace('#/api/v[0-9.]+$#', '', $pluginUrl);
-        $pluginUrl = preg_replace('#/crm$#', '', $pluginUrl);
-        $webhookUrl = dn_plugin_public($config) . '?page=webhook';
-
-        // Check if already exists
-        $existing = $crm->getWebhooks();
-        foreach ($existing as $wh) {
-            if (strpos($wh['url'] ?? '', 'dishnet-hybrid') !== false) {
-                $ok2(['already_exists' => true, 'webhook' => $wh], 'Webhook already registered (ID: ' . ($wh['id'] ?? '?') . ')');
-            }
-        }
-
-        // Register new webhook with all billing events
-        $result = $crm->createWebhook($webhookUrl, [
-            'client.add', 'client.edit', 'client.delete',
-            'invoice.add', 'invoice.edit', 'invoice.near_due', 'invoice.overdue', 'invoice.draft_approved',
-            'payment.add', 'payment.edit',
-            'service.suspend', 'service.activate', 'service.end',
-        ]);
-
-        if ($result && !empty($result['id'])) {
-            $ok2(['registered' => true, 'webhook' => $result], 'Webhook registered! ID: ' . $result['id'] . ' — UCRM will now send events to the plugin.');
-        } else {
-            $er2('Failed to register webhook: ' . json_encode($crm->getLastError()), 500);
-        }
+        // One policy with the Settings button and tools/webhook_setup.php:
+        // create when none exists, repair only what is wrong, never narrow the
+        // event list, never replace an address uCRM can reach. See lib/WebhookRegistrar.php.
+        require_once dirname(__DIR__, 2) . '/lib/WebhookRegistrar.php';
+        $result = WebhookRegistrar::run($crm, (array)$config, basename(dirname(__DIR__, 2)));
+        if ($result['success']) $ok2($result, $result['message']);
+        $er2(json_encode($result + ['crm_last_error' => $crm->getLastError()]), 500);
     }
 
     // ── Retry failed quote for a specific KYC app ─────────────────────

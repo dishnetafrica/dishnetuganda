@@ -22,6 +22,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/lib/crm_url.php';
+require_once __DIR__ . '/lib/QuotePdfToken.php';
 
 if (!function_exists('str_contains'))   { function str_contains(string $h, string $n): bool  { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_starts_with')){ function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
@@ -40,6 +41,7 @@ $pluginRoot = __DIR__;
 $dataDir    = getDataDir($pluginRoot);
 $store      = SqliteStore::create($dataDir);
 $config     = $store->load('kyc_config.json') ?? [];
+QuotePdfToken::ensureSecret($store, $config);   // the quotation-link secret, generated once if missing
 require_once __DIR__ . '/lib/currency.php';
 
 if (($config['quote_wa_cron_enabled'] ?? true) === false) {
@@ -776,13 +778,12 @@ function _qwa_fetchAndStorePdf(
         $pdfPath  = $pdfDir . '/' . $pdfFile;
         $metaPath = $pdfPath . '.meta';
 
-        // Use a stable daily token so the URL works for ~24h
-        $secret   = ($config['webhook_secret'] ?? 'dishnet');
-        $pdfToken = hash_hmac('sha256', $pdfFile . date('Ymd'), $secret);
+        // Daily token (QuotePdfToken): good today and tomorrow, then dead.
+        $pdfToken = QuotePdfToken::mint($pdfFile, $config);
 
         file_put_contents($pdfPath, base64_decode($pdfRaw));
+        // .meta is metadata only — the token is recomputed per day, never stored
         file_put_contents($metaPath, json_encode([
-            'token'    => $pdfToken,
             'created'  => time(),
             'quote'    => $quoteRef,
             'filename' => "Quote-{$quoteRef}.pdf",

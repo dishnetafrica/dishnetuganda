@@ -311,6 +311,19 @@ class DishNetTools
      * are quoted. A top-level `price`, where a UCRM version provides one, is
      * still honoured first.
      */
+    /**
+     * The comparable form of a catalogue name: lower-case, the word
+     * "starlink" removed, letters and digits only. "Starlink Residential Lite
+     * ( up to 100 Mbps)" and "Residential Lite (up to 100 Mbps)" are the same
+     * thing spelled twice, and this says so.
+     */
+    public static function catalogueKey(string $name): string
+    {
+        $k = mb_strtolower(trim($name));
+        $k = preg_replace('/\bstarlink\b/u', '', $k) ?? $k;
+        return preg_replace('/[^a-z0-9]+/u', '', $k) ?? '';
+    }
+
     public static function mapServicePlan(array $p): array
     {
         $price  = isset($p['price']) && $p['price'] !== null ? (float)$p['price'] : null;
@@ -406,12 +419,49 @@ class DishNetTools
             } catch (\Throwable $e) {
                 $hardwareError = $e->getMessage();
             }
+            // uCRM builds quotations from Products, so an operator mirrors each
+            // monthly plan as a product to put it on a quote — seen live on
+            // 15 Sep: "Residential Lite (up to 100 Mbps)" in both lists, once
+            // at 249,000 a month and once as a 249,000 one-time item. To the
+            // prompt every product is a ONE-TIME charge, so the mirror would
+            // have the model call a monthly plan a one-off, or add it into the
+            // total to get connected. A product whose name is a plan's name is
+            // the plan, and is dropped here before anything reads it.
+            $planKeys = [];
+            foreach ($out as $p) {
+                $k = self::catalogueKey((string)($p['name'] ?? ''));
+                if ($k !== '') $planKeys[$k] = true;
+            }
+            $mirrors  = 0;
+            $hardware = array_values(array_filter($hardware, function (array $h) use ($planKeys, &$mirrors): bool {
+                $k = self::catalogueKey((string)($h['name'] ?? ''));
+                if ($k !== '' && isset($planKeys[$k])) { $mirrors++; return false; }
+                return true;
+            }));
+
+            // Accessories (5.18.11). The shop catalogue names the optional
+            // extras — mounts, routers, cables. Held apart from the kit and
+            // the installation so the prompt can say "these are extras, not
+            // part of getting connected" instead of handing the model twenty
+            // three one-time items in one list and hoping.
+            if (!class_exists('ShopCatalogue')) require_once __DIR__ . '/ShopCatalogue.php';
+            $accessoryKeys = ShopCatalogue::accessoryNameKeys($this->pluginRoot);
+            $accessories   = [];
+            $hardware = array_values(array_filter($hardware, function (array $h) use ($accessoryKeys, &$accessories): bool {
+                $k = ShopCatalogue::nameKey((string)($h['name'] ?? ''));
+                if ($k !== '' && isset($accessoryKeys[$k])) { $accessories[] = $h; return false; }
+                return true;
+            }));
+
             $result = $this->ok([
                 'products'         => $out,
                 'count'            => count($out),
                 'hardware'         => $hardware,
                 'hardware_count'   => count($hardware),
+                'hardware_plan_mirrors' => $mirrors,
                 'hardware_error'   => $hardwareError,
+                'accessories'      => $accessories,
+                'accessory_count'  => count($accessories),
                 '_schema_verified' => false,
                 '_note'            => 'Fields absent from UCRM are null. Never present a null field as a fact.',
             ]);
@@ -495,15 +545,36 @@ class DishNetTools
     //  Internals
     // ══════════════════════════════════════════════════════════════════════
 
+    /**
+     * One matching rule, and it lives in CustomerIdentity.
+     *
+     * This used to compare the trailing nine digits and stop there. Nine
+     * digits are a subscriber number, not a person: DishNet's client base
+     * spans +256 and +211, so a stored South Sudan number and an incoming
+     * Uganda one that happen to share their last nine match — and because
+     * only ONE of them is in the index, that is not an ambiguous result the
+     * caller asks a question about. It is a single confident match, and the
+     * wrong customer's balance is disclosed to whoever wrote in.
+     *
+     * CustomerIdentity::same() adds the part that was missing: the country
+     * code must agree too, when both numbers state one. A local number
+     * written 0700123456 states no country, and an unstated code is not
+     * evidence of disagreement, so those still match as they did.
+     *
+     * The rule is not reimplemented here. The hardened WhatsApp path and this
+     * one now decide identity by the same function, which is the only way
+     * they stay decided the same way.
+     *
+     * @param string $needle unused outside legacy mode — kept so the legacy
+     *                       escape hatch below reads unchanged.
+     */
     private function phoneMatches(string $stored, string $incoming, string $needle, bool $legacy): bool
     {
         if ($legacy) {
             return $this->endsWith($stored, $incoming) || $this->endsWith($incoming, $stored);
         }
-        // Both numbers must carry at least the comparison length, and their
-        // trailing MIN_PHONE_MATCH_DIGITS must agree exactly.
-        if (strlen($stored) < self::MIN_PHONE_MATCH_DIGITS) return false;
-        return substr($stored, -self::MIN_PHONE_MATCH_DIGITS) === $needle;
+        require_once __DIR__ . '/CustomerIdentity.php';
+        return \CustomerIdentity::same($stored, $incoming);
     }
 
     private function endsWith(string $haystack, string $needle): bool

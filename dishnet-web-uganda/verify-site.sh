@@ -132,10 +132,14 @@ done
 wa=$(grep -rhoE 'wa\.me/[0-9]+' "$HERE/site" --include='*.html' | sort -u)
 [ "$wa" = "wa.me/256705993348" ] || { echo "  unexpected WhatsApp target(s): $wa"; fail=1; }
 # One customer-portal URL, everywhere it appears — plus the plugin's public
-# price feed, which legitimately lives on the same host.
+# price feed, which legitimately lives on the same host — and, since the
+# shop page, the accessories feed and the bare origin shop.html preconnects
+# to, because every product photo is served from there too.
 portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --include='*.html' | sort -u \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=prices$' \
-         | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=web_chat$')
+         | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=web_chat$' \
+         | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=shop&amp;format=json$' \
+         | grep -v '^https://crm\.dishnetuganda\.com$')
 [ "$portal" = "https://crm.dishnetuganda.com/crm" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
 [ $fail -eq 0 ] && echo "  no foreign-country remnants; one WhatsApp number; one portal URL"
 

@@ -1,6 +1,6 @@
 # One owner per customer email event
 
-**Status: audit complete, wiring incomplete.** Read the sequencing warning
+**Status: audit complete; all eight lifecycle e-mails are wired and switched on (15 Sep 2026, plugin 5.18.8). They were off for about an hour that afternoon after an `--all-off` whose read-back wrongly showed them still on; 5.18.8 fixed the read-back and they were switched back on. `php tools/set_customer_emails.php --show` is the source of truth.** Read the sequencing warning
 before switching anything off in uCRM.
 
 Every fact below was established by reading the code, not by assumption.
@@ -55,11 +55,16 @@ sends. One owner either way.
 |---|---|---|
 | Invoice | `invoice.add` | `INV<number>` |
 | Payment received | `payment.add` | `PAY<payment id>` |
-| Welcome / activated | `service.add` | `SVCADD<client>:<service>` |
+| Welcome / activated | `service.add` (created active) or `service.activate` with no remembered pause | `SVCADD<client>:<service id>` |
 | Service paused | `service.suspend` | `SUSP<client>:<date>` |
-| Service resumed | `service.activate` / `unsuspend` | `RESUME<client>:<date>` |
+| Service resumed | `service.activate` after a remembered pause (`paused_svc_<id>`) | `RESUME<client>:<service id>:<date>` |
 | Support acknowledgement | `ticket.add` | `TKT<ticket id>` |
-| Installation scheduled | `job.add` | `JOB<job id>` |
+| Installation scheduled | `job.add` — installation title, dated, with a client | `JOB<job id>` |
+
+Since 5.18.6 the invoice e-mail carries uCRM's invoice PDF, fetched once per
+webhook and shared with the WhatsApp document, and the template says
+"attached" only when it is (`pdf_attached`, passed by every sender of the
+invoice and the quotation). Plain-text parts list no fact they do not have.
 
 Each send rides alongside the WhatsApp message that event already sent, so the
 trigger conditions and the recipient are identical to a channel that has been
@@ -81,15 +86,15 @@ control flow, which is a larger change than this one and is not attempted here.
 | Event | Owner | Channel | Notes |
 |---|---|---|---|
 | Quotation | **Plugin** | Email + WhatsApp | live; PDF attached; uCRM send suppressed by the toggle |
-| Order confirmed / payment received | **Plugin** | Email + WhatsApp | template ready, needs wiring |
-| Installation scheduled | **Plugin** | Email + WhatsApp | template ready, needs wiring |
-| Welcome / service active | **Plugin** | Email + WhatsApp | template ready, needs wiring |
-| Invoice issued | **uCRM until the plugin is wired**, then Plugin | Email | uCRM is the only sender today |
+| Order confirmed / payment received | **Plugin** | Email + WhatsApp | wired to `payment.add`; **switched on 15 Sep 2026** |
+| Installation scheduled | **Plugin** | Email + WhatsApp | wired to `job.add` (installation jobs with a date); facts corrected in 5.18.7; **switched on 15 Sep 2026** |
+| Welcome / service active | **Plugin** | Email + WhatsApp | wired to `service.add` and first `service.activate`; facts corrected in 5.18.7; **switched on 15 Sep 2026** |
+| Invoice issued | **Plugin** | Email + WhatsApp | wired to `invoice.add`, uCRM's PDF attached (5.18.6); **switched on 15 Sep 2026** — uCRM's own invoice notification not yet confirmed off in the browser, so a duplicate is possible until it is |
 | Payment reminder (pre-due) | **WhatsApp only** | WhatsApp | email here reads as nagging; WhatsApp already covers d7/d3/d1 |
-| Service paused | **Plugin** | Email + WhatsApp | replaces the postpaid dunning ladder |
-| Service resumed | **Plugin** | Email + WhatsApp | template ready, needs wiring |
+| Service paused | **Plugin** | Email + WhatsApp | replaces the postpaid dunning ladder; names the unpaid invoice and amount, offers the configured pay link (5.18.7); **switched on 15 Sep 2026** |
+| Service resumed | **Plugin** | Email + WhatsApp | wired to `service.activate` after a remembered pause; payment claimed only when seen (5.18.7); **switched on 15 Sep 2026** |
 | Login code (OTP) | **Plugin** | Email | live, via `OtpEmailTemplate` |
-| Support acknowledgement | **Plugin** | Email | template ready, needs wiring |
+| Support acknowledgement | **Plugin** | Email | wired to `ticket.add` for a client's ticket; reference and account passed (5.18.7); **switched on 15 Sep 2026** |
 | Overdue chase (9 stages) | **nobody, on prepaid** | — | gated off; see below |
 
 ---

@@ -299,7 +299,16 @@ try {
 
     // Read the prior turns BEFORE recording this one, or the current message
     // would arrive twice: once as history and once as the message being asked.
-    foreach ($convSvc->getMessages($convId, 20, 0) as $m) {
+    //
+    // Identity-bound since B3.1, to the SESSION rather than to a customer.
+    // A website visitor is anonymous by design and this conversation holds no
+    // account data — customer is null below and no account block is ever
+    // built — so there is nothing of anybody's to inherit. What a session
+    // does have is a holder: one browser, not a phone number that gets
+    // reassigned. Replay stays inside it.
+    $webIdentity = ConversationService::sessionIdentityKey($session);
+    $convSvc->beginTurn($convId, $webIdentity);
+    foreach ($convSvc->getMessagesForAi($convId, $webIdentity, 20) as $m) {
         $history[] = [
             'role' => ($m['direction'] ?? 'in') === 'in' ? 'customer' : 'dishnet',
             'text' => mb_substr((string)($m['body'] ?? ''), 0, 400),
@@ -358,17 +367,22 @@ try {
     $products = ['ok' => false, 'error' => $e->getMessage()];
 }
 
-$ctx = [
+// The B3.2 contract. A website visitor is ANONYMOUS — not a customer we
+// failed to identify — so they keep their own session history and get the
+// public catalogue, and there is no customer block at all.
+require_once __DIR__ . '/lib/BrainContext.php';
+$_catalogue = $products['ok'] ? $products['data'] : [];
+$_catalogue['stock'] = (string)($config['stock_statement'] ?? '');
+$ctx = BrainContext::build(ConversationService::STATE_ANONYMOUS, [
     'channel'   => 'sales',
     'transport' => 'web',
+    'medium'    => '',
     'message'   => $message,
-    'customer'  => null,
+    'products'  => $_catalogue,
     // Twenty entries is ten exchanges; the brain trims again if it needs to.
     'history'   => array_slice($history, -20),
-];
-if ($products['ok']) {
-    $ctx['products'] = $products['data'];
-} else {
+]);
+if (!$products['ok']) {
     // The brain falls back to refusing to quote, which is correct, but this
     // must never be silent -- a website quoting nothing is a lost sale.
     @file_put_contents($dataDir . '/ai_platform.log', sprintf(

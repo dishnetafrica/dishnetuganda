@@ -57,6 +57,88 @@ final class FollowUpPolicy
     public const SCHEDULE = [1 => 24, 2 => 72];
 
     /**
+     * May this drafted follow-up go out without a person reading it?
+     *
+     * WhatsApp only, and deliberately so. Email keeps its own policy in
+     * EmailReplyPolicy, which splits categories by what a wrong answer costs
+     * and holds thirteen of them back unconditionally. A WhatsApp follow-up is
+     * a different thing: one-to-one, short, to somebody who wrote to us first
+     * about something they asked, and it can say nothing the enquiry did not
+     * already put on the table.
+     *
+     * Four conditions, all required. The operator switch is last in intent and
+     * first in code, because an unset key must mean today's behaviour on every
+     * install that upgrades into this.
+     *
+     *   1. followup_auto_send is on           — absent means off, always
+     *   2. the assistant said SEND            — WAIT, DO_NOT_SEND and
+     *                                           ESCALATE_TO_HUMAN never auto-send
+     *   3. there is a message                 — an empty body is a bug, not a send
+     *   4. the content level is ENQUIRY       — see below
+     *
+     * ── WHY ACCOUNT CONTENT STILL NEEDS A PERSON ────────────────────────
+     *
+     * CONTENT_ACCOUNT means provenance is good enough to discuss the
+     * customer's balance, invoices and service. That is the right bar for
+     * ANSWERING somebody. It is not the right bar for a message we chose to
+     * send, unread, about their money. If the identity is wrong, an enquiry
+     * follow-up is a wasted message and an account follow-up is somebody
+     * else's balance on a stranger's phone. Those are not the same mistake,
+     * so they do not get the same gate.
+     *
+     * Escalation words are not re-checked here: gate 6 already CLOSES a
+     * follow-up whose thread mentions one, so no draft can exist for it. The
+     * BODY is scanned though — the assistant writing about a refund is a
+     * different event from the customer mentioning one.
+     *
+     * @return array{auto:bool, reason:string}
+     */
+    public static function mayAutoSend(array $verdict, string $level, array $config,
+                                      array $conv = []): array
+    {
+        $no = static fn(string $why): array => ['auto' => false, 'reason' => $why];
+
+        if (!filter_var($config['followup_auto_send'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return $no('followup_auto_send is off');
+        }
+        $v = strtoupper(trim((string)($verdict['verdict'] ?? '')));
+        if ($v !== 'SEND') {
+            return $no('the assistant said ' . ($v ?: 'nothing') . ', not SEND');
+        }
+        $body = trim((string)($verdict['message'] ?? ''));
+        if ($body === '') {
+            return $no('the draft has no message');
+        }
+        if ($level !== self::CONTENT_ENQUIRY) {
+            return $no('content level is ' . $level . ' — only enquiry follow-ups may send themselves');
+        }
+        $esc = EmailReplyPolicy::scanForEscalation($body);
+        if (!empty($esc['escalate'])) {
+            return $no('the drafted message mentions "' . $esc['matched'] . '"');
+        }
+
+        // A conversation already flagged for a colleague. The gate chain tests
+        // human_active — a colleague who is ALREADY TYPING — and never tested
+        // this one, which is what the assistant sets when it hands over and
+        // promises that a person will answer.
+        //
+        // On 19 September 2026 the first automatic message this plugin ever
+        // sent went to a customer who had been told "let me confirm with our
+        // team and come back to you today". Nobody had. Four days later the
+        // follow-up asked THEM whether THEY had any questions, which inverts
+        // who owes whom an answer in front of a buyer who is still waiting.
+        //
+        // The draft is still written. It is exactly what the colleague wants
+        // waiting when they pick the conversation up. It may not send itself.
+        $state = strtolower(trim((string)($conv['state'] ?? '')));
+        if ($state === 'needs_human' || $state === 'human_active') {
+            return $no('the conversation is ' . $state . ' — a person owes this customer a reply');
+        }
+
+        return ['auto' => true, 'reason' => 'enquiry follow-up, assistant said SEND'];
+    }
+
+    /**
      * What a proactive message to this conversation may contain.
      *
      * @param array $conv a wa_conversations row
@@ -154,6 +236,42 @@ final class FollowUpPolicy
             $t = new \DateTimeImmutable($lastCustomerUtc, new \DateTimeZone('UTC'));
         } catch (\Throwable $e) { return ''; }
         return $t->modify('+' . $hours . ' hours')->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * When attempt N becomes askable, given that attempt N-1 has just gone out.
+     *
+     * dueAt() anchors to the customer's last message. That is right for the
+     * FIRST attempt — the wait is measured from their silence. It is wrong for
+     * every attempt after a LATE send, and this engine sent nothing for five
+     * days in September 2026 because it was reading the wrong provider key.
+     * When it restarted, every queued row had its attempt-2 date already in the
+     * past: 110 of 276 open follow-ups. Attempt 2 would have become due the
+     * instant attempt 1 was sent, and the customer would have received two
+     * messages minutes apart.
+     *
+     * So the next attempt is never sooner than the gap the schedule already
+     * intends between attempts, measured from when we ACTUALLY wrote. On a
+     * punctual send the customer anchor is later anyway and nothing changes —
+     * the floor only bites when we were late, which is exactly when it should.
+     */
+    public static function nextDueAfterSend(string $lastCustomerUtc, string $sentAtUtc,
+                                            int $nextAttempt): string
+    {
+        $byCustomer = self::dueAt($lastCustomerUtc, $nextAttempt);
+        if ($byCustomer === '') return '';   // no attempt N — the cadence ends here
+
+        $gap = (int)(self::SCHEDULE[$nextAttempt] ?? 0)
+             - (int)(self::SCHEDULE[$nextAttempt - 1] ?? 0);
+        if ($gap <= 0) return $byCustomer;
+
+        try {
+            $floor = (new \DateTimeImmutable($sentAtUtc, new \DateTimeZone('UTC')))
+                ->modify('+' . $gap . ' hours')->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            return $byCustomer;              // an unreadable clock must not shorten the wait
+        }
+        return $floor > $byCustomer ? $floor : $byCustomer;
     }
 
     /**

@@ -123,17 +123,27 @@ class CustomerEmailDispatcher
      */
     public static function effectiveConfig(array $config = []): array
     {
-        static $fromDisk = null;
-        if ($fromDisk === null) {
+        // Cached per request, keyed by the files' size and modification time,
+        // so a write earlier in the same process is seen by the next call.
+        // A one-shot static here made tools/set_customer_emails.php --all-off
+        // report every switch still ON after it had just cleared them all:
+        // the "Before" display filled the cache, the "After" display re-read
+        // it. The stop worked; the read-back lied.
+        static $fromDisk = null, $stamp = null;
+        $root    = dirname(__DIR__);
+        $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
+        $files   = [$root . '/data/config.json', $dataDir . '/config.json', $dataDir . '/kyc_config.json'];
+        clearstatcache();
+        $now = '';
+        foreach ($files as $p) $now .= is_file($p) ? (filemtime($p) . ':' . filesize($p) . ';') : '-;';
+        if ($fromDisk === null || $stamp !== $now) {
             $fromDisk = [];
-            $root    = dirname(__DIR__);
-            $dataDir = $GLOBALS['dataDir'] ?? ($root . '/data');
-            foreach ([$root . '/data/config.json', $dataDir . '/config.json',
-                      $dataDir . '/kyc_config.json'] as $p) {
+            foreach ($files as $p) {
                 if (!is_file($p)) continue;
                 $d = json_decode((string)@file_get_contents($p), true);
                 if (is_array($d)) $fromDisk = array_merge($fromDisk, $d);
             }
+            $stamp = $now;
         }
         // Disk wins, EXCEPT where disk is empty and the caller has a value.
         //
@@ -242,10 +252,15 @@ class CustomerEmailDispatcher
                 return $this->result(false, 'plugin mail is not configured', $email);
             }
 
+            // Who the header will say it is from. The dispatcher passes no
+            // From override, so the configured sender IS the one used, and it
+            // belongs on the audit row rather than only in the relay's log.
+            $sender = MailService::bareAddress((string)($mail->getConfig()['from'] ?? ''));
+
             // Claim the dedupe key BEFORE sending. A crash between the send and
             // the log would otherwise let a retry send it again, and a customer
             // would rather miss an email than get it twice.
-            if ($mark !== '') $this->claim($mark, $key, $email);
+            if ($mark !== '') $this->claim($mark, $key, $email, $sender);
 
             $res = $mail->send($email, $name, (string)$built['subject'],
                                (string)$built['html'], (string)$built['text'],
@@ -307,8 +322,18 @@ class CustomerEmailDispatcher
                     recipient  TEXT NOT NULL,
                     status     TEXT NOT NULL DEFAULT 'claimed',
                     error      TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    sender     TEXT NOT NULL DEFAULT ''
                  )");
+            // Additive, for a table created before the column existed. An
+            // audit row that cannot say who sent it answers half a question.
+            $cols = [];
+            foreach ($this->pdo->query('PRAGMA table_info(customer_email_log)') as $c) {
+                $cols[] = (string)($c['name'] ?? '');
+            }
+            if (!in_array('sender', $cols, true)) {
+                $this->pdo->exec("ALTER TABLE customer_email_log ADD COLUMN sender TEXT NOT NULL DEFAULT ''");
+            }
             $made = true;
             return true;
         } catch (\Throwable $e) { return false; }
@@ -340,17 +365,38 @@ class CustomerEmailDispatcher
         } catch (\Throwable $e) { return false; }
     }
 
-    private function claim(string $mark, string $key, string $email): void
+    private function claim(string $mark, string $key, string $email, string $sender = ''): void
     {
         if (!$this->table()) return;
         try {
             // REPLACE, not IGNORE: a retry after a failure must be able to
             // take the row back and reset it to claimed.
             $st = $this->pdo->prepare(
-                'INSERT OR REPLACE INTO customer_email_log (dedupe_key, template, recipient, status)
-                 VALUES (?,?,?,\'claimed\')');
-            $st->execute([$mark, $key, $email]);
+                'INSERT OR REPLACE INTO customer_email_log (dedupe_key, template, recipient, status, sender)
+                 VALUES (?,?,?,\'claimed\',?)');
+            $st->execute([$mark, $key, $email, $sender]);
         } catch (\Throwable $e) {}
+    }
+
+    /**
+     * Forget a settled send, so the same event may be sent again on purpose.
+     *
+     * A row marked 'sent' blocks forever by design. tools/quote_email_send.php
+     * --clear-claim exists to make a quotation resendable, and it used to
+     * clear only the QEMAIL claim — which was enough while this table held no
+     * quotation rows. Now that the webhook records its sends here, that row
+     * would still say "sent" and the webhook would still refuse. Both records
+     * have to go for "the webhook may send again" to be true.
+     *
+     * @return bool whether a row existed to forget
+     */
+    public static function forget(PDO $pdo, string $key, string $dedupe): bool
+    {
+        try {
+            $st = $pdo->prepare('DELETE FROM customer_email_log WHERE dedupe_key = ?');
+            $st->execute(["{$key}:{$dedupe}"]);
+            return $st->rowCount() > 0;
+        } catch (\Throwable $e) { return false; }
     }
 
     private function settle(string $mark, bool $ok, string $error): void

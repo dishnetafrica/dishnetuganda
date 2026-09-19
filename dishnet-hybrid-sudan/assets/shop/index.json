@@ -1,0 +1,181 @@
+{
+  "_note": "Product photos for the accessories shop. Keyed by catalogue slug; 'product' is the exact uCRM/Starlink product name the shop tab matches on. Source: Starlink's own store images (reseller use). No price lives here — prices come from uCRM only.",
+  "items": [
+    {
+      "slug": "router-mini",
+      "product": "Router Mini",
+      "file": "router-mini.png",
+      "bytes": 285535,
+      "sha1": "4dde1d710aef",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "roof-rack-mount-standard",
+      "product": "Roof Rack Mount | Standard 4 or 4 X",
+      "file": "roof-rack-mount-standard.png",
+      "bytes": 403651,
+      "sha1": "0399e9a617a1",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "standard-to-actuated-mount-adapter",
+      "product": "Standard 4 or 4 X to Standard Actuated Mount Adapter",
+      "file": "standard-to-actuated-mount-adapter.png",
+      "bytes": 463204,
+      "sha1": "2f5094dcbb7f",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "x-frame-base-standard",
+      "product": "X-Frame Base | Standard 4 or 4 X, Enterprise",
+      "file": "x-frame-base-standard.png",
+      "bytes": 626774,
+      "sha1": "d4dfd86a4b50",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "ridgeline-mount-standard",
+      "product": "Ridgeline Mount | Standard 4 or 4 X",
+      "file": "ridgeline-mount-standard.png",
+      "bytes": 340495,
+      "sha1": "fce8b6bacaa9",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "router-3-mount",
+      "product": "Router 3 Mount",
+      "file": "router-3-mount.png",
+      "bytes": 346931,
+      "sha1": "7815f672ebc6",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "mobility-mount-standard",
+      "product": "Mobility Mount | Standard 4 or 4 X",
+      "file": "mobility-mount-standard.png",
+      "bytes": 224524,
+      "sha1": "4a68381f07ae",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "power-supply-mount-standard-4x",
+      "product": "Power Supply Mount | Standard 4 X",
+      "file": "power-supply-mount-standard-4x.png",
+      "bytes": 40968,
+      "sha1": "a404848c2d2c",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "pivot-mount-standard",
+      "product": "Pivot Mount | Standard 4 and 4 X, Enterprise",
+      "file": "pivot-mount-standard.png",
+      "bytes": 385974,
+      "sha1": "0d09335249fd",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "wall-mount-standard",
+      "product": "Wall Mount | Standard 4 or 4 X",
+      "file": "wall-mount-standard.png",
+      "bytes": 311833,
+      "sha1": "d6e906f3a0da",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "pipe-adapter-standard",
+      "product": "Pipe Adapter | Standard 4 or 4 X",
+      "file": "pipe-adapter-standard.png",
+      "bytes": 319986,
+      "sha1": "fc64e35d481f",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "router-3",
+      "product": "Router 3 | Starlink V4 or V5, Mini",
+      "file": "router-3.png",
+      "bytes": 364616,
+      "sha1": "d1ea04b60b5f",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "travel-kit-mini",
+      "product": "Travel Kit | Mini",
+      "file": "travel-kit-mini.jpg",
+      "bytes": 29010,
+      "sha1": "5a154d6e1e0e",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "car-adapter-mini",
+      "product": "Car Adapter | Mini",
+      "file": "car-adapter-mini.jpg",
+      "bytes": 31776,
+      "sha1": "24b2026f6063",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "mini-usb-c-cable-5m",
+      "product": "Starlink Mini USB-C Cable 5m",
+      "file": "mini-usb-c-cable-5m.jpg",
+      "bytes": 15319,
+      "sha1": "593f87f64c84",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "mobility-mount-mini",
+      "product": "Mobility Mount | Mini",
+      "file": "mobility-mount-mini.jpg",
+      "bytes": 47885,
+      "sha1": "7004c8c1f551",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "roof-rack-mount-mini",
+      "product": "Roof Rack Mount | Mini",
+      "file": "roof-rack-mount-mini.jpg",
+      "bytes": 51684,
+      "sha1": "bf3420145fb3",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "mini-ethernet-cable-15m",
+      "product": "Starlink Mini Ethernet Cable 15m",
+      "file": "mini-ethernet-cable-15m.jpg",
+      "bytes": 12428,
+      "sha1": "530895860e96",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "pivot-mount-mini",
+      "product": "Pivot Mount | Mini",
+      "file": "pivot-mount-mini.jpg",
+      "bytes": 49365,
+      "sha1": "7dadcd9ca80a",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "wall-mount-mini",
+      "product": "Wall Mount | Mini",
+      "file": "wall-mount-mini.jpg",
+      "bytes": 49119,
+      "sha1": "e43e43936436",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "standard-kit",
+      "product": "Starlink Standard Kit (kit photo)",
+      "file": "standard-kit.png",
+      "bytes": 85748,
+      "sha1": "0b8698f7b2cf",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    },
+    {
+      "slug": "mini-kit",
+      "product": "Starlink Mini Kit (kit photo)",
+      "file": "mini-kit.png",
+      "bytes": 32540,
+      "sha1": "12998bc85f96",
+      "source": "Starlink store for Uganda, product page image, 500x500, saved 16 Sep 2026"
+    }
+  ]
+}

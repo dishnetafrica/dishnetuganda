@@ -1468,13 +1468,34 @@ class NotificationService
         );
     }
 
+    /**
+     * Send a WhatsApp message for a named event — the text the caller wrote.
+     *
+     * Until 5.18.4 this built its own text from the variables it was handed:
+     * "*EVENT CLIENT ADD*", "To: Julius Peter", "Crm id: 13", one line per
+     * key — a debugging format that became a customer message the day
+     * client.add started calling it as a "welcome", and that the overdue
+     * follow-ups were sending with their real text tacked on as "Raw message:".
+     *
+     * The text of a customer message is the caller's to write, in
+     * $data['_raw_message']. That is sent, exactly, and nothing else. With no
+     * text there is nothing to send: the omission is logged and the customer
+     * receives nothing, which is better than receiving our variable names.
+     * $toName is kept for the callers' sake; it was only ever a line in the dump.
+     */
     public function send(string $event, string $toPhone, string $toName, array $data, string $sender = self::SUPPORT): void
     {
-        $lines = ['*' . str_replace('_', ' ', strtoupper($event)) . '*', "To: {$toName}"];
-        foreach ($data as $k => $v) {
-            if (!is_array($v)) $lines[] = ucfirst(str_replace('_', ' ', $k)) . ': ' . $v;
+        $message = trim((string)($data['_raw_message'] ?? ''));
+        if ($message === '') {
+            $this->writeLog([
+                'sender' => $sender, 'event' => $event ?: 'send', 'to' => $toPhone,
+                'status' => 'skipped', 'reason' => 'no message text for this event — nothing sent',
+            ]);
+            return;
         }
-        $this->sendVia($sender, $toPhone, implode("\n", $lines), $event, $data);
+        $vars = $data;
+        unset($vars['_raw_message']);
+        $this->sendVia($sender, $toPhone, $message, $event, $vars);
     }
 
     public function sendAdmin(string $message, string $event = '', array $vars = []): void
@@ -2044,13 +2065,26 @@ class NotificationService
                     $convSvc = new ConversationService($dataDir, $this->store->getPdo());
                     $channel = ($sender === self::ACCOUNTS) ? 'accounts' : 'support';
                     $conv    = $convSvc->ensureConversation($to, $channel);
+                    // The id Evolution gave the message, when it was Evolution
+                    // that carried it: the echo then dedupes on the row as well
+                    // as at the guard.
+                    $echoRes = json_decode((string)$response, true);
+                    $echoId  = is_array($echoRes)
+                             ? (string)($echoRes['data']['key']['id'] ?? ($echoRes['key']['id'] ?? ''))
+                             : '';
                     $convSvc->storeMessage($conv['id'], [
                         'direction'  => 'out',
                         'role'       => 'agent',
                         'body'       => $message,
                         'event_key'  => $event ?: null,
                         'agent_name' => 'DishNet Plugin',
-                        'sent_at'    => date('Y-m-d H:i:s'),
+                        // UTC like every other sent_at. date() here ran under
+                        // Africa/Kampala and stamped these rows three hours
+                        // ahead: the Inbox showed a reminder after messages
+                        // that came later, and last_agent_at sat in the future,
+                        // so the watchdog thought a waiting customer answered.
+                        'sent_at'    => gmdate('Y-m-d H:i:s'),
+                        'wa_message_id' => $echoId !== '' ? $echoId : null,
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -2202,7 +2236,12 @@ class NotificationService
             $vars = json_decode($row['vars'] ?? '{}', true) ?: [];
             $isDoc = ($vars['_type'] ?? '') === 'document' && !empty($vars['url']);
             if ($isDoc) {
-                $this->sendDocument($row['sender'], $row['phone'], $vars['url'], $vars['filename'] ?? 'document.pdf', $row['message'], $row['event'] ?? '');
+                // A quotation PDF link is signed for the day it was minted and
+                // dies the day after. Re-sign it, or the retry re-sends a link
+                // the endpoint will refuse. Any other URL passes through as is.
+                require_once __DIR__ . '/QuotePdfToken.php';
+                $url = QuotePdfToken::refreshUrl((string)$vars['url'], $this->evoConfig);
+                $this->sendDocument($row['sender'], $row['phone'], $url, $vars['filename'] ?? 'document.pdf', $row['message'], $row['event'] ?? '');
             } else {
                 $this->sendVia($row['sender'], $row['phone'], $row['message'], $row['event'] ?? '', $vars);
             }

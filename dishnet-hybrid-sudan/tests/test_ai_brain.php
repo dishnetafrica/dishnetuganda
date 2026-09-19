@@ -289,7 +289,12 @@ $reflect = new ReflectionMethod('DishNetAiBrain', 'buildTurns');
 $reflect->setAccessible(true);
 $turns = $reflect->invoke($qb, ['message' => 'how much?', 'history' => $long]);
 t('window trims to 20 history turns plus the new message', count($turns), 21);
-t('the oldest turns are the ones dropped', $turns[0]['content'], 'question 5');
+// The oldest are dropped, not the newest. Asserted on the substance rather
+// than the whole string: history turns now carry an untrusted-content label.
+t('the oldest turns are the ones dropped',
+  str_contains((string)$turns[0]['content'], 'question 5'), true);
+t('and question 4 really is gone from the window',
+  str_contains(implode('|', array_column($turns, 'content')), 'question 4'), false);
 t('the newest exchange survives',
   $turns[count($turns) - 2]['content'], 'answer 14');
 // Ten exchanges must fit untrimmed -- that is the qualification flow itself.
@@ -303,7 +308,7 @@ t('and it is attributed to the customer', end($turns)['role'], 'user');
 $roles = $reflect->invoke($qb, ['message' => 'x', 'history' => $flow]);
 t('customer turns map to user', $roles[0]['role'], 'user');
 t('our turns map to assistant', $roles[1]['role'], 'assistant');
-t('order is oldest to newest', $roles[0]['content'], 'Hi');
+t('order is oldest to newest', str_ends_with((string)$roles[0]['content'], 'Hi'), true);
 
 echo "\nAvailability is stated by the operator, never guessed\n";
 $hw = ['products' => ['products' => [['name' => 'Starlink Priority 1TB', 'price' => 189,

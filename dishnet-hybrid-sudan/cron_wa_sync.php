@@ -158,64 +158,62 @@ foreach ($rows as $row) {
         if (!is_array($msgJson)) $msgJson = [];
         $parsed = parseBaileysMessage($msgJson);
 
-        if (empty($parsed['body']) && empty($parsed['media_type'])) { $skipped++; continue; }
-
-        // 4. Direction
+        // 4. Transport-level gates. These are the cron's own concerns, not
+        // security ones: it polls history, so it must not answer a message
+        // from last week, and must not answer itself. Everything after this
+        // is decided by the shared processor.
         $fromMe   = (bool)$row['fromMe'];
-        $direction = $fromMe ? 'out' : 'in';
-        $role      = $fromMe ? 'agent' : 'customer';
-        $pushName  = $row['pushName'] ?? null;
+        $pushName = $row['pushName'] ?? null;
+        $ts       = (int)$row['messageTimestamp'];
+        $msgAge   = time() - $ts;
 
-        // 5. Timestamp
-        $ts = (int)$row['messageTimestamp'];
-        $sentAt = $ts > 0 ? date('Y-m-d H:i:s', $ts) : date('Y-m-d H:i:s');
-
-        // 6. Ensure conversation
-        $conv = $convSvc->ensureConversation($phone, $channel, $pushName, 'wa_sync');
-        $isNew = (strtotime($conv['created_at'] ?? '') >= time() - 5);
-
-        // 7. Store message (dedup by wa_message_id)
-        $msgId = $convSvc->storeMessage($conv['id'], [
-            'direction'     => $direction,
-            'role'          => $role,
-            'body'          => $parsed['body'] ?: ('[' . ($parsed['media_type'] ?? 'media') . ']'),
-            'media_type'    => $parsed['media_type'],
-            'media_url'     => $parsed['media_url'],
-            'wa_message_id' => $row['id'],
-            'agent_name'    => $fromMe ? 'DishNet' : null,
-            'sent_at'       => $sentAt,
-        ]);
-
-        if ($msgId === null) { $skipped++; continue; }
-        $stored++;
-
-        // 8a. Auto-reply for incoming customer messages (only fresh — within last 5 mins)
-        $msgAge = time() - $ts;
-        // Skip own business numbers
         $_ownPhones = ['211921443002', '211921443006']; // Support + Accounts numbers
-        $_isOwnNum = in_array($phone, $_ownPhones) || in_array(substr($phone, -9), array_map(fn($p) => substr($p, -9), $_ownPhones));
-        if ($direction === 'in' && !empty($parsed['body']) && !empty($config['wa_bot_enabled']) && $msgAge < 300 && !$_isOwnNum) {
-            wsLog("  Auto-reply check: phone={$phone} channel={$channel} age={$msgAge}s text=" . substr($parsed['body'], 0, 30));
-            try {
-                if (!isset($autoReplySvc)) {
-                    require_once __DIR__ . '/lib/NotificationService.php';
-                    require_once __DIR__ . '/lib/WaAutoReplyService.php';
-                    $notify = new NotificationService($store, $config);
-                    $autoReplySvc = new WaAutoReplyService($store, $store->getPdo(), $notify, $config, $convSvc);
-                }
-                $arResult = $autoReplySvc->handleIncoming($phone, $parsed['body'], $channel, $pushName, $conv['id']);
-                if ($arResult['replied']) {
-                    wsLog("  Auto-replied to {$phone} on {$channel}: {$arResult['action']}");
-                } else {
-                    wsLog("  Auto-reply skipped for {$phone}: {$arResult['action']}");
-                }
-            } catch (Throwable $e) {
-                wsLog("  Auto-reply error for {$phone}: " . $e->getMessage());
-            }
-        } elseif ($direction === 'in' && !empty($parsed['body']) && !empty($config['wa_bot_enabled'])) {
-            wsLog("  Skipped auto-reply: phone={$phone} age={$msgAge}s own=" . ($_isOwnNum ? 'yes' : 'no'));
+        $_isOwnNum  = in_array($phone, $_ownPhones, true)
+                   || in_array(substr($phone, -9),
+                        array_map(fn($p) => substr($p, -9), $_ownPhones), true);
+
+        // 5. One shape, one pipeline — the same two calls the webhook makes.
+        $inbound = WaInbound::normalise([
+            'key'              => ['remoteJid' => $row['remoteJid'],
+                                   'id'        => $row['id'],
+                                   'fromMe'    => $fromMe],
+            'message'          => $msgJson,
+            'pushName'         => $pushName,
+            'messageTimestamp' => $ts,
+        ], 'cron', $channel);
+
+        if (!$inbound['usable']) { $skipped++; continue; }
+
+        // An old or self-sent message is still recorded; it simply does not
+        // earn a reply. Stripping its text would make the processor treat it
+        // as media, so the gate is expressed as what it actually is.
+        $silent = $fromMe || $_isOwnNum || ($msgAge >= 300);
+
+        if (!isset($waProcessor)) {
+            require_once __DIR__ . '/lib/NotificationService.php';
+            require_once __DIR__ . '/lib/WaAutoReplyService.php';
+            require_once __DIR__ . '/lib/WaInbound.php';
+            require_once __DIR__ . '/lib/WaMessageProcessor.php';
+            $notify       = new NotificationService($store, $config);
+            $autoReplySvc = new WaAutoReplyService($store, $store->getPdo(), $notify, $config, $convSvc);
+            $waProcessor  = new WaMessageProcessor($convSvc, $autoReplySvc, $notify, $config);
+            // A config copy with replies off, for messages that must be
+            // recorded but never answered.
+            $quietConfig  = $config;
+            $quietConfig['wa_bot_enabled'] = false;
+            $quietConfig['wa_auto_reply_enabled'] = false;
+            $waProcessorQuiet = new WaMessageProcessor($convSvc, $autoReplySvc, $notify, $quietConfig);
         }
 
+        $conv  = $convSvc->ensureConversation($phone, $channel, $pushName, 'wa_sync');
+        $isNew = (strtotime($conv['created_at'] ?? '') >= time() - 5);
+
+        $res = ($silent ? $waProcessorQuiet : $waProcessor)->process($inbound);
+
+        if ($res['duplicate']) { $skipped++; continue; }
+        $stored++;
+        wsLog("  {$inbound['modality']} from {$phone} on {$channel}: {$res['action']}"
+            . ($silent ? ' (not answered)' : ''));
         // 8b. Auto-link to CRM
         if ($isNew && empty($conv['crm_client_id'])) {
             $phoneTail = substr($phone, -9);

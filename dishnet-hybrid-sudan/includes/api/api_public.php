@@ -378,3 +378,7 @@
     // ─── Customer App API (mobile app endpoints) ─────────────────────────────
     // All actions prefixed app_*, see api_customer_app.php
     require __DIR__ . '/api_customer_app.php';
+    // dpo_* — paying an invoice from the portal. Loaded here because they
+    // authenticate with the customer's Bearer JWT, like the app_* actions,
+    // not with a staff session.
+    require __DIR__ . '/api_dpo.php';

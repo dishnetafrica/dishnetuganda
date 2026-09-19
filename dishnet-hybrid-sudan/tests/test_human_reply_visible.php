@@ -65,7 +65,7 @@ echo "\nThe model is told a person wrote it, not the assistant\n";
 // promised whatever the person promised.
 is_(strpos($worker, 'from our team] ') !== false,
     'history tags it by name');
-is_(strpos($hook, "'agent_name'    => 'Team'") !== false,
+is_(strpos($hook, "'agent_name'    => \$canned ? ConversationService::AGENT_AUTO_REPLY : 'Team'") !== false,
     'and an agent_name is set, which is what triggers that tag',
     "an empty agent_name reads as the AI's own previous turn");
 

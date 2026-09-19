@@ -14,7 +14,7 @@
 //   $portalSites, $portalActiveCount, $portalTotalUsageGb,
 //   $portalCustomerId, $portalClaims, $portalCustomerName, $portalFirstName,
 //   $portalServiceType, $portalLocation, $portalPrice, $portalCurrency,
-//   $portalNextBill, $portalDaysLeft
+//   $portalNextBill, $portalDaysLeft, $portalDpoEnabled
 //
 // Sets on failure:
 //   $portalAuthError (string)  — templates should check this first
@@ -119,6 +119,18 @@ $portalCustomer = null;
 $portalFullClient = null;
 $portalService = null;
 $portalPlanName = '';
+// ── DPO Pay availability ────────────────────────────────────────────
+// Display only. It decides whether a Pay Now button is drawn; it decides
+// nothing about money. The server re-checks the flag, the invoice, the
+// owner and the amount on every initiate call, so a button that should not
+// be there is a cosmetic bug, not a financial one.
+$portalDpoEnabled = false;
+try {
+    require_once dirname(__DIR__, 2) . '/lib/DpoBootstrap.php';
+    $_pdDpo = DpoBootstrap::readiness($config);
+    $portalDpoEnabled = $_pdDpo['enabled'] && $_pdDpo['ready'];
+} catch (\Throwable $_pdE) {}
+
 $portalInvoices = [];
 
 // ── v4.20.7 — UCRM Client Zone deep-link base URL ──────────────────
@@ -258,9 +270,22 @@ if (!$portalAuthError) {
     }
 
     // ── Usage data ──────────────────────────────────────────────────
-    // Primary: dishnet-data-report plugin (syncs hourly via Starlink API)
-    // Fallback: dishnet-starlink-finance plugin (synced less frequently)
-    // Chain: CRM client_id → sl_kits.json → kit_number → sl_usage.json
+    //
+    // The chain USED to be, and on the South Sudan box still is:
+    //     CRM client_id → sl_kits.json → kit_number → sl_usage.json
+    //
+    // Both of those files belong to sibling plugins. On the Uganda box neither
+    // holds anything: dishnet-starlink-finance is not installed at all, and
+    // dishnet-data-report has no sl_kits.json and an empty sl_usage.json,
+    // because it only collects for KITs typed into its own manual map. So a
+    // customer whose kit IS bound, and whose usage WE have collected, saw
+    // nothing — while the admin Fleet screen showed 52 GB for the same kit.
+    //
+    // The two screens disagreed because they read different things. The Fleet
+    // screen reads equipment_assignments, the authoritative binding, and
+    // KitUsage, which prefers our own collection. This now does the same, and
+    // falls back to the sibling chain unchanged — so an install where the
+    // sibling IS the collector behaves exactly as before.
     $portalUsage = null;
     try {
         // Through SiblingPlugin now. The path was built by hand here, and it
@@ -274,46 +299,69 @@ if (!$portalAuthError) {
         $kitsData = SiblingPlugin::readJsonFromAny(
             ['dishnet-starlink-finance', 'dishnet-data-report'], 'sl_kits.json') ?? [];
 
-        // Usage — Data Report first because it syncs hourly, Finance as fallback.
-        $allUsage = SiblingPlugin::readJsonFromAny(
-            ['dishnet-data-report', 'dishnet-starlink-finance'], 'sl_usage.json') ?? [];
+        // Usage — ours first, then the siblings. KitUsage already encodes that
+        // order and reads the same row shape either way, so the discovery
+        // below is unchanged by where the rows came from.
+        require_once dirname(__DIR__, 2) . '/lib/EquipmentAssignment.php';
+        require_once dirname(__DIR__, 2) . '/lib/KitUsage.php';
+        require_once dirname(__DIR__, 2) . '/lib/bootstrap_data.php';
+        $pdEa    = EquipmentAssignment::fromStore($store);
+        $pdKu    = new KitUsage($pdEa, getDataDir(dirname(__DIR__, 2)));
+        $allUsage = $pdKu->rows() ?? [];
+        $pdSource = $pdKu->source();
 
         // Service-line cache, for resolving a kit to the line it bills under.
         $slSvcCache = SiblingPlugin::readJsonOrEmpty('dishnet-data-report', 'sl_svc_cache.json');
 
-        if (!empty($kitsData) && !empty($allUsage)) {
-            // Find KIT(s) for this customer
-            $customerKits = [];
-            $customerSLs = [];
+        // The authoritative binding first. equipment_assignments is what an
+        // installer recorded and what every admin screen trusts; sl_kits.json
+        // is a file a sync happened to write, and on this box it does not
+        // exist. Seeding from the assignment means a bound customer is never
+        // invisible because a sibling plugin is quiet.
+        $customerKits = [];
+        $customerSLs  = [];
+        foreach ($pdEa->forClient($portalCustomerId) as $pdA) {
+            $pdK = strtoupper(trim((string)($pdA['kit_serial'] ?? '')));
+            if ($pdK !== '') $customerKits[] = $pdK;
+            $pdL = strtoupper(trim((string)($pdA['starlink_service_line'] ?? '')));
+            if ($pdL !== '') $customerSLs[] = $pdL;
+        }
+
+        if (!empty($allUsage) && (!empty($kitsData) || !empty($customerKits))) {
+            // Then anything the sibling kit file adds, exactly as before.
             foreach ($kitsData as $kit) {
                 $kitCrmId = (int)($kit['crm_client_id'] ?? $kit['assigned_client_id'] ?? 0);
                 if ($kitCrmId === $portalCustomerId) {
                     $kn = $kit['kit_number'] ?? '';
-                    if ($kn) $customerKits[] = $kn;
+                    if ($kn) $customerKits[] = strtoupper(trim((string)$kn));
                     // Also track service line if available
                     $sl = $kit['service_line'] ?? '';
-                    if ($sl) $customerSLs[] = $sl;
+                    if ($sl) $customerSLs[] = strtoupper(trim((string)$sl));
                 }
             }
 
             // Also check sl_svc_cache for additional SL→kit mappings
             foreach ($slSvcCache as $slEntry) {
-                $eKit = $slEntry['kit_number'] ?? '';
-                $eSl = $slEntry['service_line'] ?? '';
-                if ($eKit && in_array($eKit, $customerKits, true) && $eSl) {
+                $eKit = strtoupper(trim((string)($slEntry['kit_number'] ?? '')));
+                $eSl  = strtoupper(trim((string)($slEntry['service_line'] ?? '')));
+                if ($eKit !== '' && in_array($eKit, $customerKits, true) && $eSl !== '') {
                     $customerSLs[] = $eSl;
                 }
             }
 
-            $customerSLs = array_unique($customerSLs);
+            $customerKits = array_values(array_unique($customerKits));
+            $customerSLs  = array_values(array_unique($customerSLs));
 
             // Find most recent usage record matching any customer KIT or service line
             if (!empty($customerKits) || !empty($customerSLs)) {
                 $bestUsage = null;
                 $bestKey = '';
                 foreach ($allUsage as $u) {
-                    $uKit = $u['kit_number'] ?? '';
-                    $uSl = $u['service_line'] ?? '';
+                    // Upper-cased both sides: the assignment's serials are
+                    // normalised on the way in, the sibling kit file's are not,
+                    // and a case difference would silently drop a match.
+                    $uKit = strtoupper(trim((string)($u['kit_number'] ?? '')));
+                    $uSl  = strtoupper(trim((string)($u['service_line'] ?? '')));
                     $match = false;
                     // Match by kit_number
                     if ($uKit && in_array($uKit, $customerKits, true)) $match = true;
@@ -334,7 +382,15 @@ if (!$portalAuthError) {
                 }
                 if ($bestUsage) {
                     $totalGb = (float)($bestUsage['total_gb'] ?? 0);
-                    $allowance = $bestUsage['local_priority_allowance'] ?? $bestUsage['other_data_allowance'] ?? null;
+                    // The sibling plugin and our own collector name the same
+                    // facts differently. Reading both means one screen renders
+                    // fully whichever collected the figures — and until this,
+                    // a row of ours showed the headline with a blank cycle,
+                    // no allowance and no chart.
+                    $allowance = $bestUsage['local_priority_allowance']
+                              ?? $bestUsage['other_data_allowance']
+                              ?? $bestUsage['limit_gb']
+                              ?? null;
                     $isUnlimited = ($allowance === 'Unlimited' || $allowance === null || $allowance === '');
                     $limitGb = $isUnlimited ? null : (int)$allowance;
                     $pct = ($limitGb && $limitGb > 0) ? min(100, (int)round($totalGb / $limitGb * 100)) : null;
@@ -353,12 +409,15 @@ if (!$portalAuthError) {
                         'unlimited' => $isUnlimited,
                         'pct' => $pct,
                         'cycle_label' => $bestUsage['cycle_label'] ?? '',
-                        'cycle_start' => $bestUsage['axis_left'] ?? '',
-                        'cycle_end' => $bestUsage['axis_right'] ?? '',
-                        'updated' => $bestUsage['updated_at'] ?? '',
+                        'cycle_start' => $bestUsage['axis_left']  ?? $bestUsage['cycle_start'] ?? '',
+                        'cycle_end'   => $bestUsage['axis_right'] ?? $bestUsage['cycle_end']   ?? '',
+                        'updated'     => $bestUsage['updated_at'] ?? $bestUsage['collected_at'] ?? '',
                         'daily' => $dailyTotal,
-                        'plan_id' => $bestUsage['plan_id'] ?? '',
-                        'source' => basename(dirname($uf ?? '')),
+                        'plan_id' => $bestUsage['plan_id'] ?? $bestUsage['product_id'] ?? '',
+                        // Which collector this figure came from. It was
+                        // basename(dirname($uf)) against a variable that
+                        // never existed, so it was always an empty string.
+                        'source' => $pdSource,
                     ];
                 }
             }

@@ -130,7 +130,19 @@ if (!empty($r['ok'])) {
 }
 echo "  FAIL — {$r['error']}\n";
 foreach ((array)($r['tried'] ?? []) as $t) echo "         tried {$t}\n";
-if (!empty($r['tried'])) {
+if (!empty($r['tls_failed'])) {
+    // The port answered. This is the certificate, and the network advice
+    // below would send the operator to fix something that is not broken.
+    $h = (string)$r['tls_failed'][0];
+    echo "\n  The port answered on " . implode(', ', $r['tls_failed']) . " and the TLS handshake failed.\n";
+    echo "  That is the certificate, not the network — do not reattach docker networks.\n";
+    echo "  See what the server actually presents:\n";
+    echo "    docker exec ucrm php -r '\$c=stream_context_create([\"ssl\"=>[\"capture_peer_cert\"=>true,\n";
+    echo "      \"verify_peer\"=>false,\"verify_peer_name\"=>false]]);\n";
+    echo "      \$f=stream_socket_client(\"ssl://{$h}:{$port}\",\$e,\$s,8,STREAM_CLIENT_CONNECT,\$c);\n";
+    echo "      print_r(openssl_x509_parse(stream_context_get_params(\$f)[\"options\"][\"ssl\"][\"peer_certificate\"])[\"subject\"]);'\n";
+    echo "  A subject of \"rcgen self signed cert\" means the mail server has no real certificate.\n";
+} elseif (!empty($r['tried'])) {
     echo "\n  Every route failed. The container almost certainly cannot reach the\n";
     echo "  mail server by its public name — DNS returns this host's own public\n";
     echo "  address, and connecting back to it from inside a container needs NAT\n";

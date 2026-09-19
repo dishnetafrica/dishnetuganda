@@ -253,8 +253,11 @@ foreach ([
     is_(strpos($wh, "whCustomerEmail('{$key}'") !== false,
         "{$key} is wired ({$event})");
 }
-is_(substr_count($wh, 'whCustomerEmail(') === 8,
-    'seven call sites and one definition, no strays',
+// Eight: the seven events above, plus a second welcome on service.activate —
+// uCRM fires that for a first activation and for a resumption alike, and the
+// handler sends the welcome for the former and the resumption for the latter.
+is_(substr_count($wh, 'whCustomerEmail(') === 9,
+    'eight call sites and one definition, no strays',
     'found ' . substr_count($wh, 'whCustomerEmail('));
 
 @array_map('unlink', glob($tmp . '/*') ?: []); @rmdir($tmp);

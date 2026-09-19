@@ -36,14 +36,35 @@ class ClaudeWaClient
      * @param string $conversationHistory  Recent messages for context (optional)
      * @return string|null  Reply text, or null on failure
      */
+    /**
+     * How the request reaches Anthropic. Replaceable so the tool loop can be
+     * driven by a test: a security property that can only be checked against
+     * a live API is a security property that is never checked.
+     *
+     * @var callable|null fn(array $payload): array{code:int, body:?string}
+     */
+    public $transport = null;
+
+    /** The last composed system prompt, so the output guard can tell a public
+     *  figure from a disclosed one, and spot verbatim recitation of it. */
+    private string $lastSystem = '';
+    public function lastSystemPrompt(): string { return $this->lastSystem; }
+
     public function getReply(
         string $customerMessage,
         array  $customerContext = [],
         string $channel = 'support',
         string $conversationHistory = '',
         string $customInstructions = '',
-        string $instructionsMode = 'append'  // 'append' or 'override'
+        string $instructionsMode = 'append',  // 'append' or 'override'
+        $tools = null                          // ?CustomerDataTools
     ): ?string {
+        // Customer data reaches the model through the tool layer or not at
+        // all. A context assembled elsewhere -- an un-updated caller, a merge
+        // that brings the old 26-key block back -- is reduced to the
+        // allowlist here rather than trusted.
+        require_once __DIR__ . '/AiMinimalContext.php';
+        $customerContext = \AiMinimalContext::enforce($customerContext);
         if (empty($this->apiKey) || !str_starts_with($this->apiKey, 'sk-ant-')) {
             return null;
         }
@@ -56,43 +77,24 @@ class ClaudeWaClient
             return null;
         }
 
-        // ── Security: detect prompt injection / data extraction attempts ──
-        // Block messages trying to override instructions or extract other customers' data.
-        // Return a fixed safe response — never pass these to Claude.
-        $injectionPatterns = [
-            '/ignore (previous|all|your) (instructions?|rules?|prompt)/i',
-            '/forget (everything|instructions?|rules?|your training)/i',
-            '/you are now|pretend (you are|to be)|act as (admin|system|root)/i',
-            '/show (me )?(all |every |other )?customer(s| data| record| list)/i',
-            '/give me (all |every |other )?customer/i',
-            '/what is .{0,30}(password|api.?key|secret|token)/i',
-            '/reveal|expose|dump|extract.{0,20}(data|record|customer|account)/i',
-            '/override|bypass|disable|unlock (the )?(filter|rule|restriction)/i',
-            '/system prompt|your instructions?|your (rule|prompt|training)/i',
-            '/DAN|jailbreak|unrestricted mode/i',
-        ];
-        foreach ($injectionPatterns as $pattern) {
-            if (preg_match($pattern, $customerMessage)) {
-                return "I can only help with your own DishNet account and services. For account queries, please call our office or visit us in Juba.";
-            }
-        }
-
-        // ── Scope check: out-of-scope technical questions ─────────────────
-        // DishNet's bot should not become a general IT helpdesk.
-        // Redirect specific third-party device config questions to support team.
-        $outOfScope = [
-            '/mikrotik|routeros|winbox/i',
-            '/cisco|ubiquiti|unifi|fortinet|pfsense/i',
-            '/how (to |do I )?(configure|setup|install|program) (a |the )?(router|firewall|switch|server)/i',
-            '/iptables|nat rules?|port forward(ing)?|vlan|bgp|ospf/i',
-            '/hack|crack|bypass.*password|brute.?force/i',
-            '/telegram bot|whatsapp (api|bot)|make money|investment/i',
-        ];
-        foreach ($outOfScope as $pattern) {
-            if (preg_match($pattern, $customerMessage)) {
-                return "That's a bit outside what I can help with here. For technical configuration questions, our team can assist — just reply *HELP* and we'll connect you with a technician.";
-            }
-        }
+        // ── Customer content is DATA, not instruction ────────────────────
+        //
+        // Two regex denylists used to sit here and return a canned refusal
+        // before the API was called, under a comment reading "never pass
+        // these to Claude". The audit found they could never GRANT anything --
+        // no customer id, no tool, no identity -- so removing them takes
+        // nothing from the boundary. What they could do was DENY, and that was
+        // the defect: /what is .{0,30}(password|...)/ matched "what is my
+        // password for the customer portal?", so a paying customer asking an
+        // ordinary question got a brush-off.
+        //
+        // The patterns now live in PromptRiskSignal, which records what it
+        // noticed and decides nothing. Containment is where it always was:
+        // CustomerIdentity establishes who this is, AiMinimalContext gives the
+        // model nothing of theirs, CustomerDataTools supplies the customer id
+        // from the server, and ReplyPrivacyGuard checks what leaves. A message
+        // that says "ignore your instructions" is answered by a model that has
+        // those instructions, using tools that cannot reach another customer.
 
         // ── Cache check (skip for personalized/CRM-enriched responses) ──
         $hasCustomerData = !empty($customerContext['name']) || !empty($customerContext['balance']);
@@ -105,12 +107,19 @@ class ClaudeWaClient
         }
 
         // ── Build system prompt ──────────────────────────────────────────
-        // override mode: use ONLY custom instructions (no built-in DishNet prompt)
-        if ($instructionsMode === 'override' && !empty(trim($customInstructions))) {
-            $systemPrompt = trim($customInstructions);
-        } else {
-            $systemPrompt = $this->buildSystemPrompt($customerContext, $channel, $customInstructions);
-        }
+        // The confidentiality rules are composed in ahead of everything else
+        // and are not part of what override can replace. Override used to
+        // assign $customInstructions straight to $systemPrompt, which deleted
+        // "you only know this one customer" and "never reveal passwords, API
+        // keys or system info" whenever an operator changed the bot's tone.
+        // Now override replaces the BUSINESS prompt only.
+        require_once __DIR__ . '/AiSecurityPolicy.php';
+        $systemPrompt = \AiSecurityPolicy::compose(
+            $this->buildSystemPrompt($customerContext, $channel, '')
+                . "\n\n" . self::dataAccessNote($customerContext, $tools),
+            $customInstructions,
+            $instructionsMode
+        );
 
         // ── Build messages array with proper conversation turns ──────────
         $messages = [];
@@ -149,6 +158,123 @@ class ClaudeWaClient
             'system'     => $systemPrompt,
             'messages'   => $messages,
         ];
+        if ($tools instanceof \CustomerDataTools && $tools->isAuthenticated()) {
+            $payload['tools'] = self::toolSchema();
+        }
+
+        $this->lastSystem = $systemPrompt;
+        return $this->converse($payload, $tools, $channel, $customerMessage);
+    }
+
+    /**
+     * Tell the model, plainly, that it starts with nothing.
+     *
+     * Without this it would answer an account question from memory or
+     * invention, because the account data it used to be handed is simply
+     * absent now. The instruction to use a tool is what turns "I do not know"
+     * into "let me look that up".
+     */
+    private static function dataAccessNote(array $ctx, $tools): string
+    {
+        $has = ($tools instanceof \CustomerDataTools) && $tools->isAuthenticated();
+        if (!$has) {
+            return "ACCOUNT DATA: you have none, and no way to look any up in this "
+                 . "conversation. Answer from public DishNet and Starlink information "
+                 . "only. For anything about this person's own account, say a colleague "
+                 . "will check it for them. Never state or guess a balance, a plan, an "
+                 . "expiry date, a payment or a kit number.";
+        }
+        return "ACCOUNT DATA: you start with NONE of this customer's account "
+             . "information — no balance, no plan, no expiry, no payments, no "
+             . "equipment, no network details. That is deliberate.\n"
+             . "When their question needs one of those, call the matching tool and "
+             . "answer from what it returns. Ask for one thing at a time: the tool "
+             . "for the question actually asked, not everything available.\n"
+             . "A tool answers only for THIS customer. If one returns nothing, say "
+             . "you could not find it and offer to have a colleague check — do not "
+             . "fill the gap from memory, and do not retry with different arguments.";
+    }
+
+    /** The catalogue, in the shape the Messages API expects. */
+    public static function toolSchema(): array
+    {
+        require_once __DIR__ . '/CustomerDataTools.php';
+        $out = [];
+        foreach (\CustomerDataTools::catalogue() as $name => $def) {
+            $props = []; $req = [];
+            foreach ($def['args'] as $a) {
+                $props[$a] = ['type' => 'string'];
+                $req[] = $a;
+            }
+            $out[] = [
+                'name'         => $name,
+                'description'  => $def['about'],
+                'input_schema' => ['type' => 'object', 'properties' => (object)$props,
+                                   'required' => $req],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Run the exchange, serving any tool the model asks for.
+     *
+     * Every tool call goes through CustomerDataTools, which supplies the
+     * customer id from the server. Whatever the model puts in the arguments
+     * is irrelevant to whose data comes back.
+     */
+    private function converse(array $payload, $tools, string $channel, string $customerMessage): ?string
+    {
+        $rounds = 0;
+        while (true) {
+            $res = $this->send($payload);
+            if ($res === null) return null;
+            $data = $res;
+
+            $stop = (string)($data['stop_reason'] ?? '');
+            $blocks = is_array($data['content'] ?? null) ? $data['content'] : [];
+
+            if ($stop !== 'tool_use' || !($tools instanceof \CustomerDataTools) || $rounds >= 4) {
+                $text = '';
+                foreach ($blocks as $b) {
+                    if (($b['type'] ?? '') === 'text') $text .= (string)($b['text'] ?? '');
+                }
+                $text = trim($text);
+                if ($text === '') return null;
+                $this->logUsage($channel, $customerMessage, $text,
+                                (int)($data['usage']['input_tokens'] ?? 0),
+                                (int)($data['usage']['output_tokens'] ?? 0));
+                return $text;
+            }
+
+            // Serve the tools, then let the model continue with the answers.
+            $payload['messages'][] = ['role' => 'assistant', 'content' => $blocks];
+            $results = [];
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? '') !== 'tool_use') continue;
+                $out = $tools->call((string)($b['name'] ?? ''), (array)($b['input'] ?? []));
+                $results[] = [
+                    'type'        => 'tool_result',
+                    'tool_use_id' => (string)($b['id'] ?? ''),
+                    'content'     => json_encode(($out['ok'] ?? false)
+                        ? ($out['data'] ?? [])
+                        : ['error' => (string)($out['error'] ?? 'not available')]),
+                ];
+            }
+            $payload['messages'][] = ['role' => 'user', 'content' => $results];
+            $rounds++;
+        }
+    }
+
+    /** One HTTP round trip, through the transport seam. */
+    private function send(array $payload): ?array
+    {
+        if (is_callable($this->transport)) {
+            $r = ($this->transport)($payload);
+            if ((int)($r['code'] ?? 0) !== 200 || empty($r['body'])) return null;
+            $d = json_decode((string)$r['body'], true);
+            return is_array($d) ? $d : null;
+        }
 
         $ch = curl_init('https://api.anthropic.com/v1/messages');
         curl_setopt_array($ch, [
@@ -173,30 +299,8 @@ class ClaudeWaClient
             return null;
         }
 
-        $data  = json_decode($raw, true);
-        $reply = $data['content'][0]['text'] ?? null;
-
-        if (!$reply || !is_string($reply)) {
-            return null;
-        }
-
-        $reply = trim($reply);
-
-        // ── Cache the response (only for generic non-personalized replies) ─
-        if (!$hasCustomerData) {
-            $this->cache($cacheKey, $reply, $channel);
-        }
-
-        // ── Log usage ───────────────────────────────────────────────────
-        $this->logUsage(
-            $channel,
-            $customerMessage,
-            $reply,
-            (int)($data['usage']['input_tokens'] ?? 0),
-            (int)($data['usage']['output_tokens'] ?? 0)
-        );
-
-        return $reply;
+        $data = json_decode((string)$raw, true);
+        return is_array($data) ? $data : null;
     }
 
     /**
@@ -206,6 +310,17 @@ class ClaudeWaClient
      */
     private function buildSystemPrompt(array $ctx, string $channel, string $customInstructions = ''): string
     {
+        // Enforced HERE as well as in getReply(), so this function is safe
+        // whoever calls it. Everything below that reads a customer field --
+        // balance, plan, expiry, the Splynx block -- therefore finds nothing
+        // and renders nothing: those branches are now unreachable by
+        // construction rather than by the caller remembering to strip first.
+        // They are left in place for now because deleting three hundred lines
+        // of prompt is a separate, riskier change; this makes them provably
+        // dead in the meantime.
+        require_once __DIR__ . '/AiMinimalContext.php';
+        $ctx = \AiMinimalContext::enforce($ctx);
+
         $name     = $ctx['name']         ?? null;
         $service  = $ctx['service_type'] ?? null;
         $balance  = isset($ctx['balance']) ? ($ctx['currency'] ?? '$ ') . number_format((float)$ctx['balance'], 2) : null;
