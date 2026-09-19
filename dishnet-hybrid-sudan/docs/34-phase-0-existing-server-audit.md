@@ -285,3 +285,95 @@ file belonging to any running service is involved at any point.
 4. The pre-existing exposure of SSH and the mail/admin ports with no host
    firewall. **Out of Phase 0 scope, recorded because it was observed**, and
    worth its own conversation.
+
+---
+
+## 7. Execution record — 19 September 2026
+
+The plan in §5 was executed on the live host. **It ran exactly as documented;
+nothing differed from the procedure.** Recorded here because a plan that was
+followed is worth less than a plan that was followed *and measured*.
+
+### 7.1 What was installed
+
+```
+wireguard-tools 1.0.20210914-1ubuntu4   (Ubuntu 24.04 noble, amd64)
+0 upgraded, 1 newly installed, 0 to remove, 41 not upgraded
+89.1 kB fetched · 330 kB on disk
+```
+
+The simulation and the install agreed exactly: **one package, nothing
+upgraded, nothing removed.** The 41 held-back upgrades were left untouched —
+`--no-install-recommends` and a named package meant apt had no reason to
+touch them, which is the point of simulating first on a production host.
+
+apt's own post-install check confirmed the blast radius:
+
+```
+Running kernel seems to be up-to-date.
+No services need to be restarted.
+No containers need to be restarted.
+No user sessions are running outdated binaries.
+```
+
+### 7.2 Before/after diff — the evidence that matters
+
+| | before | after | verdict |
+|---|---|---|---|
+| containers | 18 | 18 | **IDENTICAL** — no name or status changed |
+| iptables rules | 54 | 54 | **IDENTICAL** — Docker's chains untouched |
+| addresses | 33 | 34 | one new: `wg0 10.66.0.1/24` |
+| listeners | 38 | 40 | two new: `udp 0.0.0.0:51820`, `udp [::]:51820` |
+
+Every published production port still answered: 80, 443, 3000, 81, 8080,
+8443, 25, 587, 993.
+
+**The iptables line is the one that mattered.** §3.1 predicted that leaving
+the firewall alone would keep Docker's 38 rule references intact, and a
+byte-identical `iptables -S` before and after is that prediction confirmed
+rather than assumed. Had `ufw enable` been run per docs/33 §6.2, this row
+would not have read IDENTICAL.
+
+### 7.3 Two things the output revealed that the plan did not state
+
+**WireGuard also listens on IPv6** (`udp [::]:51820`). Default behaviour, not
+a fault. The droplet has IPv6 on eth0, so the gateway is reachable over both
+families. Harmless, and worth knowing before someone reads it as an
+unexpected listener during a later audit.
+
+**`wg-quick.target` is static and was not started by the package.** The
+`systemctl enable --now wg-quick@wg0` in §5 is what makes the interface
+survive a reboot — the package alone would not have. Confirmed by the
+symlink it created.
+
+### 7.4 Gateway identity
+
+```
+Gateway public key: ftGs/7LjO/aVmKJ9xS/fz+QDt73JcGI+X3vgSCZpJT4=
+Endpoint:           209.97.137.203:51820
+Tunnel:             10.66.0.1/24
+```
+
+The public key is not a secret — every router needs it. The private key is in
+`/etc/wireguard/gw.key`, mode 600, and appears nowhere else.
+
+### 7.5 Not yet done — the external handshake
+
+**The category-A install is complete. The gate in §5 Step 3 is not passed.**
+
+A test peer was added, but its keypair was generated **on the gateway
+itself**, so no traffic has crossed the public Internet and the two things
+that test exists to prove remain unproven:
+
+1. whether a DigitalOcean cloud firewall permits UDP 51820 inbound
+2. whether the endpoint is reachable from outside the droplet
+
+Until a handshake arrives from a machine that is not this server, the
+gateway is only known to work with itself. See §5 Step 3 for the correct
+procedure: **the private key is generated where it will live, and never
+travels.** That is the same rule docs/30 §6.2 sets for routers, and it is
+worth keeping even for a throwaway test peer, because the habit is what
+carries into the fleet.
+
+Cleanup owed once the test passes: remove the laptop `[Peer]` block from
+`wg0.conf`, and delete `/etc/wireguard/lap.key` and `lap.pub`.
