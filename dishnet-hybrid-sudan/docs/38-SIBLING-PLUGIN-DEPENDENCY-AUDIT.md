@@ -4,6 +4,13 @@
 existing hotspot authorization depends on.
 **Type:** Read-only audit. No code changed, no migration, no deployment, no
 configuration or database change.
+
+> **INSTALLATION SCOPE (added 2026-09-19).** Every finding here was measured on
+> **installation B — Uganda, `crm.dishnetuganda.com:8443` / `209.97.137.203`**, plugin
+> `dishnet-hybrid-sudan`. DishNet also runs **installation A — South Sudan,
+> `crm.dishnetafrica.com` / `46.101.93.167`**, plugin `dishnet-hybrid-telecom`, which is
+> where the customer Android application operates. **Installation A has never been
+> audited**; nothing in this document describes it. See docs/00 §2.1.
 **Question behind it:** can the MikroTik project be built without touching the
 working Starlink HotSpot system?
 

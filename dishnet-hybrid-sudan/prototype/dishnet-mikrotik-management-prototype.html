@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DishNet MikroTik Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#D41C1C; --red-dark:#A81515; --red-lt:#fef2f2;
+  --blue:#1A4DB5; --blue-light:#E6F1FB;
+  --dark:#141414; --hdr:#1a1a2e;
+  --gray:#6B6B6B; --gray-light:#EBEBEB; --off-white:#F5F5F5;
+  --green:#22C55E; --green-light:#E7F8EF; --green-mid:#0F7A3D;
+  --amber:#EF9F27; --amber-light:#FEF6E6; --amber-dark:#854F0B;
+  --danger-light:#FCEBEB; --danger-text:#A32D2D;
+  --line:#E4E4E7; --line2:#F1F1F3;
+  --sans:'Barlow',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --display:'Barlow Condensed','Barlow',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sidebar:248px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:14px;color:var(--dark);background:var(--off-white);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+.mono{font-family:var(--mono);font-size:.92em;letter-spacing:-.02em}
+
+/* ---------- shell ---------- */
+.app{display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar);background:var(--hdr);color:#fff;position:fixed;inset:0 auto 0 0;display:flex;flex-direction:column;z-index:60;transition:transform .2s}
+.brand{padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px}
+.brand-mark{width:30px;height:30px;border-radius:7px;background:var(--red);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:17px;color:#fff;flex:none}
+.brand-txt{line-height:1.15}
+.brand-txt b{font-family:var(--display);font-size:17px;letter-spacing:.3px;display:block}
+.brand-txt span{font-size:10.5px;color:rgba(255,255,255,.55);letter-spacing:.06em;text-transform:uppercase}
+.nav{flex:1;overflow-y:auto;padding:12px 10px 20px}
+.nav-sec{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);padding:14px 10px 6px;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;color:rgba(255,255,255,.72);font-weight:500;font-size:13.5px;margin-bottom:1px}
+.nav-item:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav-item.on{background:var(--red);color:#fff}
+.nav-item .ic{width:17px;text-align:center;font-size:14px;opacity:.9;flex:none}
+.nav-item .badge{margin-left:auto;background:rgba(255,255,255,.15);font-size:11px;padding:1px 6px;border-radius:9px;font-weight:600}
+.nav-item.on .badge{background:rgba(0,0,0,.22)}
+.nav-item .badge.alert{background:var(--amber);color:#3d2400}
+.sidebar-foot{padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;color:rgba(255,255,255,.45)}
+
+.main{flex:1;margin-left:var(--sidebar);min-width:0;max-width:100%;overflow-x:hidden;display:flex;flex-direction:column}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 20px;position:sticky;top:0;z-index:40;min-width:0;overflow:hidden}
+.hamb{display:none;font-size:20px;padding:4px 8px;border-radius:6px}
+.crumb{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.2px}
+.topsearch{margin-left:auto;position:relative}
+.topsearch input{width:230px;padding:7px 11px 7px 30px;border:1px solid var(--line);border-radius:7px;background:var(--off-white);font-size:13px}
+.topsearch input:focus{outline:none;border-color:var(--blue);background:#fff}
+.topsearch .mag{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:12px}
+.whoami{display:flex;align-items:center;gap:8px;padding-left:14px;border-left:1px solid var(--line);flex:none}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:11.5px;font-weight:700}
+.whoami small{display:block;color:var(--gray);font-size:11px;line-height:1.2}
+.content{padding:20px;flex:1;min-width:0}
+
+/* ---------- primitives ---------- */
+.card{background:#fff;border:1px solid var(--line);border-radius:10px}
+.card-h{padding:13px 16px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:10px}
+.card-h h3{font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:.2px}
+.card-h .sub{font-size:12px;color:var(--gray)}
+.card-b{padding:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:7px;font-weight:600;font-size:13px;border:1px solid var(--line);background:#fff;white-space:nowrap}
+.btn:hover{background:var(--off-white)}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn-primary:hover{background:var(--red-dark);border-color:var(--red-dark)}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--gray)}
+.btn-ghost:hover{background:var(--gray-light);color:var(--dark)}
+.btn-sm{padding:4px 9px;font-size:12px;border-radius:6px}
+.btn-danger{color:var(--danger-text);border-color:#f0c9c9}
+.btn-danger:hover{background:var(--danger-light)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;align-items:center;gap:10px}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.grow{flex:1;min-width:0}
+.muted{color:var(--gray)}
+.tiny{font-size:11.5px}
+.right{text-align:right}
+.mt10{margin-top:10px}.mt16{margin-top:16px}.mt20{margin-top:20px}
+
+/* status */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.p-ok{background:var(--green-light);color:var(--green-mid);border-color:#bfe9d0}
+.p-ok .dot{background:var(--green)}
+.p-warn{background:var(--amber-light);color:var(--amber-dark);border-color:#f4dbb0}
+.p-warn .dot{background:var(--amber)}
+.p-bad{background:var(--danger-light);color:var(--danger-text);border-color:#f0c9c9}
+.p-bad .dot{background:var(--red)}
+.p-info{background:var(--blue-light);color:var(--blue);border-color:#c5dcf5}
+.p-info .dot{background:var(--blue)}
+.p-mute{background:var(--gray-light);color:var(--gray);border-color:#dcdce0}
+.p-mute .dot{background:var(--gray)}
+
+/* tables */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--gray);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);background:#fcfcfd;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line2);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.clickable:hover{background:#fafbfc;cursor:pointer}
+.t-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.t-name{font-weight:600}
+.t-sub{font-size:11.5px;color:var(--gray)}
+
+/* filter bar */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line2);background:#fcfcfd}
+.filters input[type=text],.filters input[type=date],.filters select{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:12.5px}
+.filters input:focus,.filters select:focus{outline:none;border-color:var(--blue)}
+.fcount{font-size:12px;color:var(--gray);margin-left:auto;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:14px;background:var(--blue-light);color:var(--blue);font-size:11.5px;font-weight:600}
+.chip button{font-size:13px;line-height:1;opacity:.7}
+.chip button:hover{opacity:1}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+.stat .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--gray);font-weight:600}
+.stat .val{font-family:var(--display);font-size:27px;font-weight:600;line-height:1.15;margin-top:3px;letter-spacing:.3px}
+.stat .delta{font-size:11.5px;margin-top:2px}
+.up{color:var(--green-mid)}.down{color:var(--danger-text)}
+.stat.link{cursor:pointer}
+.stat.link:hover{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+
+/* attention */
+.attn .card-h{background:var(--red-lt);border-bottom-color:#f5d5d5}
+.attn-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line2)}
+.attn-row:last-child{border-bottom:none}
+.attn-row .sev{width:8px;height:8px;border-radius:50%;flex:none}
+.attn-row .why{font-size:12px;color:var(--gray)}
+.allgood{padding:22px 16px;text-align:center;color:var(--green-mid);background:var(--green-light)}
+
+/* detail */
+.dl{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:9px 18px;font-size:13px}
+.dl dt{color:var(--gray);font-size:12px}
+.dl dd{font-weight:500}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:0 16px;overflow-x:auto}
+.tab{padding:10px 13px;font-weight:600;font-size:13px;color:var(--gray);border-bottom:2px solid transparent;white-space:nowrap}
+.tab:hover{color:var(--dark)}
+.tab.on{color:var(--red);border-bottom-color:var(--red)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}
+
+/* stepper */
+.stepper{display:flex;align-items:flex-start;gap:0;padding:6px 0;overflow-x:auto}
+.step{flex:1;min-width:104px;text-align:center;position:relative}
+.step:not(:last-child):after{content:'';position:absolute;top:13px;left:calc(50% + 15px);right:calc(-50% + 15px);height:2px;background:var(--line)}
+.step.done:not(:last-child):after{background:var(--green)}
+.step .bub{width:28px;height:28px;border-radius:50%;margin:0 auto 6px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--gray-light);color:var(--gray);border:2px solid #fff;box-shadow:0 0 0 1px var(--line);position:relative;z-index:1}
+.step.done .bub{background:var(--green);color:#fff;box-shadow:0 0 0 1px var(--green)}
+.step.now .bub{background:var(--blue);color:#fff;box-shadow:0 0 0 3px var(--blue-light)}
+.step.fail .bub{background:var(--red);color:#fff;box-shadow:0 0 0 3px var(--red-lt)}
+.step .nm{font-size:10.5px;font-weight:600;line-height:1.25;padding:0 2px}
+.step.done .nm,.step.now .nm{color:var(--dark)}
+.step:not(.done):not(.now):not(.fail) .nm{color:var(--gray)}
+.step.fail .nm{color:var(--danger-text)}
+
+/* desired vs actual */
+.dva{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:stretch}
+.dva-col{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.dva-col h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;padding:8px 12px;background:#fcfcfd;border-bottom:1px solid var(--line2);color:var(--gray);font-weight:600}
+.dva-col .body{padding:11px 12px;font-size:12.5px}
+.dva-col.desired h4{background:var(--blue-light);color:var(--blue)}
+.dva-col.actual h4{background:var(--green-light);color:var(--green-mid)}
+.dva-col.actual.drift h4{background:var(--amber-light);color:var(--amber-dark)}
+.dva-mid{display:grid;place-items:center;color:var(--gray);font-size:19px;padding-top:26px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.kv b{font-weight:600}
+.kv.diff b{color:var(--amber-dark);background:var(--amber-light);padding:0 5px;border-radius:4px}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(15,15,20,.5);display:none;place-items:center;z-index:90;padding:18px}
+.scrim.on{display:grid}
+.modal{background:#fff;border-radius:12px;width:min(560px,100%);max-height:88vh;overflow:auto;box-shadow:0 20px 50px rgba(0,0,0,.28)}
+.modal.wide{width:min(840px,100%)}
+.modal-h{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;position:sticky;top:0;background:#fff;z-index:2}
+.modal-h h3{font-family:var(--display);font-size:18px;font-weight:600;flex:1}
+.modal-b{padding:18px}
+.modal-f{padding:13px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:#fff}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:11.5px;font-weight:600;color:var(--gray);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+.field .hint{font-size:11.5px;color:var(--gray);margin-top:3px}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* toast */
+.toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:9px;z-index:120}
+.toast{background:var(--hdr);color:#fff;padding:11px 15px;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:13px;display:flex;align-items:center;gap:9px;animation:tin .22s ease-out;max-width:330px}
+.toast.ok{background:var(--green-mid)}
+.toast.err{background:var(--danger-text)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}}
+
+/* empty / loading */
+.empty{padding:44px 20px;text-align:center}
+.empty .ico{font-size:30px;opacity:.28}
+.empty h4{font-family:var(--display);font-size:17px;margin:9px 0 4px;font-weight:600}
+.empty p{color:var(--gray);font-size:13px;max-width:330px;margin:0 auto 14px}
+.skel{background:linear-gradient(90deg,#eee 25%,#f6f6f6 50%,#eee 75%);background-size:200% 100%;animation:sk 1.3s infinite;border-radius:5px;height:13px}
+@keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* voucher print */
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:10px}
+.vch{border:1.5px dashed #bbb;border-radius:8px;padding:11px;text-align:center;background:#fff}
+.vch .top{font-family:var(--display);font-weight:700;font-size:12.5px;color:var(--red);letter-spacing:.4px}
+.vch .code{font-family:var(--mono);font-size:17px;font-weight:500;letter-spacing:1.5px;margin:7px 0;padding:5px;background:var(--off-white);border-radius:5px}
+.vch .meta{font-size:10.5px;color:var(--gray);line-height:1.45}
+.vch .qr{width:52px;height:52px;margin:7px auto;background-image:repeating-linear-gradient(0deg,#141414 0 4px,transparent 4px 8px),repeating-linear-gradient(90deg,#141414 0 4px,transparent 4px 8px);background-size:8px 8px;opacity:.85}
+.thermal{width:224px;margin:0 auto;border:1px solid var(--line);padding:13px;font-family:var(--mono);font-size:11.5px;text-align:center;background:#fff}
+.thermal hr{border:none;border-top:1px dashed #999;margin:7px 0}
+
+/* portal preview */
+.pp-frame{border:9px solid #23232b;border-radius:22px;width:280px;margin:0 auto;overflow:hidden;background:#fff;box-shadow:0 8px 26px rgba(0,0,0,.16)}
+.pp-body{padding:22px 18px;text-align:center;min-height:396px;display:flex;flex-direction:column}
+.pp-logo{width:52px;height:52px;border-radius:12px;margin:0 auto 13px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:23px;color:#fff}
+.pp-in{width:100%;padding:9px;border:1px solid #ddd;border-radius:7px;margin-bottom:9px;font-size:13px;text-align:center}
+.pp-btn{width:100%;padding:10px;border-radius:7px;color:#fff;font-weight:600;font-size:13.5px}
+
+/* funnel */
+.funnel-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line2)}
+.funnel-row:last-child{border-bottom:none}
+.funnel-bar{height:7px;border-radius:4px;background:var(--blue);min-width:3px}
+.funnel-row.total{background:#fcfcfd;font-weight:700}
+
+.gatebar{display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--amber-light);border:1px solid #f4dbb0;border-radius:8px;font-size:12.5px;color:var(--amber-dark)}
+.gatebar b{font-weight:700}
+
+@media(max-width:900px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:none}
+  .main{margin-left:0}
+  .hamb{display:block}
+  .topsearch input{width:150px}
+  .dva{grid-template-columns:1fr}
+  .dva-mid{padding:0;transform:rotate(90deg)}
+  .f2,.f3{grid-template-columns:1fr}
+  .content{padding:14px}
+  .whoami small{display:none}
+  .card-h{flex-wrap:wrap}
+  .stepper{gap:4px}
+}
+@media(max-width:620px){
+  .topsearch{display:none}
+  .crumb{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar{padding:0 12px;gap:10px}
+  .whoami{padding-left:10px}
+  .whoami b{display:none}
+  .toasts{left:12px;right:12px}
+  .toast{max-width:none}
+  .modal-h{flex-wrap:wrap}
+}
+@media print{
+  .sidebar,.topbar,.no-print{display:none!important}
+  .main{margin-left:0}
+  .content{padding:0}
+  .card{border:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">D</div>
+      <div class="brand-txt"><b>DishNet</b><span>MikroTik Estate</span></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidebar-foot">
+      Prototype &middot; mock data<br>
+      <span style="opacity:.7">No router is contacted</span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <button class="hamb" onclick="document.getElementById('sidebar').classList.toggle('open')">&#9776;</button>
+      <div class="crumb" id="crumb">Dashboard</div>
+      <div class="topsearch">
+        <span class="mag">&#9906;</span>
+        <input type="text" id="globalSearch" placeholder="Search routers, vouchers..." oninput="globalSearch(this.value)">
+      </div>
+      <div class="whoami">
+        <div class="avatar">BM</div>
+        <div><b style="font-size:12.5px">B. Mehta</b><small>Super Admin</small></div>
+      </div>
+    </header>
+    <main class="content" id="view"></main>
+  </div>
+</div>
+<div class="scrim" id="scrim" onclick="if(event.target===this)closeModal()"><div id="modalHost"></div></div>
+<div class="toasts" id="toasts"></div>
+<script>
+/* =====================================================================
+   DishNet MikroTik Management — prototype
+   Domain B only. No Starlink concept appears here.
+   All data is mock. No router, RADIUS or WireGuard endpoint is contacted.
+   ===================================================================== */
+
+const UGX = n => 'UGX ' + n.toLocaleString('en-UG');
+const nowISO = new Date('2026-09-19T14:20:00');
+const ago = mins => { const d=new Date(nowISO-mins*60000); return d.toTimeString().slice(0,5); };
+const agoTxt = mins => mins<1?'just now':mins<60?mins+' min ago':mins<1440?Math.floor(mins/60)+' h ago':Math.floor(mins/1440)+' d ago';
+
+/* ---------------- mock data ---------------- */
+const TENANTS = [
+  {id:'T-01', name:'Riverside Hotel',      town:'Kampala'},
+  {id:'T-02', name:'Nile Breeze Lodge',    town:'Jinja'},
+  {id:'T-03', name:'Kabale Student Hostel',town:'Kabale'},
+  {id:'T-04', name:'Equator Cafe',         town:'Masaka'},
+  {id:'T-05', name:'Gulu Transit Inn',     town:'Gulu'},
+];
+
+const PLANS = [
+  {id:'P-1',name:'1 Hour',   price:1000, validity:'1 hour',  down:5,  up:2, data:null, status:'active', users:41, revenue:  412000},
+  {id:'P-2',name:'6 Hours',  price:2500, validity:'6 hours', down:5,  up:2, data:null, status:'active', users:23, revenue:  287500},
+  {id:'P-3',name:'1 Day',    price:5000, validity:'24 hours',down:10, up:3, data:null, status:'active', users:68, revenue: 1145000},
+  {id:'P-4',name:'1 Week',   price:20000,validity:'7 days',  down:10, up:3, data:'10 GB',status:'active',users:14, revenue:  560000},
+  {id:'P-5',name:'1 Month',  price:60000,validity:'30 days', down:15, up:5, data:'40 GB',status:'active',users: 6, revenue:  420000},
+  {id:'P-6',name:'Night Owl',price:1500, validity:'10 h (22:00-08:00)',down:8,up:3,data:null,status:'retired',users:0,revenue:88500},
+];
+
+const ROUTERS = [
+  {id:'MT-0001',name:'KLA-Riverside-01',tenant:'T-01',site:'Riverside Hotel — Lobby',model:'hAP ax²',serial:'HDX8821K0QN',ros:'7.16.2',
+   status:'online', wg:'up', wgIp:'10.66.0.11', endpoint:'41.210.147.22:51820', handshake:42, latency:38, uptime:'18d 4h', seen:1,
+   prov:'active', hotspot:'running', sessions:23, profile:'dn-standard', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,6H,1D,1W',portal:'v4',bw:'10/3'}, actual:{ros:'7.16.2',profile:'dn-standard',plans:'1H,6H,1D,1W',portal:'v4',bw:'10/3'}},
+  {id:'MT-0002',name:'KLA-Riverside-02',tenant:'T-01',site:'Riverside Hotel — Pool',model:'cAP ac',serial:'HDX8821K0RT',ros:'7.15.3',
+   status:'online', wg:'up', wgIp:'10.66.0.12', endpoint:'41.210.147.22:51820', handshake:28, latency:41, uptime:'18d 4h', seen:2,
+   prov:'drift',  hotspot:'running', sessions:11, profile:'dn-standard', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,6H,1D,1W',portal:'v4',bw:'10/3'}, actual:{ros:'7.15.3',profile:'dn-standard',plans:'1H,6H,1D',portal:'v3',bw:'10/3'}},
+  {id:'MT-0003',name:'JIN-NileBreeze-01',tenant:'T-02',site:'Nile Breeze — Reception',model:'hAP ac²',serial:'HDX7740J1WP',ros:'7.16.2',
+   status:'offline',wg:'down',wgIp:'10.66.0.13', endpoint:'—', handshake:1080, latency:null, uptime:'—', seen:1080,
+   prov:'active', hotspot:'unknown', sessions:0, profile:'dn-standard', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,1D,1W',portal:'v4',bw:'10/3'}, actual:{ros:'7.16.2',profile:'dn-standard',plans:'1H,1D,1W',portal:'v4',bw:'10/3'}},
+  {id:'MT-0004',name:'JIN-NileBreeze-02',tenant:'T-02',site:'Nile Breeze — Garden',model:'hAP ax²',serial:'HDX7740J1XQ',ros:'7.16.2',
+   status:'online', wg:'up', wgIp:'10.66.0.14', endpoint:'102.89.33.7:51820', handshake:15, latency:52, uptime:'6d 11h', seen:1,
+   prov:'configuring',hotspot:'pending',sessions:0, profile:'dn-standard', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,1D',portal:'v4',bw:'10/3'}, actual:{ros:'7.16.2',profile:'—',plans:'—',portal:'—',bw:'—'}},
+  {id:'MT-0005',name:'KBL-Hostel-01',tenant:'T-03',site:'Kabale Hostel — Block A',model:'hEX S',serial:'HDX9901L2MN',ros:'7.14.1',
+   status:'online', wg:'up', wgIp:'10.66.0.15', endpoint:'197.239.4.91:51820',handshake:9, latency:71, uptime:'41d 2h', seen:1,
+   prov:'failed', hotspot:'stopped', sessions:0, profile:'dn-hostel', desired:{ros:'7.16.2',profile:'dn-hostel',plans:'1D,1W,1M',portal:'v4',bw:'15/5'}, actual:{ros:'7.14.1',profile:'dn-hostel',plans:'1D,1W',portal:'v3',bw:'10/3'}},
+  {id:'MT-0006',name:'KBL-Hostel-02',tenant:'T-03',site:'Kabale Hostel — Block B',model:'hEX S',serial:'HDX9901L2PQ',ros:'7.16.2',
+   status:'online', wg:'up', wgIp:'10.66.0.16', endpoint:'197.239.4.91:51820',handshake:33, latency:69, uptime:'41d 2h', seen:1,
+   prov:'active', hotspot:'running', sessions:47, profile:'dn-hostel', desired:{ros:'7.16.2',profile:'dn-hostel',plans:'1D,1W,1M',portal:'v4',bw:'15/5'}, actual:{ros:'7.16.2',profile:'dn-hostel',plans:'1D,1W,1M',portal:'v4',bw:'15/5'}},
+  {id:'MT-0007',name:'MSK-Equator-01',tenant:'T-04',site:'Equator Cafe — Main',model:'hAP ac²',serial:'HDX6612M3RS',ros:'7.16.2',
+   status:'online', wg:'up', wgIp:'10.66.0.17', endpoint:'41.202.240.15:51820',handshake:51, latency:44, uptime:'9d 7h', seen:1,
+   prov:'active', hotspot:'running', sessions:8, profile:'dn-standard', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,6H,1D',portal:'v4',bw:'10/3'}, actual:{ros:'7.16.2',profile:'dn-standard',plans:'1H,6H,1D',portal:'v4',bw:'10/3'}},
+  {id:'MT-0008',name:'GLU-Transit-01',tenant:'T-05',site:'Gulu Transit Inn',model:'hAP ax²',serial:'HDX5503N4TU',ros:'7.16.2',
+   status:'provisioning',wg:'up',wgIp:'10.66.0.18',endpoint:'154.72.198.3:51820',handshake:3,latency:88,uptime:'0d 1h',seen:1,
+   prov:'discovered',hotspot:'none',sessions:0,profile:'—', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,1D',portal:'v4',bw:'10/3'}, actual:{ros:'7.16.2',profile:'—',plans:'—',portal:'—',bw:'—'}},
+  {id:'MT-0009',name:'GLU-Transit-02',tenant:'T-05',site:'Gulu Transit Inn — Annex',model:'hAP ac lite',serial:'HDX5503N4VW',ros:'—',
+   status:'registered',wg:'never',wgIp:'10.66.0.19',endpoint:'—',handshake:null,latency:null,uptime:'—',seen:null,
+   prov:'registered',hotspot:'none',sessions:0,profile:'—', desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,1D',portal:'v4',bw:'10/3'}, actual:{ros:'—',profile:'—',plans:'—',portal:'—',bw:'—'}},
+];
+
+const PROV_STEPS = ['registered','wireguard','discovered','configuring','hotspot','active'];
+const PROV_LABEL = {registered:'Registered',wireguard:'WireGuard Online',discovered:'Discovered',configuring:'Configuring',hotspot:'HotSpot Ready',active:'Active',failed:'Failed',drift:'Config Drift'};
+
+const INTENTS = [
+  {id:'IN-4821',router:'MT-0005',action:'Apply configuration',state:'failed',   created:96, priority:'high',  retries:3, err:'HotSpot profile rejected: pool dn-hostel-pool not found', exec:'2.4s'},
+  {id:'IN-4822',router:'MT-0004',action:'Create HotSpot profile',state:'running',created:12, priority:'normal',retries:0, err:null, exec:'—'},
+  {id:'IN-4823',router:'MT-0002',action:'Update captive portal',state:'queued',  created:8,  priority:'normal',retries:0, err:null, exec:'—'},
+  {id:'IN-4824',router:'MT-0003',action:'Configure RADIUS',    state:'waiting',  created:1080,priority:'normal',retries:1, err:'Router offline since 08:20 — will deliver on next handshake', exec:'—'},
+  {id:'IN-4825',router:'MT-0008',action:'Provision WireGuard', state:'succeeded',created:62, priority:'high',  retries:0, err:null, exec:'1.1s'},
+  {id:'IN-4826',router:'MT-0008',action:'Change router identity',state:'succeeded',created:58,priority:'low',  retries:0, err:null, exec:'0.7s'},
+  {id:'IN-4827',router:'MT-0002',action:'Update bandwidth profile',state:'queued',created:4, priority:'normal',retries:0, err:null, exec:'—'},
+  {id:'IN-4828',router:'MT-0006',action:'Apply configuration', state:'succeeded',created:240,priority:'normal',retries:0, err:null, exec:'3.2s'},
+];
+const INTENT_STATE = {
+  queued:{cls:'p-info',  label:'Queued'},
+  running:{cls:'p-info', label:'Sent'},
+  succeeded:{cls:'p-ok', label:'Confirmed'},
+  failed:{cls:'p-bad',   label:'Failed'},
+  waiting:{cls:'p-warn', label:'Waiting for Router'},
+  expired:{cls:'p-mute', label:'Expired'},
+};
+
+const BATCHES = [
+  {id:'UG-2026-0081',plan:'P-3',qty:100,unused:83,active:5,expired:3,sold:9,by:'J. Okello',created:'2026-09-14',router:'MT-0001'},
+  {id:'UG-2026-0080',plan:'P-1',qty:200,unused:44,active:31,expired:98,sold:156,by:'J. Okello',created:'2026-09-12',router:'MT-0006'},
+  {id:'UG-2026-0079',plan:'P-4',qty:50, unused:12,active:9, expired:14,sold:38,by:'A. Nakato',created:'2026-09-08',router:'MT-0006'},
+  {id:'UG-2026-0078',plan:'P-2',qty:150,unused:6, active:18,expired:112,sold:144,by:'A. Nakato',created:'2026-09-02',router:'MT-0001'},
+  {id:'UG-2026-0077',plan:'P-5',qty:25, unused:19,active:4, expired:2, sold:6, by:'B. Mehta', created:'2026-08-28',router:'MT-0007'},
+];
+
+const VSTATE = {unused:{cls:'p-mute',label:'Unused'},active:{cls:'p-ok',label:'Active'},expired:{cls:'p-mute',label:'Expired'},suspended:{cls:'p-warn',label:'Suspended'}};
+function genVouchers(){
+  const out=[], rnd=(n)=>Math.floor(Math.random()*n);
+  const pool=['unused','unused','unused','active','expired','expired','suspended'];
+  BATCHES.forEach(b=>{
+    for(let i=0;i<Math.min(b.qty,26);i++){
+      const st=pool[rnd(pool.length)];
+      out.push({code:String(10000000+rnd(89999999)),batch:b.id,plan:b.plan,status:st,
+        created:b.created, activated: st==='unused'?null:b.created, expiry: st==='unused'?'—':'2026-09-21'});
+    }
+  });
+  return out;
+}
+const VOUCHERS = genVouchers();
+
+const SESSIONS = [
+  {voucher:'48210937',router:'MT-0006',dev:'Android · SM-A155F',ip:'10.5.50.34', mac:'A4:83:E7:11:0C:92',plan:'P-3',start:142,down:412,up:88,  status:'online'},
+  {voucher:'71620485',router:'MT-0006',dev:'iPhone 13',         ip:'10.5.50.51', mac:'F0:18:98:4A:22:B1',plan:'P-3',start:96, down:1240,up:210, status:'online'},
+  {voucher:'22984410',router:'MT-0001',dev:'Windows laptop',    ip:'10.5.10.22', mac:'3C:97:0E:77:19:04',plan:'P-4',start:301,down:3890,up:640, status:'online'},
+  {voucher:'55012877',router:'MT-0001',dev:'Android · TECNO',   ip:'10.5.10.41', mac:'B8:27:EB:09:5F:33',plan:'P-1',start:12, down:64,  up:11,  status:'online'},
+  {voucher:'90341562',router:'MT-0007',dev:'iPad',              ip:'10.5.70.14', mac:'DC:A6:32:88:41:7E',plan:'P-2',start:47, down:520, up:95,  status:'online'},
+  {voucher:'13875024',router:'MT-0006',dev:'Android · Redmi',   ip:'10.5.50.77', mac:'E4:5F:01:6B:2D:10',plan:'P-3',start:8,  down:22,  up:4,   status:'idle'},
+];
+
+const SALES = [
+  {ref:'SL-92014',when:'14:02',voucher:'48210937',plan:'P-3',amount:5000, op:'J. Okello',agent:'Riverside Front Desk',method:'MTN MoMo'},
+  {ref:'SL-92013',when:'13:47',voucher:'71620485',plan:'P-3',amount:5000, op:'J. Okello',agent:'Riverside Front Desk',method:'Cash'},
+  {ref:'SL-92012',when:'13:20',voucher:'22984410',plan:'P-4',amount:20000,op:'A. Nakato',agent:'Kabale Block B',method:'Airtel Money'},
+  {ref:'SL-92011',when:'12:58',voucher:'55012877',plan:'P-1',amount:1000, op:'A. Nakato',agent:'Kabale Block B',method:'Cash'},
+  {ref:'SL-92010',when:'12:31',voucher:'90341562',plan:'P-2',amount:2500, op:'J. Okello',agent:'Equator Counter',method:'MTN MoMo'},
+  {ref:'SL-92009',when:'11:44',voucher:'13875024',plan:'P-3',amount:5000, op:'B. Mehta', agent:'Equator Counter',method:'Cash'},
+  {ref:'SL-92008',when:'10:12',voucher:'66120398',plan:'P-1',amount:1000, op:'J. Okello',agent:'Riverside Front Desk',method:'Cash'},
+];
+
+const USERS = [
+  {name:'B. Mehta',   email:'admin@dishnet.ug',    role:'Super Admin', tenant:'All',              last:'now',      status:'active'},
+  {name:'J. Okello',  email:'j.okello@dishnet.ug', role:'Operations',  tenant:'All',              last:'12 min ago',status:'active'},
+  {name:'A. Nakato',  email:'a.nakato@dishnet.ug', role:'Operations',  tenant:'All',              last:'2 h ago',  status:'active'},
+  {name:'S. Businge', email:'riverside@partner.ug',role:'Reseller',    tenant:'Riverside Hotel',  last:'40 min ago',status:'active'},
+  {name:'P. Tumwine', email:'kabale@partner.ug',   role:'Reseller',    tenant:'Kabale Student Hostel',last:'1 d ago',status:'suspended'},
+];
+const ROLE_MATRIX = [
+  ['Routers — view',      1,1,'own'],
+  ['Routers — register',  1,1,0],
+  ['Queue intents',       1,1,0],
+  ['Plans — create/edit', 1,0,0],
+  ['Vouchers — generate', 1,0,'quota'],
+  ['Vouchers — disable',  1,1,'own'],
+  ['Sessions — view',     1,1,'own'],
+  ['Sessions — disconnect',1,1,'own'],
+  ['Sales & revenue',     1,0,'own'],
+  ['Users & roles',       1,0,0],
+  ['Audit log',           1,'own','own'],
+];
+
+const AUDIT = [
+  {when:'14:18',who:'B. Mehta',  what:'Queued intent',      target:'MT-0002 · Update captive portal', ok:true},
+  {when:'14:02',who:'J. Okello', what:'Sold voucher',       target:'48210937 · 1 Day', ok:true},
+  {when:'13:51',who:'System',    what:'Intent failed',      target:'MT-0005 · Apply configuration', ok:false},
+  {when:'13:40',who:'A. Nakato', what:'Generated batch',    target:'UG-2026-0081 · 100 × 1 Day', ok:true},
+  {when:'12:22',who:'B. Mehta',  what:'Registered router',  target:'MT-0009 · GLU-Transit-02', ok:true},
+  {when:'11:05',who:'B. Mehta',  what:'Edited plan',        target:'1 Week · price 18,000 → 20,000', ok:true},
+];
+
+const PORTAL = {title:'DishNet WiFi', welcome:'Enter your voucher code to get online.',
+  support:'+256 700 000 000', terms:'Fair-use applies. No illegal use.', logo:'D',
+  colour:'#D41C1C', bg:'#FFFFFF', login:'voucher'};
+
+/* ---------------- helpers ---------------- */
+const $ = s => document.querySelector(s);
+const tenantName = id => (TENANTS.find(t=>t.id===id)||{}).name || '—';
+const planName   = id => (PLANS.find(p=>p.id===id)||{}).name || '—';
+const planPrice  = id => (PLANS.find(p=>p.id===id)||{}).price || 0;
+const routerById = id => ROUTERS.find(r=>r.id===id);
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function statusPill(r){
+  if(r.status==='online')       return '<span class="pill p-ok"><i class="dot"></i>Online</span>';
+  if(r.status==='offline')      return '<span class="pill p-bad"><i class="dot"></i>Offline</span>';
+  if(r.status==='provisioning') return '<span class="pill p-info"><i class="dot"></i>Provisioning</span>';
+  return '<span class="pill p-mute"><i class="dot"></i>Registered</span>';
+}
+function wgPill(r){
+  if(r.wg==='up')   return '<span class="pill p-ok"><i class="dot"></i>Up</span>';
+  if(r.wg==='down') return '<span class="pill p-bad"><i class="dot"></i>Down</span>';
+  return '<span class="pill p-mute"><i class="dot"></i>Never</span>';
+}
+function provPill(r){
+  const m={active:'p-ok',drift:'p-warn',failed:'p-bad',configuring:'p-info',discovered:'p-info',registered:'p-mute'};
+  return '<span class="pill '+(m[r.prov]||'p-mute')+'"><i class="dot"></i>'+(PROV_LABEL[r.prov]||r.prov)+'</span>';
+}
+function hsPill(r){
+  const m={running:['p-ok','Running'],stopped:['p-bad','Stopped'],pending:['p-info','Pending'],unknown:['p-mute','Unknown'],none:['p-mute','Not set']};
+  const v=m[r.hotspot]||['p-mute',r.hotspot];
+  return '<span class="pill '+v[0]+'"><i class="dot"></i>'+v[1]+'</span>';
+}
+function driftCount(r){ return Object.keys(r.desired).filter(k=>r.desired[k]!==r.actual[k]).length; }
+
+function toast(msg,kind){
+  const el=document.createElement('div');
+  el.className='toast'+(kind?' '+kind:'');
+  el.innerHTML='<span>'+(kind==='ok'?'&#10003;':kind==='err'?'&#9888;':'&#9432;')+'</span><span>'+msg+'</span>';
+  $('#toasts').appendChild(el);
+  setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);},3400);
+}
+function openModal(html,wide){
+  $('#modalHost').innerHTML='<div class="modal'+(wide?' wide':'')+'">'+html+'</div>';
+  $('#scrim').classList.add('on');
+}
+function closeModal(){ $('#scrim').classList.remove('on'); $('#modalHost').innerHTML=''; }
+function gate(txt){ return '<div class="gatebar"><b>TECHNICAL GATE</b> '+txt+'</div>'; }
+</script>
+<script>
+/* ---------------- navigation ---------------- */
+const NAV = [
+  {sec:''},
+  {id:'dashboard', label:'Dashboard', ic:'&#9632;'},
+  {id:'routers',   label:'MT Routers', ic:'&#9736;', badge:()=>ROUTERS.length},
+  {sec:'Selling'},
+  {id:'plans',    label:'Plans',    ic:'&#9873;'},
+  {id:'vouchers', label:'MT Vouchers', ic:'&#9862;'},
+  {id:'batches',  label:'Batches',  ic:'&#9707;'},
+  {id:'sales',    label:'Sales',    ic:'&#9878;'},
+  {sec:'Operations'},
+  {id:'intents',  label:'MT Intents', ic:'&#8644;', badge:()=>INTENTS.filter(i=>i.state==='failed').length||'', alert:true},
+  {id:'sessions', label:'MT Sessions',ic:'&#9679;', badge:()=>SESSIONS.length},
+  {sec:'Insight'},
+  {id:'reports',  label:'Reports',  ic:'&#9707;'},
+  {sec:'Administration'},
+  {id:'portal',   label:'Captive Portal', ic:'&#9744;'},
+  {id:'users',    label:'Users & Roles',  ic:'&#9787;'},
+  {id:'audit',    label:'Audit Log', ic:'&#9776;'},
+];
+let route={view:'dashboard',arg:null,tab:null};
+
+function renderNav(){
+  $('#nav').innerHTML = NAV.map(n=>{
+    if(n.sec!==undefined) return n.sec?'<div class="nav-sec">'+n.sec+'</div>':'';
+    const b = n.badge?n.badge():'';
+    return '<a class="nav-item'+(route.view===n.id?' on':'')+'" onclick="go(\''+n.id+'\')">'+
+      '<span class="ic">'+n.ic+'</span><span>'+n.label+'</span>'+
+      (b?'<span class="badge'+(n.alert?' alert':'')+'">'+b+'</span>':'')+'</a>';
+  }).join('');
+}
+function go(view,arg,tab){
+  route={view,arg:arg||null,tab:tab||null};
+  const n=NAV.find(x=>x.id===view);
+  $('#crumb').textContent = view==='router' ? (routerById(arg)||{}).name : (n?n.label:view);
+  renderNav(); render();
+  document.getElementById('sidebar').classList.remove('open');
+  window.scrollTo(0,0);
+}
+function render(){
+  const v=route.view;
+  const fn={dashboard:vDashboard,routers:vRouters,router:vRouter,intents:vIntents,sessions:vSessions,
+            plans:vPlans,vouchers:vVouchers,batches:vBatches,sales:vSales,reports:vReports,
+            portal:vPortal,users:vUsers,audit:vAudit}[v];
+  $('#view').innerHTML = fn?fn():'<div class="empty"><h4>Not built</h4></div>';
+  if(afterRender[v]) afterRender[v]();
+}
+const afterRender={};
+
+/* ---------------- dashboard ---------------- */
+function vDashboard(){
+  const online=ROUTERS.filter(r=>r.status==='online').length;
+  const offline=ROUTERS.filter(r=>r.status==='offline').length;
+  const pendingProv=ROUTERS.filter(r=>['registered','discovered','configuring'].includes(r.prov)).length;
+  const failedIntents=INTENTS.filter(i=>i.state==='failed').length;
+  const waiting=INTENTS.filter(i=>i.state==='waiting').length;
+  const todaySales=SALES.reduce((a,s)=>a+s.amount,0);
+  const attn=[];
+  ROUTERS.filter(r=>r.status==='offline').forEach(r=>attn.push({sev:'var(--red)',t:r.name+' offline',
+    w:'Guests at '+tenantName(r.tenant)+' cannot connect · last seen '+agoTxt(r.seen),a:'View router',f:"go('router','"+r.id+"')"}));
+  INTENTS.filter(i=>i.state==='failed').forEach(i=>attn.push({sev:'var(--red)',t:'Provisioning failed — '+routerById(i.router).name,
+    w:i.err,a:'Open intent',f:"go('intents')"}));
+  ROUTERS.filter(r=>r.prov==='drift').forEach(r=>attn.push({sev:'var(--amber)',t:r.name+' has config drift',
+    w:driftCount(r)+' setting(s) differ from desired state',a:'Reconcile',f:"go('router','"+r.id+"','prov')"}));
+  BATCHES.filter(b=>b.unused/b.qty<0.12).forEach(b=>attn.push({sev:'var(--amber)',t:'Batch '+b.id+' nearly sold out',
+    w:b.unused+' of '+b.qty+' left · '+planName(b.plan),a:'Generate more',f:"modalGenerate()"}));
+
+  return `
+  <div class="card attn no-print">
+    <div class="card-h"><h3>Needs attention</h3><span class="pill p-bad">${attn.length}</span>
+      <div class="grow"></div><button class="btn btn-sm" onclick="go('intents')">All operations</button></div>
+    ${attn.length? attn.map(a=>`
+      <div class="attn-row">
+        <i class="sev" style="background:${a.sev}"></i>
+        <div class="grow"><div style="font-weight:600">${esc(a.t)}</div><div class="why">${esc(a.w)}</div></div>
+        <button class="btn btn-sm" onclick="${a.f}">${a.a}</button>
+      </div>`).join('')
+    : `<div class="allgood"><b>Everything is running.</b><br><span class="tiny">${online} routers online · ${SESSIONS.length} guests connected</span></div>`}
+  </div>
+
+  <div class="stats mt16">
+    <div class="stat link" onclick="go('routers')"><div class="lbl">Routers online</div><div class="val">${online}<span style="font-size:15px;color:var(--gray)"> / ${ROUTERS.length}</span></div><div class="delta muted">${offline} offline · ${pendingProv} provisioning</div></div>
+    <div class="stat link" onclick="go('sessions')"><div class="lbl">Active MT sessions</div><div class="val">${SESSIONS.length}</div><div class="delta up">&#9650; 18 vs yesterday</div></div>
+    <div class="stat link" onclick="go('sales')"><div class="lbl">Today's revenue</div><div class="val">${UGX(todaySales)}</div><div class="delta up">&#9650; 12%</div></div>
+    <div class="stat link" onclick="go('sales')"><div class="lbl">Vouchers sold today</div><div class="val">${SALES.length}</div><div class="delta muted">across ${new Set(SALES.map(s=>s.agent)).size} counters</div></div>
+    <div class="stat link" onclick="go('intents')"><div class="lbl">Failed intents</div><div class="val" style="color:${failedIntents?'var(--danger-text)':'inherit'}">${failedIntents}</div><div class="delta muted">${waiting} waiting for router</div></div>
+  </div>
+
+  <div class="grid2 mt16">
+    <div class="card">
+      <div class="card-h"><h3>Estate by provisioning state</h3></div>
+      <div class="card-b">
+        ${PROV_STEPS.concat(['drift','failed']).map(s=>{
+          const n=ROUTERS.filter(r=>r.prov===s).length; if(!n) return '';
+          const pct=Math.round(n/ROUTERS.length*100);
+          const col=s==='failed'?'var(--red)':s==='drift'?'var(--amber)':s==='active'?'var(--green)':'var(--blue)';
+          return `<div class="spread" style="padding:5px 0"><span style="width:130px" class="tiny">${PROV_LABEL[s]}</span>
+            <div class="grow" style="background:var(--gray-light);height:7px;border-radius:4px"><div style="width:${pct}%;background:${col};height:7px;border-radius:4px"></div></div>
+            <b style="width:22px;text-align:right">${n}</b></div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>Recent activity</h3><div class="grow"></div><button class="btn btn-sm btn-ghost" onclick="go('audit')">Audit log</button></div>
+      ${AUDIT.slice(0,6).map(a=>`<div class="attn-row"><span class="tiny mono muted" style="width:38px">${a.when}</span>
+        <div class="grow"><span style="font-weight:600">${esc(a.what)}</span> <span class="tiny muted">${esc(a.target)}</span></div>
+        <span class="tiny muted">${esc(a.who)}</span></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* ---------------- routers ---------------- */
+let rFilter={q:'',status:'',model:'',prov:'',tenant:'',page:1};
+function vRouters(){
+  return `<div class="card">
+    <div class="card-h"><h3>MikroTik routers</h3><span class="sub">DishNet-managed estate</span>
+      <div class="grow"></div>
+      <button class="btn btn-sm" onclick="toast('Export is mocked in this prototype')">Export</button>
+      <button class="btn btn-primary btn-sm" onclick="modalAddRouter()">+ Register router</button></div>
+    <div class="filters">
+      <input type="text" id="rq" placeholder="Search name, serial, site..." value="${esc(rFilter.q)}" oninput="rFilter.q=this.value;rFilter.page=1;paintRouters()">
+      <select onchange="rFilter.status=this.value;rFilter.page=1;paintRouters()">
+        <option value="">All status</option><option value="online">Online</option><option value="offline">Offline</option>
+        <option value="provisioning">Provisioning</option><option value="registered">Registered</option></select>
+      <select onchange="rFilter.prov=this.value;rFilter.page=1;paintRouters()">
+        <option value="">All provisioning</option>${PROV_STEPS.concat(['drift','failed']).map(s=>`<option value="${s}">${PROV_LABEL[s]}</option>`).join('')}</select>
+      <select onchange="rFilter.model=this.value;rFilter.page=1;paintRouters()">
+        <option value="">All models</option>${[...new Set(ROUTERS.map(r=>r.model))].map(m=>`<option>${m}</option>`).join('')}</select>
+      <select onchange="rFilter.tenant=this.value;rFilter.page=1;paintRouters()">
+        <option value="">All customers</option>${TENANTS.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
+      <span class="fcount" id="rcount"></span>
+    </div>
+    <div id="routerBody"></div>
+  </div>`;
+}
+afterRender.routers=paintRouters;
+function filteredRouters(){
+  const q=rFilter.q.toLowerCase();
+  return ROUTERS.filter(r=>
+    (!q || (r.name+r.serial+r.site+r.id+r.model).toLowerCase().includes(q)) &&
+    (!rFilter.status || r.status===rFilter.status) &&
+    (!rFilter.prov   || r.prov===rFilter.prov) &&
+    (!rFilter.model  || r.model===rFilter.model) &&
+    (!rFilter.tenant || r.tenant===rFilter.tenant));
+}
+function paintRouters(){
+  const all=filteredRouters(), per=8, pages=Math.max(1,Math.ceil(all.length/per));
+  if(rFilter.page>pages) rFilter.page=pages;
+  const rows=all.slice((rFilter.page-1)*per, rFilter.page*per);
+  const c=$('#rcount'); if(c) c.textContent=all.length+' of '+ROUTERS.length+' routers';
+  const host=$('#routerBody'); if(!host) return;
+  if(!all.length){ host.innerHTML=`<div class="empty"><div class="ico">&#9736;</div><h4>No routers match these filters</h4>
+    <p>Nothing here matches what you searched for. The estate still has ${ROUTERS.length} routers.</p>
+    <button class="btn" onclick="rFilter={q:'',status:'',model:'',prov:'',tenant:'',page:1};go('routers')">Clear filters</button></div>`; return; }
+  host.innerHTML=`<div class="t-wrap"><table><thead><tr>
+      <th>Router</th><th>Customer</th><th>Model</th><th>RouterOS</th><th>WireGuard</th>
+      <th>Provisioning</th><th>HotSpot</th><th class="right">Sessions</th><th>Last seen</th><th>Status</th><th></th></tr></thead><tbody>
+    ${rows.map(r=>`<tr class="clickable" onclick="go('router','${r.id}')">
+      <td><div class="t-name">${esc(r.name)}</div><div class="t-sub mono">${r.id}</div></td>
+      <td><div>${esc(tenantName(r.tenant))}</div><div class="t-sub">${esc(r.site.split('—')[1]||'')}</div></td>
+      <td>${r.model}</td>
+      <td class="mono">${r.ros}</td>
+      <td>${wgPill(r)}${r.handshake!=null&&r.wg==='up'?`<div class="t-sub">${agoTxt(r.handshake)}</div>`:''}</td>
+      <td>${provPill(r)}${r.prov==='drift'?`<div class="t-sub" style="color:var(--amber-dark)">${driftCount(r)} differ</div>`:''}</td>
+      <td>${hsPill(r)}</td>
+      <td class="right"><b>${r.sessions||'—'}</b></td>
+      <td class="t-sub">${r.seen==null?'never':agoTxt(r.seen)}</td>
+      <td>${statusPill(r)}</td>
+      <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();modalRouterActions('${r.id}')">&#8943;</button></td>
+    </tr>`).join('')}</tbody></table></div>
+    ${pages>1?`<div class="spread" style="padding:11px 16px;border-top:1px solid var(--line2)">
+      <span class="tiny muted">Page ${rFilter.page} of ${pages}</span>
+      <div class="row"><button class="btn btn-sm" ${rFilter.page<=1?'disabled':''} onclick="rFilter.page--;paintRouters()">Previous</button>
+      <button class="btn btn-sm" ${rFilter.page>=pages?'disabled':''} onclick="rFilter.page++;paintRouters()">Next</button></div></div>`:''}`;
+}
+</script>
+<script>
+/* ---------------- router detail ---------------- */
+function stepIndex(r){
+  if(r.prov==='failed') return 3;
+  if(r.prov==='drift')  return 5;
+  return Math.max(0,PROV_STEPS.indexOf(r.prov));
+}
+function vRouter(){
+  const r=routerById(route.arg); if(!r) return '<div class="empty"><h4>Router not found</h4></div>';
+  const tab=route.tab||'overview';
+  const idx=stepIndex(r), failed=r.prov==='failed';
+  const myIntents=INTENTS.filter(i=>i.router===r.id);
+  const drift=driftCount(r);
+
+  const stepper=`<div class="stepper">${PROV_STEPS.map((s,i)=>{
+    let cls = i<idx?'done' : i===idx?(failed?'fail':'now') : '';
+    if(r.prov==='active') cls = 'done';
+    return `<div class="step ${cls}"><div class="bub">${i<idx||r.prov==='active'?'&#10003;':failed&&i===idx?'&#10005;':i+1}</div><div class="nm">${PROV_LABEL[s]}</div></div>`;
+  }).join('')}</div>`;
+
+  const body={
+    overview:`<div class="grid2">
+      <div class="card"><div class="card-h"><h3>Identity</h3></div><div class="card-b">
+        <dl class="dl">
+          <dt>Router name</dt><dd>${esc(r.name)}</dd>
+          <dt>MT Router ID</dt><dd class="mono">${r.id}</dd>
+          <dt>Customer</dt><dd>${esc(tenantName(r.tenant))}</dd>
+          <dt>Location</dt><dd>${esc(r.site)}</dd>
+          <dt>Model</dt><dd>${r.model}</dd>
+          <dt>Serial</dt><dd class="mono">${r.serial}</dd>
+          <dt>RouterOS</dt><dd class="mono">${r.ros}</dd>
+          <dt>Uptime</dt><dd>${r.uptime}</dd>
+          <dt>Last seen</dt><dd>${r.seen==null?'never':agoTxt(r.seen)}</dd>
+          <dt>Status</dt><dd>${statusPill(r)}</dd>
+        </dl></div></div>
+      <div class="card"><div class="card-h"><h3>Connectivity</h3><span class="sub">WireGuard</span></div><div class="card-b">
+        <dl class="dl">
+          <dt>Tunnel</dt><dd>${wgPill(r)}</dd>
+          <dt>Tunnel IP</dt><dd class="mono">${r.wgIp}</dd>
+          <dt>Last handshake</dt><dd>${r.handshake==null?'never':agoTxt(r.handshake)}</dd>
+          <dt>Endpoint</dt><dd class="mono">${r.endpoint}</dd>
+          <dt>Latency</dt><dd>${r.latency?r.latency+' ms':'—'}</dd>
+        </dl>
+        <div class="mt16">${r.wg==='up'
+          ? '<div class="gatebar" style="background:var(--green-light);border-color:#bfe9d0;color:var(--green-mid)">Tunnel established. The router is reachable for queued work.</div>'
+          : '<div class="gatebar">Router unreachable. Intents will be <b>held</b> and delivered on the next handshake — nothing is lost.</div>'}</div>
+      </div></div></div>`,
+
+    prov:`<div class="card"><div class="card-h"><h3>Provisioning lifecycle</h3>
+        ${drift?`<span class="pill p-warn"><i class="dot"></i>${drift} setting(s) drifted</span>`:''}</div>
+      <div class="card-b">${stepper}
+        ${failed?`<div class="gatebar" style="background:var(--danger-light);border-color:#f0c9c9;color:var(--danger-text);margin-top:14px">
+          <div><b>Step failed:</b> ${esc(myIntents.find(i=>i.state==='failed')?.err||'Configuration rejected')}<br>
+          <span class="tiny">attempt ${myIntents.find(i=>i.state==='failed')?.retries||1} of 3</span></div>
+          <div class="grow"></div><button class="btn btn-sm" onclick="retryIntent('${myIntents.find(i=>i.state==='failed')?.id}')">Retry</button></div>`:''}
+      </div></div>
+
+      <div class="card mt16"><div class="card-h"><h3>Desired vs actual state</h3>
+        <span class="sub">what we asked for, against what the router reports</span></div>
+      <div class="card-b"><div class="dva">
+        <div class="dva-col desired"><h4>Desired state</h4><div class="body">
+          ${Object.keys(r.desired).map(k=>`<div class="kv"><span class="muted">${k}</span><b>${esc(r.desired[k])}</b></div>`).join('')}</div></div>
+        <div class="dva-mid">&#8594;</div>
+        <div class="dva-col actual ${drift?'drift':''}"><h4>Actual state${drift?' — drifted':''}</h4><div class="body">
+          ${Object.keys(r.actual).map(k=>`<div class="kv ${r.desired[k]!==r.actual[k]?'diff':''}"><span class="muted">${k}</span><b>${esc(r.actual[k])}</b></div>`).join('')}</div></div>
+      </div>
+      ${drift?`<div class="mt16 row"><button class="btn btn-primary btn-sm" onclick="queueIntent('${r.id}','Apply configuration')">Queue reconcile</button>
+        <span class="tiny muted">Queues an intent to bring actual state back to desired. Nothing is sent to the router from this screen.</span></div>`
+      :'<div class="mt16 tiny muted">In sync. Nothing to reconcile.</div>'}
+      </div></div>
+
+      <div class="card mt16"><div class="card-h"><h3>Intents for this router</h3><div class="grow"></div>
+        <button class="btn btn-sm" onclick="go('intents')">All intents</button></div>
+        ${myIntents.length?intentTable(myIntents):'<div class="empty"><h4>No intents</h4><p>Nothing has been queued for this router.</p></div>'}
+      </div>`,
+
+    hotspot:`<div class="grid2">
+      <div class="card"><div class="card-h"><h3>HotSpot</h3></div><div class="card-b"><dl class="dl">
+        <dt>Status</dt><dd>${hsPill(r)}</dd>
+        <dt>Assigned profile</dt><dd class="mono">${r.profile}</dd>
+        <dt>Active sessions</dt><dd><b>${r.sessions}</b></dd>
+        <dt>Plans offered</dt><dd>${esc(r.actual.plans)}</dd>
+        <dt>Portal version</dt><dd class="mono">${esc(r.actual.portal)}</dd>
+      </dl>
+      <div class="mt16">${gate('Live HotSpot status and session control depend on <b>Step 0</b> (RADIUS on real hardware). Values shown are mock.')}</div>
+      </div></div>
+      <div class="card"><div class="card-h"><h3>Vouchers on this router</h3></div>
+        ${BATCHES.filter(b=>b.router===r.id).length?`<div class="t-wrap"><table><thead><tr><th>Batch</th><th>Plan</th><th class="right">Unused</th><th class="right">Active</th></tr></thead><tbody>
+        ${BATCHES.filter(b=>b.router===r.id).map(b=>`<tr class="clickable" onclick="go('batches')"><td class="mono">${b.id}</td><td>${planName(b.plan)}</td><td class="right">${b.unused}</td><td class="right">${b.active}</td></tr>`).join('')}
+        </tbody></table></div>`:'<div class="empty"><h4>No batches</h4><p>No voucher batch has been assigned to this router.</p></div>'}
+      </div></div>`,
+
+    events:`<div class="card"><div class="card-h"><h3>Events</h3></div>
+      ${AUDIT.concat([{when:'09:14',who:'System',what:'Handshake restored',target:r.id,ok:true},
+                      {when:'08:20',who:'System',what:'Tunnel lost',target:r.id,ok:false}])
+        .slice(0,8).map(a=>`<div class="attn-row"><span class="tiny mono muted" style="width:38px">${a.when}</span>
+        <i class="sev" style="background:${a.ok?'var(--green)':'var(--red)'}"></i>
+        <div class="grow"><b>${esc(a.what)}</b> <span class="tiny muted">${esc(a.target)}</span></div>
+        <span class="tiny muted">${esc(a.who)}</span></div>`).join('')}</div>`
+  }[tab];
+
+  return `<div class="spread no-print" style="margin-bottom:14px">
+      <div class="row"><button class="btn btn-sm" onclick="go('routers')">&#8592; Routers</button>
+        <div><div style="font-family:var(--display);font-size:22px;font-weight:600">${esc(r.name)}</div>
+        <div class="tiny muted">${esc(tenantName(r.tenant))} · ${esc(r.site)} · <span class="mono">${r.id}</span></div></div></div>
+      <div class="row">${statusPill(r)}<button class="btn btn-primary btn-sm" onclick="modalRouterActions('${r.id}')">Actions</button></div>
+    </div>
+    <div class="card" style="margin-bottom:16px"><div class="tabs">
+      ${[['overview','Overview'],['prov','Provisioning'],['hotspot','HotSpot'],['events','Events']].map(t=>
+        `<a class="tab ${tab===t[0]?'on':''}" onclick="go('router','${r.id}','${t[0]}')">${t[1]}</a>`).join('')}
+    </div></div>${body}`;
+}
+
+/* ---------------- intents ---------------- */
+function intentTable(list){
+  return `<div class="t-wrap"><table><thead><tr><th>Intent</th><th>Router</th><th>Action</th><th>State</th>
+    <th>Priority</th><th class="right">Retries</th><th>Created</th><th>Exec</th><th></th></tr></thead><tbody>
+    ${list.map(i=>{const st=INTENT_STATE[i.state],r=routerById(i.router);return `<tr>
+      <td class="mono">${i.id}</td>
+      <td><div class="t-name">${esc(r.name)}</div><div class="t-sub mono">${i.router}</div></td>
+      <td>${esc(i.action)}${i.err?`<div class="t-sub" style="color:var(--danger-text)">${esc(i.err)}</div>`:''}</td>
+      <td><span class="pill ${st.cls}"><i class="dot"></i>${st.label}</span></td>
+      <td><span class="tiny ${i.priority==='high'?'':'muted'}">${i.priority}</span></td>
+      <td class="right">${i.retries}</td>
+      <td class="t-sub">${agoTxt(i.created)}</td>
+      <td class="t-sub mono">${i.exec}</td>
+      <td>${i.state==='failed'?`<button class="btn btn-sm" onclick="retryIntent('${i.id}')">Retry</button>`:
+          i.state==='queued'?`<button class="btn btn-sm btn-ghost" onclick="cancelIntent('${i.id}')">Cancel</button>`:''}</td>
+    </tr>`}).join('')}</tbody></table></div>`;
+}
+let iFilter='';
+function vIntents(){
+  const list=iFilter?INTENTS.filter(i=>i.state===iFilter):INTENTS;
+  const counts=Object.keys(INTENT_STATE).map(k=>[k,INTENTS.filter(i=>i.state===k).length]);
+  return `<div class="card">
+    <div class="card-h"><h3>MT Intents</h3><span class="sub">every change to a router is queued here first</span></div>
+    <div class="card-b" style="padding-bottom:0">
+      <div class="gatebar" style="margin-bottom:14px">
+        <b>Queued &#8594; Sent &#8594; Confirmed &#8594; Failed &#8594; Expired.</b>
+        No screen sends a command directly to a router. Delivery timing is <b>pending B1</b> (push vs poll).
+      </div>
+    </div>
+    <div class="filters">
+      <button class="btn btn-sm ${!iFilter?'btn-primary':''}" onclick="iFilter='';render()">All (${INTENTS.length})</button>
+      ${counts.filter(c=>c[1]).map(c=>`<button class="btn btn-sm ${iFilter===c[0]?'btn-primary':''}" onclick="iFilter='${c[0]}';render()">${INTENT_STATE[c[0]].label} (${c[1]})</button>`).join('')}
+      <span class="fcount">${list.length} intent(s)</span>
+    </div>
+    ${list.length?intentTable(list):`<div class="empty"><div class="ico">&#8644;</div><h4>Nothing queued</h4>
+      <p>That is a good sign — every router is in its desired state.</p></div>`}
+  </div>`;
+}
+function retryIntent(id){
+  const i=INTENTS.find(x=>x.id===id); if(!i) return;
+  i.state='queued'; i.retries++; i.err=null;
+  toast('Intent '+id+' re-queued — it will be delivered when the router is reachable','ok'); renderNav(); render();
+}
+function cancelIntent(id){
+  const idx=INTENTS.findIndex(x=>x.id===id); if(idx<0) return;
+  INTENTS.splice(idx,1); toast('Intent '+id+' cancelled'); renderNav(); render();
+}
+function queueIntent(routerId,action){
+  const id='IN-'+(4830+INTENTS.length);
+  INTENTS.unshift({id,router:routerId,action,state:'queued',created:0,priority:'normal',retries:0,err:null,exec:'—'});
+  closeModal();
+  toast(action+' queued for '+routerById(routerId).name,'ok'); renderNav(); render();
+}
+
+/* ---------------- sessions ---------------- */
+let sFilter={router:'',q:''};
+function vSessions(){
+  const list=SESSIONS.filter(s=>(!sFilter.router||s.router===sFilter.router) &&
+    (!sFilter.q||(s.voucher+s.dev+s.ip+s.mac).toLowerCase().includes(sFilter.q.toLowerCase())));
+  return `<div class="card">
+    <div class="card-h"><h3>MT Sessions</h3><span class="sub">guests connected right now</span></div>
+    <div class="card-b" style="padding-bottom:0">${gate('Live session data and disconnect depend on <b>Step 0</b> — RADIUS accounting from real hardware. Figures below are mock.')}</div>
+    <div class="filters">
+      <input type="text" placeholder="Search voucher, device, IP, MAC..." value="${esc(sFilter.q)}" oninput="sFilter.q=this.value;render()">
+      <select onchange="sFilter.router=this.value;render()"><option value="">All routers</option>
+        ${ROUTERS.filter(r=>r.sessions>0).map(r=>`<option value="${r.id}" ${sFilter.router===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select>
+      <span class="fcount">${list.length} active session(s)</span>
+    </div>
+    ${list.length?`<div class="t-wrap"><table><thead><tr><th>Voucher</th><th>Device</th><th>Router</th><th>IP</th><th>MAC</th>
+      <th>Plan</th><th>Started</th><th>Duration</th><th class="right">Down</th><th class="right">Up</th><th>Status</th><th></th></tr></thead><tbody>
+      ${list.map(s=>`<tr>
+        <td class="mono t-name">${s.voucher}</td>
+        <td>${esc(s.dev)}</td>
+        <td><div class="t-sub">${esc(routerById(s.router).name)}</div></td>
+        <td class="mono t-sub">${s.ip}</td>
+        <td class="mono t-sub">${s.mac}</td>
+        <td>${planName(s.plan)}</td>
+        <td class="t-sub">${ago(s.start)}</td>
+        <td>${Math.floor(s.start/60)}h ${s.start%60}m</td>
+        <td class="right mono">${s.down} MB</td>
+        <td class="right mono">${s.up} MB</td>
+        <td><span class="pill ${s.status==='online'?'p-ok':'p-mute'}"><i class="dot"></i>${s.status}</span></td>
+        <td><button class="btn btn-sm btn-danger" onclick="modalDisconnect('${s.voucher}')">Disconnect</button></td>
+      </tr>`).join('')}</tbody></table></div>`
+    :`<div class="empty"><div class="ico">&#9679;</div><h4>No active sessions</h4>
+      <p>Nobody is connected right now. That is normal outside business hours.</p></div>`}
+  </div>`;
+}
+function modalDisconnect(v){
+  const s=SESSIONS.find(x=>x.voucher===v);
+  openModal(`<div class="modal-h"><h3>Queue disconnect</h3><button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
+  <div class="modal-b">
+    <p>Disconnect voucher <b class="mono">${v}</b> on <b>${esc(routerById(s.router).name)}</b>?</p>
+    <div class="mt16">${gate('This <b>queues an intent</b>. It is not sent immediately. Whether it reaches the router at once or at its next check-in is <b>pending B1</b>.')}</div>
+    <div class="mt16 tiny muted">The guest keeps their remaining time — disconnecting ends the session, not the voucher.</div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="doDisconnect('${v}')">Queue disconnect</button></div>`);
+}
+function doDisconnect(v){
+  const s=SESSIONS.find(x=>x.voucher===v);
+  queueIntent(s.router,'Disconnect session '+v);
+}
+</script>
+<script>
+/* ---------------- plans ---------------- */
+function vPlans(){
+  return `<div class="card">
+    <div class="card-h"><h3>Plans</h3><span class="sub">what a guest buys</span><div class="grow"></div>
+      <button class="btn btn-primary btn-sm" onclick="modalPlan()">+ New plan</button></div>
+    <div class="t-wrap"><table><thead><tr><th>Plan</th><th class="right">Price</th><th>Validity</th><th>Speed</th><th>Data</th>
+      <th class="right">Active users</th><th class="right">Revenue (30d)</th><th>Status</th><th></th></tr></thead><tbody>
+      ${PLANS.map(p=>`<tr class="clickable" onclick="modalPlan('${p.id}')">
+        <td class="t-name">${esc(p.name)}</td>
+        <td class="right"><b>${UGX(p.price)}</b></td>
+        <td>${esc(p.validity)}</td>
+        <td class="mono t-sub">${p.down}/${p.up} Mbps</td>
+        <td>${p.data||'<span class="muted">Unlimited</span>'}</td>
+        <td class="right">${p.users||'—'}</td>
+        <td class="right">${UGX(p.revenue)}</td>
+        <td><span class="pill ${p.status==='active'?'p-ok':'p-mute'}"><i class="dot"></i>${p.status}</span></td>
+        <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();modalPlan('${p.id}')">Edit</button></td>
+      </tr>`).join('')}</tbody></table></div>
+    <div class="card-b" style="border-top:1px solid var(--line2)">
+      ${gate('Speed and data-cap <b>enforcement</b> is pending Step 0. Phase 0 proved only <span class="mono">Mikrotik-Rate-Limit</span>, <span class="mono">Session-Timeout</span> and <span class="mono">Acct-Interim-Interval</span> return in an Access-Accept.')}
+    </div></div>`;
+}
+function modalPlan(id){
+  const p=PLANS.find(x=>x.id===id)||{name:'',price:'',validity:'',down:10,up:3,data:'',status:'active'};
+  openModal(`<div class="modal-h"><h3>${id?'Edit plan':'New plan'}</h3><button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
+  <div class="modal-b">
+    <div class="field"><label>Plan name</label><input id="pn" value="${esc(p.name)}" placeholder="1 Day"></div>
+    <div class="f2">
+      <div class="field"><label>Price (UGX)</label><input id="pp" type="number" value="${p.price}" placeholder="5000"></div>
+      <div class="field"><label>Validity</label><input id="pv" value="${esc(p.validity)}" placeholder="24 hours"></div>
+    </div>
+    <div class="f3">
+      <div class="field"><label>Download (Mbps)</label><input id="pd" type="number" value="${p.down}"></div>
+      <div class="field"><label>Upload (Mbps)</label><input id="pu" type="number" value="${p.up}"></div>
+      <div class="field"><label>Data cap</label><input id="pc" value="${esc(p.data||'')}" placeholder="unlimited"></div>
+    </div>
+    <div class="field"><label>Status</label><select id="ps"><option ${p.status==='active'?'selected':''}>active</option><option ${p.status==='retired'?'selected':''}>retired</option></select></div>
+    ${gate('Enforcement beyond rate-limit and session-timeout is <b>pending technical validation</b>.')}
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="savePlan('${id||''}')">Save plan</button></div>`);
+}
+function savePlan(id){
+  const g=x=>document.getElementById(x).value;
+  if(!g('pn')){toast('Plan needs a name','err');return;}
+  if(id){ const p=PLANS.find(x=>x.id===id);
+    Object.assign(p,{name:g('pn'),price:+g('pp')||0,validity:g('pv'),down:+g('pd'),up:+g('pu'),data:g('pc')||null,status:g('ps')});
+    toast('Plan updated','ok');
+  } else {
+    PLANS.push({id:'P-'+(PLANS.length+1),name:g('pn'),price:+g('pp')||0,validity:g('pv'),down:+g('pd'),up:+g('pu'),
+      data:g('pc')||null,status:g('ps'),users:0,revenue:0});
+    toast('Plan created','ok');
+  }
+  closeModal(); render();
+}
+
+/* ---------------- vouchers ---------------- */
+let vFilter={q:'',status:'',batch:'',page:1};
+function vVouchers(){
+  return `<div class="card">
+    <div class="card-h"><h3>MT Vouchers</h3><span class="sub">individual credentials</span><div class="grow"></div>
+      <button class="btn btn-primary btn-sm" onclick="modalGenerate()">+ Generate</button></div>
+    <div class="filters">
+      <input type="text" placeholder="Search voucher code..." value="${esc(vFilter.q)}" oninput="vFilter.q=this.value;vFilter.page=1;paintVouchers()">
+      <select onchange="vFilter.status=this.value;vFilter.page=1;paintVouchers()"><option value="">All statuses</option>
+        ${Object.keys(VSTATE).map(k=>`<option value="${k}">${VSTATE[k].label}</option>`).join('')}</select>
+      <select onchange="vFilter.batch=this.value;vFilter.page=1;paintVouchers()"><option value="">All batches</option>
+        ${BATCHES.map(b=>`<option value="${b.id}">${b.id}</option>`).join('')}</select>
+      <span class="fcount" id="vcount"></span>
+    </div>
+    <div id="voucherBody"></div></div>`;
+}
+afterRender.vouchers=paintVouchers;
+function paintVouchers(){
+  const q=vFilter.q.toLowerCase();
+  const all=VOUCHERS.filter(v=>(!q||v.code.includes(q))&&(!vFilter.status||v.status===vFilter.status)&&(!vFilter.batch||v.batch===vFilter.batch));
+  const per=12,pages=Math.max(1,Math.ceil(all.length/per));
+  if(vFilter.page>pages)vFilter.page=pages;
+  const rows=all.slice((vFilter.page-1)*per,vFilter.page*per);
+  const c=$('#vcount'); if(c)c.textContent=all.length+' voucher(s)';
+  const host=$('#voucherBody'); if(!host)return;
+  if(!all.length){host.innerHTML=`<div class="empty"><div class="ico">&#9862;</div><h4>No vouchers match</h4>
+    <p>Try a different code, status or batch.</p><button class="btn" onclick="vFilter={q:'',status:'',batch:'',page:1};render()">Clear filters</button></div>`;return;}
+  host.innerHTML=`<div class="t-wrap"><table><thead><tr><th>Code</th><th>Plan</th><th class="right">Price</th><th>Batch</th>
+    <th>Status</th><th>Created</th><th>Activated</th><th>Expires</th><th></th></tr></thead><tbody>
+    ${rows.map(v=>`<tr>
+      <td class="mono t-name" style="font-size:14px;letter-spacing:.5px">${v.code}</td>
+      <td>${planName(v.plan)}</td>
+      <td class="right">${UGX(planPrice(v.plan))}</td>
+      <td class="mono t-sub">${v.batch}</td>
+      <td><span class="pill ${VSTATE[v.status].cls}"><i class="dot"></i>${VSTATE[v.status].label}</span></td>
+      <td class="t-sub">${v.created}</td>
+      <td class="t-sub">${v.activated||'—'}</td>
+      <td class="t-sub">${v.expiry}</td>
+      <td>${v.status==='unused'?`<button class="btn btn-sm btn-ghost" onclick="suspendVoucher('${v.code}')">Suspend</button>`:
+           v.status==='suspended'?`<button class="btn btn-sm btn-ghost" onclick="unsuspendVoucher('${v.code}')">Restore</button>`:''}</td>
+    </tr>`).join('')}</tbody></table></div>
+    ${pages>1?`<div class="spread" style="padding:11px 16px;border-top:1px solid var(--line2)">
+      <span class="tiny muted">Page ${vFilter.page} of ${pages}</span>
+      <div class="row"><button class="btn btn-sm" ${vFilter.page<=1?'disabled':''} onclick="vFilter.page--;paintVouchers()">Previous</button>
+      <button class="btn btn-sm" ${vFilter.page>=pages?'disabled':''} onclick="vFilter.page++;paintVouchers()">Next</button></div></div>`:''}`;
+}
+function suspendVoucher(c){const v=VOUCHERS.find(x=>x.code===c);v.status='suspended';toast('Voucher '+c+' suspended');paintVouchers();}
+function unsuspendVoucher(c){const v=VOUCHERS.find(x=>x.code===c);v.status='unused';toast('Voucher '+c+' restored','ok');paintVouchers();}
+
+/* ---------------- batches ---------------- */
+function vBatches(){
+  return `<div class="card">
+    <div class="card-h"><h3>Voucher batches</h3><span class="sub">how vouchers are actually created and sold</span><div class="grow"></div>
+      <button class="btn btn-primary btn-sm" onclick="modalGenerate()">+ Generate batch</button></div>
+    <div class="card-b"><div class="grid2">
+    ${BATCHES.map(b=>{
+      const sold=b.qty-b.unused, pct=Math.round(sold/b.qty*100), rev=sold*planPrice(b.plan);
+      const low=b.unused/b.qty<0.12;
+      return `<div class="card" style="border-color:${low?'#f4dbb0':'var(--line)'}">
+        <div class="card-h" style="${low?'background:var(--amber-light);border-bottom-color:#f4dbb0':''}">
+          <h3 class="mono" style="font-size:14px">${b.id}</h3>
+          ${low?'<span class="pill p-warn"><i class="dot"></i>Low stock</span>':''}
+          <div class="grow"></div><span class="tiny muted">${b.created}</span></div>
+        <div class="card-b">
+          <div class="spread"><div><b>${planName(b.plan)}</b> · ${UGX(planPrice(b.plan))}</div>
+            <div class="tiny muted">${esc(routerById(b.router).name)}</div></div>
+          <div class="mt10" style="display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--gray-light)">
+            <div style="width:${b.unused/b.qty*100}%;background:var(--gray)"></div>
+            <div style="width:${b.active/b.qty*100}%;background:var(--green)"></div>
+            <div style="width:${b.expired/b.qty*100}%;background:var(--line)"></div></div>
+          <div class="mt10 tiny" style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px">
+            <span class="muted">Generated</span><b class="right">${b.qty}</b>
+            <span class="muted">Unused</span><b class="right">${b.unused}</b>
+            <span class="muted">Active now</span><b class="right" style="color:var(--green-mid)">${b.active}</b>
+            <span class="muted">Expired</span><b class="right">${b.expired}</b>
+            <span class="muted">Sold</span><b class="right">${sold} (${pct}%)</b>
+            <span class="muted">Revenue</span><b class="right">${UGX(rev)}</b></div>
+          <div class="mt10 tiny muted">Created by ${esc(b.by)}</div>
+          <div class="mt10 row">
+            <button class="btn btn-sm" onclick="modalPrint('${b.id}')">Print</button>
+            <button class="btn btn-sm" onclick="vFilter={q:'',status:'',batch:'${b.id}',page:1};go('vouchers')">View vouchers</button>
+            <button class="btn btn-sm btn-ghost" onclick="toast('Export is mocked in this prototype')">Export</button>
+          </div>
+        </div></div>`;
+    }).join('')}
+    </div></div></div>`;
+}
+
+/* generate — MikroTicket pattern: router + plan + output + quantity in ONE flow */
+function modalGenerate(){
+  openModal(`<div class="modal-h"><h3>Generate vouchers</h3><button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
+  <div class="modal-b">
+    <div class="field"><label>MT Router</label><select id="gr">${ROUTERS.filter(r=>r.hotspot==='running').map(r=>`<option value="${r.id}">${esc(r.name)} — ${esc(tenantName(r.tenant))}</option>`).join('')}</select>
+      <div class="hint">Vouchers are redeemable only on this customer's routers.</div></div>
+    <div class="field"><label>Plan</label><select id="gp">${PLANS.filter(p=>p.status==='active').map(p=>`<option value="${p.id}">${esc(p.name)} — ${UGX(p.price)}</option>`).join('')}</select></div>
+    <div class="f2">
+      <div class="field"><label>Output</label><select id="go_"><option>Thermal printer</option><option>PDF A4</option><option>PDF A3</option><option>Digital / QR only</option></select></div>
+      <div class="field"><label>Printer</label><select id="gpr"><option>MPT-II · 58 mm · Bluetooth</option><option>LAN Printer · 80 mm · 192.168.88.100</option></select></div>
+    </div>
+    <div class="field"><label>Quantity</label><input id="gq" type="number" value="50" min="1" max="500"></div>
+    <div class="tiny muted">Generation is instant and server-side — it does not contact the router. The router only learns about a voucher when a guest redeems it.</div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="doGenerate()">Generate &amp; print</button></div>`);
+}
+function doGenerate(){
+  const qty=+document.getElementById('gq').value||0;
+  if(qty<1){toast('Quantity must be at least 1','err');return;}
+  const plan=document.getElementById('gp').value, router=document.getElementById('gr').value;
+  const id='UG-2026-'+String(82+BATCHES.length).padStart(4,'0');
+  BATCHES.unshift({id,plan,qty,unused:qty,active:0,expired:0,sold:0,by:'B. Mehta',created:'2026-09-19',router});
+  for(let i=0;i<Math.min(qty,26);i++)
+    VOUCHERS.unshift({code:String(10000000+Math.floor(Math.random()*89999999)),batch:id,plan,status:'unused',created:'2026-09-19',activated:null,expiry:'—'});
+  closeModal(); toast(qty+' vouchers generated in batch '+id,'ok');
+  go('batches'); setTimeout(()=>modalPrint(id),420);
+}
+
+/* print preview — thermal + A4 */
+function modalPrint(batchId){
+  const b=BATCHES.find(x=>x.id===batchId);
+  const vs=VOUCHERS.filter(v=>v.batch===batchId).slice(0,8);
+  openModal(`<div class="modal-h"><h3>Print preview — ${batchId}</h3>
+      <div class="grow"></div>
+      <button class="btn btn-sm" onclick="switchPrint('thermal')" id="bt-thermal">Thermal 58mm</button>
+      <button class="btn btn-sm btn-primary" onclick="switchPrint('a4')" id="bt-a4">A4 sheet</button>
+      <button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
+  <div class="modal-b" id="printArea"></div>
+  <div class="modal-f no-print"><button class="btn" onclick="closeModal()">Close</button>
+    <button class="btn btn-primary" onclick="window.print()">Print</button></div>`,true);
+  window.__pb={b,vs}; switchPrint('a4');
+}
+function switchPrint(mode){
+  const {b,vs}=window.__pb;
+  document.getElementById('bt-a4').className='btn btn-sm'+(mode==='a4'?' btn-primary':'');
+  document.getElementById('bt-thermal').className='btn btn-sm'+(mode==='thermal'?' btn-primary':'');
+  const host=document.getElementById('printArea');
+  if(mode==='thermal'){
+    host.innerHTML=`<div class="thermal">
+      <b style="font-family:var(--display);font-size:15px">DISHNET WIFI</b><hr>
+      ${esc(planName(b.plan))}<br>${UGX(planPrice(b.plan))}<hr>
+      <div style="font-size:17px;letter-spacing:2px;font-weight:600">${vs[0]?vs[0].code:'00000000'}</div><hr>
+      <div class="qr" style="margin:7px auto"></div>
+      Valid: ${esc((PLANS.find(p=>p.id===b.plan)||{}).validity||'')}<br>
+      Support +256 700 000 000<hr>
+      <span style="font-size:9.5px">${b.id}</span></div>
+      <div class="tiny muted mt16" style="text-align:center">One slip per guest · 58 mm roll</div>`;
+  } else {
+    host.innerHTML=`<div class="vgrid">${vs.map(v=>`<div class="vch">
+      <div class="top">DISHNET WIFI</div>
+      <div class="code">${v.code}</div>
+      <div class="qr"></div>
+      <div class="meta"><b>${esc(planName(b.plan))}</b><br>${UGX(planPrice(b.plan))}<br>
+        ${esc((PLANS.find(p=>p.id===b.plan)||{}).validity||'')}<br>
+        <span style="opacity:.6">${b.id}</span></div></div>`).join('')}</div>
+      <div class="tiny muted mt16" style="text-align:center">Showing 8 of ${b.qty} · A4 fits 12 per sheet</div>`;
+  }
+}
+
+/* ---------------- sales ---------------- */
+let salesF={op:'',method:'',q:''};
+function vSales(){
+  const list=SALES.filter(s=>(!salesF.op||s.op===salesF.op)&&(!salesF.method||s.method===salesF.method)&&
+    (!salesF.q||(s.ref+s.voucher+s.agent).toLowerCase().includes(salesF.q.toLowerCase())));
+  const total=list.reduce((a,s)=>a+s.amount,0);
+  return `<div class="stats" style="margin-bottom:16px">
+      <div class="stat"><div class="lbl">Revenue (filtered)</div><div class="val">${UGX(total)}</div></div>
+      <div class="stat"><div class="lbl">Vouchers sold</div><div class="val">${list.length}</div></div>
+      <div class="stat"><div class="lbl">Average sale</div><div class="val">${UGX(list.length?Math.round(total/list.length):0)}</div></div>
+      <div class="stat"><div class="lbl">Counters active</div><div class="val">${new Set(list.map(s=>s.agent)).size}</div></div>
+    </div>
+  <div class="card"><div class="card-h"><h3>Voucher sales</h3><span class="sub">today</span></div>
+    <div class="filters">
+      <input type="text" placeholder="Search reference, voucher, counter..." value="${esc(salesF.q)}" oninput="salesF.q=this.value;render()">
+      <select onchange="salesF.op=this.value;render()"><option value="">All operators</option>
+        ${[...new Set(SALES.map(s=>s.op))].map(o=>`<option ${salesF.op===o?'selected':''}>${o}</option>`).join('')}</select>
+      <select onchange="salesF.method=this.value;render()"><option value="">All payment methods</option>
+        ${[...new Set(SALES.map(s=>s.method))].map(m=>`<option ${salesF.method===m?'selected':''}>${m}</option>`).join('')}</select>
+      ${(salesF.op||salesF.method||salesF.q)?`<span class="chip">filtered <button onclick="salesF={op:'',method:'',q:''};render()">&#10005;</button></span>`:''}
+      <span class="fcount">${list.length} sale(s)</span>
+    </div>
+    ${list.length?`<div class="t-wrap"><table><thead><tr><th>Reference</th><th>Time</th><th>Voucher</th><th>Plan</th>
+      <th class="right">Amount</th><th>Operator</th><th>Counter / agent</th><th>Method</th></tr></thead><tbody>
+      ${list.map(s=>`<tr><td class="mono t-name">${s.ref}</td><td class="t-sub">${s.when}</td>
+        <td class="mono">${s.voucher}</td><td>${planName(s.plan)}</td>
+        <td class="right"><b>${UGX(s.amount)}</b></td><td>${esc(s.op)}</td><td>${esc(s.agent)}</td>
+        <td><span class="pill ${s.method==='Cash'?'p-mute':'p-info'}"><i class="dot"></i>${s.method}</span></td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty"><div class="ico">&#9878;</div><h4>No sales match</h4>
+        <p>Nothing recorded for these filters.</p><button class="btn" onclick="salesF={op:'',method:'',q:''};render()">Clear filters</button></div>`}
+  </div>`;
+}
+</script>
+<script>
+/* ---------------- reports — MikroTicket's funnel, not a chart wall ---------------- */
+let repF={from:'2026-09-01',to:'2026-09-19',op:'',plan:'',router:''};
+function vReports(){
+  const created=BATCHES.reduce((a,b)=>a+b.qty,0);
+  const activated=BATCHES.reduce((a,b)=>a+b.active+b.expired,0);
+  const completed=BATCHES.reduce((a,b)=>a+b.expired,0);
+  const revenue=BATCHES.reduce((a,b)=>a+(b.qty-b.unused)*planPrice(b.plan),0);
+  const max=created||1;
+  const funnel=[['Vouchers created',created],['Vouchers activated',activated],['Sessions completed',completed]];
+  return `<div class="card">
+    <div class="card-h"><h3>Reports</h3><span class="sub">revenue is recognised on activation, not on generation</span></div>
+    <div class="filters">
+      <input type="date" value="${repF.from}" onchange="repF.from=this.value;render()">
+      <span class="tiny muted">to</span>
+      <input type="date" value="${repF.to}" onchange="repF.to=this.value;render()">
+      <select onchange="repF.op=this.value;render()"><option value="">All operators</option>
+        ${[...new Set(SALES.map(s=>s.op))].map(o=>`<option ${repF.op===o?'selected':''}>${o}</option>`).join('')}</select>
+      <select onchange="repF.plan=this.value;render()"><option value="">All plans</option>
+        ${PLANS.map(p=>`<option value="${p.id}" ${repF.plan===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>
+      <select onchange="repF.router=this.value;render()"><option value="">All routers</option>
+        ${ROUTERS.map(r=>`<option value="${r.id}" ${repF.router===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select>
+      ${(repF.op||repF.plan||repF.router)?`<span class="chip">filtered <button onclick="repF.op='';repF.plan='';repF.router='';render()">&#10005;</button></span>`:''}
+    </div>
+    ${funnel.map(f=>`<div class="funnel-row"><span class="grow">${f[0]}</span>
+      <div style="width:170px"><div class="funnel-bar" style="width:${Math.round(f[1]/max*100)}%"></div></div>
+      <b style="width:58px;text-align:right">${f[1]}</b></div>`).join('')}
+    <div class="funnel-row total"><span class="grow">Revenue from activated vouchers</span><b>${UGX(revenue)}</b></div>
+  </div>
+
+  <div class="grid2 mt16">
+    <div class="card"><div class="card-h"><h3>Plan performance</h3></div>
+      <div class="t-wrap"><table><thead><tr><th>Plan</th><th class="right">Users</th><th class="right">Revenue</th><th style="width:88px">Share</th></tr></thead><tbody>
+      ${PLANS.filter(p=>p.revenue).sort((a,b)=>b.revenue-a.revenue).map(p=>{
+        const tot=PLANS.reduce((a,x)=>a+x.revenue,0);
+        return `<tr><td class="t-name">${esc(p.name)}</td><td class="right">${p.users}</td><td class="right">${UGX(p.revenue)}</td>
+        <td><div style="background:var(--gray-light);height:7px;border-radius:4px"><div style="width:${Math.round(p.revenue/tot*100)}%;background:var(--red);height:7px;border-radius:4px"></div></div></td></tr>`;
+      }).join('')}</tbody></table></div></div>
+
+    <div class="card"><div class="card-h"><h3>Operator performance</h3></div>
+      <div class="t-wrap"><table><thead><tr><th>Operator</th><th class="right">Sales</th><th class="right">Revenue</th></tr></thead><tbody>
+      ${[...new Set(SALES.map(s=>s.op))].map(o=>{
+        const rows=SALES.filter(s=>s.op===o);
+        return `<tr><td class="t-name">${esc(o)}</td><td class="right">${rows.length}</td><td class="right">${UGX(rows.reduce((a,s)=>a+s.amount,0))}</td></tr>`;
+      }).join('')}</tbody></table></div></div>
+  </div>
+
+  <div class="card mt16"><div class="card-h"><h3>Router activity</h3></div>
+    <div class="t-wrap"><table><thead><tr><th>Router</th><th>Customer</th><th class="right">Sessions now</th><th class="right">Batches</th><th>Uptime</th><th>Status</th></tr></thead><tbody>
+    ${ROUTERS.map(r=>`<tr class="clickable" onclick="go('router','${r.id}')"><td class="t-name">${esc(r.name)}</td>
+      <td>${esc(tenantName(r.tenant))}</td><td class="right">${r.sessions||'—'}</td>
+      <td class="right">${BATCHES.filter(b=>b.router===r.id).length||'—'}</td>
+      <td class="t-sub">${r.uptime}</td><td>${statusPill(r)}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+/* ---------------- captive portal ---------------- */
+function vPortal(){
+  return `<div class="grid2">
+    <div class="card"><div class="card-h"><h3>Captive portal</h3><span class="sub">what a guest sees</span></div>
+      <div class="card-b">
+        <div class="field"><label>Portal title</label><input id="ptitle" value="${esc(PORTAL.title)}" oninput="PORTAL.title=this.value;paintPortal()"></div>
+        <div class="field"><label>Welcome message</label><textarea id="pwel" rows="2" oninput="PORTAL.welcome=this.value;paintPortal()">${esc(PORTAL.welcome)}</textarea></div>
+        <div class="f2">
+          <div class="field"><label>Brand colour</label><input type="color" value="${PORTAL.colour}" oninput="PORTAL.colour=this.value;paintPortal()"></div>
+          <div class="field"><label>Background</label><input type="color" value="${PORTAL.bg}" oninput="PORTAL.bg=this.value;paintPortal()"></div>
+        </div>
+        <div class="field"><label>Logo letter</label><input value="${esc(PORTAL.logo)}" maxlength="2" oninput="PORTAL.logo=this.value;paintPortal()"></div>
+        <div class="field"><label>Support contact</label><input value="${esc(PORTAL.support)}" oninput="PORTAL.support=this.value;paintPortal()"></div>
+        <div class="field"><label>Terms line</label><input value="${esc(PORTAL.terms)}" oninput="PORTAL.terms=this.value;paintPortal()"></div>
+        <div class="field"><label>Login options</label><select onchange="PORTAL.login=this.value;paintPortal()">
+          <option value="voucher" ${PORTAL.login==='voucher'?'selected':''}>Voucher code only</option>
+          <option value="voucher-phone" ${PORTAL.login==='voucher-phone'?'selected':''}>Voucher code or phone number</option></select></div>
+        ${gate('Publishing the portal to a router depends on <b>Step 0</b> (HotSpot configuration on real hardware). Preview is local only.')}
+        <div class="mt16 row"><button class="btn btn-primary" onclick="publishPortal()">Queue publish to routers</button>
+          <button class="btn" onclick="toast('Reverted to last published version')">Revert</button></div>
+      </div></div>
+    <div class="card"><div class="card-h"><h3>Live preview</h3><div class="grow"></div><span class="pill p-info"><i class="dot"></i>Draft v5</span></div>
+      <div class="card-b" style="background:var(--off-white)"><div id="ppHost"></div></div></div>
+  </div>`;
+}
+afterRender.portal=paintPortal;
+function paintPortal(){
+  const h=$('#ppHost'); if(!h) return;
+  h.innerHTML=`<div class="pp-frame"><div class="pp-body" style="background:${PORTAL.bg}">
+    <div class="pp-logo" style="background:${PORTAL.colour}">${esc(PORTAL.logo||'D')}</div>
+    <div style="font-family:var(--display);font-size:20px;font-weight:600">${esc(PORTAL.title)}</div>
+    <div class="tiny muted" style="margin:7px 0 15px">${esc(PORTAL.welcome)}</div>
+    <input class="pp-in" placeholder="Voucher code" readonly>
+    ${PORTAL.login==='voucher-phone'?'<input class="pp-in" placeholder="or phone number" readonly>':''}
+    <div class="pp-btn" style="background:${PORTAL.colour}">Connect</div>
+    <div class="grow"></div>
+    <div class="tiny muted" style="margin-top:18px">${esc(PORTAL.terms)}<br><b>${esc(PORTAL.support)}</b></div>
+  </div></div>`;
+}
+function publishPortal(){
+  ROUTERS.filter(r=>r.hotspot==='running').forEach(r=>{
+    INTENTS.unshift({id:'IN-'+(4840+INTENTS.length),router:r.id,action:'Update captive portal',state:'queued',
+      created:0,priority:'normal',retries:0,err:null,exec:'—'});
+  });
+  toast('Portal publish queued for '+ROUTERS.filter(r=>r.hotspot==='running').length+' routers','ok');
+  renderNav();
+}
+
+/* ---------------- users & roles ---------------- */
+function vUsers(){
+  const yn=v=>v===1?'<span style="color:var(--green-mid)">&#10003;</span>':v===0?'<span class="muted">&#8212;</span>':`<span class="tiny" style="color:var(--amber-dark)">${v}</span>`;
+  return `<div class="card">
+    <div class="card-h"><h3>Users</h3><div class="grow"></div><button class="btn btn-primary btn-sm" onclick="toast('User invite is mocked in this prototype')">+ Invite user</button></div>
+    <div class="t-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Customer scope</th><th>Last active</th><th>Status</th></tr></thead><tbody>
+    ${USERS.map(u=>`<tr><td class="t-name">${esc(u.name)}</td><td class="t-sub">${esc(u.email)}</td>
+      <td><span class="pill ${u.role==='Super Admin'?'p-info':u.role==='Reseller'?'p-warn':'p-mute'}"><i class="dot"></i>${u.role}</span></td>
+      <td>${esc(u.tenant)}</td><td class="t-sub">${u.last}</td>
+      <td><span class="pill ${u.status==='active'?'p-ok':'p-bad'}"><i class="dot"></i>${u.status}</span></td></tr>`).join('')}
+    </tbody></table></div></div>
+
+  <div class="card mt16"><div class="card-h"><h3>Role permissions</h3>
+      <span class="sub">Reseller is a role of a customer, not a separate entity</span></div>
+    <div class="t-wrap"><table><thead><tr><th>Capability</th><th style="text-align:center">Super Admin</th>
+      <th style="text-align:center">Operations</th><th style="text-align:center">Reseller</th></tr></thead><tbody>
+      ${ROLE_MATRIX.map(r=>`<tr><td>${r[0]}</td><td style="text-align:center">${yn(r[1])}</td>
+        <td style="text-align:center">${yn(r[2])}</td><td style="text-align:center">${yn(r[3])}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="card-b" style="border-top:1px solid var(--line2)">
+      <span class="tiny muted">"own" = limited to that user's assigned customer. Isolation is enforced server-side, not by hiding UI.</span></div>
+  </div>`;
+}
+
+/* ---------------- audit ---------------- */
+function vAudit(){
+  return `<div class="card"><div class="card-h"><h3>Audit log</h3><span class="sub">append-only · every privileged action</span></div>
+    <div class="t-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Result</th></tr></thead><tbody>
+    ${AUDIT.map(a=>`<tr><td class="mono t-sub">${a.when}</td><td>${esc(a.who)}</td><td class="t-name">${esc(a.what)}</td>
+      <td class="t-sub">${esc(a.target)}</td>
+      <td><span class="pill ${a.ok?'p-ok':'p-bad'}"><i class="dot"></i>${a.ok?'OK':'Failed'}</span></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="card-b" style="border-top:1px solid var(--line2)">
+      <span class="tiny muted">Records are never edited or deleted. Every router change goes through an intent, so nothing bypasses this log.</span></div></div>`;
+}
+
+/* ---------------- modals ---------------- */
+function modalAddRouter(){
+  openModal(`<div class="modal-h"><h3>Register MikroTik router</h3><button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
+  <div class="modal-b">
+    <div class="f2">
+      <div class="field"><label>Router name</label><input id="nrn" placeholder="KLA-Riverside-03"></div>
+      <div class="field"><label>Serial number</label><input id="nrs" placeholder="HDX0000X0XX"></div>
+    </div>
+    <div class="field"><label>Customer</label><select id="nrt">${TENANTS.map(t=>`<option value="${t.id}">${esc(t.name)} — ${t.town}</option>`).join('')}</select></div>
+    <div class="field"><label>Location / site</label><input id="nrl" placeholder="Riverside Hotel — Conference wing"></div>
+    <div class="field"><label>Model</label><select id="nrm">${[...new Set(ROUTERS.map(r=>r.model))].map(m=>`<option>${m}</option>`).join('')}</select></div>
+    <div class="mt16">${gate('Registering allocates a WireGuard identity and a tunnel IP. The router is <b>not contacted</b> — it appears as <b>Registered</b> until it dials home.')}</div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="doAddRouter()">Register router</button></div>`);
+}
+function doAddRouter(){
+  const g=x=>document.getElementById(x).value;
+  if(!g('nrn')){toast('Router needs a name','err');return;}
+  const n=ROUTERS.length+1, id='MT-'+String(n).padStart(4,'0');
+  ROUTERS.push({id,name:g('nrn'),tenant:g('nrt'),site:g('nrl')||'—',model:g('nrm'),serial:g('nrs')||'—',ros:'—',
+    status:'registered',wg:'never',wgIp:'10.66.0.'+(10+n),endpoint:'—',handshake:null,latency:null,uptime:'—',seen:null,
+    prov:'registered',hotspot:'none',sessions:0,profile:'—',
+    desired:{ros:'7.16.2',profile:'dn-standard',plans:'1H,1D',portal:'v4',bw:'10/3'},
+    actual:{ros:'—',profile:'—',plans:'—',portal:'—',bw:'—'}});
+  closeModal(); toast(id+' registered — waiting for first handshake','ok'); renderNav(); go('routers');
+}
+function modalRouterActions(id){
+  const r=routerById(id);
+  const acts=[
+    ['Sync configuration','Apply configuration'],
+    ['Re-provision from scratch','Provision WireGuard'],
+    ['Configure RADIUS','Configure RADIUS'],
+    ['Update captive portal','Update captive portal'],
+    ['Update bandwidth profile','Update bandwidth profile'],
+  ];
+  openModal(`<div class="modal-h"><h3>${esc(r.name)}</h3><button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
+  <div class="modal-b">
+    <div class="tiny muted" style="margin-bottom:12px">Every action below <b>queues an intent</b>. Nothing is sent to the router from this dialog.</div>
+    ${acts.map(a=>`<button class="btn mt10" style="width:100%;justify-content:flex-start" onclick="queueIntent('${id}','${a[1]}')">${a[0]}</button>`).join('')}
+    <div class="mt16">${gate('<b>Restart</b>, <b>reset</b> and <b>disable HotSpot</b> are deliberately absent. docs/32 §0.4 must prove reset and restore on the bench before any screen offers them.')}</div>
+  </div>
+  <div class="modal-f"><button class="btn" onclick="closeModal()">Close</button></div>`);
+}
+function globalSearch(q){
+  if(q.length<2) return;
+  const r=ROUTERS.find(x=>(x.name+x.serial+x.id).toLowerCase().includes(q.toLowerCase()));
+  const v=VOUCHERS.find(x=>x.code.includes(q));
+  if(v&&/^\d+$/.test(q)){ vFilter={q,status:'',batch:'',page:1}; go('vouchers'); }
+  else if(r){ rFilter.q=q; rFilter.page=1; go('routers'); }
+}
+
+/* ---------------- boot ---------------- */
+renderNav(); render();
+setTimeout(()=>toast('Prototype loaded with mock data — no router, RADIUS or WireGuard endpoint is contacted'),600);
+</script>
+</body>
+</html>
