@@ -119,8 +119,10 @@ final class Routes
                 if ($ok === null) { return Response::notFound(); }
             }
             try {
-                $plan = (new \Dn\Policy\PlanRepository($db))
-                    ->create($who['customer_id'], $req->body, $who['principal_id'], $site);
+                // Savepointed so a duplicate name leaves the transaction
+                // usable for the audit write that follows on the happy path.
+                $plan = $db->attempt(fn($d) => (new \Dn\Policy\PlanRepository($d))
+                    ->create($who['customer_id'], $req->body, $who['principal_id'], $site));
             } catch (\PDOException $e) {
                 if (($e->errorInfo[0] ?? '') === '23505') {
                     return Response::conflict('a plan with that name already exists');
@@ -158,6 +160,67 @@ final class Routes
             (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
                 'principal', 'plan.retired', 'plan', $id, $req->ip);
             return Response::ok(['plan' => P::plan($plan)]);
+        });
+
+        // ── vouchers ────────────────────────────────────────────────────
+        $r->get('/api/v1/me/vouchers', function (Request $req, Database $db) {
+            $state = $req->params['state'] ?? null;
+            $rows = (new \Dn\Vouchers\VoucherService($db))->list();
+            return Response::ok(['vouchers' => P::many([P::class, 'voucher'], $rows)]);
+        });
+
+        $r->post('/api/v1/me/vouchers', function (Request $req, Database $db, array $who) {
+            $planId = (string) ($req->body['plan_id'] ?? '');
+            $count  = (int) ($req->body['count'] ?? 1);
+            $site   = $req->body['site_id'] ?? null;
+
+            if (!preg_match('/^[0-9a-f-]{36}$/i', $planId)) { return Response::notFound(); }
+            if ($count < 1 || $count > 500) {
+                // Above this a batch is a job, not a request (docs/30
+                // Artifact 9). The async path is step 5b; until it exists the
+                // limit is stated rather than letting a request time out
+                // halfway through writing rows.
+                return Response::badRequest('count must be between 1 and 500');
+            }
+            if ($site !== null && $db->one('SELECT id FROM mt_sites WHERE id = ?', [$site]) === null) {
+                return Response::notFound();
+            }
+
+            $key = $req->header('Idempotency-Key');
+            try {
+                $out = (new \Dn\Vouchers\VoucherService($db))->issueBatch(
+                    $who['customer_id'], $planId, $count, $site, $who['principal_id'], $key);
+            } catch (\InvalidArgumentException) {
+                return Response::notFound();   // unknown or retired plan
+            }
+
+            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
+                'principal', 'voucher.issued', 'voucher_batch', $out['batch']['id'], $req->ip,
+                ['count' => count($out['vouchers'])]);
+
+            // 202, not 200: the codes exist, and the work of publishing them
+            // is queued. Says nothing about how or when that reaches a router.
+            return Response::accepted([
+                'batch'     => P::batch($out['batch']),
+                'vouchers'  => P::many([P::class, 'voucher'], $out['vouchers']),
+                'intent_id' => $out['intent']['id'],
+            ]);
+        });
+
+        $r->post('/api/v1/me/vouchers/{voucher_id}/revoke', function (Request $req, Database $db, array $who) {
+            $id = $req->params['voucher_id'] ?? '';
+            if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
+            $svc = new \Dn\Vouchers\VoucherService($db);
+            $v = $svc->revoke($id);
+            if ($v === null) { return Response::notFound(); }
+
+            $intent = (new \Dn\Intents\IntentQueue($db))->enqueue(
+                $who['customer_id'], 'voucher.revoke', ['voucher_id' => $id],
+                $who['principal_id'], 'voucher', $id);
+            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
+                'principal', 'voucher.revoked', 'voucher', $id, $req->ip);
+
+            return Response::accepted(['voucher' => P::voucher($v), 'intent_id' => $intent['id']]);
         });
 
         $r->get('/api/v1/me/intents', function (Request $req, Database $db) {

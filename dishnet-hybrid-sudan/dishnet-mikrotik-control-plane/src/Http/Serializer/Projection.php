@@ -59,6 +59,22 @@ final class Projection
         'price_minor', 'currency', 'active', 'site_id', 'created_at',
     ];
 
+    /**
+     * A voucher as its owner sees it. The code IS shown — it is the thing
+     * they sell. batch_id and plan_id are internal joins the customer has no
+     * use for; price and duration are the snapshot taken at issue.
+     */
+    private const VOUCHER = [
+        'id', 'code', 'state', 'price_minor', 'currency', 'duration_s',
+        'site_id', 'created_at', 'activated_at', 'expires_at',
+    ];
+
+    private const BATCH = [
+        'id', 'requested_count', 'issued_count', 'state', 'site_id', 'created_at',
+    ];
+
+    public static function voucher(array $r): array     { return self::pick($r, self::VOUCHER); }
+    public static function batch(array $r): array       { return self::pick($r, self::BATCH); }
     public static function plan(array $r): array        { return self::pick($r, self::PLAN); }
     public static function intent(array $r): array      { return self::pick($r, self::INTENT); }
     public static function customer(array $r): array    { return self::pick($r, self::CUSTOMER); }
@@ -86,6 +102,8 @@ final class Projection
             'accessPoint' => self::ACCESS_POINT,
             'intent'      => self::INTENT,
             'plan'        => self::PLAN,
+            'voucher'     => self::VOUCHER,
+            'batch'       => self::BATCH,
             default       => throw new \InvalidArgumentException("unknown projection {$name}"),
         };
     }

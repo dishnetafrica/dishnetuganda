@@ -67,6 +67,7 @@ function seed_tables(): array
 {
     return [
         'mt_auth_codes', 'mt_intents', 'mt_idempotency', 'mt_audit_log',
+        'mt_hotspot_users', 'mt_vouchers', 'mt_voucher_batches',
         'mt_plans', 'mt_sites', 'mt_entitlements', 'mt_services',
         'mt_auth_sessions', 'mt_principals',
     ];

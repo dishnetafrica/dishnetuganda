@@ -81,6 +81,27 @@ foreach ($src() as $f) {
 is_($touches, ['Api/Routes.php'],
     'exactly one source file reads mt_entitlements, and it is the read-only route');
 
+t('every catch of a constraint violation is savepointed');
+// In PostgreSQL a failed statement aborts the whole transaction, so
+// catch-the-unique-violation-and-continue silently does not work inside one:
+// the recovery code cannot run, and neither can anything after it. It looks
+// correct and fails the first time the collision it exists for happens.
+// Found in three places at once in step 5, which is why this is a guard and
+// not a note.
+$unsafe = [];
+foreach ($src() as $f) {
+    $body = strip_php_comments(file_get_contents($f));
+    if (!str_contains($body, '23505')) { continue; }
+    if (!str_contains($body, 'attempt(')) {
+        $unsafe[] = str_replace($root . '/src/', '', $f);
+    }
+}
+is_($unsafe, [], 'every file catching 23505 routes the attempt through Database::attempt()');
+
+$dbSrc = file_get_contents($root . '/src/Db/Database.php');
+is_(str_contains($dbSrc, 'SAVEPOINT'), true, 'and attempt() really uses a savepoint');
+is_(str_contains($dbSrc, 'ROLLBACK TO SAVEPOINT'), true, 'rolling back to it on failure');
+
 t('F9 — no source file refuses anything on commercial grounds');
 // If a ceiling creeps back, it announces itself in the wording first.
 $wording = [];

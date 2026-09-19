@@ -6,10 +6,10 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 4 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
-the `/me` surface, the response projection, the intent queue, and the policy plane
-(retail plans and derived enforcement profiles). No devices, vouchers, RADIUS or
-telemetry yet. See `docs/55` in the plugin repo for the plan.
+**Status: step 5 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
+the `/me` surface, the response projection, the intent queue, the policy plane, and
+vouchers with their projection into AAA. No devices, RADIUS daemon integration, sessions
+or telemetry yet. See `docs/55` in the plugin repo for the plan.
 
 ---
 
@@ -37,7 +37,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**337 assertions across 10 suites**, including one that runs against a real `php -S` server.
+**381 assertions across 11 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -70,7 +70,7 @@ misconfigures this fails the suite rather than leaking silently.
 ```
 migrations/   001 roles · 002 identity · 003 commercial plane
               004 audit · 005 idempotency · 006 RLS · 007 auth · 008 intents
-              009 policy
+              009 policy · 010 vouchers
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
 src/Auth/     Authenticator — credential to derived (principal, customer)
@@ -79,13 +79,14 @@ src/Http/     Request, Response, Router, Kernel, Idempotency
 src/Http/Serializer/  Projection — the allowlist for what leaves
 src/Policy/   PlanValidator (validity, never ceiling), ProfileResolver,
               PlanRepository
+src/Vouchers/ CodeSource, CodeGenerator, VoucherService
 src/Intents/  IntentQueue, IntentState — the only path to a router
 src/Delivery/ DeliveryPort (interface), DeliveryResult, NullDelivery
 src/Jobs/     IntentWorker — the only caller of DeliveryPort
 src/Api/      Routes — auth + /me
 public/       index.php
 bin/          migrate.php, worker.php
-tests/        run.sh + 10 suites
+tests/        run.sh + 11 suites
 ```
 
 ## Invariants the tests enforce
@@ -108,6 +109,40 @@ Each guard has been **negative-tested**: a violation is planted, the suite is co
 fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
 
 ---
+
+## One code, one redemption — and how that is tested
+
+Two guests typing the same code at the same moment is not hypothetical; it is what happens
+when a code is shared. The guard is a `WHERE state = 'unused'` inside the redeeming UPDATE,
+so the second transaction blocks on the row lock, re-evaluates, and matches nothing.
+
+The test spawns **twelve real processes** that connect first, spin until an agreed instant,
+then fire together. Exactly one wins. A sequential test — redeem, redeem again — passes
+against code that has the bug, so it would not have been a test of this at all.
+
+Every redemption failure returns the same nothing: unknown code, already used, revoked,
+expired. Nothing distinguishes "wrong code" from "someone else got there first".
+
+## A PostgreSQL trap worth knowing about
+
+**A failed statement aborts the whole transaction.** Every statement after it raises 25P02
+until rollback. So the familiar pattern —
+
+```php
+try { insert(); } catch (UniqueViolation) { /* try again, or re-read */ }
+```
+
+— does not work inside a transaction. The recovery code cannot run, and neither can
+anything after it. It looks correct, passes review, and fails the first time the collision
+it exists for actually happens.
+
+`Database::attempt()` takes a savepoint around the attempt and rolls back to it on failure,
+confining the abort. Three call sites needed it. A guard asserts that any file catching
+`23505` routes through it.
+
+The voucher collision-retry is why this surfaced: at 32^10 a natural collision would never
+occur in a test run, so the path was given a deliberate seam (`CodeSource`) and driven —
+and the bug was underneath it.
 
 ## Validity is not a ceiling
 

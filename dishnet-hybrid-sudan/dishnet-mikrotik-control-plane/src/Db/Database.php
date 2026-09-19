@@ -67,4 +67,37 @@ final class Database
         $rows = $this->query($sql, $params);
         return $rows[0] ?? null;
     }
+
+    /**
+     * Run something that may violate a constraint, WITHOUT poisoning the
+     * surrounding transaction.
+     *
+     * In PostgreSQL a failed statement aborts the whole transaction: every
+     * statement after it raises 25P02 until rollback. So the familiar
+     * "try the insert, catch the unique violation, try again" pattern does
+     * not work inside a transaction — the retry cannot run, and neither can
+     * anything else. It looks correct, passes review, and fails the first
+     * time the collision it exists for actually happens.
+     *
+     * A savepoint confines the abort. Take one before the attempt, release it
+     * on success, roll back to it on failure, and the transaction survives.
+     *
+     * Outside a transaction this is a no-op, so callers do not have to know
+     * which case they are in.
+     */
+    public function attempt(callable $fn): mixed
+    {
+        if (!$this->pdo->inTransaction()) { return $fn($this); }
+
+        $sp = 'sp_' . bin2hex(random_bytes(6));
+        $this->pdo->exec("SAVEPOINT {$sp}");
+        try {
+            $out = $fn($this);
+            $this->pdo->exec("RELEASE SAVEPOINT {$sp}");
+            return $out;
+        } catch (\Throwable $e) {
+            $this->pdo->exec("ROLLBACK TO SAVEPOINT {$sp}");
+            throw $e;
+        }
+    }
 }

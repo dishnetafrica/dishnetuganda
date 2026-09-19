@@ -37,12 +37,14 @@ final class ProfileResolver
         // tuple decides it, and the loser re-reads rather than failing: this
         // is a lookup, not a write the caller asked for.
         try {
-            $new = $this->db->one(
+            // Savepointed: without it the losing side of the race cannot
+            // re-read, because the failed insert has aborted the transaction.
+            $new = $this->db->attempt(fn($db) => $db->one(
                 'INSERT INTO mt_profiles
                    (rate_down_bps, rate_up_bps, session_timeout_s, shared_users, data_cap_bytes)
                  VALUES (?,?,?,?,?) RETURNING id',
                 [$rateDown, $rateUp, $sessionTimeout, $sharedUsers, $dataCap]
-            );
+            ));
             return $new['id'];
         } catch (\PDOException $e) {
             if (($e->errorInfo[0] ?? '') !== '23505') { throw $e; }
