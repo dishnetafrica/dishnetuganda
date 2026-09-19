@@ -1316,6 +1316,16 @@ class DishNetAiBrain
 
         // Sales
         $products = $ctx['products']['products'] ?? null;
+        // Which plans this conversation may see. A Business plan is only in
+        // the list once there is a reason for one — the model is not asked to
+        // resist the word "business", it is given nothing else to offer.
+        // See PlanCatalogue for why this is omission rather than instruction.
+        $planCut = ['filtered' => 0];
+        if (is_array($products) && $products) {
+            if (!class_exists('PlanCatalogue')) require_once __DIR__ . '/PlanCatalogue.php';
+            $planCut  = \PlanCatalogue::forConversation($products, $ctx);
+            $products = $planCut['products'];
+        }
         if (is_array($products) && $products) {
             $d .= "\nPLANS (live from our system — quote these exactly):\n";
             foreach ($products as $p) {
@@ -1330,6 +1340,9 @@ class DishNetAiBrain
                 if (!empty($p['upload_speed']))   $d .= '/' . $p['upload_speed'] . ' up';
                 if (!empty($p['data_limit']))     $d .= ', data limit ' . $p['data_limit'];
                 $d .= "\n";
+            }
+            if (!empty($planCut['filtered'])) {
+                $d .= \PlanCatalogue::ASK_RULE;
             }
             // uCRM's plan and product responses carry no currency, so the brain was
             // told to stay silent rather than guess one. That was right while
