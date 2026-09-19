@@ -658,7 +658,23 @@ class AiReplyWorker extends WorkerBase
             $this->log('error', 'guard failed, reply withheld: ' . $e->getMessage());
             $res = ['safe' => false, 'reply' => \ReplyPrivacyGuard::SAFE_FALLBACK, 'categories' => ['guard_error']];
         }
-        if (!empty($res['safe'])) return $ai;
+        if (!empty($res['safe'])) {
+            // The fact the prompt could not make stick. Applied AFTER the
+            // privacy guard has passed the model's own words: this text is
+            // the operator's, listed in DishNetAiBrain::operatorText, so it
+            // needs no checking — and checking it would only risk the guard
+            // refusing our own sentence.
+            if (!class_exists('PlanFenceGuard')) {
+                require_once dirname(__DIR__) . '/lib/PlanFenceGuard.php';
+            }
+            $fence = \PlanFenceGuard::apply((string)$ai['reply'], (array)($this->config ?? []));
+            if ($fence['appended']) {
+                $ai['reply'] = $fence['reply'];
+                $this->log('info', sprintf('conv %d: plan fence appended — %s',
+                    (int)($ctx['conversation_id'] ?? 0), $fence['reason']));
+            }
+            return $ai;
+        }
 
         $convId = (int)($ctx['conversation_id'] ?? 0);
         $cats   = implode(',', (array)($res['categories'] ?? []));

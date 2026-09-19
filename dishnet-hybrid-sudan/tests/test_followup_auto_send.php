@@ -122,5 +122,49 @@ echo "\n9. The switch is settable\n";
 $cfg = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($cfg, "'followup_auto_send'") !== false, 'set_config.php registers it');
 
+echo "\nA conversation a person owes an answer may not answer itself\n";
+// needs_human is what the assistant sets when it hands over and tells the
+// customer a colleague will reply. The gate chain tests human_active — a
+// colleague ALREADY TYPING — and never tested this one.
+//
+// c354: on the 15th the assistant said "let me confirm with our team and come
+// back to you today" about registering a kit on a DRC address. Nobody did. On
+// the 19th the first automatic message this plugin ever sent asked THAT
+// customer whether THEY had any questions, while they were still waiting for
+// the answer we promised.
+$send = ['verdict' => 'SEND', 'message' => 'Following up on the kit you asked about.'];
+$on   = ['followup_auto_send' => '1'];
+
+foreach (['needs_human', 'human_active'] as $state) {
+    $r = FollowUpPolicy::mayAutoSend($send, FollowUpPolicy::CONTENT_ENQUIRY, $on,
+                                     ['state' => $state]);
+    is_($r['auto'] === false, $state . ' may not send itself');
+    is_(strpos($r['reason'], $state) !== false,
+        'and the reason names it, so the queue explains itself', $r['reason']);
+}
+// Case must not decide a safety gate.
+is_(FollowUpPolicy::mayAutoSend($send, FollowUpPolicy::CONTENT_ENQUIRY, $on,
+        ['state' => 'NEEDS_HUMAN'])['auto'] === false,
+    'the check is not defeated by capitals');
+
+foreach (['new', 'active', ''] as $state) {
+    is_(FollowUpPolicy::mayAutoSend($send, FollowUpPolicy::CONTENT_ENQUIRY, $on,
+            ['state' => $state])['auto'] === true,
+        'a conversation in "' . ($state ?: 'no state') . '" still sends itself',
+        'the fix must not stop the 246 ordinary enquiries this was built for');
+}
+is_(FollowUpPolicy::mayAutoSend($send, FollowUpPolicy::CONTENT_ENQUIRY, $on)['auto'] === true,
+    'and an absent conversation argument does not silently block everything');
+
+echo "\nThe draft is still written — only the sending is withheld\n";
+// The colleague picking this up wants the draft waiting. Blocking the draft
+// would make the gap worse, not better.
+$run = (string)file_get_contents($root . '/cron/followup_run.php');
+is_(strpos($run, 'mayAutoSend($verdict, $level, $config, $conv)') !== false,
+    'the cron passes the conversation into the decision');
+is_(strpos($run, '$drafted++') < strpos($run, 'mayAutoSend'),
+    'and drafts before it asks whether it may send',
+    'if the order flips, a needs_human conversation loses its draft too');
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

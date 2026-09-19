@@ -675,6 +675,10 @@ class DishNetAiBrain
             'ai_fact_payment',
             'ai_fact_prices',
             'stock_statement',
+            // PlanFenceGuard appends this to outgoing replies, so it comes
+            // back as history on the next turn. Without it here the guard
+            // would block the model for repeating our own sentence.
+            'ai_fact_business_cap',
         ];
         $out = [];
         foreach ($keys as $k) {

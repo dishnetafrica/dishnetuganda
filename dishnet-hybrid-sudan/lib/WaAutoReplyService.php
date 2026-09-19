@@ -1248,7 +1248,14 @@ class WaAutoReplyService
             // business facts are the answer, not a leak of the prompt.
             'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
         ]);
-        if ($res['safe']) return $res['reply'];
+        if ($res['safe']) {
+            // See AiReplyWorker: the same fence on the other outbound path.
+            if (!class_exists('PlanFenceGuard')) {
+                require_once __DIR__ . '/PlanFenceGuard.php';
+            }
+            return \PlanFenceGuard::apply((string)$res['reply'],
+                                          (array)($this->config ?? []))['reply'];
+        }
 
         $tools_called = [];
         if ($tools instanceof \CustomerDataTools) {

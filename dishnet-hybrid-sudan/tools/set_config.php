@@ -119,6 +119,13 @@ $FLAGS = [
     // not calculate a tax amount or rate.
     'ai_fact_prices' => ['text',
         'What to say about tax on listed prices, e.g. "All our listed prices include VAT." (unset = the AI hedges)'],
+    // Appended by PlanFenceGuard to any reply that names a Business plan
+    // without naming Residential. It is here, and not in the prompt, because
+    // the prompt version was measured: 18 of 21 replies ignored it. "omit"
+    // switches the fence off; unset uses PlanFenceGuard::DEFAULT_NOTE.
+    'ai_fact_business_cap' => ['text',
+        'Appended when the AI quotes a Business plan without offering Residential — the priority-data '
+      . 'cap and the 1 Mbps drop ("omit" = never append; unset = the built-in wording)'],
     // The three business facts that shipped with South Sudan wording and had
     // no way to change them: not on the uCRM Configuration screen, not in the
     // Engage tab, not here. Unset, a Ugandan customer is told the office is
@@ -336,6 +343,11 @@ if (!$clear) {
     if (in_array($key, ['ai_fact_office', 'ai_fact_delivery'], true) && $new !== ''
         && preg_match('/\b(juba|sudan|renk|joda)\b/i', $new)) {
         $warn[] = 'That names a South Sudan place. This box answers Ugandan customers.';
+    }
+    if ($key === 'ai_fact_business_cap' && $new !== ''
+        && preg_match('/\b\d{1,3}[, ]\d{3}\b|UGX|shillings?/i', $new)) {
+        $warn[] = 'That looks like a price. Prices come from uCRM so they stay current — a figure '
+                . 'here becomes a second catalogue that goes stale silently.';
     }
     if ($key === 'ai_fact_prices' && $new !== '' && preg_match('/\d/', $new)) {
         $warn[] = 'This is repeated to customers as a fact. A figure in it (a rate, an amount) '

@@ -165,7 +165,7 @@ foreach ($svc->due($now, $perRun) as $fu) {
     // outside the window. Routing through approve() rather than around it is
     // what keeps those checks on the automatic path too, and leaves
     // decided_by = 'auto' in the trail so the two are told apart afterwards.
-    $auto = FollowUpPolicy::mayAutoSend($verdict, $level, $config);
+    $auto = FollowUpPolicy::mayAutoSend($verdict, $level, $config, $conv);
     if ($auto['auto']) {
         $ok = $svc->approve((int)$r['id'], 'auto', '', $auto['reason']);
         if (empty($ok['ok'])) {
