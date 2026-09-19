@@ -37,6 +37,28 @@ function t_summary(): int
     return $f ? 1 : 0;
 }
 
+/**
+ * Strip comments so a source-content guard scans CODE, not prose.
+ *
+ * Without this, a guard looking for "shape" matches the comment "one failure
+ * shape for every reason", and a guard looking for refusal verbs matches
+ * "ALLOWLIST, never a denylist". Both happened; both were false positives on
+ * comments that exist to explain the very rule being checked.
+ */
+function strip_php_comments(string $code): string
+{
+    $out = '';
+    foreach (token_get_all($code) as $tok) {
+        if (is_array($tok)) {
+            if (in_array($tok[0], [T_COMMENT, T_DOC_COMMENT], true)) { continue; }
+            $out .= $tok[1];
+        } else {
+            $out .= $tok;
+        }
+    }
+    return $out;
+}
+
 /** Seed two customers with a full object graph each. Owner connection. */
 function seed_two_customers(\Dn\Db\Database $owner): array
 {

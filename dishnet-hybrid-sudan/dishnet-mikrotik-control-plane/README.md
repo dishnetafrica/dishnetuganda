@@ -6,8 +6,9 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 1 of 8.** Schema, tenancy, isolation, audit and idempotency. No HTTP layer,
-no devices, no vouchers, no RADIUS yet. See `docs/55` in the plugin repo for the plan.
+**Status: step 2 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
+the `/me` read surface and the response projection. No devices, vouchers, RADIUS or
+telemetry yet. See `docs/55` in the plugin repo for the plan.
 
 ---
 
@@ -35,7 +36,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**123 assertions across 5 suites.**
+**221 assertions across 8 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -67,13 +68,17 @@ misconfigures this fails the suite rather than leaking silently.
 
 ```
 migrations/   001 roles · 002 identity · 003 commercial plane
-              004 audit · 005 idempotency · 006 RLS
+              004 audit · 005 idempotency · 006 RLS · 007 auth
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
+src/Auth/     Authenticator — credential to derived (principal, customer)
 src/Audit/    AuditLog — append-only, enforced by the database
-src/Http/     Idempotency — replay protection
+src/Http/     Request, Response, Router, Kernel, Idempotency
+src/Http/Serializer/  Projection — the allowlist for what leaves
+src/Api/      Routes — auth + /me
+public/       index.php
 bin/          migrate.php
-tests/        run.sh + 5 suites
+tests/        run.sh + 8 suites
 ```
 
 ## Invariants the tests enforce
@@ -91,3 +96,23 @@ From `docs/53` F1–F13, binding:
 
 These are executable because a frozen decision recorded only in prose gets reopened by
 whoever has not read the prose.
+
+Each guard has been **negative-tested**: a violation is planted, the suite is confirmed to
+fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
+
+---
+
+## Authentication, and the chicken-and-egg it solves
+
+Signing in has to read `mt_principals` — a table under RLS keyed on the customer being
+derived. The lookup cannot satisfy the policy it is trying to establish.
+
+`migrations/007_auth.sql` solves it with `SECURITY DEFINER` functions that return **only
+the ids needed to establish context** — never a row, never a hash, never a name. The app
+role has no privilege on `mt_auth_codes` at all. Every such function pins `search_path`,
+and a test asserts that: an unpinned `SECURITY DEFINER` function can be hijacked by a
+caller who shadows an object earlier on the path.
+
+`POST /auth/request-code` returns the same response for a registered and an unregistered
+number, so it cannot be used as a directory of who holds an account. Every verify failure —
+wrong code, expired, reused, too many attempts, unknown phone — returns one identical 401.

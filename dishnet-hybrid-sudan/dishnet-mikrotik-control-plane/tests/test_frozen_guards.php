@@ -44,26 +44,37 @@ t('F8/F10 — entitlements are recorded, never enforced against an operation');
 // Your clarification: max_routers/max_sites/max_operators are COMMERCIAL
 // controls. Until C11 and C20 are decided they must not gate a customer
 // operation, and when they do it must bind at admin time, never at a guest.
-// This asserts no such enforcement path has appeared.
+//
+// The precise form of that guard is: no code reads an entitlement KEY. A
+// first attempt grepped for refusal verbs near the word "entitlement" and
+// flagged Projection.php for containing `throw` (on an unknown projection
+// name) and the word "denylist" (in a comment explaining the allowlist).
+// A guard that cannot tell those from an enforcement path is not a guard —
+// it is noise that gets switched off. So it names the keys instead.
+$keys = ['max_routers','max_sites','max_operators',
+         'feature_portal_branding','feature_uplink_alerts'];
 $offenders = [];
 foreach ($src() as $f) {
-    $body = file_get_contents($f);
-    if (!preg_match('/entitlement/i', $body)) { continue; }
-    foreach (['throw','deny','reject','exceed','limit_reached','forbid'] as $verb) {
-        if (preg_match('/' . $verb . '/i', $body)) { $offenders[] = basename($f) . " ({$verb})"; }
+    $body = strip_php_comments(file_get_contents($f));
+    foreach ($keys as $k) {
+        if (str_contains($body, $k)) { $offenders[] = basename($f) . " reads {$k}"; }
     }
 }
-is_($offenders, [], 'no source file both mentions entitlements and refuses an operation');
+is_($offenders, [], 'no source file reads an entitlement key — they are stored and shown, never applied');
 
-t('F13 — no enforcement path exists for anything measured');
+t('F13 — no code can send a rate limit or queue to a router');
+// Named by the RouterOS/RADIUS artefacts that would actually do it, not by
+// English words. An earlier version matched "failure shape" and "return a
+// shape that says nothing", which are not network shaping.
 $bad = [];
 foreach ($src() as $f) {
-    $b = file_get_contents($f);
-    if (preg_match('/\b(shape|throttle|ration|cap_uplink|enforce_bandwidth)\b/i', $b)) {
-        $bad[] = basename($f);
+    $b = strip_php_comments(file_get_contents($f));
+    foreach (['Mikrotik-Rate-Limit', '/queue/simple', 'rate-limit',
+              'burst-limit', 'Ascend-Data-Rate', 'WISPr-Bandwidth'] as $needle) {
+        if (stripos($b, $needle) !== false) { $bad[] = basename($f) . " -> {$needle}"; }
     }
 }
-is_($bad, [], 'no shaping, throttling or rationing verb appears in the source');
+is_($bad, [], 'no RouterOS or RADIUS bandwidth-enforcement artefact appears in the source');
 
 // ---------------------------------------------------------------------------
 t('F1 — Domain B references no Domain A artefact');
@@ -113,6 +124,36 @@ foreach ($src() as $f) {
     }
 }
 is_($fromRequest, [], 'no source file reads a customer/tenant id from a request');
+
+t('F4 — no route pattern contains a customer or tenant id');
+// The strongest form of "the tenant is never an argument": there is no URL
+// shape that could carry one.
+$patterns = [];
+foreach (\Dn\Api\Routes::build(new \Dn\Auth\Authenticator(Database::app()))
+         ->patterns() as $pat) { $patterns[] = $pat; }
+$offending = array_values(array_filter($patterns,
+    fn($p) => preg_match('/\{(customer|customer_id|tenant|tenant_id)\}/i', $p)));
+is_($offending, [], 'no route pattern accepts a customer or tenant id');
+is_(count($patterns) > 0, true, 'and there really are routes to check (' . count($patterns) . ')');
+
+t('SECURITY DEFINER functions all pin their search_path');
+// A SECURITY DEFINER function with a mutable search_path can be hijacked by a
+// caller who creates a same-named object earlier on the path, running their
+// SQL as the owner. This is the classic mistake with the pattern.
+$defs = $owner->query(
+    "SELECT proname, proconfig FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.prosecdef");
+is_(count($defs) > 0, true, 'there are SECURITY DEFINER functions to check');
+$unpinned = [];
+foreach ($defs as $d) {
+    if (!str_contains((string) $d['proconfig'], 'search_path=')) { $unpinned[] = $d['proname']; }
+}
+is_($unpinned, [], 'every SECURITY DEFINER function pins search_path');
+
+t('the app role has no direct access to the auth code table');
+throws_(fn() => Database::app()->query('SELECT * FROM mt_auth_codes'), '',
+    'dnb_app cannot read mt_auth_codes at all — only the functions may');
 
 t('the two connection roles are kept separate in code');
 $db = file_get_contents($root . '/src/Db/Database.php');
