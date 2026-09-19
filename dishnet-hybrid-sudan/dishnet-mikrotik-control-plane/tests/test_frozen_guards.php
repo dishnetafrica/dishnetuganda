@@ -62,6 +62,38 @@ foreach ($src() as $f) {
 }
 is_($offenders, [], 'no source file reads an entitlement key — they are stored and shown, never applied');
 
+t('F8/F10 — mt_entitlements is only ever read, never consulted in a decision');
+// The entitlement KEY guard above catches code that names max_routers. This
+// catches the other shape: reading the table at all outside the one read-only
+// route. A SELECT that feeds an if-statement is a ceiling even if it never
+// names a key.
+$touches = [];
+foreach ($src() as $f) {
+    $body = strip_php_comments(file_get_contents($f));
+    if (!str_contains($body, 'mt_entitlements')) { continue; }
+    $touches[] = str_replace($root . '/src/', '', $f);
+    foreach (['UPDATE mt_entitlements', 'DELETE FROM mt_entitlements',
+              'INSERT INTO mt_entitlements'] as $write) {
+        is_(stripos($body, $write) === false, true,
+            basename($f) . " does not {$write} — entitlements are set by admin, not by a customer path");
+    }
+}
+is_($touches, ['Api/Routes.php'],
+    'exactly one source file reads mt_entitlements, and it is the read-only route');
+
+t('F9 — no source file refuses anything on commercial grounds');
+// If a ceiling creeps back, it announces itself in the wording first.
+$wording = [];
+foreach ($src() as $f) {
+    $body = strip_php_comments(file_get_contents($f));
+    foreach (['you did not buy', 'not purchased', 'exceeds your plan',
+              'upgrade your', 'your allowance', 'plan does not permit',
+              'exceeds your entitlement'] as $phrase) {
+        if (stripos($body, $phrase) !== false) { $wording[] = basename($f) . " -> {$phrase}"; }
+    }
+}
+is_($wording, [], 'no commercial-refusal wording anywhere in the service');
+
 t('F13 — no code can send a rate limit or queue to a router');
 // Named by the RouterOS/RADIUS artefacts that would actually do it, not by
 // English words. An earlier version matched "failure shape" and "return a

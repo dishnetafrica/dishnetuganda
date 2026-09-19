@@ -6,9 +6,10 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 3 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
-the `/me` read surface, the response projection, and the intent queue. No devices,
-vouchers, RADIUS or telemetry yet. See `docs/55` in the plugin repo for the plan.
+**Status: step 4 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
+the `/me` surface, the response projection, the intent queue, and the policy plane
+(retail plans and derived enforcement profiles). No devices, vouchers, RADIUS or
+telemetry yet. See `docs/55` in the plugin repo for the plan.
 
 ---
 
@@ -36,7 +37,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**282 assertions across 9 suites**, including one that runs against a real `php -S` server.
+**337 assertions across 10 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -69,19 +70,22 @@ misconfigures this fails the suite rather than leaking silently.
 ```
 migrations/   001 roles · 002 identity · 003 commercial plane
               004 audit · 005 idempotency · 006 RLS · 007 auth · 008 intents
+              009 policy
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
 src/Auth/     Authenticator — credential to derived (principal, customer)
 src/Audit/    AuditLog — append-only, enforced by the database
 src/Http/     Request, Response, Router, Kernel, Idempotency
 src/Http/Serializer/  Projection — the allowlist for what leaves
+src/Policy/   PlanValidator (validity, never ceiling), ProfileResolver,
+              PlanRepository
 src/Intents/  IntentQueue, IntentState — the only path to a router
 src/Delivery/ DeliveryPort (interface), DeliveryResult, NullDelivery
 src/Jobs/     IntentWorker — the only caller of DeliveryPort
 src/Api/      Routes — auth + /me
 public/       index.php
 bin/          migrate.php, worker.php
-tests/        run.sh + 9 suites
+tests/        run.sh + 10 suites
 ```
 
 ## Invariants the tests enforce
@@ -104,6 +108,32 @@ Each guard has been **negative-tested**: a violation is planted, the suite is co
 fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
 
 ---
+
+## Validity is not a ceiling
+
+A plan is checked for one thing: whether its values can be **expressed** — by the RADIUS
+attributes that carry them and the hardware that enforces them.
+
+*"That rate cannot be written into the attribute"* is a fact about the protocol and stays.
+*"You did not buy that much"* is a commercial ceiling, and under F8/F9 it is wrong: the
+customer's uplink is their own and DishNet does not ration it. A customer may create a
+20 Mbps plan whether or not their link carries it — overselling their own uplink is their
+business decision, and the platform shows them what is happening rather than refusing them.
+
+Three guards hold that line: no source file reads an entitlement key; `mt_entitlements` is
+read in exactly one place and never written from a customer path; and no source file
+contains commercial-refusal wording. A ceiling creeping back would announce itself in the
+wording before it showed up anywhere else.
+
+`PlanValidator::MAX_RATE_BPS` is a conservative 32-bit bound that **requires verification on
+hardware in step 7** — RouterOS's real maximum has not been read off a device, and docs/31
+§7's matrix is filled by testing rather than assumption. It is set high enough that no
+hotspot plan will meet it, so it cannot act as a commercial limit by accident.
+
+**Profiles are derived, never chosen.** The customer expresses what they are selling; the
+platform works out how to enforce it, deduplicating on the technical tuple so two customers
+selling the same shape share one profile row. No customer-facing response carries a profile
+id, so neither can observe the other.
 
 ## Delivery is at-least-once, and nothing pretends otherwise
 

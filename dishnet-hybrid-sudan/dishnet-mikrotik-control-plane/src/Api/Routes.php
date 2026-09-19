@@ -100,6 +100,66 @@ final class Routes
             return Response::ok(['entitlements' => P::many([P::class, 'entitlement'], $rows)]);
         });
 
+        // ── retail plans: the customer's own products ───────────────────
+        $r->get('/api/v1/me/plans', function (Request $req, Database $db) {
+            $rows = (new \Dn\Policy\PlanRepository($db))->all();
+            return Response::ok(['plans' => P::many([P::class, 'plan'], $rows)]);
+        });
+
+        $r->post('/api/v1/me/plans', function (Request $req, Database $db, array $who) {
+            // Checked for whether the values can be EXPRESSED, never for
+            // whether the customer is permitted to sell them (F9).
+            $errors = (new \Dn\Policy\PlanValidator())->check($req->body);
+            if ($errors) { return new Response(422, ['error' => 'invalid_plan', 'reasons' => $errors]); }
+
+            $site = $req->body['site_id'] ?? null;
+            if ($site !== null) {
+                // Filters the derived set; a foreign site id matches nothing.
+                $ok = $db->one('SELECT id FROM mt_sites WHERE id = ?', [$site]);
+                if ($ok === null) { return Response::notFound(); }
+            }
+            try {
+                $plan = (new \Dn\Policy\PlanRepository($db))
+                    ->create($who['customer_id'], $req->body, $who['principal_id'], $site);
+            } catch (\PDOException $e) {
+                if (($e->errorInfo[0] ?? '') === '23505') {
+                    return Response::conflict('a plan with that name already exists');
+                }
+                throw $e;
+            }
+            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
+                'principal', 'plan.created', 'plan', $plan['id'], $req->ip,
+                ['name' => $plan['name']]);
+            return new Response(201, ['plan' => P::plan($plan)]);
+        });
+
+        $r->add('PATCH', '/api/v1/me/plans/{plan_id}', function (Request $req, Database $db, array $who) {
+            $id = $req->params['plan_id'] ?? '';
+            if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
+            $repo = new \Dn\Policy\PlanRepository($db);
+            $cur = $repo->find($id);
+            if ($cur === null) { return Response::notFound(); }
+
+            $merged = array_merge($cur, array_filter($req->body, fn($v) => $v !== null));
+            $errors = (new \Dn\Policy\PlanValidator())->check($merged);
+            if ($errors) { return new Response(422, ['error' => 'invalid_plan', 'reasons' => $errors]); }
+
+            $plan = $repo->update($id, $req->body);
+            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
+                'principal', 'plan.updated', 'plan', $id, $req->ip);
+            return Response::ok(['plan' => P::plan($plan)]);
+        });
+
+        $r->post('/api/v1/me/plans/{plan_id}/retire', function (Request $req, Database $db, array $who) {
+            $id = $req->params['plan_id'] ?? '';
+            if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
+            $plan = (new \Dn\Policy\PlanRepository($db))->retire($id);
+            if ($plan === null) { return Response::notFound(); }
+            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
+                'principal', 'plan.retired', 'plan', $id, $req->ip);
+            return Response::ok(['plan' => P::plan($plan)]);
+        });
+
         $r->get('/api/v1/me/intents', function (Request $req, Database $db) {
             $rows = (new \Dn\Intents\IntentQueue($db))->forCustomer();
             // Deliberately says nothing about when queued work reaches a

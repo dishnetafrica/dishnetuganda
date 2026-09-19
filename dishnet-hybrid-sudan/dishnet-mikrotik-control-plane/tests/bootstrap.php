@@ -67,9 +67,39 @@ function seed_tables(): array
 {
     return [
         'mt_auth_codes', 'mt_intents', 'mt_idempotency', 'mt_audit_log',
-        'mt_sites', 'mt_entitlements', 'mt_services', 'mt_auth_sessions',
-        'mt_principals',
+        'mt_plans', 'mt_sites', 'mt_entitlements', 'mt_services',
+        'mt_auth_sessions', 'mt_principals',
     ];
+}
+
+/**
+ * Delete every row from a table, lifting any delete-protection trigger for
+ * exactly that statement.
+ *
+ * Two tables refuse DELETE in production and are right to: mt_audit_log is
+ * append-only, and a plan is retired rather than deleted because a voucher
+ * sold against it is a revenue record. A test fixture is the one place it is
+ * legitimate to lift that, and doing it generically means the next protected
+ * table a step adds does not break teardown in a way that looks like a
+ * product bug.
+ */
+function clear_table(\Dn\Db\Database $owner, string $table): void
+{
+    $triggers = array_column($owner->query(
+        "SELECT tgname FROM pg_trigger
+          WHERE tgrelid = ?::regclass AND NOT tgisinternal
+            AND tgname LIKE '%no_delete%'", [$table]), 'tgname');
+
+    foreach ($triggers as $tg) {
+        $owner->pdo()->exec("ALTER TABLE {$table} DISABLE TRIGGER {$tg}");
+    }
+    try {
+        $owner->exec("DELETE FROM {$table}");
+    } finally {
+        foreach ($triggers as $tg) {
+            $owner->pdo()->exec("ALTER TABLE {$table} ENABLE TRIGGER {$tg}");
+        }
+    }
 }
 
 /** Seed two customers with a full object graph each. Owner connection. */
@@ -80,18 +110,12 @@ function seed_two_customers(\Dn\Db\Database $owner): array
     // table in a later step fails loudly here instead of producing a foreign
     // key violation nobody expects.
     foreach (seed_tables() as $tbl) {
-        if ($tbl === 'mt_audit_log') {
-            // Append-only in production, by a trigger that is doing its job.
-            // A test fixture is the one place it is legitimate to lift it,
-            // and it is lifted for exactly one statement.
-            $owner->pdo()->exec('ALTER TABLE mt_audit_log DISABLE TRIGGER mt_audit_no_delete');
-            $owner->exec('DELETE FROM mt_audit_log');
-            $owner->pdo()->exec('ALTER TABLE mt_audit_log ENABLE TRIGGER mt_audit_no_delete');
-            continue;
-        }
-        $owner->exec("DELETE FROM {$tbl}");
+        clear_table($owner, $tbl);
     }
     $owner->exec('DELETE FROM mt_customers');
+    // Global reference data, not customer-scoped, so it is not in
+    // seed_tables(). Cleared after plans, which reference it.
+    clear_table($owner, 'mt_profiles');
 
     $out = [];
     foreach ([['A','Riverside Hotel',1001], ['B','Kabale Hostel',1002]] as [$k,$name,$ucrm]) {

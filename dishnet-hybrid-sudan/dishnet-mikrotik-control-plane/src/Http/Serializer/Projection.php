@@ -45,6 +45,21 @@ final class Projection
      */
     private const INTENT = ['id', 'kind', 'state', 'created_at'];
 
+    /**
+     * A retail plan, as its owner sees it.
+     *
+     * profile_id is absent deliberately: the enforcement profile is DishNet's
+     * layer and the customer never learns the concept exists. Two customers
+     * selling the same shape of access share a profile row, so exposing the
+     * id would also let one infer something about the other.
+     */
+    private const PLAN = [
+        'id', 'name', 'duration_s', 'rate_down_bps', 'rate_up_bps',
+        'data_cap_bytes', 'devices_per_voucher', 'mode',
+        'price_minor', 'currency', 'active', 'site_id', 'created_at',
+    ];
+
+    public static function plan(array $r): array        { return self::pick($r, self::PLAN); }
     public static function intent(array $r): array      { return self::pick($r, self::INTENT); }
     public static function customer(array $r): array    { return self::pick($r, self::CUSTOMER); }
     public static function principal(array $r): array   { return self::pick($r, self::PRINCIPAL); }
@@ -70,6 +85,7 @@ final class Projection
             'entitlement' => self::ENTITLEMENT,
             'accessPoint' => self::ACCESS_POINT,
             'intent'      => self::INTENT,
+            'plan'        => self::PLAN,
             default       => throw new \InvalidArgumentException("unknown projection {$name}"),
         };
     }
