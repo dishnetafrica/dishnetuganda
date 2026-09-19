@@ -181,9 +181,18 @@ OTP → JWT → `ca_require_auth()`, which touches no sibling file. So a missing
 degrades what the PWA shows; it does not let anyone in.
 
 **Q6 — Does any cron depend on them?**
-Exactly one: **`cron/dr_snapshot.php`**, which uses `SiblingPlugin::pluginRoot()` and
-`SiblingPlugin::dataDir(DrSnapshot::PLUGIN)` — it is the job that *produces* the
-`dr_*` snapshot files. Of the 28 jobs in `cron/`, no other reads a sibling.
+Exactly one: **`cron/dr_snapshot.php`**. It uses `SiblingPlugin::pluginRoot()` and
+`SiblingPlugin::dataDir(DrSnapshot::PLUGIN)`.
+
+**Correction to an earlier reading of this file:** it does **not** generate the `dr_*`
+files. `lib/DrSnapshot.php:182` is `@copy()` — the cron *backs up* files that
+`dishnet-data-report` has already written, into this plugin's own data directory under
+`dr_snapshots/`. `DrSnapshot::FILES` is a list of things to *take*, and `survey()` only
+reports which of them exist in the sibling's directory.
+
+So the producer is `dishnet-data-report` itself; this cron is a **backup consumer**. That
+distinction matters for Q7 of the provider-side audit and it changes who owns each file.
+Of the 28 jobs in `cron/`, no other reads a sibling.
 `cron_paid_access.php` does not (§Q4).
 
 **Q7 — Can the MikroTik project be completely isolated from them?**
@@ -250,7 +259,9 @@ cron_paid_access.php   ← reads the TABLE, not the siblings
    SELECT DISTINCT router_id WHERE status='active'
    → batch dr_wifi_get_status per router → expire → pause device
 
-Produced by:  cron/dr_snapshot.php ──► dr_*.json  (the only sibling-aware cron)
+Written by:   dishnet-data-report (the producer)  ──►  dr_*.json / wifi_*.json
+Backed up by: cron/dr_snapshot.php  ──@copy()──►  <this plugin>/data/dr_snapshots/
+              (a COPY of the sibling's files, not their source)
 ```
 
 ## 7. Diagram B — proposed MikroTik path (ADDITIVE, no overlap)
