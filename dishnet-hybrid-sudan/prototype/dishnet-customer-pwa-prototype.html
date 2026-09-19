@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>DishNet Customer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#D41C1C; --red-dark:#A81515; --red-lt:#fef2f2;
+  --blue:#1A4DB5; --blue-light:#E6F1FB;
+  --dark:#141414; --hdr:#1a1a2e;
+  --gray:#6B6B6B; --gray-light:#EBEBEB; --off-white:#F5F5F5;
+  --green:#22C55E; --green-light:#E7F8EF; --green-mid:#0F7A3D;
+  --amber:#EF9F27; --amber-light:#FEF6E6; --amber-dark:#854F0B;
+  --danger-light:#FCEBEB; --danger-text:#A32D2D;
+  --line:#E4E4E7; --line2:#F1F1F3;
+  --sans:'Barlow',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --display:'Barlow Condensed','Barlow',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--sans);font-size:15px;color:var(--dark);background:#2a2a35;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font-family:inherit;font-size:inherit;color:inherit}
+.mono{font-family:var(--mono);font-size:.9em;letter-spacing:-.02em}
+
+/* ---------- reviewer chrome (hidden on real phones) ---------- */
+.stage{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;gap:26px;padding:26px 18px}
+.devctl{width:266px;background:#fff;border-radius:12px;padding:15px;position:sticky;top:26px}
+.devctl h4{font-family:var(--display);font-size:15px;margin-bottom:3px}
+.devctl p{font-size:12px;color:var(--gray);line-height:1.45;margin-bottom:11px}
+.devctl .grp{margin-bottom:14px}
+.devctl .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--gray);font-weight:700;margin-bottom:5px}
+.devbtn{display:block;width:100%;text-align:left;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;margin-bottom:5px;background:#fff}
+.devbtn:hover{background:var(--off-white)}
+.devbtn.on{background:var(--hdr);color:#fff;border-color:var(--hdr)}
+.phone{width:390px;flex:none;background:#000;border-radius:38px;padding:9px;box-shadow:0 22px 60px rgba(0,0,0,.45)}
+.screen{background:#fff;border-radius:30px;overflow:hidden;height:780px;display:flex;flex-direction:column;position:relative}
+.notch{height:26px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11.5px;font-weight:600;flex:none}
+
+/* ---------- app ---------- */
+.appbar{padding:12px 18px 10px;display:flex;align-items:center;gap:11px;flex:none;border-bottom:1px solid var(--line2)}
+.appbar .bk{font-size:19px;width:24px;margin-left:-4px}
+.appbar h1{font-family:var(--display);font-size:20px;font-weight:600;flex:1;letter-spacing:.2px}
+.appbar .sub{font-size:11.5px;color:var(--gray);font-weight:400;display:block;letter-spacing:0}
+.body{flex:1;overflow-y:auto;padding:16px 18px 20px;-webkit-overflow-scrolling:touch}
+.tabbar{display:flex;border-top:1px solid var(--line);background:#fff;flex:none;padding-bottom:4px}
+.tab{flex:1;padding:9px 4px 7px;text-align:center;color:var(--gray)}
+.tab .ic{font-size:17px;display:block;line-height:1.2}
+.tab .tl{font-size:10.5px;font-weight:600;margin-top:1px}
+.tab.on{color:var(--red)}
+
+h2{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:.2px}
+h3{font-family:var(--display);font-size:16px;font-weight:600;margin-bottom:8px}
+.muted{color:var(--gray)}
+.tiny{font-size:11.5px}
+.sm{font-size:13px}
+.mt8{margin-top:8px}.mt14{margin-top:14px}.mt20{margin-top:20px}
+.row{display:flex;align-items:center;gap:10px}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.grow{flex:1;min-width:0}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:15px;margin-bottom:12px}
+.card.flat{background:var(--off-white);border-color:transparent}
+.card.tap:active{transform:scale(.995)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;border:1px solid transparent}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.p-ok{background:var(--green-light);color:var(--green-mid);border-color:#bfe9d0}.p-ok .dot{background:var(--green)}
+.p-warn{background:var(--amber-light);color:var(--amber-dark);border-color:#f4dbb0}.p-warn .dot{background:var(--amber)}
+.p-bad{background:var(--danger-light);color:var(--danger-text);border-color:#f0c9c9}.p-bad .dot{background:var(--red)}
+.p-mute{background:var(--gray-light);color:var(--gray);border-color:#dcdce0}.p-mute .dot{background:var(--gray)}
+.p-info{background:var(--blue-light);color:var(--blue);border-color:#c5dcf5}.p-info .dot{background:var(--blue)}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:13px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid var(--line);background:#fff}
+.btn:active{opacity:.85}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn-sm{padding:8px 13px;width:auto;font-size:13px;border-radius:8px}
+.btn-ghost{border-color:transparent;background:var(--off-white)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11.5px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.field input{width:100%;padding:13px;border:1px solid var(--line);border-radius:10px;font-size:16px}
+.field input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+
+.svc{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:13px;margin-bottom:11px;background:#fff}
+.svc .ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:17px;flex:none;color:#fff}
+.svc.off{opacity:.62}
+.svc .nm{font-weight:700;font-size:15px}
+.big{font-family:var(--display);font-size:31px;font-weight:600;line-height:1.1;letter-spacing:.3px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line2);font-size:14px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--gray)}
+.kv .v{font-weight:600;text-align:right}
+.dev{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line2)}
+.dev:last-child{border-bottom:none}
+.dev .di{width:34px;height:34px;border-radius:9px;background:var(--off-white);display:grid;place-items:center;font-size:15px;flex:none}
+.vc{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line2)}
+.vc:last-child{border-bottom:none}
+.vc .code{font-family:var(--mono);font-size:15px;font-weight:500;letter-spacing:1px}
+.bar{height:7px;border-radius:4px;background:var(--gray-light);overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:4px;background:var(--red)}
+
+.empty{text-align:center;padding:34px 12px}
+.empty .ic{font-size:34px;opacity:.22}
+.empty h3{margin:10px 0 5px}
+.empty p{color:var(--gray);font-size:13.5px;line-height:1.5;margin-bottom:16px}
+
+/* identity chain */
+.chain{background:var(--hdr);color:#fff;border-radius:12px;padding:14px;font-size:12px}
+.chain h4{font-family:var(--display);font-size:14px;margin-bottom:9px;color:#fff}
+.chain .step{display:flex;gap:9px;align-items:flex-start;padding:5px 0}
+.chain .n{width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.13);display:grid;place-items:center;font-size:9.5px;font-weight:700;flex:none;margin-top:1px}
+.chain .lk{opacity:.55;font-size:11px}
+.chain b{color:#fff}
+.chain .src{font-size:10px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.12);margin-left:5px}
+.chain .src.derived{background:rgba(34,197,94,.25);color:#86efac}
+.chain .src.client{background:rgba(212,28,28,.3);color:#fca5a5}
+
+.toastwrap{position:absolute;left:14px;right:14px;bottom:70px;display:flex;flex-direction:column;gap:7px;pointer-events:none;z-index:50}
+.toast{background:var(--hdr);color:#fff;padding:11px 14px;border-radius:10px;font-size:13.5px;box-shadow:0 8px 22px rgba(0,0,0,.3);animation:ti .22s}
+@keyframes ti{from{opacity:0;transform:translateY(8px)}}
+.sheet{position:absolute;inset:0;background:rgba(10,10,15,.45);display:none;align-items:flex-end;z-index:60}
+.sheet.on{display:flex}
+.sheetbox{background:#fff;width:100%;border-radius:18px 18px 0 0;padding:18px;max-height:82%;overflow:auto;animation:su .2s}
+@keyframes su{from{transform:translateY(24px)}}
+.grab{width:36px;height:4px;background:var(--gray-light);border-radius:3px;margin:0 auto 14px}
+
+@media(max-width:860px){
+  body{background:#fff}
+  .stage{padding:0;display:block}
+  .devctl{display:none}
+  .phone{width:100%;padding:0;border-radius:0;box-shadow:none}
+  .screen{border-radius:0;height:100vh;height:100dvh}
+  .notch{display:none}
+}
+</style>
+</head>
+<body>
+<div class="stage">
+  <aside class="devctl">
+    <h4>Reviewer controls</h4>
+    <p>Not part of the product. These switch the mock state so you can see every case.</p>
+    <div class="grp"><div class="lbl">Signed in as</div>
+      <button class="devbtn on" id="w-C-01" onclick="setWho('C-01')">Riverside Hotel<br><span class="tiny muted">MikroTik + Fiber</span></button>
+      <button class="devbtn" id="w-C-03" onclick="setWho('C-03')">Kabale Student Hostel<br><span class="tiny muted">MikroTik only, 2 sites</span></button>
+      <button class="devbtn" id="w-C-09" onclick="setWho('C-09')">Mbale Guest House<br><span class="tiny muted">No MikroTik service</span></button>
+      <button class="devbtn" id="w-out" onclick="signOut()">Signed out</button></div>
+    <div class="grp"><div class="lbl">Show</div>
+      <button class="devbtn" onclick="openChain()">Identity chain</button>
+      <button class="devbtn" onclick="openGuest()">Guest captive portal</button></div>
+    <p style="margin:0"><b>Mock only.</b> No backend, no router, no RADIUS. Nothing is contacted.</p>
+  </aside>
+
+  <div class="phone"><div class="screen">
+    <div class="notch"><span>9:41</span><span>&#9601;&#9602;&#9604; &#9679;&#9679;&#9679;&#9679;</span></div>
+    <div id="app" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+    <div class="toastwrap" id="toasts"></div>
+    <div class="sheet" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
+  </div></div>
+</div>
+<script>
+/* ============================================================================
+   DishNet Customer PWA - MOCK PROTOTYPE
+   ----------------------------------------------------------------------------
+   Mock only. No backend, no router, no RADIUS, no uCRM. Nothing is contacted.
+   Demonstrates the customer-facing half of the Domain B identity chain:
+
+     Person/Company -> DishNet Customer -> Service -> Site -> Router
+                                                   -> Voucher -> Device -> Session
+
+   ENTITY IDs BELOW ARE THE SAME ONES USED BY THE ADMIN V2 PROTOTYPE.
+   C-01/C-03/C-09 and S-01.. are shared so the two prototypes are provably
+   describing one domain model, viewed from two sides.
+
+   AUTHORIZATION MODEL DEMONSTRATED HERE
+   -------------------------------------
+   The client never names a customer, site or router it wants. It asks for
+   "my services". Every identifier the UI renders was REACHED by walking the
+   chain from the session, never accepted from the page. See derive() and the
+   tamper demo in openChain().
+   ============================================================================ */
+
+/* ---------- shared entities (same ids as admin V2) ---------- */
+const CUSTOMERS={
+  'C-01':{id:'C-01',name:'Riverside Hotel',acct:'DN-100482',contact:'Operations Manager',town:'Kampala',since:'Mar 2024'},
+  'C-03':{id:'C-03',name:'Kabale Student Hostel',acct:'DN-100517',contact:'Warden',town:'Kabale',since:'Aug 2024'},
+  'C-09':{id:'C-09',name:'Mbale Guest House',acct:'DN-100603',contact:'Proprietor',town:'Mbale',since:'Jan 2025'}
+};
+const SITES=[
+  {id:'S-01',cust:'C-01',name:'Lobby',loc:'Ground floor, main entrance'},
+  {id:'S-02',cust:'C-01',name:'Poolside',loc:'Rear terrace'},
+  {id:'S-07',cust:'C-03',name:'Block A',loc:'Main hostel building'},
+  {id:'S-08',cust:'C-03',name:'Block B',loc:'Annex'}
+];
+/* router objects mirror the admin V2 shape; the customer view reads far fewer
+   fields. Fields the customer is never shown are kept here deliberately, to
+   make the projection in routerForCustomer() visible rather than implied. */
+const ROUTERS=[
+  {id:'MT-0001',site:'S-01',name:'Lobby AP',model:'hAP ax2',serial:'HGX8842011',ros:'7.14.3',
+   conn:'online',wg:'up',wgIp:'10.66.0.11',endpoint:'41.210.**.**',hs:'enabled',latency:34,
+   uptime:'11d 4h',seen:2,sessions:18,profile:'P-3'},
+  {id:'MT-0002',site:'S-02',name:'Poolside AP',model:'hAP ax2',serial:'HGX8842077',ros:'7.14.3',
+   conn:'online',wg:'up',wgIp:'10.66.0.12',endpoint:'41.210.**.**',hs:'enabled',latency:41,
+   uptime:'11d 4h',seen:3,sessions:6,profile:'P-3'},
+  {id:'MT-0014',site:'S-07',name:'Block A AP',model:'hAP ax lite',serial:'HGX9110455',ros:'7.13.5',
+   conn:'online',wg:'up',wgIp:'10.66.0.24',endpoint:'41.210.**.**',hs:'enabled',latency:88,
+   uptime:'3d 19h',seen:4,sessions:31,profile:'P-2'},
+  {id:'MT-0015',site:'S-08',name:'Block B AP',model:'hAP ax lite',serial:'HGX9110461',ros:'7.13.5',
+   conn:'offline',wg:'down',wgIp:'10.66.0.25',endpoint:null,hs:'enabled',latency:null,
+   uptime:null,seen:47,sessions:0,profile:'P-2'}
+];
+const PLANS=[
+  {id:'P-1',name:'1 Hour',price:1000,validity:'60 minutes',down:5,up:2,data:null,devices:1,mode:'elapsed'},
+  {id:'P-2',name:'6 Hours',price:2500,validity:'6 hours',down:8,up:3,data:null,devices:1,mode:'elapsed'},
+  {id:'P-3',name:'1 Day',price:5000,validity:'24 hours',down:10,up:3,data:null,devices:2,mode:'elapsed'},
+  {id:'P-5',name:'1 Week',price:20000,validity:'7 days',down:10,up:3,data:'20 GB',devices:3,mode:'elapsed'}
+];
+/* A DishNet customer and a HotSpot user are different things.
+   A voucher creates a HotSpot user. It does NOT create a DishNet account. */
+const VOUCHERS=[
+  {code:'HT4K-9M2P',site:'S-01',plan:'P-3',state:'active',issued:'19 Sep 09:12',endsIn:'14h 20m',usedBy:'2 devices'},
+  {code:'QW7R-3X8L',site:'S-01',plan:'P-3',state:'active',issued:'19 Sep 08:40',endsIn:'13h 48m',usedBy:'1 device'},
+  {code:'ZB2N-6V4T',site:'S-02',plan:'P-1',state:'unused',issued:'19 Sep 07:55',endsIn:null,usedBy:null},
+  {code:'MK9D-1C5J',site:'S-01',plan:'P-3',state:'expired',issued:'18 Sep 10:02',endsIn:null,usedBy:'2 devices'},
+  {code:'PL3S-8H6G',site:'S-07',plan:'P-2',state:'active',issued:'19 Sep 10:31',endsIn:'4h 02m',usedBy:'1 device'},
+  {code:'RT6W-2Y9F',site:'S-07',plan:'P-2',state:'unused',issued:'19 Sep 06:14',endsIn:null,usedBy:null},
+  {code:'XN5A-7Q3E',site:'S-08',plan:'P-2',state:'unused',issued:'17 Sep 15:20',endsIn:null,usedBy:null}
+];
+/* Sessions belong to HotSpot users, reached through a voucher. */
+const SESSIONS=[
+  {id:'sess-1',router:'MT-0001',voucher:'HT4K-9M2P',dev:'iPhone',since:'09:14',down:412,up:38,ip:'10.5.50.22'},
+  {id:'sess-2',router:'MT-0001',voucher:'HT4K-9M2P',dev:'Android',since:'09:20',down:180,up:21,ip:'10.5.50.31'},
+  {id:'sess-3',router:'MT-0001',voucher:'QW7R-3X8L',dev:'Laptop',since:'08:44',down:1290,up:145,ip:'10.5.50.14'},
+  {id:'sess-4',router:'MT-0014',voucher:'PL3S-8H6G',dev:'Android',since:'10:33',down:96,up:12,ip:'10.5.51.40'}
+];
+/* Services a customer holds. Only 'mikrotik' is Domain B and interactive here.
+   Domain A services are listed but NOT implemented in this prototype: they are
+   served by their own backend. docs/41 s5 permits shared UI, not shared backend. */
+const SERVICES=[
+  {id:'SV-11',cust:'C-01',kind:'mikrotik',name:'MikroTik HotSpot',status:'active',since:'Mar 2024',domain:'B'},
+  {id:'SV-12',cust:'C-01',kind:'fiber',   name:'Fiber Broadband',status:'active',since:'Mar 2024',domain:'other'},
+  {id:'SV-31',cust:'C-03',kind:'mikrotik',name:'MikroTik HotSpot',status:'active',since:'Aug 2024',domain:'B'},
+  {id:'SV-91',cust:'C-09',kind:'fiber',   name:'Fiber Broadband',status:'active',since:'Jan 2025',domain:'other'}
+];
+const KIND={
+  mikrotik:{ic:'&#128246;',bg:'var(--red)',blurb:'Guest Wi-Fi with vouchers'},
+  fiber:{ic:'&#127760;',bg:'var(--blue)',blurb:'Dedicated line'},
+  lte:{ic:'&#128225;',bg:'var(--gray)',blurb:'Mobile broadband'}
+};
+const INVOICES=[
+  {no:'—',period:'September 2025',amount:420000,state:'due',due:'25 Sep'},
+  {no:'—',period:'August 2025',amount:420000,state:'paid',due:'25 Aug'},
+  {no:'—',period:'July 2025',amount:395000,state:'paid',due:'25 Jul'}
+];
+
+/* ============================ SESSION + DERIVATION ========================= */
+/* The only thing the client holds is an opaque session token. It carries NO
+   customer id. Everything else is derived. This mirrors what the real server
+   must do: resolve token -> customer, then walk down. */
+let SESSION=null;           // {token} only
+const TOKEN_TO_CUST={'tok_a1':'C-01','tok_b2':'C-03','tok_c3':'C-09'};
+const WHO_TOKEN={'C-01':'tok_a1','C-03':'tok_b2','C-09':'tok_c3'};
+
+/* derive() is the single gate. Nothing in the UI may read an entity except
+   through what this returns. It is written to look like the server call it
+   stands in for. */
+function derive(){
+  if(!SESSION) return null;
+  const custId=TOKEN_TO_CUST[SESSION.token];        // step 1: token -> customer
+  if(!custId) return null;
+  const cust=CUSTOMERS[custId];
+  const services=SERVICES.filter(s=>s.cust===custId);        // step 2
+  const sites=SITES.filter(s=>s.cust===custId);              // step 3
+  const siteIds=sites.map(s=>s.id);
+  const routers=ROUTERS.filter(r=>siteIds.includes(r.site)); // step 4 - by site, never by id
+  const rIds=routers.map(r=>r.id);
+  const vouchers=VOUCHERS.filter(v=>siteIds.includes(v.site));
+  const sessions=SESSIONS.filter(s=>rIds.includes(s.router));
+  return {cust,services,sites,routers,vouchers,sessions,
+          mik:services.find(s=>s.kind==='mikrotik')||null};
+}
+/* Projection: the customer view of a router is a SUBSET. Serial, WireGuard IP,
+   public endpoint, RouterOS version and provisioning state are operational
+   fields and are not projected. */
+function routerForCustomer(r){
+  return {id:r.id,name:r.name,site:r.site,online:r.conn==='online',
+          sessions:r.sessions,profile:r.profile,seen:r.seen};
+}
+function ask(what){            // every screen asks by INTENT, never by id
+  const d=derive(); if(!d) return null;
+  if(what==='wifi')     return d.mik?{service:d.mik,sites:d.sites,routers:d.routers.map(routerForCustomer)}:null;
+  if(what==='vouchers') return d.vouchers;
+  if(what==='devices')  return d.sessions;
+  return d;
+}
+const fmtUGX=n=>'UGX '+n.toLocaleString('en-UG');
+const mb=n=>n>=1024?(n/1024).toFixed(1)+' GB':n+' MB';
+const plan=id=>PLANS.find(p=>p.id===id);
+const site=id=>SITES.find(s=>s.id===id);
+const ago=m=>m==null?'—':m<1?'just now':m<60?m+' min ago':m<1440?Math.floor(m/60)+' h ago':Math.floor(m/1440)+' d ago';
+
+/* ================================ ROUTER ================================== */
+let VIEW='home', ARG=null, PENDING=[];   // PENDING = customer-raised intents
+const app=()=>document.getElementById('app');
+function go(v,a){VIEW=v;ARG=a||null;render();const b=document.querySelector('.body');if(b)b.scrollTop=0;}
+function toast(m){const w=document.getElementById('toasts');const t=document.createElement('div');
+  t.className='toast';t.textContent=m;w.appendChild(t);setTimeout(()=>t.remove(),3400);}
+function sheet(h){document.getElementById('sheetbox').innerHTML=h;document.getElementById('sheet').classList.add('on');}
+function closeSheet(){document.getElementById('sheet').classList.remove('on');}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function bar(title,sub,back){
+  return `<div class="appbar">${back?`<button class="bk" onclick="go('${back}')">&#8249;</button>`:''}
+    <h1>${esc(title)}${sub?`<span class="sub">${esc(sub)}</span>`:''}</h1></div>`;
+}
+function tabs(){
+  const d=derive(); if(!d) return '';
+  const T=[['home','&#127968;','Home'],['wifi','&#128246;','Wi-Fi'],['vouchers','&#127915;','Vouchers'],['account','&#128100;','Account']];
+  return `<div class="tabbar">${T.map(([k,i,l])=>
+    `<button class="tab ${VIEW===k?'on':''}" onclick="go('${k}')"><span class="ic">${i}</span><span class="tl">${l}</span></button>`).join('')}</div>`;
+}
+const wrap=(head,body,showTabs=true)=>head+`<div class="body">${body}</div>`+(showTabs?tabs():'');
+
+/* -------------------------------- LOGIN ---------------------------------- */
+/* The customer authenticates as a PERSON. The DishNet customer they act for is
+   resolved afterwards, by the server, from the identity - never chosen here. */
+function vLogin(){
+  return `<div class="body" style="display:flex;flex-direction:column;justify-content:center;padding:26px 24px">
+    <div style="text-align:center;margin-bottom:26px">
+      <div style="font-family:var(--display);font-size:33px;font-weight:700;letter-spacing:.5px">
+        <span style="color:var(--red)">DISH</span><span style="color:var(--blue)">NET</span></div>
+      <div class="tiny muted" style="letter-spacing:.16em;margin-top:2px">AFRICA LTD</div></div>
+    <h2 style="margin-bottom:4px">Sign in</h2>
+    <p class="sm muted" style="margin-bottom:20px">We'll send a code to your registered number.</p>
+    <div class="field"><label>Mobile number</label><input id="ph" inputmode="tel" value="+256 7xx xxx xxx"></div>
+    <button class="btn btn-primary" onclick="doOtp()">Send code</button>
+    <p class="tiny muted mt20" style="text-align:center;line-height:1.5">
+      Signing in shows the services registered to your DishNet account.<br>
+      <b>Buying Wi-Fi as a guest?</b> You don't need an account &mdash;
+      <a href="#" onclick="openGuest();return false" style="color:var(--blue)">connect to the Wi-Fi</a> instead.</p>
+  </div>`;
+}
+function doOtp(){
+  sheet(`<div class="grab"></div><h2 style="margin-bottom:4px">Enter code</h2>
+    <p class="sm muted" style="margin-bottom:16px">6-digit code sent by SMS.</p>
+    <div class="field"><input id="otp" inputmode="numeric" value="••••••" style="text-align:center;font-size:24px;letter-spacing:8px;font-family:var(--mono)"></div>
+    <p class="tiny muted" style="margin-bottom:14px">Mock sign-in. Pick which account this number belongs to:</p>
+    ${Object.values(CUSTOMERS).map(c=>`<button class="btn mt8" onclick="setWho('${c.id}');closeSheet()"
+       style="justify-content:space-between"><span>${esc(c.name)}</span>
+       <span class="tiny muted mono">${esc(c.acct)}</span></button>`).join('')}`);
+}
+function setWho(id){
+  SESSION={token:WHO_TOKEN[id]};                 // client holds a token, nothing else
+  document.querySelectorAll('.devctl .devbtn').forEach(b=>b.classList.remove('on'));
+  const b=document.getElementById('w-'+id); if(b)b.classList.add('on');
+  PENDING=[]; go('home');
+}
+function signOut(){SESSION=null;
+  document.querySelectorAll('.devctl .devbtn').forEach(b=>b.classList.remove('on'));
+  const b=document.getElementById('w-out'); if(b)b.classList.add('on'); go('home');}
+
+/* --------------------------------- HOME ---------------------------------- */
+function vHome(){
+  const d=derive();
+  const due=INVOICES.find(i=>i.state==='due');
+  let s=`<div class="spread" style="margin-bottom:16px"><div class="grow">
+      <h2>${esc(d.cust.name)}</h2>
+      <div class="tiny muted mono">${esc(d.cust.acct)} &middot; ${esc(d.cust.town)}</div></div>
+      <button class="btn btn-sm btn-ghost" onclick="openChain()" title="How this view was authorized">&#128274;</button></div>`;
+
+  if(due) s+=`<div class="card" style="background:var(--amber-light);border-color:#f4dbb0">
+    <div class="spread"><div><div class="tiny" style="color:var(--amber-dark);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Amount due</div>
+      <div class="big" style="color:var(--amber-dark)">${fmtUGX(due.amount)}</div>
+      <div class="tiny" style="color:var(--amber-dark)">${esc(due.period)} &middot; due ${esc(due.due)}</div></div>
+      <button class="btn btn-sm" onclick="go('billing')" style="background:#fff">Pay</button></div></div>`;
+
+  s+=`<h3 class="mt14">My services</h3>`;
+  s+=d.services.map(sv=>{
+    const k=KIND[sv.kind]||KIND.lte, isB=sv.domain==='B';
+    return `<div class="svc ${isB?'tap':'off'}" ${isB?`onclick="go('wifi')"`:''}>
+      <div class="ico" style="background:${k.bg}">${k.ic}</div>
+      <div class="grow"><div class="nm">${esc(sv.name)}</div>
+        <div class="tiny muted">${k.blurb} &middot; since ${esc(sv.since)}</div>
+        ${isB?`<div class="mt8"><span class="pill p-ok"><i class="dot"></i>Active</span></div>`
+             :`<div class="mt8"><span class="pill p-mute"><i class="dot"></i>Managed separately</span></div>`}</div>
+      ${isB?`<div style="color:var(--gray);font-size:19px;align-self:center">&#8250;</div>`:''}</div>`;
+  }).join('');
+
+  if(!d.mik) s+=`<div class="card flat mt8"><div class="row" style="align-items:flex-start">
+    <div style="font-size:19px">&#128246;</div><div class="grow">
+    <div style="font-weight:700;font-size:14px">Guest Wi-Fi with vouchers</div>
+    <div class="tiny muted mt8" style="line-height:1.5">Sell or hand out time-limited Wi-Fi access at your premises.
+      Not on your account yet.</div>
+    <button class="btn btn-sm mt8" onclick="go('nowifi')">Learn more</button></div></div></div>`;
+
+  if(PENDING.length) s+=pendingCard();
+  s+=`<button class="btn btn-ghost mt14" onclick="go('support')">&#128172; &nbsp;Contact support</button>`;
+  return wrap(`<div class="appbar"><h1>DishNet<span class="sub">Signed in</span></h1></div>`,s);
+}
+
+/* Customer-raised intents use the SAME model as admin: nothing is asserted
+   about how or when the work reaches the router. */
+function pendingCard(){
+  return `<div class="card mt14" style="border-color:#c5dcf5;background:var(--blue-light)">
+    <div class="spread" style="margin-bottom:6px"><b style="font-size:14px">Queued requests</b>
+      <span class="pill p-info"><i class="dot"></i>${PENDING.length}</span></div>
+    ${PENDING.map(p=>`<div class="kv"><span class="k">${esc(p.what)}</span>
+      <span class="v tiny">Queued</span></div>`).join('')}
+    <p class="tiny muted mt8" style="line-height:1.45">Queued work is held until the delivery path is available.
+      You'll see it here until it is confirmed.</p></div>`;
+}
+
+/* ------------------------------ WI-FI SERVICE ----------------------------- */
+/* Asks for "my Wi-Fi service". Never names a router. */
+function vWifi(){
+  const w=ask('wifi');
+  if(!w) return wrap(bar('My Wi-Fi'),emptyWifi());
+  const online=w.routers.filter(r=>r.online).length;
+  const live=ask('devices').length;
+  const act=ask('vouchers').filter(v=>v.state==='active').length;
+
+  let s=`<div class="card" style="background:var(--hdr);color:#fff;border-color:transparent">
+    <div class="tiny" style="opacity:.7;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Right now</div>
+    <div class="row mt8" style="gap:20px">
+      <div><div class="big" style="color:#fff">${live}</div><div class="tiny" style="opacity:.75">devices online</div></div>
+      <div><div class="big" style="color:#fff">${act}</div><div class="tiny" style="opacity:.75">active vouchers</div></div>
+      <div><div class="big" style="color:#fff">${online}/${w.routers.length}</div><div class="tiny" style="opacity:.75">access points up</div></div>
+    </div></div>`;
+
+  s+=`<div class="row mt14" style="gap:9px">
+    <button class="btn btn-primary" onclick="issueSheet()">+ &nbsp;New voucher</button>
+    <button class="btn" onclick="go('devices')" style="flex:0 0 42%">Devices</button></div>`;
+
+  s+=`<h3 class="mt20">My locations</h3>`;
+  s+=w.sites.map(st=>{
+    const rs=w.routers.filter(r=>r.site===st.id);
+    const up=rs.filter(r=>r.online).length, dev=ask('devices').filter(x=>rs.some(r=>r.id===x.router)).length;
+    const allUp=up===rs.length&&rs.length>0;
+    return `<div class="card tap" onclick="go('site','${st.id}')">
+      <div class="spread"><div class="grow"><b>${esc(st.name)}</b>
+        <div class="tiny muted">${esc(st.loc)}</div></div>
+        <span class="pill ${allUp?'p-ok':(up>0?'p-warn':'p-bad')}"><i class="dot"></i>${allUp?'All on':up+' of '+rs.length+' on'}</span></div>
+      <div class="kv mt8"><span class="k">Devices connected</span><span class="v">${dev}</span></div>
+      <div class="kv"><span class="k">Access points</span><span class="v">${rs.length}</span></div></div>`;
+  }).join('');
+
+  if(PENDING.length) s+=pendingCard();
+  s+=`<button class="btn btn-ghost mt8" onclick="go('usage')">&#128200; &nbsp;Usage this month</button>`;
+  return wrap(bar('My Wi-Fi','Guest HotSpot'),s);
+}
+function emptyWifi(){
+  return `<div class="empty"><div class="ic">&#128246;</div>
+    <h3>No Wi-Fi service yet</h3>
+    <p>Guest Wi-Fi with vouchers isn't on your account. Your other DishNet services are unaffected.</p>
+    <button class="btn btn-primary" onclick="go('nowifi')">See what it does</button>
+    <button class="btn mt8" onclick="go('home')">Back to my services</button></div>`;
+}
+function vNoWifi(){
+  const s=`<div class="card flat"><b>Guest Wi-Fi with vouchers</b>
+    <p class="sm muted mt8" style="line-height:1.55">Give guests a code that opens internet access for a fixed
+      time. Codes can be sold at reception or handed out free.</p></div>
+    ${[['&#127915;','Issue codes','Print or send a code valid for an hour, a day or a week.'],
+       ['&#128241;','See who is on','Watch how many devices are connected at each location.'],
+       ['&#128176;','Charge for access','Set your own prices per code, or hand them out free.'],
+       ['&#128274;','Guests stay separate','Guest devices never reach your own network.']]
+      .map(([i,t,b])=>`<div class="card"><div class="row" style="align-items:flex-start">
+        <div style="font-size:19px">${i}</div><div class="grow"><b style="font-size:14px">${t}</b>
+        <div class="tiny muted mt8" style="line-height:1.5">${b}</div></div></div></div>`).join('')}
+    <button class="btn btn-primary mt8" onclick="toast('Mock only — no request was sent.')">Ask DishNet about this</button>`;
+  return wrap(bar('Guest Wi-Fi','Not on your account','home'),s);
+}
+
+/* --------------------------------- SITE ----------------------------------- */
+function vSite(){
+  const w=ask('wifi'); const st=w.sites.find(x=>x.id===ARG);
+  if(!st) return wrap(bar('Location','','wifi'),`<div class="empty"><p>Not available on your account.</p></div>`);
+  const rs=w.routers.filter(r=>r.site===st.id);
+  const devs=ask('devices').filter(x=>rs.some(r=>r.id===x.router));
+  const vs=ask('vouchers').filter(v=>v.site===st.id&&v.state==='active');
+  let s=`<div class="card"><div class="kv"><span class="k">Devices connected</span><span class="v">${devs.length}</span></div>
+    <div class="kv"><span class="k">Active vouchers</span><span class="v">${vs.length}</span></div>
+    <div class="kv"><span class="k">Access points</span><span class="v">${rs.filter(r=>r.online).length} of ${rs.length} on</span></div></div>`;
+  s+=`<h3 class="mt14">Access points</h3>`;
+  /* The customer sees a NAME and a state. Not a serial, not a tunnel address. */
+  s+=rs.map(r=>`<div class="card"><div class="spread"><div class="grow"><b>${esc(r.name)}</b>
+      <div class="tiny muted">${r.online?'Working normally':'Not reachable &middot; last seen '+ago(r.seen)}</div></div>
+      <span class="pill ${r.online?'p-ok':'p-bad'}"><i class="dot"></i>${r.online?'On':'Off'}</span></div>
+      ${r.online?`<div class="kv mt8"><span class="k">Devices on this point</span><span class="v">${r.sessions}</span></div>`
+      :`<div class="card flat mt8" style="margin-bottom:0"><div class="tiny" style="line-height:1.5">
+         <b>DishNet can see this too.</b> No action is needed from you. If it stays off, contact support.</div></div>`}</div>`).join('');
+  s+=`<button class="btn btn-primary mt8" onclick="issueSheet('${st.id}')">+ &nbsp;New voucher for ${esc(st.name)}</button>`;
+  s+=`<button class="btn btn-ghost mt8" onclick="go('devices')">See connected devices</button>`;
+  return wrap(bar(st.name,st.loc,'wifi'),s);
+}
+
+/* ------------------------------- VOUCHERS --------------------------------- */
+function vVouchers(){
+  const vs=ask('vouchers');
+  if(!vs||!ask('wifi')) return wrap(bar('Vouchers'),emptyWifi());
+  const f=ARG||'active';
+  const N={active:vs.filter(v=>v.state==='active').length,unused:vs.filter(v=>v.state==='unused').length,
+           expired:vs.filter(v=>v.state==='expired').length};
+  let s=`<div class="row" style="gap:7px;margin-bottom:14px">
+    ${[['active','In use'],['unused','Not used'],['expired','Finished']].map(([k,l])=>
+      `<button class="btn btn-sm ${f===k?'btn-primary':''}" style="flex:1"
+        onclick="go('vouchers','${k}')">${l} ${N[k]?`(${N[k]})`:''}</button>`).join('')}</div>`;
+  const list=vs.filter(v=>v.state===f);
+  if(!list.length) s+=`<div class="empty"><div class="ic">&#127915;</div><p>Nothing here.</p></div>`;
+  else s+=`<div class="card">`+list.map(v=>{
+    const p=plan(v.plan), st=site(v.site);
+    return `<div class="vc"><div class="grow"><div class="code">${esc(v.code)}</div>
+      <div class="tiny muted">${esc(p.name)} &middot; ${esc(st.name)}${v.usedBy?' &middot; '+esc(v.usedBy):''}</div></div>
+      <div style="text-align:right">${v.state==='active'
+        ?`<span class="pill p-ok"><i class="dot"></i>${esc(v.endsIn)} left</span>`
+        :v.state==='unused'?`<span class="pill p-info"><i class="dot"></i>Ready</span>`
+        :`<span class="pill p-mute"><i class="dot"></i>Finished</span>`}</div></div>`;
+  }).join('')+`</div>`;
+  s+=`<button class="btn btn-primary mt8" onclick="issueSheet()">+ &nbsp;New voucher</button>`;
+  s+=`<p class="tiny muted mt14" style="line-height:1.5">A voucher gives someone internet access. It does not
+     create a DishNet account for them, and it does not let them see this app.</p>`;
+  return wrap(bar('Vouchers','Guest access codes'),s);
+}
+function issueSheet(preSite){
+  const w=ask('wifi'); if(!w) return;
+  const sel=preSite||w.sites[0].id;
+  sheet(`<div class="grab"></div><h2 style="margin-bottom:14px">New voucher</h2>
+    <div class="field"><label>Location</label>
+      <select id="vs" style="width:100%;padding:13px;border:1px solid var(--line);border-radius:10px">
+        ${w.sites.map(st=>`<option value="${st.id}" ${st.id===sel?'selected':''}>${esc(st.name)}</option>`).join('')}
+      </select></div>
+    <div class="field"><label>How long</label>
+      ${PLANS.map((p,i)=>`<label class="card" style="display:flex;gap:11px;align-items:center;margin-bottom:7px;padding:12px">
+        <input type="radio" name="pl" value="${p.id}" ${i===2?'checked':''} style="width:18px;height:18px;flex:none">
+        <span class="grow"><b>${esc(p.name)}</b><span class="tiny muted" style="display:block">
+          ${esc(p.validity)} &middot; up to ${p.devices} device${p.devices>1?'s':''}${p.data?' &middot; '+esc(p.data):''}</span></span>
+        <b class="sm">${fmtUGX(p.price)}</b></label>`).join('')}</div>
+    <button class="btn btn-primary" onclick="doIssue()">Create voucher</button>
+    <p class="tiny muted mt8" style="text-align:center;line-height:1.45">The code is created straight away.
+      It starts working once the request reaches the access point.</p>`);
+}
+function doIssue(){
+  const st=document.getElementById('vs').value;
+  const pid=(document.querySelector('input[name=pl]:checked')||{}).value||'P-3';
+  const code=Array.from({length:2},()=>Array.from({length:4},()=>
+    'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]).join('')).join('-');
+  VOUCHERS.unshift({code,site:st,plan:pid,state:'unused',issued:'now',endsIn:null,usedBy:null});
+  PENDING.push({what:'New voucher '+code});
+  closeSheet();
+  sheet(`<div class="grab"></div><div style="text-align:center;padding:6px 0 14px">
+    <div style="font-size:30px">&#127915;</div><h2 class="mt8">Voucher created</h2>
+    <div class="code mono" style="font-size:27px;font-weight:600;letter-spacing:3px;margin:14px 0;
+      padding:14px;background:var(--off-white);border-radius:11px">${esc(code)}</div>
+    <p class="sm muted" style="line-height:1.5">${esc(plan(pid).name)} &middot; ${esc(site(st).name)}</p>
+    <div class="card flat mt14" style="text-align:left"><div class="tiny" style="line-height:1.5">
+      <b>Queued.</b> The code is held until the delivery path is available.
+      You'll see it under queued requests until it is confirmed.</div></div>
+    <button class="btn btn-primary mt14" onclick="closeSheet();toast('Mock only — nothing was printed or sent.')">Share code</button>
+    <button class="btn btn-ghost mt8" onclick="closeSheet();go('vouchers','unused')">Done</button></div>`);
+}
+
+/* ---------------------------- CONNECTED DEVICES --------------------------- */
+function vDevices(){
+  const ss=ask('devices'); if(!ask('wifi')) return wrap(bar('Devices','','wifi'),emptyWifi());
+  let s=`<p class="sm muted" style="margin-bottom:14px">Guest devices using your Wi-Fi right now.</p>`;
+  if(!ss.length) s+=`<div class="empty"><div class="ic">&#128241;</div><p>Nobody is connected.</p></div>`;
+  else{
+    s+=`<div class="card">`+ss.map(x=>{
+      const r=ROUTERS.find(r=>r.id===x.router), st=site(r.site);
+      return `<div class="dev"><div class="di">${x.dev==='iPhone'||x.dev==='Android'?'&#128241;':'&#128187;'}</div>
+        <div class="grow"><b class="sm">${esc(x.dev)}</b>
+          <div class="tiny muted">${esc(st.name)} &middot; since ${esc(x.since)} &middot; <span class="mono">${esc(x.voucher)}</span></div></div>
+        <div style="text-align:right"><div class="sm" style="font-weight:600">${mb(x.down)}</div>
+          <div class="tiny muted">down</div></div></div>`;
+    }).join('')+`</div>`;
+  }
+  s+=`<p class="tiny muted mt14" style="line-height:1.5">Each device is shown against the voucher that let it on.
+    Device owners are guests, not DishNet account holders.</p>`;
+  return wrap(bar('Connected devices',ss.length+' online','wifi'),s);
+}
+
+/* --------------------------------- USAGE ---------------------------------- */
+function vUsage(){
+  const vs=ask('vouchers'); if(!ask('wifi')) return wrap(bar('Usage','','wifi'),emptyWifi());
+  const issued=vs.length, used=vs.filter(v=>v.state!=='unused').length;
+  const rev=vs.filter(v=>v.state!=='unused').reduce((a,v)=>a+plan(v.plan).price,0);
+  const days=[42,55,38,61,70,49,58];
+  let s=`<div class="card"><div class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700">Vouchers used &middot; September</div>
+    <div class="big mt8">${used}</div>
+    <div class="tiny muted">of ${issued} issued</div>
+    <div class="row mt14" style="gap:4px;align-items:flex-end;height:58px">
+      ${days.map(v=>`<div style="flex:1;background:var(--red);opacity:.85;border-radius:3px 3px 0 0;height:${v}%"></div>`).join('')}</div>
+    <div class="row tiny muted mt8" style="justify-content:space-between">
+      <span>Mon</span><span>Sun</span></div></div>
+    <div class="card"><div class="kv"><span class="k">Value of used vouchers</span><span class="v">${fmtUGX(rev)}</span></div>
+      <div class="kv"><span class="k">Busiest location</span><span class="v">Lobby</span></div>
+      <div class="kv"><span class="k">Most popular</span><span class="v">1 Day</span></div>
+      <div class="kv"><span class="k">Devices served</span><span class="v">${ask('devices').length} now</span></div></div>
+    <p class="tiny muted" style="line-height:1.5">Figures cover your own locations only.</p>`;
+  return wrap(bar('Usage','This month','wifi'),s);
+}
+
+/* -------------------------------- ACCOUNT --------------------------------- */
+function vAccount(){
+  const d=derive();
+  let s=`<div class="card"><div class="kv"><span class="k">Account</span><span class="v mono">${esc(d.cust.acct)}</span></div>
+    <div class="kv"><span class="k">Name</span><span class="v">${esc(d.cust.name)}</span></div>
+    <div class="kv"><span class="k">Contact</span><span class="v">${esc(d.cust.contact)}</span></div>
+    <div class="kv"><span class="k">Town</span><span class="v">${esc(d.cust.town)}</span></div>
+    <div class="kv"><span class="k">Customer since</span><span class="v">${esc(d.cust.since)}</span></div></div>
+    <h3 class="mt14">Services on this account</h3>
+    <div class="card">${d.services.map(sv=>`<div class="kv"><span class="k">${esc(sv.name)}</span>
+      <span class="v"><span class="pill p-ok"><i class="dot"></i>Active</span></span></div>`).join('')}</div>
+    <button class="btn mt14" onclick="go('billing')">&#128179; &nbsp;Billing &amp; payments</button>
+    <button class="btn btn-ghost mt8" onclick="go('support')">&#128172; &nbsp;Support</button>
+    <button class="btn btn-ghost mt8" onclick="openChain()">&#128274; &nbsp;How this account is protected</button>
+    <button class="btn btn-ghost mt8" onclick="signOut()" style="color:var(--red)">Sign out</button>`;
+  return wrap(bar('Account'),s);
+}
+function vBilling(){
+  const due=INVOICES.find(i=>i.state==='due');
+  let s='';
+  if(due) s+=`<div class="card" style="background:var(--amber-light);border-color:#f4dbb0">
+    <div class="tiny" style="color:var(--amber-dark);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Amount due</div>
+    <div class="big" style="color:var(--amber-dark)">${fmtUGX(due.amount)}</div>
+    <div class="tiny" style="color:var(--amber-dark);margin-bottom:12px">${esc(due.period)} &middot; due ${esc(due.due)}</div>
+    <button class="btn" style="background:#fff" onclick="toast('Mock only — no payment was taken.')">Pay now</button></div>`;
+  s+=`<h3 class="mt14">History</h3><div class="card">${INVOICES.map(i=>
+    `<div class="kv"><span class="k">${esc(i.period)}</span>
+      <span class="v">${fmtUGX(i.amount)} &nbsp;<span class="pill ${i.state==='paid'?'p-ok':'p-warn'}">
+      <i class="dot"></i>${i.state==='paid'?'Paid':'Due'}</span></span></div>`).join('')}</div>
+    <p class="tiny muted mt14" style="line-height:1.5">Billing covers all DishNet services on this account.</p>`;
+  return wrap(bar('Billing','','account'),s);
+}
+function vSupport(){
+  const d=derive();
+  const s=`<div class="card flat"><b class="sm">Your details are already attached</b>
+    <p class="tiny muted mt8" style="line-height:1.5">Support sees your account number and services.
+      You don't need to quote anything.</p></div>
+    <button class="btn btn-primary" onclick="toast('Mock only — no message was sent.')">&#128172; &nbsp;Start a chat</button>
+    <button class="btn mt8" onclick="toast('Mock only — no call was placed.')">&#128222; &nbsp;Call DishNet</button>
+    <h3 class="mt20">Common questions</h3>
+    ${[['A guest cannot connect','Check the code has not already finished. Each code allows a set number of devices.'],
+       ['An access point shows Off','DishNet can see this as well. If it does not come back, start a chat.'],
+       ['Can I change my prices?','Yes. Ask support to adjust what each code costs.'],
+       ['Does a voucher create an account?','No. It only gives internet access at your location.']]
+      .map(([q,a])=>`<div class="card"><b class="sm">${q}</b>
+        <div class="tiny muted mt8" style="line-height:1.5">${a}</div></div>`).join('')}`;
+  return wrap(bar('Support',d.cust.acct,'account'),s);
+}
+
+/* ========================= IDENTITY CHAIN + TAMPER DEMO ==================== */
+/* Makes the authorization model inspectable. The point of the tamper demo is
+   that asking for another customer's id is not "denied" by a check bolted on
+   top - there is no code path that accepts an id from the client at all. */
+function openChain(){
+  const d=derive();
+  if(!d){sheet(`<div class="grab"></div><h2>Not signed in</h2>
+    <p class="sm muted mt8">Sign in first to see how a view is authorized.</p>`);return;}
+  const r=d.routers[0];
+  sheet(`<div class="grab"></div>
+    <h2 style="margin-bottom:4px">How this view is authorized</h2>
+    <p class="sm muted" style="margin-bottom:14px">Reviewer view. Not a customer screen.</p>
+    <div class="chain"><h4>What the app sent</h4>
+      <div class="step"><span class="n">&#8226;</span><div>Session token
+        <span class="src client">only thing held</span>
+        <div class="lk mono mt8">${esc(SESSION.token)}</div>
+        <div class="lk mt8">Carries no customer id, no site id, no router id.</div></div></div>
+      <div class="step"><span class="n">&#8226;</span><div>Request
+        <div class="lk mono mt8">GET /me/services</div>
+        <div class="lk mt8">The app asks for <b>&ldquo;my services&rdquo;</b>. It never names what it wants.</div></div></div>
+    </div>
+    <div class="chain mt8" style="background:#0f2a1a"><h4>What the server derived</h4>
+      <div class="step"><span class="n">1</span><div>Token &rarr; <b>${esc(d.cust.name)}</b>
+        <span class="src derived">derived</span></div></div>
+      <div class="step"><span class="n">2</span><div>Customer &rarr; <b>${d.services.length} service(s)</b>
+        <span class="src derived">derived</span></div></div>
+      <div class="step"><span class="n">3</span><div>Service &rarr; <b>${d.sites.length} authorized site(s)</b>
+        <span class="src derived">derived</span></div></div>
+      <div class="step"><span class="n">4</span><div>Sites &rarr; <b>${d.routers.length} authorized router(s)</b>
+        <span class="src derived">derived</span>
+        <div class="lk mt8">Routers are reached <b>through sites</b>, never looked up by id.</div></div></div>
+      <div class="step"><span class="n">5</span><div>Routers &rarr; <b>${d.sessions.length} session(s)</b>, ${d.vouchers.length} voucher(s)
+        <span class="src derived">derived</span></div></div>
+    </div>
+    <h3 class="mt14">Try to reach another customer</h3>
+    <p class="tiny muted" style="margin-bottom:9px;line-height:1.5">Edit the id the way a tampered URL would.
+      The result is the same for every value, including a real one.</p>
+    <div class="field" style="margin-bottom:9px"><input id="tamper" value="C-02" class="mono"></div>
+    <button class="btn btn-sm" onclick="doTamper()">Request /customer/&lt;id&gt;</button>
+    <div id="tamperout" class="mt8"></div>
+    <h3 class="mt20">What ${esc(d.cust.name)} is not shown</h3>
+    <div class="card flat" style="margin-bottom:0"><div class="tiny" style="line-height:1.7">
+      Serial number, WireGuard address, public endpoint, RouterOS version, provisioning state,
+      other customers' existence, pricing cost basis.<br>
+      <span class="muted">These exist on the router object. The customer projection drops them.</span></div></div>
+    <div class="card flat mt8" style="margin-bottom:0"><div class="tiny" style="line-height:1.6">
+      <b>Prototype caveat.</b> This is a mock. The guarantee shown here has to be
+      implemented on a real server; a client-side demo cannot provide it.</div></div>`);
+}
+function doTamper(){
+  const v=(document.getElementById('tamper').value||'').trim();
+  const out=document.getElementById('tamperout');
+  const mine=derive().cust.id;
+  /* Deliberately: the id is not looked up, not compared against a list, not
+     validated. It is discarded, because no endpoint accepts it. */
+  const same=v===mine;
+  out.innerHTML=`<div class="card" style="margin-bottom:0;border-color:${same?'#c5dcf5':'#f0c9c9'};
+      background:${same?'var(--blue-light)':'var(--danger-light)'}">
+    <div class="mono tiny" style="margin-bottom:6px">GET /customer/${esc(v)}</div>
+    <b class="sm">404 Not Found</b>
+    <div class="tiny mt8" style="line-height:1.55">No such route. The API exposes
+      <span class="mono">/me/*</span> only. There is no endpoint that takes a customer id,
+      so there is nothing to tamper with${same?' — including your own id.':'.'}</div></div>`;
+}
+
+/* ============================== GUEST PORTAL ============================== */
+/* Shown so the two audiences are not confused. A guest is NOT a DishNet
+   customer, has no account, and never sees the app above. */
+function openGuest(){
+  sheet(`<div class="grab"></div>
+    <h2 style="margin-bottom:4px">Guest captive portal</h2>
+    <p class="sm muted" style="margin-bottom:14px">Reviewer view. This is the <b>third</b> experience &mdash;
+      what a hotel guest sees. Separate from this app.</p>
+    <div style="border:1px solid var(--line);border-radius:13px;overflow:hidden">
+      <div style="background:var(--hdr);color:#fff;padding:13px 15px">
+        <div style="font-family:var(--display);font-size:17px;font-weight:600">Riverside Hotel Wi-Fi</div>
+        <div class="tiny" style="opacity:.7">Powered by DishNet</div></div>
+      <div style="padding:16px">
+        <p class="sm muted" style="margin-bottom:13px">Enter the code from reception.</p>
+        <div class="field"><input value="HT4K-9M2P" class="mono"
+          style="text-align:center;font-size:19px;letter-spacing:2px" readonly></div>
+        <button class="btn btn-primary" onclick="toast('Mock only — nothing was connected.')">Connect</button>
+        <div class="row mt14" style="gap:9px"><div style="flex:1;height:1px;background:var(--line)"></div>
+          <span class="tiny muted">or</span><div style="flex:1;height:1px;background:var(--line)"></div></div>
+        <button class="btn mt14" onclick="toast('Mock only — no payment was taken.')">Buy a code</button>
+      </div></div>
+    <div class="card flat mt14" style="margin-bottom:0"><div class="tiny" style="line-height:1.65">
+      <b>A guest is not a customer.</b> Entering a code creates a HotSpot user on the network.
+      It does not create a DishNet account, does not appear in the customer app,
+      and gives no access to anything above.</div></div>`);
+}
+
+/* ================================= BOOT =================================== */
+const VIEWS={home:vHome,wifi:vWifi,site:vSite,vouchers:vVouchers,devices:vDevices,
+             usage:vUsage,account:vAccount,billing:vBilling,support:vSupport,nowifi:vNoWifi};
+function render(){
+  if(!SESSION){app().innerHTML=vLogin();return;}
+  const d=derive();
+  if(!d){SESSION=null;app().innerHTML=vLogin();return;}
+  /* A customer with no MikroTik service must never land on a Wi-Fi screen
+     that assumes one exists. Redirect rather than render a broken view. */
+  if(!d.mik&&['site','usage'].includes(VIEW))VIEW='wifi';
+  app().innerHTML=(VIEWS[VIEW]||vHome)();
+}
+setWho('C-01');
+</script>
+</body>
+</html>
