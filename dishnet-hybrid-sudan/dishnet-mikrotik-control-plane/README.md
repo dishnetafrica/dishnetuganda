@@ -6,10 +6,10 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 5 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
-the `/me` surface, the response projection, the intent queue, the policy plane, and
-vouchers with their projection into AAA. No devices, RADIUS daemon integration, sessions
-or telemetry yet. See `docs/55` in the plugin repo for the plan.
+**Status: step 6 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
+the `/me` surface, the response projection, the intent queue, the policy plane, vouchers,
+and session accounting. No devices, no RouterOS client, no telemetry yet. See `docs/55` in
+the plugin repo for the plan.
 
 ---
 
@@ -37,7 +37,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**381 assertions across 11 suites**, including one that runs against a real `php -S` server.
+**438 assertions across 12 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -70,7 +70,7 @@ misconfigures this fails the suite rather than leaking silently.
 ```
 migrations/   001 roles · 002 identity · 003 commercial plane
               004 audit · 005 idempotency · 006 RLS · 007 auth · 008 intents
-              009 policy · 010 vouchers
+              009 policy · 010 vouchers · 011 sessions
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
 src/Auth/     Authenticator — credential to derived (principal, customer)
@@ -80,13 +80,14 @@ src/Http/Serializer/  Projection — the allowlist for what leaves
 src/Policy/   PlanValidator (validity, never ceiling), ProfileResolver,
               PlanRepository
 src/Vouchers/ CodeSource, CodeGenerator, VoucherService
+src/Sessions/ AccountingIngest, SessionService
 src/Intents/  IntentQueue, IntentState — the only path to a router
 src/Delivery/ DeliveryPort (interface), DeliveryResult, NullDelivery
 src/Jobs/     IntentWorker — the only caller of DeliveryPort
 src/Api/      Routes — auth + /me
 public/       index.php
 bin/          migrate.php, worker.php
-tests/        run.sh + 11 suites
+tests/        run.sh + 12 suites
 ```
 
 ## Invariants the tests enforce
@@ -109,6 +110,30 @@ Each guard has been **negative-tested**: a violation is planted, the suite is co
 fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
 
 ---
+
+## RADIUS accounting arrives over UDP
+
+Three consequences, each a bug if unhandled, each with its own section in the suite:
+
+**Retransmits are normal.** A NAS that gets no reply resends. Ingest is idempotent, not
+merely tolerant — the same packet twice changes nothing and creates no second row.
+
+**Packets reorder.** An Interim-Update can arrive after the Stop it precedes. A closed
+session is final: a late Interim neither reopens it nor moves its numbers. Counters use
+`GREATEST`, never assignment, so a retransmitted *earlier* reading cannot shrink a session.
+
+**Counters are 32-bit.** `Acct-Input-Octets` wraps at 4 GiB, with the high bits in
+`Acct-Input-Gigawords`. Reading only the octets under-reports every session past 4 GiB —
+quietly, so the figures look like light usage rather than a fault. On a day pass over hotel
+Wi-Fi that is one evening of video.
+
+A lost Stop is handled by reaping, and reaped is its own state rather than `closed`: a
+session nobody reported the end of is weaker evidence than one that reported its own Stop,
+and reconciliation should be able to tell them apart.
+
+The accounting endpoint returns 204 whatever happens — an unknown username creates no
+session, and the response is identical either way, so it cannot be used to test whether a
+username exists.
 
 ## One code, one redemption — and how that is tested
 

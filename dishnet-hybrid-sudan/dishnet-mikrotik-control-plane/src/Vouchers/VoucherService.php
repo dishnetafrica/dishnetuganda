@@ -46,6 +46,23 @@ final class VoucherService
             $vouchers[] = $this->insertOne($customerId, $batch['id'], $plan, $siteId);
         }
 
+        // The AAA row is written here, not by the intent.
+        //
+        // With RADIUS the credential lives in this database and FreeRADIUS
+        // reads it; there is no per-voucher operation on a router. The intent
+        // below records that publication was requested and is what step 7's
+        // delivery will act on — which may well be a no-op confirm for this
+        // kind, since the router needs no per-voucher change. Writing the row
+        // here means a code works the moment it is handed over rather than
+        // when a queue gets to it.
+        $customer = $this->db->one('SELECT radius_ref FROM mt_customers WHERE id = ?', [$customerId]);
+        foreach ($vouchers as $v) {
+            $this->db->exec(
+                'INSERT INTO mt_hotspot_users (voucher_id, customer_id, radius_username)
+                 VALUES (?,?,?)',
+                [$v['id'], $customerId, $this->radiusUsername($customer, $v['code'])]);
+        }
+
         $this->db->exec(
             "UPDATE mt_voucher_batches
                 SET issued_count = ?, state = 'issued', completed_at = now()

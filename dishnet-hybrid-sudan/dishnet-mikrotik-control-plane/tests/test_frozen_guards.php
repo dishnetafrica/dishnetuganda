@@ -102,6 +102,29 @@ $dbSrc = file_get_contents($root . '/src/Db/Database.php');
 is_(str_contains($dbSrc, 'SAVEPOINT'), true, 'and attempt() really uses a savepoint');
 is_(str_contains($dbSrc, 'ROLLBACK TO SAVEPOINT'), true, 'rolling back to it on failure');
 
+t('RADIUS counters are combined with their gigawords companion');
+// Acct-Input-Octets is 32-bit and wraps at 4 GiB. Reading it without
+// Acct-Input-Gigawords under-reports every session past that, quietly — the
+// figures look like light usage rather than like a fault.
+//
+// This is asserted BEHAVIOURALLY. A first version checked the source for the
+// string '4294967296' — which survives in the constant declaration even if
+// the multiplication is deleted, so the guard passed while the bug was
+// present. A guard that cannot fail is worse than none, because it is
+// believed. Negative-testing it is what caught that.
+$combined = \Dn\Sessions\AccountingIngest::combineOctets(
+    ['Acct-Input-Octets' => 1000, 'Acct-Input-Gigawords' => 2], 'Input');
+is_($combined, 2 * 4294967296 + 1000, 'gigawords are multiplied in, not dropped');
+is_(\Dn\Sessions\AccountingIngest::combineOctets(['Acct-Input-Octets' => 7], 'Input'), 7,
+    'and a session below 4 GiB is unaffected');
+$naive = [];
+foreach ($src() as $f) {
+    $body = strip_php_comments(file_get_contents($f));
+    if (!str_contains($body, 'Acct-Input-Octets')) { continue; }
+    if (!str_contains($body, 'Gigawords')) { $naive[] = basename($f); }
+}
+is_($naive, [], 'no file reads octets without also reading gigawords');
+
 t('F9 — no source file refuses anything on commercial grounds');
 // If a ceiling creeps back, it announces itself in the wording first.
 $wording = [];

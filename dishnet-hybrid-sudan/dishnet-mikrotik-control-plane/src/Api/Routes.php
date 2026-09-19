@@ -223,6 +223,41 @@ final class Routes
             return Response::accepted(['voucher' => P::voucher($v), 'intent_id' => $intent['id']]);
         });
 
+        // ── sessions: connected devices ─────────────────────────────────
+        $r->get('/api/v1/me/sessions', function (Request $req, Database $db) {
+            $svc = new \Dn\Sessions\SessionService($db);
+            $rows = ($req->body['all'] ?? false) ? $svc->all() : $svc->live();
+            return Response::ok(['sessions' => P::many([P::class, 'session'], $rows)]);
+        });
+
+        $r->get('/api/v1/me/usage', function (Request $req, Database $db) {
+            $u = (new \Dn\Sessions\SessionService($db))->usage();
+            return Response::ok(['usage' => [
+                'open_now'       => (int) ($u['open_now'] ?? 0),
+                'sessions_total' => (int) ($u['sessions_total'] ?? 0),
+                'bytes_in'       => (int) ($u['bytes_in'] ?? 0),
+                'bytes_out'      => (int) ($u['bytes_out'] ?? 0),
+            ]]);
+        });
+
+        $r->post('/api/v1/me/sessions/{session_id}/disconnect',
+            function (Request $req, Database $db, array $who) {
+                $id = $req->params['session_id'] ?? '';
+                if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
+                $s = (new \Dn\Sessions\SessionService($db))->find($id);
+                if ($s === null) { return Response::notFound(); }
+
+                // Disconnecting reaches a router, so it is an intent like
+                // everything else that does.
+                $intent = (new \Dn\Intents\IntentQueue($db))->enqueue(
+                    $who['customer_id'], 'session.disconnect',
+                    ['session_id' => $id], $who['principal_id'], 'session', $id);
+                (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
+                    'principal', 'session.disconnect_requested', 'session', $id, $req->ip);
+
+                return Response::accepted(['intent_id' => $intent['id']]);
+            });
+
         $r->get('/api/v1/me/intents', function (Request $req, Database $db) {
             $rows = (new \Dn\Intents\IntentQueue($db))->forCustomer();
             // Deliberately says nothing about when queued work reaches a
@@ -230,6 +265,25 @@ final class Routes
             // be asserted in a response, a label or a message.
             return Response::ok(['intents' => P::many([P::class, 'intent'], $rows)]);
         });
+
+        // ── internal: RADIUS accounting ─────────────────────────────────
+        //
+        // Called by FreeRADIUS, not by a customer, so it does not use the
+        // bearer-token path at all. It authenticates with a shared secret and
+        // runs WITHOUT a tenant context: the username is the only identity
+        // presented, and resolving it is how the customer is determined.
+        $r->post('/internal/radius/accounting', function (Request $req, Database $db) {
+            $expected = getenv('DNB_INTERNAL_TOKEN') ?: '';
+            $given    = $req->header('X-Internal-Token') ?? '';
+            if ($expected === '' || !hash_equals($expected, $given)) {
+                return Response::unauthorized();
+            }
+            $out = (new \Dn\Sessions\AccountingIngest($db))->record($req->body);
+            // 204 whatever the outcome: a NAS is not a client to be argued
+            // with, and telling it whether a username exists would make this
+            // endpoint a way to test usernames.
+            return Response::noContent();
+        }, auth: false);
 
         return $r;
     }

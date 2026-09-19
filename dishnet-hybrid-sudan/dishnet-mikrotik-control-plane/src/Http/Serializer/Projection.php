@@ -73,6 +73,20 @@ final class Projection
         'id', 'requested_count', 'issued_count', 'state', 'site_id', 'created_at',
     ];
 
+    /**
+     * A connected device, as the customer sees it.
+     *
+     * radius_username, acct_session_id and nas_identifier are withheld: they
+     * are AAA plumbing, and the username carries the customer's own namespace
+     * prefix. The customer sees a device using their Wi-Fi, against the
+     * voucher that let it on.
+     */
+    private const SESSION = [
+        'id', 'voucher_id', 'mac', 'ip', 'bytes_in', 'bytes_out',
+        'state', 'started_at', 'last_seen_at', 'ended_at',
+    ];
+
+    public static function session(array $r): array     { return self::pick($r, self::SESSION); }
     public static function voucher(array $r): array     { return self::pick($r, self::VOUCHER); }
     public static function batch(array $r): array       { return self::pick($r, self::BATCH); }
     public static function plan(array $r): array        { return self::pick($r, self::PLAN); }
@@ -103,6 +117,7 @@ final class Projection
             'intent'      => self::INTENT,
             'plan'        => self::PLAN,
             'voucher'     => self::VOUCHER,
+            'session'     => self::SESSION,
             'batch'       => self::BATCH,
             default       => throw new \InvalidArgumentException("unknown projection {$name}"),
         };
