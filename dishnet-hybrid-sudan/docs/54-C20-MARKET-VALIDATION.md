@@ -166,3 +166,86 @@ produce *signals* for C11 — Q11 and Q13 especially — but the pricing unit st
 per docs/51.
 
 *No production system was contacted. No prototype, schema or architecture was changed.*
+
+---
+
+## 7. Capture sheet — one per prospect
+
+Two rules for whoever fills this in:
+
+- **Record answers, not judgements.** `Load-bearing` is *derived afterwards* from what they
+  said would stop working — not asked, and not decided in the room. An interviewer who ticks
+  it live is recording their own prior.
+- **Never leave a field blank.** Write `UNKNOWN` or `COULD NOT CHECK`. A blank cannot be
+  distinguished from a "no" later, and the M2 threshold in §4 depends on that difference.
+
+```
+INTERVIEW #____        Date ________        Interviewer ________
+
+Business ______________________________  Type ______________________
+Locations (count) ____   Town(s) ____________________________________
+
+A — CONNECTION
+Internet          [ ] Starlink  [ ] Fiber  [ ] LTE  [ ] Other ________
+Bought from ____________________  How long ______________
+
+B — EQUIPMENT
+What sits between the connection and the Wi-Fi?
+_____________________________________________________________________
+
+Any MikroTik?     [ ] Yes   [ ] No   [ ] UNKNOWN
+  Model (from label) _______________________________________________
+  RouterOS version _________________  [ ] COULD NOT CHECK
+  Photo of label taken?   [ ] Yes  [ ] No
+
+What does it do?  [ ] Routing  [ ] Wi-Fi  [ ] HotSpot  [ ] Firewall
+                  [ ] VPN      [ ] Other ____________________________
+
+"If that box died tonight, what would stop working?"  ← VERBATIM
+_____________________________________________________________________
+_____________________________________________________________________
+
+Who set it up? ______________________________________________________
+Who would you call if it broke? _____________________________________
+Config changed in the last year?  [ ] Yes, by ____________  [ ] No  [ ] UNKNOWN
+
+C — THE WI-FI BUSINESS
+Guests on a normal day ______   On the busiest day ______
+Charge for Wi-Fi?  [ ] Yes  [ ] No     If yes, how? ________________
+How are codes produced today, and by whom? _________________________
+Paid anyone for network work in the last year?  [ ] Yes  [ ] No  [ ] UNKNOWN
+  Approx amount ______________
+
+"Biggest problem with your Wi-Fi as it stands?"  ← VERBATIM
+_____________________________________________________________________
+
+D — AFTER describing the product (not before)
+Useful here?  [ ] Yes  [ ] No  [ ] Maybe
+What would they use it for first? ___________________________________
+
+"What would have to be true for you to try it?"  ← VERBATIM, UNPROMPTED
+_____________________________________________________________________
+_____________________________________________________________________
+
+FIRST OBSTACLE THEY NAMED (one word/phrase) ________________________
+Did they raise hardware themselves?   [ ] Yes  [ ] No
+
+--- DERIVED AFTER THE INTERVIEW, NOT IN THE ROOM ---
+M1 load-bearing   [ ] Yes  [ ] No  [ ] Can't tell    (from the B verbatim)
+M2 certifiable    [ ] Yes  [ ] No  [ ] Can't tell    (needs model AND version)
+M3 incumbent      [ ] Yes  [ ] No                    (a named person who maintains it)
+```
+
+### 7.1 Tally sheet
+
+Only the derived row feeds §4:
+
+| # | Business | M1 | M2 | M3 | Charges? | First obstacle |
+|---|---|---|---|---|---|---|
+| 1 | | | | | | |
+| … | | | | | | |
+| 12 | | | | | | |
+
+**M1 AND M2 both Yes** → counts toward the §4 threshold. `Can't tell` counts as neither, and
+if more than three interviews land there, the equipment questions are not being asked
+thoroughly enough — fix that before continuing rather than after.
