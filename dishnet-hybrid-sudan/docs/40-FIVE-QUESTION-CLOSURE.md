@@ -164,7 +164,7 @@ file we could not. Recorded, not fixed.
 
 ---
 
-## Q5 — CLOSED: the hotspot has never been used, and the schema was never created
+## Q5 — CLOSED: on this installation the hotspot has never been used, and the schema was never created
 
 The follow-up scan covered the whole plugins root including dot-directories and found
 **13 SQLite databases**. The result is not ambiguous.
@@ -204,8 +204,26 @@ first call any PWA session makes.
 
 None of its exclusive tables exists anywhere. Therefore:
 
-> **`ca_init_tables()` has never executed in production. No customer-app API request has
-> ever been served. The PWA has never been used. Live hotspot usage is zero.**
+> **On this installation, `ca_init_tables()` has never executed. No customer-app API
+> request has ever been served here. This installation's PWA has never been used, and its
+> live hotspot usage is zero.**
+
+### SCOPE — corrected 2026-09-19
+
+> **Precise statement:** *`dishnet-hybrid-sudan` on the Uganda installation at
+> `209.97.137.203` had no observed customer-app usage in the audited databases.*
+>
+> This does **NOT** mean DishNet globally has never served customers.
+
+A customer Android application (v1.0.2) is in **active production** against a **separate
+installation**: **installation A — South Sudan, `crm.dishnetafrica.com` /
+`46.101.93.167`**, using plugin `dishnet-hybrid-telecom`. It never contacts
+`209.97.137.203`.
+
+Both facts hold together: Uganda's customer app was never launched; South Sudan's was, and
+runs on the other host. The measurement below was correct — only its scope label was
+missing. **Installation A has never been audited**, so nothing here describes its usage.
+See docs/00 §2.1.
 
 The counts requested are all the same number:
 

@@ -9,6 +9,27 @@ traces to one of those, all of which were read-only audits against the live serv
 **Type:** Architecture governance. No code, schema, data, configuration or deployment was
 changed in producing it.
 
+> ### INSTALLATION SCOPE (added 2026-09-19)
+>
+> DishNet runs **two production installations**. Every server finding behind this freeze
+> was measured on **installation B**.
+>
+> | | **A — South Sudan** | **B — Uganda** |
+> |---|---|---|
+> | Endpoint | `crm.dishnetafrica.com` | `crm.dishnetuganda.com:8443` |
+> | Host | `46.101.93.167` | `209.97.137.203` |
+> | Hybrid plugin | `dishnet-hybrid-telecom` | `dishnet-hybrid-sudan` |
+> | Customer Android app | **YES** (v1.0.2) | No |
+> | Zero-Touch / Phase 0 | No | **YES** |
+> | Audited | **NO** | **YES** |
+>
+> No shared filesystem, live connection or database was found between them.
+> **Installation A has never been audited.**
+>
+> **This boundary applies to both installations.** The Domain A / Domain B separation is
+> architectural, not per-host: wherever a MikroTik estate is built, it must not consume
+> Starlink registries. See docs/00 §2.1.
+
 ---
 
 ## 0. Why this document exists
@@ -148,6 +169,29 @@ The MikroTik system **must not** use, read, write, extend, alias or derive from:
 | `sl_svc_cache.json`, `dr_kit_registry.json`, `auto_block.sqlite3` | Domain A |
 
 MikroTik gets **its own tables and its own identifiers**.
+
+### 4.1a "MikroTik" means TWO different things — do not collapse them
+
+**VERIFIED 2026-09-19** from the Android application source: the existing Starlink customer
+system **already uses MikroTik hardware**. The word therefore names two unrelated
+operational roles, and conflating them is the most likely way this boundary gets crossed.
+
+| | **Domain A — existing** | **Domain B — new** |
+|---|---|---|
+| What it is | Customer-premises MikroTik router, part of the existing Starlink/WiFi system | DishNet-managed Zero-Touch MikroTik estate |
+| Reached by | `dr_wifi_*` cloud relay; local gRPC `192.168.1.1:9000`; router API | WireGuard `10.66.0.1/24`; RouterOS REST |
+| Registry | `wifi_router_map.json`, `sl_kits.json` | `mt_*` tables (to build) |
+| Access control | `ca_hotspot_authz_router()` | FreeRADIUS |
+| Sessions | `hotspot_session_log` | RADIUS `radacct` |
+| Vouchers | `hotspot_paid_access` | `mt_vouchers` (to build) |
+| Provisioning | none — installed per customer | Zero-Touch |
+
+> **Shared hardware vendor implies nothing about shared registry, API lifecycle,
+> provisioning model, RADIUS, or vouchers. Do not merge them.**
+
+A MikroTik router already managed under Domain A does **not** become a Domain B device by
+being the same brand, and must not be added to the Domain B registry without an explicit
+architecture decision recorded here.
 
 ### 4.2 The single most important rule
 

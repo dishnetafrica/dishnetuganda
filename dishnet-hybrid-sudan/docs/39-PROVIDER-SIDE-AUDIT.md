@@ -12,6 +12,23 @@ output; the probes have no code path that prints a scalar value.
 router hardware ids appear in the raw probe output but are redacted throughout this
 document, per the standing observation rule.
 
+> **INSTALLATION SCOPE (added 2026-09-19).** Every finding here was measured on
+> **installation B — Uganda, `crm.dishnetuganda.com:8443` / `209.97.137.203`**. DishNet
+> also runs **installation A — South Sudan, `crm.dishnetafrica.com` / `46.101.93.167`**,
+> which runs its own `dishnet-data-report` and is where the customer Android application
+> operates. **Installation A has never been audited.** Whether the two
+> `dishnet-data-report` deployments match in version or fleet ownership is
+> **UNVERIFIED**. See docs/00 §2.1 and §16.1.
+>
+> **`dr_wifi_*` surface — corrected.** This document originally named five actions. The
+> installed plugin on installation B implements **26**. Of those, **9 are VERIFIED**
+> (5 customer-facing, called by the Android app: `dr_wifi_lookup`,
+> `dr_wifi_request_token`, `dr_wifi_change_password`, `dr_wifi_change_confirm`,
+> `dr_wifi_list_routers`; 4 administrative: `dr_wifi_get_status`, `dr_wifi_pause_client`,
+> `dr_wifi_get_config`, `dr_wifi_test_block`) and **17 remain INFERRED** — implemented,
+> but with no traced caller. **Do not promote an inferred action to verified without
+> tracing its caller.**
+
 ---
 
 ## 1. Actual installed plugin paths
@@ -361,7 +378,7 @@ STARLINK (api.starlink.com)
 └──────────────────────────────────────────────────────────────────┘
         │
         ▼
-   Customer PWA / Android app
+   Customer PWA  (installation B; the Android app runs on installation A)
 ```
 
 **Three corrections to the brief's diagram:**

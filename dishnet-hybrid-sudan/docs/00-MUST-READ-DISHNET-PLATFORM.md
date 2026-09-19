@@ -2,9 +2,11 @@
 
 > **STATUS: BINDING / MUST READ**
 > **Scope:** DishNet customer platform + existing Starlink ecosystem + MikroTik
-> Zero-Touch/HotSpot project
+> Zero-Touch/HotSpot project.
+> **Server findings describe installation B (Uganda, `209.97.137.203`) unless stated.**
+> Installation A (South Sudan, `46.101.93.167`) is **UNAUDITED** — see §2.1.
 > **Last verified:** 2026-09-19
-> **Source documents:** docs/30–41
+> **Source documents:** docs/30–41 + Android app v1.0.2 source
 > **This document does not replace the detailed documents. It is the entry point and
 > system map.**
 
@@ -74,6 +76,66 @@ They **MUST NOT** share **network-control data or device registries**.
 permitted. Below it, never.
 
 Authoritative source: **docs/41**, which is binding.
+
+---
+
+### 2.1 TWO INSTALLATIONS — deployment topology (read before any server work)
+
+**DishNet runs two separate production installations on two separate hosts.** They are
+two country operations, not two environments. Confusing them is how a single Android
+application briefly appeared to contradict five audits.
+
+| | **A — South Sudan** | **B — Uganda** |
+|---|---|---|
+| Public endpoint | `crm.dishnetafrica.com` | `crm.dishnetuganda.com:8443` |
+| Host | **`46.101.93.167`** | **`209.97.137.203`** |
+| Hybrid plugin | `dishnet-hybrid-telecom` | `dishnet-hybrid-sudan` |
+| Customer Android app | **YES** — v1.0.2, active production | No |
+| Starlink WiFi control | existing `dr_wifi_*` + local gRPC | present, not app-facing |
+| Zero-Touch WireGuard | No | **YES** |
+| Phase 0 FreeRADIUS | No | **YES** |
+| **Audited by docs/34–41** | **NO — never audited** | **YES** |
+
+```
+A — SOUTH SUDAN  (PROVEN endpoints, UNVERIFIED internals)
+  Customer Android App v1.0.2
+        ▼
+  crm.dishnetafrica.com  →  46.101.93.167
+        ▼
+  [UNVERIFIED] dishnet-hybrid-telecom + dishnet-data-report
+        ▼
+  [UNVERIFIED] customer-LAN MikroTik / Starlink dish
+
+B — UGANDA  (PROVEN — this is what docs/34–41 describe)
+  Phase 0 / Zero-Touch
+        ▼
+  crm.dishnetuganda.com:8443  →  209.97.137.203
+        ▼
+  uCRM + dishnet-hybrid-sudan + dishnet-data-report + dishnet-starlink-finance
+        ▼
+  native WireGuard 10.66.0.1/24 · dn-phase0-radius · dn-phase0-postgres 127.0.0.1:5433
+
+LINK BETWEEN A AND B: none found.
+  No shared filesystem (NFS/CIFS/SMB/Gluster/Ceph/SSHFS count 0)
+  No live connection to 46.101.93.167 · no config naming it
+  No shared database (POSTGRES_HOST=unms-postgres, local container)
+  Cross-references in B's code are branding, e-mail domains, documentation and
+  negative test assertions only — no outbound call
+```
+
+**Scope rules that follow from this, and that every reader must apply:**
+
+1. **docs/34–41 describe installation B (Uganda).** Unless a finding says otherwise, that
+   is the host it was measured on.
+2. **The Android application audit describes installation A (South Sudan).** It was
+   audited from its source ZIP, not from the server.
+3. **Installation A has never been audited.** Its plugins, databases, persistence
+   locations and `dr_wifi_*` version are **UNVERIFIED**. Do not state anything about them.
+4. **Phase 0 and all Zero-Touch work live on installation B only.**
+
+**Evidence status:** the endpoints, hosts, plugin lists and absence of linkage are
+**VERIFIED** (DNS, `ucrmPublicUrl`, container plugin listing, mount/connection/database
+checks). Everything below `46.101.93.167` is **UNVERIFIED**.
 
 ---
 
@@ -151,26 +213,40 @@ Per **docs/40 Q5**, the PWA has **never served a customer request**. But the cod
 > working implementation with a real Starlink registry behind it, and the business may
 > launch it.
 
-### UNSOURCED — flagged, not documented as fact
+### The Android customer application — installation A, not this one
 
-An **Android customer application**, a **WebView/PWA relationship**, and an **Android ZIP
-reviewed during the audit** are **not present anywhere in docs/30–41**, and no Android
-application was audited during this work.
+**RESOLVED 2026-09-19** from the supplied source ZIP (`dishnet-customer-app-v1_0_2`). An
+earlier version of this document recorded it as UNSOURCED; it is now audited from source.
 
-The only Android references in the source documents are:
+**VERIFIED from the app's source:**
 
-- docs/30:323 — a technical note on Android's `ConnectivityManager.requestNetwork` for
-  captive-portal behaviour. That is **device OS behaviour**, not a DishNet application.
-- docs/39:364 — a diagram label reading "Customer PWA / Android app".
-- docs/39:491, docs/41:96 — constraint lines stating no Android application was modified.
+- Native Kotlin/Jetpack Compose, `com.dishnet.starlinkwifi`, versionName **1.0.2**
+- Its own `CLAUDE.md`: *"This app is in active production with DishNet's customers and
+  handles real authentication, payment visibility, and remote WiFi password changes."*
+- `USE_MOCK = false` — production, not demo
+- WebView pins `ALLOWED_HOST` and blocks off-host navigation
 
-**Status: UNSOURCED.** An Android customer application may well exist — but this audit did
-not examine one, so this document cannot describe it. If it exists, it needs its own audit
-before anything here claims knowledge of it.
+**It talks to installation A (South Sudan), not installation B.** Both of its backends are
+on `crm.dishnetafrica.com`:
 
-The constraint still stands regardless: **do not modify any Android application**, and do
-not treat any Android artefact as a drop-in replacement for the current production
-application.
+| Path | Route |
+|---|---|
+| **1 — local** | `StarlinkWifiClient` gRPC → router `192.168.1.1:9000`, dish `192.168.100.1:9200`. No backend involved |
+| **2 — cloud relay** | `DishNetBackendClient` → `dishnetafrica/dishnet-data-report` → `dr_wifi_lookup` → `request_token` → `change_password` → `change_confirm` |
+| **3 — WebView/PWA** | `CustomerWebView` → `dishnetafrica/dishnet-hybrid-telecom/public.php?page=customer_portal`, `Authorization: Bearer <jwt>` |
+| **auth** | `CustomerApiClient` → `.../dishnet-hybrid-telecom/public.php?page=api` — `app_send_otp` → `app_verify_otp` → JWT |
+
+`WifiViewModel` tries path 1, falls back to path 2 on network error, then fails
+gracefully. `DishNetJsBridge` exposes `navigateTab`, `openWifi`, `openWhatsApp`,
+`openPhone`, `openEmail`, `openInvoice` to the portal page.
+
+> **Scope warning.** This app is evidence about **installation A only**. It never contacts
+> `209.97.137.203`. Do not cite it as evidence of activity on installation B, and do not
+> use it to infer anything about `dishnet-hybrid-telecom`'s server-side internals, which
+> remain **UNVERIFIED**.
+
+The constraint stands: **do not modify any Android application**, and do not treat any
+Android artefact as a drop-in replacement for a production application.
 
 ---
 
@@ -196,14 +272,27 @@ application.
   SQLite files, including every backup from 4 to 19 September 2026.
 - `ca_init_tables()` creates those tables and runs at the top of 44 customer-app handlers.
   Their absence everywhere proves it **has never executed**.
-- Therefore the customer PWA has **never actually served a customer request**.
+- Therefore this installation's customer PWA has **never actually served a customer
+  request**.
 - `cron_paid_access.php` has been a **no-op since deployment** — it returns at its first
   query when the table is missing.
 
+### SCOPE — this finding is about installation B only
+
+> **Precise statement:** *`dishnet-hybrid-sudan` on the Uganda installation at
+> `209.97.137.203` had no observed customer-app usage in any audited database.*
+>
+> It does **NOT** mean DishNet globally has never served customers. The Android customer
+> application (§4) is in active production against **installation A**
+> (`crm.dishnetafrica.com` / `46.101.93.167`), which has never been audited.
+
+Both facts hold together without contradiction: Uganda's customer app was never launched;
+South Sudan's was, and runs on the other host.
+
 ### What this means
 
-**The code is frozen and must be preserved, but it is not currently carrying live customer
-HotSpot traffic.**
+**The code is frozen and must be preserved, but installation B is not currently carrying
+live customer HotSpot traffic.**
 
 > **Do not interpret "unused" as permission to delete it.**
 
@@ -367,8 +456,9 @@ The network control domains remain **independent, permanently**. Unification is 
 
 ## 10. PHASE 0 SERVER — CURRENT VERIFIED STATE
 
-**VERIFIED** (docs/34, docs/36). This is the **existing production host** — Phase 0 was
-built alongside production, not on a new VPS.
+**VERIFIED** (docs/34, docs/36). This is **installation B (Uganda)** — the existing
+production host. Phase 0 was built alongside production, not on a new VPS.
+**Nothing in this section describes installation A.**
 
 | | |
 |---|---|
@@ -567,8 +657,26 @@ and future launch*.
 | **R9** | `sl_account_cycles.json` and `accounts.json` absent; two reads in `api_crm_misc.php` return null | Low | No | **Deferred** |
 | **R10** | `sl_usage.json` empty; portal usage display has no source | Low | No | **Deferred** |
 
+**All ten are measured on installation B (Uganda).** Whether equivalent risks exist on
+installation A is **UNKNOWN and unaudited**. Severities above are correct for the
+installation they describe and must not be re-rated using evidence from the other one.
+
 **None of these was introduced by the MikroTik project.** They are pre-existing conditions
 discovered during audit.
+
+### 16.1 UNRESOLVED — installation scope
+
+These are open questions, recorded so they are not mistaken for settled facts:
+
+| # | Unresolved | Status |
+|---|---|---|
+| U1 | **`46.101.93.167` (installation A) has never been audited** — and it is the install that actually serves customers | **UNVERIFIED** |
+| U2 | **`dishnet-hybrid-telecom` vs `dishnet-hybrid-sudan`** — same codebase, fork, or unrelated? Its `CLAUDE.md` claims 27 `app_*` endpoints against the 44 counted here. Suggestive, not conclusive | **UNVERIFIED** |
+| U3 | **Starlink fleet ownership / source of truth between installations** — both run `dishnet-data-report`; installation B's copy has live, fresh data and its own session cookie | **UNVERIFIED** |
+| U4 | `dishnet-starlink-finance`'s own docs name `crm.dishnetafrica.com` as its *"Production deployment"*, yet installation B's copy holds live data. Both may be true; not established | **UNVERIFIED** |
+
+**Do not resolve these by inference.** U1 requires access to a host that has never been in
+scope. Until then, no statement about installation A's internals belongs in any document.
 
 ---
 
@@ -632,8 +740,10 @@ version of this map.
 
 > **STATUS: BINDING / MUST READ**
 > **Scope:** DishNet customer platform + existing Starlink ecosystem + MikroTik
-> Zero-Touch/HotSpot project
+> Zero-Touch/HotSpot project.
+> **Server findings describe installation B (Uganda, `209.97.137.203`) unless stated.**
+> Installation A (South Sudan, `46.101.93.167`) is **UNAUDITED** — see §2.1.
 > **Last verified:** 2026-09-19
-> **Source documents:** docs/30–41
+> **Source documents:** docs/30–41 + Android app v1.0.2 source
 > **This document does not replace the detailed documents. It is the entry point and
 > system map.**
