@@ -104,6 +104,9 @@ $FLAGS = [
         'An enquiry older than this is history, not a live lead (default 336 = 14 days)'],
     'followup_run_limit' => ['number',
         'Follow-ups EVALUATED per run (default 5) — set 1 or 2 on a large backlog'],
+    'followup_auto_send' => ['bool',
+        'Send WhatsApp enquiry follow-ups WITHOUT a person approving them '
+        . '(account-level and escalated ones still wait; e-mail is unaffected)'],
 
     // On every quotation the team sends. QuotationService compiles South Sudan
     // defaults for all three, so an unset key is not a blank — it is Juba's

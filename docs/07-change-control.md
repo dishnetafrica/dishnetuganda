@@ -172,3 +172,48 @@ interchangeable here because `evaluate()` passes six, and a test pins that.
 
 Tests: 160 files green, 0 failures. A mutation reinstating the original bug
 fails 8 assertions.
+
+## 5.18.24 — WhatsApp enquiry follow-ups may send themselves
+
+**19 September 2026** · `lib/FollowUpPolicy.php`, `cron/followup_run.php`,
+`tools/set_config.php`, `tests/test_followup_auto_send.php` (new)
+
+Operator decision: WhatsApp is one-to-one, the message is short, and it goes
+to somebody who wrote to us first about something they asked. Email keeps its
+own policy and is unchanged.
+
+`FollowUpPolicy::mayAutoSend()` — four conditions, all required:
+
+1. `followup_auto_send` is on. **Absent means off**, so an install that
+   upgrades into this behaves exactly as it did the day before.
+2. The assistant returned `SEND`. `WAIT`, `DO_NOT_SEND` and
+   `ESCALATE_TO_HUMAN` never auto-send.
+3. There is a message. An empty body is a bug, not a send.
+4. The content level is `CONTENT_ENQUIRY`. **`CONTENT_ACCOUNT` still waits for
+   a person** — provenance good enough to ANSWER a balance question is not
+   provenance good enough to SEND somebody an unread message about their
+   money. A wrong identity wastes a message in the first case and puts another
+   customer's balance on a stranger's phone in the second.
+
+Plus: the drafted BODY is scanned for escalation words. The customer's own
+words already close the follow-up at gate 6, so no draft can exist for those;
+this is the other direction — the assistant writing about a refund.
+
+**Auto-send approves a draft. It does not send one.** `followup_send.php`
+still delivers, and still re-checks opt-out, human takeover, a reply arriving
+and the sending window between approval and delivery. Routing through
+`approve()` rather than around it is what keeps those four protections on the
+automatic path, and leaves `decided_by = 'auto'` in the trail. A test asserts
+`followup_run.php` still has no way to reach Evolution at all.
+
+Email untouched and asserted: `EmailReplyPolicy::NEVER_AUTO` still holds back
+13 categories unconditionally, and `followup_auto_send` does not unlock any of
+them.
+
+Tests: 161 files green, 0 failures. Mutations removing the account gate or the
+master switch each fail 3 assertions.
+
+**Not enabled.** `followup_auto_send` is unset. Do not switch it on until at
+least ten drafts have been read — no draft has ever been produced on this
+install, so there is no evidence yet about their quality, and 257 open
+follow-ups against a cap of 30/day is nine days of unread messages.

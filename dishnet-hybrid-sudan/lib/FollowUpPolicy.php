@@ -57,6 +57,68 @@ final class FollowUpPolicy
     public const SCHEDULE = [1 => 24, 2 => 72];
 
     /**
+     * May this drafted follow-up go out without a person reading it?
+     *
+     * WhatsApp only, and deliberately so. Email keeps its own policy in
+     * EmailReplyPolicy, which splits categories by what a wrong answer costs
+     * and holds thirteen of them back unconditionally. A WhatsApp follow-up is
+     * a different thing: one-to-one, short, to somebody who wrote to us first
+     * about something they asked, and it can say nothing the enquiry did not
+     * already put on the table.
+     *
+     * Four conditions, all required. The operator switch is last in intent and
+     * first in code, because an unset key must mean today's behaviour on every
+     * install that upgrades into this.
+     *
+     *   1. followup_auto_send is on           — absent means off, always
+     *   2. the assistant said SEND            — WAIT, DO_NOT_SEND and
+     *                                           ESCALATE_TO_HUMAN never auto-send
+     *   3. there is a message                 — an empty body is a bug, not a send
+     *   4. the content level is ENQUIRY       — see below
+     *
+     * ── WHY ACCOUNT CONTENT STILL NEEDS A PERSON ────────────────────────
+     *
+     * CONTENT_ACCOUNT means provenance is good enough to discuss the
+     * customer's balance, invoices and service. That is the right bar for
+     * ANSWERING somebody. It is not the right bar for a message we chose to
+     * send, unread, about their money. If the identity is wrong, an enquiry
+     * follow-up is a wasted message and an account follow-up is somebody
+     * else's balance on a stranger's phone. Those are not the same mistake,
+     * so they do not get the same gate.
+     *
+     * Escalation words are not re-checked here: gate 6 already CLOSES a
+     * follow-up whose thread mentions one, so no draft can exist for it. The
+     * BODY is scanned though — the assistant writing about a refund is a
+     * different event from the customer mentioning one.
+     *
+     * @return array{auto:bool, reason:string}
+     */
+    public static function mayAutoSend(array $verdict, string $level, array $config): array
+    {
+        $no = static fn(string $why): array => ['auto' => false, 'reason' => $why];
+
+        if (!filter_var($config['followup_auto_send'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return $no('followup_auto_send is off');
+        }
+        $v = strtoupper(trim((string)($verdict['verdict'] ?? '')));
+        if ($v !== 'SEND') {
+            return $no('the assistant said ' . ($v ?: 'nothing') . ', not SEND');
+        }
+        $body = trim((string)($verdict['message'] ?? ''));
+        if ($body === '') {
+            return $no('the draft has no message');
+        }
+        if ($level !== self::CONTENT_ENQUIRY) {
+            return $no('content level is ' . $level . ' — only enquiry follow-ups may send themselves');
+        }
+        $esc = EmailReplyPolicy::scanForEscalation($body);
+        if (!empty($esc['escalate'])) {
+            return $no('the drafted message mentions "' . $esc['matched'] . '"');
+        }
+        return ['auto' => true, 'reason' => 'enquiry follow-up, assistant said SEND'];
+    }
+
+    /**
      * What a proactive message to this conversation may contain.
      *
      * @param array $conv a wa_conversations row
