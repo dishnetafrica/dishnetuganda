@@ -402,7 +402,40 @@ Wi-Fi On-Demand, which kept tearing the tunnel down and rebuilding it — the
 status read "Restarting" rather than settling, and the byte counters were
 unreliable. Disabled, it went Active immediately.
 
-### 7.6 Cleanup owed
+### 7.5b Reachability and routing — PASSED
+
+```
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 148.248/149.716/152.824/1.816 ms
+
+10.66/24        link#21      UCS     utun7
+10.66.0.1       link#21      UHWIi   utun7
+10.66.0.250     10.66.0.250  UH      utun7
+```
+
+**The routing table is the quiet half of this evidence.** Only the 10.66
+routes exist, all on `utun7`. No default route was captured, no DNS was
+rewritten, nothing else on the machine moved — which is what
+`AllowedIPs = 10.66.0.0/24` buys over `0.0.0.0/0`, and why the production
+staging template must never carry the latter.
+
+**Latency baseline: ~149 ms** from Kampala to the droplet over ordinary
+broadband, stddev 1.8 ms. Worth keeping, because it is the floor. A MikroTik
+behind Starlink Residential adds its own path — **expect materially more, and
+record the real figure in Test B1 rather than comparing against this.** For
+management traffic and RADIUS the absolute number matters far less than its
+stability; the 1.8 ms deviation here is the quality to watch for, not the 149.
+
+### 7.6 Cleanup — server done, Mac outstanding
+
+Server teardown was executed and verified: `wg show` reports the interface
+with **no peers**. `lap.key` and `lap.pub` are removed. The gateway is back
+to a bare `[Interface]` awaiting its first router.
+
+**Outstanding:** delete the `dishnet-phase0` tunnel in the macOS WireGuard
+app. It is a GUI action and cannot be done from the server.
+
+### 7.6b Original cleanup commands, for reference
 
 The MacBook peer is a test peer and should not outlive the test:
 
