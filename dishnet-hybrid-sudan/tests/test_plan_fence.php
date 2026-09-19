@@ -96,10 +96,60 @@ is_(strpos($note, '400 Mbps') !== false, 'it does state the speed, which is not 
 echo "\nIt is wired into both outbound paths, not just the one\n";
 // The service path and the Evolution worker each call ReplyPrivacyGuard
 // separately. A fence on one of them is a fence on neither.
-foreach (['lib/WaAutoReplyService.php', 'workers/AiReplyWorker.php'] as $f) {
+// Three, not two. The first version of this fence covered the two paths that
+// call ReplyPrivacyGuard and missed followup_send.php, which reaches Evolution
+// on its own and passes through neither guard. A fence on some of the doors is
+// a fence on none of them.
+foreach (['lib/WaAutoReplyService.php', 'workers/AiReplyWorker.php',
+          'cron/followup_send.php'] as $f) {
     is_(strpos((string)file_get_contents($root . '/' . $f), 'PlanFenceGuard::apply') !== false,
         basename($f) . ' applies the fence');
 }
+
+echo "\nEvery path that reaches Evolution is accounted for, by name\n";
+// The rule: fence anything that puts MODEL-GENERATED text in front of a
+// CUSTOMER. Staff alerts are internal, and fixed templates contain no model
+// output to fence. Both exemptions are decisions, so they are written down
+// here; a sender that appears without a line in this ledger fails the test
+// until somebody chooses which side it is on. That choice going unmade by
+// default is how followup_send.php shipped unfenced.
+$ledger = [
+    'AiReplyWorker.php'        => 'fence',   // AI reply, customer
+    'followup_send.php'        => 'fence',   // AI-drafted follow-up, customer
+    'AlertService.php'         => 'staff',   // CLASS_STAFF
+    'NotificationService.php'  => 'staff',   // CLASS_STAFF
+    'job_assignment_notify.php'=> 'staff',   // CLASS_STAFF
+    'StarlinkMailWorker.php'   => 'fixed',   // three literal templates, no model text
+    'EvolutionApiService.php'  => 'transport',
+    'EvolutionApiClient.php'   => 'transport',
+];
+// WaAutoReplyService is deliberately absent: it calls sendText nowhere. It
+// produces the reply and fences it in guard(), and something else posts it.
+// Listing it here as a sender would be a lie the next reader has to unpick.
+$found = [];
+foreach (array_merge(glob($root . '/cron/*.php') ?: [], glob($root . '/workers/*.php') ?: [],
+                     glob($root . '/lib/*.php') ?: []) as $f) {
+    $src = (string)file_get_contents($f);
+    if (strpos($src, 'sendText(') !== false) $found[] = basename($f);
+}
+foreach ($found as $name) {
+    $how = $ledger[$name] ?? '';
+    is_($how !== '', $name . ' has a decision recorded',
+        'a new sender reached Evolution and nobody said whether customers see model text');
+    if ($how === 'fence') {
+        $path = file_exists($root . '/lib/' . $name) ? '/lib/' . $name
+              : (file_exists($root . '/cron/' . $name) ? '/cron/' . $name : '/workers/' . $name);
+        is_(strpos((string)file_get_contents($root . $path), 'PlanFenceGuard::apply') !== false,
+            $name . ' is fenced, as its entry says');
+    }
+}
+is_(count(array_intersect(array_keys($ledger, 'fence'), $found)) === 2,
+    'both customer-facing AI senders are present and fenced');
+is_(substr_count((string)file_get_contents($root . '/lib/WaAutoReplyService.php'),
+    'sendText(') === 0,
+    'and WaAutoReplyService still sends nothing itself, so the ledger stays true',
+    'if it starts sending, it needs a ledger entry of its own');
+
 is_(strpos((string)file_get_contents($root . '/lib/DishNetAiBrain.php'),
     "'ai_fact_business_cap'") !== false,
     'and the guard knows the note is operator text, so it cannot block us for echoing it');

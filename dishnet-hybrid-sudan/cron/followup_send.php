@@ -30,6 +30,7 @@ require_once $pluginRoot . '/lib/PluginConfig.php';
 require_once $pluginRoot . '/lib/ConversationService.php';
 require_once $pluginRoot . '/lib/ContactOptOut.php';
 require_once $pluginRoot . '/lib/EvolutionApiService.php';
+require_once $pluginRoot . '/lib/PlanFenceGuard.php';
 require_once $pluginRoot . '/lib/EvoWebhookGuard.php';
 require_once $pluginRoot . '/lib/FollowUpPolicy.php';
 require_once $pluginRoot . '/lib/FollowUpService.php';
@@ -90,6 +91,19 @@ foreach ($svc->approvedDrafts(10) as $d) {
     }
     $win = FollowUpPolicy::withinSendingWindow($now);
     if (!$win['ok']) { $held++; continue; }   // wait for the window; stay approved
+
+    // The same fence the reply paths carry. A follow-up is a message to a
+    // customer like any other, and this cron reaches Evolution directly —
+    // neither ReplyPrivacyGuard nor this runs unless it is called here. The
+    // drafts seen so far name no plan, but "following up on the Business 500
+    // you asked about" is one model call away, and it would have gone out
+    // without the cap being mentioned once.
+    $fence = PlanFenceGuard::apply($body, $config);
+    if ($fence['appended']) {
+        $body = $fence['reply'];
+        $svc->log($fuId, (int)$d['conversation_id'], 'fenced',
+                  'priority-data fact appended before sending', 'system');
+    }
 
     $res = $evo->sendText($chan, $phone, $body, ContactOptOut::CLASS_PROACTIVE);
 
