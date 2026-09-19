@@ -1,17 +1,22 @@
 # 42 — Domain B Management UX / Information Architecture Specification
 
-**Status:** DRAFT FOR REVIEW. Specification only — no code, no migrations, no tables.
+**Status:** **APPROVED BASELINE** (2026-09-19). Specification only — no code, no
+migrations, no tables. The Intent model (§0) is specifically approved and is retained
+regardless of the B1 outcome.
 **Scope:** Domain B only — the new DishNet-managed Zero-Touch MikroTik + HotSpot platform.
 **Boundary:** docs/41 is binding. Domain A (existing Starlink system) is **not represented
 anywhere in these screens**.
 **Date:** 2026-09-19
 
-**Reference patterns.** MikroTicket, Mikhmon / Mikhmon Online, MikroRadius, Powerlynx and
-MikroTik User Manager are referenced as a *product class* — voucher-batch generation,
-print/share workflows, operator-first business dashboards. **No UI is copied**, and the
-Play Store listing could not be opened from this environment, so nothing here claims to
-reproduce a specific screen from it. If particular screens matter, screenshots would let
-me respond to the actual design rather than the category.
+**Reference patterns — product class only.** MikroTicket, Mikhmon / Mikhmon Online,
+MikroRadius, Powerlynx and MikroTik User Manager are referenced **as a category of
+product**, for the patterns that category has settled on: voucher-batch generation,
+print/share workflows, operator-first business dashboards.
+
+> **No screen of any of these products was studied.** The Play Store listing could not be
+> opened from this environment. Nothing in this document reproduces, adapts or responds to
+> MikroTicket's actual UI, and no claim to the contrary should be read into it. If its
+> specific screens are to inform the design, screenshots are required first.
 
 ---
 
@@ -34,6 +39,16 @@ No screen in this specification issues a synchronous instruction to a router. In
 Operator acts  →  intent recorded  →  queued  →  delivered  →  confirmed by device
                        │                                              │
                        └──────── visible state at every step ─────────┘
+```
+
+**The approved intent lifecycle:**
+
+```
+Queued  →  Sent  →  Confirmed
+   │         │
+   │         └──→  Failed  ──[retry]──→  Queued
+   │
+   └──────────────→  Expired        (not delivered within its validity window)
 ```
 
 Every remote action therefore has a **state**, not just a result:
@@ -95,6 +110,11 @@ Ambiguous words cause the worst UI. These are binding for Domain B.
 | **Profile** | Technical enforcement settings a plan maps onto | A user profile |
 | **Provisioning** | Getting a registered router to HOTSPOT READY | Manual configuration |
 | **Intent** | A queued remote action with a lifecycle | An immediate command |
+
+> **Scope of this vocabulary.** These terms are **Domain B terminology**. They describe
+> how the Zero-Touch MikroTik platform models its world. They are **not** a claim about
+> DishNet's universal customer model, and they do not redefine "customer" anywhere else in
+> the business or in Domain A.
 
 ### Why "Customer" is deliberately not a top-level concept
 
@@ -455,9 +475,14 @@ carry privacy weight; they belong behind a disclosure control, and access is log
 
 ---
 
-## 11. Reseller dashboard
+## 11. Tenant dashboard (the Dashboard in tenant scope)
 
-A **business** dashboard. No estate health, no provisioning, no RouterOS.
+> **REVISED per approved decision 2.** Since Reseller is a **role of a Tenant**, not a
+> separate entity, this is **not a separate screen**. It is the Dashboard (§5) rendered
+> with tenant scope and the operational bands removed. One screen, two scopes — which
+> removes a screen from the inventory and keeps the two views from drifting apart.
+
+A **business** view. No estate health, no provisioning, no RouterOS.
 
 ```
 MY BUSINESS                                        Riverside Hotel
@@ -655,48 +680,49 @@ Global search · Notification channels (email/SMS/push) · Multi-currency beyond
 
 ---
 
-## 19. Recommended MVP
+## 19. MVP — approved screen set and order
 
-**Principle: ship the part that works without a router.** Everything in READY TO DESIGN can
-be built, tested and used before Step 0 completes — vouchers can be generated and sold
-against routers provisioned by hand.
+**Approved implementation priority:**
 
-### MVP — 9 screens
+| # | Screen | Gate | Buildable now? |
+|---|---|---|---|
+| 1 | **Dashboard** | — | **Yes** (see note below) |
+| 2 | **Routers** | — | **Yes** |
+| 3 | **Router Details** | partial | **Yes** — Overview, Provisioning, Events tabs |
+| 4 | **Plans** | partial | **Yes** — commercial fields only |
+| 5 | **Vouchers** | — | **Yes** |
+| 6 | **Voucher Batch** | — | **Yes** |
+| 7 | **Sessions** | **STEP 0** | Shell only |
+| 8 | **Operations / Intents** | **B1** | Shell only |
+| 9 | **Reports / Revenue** | — | **Yes** |
 
-1. **Dashboard** — Needs Attention + estate/guest/today bands
-2. **Routers** — list + register
-3. **Router detail** — Overview, Provisioning, Events tabs only
-4. **Plans** — commercial fields; profiles deferred
-5. **Batches** — generate, view, print, export
-6. **Vouchers** — search and status
-7. **Reseller dashboard**
-8. **Alerts** — framework + voucher exhaustion
-9. **Audit Log**
+**Deferred past MVP, as approved:** Administration (Tenants, Users, Roles), Audit Log,
+advanced reporting, Profiles, Sites as a separate screen, Usage, Reseller Balances.
 
-### Explicitly deferred past MVP
+### Three build-order facts worth stating before anyone starts
 
-Sessions (needs Step 0) · Profiles (needs Step 0) · Intents screen — *build the intent
-model from day one, but the management screen can wait for B1 to tell us how busy it will
-be* · Reports · Sites as a separate screen (a field on Router until there are enough) ·
-Usage · Reseller Balances
+**1. The Dashboard needs an alert source even though the Alerts screen is deferred.**
+Band 1 of §5 is *Needs Attention* — it is the reason the Dashboard exists. It reads from
+the alert framework. So the **alert engine is MVP** (at minimum the voucher-exhaustion
+rule, which needs no router); only the dedicated Alerts *management screen* is deferred.
+Building the Dashboard without any alert source produces an empty top band and a product
+that answers four of the five questions in §1.
 
-### Build order
+**2. Screens 7 and 8 can be built as shells but not completed.** Sessions needs RADIUS
+accounting from a real router (Step 0). The Intents screen is structurally ready, but how
+busy it is — and therefore how it should be laid out and sorted — depends on B1. Build the
+**intent model** from day one, as approved; the **screen** finishes after B1.
 
-```
-1. Tenants, Users, Roles, Audit    ← everything else needs identity
-2. Routers + register + Sites-as-field
-3. Plans → Batches → Vouchers      ← the revenue path; works without a router
-4. Reseller dashboard              ← makes the above sellable
-5. Dashboard                       ← needs the data the above produces
-6. Alerts framework
-   ─── STEP 0 GATE ───
-7. Provisioning execution, Profiles
-   ─── B1 GATE ───
-8. Sessions, Intents screen, real-time behaviour
-```
+**3. Screens 5 and 6 are one piece of work.** Voucher search is only useful once vouchers
+exist, so batch generation has to function before the Vouchers screen has anything to show.
+They are listed separately because they are separate destinations, not separate milestones.
 
-**Steps 1–6 can start now.** They contain no router dependency, no Domain A contact, and
-no assumption about push or poll.
+### What can start immediately, with no gate
+
+Screens 1–6 and 9, plus the alert engine and the intent model. That is the **entire revenue
+path** — a tenant can be created, routers registered, plans defined, vouchers generated,
+printed, sold and reported on, against routers provisioned by hand. None of it contacts
+Domain A, and none of it assumes push or poll.
 
 ---
 
@@ -716,16 +742,143 @@ refer to the customer-premises MikroTik routers inside the existing Starlink sys
 
 ---
 
-## 21. What I need from review
+## 21. Approved product decisions
 
-1. **Is Tenant/Guest right?** It removes "Customers" from the navigation. If DishNet
-   genuinely sells hotspot service direct to end users as well as to venues, this changes.
-2. **Is the reseller a tenant with a role, or a separate entity?** Affects the whole
-   permission model.
-3. **Is voucher printing physical slips?** It shapes a real deliverable.
-4. **Does a router serve one tenant, or can it be shared?** Affects isolation throughout.
-5. **Is UGX the only currency for MVP?**
-6. **MikroTicket screenshots** would let me respond to the actual reference rather than the
-   product category.
+Recorded as **decisions**, not assumptions. Each was answered by the business; none was
+inferred here.
 
-No code written. No production, Domain A or Phase 0 changes. No migrations, no tables.
+| # | Decision | Consequence in this specification |
+|---|---|---|
+| **1** | **Tenant** = the business operating a HotSpot service through DishNet. **Guest** = the end user who connects and consumes a voucher. "Customer" stays out of Domain B navigation | §2 glossary is binding for Domain B, and explicitly **not** a claim about DishNet's universal customer model |
+| **2** | **Reseller is a role of a Tenant**, not a separate entity. Tenant user roles: Owner, Admin, Operator, Sales Agent | §11 becomes the Dashboard in tenant scope, not a separate screen. **No Reseller entity is created** |
+| **3** | **One router belongs to one Tenant.** Shared-router tenancy is not designed | Clean isolation throughout. If it is ever needed it becomes an explicit architecture decision, never an accidental UI feature |
+| **4** | **A voucher belongs to a Tenant** and is redeemable only on that Tenant's routers | Vouchers are never globally interchangeable between tenants |
+| **5** | **Reporting is tenant-scoped.** Super Admin aggregates across tenants | Every list, total and export carries the tenant filter as a server-side constraint |
+| **6** | **The Guest/customer app is not designed here.** It follows once the management model is frozen | Out of scope for this document |
+
+> **These are UX and domain assumptions for the MVP.** They remain subject to the actual
+> commercial model and to technical validation. **They must not become database migrations
+> yet.** No table is proposed, created or implied by this document.
+
+---
+
+## 22. MVP domain model
+
+Entities and the relationships between them. **Conceptual only — no schema, no tables, no
+migrations.**
+
+```
+                    ┌──────────┐
+                    │  TENANT  │  the business operating hotspots
+                    └────┬─────┘
+          ┌──────────────┼──────────────┬──────────────┐
+          │              │              │              │
+   ┌──────▼─────┐  ┌─────▼────┐  ┌──────▼───┐  ┌───────▼──────┐
+   │TENANT USER │  │  ROUTER  │  │   PLAN   │  │   VOUCHER    │
+   │ Owner      │  │ 1 tenant │  │ duration │  │ belongs to   │
+   │ Admin      │  │ only     │  │ data     │  │ 1 tenant     │
+   │ Operator   │  └────┬─────┘  │ speed    │  │ 1 plan       │
+   │ Sales Agent│       │        │ price    │  └───┬──────┬───┘
+   └────────────┘       │        └────┬─────┘      │      │
+                        │             │            │      │
+                   ┌────▼─────┐       │      ┌─────▼──┐ ┌─▼──────┐
+                   │  INTENT  │       │      │ SESSION│ │  SALE  │
+                   │ queued   │       │      │ 1 guest│ │ revenue│
+                   │ action   │       │      │ 1 rtr  │ └────────┘
+                   └──────────┘       │      └────┬───┘
+                                      └───────────┘
+                    ┌──────────┐  ┌─────────────┐
+                    │  ALERT   │  │ AUDIT EVENT │
+                    │ about a  │  │ who did what│
+                    │ router / │  │ when, result│
+                    │ batch    │  └─────────────┘
+                    └──────────┘
+```
+
+### Entity definitions
+
+| Entity | Is | Owned by | Notes |
+|---|---|---|---|
+| **Tenant** | A business operating hotspots through DishNet | — | The isolation boundary for everything below |
+| **Tenant User** | A person acting for a tenant | Tenant | Roles: Owner, Admin, Operator, Sales Agent |
+| **Guest** | An end user who redeems a voucher | *not owned* | Not an account. Exists only as sessions and redemptions |
+| **Router** | One DishNet-managed MikroTik | **Exactly one Tenant** | Carries provisioning state; never shared |
+| **Plan** | Commercial product: duration, data, speed, price | DishNet (assignable to tenants) | Maps to a technical profile |
+| **Voucher** | One redeemable credential | **Tenant** | Redeemable only on that tenant's routers |
+| **Batch** | A set of vouchers generated together | Tenant | The primary working object for operators |
+| **Session** | One guest's authenticated connection | Tenant, via router | **PENDING STEP 0** |
+| **Sale** | A voucher transaction and its revenue | Tenant | No router dependency |
+| **Intent** | A queued remote action with a lifecycle | Router → Tenant | §0. Model built day one |
+| **Alert** | A condition needing attention | Router or Batch → Tenant | Engine is MVP; screen deferred |
+| **Audit Event** | A privileged action record | Tenant (actor) | Append-only |
+
+### Ownership rules — the ones that matter
+
+1. **Tenant is the isolation boundary.** Every query is tenant-scoped server-side. The UI is
+   never the only thing enforcing it.
+2. **A router has exactly one tenant.** No shared tenancy is designed (decision 3).
+3. **A voucher is redeemable only on its tenant's routers** (decision 4).
+4. **A guest is not an account.** There is no guest record to manage, only sessions and
+   redemptions — which is why there is no "Customers" screen.
+5. **Super Admin aggregates; tenants never do** (decision 5).
+
+---
+
+## 23. Screen-to-entity map
+
+| # | Screen | Primary entity | Also reads | Writes |
+|---|---|---|---|---|
+| 1 | Dashboard | — (aggregate) | Router, Session, Sale, Voucher, Alert | none |
+| 2 | Routers | **Router** | Tenant, Site | Router (register, edit) |
+| 3 | Router Details | **Router** | Intent, Session, Voucher, Audit Event | Intent |
+| 4 | Plans | **Plan** | Tenant | Plan |
+| 5 | Vouchers | **Voucher** | Batch, Plan, Tenant | Voucher (disable) |
+| 6 | Voucher Batch | **Batch** | Plan, Voucher, Tenant | Batch, Voucher (generate) |
+| 7 | Sessions | **Session** | Router, Voucher, Plan | Intent (queue disconnect) |
+| 8 | Operations / Intents | **Intent** | Router, Tenant User | Intent (retry, cancel) |
+| 9 | Reports / Revenue | **Sale** | Voucher, Plan, Tenant | none |
+
+**Every screen that changes a router writes an Intent, never a router command.** That is
+§0 expressed as a data rule: the only write path to hardware is the intent queue.
+
+---
+
+## 24. Technical-gate matrix
+
+| Capability | Gate | Until it passes |
+|---|---|---|
+| MikroTik model and RouterOS version | **STEP 0** | Not displayed as verified anywhere |
+| WireGuard peer syntax (`endpoint-address`, `endpoint-port`, `allowed-address`, `persistent-keepalive`) | **STEP 0** | Provisioning cannot execute |
+| REST availability and configuration | **STEP 0** | No REST-dependent feature is specified |
+| `reset` / `run-after-reset` | **STEP 0** | **No remote reset/reboot UI exists at all** |
+| HotSpot syntax | **STEP 0** | Provisioning step CONFIGURING undefined |
+| RADIUS syntax and attributes beyond the three Phase 0 proved | **STEP 0** | Profile fields show *"Pending technical validation"* |
+| Live session list | **STEP 0** | Sessions screen is a shell |
+| Session disconnect (CoA) | **STEP 0** | Action **hidden**, not greyed |
+| **PUSH vs POLL** | **B1** | No UI claims either. Intent states carry timing; no copy asserts immediacy |
+| Online/offline detection latency | **B1** | "Last seen" shown as a timestamp, never as a promise |
+| Provisioning start timing | **B1** | Stepper shows state, not ETA |
+| Intent delivery timing | **B1** | Intents screen finished after B1 |
+
+> **No screen in this document claims that push works, that polling is required, that
+> remote disconnect is possible, that CoA is supported, or that any RouterOS endpoint or
+> RADIUS attribute exists beyond those Phase 0 actually proved.**
+
+---
+
+## 25. Status
+
+**docs/42 is the approved UX and domain baseline for Domain B.**
+
+Approved: the Intent model — **Queued → Sent → Confirmed → Failed → Expired**, retained
+regardless of the B1 outcome; no synchronous router commands; "Queue disconnect" wording;
+Operations → Intents as a first-class screen; no remote reboot/reset UI before the gate;
+disconnect hidden until CoA is proven; technical-gate labelling; duplicate navigation
+removed; no Domain A concepts in Domain B screens; the six product decisions in §21.
+
+**Not done and not to be done yet:** no code, no Figma, no frontend implementation, no
+migrations, no tables, no production change, no Domain A change, no Phase 0 change.
+
+**Next gates, in order:** physical MikroTik **Step 0** (independently pending hardware) →
+**B1** push/poll → then a decision on whether to move these screens into design or
+implementation.
