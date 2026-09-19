@@ -357,7 +357,75 @@ Tunnel:             10.66.0.1/24
 The public key is not a secret — every router needs it. The private key is in
 `/etc/wireguard/gw.key`, mode 600, and appears nowhere else.
 
-### 7.5 Not yet done — the external handshake
+### 7.5 External handshake — PASSED
+
+**19 September 2026, 12:47.** A MacBook Pro on a different network, running
+the official WireGuard client, completed a handshake with the gateway.
+
+```
+Status:            Active, On-Demand Disabled
+Addresses:         10.66.0.250/32
+Peer:              ftGs/7LjO/aVmKJ9xS/fz+QDt73JcGI+X3vgSCZpJT4=
+Endpoint:          209.97.137.203:51820
+Allowed IPs:       10.66.0.0/24
+Persistent keepalive: every 25 seconds
+Data received:     92 B
+Data sent:         180 B
+Latest handshake:  4 seconds ago
+```
+
+**Three things are now established that could not be checked from inside the
+droplet:**
+
+1. **UDP 51820 is reachable from the public Internet.**
+2. **No DigitalOcean cloud firewall is blocking it** — the open question in
+   §3.1 and §6.1 is answered. Either none is attached, or it already permits
+   the port.
+3. The gateway configuration is correct and carries traffic **both ways** —
+   `Data received` is the half that matters; outbound alone proves nothing.
+
+**The category-A foundation is complete and proven.** docs/33 §7 acceptance
+checks 1–4 and 13 pass; 5–12 belong to category B and are not yet due.
+
+Two notes from the run, both worth carrying forward:
+
+**A failed first attempt looked exactly like a firewall block.** Before the
+peer was added server-side, the Mac showed `Data sent: 888 B` and no
+`Data received` at all. WireGuard is silent to unknown keys, so "no matching
+peer" and "port blocked" are indistinguishable from the client. The way to
+tell them apart is `tcpdump -ni any udp port 51820` on the gateway: packets
+arriving means the perimeter is fine and the fault is a key or config
+mismatch. Worth remembering when the first MikroTik does the same thing.
+
+**On-Demand must stay off for test peers.** The macOS client defaults to
+Wi-Fi On-Demand, which kept tearing the tunnel down and rebuilding it — the
+status read "Restarting" rather than settling, and the byte counters were
+unreliable. Disabled, it went Active immediately.
+
+### 7.6 Cleanup owed
+
+The MacBook peer is a test peer and should not outlive the test:
+
+```bash
+# server
+cd /etc/wireguard
+cp wg0.conf wg0.conf.bak.$(date +%s)
+awk '/^\[Peer\]/{exit} {print}' wg0.conf > wg0.conf.new && mv wg0.conf.new wg0.conf
+chmod 600 wg0.conf
+wg syncconf wg0 <(wg-quick strip wg0)
+
+# Mac: delete the dishnet-phase0 tunnel in the WireGuard app
+```
+
+Its private key appeared in a screenshot during the test, so the tunnel is
+retired rather than reused. The rule it breached is the one docs/30 §6.2 sets
+for routers — **the private key is generated where it will live and never
+travels** — and it is kept even for a throwaway peer because the habit is
+what carries into the fleet.
+
+### 7.7 Superseded — what §7.5 said before
+
+
 
 **The category-A install is complete. The gate in §5 Step 3 is not passed.**
 
