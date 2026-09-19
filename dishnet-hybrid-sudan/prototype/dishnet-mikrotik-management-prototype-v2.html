@@ -466,7 +466,7 @@ const INTENTS=[
   {id:'IN-4821',router:'MT-0005',action:'Apply configuration',state:'failed',   created:96,  priority:'high',  retries:3,err:'HotSpot profile rejected: pool dn-hostel-pool not found',exec:'2.4s'},
   {id:'IN-4822',router:'MT-0004',action:'Create HotSpot profile',state:'running',created:12, priority:'normal',retries:0,err:null,exec:'—'},
   {id:'IN-4823',router:'MT-0002',action:'Update captive portal',state:'queued',  created:8,  priority:'normal',retries:0,err:null,exec:'—'},
-  {id:'IN-4824',router:'MT-0003',action:'Configure RADIUS',     state:'waiting', created:1080,priority:'normal',retries:1,err:'Router has not been seen since 08:20 — delivery pending',exec:'—'},
+  {id:'IN-4824',router:'MT-0003',action:'Configure RADIUS',     state:'waiting', created:1080,priority:'normal',retries:1,err:'Router not seen since 08:20 — delivery pending',exec:'—'},
   {id:'IN-4825',router:'MT-0008',action:'Provision WireGuard',  state:'succeeded',created:62, priority:'high',  retries:0,err:null,exec:'1.1s'},
   {id:'IN-4826',router:'MT-0008',action:'Change router identity',state:'succeeded',created:58,priority:'low',   retries:0,err:null,exec:'0.7s'},
   {id:'IN-4827',router:'MT-0002',action:'Update bandwidth profile',state:'queued',created:4, priority:'normal',retries:0,err:null,exec:'—'},
@@ -776,8 +776,8 @@ function vRouter(){
         <div class="mt16">${r.conn==='never'
           ? '<div class="gatebar"><b>Never connected.</b> This router has been registered but has not yet reached the gateway. That is an installation or bootstrap issue, not a network outage.</div>'
           : r.wg==='up'
-            ? '<div class="gatebar" style="background:var(--green-light);border-color:#bfe9d0;color:var(--green-mid)">Tunnel established at last handshake. Queued work is delivered when the router next checks in.</div>'
-            : '<div class="gatebar">No recent handshake. Intents are <b>held</b> and delivered when the router next appears — nothing is lost.</div>'}</div>
+            ? '<div class="gatebar" style="background:var(--green-light);border-color:#bfe9d0;color:var(--green-mid)">Tunnel established at last handshake. Queued work is held until the delivery path is available.</div>'
+            : '<div class="gatebar">No recent handshake. Intents are <b>held</b> until the delivery path is available — nothing is lost.</div>'}</div>
       </div></div></div>`,
 
     prov:`<div class="card"><div class="card-h"><h3>Provisioning lifecycle</h3>
@@ -951,7 +951,7 @@ function vDashboard(){
   ${band('Operations','queued work and its delivery state',
     tile('Pending intents',pend,'queued or sent',"go('intents')")+
     tile('Failed intents',fail,'',"iFilter='failed';go('intents')",fail?'var(--danger-text)':'')+
-    tile('Waiting for router',wait,'held until next check-in',"iFilter='waiting';go('intents')",wait?'var(--amber-dark)':''))}
+    tile('Waiting for router',wait,'held until deliverable',"iFilter='waiting';go('intents')",wait?'var(--amber-dark)':''))}
   ${band('Business','today',
     tile("Today's revenue",UGX(rev),'&#9650; 12%',"go('sales')")+
     tile('Vouchers sold',SALES.length,'across '+new Set(SALES.map(s=>s.agent)).size+' counters',"go('sales')")+
@@ -1049,7 +1049,7 @@ function vIntents(){
   return `<div class="card"><div class="card-h"><h3>MT Intents</h3><span class="sub">every router change is queued here first</span></div>
     <div class="card-b" style="padding-bottom:0"><div class="gatebar" style="margin-bottom:14px">
       <b>Queued &#8594; Sent &#8594; Confirmed &#8594; Failed &#8594; Expired.</b>
-      No screen sends a command directly to a router. Whether delivery is immediate or waits for the router to check in is <b>pending B1</b>.</div></div>
+      No screen sends a command directly to a router. Whether delivery is immediate or deferred is <b>pending B1</b>.</div></div>
     <div class="filters">
       <button class="btn btn-sm ${!iFilter?'btn-primary':''}" onclick="iFilter='';render()">All (${INTENTS.length})</button>
       ${counts.filter(c=>c[1]).map(c=>`<button class="btn btn-sm ${iFilter===c[0]?'btn-primary':''}" onclick="iFilter='${c[0]}';render()">${INTENT_STATE[c[0]].label} (${c[1]})</button>`).join('')}
@@ -1058,7 +1058,7 @@ function vIntents(){
       <p>That is a good sign — every router is in its desired state.</p></div>`}</div>`;
 }
 function retryIntent(id){const i=INTENTS.find(x=>x.id===id);if(!i)return;i.state='queued';i.retries++;i.err=null;
-  toast('Intent '+id+' re-queued — delivered when the router next checks in','ok');renderNav();render();}
+  toast('Intent '+id+' re-queued — held until the delivery path is available','ok');renderNav();render();}
 function cancelIntent(id){const i=INTENTS.findIndex(x=>x.id===id);if(i<0)return;INTENTS.splice(i,1);
   toast('Intent '+id+' cancelled');renderNav();render();}
 function queueIntent(rid,action){
@@ -1092,7 +1092,7 @@ function modalDisconnect(v){
   const s=SESSIONS.find(x=>x.voucher===v);
   openModal(`<div class="modal-h"><h3>Queue disconnect</h3><button class="btn btn-sm btn-ghost" onclick="closeModal()">&#10005;</button></div>
   <div class="modal-b"><p>Disconnect voucher <b class="mono">${v}</b> on <b>${esc(routerById(s.router).name)}</b>?</p>
-    <div class="mt16">${gate('This <b>queues an intent</b>. Whether it reaches the router immediately or at its next check-in is <b>pending B1</b>.')}</div>
+    <div class="mt16">${gate('This <b>queues an intent</b>. Whether it reaches the router immediately or is deferred is <b>pending B1</b>.')}</div>
     <div class="mt16 tiny muted">The guest keeps their remaining time — disconnecting ends the session, not the voucher.</div></div>
   <div class="modal-f"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="queueIntent('${s.router}','Disconnect session ${v}')">Queue disconnect</button></div>`);
