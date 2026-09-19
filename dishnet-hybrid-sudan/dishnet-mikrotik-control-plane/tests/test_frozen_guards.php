@@ -125,6 +125,42 @@ foreach ($src() as $f) {
 }
 is_($naive, [], 'no file reads octets without also reading gigawords');
 
+t('no router credential is ever stored or logged in the clear');
+// docs/30 Artifact 7 principle 3. The whole point is that a dump yields
+// nothing, so a column that held a password would defeat the encryption
+// without removing it.
+$cols = $owner->query(
+    "SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name ~* '(password|passwd|secret|credential)'
+        AND column_name !~* 'sealed|hash'");
+is_(array_map(fn($c) => $c['table_name'] . '.' . $c['column_name'], $cols), [],
+    'no column names a password, secret or credential outside a sealed or hashed one');
+
+$plain = [];
+foreach ($src() as $f) {
+    $body = strip_php_comments(file_get_contents($f));
+    // A credential reaching a log or an exception message is the other half
+    // of the same leak.
+    if (preg_match('/(error_log|var_dump|print_r)\s*\([^)]*\$(password|secret|creds)/i', $body)) {
+        $plain[] = basename($f);
+    }
+}
+is_($plain, [], 'no source file logs or dumps a credential variable');
+
+t('router management is reachable over the tunnel only');
+// Without this, the self-signed-certificate exception would quietly become
+// "TLS verification is off everywhere".
+foreach (['8.8.8.8', 'router.example.com', '10.67.0.1', '192.168.1.1'] as $h) {
+    is_(\Dn\Delivery\RouterOs\RestClient::isTunnelHost($h), false, "{$h} is not a tunnel host");
+}
+is_(\Dn\Delivery\RouterOs\RestClient::isTunnelHost('10.66.0.11'), true,
+    'and a 10.66.0.0/16 address is');
+
+$client = file_get_contents($root . '/src/Delivery/RouterOs/RestClient.php');
+is_(str_contains($client, 'CURLOPT_SSL_VERIFYPEER'), true, 'the client sets peer verification explicitly');
+is_(str_contains($client, 'isTunnelHost'), true, 'and constrains the host before it does');
+
 t('F9 — no source file refuses anything on commercial grounds');
 // If a ceiling creeps back, it announces itself in the wording first.
 $wording = [];
@@ -181,11 +217,22 @@ is_($unprefixed, [], 'no table without the mt_ prefix: ' . implode(',', $tables)
 
 // ---------------------------------------------------------------------------
 t('docs/53 §4 — nothing has been built for BYO / remote adoption');
+//
+// Line-wise, exempting lines that cite the rule — the same discriminator the
+// B1 guard uses. This is the fourth text-scanning guard in this suite to trip
+// over the prose that forbids the thing it looks for, which is worth stating
+// as a general rule: such a guard must distinguish ASSERTION from DISCUSSION,
+// and the cheapest reliable discriminator is whether the line names the rule.
+$cites = '/docs\/53|docs\/52|C20/';
 $byo = [];
 foreach (array_merge($src(), glob($root . '/migrations/*.sql')) as $f) {
-    $b = file_get_contents($f);
-    foreach (['adopt','byo','remote_claim','self_stage','discover_capability'] as $needle) {
-        if (preg_match('/\b' . $needle . '/i', $b)) { $byo[] = basename($f) . " -> {$needle}"; }
+    foreach (explode("\n", file_get_contents($f)) as $n => $line) {
+        if (preg_match($cites, $line)) { continue; }
+        foreach (['adopt','byo','remote_claim','self_stage','discover_capability'] as $needle) {
+            if (preg_match('/\b' . $needle . '/i', $line)) {
+                $byo[] = basename($f) . ':' . ($n + 1) . " -> {$needle}";
+            }
+        }
     }
 }
 is_($byo, [], 'no adoption, BYO or capability-discovery code exists');

@@ -6,10 +6,37 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 6 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
-the `/me` surface, the response projection, the intent queue, the policy plane, vouchers,
-and session accounting. No devices, no RouterOS client, no telemetry yet. See `docs/55` in
-the plugin repo for the plan.
+**Status: step 7 of 8**, with its hardware half **unmet** — see below. Schema, tenancy,
+isolation, audit, idempotency, authentication, the `/me` surface, the response projection,
+the intent queue, the policy plane, vouchers, session accounting, and the device plane with
+a RouterOS REST client. No telemetry yet. See `docs/55` in the plugin repo for the plan.
+
+---
+
+## What step 7 did NOT prove
+
+docs/55 step 7's exit condition is *"provisions against CHR; unproven on metal."*
+**Neither half was reached here, and the first is worth being precise about.**
+
+This environment has no hardware virtualisation (`/dev/kvm` absent, no `vmx`/`svm`), no
+qemu, no Docker daemon and no route to fetch an image. CHR is a full RouterOS VM, so it
+**could not be run**.
+
+The device tests drive the real delivery code against `tests/fake_routeros.php` over real
+HTTP. That proves the client's transport — auth, JSON, methods, status codes — and the
+delivery and confirmation logic built on it. Per docs/30 Artifact 13 it proves **nothing**
+about whether RouterOS accepts these paths, payload shapes or values: *"a fake MikroTik
+would pass while the real one rejects the command."*
+
+`tools/chr_harness.sh` is that check written as a runnable command rather than an
+intention. `./tools/chr_harness.sh preflight` reports what is missing. Its `checks`
+subcommand lists what must be confirmed, including the real maximum
+`Mikrotik-Rate-Limit` — `PlanValidator::MAX_RATE_BPS` is a conservative guess until
+someone reads it off a device.
+
+And even a green CHR run is not the Phase 0 gate: docs/31 §1.1 is explicit that CHR has no
+radio, no RouterBOARD serial and no factory-reset behaviour to speak of, so the bootstrap
+flow can only be proven on metal.
 
 ---
 
@@ -37,7 +64,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**438 assertions across 12 suites**, including one that runs against a real `php -S` server.
+**488 assertions across 13 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -71,6 +98,7 @@ misconfigures this fails the suite rather than leaking silently.
 migrations/   001 roles · 002 identity · 003 commercial plane
               004 audit · 005 idempotency · 006 RLS · 007 auth · 008 intents
               009 policy · 010 vouchers · 011 sessions
+              012 devices · 013 device admin
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
 src/Auth/     Authenticator — credential to derived (principal, customer)
@@ -81,13 +109,17 @@ src/Policy/   PlanValidator (validity, never ceiling), ProfileResolver,
               PlanRepository
 src/Vouchers/ CodeSource, CodeGenerator, VoucherService
 src/Sessions/ AccountingIngest, SessionService
+src/Crypto/   SecretBox — AEAD for secrets at rest
+src/Devices/  DeviceRegistry — lifecycle, desired vs actual
+src/Delivery/RouterOs/  RestClient — tunnel-only REST
 src/Intents/  IntentQueue, IntentState — the only path to a router
 src/Delivery/ DeliveryPort (interface), DeliveryResult, NullDelivery
 src/Jobs/     IntentWorker — the only caller of DeliveryPort
 src/Api/      Routes — auth + /me
 public/       index.php
 bin/          migrate.php, worker.php
-tests/        run.sh + 12 suites
+tests/        run.sh + 13 suites
+tools/        chr_harness.sh — the real check, NOT RUN
 ```
 
 ## Invariants the tests enforce
@@ -110,6 +142,19 @@ Each guard has been **negative-tested**: a violation is planted, the suite is co
 fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
 
 ---
+
+## Router credentials, and the tunnel-only rule
+
+Management credentials are AEAD-sealed per device, with the **device id bound in as
+associated data** — so an envelope lifted from one device's row into another's fails to
+open rather than quietly decrypting into the wrong credential. The key lives in the
+environment, never the database; with both halves in one dump the encryption would be
+decoration. No key at all refuses to start rather than falling back to a default.
+
+REST needs `www-ssl`, and over the tunnel the transport is already authenticated, so a
+self-signed per-device certificate is enough and avoids a public PKI for every router. That
+exception is why `RestClient` **refuses any host outside 10.66.0.0/16** in its constructor:
+without that constraint, "TLS verification is off" would quietly become true everywhere.
 
 ## RADIUS accounting arrives over UDP
 
