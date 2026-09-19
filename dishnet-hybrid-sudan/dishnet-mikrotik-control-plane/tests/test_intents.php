@@ -20,7 +20,11 @@ $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $db  = Database::app();
 $ctx = new TenantContext($db);
-$q   = new IntentQueue($db);
+// Claiming is a WORKER privilege after docs/57 §10; the request role has no
+// EXECUTE on the claim primitive.
+$workDb = Database::worker();
+$ctxW   = new TenantContext($workDb);
+$q      = new IntentQueue($workDb);
 
 /** A delivery double whose behaviour each test chooses. */
 final class Scripted implements DeliveryPort
@@ -31,11 +35,11 @@ final class Scripted implements DeliveryPort
         private $onDeliver = null,
         private $onConfirm = null,
     ) {}
-    public function deliver(array $i): DeliveryResult {
+    public function deliver(\Dn\Db\Database $db, array $i): DeliveryResult {
         $this->delivered[] = $i['id'];
         return ($this->onDeliver)($i);
     }
-    public function confirm(array $i): bool {
+    public function confirm(\Dn\Db\Database $db, array $i): bool {
         $this->confirmed[] = $i['id'];
         return ($this->onConfirm)($i);
     }
@@ -106,8 +110,8 @@ $owner->exec('DELETE FROM mt_intents');
 for ($i = 0; $i < 20; $i++) {
     $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'race.test'));
 }
-$w1 = (new IntentQueue(Database::app()))->claim('race-1', '5 minutes', 20);
-$w2 = (new IntentQueue(Database::app()))->claim('race-2', '5 minutes', 20);
+$w1 = (new IntentQueue(Database::worker()))->claim('race-1', '5 minutes', 20);
+$w2 = (new IntentQueue(Database::worker()))->claim('race-2', '5 minutes', 20);
 $o1 = array_column($w1, 'id'); $o2 = array_column($w2, 'id');
 is_(count(array_intersect($o1, $o2)), 0, 'no intent is claimed by both workers');
 is_(count($o1) + count($o2), 20, 'and between them they claim every one, exactly once');
@@ -117,7 +121,7 @@ t('RETRY — a retryable failure backs off rather than spinning');
 $owner->exec('DELETE FROM mt_intents');
 $r = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'retry.test'));
 $flaky = new Scripted(fn() => DeliveryResult::retryable('router unreachable'), $yes);
-$w = new IntentWorker($db, $ctx, $q, $flaky, 'w-retry');
+$w = new IntentWorker($workDb, $ctxW, $q, $flaky, 'w-retry');
 $out = $w->runOnce();
 is_($out['retrying'], 1, 'one intent is retrying');
 $row = $owner->one('SELECT state, attempts, next_attempt_at > now() AS backed_off,
@@ -138,7 +142,7 @@ is_(str_contains($row['last_error'], 'unreachable'), true, 'and records why');
 t('RETRY — a permanent failure does not burn five attempts first');
 $p = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'perm.test'));
 $broken = new Scripted(fn() => DeliveryResult::permanent('malformed request'), $yes);
-(new IntentWorker($db, $ctx, $q, $broken, 'w-perm'))->runOnce();
+(new IntentWorker($workDb, $ctxW, $q, $broken, 'w-perm'))->runOnce();
 $row = $owner->one('SELECT state, attempts FROM mt_intents WHERE id = ?', [$p['id']]);
 is_($row['state'], IntentState::FAILED, 'it fails at once');
 is_((int) $row['attempts'] <= 1, true, 'without retrying something that can never work');
@@ -150,7 +154,7 @@ $ok = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['cus
 // The router ACCEPTS the command and does not apply it. A design that trusted
 // the write's success would call this done.
 $lying = new Scripted($always, fn() => false);
-$out = (new IntentWorker($db, $ctx, $q, $lying, 'w-lie'))->runOnce();
+$out = (new IntentWorker($workDb, $ctxW, $q, $lying, 'w-lie'))->runOnce();
 is_($out['confirmed'], 0, 'an accepted-but-unapplied command is NOT confirmed');
 is_(count($lying->confirmed), 1, 'confirm() was actually consulted');
 $row = $owner->one('SELECT state FROM mt_intents WHERE id = ?', [$ok['id']]);
@@ -160,7 +164,7 @@ t('the happy path confirms');
 $owner->exec('DELETE FROM mt_intents');
 $h = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'happy.test'));
 $good = new Scripted($always, $yes);
-$out = (new IntentWorker($db, $ctx, $q, $good, 'w-good'))->runOnce();
+$out = (new IntentWorker($workDb, $ctxW, $q, $good, 'w-good'))->runOnce();
 is_($out['confirmed'], 1, 'delivered and confirmed');
 $row = $owner->one('SELECT state, sent_at IS NOT NULL AS s, confirmed_at IS NOT NULL AS c
                       FROM mt_intents WHERE id = ?', [$h['id']]);
@@ -190,7 +194,7 @@ is_($ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->find($ib['id'])),
 
 t('a worker serving both customers still writes each audit row to the right one');
 $good = new Scripted($always, $yes);
-(new IntentWorker($db, $ctx, $q, $good, 'w-both'))->runOnce();
+(new IntentWorker($workDb, $ctxW, $q, $good, 'w-both'))->runOnce();
 // Scoped to the two intents created just above: mt_audit_log is append-only
 // by design, so earlier sections' rows are still there and counting the whole
 // table would measure the test's own history rather than this behaviour.

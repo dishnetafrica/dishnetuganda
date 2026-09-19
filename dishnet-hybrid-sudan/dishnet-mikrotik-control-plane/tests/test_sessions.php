@@ -155,7 +155,10 @@ t('REAPING — a lost Stop does not leave a session open forever');
 $acct($pkt(['Acct-Session-Id' => 'sess-stale', 'Acct-Status-Type' => 'Start']));
 $owner->exec("UPDATE mt_sessions SET last_seen_at = now() - interval '2 hours'
                WHERE acct_session_id = 'sess-stale'");
-$n = (new AccountingIngest($db))->reap('15 minutes');
+// The sweep crosses customers by definition, so it is worker work and runs as
+// the worker role. Ingest of a single Accounting packet above stays on the app
+// role, which is the split migration 015 introduced.
+$n = (new AccountingIngest(Database::worker()))->reap('15 minutes');
 is_($n, 1, 'the sweep closes one session');
 $r = $owner->one("SELECT * FROM mt_sessions WHERE acct_session_id = 'sess-stale'");
 is_($r['state'], 'reaped', "its state is 'reaped', not 'closed'");

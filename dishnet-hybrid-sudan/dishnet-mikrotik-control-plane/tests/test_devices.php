@@ -37,6 +37,11 @@ $auth = new Authenticator($db);
 $ctx  = new TenantContext($db);
 $k    = new Kernel(Routes::build($auth), $db, $auth, $ctx);
 
+// Three identities, three execution contexts (docs/57 §10). Admin stages and
+// assigns; the worker claims; the request path does neither.
+$adminDb = Database::admin();   $ctxA = new TenantContext($adminDb);
+$workDb  = Database::worker();  $ctxW = new TenantContext($workDb);
+
 // ── fake router, over real HTTP ────────────────────────────────────────────
 $port = 59100 + (getmypid() % 300);
 $log  = tempnam(sys_get_temp_dir(), 'fakeros');
@@ -73,20 +78,20 @@ $clientFactory = fn(array $d) => new RestClient(
 
 // ===========================================================================
 t('registration records the trust anchor established at staging');
-$dev = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
+$dev = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX8842011', 'hAP ax2', '7.14.3', 'pubkey-aaa', '10.66.0.11', 'tech:bhavin'));
 is_($dev['state'], 'staged', 'a device staged by someone is staged');
 is_($dev['staged_by'], 'tech:bhavin', 'and records WHO staged it');
 is_($dev['staged_at'] !== null, true, 'and when');
 
-$unstaged = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
+$unstaged = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX9999999', 'hAP ax lite', null, null, null, null));
 is_($unstaged['state'], 'registered', 'a device nobody staged is only registered');
 
 // ===========================================================================
 t('CREDENTIALS — sealed at rest, never a password in a column');
 $reg = new DeviceRegistry($db);
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->setCredentials($dev['id'], 'dn-mgmt', 'correct-horse'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setCredentials($dev['id'], 'dn-mgmt', 'correct-horse'));
 $row = $owner->one('SELECT * FROM mt_device_secrets WHERE device_id = ?', [$dev['id']]);
 is_(str_contains($row['secret_sealed'], 'correct-horse'), false, 'the column does not contain the password');
 is_(str_starts_with($row['secret_sealed'], 'v1.'), true, 'it is a versioned envelope');
@@ -95,18 +100,30 @@ $dump = '';
 foreach ($owner->query('SELECT secret_sealed FROM mt_device_secrets') as $r) { $dump .= $r['secret_sealed']; }
 is_(str_contains($dump, 'correct-horse'), false, 'a dump of the whole table yields no password');
 
-$back = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->credentials($dev['id']));
-is_($back['password'], 'correct-horse', 'and it opens correctly for its own device');
+t('CREDENTIALS — an unassigned device\'s secret belongs to nobody');
+// It was written at staging, before the device was assigned. Under the
+// policy added for finding S1 it matches no customer, which is correct:
+// unassigned stock has no owner to read it.
+is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->credentials($dev['id'])), null,
+    'a customer cannot read the secret of a device that is not theirs yet');
+
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($dev['id'], $A['customer'], $A['site'], 'Lobby AP'));
+$back = $ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->credentials($dev['id']));
+is_($back['password'], 'correct-horse', 'and once assigned, its owner can open it');
 
 t('CREDENTIALS — an envelope lifted to another device does not open');
 // The device id is the associated data. Without that binding, a swapped row
 // would decrypt cleanly into the wrong device's credential.
-$dev2 = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
+$dev2 = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX7777777', 'hAP ax2', '7.14.3', 'pubkey-bbb', '10.66.0.12', 'tech:x'));
 $owner->exec('INSERT INTO mt_device_secrets (device_id, username, secret_sealed) VALUES (?,?,?)',
     [$dev2['id'], 'dn-mgmt', $row['secret_sealed']]);
-throws_(fn() => $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->credentials($dev2['id'])),
-    'did not open', "device B cannot open device A's envelope");
+// Two layers now refuse this, and the outer one refuses first: device 2
+// belongs to no customer, so it is not visible and the secret is never read.
+// The AAD binding underneath still holds — it is simply no longer the only
+// thing standing between a caller and another device's password.
+is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->credentials($dev2['id'])), null,
+    "device B's row does not yield device A's password");
 
 t('CREDENTIALS — a wrong key does not open, and a missing key refuses to run');
 $otherBox = new SecretBox('a-completely-different-key');
@@ -130,24 +147,22 @@ is_(RestClient::isTunnelHost('10.66.0.11'), true, 'and accepts a tunnel address'
 
 // ===========================================================================
 t('DELIVERY — provisioning pushes desired state and confirms by reading back');
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->setDesired($dev['id'],
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setDesired($dev['id'],
     ['ip/hotspot/profile' => ['use-radius' => 'yes']]));
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($dev['id'], $A['customer'], $A['site'], 'Lobby AP'));
-
 $intent = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']],
     $A['principal'], 'device', $dev['id']));
 
-$delivery = new RouterOsDelivery($db, $clientFactory);
-$worker = new IntentWorker($db, $ctx, new IntentQueue($db), $delivery, 'w-dev');
+$delivery = new RouterOsDelivery($clientFactory);
+$worker = new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $delivery, 'w-dev');
 $out = $worker->runOnce();
 is_($out['confirmed'], 1, 'the intent is delivered and confirmed');
 $st = $owner->one('SELECT state FROM mt_intents WHERE id = ?', [$intent['id']]);
 is_($st['state'], 'confirmed', 'its state is confirmed');
 
-$cfg = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->config($dev['id']));
+$cfg = $ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->config($dev['id']));
 is_($cfg['actual_read_at'] !== null, true, 'actual state was read back and stored');
-is_($ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])), [],
+is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])), [],
     'and desired and actual agree');
 
 t('DELIVERY — a router that accepts and does not apply is NOT confirmed');
@@ -155,15 +170,15 @@ t('DELIVERY — a router that accepts and does not apply is NOT confirmed');
 // PATCH lands but the read-back shows the old value.
 @unlink(sys_get_temp_dir() . "/fake-ros-{$fakeId}.json");
 // Delegates delivery to the real implementation; the read-back disagrees.
-$diverging = new class(new RouterOsDelivery($db, $clientFactory)) implements \Dn\Delivery\DeliveryPort {
+$diverging = new class(new RouterOsDelivery($clientFactory)) implements \Dn\Delivery\DeliveryPort {
     public function __construct(private RouterOsDelivery $inner) {}
-    public function deliver(array $i): \Dn\Delivery\DeliveryResult { return $this->inner->deliver($i); }
-    public function confirm(array $i): bool { return false; }
+    public function deliver(\Dn\Db\Database $db, array $i): \Dn\Delivery\DeliveryResult { return $this->inner->deliver($db, $i); }
+    public function confirm(\Dn\Db\Database $db, array $i): bool { return false; }
 };
 $i2 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']],
     $A['principal'], 'device', $dev['id']));
-$out = (new IntentWorker($db, $ctx, new IntentQueue($db), $diverging, 'w-div'))->runOnce();
+$out = (new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $diverging, 'w-div'))->runOnce();
 is_($out['confirmed'], 0, 'not confirmed');
 is_($owner->one('SELECT state FROM mt_intents WHERE id = ?', [$i2['id']])['state'], 'queued',
     'it goes back for another look rather than being called done');
@@ -172,7 +187,7 @@ t('DELIVERY — disconnect removes the session and confirms it is gone');
 $i3 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
     $A['customer'], 'session.disconnect',
     ['device_id' => $dev['id'], 'nas_session_id' => '*A'], $A['principal'], 'device', $dev['id']));
-$out = (new IntentWorker($db, $ctx, new IntentQueue($db), $delivery, 'w-disc'))->runOnce();
+$out = (new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $delivery, 'w-disc'))->runOnce();
 is_($out['confirmed'], 1, 'confirmed');
 $active = $transport('GET', 'https://x/rest/ip/hotspot/active', null, 'dn-mgmt', 'correct-horse');
 is_(count($active['body']), 0, 'the session really is gone from the router');
@@ -180,7 +195,7 @@ is_(count($active['body']), 0, 'the session really is gone from the router');
 t('DELIVERY — an unknown intent kind fails permanently rather than retrying forever');
 $i4 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
     $A['customer'], 'something.invented', ['device_id' => $dev['id']], $A['principal']));
-(new IntentWorker($db, $ctx, new IntentQueue($db), $delivery, 'w-unk'))->runOnce();
+(new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $delivery, 'w-unk'))->runOnce();
 $s4 = $owner->one('SELECT state, attempts FROM mt_intents WHERE id = ?', [$i4['id']]);
 is_($s4['state'], 'failed', 'it fails');
 is_((int) $s4['attempts'] <= 1, true, 'without burning five attempts');
@@ -190,8 +205,8 @@ $badFactory = fn(array $d) => new RestClient($d['tunnel_ip'], 'dn-mgmt', 'wrong-
     \Closure::fromCallable($transport));
 $i5 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']], $A['principal'], 'device', $dev['id']));
-(new IntentWorker($db, $ctx, new IntentQueue($db),
-    new RouterOsDelivery($db, $badFactory), 'w-bad'))->runOnce();
+(new IntentWorker($workDb, $ctxW, new IntentQueue($workDb),
+    new RouterOsDelivery($badFactory), 'w-bad'))->runOnce();
 $s5 = $owner->one('SELECT state FROM mt_intents WHERE id = ?', [$i5['id']]);
 is_(in_array($s5['state'], ['queued', 'failed'], true), true,
     'a 401 from the router does not produce a confirmed intent');
@@ -208,13 +223,18 @@ is_($owner->one('SELECT state FROM mt_devices WHERE id = ?', [$unstaged['id']])[
     'registered', 'and the device did not move');
 
 t('LIFECYCLE — the database refuses an illegal transition');
-// Through the admin path, which is the only way the row is reachable.
-throws_(fn() => $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))
+// Through the ADMIN identity. The comment already said "the admin path" while
+// the code used the request identity, which only worked because one role then
+// held every privilege. Under migration 015 the request role cannot call
+// mt_device_set_state at all, so asserting the transition rule from there would
+// assert the grant, not the rule. Refusing a bad transition is a property of
+// the state machine and has to be shown to someone allowed to attempt it.
+throws_(fn() => $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))
         ->transition($unstaged['id'], 'active')),
     'illegal', 'registered cannot jump to active');
 
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($unstaged['id'], 'decommissioned'));
-throws_(fn() => $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($unstaged['id'], 'decommissioned'));
+throws_(fn() => $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))
         ->transition($unstaged['id'], 'staged')),
     'decommissioned', 'a decommissioned device cannot come back');
 
@@ -224,34 +244,34 @@ throws_(fn() => $owner->exec('DELETE FROM mt_devices WHERE id = ?', [$unstaged['
     'not deleted', 'and even the owner cannot delete it');
 
 t('a legal transition is allowed');
-$ok = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'shipped'));
+$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'shipped'));
 is_($ok['state'], 'shipped', 'staged -> shipped is accepted');
 
 t('DIVERGENCE is computed, not stored');
 $cols = array_column($owner->query(
     "SELECT column_name FROM information_schema.columns WHERE table_name='mt_device_config'"), 'column_name');
 is_(in_array('diverged', $cols, true), false, 'there is no stored divergence column');
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->setActual($dev['id'],
+$ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setActual($dev['id'],
     ['ip/hotspot/profile' => ['use-radius' => 'no']]));
-is_($ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])),
+is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])),
     ['ip/hotspot/profile'], 'and divergence is derived from the two sides');
 
 t('divergence tolerates attributes the router knows and we never set');
 // The router returns .id, name and much else. Requiring equality would call
 // every device diverged forever.
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->setActual($dev['id'],
+$ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setActual($dev['id'],
     ['ip/hotspot/profile' => [['.id' => '*1', 'name' => 'hsprof1',
                               'use-radius' => 'yes', 'html-directory' => 'hotspot']]]));
-is_($ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])), [],
+is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])), [],
     'extra attributes do not count as divergence');
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->setActual($dev['id'],
+$ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setActual($dev['id'],
     ['ip/hotspot/profile' => [['.id' => '*1', 'use-radius' => 'no']]]));
-is_($ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])),
+is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->divergence($dev['id'])),
     ['ip/hotspot/profile'], 'but a wrong value for an attribute we set does');
 
 // ===========================================================================
 t('ISOLATION — unassigned stock belongs to no customer');
-$stock = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
+$stock = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX5555555', 'hEX S', '7.14.3', 'pubkey-ccc', '10.66.0.99', 'tech:y'));
 $seenA = $ctx->run($A['customer'], fn($d) => (new DeviceRegistry($d))->forCustomer());
 is_(in_array($stock['id'], array_column($seenA, 'id'), true), false,

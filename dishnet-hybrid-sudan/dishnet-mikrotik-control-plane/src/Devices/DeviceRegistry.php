@@ -34,24 +34,32 @@ final class DeviceRegistry
     public function setCredentials(string $deviceId, string $username, string $password): void
     {
         $box = $this->box ?? new SecretBox();
-        $this->db->exec(
-            'INSERT INTO mt_device_secrets (device_id, username, secret_sealed)
-             VALUES (?,?,?)
-             ON CONFLICT (device_id) DO UPDATE
-               SET username = EXCLUDED.username,
-                   secret_sealed = EXCLUDED.secret_sealed, rotated_at = now()',
-            [$deviceId, $username, $box->seal($password, $deviceId)]
-        );
+        // Via the admin function: a device may still be unassigned when it is
+        // staged, and the policy on mt_device_secrets would refuse a row with
+        // no customer under any context.
+        $this->db->one('SELECT mt_device_set_secret(?,?,?) AS ok',
+            [$deviceId, $username, $box->seal($password, $deviceId)]);
     }
 
     /** @return array{username:string,password:string}|null */
     public function credentials(string $deviceId): ?array
     {
+        // Resolve the DEVICE first, through a table the caller's tenant context
+        // governs. Audit finding S1: this method used to read the secret row
+        // directly, so a caller holding any device id recovered that device's
+        // password — the encryption opened happily, because the key is
+        // process-wide and the associated data was supplied by the caller.
+        //
+        // ENCRYPTION IS NOT TENANT ISOLATION. The AEAD still binds an envelope
+        // to one device so it cannot be moved between rows; deciding WHO MAY
+        // ASK is authorization, and that is what the two checks below are.
+        // RLS on mt_device_secrets is the boundary; this is the second layer.
+        $device = $this->db->one('SELECT id FROM mt_devices WHERE id = ?', [$deviceId]);
+        if ($device === null) { return null; }
+
         $row = $this->db->one('SELECT * FROM mt_device_secrets WHERE device_id = ?', [$deviceId]);
         if ($row === null) { return null; }
         $box = $this->box ?? new SecretBox();
-        // The device id is the associated data, so an envelope lifted from
-        // another device's row will not open here.
         return ['username' => $row['username'],
                 'password' => $box->open($row['secret_sealed'], $deviceId)];
     }
@@ -80,19 +88,20 @@ final class DeviceRegistry
 
     public function setDesired(string $deviceId, array $desired): void
     {
-        $this->db->exec(
-            'INSERT INTO mt_device_config (device_id, desired, desired_at)
-             VALUES (?, ?::jsonb, now())
-             ON CONFLICT (device_id) DO UPDATE
-               SET desired = EXCLUDED.desired, desired_at = now()',
+        // Admin function, for the same reason as the secret above.
+        $this->db->one('SELECT mt_device_set_desired(?, ?::jsonb) AS ok',
             [$deviceId, json_encode($desired, JSON_THROW_ON_ERROR)]);
     }
 
     public function setActual(string $deviceId, array $actual): void
     {
+        // Written by the worker INSIDE the intent's tenant context, so the row
+        // carries that customer and the policy is satisfied. Outside a tenant
+        // context this fails, which is correct: read-back state belongs to
+        // whoever owns the device.
         $this->db->exec(
-            'INSERT INTO mt_device_config (device_id, actual, actual_read_at)
-             VALUES (?, ?::jsonb, now())
+            'INSERT INTO mt_device_config (device_id, customer_id, actual, actual_read_at)
+             VALUES (?, mt_current_customer(), ?::jsonb, now())
              ON CONFLICT (device_id) DO UPDATE
                SET actual = EXCLUDED.actual, actual_read_at = now()',
             [$deviceId, json_encode($actual, JSON_THROW_ON_ERROR)]);

@@ -6,6 +6,7 @@ use Dn\Db\Database;
 use Dn\Delivery\RouterOs\RestClient;
 use Dn\Devices\DeviceRegistry;
 use Dn\Telemetry\UplinkRepository;
+use Dn\Tenancy\TenantContext;
 use Throwable;
 
 /**
@@ -27,7 +28,10 @@ final class UplinkSampler
     public function __construct(
         private Database $db,
         private $clientFactory = null,
-    ) {}
+        private ?TenantContext $ctx = null,
+    ) {
+        $this->ctx ??= new TenantContext($this->db);
+    }
 
     /** @return array{sampled:int,skipped:int,unreachable:int} */
     public function runOnce(): array
@@ -39,24 +43,32 @@ final class UplinkSampler
         $devices = $this->db->query('SELECT * FROM mt_devices_samplable()');
 
         $out = ['sampled' => 0, 'skipped' => 0, 'unreachable' => 0];
-        $repo = new UplinkRepository($this->db);
 
         foreach ($devices as $device) {
             try {
-                $client = $this->client($device);
-                $res = $client->get('interface');
-                if ($res['status'] >= 400) { $out['unreachable']++; continue; }
+                // Enter this device's OWN tenant context before touching
+                // anything — the same thing the intent worker does. Audit
+                // finding S1: reading credentials across customers is not
+                // something a worker needs, so it no longer happens.
+                $result = $this->ctx->run($device['customer_id'],
+                    function (Database $db) use ($device) {
+                        $client = $this->client($db, $device);
+                        $res = $client->get('interface');
+                        if ($res['status'] >= 400) { return 'unreachable'; }
 
-                $wan = $this->wan((array) ($res['body'] ?? []));
-                if ($wan === null) { $out['skipped']++; continue; }
+                        $wan = $this->wan((array) ($res['body'] ?? []));
+                        if ($wan === null) { return 'skipped'; }
 
-                $sessions = (int) ($this->db->one(
-                    'SELECT count(*) AS n FROM mt_sessions
-                      WHERE device_id = ?', [$device['id']])['n'] ?? 0);
+                        $sessions = (int) ($db->one(
+                            'SELECT count(*) AS n FROM mt_sessions WHERE device_id = ?',
+                            [$device['id']])['n'] ?? 0);
 
-                $repo->record($device['id'], (int) ($wan['rx-bits-per-second'] ?? 0),
-                              (int) ($wan['tx-bits-per-second'] ?? 0), $sessions)
-                    ? $out['sampled']++ : $out['skipped']++;
+                        return (new UplinkRepository($db))->record(
+                            $device['id'], (int) ($wan['rx-bits-per-second'] ?? 0),
+                            (int) ($wan['tx-bits-per-second'] ?? 0), $sessions)
+                                ? 'sampled' : 'skipped';
+                    });
+                $out[$result]++;
             } catch (Throwable) {
                 // Unreachable is recorded as unreachable, never as zero.
                 $out['unreachable']++;
@@ -75,10 +87,10 @@ final class UplinkSampler
         return null;
     }
 
-    private function client(array $device): RestClient
+    private function client(Database $db, array $device): RestClient
     {
         if ($this->clientFactory !== null) { return ($this->clientFactory)($device); }
-        $creds = (new DeviceRegistry($this->db))->credentials($device['id']);
+        $creds = (new DeviceRegistry($db))->credentials($device['id']);
         if ($creds === null) { throw new \RuntimeException('no credentials for device'); }
         return new RestClient($device['tunnel_ip'], $creds['username'], $creds['password']);
     }

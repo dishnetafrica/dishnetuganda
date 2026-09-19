@@ -41,25 +41,25 @@ final class IntentWorker
 
         foreach ($claimed as $intent) {
             $result = $this->ctx->run($intent['customer_id'], function (Database $db) use ($intent) {
-                return $this->handle(new IntentQueue($db), new AuditLog($db), $intent);
+                return $this->handle($db, new IntentQueue($db), new AuditLog($db), $intent);
             });
             if (isset($out[$result])) { $out[$result]++; }
         }
         return $out;
     }
 
-    private function handle(IntentQueue $q, AuditLog $audit, array $intent): string
+    private function handle(Database $db, IntentQueue $q, AuditLog $audit, array $intent): string
     {
         $id = $intent['id'];
         try {
-            $res = $this->delivery->deliver($intent);
+            $res = $this->delivery->deliver($db, $intent);
 
             if (!$res->accepted) {
                 if (!$res->retryable) {
                     // A malformed request will fail identically forever.
                     // Burning five attempts on it delays everything behind it.
                     $q->recordFailure($id, $res->error ?? 'permanent failure');
-                    $q->find($id) && $this->forceFail($q, $id, $res->error ?? 'permanent failure');
+                    $q->find($id) && $this->forceFail($db, $q, $id, $res->error ?? 'permanent failure');
                     $audit->record($intent['customer_id'], $this->workerId, 'system',
                         'intent.failed', 'intent', $id, null, ['reason' => $res->error]);
                     return 'failed';
@@ -72,7 +72,7 @@ final class IntentWorker
 
             // Confirmation is a separate READ of actual state, never the
             // delivery call's own return value.
-            if ($this->delivery->confirm($intent)) {
+            if ($this->delivery->confirm($db, $intent)) {
                 $q->markConfirmed($id);
                 $audit->record($intent['customer_id'], $this->workerId, 'system',
                     'intent.confirmed', 'intent', $id);
@@ -91,11 +91,11 @@ final class IntentWorker
     }
 
     /** Permanent failures skip the remaining attempts. */
-    private function forceFail(IntentQueue $q, string $id, string $why): void
+    private function forceFail(Database $db, IntentQueue $q, string $id, string $why): void
     {
         $row = $q->find($id);
         if ($row === null || IntentState::isTerminal($row['state'])) { return; }
-        $this->db->exec(
+        $db->exec(
             "UPDATE mt_intents SET state = 'failed', failed_at = now(), last_error = ?,
                     claimed_by = NULL, lease_expires_at = NULL
               WHERE id = ? AND state <> 'failed'", [$why, $id]);

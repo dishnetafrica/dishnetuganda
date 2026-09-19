@@ -12,10 +12,10 @@ namespace Dn\Delivery;
  */
 final class NullDelivery implements DeliveryPort
 {
-    public function deliver(array $intent): DeliveryResult
+    public function deliver(\Dn\Db\Database $db, array $intent): DeliveryResult
     {
         return DeliveryResult::retryable('no delivery path is configured');
     }
 
-    public function confirm(array $intent): bool { return false; }
+    public function confirm(\Dn\Db\Database $db, array $intent): bool { return false; }
 }

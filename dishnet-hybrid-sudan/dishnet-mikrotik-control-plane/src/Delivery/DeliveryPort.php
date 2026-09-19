@@ -16,13 +16,24 @@ namespace Dn\Delivery;
  */
 interface DeliveryPort
 {
+    /*
+     * Both methods take the Database the WORKER is currently scoped to.
+     *
+     * They used to use a connection captured at construction. That worked only
+     * while the worker and the delivery happened to share one object: the
+     * worker sets app.customer_id on ITS connection, so a delivery holding a
+     * different one sees nothing and reports "device not found". Role
+     * separation (docs/57 §10) split those connections and the coupling
+     * surfaced immediately. Passing it makes the requirement impossible to get
+     * wrong rather than merely documented.
+     */
     /**
      * Attempt to carry out an intent.
      *
      * @return DeliveryResult
      * @throws \RuntimeException on a transport failure the caller should retry
      */
-    public function deliver(array $intent): DeliveryResult;
+    public function deliver(\Dn\Db\Database $db, array $intent): DeliveryResult;
 
     /**
      * Read back actual state to decide whether the intent really took effect.
@@ -31,5 +42,5 @@ interface DeliveryPort
      * that accepts a command and does not apply it is a real failure mode,
      * and trusting the write's own success is how it goes unnoticed.
      */
-    public function confirm(array $intent): bool;
+    public function confirm(\Dn\Db\Database $db, array $intent): bool;
 }

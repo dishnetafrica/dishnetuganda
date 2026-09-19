@@ -34,6 +34,8 @@ $db   = Database::app();
 $auth = new Authenticator($db);
 $ctx  = new TenantContext($db);
 $k    = new Kernel(Routes::build($auth), $db, $auth, $ctx);
+$adminDb = Database::admin();  $ctxA = new TenantContext($adminDb);
+$workDb  = Database::worker(); $ctxW = new TenantContext($workDb);
 $call = fn(string $m, string $p, array $body = [], string $tok = '')
     => $k->handle(new Request($m, $p, $tok ? ['Authorization' => "Bearer {$tok}"] : [], $body));
 $signIn = function (string $phone) use ($call, $owner): string {
@@ -45,14 +47,15 @@ $tokA = $signIn('+256700001001');
 $tokB = $signIn('+256700001002');
 
 // devices
-$devA = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
+$devA = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX-T-0001', 'hAP ax2', '7.14.3', 'pk-a', '10.66.0.21', 'tech:t'));
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($devA['id'], $A['customer'], $A['site'], 'Lobby AP'));
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'shipped'));
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'connected'));
-$ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'provisioned'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($devA['id'], $A['customer'], $A['site'], 'Lobby AP'));
+$ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setCredentials($devA['id'], 'u', 'p'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'shipped'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'connected'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'provisioned'));
 
-$stock = $ctx->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
+$stock = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX-T-9999', 'hEX S', '7.14.3', 'pk-s', '10.66.0.99', 'tech:t'));
 
 /** A fake router whose throughput the test chooses. */
@@ -70,7 +73,7 @@ $factory = function (array $d) use (&$rx, &$tx, &$reachable) {
 
 // ===========================================================================
 t('sampling records what the link is actually doing');
-$out = (new UplinkSampler($db, $factory))->runOnce();
+$out = (new UplinkSampler($workDb, $factory, $ctxW))->runOnce();
 is_($out['sampled'], 1, 'one device sampled');
 $s = $owner->one('SELECT * FROM mt_uplink_samples ORDER BY at DESC LIMIT 1');
 is_((int) $s['rx_bps'], 78_000_000, 'the WAN interface rate is recorded');
@@ -83,14 +86,14 @@ t('an unreachable router records NOTHING, not a zero');
 // it — and that graph would be read as evidence.
 $before = (int) $owner->one('SELECT count(*) AS n FROM mt_uplink_samples')['n'];
 $reachable = false;
-$out = (new UplinkSampler($db, $factory))->runOnce();
+$out = (new UplinkSampler($workDb, $factory, $ctxW))->runOnce();
 $reachable = true;
 is_($out['unreachable'], 1, 'counted as unreachable');
 is_((int) $owner->one('SELECT count(*) AS n FROM mt_uplink_samples')['n'], $before,
     'and no sample was written');
 
 t('unassigned stock produces no telemetry');
-is_($ctx->runUnscoped(fn($d) => (new UplinkRepository($d))->record($stock['id'], 1, 1, 0)), false,
+is_($ctxW->runUnscoped(fn($d) => (new UplinkRepository($d))->record($stock['id'], 1, 1, 0)), false,
     'a device belonging to nobody has no one to show a sample to');
 
 // ===========================================================================
@@ -129,7 +132,7 @@ for ($i = 0; $i < 40; $i++) {
                   VALUES (?,?, now() - (? || \' seconds\')::interval, ?,?,?)',
                  [$devA['id'], $A['customer'], (string) ($i * 30), $rx, $tx, 500]);
 }
-(new UplinkSampler($db, $factory))->runOnce();
+(new UplinkSampler($workDb, $factory, $ctxW))->runOnce();
 
 $saturated = $exercise($tokA, 'saturated');
 is_($saturated['plan_status'],    $healthy['plan_status'],    'a saturated link does not block plan creation');
@@ -194,7 +197,7 @@ $bRows = $ctx->run($B['customer'], fn($d) => (new UplinkRepository($d))->recent(
 is_(count($bRows), 0, "B's direct read returns nothing");
 
 t('samples may be pruned — they are the one thing here that is not evidence');
-$n = $ctx->runUnscoped(fn($d) => $d->one("SELECT mt_uplink_prune('0 seconds'::interval) AS n")['n']);
+$n = $ctxW->runUnscoped(fn($d) => $d->one("SELECT mt_uplink_prune('0 seconds'::interval) AS n")['n']);
 is_((int) $n > 0, true, 'pruning removes old samples');
 is_((int) $owner->one('SELECT count(*) AS n FROM mt_uplink_samples')['n'], 0, 'and they are gone');
 

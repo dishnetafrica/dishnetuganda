@@ -24,15 +24,31 @@ final class Database
     private function __construct(private PDO $pdo, private string $role) {}
 
     public static function app(): self    { return self::connect('app'); }
+    public static function worker(): self { return self::connect('worker'); }
+    public static function admin(): self  { return self::connect('admin'); }
     public static function owner(): self  { return self::connect('owner'); }
 
+    /**
+     * Four identities, because four execution contexts exist.
+     *
+     * Audit findings S1 and S2 (docs/57) were both possible because requests,
+     * background jobs and provisioning all connected as one role, so every
+     * privilege any of them needed, all of them had. The only thing separating
+     * a customer request from a worker was which PHP function the process
+     * happened to call — and that is not an authorization boundary.
+     *
+     * None of the three application roles is a member of another, so none can
+     * SET ROLE into another, and none may grant itself anything.
+     */
     private static function connect(string $role): self
     {
-        $dsn  = getenv('DNB_DSN') ?: 'pgsql:host=/var/tmp;port=55432;dbname=dnb';
-        $user = $role === 'owner' ? (getenv('DNB_OWNER_USER') ?: 'dnb')
-                                  : (getenv('DNB_APP_USER')   ?: 'dnb_app');
-        $pass = $role === 'owner' ? (getenv('DNB_OWNER_PASS') ?: '')
-                                  : (getenv('DNB_APP_PASS')   ?: 'app-local-dev');
+        $dsn = getenv('DNB_DSN') ?: 'pgsql:host=/var/tmp;port=55432;dbname=dnb';
+        [$user, $pass] = match ($role) {
+            'owner'  => [getenv('DNB_OWNER_USER')  ?: 'dnb',        getenv('DNB_OWNER_PASS')  ?: ''],
+            'worker' => [getenv('DNB_WORKER_USER') ?: 'dnb_worker', getenv('DNB_WORKER_PASS') ?: 'worker-local-dev'],
+            'admin'  => [getenv('DNB_ADMIN_USER')  ?: 'dnb_admin',  getenv('DNB_ADMIN_PASS')  ?: 'admin-local-dev'],
+            default  => [getenv('DNB_APP_USER')    ?: 'dnb_app',    getenv('DNB_APP_PASS')    ?: 'app-local-dev'],
+        };
         try {
             $pdo = new PDO($dsn, $user, $pass, [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,

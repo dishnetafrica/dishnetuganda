@@ -284,3 +284,209 @@ layer for isolation, which is where both HIGH findings live — reachable from a
 role rather than from a URL.
 
 *No production system was contacted. Nothing was fixed. The probe database was temporary.*
+
+---
+
+# 10. Remediation design for S1 and S2
+
+**Written before any code changed.** Added to the audit rather than to a new document so
+the finding and its answer stay together; the audit's own findings above are unaltered.
+
+## 10.1 One attack the audit under-stated
+
+Re-running the probe cleanly surfaced a fourth path the audit did not list:
+
+```
+A4  mt_device_assign(Q's device -> P)  as the request role   ASSIGNED
+    then credentials(Q_device) as P                          DISCLOSED password=pw-Q
+```
+
+**A customer can assign another customer's device to itself, then read its credential
+entirely legitimately.** `mt_device_assign` is `SECURITY DEFINER` and executable by
+`dnb_app`.
+
+This means **S1 cannot be fixed by securing `mt_device_secrets` alone.** Putting RLS on the
+secrets table while leaving device *assignment* open converts a direct read into a two-step
+read. The device admin functions are therefore in scope — not as an unrelated finding, but
+because S1 is not secure without them.
+
+## 10.2 Current privilege path
+
+```
+HTTP request ─┐
+worker        ├─ ALL run as  dnb_app  ─── EXECUTE on every SECURITY DEFINER function
+admin/staging ┘                        └── SELECT on mt_device_secrets (no RLS)
+```
+
+One database identity for three execution contexts. Every privilege any of them needs, all
+of them have. The only thing separating a customer request from a worker is **which PHP
+function the process happens to call** — and that is not an authorization boundary.
+
+## 10.3 Intended privilege path
+
+Three roles, because three execution contexts genuinely exist:
+
+```
+HTTP request   →  dnb_app     table DML under RLS · auth functions only
+background job →  dnb_worker  + claim, expire, reap, prune, samplable, uplink_record
+provisioning   →  dnb_admin   + device register, assign, set_state, set_secret
+```
+
+All three: `NOSUPERUSER`, `NOBYPASSRLS`, no DDL, own nothing. None is a member of another,
+so none can `SET ROLE` into another.
+
+## 10.4 Exact changes
+
+| Object | Change |
+|---|---|
+| **`mt_device_secrets`** | `+ customer_id` (FK, nullable for unassigned stock), backfilled; `ENABLE`/`FORCE ROW LEVEL SECURITY`; standard isolation policy |
+| `mt_device_assign` | Also moves the secret's `customer_id`, so the two cannot drift |
+| **`mt_device_set_secret`** | **New** `SECURITY DEFINER` — writes a secret for a device that may still be unassigned, which RLS would otherwise forbid. `dnb_admin` only |
+| `mt_devices_samplable` | Now returns `customer_id`, so the sampler can enter a tenant context instead of reading across customers |
+| `mt_intent_claim`, `mt_intent_expire_overdue`, `mt_sessions_reap`, `mt_uplink_prune`, `mt_uplink_record`, `mt_devices_samplable` | `REVOKE` from `dnb_app`; `GRANT` to `dnb_worker` |
+| `mt_device_register`, `mt_device_assign`, `mt_device_set_state`, `mt_device_set_secret` | `REVOKE` from `dnb_app`; `GRANT` to `dnb_admin` |
+| `mt_migrations` | `REVOKE DELETE` from all three (finding S5, one line, taken while the grants are being rewritten) |
+| `Database` | `+ worker()`, `+ admin()` |
+| `DeviceRegistry::credentials()` | Resolves the device through `mt_devices` **first**; refuses if invisible |
+| `UplinkSampler` | Enters each device's tenant context before reading its credential |
+
+**Unchanged:** `mt_intent_claim`'s body, the intent state machine, lease and retry
+semantics, the AEAD scheme, and every `mt_auth_*` function (login is a request-path
+operation and those functions return ids only).
+
+## 10.5 Why this stops direct SQL abuse, not merely HTTP abuse
+
+The audit's own objection to "there is no HTTP route" applies to any fix that relies on
+application structure. This one does not:
+
+- **S1:** with `customer_id` + RLS, a `SELECT` on `mt_device_secrets` from `dnb_app`
+  returns another customer's row **never** — not "only if the code forgets a check". The
+  device resolution in `credentials()` is a second layer, not the layer.
+- **S2:** `dnb_app` holds no `EXECUTE` on the claim primitive. Arbitrary SQL as `dnb_app`
+  cannot call it, cannot `SET ROLE` to a role that can (no membership), and cannot grant
+  itself (no `CREATEROLE`, not superuser).
+- **A4:** `dnb_app` holds no `EXECUTE` on `mt_device_assign`, so the two-step theft has no
+  first step.
+
+In each case the boundary is a privilege the request path does not hold, which holds
+whether the caller arrived through a route, through a SQL injection, or through a PHP
+shell.
+
+## 10.6 What this does not fix
+
+Deliberately out of scope, and still true afterwards:
+
+- **R4** (`ether1`) — sequenced after this gate.
+- `mt_session_account` and `mt_voucher_redeem` remain `dnb_app`-executable **by design**:
+  both are network-side entry points that resolve identity from what is presented. Neither
+  returns another customer's data, but `mt_session_account` could be used to inject
+  accounting for a username an attacker already knows. Noted as residual; the
+  namespaced usernames are not exposed by any projection.
+- Nothing here is proven against hardware. The physical Phase 0 gate (§8) is untouched.
+
+---
+
+# 11. Remediation outcome (S1, S2)
+
+Recorded after implementation. The findings in §4 and the design in §10 are left exactly as
+written so the pre-remediation state stays a fixed reference point.
+
+## 11.1 A remediation that silently did nothing
+
+The first implementation of migration 015 revoked the privileged functions like this:
+
+```sql
+REVOKE EXECUTE ON FUNCTION mt_intent_claim(text,interval,integer) FROM dnb_app;
+```
+
+That statement succeeds, reports no error, and **changes nothing that matters**. PostgreSQL
+grants `EXECUTE` on a newly created function to `PUBLIC`, so the privilege never depended on
+a grant to `dnb_app` in the first place. Revoking the named grant leaves the `PUBLIC` grant
+standing, and `dnb_app` keeps the privilege through it.
+
+Every attack in §4 still succeeded against that schema. The catalogue showed it plainly once
+looked at — `proacl` read `=X/dnb,...`, where the empty grantee before `=` *is* `PUBLIC` —
+but nothing in the migration's output said so, and a reader checking that the revoke was
+present would have found it present.
+
+What caught it was writing the denial assertions as tests and watching them fail. This is the
+same lesson as G1–G5 in the implementation log, now in its most expensive form: **a security
+control nobody has watched fail is a control nobody knows works.** A revoke is not a denial
+until something has been refused.
+
+The corrected sweep takes `EXECUTE` away from `PUBLIC` *and* from all three application roles
+across the schema, then grants it back by name, so the grants in migration 015 are the entire
+privilege surface rather than a delta against migrations written earlier. An
+`ALTER DEFAULT PRIVILEGES` keeps future functions on the same footing, and a test asserts that
+no `mt_` function grants `EXECUTE` to `PUBLIC`, so an ordinary `CREATE FUNCTION` in a later
+migration cannot quietly reopen S2.
+
+## 11.2 Attack results, before and after
+
+Same probe, same attacker identity (`dnb_app` inside customer P's tenant context), against a
+freshly migrated database in both cases.
+
+| # | Attack | Before | After | Refused by |
+|---|--------|--------|-------|-----------|
+| A1 | `SELECT … FROM mt_device_secrets WHERE device_id = <Q's>` | **DISCLOSED** | no rows | RLS (`FORCE`) |
+| A2 | `DeviceRegistry::credentials(<Q's device>)` | **DISCLOSED** `password=pw-Q` | `null` | RLS + device resolved first |
+| A3 | `IntentQueue::claim()` as the request role | **DISCLOSED** 1 intent, payload included | `SQLSTATE 42501` | no `EXECUTE` |
+| A4 | `mt_device_assign(<Q's device> → P)`, then read | **ASSIGNED**, then **DISCLOSED** `pw-Q` | `SQLSTATE 42501`, then `null` | no `EXECUTE` |
+| A5 | P reads its **own** credential (must keep working) | ok | ok | — |
+
+The two refusal mechanisms differ on purpose. Reads fail **closed and quiet** — RLS returns no
+rows, and a missing row is indistinguishable from a foreign one, so the boundary leaks nothing
+about what exists. Cross-customer *primitives* fail **loud** — `42501` — because a request-path
+process attempting them is not a user error, it is either a bug or an intrusion, and it should
+be visible in the log as such.
+
+A4 is why the device admin functions were in scope. Securing `mt_device_secrets` alone would
+have converted a one-step read into a two-step one.
+
+## 11.3 What this changes about the audit's conclusions
+
+S1 and S2 move from OPEN to CLOSED, and S3 and S5 close with them because the same sweep
+covers them. **No other finding is affected**, and in particular:
+
+- The system is still **not proven against hardware**. F1–F13 passing, and now these denials
+  passing, are statements about the database and the code — not about a MikroTik.
+- R4 (`ether1`) is untouched and still sequenced after this gate.
+- `mt_session_account` and `mt_voucher_redeem` remain `dnb_app`-executable by design (§10.6),
+  and that residual is unchanged.
+
+Nothing here makes the system deployable. It makes one class of cross-customer compromise
+unreachable from the request role, which was a precondition for deployment, not a substitute
+for the remaining gates.
+
+## 11.4 Residual privilege paths, and what still gates them
+
+Four things remain true after this remediation. None is a defect introduced by it; all four
+are reasons the system is still not deployable.
+
+**1. Role passwords are development literals (deployment gate).** Migration 015 creates
+`dnb_worker` and `dnb_admin` with literal passwords, following the convention migration 001
+set for `dnb_app`. They are in the repository. On a database reachable beyond a local socket
+they are equivalent to no password, and three roles with published credentials are one role.
+The separation proven in §11.2 holds only once each role has a real password
+(`ALTER ROLE … PASSWORD`, supplied via `DNB_APP_PASS` / `DNB_WORKER_PASS` / `DNB_ADMIN_PASS`).
+Stated in the migration itself so it cannot be deployed unread.
+
+**2. The `dnb` owner still bypasses everything.** Table owners are not subject to RLS unless
+`FORCE` is set — it is set on the tenant tables — but the owner can drop `FORCE`, drop a
+policy, or `SET ROLE` to any application role. Migrations must run as the owner, so this
+cannot be closed, only contained: the owner is not an application identity, no long-lived
+process connects as it, and `Database::owner()` appears in migrations and tests only.
+
+**3. `mt_session_account` and `mt_voucher_redeem` remain request-path executable by design.**
+Unchanged from §10.6. Both are network-side entry points that resolve identity from what is
+presented; neither returns another customer's data. `mt_session_account` could still be used
+to inject accounting for a username an attacker already knows, and the namespaced usernames
+are not exposed by any projection. Residual, accepted, unchanged by this work.
+
+**4. None of this is proven against hardware (physical Phase 0 gate).** Everything in §11.2
+was demonstrated against PostgreSQL and a fake RouterOS. The admin functions are now the only
+way to register, assign or credential a device, which means Phase 0 provisioning must run as
+`dnb_admin` — a path no physical device has yet exercised. Whether a real MikroTik provisions
+through it is untested, and the CHR harness cannot answer it in this environment (no KVM, no
+qemu, no route to the vendor). This stays exactly where the audit put it: unproven until a
+physical device runs the provisioning path end to end.

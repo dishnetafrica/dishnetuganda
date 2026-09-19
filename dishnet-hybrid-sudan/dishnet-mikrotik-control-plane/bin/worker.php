@@ -8,7 +8,9 @@ use Dn\Intents\IntentQueue;
 use Dn\Jobs\IntentWorker;
 use Dn\Tenancy\TenantContext;
 
-$db = Database::app();
+// The WORKER role: it may call the cross-customer claim primitive, which the
+// request-path role may not (docs/57 §10).
+$db = Database::worker();
 $q  = new IntentQueue($db);
 $w  = new IntentWorker($db, new TenantContext($db), $q, new NullDelivery(),
                        gethostname() . ':' . getmypid());

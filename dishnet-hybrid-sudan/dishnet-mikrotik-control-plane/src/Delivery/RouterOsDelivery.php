@@ -24,36 +24,33 @@ use Throwable;
 final class RouterOsDelivery implements DeliveryPort
 {
     /** @param null|callable(array):RestClient $clientFactory seam for tests */
-    public function __construct(
-        private Database $db,
-        private $clientFactory = null,
-    ) {}
+    public function __construct(private $clientFactory = null) {}
 
-    public function deliver(array $intent): DeliveryResult
+    public function deliver(Database $db, array $intent): DeliveryResult
     {
         return match ($intent['kind']) {
-            'device.provision'   => $this->provision($intent),
-            'session.disconnect' => $this->disconnect($intent),
+            'device.provision'   => $this->provision($db, $intent),
+            'session.disconnect' => $this->disconnect($db, $intent),
             // With RADIUS the credential lives in our database and FreeRADIUS
             // reads it; a router holds no per-voucher state. So publishing a
             // batch is not a router operation. What must be true is that the
             // hotspot is RADIUS-backed, which provisioning established and
             // confirm() re-reads.
             'voucher.publish',
-            'voucher.revoke'     => $this->assertRadiusBacked($intent),
+            'voucher.revoke'     => $this->assertRadiusBacked($db, $intent),
             default              => DeliveryResult::permanent(
                                         'no delivery is defined for ' . $intent['kind']),
         };
     }
 
-    public function confirm(array $intent): bool
+    public function confirm(Database $db, array $intent): bool
     {
         try {
             return match ($intent['kind']) {
-                'device.provision'   => $this->divergenceIsEmpty($intent),
-                'session.disconnect' => $this->sessionIsGone($intent),
+                'device.provision'   => $this->divergenceIsEmpty($db, $intent),
+                'session.disconnect' => $this->sessionIsGone($db, $intent),
                 'voucher.publish',
-                'voucher.revoke'     => $this->assertRadiusBacked($intent)->accepted,
+                'voucher.revoke'     => $this->assertRadiusBacked($db, $intent)->accepted,
                 default              => false,
             };
         } catch (Throwable) {
@@ -63,16 +60,16 @@ final class RouterOsDelivery implements DeliveryPort
     }
 
     // -----------------------------------------------------------------------
-    private function provision(array $intent): DeliveryResult
+    private function provision(Database $db, array $intent): DeliveryResult
     {
-        $device = $this->device($intent);
+        $device = $this->device($db, $intent);
         if ($device === null) { return DeliveryResult::permanent('device not found'); }
         if ($device['tunnel_ip'] === null) {
             return DeliveryResult::retryable('no tunnel address yet');
         }
 
-        $client = $this->client($device);
-        $registry = new DeviceRegistry($this->db);
+        $client = $this->client($db, $device);
+        $registry = new DeviceRegistry($db);
         $desired = json_decode((string) $registry->config($device['id'])['desired'], true) ?: [];
 
         foreach ($desired as $path => $values) {
@@ -89,11 +86,11 @@ final class RouterOsDelivery implements DeliveryPort
         return DeliveryResult::accepted();
     }
 
-    private function disconnect(array $intent): DeliveryResult
+    private function disconnect(Database $db, array $intent): DeliveryResult
     {
-        $device = $this->device($intent);
+        $device = $this->device($db, $intent);
         if ($device === null) { return DeliveryResult::permanent('device not found'); }
-        $client = $this->client($device);
+        $client = $this->client($db, $device);
         $payload = json_decode((string) $intent['payload'], true) ?: [];
         $res = $client->post('ip/hotspot/active/remove',
                              ['.id' => $payload['nas_session_id'] ?? '']);
@@ -102,15 +99,15 @@ final class RouterOsDelivery implements DeliveryPort
         return DeliveryResult::accepted();
     }
 
-    private function assertRadiusBacked(array $intent): DeliveryResult
+    private function assertRadiusBacked(Database $db, array $intent): DeliveryResult
     {
-        $device = $this->device($intent);
+        $device = $this->device($db, $intent);
         if ($device === null) {
             // Not every voucher intent names a device — a batch spans a site.
             // Nothing to check, and nothing to do on a router.
             return DeliveryResult::accepted();
         }
-        $res = $this->client($device)->get('ip/hotspot/profile');
+        $res = $this->client($db, $device)->get('ip/hotspot/profile');
         if ($res['status'] >= 500) { return DeliveryResult::retryable('router error'); }
         foreach ((array) ($res['body'] ?? []) as $profile) {
             if (($profile['use-radius'] ?? 'no') === 'yes') { return DeliveryResult::accepted(); }
@@ -118,13 +115,13 @@ final class RouterOsDelivery implements DeliveryPort
         return DeliveryResult::retryable('hotspot is not RADIUS-backed yet');
     }
 
-    private function divergenceIsEmpty(array $intent): bool
+    private function divergenceIsEmpty(Database $db, array $intent): bool
     {
-        $device = $this->device($intent);
+        $device = $this->device($db, $intent);
         if ($device === null) { return false; }
 
-        $registry = new DeviceRegistry($this->db);
-        $client = $this->client($device);
+        $registry = new DeviceRegistry($db);
+        $client = $this->client($db, $device);
         $desired = json_decode((string) $registry->config($device['id'])['desired'], true) ?: [];
 
         $actual = [];
@@ -138,12 +135,12 @@ final class RouterOsDelivery implements DeliveryPort
         return $registry->divergence($device['id']) === [];
     }
 
-    private function sessionIsGone(array $intent): bool
+    private function sessionIsGone(Database $db, array $intent): bool
     {
-        $device = $this->device($intent);
+        $device = $this->device($db, $intent);
         if ($device === null) { return false; }
         $payload = json_decode((string) $intent['payload'], true) ?: [];
-        $res = $this->client($device)->get('ip/hotspot/active');
+        $res = $this->client($db, $device)->get('ip/hotspot/active');
         if ($res['status'] >= 400) { return false; }
         foreach ((array) ($res['body'] ?? []) as $a) {
             if (($a['.id'] ?? null) === ($payload['nas_session_id'] ?? '')) { return false; }
@@ -151,17 +148,17 @@ final class RouterOsDelivery implements DeliveryPort
         return true;
     }
 
-    private function device(array $intent): ?array
+    private function device(Database $db, array $intent): ?array
     {
         $payload = json_decode((string) $intent['payload'], true) ?: [];
         $id = $payload['device_id'] ?? ($intent['target_type'] === 'device' ? $intent['target_id'] : null);
-        return $id === null ? null : $this->db->one('SELECT * FROM mt_devices WHERE id = ?', [$id]);
+        return $id === null ? null : $db->one('SELECT * FROM mt_devices WHERE id = ?', [$id]);
     }
 
-    private function client(array $device): RestClient
+    private function client(Database $db, array $device): RestClient
     {
         if ($this->clientFactory !== null) { return ($this->clientFactory)($device); }
-        $creds = (new DeviceRegistry($this->db))->credentials($device['id']);
+        $creds = (new DeviceRegistry($db))->credentials($device['id']);
         if ($creds === null) { throw new \RuntimeException('no credentials for device'); }
         return new RestClient($device['tunnel_ip'], $creds['username'], $creds['password']);
     }
