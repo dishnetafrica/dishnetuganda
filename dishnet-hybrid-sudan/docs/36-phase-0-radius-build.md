@@ -504,7 +504,48 @@ correctly either way. Splitting #4, #5 and #6 is what caught it.
   modules, so it could not read its own config. Fixed with a recursive
   `chgrp` to gid 101 rather than by loosening permissions.
 
-### 6.6 Owed before any of this faces a real router
+### 6.6 Owed before any of this faces a real router — **DONE 2026-09-19**
+
+**Execution record.** Completed on the live host before physical Step 0.
+
+| Item | Result |
+|---|---|
+| `client dn-localtest` | **Removed** |
+| `client localhost` | **Removed** |
+| `client localhost_ipv6` | **Removed** |
+| `radcheck` rows for `t1-TESTCODE01` | **Deleted** (1) |
+| `radreply` rows for `t1-TESTCODE01` | **Deleted** (3) |
+| `radacct` rows for `t1-TESTCODE01` | **Deleted** (1) |
+
+Test rows were deleted **by username**, not by the `dnp0-test-002` session id, so
+every accounting row from the test run was caught regardless of the session id it
+carried.
+
+**Verification after cleanup:**
+
+- `freeradius -C` returned `exit=0`; container restarted and came back `Up`.
+- The only remaining client is `dn-test-mikrotik` (`ipaddr = 10.66.0.11`,
+  `nas_type = other`), which Step 0 requires and §6.6 never listed for removal.
+- Its secret is **distinct and 26 characters** — not the stock default.
+- `radcheck`, `radreply`, `radacct` and `nas` all return **0 rows**. The `nas`
+  table was already empty: `clients.conf` is authoritative.
+- Backup retained at `clients.conf.bak-20260919-135654`.
+
+**Two method notes worth keeping.**
+
+The block remover counts braces rather than deleting line ranges, because a
+`client` block can contain a nested `limit { }` — the same orphan-brace failure
+mode as the WireGuard `[Peer]` sed. It also runs POSIX-clean: the first version
+used `match($0, re, arr)`, a gawk extension, and this host's `awk` is **mawk**,
+where it silently produced an empty file. Pre-write checks for a non-empty result
+and the continued presence of `dn-test-mikrotik` exist because a test that passes
+on empty output is not a test.
+
+The post-check `grep -q 'testing123'` reported STILL PRESENT and was **wrong to
+alarm**: all five occurrences are in commented-out stock examples (L55, L60, L70,
+L75, L113). A secret check must be comment-aware; a bare grep is not.
+
+#### Original list
 
 - `client dn-localtest` (ipaddr `10.66.0.1`) — a test client pointing at the
   gateway itself. **Remove.**
