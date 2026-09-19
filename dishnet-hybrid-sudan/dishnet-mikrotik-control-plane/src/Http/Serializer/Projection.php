@@ -35,6 +35,17 @@ final class Projection
      */
     private const ACCESS_POINT = ['id', 'name', 'site_id', 'online', 'session_count', 'last_seen'];
 
+    /**
+     * Queued work, as the customer sees it.
+     *
+     * Withheld: payload (carries router-shaped detail), last_error (raw
+     * transport text), attempts, claimed_by, lease. A customer needs to know
+     * a request exists and where it has got to — not how the platform is
+     * going about it.
+     */
+    private const INTENT = ['id', 'kind', 'state', 'created_at'];
+
+    public static function intent(array $r): array      { return self::pick($r, self::INTENT); }
     public static function customer(array $r): array    { return self::pick($r, self::CUSTOMER); }
     public static function principal(array $r): array   { return self::pick($r, self::PRINCIPAL); }
     public static function service(array $r): array     { return self::pick($r, self::SERVICE); }
@@ -58,6 +69,7 @@ final class Projection
             'site'        => self::SITE,
             'entitlement' => self::ENTITLEMENT,
             'accessPoint' => self::ACCESS_POINT,
+            'intent'      => self::INTENT,
             default       => throw new \InvalidArgumentException("unknown projection {$name}"),
         };
     }

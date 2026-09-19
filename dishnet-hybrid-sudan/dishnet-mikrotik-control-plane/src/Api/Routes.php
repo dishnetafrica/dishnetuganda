@@ -100,6 +100,14 @@ final class Routes
             return Response::ok(['entitlements' => P::many([P::class, 'entitlement'], $rows)]);
         });
 
+        $r->get('/api/v1/me/intents', function (Request $req, Database $db) {
+            $rows = (new \Dn\Intents\IntentQueue($db))->forCustomer();
+            // Deliberately says nothing about when queued work reaches a
+            // router. B1 is unresolved (docs/49); neither push nor poll may
+            // be asserted in a response, a label or a message.
+            return Response::ok(['intents' => P::many([P::class, 'intent'], $rows)]);
+        });
+
         return $r;
     }
 }

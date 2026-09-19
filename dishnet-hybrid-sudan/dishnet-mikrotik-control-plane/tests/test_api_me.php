@@ -121,9 +121,36 @@ foreach (['serial','wg_ip','wgIp','endpoint','ros_version','tunnel_ip',
 }
 
 // ---------------------------------------------------------------------------
+t('GET /me/intents — a customer sees its own queued work and no more');
+$qa = new \Dn\Intents\IntentQueue($db);
+$ctx = new TenantContext($db);
+$ia = $ctx->run($A['customer'], fn($d) => (new \Dn\Intents\IntentQueue($d))
+        ->enqueue($A['customer'], 'voucher.create', ['secret_count' => 99], $A['principal']));
+$ib = $ctx->run($B['customer'], fn($d) => (new \Dn\Intents\IntentQueue($d))
+        ->enqueue($B['customer'], 'voucher.create', [], $B['principal']));
+
+$r = $call('GET', '/api/v1/me/intents', [], $tokA);
+is_($r->status, 200, 'the route responds');
+is_(count($r->body['intents']), 1, 'A sees exactly one intent');
+is_($r->body['intents'][0]['id'], $ia['id'], "and it is A's");
+is_($r->body['intents'][0]['state'], 'queued', 'with its state');
+
+$body = json_encode($r->body);
+foreach (['payload','secret_count','claimed_by','lease_expires_at','attempts',
+          'last_error','next_attempt_at','max_attempts'] as $f) {
+    is_(str_contains($body, $f), false, "/me/intents withholds {$f}");
+}
+$extra = array_diff(array_keys($r->body['intents'][0]), Projection::fieldsFor('intent'));
+is_(array_values($extra), [], 'no field outside the intent allowlist');
+
+$rb = $call('GET', '/api/v1/me/intents', [], $tokB);
+is_(count($rb->body['intents']), 1, 'B sees exactly one');
+is_($rb->body['intents'][0]['id'], $ib['id'], "and it is B's");
+
 t('unauthenticated access to every /me route is refused');
 foreach (['/api/v1/me', '/api/v1/me/services', '/api/v1/me/sites',
-          '/api/v1/me/entitlements', '/api/v1/me/sites/' . $A['site']] as $p) {
+          '/api/v1/me/entitlements', '/api/v1/me/intents',
+          '/api/v1/me/sites/' . $A['site']] as $p) {
     is_($call('GET', $p)->status, 401, "{$p} requires a token");
 }
 

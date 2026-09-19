@@ -125,6 +125,69 @@ foreach ($src() as $f) {
 }
 is_($fromRequest, [], 'no source file reads a customer/tenant id from a request');
 
+t('F2 — an HTTP request cannot reach a router within one process');
+// The intent model as a code boundary rather than a convention: only Dn\Jobs
+// may reference the delivery port. If Dn\Http or Dn\Api could, someone could
+// call it from a request handler and the queue would be bypassed.
+$violations = [];
+foreach ($src() as $f) {
+    $rel = str_replace($root . '/src/', '', $f);
+    if (!preg_match('#^(Http|Api)/#', $rel)) { continue; }
+    $body = strip_php_comments(file_get_contents($f));
+    foreach (['DeliveryPort', 'Dn\\Delivery', 'NullDelivery', 'IntentWorker'] as $needle) {
+        if (str_contains($body, $needle)) { $violations[] = "{$rel} -> {$needle}"; }
+    }
+}
+is_($violations, [], 'no file in Http/ or Api/ references the delivery port or the worker');
+
+$jobs = glob($root . '/src/Jobs/*.php');
+is_(count($jobs) > 0, true, 'and there is a Jobs/ directory that does');
+$jobsUseDelivery = false;
+foreach ($jobs as $f) {
+    if (str_contains(file_get_contents($f), 'DeliveryPort')) { $jobsUseDelivery = true; }
+}
+is_($jobsUseDelivery, true, 'Jobs/ is where delivery is reached from');
+
+t('B1 — no server string asserts how or when queued work is delivered');
+// The same two-sided guard the V2 prototype carries. It is two-sided on
+// purpose: a one-sided check on a two-sided question missed six strings once.
+// B1 is unresolved (docs/49), so neither model may be implied.
+$POLL = '/\bchecks? in\b|\bcheck-?in\b|\bnext appears\b|\bwhen the router next\b'
+      . '|\bnext contacts\b|\bphones home\b|\bpolls?\b/i';
+$PUSH = '/\binstantly\b|\breal-?time control\b|\bimmediately sent\b'
+      . '|\bpushed to the router\b|\bsent immediately\b/i';
+//
+// Comments are scanned too — a comment asserting a delivery model would
+// mislead whoever implements against it. But a line that NAMES the two models
+// in order to forbid them is discussing the rule, not breaking it, so a line
+// citing the open question itself is exempt. Narrow enough not to be a
+// loophole: someone would have to write "B1" or "docs/49" on the same line.
+$discusses = '/\bB1\b|docs\/49/';
+$b1 = [];
+foreach (array_merge($src(), glob($root . '/migrations/*.sql')) as $f) {
+    foreach (explode("\n", file_get_contents($f)) as $n => $line) {
+        if (preg_match($discusses, $line)) { continue; }
+        if (preg_match($POLL, $line) || preg_match($PUSH, $line)) {
+            $b1[] = basename($f) . ':' . ($n + 1) . ' ' . trim(substr($line, 0, 60));
+        }
+    }
+}
+is_($b1, [], 'no push- or poll-implying language anywhere in the service');
+
+t('the test seeder knows about every customer-referencing table');
+// Otherwise adding a table in a later step produces a foreign-key violation
+// during teardown that looks like a product bug and is not one.
+$fkTables = array_column($owner->query(
+    "SELECT DISTINCT c.conrelid::regclass::text AS t
+       FROM pg_constraint c
+      WHERE c.contype = 'f'
+        AND c.confrelid = 'mt_customers'::regclass
+        AND c.conrelid <> 'mt_customers'::regclass"), 't');
+sort($fkTables);
+$known = seed_tables(); sort($known);
+is_(array_values(array_diff($fkTables, $known)), [],
+    'no customer-referencing table is missing from seed_tables()');
+
 t('F4 — no route pattern contains a customer or tenant id');
 // The strongest form of "the tenant is never an argument": there is no URL
 // shape that could carry one.

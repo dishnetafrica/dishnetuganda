@@ -6,9 +6,9 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 2 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
-the `/me` read surface and the response projection. No devices, vouchers, RADIUS or
-telemetry yet. See `docs/55` in the plugin repo for the plan.
+**Status: step 3 of 8.** Schema, tenancy, isolation, audit, idempotency, authentication,
+the `/me` read surface, the response projection, and the intent queue. No devices,
+vouchers, RADIUS or telemetry yet. See `docs/55` in the plugin repo for the plan.
 
 ---
 
@@ -36,7 +36,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**221 assertions across 8 suites**, including one that runs against a real `php -S` server.
+**282 assertions across 9 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -68,17 +68,20 @@ misconfigures this fails the suite rather than leaking silently.
 
 ```
 migrations/   001 roles · 002 identity · 003 commercial plane
-              004 audit · 005 idempotency · 006 RLS · 007 auth
+              004 audit · 005 idempotency · 006 RLS · 007 auth · 008 intents
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
 src/Auth/     Authenticator — credential to derived (principal, customer)
 src/Audit/    AuditLog — append-only, enforced by the database
 src/Http/     Request, Response, Router, Kernel, Idempotency
 src/Http/Serializer/  Projection — the allowlist for what leaves
+src/Intents/  IntentQueue, IntentState — the only path to a router
+src/Delivery/ DeliveryPort (interface), DeliveryResult, NullDelivery
+src/Jobs/     IntentWorker — the only caller of DeliveryPort
 src/Api/      Routes — auth + /me
 public/       index.php
-bin/          migrate.php
-tests/        run.sh + 8 suites
+bin/          migrate.php, worker.php
+tests/        run.sh + 9 suites
 ```
 
 ## Invariants the tests enforce
@@ -101,6 +104,29 @@ Each guard has been **negative-tested**: a violation is planted, the suite is co
 fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
 
 ---
+
+## Delivery is at-least-once, and nothing pretends otherwise
+
+A worker can die after sending a command but before recording that it sent it. That is
+indistinguishable from dying before sending, so the intent is retried and the command may
+arrive twice. Exactly-once delivery across a process boundary is not available; what is
+available is making the second arrival harmless. That is what the idempotency key is for,
+and it is why every operation delivered through the queue must be idempotent at the far
+end.
+
+The lease is what makes a crash recoverable: a worker claims a row for a bounded time, and
+if it dies the lease lapses and another worker picks the row up, still queued. Claims use
+`FOR UPDATE SKIP LOCKED`, so several workers never claim the same row and none blocks
+behind another — asserted with twenty intents and two racing workers.
+
+**Confirmation is a read, never the delivery call's own return value.** A router that
+accepts a command and does not apply it is a real failure mode, and trusting the write's
+success is how it goes unnoticed. There is a test in which delivery reports success and
+the read-back reports otherwise; the intent is not confirmed.
+
+The state machine is enforced by a trigger, not by application code. In code it is a
+convention, and one forgotten branch takes an intent from confirmed back to queued —
+reconfiguring a router for a request the customer was told had completed.
 
 ## Authentication, and the chicken-and-egg it solves
 
