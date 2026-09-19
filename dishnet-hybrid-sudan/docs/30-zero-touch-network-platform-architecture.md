@@ -194,6 +194,53 @@ The plugin gains **no new tables**. Its only change, eventually, is a
 read-only client of the network API for showing hotspot revenue on an
 invoice. That is Phase 4, and nothing before it touches the plugin.
 
+## Artifact 3b — The four layers, and why they must not merge
+
+**Added 19 September 2026 after the operator checked the RouterOS manual.**
+This separation was implicit in the sections below and is now explicit,
+because the failure mode of merging them is expensive and not obvious.
+
+| layer | technology | job | must not also do |
+|---|---|---|---|
+| **transport** | WireGuard | carry management traffic to a router with no public IP | authenticate subscribers |
+| **management** | RouterOS REST (`/rest`, over `www-ssl`) | read and write device configuration | enforce access |
+| **AAA** | FreeRADIUS | authenticate and account for subscribers | configure devices |
+| **enforcement** | RouterOS HotSpot | captive portal, gate the user's traffic | decide policy |
+| **control** | DishNet Control Plane | registry, provisioning, plans, vouchers, tenancy | any of the above directly |
+
+**CONFIRMED BY DOCUMENTATION** (capability, not syntax): RouterOS has native
+WireGuard; a REST API from 7.1beta4 exposed at `/rest` and requiring
+`www-ssl`; RADIUS for HotSpot and PPP/PPPoE with accounting, where RADIUS
+attributes override profile parameters; and HotSpot with remote RADIUS
+authentication and accounting.
+
+**Two consequences worth stating:**
+
+**DishNet builds no captive portal.** RouterOS HotSpot already is one, with
+remote RADIUS built in. The DishNet-branded login page is a *template served
+by HotSpot*, not an application. Anything beyond that is rebuilding a
+supported feature.
+
+**RouterOS REST becomes the management interface, not scripting.** Scripting
+and `/import` remain the **bootstrap and recovery** mechanism — they work
+before REST is configured and after a reset, which REST does not. So:
+
+```
+bootstrap / recovery  →  RouterOS scripting, /import, run-after-reset
+steady-state config   →  REST over the WireGuard tunnel
+```
+
+Keeping a hand-rolled scripting protocol for steady-state configuration
+would mean maintaining a private RPC against a moving target. The manual
+describes REST as a JSON wrapper over the same console API, so the
+capability is the same and the surface is far smaller.
+
+**Certificates.** REST needs `www-ssl`, which needs a certificate. Over the
+WireGuard tunnel the transport is already authenticated and encrypted, so a
+self-signed per-device certificate is sufficient and avoids a public PKI for
+every router. **REQUIRES VERIFICATION** that RouterOS will serve REST on a
+self-signed certificate without further configuration.
+
 ## Artifact 4 — MikroTik provisioning architecture (the core)
 
 ### 4.1 Why not a tunnel first
@@ -304,9 +351,54 @@ tenant. Artifact 7 covers the isolation test that must accompany this.
 
 **CoA and Disconnect.** `Disconnect-Request` on voucher revocation or account
 suspension; `CoA-Request` for a mid-session plan change. **REQUIRES
-VERIFICATION** per model — CoA support varies across RouterOS versions and
-the incoming port must be reachable *through the tunnel*, which is another
-reason the tunnel is not optional.
+VERIFICATION** per model. CoA is inherently server-initiated, so it has the
+same inbound-reachability problem as management — see §5.2, which is where
+that stops being a footnote.
+
+### 5.1 Does RADIUS go through the management tunnel?
+
+**This question was not asked in the first draft and it should have been.**
+It is an availability decision, not a security one.
+
+| | RADIUS through the WireGuard tunnel | RADIUS direct, over RadSec |
+|---|---|---|
+| confidentiality | WireGuard provides it | TLS provides it |
+| certificates | none needed per device | one per device |
+| **if the tunnel drops** | **hotspot logins stop** | hotspot keeps working |
+| complexity | low | moderate |
+
+The coupling in row three is the problem. A management tunnel outage is an
+inconvenience; a management tunnel outage that also stops every paying
+hotspot user from logging in, across every reseller, is an incident. The
+operator's own instruction — *the management tunnel should be separate from
+the customer's production traffic* — points the same way: subscriber
+authentication **is** production traffic.
+
+**PROPOSED:** through-tunnel for Phase 0, because it is simplest and proves
+the chain. But the RADIUS layer is built so that a device's AAA transport is
+a **per-device setting**, not an assumption baked into the provisioning
+templates. Moving to RadSec later must not require re-staging the fleet.
+
+### 5.2 RadSec may solve the CGNAT inbound problem for CoA
+
+**CONFIRMED BY DOCUMENTATION:** RouterOS supports `protocol=radsec` with
+certificates, alongside conventional UDP RADIUS.
+
+**REQUIRES VERIFICATION, and it is worth verifying early.** RadSec is RADIUS
+over TLS on TCP, and the connection is opened *by the NAS* — outbound. If
+RouterOS accepts CoA and Disconnect **back down that existing connection**,
+then CoA works through CGNAT with no inbound reachability at all, and no
+dependence on the WireGuard idle-reach behaviour that Test B1 measures.
+
+That matters because of what otherwise happens if B1 fails: management goes
+poll-based, and **voucher revocation and mid-session plan changes go with
+it**, since both are server-initiated. A reseller revoking a voucher would
+wait for the next poll. If RadSec carries CoA down the NAS-initiated
+connection, revocation stays immediate even in the poll-based world.
+
+**PROPOSED:** not a Phase 0 blocker, per the operator. But add one check to
+Phase 0 — see docs/31 §2.1 — because a positive result de-risks the entire
+B1-fails branch, and it costs one test.
 
 ## Artifact 6 — Zero-touch pairing and device identity
 

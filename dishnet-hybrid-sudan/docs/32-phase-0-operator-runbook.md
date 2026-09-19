@@ -70,6 +70,18 @@ or **ERROR** (prints something else — record it verbatim).
 | 18 | `/tool/fetch` (with no args, read the error) | backend check-in | |
 | 19 | `/file/print` | rollback file storage | |
 | 20 | `/system/clock/print` | timestamps, cert validity | |
+| 21 | `/system/default-configuration/print` | **Test E4** — manual says it exists | |
+| 22 | `/ip/service/print` shows `www-ssl` | **REST** — manual: `/rest` needs it | |
+
+**Manual vs device.** The RouterOS documentation was checked on 19 September
+2026 and confirms WireGuard, REST at `/rest` (7.1beta4+, via `www-ssl`),
+RADIUS for HotSpot with accounting, RADIUS attributes overriding profile
+parameters, HotSpot with remote RADIUS, `protocol=radsec`,
+`run-after-reset`, and `/system default-configuration`. **That confirms the
+capabilities exist. It does not confirm the syntax below, on your version,
+on your hardware.** The manual is the authority for *what is possible*; this
+unit is the authority for *what you will type*. Step 0 does not become
+optional because a feature is documented.
 
 **If #5 is MISSING**, the WireGuard package is absent or the version is v6.
 Stop, resolve, and restart Step 0. Nothing in this protocol works without it.
@@ -97,6 +109,35 @@ form.
 arguments most likely to differ, and `persistent-keepalive` is the one the
 entire push-vs-poll question rests on. If it is not accepted under that name,
 find what it is called and **write it into this file before continuing.**
+
+### 0.2b REST over the tunnel — the management interface
+
+Per docs/30 §3b, REST is the steady-state management interface and scripting
+is the bootstrap/recovery one. Validate REST now, because everything in A8
+depends on it.
+
+```
+/certificate/add name=dn-rest common-name=<router identity>
+/certificate/sign dn-rest
+/ip/service/set www-ssl certificate=dn-rest disabled=no
+/ip/service/set www-ssl address=10.66.0.0/16        # tunnel only, never WAN
+```
+
+Then from the gateway, over the tunnel:
+
+```
+curl -sk -u <user>:<pass> https://10.66.x.y/rest/system/resource
+```
+
+| check | result |
+|---|---|
+| `www-ssl` accepts a self-signed certificate | |
+| `/rest` returns JSON | |
+| `/ip/service/set www-ssl address=` restricts it to the tunnel | |
+| REST is **NOT** reachable from the WAN | |
+
+**The last row is a security gate, not a curiosity.** Confirm it from a host
+outside the tunnel before any unit ships.
 
 ### 0.3 Key generation — confirm the private key never leaves
 
@@ -498,6 +539,7 @@ before **any** of docs/30 Phases 2–4 begins:
 [ ] 4. D1 reverts, D3 does not misfire
 [ ] 5. E1–E3 documented, E4 answered, RMA path written if negative
 [ ] 6. Voucher lifecycle A10–A14 works, including automatic expiry
+[ ] 7. REST reachable ON the tunnel and NOT from the WAN (Step 0.2b)
 ```
 
 **Failing this gate is a cheap, successful outcome.** Four routers and a week

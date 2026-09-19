@@ -141,10 +141,18 @@ time is part of the staging cost per unit.
 
 Do not assume any of these. Confirm each, and record the command output.
 
+**Documentation status, checked 19 September 2026.** The RouterOS manual
+confirms each capability below *exists*. It does not confirm the syntax on
+your unit, and it is not the authority for procedure — the device is. Marked
+**[doc]** where the manual confirms the capability.
+
 | capability | how to confirm |
 |---|---|
-| WireGuard present | `/interface/wireguard/print` does not error |
-| REST API | `/ip/service/print` shows `www-ssl`; a `GET /rest/system/resource` succeeds |
+| WireGuard present **[doc]** | `/interface/wireguard/print` does not error |
+| REST API **[doc]** — 7.1beta4+, served at `/rest`, needs `www-ssl` | `/ip/service/print` shows `www-ssl`; enable it with a certificate; `GET https://<router>/rest/system/resource` returns JSON |
+| REST on a **self-signed** certificate | generate one, bind `www-ssl`, call `/rest` over the tunnel. If it refuses, per-device PKI becomes a fleet cost |
+| **RadSec** `protocol=radsec` **[doc]** | `/radius/add protocol=radsec ...` is accepted. **See E6 — worth one extra test** |
+| `/system default-configuration` **[doc]** | `/system/default-configuration/print` — feeds E4 |
 | certificate support | `/certificate/print` and a self-signed generate |
 | scripting + scheduler | `/system/scheduler/print`, `/system/script/print` |
 | HotSpot | `/ip/hotspot/print` |
@@ -341,7 +349,18 @@ customer-owned device — the path explicitly deferred to a later phase.
 | E1 | Soft reset `/system/reset-configuration` | is staging gone? |
 | E2 | Hard reset (button held at boot) | is staging gone? |
 | E3 | Reset with `run-after-reset=staged.rsc`, file present | does it restore itself? |
-| E4 | Investigate whether a **custom default configuration** can survive a hard reset (`/system/default-configuration`, or a defconf package) | **REQUIRES VERIFICATION** — if yes, this is the single highest-value finding in Phase 0 |
+| E4 | Investigate whether a **custom default configuration** can survive a hard reset. The manual confirms `/system/default-configuration/print` exists and that devices hold an internally stored default configuration, and that factory reset loads it **[doc]** | **REQUIRES VERIFICATION** — the manual confirms the mechanism exists, not that DishNet's configuration can become it. Highest-value unknown in Phase 0 |
+| E5 | If E4 is negative: can `run-after-reset=staged.rsc` be made the standard recovery instruction given to a customer by phone? | a support path that does not need an RMA |
+| **E6** | **RadSec CoA.** Configure `protocol=radsec`, establish it from the router, then send a Disconnect **from the server** over the existing NAS-initiated TLS connection | **does revocation work without inbound reachability?** |
+
+**Why E6 is worth the extra hour.** CoA and Disconnect are server-initiated,
+so they have the same inbound problem as management. If Test B1's idle-reach
+fails, management goes poll-based — and voucher revocation goes with it,
+because a reseller revoking a code would wait for the next poll. RadSec is
+RADIUS over TLS on a connection the router opens outbound; if RouterOS
+accepts CoA back down that connection, revocation stays immediate even in
+the poll-based world. A positive result here de-risks the whole B1-fails
+branch. See docs/30 §5.2.
 
 **Why E4 matters more than it looks.** If staging can be made to survive a
 factory reset, then a reset router re-joins DishNet by itself, the support
