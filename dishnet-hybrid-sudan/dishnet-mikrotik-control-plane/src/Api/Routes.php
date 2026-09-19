@@ -258,6 +258,20 @@ final class Routes
                 return Response::accepted(['intent_id' => $intent['id']]);
             });
 
+        // ── uplink: measured, shown, never acted on ─────────────────────
+        $r->get('/api/v1/me/uplink', function (Request $req, Database $db) {
+            $repo = new \Dn\Telemetry\UplinkRepository($db);
+            // Stored samples, never a live read: a slow or unreachable router
+            // must make this page stale, not make it hang.
+            return Response::ok([
+                'uplink' => $repo->summary(),
+                // Absolute figures only. A percentage would need a denominator
+                // DishNet does not own — and with Starlink, one that varies by
+                // the minute. See the README.
+                'note'   => 'observed throughput on your own connection',
+            ]);
+        });
+
         $r->get('/api/v1/me/intents', function (Request $req, Database $db) {
             $rows = (new \Dn\Intents\IntentQueue($db))->forCustomer();
             // Deliberately says nothing about when queued work reaches a

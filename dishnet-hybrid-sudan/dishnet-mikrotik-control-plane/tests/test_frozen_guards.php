@@ -161,6 +161,40 @@ $client = file_get_contents($root . '/src/Delivery/RouterOs/RestClient.php');
 is_(str_contains($client, 'CURLOPT_SSL_VERIFYPEER'), true, 'the client sets peer verification explicitly');
 is_(str_contains($client, 'isTunnelHost'), true, 'and constrains the host before it does');
 
+t('F13 — telemetry cannot reach anything that decides');
+// The structural half of the saturation proof in test_telemetry.php. A
+// decision-making module that could see the samples is one refactor away
+// from using them.
+$leak = [];
+foreach ($src() as $f) {
+    $rel = str_replace($root . '/src/', '', $f);
+    if (!preg_match('#^(Policy|Vouchers|Intents|Delivery|Auth|Sessions)/#', $rel)) { continue; }
+    $body = strip_php_comments(file_get_contents($f));
+    foreach (['UplinkRepository', 'mt_uplink_samples', 'Dn\\Telemetry', 'uplink'] as $n) {
+        if (stripos($body, $n) !== false) { $leak[] = "{$rel} -> {$n}"; }
+    }
+}
+is_($leak, [], 'no decision-making module references uplink telemetry');
+
+// And the reverse: telemetry must not import a decision-maker either.
+$tele = [];
+foreach (glob($root . '/src/Telemetry/*.php') as $f) {
+    $body = strip_php_comments(file_get_contents($f));
+    foreach (['PlanValidator', 'VoucherService', 'IntentQueue', 'DeliveryPort'] as $n) {
+        if (str_contains($body, $n)) { $tele[] = basename($f) . " -> {$n}"; }
+    }
+}
+is_($tele, [], 'telemetry imports nothing that could act on it');
+
+t('F13 — no percentage or capacity is invented from a denominator we do not own');
+// A "% utilised" needs a link capacity DishNet does not sell and, with
+// Starlink, one that varies minute to minute. Printing it would be an
+// invention that reads like a limit.
+$tel = file_get_contents($root . '/src/Telemetry/UplinkRepository.php');
+foreach (['utilisation', 'utilization', 'percent_used', 'capacity_bps'] as $w) {
+    is_(stripos($tel, $w) === false, true, "the repository computes no {$w}");
+}
+
 t('F9 — no source file refuses anything on commercial grounds');
 // If a ceiling creeps back, it announces itself in the wording first.
 $wording = [];
@@ -190,24 +224,50 @@ is_($bad, [], 'no RouterOS or RADIUS bandwidth-enforcement artefact appears in t
 
 // ---------------------------------------------------------------------------
 t('F1 — Domain B references no Domain A artefact');
+//
+// ARTEFACTS, not the brand name. The bare word "Starlink" was on this list
+// until the product model changed: docs/50 established that the customer's
+// UPLINK may be Starlink, and that it is theirs and DishNet does not ration
+// it. So the word now appears legitimately in Domain B — describing a
+// customer's own connection — while naming a Domain A TABLE, PLUGIN or
+// ENDPOINT is still a violation. A guard that cannot tell those apart would
+// force the code to stop explaining the very boundary it is keeping.
+$artefacts = [
+    'hotspot_paid_access',        // docs/41 §4.1, the named prohibition
+    'dr_wifi_', 'dr_accounts', 'wifi_router_map',
+    'dishnet-starlink-finance', 'dishnet-data-report',
+    'StarlinkSessionStore', 'ucrm.db', 'SiblingPlugin',
+];
 $leaks = [];
 foreach ($src() as $f) {
     $b = file_get_contents($f);
-    foreach (['hotspot_paid_access','dr_wifi_','dr_accounts','starlink','ucrm.db',
-              'dishnet-starlink-finance','dishnet-data-report'] as $needle) {
+    foreach ($artefacts as $needle) {
         if (stripos($b, $needle) !== false) { $leaks[] = basename($f) . " -> {$needle}"; }
     }
 }
-is_($leaks, [], 'no Domain A table, plugin or endpoint named anywhere in src/');
+is_($leaks, [], 'no Domain A table, plugin, store or file named anywhere in src/');
 
 $sqlLeaks = [];
 foreach (glob($root . '/migrations/*.sql') as $f) {
     $b = file_get_contents($f);
-    foreach (['hotspot_paid_access','dr_wifi_','starlink'] as $needle) {
+    foreach ($artefacts as $needle) {
         if (stripos($b, $needle) !== false) { $sqlLeaks[] = basename($f) . " -> {$needle}"; }
     }
 }
 is_($sqlLeaks, [], 'no Domain A artefact named in any migration');
+
+// The separation itself is asserted where it actually lives: a different
+// database, reached by a different connection string. Naming is a courtesy;
+// this is the boundary.
+is_(str_contains(getenv('DNB_DSN') ?: '', 'dbname=dnb'), true,
+    'Domain B runs against its own database, not the plugin\'s SQLite');
+$sqliteUse = [];
+foreach ($src() as $f) {
+    if (preg_match('/sqlite|\.db[\'"]/i', strip_php_comments(file_get_contents($f)))) {
+        $sqliteUse[] = basename($f);
+    }
+}
+is_($sqliteUse, [], 'nothing in Domain B opens a SQLite database');
 
 t('F1 — every table created carries the mt_ boundary prefix');
 $tables = array_column($owner->query(

@@ -6,7 +6,7 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
-**Status: step 7 of 8**, with its hardware half **unmet** — see below. Schema, tenancy,
+**Status: steps 1–8 built**, with step 7's hardware half **unmet** — see below. Schema, tenancy,
 isolation, audit, idempotency, authentication, the `/me` surface, the response projection,
 the intent queue, the policy plane, vouchers, session accounting, and the device plane with
 a RouterOS REST client. No telemetry yet. See `docs/55` in the plugin repo for the plan.
@@ -64,7 +64,7 @@ Requires PostgreSQL 13+ (`gen_random_uuid()`) and PHP 8.1+ with `pdo_pgsql`.
 It creates a throwaway database, migrates it and runs every suite. Override with
 `DNB_PGHOST`, `DNB_PGPORT`, `DNB_OWNER_USER`, `DNB_TEST_DB`.
 
-**488 assertions across 13 suites**, including one that runs against a real `php -S` server.
+**539 assertions across 14 suites**, including one that runs against a real `php -S` server.
 
 ---
 
@@ -98,7 +98,7 @@ misconfigures this fails the suite rather than leaking silently.
 migrations/   001 roles · 002 identity · 003 commercial plane
               004 audit · 005 idempotency · 006 RLS · 007 auth · 008 intents
               009 policy · 010 vouchers · 011 sessions
-              012 devices · 013 device admin
+              012 devices · 013 device admin · 014 telemetry
 src/Db/       Database (two roles), Migrator
 src/Tenancy/  TenantContext — the only way to reach customer data
 src/Auth/     Authenticator — credential to derived (principal, customer)
@@ -112,13 +112,15 @@ src/Sessions/ AccountingIngest, SessionService
 src/Crypto/   SecretBox — AEAD for secrets at rest
 src/Devices/  DeviceRegistry — lifecycle, desired vs actual
 src/Delivery/RouterOs/  RestClient — tunnel-only REST
+src/Telemetry/ UplinkRepository — observation only
+src/Jobs/     IntentWorker, UplinkSampler
 src/Intents/  IntentQueue, IntentState — the only path to a router
 src/Delivery/ DeliveryPort (interface), DeliveryResult, NullDelivery
 src/Jobs/     IntentWorker — the only caller of DeliveryPort
 src/Api/      Routes — auth + /me
 public/       index.php
 bin/          migrate.php, worker.php
-tests/        run.sh + 13 suites
+tests/        run.sh + 14 suites
 tools/        chr_harness.sh — the real check, NOT RUN
 ```
 
@@ -142,6 +144,30 @@ Each guard has been **negative-tested**: a violation is planted, the suite is co
 fail, and the plant removed. A guard nobody has watched fail is a guard nobody knows works.
 
 ---
+
+## Telemetry measures and informs. It cannot gate.
+
+F13 is proved behaviourally, not only argued. A structural claim — *no code reads the
+samples to decide anything* — is an argument. The suite instead pins the readings at a link
+flat on its back and shows every customer operation still succeeding **identically**: the
+same plan created at the same rate and price, the same vouchers issued, the same guest
+redeeming. It then creates a **100 Mbps plan while the link reads saturated**, which is the
+case a throttling design would refuse outright.
+
+Two structural guards back it: nothing in Policy, Vouchers, Intents, Delivery, Auth or
+Sessions may reference telemetry, and telemetry may reference none of them.
+
+### Utilisation is not reported, on purpose
+
+A "% utilised" needs a denominator. DishNet does not own the customer's link capacity, and
+with Starlink there is not even a fixed number to own — the available rate varies minute to
+minute. So the customer is shown observed throughput and peak observed, and nothing else.
+Printing a percentage against a number nobody measured would be an invention, and an
+invention that reads like a limit.
+
+An unreachable router records **nothing, not a zero**: no measurement and zero throughput
+are different facts, and conflating them would draw a graph showing an idle link when what
+actually happened is that DishNet could not see it.
 
 ## Router credentials, and the tunnel-only rule
 
