@@ -32,7 +32,8 @@ CREATE TABLE pf_vouchers (
   state       text NOT NULL DEFAULT 'unused' CHECK (state IN ('unused','active','expired','revoked')),
   duration_s  integer NOT NULL,
   activated_at timestamptz,
-  expires_at   timestamptz);
+  expires_at   timestamptz,
+  revoked_at   timestamptz);
 
 -- Mirrors production: the AAA row is written at ISSUE, not at redemption.
 CREATE TABLE pf_hotspot_users (voucher_id uuid PRIMARY KEY REFERENCES pf_vouchers(id),
