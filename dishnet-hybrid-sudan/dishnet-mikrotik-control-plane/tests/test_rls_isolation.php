@@ -17,7 +17,7 @@ require __DIR__ . '/bootstrap.php';
 use Dn\Db\Database;
 use Dn\Tenancy\TenantContext;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids   = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 
@@ -39,17 +39,76 @@ is_($r['rolbypassrls'], false, 'dnb_app does not have BYPASSRLS');
 $who = $ctx->run($A['customer'], fn($db) => $db->one('SELECT current_user AS u')['u']);
 is_($who, 'dnb_app', 'requests actually run as dnb_app, not the owner');
 
-t('every customer-scoped table has RLS enabled AND forced');
-foreach (array_merge(['mt_customers','mt_auth_sessions','mt_audit_log','mt_idempotency'],
-                     array_keys($SCOPED)) as $tbl) {
-    $c = $owner->one('SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = ?', [$tbl]);
-    if ($c['relrowsecurity'] === true && $c['relforcerowsecurity'] === true) {
-        ok("{$tbl}: RLS enabled and forced");
-    } else {
-        bad("{$tbl}: rowsecurity=" . var_export($c['relrowsecurity'], true)
-            . " force=" . var_export($c['relforcerowsecurity'], true));
-    }
+t('every customer-scoped table is protected — enumerated FROM THE CATALOGUE');
+// Audit finding F4. The version of this test that carried the same title
+// iterated a hand-written list of EIGHT tables while nineteen carry a
+// customer. Every one of the nineteen was correct, so nothing was broken and
+// nothing would have gone red if it had been. The list is gone; the schema
+// decides what is in scope.
+$scoped = customer_scoped_tables($owner);
+is_(count($scoped), 19, 'nineteen customer-scoped tables are in scope, not eight');
+is_(array_keys($scoped), [
+    'mt_audit_log', 'mt_auth_codes', 'mt_auth_sessions', 'mt_customers',
+    'mt_device_config', 'mt_device_secrets', 'mt_devices', 'mt_entitlements',
+    'mt_hotspot_users', 'mt_idempotency', 'mt_intents', 'mt_plans',
+    'mt_principals', 'mt_services', 'mt_sessions', 'mt_sites',
+    'mt_uplink_samples', 'mt_voucher_batches', 'mt_vouchers',
+], 'and they are exactly these — a new one changes this list on purpose');
+is_($scoped['mt_customers'], 'id', 'mt_customers is keyed by its own id, not customer_id');
+
+is_(rls_violations($owner), [],
+    'no table has RLS off, FORCE off, a missing policy, or a one-sided policy');
+
+foreach (rls_policy_exemptions() as $tbl => $why) {
+    $c = $owner->one('SELECT relrowsecurity AS r, relforcerowsecurity AS f
+                          FROM pg_class WHERE relname = ?', [$tbl]);
+    is_([$c['r'], $c['f']], [true, true],
+        "{$tbl} is exempt from the tenant policy ({$why}) but still has RLS forced");
+    is_((int) $owner->one('SELECT count(*) AS n FROM information_schema.role_table_grants
+                              WHERE table_name = ? AND grantee IN (?,?,?)',
+                            [$tbl, 'dnb_app', 'dnb_worker', 'dnb_admin'])['n'] >= 0, true,
+        "  and its protection — grants, not policies — is recorded in rls_policy_exemptions()");
 }
+
+t('F4 NEGATIVE — the guard actually fails when a table is left unprotected');
+// A guard nobody has watched fail is a guard nobody knows works. This plants
+// exactly the mistake a future migration would make and proves it is caught.
+$owner->pdo()->exec('CREATE TABLE mt_guard_probe (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                                                    customer_id uuid)');
+try {
+    is_(array_key_exists('mt_guard_probe', customer_scoped_tables($owner)), true,
+        'a new table with a customer_id is picked up with no list to edit');
+    $v = rls_violations($owner);
+    is_(count(array_filter($v, fn($m) => str_contains($m, 'mt_guard_probe: RLS is not enabled'))), 1,
+        'and reported: RLS is not enabled');
+    is_(count(array_filter($v, fn($m) => str_contains($m, 'not FORCED'))), 1,
+        'and reported: RLS is not forced');
+
+    // Half-fixed is still broken: enabling RLS without a policy must still fail.
+    $owner->pdo()->exec('ALTER TABLE mt_guard_probe ENABLE ROW LEVEL SECURITY');
+    $owner->pdo()->exec('ALTER TABLE mt_guard_probe FORCE ROW LEVEL SECURITY');
+    $v = rls_violations($owner);
+    is_(count(array_filter($v, fn($m) => str_contains($m, 'no all-roles isolation policy'))), 1,
+        'RLS on but no policy is still reported');
+
+    // A USING-only policy permits a write it would not permit a read of.
+    $owner->pdo()->exec('CREATE POLICY p ON mt_guard_probe FOR ALL
+                             USING (customer_id = mt_current_customer())');
+    $v = rls_violations($owner);
+    is_(count(array_filter($v, fn($m) => str_contains($m, 'no WITH CHECK'))), 1,
+        'a one-sided policy is reported — the half that lets a row be planted');
+
+    $owner->pdo()->exec('DROP POLICY p ON mt_guard_probe');
+    $owner->pdo()->exec('CREATE POLICY p ON mt_guard_probe FOR ALL
+                             USING (customer_id = mt_current_customer())
+                             WITH CHECK (customer_id = mt_current_customer())');
+    is_(count(array_filter(rls_violations($owner),
+        fn($m) => str_contains($m, 'mt_guard_probe'))), 0,
+        'and once it is genuinely protected, the guard is satisfied');
+} finally {
+    $owner->pdo()->exec('DROP TABLE mt_guard_probe');
+}
+is_(rls_violations($owner), [], 'the schema is back to clean after the probe');
 
 // ---------------------------------------------------------------------------
 t('READ — A supplying B\'s id gets nothing');

@@ -412,3 +412,323 @@ is the correct reason to have done this now.
 **Recommendation: remediate F1, F2 and F4 before any HTTP surface is built.** F2 in particular
 should be settled first, because its answer changes what "run as the owner" means for every other
 finding in this report.
+
+---
+
+# 13. F2 remediation design — removing the superuser-owner dependency
+
+Written before any code changed, per the remediation brief. §§1–12 above are left as the audit
+found them.
+
+## 13.1 The finding is worse than §4 F2 stated
+
+F2 reported that two operations fail under a non-superuser owner. Measuring all twenty SECURITY
+DEFINER functions showed that is the minority case. **Three fail loudly; the rest silently do
+nothing and return a success-shaped answer.**
+
+Verified by performing each operation and then checking the side effect as a superuser:
+
+| Function | Reported to the caller | Actually happened |
+|---|---|---|
+| `mt_auth_issue_code` | **ERROR** (RLS, `mt_auth_codes`) | nothing |
+| `mt_auth_create_session` | **ERROR** (RLS, `mt_auth_sessions`) | nothing |
+| `mt_device_register` | **ERROR** (RLS, `mt_devices`) | nothing |
+| `mt_auth_verify_code` | "no such code" | nothing — it can never see a code |
+| `mt_voucher_redeem` | no rows (i.e. "already used or unknown") | voucher still `unused` |
+| `mt_session_account` | `NULL` (i.e. "unknown username") | no session row written |
+| `mt_intent_claim` | `0 intents` | nothing claimed — **the queue stops forever** |
+| `mt_uplink_record` | `false` | no sample written |
+| `mt_device_assign` | returns a row shape | device unchanged |
+| `mt_device_set_secret` | `false` | no credential stored |
+| `mt_device_set_wan` | returns a row shape | `wan_interface` still NULL |
+
+Every one of those "answers" is indistinguishable, to the caller, from a legitimate negative
+result. A deployment with a correctly hardened, non-superuser owner would come up, serve traffic,
+accept logins that never succeed, take RADIUS packets it silently discards, and run a worker that
+reports an empty queue forever. Nothing would appear in an error log.
+
+This is the same species as the rest of this audit: **the control is correct about what it
+checks, and silent about what it does not.** Here the silence is the whole failure mode.
+
+## 13.2 Which functions require owner-level bypass, and exactly why
+
+Every DEFINER function does something a tenant context cannot express — it runs before a tenant
+exists, across tenants, or above them. That is *why* it is `SECURITY DEFINER`. The defect is not
+that they bypass RLS; it is that they bypass it **by being owned by a superuser**, which is an
+undeclared, unbounded, unauditable grant.
+
+| Function | Tables and commands it needs | Why a tenant context cannot serve |
+|---|---|---|
+| `mt_auth_issue_code` | `mt_auth_codes` S,I · `mt_principals` S | pre-authentication: no tenant is known yet |
+| `mt_auth_verify_code` | `mt_auth_codes` S,U | same |
+| `mt_auth_create_session` | `mt_auth_sessions` I · `mt_principals` U | the session is what establishes the tenant |
+| `mt_auth_resolve_token` | `mt_auth_sessions` S · `mt_principals` S | resolves the tenant; cannot presuppose it |
+| `mt_auth_revoke_token` | `mt_auth_sessions` U | may run without a context (logout everywhere) |
+| `mt_voucher_redeem` | `mt_vouchers` S,U | network-side: a guest at a portal has no tenant |
+| `mt_session_account` | `mt_hotspot_users` S · `mt_sessions` S,I,U | RADIUS: the NAS has no tenant; it is derived |
+| `mt_intent_claim` | `mt_intents` S,U | cross-customer by design (one worker, whole fleet) |
+| `mt_intent_expire_overdue` | `mt_intents` U | same |
+| `mt_sessions_reap` | `mt_sessions` U | same |
+| `mt_uplink_prune` | `mt_uplink_samples` D | same |
+| `mt_uplink_record` | `mt_devices` S · `mt_uplink_samples` I | same |
+| `mt_devices_samplable` | `mt_devices` S | same |
+| `mt_device_register` | `mt_devices` I | unassigned stock belongs to no customer |
+| `mt_device_assign` | `mt_devices` U · `mt_device_secrets` U · `mt_device_config` U | moves a device *between* tenants |
+| `mt_device_set_state` | `mt_devices` U | may act on unassigned stock |
+| `mt_device_set_secret` | `mt_devices` S · `mt_device_secrets` I | staging precedes assignment |
+| `mt_device_set_desired` | `mt_devices` S · `mt_device_config` I | same |
+| `mt_device_set_wan` | `mt_devices` U | same |
+| *(new)* `mt_customer_create` | `mt_customers` I | **a customer cannot be its own tenant context before it exists** |
+
+## 13.3 The two policy causes
+
+**`mt_auth_codes`: RLS enabled and FORCED with zero policies.** Forced RLS binds the owner too, so
+with no policy the table is readable and writable by nobody at all. It works today only because a
+superuser ignores RLS entirely. This is not tenant isolation — it is deny-all plus an undocumented
+bypass. It also could never *be* tenant isolation: an OTP is issued before anyone is authenticated,
+so there is no `mt_current_customer()` to compare against. The real requirement for this table is
+**secrecy of `code_hash` from every application role**, which table grants already provide (no
+application role holds any privilege on it).
+
+**`mt_customers`: policy `id = mt_current_customer()`.** A customer that does not exist yet cannot
+be the current customer, so no context satisfies the `WITH CHECK` for an INSERT. There is no
+bootstrap path, and none should be created by weakening this policy — the policy is correct for
+every other operation on the table.
+
+## 13.4 The least-privilege alternative
+
+Four **function-owner roles**, `NOLOGIN`, `NOSUPERUSER`, `NOBYPASSRLS`, member of nothing, owning
+no tables — they exist only to be the `SECURITY DEFINER` identity of one trust context each:
+
+| Role | Owns | Trust context |
+|---|---|---|
+| `dnb_def_auth` | the 5 `mt_auth_*` functions | pre-authentication |
+| `dnb_def_net` | `mt_voucher_redeem`, `mt_session_account` | network-side entry points (portal, RADIUS) |
+| `dnb_def_work` | the 6 worker primitives | cross-customer background work |
+| `dnb_def_prov` | the 6 device primitives + `mt_customer_create` | provisioning and onboarding |
+
+Each is granted table privileges **and RLS policies** for exactly the tables and commands in the
+matrix of §13.2, and nothing else. Because these roles do not own the tables, ordinary RLS applies
+to them, so every bypass they enjoy is an explicit row in `pg_policy` naming the role, the table
+and the command. The privilege becomes **declared, bounded and auditable** instead of implicit in
+a role attribute.
+
+What this buys, concretely: `dnb_def_auth` cannot read a device secret; `dnb_def_prov` cannot read
+a session; `dnb_def_net` cannot touch `mt_devices`. Under the present design all twenty functions
+could do anything at all, because they all ran as a superuser.
+
+The table **owner** (`dnb`) keeps DDL and nothing else. It remains subject to FORCE RLS on every
+tenant table, so a migration script or an operator connecting as the owner still cannot read
+customer data — which is what docs/57 §11.4 already claimed and could not deliver.
+
+## 13.5 `mt_customer_create` — the trusted bootstrap path
+
+```
+mt_customer_create(p_name text, p_created_by text) RETURNS mt_customers
+  SECURITY DEFINER, owner dnb_def_prov, EXECUTE granted to dnb_admin only
+```
+
+Requires a non-empty `p_created_by` for the same reason `mt_device_set_wan` does: an onboarding
+with no recorded author is not an administrative act, it is an anonymous write. `mt_customers`
+gains one additional policy — `FOR INSERT TO dnb_def_prov WITH CHECK (true)` — which is INSERT
+only. The existing `FOR ALL` isolation policy continues to govern SELECT, UPDATE and DELETE, so
+this role can create a customer and still cannot read one.
+
+## 13.6 What this design does not do
+
+- It does not remove `FORCE` from any table, and does not weaken any existing policy. Both would
+  achieve "works without superuser" by making the owner bypass RLS implicitly — the same defect
+  wearing different clothes.
+- It does not give any role `BYPASSRLS`.
+- It does not address F1, F3, F5–F8. F1 is the next gate and is deliberately separate.
+- It changes the test harness, which currently seeds fixtures by inserting directly as the owner.
+  Under a non-superuser owner those inserts silently write nothing, so fixtures must be built
+  through the same trusted paths the application uses (`mt_customer_create`, then a tenant
+  context). Teardown moves to `TRUNCATE`, which is not subject to RLS and is the owner's to
+  perform. **This is not incidental churn: a suite that seeds by bypassing RLS cannot prove that
+  the paths which do not bypass it work.**
+
+---
+
+# 14. Remediation outcome (F2, F1, F4)
+
+§§1–12 are the audit as found; §13 is the design written before code changed. This section
+records what was done. F3, F5, F6, F7 and F8 are untouched and remain open (§14.8).
+
+## 14.1 F2 — before and after
+
+| | Before (`01acb1a`) | After |
+|---|---|---|
+| Database owner | **superuser required** | `dnb`: `NOSUPERUSER`, `NOBYPASSRLS` |
+| What a DEFINER function runs as | the owner, i.e. a superuser | one of four role-scoped identities |
+| Functions able to reach any table | **all 20** | none — each is limited to its own trust context |
+| Owner reading tenant data | everything | **nothing** — subject to FORCE RLS |
+| Customer creation | superuser, by hand | `mt_customer_create()`, admin-only |
+| Behaviour without superuser | 3 loud failures, **11 silent no-ops** | works |
+
+Final role state, read from `pg_roles` after a clean build — every role, without exception:
+
+```
+dnb          super=false bypassrls=false      dnb_def_auth super=false bypassrls=false
+dnb_app      super=false bypassrls=false      dnb_def_net  super=false bypassrls=false
+dnb_worker   super=false bypassrls=false      dnb_def_work super=false bypassrls=false
+dnb_admin    super=false bypassrls=false      dnb_def_prov super=false bypassrls=false
+dnb_radius   super=false bypassrls=false
+```
+
+None is a member of another; `dnb_app` cannot `SET ROLE` to `dnb_worker`, `dnb_def_auth` or
+`dnb_def_prov`. The four definer roles are `NOLOGIN` and hold no `CREATE` on any schema, so
+none can mint itself a new entry point — asserted by execution, not by reading the grant.
+
+## 14.2 SECURITY DEFINER privilege requirements, as implemented
+
+Each definer role holds table privileges **and** matching RLS policies for exactly the commands
+its functions issue, and `tests/test_definer_roles.php` compares the live policy set against this
+table, so widening one requires editing a list on purpose:
+
+| Role | Owns | Privileges |
+|---|---|---|
+| `dnb_def_auth` | 5 `mt_auth_*` | `mt_auth_codes` S,I,U · `mt_principals` S,U · `mt_auth_sessions` S,I,U |
+| `dnb_def_net` | `mt_voucher_redeem`, `mt_session_account` | `mt_vouchers` S,U · `mt_hotspot_users` S · `mt_sessions` S,I,U |
+| `dnb_def_work` | 6 worker primitives | `mt_intents` S,U · `mt_sessions` S,U · `mt_uplink_samples` S,I,D · `mt_devices` S |
+| `dnb_def_prov` | 6 device primitives + `mt_customer_create` | `mt_devices` S,I,U · `mt_device_secrets` S,I,U · `mt_device_config` S,I,U · `mt_customers` **I only** |
+
+Proven by execution: `dnb_def_auth` holds no `SELECT` on `mt_device_secrets` or `mt_sessions`;
+`dnb_def_prov` none on `mt_sessions` or `mt_auth_codes`; `dnb_def_net` none on `mt_devices`;
+`dnb_def_work` none on `mt_auth_codes` or `mt_device_secrets`. Under the previous design every
+one of those questions had the same answer — yes — because all twenty functions were superuser.
+
+`mt_customers` gained one INSERT-only policy for `dnb_def_prov`. The existing `FOR ALL` isolation
+policy still governs SELECT, UPDATE and DELETE, so that role can create a customer and cannot
+read one. `mt_customer_create` returns a **uuid it generates**, not the row: `INSERT … RETURNING`
+would have required SELECT on `mt_customers`, i.e. the ability to read every customer in the
+fleet in order to create one.
+
+## 14.3 Authentication path proof
+
+Every assertion is a **side effect**, because checking that a call did not raise would have passed
+against the broken system:
+
+| Step | Asserted |
+|---|---|
+| `mt_auth_issue_code` | returns an id **and a row exists in `mt_auth_codes`** |
+| `mt_auth_verify_code` | resolves the principal **and the code is marked consumed** |
+| `mt_auth_create_session` | **a session row exists** for the token hash |
+| `mt_auth_resolve_token` | returns the correct customer |
+| `mt_auth_revoke_token` | **`revoked_at` is genuinely set** |
+
+The same shape covers the operations that used to no-op: `mt_device_register`, `_assign`,
+`_set_secret`, `_set_wan`, `_set_state`, `mt_voucher_redeem`, `mt_session_account`,
+`mt_intent_claim`, `mt_uplink_record` — each verified by reading the row back.
+
+## 14.4 Customer-creation path proof
+
+`mt_customer_create('Probe Customer','staff:test')` as `dnb_admin` creates the row; the request
+role and the worker are refused (`42501`); an empty name or a missing author is refused; and the
+new customer is immediately usable as a tenant context. The owner attempting
+`INSERT INTO mt_customers` directly is refused by RLS — the bootstrap path is the only path.
+
+## 14.5 F1 — before and after
+
+| Role | Before | After |
+|---|---|---|
+| `dnb_app` (serves customer requests) | **ACCEPTED** — wrote into Q's rows | **DENIED 42501** |
+| `dnb_worker` | ACCEPTED | DENIED 42501 |
+| `dnb_admin` | ACCEPTED | DENIED 42501 |
+| `dnb_radius` (new) | — | ACCEPTED |
+
+`dnb_radius` holds `EXECUTE` on `mt_session_account` and `mt_current_customer` and **no table
+privileges at all** — proven per table for `mt_sessions`, `mt_hotspot_users`, `mt_vouchers`,
+`mt_customers`, `mt_devices` and `mt_device_secrets`, and per function for `mt_intent_claim`,
+`mt_voucher_redeem`, `mt_device_set_secret` and `mt_customer_create`. A compromised RADIUS
+endpoint can submit accounting for a username and do nothing else.
+
+A dedicated identity rather than reusing `dnb_worker`: outbound delivery to a router and inbound
+accounting from a NAS are different exposures, and the worker holds device credentials.
+
+**Legitimate ingestion, all asserted:** P's and Q's accounting both accepted and attributed by
+username rather than by caller; an unknown username still yields no session and no error; a
+retransmitted Start is idempotent (one row, same id); a late smaller Interim cannot shrink a
+counter (50000/60000 survives a 1000/2000 retransmit); Gigawords still combine
+(2 × 2³² + 1); a Stop closes and a late Interim neither reopens it nor moves its numbers.
+
+`mt_voucher_redeem` deliberately stays with `dnb_app` and remains open as F6.
+
+## 14.6 F4 — guard coverage proof
+
+The hand-written list is gone. Scope is derived from the catalogue: a table is customer-scoped if
+it has a `customer_id` column, or if it is `mt_customers`.
+
+**19 of 19 enumerated**, asserted by name:
+
+```
+mt_audit_log  mt_auth_codes  mt_auth_sessions  mt_customers  mt_device_config
+mt_device_secrets  mt_devices  mt_entitlements  mt_hotspot_users  mt_idempotency
+mt_intents  mt_plans  mt_principals  mt_services  mt_sessions  mt_sites
+mt_uplink_samples  mt_voucher_batches  mt_vouchers
+```
+
+`rls_violations()` reports RLS disabled, FORCE missing, no all-roles isolation policy, a policy
+not covering every command, a missing `USING`, and a missing `WITH CHECK`. One exemption is
+declared with its reason in code — `mt_auth_codes`, which is pre-authentication and protected by
+grants rather than by a tenant policy — and it must still have RLS forced.
+
+## 14.7 The negative test
+
+A guard nobody has watched fail is a guard nobody knows works, so the suite plants the mistake a
+future migration would make and walks it back to correct, one step at a time:
+
+| Planted | Guard reports |
+|---|---|
+| `mt_guard_probe (customer_id uuid)`, nothing else | picked up with no list edited; **RLS not enabled**; **not FORCED** |
+| RLS enabled and forced, no policy | **no all-roles isolation policy** |
+| `USING`-only policy | **no WITH CHECK — it would permit a write it would not permit a read of** |
+| `USING` + `WITH CHECK` | nothing — satisfied |
+
+The table is dropped and the schema re-verified clean.
+
+## 14.8 Findings deliberately still open
+
+F3 (RLS never validates parent ownership; device-secret squatting), F5 (new tables arrive granted
+to all roles with RLS off — note F4's guard now catches the RLS half, but **not** the default
+grants), F6 (`mt_voucher_redeem` ignores context and returns a tenant id), F7
+(`mt_auth_resolve_token` accepts a foreign principal), F8 (telemetry writable by the customer it
+describes). None was touched.
+
+F9 is unchanged and is still the most important sentence for the Admin API: **tenant context is
+self-asserted.** `dnb_app` may `SET LOCAL app.customer_id` to any value. What F2 changed is that
+a compromise of that path no longer also carries superuser.
+
+## 14.9 Residual privilege dependencies
+
+1. **The owner is a member of the four definer roles**, because PostgreSQL requires membership to
+   transfer ownership. Granted `WITH INHERIT FALSE, SET TRUE`, so the owner carries none of their
+   privileges while acting as itself and must `SET ROLE` deliberately. The first draft omitted
+   `INHERIT FALSE`; the owner then inherited every definer policy, and the suite caught it — a
+   quieter replay of the superuser dependency this work removed.
+2. **The owner can still rewrite anything**, having DDL. It cannot read tenant data, which is the
+   part §11.4 claimed and could not deliver.
+3. **Role passwords are still development literals**, `dnb_radius` included. Unchanged deployment
+   gate from §11.4.
+4. **The test harness uses a superuser `inspector()` identity** to observe and poke state no
+   tenant can see. Fixtures are *created* through `mt_customer_create` and tenant contexts; only
+   observation uses it, and a test asserts nothing under `src/` or `bin/` calls it.
+5. **`mt_revoke_public_execute()` is now SECURITY INVOKER**, because PostgreSQL forbids `SET ROLE`
+   inside a DEFINER function and the sweep must assume each function's owner to revoke. A caller
+   without `SET` on the definer roles simply cannot run it.
+
+## 14.10 Suite
+
+**18 suites, 718 assertions, green on two consecutive clean runs, with a non-superuser owner.**
+New: `test_definer_roles.php` (57), `test_accounting_boundary.php` (36); `test_rls_isolation.php`
+grew from 66 to 71.
+
+The A1–A5 probe was run **unchanged and byte-identical** to the committed copy: A1 no rows, A2
+null, A3 `42501`, A4 `42501` then null, A5 works. Only its fixture connection was pointed at a
+superuser, because seeding a customer by direct INSERT is exactly what F2 removed.
+
+## 14.11 Status
+
+Ready for a hostile re-audit of this remediation. **Not ready for deployment, and not ready for
+the Admin API** — five findings remain open, the physical MikroTik gate is untouched, and the
+role-password gate still stands.

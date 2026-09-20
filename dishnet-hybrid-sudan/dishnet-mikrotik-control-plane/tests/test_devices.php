@@ -29,7 +29,7 @@ use Dn\Tenancy\TenantContext;
 
 putenv('DNB_SECRET_KEY=test-key-for-suite-only');
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $db   = Database::app();

@@ -26,7 +26,39 @@ final class Database
     public static function app(): self    { return self::connect('app'); }
     public static function worker(): self { return self::connect('worker'); }
     public static function admin(): self  { return self::connect('admin'); }
+
+    /**
+     * RADIUS accounting ingestion. Holds EXECUTE on one function and nothing
+     * else — no table privileges at all (migration 018, audit finding F1).
+     *
+     * Separate from app() because a NAS reporting usage for the whole fleet and
+     * a customer's HTTP request are different trust contexts. While they shared
+     * an identity, a customer who knew another customer's RADIUS username could
+     * fabricate sessions and inflate byte counters in that customer's records.
+     */
+    public static function radius(): self { return self::connect('radius'); }
     public static function owner(): self  { return self::connect('owner'); }
+
+    /**
+     * TEST FIXTURE IDENTITY. Never use this in application code.
+     *
+     * Since migration 017 the database owner is not a superuser and is subject
+     * to FORCE row-level security like every other role, which is the point of
+     * finding F2. That leaves the test harness without a way to plant or
+     * inspect state that no tenant can see — an unassigned device, another
+     * customer's row, an OTP attempt counter — and there is deliberately no
+     * application path for most of those.
+     *
+     * So observation and fixture-poking use this identity, and CREATION does
+     * not: seed_two_customers() builds customers through mt_customer_create()
+     * and tenant contexts, because a suite that created its fixtures with a
+     * superuser could not show that the ordinary paths work. That distinction
+     * is the whole reason F2 went unnoticed.
+     *
+     * tests/test_definer_roles.php asserts that nothing under src/ or bin/
+     * mentions this method.
+     */
+    public static function inspector(): self { return self::connect('inspector'); }
 
     /**
      * Four identities, because four execution contexts exist.
@@ -45,8 +77,10 @@ final class Database
         $dsn = getenv('DNB_DSN') ?: 'pgsql:host=/var/tmp;port=55432;dbname=dnb';
         [$user, $pass] = match ($role) {
             'owner'  => [getenv('DNB_OWNER_USER')  ?: 'dnb',        getenv('DNB_OWNER_PASS')  ?: ''],
+            'inspector' => [getenv('DNB_INSPECT_USER') ?: 'postgres', getenv('DNB_INSPECT_PASS') ?: ''],
             'worker' => [getenv('DNB_WORKER_USER') ?: 'dnb_worker', getenv('DNB_WORKER_PASS') ?: 'worker-local-dev'],
             'admin'  => [getenv('DNB_ADMIN_USER')  ?: 'dnb_admin',  getenv('DNB_ADMIN_PASS')  ?: 'admin-local-dev'],
+            'radius' => [getenv('DNB_RADIUS_USER') ?: 'dnb_radius', getenv('DNB_RADIUS_PASS') ?: 'radius-local-dev'],
             default  => [getenv('DNB_APP_USER')    ?: 'dnb_app',    getenv('DNB_APP_PASS')    ?: 'app-local-dev'],
         };
         try {

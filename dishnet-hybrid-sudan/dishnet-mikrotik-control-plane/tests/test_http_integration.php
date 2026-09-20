@@ -14,7 +14,7 @@ declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 use Dn\Db\Database;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids   = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 

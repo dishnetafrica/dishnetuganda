@@ -20,7 +20,7 @@ use Dn\Tenancy\TenantContext;
 
 putenv('DNB_SECRET_KEY=test-key-for-suite-only');
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $app   = Database::app();     $ctx  = new TenantContext($app);
 $workDb = Database::worker(); $ctxW = new TenantContext($workDb);
 $adminDb = Database::admin(); $ctxA = new TenantContext($adminDb);

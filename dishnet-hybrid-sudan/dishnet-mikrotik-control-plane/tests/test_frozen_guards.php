@@ -10,7 +10,7 @@ declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 use Dn\Db\Database;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $root  = dirname(__DIR__);
 $src   = static function () use ($root): array {
     $out = [];

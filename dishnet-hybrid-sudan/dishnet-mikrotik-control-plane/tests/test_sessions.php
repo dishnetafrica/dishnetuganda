@@ -21,7 +21,7 @@ use Dn\Sessions\AccountingIngest;
 use Dn\Tenancy\TenantContext;
 use Dn\Vouchers\VoucherService;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $db   = Database::app();

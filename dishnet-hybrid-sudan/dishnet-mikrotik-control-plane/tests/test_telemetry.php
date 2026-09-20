@@ -27,7 +27,7 @@ use Dn\Vouchers\VoucherService;
 putenv('DNB_SECRET_KEY=test-key-for-suite-only');
 putenv('DNB_EXPOSE_OTP=1');
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $db   = Database::app();

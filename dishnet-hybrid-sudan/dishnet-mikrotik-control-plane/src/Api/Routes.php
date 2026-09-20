@@ -292,7 +292,15 @@ final class Routes
             if ($expected === '' || !hash_equals($expected, $given)) {
                 return Response::unauthorized();
             }
-            $out = (new \Dn\Sessions\AccountingIngest($db))->record($req->body);
+            // A DIFFERENT DATABASE IDENTITY, not the request connection.
+            //
+            // Audit finding F1: while this ran as the request role, any
+            // customer request — or anything injected into one — could reach
+            // mt_session_account and write into another customer's sessions,
+            // because the function resolves the owner from the username it is
+            // given. The ingestion role holds EXECUTE on that one function and
+            // no table privileges whatsoever (migration 018).
+            $out = (new \Dn\Sessions\AccountingIngest(Database::radius()))->record($req->body);
             // 204 whatever the outcome: a NAS is not a client to be argued
             // with, and telling it whether a username exists would make this
             // endpoint a way to test usernames.

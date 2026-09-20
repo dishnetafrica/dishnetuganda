@@ -8,7 +8,7 @@ use Dn\Http\Kernel;
 use Dn\Http\Request;
 use Dn\Tenancy\TenantContext;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $phoneA = '+256700001001';

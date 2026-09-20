@@ -5,7 +5,7 @@ use Dn\Db\Database;
 use Dn\Tenancy\TenantContext;
 use Dn\Audit\AuditLog;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $app = Database::app();

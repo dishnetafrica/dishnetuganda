@@ -4,7 +4,7 @@ require __DIR__ . '/bootstrap.php';
 use Dn\Db\Database;
 use Dn\Db\Migrator;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 
 t('migrations are idempotent — a second run applies nothing');
 $again = (new Migrator($owner, dirname(__DIR__) . '/migrations'))->run(true);

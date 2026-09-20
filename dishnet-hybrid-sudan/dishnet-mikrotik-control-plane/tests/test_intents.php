@@ -15,7 +15,7 @@ use Dn\Intents\IntentState;
 use Dn\Jobs\IntentWorker;
 use Dn\Tenancy\TenantContext;
 
-$owner = Database::owner();
+$owner = Database::inspector();
 $ids = seed_two_customers($owner);
 $A = $ids['A']; $B = $ids['B'];
 $db  = Database::app();
