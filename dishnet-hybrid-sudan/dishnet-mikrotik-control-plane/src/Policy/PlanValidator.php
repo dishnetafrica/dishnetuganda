@@ -24,29 +24,36 @@ namespace Dn\Policy;
 final class PlanValidator
 {
     /**
-     * Conservative 32-bit ceiling on a rate, in bits per second (~4.29 Gbps).
+     * PROTOCOL facts. These two are constants because they are properties of
+     * the wire format, true of every device that speaks it.
      *
-     * REQUIRES VERIFICATION on hardware in step 7. RouterOS parses
-     * Mikrotik-Rate-Limit as a rate string and the real upper bound has not
-     * been read off a device — docs/31 §7's matrix is filled by testing, not
-     * by assumption, and this follows the same rule. It is set high enough
-     * that no hotspot plan will meet it, so it cannot act as a commercial
-     * limit by accident.
+     * RFC 2865: Session-Timeout is a 32-bit unsigned integer. Mikrotik-Total-
+     * Limit plus its Gigawords companion is effectively 64-bit. Neither needs
+     * a MikroTik to confirm it; reading the RFC is the verification.
+     *
+     * The two numbers that used to sit beside them — the rate ceiling and the
+     * shared-users ceiling — were NOT protocol facts. They are properties of a
+     * firmware on a model, nobody had measured them, and a `const` claimed
+     * otherwise. Audit findings R2 and R3; they now live in RouterOsLimits,
+     * where a number carries its provenance.
      */
-    public const MAX_RATE_BPS = 4294967295;
-
-    /** RFC 2865: Session-Timeout is a 32-bit unsigned integer. */
     public const MAX_SESSION_S = 4294967295;
-
-    /**
-     * RouterOS hotspot shared-users. Conservative; also REQUIRES VERIFICATION.
-     * A voucher shared by more devices than a router can track is a support
-     * call, not a sale.
-     */
-    public const MAX_DEVICES = 65535;
 
     /** Mikrotik-Total-Limit plus its Gigawords companion: effectively 64-bit. */
     public const MAX_DATA_BYTES = 9223372036854775807;
+
+    private RouterOsLimits $limits;
+
+    /**
+     * @param RouterOsLimits|null $limits what the target hardware accepts. Left
+     *        null, the provisional bound applies and says so in any message it
+     *        produces — there is no measured limit for any model yet, so that
+     *        is currently every call.
+     */
+    public function __construct(?RouterOsLimits $limits = null)
+    {
+        $this->limits = $limits ?? RouterOsLimits::unverified();
+    }
 
     /** @return list<string> reasons; empty means valid */
     public function check(array $p): array
@@ -69,16 +76,23 @@ final class PlanValidator
             $v = $p[$k] ?? null;
             if (!$this->isInt($v) || (int) $v < 1) {
                 $e[] = "{$label} must be a whole number of bits per second, at least 1";
-            } elseif ((int) $v > self::MAX_RATE_BPS) {
-                $e[] = "{$label} exceeds what the rate limit attribute can express";
+            } elseif ((int) $v > $this->limits->maxRateBps) {
+                // The message names the provenance on purpose. "Exceeds what
+                // the attribute can express" reads as settled fact; when the
+                // bound has never been measured, whoever hits it deserves to
+                // know they may be arguing with a guard rail rather than with
+                // a router.
+                $e[] = "{$label} exceeds what the rate limit attribute can express ("
+                     . $this->limits->maxRateBps . ' bps — ' . $this->limits->provenance . ')';
             }
         }
 
         $dev = $p['devices_per_voucher'] ?? null;
         if (!$this->isInt($dev) || (int) $dev < 1) {
             $e[] = 'devices per voucher must be a whole number, at least 1';
-        } elseif ((int) $dev > self::MAX_DEVICES) {
-            $e[] = 'devices per voucher exceeds what the router can track';
+        } elseif ((int) $dev > $this->limits->maxSharedUsers) {
+            $e[] = 'devices per voucher exceeds what the router can track ('
+                 . $this->limits->maxSharedUsers . ' — ' . $this->limits->provenance . ')';
         }
 
         if (array_key_exists('data_cap_bytes', $p) && $p['data_cap_bytes'] !== null) {

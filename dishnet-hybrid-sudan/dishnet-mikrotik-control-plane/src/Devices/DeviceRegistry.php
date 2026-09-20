@@ -30,6 +30,25 @@ final class DeviceRegistry
             [$serial, $model, $rosVersion, $wgPubkey, $tunnelIp, $stagedBy]);
     }
 
+    /**
+     * Record which interface carries the uplink (audit finding R4).
+     *
+     * This is a staging fact, not a configuration choice: the answer comes from
+     * a person looking at which port the uplink is plugged into, and the
+     * identity of that person is stored with it. Until it is recorded the
+     * sampler measures nothing for this device, which is the intended
+     * behaviour — a blank graph is honest, and the alternative was a graph of
+     * whatever happened to be called ether1.
+     *
+     * Admin path: a customer cannot establish it, because a customer-settable
+     * WAN interface is a customer-settable telemetry source.
+     */
+    public function setWanInterface(string $deviceId, string $interface, string $establishedBy): array
+    {
+        return $this->db->one('SELECT * FROM mt_device_set_wan(?,?,?)',
+            [$deviceId, $interface, $establishedBy]);
+    }
+
     /** Store management credentials sealed, bound to this device. */
     public function setCredentials(string $deviceId, string $username, string $password): void
     {

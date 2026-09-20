@@ -490,3 +490,151 @@ way to register, assign or credential a device, which means Phase 0 provisioning
 through it is untested, and the CHR harness cannot answer it in this environment (no KVM, no
 qemu, no route to the vendor). This stays exactly where the audit put it: unproven until a
 physical device runs the provisioning path end to end.
+
+---
+
+# 12. Remediation outcome (R4, R2, R3)
+
+§1 and §1.1 are left as written. This section records what changed and what did not.
+
+## 12.1 R4 — the WAN interface is now an established fact
+
+**Before.** `UplinkSampler::wan()` scanned the interface list for one named `ether1` and
+measured it. On a unit where ether1 is not the uplink it measured a LAN bridge and stored
+throughput that looked entirely reasonable. The test that appeared to prove it worked handed
+a fake an interface called `ether1` and then asserted the code found `ether1`.
+
+**After.** `mt_devices.wan_interface` holds the interface name, recorded at staging with
+`wan_interface_set_by` and `wan_interface_set_at`. A CHECK constraint refuses a WAN with no
+author, `mt_device_set_wan()` is admin-only, and the sampler matches the stored name exactly.
+
+The sampler now has three distinct ways to have no measurement, and takes none of them as
+zero and none as a licence to substitute:
+
+| Outcome | Meaning | Written |
+|---|---|---|
+| `no_wan` | nobody established the uplink interface | nothing |
+| `wan_absent` | device does not report that interface, **or reports it with no rate keys** | nothing |
+| `unreachable` | could not talk to the device | nothing |
+
+Two decisions inside that are worth stating, because each is a place the old bug could have
+grown back:
+
+- **Matched on `name` only, never `default-name`.** Following a rename through `default-name`
+  would silently re-point the measurement at an interface nobody chose. A rename surfaces as
+  `wan_absent`, which is the operator's to re-establish.
+- **A missing rate key is not a zero.** The old code read
+  `(int) ($wan['rx-bits-per-second'] ?? 0)`. R7 — whether a real unit returns those keys at
+  all — is still unverified, so that `?? 0` was the same lie as guessing the interface, one
+  level down: it would have drawn an idle link. It now yields `wan_absent`.
+
+`mt_devices_samplable()` deliberately still returns devices with no WAN established, so the
+gap is counted and visible rather than filtered out of existence.
+
+**Rule 5 is tested, not assumed.** A device with no established WAN does not change state and
+queues no intent; an unmeasurable device is a reporting gap and never an enforcement input.
+
+## 12.2 A second control that did nothing — and how it was caught
+
+Migration 015 closed S2 by sweeping `EXECUTE` away from `PUBLIC`, and reached for
+`ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` to keep functions added
+later on the same footing. **That statement does not do what it appears to.** Measured on
+PostgreSQL 16.13 in this cluster:
+
+- issued against the built-in default, it stores no `pg_default_acl` row at all and has no effect;
+- and even after a row excluding `PUBLIC` is materialised by hand (`GRANT` then `REVOKE`), a
+  function created afterwards still comes out with the built-in default — `PUBLIC` included,
+  confirmed by executing it as `dnb_app`.
+
+The two functions migration 016 adds proved it: both shipped PUBLIC-executable under a
+migration whose comment claimed they could not. The S1/S2 suite caught them on the first run
+after the migration was written.
+
+This is the S2 lesson repeating one commit later, and it is worth naming as a pattern: **a
+privilege control is not in force because the statement ran without error.** Both times the
+SQL succeeded, read correctly, and changed nothing.
+
+Two things were fixed rather than one:
+
+1. **The mechanism.** `mt_revoke_public_execute()` (migration 016) performs the sweep and is
+   called at the end of every migration that adds a function. It touches `PUBLIC` only, so the
+   explicit grants each migration makes survive it, and it is idempotent.
+2. **The guard, which was also wrong.** The earlier assertion inspected `proacl` for a `PUBLIC`
+   entry. `aclexplode(NULL)` returns no rows, and a freshly created function has
+   `proacl IS NULL` — which *means* PUBLIC. The guard would have passed on exactly the case it
+   existed to catch. It now flags both shapes, and asserts positively that a second sweep finds
+   nothing left to do.
+
+Migration 015's comment was corrected in place rather than left standing: it is not deployed
+anywhere, and a migration that documents a protection it does not provide is worse than one
+that says nothing.
+
+## 12.3 R2 and R3 — parameterised, and still unmeasured
+
+`PlanValidator::MAX_RATE_BPS` and `MAX_DEVICES` are gone. A `const` is how PHP spells "this is
+a fact", and neither number had been read off a MikroTik. They are also not single numbers:
+both are properties of a firmware on a model, so one value could not be right for a fleet even
+if a unit had been measured.
+
+They now live in `RouterOsLimits`, which carries `provenance` and `verified`, looked up through
+`RouterOsLimitBook` keyed by model × firmware. **The shipped book is empty**, every lookup falls
+through to `RouterOsLimits::unverified()`, and a test asserts the book contains nothing claiming
+verification — so parameterising did not quietly promote a guess into configuration, which is
+the usual way this refactor goes wrong.
+
+The refusal message now names the provenance, so a developer who hits the bound is told they may
+be arguing with a guard rail rather than with a router. The provisional values are unchanged and
+remain far above any hotspot plan, so they cannot act as a commercial ceiling by accident (F8/F9)
+— asserted directly.
+
+`MAX_SESSION_S` and `MAX_DATA_BYTES` stay constants: RFC 2865 and the Gigawords companion are
+properties of the wire format, true of any device that speaks it. That distinction — protocol
+fact versus device fact — is the whole content of this change.
+
+**What a verified limit requires**, recorded so it is not re-guessed: a bisection on a unit of
+that model and firmware — set the attribute, apply it, read it back, and find the largest value
+the device both accepts *and* honours. Accepting is not honouring; the read-back is the test.
+
+## 12.4 Evidence classes
+
+| # | Class | What is in it now |
+|---|---|---|
+| 1 | **Architecture fact** | Domain A/B boundary; F1–F13; the four planes; uplink outside all of them |
+| 2 | **Application invariant** | Tenant isolation; worker/admin separation; no measurement is never a zero; a WAN interface without an author is not a fact |
+| 3 | **Parameter / device fact** | `wan_interface` per device (established at staging); `RouterOsLimits` per model × firmware — **zero entries recorded** |
+| 4 | **Fake RouterOS evidence** | Delivery, confirmation, divergence, sampling, disconnect — all against a fake whose shape we wrote |
+| 5 | **Physical MikroTik evidence required** | R1, R5, R6, R7 unchanged; R2/R3 bisections; that a real unit provisions through the admin path; that a staged WAN interface matches what `/interface` reports |
+
+Class 4 is not evidence that the physical system works. The fake returns what the code expects
+because both were written here. R4 was precisely a class-4 "pass" concealing a class-5 unknown,
+and finding one instance is not proof there are no others.
+
+## 12.5 Remaining unverified RouterOS assumptions
+
+| # | Assumption | State after this work |
+|---|---|---|
+| R1 | REST on a self-signed certificate | Unverified. TLS never exercised — the fake is plain HTTP |
+| R2 | `Mikrotik-Rate-Limit` maximum | **Parameterised**, still unmeasured. Bisection required |
+| R3 | `shared-users` maximum | **Parameterised**, still unmeasured. Bisection required |
+| R4 | `ether1` is the WAN | **Removed from code.** Now a staging fact. Verification moves to the staging step: that a technician records the interface the unit actually reports |
+| R5 | `ip/hotspot/profile` carries `use-radius` | Unverified. Fails loudly, so it is safe to carry |
+| R6 | `ip/hotspot/active/remove` takes `.id` | Unverified, and **fails silently if wrong** — the highest-risk remaining item |
+| R7 | `interface` returns `rx/tx-bits-per-second` | Unverified. Now fails *safely*: absent keys record nothing instead of zero |
+
+R4 is closed as a code defect. It is not closed as a physical question — it has been converted
+from a guess nobody could see into a field somebody must fill, and whether the staging step
+reliably gets filled is a process question the physical gate answers.
+
+## 12.6 Is the code ready for the next re-audit?
+
+**Ready for re-audit: yes. Ready for deployment: no**, and nothing in this section moves that.
+
+What a re-audit can now examine that it could not before: a privilege surface stated in one
+place, with a test that fails if a later migration widens it; telemetry that records nothing
+rather than something plausible; and device limits that carry their own provenance.
+
+What it must still treat as open: every class-5 row above, the role-password deployment gate
+(§11.4), and the fact that **two separate privilege controls in two consecutive commits ran
+cleanly while doing nothing at all.** Both were caught by tests written specifically to watch
+them fail. A re-audit should assume there is a third and go looking for it, rather than
+reading green output as assurance.

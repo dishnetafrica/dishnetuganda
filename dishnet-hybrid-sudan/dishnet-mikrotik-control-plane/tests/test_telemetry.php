@@ -54,6 +54,12 @@ $ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setCredentials($d
 $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'shipped'));
 $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'connected'));
 $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'provisioned'));
+// R4: which interface carries the uplink is a staging fact, not a constant.
+// Deliberately NOT ether1 — the fake below offers an ether1 carrying different
+// numbers, so if the sampler ever goes back to guessing, these assertions fail
+// instead of passing for the wrong reason.
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))
+    ->setWanInterface($devA['id'], 'sfp-sfpplus1', 'tech:t'));
 
 $stock = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX-T-9999', 'hEX S', '7.14.3', 'pk-s', '10.66.0.99', 'tech:t'));
@@ -64,8 +70,11 @@ $factory = function (array $d) use (&$rx, &$tx, &$reachable) {
     $t = function (string $m, string $u, ?array $b, string $usr, string $p) use (&$rx, &$tx, &$reachable) {
         if (!$reachable) { throw new \RuntimeException('router unreachable: timeout'); }
         return ['status' => 200, 'body' => [
-            ['name' => 'ether1', 'rx-bits-per-second' => $rx, 'tx-bits-per-second' => $tx],
-            ['name' => 'bridge', 'rx-bits-per-second' => 5, 'tx-bits-per-second' => 5],
+            // The decoy. A router where ether1 is NOT the uplink is the whole
+            // of finding R4, so the fake is one.
+            ['name' => 'ether1',       'rx-bits-per-second' => 999, 'tx-bits-per-second' => 999],
+            ['name' => 'bridge',       'rx-bits-per-second' => 5,   'tx-bits-per-second' => 5],
+            ['name' => 'sfp-sfpplus1', 'rx-bits-per-second' => $rx, 'tx-bits-per-second' => $tx],
         ]];
     };
     return new RestClient($d['tunnel_ip'], 'u', 'p', 5, \Closure::fromCallable($t));

@@ -15,6 +15,7 @@ use Dn\Http\Request;
 use Dn\Http\Serializer\Projection;
 use Dn\Policy\PlanRepository;
 use Dn\Policy\PlanValidator;
+use Dn\Policy\RouterOsLimits;
 use Dn\Tenancy\TenantContext;
 
 $owner = Database::owner();
@@ -65,11 +66,17 @@ t('F9 — no validation message ever speaks of buying, allowance or permission')
 // If a ceiling ever creeps back in, it will announce itself in the wording
 // before it shows up anywhere else.
 $v = new PlanValidator();
+// The bound the validator applies when nothing has been measured — which is
+// every model today. Naming it here rather than repeating a literal keeps the
+// test honest about WHAT it is asserting: that the validator enforces the
+// bound it was given, not that the bound is correct. Nothing in this suite can
+// establish the latter; only a physical unit can (docs/57 R2, R3).
+$prov = RouterOsLimits::unverified();
 $all = [];
 foreach ([
     [], ['duration_s' => 0], ['rate_down_bps' => -1], ['devices_per_voucher' => 0],
     ['price_minor' => -5], ['currency' => 'pounds'], ['mode' => 'whatever'],
-    ['name' => ''], ['rate_up_bps' => PlanValidator::MAX_RATE_BPS + 1],
+    ['name' => ''], ['rate_up_bps' => $prov->maxRateBps + 1],
     ['duration_s' => PlanValidator::MAX_SESSION_S + 1],
 ] as $bad) {
     $all = array_merge($all, $v->check($plan($bad)));
@@ -87,9 +94,9 @@ is_(count($all) > 5, true, 'and there really were messages to check (' . count($
 // ===========================================================================
 t('VALIDITY — what the protocol cannot carry is refused, and says why');
 $cases = [
-    ['rate_down_bps' => PlanValidator::MAX_RATE_BPS + 1, 'expect' => 'rate limit attribute'],
+    ['rate_down_bps' => $prov->maxRateBps + 1, 'expect' => 'rate limit attribute'],
     ['duration_s'    => PlanValidator::MAX_SESSION_S + 1, 'expect' => 'session timeout attribute'],
-    ['devices_per_voucher' => PlanValidator::MAX_DEVICES + 1, 'expect' => 'router can track'],
+    ['devices_per_voucher' => $prov->maxSharedUsers + 1, 'expect' => 'router can track'],
 ];
 foreach ($cases as $c) {
     $expect = $c['expect']; unset($c['expect']);

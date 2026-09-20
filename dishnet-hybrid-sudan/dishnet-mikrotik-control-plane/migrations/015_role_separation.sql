@@ -183,9 +183,21 @@ $$;
 -- as a GRANT in this file. Read the grants below and you have read the whole
 -- privilege surface; nothing is inherited from a migration written earlier.
 --
--- The privilege is taken away across the schema and handed back by name. ALTER DEFAULT PRIVILEGES keeps any function a later migration adds
--- on the same footing, so the next author cannot reintroduce the hole by
--- writing an ordinary CREATE FUNCTION.
+-- The privilege is taken away across the schema and handed back by name.
+--
+-- This sweep covers the functions that exist WHEN IT RUNS. It cannot cover one
+-- a later migration creates, and ALTER DEFAULT PRIVILEGES does not close that
+-- gap: on PostgreSQL 16.13 a default-privileges REVOKE of the built-in PUBLIC
+-- EXECUTE stores no catalogue row and changes nothing, and even after a row
+-- that excludes PUBLIC is materialised by hand, a function created afterwards
+-- still comes out with the built-in default. Measured in this cluster, not
+-- assumed — docs/57 §12.2. An earlier draft of this file carried such a line
+-- and it did nothing, which is the same failure mode as the revoke it was
+-- meant to reinforce.
+--
+-- So migration 016 defines mt_revoke_public_execute(), which every migration
+-- that adds a function calls at its end, and tests/test_isolation_s1_s2.php
+-- goes red if one forgets.
 DO $$
 DECLARE f regprocedure;
 BEGIN
@@ -197,8 +209,6 @@ BEGIN
             'REVOKE ALL ON FUNCTION %s FROM PUBLIC, dnb_app, dnb_worker, dnb_admin', f);
     END LOOP;
 END $$;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 -- The request path keeps exactly what serving a request needs: login (these
 -- return ids only), voucher redemption and RADIUS accounting (network-side

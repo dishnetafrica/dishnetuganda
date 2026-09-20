@@ -159,17 +159,28 @@ is_(count(array_intersect(array_column($a, 'id'), array_column($b, 'id'))), 0,
 is_(count($a) + count($b), 20, 'and every one claimed exactly once');
 
 t('PUBLIC holds nothing — the grant default that made the first fix a no-op');
+// Two ways a function can be PUBLIC-executable, and the second is the one that
+// hides: an explicit ACL listing PUBLIC (grantee 0), and NO explicit ACL AT
+// ALL, which means the built-in default — PUBLIC included. aclexplode(NULL)
+// returns no rows, so a guard that only inspects proacl passes happily on a
+// brand-new CREATE FUNCTION. An earlier version of this assertion did exactly
+// that. Both shapes are checked here.
 $public = $owner->query(
     "SELECT p.oid::regprocedure::text AS sig FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
        WHERE n.nspname = 'public' AND p.proname LIKE 'mt\\_%'
-         AND EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0)");
+         AND (p.proacl IS NULL
+              OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0))");
 is_(array_column($public, 'sig'), [],
-    'no mt_ function grants EXECUTE to PUBLIC — a later CREATE FUNCTION cannot reopen S2 silently');
-is_($owner->one("SELECT count(*) AS n FROM pg_default_acl d
-      WHERE d.defaclobjtype = 'f'
-        AND EXISTS (SELECT 1 FROM aclexplode(d.defaclacl) a WHERE a.grantee = 0)")['n'], 0,
-    'and the default privileges for future functions do not grant PUBLIC either');
+    'no mt_ function is executable by PUBLIC, explicitly or by default');
+
+// Positive check on the mechanism rather than the absence of a symptom: the
+// sweep reports how many functions it had to fix, so a second call returning 0
+// proves the migrations left nothing for it to do. ALTER DEFAULT PRIVILEGES
+// cannot provide this — measured not to work on 16.13 (docs/57 §12.2) — so
+// this function plus this assertion ARE the control.
+is_((int) $owner->one('SELECT mt_revoke_public_execute() AS n')['n'], 0,
+    'and the sweep finds nothing left to revoke — migrations called it');
 
 t('S5 — no application role can delete migration history');
 foreach ([[$app, 'app'], [$workDb, 'worker'], [$adminDb, 'admin']] as [$conn, $name]) {
