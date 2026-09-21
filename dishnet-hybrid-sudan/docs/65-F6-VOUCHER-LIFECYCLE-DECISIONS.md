@@ -899,14 +899,52 @@ is chosen here:
 It applies identically under Model A and Model B, so **it does not bear on
 Decision 1.**
 
-#### Still unmeasured
+#### Measured — `radpostauth` already holds a row, and the cleanup missed it
 
-Whether `radpostauth` currently holds rows. docs/00 §525 recorded `radcheck`,
-`radreply`, `radacct` and `nas` at 0 rows after the Phase 0 cleanup;
-**`radpostauth` was not in that list.** Since reject-path logging is active and
-`radcheck` is empty — so every attempt rejects — any authentication attempted
-against this server since it was built would have been logged. A row count, and
-whatever retention applies to it, is a follow-on read-only question.
+```
+ rows |            oldest             |            newest
+------+-------------------------------+-------------------------------
+    1 | 2026-09-19 12:02:17.895401+00 | 2026-09-19 12:02:17.895401+00
+```
+
+Counts and timestamps only. The `pass` column was not read and is not to be.
+
+Three dated facts bracket that row:
+
+| | |
+|---|---|
+| `mods-enabled/sql -> ../mods-available/sql` | dated **Sep 19 10:27** — post-auth logging was live from then |
+| the single `radpostauth` row | written **2026-09-19 12:02:17+00**, about 95 minutes later |
+| the Phase 0 cleanup | *"test clients and test rows removed (docs/36 §6.6, executed 2026-09-19)"* — docs/00 §519 |
+
+docs/00 §525 records the post-cleanup state as `radcheck`, `radreply`, `radacct`
+and `nas` at 0 rows. **`radpostauth` is not in that list**, and it is the one
+table that still has a row.
+
+The timing is consistent with the documented Phase 0 test authentication —
+`radtest` and `radclient` are in the image (docs/36 §307), and docs/33 §416–417
+gives the test credential. The row's contents were not read, so that remains an
+inference from timing rather than a measurement; what *is* measured is that one
+authentication on 2026-09-19 produced exactly one post-auth row, and that the
+cleanup did not remove it.
+
+**This is not a security incident.** Whatever that row holds in `pass`, the
+Phase 0 test credential is already published in plaintext in this repository at
+docs/33 §417. The row is evidence, not exposure.
+
+**What it does establish** is the mechanism working end to end, in production,
+unprompted: authentication → post-auth `-sql` → `queries.conf:728` →
+`radpostauth`, surviving a cleanup that was believed complete. It was missed for
+exactly the reason this gate exists — **nobody knew post-auth logging was on**,
+so the table was never in scope to clean.
+
+The generalisation belongs in Decision 7: the AAA layer keeps its own records
+by its own configuration, and the control plane's retention decisions do not
+reach them. Whatever §14 decision 6 settles for the control plane's attempt
+store, `radpostauth` needs its own answer — and any future cleanup checklist
+for this server needs the table added to it. Neither is decided here, and the
+existing row is left in place: removing it would be a write to production and is
+not this gate's to make.
 
 ---
 
