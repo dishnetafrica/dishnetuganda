@@ -97,7 +97,7 @@ the control plane never sees it.
 |---|---|
 | Form | opaque random token from a CSPRNG, ≥128 bits, carrying **no** encoded content — not a signed blob containing a voucher id |
 | Storage | **hashed** in the control plane, never at rest in the clear — the discipline already applied to auth tokens and to not storing presented codes |
-| Binds to | one publication row; and the NAS the redemption came from |
+| Binds to | one publication row |
 | Lifetime | short — it only has to outlive the publication deadline (docs/66 §2.7). Minutes, not hours |
 | Authority | exactly one thing: **read the status of this one activation.** It is not a session token and authorises nothing else |
 | Issued | once, in the response to the redemption that created it |
@@ -226,9 +226,15 @@ is still not to be read or exposed.
 Two endpoints, both unauthenticated, joining the three that already exist.
 
 ```
-POST /portal/redeem          { "code": "...", "nas": "..." }
+POST /portal/redeem          { "code": "..." }
 GET  /portal/activation/{ticket}
 ```
+
+> **Amended by docs/68 §3.** This body originally carried a `nas` field. That
+> value arrives from the guest's browser and is therefore client-asserted, so it
+> cannot be authority for anything that grants or denies — docs/68 §2.2. Site
+> binding is enforced at the AAA layer instead (docs/68 §2.4), where the NAS
+> identity comes from the router over a shared-secret channel.
 
 ### 4.1 Every outcome, with its status code
 

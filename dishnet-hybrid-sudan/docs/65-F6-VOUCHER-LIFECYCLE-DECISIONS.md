@@ -337,8 +337,13 @@ Site 2; Q is a different customer.
 ```
 
 **Cross-customer redemption is refused under all three.** That is a floor, not
-an option: it sits before the binding logic, and Q's router never serves P's
-guest on Q's uplink.
+an option: it sits before the binding logic.
+
+> **Scoped by docs/68 §2.3.** This is a statement about **redemption**, not about
+> authentication. Once a credential is published, `radcheck` carries no customer,
+> site or NAS column and one FreeRADIUS instance serves every NAS — so the floor
+> does not hold at the AAA layer unless a check item puts it there. docs/68 §2.4
+> decides that it must.
 
 | | **A — bound at issue** | **B — bound at first use** | **C — roaming in the estate** |
 |---|---|---|---|
@@ -1013,7 +1018,7 @@ docs/66 answers, and deleting it would remove the reasoning from the record.
 | # | Decision | Blocking |
 |---|---|---|
 | ~~1~~ | ~~Model A or Model B~~ — **CLOSED: Model B.** See docs/66 §1 | — |
-| **2** | **Site binding A, B or C** | the portal function's site check; a possible `NOT NULL` |
+| **2** | **Site binding A, B or C** | **partly closed — see docs/68.** The tenant floor (2a) is decided; A/B/C (2b) stays open, reframed |
 | ~~3~~ | ~~Portal contract P1, P2 or P3~~ — **CLOSED: P2 with generated credentials.** See docs/67 | — |
 | **4** | **Front-desk activation: required or not** | whether an operator capability exists at all |
 | **5** | **Rate-limit numbers** — burst, sustained, window, per NAS | §9 fixes the shape and dimensions; the values need a real venue's traffic |
