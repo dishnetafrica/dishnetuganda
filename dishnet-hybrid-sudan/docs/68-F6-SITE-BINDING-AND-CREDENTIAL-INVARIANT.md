@@ -147,22 +147,81 @@ docker exec dn-phase0-radius grep -n -B2 -A 12 \
 Until it is run, §2.4 is stated as a requirement rather than as a repair of a
 proven hole.
 
-### 2.4 Decision 2a — the tenant restriction (SECURITY, decided)
+### 2.4 Decision 2a — the tenant restriction (SECURITY: required, mechanism UNVERIFIED)
 
-> **Every published credential carries a check item restricting it to the NAS
-> set of the customer that owns the voucher.**
+> **Requirement.** A published credential must not authenticate against a NAS
+> outside the estate of the customer that owns the voucher.
 
-This is not one of A, B or C. It sits beneath all three, it is not a product
-choice, and it is the only place the cross-tenant floor can actually stand:
-enforcement must live where the NAS identity is trustworthy, which is the RADIUS
-packet, not the portal POST (§2.2).
+**The requirement is settled. The mechanism is not, and is not claimed to be.**
+An earlier draft of this section recorded a *"check item restricting it to the
+customer's NAS set"* as decided. That is a design candidate, not a verified one,
+and three obstacles found while preparing §2.8's inspection say why.
 
-It also needs no client input at all. The owning customer comes from the
-voucher, which the control plane already holds.
+**(a) Expressing a *set* runs straight into the duplicate-check-item question.**
+A check item names one value. A customer with several routers needs either
+several `NAS-Identifier` rows for one username — which is exactly the duplicate
+case docs/65 §12.3 measured as unconstrained and docs/66 §2.11 listed as
+*undefined authentication behaviour* — or a regex operator, or huntgroups. "One
+NAS" and "a set of NASes" are not the same mechanism, and the set version is the
+one 2a needs.
 
-Which attribute carries it — `NAS-Identifier`, `NAS-IP-Address`,
-`Called-Station-Id`, a huntgroup — is a FreeRADIUS question for the
-implementation gate, and depends on §2.3's measurement.
+**(b) The `nas` table is empty, and clients are file-based.** docs/00 §523–525
+records `nas` at **0 rows** while client `dn-test-mikrotik` remains — so client
+definitions live in `clients.conf`, a file the control plane cannot reach or
+manage. `read_clients = yes` reads the empty table *in addition to* the file. So
+a customer → NAS-set mapping has **no data source on either side**: absent from
+the control plane (§2.1), empty in the RADIUS database.
+
+**(c) The trustworthy anchor may not be the packet attribute.** `NAS-Identifier`
+in an Access-Request is asserted by the router. The client entry, matched by
+source address and authenticated by the shared secret, is server-side
+configuration. Those are not equivalent, and which one a restriction should key
+on is a design question — the same distinction as §2.2, one layer down.
+
+What holds regardless: enforcement must live where the NAS identity is
+trustworthy, which is the RADIUS path and not the portal POST; and the owning
+customer needs no client input, since it comes from the voucher.
+
+### 2.4a What the authorize inspection can and cannot establish
+
+The nine questions are not all of one kind, and this is recorded before the
+inspection so its result is not over-read.
+
+| | Question | Answerable from configuration? |
+|---|---|---|
+| 1 | which authorize query is used | **yes** — `queries.conf` |
+| 2 | what tables and columns it reads | **yes** |
+| 3 | whether NAS identity is available to the query | **yes** — whether the shipped query references it |
+| 4 | **what NAS identifier the router actually supplies** | **no — see below** |
+| 5 | whether the query can compare it against a restriction | **partly** — the query is one candidate; check items evaluated by the server are another, and §2.4(a) applies to both |
+| 6 | whether `radcheck`/`radreply` can carry the restriction | **partly** — the columns can hold it; whether the deployment evaluates it as expected is what the inspection shows |
+| 7 | whether it is evaluated before Access-Accept | **yes** — module ordering in the `authorize` section |
+| 8 | whether it applies to a **native MikroTik login** | **structural, not configuration-dependent** — see below |
+| 9 | whether the credential would otherwise work at another NAS | **follows from 1 and 5** |
+
+**Question 8 is already answered by the shape of the system.** Every
+authentication reaches FreeRADIUS as an Access-Request, whatever produced it —
+the DishNet portal, the router's native HotSpot form, or a client speaking
+RADIUS directly. So a restriction that works applies to all of them equally.
+That is precisely the property that matters if someone bypasses the portal. What
+the inspection has to establish is not *whether a working restriction would
+apply*, but *whether a restriction works at all*.
+
+**Question 4 is not answerable from FreeRADIUS configuration.** What NAS
+identifier a router supplies is set by the **router's** configuration and
+appears only in the packet. No MikroTik has ever authenticated against this
+server — `radacct` is at 0 rows (docs/00 §525) and `mt_sessions` is
+correspondingly empty — so **no observed value exists anywhere**. Answering it
+needs the router's own configuration or a live authentication, and the physical
+Phase 0 hardware remains independently blocked.
+
+**The consequence for 2a.** Whether a restriction is *enforceable in principle*
+can be established from configuration. The concrete value it would compare
+against cannot be fixed until a real MikroTik authenticates or its configuration
+is read. 2a can therefore be designed now and cannot be finished now, and this
+document does not pretend otherwise.
+
+---
 
 ### 2.5 Decision 2b — A, B or C (PRODUCT, open)
 
@@ -226,8 +285,9 @@ is applied in this commit with a pointer back here. F1–F13 are unaffected.
 
 ## 4 — What is decided, and what is not
 
-**Decided:** C1 (Part 1). Decision **2a** — the tenant restriction at the AAA
-layer.
+**Decided:** C1 (Part 1). Decision **2a** as a *requirement* — a credential must
+not authenticate outside its customer's estate. **Its mechanism is not decided**
+and three obstacles to the obvious candidate are recorded in §2.4.
 
 **Open:** Decision **2b** — A, B or C, pending §2.6.
 
