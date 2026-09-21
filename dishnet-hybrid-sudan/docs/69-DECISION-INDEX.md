@@ -17,7 +17,7 @@ under.
 | — | **F1–F13 architecture freeze** | **FROZEN** | 13 items, unfrozen only by explicit amendment to docs/53 §5 | **docs/53** | — |
 | **1** | **AAA publication lifecycle** | **CLOSED** | **Model B** — the AAA credential is published at redemption/activation, not at voucher issue | **docs/66 §1** | docs/65 §3 (both models measured across all three layers), §4 |
 | **2a** | **Cross-customer AAA security floor** | **PROVEN requirement; mechanism NOT CHOSEN** | See §2a below | **docs/68 §2.4** | docs/68 §2.4b, §2.4c |
-| **2b** | **Product / site-binding policy** | **OPEN — business decision** | A, B or C. Not selected | **docs/68 §2.5** | docs/65 §5, docs/68 §2.6 |
+| **2b** | **Product / site-binding policy** | **OPEN — business decision** | A, B or C. Not selected. C20 evidence: **Q3 closed**, Q1 and Q2 open — docs/68 §2.6 | **docs/68 §2.5** | docs/65 §5, docs/68 §2.6 |
 | **3** | **Portal contract** | **CLOSED** | **P2** — generated AAA credentials; the commercial voucher code never enters the AAA credential path | **docs/67** | docs/65 §6, §12.4 |
 | **4** | **Front-desk activation** | **OPEN — business decision** | Whether an operator may activate on a guest's behalf | **docs/67 §7** | docs/64 §2 Q5 |
 | **5** | **Rate limits and timing** | **OPEN** | Numbers only; the shape is settled | **docs/65 §9**, docs/67 §10 | docs/65 §9.2, §12.4 |
@@ -35,10 +35,24 @@ Four separate statements. docs/68 §2.4c holds the full version.
 | **Security requirement** | **PROVEN.** A credential must not authenticate outside its customer's estate, and FreeRADIUS can enforce that from a server-derived source address |
 | **Production mechanism** | **NOT CHOSEN.** No mechanism has been selected to build |
 | **Huntgroups** | a **measured viable mechanism**, not an architectural selection. They work (E7, E8) and cost a full FreeRADIUS restart per mapping change (E9) |
-| **SQL dynamic-set investigation** | a **candidate investigation**, not a chosen design. Four candidates recorded, none assumed to work |
+| **C-b, the SQL dynamic-set candidate** | **MEASURED: `WORKS`** (docs/68 §2.4f) — and **not chosen**. The set can live in the SQL authorize path, so a mapping change is a row rather than a restart. It is a second proven candidate, not a selection |
+| **C-a, C-c, C-d** | still **candidates**, none measured, none selected |
+
+So there are now **two** proven mechanisms and still **no chosen one**.
 
 Evidence items **E1–E9** are enumerated in docs/68 §2.4c and citable by number.
-The investigation and its constraints are docs/68 §2.4e.
+The investigation and its constraints are docs/68 §2.4e; C-b's result is §2.4f.
+
+---
+
+## Open business-model observation — not reconciled
+
+**The ISP/operator hierarchy.** C20 evidence records that a DishNet customer may
+itself be an ISP or operator managing its own downstream customers:
+**DishNet → ISP/operator customer → sites → downstream users**, with each site
+generating its own voucher stock. This layer is **new relative to the frozen
+documents** and has deliberately **not** been reconciled into them. It is an open
+business-model observation, not an architecture change. (`docs/68` §2.6)
 
 ---
 
@@ -77,8 +91,9 @@ The investigation and its constraints are docs/68 §2.4e.
 | **docs/69** | this index |
 
 Reproducible artifacts live in `dishnet-mikrotik-control-plane/tools/audit/`:
-`proto_f6*` (the actor and lifecycle prototypes) and `f6_radius_restriction.sh`
-with `f6_rad_client.py` (the isolated FreeRADIUS experiment).
+`proto_f6*` (the actor and lifecycle prototypes), `f6_radius_restriction.sh`
+with `f6_rad_client.py` (the isolated FreeRADIUS experiment), and
+`f6_cb_sql_dynamic.sh` (candidate C-b). All disposable; none touches Phase 0.
 
 ---
 
