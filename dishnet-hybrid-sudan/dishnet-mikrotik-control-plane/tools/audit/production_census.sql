@@ -40,6 +40,10 @@ RAISE NOTICE '============================================================';
 RAISE NOTICE 'server            : %', version();
 RAISE NOTICE 'database          : %', current_database();
 RAISE NOTICE 'user              : %', current_user;
+RAISE NOTICE 'server address    : %   port : %',
+  coalesce(host(inet_server_addr()), '<unix socket>'),
+  coalesce(inet_server_port()::text, current_setting('port', true));
+RAISE NOTICE '(identity only — no password or connection string is read or printed)';
 SELECT rolsuper, rolbypassrls INTO r FROM pg_roles WHERE rolname = current_user;
 RAISE NOTICE 'superuser         : %   bypassrls : %', r.rolsuper, r.rolbypassrls;
 IF NOT (r.rolsuper OR r.rolbypassrls) THEN
@@ -99,6 +103,21 @@ EXECUTE 'SELECT count(*) FROM mt_devices WHERE state=''decommissioned'' AND site
 RAISE NOTICE 'DECOMMISSIONED but still sited          : %', n;
 EXECUTE 'SELECT count(*) FROM mt_devices WHERE site_id IS NOT NULL AND tunnel_ip IS NULL' INTO n;
 RAISE NOTICE 'sited but no tunnel_ip (unprojectable)  : %', n;
+EXECUTE 'SELECT count(*) FROM mt_devices WHERE tunnel_ip IS NOT NULL' INTO n;
+EXECUTE 'SELECT count(DISTINCT tunnel_ip) FROM mt_devices WHERE tunnel_ip IS NOT NULL' INTO m;
+RAISE NOTICE 'devices with a tunnel_ip                : %   distinct : %', n, m;
+RAISE NOTICE 'SHARED/DUPLICATE tunnel_ip              : %', n - m;
+SELECT count(*) INTO k FROM pg_constraint
+  WHERE conrelid = 'mt_devices'::regclass AND contype = 'u'
+    AND pg_get_constraintdef(oid) ILIKE '%tunnel_ip%';
+IF k > 0 THEN
+  RAISE NOTICE '  (UNIQUE on tunnel_ip present, so duplicates should be structurally impossible;';
+  RAISE NOTICE '   a non-zero above would mean the constraint is missing or was dropped)';
+ELSE
+  RAISE NOTICE '  *** UNIQUE on tunnel_ip is ABSENT — duplicates are possible here ***';
+END IF;
+RAISE NOTICE '  note: reuse of a RETIRED tunnel_ip is not detectable from current rows';
+RAISE NOTICE '        alone (no history is kept) — that is T10, docs/71 §5';
 
 RAISE NOTICE '';
 RAISE NOTICE '============================================================';
@@ -114,8 +133,17 @@ RAISE NOTICE 'mt_vouchers CROSS-CUSTOMER site         : %   <= blocks the FK', n
 EXECUTE 'SELECT count(*) FROM mt_vouchers v WHERE v.site_id IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM mt_sites s WHERE s.id=v.site_id)' INTO n;
 RAISE NOTICE 'mt_vouchers ORPHANED site_id            : %', n;
+RAISE NOTICE '  --- site-less vouchers BY STATE (voiding is not free) ---';
+FOR r IN EXECUTE 'SELECT state, count(*) AS c FROM mt_vouchers
+                   WHERE site_id IS NULL GROUP BY state ORDER BY state' LOOP
+  RAISE NOTICE '    site-less + state=% : %', rpad(r.state, 10), r.c;
+END LOOP;
+EXECUTE 'SELECT count(*) FROM mt_vouchers WHERE site_id IS NULL AND state = ''unused''' INTO n;
+RAISE NOTICE '  site-less and UNUSED (voidable)       : %', n;
 EXECUTE 'SELECT count(*) FROM mt_vouchers WHERE site_id IS NULL AND state <> ''unused''' INTO n;
-RAISE NOTICE '  of the site-less, already sold/used   : %   (these cannot simply be voided)', n;
+RAISE NOTICE '  site-less and NOT unused              : %   <= sold/active/expired/revoked', n;
+EXECUTE 'SELECT count(*) FROM mt_vouchers WHERE site_id IS NULL AND sold_at IS NOT NULL' INTO n;
+RAISE NOTICE '  site-less with a sold_at timestamp    : %', n;
 
 EXECUTE 'SELECT count(*) FROM mt_voucher_batches' INTO n;
 EXECUTE 'SELECT count(*) FROM mt_voucher_batches WHERE site_id IS NULL' INTO m;
@@ -124,6 +152,12 @@ RAISE NOTICE 'mt_voucher_batches with site_id NULL    : %   (informational — s
 EXECUTE 'SELECT count(*) FROM mt_voucher_batches b JOIN mt_sites s ON s.id=b.site_id
            WHERE b.customer_id IS DISTINCT FROM s.customer_id' INTO n;
 RAISE NOTICE 'mt_voucher_batches CROSS-CUSTOMER site  : %   <= blocks the FK', n;
+EXECUTE 'SELECT count(*) FROM mt_voucher_batches b WHERE b.site_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM mt_sites s WHERE s.id=b.site_id)' INTO n;
+RAISE NOTICE 'mt_voucher_batches ORPHANED site_id     : %', n;
+EXECUTE 'SELECT count(*) FROM mt_voucher_batches b WHERE b.site_id IS NULL
+           AND EXISTS (SELECT 1 FROM mt_vouchers v WHERE v.batch_id = b.id)' INTO n;
+RAISE NOTICE '  NULL-site batches that HAVE vouchers  : %   <= every such voucher is site-less', n;
 
 RAISE NOTICE '';
 RAISE NOTICE '============================================================';
@@ -150,6 +184,15 @@ RAISE NOTICE '';
 RAISE NOTICE '============================================================';
 RAISE NOTICE 'SECTION 5 — what this census CANNOT establish';
 RAISE NOTICE '============================================================';
+SELECT rolsuper, rolbypassrls INTO r FROM pg_roles WHERE rolname = current_user;
+IF NOT (r.rolsuper OR r.rolbypassrls) THEN
+  RAISE NOTICE '*** EVERY COUNT ABOVE IS POTENTIALLY INCOMPLETE ***';
+  RAISE NOTICE 'The executing role (%) cannot bypass RLS, and these tables', current_user;
+  RAISE NOTICE 'use FORCE ROW LEVEL SECURITY. Treat every number above as a';
+  RAISE NOTICE 'LOWER BOUND, not a total. Re-run as a bypassing role before';
+  RAISE NOTICE 'any migration decision is taken on these figures.';
+  RAISE NOTICE '';
+END IF;
 RAISE NOTICE 'It speaks for THIS database only. To establish that no control';
 RAISE NOTICE 'plane is deployed anywhere, the operator must also confirm, and';
 RAISE NOTICE 'state how it was confirmed:';
