@@ -1005,15 +1005,20 @@ or nothing.
 
 ## 14. Open decisions
 
+**Decisions 1 and 7 were closed on this evidence — see docs/66.** The rows are
+struck through rather than deleted so this document still shows what was open
+when the evidence was gathered. §12 stays as written: it is the question set
+docs/66 answers, and deleting it would remove the reasoning from the record.
+
 | # | Decision | Blocking |
 |---|---|---|
-| **1** | **Model A or Model B** — at which event the AAA credential is published, and whether that is the same event as voucher creation | M1's function body, D1, and §11's resolution |
+| ~~1~~ | ~~Model A or Model B~~ — **CLOSED: Model B.** See docs/66 §1 | — |
 | **2** | **Site binding A, B or C** | the portal function's site check; a possible `NOT NULL` |
 | **3** | **Portal contract P1, P2 or P3** | the return shape; under P3, the F2 conflict of §6.1 first |
 | **4** | **Front-desk activation: required or not** | whether an operator capability exists at all |
 | **5** | **Rate-limit numbers** — burst, sustained, window, per NAS | §9 fixes the shape and dimensions; the values need a real venue's traffic |
 | **6** | **Retention** for the attempt store | M3 |
-| **7** | **Where does the control plane publish to the separate RADIUS database, and what is the authoritative synchronization / reconciliation mechanism?** | **everything downstream.** Fully stated in §12 |
+| ~~7~~ | ~~Where does the control plane publish…~~ — **CLOSED.** Architecture decided in docs/66 §2; §12 below remains the evidence and the question set it was decided against | — |
 
 ### Decision 7 is a first-class architecture question
 
