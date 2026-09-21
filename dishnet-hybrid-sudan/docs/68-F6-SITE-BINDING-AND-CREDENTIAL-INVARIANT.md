@@ -638,7 +638,7 @@ and poor as the basis of a production publisher.
 | **C-c** | **Another server-derived attribute path** | some other attribute the server derives can carry or key the set | §2.4b left the **group** path uncharacterised — the active group query does not join `radusergroup` as stock does, and `group_attribute` / `group_membership_query` were never captured. That is the obvious first thing to look at |
 | **C-d** | **Controlled generation and restart, as a fallback** — keep huntgroups, but make generation and restart a governed, scheduled, audited operation | E9's cost is accepted and managed rather than removed | nothing technical; this is the known-working path and exists so the investigation has a floor |
 
-**C-b is the most promising on the evidence and is not thereby chosen.** Its
+**C-b was measured and WORKS — §2.4f. It is still not chosen.** Its
 attraction is that it would put the set in the database, where the publisher
 already writes, removing the second state path of §2.4d entirely. Its unknown is
 a single measurable fact, and it must be measured rather than assumed — the
@@ -665,6 +665,112 @@ These are not to be rediscovered:
 * **E6** — `=~` does not give set semantics on that attribute either.
 * **E4** — `Client-Shortname` is not a viable anchor in the tested
   configuration; it rejected the authorised client.
+
+---
+
+### 2.4f Measured — candidate C-b: **WORKS**
+
+**Classification: `WORKS`.** Measured on the same disposable instance as §2.4c,
+never Phase 0, all values synthetic. Reproducible with
+`tools/audit/f6_cb_sql_dynamic.sh`.
+
+C-b asked whether the customer → NAS set can live in the **SQL authorization
+path**, so that adding a router is a row rather than a restart. It can, in two
+shapes.
+
+#### v1 — stock tables only
+
+`authorize_check_query` gains a NAS predicate. The allow-list is rows in
+`radcheck` carrying a private attribute name, excluded from the returned check
+items so FreeRADIUS never sees an attribute it does not know:
+
+```sql
+SELECT c.id, c.UserName, c.Attribute, c.Value, c.Op
+  FROM radcheck AS c
+ WHERE c.Username  = '%{SQL-User-Name}'
+   AND c.Attribute <> 'DNB-Allowed-NAS'
+   AND EXISTS (SELECT 1 FROM radcheck n
+                WHERE n.UserName  = c.UserName
+                  AND n.Attribute = 'DNB-Allowed-NAS'
+                  AND n.Value     = '%{Packet-Src-IP-Address}')
+ ORDER BY c.id
+```
+
+```
+  single-NAS: allowed at A only               A=Access-Accept   B=Access-Reject
+  wrong password from A (must still reject)   Access-Reject
+  multi-NAS: second allow row, NO restart     A=Access-Accept   B=Access-Accept
+  removed again, NO restart                   A=Access-Accept   B=Access-Reject
+  no allow rows (fail-closed?)                A=Access-Reject   B=Access-Reject
+```
+
+#### v2 — customer-level, two additive tables
+
+`dnb_cred_owner(radius_username → customer)` and
+`dnb_customer_nas(customer, nas_ip)`, so **one row per customer-NAS serves every
+credential of that customer** instead of duplicating per voucher.
+
+```
+  customer P, one NAS                         A=Access-Accept   B=Access-Reject
+  ONE insert adds a NAS to P, NO restart      A=Access-Accept   B=Access-Accept
+  removed again, NO restart                   A=Access-Accept   B=Access-Reject
+  credential reassigned to customer Q         A=Access-Reject   B=Access-Accept
+  no mapping at all (fail-closed?)            A=Access-Reject   B=Access-Reject
+  credential with no owner (fail-closed?)     A=Access-Reject   B=Access-Reject
+```
+
+#### The questions C-b was set, answered
+
+| | Result |
+|---|---|
+| Does `%{Packet-Src-IP-Address}` expand **inside the query**? | **WORKS.** The debug log shows it expanding to `127.0.0.1` / `127.0.0.2` per request, and the positive control accepts |
+| Single-NAS customer | **WORKS** |
+| Multi-NAS customer | **WORKS** — and it is **OR** semantics, the thing check items could not express (E5) |
+| Authorised vs unauthorised source address | **WORKS** — accept and reject respectively |
+| Without modifying the **stock schema** | **WORKS.** v1 touches no object at all; v2 adds two new tables. `radcheck`/`radreply` keep exactly their stock indexes and their two primary-key constraints, verified after both runs |
+| Without a **global restart** | **WORKS for the mapping.** Every add, removal and reassignment above took effect with no restart. The *query* is configuration and its installation is a **one-time** restart |
+
+**Fail-closed in every degenerate case.** No allow rows, no mapping, no owner —
+all reject. The default is deny, not allow.
+
+#### How this differs from huntgroups
+
+| | Huntgroups (§2.4c) | C-b |
+|---|---|---|
+| Where the set lives | a server-side **file** | the **database** |
+| Adding a router | edit file → **full restart**, authentication interrupted server-wide (E9) | **one INSERT**, no restart |
+| Who can write it | something with configuration access — a second state path (§2.4d) | the publisher, which already writes the database |
+| Restarts required | one **per change** | one **at installation** |
+
+C-b, if selected, would **remove §2.4d's second state path entirely**.
+
+#### Still not the production design
+
+**Recorded as a proven technical candidate. Not selected.** docs/68 §2.4's
+distinction stands unchanged: the requirement is proven, the production
+mechanism is not chosen. What has changed is that there are now **two** measured
+candidates rather than one, and the cheaper one no longer needs configuration
+access or a restart per change.
+
+Points a production decision must still settle, none of them answered here:
+
+* **v1 or v2** — v1 adds no objects but duplicates the allow-list per voucher;
+  v2 adds two tables and does not;
+* **the publisher's privileges** over whichever tables carry the mapping, under
+  docs/66 §2.3 — `dnb_pub` currently holds no table privileges at all, and this
+  would need a narrow, audited way to write the mapping;
+* **who owns the query change** — it is FreeRADIUS configuration, installed
+  once, and diverges from the stock `queries.conf`, which has upgrade
+  consequences;
+* **D-2 is unaffected** — a NAS identifier must still exist in the control plane
+  and map to a device (§2.7). C-b changes where the set is stored, not whether
+  DishNet knows it.
+
+#### C-a, C-c and C-d
+
+C-b's result does not resolve them. **C-a** is essentially what C-b
+demonstrated. **C-c** — the group path — remains uncharacterised (§2.4b).
+**C-d** remains the known-working fallback. None is selected.
 
 ---
 
