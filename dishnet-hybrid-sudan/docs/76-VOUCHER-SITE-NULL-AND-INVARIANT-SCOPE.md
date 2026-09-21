@@ -116,6 +116,11 @@ system from probing also hides this from the person holding it.
 
 ## A.7 The domain decision required — options, not a choice
 
+> **CLOSED 2026-09-21 — Option A: a voucher may not be issued without an
+> issuing site.** The decision, its seven recorded rationale points and the
+> resulting invariant are in **docs/77 §1**. The options below are preserved
+> as the evidence the decision was taken on.
+
 > **May a voucher be issued with no site, under a site-bound policy?**
 
 | | Option | For | Against |
@@ -156,7 +161,7 @@ Every composite FK below references it.
 |---|---|---|---|---|---|
 | **T1** | `mt_devices` | **NULLABLE** | NULLABLE | composite FK `MATCH SIMPLE` **+** `CHECK (site_id IS NULL OR customer_id IS NOT NULL)` | the partial-NULL state is reachable, and `MATCH SIMPLE` permits it — measured, docs/73 M4/M7. `MATCH FULL` would close it but breaks site deletion (M6) |
 | **T2** | `mt_vouchers` | **NOT NULL** | NULLABLE *(pending A.7)* | composite FK `MATCH SIMPLE` **alone — no CHECK** | with `customer_id NOT NULL` the partial-NULL state is **unrepresentable**, so the CHECK would be dead weight |
-| **T3** | `mt_voucher_batches` | **NOT NULL** | NULLABLE *(pending A.7)* | composite FK `MATCH SIMPLE` **alone — no CHECK** | same reasoning |
+| **T3** | `mt_voucher_batches` | **NOT NULL** | **NULLABLE** — and it stays nullable unless confirmed; see docs/77 §2 | composite FK `MATCH SIMPLE` **alone — no CHECK** | same reasoning |
 
 **The two concerns stay cleanly separable.** Under `MATCH SIMPLE`, a NULL
 `site_id` satisfies the FK regardless — so the FK enforces *"if there is a site,

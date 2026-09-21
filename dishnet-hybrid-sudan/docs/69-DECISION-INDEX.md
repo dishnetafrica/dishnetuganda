@@ -19,6 +19,7 @@ under.
 | **2a** | **Cross-customer AAA security floor — and the mechanism enforcing it** | **CLOSED** | **C-b — site-keyed dynamic SQL source-address restriction**, using `dnb_cred_site`, `dnb_site_nas` and the `EXISTS` predicate against the authorized NAS/source-address set. **Huntgroups retired as a production candidate** | **docs/70 §8** (requirement: docs/68 §2.4) | docs/70 §2, §8.1; docs/68 §2.4b–g |
 | **2b** | **Product / site-binding policy** | **CLOSED** | **A / SITE-BOUND** — a voucher is bound to its issuing site and valid only against the NAS set authorized for that site. Does **not** imply one router per site | **docs/68 §2.5** | docs/68 §2.5a, §2.6, §2.6a–b |
 | **3** | **Portal contract** | **CLOSED** | **P2** — generated AAA credentials; the commercial voucher code never enters the AAA credential path | **docs/67** | docs/65 §6, §12.4 |
+| **3a** | **Voucher issuance requires a site** | **CLOSED** | Under 2b a voucher may **not** be issued without an issuing site — Option A, reject at creation. `mt_vouchers.site_id` becomes `NOT NULL` | **docs/77 §1** | docs/76 Part A |
 | **4** | **Front-desk activation** | **OPEN — business decision** | Whether an operator may activate on a guest's behalf | **docs/67 §7** | docs/64 §2 Q5 |
 | **5** | **Rate limits and timing** | **OPEN** | Numbers only; the shape is settled | **docs/65 §9**, docs/67 §10 | docs/65 §9.2, §12.4 |
 | **6** | **Retention** | **OPEN** | Two separate questions: the control plane's attempt store, and `radpostauth` | **docs/66 §7** | docs/65 §12.4 |
@@ -63,7 +64,7 @@ business-model observation, not an architecture change. (`docs/68` §2.6)
 | | Dependency | Where |
 |---|---|---|
 | **D-1** | **The site→NAS mapping is a second state path.** Under the chosen mechanism it is `dnb_site_nas` in the `radius` database, written on the **device-provisioning** lifecycle — *not* the publication lifecycle. It carries **site isolation and cross-customer isolation at once**, so the AAA Publisher must **not** be able to write it | docs/70 §5.1, §8.4; docs/68 §2.4d; pointer at docs/66 §9a |
-| **D-6** | **The Decision 7 extension — a narrowly scoped provisioning writer** for `dnb_site_nas`. Designed in docs/71; **awaiting approval and blocked**. **N10/P-1** is measured exploitable — and **from the request role, not just `dnb_admin`** (docs/73 §1.1) — with a recommended remediation in **docs/73 §4** awaiting approval; **Q2** (may one router serve two sites?) is **NOT ESTABLISHED** and blocks the `dnb_site_nas` key | **docs/76**, docs/75, docs/74, docs/73, docs/72, docs/71 |
+| **D-6** | **The Decision 7 extension — a narrowly scoped provisioning writer** for `dnb_site_nas`. Designed in docs/71; **awaiting approval and blocked**. **N10/P-1** is measured exploitable — and **from the request role, not just `dnb_admin`** (docs/73 §1.1) — with a recommended remediation in **docs/73 §4** awaiting approval; **Q2** (may one router serve two sites?) is **NOT ESTABLISHED** and blocks the `dnb_site_nas` key | **docs/77**, docs/76, docs/75, docs/74, docs/73, docs/72, docs/71 |
 | **D-2** | **A NAS identifier must exist in the control plane** and map to a device. It does not today | docs/68 §2.7 |
 | **D-3** | **Invariant C1** — generated AAA credentials, independent of the voucher in every respect | docs/68 Part 1 |
 | **D-4** | The **publication state machine** — `activating`, `activation_failed`, `revoking` — must not be collapsed into a generic HTTP 500 | docs/66 §4, docs/67 §4.2 |
@@ -99,6 +100,7 @@ business-model observation, not an architecture change. (`docs/68` §2.6)
 | **docs/74** | **N10 backfill data state:** fixture census (0 violations, 0 partial nulls), suite impact (718 green **with** the constraints), the five backfill classes, and the scope finding that `mt_plans`, `mt_voucher_batches` and **`mt_vouchers`** carry the same untied pair. **Production state NOT ESTABLISHED** |
 | **docs/75** | **Customer/site ownership scope audit:** which tables genuinely need the invariant. `mt_devices`, `mt_vouchers`, `mt_voucher_batches` **yes** (one chain); `mt_plans` **no** (commercial scoping, read by nothing). All three measured able to hold a cross-customer pair. Also: `mt_vouchers.site_id` is NULLABLE, which Decision 2b cannot describe. Changes nothing |
 | **docs/76** | **The site-less voucher + the proposed invariant set.** Measured: *every* voucher the suite creates is site-less (30/30), and such a voucher is a sellable object that can never work, indistinguishable from an invalid code. Options A/B/C for the domain decision, the three-table invariant set with NULL semantics, and six migration prerequisites. Decides nothing |
+| **docs/77** | **Decision record (voucher site-less issuance CLOSED) + the operator census protocol.** Corrects the scope note: `mt_voucher_batches.site_id` is **NULLABLE**, not NOT NULL. Carries `tools/audit/production_census.sql` — read-only, self-tested, with a blinding guard. No migration |
 
 Reproducible artifacts live in `dishnet-mikrotik-control-plane/tools/audit/`:
 `proto_f6*` (the actor and lifecycle prototypes), `f6_radius_restriction.sh`
@@ -129,6 +131,6 @@ created.
 |---|---|
 | **Closed** | Decisions **1**, **2a**, **2b**, **3**, **7**. F1–F13 frozen |
 | **Open** | Decisions **4** (front-desk activation), **5** (rate-limit and timing numbers), **6** (retention — control plane and `radpostauth` separately) |
-| **The next gate** | **The domain decision in docs/76 §A.7** — may a voucher be issued with no site under a site-bound policy? It determines whether `NOT NULL` joins the migration. Then the production census (NOT ESTABLISHED), then the migration. **Q2** still blocks the `dnb_site_nas` key. **Not F6 implementation** |
+| **The next gate** | **The production census** — `tools/audit/production_census.sql`, run by an operator with access (docs/77 §4). Production data state is **NOT ESTABLISHED** and is not inferable from disposable databases or from documentation. Then the migration plan. **Q2** still blocks the `dnb_site_nas` key. **Not F6 implementation** |
 | **F6** | **NOT AUTHORIZED.** It is not the next step, and closing 2a did not bring it closer to being authorized |
 | **Unanswered factual input** | whether a site may have several MikroTik HotSpot routers (docs/68 §2.6b). It did **not** block Decision 2a and is **not** settled by it |

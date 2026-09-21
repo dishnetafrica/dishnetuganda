@@ -24,6 +24,12 @@ the index and a decision document disagree, **the decision document is right.**
   restriction — `dnb_cred_site` + `dnb_site_nas` + the `EXISTS` predicate
   against the authorized NAS set. **Huntgroups are RETIRED as a production
   candidate; do not build on them.** (`docs/70` §8)
+- **Voucher issuance requires a site — CLOSED.** Under 2b a voucher may not be
+  issued without an issuing site; `mt_vouchers.site_id` becomes `NOT NULL`.
+  Decided, **not migrated**. (`docs/77` §1)
+- **The customer/site ownership invariant covers `mt_devices`, `mt_vouchers`
+  and `mt_voucher_batches` only.** `mt_plans` is **out of scope** — do not add
+  it because the column names match. (`docs/75` §5, `docs/77` §3)
 
 ## Chosen ≠ built
 
@@ -36,9 +42,11 @@ the index and a decision document disagree, **the decision document is right.**
 
 ## The next gate
 
-**The Decision 7 extension — the narrowly scoped provisioning writer for
-`dnb_site_nas`** (`docs/70` §8.4). It must be designed and reviewed before any
-implementation. **It is not F6, and F6 is not the next step.**
+**The production census** — `tools/audit/production_census.sql`, run by an
+operator with access (`docs/77` §4). **Production data state is NOT
+ESTABLISHED**; never infer it from a disposable database or from what a
+document permits. The provisioning writer (`docs/71`) is designed but
+unapproved and blocked. **It is not F6, and F6 is not the next step.**
 
 ## Open and parked
 
