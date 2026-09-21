@@ -147,7 +147,7 @@ docker exec dn-phase0-radius grep -n -B2 -A 12 \
 Until it is run, §2.4 is stated as a requirement rather than as a repair of a
 proven hole.
 
-### 2.4 Decision 2a — the tenant restriction (SECURITY: required, mechanism UNVERIFIED)
+### 2.4 Decision 2a — the tenant restriction (SECURITY: required; mechanism VERIFIED in §2.4c)
 
 > **Requirement.** A published credential must not authenticate against a NAS
 > outside the estate of the customer that owns the voucher.
@@ -355,8 +355,135 @@ next thing to look at if a *set* rather than a single NAS is needed.
   a running FreeRADIUS, not a configuration file;
 * question 4 still needs a real router.
 
-**2a remains a requirement with an unverified mechanism.** It is closer to
-verifiable than it was, and the two things still missing are both named.
+**2a's mechanism was verified in §2.4c** — by experiment, not by reading. What
+remains is question 4, which needs a router.
+
+---
+
+### 2.4c Measured — the isolated FreeRADIUS experiment
+
+**2a's mechanism is technically viable.** Measured, not reasoned.
+
+**Setup.** A throwaway FreeRADIUS built and run inside this disposable session
+container. Phase 0 was not touched: no production host, database, configuration
+or credential was used or reached. Every username, password, secret and address
+below is synthetic and corresponds to nothing real. Reproducible from scratch
+with `tools/audit/f6_radius_restriction.sh`, which builds the database, the
+configuration and the server, runs the matrix and stops the server.
+
+| Fidelity point | Here | Phase 0 |
+|---|---|---|
+| FreeRADIUS | **3.2.5** | 3.2.10 — same 3.2 series, a version apart |
+| Schema | the **stock shipped** `schema.sql` | stock, verified identical in shape |
+| `radcheck` indexes | `radcheck_pkey (id)`, `radcheck_username (username, attribute)` — **no unique** | identical (docs/65 §12.3) |
+| authorize query | stock `queries.conf`, unmodified | identical (§2.4b) |
+| Clients | two synthetic, on distinct loopback addresses | one, file-defined |
+
+Two clients on distinct source addresses stand in for two customers. `radclient`
+cannot bind a source address, so `tools/audit/f6_rad_client.py` sends the
+Access-Request directly — the source address is the point of the experiment.
+
+#### Results
+
+```
+=== sanity ===
+  same client, correct vs wrong password    correct=Access-Accept   wrong=Access-Reject
+=== baseline: no restriction (the production condition) ===
+  no restriction row                        A=Access-Accept   B=Access-Accept
+=== server-derived anchors ===
+  Packet-Src-IP-Address == 127.0.0.1        A=Access-Accept   B=Access-Reject
+  Client-IP-Address     == 127.0.0.1        A=Access-Accept   B=Access-Reject
+  Client-Shortname      == cust-p-nas1      A=Access-Reject   B=Access-Reject
+=== client-asserted attributes (mechanism only) ===
+  NAS-IP-Address  == 10.0.0.11              A=Access-Accept   B=Access-Reject
+  NAS-Identifier  == router-p1              A=Access-Accept   B=Access-Reject
+=== expressing a SET ===
+  two '==' rows                             A=Access-Reject   B=Access-Reject
+  one '=~' row matching both                A=Access-Reject   B=Access-Reject
+  Huntgroup-Name == cust-p  (P's group)     A=Access-Accept   B=Access-Reject
+  Huntgroup-Name == cust-q  (Q's group)     A=Access-Reject   B=Access-Accept
+```
+
+#### What each line establishes
+
+**The baseline reproduces production.** With no restriction, one credential
+authenticates from both clients — both tenants. §2.4b's question 9, demonstrated
+rather than deduced.
+
+**A check item does refuse an accept, and is evaluated before it.** That was the
+open behavioural question of §2.4b, and it is now answered: yes.
+
+**Two server-derived anchors work.** `Packet-Src-IP-Address` and
+`Client-IP-Address` both confine the credential, and neither is asserted by the
+client — they come from the socket and from the `clients.conf` match. This is
+the anchor §2.4b identified, now verified.
+
+**`Client-Shortname` does not work** — it rejected the *authorised* client too.
+A negative result worth keeping: the obvious-looking readable anchor is not
+usable, and anyone reaching for it will otherwise discover this in production.
+
+**`NAS-IP-Address` and `NAS-Identifier` work**, but they are client-asserted
+(§2.2) and are recorded only to show the mechanism is general, not to propose
+them.
+
+#### The set problem, and its answer
+
+**Check items are ANDed, not ORed.** Two `Packet-Src-IP-Address ==` rows for one
+username reject *both* clients: the credential must satisfy every check item, and
+it cannot have two different source addresses at once. So a set **cannot** be
+expressed as multiple rows.
+
+This gives docs/65 §12.3's duplicate-row hazard a concrete meaning. It is not
+merely *undefined*: **two restriction rows lock the credential out entirely.**
+Under docs/66 §2.6's delete-then-insert that cannot happen by accident, which is
+one more reason that publication must converge rather than accumulate.
+
+**Regex does not work here either.** A `=~` row matching both addresses rejected
+both.
+
+**Huntgroups do work, and are the only mechanism found that expresses a set.**
+A server-side file maps many source addresses to one group name; `radcheck`
+then carries a single `Huntgroup-Name ==` check item. The tenant test is
+symmetric: P's credential passes at P's router and fails at Q's, and a
+credential scoped to Q's group does the reverse.
+
+**This reverses §2.4b's elimination of huntgroups.** They were set aside there
+because no huntgroups file exists in Phase 0 — true, and beside the point, since
+creating one is configuration. They are not "another mechanism for its own
+sake": they are the only one measured to express a set, and the file keys on
+`Packet-Src-IP-Address`, the same trustworthy anchor.
+
+#### What this costs, stated plainly
+
+**The NAS-set mapping would live in a file, not the database.** Publication is a
+database write by the publisher (docs/66 §2.3); the huntgroups file is
+server-side configuration the publisher cannot and must not write. Those are two
+different update paths with two different actors, and adding or moving a
+customer's router means regenerating a file and reloading FreeRADIUS. That is a
+real operational cost and it belongs to whoever implements 2a.
+
+A single-NAS customer needs no file at all — `Packet-Src-IP-Address ==` on the
+credential is sufficient and is a pure database write.
+
+#### Effect on 2b — none
+
+I expected the mechanism to constrain the product choice, and it does not.
+Huntgroups express any set, so a **per-site** group and a **per-customer** group
+are equally expressible. A, B and C remain genuinely open and remain a business
+question. §2.6's three questions stand unanswered.
+
+#### Status of 2a
+
+**Viable.** Mechanism: a `Huntgroup-Name` check item published with the
+credential, against a server-side huntgroups file keyed on
+`Packet-Src-IP-Address` — the WireGuard tunnel address the control plane already
+holds as `mt_devices.tunnel_ip`. For a single-NAS customer,
+`Packet-Src-IP-Address ==` directly, with no file.
+
+Still outstanding, unchanged: **question 4** — what a real MikroTik supplies —
+which this experiment could not and did not address, because it needs a router.
+It does not block 2a's design: the anchor chosen is the source address, which
+the server derives, not anything the router asserts.
 
 ---
 
