@@ -1019,6 +1019,115 @@ ISP/operator hierarchy remains unreconciled into the frozen architecture.
 
 ---
 
+### 2.6b Two factual questions behind the site-scope question
+
+#### Factual question 1 — are multi-site customers branches, or different businesses?
+
+**ANSWERED** (operator-supplied, 2026-09-21): **a DishNet customer may itself be
+an ISP/operator serving different downstream businesses.** Multiple sites under
+one DishNet customer are therefore **not** to be assumed to be branches of the
+same business.
+
+**Recorded as the intended/observed business model, not a measured market
+share.** It is not a percentage, and it is not a claim that every multi-site
+customer is of that shape — it removes an assumption rather than establishing a
+distribution.
+
+Its bearing on §2.6a is direct: under a YES answer, a voucher would cross
+**between different downstream businesses**, not between branches of one. That
+is the concern §2.6a's YES row records about the ISP losing per-site
+attribution, now with the business shape behind it stated.
+
+#### Factual question 2 — can one site have several MikroTik routers?
+
+**NOT ESTABLISHED.** Classified below, from what the repository does and does
+not say.
+
+**First, a narrowing that changes the question.** Multiple *access points* are
+not multiple *NAS devices*. A hotel with twenty APs bridged behind one MikroTik
+is **one NAS** to FreeRADIUS, because the HotSpot and the RADIUS client run on
+the router (docs/32 §A8's push order: WAN → bridge → DHCP → DNS → pool →
+**HotSpot** → **RADIUS client** → walled garden → …). So the question is not
+"does a site have several APs" — it is **"does a site need more than one MikroTik
+acting as a HotSpot gateway."**
+
+*"Access point" appears zero times in docs/30 and docs/32.* The distinction is
+absent from the architecture documents, which is itself worth recording.
+
+| Evidence | What it says |
+|---|---|
+| **docs/50 §4** lists **"A Per router"** and **"B Per site"** as *distinct* pricing options, with distinct rows — *"Where the limit bites: **Adding a router**"* versus *"**Adding a site**"* | Those are different events only if a site can hold more than one router. **The intended product model contemplates it.** Inferential, not stated: the document nowhere defines the relationship, and it is itself status *"OPTIONS ANALYSIS — no option chosen"* |
+| **docs/32 §A8** provisions one router per push, owning the site's bridge, DHCP, pool and HotSpot | No documented model for two routers sharing a site's LAN. **Not evidence against**, but the provisioning design describes one |
+| **docs/54 Section B** — the C20 instrument — asks *"what equipment sits between that connection and your Wi-Fi"*, *"that device"*, *"if **that box** died tonight"* | **Singular throughout.** The instrument assumes one device per location |
+| `mt_devices.site_id` is not unique | **Technically possible.** Deliberately not treated as evidence of intent — a schema permitting something is not a product requiring it |
+
+**Classification:** **merely technically possible**, with docs/50 as a signal
+that it may be *intended*. It is **not documented as required**, and it cannot
+be concluded to be **not required** either, because docs/50 contemplates it.
+
+#### The missing evidence, named exactly
+
+**C20 as written cannot answer factual question 2.** Section A's Q3 counts
+*locations*; Section B counts nothing — its singular framing (*"that device"*,
+*"that box"*) forecloses the answer rather than collecting it.
+
+The missing item is one question, absent from the instrument:
+
+> **At this location, how many MikroTik routers run the guest hotspot — one, or
+> more than one? If more than one, why?**
+
+The "why" matters: separate buildings with no cable between them, capacity
+beyond one unit, redundancy, and separate uplinks per building are different
+answers with different consequences. **Not added to docs/54 here** — the C20
+instrument is not mine to edit, and this is an evidence note.
+
+#### How each fact affects the technical 2a mechanism
+
+| | Effect |
+|---|---|
+| **Factual 1** (ISP, different businesses) | **None technically.** It bears on policy (§2.6a), not on mechanism |
+| **Factual 2 = one router per site** | With site-scoped vouchers, every credential binds to a single address: `Packet-Src-IP-Address ==` suffices, **no set mechanism at all** (§2.4c E3) |
+| **Factual 2 = several routers per site** | A set must be expressed **even under site-scoped vouchers**. §2.4c/§2.4f's mechanisms become necessary **independently of 2b's answer** |
+
+**That is the sharp point:** factual question 2 can make the set mechanism
+mandatory *whatever* 2b decides. It is the only open question that does so.
+
+#### How each fact affects the product scope question
+
+| | Effect |
+|---|---|
+| **Factual 1** | Strengthens what is at stake in §2.6a: a YES answer lets a voucher cross **between unrelated downstream businesses** under one DishNet account. It does not decide it |
+| **Factual 2** | If a site can hold several routers, "site scope" is *itself* a set, so §2.6a becomes **which** set rather than set-versus-single. The policy question is unchanged; only the simplicity argument for NO is weakened |
+
+#### Is additional evidence actually necessary?
+
+Asked directly, and the honest answer is **no for the policy decision, and
+conditionally no for the mechanism.**
+
+* **For Decision 2b — not necessary.** 2b asks whether a voucher crosses **site**
+  boundaries. How many routers stand inside a site does not change that
+  question. **2b can be decided without factual question 2.**
+* **For 2a's production mechanism — it matters, unless the mechanism chosen
+  handles a set anyway.** C-b (§2.4f) expresses one address or several through
+  the same code path: an allow-list with one row, or with three. A mechanism
+  that handles a set **makes the question moot**; the single-value shortcut is
+  the only choice that depends on the answer.
+
+So the evidence becomes necessary **only if** someone wants to build the
+single-value shortcut. **This is not a reason to select C-b** — §2.4's
+distinction is unchanged and no mechanism is chosen here. It is a statement
+about which decisions the missing evidence actually blocks: **currently, none of
+them**.
+
+#### Status
+
+Factual 1 **answered**. Factual 2 **not established**, with the missing question
+named. **No A/B/C selected, no mechanism chosen, no architecture frozen.** The
+ISP/operator hierarchy remains an input to the decision process, not a frozen
+part of the architecture.
+
+---
+
 ### 2.7 Precondition for 2a, A and B alike
 
 **A NAS identifier must exist in the control plane and map to a device.** It
