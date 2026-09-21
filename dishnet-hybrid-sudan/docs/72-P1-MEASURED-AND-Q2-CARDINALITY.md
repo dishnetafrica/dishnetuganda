@@ -75,6 +75,16 @@ comes from the application layer (`src/Api/Routes.php`), which means a call made
 directly against the function — which is what holding `dnb_admin` permits — is
 **unattributable**.
 
+
+> **SUPERSEDED IN SCOPE by docs/73 §1.1.** The framing below — an *administrative*
+> path that admin-only does not excuse — is right as far as it goes but too narrow.
+> **`dnb_app`, the request role, can violate N10 directly**: it holds `UPDATE` on
+> `mt_devices` from migration 006's blanket grant, and the tenant policy constrains
+> `customer_id` while saying nothing about `site_id`. Measured: a customer pointed
+> its own device at another customer's site, `rows=1`, without `mt_device_assign`.
+> P-1 is therefore reachable from an ordinary authenticated request, not only from
+> `dnb_admin`, which raises its severity and settles §A.7 against any
+> function-level-only remediation.
 ### A.5 Why "admin-only" is not a mitigation
 
 docs/71 §1.2 noted the path is `dnb_admin`-only and that `dnb_app` is refused

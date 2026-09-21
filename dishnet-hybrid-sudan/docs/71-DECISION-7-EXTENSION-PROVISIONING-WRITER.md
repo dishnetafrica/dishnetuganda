@@ -105,6 +105,12 @@ No existing test supplies a mismatched customer/site pair —
 > **`dnb_admin`-only is not a mitigation** — docs/72 §A.5. It bounds who can
 > reach the path; it does not enforce the invariant, and under §2 the error
 > reaches RADIUS without anything touching RADIUS.
+>
+> **And the bound is wider than stated (docs/73 §1.1).** `dnb_app`, the request
+> role, holds `UPDATE` on `mt_devices` and the tenant policy constrains only
+> `customer_id` — measured, a customer re-pointed its own device at another
+> customer's site with a direct `UPDATE`, no privileged function involved. The
+> remediation is docs/73 §4.
 
 ### 1.3 Finding P-2 — a correction to docs/70: the composite key permits one NAS in two sites
 
