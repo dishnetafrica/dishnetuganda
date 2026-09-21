@@ -117,6 +117,22 @@ denies access; it does not restore unrestricted access.**
 
 S2, S3, S4 and S5 all ran **with no restart of any kind**.
 
+**Correction to S2's reading (recorded docs/71 §1.3).** S2 was reported above as
+*"a site gains a second router,"* which it was. It was also something not
+reported. Its baseline was `site-a={127.0.0.1}`, `site-b={127.0.0.2}`; the INSERT
+made `site-a={127.0.0.1, 127.0.0.2}` while `site-b` still held `127.0.0.2` — so
+**`127.0.0.2` was in both sites at once**, belonging to two different customers,
+and the measured result was `U1@B = Access-Accept` **and** `U2@B = Access-Accept`:
+two customers' credentials authenticating at the same router.
+
+The predicate behaved correctly — it authorized exactly what the table said. The
+point is about the **table**: `PRIMARY KEY (site_id, nas_ip)` permits a NAS shared
+between two customers' sites. **This does not weaken Decision 2a**; the mechanism
+did what it was asked. It changes what the mapping's *integrity* rests on, and it
+is why docs/71 §2.1 proposes `PRIMARY KEY (nas_ip)` instead — a change to the
+shape recorded here, conditional on a factual question nobody has answered
+(docs/71 §9 Q2) and **not** made unilaterally.
+
 ### E10 — huntgroup removal also requires a full restart
 
 `SYN-USER-1` carries `radcheck: Huntgroup-Name == site-a`. The credential is
