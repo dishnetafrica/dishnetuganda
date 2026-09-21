@@ -792,6 +792,91 @@ learns about after the fact.
 under all three; what remains is genuinely a business question about how
 DishNet's customers run their sites.
 
+### 2.5a Decision 2b — the comparison, for approval
+
+> **If Site A and Site B belong to the same DishNet customer, should a voucher
+> created for Site A be usable at Site B?**
+>
+> **A — Site-bound.** Valid only at its issuing site.
+> **B — First-use binding.** Unbound at issue; binds to the first site it is
+> redeemed at.
+> **C — Customer-estate scope.** Valid across the customer's sites.
+
+**Nothing below selects.** "Simplest" is not used as a reason anywhere, and the
+answer is not inferred from Q1, Q2 or Q3.
+
+**True of all three, and therefore not a differentiator:** 2a's cross-*customer*
+floor is unchanged (§2.4); F10 holds — no DishNet commercial limit reaches a
+guest; and for a **single-site customer all three are behaviourally identical**,
+so the choice affects approximately 2–3 customers today (§2.6 Q1).
+
+| | **A — Site-bound** | **B — First-use binding** | **C — Customer-estate** |
+|---|---|---|---|
+| **Operator behaviour** | each site hands out its own stock; a foreign code fails and a local one must be issued | one pool, handed out anywhere; binding happens invisibly at redemption | one pool, works everywhere; nothing to get wrong |
+| **Security / blast radius** | **tightest** — a leaked batch is worth one site | **split**: *before* first use a leaked code is estate-wide; *after*, one site | **widest** — a leaked batch is the whole estate for its lifetime |
+| **Downstream-business separation** | **strongest** — Site A's vouchers can never consume Site B's link | after binding yes; before binding no | **none at enforcement level** — the hotel's paper can be spent on the school's link |
+| **Voucher distribution** | stock must be generated for the site that will use it — which is what Q3 already describes | stock is fungible until first use | stock is fungible permanently |
+| **Operational complexity** | binding is known at generation; no later event | **highest** — needs a binding event from a trustworthy source, plus a window before it fires | lowest at the policy level |
+| **Effect on the 2a NAS restriction** | if a site has **one** router, a single-value restriction suffices and **no set mechanism is needed**; if several, a set of that site's routers | needs a **set** at publication *and* a **mutation path** to narrow it later — the most machinery of the three | **always** needs a set for multi-site customers |
+| **ISP serving unrelated businesses** | cleanest fit: the hotel's codes are the hotel's, the school's are the school's | weakest guarantee where it matters — unissued stock is estate-wide | converts a **commercial** fact ("one DishNet account") into a **network-enforcement** fact spanning unrelated businesses |
+| **Future flexibility** | **most reversible** — A → C later is a relaxation | middle; moving either way is possible but the machinery persists meanwhile | **least reversible** — C → A later invalidates vouchers already in people's hands |
+
+#### Notes the table cannot hold
+
+**The reversibility asymmetry is the one dimension where the options are
+genuinely ordered.** Relaxing a restriction later widens an allow-list and
+breaks nothing — codes that worked keep working. Tightening one later stops
+codes working in places they previously worked, in the field, in guests' hands.
+A → C is a configuration change; C → A is a breaking change. This is a property
+of the options, not an argument for either end.
+
+**B's protection covers the wrong end of the lifecycle.** Its blast radius is
+narrow only *after* a voucher has been redeemed. The stock most likely to be
+stolen, photographed or mislaid is **unused** paper sitting in a drawer — and
+that is precisely when B behaves like C. B's guarantee arrives after the moment
+it would have mattered.
+
+**Q3 substantially undercuts B's main advantage.** B's flexibility — one pool
+serving every site — is worth most when stock is centrally produced and
+allocated later. Q3 records that generation is already per site, so the problem
+B solves is one this customer base does not appear to have. *Stated as a
+consequence of the evidence, not as a verdict on B.*
+
+**C's cost is not that DishNet declines to separate downstream businesses — it
+is that DishNet would prevent the ISP from separating them.** §2.6 Q2 settled
+that DishNet does not need per-site attribution. Under C the ISP cannot have it
+either, because the hotel's consumption and the school's become
+indistinguishable at the link. That is DishNet constraining a customer's
+business model, and it is a different thing from DishNet declining to perform
+an accounting task.
+
+**A's cost is guests and staff who legitimately move.** A contractor or manager
+working across the ISP's sites needs a voucher per site. Whether that is a real
+burden depends on whether such people exist in numbers — **not known, and not
+worth a C20 question on this evidence.**
+
+**The per-customer variant recorded in §2.6a remains available** as a wrapper
+over whichever of A/B/C is chosen — the scope becomes a per-customer setting
+rather than a platform-wide rule. It is **not a fourth option here** and carries
+the cost §2.6a records: a wrong setting is a silent authorization change.
+
+#### What this decision does not settle
+
+Voucher **validity scope** only. It does not touch DishNet's commercial
+accounting (§2.6 Q2), who may issue a voucher (decision 4), rate limits
+(decision 5), retention (decision 6), or 2a's production **mechanism**, which
+remains unchosen with two proven candidates (§2.4).
+
+It is also **independent of the unresolved multiple-MikroTik-per-site question**
+(§2.6b): that question can change how much machinery A and B need, but it does
+not change what any of the three options *means*.
+
+#### Status
+
+**OPEN — presented for explicit approval. No option selected.**
+
+---
+
 ### 2.6 C20 evidence, and what it implies for 2b
 
 All three questions are now answered. **Nothing here selects A, B or C.**
