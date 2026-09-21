@@ -17,7 +17,7 @@ under.
 | — | **F1–F13 architecture freeze** | **FROZEN** | 13 items, unfrozen only by explicit amendment to docs/53 §5 | **docs/53** | — |
 | **1** | **AAA publication lifecycle** | **CLOSED** | **Model B** — the AAA credential is published at redemption/activation, not at voucher issue | **docs/66 §1** | docs/65 §3 (both models measured across all three layers), §4 |
 | **2a** | **Cross-customer AAA security floor** | **PROVEN requirement; mechanism NOT CHOSEN** | See §2a below | **docs/68 §2.4** | docs/68 §2.4b, §2.4c |
-| **2b** | **Product / site-binding policy** | **OPEN — business decision** | A, B or C. Not selected. **C20 Q1–Q3 all answered** (docs/68 §2.6); the question has narrowed to blast radius within an estate. **The comparison is written and awaiting approval — docs/68 §2.5a.** The framing question is §2.6a: should a voucher made for one of a customer's sites work at another? | **docs/68 §2.5** | docs/65 §5, docs/68 §2.6 |
+| **2b** | **Product / site-binding policy** | **CLOSED** | **A / SITE-BOUND** — a voucher is bound to its issuing site and valid only against the NAS set authorized for that site. Does **not** imply one router per site | **docs/68 §2.5** | docs/68 §2.5a, §2.6, §2.6a–b |
 | **3** | **Portal contract** | **CLOSED** | **P2** — generated AAA credentials; the commercial voucher code never enters the AAA credential path | **docs/67** | docs/65 §6, §12.4 |
 | **4** | **Front-desk activation** | **OPEN — business decision** | Whether an operator may activate on a guest's behalf | **docs/67 §7** | docs/64 §2 Q5 |
 | **5** | **Rate limits and timing** | **OPEN** | Numbers only; the shape is settled | **docs/65 §9**, docs/67 §10 | docs/65 §9.2, §12.4 |
@@ -47,11 +47,12 @@ The investigation and its constraints are docs/68 §2.4e; C-b's result is §2.4f
 
 ## Open business-model observation — not reconciled
 
-**The ISP/operator hierarchy — now also an input to Decision 2b.** Option C is
-defined as roaming within the owning customer's *estate*, and if a customer is
-an ISP with downstream customers of its own, what that scope covers is unsettled
-(`docs/68` §2.6 ¶3). C20 evidence records that a DishNet customer may itself be
-an ISP or operator managing its own downstream customers:
+**The ISP/operator hierarchy.** It informed Decision 2b's rationale — a customer
+may serve unrelated downstream businesses, so customer-level commercial
+ownership does not become customer-wide voucher scope (`docs/68` §2.5). It
+remains a business-model input and is **not** a tenant layer in the
+architecture. C20 evidence records that a DishNet customer may itself be an ISP
+or operator managing its own downstream customers:
 **DishNet → ISP/operator customer → sites → downstream users**, with each site
 generating its own voucher stock. This layer is **new relative to the frozen
 documents** and has deliberately **not** been reconciled into them. It is an open
@@ -90,7 +91,7 @@ business-model observation, not an architecture change. (`docs/68` §2.6)
 | **docs/65** | lifecycle evidence and the open-decision set. Rows 1, 3 and 7 struck through with pointers; §12 holds the AAA-boundary evidence |
 | **docs/66** | **Decision record: Decisions 1 and 7** |
 | **docs/67** | **Decision record: Decision 3** (amended once by docs/68 §3) |
-| **docs/68** | credential invariant C1; Decision 2a evidence and 2b's open state |
+| **docs/68** | credential invariant C1; **Decision 2b (closed)**; Decision 2a's evidence and open mechanism |
 | **docs/69** | this index |
 
 Reproducible artifacts live in `dishnet-mikrotik-control-plane/tools/audit/`:

@@ -774,7 +774,7 @@ demonstrated. **C-c** — the group path — remains uncharacterised (§2.4b).
 
 ---
 
-### 2.5 Decision 2b — A, B or C (PRODUCT, open)
+### 2.5 Decision 2b — **CLOSED: A / SITE-BOUND**
 
 With §2.2 applied, the three options reorder by what each must trust:
 
@@ -788,9 +788,56 @@ The earlier framing had B as a middle option. Under the trust analysis it is the
 most expensive, because the only honest binding event is one the control plane
 learns about after the fact.
 
-**None of the three is chosen here.** The security floor is 2a and is identical
-under all three; what remains is genuinely a business question about how
-DishNet's customers run their sites.
+#### The decision
+
+> **Decision 2b — SITE-BOUND.** A voucher is bound to its issuing site and is
+> valid only against the MikroTik HotSpot/NAS set authorized for that site.
+>
+> **Approved 2026-09-21. The comparison it was taken on is §2.5a.**
+
+#### Rationale, as recorded
+
+1. Vouchers are already generated **locally per site** (C20 Q3, §2.6).
+2. Only approximately **2–3** current/target customers are known to operate more
+   than one site (C20 Q1, §2.6).
+3. A DishNet customer **may itself be an ISP/operator serving unrelated
+   downstream businesses** (§2.6b factual 1). Therefore **customer-level
+   commercial ownership must not automatically become customer-wide voucher
+   enforcement scope.**
+4. DishNet does not require per-site downstream revenue attribution (C20 Q2) —
+   **but that does not mean the ISP should lose the ability to distinguish its
+   own sites.**
+5. First-use binding adds **lifecycle and mutation complexity without a
+   demonstrated current business requirement** (§2.5a).
+6. Site-bound scope keeps the **enforcement boundary aligned with the
+   operational site and the downstream-business boundary.**
+7. Site-bound is **reversible in the direction of relaxing** scope later;
+   tightening a previously estate-wide voucher would be a breaking change
+   (§2.5a).
+
+#### Distinctions this decision carries
+
+**It is an enforcement and policy decision, not a DishNet revenue-accounting
+decision.** C20 Q2 stands as recorded: DishNet accounts at customer level.
+
+**"Site-bound" does NOT imply that one site may have only one MikroTik router.**
+A voucher is bound to its *site*; that site's **authorized NAS set may contain
+more than one router**. The two are separate statements and conflating them
+would read a device constraint out of a policy decision.
+
+**The multiple-MikroTik-per-site question therefore remains OPEN** (§2.6b factual
+2) and **does not change this decision.** It bears only on how much machinery
+2a's mechanism needs, not on what site-bound means.
+
+**The ISP/operator hierarchy remains a business-model input.** It informed
+rationale 3 and is **not** to become a new tenant layer in the architecture. No
+frozen item is amended by this decision.
+
+**C-b is not selected.** It remains a proven technical candidate (§2.4f) for
+expressing a multi-NAS authorized set *if* the device/site evidence later
+requires one. 2a's production mechanism stays unchosen (§2.4).
+
+**F6 is not implemented.** This decision authorises nothing.
 
 ### 2.5a Decision 2b — the comparison, for approval
 
@@ -873,7 +920,9 @@ not change what any of the three options *means*.
 
 #### Status
 
-**OPEN — presented for explicit approval. No option selected.**
+**CLOSED — A / SITE-BOUND**, approved 2026-09-21. The comparison is preserved as
+written, unedited, as the basis the decision was taken on. See §2.5 for the
+decision and its rationale.
 
 ---
 

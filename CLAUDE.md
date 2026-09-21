@@ -17,6 +17,9 @@ the index and a decision document disagree, **the decision document is right.**
   **the voucher code never enters the AAA credential path.** (`docs/67`)
 - **Decision 7 — CLOSED:** a dedicated **AAA Publisher**, with the privilege and
   reconciliation boundary as documented. (`docs/66` §2)
+- **Decision 2b — CLOSED: A / SITE-BOUND.** A voucher is bound to its issuing
+  site and is valid only against the NAS set authorized for that site. This does
+  **not** imply that a site may have only one router. (`docs/68` §2.5)
 
 ## Proven ≠ chosen
 
@@ -27,8 +30,11 @@ the index and a decision document disagree, **the decision document is right.**
 
 ## Open and parked
 
-- **Decision 2b is OPEN**, awaiting C20 customer evidence. **Do not infer
-  A/B/C from this repository.** (`docs/68` §2.5–2.6)
+- **Whether a site may have several MikroTik HotSpot routers is OPEN**
+  (`docs/68` §2.6b). It affects how much machinery 2a's mechanism needs — not
+  what site-bound means.
+- **The ISP/operator hierarchy is a business-model input, not a tenant layer.**
+  Do not build one from it. (`docs/68` §2.5, §2.6)
 - **Do not implement F6** until the implementation gate is explicitly opened.
 - **C1 guard tests are mandatory at that gate**, not after it. (`docs/68` Part 1)
 - **`s1_s2_probe.php` repair is a separate test-maintenance task** and must not
