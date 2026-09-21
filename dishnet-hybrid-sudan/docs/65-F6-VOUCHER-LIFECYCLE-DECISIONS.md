@@ -796,7 +796,89 @@ schema is equally permissive under both.
 
 ---
 
-### 12.4 What must not happen
+### 12.4 Measured — post-authentication logging
+
+**Provenance.** Operator-supplied, 2026-09-21, six read-only commands on the
+Phase 0 server, returned as output. Same access limitation as §12.3: this
+session cannot reach the host. Nothing was modified, restarted or written.
+
+#### Established
+
+| Fact | Evidence |
+|---|---|
+| The `sql` module **is enabled** | `mods-enabled/sql -> ../mods-available/sql` |
+| It is bound to the credential and post-auth tables | `dialect = "postgresql"`, `postauth_table = "radpostauth"`, `authcheck_table = "radcheck"`, `authreply_table = "radreply"` |
+| FreeRADIUS reads its NAS clients **from the database** | `read_clients = yes` — so the `nas` table, and `nas.secret` with it, is live rather than vestigial. This strengthens the Q14 consideration recorded in §12.0 |
+| The post-auth query is **active, not commented** | `queries.conf:728`, `post-auth { query = … }`. The optional `logfile =` line above it is commented, so rows go to the database, not a file |
+| Enabled virtual servers | `default` and `inner-tunnel`, and only those |
+| `inner-tunnel`'s post-auth **actively calls** `-sql` | `sites-enabled/inner-tunnel:337`, uncommented |
+
+The query itself:
+
+```
+INSERT INTO ${..postauth_table}
+        (username, pass, reply, authdate ${..class.column_name})
+VALUES( '%{User-Name}',
+        '%{%{User-Password}:-%{Chap-Password}}',
+        '%{reply:Packet-Type}',
+        '%S.%M' ${..class.reply_xlat})
+```
+
+Three properties of it matter:
+
+* `pass` receives `%{User-Password}`, falling back to `%{Chap-Password}` — **the
+  password as supplied by the client, interpolated verbatim.** No hash, no
+  truncation; the column is `text`.
+* `reply` receives `%{reply:Packet-Type}`, so a row records *which* outcome it
+  was. The query is outcome-agnostic wherever it is invoked.
+* It writes to `radpostauth`, in the same database as `radcheck` and `nas`.
+
+#### Not established, and why
+
+* **Whether `default`'s post-auth invokes `sql`.** The command displayed 45
+  lines from `sites-enabled/default:812` and all of them were commentary; the
+  section continues past that window. This is the decisive unknown, because
+  `default` is the virtual server a MikroTik HotSpot NAS reaches — `inner-tunnel`
+  serves tunnelled EAP inner methods, not the PAP a HotSpot sends.
+* **Whether any reject path logs.** `grep -rn 'Post-Auth-Type'
+  /etc/freeradius/sites-enabled/` returned nothing, **and that result is an
+  artefact of the command, not a finding**: `sites-enabled/` contains only
+  symlinks, and `grep -r` does not follow symlinks to files — `-R` does. The
+  earlier per-file loop worked for exactly that reason. Nothing about the reject
+  path has been measured.
+
+Both were my own command errors, not gaps in what was returned.
+
+#### The seven questions, answered as far as the evidence reaches
+
+| | Question | Answer |
+|---|---|---|
+| 1 | Is `radpostauth` INSERT enabled? | The module is enabled and the query is active. **Whether it executes for HotSpot authentications is unresolved**, pending `default`'s post-auth |
+| 2 | Under what outcomes is it written? | Where invoked, it is outcome-agnostic and records the outcome in `reply`. Accept-path invocation depends on `default` post-auth; reject-path depends on a `Post-Auth-Type REJECT` block. **Both unmeasured for `default`** |
+| 3 | Is the supplied password written to `radpostauth.pass`? | **Yes**, by the configured query |
+| 4 | Verbatim or transformed? | **Verbatim.** `'%{%{User-Password}:-%{Chap-Password}}'` interpolates the supplied value; nothing hashes or truncates it |
+| 5 | Does the current configuration make a voucher code persist there? | **Not answerable yet.** It needs both (a) `default` post-auth calling `sql` — unmeasured — and (b) the voucher code being the User-Password, which is docs/33 §416–417's *intended* model, not current state. `radcheck` holds 0 rows, so nothing persists today |
+| 6 | Exact path if yes | `sites-enabled/default` post-auth → `sql` → `mods-enabled/sql` → `queries.conf:728` → `radpostauth.pass`. **The first link is the unverified one** |
+| 7 | Why not, if no | n/a — pending 1 and 2 |
+
+#### What follows if it is confirmed
+
+Stated, not acted on. Under any design where the voucher code is the RADIUS
+password, every authentication attempt would write that code in plaintext to
+`radpostauth` — **including failed ones** — in the same database as `nas.secret`.
+That is precisely the hazard §8 settled for the control plane's own attempt
+records, reappearing one layer down where the control plane's decision does not
+reach it.
+
+It is a configuration fact about the AAA layer, not a control-plane decision,
+and **it does not bear on Model A versus Model B**: it would apply identically
+under both. It bears on Decision 7 — specifically on whether publication should
+avoid making the code the password at all, which is the same question §6's P1
+raises from the portal's side.
+
+---
+
+### 12.5 What must not happen
 
 * Publication must not be decided by writing the first thing that works.
   Questions 12, 13 and 14 have no implementation-obvious answer, and a wrong one
@@ -807,8 +889,9 @@ schema is equally permissive under both.
 * Questions 8 and 11 must not be answered from the standard FreeRADIUS schema
   as remembered. That is why §12.3 exists: the deployed schema was inspected
   rather than recalled, and it turned out to permit exactly what the simulation
-  showed. What remains unmeasured — whether post-auth logging is enabled — must
-  be established the same way rather than assumed.
+  showed. §12.4 carried that
+  through for post-auth logging and stopped where the evidence stopped, rather
+  than completing the picture from a remembered stock configuration.
 
 ---
 
