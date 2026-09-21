@@ -16,7 +16,7 @@ under.
 |---|---|---|---|---|---|
 | — | **F1–F13 architecture freeze** | **FROZEN** | 13 items, unfrozen only by explicit amendment to docs/53 §5 | **docs/53** | — |
 | **1** | **AAA publication lifecycle** | **CLOSED** | **Model B** — the AAA credential is published at redemption/activation, not at voucher issue | **docs/66 §1** | docs/65 §3 (both models measured across all three layers), §4 |
-| **2a** | **Cross-customer AAA security floor** | **PROVEN requirement; mechanism NOT CHOSEN** | See §2a below | **docs/68 §2.4** | docs/68 §2.4b, §2.4c |
+| **2a** | **Cross-customer AAA security floor** | **PROVEN requirement; mechanism NOT CHOSEN — a recommendation awaits approval in docs/70 §8** | See §2a below | **docs/68 §2.4** | docs/68 §2.4b, §2.4c, §2.4g; **docs/70 §2** |
 | **2b** | **Product / site-binding policy** | **CLOSED** | **A / SITE-BOUND** — a voucher is bound to its issuing site and valid only against the NAS set authorized for that site. Does **not** imply one router per site | **docs/68 §2.5** | docs/68 §2.5a, §2.6, §2.6a–b |
 | **3** | **Portal contract** | **CLOSED** | **P2** — generated AAA credentials; the commercial voucher code never enters the AAA credential path | **docs/67** | docs/65 §6, §12.4 |
 | **4** | **Front-desk activation** | **OPEN — business decision** | Whether an operator may activate on a guest's behalf | **docs/67 §7** | docs/64 §2 Q5 |
@@ -34,8 +34,8 @@ Four separate statements. docs/68 §2.4c holds the full version.
 |---|---|
 | **Security requirement** | **PROVEN.** A credential must not authenticate outside its customer's estate, and FreeRADIUS can enforce that from a server-derived source address |
 | **Production mechanism** | **NOT CHOSEN.** No mechanism has been selected to build |
-| **Huntgroups** | a **measured viable mechanism**, not an architectural selection. They work (E7, E8) and cost a full FreeRADIUS restart per mapping change (E9) |
-| **C-b, the SQL dynamic-set candidate** | **MEASURED: `WORKS`** (docs/68 §2.4f) — and **not chosen**. The set can live in the SQL authorize path, so a mapping change is a row rather than a restart. It is a second proven candidate, not a selection |
+| **Huntgroups** | a **measured viable mechanism**, not an architectural selection. They work (E7, E8) and cost a full FreeRADIUS restart per mapping change — **in both directions**: E9 (granting) and **E10** (removing, so stale authorization persists until that restart — docs/70 §2) |
+| **C-b, the SQL dynamic-set candidate** | **MEASURED: `WORKS`** (docs/68 §2.4f), re-measured on a **site** key (docs/70 §2) — and **not chosen**. The set can live in the SQL authorize path, so a mapping change is a row rather than a restart. **docs/70 §7 recommends it; only explicit approval of docs/70 §8 selects it** |
 | **C-a, C-c, C-d** | still **candidates**, none measured, none selected |
 
 So there are now **two** proven mechanisms and still **no chosen one**.
@@ -93,6 +93,7 @@ business-model observation, not an architecture change. (`docs/68` §2.6)
 | **docs/67** | **Decision record: Decision 3** (amended once by docs/68 §3) |
 | **docs/68** | credential invariant C1; **Decision 2b (closed)**; Decision 2a's evidence and open mechanism |
 | **docs/69** | this index |
+| **docs/70** | Decision 2a's **mechanism** gate: the sixteen-requirement comparison, E10 and S1–S9, and the recommendation **awaiting approval**. Decides nothing |
 
 Reproducible artifacts live in `dishnet-mikrotik-control-plane/tools/audit/`:
 `proto_f6*` (the actor and lifecycle prototypes), `f6_radius_restriction.sh`

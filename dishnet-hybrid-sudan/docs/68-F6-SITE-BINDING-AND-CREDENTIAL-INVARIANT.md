@@ -772,6 +772,29 @@ C-b's result does not resolve them. **C-a** is essentially what C-b
 demonstrated. **C-c** — the group path — remains uncharacterised (§2.4b).
 **C-d** remains the known-working fallback. None is selected.
 
+### 2.4g Evidence added at the Decision 2a mechanism gate — see docs/70
+
+Two gaps in the evidence above were closed **after** Decision 2b closed, once
+the mapping key had to be a **site** rather than a customer. The measurements
+live in **docs/70 §2**; only their consequences for this section are recorded
+here.
+
+- **E10 — a huntgroup *removal* also requires a full restart.** E9 measured the
+  **addition** direction only. E10 measures removal: reassigning a router
+  between sites in the `huntgroups` file leaves the old site's credentials
+  authenticating at that router **through the file edit and through a SIGHUP**,
+  until a full restart. E10 joins E9 as a permanent implementation constraint on
+  huntgroups.
+- **S1–S9 — C-b re-measured on a *site* key**, with two additive tables
+  (`dnb_cred_site`, `dnb_site_nas`). C-b still `WORKS`, still fails closed —
+  including when its own mapping tables are **dropped** — and a router
+  reassignment is one row `UPDATE`, atomic and immediate, with no credential
+  rewritten and no restart.
+
+**This does not change §2.4's status.** The requirement remains PROVEN and the
+production mechanism remains **NOT CHOSEN** until the decision in docs/70 §8 is
+explicitly approved. docs/70 recommends; it does not select.
+
 ---
 
 ### 2.5 Decision 2b — **CLOSED: A / SITE-BOUND**
