@@ -792,43 +792,130 @@ learns about after the fact.
 under all three; what remains is genuinely a business question about how
 DishNet's customers run their sites.
 
-### 2.6 The question that settles it
+### 2.6 C20 evidence, and what it implies for 2b
 
-I cannot answer these from the repository, and they decide 2b:
+All three questions are now answered. **Nothing here selects A, B or C.**
 
-1. **Do DishNet's MikroTik customers typically operate more than one site?**
-   — **OPEN.**
-2. **Is per-site revenue attribution required, or is per-customer sufficient?**
-   — **OPEN.**
-3. **Is voucher stock printed centrally, or per site?**
-   — **ANSWERED** (C20, operator-supplied, 2026-09-21): **per site, locally
-   generated.** Each site can independently generate, print and distribute its
-   own vouchers. Stock is *not* centrally produced by DishNet and pushed out to
-   a customer's sites.
+#### 1. Observed business evidence
 
-**Two notes on that answer, neither of them an inference about 1 or 2.**
+Operator-supplied, C20, 2026-09-21. Recorded as given.
 
-*It carries a hierarchy the frozen documents do not currently describe.* As
-given: **DishNet → ISP/operator customer → sites → downstream users** — a
+| | Question | Answer |
+|---|---|---|
+| **Q1** | Do customers typically operate more than one site? | **Very few — approximately 2–3 target/current customers.** Recorded as **observed current business evidence, not a market statistic**: it is not a percentage, not a projection, and not a claim about the wider market |
+| **Q2** | Is per-site revenue attribution required? | **No — customer-level revenue is sufficient for DishNet.** DishNet tracks the commercial relationship at customer level. An ISP/operator customer runs its own downstream commercial operation, and **attributing that downstream resale revenue by site is not a DishNet requirement** |
+| **Q3** | Is voucher stock produced centrally or per site? | **Per site, locally generated.** Each site can independently generate, print and distribute its own vouchers |
+
+#### 2. Implications for Decision 2b
+
+**(a) For most customers the choice is behaviourally moot.** A single-site
+customer sees identical behaviour under all three options: with one site,
+*bound to the site*, *bound at first use* and *roams within the estate* denote
+the same thing. Per Q1, the distinction manifests for approximately 2–3
+customers.
+
+The technical cost follows the same boundary: a single-NAS customer needs no
+set-expressing mechanism at all (§2.4c E3, §2.4f). **Both the product
+difference and the implementation difference are confined to the same small
+set.**
+
+**(b) Q2 retires C's principal recorded cost.** docs/65 §5 listed C's cost as
+*"revenue attribution: impossible — no site is ever fixed."* Q2 says per-site
+attribution is not a DishNet requirement, so that cost no longer binds DishNet.
+It does not disappear — it becomes irrelevant to DishNet's own accounting.
+
+**(c) Q3 retires A's principal recorded cost.** docs/65 §5 listed A's costs as
+*"a code printed for the wrong desk is dead paper"* and *"printed for the wrong
+site: dead paper until revoked and reissued."* Both presuppose central
+production and distribution. Under Q3 the generating site **is** the binding
+site, so the mismatch largely cannot arise.
+
+**(d) B is unchanged, and remains the most expensive.** §2.5 records that its
+only honest binding event is the first successful authentication, learned after
+the fact, with a window in which the credential is customer-wide. Nothing in
+Q1–Q3 reduces that.
+
+**(e) Commercial hierarchy is not enforcement scope.** Q2 settles that DishNet's
+commercial relationship sits at customer level and sites are not separate
+commercial accounts. **It does not follow that vouchers roam between sites.** A
+customer can be a single commercial account and still want per-site voucher
+validity for operational reasons. 2b is an enforcement and policy question, not
+a commercial-plane one, and merging the two would be the kind of silent
+inference this document exists to prevent.
+
+**(f) What the evidence does not touch: blast radius.** The live differentiator
+between A and C is what a leaked, photographed or shared code is worth inside
+one customer's estate — **one site under A, the whole estate under C**, for the
+code's lifetime. None of Q1, Q2 or Q3 speaks to it. It is the question 2b now
+substantially reduces to.
+
+#### 3. Remaining uncertainty
+
+**The largest is what "the customer's estate" means.** Option C is defined as
+*roaming within the owning customer's estate*. Under the ISP/operator hierarchy
+(below), a DishNet customer may be an ISP whose own downstream customers each
+have sites. If so, "the customer's estate" could mean the ISP's **entire
+footprint, spanning unrelated downstream businesses** — materially different
+from roaming across one hotel chain's three branches, and a much larger blast
+radius under (f).
+
+**This promotes the ISP/operator hierarchy from an observation to an input to
+2b.** It is still not reconciled into the frozen architecture and no decision is
+taken on it here, but option C cannot be evaluated until it is settled.
+
+Also open, and not inferred:
+
+* whether the **platform** should offer an ISP per-site reporting for its own
+  downstream business — Q2 answers DishNet's accounting need, not what DishNet
+  sells;
+* whether any of the ~2–3 multi-site customers has a stated preference. Not
+  asked, not known;
+* Q1 is a **current** observation. If the customer base shifts toward multi-site
+  operators the balance changes. **No projection is made here.**
+
+#### 4. The decision still to be made
+
+**2b remains open, and remains a product decision: A, B or C.**
+
+What changed is the grounds, not the answer. The attribution argument (for A)
+and the stock-distribution argument (against A) are both largely retired; B's
+cost is unchanged; and the question has narrowed to **blast radius within an
+estate, and what "estate" means**.
+
+A sensible order — stated as sequence, not as selection: **settle what "the
+customer's estate" means under the ISP/operator hierarchy first**, because C's
+meaning depends on it and A's does not.
+
+The security floor **2a is unaffected** and applies identically under all three
+(§2.4). Nothing in this section authorises implementation.
+
+#### A conditional withdrawn
+
+An earlier version of this section said: *"If the answer to 1 is 'mostly no',
+then A, B and C are indistinguishable in practice for most of the estate, 2a
+already carries the security, and C is correct on simplicity alone."*
+
+Q1's answer meets that antecedent, and **the conclusion is withdrawn rather than
+triggered.** It was written before the ISP/operator hierarchy was known, and it
+assumed "the customer's estate" was a small, well-understood scope. Under §3
+that scope is now the open question. A conditional whose reasoning has been
+undercut should not fire merely because its stated antecedent came true.
+
+#### The ISP/operator hierarchy — still open
+
+As given: **DishNet → ISP/operator customer → sites → downstream users.** A
 DishNet customer may itself be an ISP or operator managing its own downstream
 customers. docs/45 §2.1 settles that a guest is not a DishNet account, which is
-consistent, but the intermediate operator layer is new relative to the frozen
-set. **It is recorded here and deliberately not reconciled**; reconciling it
-would be architecture work and this is an evidence note.
+consistent; the intermediate operator layer is new relative to the frozen set.
 
-*It may bear on decision 4's scope.* If the issuing actor is per-site, who holds
-the issuing capability is a question decision 4 touches. **Recorded as a pointer,
-not a conclusion** — decision 4 remains open and untouched.
+**Recorded, not reconciled.** Q2 is consistent with it but does not decide it:
+Q2 is a statement about where DishNet accounts for revenue, not a decision to
+model an operator layer in the platform. It remains an open business-model
+observation — now also an input to 2b, per §3.
 
-**Questions 1 and 2 remain open and are not to be inferred from question 3.**
-Per-site *generation* says nothing about how many customers have several sites,
-nor about whether revenue must be attributed per site.
-
-If the answer to 1 is "mostly no", then A, B and C are indistinguishable in
-practice for most of the estate, 2a already carries the security, and **C is
-correct on simplicity alone** — it needs no mapping that does not exist. If
-multi-site customers are common and 2 matters, A is the only option that gives
-attribution from issue.
+*It may also bear on decision 4's scope.* If the issuing actor is per-site, who
+holds the issuing capability is a question decision 4 touches. A pointer, not a
+conclusion; decision 4 is untouched.
 
 ### 2.7 Precondition for 2a, A and B alike
 
