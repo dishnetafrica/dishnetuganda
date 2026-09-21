@@ -22,6 +22,10 @@ respect while its published state is not authoritative at the AAA layer. §2.1
 is added to keep voucher redemption and AAA publication separate concepts even
 where the product performs them together. No decision is made in either.
 
+**Third revision.** §12.3 records the deployed FreeRADIUS schema, inspected on
+the Phase 0 server. It answers question 8 and sharpens questions 7, 11 and 14.
+Still no decision: Decision 1 and Decision 7 remain open.
+
 ---
 
 ## 0. The factual distinction, frozen before anything is reconciled
@@ -259,6 +263,12 @@ finds, so two `Expiration` rows disagreeing would both be applied. Publication
 under Model A must therefore be idempotent by construction (delete-then-insert,
 or an upsert keyed on username+attribute), not an insert.
 
+**Confirmed against the deployed schema (§12.3).** `radcheck` has no unique
+constraint or unique index on `(username, attribute)` — only a surrogate `id`
+primary key and a plain btree index. The duplication above is production
+behaviour, not an artefact of the simulation, and nothing in the AAA schema will
+prevent it.
+
 ### 3.3 What the evidence does not decide
 
 It does not decide A versus B. The honest trade:
@@ -306,7 +316,9 @@ Revoking an **active** voucher therefore needs both actions, not one.
 ### 4.3 Publication must be idempotent
 
 Per §3.2. Republication must converge on one credential, not accumulate check
-items.
+items. §12.3 establishes that the AAA schema will not help: there is no unique
+key on `(username, attribute)` in either table, so every part of this must be
+built.
 
 ---
 
@@ -640,17 +652,118 @@ assumed.
 | 4 | **Is publication synchronous or asynchronous?** | The intent queue is the house asynchronous mechanism, and `voucher.publish` / `voucher.revoke` already exist as intent kinds. But its timing assumptions are built for router provisioning: `max_attempts DEFAULT 5`, `deadline_at DEFAULT now() + interval '7 days'`. **A seven-day deadline is not a design for a guest standing in a lobby**, which is what Model B makes it |
 | 5 | **What happens if publication fails?** | `DeliveryResult::retryable()` versus `::permanent()` already distinguishes transient from permanent failure, and `mt_intents.last_error` records why. What is undefined is the *voucher's* state when publication permanently fails after a successful redemption: the code is spent and the guest has nothing |
 | 6 | **What if the RADIUS database is temporarily unavailable?** | A special case of 5, and the one that decides 4. Under Model A the answer can be "retry later, nobody is waiting." Under Model B someone is waiting |
-| 7 | **What is the idempotency key for a publication?** | `mt_intents.idempotency_key` with the partial unique index `(customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL` is the existing pattern. For a publication the natural key is the voucher, since one voucher yields exactly one AAA credential — but that must be stated, not assumed |
-| 8 | **How are duplicate `radcheck` / `radreply` rows prevented?** | **Measured:** a second naive publish produced duplicate `Cleartext-Password` *and* `Expiration` rows while authentication still succeeded (§3.2). The standard FreeRADIUS schema is at a known path — docs/36 §307 verified `/etc/freeradius/mods-config/sql/main/postgresql/schema.sql` — but **its constraint set has never been inspected**. Whether `radcheck` carries any unique constraint on `(username, attribute)` is an open fact, not an open opinion, and it should be established before this question is answered |
+| 7 | **What is the idempotency key for a publication?** | `mt_intents.idempotency_key` with the partial unique index `(customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL` is the existing pattern. For a publication the natural key is the voucher, since one voucher yields exactly one AAA credential — but that must be stated, not assumed. **§12.3 sharpens this:** the AAA schema has no unique key on `(username, attribute)`, so idempotency cannot be delegated to it. It must be enforced by the publisher, or by adding a constraint to the RADIUS schema — which is itself a change to a database this project does not currently own |
+| 8 | **How are duplicate `radcheck` / `radreply` rows prevented?** | **Answered — §12.3.** They are not. The deployed schema carries no unique constraint or unique index on `(username, attribute)` in either table; the only uniqueness is a surrogate `id` primary key. Duplicates are structurally permitted, so the simulated result in §3.2 reproduces production behaviour rather than an artefact of the simulation. Everything that prevents duplication must be built |
 | 9 | **How are expiry and revoke propagated?** | `Expiration` in `radcheck` is the documented expiry mechanism (docs/33 §428). Revocation has no mechanism. Both intent kinds exist and both currently resolve to `assertRadiusBacked()`, which writes nothing |
 | 10 | **What happens to an already-established HotSpot session after revoke or expiry?** | Removing a credential stops the *next* authentication, not a running session. The `session.disconnect` intent kind already exists in `RouterOsDelivery`; nothing connects revocation to it. §4.2 |
-| 11 | **How is AAA drift detected?** | The codebase already has a drift pattern for routers: `DeviceRegistry` stores `desired`, reads back `actual`, and `divergence()` compares; `confirm()` re-reads before an intent is marked confirmed. The same shape applies here — a voucher `active` with no `radcheck` row, and a `radcheck` row with no live voucher, are both silent today |
+| 11 | **How is AAA drift detected?** | The codebase already has a drift pattern for routers: `DeviceRegistry` stores `desired`, reads back `actual`, and `divergence()` compares; `confirm()` re-reads before an intent is marked confirmed. The same shape applies here — a voucher `active` with no `radcheck` row, and a `radcheck` row with no live voucher, are both silent today. **§12.3 adds:** `radcheck` and `radreply` carry no foreign keys at all — `username` is free text linked to nothing — so orphan credentials are structurally permitted and drift detection cannot lean on the database |
 | 12 | **Which side wins if `mt_vouchers` and `radcheck` / `radreply` disagree?** | No precedent. F1's Domain A/B rule is about two systems sharing *nothing*; this is two stores that must agree. The safe-by-default answer and the commercially correct answer may differ — a stale `radcheck` row granting access is a revenue and security problem, while a missing one is a support problem |
 | 13 | **How is reconciliation performed?** | Follows from 11 and 12. Sweep direction, frequency, and whether reconciliation may *act* or only *report* are all open. A reconciler that silently deletes AAA rows is a denial-of-service against paying guests; one that silently creates them is an authorization bypass |
-| 14 | **What prevents the publisher credential from becoming a lateral access path between the two databases?** | The two databases are currently isolated by having no connection at all. A publisher deliberately breaches that. The question is what it may do on each side, and it is the reason 2 and 3 are separate questions. §10's principle applies: one narrow capability, no table privileges beyond it, and nothing that can read the control plane's tenant data |
+| 14 | **What prevents the publisher credential from becoming a lateral access path between the two databases?** | The two databases are currently isolated by having no connection at all. A publisher deliberately breaches that. The question is what it may do on each side, and it is the reason 2 and 3 are separate questions. §10's principle applies: one narrow capability, no table privileges beyond it, and nothing that can read the control plane's tenant data. **§12.3 adds a concrete reason:** the `radius` database also holds `nas.secret` — the NAS shared secrets — so a publisher with broad rights there could read every router's RADIUS secret |
 | 15 | **How is publication or audit failure surfaced to operators?** | Today the only operator surface is `error_log('[dnb] …')` from the HTTP kernel and `mt_intents.last_error`. Neither is a monitored channel. A publication that fails silently is indistinguishable from one that never ran |
 
-### 12.3 What must not happen
+### 12.3 Measured — the deployed AAA schema
+
+**Provenance.** Obtained 2026-09-21 by the operator running four read-only
+commands on the Phase 0 server and returning the output. **This session did not
+read it directly and could not:** no SSH client or key exists in this
+environment, and the egress policy denies the host — the proxy reported
+`connect_rejected`, *"gateway answered 403 to CONNECT"*, for
+`209.97.137.203:443`. It is recorded as operator-supplied evidence, which is a
+weaker provenance than this project's measured results and is marked as such.
+Nothing was modified: the commands were two `psql` introspections and one `cat`.
+
+**What is actually enforced** (live introspection, the authoritative source —
+the schema file is what *would* be applied, this is what *was*):
+
+```
+                           Table "public.radcheck"
+  Column   |         Type         | Nullable |           Default
+-----------+----------------------+----------+------------------------------
+ id        | integer              | not null | nextval('radcheck_id_seq')
+ username  | text                 | not null | ''::text
+ attribute | text                 | not null | ''::text
+ op        | character varying(2) | not null | '=='::character varying
+ value     | text                 | not null | ''::text
+Indexes:
+    "radcheck_pkey"    PRIMARY KEY, btree (id)
+    "radcheck_username"             btree (username, attribute)
+
+                           Table "public.radreply"
+  ... identical, except op default '='
+Indexes:
+    "radreply_pkey"    PRIMARY KEY, btree (id)
+    "radreply_username"             btree (username, attribute)
+
+Constraints across both tables:
+  radcheck | radcheck_pkey | PRIMARY KEY (id)
+  radreply | radreply_pkey | PRIMARY KEY (id)
+  (2 rows — that is the complete constraint set)
+```
+
+**Corroboration.** The shipped
+`/etc/freeradius/mods-config/sql/main/postgresql/schema.sql` declares exactly
+this, with `create index radcheck_UserName on radcheck (UserName,Attribute);` —
+a plain index, and its commented-out alternatives are case-insensitive variants
+that are also non-unique. The lowercase column names in the live database are
+PostgreSQL folding unquoted identifiers, not a divergence. **The deployed schema
+matches the shipped file**, which also makes the file a reliable reference for
+the other tables.
+
+#### The seven answers
+
+| | Question | Answer |
+|---|---|---|
+| 1 | UNIQUE constraint on `radcheck (username, attribute)`? | **No.** A plain btree index of that name exists and enforces nothing |
+| 2 | Any relevant uniqueness on `radreply`? | **No.** Same shape |
+| 3 | Primary keys | `radcheck_pkey (id)` and `radreply_pkey (id)` — surrogate `serial` integers carrying no business meaning |
+| 4 | Indexes relevant to publication / idempotency | `radcheck_username` and `radreply_username`, both `btree (username, attribute)`, both **non-unique**. They make lookup fast; they constrain nothing |
+| 5 | Exact DDL | above |
+| 6 | Does the structure permit multiple rows for one `(username, attribute)`? | **Yes, without restriction.** Nothing in the schema prevents it |
+| 7 | Other materially relevant constraints | below |
+
+**No probe row was inserted.** The catalogue answers question 6 definitively; a
+test insert would have been a write to production and was unnecessary.
+
+#### Question 7 — the rest of what the schema says
+
+* **`NOT NULL DEFAULT ''` on `username`, `attribute` and `value`.** A publisher
+  that omits a column gets an empty string, not an error. A bug producing
+  `username = ''` writes a row that fails silently rather than loudly.
+* **`op` is `varchar(2)`.** The operator vocabulary is capped at two characters;
+  `:=`, `==` and `=` fit, and anything longer is rejected at write time.
+* **No foreign keys anywhere in either table.** `radcheck.username` is free text
+  linked to nothing — not to a voucher, not to a customer, not to `radacct`.
+  Orphan credentials are structurally permitted, which is why question 11 cannot
+  be answered by the database.
+* **The contrast is instructive.** `radacct` *does* carry
+  `AcctUniqueId text NOT NULL UNIQUE`. FreeRADIUS applies a uniqueness
+  discipline to accounting and deliberately none to credentials, because upstream
+  expects multiple check items per user. The absence is the upstream design, not
+  a local omission — so "add a unique constraint" is a divergence from stock
+  FreeRADIUS, with whatever that implies for upgrades.
+* **`nas.secret text NOT NULL` lives in this same database.** The NAS shared
+  secrets are one `SELECT` away from anything with broad rights here. Material to
+  question 14, and the reason the publisher's privileges in the `radius` database
+  are a design question rather than a detail. No secret was read or printed.
+* **`radpostauth` carries `pass text`.** If FreeRADIUS's post-auth SQL logging is
+  enabled, every authentication attempt writes the username *and the password
+  used*. Under docs/33 §416–417's model, where the password equals the username
+  equals the voucher code, that table becomes a plaintext store of voucher codes
+  — the same hazard §8 settled for the control plane's own attempt records.
+  **Whether post-auth logging is enabled has NOT been measured**; it lives in
+  `mods-enabled/sql` and `queries.conf`. It is a follow-on read-only check, not
+  a finding.
+
+#### What this does and does not settle
+
+It settles question 8 and sharpens 7, 11 and 14. It does **not** resolve
+Decision 1 or Decision 7, and nothing here favours Model A or Model B: the
+schema is equally permissive under both.
+
+---
+
+### 12.4 What must not happen
 
 * Publication must not be decided by writing the first thing that works.
   Questions 12, 13 and 14 have no implementation-obvious answer, and a wrong one
@@ -659,8 +772,10 @@ assumed.
 * The publisher must not be given broad access to either database because it is
   convenient. §10's principle applies unchanged on both sides of the boundary.
 * Questions 8 and 11 must not be answered from the standard FreeRADIUS schema
-  as remembered. The deployed schema file's location is known; its contents are
-  not recorded anywhere in this repository.
+  as remembered. That is why §12.3 exists: the deployed schema was inspected
+  rather than recalled, and it turned out to permit exactly what the simulation
+  showed. What remains unmeasured — whether post-auth logging is enabled — must
+  be established the same way rather than assumed.
 
 ---
 
