@@ -17,7 +17,7 @@ under.
 | — | **F1–F13 architecture freeze** | **FROZEN** | 13 items, unfrozen only by explicit amendment to docs/53 §5 | **docs/53** | — |
 | **1** | **AAA publication lifecycle** | **CLOSED** | **Model B** — the AAA credential is published at redemption/activation, not at voucher issue | **docs/66 §1** | docs/65 §3 (both models measured across all three layers), §4 |
 | **2a** | **Cross-customer AAA security floor** | **PROVEN requirement; mechanism NOT CHOSEN** | See §2a below | **docs/68 §2.4** | docs/68 §2.4b, §2.4c |
-| **2b** | **Product / site-binding policy** | **OPEN — business decision** | A, B or C. Not selected. **C20 Q1–Q3 all answered** (docs/68 §2.6); the question has narrowed to blast radius within an estate, and what "estate" means under the ISP/operator hierarchy | **docs/68 §2.5** | docs/65 §5, docs/68 §2.6 |
+| **2b** | **Product / site-binding policy** | **OPEN — business decision** | A, B or C. Not selected. **C20 Q1–Q3 all answered** (docs/68 §2.6); the question has narrowed to blast radius within an estate. **A prior question is open — docs/68 §2.6a:** should a voucher made for one of a customer's sites work at another? | **docs/68 §2.5** | docs/65 §5, docs/68 §2.6 |
 | **3** | **Portal contract** | **CLOSED** | **P2** — generated AAA credentials; the commercial voucher code never enters the AAA credential path | **docs/67** | docs/65 §6, §12.4 |
 | **4** | **Front-desk activation** | **OPEN — business decision** | Whether an operator may activate on a guest's behalf | **docs/67 §7** | docs/64 §2 Q5 |
 | **5** | **Rate limits and timing** | **OPEN** | Numbers only; the shape is settled | **docs/65 §9**, docs/67 §10 | docs/65 §9.2, §12.4 |

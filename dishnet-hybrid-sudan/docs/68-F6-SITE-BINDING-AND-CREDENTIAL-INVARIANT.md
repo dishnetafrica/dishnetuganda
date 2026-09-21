@@ -917,6 +917,108 @@ observation — now also an input to 2b, per §3.
 holds the issuing capability is a question decision 4 touches. A pointer, not a
 conclusion; decision 4 is untouched.
 
+### 2.6a The site-scope question — open, and prior to A/B/C
+
+**The question, as posed:**
+
+```
+  DishNet
+     └── ISP / operator customer
+            ├── Site A — hotel      └── hotel guests
+            ├── Site B — school     └── students
+            └── Site C — café       └── café guests
+```
+
+> **If one DishNet customer operates multiple sites for different downstream
+> businesses or locations, should a voucher created for Site A be valid at
+> Site B simply because both sites belong to the same DishNet customer?**
+
+**This is not answered by Q1, Q2 or Q3, and is not to be inferred from the
+commercial relationship.** §2.6(e) records why: Q2 places DishNet's *accounting*
+at customer level; it says nothing about where a voucher should *work*. The two
+are different planes and merging them is the error this section exists to
+prevent.
+
+It is **prior to A/B/C**, not a sub-question of it. A, B and C are mechanisms
+for expressing a scope; this decides what the scope *is*.
+
+#### If the answer is YES — the customer is the scope
+
+| | Consequence |
+|---|---|
+| Maps to | **C** (roams within the estate) |
+| Blast radius | a code photographed at the hotel reception is internet at the school and the café, for its lifetime |
+| **Downstream attribution** | **the ISP loses the ability to attribute per site, even for its own business.** Q2 removed *DishNet's* need for site attribution; it did not remove the ISP's. If the platform makes the split impossible, DishNet constrains its customer's business model — the hotel's paper is consumed on the school's link and the ISP cannot reconcile it |
+| Uplink | F7 puts the uplink with the customer. Where sites have separate uplinks, a roaming voucher consumes a different site's capacity than the one that sold it. F13 forbids gating, so this is visible but not preventable |
+| Support | simplest: a code works everywhere, so "it doesn't work here" cannot arise within an estate |
+| Guest mobility | a guest moving between the ISP's sites keeps working |
+
+#### If the answer is NO — the site is the scope
+
+| | Consequence |
+|---|---|
+| Maps to | **A** (bound at issue) or **B** (bound at first use) |
+| Blast radius | a leaked code is worth one site |
+| Downstream attribution | preserved — each site's vouchers are that site's, and the ISP may account per site if it chooses to. DishNet neither performs nor prevents it |
+| Uplink | each site's capacity is consumed by its own sales |
+| Support | "this code doesn't work here" becomes a real conversation, answerable from the voucher record |
+| Guest mobility | a guest moving between sites needs another voucher. Under the hotel/school/café shape that is probably correct — they are different businesses with different users |
+| Operational fit | natural under Q3: the generating site **is** the binding site |
+
+#### If the answer is PER CUSTOMER — the scope is configurable
+
+Named because the ~2–3 multi-site customers may genuinely differ, and a single
+platform-wide answer may not fit both a hotel chain and an ISP serving unrelated
+businesses.
+
+| | Consequence |
+|---|---|
+| Blast radius | whatever each customer selected — which means it is only as good as the setting |
+| Cost | a new configuration surface, and **a wrong setting is a silent security change**, not an error. §2.4d records the same hazard for the NAS mapping: a mistake that denies or grants access looks like a working system |
+| Technical | the set mechanism must exist **regardless**, because some customer will choose customer-wide |
+| Test surface | every 2b behaviour must be tested under both settings |
+
+#### What the answer changes technically
+
+**It determines whether §2.4's set mechanism is needed at all.**
+
+* **NO**, and each site has one router → every credential binds to a single
+  address. `Packet-Src-IP-Address ==` on the credential is sufficient (§2.4c
+  E3): **no huntgroups, no C-b, no second state path, no restart**. The
+  simplest path in the whole of §2.4 becomes the only one required.
+* **YES**, or a single site has **more than one router** → a set must be
+  expressed, and §2.4c/§2.4f's mechanisms are needed.
+
+**Whether a single site can have several routers is unmeasured.** The data model
+permits it — `mt_devices.site_id` is not unique — but whether any customer does
+it is not known, and it is a second input to the same technical question.
+
+#### What the answer does not change
+
+* **2a's floor.** Cross-*customer* is refused under every answer (§2.4).
+* **F10.** No DishNet commercial limit reaches a guest, either way.
+* **Decisions 1, 3 and 7**, and F1–F13.
+* **D-2.** A NAS → device mapping is needed regardless (§2.7).
+
+#### A sharper factual question that would inform it
+
+The hotel/school/café example is illustrative. Whether it is *representative*
+is a further factual question, not yet asked and **not answered here**:
+
+> **Of the ~2–3 multi-site customers, are their sites different downstream
+> businesses — or branches of one business?**
+
+A hotel chain's three branches and an ISP serving a hotel, a school and a café
+are different cases, and the answer to the site-scope question may differ
+between them. That is a C20-style factual question, not a design judgement.
+
+#### Status
+
+**OPEN.** No answer selected, no A/B/C selected, no mechanism chosen. The
+ISP/operator hierarchy remains unreconciled into the frozen architecture.
+
+---
+
 ### 2.7 Precondition for 2a, A and B alike
 
 **A NAS identifier must exist in the control plane and map to a device.** It
