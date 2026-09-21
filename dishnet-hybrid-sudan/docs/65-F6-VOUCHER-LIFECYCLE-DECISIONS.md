@@ -607,6 +607,39 @@ because every other decision depends on it: a redemption path can be correct in
 every respect and still leave a guest offline, or leave a revoked voucher
 working, if the published state is not authoritative at the AAA layer.
 
+### 12.0 Constraints accepted at this gate
+
+These are operator decisions taken on the evidence of §12.3, recorded so the
+decision session starts from them rather than reopening them. They narrow
+Decision 7; they do not resolve it.
+
+**Q8 is resolved at the evidence level.** Restated as accepted:
+
+* `radcheck` — no UNIQUE constraint or index on `(username, attribute)`;
+* `radreply` — no UNIQUE constraint or index on `(username, attribute)`;
+* the only uniqueness in either table is the surrogate `id` primary key;
+* `radcheck_username` is a normal lookup index and enforces nothing;
+* no foreign keys connect credential rows to voucher, customer or accounting
+  entities;
+* duplicate publication is therefore permitted by the deployed schema;
+* **publisher-side idempotency is mandatory.**
+
+**The RADIUS schema is not to be modified.** Adding a unique constraint would
+be a divergence from stock FreeRADIUS (§12.3) and a separate architectural and
+operational decision. It is not taken, so idempotency has nowhere to live but
+the publication mechanism.
+
+**`nas.secret` is accepted as an architectural security consideration for
+Q14** — not as licence to broaden any privilege. No publisher is to be created
+and no privilege widened until Decision 7 is resolved.
+
+**`dnb_radius` is not to be reused as the publisher.** Its trust direction is
+`RADIUS → control plane`; publication is `control plane → RADIUS`. That the
+role already exists is not a reason, and the two directions are not the same
+grant.
+
+---
+
 ### 12.1 The pipeline
 
 ```
@@ -652,7 +685,7 @@ assumed.
 | 4 | **Is publication synchronous or asynchronous?** | The intent queue is the house asynchronous mechanism, and `voucher.publish` / `voucher.revoke` already exist as intent kinds. But its timing assumptions are built for router provisioning: `max_attempts DEFAULT 5`, `deadline_at DEFAULT now() + interval '7 days'`. **A seven-day deadline is not a design for a guest standing in a lobby**, which is what Model B makes it |
 | 5 | **What happens if publication fails?** | `DeliveryResult::retryable()` versus `::permanent()` already distinguishes transient from permanent failure, and `mt_intents.last_error` records why. What is undefined is the *voucher's* state when publication permanently fails after a successful redemption: the code is spent and the guest has nothing |
 | 6 | **What if the RADIUS database is temporarily unavailable?** | A special case of 5, and the one that decides 4. Under Model A the answer can be "retry later, nobody is waiting." Under Model B someone is waiting |
-| 7 | **What is the idempotency key for a publication?** | `mt_intents.idempotency_key` with the partial unique index `(customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL` is the existing pattern. For a publication the natural key is the voucher, since one voucher yields exactly one AAA credential — but that must be stated, not assumed. **§12.3 sharpens this:** the AAA schema has no unique key on `(username, attribute)`, so idempotency cannot be delegated to it. It must be enforced by the publisher, or by adding a constraint to the RADIUS schema — which is itself a change to a database this project does not currently own |
+| 7 | **What is the idempotency key for a publication?** | `mt_intents.idempotency_key` with the partial unique index `(customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL` is the existing pattern. For a publication the natural key is the voucher, since one voucher yields exactly one AAA credential — but that must be stated, not assumed. **§12.3 sharpens this:** the AAA schema has no unique key on `(username, attribute)`, so idempotency cannot be delegated to it. It must be enforced by the publisher: adding a constraint to the RADIUS schema was available in principle and is **closed by the decision in §12.0** |
 | 8 | **How are duplicate `radcheck` / `radreply` rows prevented?** | **Answered — §12.3.** They are not. The deployed schema carries no unique constraint or unique index on `(username, attribute)` in either table; the only uniqueness is a surrogate `id` primary key. Duplicates are structurally permitted, so the simulated result in §3.2 reproduces production behaviour rather than an artefact of the simulation. Everything that prevents duplication must be built |
 | 9 | **How are expiry and revoke propagated?** | `Expiration` in `radcheck` is the documented expiry mechanism (docs/33 §428). Revocation has no mechanism. Both intent kinds exist and both currently resolve to `assertRadiusBacked()`, which writes nothing |
 | 10 | **What happens to an already-established HotSpot session after revoke or expiry?** | Removing a credential stops the *next* authentication, not a running session. The `session.disconnect` intent kind already exists in `RouterOsDelivery`; nothing connects revocation to it. §4.2 |
