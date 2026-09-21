@@ -691,8 +691,32 @@ DishNet's customers run their sites.
 I cannot answer these from the repository, and they decide 2b:
 
 1. **Do DishNet's MikroTik customers typically operate more than one site?**
+   — **OPEN.**
 2. **Is per-site revenue attribution required, or is per-customer sufficient?**
+   — **OPEN.**
 3. **Is voucher stock printed centrally, or per site?**
+   — **ANSWERED** (C20, operator-supplied, 2026-09-21): **per site, locally
+   generated.** Each site can independently generate, print and distribute its
+   own vouchers. Stock is *not* centrally produced by DishNet and pushed out to
+   a customer's sites.
+
+**Two notes on that answer, neither of them an inference about 1 or 2.**
+
+*It carries a hierarchy the frozen documents do not currently describe.* As
+given: **DishNet → ISP/operator customer → sites → downstream users** — a
+DishNet customer may itself be an ISP or operator managing its own downstream
+customers. docs/45 §2.1 settles that a guest is not a DishNet account, which is
+consistent, but the intermediate operator layer is new relative to the frozen
+set. **It is recorded here and deliberately not reconciled**; reconciling it
+would be architecture work and this is an evidence note.
+
+*It may bear on decision 4's scope.* If the issuing actor is per-site, who holds
+the issuing capability is a question decision 4 touches. **Recorded as a pointer,
+not a conclusion** — decision 4 remains open and untouched.
+
+**Questions 1 and 2 remain open and are not to be inferred from question 3.**
+Per-site *generation* says nothing about how many customers have several sites,
+nor about whether revenue must be attributed per site.
 
 If the answer to 1 is "mostly no", then A, B and C are indistinguishable in
 practice for most of the estate, 2a already carries the security, and **C is
