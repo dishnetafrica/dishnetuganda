@@ -223,6 +223,143 @@ document does not pretend otherwise.
 
 ---
 
+### 2.4b Measured — the deployed authorize path
+
+**Provenance.** Operator-supplied, 2026-09-21, five read-only commands on the
+Phase 0 server. This session cannot reach the host (§2.4a). Nothing was
+modified, no credential inserted, no authentication attempted.
+
+#### The active queries
+
+```sql
+authorize_check_query = "SELECT id, UserName, Attribute, Value, Op
+                         FROM ${authcheck_table}
+                         WHERE Username = '%{SQL-User-Name}'
+                         ORDER BY id"
+
+authorize_reply_query = "SELECT id, UserName, Attribute, Value, Op
+                         FROM ${authreply_table}
+                         WHERE Username = '%{SQL-User-Name}'
+                         ORDER BY id"
+```
+
+Uncommented and active at `queries.conf:178` and `:184`; the case-insensitive
+variants above them are commented out. `${authcheck_table}` is `radcheck` and
+`${authreply_table}` is `radreply` (docs/65 §12.4).
+
+#### The authorize section, comments stripped
+
+```
+authorize {
+    filter_username    preprocess    chap    mschap    digest    suffix
+    eap { ok = return }
+    files    -sql    -ldap    expiration    logintime    pap
+    Autz-Type New-TLS-Connection { ok }
+}
+```
+
+#### The nine questions
+
+| | Question | Answer |
+|---|---|---|
+| 1 | Which authorize query is used | the two above — `queries.conf:178`, `:184` |
+| 2 | What it reads | `radcheck` / `radreply`; columns `id, UserName, Attribute, Value, Op` |
+| 3 | Is NAS identity available to the query? | **No.** The WHERE clause is `Username` alone. Neither query references any NAS attribute |
+| 4 | What NAS identifier the router supplies | **still unanswered** — §2.4a. No MikroTik has authenticated here |
+| 5 | Can the query compare NAS identity against a restriction? | **Not as configured**, and the query is not where such a comparison would live: it returns *all* check items for the username, and the server evaluates them. See below |
+| 6 | Can `radcheck` / `radreply` carry the restriction? | The columns can hold any attribute name, and `op` is `varchar(2)` so `==`, `!=`, `=~`, `=*` all fit. Whether a NAS-based check item is **evaluated** is the part configuration does not settle |
+| 7 | Evaluated before Access-Accept? | **Yes, structurally.** `-sql` sits in `authorize`, which completes before `authenticate` and before any accept is sent |
+| 8 | Applies to a native MikroTik login? | **Yes** — structural, per §2.4a. Every authentication is an Access-Request whatever produced it |
+| 9 | Would the same credential authenticate at another NAS? | **Yes.** The SQL path scopes on username only, so nothing restricts a published credential to any NAS |
+
+**Question 9 is now measured rather than inferred.** docs/65 §12.3 established
+the *schema* cannot scope by tenant; this establishes the *query* does not
+either. The tenant boundary does not exist at the AAA layer today.
+
+#### Two candidates eliminated, one better anchor found
+
+**Huntgroups are unavailable.** `preprocess` is enabled
+(`mods-enabled/preprocess -> ../mods-available/preprocess`) but **there is no
+huntgroups file**. `Huntgroup-Name` therefore cannot carry the restriction
+without new configuration. One of §2.4(a)'s three set-expressing candidates is
+closed.
+
+**The trustworthy anchor is the source address, not `NAS-Identifier`.** Clients
+are **file-defined**, not database-defined:
+
+```
+client dn-test-mikrotik {
+    ipaddr    = 10.66.0.11
+    shortname = dn-test-mikrotik
+    nas_type  = other
+}
+```
+
+and `SELECT id, nasname, shortname, type FROM nas` returns **0 rows**, confirming
+docs/00 §525. So FreeRADIUS identifies a client by the **source address of the
+packet**, matched against `clients.conf` and authenticated by the shared secret.
+That address is **`10.66.0.11` — a WireGuard tunnel address**, assigned by
+DishNet, not asserted by the router.
+
+This matters for §2.4(c). `NAS-Identifier` is a packet attribute the router
+supplies; the source address is infrastructure DishNet controls. **And the
+control plane already stores it**: `mt_devices.tunnel_ip`. So a
+customer → NAS mapping has a candidate basis after all —
+`tunnel_ip` ↔ client address ↔ device ↔ site ↔ customer — and the RADIUS-side
+restriction would key on the address rather than on a router-asserted name.
+
+That is a better anchor than the original proposal, and it came from the
+inspection rather than from the design.
+
+**A second option appears with it.** `read_clients = yes` is set (docs/65
+§12.4) while the `nas` table is empty, so the module is already configured to
+read database-defined clients and simply finds none. Clients *could* be managed
+from the database rather than from a file. That is not proposed here: `nas` also
+holds `nas.secret`, so whoever writes it is a different actor from the publisher
+under docs/66 §2.3, and it is a separate decision.
+
+#### What configuration inspection cannot settle
+
+**Whether a generic attribute check item is enforced.** The authorize section
+shows `expiration` and `logintime` — modules whose job is to evaluate the
+`Expiration` and `Login-Time` check items. Their presence is good evidence that
+*those* check items are honoured, which independently supports docs/66 §2.8's
+expiry mechanism. It does **not** establish that a `NAS-IP-Address` or
+`NAS-Identifier` check item returned by `rlm_sql` is compared against the
+request and can refuse an accept.
+
+That is a behavioural question about FreeRADIUS, and configuration cannot answer
+it. Settling it needs FreeRADIUS actually running: a **throwaway instance, never
+production**, with a synthetic credential carrying the restriction and a
+synthetic client — which would answer questions 5 and 6 definitively. It is not
+done here, and this document does not assume the answer.
+
+**The group path is not fully characterised.** The active group queries are
+
+```sql
+authorize_group_check_query = "... FROM ${groupcheck_table}
+                               WHERE GroupName = '%{${group_attribute}}' ..."
+```
+
+which, unlike the commented stock version, does **not** join `radusergroup`.
+`group_attribute` and `group_membership_query` were not captured. Groups are the
+remaining set-expressing candidate now that huntgroups are out, so this is the
+next thing to look at if a *set* rather than a single NAS is needed.
+
+#### Where this leaves 2a
+
+* the requirement stands and is now **measured to be unmet**: question 9;
+* the anchor improves — source address, already held as `mt_devices.tunnel_ip`;
+* huntgroups are eliminated; groups are uncharacterised;
+* the final mechanical step — does a generic check item refuse an accept — needs
+  a running FreeRADIUS, not a configuration file;
+* question 4 still needs a real router.
+
+**2a remains a requirement with an unverified mechanism.** It is closer to
+verifiable than it was, and the two things still missing are both named.
+
+---
+
 ### 2.5 Decision 2b — A, B or C (PRODUCT, open)
 
 With §2.2 applied, the three options reorder by what each must trust:
@@ -298,8 +435,12 @@ the portal path; docs/67 §4's `nas` parameter (§3).
 **Also open, unchanged:** decision 4 (front-desk), decision 5 (rate-limit
 numbers — now also §2.2's consequence), decision 6 (retention).
 
-**One read-only measurement is outstanding** and is the only evidence item this
-document needs: §2.3's authorize query.
+**§2.3's authorize query has been measured — §2.4b.** It scopes on username
+alone, so question 9 is answered and the tenant boundary is confirmed absent at
+the AAA layer. Two evidence items remain, both named in §2.4b: whether a generic
+check item can refuse an accept (needs a throwaway FreeRADIUS, never
+production), and what NAS identifier a real router supplies (needs a real
+router).
 
 ---
 
