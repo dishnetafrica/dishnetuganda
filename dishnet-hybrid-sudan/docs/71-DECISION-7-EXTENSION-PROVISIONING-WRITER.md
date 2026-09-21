@@ -93,9 +93,18 @@ never touches RADIUS. **The AAA boundary is only as strong as this function.**
 
 No existing test supplies a mismatched customer/site pair —
 `test_definer_roles.php:110` passes `$A['customer'], $A['site']`, which match.
-**The behaviour above is read from the code; it has not been executed** (this
-gate creates nothing and runs nothing). §9 Q1 names the measurement that would
-confirm it.
+
+> **MEASURED (docs/72 Part A): `DOES NOT WORK / exploitable by authorized
+> administrative path`.** Called as `dnb_admin` with customer A and customer B's
+> site, `mt_device_assign` **accepted**, leaving the invariant violated. No CHECK,
+> foreign key, trigger or policy prevents it — `dnb_def_prov`'s own
+> `USING (true) WITH CHECK (true)` policy is OR-combined with the tenant policy,
+> so RLS cannot be the control. The act also writes **no audit row**. Q1 is
+> closed; the requirement is docs/72 §A.7, and the invariant is **N10**.
+>
+> **`dnb_admin`-only is not a mitigation** — docs/72 §A.5. It bounds who can
+> reach the path; it does not enforce the invariant, and under §2 the error
+> reaches RADIUS without anything touching RADIUS.
 
 ### 1.3 Finding P-2 — a correction to docs/70: the composite key permits one NAS in two sites
 
@@ -328,7 +337,7 @@ intent and would need guard tests **at** the implementation gate.
 
 | | Question | Why it is not mine to answer |
 |---|---|---|
-| **Q1** | Does `mt_device_assign` actually permit a cross-customer `(customer, site)` pair when executed? | P-1 is read from the code. This gate creates and runs nothing. The measurement: call it in a disposable database with a site belonging to another customer and record the result. **Needs authorization** |
+| ~~**Q1**~~ | ~~Does `mt_device_assign` actually permit a cross-customer pair when executed?~~ | **ANSWERED — docs/72 Part A. It does.** Verdict `DOES NOT WORK / exploitable by authorized administrative path`; remediation requirement in docs/72 §A.7, invariant **N10** |
 | **Q2** | **Can one physical MikroTik serve two sites?** | Decides N4 and the primary key (§2.1). A business/topology fact, not a code fact. Related to but **distinct from** the open multiple-routers-per-site question (docs/68 §2.6b) — that asks whether a site may have many routers; this asks whether a router may have many sites. It has never been asked |
 | **Q3** | Who operates the provisioning writer — an automatic projector following `mt_device_assign`, or an explicit administrative action? | Changes the audit actor (`system` vs `staff`) and whether T3 is a service compromise or an admin compromise |
 | **Q4** | What is the reconciler's authority when it finds drift — repair silently, or alarm and stop? | Repairing silently hides T3 and T10; alarming and stopping leaves a stale mapping in place. Both have a failure mode; this is an operational policy choice |
@@ -341,8 +350,8 @@ intent and would need guard tests **at** the implementation gate.
 
 **Preconditions — before any implementation, in this order:**
 
-1. **Close P-1.** `mt_device_assign` must reject a `(customer, site)` pair where
-   the site's `customer_id` differs. Under §2 the AAA boundary is a projection of
+1. **Close P-1 — now MEASURED, not merely suspected** (docs/72 Part A).
+   `mt_device_assign` must reject a `(customer, site)` pair where
    what that function writes, so an unenforced pairing upstream is an unenforced
    boundary downstream. This is a **control-plane change** on a `dnb_def_prov`
    function and needs its own authorization — it is not part of Decision 7.

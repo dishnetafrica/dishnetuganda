@@ -63,7 +63,7 @@ business-model observation, not an architecture change. (`docs/68` §2.6)
 | | Dependency | Where |
 |---|---|---|
 | **D-1** | **The site→NAS mapping is a second state path.** Under the chosen mechanism it is `dnb_site_nas` in the `radius` database, written on the **device-provisioning** lifecycle — *not* the publication lifecycle. It carries **site isolation and cross-customer isolation at once**, so the AAA Publisher must **not** be able to write it | docs/70 §5.1, §8.4; docs/68 §2.4d; pointer at docs/66 §9a |
-| **D-6** | **The Decision 7 extension — a narrowly scoped provisioning writer** for `dnb_site_nas`. **Designed and reviewed in docs/71; awaiting approval.** Two **preconditions** before any implementation: close **P-1** (`mt_device_assign` does not check that the site belongs to the customer) and answer **Q2** (may one router serve two sites?) | **docs/71**; docs/70 §8.4 |
+| **D-6** | **The Decision 7 extension — a narrowly scoped provisioning writer** for `dnb_site_nas`. Designed in docs/71; **awaiting approval and blocked**. Two blockers: **N10/P-1** — `mt_device_assign` permits a cross-customer device/site pair, **MEASURED exploitable** (docs/72 Part A), remediation required at the database layer; and **Q2** — may one router serve two sites? **NOT ESTABLISHED** (docs/72 Part B), which blocks the `dnb_site_nas` key | **docs/72**; docs/71 |
 | **D-2** | **A NAS identifier must exist in the control plane** and map to a device. It does not today | docs/68 §2.7 |
 | **D-3** | **Invariant C1** — generated AAA credentials, independent of the voucher in every respect | docs/68 Part 1 |
 | **D-4** | The **publication state machine** — `activating`, `activation_failed`, `revoking` — must not be collapsed into a generic HTTP 500 | docs/66 §4, docs/67 §4.2 |
@@ -94,6 +94,7 @@ business-model observation, not an architecture change. (`docs/68` §2.6)
 | **docs/69** | this index |
 | **docs/70** | **Decision record: Decision 2a (closed)** — the sixteen-requirement comparison, E10 and S1–S9, the reasoning, and the accepted consequences that are **not yet authorized to build**. §2 carries a correction to S2's reading |
 | **docs/71** | **Decision 7 extension — design and evidence gate (awaiting approval).** The provisioning writer's security boundary, threat cases T1–T10, the privilege model, invariants N1–N9, findings **P-1/P-2/P-3**, and questions Q1–Q6. Builds nothing |
+| **docs/72** | **Evidence gate:** P-1 **measured** (`DOES NOT WORK / exploitable`), Q2 **NOT ESTABLISHED**, both cardinality branches, and invariant **N10**. Chooses no schema |
 
 Reproducible artifacts live in `dishnet-mikrotik-control-plane/tools/audit/`:
 `proto_f6*` (the actor and lifecycle prototypes), `f6_radius_restriction.sh`
@@ -124,6 +125,6 @@ created.
 |---|---|
 | **Closed** | Decisions **1**, **2a**, **2b**, **3**, **7**. F1–F13 frozen |
 | **Open** | Decisions **4** (front-desk activation), **5** (rate-limit and timing numbers), **6** (retention — control plane and `radpostauth` separately) |
-| **The next gate** | **The Decision 7 extension** — designed in **docs/71**, awaiting approval, and blocked on two preconditions (P-1, Q2). **Not F6 implementation** |
+| **The next gate** | Two answers, neither derivable from this repository: **authorize the N10/P-1 remediation** (docs/72 §A.7) and **answer Q2** (docs/72 §B.4). The provisioning-writer design cannot be finalised before both. **Not F6 implementation** |
 | **F6** | **NOT AUTHORIZED.** It is not the next step, and closing 2a did not bring it closer to being authorized |
 | **Unanswered factual input** | whether a site may have several MikroTik HotSpot routers (docs/68 §2.6b). It did **not** block Decision 2a and is **not** settled by it |
