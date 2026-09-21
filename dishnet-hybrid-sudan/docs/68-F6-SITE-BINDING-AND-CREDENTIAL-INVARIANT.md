@@ -486,18 +486,38 @@ question. §2.6's three questions stand unanswered.
 | **E8** | The symmetric tenant test **passed**: P's credential accepts at P and rejects at Q, and the converse |
 | **E9** | A huntgroups change takes effect **only on a full restart** — §2.4d |
 
-#### Status of 2a
+#### Status of 2a — two claims, kept apart
 
-**Viable.** Mechanism: a `Huntgroup-Name` check item published with the
-credential, against a server-side huntgroups file keyed on
-`Packet-Src-IP-Address` — the WireGuard tunnel address the control plane already
-holds as `mt_devices.tunnel_ip`. For a single-NAS customer,
-`Packet-Src-IP-Address ==` directly, with no file.
+**2a is technically solved. The best production implementation of 2a is not.**
+Those are different statements and this document must not let the first quietly
+become the second.
+
+> **Technically proven.** A check item can confine a credential to an
+> authorised source-address set, and a set can be expressed (E3, E7, E8). The
+> requirement of §2.4 is achievable.
+
+> **NOT a chosen production design.** Huntgroups are the mechanism that was
+> *measured to work*, not the mechanism selected to build. E9 — a mapping change
+> needs a full FreeRADIUS restart — makes them operationally expensive as a
+> general dynamic mapping, and §2.4e records the investigation that must happen
+> before any production implementation.
+
+Two paths, and they are not equivalent:
+
+| | **Single-NAS customer** | **Multi-NAS customer** |
+|---|---|---|
+| Restriction | `Packet-Src-IP-Address == <DishNet-controlled tunnel IP>` on the credential | `Huntgroup-Name == <group>`, against a server-side file |
+| State | **database only** | database **and** server-side configuration |
+| Adding/changing a router | a row, by the publisher | edit configuration → **full restart** → authentication interrupted server-wide |
+| Publisher access needed | the two definer functions (docs/66 §2.3) | those, **plus** something that can write configuration — §2.4d |
+
+The single-NAS path is complete and carries no open question. The multi-NAS
+path is where §2.4e applies.
 
 Still outstanding, unchanged: **question 4** — what a real MikroTik supplies —
 which this experiment could not and did not address, because it needs a router.
-It does not block 2a's design: the anchor chosen is the source address, which
-the server derives, not anything the router asserts.
+It does not block 2a's design: the anchor is the source address, which the
+server derives, not anything the router asserts.
 
 ---
 
@@ -592,6 +612,59 @@ business question. The cost asymmetry recorded above — a per-site binding wher
 each site has one router needs no huntgroup, a customer-wide set does — is
 information for that decision, **not** a reason to take it here. §2.6's three
 questions stand unanswered.
+
+---
+
+### 2.4e Required before any production implementation of 2a
+
+**An investigation, not a design.** Nothing below has been tested and no
+candidate is assumed to work. It must be carried out read-only or in isolation
+until explicitly authorised, exactly as §2.4c was.
+
+> **The question.** Can the required customer → NAS set be represented
+> **dynamically** inside the existing FreeRADIUS SQL authorization path, without
+> modifying the stock RADIUS schema and without a global restart?
+
+It exists because E9 turns every router addition or removal into a service
+event for every customer on the server. That is acceptable for a demonstration
+and poor as the basis of a production publisher.
+
+#### Candidates — recorded as candidates only
+
+| | Candidate | What would have to be true | What is currently unknown |
+|---|---|---|---|
+| **C-a** | **SQL-backed authorization logic** — the set lives in a table and the authorize path consults it, so adding a router is a row rather than a restart | the authorize path can reach a per-request NAS value | whether the SQL path can filter on it at all |
+| **C-b** | **A narrowly scoped custom authorize query** — the stock `authorize_check_query` extended with a NAS predicate, so a mismatched NAS returns *no* check items and therefore no password, and the request fails | `%{Packet-Src-IP-Address}` (or equivalent) expands **inside the query**, and the query change is one-time while the data stays dynamic | whether that expansion is available in query context. §2.4c's debug log shows `rlm_sql` expanding `%{Packet-Src-IP-Address}` during **check-item processing** — which suggests, and does **not** establish, that the same expansion works in the query. Also unknown: whether changing `queries.conf` itself needs a restart, which would be a one-time cost rather than a per-router one |
+| **C-c** | **Another server-derived attribute path** | some other attribute the server derives can carry or key the set | §2.4b left the **group** path uncharacterised — the active group query does not join `radusergroup` as stock does, and `group_attribute` / `group_membership_query` were never captured. That is the obvious first thing to look at |
+| **C-d** | **Controlled generation and restart, as a fallback** — keep huntgroups, but make generation and restart a governed, scheduled, audited operation | E9's cost is accepted and managed rather than removed | nothing technical; this is the known-working path and exists so the investigation has a floor |
+
+**C-b is the most promising on the evidence and is not thereby chosen.** Its
+attraction is that it would put the set in the database, where the publisher
+already writes, removing the second state path of §2.4d entirely. Its unknown is
+a single measurable fact, and it must be measured rather than assumed — the
+same discipline that turned up E4, E5, E6 and E9, each of which contradicted a
+reasonable expectation.
+
+#### Constraints on the investigation
+
+* **read-only or isolated** until explicitly authorised, like §2.4c;
+* **no modification of the stock RADIUS schema** — docs/65 §12.0's prohibition
+  stands, and C-a and C-b must work within `radcheck` / `radreply` as shipped or
+  with additive objects only;
+* **no production FreeRADIUS, database or configuration touched**;
+* each candidate is reported as **works / does not work / not established**,
+  never as "should work".
+
+#### Preserved negative results
+
+These are not to be rediscovered:
+
+* **E5** — multiple `Packet-Src-IP-Address ==` rows **cannot** represent a set.
+  Check items are ANDed, so two rows reject everything. This is the single most
+  natural-looking wrong answer and it is measured to fail.
+* **E6** — `=~` does not give set semantics on that attribute either.
+* **E4** — `Client-Shortname` is not a viable anchor in the tested
+  configuration; it rejected the authorised client.
 
 ---
 
