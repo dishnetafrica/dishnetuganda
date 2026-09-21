@@ -1,9 +1,21 @@
-# 70 — Decision 2a: production mechanism selection
+# 70 — Decision 2a: production mechanism — **CLOSED**
 
-**Status: EVIDENCE AND RECOMMENDATION. Decision 2a is NOT CLOSED.**
-Nothing in this document selects a production mechanism. §8 states the decision
-that requires explicit approval; until that approval is given, docs/69's entry
-stands — *production mechanism: NOT CHOSEN.*
+**Status: DECISION RECORD. Decision 2a is CLOSED (approved 2026-09-21).**
+
+> **Decision 2a — CLOSED.** The production mechanism enforcing the Decision 2a
+> security requirement under site-bound policy is **C-b — site-keyed dynamic SQL
+> source-address restriction**, using `dnb_cred_site`, `dnb_site_nas` and the
+> `EXISTS` predicate against the authorized NAS/source-address set.
+> **Huntgroups are retired as a production candidate.**
+
+§8 holds the decision as approved, its accepted consequences, and what it
+explicitly does **not** authorize. **Nothing here is authorized to be built.**
+
+**How to read this document.** §2 and §4 are **measured facts** — what was
+observed on a disposable instance. §6 is **production implications** — what a
+selection would mean for production, none of it measured there. That distinction
+is deliberate and survives the closure: the decision is closed, the production
+behaviour of the chosen mechanism is still *unmeasured in production*.
 
 Scope: choose between the two mechanisms proven in docs/68 §2.4, under the
 policy closed in docs/68 §2.5 (**A / SITE-BOUND**).
@@ -14,8 +26,9 @@ policy closed in docs/68 §2.5 (**A / SITE-BOUND**).
 | **Mechanism 2** | **C-b** — a source-address predicate inside the SQL authorize query, the set in database rows (docs/68 §2.4f) |
 
 Neither entered this gate as the favourite. C-b performing better in a
-disposable experiment is not a reason to select it, and is not used as one
-below.
+disposable experiment was not a reason to select it, and is not used as one
+below — §7 records the reasoning that did carry the decision, and names what was
+excluded from it.
 
 **Boundaries this document does not touch.** Voucher code → control plane only;
 generated AAA credentials → RADIUS only (docs/67, Decision 3). F1–F13 frozen.
@@ -309,30 +322,75 @@ production query change as its own authorized step.
 
 ---
 
-## 8. The decision that requires approval
+## 8. The decision, as approved
+
+**Approved 2026-09-21. Decision 2a is CLOSED.**
 
 > **Decision 2a — production mechanism.** Adopt **C-b (site-keyed dynamic SQL
 > source-address restriction)** as the production mechanism enforcing the
 > Decision 2a security requirement under site-bound policy, via
-> `dnb_cred_site` + `dnb_site_nas` and the `EXISTS` predicate in the authorize
-> query. **Huntgroups are retired as a production candidate** and remain what
-> docs/68 §2.4 calls them: a measured mechanism, recorded for its evidence value.
+> `dnb_cred_site` + `dnb_site_nas` and the `EXISTS` predicate against the
+> authorized NAS/source-address set in the authorize query. **Huntgroups are
+> retired as a production candidate** and remain what docs/68 §2.4 calls them:
+> a measured mechanism, recorded for its evidence value.
 
-Approving that sentence would also accept, as consequences:
+### 8.1 The measured evidence the decision rests on
 
-1. **Decision 7 is extended** by one narrowly-scoped provisioning writer for
-   `dnb_site_nas` — to be designed and reviewed as its own step, not implied by
-   this approval (§5.1).
-2. Two **additive** tables in the `radius` database; no FreeRADIUS table altered.
-3. One **authorized, one-time** production FreeRADIUS query change plus restart,
-   as its own step.
-4. The C1 guard tests at the F6 gate must include §5.3's no-client-asserted-value
-   assertion.
+Recorded here in full because a closed decision must carry its evidence with it.
+All of it was measured on a **disposable** FreeRADIUS instance (§2); none of it
+was measured in production (§5.2).
 
-**Not approved by that sentence, and not requested here:** implementing F6;
-building either mechanism; changing production FreeRADIUS, databases, schema or
-privileges; reopening Decisions 1, 2b, 3 or 7; or answering the open
-multiple-routers-per-site question, which fact 2 shows does not block 2a.
+| | Measured | Where |
+|---|---|---|
+| 1 | **Site isolation proven** — a credential authenticates at its own site's NAS and is rejected at another site's | S1 |
+| 2 | **Multiple NAS per site proven** — one INSERT, no restart, no credential rewritten | S2 |
+| 3 | **Atomic site reassignment proven** — one `UPDATE` moves a router between sites | S3 |
+| 4 | **Old-site authorization stops and new-site authorization starts** in that same statement, **without any credential rewrite and without a FreeRADIUS restart** | S3 |
+| 5 | **Empty mapping fails closed** — a site with no routers authorizes nothing | S4 |
+| 6 | **Missing credential mapping fails closed** — a credential with no site authorizes nowhere | S5 |
+| 7 | **Destroyed mapping tables fail closed** — dropping `dnb_site_nas`, then both tables, yields real Access-Rejects (verified in the server log, with the credential's password row still present) | S8, S9 |
+| 8 | **Huntgroup removal leaves stale authorization until a full restart** — surviving the file edit and a SIGHUP | **E10** |
 
-**Until that approval is given in words, Decision 2a remains OPEN and docs/69's
-entry — *mechanism NOT CHOSEN* — is the current state.**
+Item 8 is why huntgroups are retired: it is the measured failure of the
+invariant this gate was called to protect — *a site/router reassignment must not
+leave stale authorization behind.*
+
+Two further measured facts constrain how the decision may be read: the site test
+is **additive to** password authentication and does not replace it (S6), and
+**both** mechanisms supported multiple routers per site, so the still-open
+question in docs/68 §2.6b did not block this decision and is not settled by it.
+
+### 8.2 Consequences accepted — none of them authorized to build
+
+Accepted with the decision, each to be designed and reviewed **as its own step**:
+
+| | Consequence | State |
+|---|---|---|
+| 1 | **Decision 7 is extended** by one **narrowly scoped provisioning writer** for `dnb_site_nas` (§5.1) | **NOT DESIGNED. The next gate.** Must be designed and reviewed before any implementation |
+| 2 | The two **additive** mapping tables, `dnb_cred_site` and `dnb_site_nas`; no FreeRADIUS table altered | **NOT CREATED** |
+| 3 | The production FreeRADIUS **authorize-query change** plus its one-time restart | **NOT MADE — a separately authorized step** |
+| 4 | The **no-client-asserted-value invariant** added to the C1 guard tests (§5.3) | **NOT WRITTEN — due at the F6 gate**, not after it |
+
+### 8.3 What this decision does not authorize
+
+- **F6 remains NOT AUTHORIZED.** `dnb_app` still holds `EXECUTE` on
+  `mt_voucher_redeem`, exactly as docs/63 recorded it.
+- **Production FreeRADIUS is untouched.** Its authorize query is still
+  username-only (docs/68 §2.4b).
+- **The production database is untouched.** No table, column, constraint,
+  privilege or role has been created.
+- **F1–F13 remain frozen**; Decisions 1, 2b, 3 and 7 remain closed as recorded.
+- The open multiple-routers-per-site question (docs/68 §2.6b) is **not** answered
+  by this decision.
+
+### 8.4 The next gate
+
+**The Decision 7 extension — the provisioning-writer design.** Not F6
+implementation.
+
+The reason is §5.1 and fact 8 of §4 together: `dnb_site_nas` now carries **site
+isolation and cross-customer isolation at once**, and it is written on the
+*device-provisioning* lifecycle, not the publication lifecycle. Letting the AAA
+Publisher write it would let a voucher-activation path move the authorization
+boundary for every voucher at a site. That writer needs its own security
+boundary, designed and reviewed, **before** anything is implemented.
