@@ -15,6 +15,13 @@ withdrawn — F11 describes what a voucher *is*, not the event at which the AAA
 credential is published. The prior version remains in git history and is not
 edited away.
 
+**Second revision.** Decision 7 — the AAA publication boundary — was a single
+row in the open-decisions table. It is now §12, a section of its own, because
+it gates everything downstream: a redemption path can be correct in every
+respect while its published state is not authoritative at the AAA layer. §2.1
+is added to keep voucher redemption and AAA publication separate concepts even
+where the product performs them together. No decision is made in either.
+
 ---
 
 ## 0. The factual distinction, frozen before anything is reconciled
@@ -56,6 +63,12 @@ separated here and kept separate for the rest of the document.
 | Holds an authentication secret? | the code, as a commercial instrument | **no — no password column exists** | **yes** |
 | Can FreeRADIUS read it? | no | **no** | yes — this is the only one it reads |
 | Written by | `VoucherService` | `VoucherService::issue()` | **nothing, today** |
+
+**This terminology is permanent.** From here on these three names mean these
+three things and are not used interchangeably. "The RADIUS identity" is not a
+usable phrase, because it has meant all three at different points in this
+project's history, which is how the discrepancy in §0 survived as long as it
+did. Say *voucher record*, *registry row*, or *AAA credential*.
 
 **`mt_hotspot_users` is a registry, not a credential.** It has no password
 column, no expiry column and no reply attributes, and it sits in a database
@@ -127,6 +140,44 @@ what caused the earlier ambiguity:
 A third question is not a product choice at all and is settled in §4: **the
 credential must be removable and must be able to expire.**
 
+### 2.1 Redemption and AAA publication are different events
+
+They may occur inside one transaction, and from the guest's point of view they
+are one act. Architecturally they are distinct, and collapsing them is what
+produced the original F6 confusion:
+
+```
+  Guest presents voucher
+        |
+        v
+  Validate / redeem voucher          control plane: is this code real, unused,
+        |                            and valid at this NAS?
+        v
+  Authorize activation               control plane: may THIS actor start THIS
+        |                            voucher's validity window?
+        v
+  Publish AAA credential             control plane -> RADIUS database
+        |
+        v
+  Guest authenticates                FreeRADIUS reads radcheck, answers
+        |
+        v
+  RADIUS session                     radacct, then back to mt_sessions
+```
+
+Each arrow can fail independently, and they fail differently. A code that is
+real but already used fails at step 2 and is a business outcome. A publication
+that fails at step 4 is an infrastructure outcome: the voucher is legitimately
+redeemed and the guest still cannot get online. Step 5 failing after step 4
+succeeded is a third thing again. **One error shape for the guest (§8) does not
+mean one failure mode for the system**, and §12 exists because steps 4 and 5
+have no design at all today.
+
+This separation also keeps the eventual captive portal honest. A portal that
+performs all five steps as one opaque call becomes the place where
+authentication, voucher state, AAA provisioning and customer authorization mix
+together — which is precisely what the four planes exist to prevent.
+
 ---
 
 ## 3. Decision 1 — A or B, measured across all three layers
@@ -174,7 +225,7 @@ implementation of the documented lookup returns for them.
 Rows 2, 5 and 6 above assume the removal and expiry mechanisms of §4 exist. They
 do not exist today. **Without them, rows 2, 5 and 6 read `Access-Accept` under
 Model A and, for row 5 and 6, under Model B as well** — which is the measured
-result recorded in the prior version of this document and preserved in §14.
+result recorded in the prior version of this document and preserved in §15.
 
 ### 3.1 What the comparison shows
 
@@ -221,7 +272,7 @@ It does not decide A versus B. The honest trade:
   someone redeemed. Its cost is that redemption becomes a provisioning step on
   the guest's critical path, and the portal must survive its failure.
 
-That is a product and operations judgement. It stays open — §13, decision 1.
+That is a product and operations judgement. It stays open — §14, decision 1.
 
 ---
 
@@ -241,7 +292,7 @@ the `Expiration` check item in `radcheck`. Row 6 in both tables above is
 ### 4.2 Revocation must remove or disable the AAA credential
 
 `VoucherService::revoke()` flips `mt_vouchers.state` and touches nothing else.
-Measured in the prior gate and preserved in §14: a revoked voucher — whether
+Measured in the prior gate and preserved in §15: a revoked voucher — whether
 revoked while unused or while active — was still served. Rows 2 and 5 above are
 `Access-Reject` **only because the simulation deleted the rows**.
 
@@ -287,7 +338,7 @@ guest on Q's uplink.
 | Guest moves site | refused | refused after first use | allowed |
 | Printed for the wrong site | dead paper until revoked and reissued | self-corrects on first use | never an issue |
 
-A product decision, not a database-security one. Open — §13, decision 2.
+A product decision, not a database-security one. Open — §14, decision 2.
 
 ---
 
@@ -536,7 +587,84 @@ amendment to anything, and belong in their own document.
 
 ---
 
-## 12. Exact changes required, once the decisions are made
+## 12. Decision 7 — the AAA publication boundary
+
+**Not decided here.** This section states the shape of the decision and the
+questions any answer must cover. It is a section rather than a table row
+because every other decision depends on it: a redemption path can be correct in
+every respect and still leave a guest offline, or leave a revoked voucher
+working, if the published state is not authoritative at the AAA layer.
+
+### 12.1 The pipeline
+
+```
+  CONTROL PLANE                     database: DNB_DSN
+    mt_vouchers      commercial / lifecycle state
+    mt_hotspot_users voucher <-> radius_username <-> customer registry
+        |
+        v
+  AAA PUBLISHER                     <-- does not exist
+        |                               who it is, what it holds, and when it
+        |                               runs are all undecided
+        v
+  RADIUS DATABASE                   database: radius, container dn-phase0-postgres
+    radcheck         Cleartext-Password, Expiration
+    radreply         Mikrotik-Rate-Limit and other reply items
+        |
+        v
+  FreeRADIUS                        reads the two tables above; nothing else
+        |
+        v
+  HOTSPOT AUTHENTICATION / SESSION  Access-Accept, radacct
+        |
+        v
+  (back to the control plane)        /internal/radius/accounting -> mt_sessions
+```
+
+The last arrow is the only one that exists today, and it runs the other way:
+accounting is ingested over HTTP into `mt_session_account`. **Everything
+between the control plane and the RADIUS database is unbuilt.**
+
+### 12.2 The fifteen questions any answer must settle
+
+Each is annotated with what already exists in this codebase that bears on it,
+so the decision is made against evidence rather than instinct. Existing
+mechanisms are candidates to reuse *or to consciously reject* — neither is
+assumed.
+
+| # | Question | What already bears on it |
+|---|---|---|
+| 1 | **Which system is authoritative for voucher lifecycle state?** | `mt_vouchers` is the commercial record and the only place price, plan and ownership live. But `radcheck` is what decides whether a guest gets online. Authority for *commerce* and authority for *access* may not be the same system, and saying so explicitly is the first half of question 12 |
+| 2 | **Who is permitted to publish, update and remove AAA credentials?** | The four definer roles of migration 017 and the privilege model of §10 are the pattern: one named role, one narrow capability, no table privileges beyond what it needs. `dnb_radius` is the closest precedent — LOGIN, EXECUTE on two functions, **no table privileges at all** |
+| 3 | **What exact credential does the publisher hold?** | Nothing exists. Note the asymmetry with `dnb_radius`: that role is a *control-plane* identity used by the accounting ingestion path. A publisher needs an identity in the **`radius`** database, which is the opposite direction and must not be conflated with it |
+| 4 | **Is publication synchronous or asynchronous?** | The intent queue is the house asynchronous mechanism, and `voucher.publish` / `voucher.revoke` already exist as intent kinds. But its timing assumptions are built for router provisioning: `max_attempts DEFAULT 5`, `deadline_at DEFAULT now() + interval '7 days'`. **A seven-day deadline is not a design for a guest standing in a lobby**, which is what Model B makes it |
+| 5 | **What happens if publication fails?** | `DeliveryResult::retryable()` versus `::permanent()` already distinguishes transient from permanent failure, and `mt_intents.last_error` records why. What is undefined is the *voucher's* state when publication permanently fails after a successful redemption: the code is spent and the guest has nothing |
+| 6 | **What if the RADIUS database is temporarily unavailable?** | A special case of 5, and the one that decides 4. Under Model A the answer can be "retry later, nobody is waiting." Under Model B someone is waiting |
+| 7 | **What is the idempotency key for a publication?** | `mt_intents.idempotency_key` with the partial unique index `(customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL` is the existing pattern. For a publication the natural key is the voucher, since one voucher yields exactly one AAA credential — but that must be stated, not assumed |
+| 8 | **How are duplicate `radcheck` / `radreply` rows prevented?** | **Measured:** a second naive publish produced duplicate `Cleartext-Password` *and* `Expiration` rows while authentication still succeeded (§3.2). The standard FreeRADIUS schema is at a known path — docs/36 §307 verified `/etc/freeradius/mods-config/sql/main/postgresql/schema.sql` — but **its constraint set has never been inspected**. Whether `radcheck` carries any unique constraint on `(username, attribute)` is an open fact, not an open opinion, and it should be established before this question is answered |
+| 9 | **How are expiry and revoke propagated?** | `Expiration` in `radcheck` is the documented expiry mechanism (docs/33 §428). Revocation has no mechanism. Both intent kinds exist and both currently resolve to `assertRadiusBacked()`, which writes nothing |
+| 10 | **What happens to an already-established HotSpot session after revoke or expiry?** | Removing a credential stops the *next* authentication, not a running session. The `session.disconnect` intent kind already exists in `RouterOsDelivery`; nothing connects revocation to it. §4.2 |
+| 11 | **How is AAA drift detected?** | The codebase already has a drift pattern for routers: `DeviceRegistry` stores `desired`, reads back `actual`, and `divergence()` compares; `confirm()` re-reads before an intent is marked confirmed. The same shape applies here — a voucher `active` with no `radcheck` row, and a `radcheck` row with no live voucher, are both silent today |
+| 12 | **Which side wins if `mt_vouchers` and `radcheck` / `radreply` disagree?** | No precedent. F1's Domain A/B rule is about two systems sharing *nothing*; this is two stores that must agree. The safe-by-default answer and the commercially correct answer may differ — a stale `radcheck` row granting access is a revenue and security problem, while a missing one is a support problem |
+| 13 | **How is reconciliation performed?** | Follows from 11 and 12. Sweep direction, frequency, and whether reconciliation may *act* or only *report* are all open. A reconciler that silently deletes AAA rows is a denial-of-service against paying guests; one that silently creates them is an authorization bypass |
+| 14 | **What prevents the publisher credential from becoming a lateral access path between the two databases?** | The two databases are currently isolated by having no connection at all. A publisher deliberately breaches that. The question is what it may do on each side, and it is the reason 2 and 3 are separate questions. §10's principle applies: one narrow capability, no table privileges beyond it, and nothing that can read the control plane's tenant data |
+| 15 | **How is publication or audit failure surfaced to operators?** | Today the only operator surface is `error_log('[dnb] …')` from the HTTP kernel and `mt_intents.last_error`. Neither is a monitored channel. A publication that fails silently is indistinguishable from one that never ran |
+
+### 12.3 What must not happen
+
+* Publication must not be decided by writing the first thing that works.
+  Questions 12, 13 and 14 have no implementation-obvious answer, and a wrong one
+  is discovered only when a revoked voucher keeps working or a paying guest is
+  locked out.
+* The publisher must not be given broad access to either database because it is
+  convenient. §10's principle applies unchanged on both sides of the boundary.
+* Questions 8 and 11 must not be answered from the standard FreeRADIUS schema
+  as remembered. The deployed schema file's location is known; its contents are
+  not recorded anywhere in this repository.
+
+---
+
+## 13. Exact changes required, once the decisions are made
 
 Nothing here is written yet.
 
@@ -551,7 +679,7 @@ Nothing here is written yet.
 | A2 | `VoucherService::redeem()` retargeted at the portal function and its new return shape; the old signature removed |
 | A3 | tests: docs/64 §8's ten cases as a committed suite, plus the lifecycle comparison and the concurrency case |
 | D1 | an architecture document for AAA publication, `Expiration`, idempotent republication, and revocation-plus-disconnect (§4) |
-| D2 | the answer to decision 7 — the publication and reconciliation mechanism (§13) |
+| D2 | the answer to decision 7 — the publication and reconciliation mechanism (§12, §14) |
 
 **Conditional on decision 1:**
 
@@ -574,7 +702,7 @@ or nothing.
 
 ---
 
-## 13. Open decisions
+## 14. Open decisions
 
 | # | Decision | Blocking |
 |---|---|---|
@@ -584,27 +712,12 @@ or nothing.
 | **4** | **Front-desk activation: required or not** | whether an operator capability exists at all |
 | **5** | **Rate-limit numbers** — burst, sustained, window, per NAS | §9 fixes the shape and dimensions; the values need a real venue's traffic |
 | **6** | **Retention** for the attempt store | M3 |
-| **7** | **Where does the control plane publish to the separate RADIUS database, and what is the authoritative synchronization / reconciliation mechanism?** | **everything downstream.** See below |
+| **7** | **Where does the control plane publish to the separate RADIUS database, and what is the authoritative synchronization / reconciliation mechanism?** | **everything downstream.** Fully stated in §12 |
 
-### Decision 7 is now a first-class architecture question
+### Decision 7 is a first-class architecture question
 
-The control plane holds one DSN and no connection to the `radius` database. Any
-design must answer:
-
-* **who writes** — the application directly, a dedicated publisher service, a
-  worker acting on the existing `voucher.publish` / `voucher.revoke` intents, or
-  database-level replication;
-* **which store is authoritative** when they disagree, and how drift is
-  *detected* rather than assumed — a voucher marked `active` whose `radcheck`
-  row is missing, and a `radcheck` row with no live voucher, are both silent
-  today;
-* **what happens when publication fails** — under Model B this is on the guest's
-  critical path;
-* **what credential the publisher holds** in the `radius` database, and why that
-  does not become a new lateral path between the two databases.
-
-Until this is answered, a redemption path could be built that is correct in
-every respect and whose "published" state is not authoritative at the AAA layer.
+Its shape, its pipeline and the fifteen questions any answer must settle are
+**§12**. It is listed here only so the open set is complete in one place.
 
 §8's taxonomy, hashing and attempt separation, §9's dimensions and placement,
 and §10's privilege model are **security decisions and are settled**. They are
@@ -612,7 +725,7 @@ not on this list.
 
 ---
 
-## 14. Regression state and corrections
+## 15. Regression state and corrections
 
 `tests/run.sh`: **all suites passed, 718 assertions.** No project code changed in
 this gate or the previous one.
