@@ -484,6 +484,22 @@ architecture document, per docs/65 §11.
 
 ---
 
+## 9a. An implementation dependency recorded after this decision closed
+
+**This decision is unchanged.** docs/68 §2.4d records a dependency of
+*implementing* it, found while verifying Decision 2a: the customer → NAS-set
+restriction that protects the AAA plane is carried by a **huntgroups file**,
+which is server-side configuration rather than RADIUS database state, and a
+change to it takes effect only on a full FreeRADIUS restart.
+
+That gives the publisher's world a second kind of state beyond `radcheck` /
+`radreply`. It does not alter §2.3's privilege model — it extends it: the
+publisher must not receive arbitrary configuration or filesystem access, and
+whatever maintains the mapping must be narrow, validated, audited, and aware
+that its change is a service event. A single-NAS customer needs none of it.
+
+---
+
 ## 10. What was decided without being built
 
 Nothing in this record exists in code. The next step after it is an

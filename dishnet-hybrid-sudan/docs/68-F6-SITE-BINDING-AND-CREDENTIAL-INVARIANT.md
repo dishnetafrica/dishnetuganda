@@ -472,6 +472,20 @@ Huntgroups express any set, so a **per-site** group and a **per-customer** group
 are equally expressible. A, B and C remain genuinely open and remain a business
 question. §2.6's three questions stand unanswered.
 
+#### Established evidence, citable by number
+
+| | |
+|---|---|
+| **E1** | Production authorization is **username-only** — `WHERE Username = '%{SQL-User-Name}'` (§2.4b) |
+| **E2** | Unrestricted baseline **accepts the same credential from both synthetic customers** |
+| **E3** | `Packet-Src-IP-Address` and `Client-IP-Address` are **server-derived anchors that enforce** |
+| **E4** | `Client-Shortname` is **not viable** in the tested configuration — it rejected the authorised client |
+| **E5** | Multiple `Packet-Src-IP-Address ==` rows are **ANDed, not ORed** |
+| **E6** | Regex (`=~`) **does not** provide the required set semantics |
+| **E7** | `Huntgroup-Name` **successfully expresses a set** of authorised source addresses |
+| **E8** | The symmetric tenant test **passed**: P's credential accepts at P and rejects at Q, and the converse |
+| **E9** | A huntgroups change takes effect **only on a full restart** — §2.4d |
+
 #### Status of 2a
 
 **Viable.** Mechanism: a `Huntgroup-Name` check item published with the
@@ -484,6 +498,100 @@ Still outstanding, unchanged: **question 4** — what a real MikroTik supplies �
 which this experiment could not and did not address, because it needs a router.
 It does not block 2a's design: the anchor chosen is the source address, which
 the server derives, not anything the router asserts.
+
+---
+
+### 2.4d Implementation dependency for Decision 7 — the second state path
+
+**Decision 7 is not reopened.** Its architecture stands as docs/66 records it.
+What follows is a dependency of *implementing* it, discovered by §2.4c and
+recorded here so the implementation gate does not meet it late.
+
+#### There are now two kinds of state, not one
+
+docs/66 gave the publisher one job: write credentials to `radcheck` /
+`radreply` through two definer functions, holding no table privileges. 2a's
+mechanism adds a second kind of state that is **not in the RADIUS database at
+all**.
+
+```
+  CONTROL PLANE
+      |
+      +--> AAA credential publication      radcheck / radreply
+      |       database state, written by the publisher (docs/66 §2.3)
+      |
+      +--> customer / NAS-set mapping      huntgroups
+              SERVER-SIDE CONFIGURATION, a file — NOT the publisher
+      |
+      v
+  FreeRADIUS authorization check
+      |
+      v
+  HotSpot authentication
+```
+
+**Huntgroup state is server-side configuration, not RADIUS database state.**
+Measured: the file is `mods-config/preprocess/huntgroups`, read by the
+`preprocess` module; no table stands behind it.
+
+#### E9 — a change needs a full restart, not a reload
+
+Measured on the throwaway instance, moving one address out of a group while a
+credential restricted to that group kept authenticating:
+
+```
+  before any change, A (in cust-p):     Access-Accept
+  after editing the file, no signal:    Access-Accept
+  after SIGHUP:                         Access-Accept     <-- HUP does not re-read it
+  after a full restart:                 Access-Reject
+```
+
+So **adding, moving or removing a customer's router is a FreeRADIUS restart**,
+which interrupts authentication for *every* customer on that server, not just
+the one being changed. It is a scheduled service event, not a routine
+provisioning step. That is a cost the implementation gate must plan for and the
+single most surprising property of the mechanism.
+
+#### Constraints on whatever maintains the mapping
+
+1. **The publisher must not receive arbitrary filesystem or configuration
+   access.** docs/66 §2.3's principle applies to this second path at least as
+   strictly as to the first, and arguably more: write access to configuration is
+   broader by nature than write access to two tables, and `dnb_pub` was
+   deliberately given no table privileges at all.
+2. **The mechanism must be narrow.** It may express the DishNet-managed
+   customer → source-address mapping and nothing else in FreeRADIUS
+   configuration. Whether it is the publisher's process or a separate one is an
+   implementation choice; that it is confined to this one mapping is not.
+3. **It must validate before it writes.** A wrong mapping is not a syntax error
+   caught at reload — it is a **silent authorization change**. §2.4c measured
+   exactly that: `Huntgroup-Name == cust-q` against a client not in that group
+   rejected everything, quietly and correctly. A mapping mistake denies a paying
+   customer's entire estate and looks like a working system.
+4. **It must be audited** — who changed the mapping, when, and from what to
+   what — for the same reason docs/66 §2.15 audits publication.
+5. **The restart is part of the operation** (E9), so it is itself an auditable,
+   schedulable event rather than a side effect.
+
+#### A single-NAS customer needs none of this
+
+`Packet-Src-IP-Address ==` on the credential is sufficient when a customer has
+one router (§2.4c, E3). That is a **pure database write** by the publisher —
+no file, no configuration access, no restart, no second state path. Everything
+above applies only to customers whose authorised set has more than one address.
+
+This is worth weighing at the implementation gate: if most of the estate is
+single-NAS, the file-based path is an exception to handle rather than the normal
+case to build around.
+
+#### What this does *not* do
+
+**It does not select 2b.** The mechanism can express any set (E7), so per-site
+and per-customer groups remain equally expressible, and A, B and C remain a
+business question. The cost asymmetry recorded above — a per-site binding where
+each site has one router needs no huntgroup, a customer-wide set does — is
+information for that decision, **not** a reason to take it here. §2.6's three
+questions stand unanswered.
 
 ---
 
