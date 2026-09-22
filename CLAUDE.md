@@ -663,7 +663,7 @@ site at all.**
   one function and no table privileges; a NAS packet must not trigger a CRM
   lookup.
 
-### Two project engineering rules — now binding
+### Three project engineering rules — now binding
 
 **The security evidence hierarchy.** Strongest first:
 `1 execution test · 2 RLS/policy · 3 SECURITY DEFINER boundary · 4 application
@@ -680,6 +680,21 @@ must assert — and exit non-zero on failure — that the **anchor exists**, the
 **occurrence count** is expected, the **replacement count** is expected, and the
 **result contains the intended section**. **"The script exited 0" is not
 evidence that the change happened.**
+
+**Credible evidence.** `negative result + positive control + known authorization
+context`. A `0 rows` result has **seven** possible causes and only one of them is
+a finding: genuinely zero · RLS hid everything · wrong tenant context · wrong
+database · wrong role · the query never executed · the fixture was never created.
+**Every census query and every security test must carry a positive control that
+proves the session can see something it is entitled to see**, and must state its
+role, database and tenant context. A zero-mismatch result over a zero-row read is
+**INDETERMINATE**, never "clean". Three measurements in this project have already
+failed this way — a burned-credential check with no positive control, a count of
+`mt_sites` that read `0` because no tenant was set, and a cross-tenant `INSERT …
+SELECT` that returned **`INSERT 0 0`** because the subquery ran under the
+attacker's own RLS context and the *next* statement then "passed". A regression
+test also needs **the control on the controls**: it must be shown to fail when the
+control it guards is removed. (`docs/105` §0, §5)
 
 Nothing authorized to build. No gate moved.
 
@@ -747,6 +762,115 @@ is a real hazard.
 right?), **P-C** (may a principal be reassigned, given `sold_by`/`created_by`
 would misattribute?), **S-A** (may a service be migrated between customers?),
 **I-A** (idempotency per writer). Nothing authorized to build. No gate moved.
+
+## Identity integrity remediation — designed, NOT authorized (`docs/105`)
+
+**Do not build `mt_site_create`, or any other onboarding writer, until O-1 is
+closed.** A production site writer would make a known cross-customer integrity
+hole reachable.
+
+### O-1, characterised under full controls
+
+Run as `dnb_app` under RLS, one transaction, rolled back, residue 0:
+
+| | | |
+|---|---|---|
+| **C1** | B deletes its own unreferenced service | `DELETE 1` — the path works |
+| 2 | A attaches **its** site to **B's** service, by literal UUID | `INSERT 0 1` |
+| **C2** | can A *read* that service? | **0** |
+| **C3** | can B *see* the referencing row? | **0** |
+| 4 | B deletes that service again | **refused** — `mt_sites_service_id_fkey` |
+
+- **Referential integrity is enforced BELOW RLS.** Neither party can see the
+  other's row, yet the constraint binds both. **That is why a composite FK is a
+  real floor and an application-level check is not** — an application check runs
+  *above* RLS and finds nothing to object to.
+- **Not disclosure. Not enumerable.** The writer must name a `gen_random_uuid()`
+  it cannot read (C2). **The realistic trigger is not an attacker but a writer
+  that passes a `service_id` it did not derive** — a stale id, a copied request,
+  a bug. Which is exactly what the spine will build.
+- Consequence: **cross-tenant denial** — the victim can never end that service
+  and cannot see why.
+
+### The remediation — W-2's shape, one level up
+
+`UNIQUE (id, customer_id)` on `mt_services` + `FOREIGN KEY (service_id,
+customer_id) REFERENCES mt_services (id, customer_id)` on `mt_sites`.
+
+- **Both existing single-column FKs stay.** W-2 was additive; `mt_devices` kept
+  its two alongside the composite one.
+- **No CHECK, and none may be added.** `mt_devices` needs
+  `site_needs_customer` only because `site_id` is *nullable* (MATCH SIMPLE skips
+  a NULL component). `mt_sites.service_id` and `.customer_id` are **both NOT
+  NULL**, so nothing can skip it.
+- **Omit `ON DELETE`/`ON UPDATE`** — inherit `NO ACTION`, as W-2 does. Nothing in
+  this schema is `DEFERRABLE`, so it blocks as `RESTRICT` does. Deliberate
+  consequence: `mt_services.customer_id` cannot be updated while a site
+  references it, so **service migration becomes impossible by accident** (S-A).
+- **Measured migration constraint:** `Migrator` runs each file as **one implicit
+  transaction** (`PDO::exec`, `src/Db/Migrator.php:26`), so **`CREATE INDEX
+  CONCURRENTLY` is unavailable.** Lock duration is unknown until E-2.
+- **Remediate only the proven defect.** Do not bundle customer FKs, principal
+  relationships, service or device lifecycle, `mt_vouchers.site_id NOT NULL`, or
+  the `credential_hash` drop.
+
+### The census needs no superuser
+
+`dnb_def_admin` already holds SELECT-only `USING (true)` policies, and
+`mt_admin_sites()` → `(id, customer_id, service_id, …)` and
+`mt_admin_services()` → `(id, customer_id, …)` already expose every column O-1
+concerns, EXECUTE-able by **`dnb_adminapi`** — an ordinary non-superuser login
+role. **Do not create a `BYPASSRLS` role for a census**; it would outlive it. A
+superuser fallback must be reported as `method=superuser`, never silently.
+
+**This is NOT E-2.** E-2 remains the whole production census; `docs/79` is still
+the handoff.
+
+### Questions resolved, retired or newly bounded
+
+- **P-A is RETIRED — it is C6/C16**, open since `docs/47`/`docs/48`, and the
+  schema comment says so: `-- kind: owner | operator. C6/C16 OPEN`. **A writer
+  may STORE `kind` but must not branch on it** until C6 closes.
+- **P-B is genuinely new** — no document addresses the *scope* of phone
+  uniqueness. The global index is what makes `phone → exactly one principal`
+  resolvable for OTP at all. **A writer must treat a duplicate phone as a
+  refusal, never an upsert.**
+- **P-C — recommendation: no principal reassignment operation.** `sold_by`,
+  `created_by` and `actor_principal_id` are already `SET NULL` silently.
+- **S-A — UNIMPLEMENTED**, neither supported nor planned; no writer, no
+  document. Leave it forbidden-by-constraint; **do not design migration
+  behaviour.**
+- **I-A — the existing idempotency mechanism is unusable by all four writers.**
+  Measured: `mt_idempotency` is keyed `(customer_id, key)` with `customer_id NOT
+  NULL`, so **there is nothing to key a customer-creation retry on**; and
+  `dnb_adminwrite` holds **zero table privileges** —
+  `has_table_privilege(…,'mt_idempotency','INSERT') = false` — while the Admin
+  plane sets no tenant context. **Do not copy `POST /me/vouchers`.** Four of the
+  five writers have **no natural key at all** (`mt_services` worst: `customer_id`
+  + a `kind` with one legal value). `mt_device_assign` is **idempotent in state,
+  not in record** — it re-stamps `claimed_at` and writes another audit row, and
+  differing arguments are a legitimate *reassignment*, not a retry.
+
+### Site creation — derive, never accept
+
+`mt_site_create(p_service, p_name, p_location, p_actor)` — **there is no
+`p_customer` parameter.** `customer_id` is read from the service row, so the
+forgery is *unrepresentable* rather than rejected. Three layers, weakest last:
+**composite FK → the function derives → the route carries no customer.** A
+`service_id` from a browser is untrusted input naming a candidate: it may only
+be resolved **within the caller's own visibility**, exactly as `docs/88` D-1a
+treats `nas_claimed` — untrusted context may reject early, never establish
+authority.
+
+**U-1 is still OPEN.** Proposed boundary, for approval: the uCRM link becomes
+mandatory at **`mt_service_create`** (the first act asserting a billable
+relationship, and where `docs/101`'s coherence rule lands), and again at the
+commercial writes (B-2). Customer create, principal create and device possession
+stay **unconditional**. Ruled out by evidence: a blanket `NOT NULL` (U-2),
+gating at `mt_customer_create`, and gating only at `mt_device_assign`.
+
+**Order: O-1 → census → decide I-A/U-1/U-5/C6/P-B → writers.** Nothing
+authorized to build. No gate moved.
 
 ## Open and parked
 
