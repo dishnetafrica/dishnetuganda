@@ -36,9 +36,9 @@ $hit = function (string $p) use ($routes, $req): \Dn\Http\Response {
     return $h(new Request('GET', $p, [], [], $params));
 };
 
-$js  = file_get_contents(__DIR__ . '/../public/admin/api.js');
-$app = file_get_contents(__DIR__ . '/../public/admin/app.js');
-$htm = file_get_contents(__DIR__ . '/../public/admin/index.html');
+$js  = file_get_contents(__DIR__ . '/../panel/api.js');
+$app = file_get_contents(__DIR__ . '/../panel/app.js');
+$htm = file_get_contents(__DIR__ . '/../panel/index.html');
 $stripJs = static function (string $s): string {
     $s = preg_replace('#/\*.*?\*/#s', ' ', $s);
     return preg_replace('#(^|[^:])//.*$#m', '$1', $s);

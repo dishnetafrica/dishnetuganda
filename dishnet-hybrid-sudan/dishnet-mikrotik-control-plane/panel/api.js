@@ -54,6 +54,12 @@ export class AdminApi {
   sessions()      { return this.get('/api/v1/admin/sessions', 'session'); }
   intents()       { return this.get('/api/v1/admin/intents', 'intent'); }
   audit()         { return this.get('/api/v1/admin/audit', 'audit'); }
+
+  /* Which router signals the plugin can actually produce, and which it cannot.
+   * The inventory is the SERVER'S answer, never this file's: a panel that
+   * decided for itself which dots are green could show a green dot for a
+   * signal nothing measures. */
+  networkSignals() { return this.get('/api/v1/admin/network-signals'); }
 }
 
 /* ---------------------------------------------------------------------------

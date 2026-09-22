@@ -1,0 +1,193 @@
+{
+  "id": "dishnet-mikrotik",
+  "name": "DishNet MikroTik Control Plane",
+  "version": "0.9.0-dev",
+  "domain": "B",
+  "summary": "Router registry, provisioning, HotSpot policy, vouchers, sessions and AAA publication for MikroTik estates.",
+  "boundary": {
+    "consumes_domain_a": false,
+    "notes": [
+      "Domain A (Starlink/UCRM) is NOT a dependency. This plugin owns its own PostgreSQL schema and never reads or writes Domain A state.",
+      "The Admin Panel is a SEPARATE consumer and is not part of this package. It reaches the plugin only over the HTTP API declared below."
+    ]
+  },
+  "requires": {
+    "php": ">=8.1",
+    "php_extensions": [
+      "pdo_pgsql",
+      "json",
+      "openssl"
+    ],
+    "postgresql": ">=14"
+  },
+  "config": {
+    "DNB_DSN": {
+      "required": true,
+      "secret": false,
+      "description": "PDO DSN for the plugin's own PostgreSQL database."
+    },
+    "DNB_TOKEN_PEPPER": {
+      "required": true,
+      "secret": true,
+      "description": "HMAC pepper for auth tokens and activation tickets."
+    },
+    "DNB_ADMINAPI_USER": {
+      "required": false,
+      "secret": false,
+      "description": "Admin read role. Defaults to dnb_adminapi."
+    },
+    "DNB_ADMINAPI_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "Admin read role password."
+    },
+    "DN_ALLOW_REAL_BINDINGS": {
+      "required": false,
+      "secret": false,
+      "description": "F6-B gate. Absent or not 'yes-f6b-authorized' means every hardware adapter stays simulated."
+    }
+  },
+  "api": {
+    "base": "/api/v1/admin",
+    "entrypoint": "plugin/public/api.php",
+    "surface": "read-only",
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "capability": "health.read"
+      },
+      {
+        "method": "GET",
+        "path": "/network-signals",
+        "capability": "health.read"
+      },
+      {
+        "method": "GET",
+        "path": "/customers",
+        "capability": "customers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/customers/{customer_id}",
+        "capability": "customers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/sites",
+        "capability": "sites.read"
+      },
+      {
+        "method": "GET",
+        "path": "/routers",
+        "capability": "routers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/routers/{device_id}",
+        "capability": "routers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/plans",
+        "capability": "plans.read"
+      },
+      {
+        "method": "GET",
+        "path": "/vouchers",
+        "capability": "vouchers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/voucher-batches",
+        "capability": "vouchers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions",
+        "capability": "sessions.read"
+      },
+      {
+        "method": "GET",
+        "path": "/intents",
+        "capability": "intents.read"
+      },
+      {
+        "method": "GET",
+        "path": "/audit",
+        "capability": "audit.read"
+      }
+    ],
+    "writes": {
+      "bound": [],
+      "declared_unbound": [
+        {
+          "method": "POST",
+          "path": "/routers",
+          "capability": "routers.register"
+        },
+        {
+          "method": "POST",
+          "path": "/routers/{device_id}/assign",
+          "capability": "routers.assign"
+        },
+        {
+          "method": "POST",
+          "path": "/routers/{device_id}/actions",
+          "capability": "routers.act"
+        },
+        {
+          "method": "POST",
+          "path": "/sites",
+          "capability": "sites.write"
+        },
+        {
+          "method": "POST",
+          "path": "/plans",
+          "capability": "plans.write"
+        },
+        {
+          "method": "POST",
+          "path": "/voucher-batches",
+          "capability": "vouchers.generate"
+        },
+        {
+          "method": "POST",
+          "path": "/sessions/{session_id}/disconnect",
+          "capability": "sessions.disconnect"
+        }
+      ],
+      "reason": "These paths EXIST and every one answers 501. They are declared so the capability matrix is complete and testable, not because anything is bound. Binding them needs the staff identity provider (W-4) first, otherwise an audit row has no actor to name. The write floor itself is built (migration 020) and used by nothing."
+    }
+  },
+  "install": {
+    "command": "php plugin/bin/plugin.php install",
+    "creates": [
+      "postgresql schema",
+      "postgresql roles"
+    ],
+    "idempotent": true
+  },
+  "uninstall": {
+    "command": "php plugin/bin/plugin.php uninstall --i-understand-this-drops-data",
+    "removes": [
+      "postgresql schema objects owned by this plugin"
+    ],
+    "refuses_without_confirmation": true
+  },
+  "gates": {
+    "F6-B": {
+      "state": "NOT AUTHORIZED",
+      "meaning": "Real MikroTik and real FreeRADIUS bindings. While closed, every hardware adapter is a simulator and says so.",
+      "env": "DN_ALLOW_REAL_BINDINGS=yes-f6b-authorized"
+    },
+    "admin-write": {
+      "state": "NOT BOUND",
+      "meaning": "No state-changing Admin route exists. DenyAllIdentity is the production Admin identity binding."
+    },
+    "portal": {
+      "state": "NOT BUILT",
+      "meaning": "Guest voucher activation. Blocked on Decision 5 (gated) and the F-7 remediation design."
+    }
+  }
+}

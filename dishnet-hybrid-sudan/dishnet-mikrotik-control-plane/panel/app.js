@@ -16,19 +16,20 @@ const ugx = n => n == null ? '—' : 'UGX ' + Number(n).toLocaleString('en-UG');
 
 /* V2's navigation, minus reseller and tenant management. */
 export const NAV = [
-  { sec: 'Network' },
-  { id: 'routers',   label: 'MT Routers' },
-  { id: 'customers', label: 'Customers & Sites' },
-  { sec: 'Operations' },
-  { id: 'intents',   label: 'MT Intents' },
-  { id: 'sessions',  label: 'MT Sessions' },
-  { id: 'dashboard', label: 'Overview' },
-  { sec: 'Selling' },
-  { id: 'plans',     label: 'Plans' },
-  { id: 'vouchers',  label: 'MT Vouchers' },
-  { id: 'batches',   label: 'Batches' },
+  { sec: 'Network plane' },
+  { id: 'dashboard',   label: 'Overview' },
+  { id: 'routers',     label: 'Routers' },
+  { id: 'network',     label: 'Network health' },
+  { id: 'intents',     label: 'Provisioning jobs' },
+  { id: 'sessions',    label: 'Active sessions' },
+  { id: 'diagnostics', label: 'Diagnostics' },
+  { sec: 'Commercial plane' },
+  { id: 'customers',   label: 'Customers & sites' },
+  { id: 'plans',       label: 'Plans' },
+  { id: 'vouchers',    label: 'Vouchers' },
+  { id: 'batches',     label: 'Batches' },
   { sec: 'Administration' },
-  { id: 'audit',     label: 'Audit Log' },
+  { id: 'audit',       label: 'Audit log' },
 ];
 
 const state = { view: 'routers', arg: null, health: null, q: '', cohortFilter: null };
@@ -101,6 +102,64 @@ async function vRouters() {
             <td class="mono">${short(r.site_id)}</td></tr>`));
 }
 
+
+/* The provisioning ladder. Rungs come from the lifecycle states migration 012
+ * allows, in the order a router passes through them. A device sitting in a
+ * state that is NOT on the ladder (orphaned, diverged, decommissioned) is not
+ * drawn as a half-finished ladder, because it is not part-way along one. */
+const LADDER = ['registered', 'staged', 'shipped', 'connected', 'provisioned', 'active'];
+
+function ladder(r) {
+  const at = LADDER.indexOf(r.state);
+  if (at < 0) {
+    return `<div class="note">This router is <b>${esc(r.state)}</b>, which is not a step on the
+      provisioning ladder. Its position is not being guessed.</div>`;
+  }
+  const stamp = { staged: r.staged_at, connected: r.claimed_at };
+  return `<ol class="ladder">` + LADDER.map((step, i) => {
+    const cls = i < at ? 'done' : i === at ? 'here' : 'todo';
+    const when = stamp[step] ? `<span class="when">${esc(String(stamp[step]).slice(0, 16))}</span>` : '';
+    return `<li class="${cls}"><span class="dot"></span><span class="step">${esc(step)}</span>${when}</li>`;
+  }).join('') + `</ol>`;
+}
+
+/* Signals, measured and unmeasured, exactly as the server reported them.
+ *
+ * An unmeasured signal is drawn grey and says what would have to exist. It is
+ * never drawn green and never drawn red: red would claim a fault was observed,
+ * and nothing observed anything. */
+function signalPanel(sig) {
+  if (!sig || !sig.signals) {
+    return `<div class="note">The signal inventory could not be read, so no signal is being shown.</div>`;
+  }
+  return `<div class="signals">` + sig.signals.map(x => `
+    <div class="signal ${esc(x.status)}">
+      <span class="dot"></span>
+      <div>
+        <b>${esc(x.label)}</b>
+        <span class="verdict">${x.status === 'measured' ? 'measured' : 'no signal'}</span>
+        ${x.reason ? `<p>${esc(x.reason)}</p>` : ''}
+        ${x.source ? `<p class="src">${esc(x.source)}</p>` : ''}
+        ${x.needs ? `<p class="needs">Needs: ${esc(x.needs)}</p>` : ''}
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+/* Every action is rendered inert, with the server's reason attached.
+ *
+ * They are shown rather than hidden on purpose: an operator should be able to
+ * see what this product will eventually do and why it cannot do it yet. The
+ * buttons carry the disabled attribute and no handler is bound to them. */
+function actionPanel(sig) {
+  const acts = (sig && sig.actions) || [];
+  if (!acts.length) return '';
+  return `<h2 class="sub">Actions</h2><div class="actions">` + acts.map(a => `
+    <div class="action">
+      <button class="btn" disabled aria-disabled="true" title="${esc(a.reason)}">${esc(a.label)}</button>
+      <p>${esc(a.reason)}</p>
+    </div>`).join('') + `</div>`;
+}
+
 async function vRouter() {
   const res = await api.router(state.arg);
   if (res.state !== S.OK && !(res.data && res.data.router)) {
@@ -114,11 +173,48 @@ async function vRouter() {
              ['Last contact', contactAge(r.last_seen_at)],
              ['Staged by', r.staged_by], ['Claimed', r.claimed_at],
              ['Customer', short(r.customer_id)], ['Site', short(r.site_id)]];
+  const sres = await api.networkSignals();
+  const sig = sres.status === 200 ? sres.data : null;
   return head('Router', esc(r.serial)) +
     `<div class="kv">${f.map(([k, v]) =>
       `<div><dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd></div>`).join('')}</div>` +
     (r.wan_interface ? '' : `<div class="note">No WAN interface has been established for this
-      router, so its uplink is not measurable. That is a provisioning gap, not a fault.</div>`);
+      router, so its uplink is not measurable. That is a provisioning gap, not a fault.</div>`) +
+    `<h2 class="sub">Provisioning</h2>` + ladder(r) +
+    `<h2 class="sub">Signals</h2>` + signalPanel(sig) +
+    actionPanel(sig);
+}
+
+
+async function vNetwork() {
+  const res = await api.networkSignals();
+  if (res.status !== 200) return head('Network health') + stateBlock({ state: S.UNAVAILABLE, status: res.status }, 'signal');
+  const d = res.data, m = d.summary;
+  return head('Network health', `${m.measured} of ${m.total} signals measured`) +
+    `<div class="note">This page is the inventory of what this system can observe. It is
+      deliberately not a wall of green: ${m.unmeasured} of ${m.total} signals have no source at
+      all, and showing them as healthy would be the screen asserting something nothing
+      checked.</div>` +
+    signalPanel(d);
+}
+
+async function vDiagnostics() {
+  const res = await api.networkSignals();
+  const h = state.health;
+  const rows = [
+    ['Delivery binding', h ? h.bindings.delivery_binding : '—'],
+    ['Publisher binding', h ? h.bindings.publisher_binding : '—'],
+    ['Publisher simulated', h ? String(h.bindings.publisher_simulated) : '—'],
+    ['Real bindings allowed', h ? String(h.bindings.real_bindings_allowed) : '—'],
+    ['Identity provider', h ? h.identity.provider : '—'],
+  ];
+  const acts = res.status === 200 ? res.data : null;
+  return head('Diagnostics') +
+    `<div class="note">Nothing here contacts a router. Every reading below is about
+      <b>this process</b> — which adapters it loaded and which identity it accepted.</div>` +
+    `<div class="kv">${rows.map(([k, v]) =>
+      `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</div>` +
+    actionPanel(acts);
 }
 
 const list = (title, fetch, key, cols, rowFn, noun) => async () => {
@@ -199,7 +295,8 @@ async function vDashboard() {
 
 const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, plans: vPlans,
                 vouchers: vVouchers, batches: vBatches, sessions: vSessions,
-                intents: vIntents, audit: vAudit, dashboard: vDashboard };
+                intents: vIntents, audit: vAudit, dashboard: vDashboard,
+                network: vNetwork, diagnostics: vDiagnostics };
 
 function head(title, sub) {
   return `<div class="appbar"><h1>${esc(title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</h1></div>`;

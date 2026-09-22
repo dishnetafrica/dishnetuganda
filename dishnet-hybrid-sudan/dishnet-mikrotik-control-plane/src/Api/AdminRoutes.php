@@ -9,6 +9,7 @@ use Dn\Http\Request;
 use Dn\Http\Response;
 use Dn\Http\Router;
 use Dn\Http\Serializer\AdminProjection;
+use Dn\Network\SignalReport;
 use Dn\Runtime\Bindings;
 
 /**
@@ -78,6 +79,17 @@ final class AdminRoutes
                 'bindings' => $bindings->describe(),
                 'identity' => ['provider' => $identity->providerName(),
                                'role'     => $s->role->value],
+            ])), auth: false);
+
+        // Which router signals this system can actually produce, and which it
+        // cannot. Declared server-side on purpose: a front-end change must not
+        // be able to invent a green dot for a signal nothing measures.
+        // No database read — this is structural truth about the build.
+        $r->get('/api/v1/admin/network-signals', $guard(Capability::HEALTH_READ,
+            static fn(Request $req, StaffIdentity $s) => Response::ok([
+                'signals' => SignalReport::inventory(),
+                'actions' => SignalReport::actions(),
+                'summary' => SignalReport::summary(),
             ])), auth: false);
 
         // ── estate reads ────────────────────────────────────────────────

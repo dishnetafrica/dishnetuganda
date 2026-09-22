@@ -211,6 +211,38 @@ without an explicit instruction.
 - **W-4, W-5, W-6 remain OPEN.** Do not invent a staff credential store, a
   suspended state, customer/site editing, or a delivery case that does not exist.
 
+## The plugin boundary and the Admin Panel — built (`docs/90`)
+
+The control plane is now an **installable Domain-B plugin**:
+`plugin/plugin.json` (manifest), `plugin/bin/plugin.php` (install / uninstall /
+status), `plugin/public/api.php` (**the API entry point, which did not exist
+before** — `AdminRoutes` was reachable only from tests). The Admin Panel moved
+out of `public/admin/` to **`panel/`** as a separate consumer and holds no
+database access of any kind. `src/`, `migrations/` and `tests/` stayed put
+deliberately: they are the plugin's implementation.
+
+- The entry point reads as **`dnb_adminapi`** and binds **`DenyAllIdentity`** by
+  default. `DN_DEV_STAFF_IDENTITY=yes-development-only` enables a development
+  identity, which **throws** rather than degrading when real bindings are
+  allowed. Measured: 401 by default, 200 only behind the gate.
+- **The manifest's declared surface is asserted equal to the served surface.**
+  That caught seven POST paths I had wrongly declared absent; they exist and
+  **each answers 501**, declared under `declared_unbound`.
+- The Admin UI is now **Network plane / Commercial plane / Administration**,
+  with Router Detail, a provisioning ladder, Network health and Diagnostics.
+
+**NO ROUTER SIGNAL MAY BE INVENTED.** Measured during this build: there is **no
+source** for WAN link up/down, WireGuard tunnel state, RADIUS health or HotSpot
+service, and **`mt_devices.last_seen_at` is never written by anything**. All
+five render **"no signal"** in grey with a reason and what would be needed —
+never green, and never red (red would claim a fault was observed). The inventory
+is declared server-side in `src/Network/SignalReport.php` so a front-end change
+cannot colour a dot in, and a test fails if anything starts writing
+`last_seen_at` while the panel still says nothing does.
+
+All four router actions (push config, reboot, reprovision, diagnostics) render
+**inert** with specific reasons. Suite **1,349** assertions.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

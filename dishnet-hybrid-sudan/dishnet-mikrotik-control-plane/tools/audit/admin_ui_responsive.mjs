@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const page_url = (process.env.ADMIN_UI_URL || 'http://127.0.0.1:8899') + '/admin/index.html';
+const page_url = (process.env.ADMIN_UI_URL || 'http://127.0.0.1:8080') + '/index.html';
 
 const routers = Array.from({ length: 12 }, (_, i) => ({
   id: 'r' + i, customer_id: 'c' + (i % 3), site_id: 's' + (i % 4),
@@ -29,7 +29,7 @@ const stub = {
 };
 
 const widths = [360, 390, 768, 1024, 1440];
-const views  = ['routers', 'dashboard', 'customers'];
+const views  = ['routers', 'dashboard', 'customers', 'network', 'diagnostics'];
 let bad = 0;
 
 /* The image ships Chromium 1194; the npm package may expect another build.

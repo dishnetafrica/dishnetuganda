@@ -59,6 +59,44 @@ tbody tr[data-router]:hover{background:#f4f7ff}
 .hs.cold i{background:var(--red)} .hs.cold{color:var(--red)}
 .hs.never i{background:var(--gray);opacity:.6} .hs.never{color:var(--muted)}
 .stateblock{margin:14px 20px;padding:20px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+
+/* Provisioning ladder. A rung not yet reached is hollow, never red: not having
+   got there is not a fault. */
+.ladder{list-style:none;margin:8px 20px;padding:12px 14px;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;display:flex;flex-wrap:wrap;gap:6px 22px}
+.ladder li{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.ladder .dot{width:9px;height:9px;border-radius:50%;flex:none;border:2px solid var(--gray);background:transparent}
+.ladder li.done .dot{background:var(--green);border-color:var(--green)}
+.ladder li.done .step{color:var(--ink)}
+.ladder li.here .dot{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px #1f4fd822}
+.ladder li.here .step{color:var(--ink);font-weight:700}
+.ladder .when{font-size:11.5px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* Signals. Measured is green; unmeasured is GREY and says so in words — never
+   red, because red would claim a fault was observed and nothing observed one. */
+.signals{margin:8px 20px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.signal{display:flex;gap:10px;padding:12px 14px;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px}
+.signal .dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px;background:var(--gray)}
+.signal.measured .dot{background:var(--green)}
+.signal.unmeasured{background:#fbfbfc}
+.signal.unmeasured .dot{background:transparent;border:2px solid var(--gray);width:7px;height:7px}
+.signal b{font-size:13.5px}
+.signal .verdict{margin-left:7px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.signal.measured .verdict{color:var(--green)}
+.signal p{margin:5px 0 0;font-size:12.5px;color:var(--muted)}
+.signal p.needs{color:#4b5563;font-style:italic}
+.signal p.src{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#7a828c}
+
+/* Actions, shown inert. Visible so an operator can see what the product will
+   do and why it cannot yet. */
+.actions{margin:8px 20px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.action{padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.action p{margin:7px 0 0;font-size:12.5px;color:var(--muted)}
+.btn{font:inherit;padding:7px 13px;border-radius:7px;border:1px solid var(--line);
+  background:#fff;color:var(--ink);cursor:pointer}
+.btn[disabled]{opacity:.5;cursor:not-allowed;background:#f3f4f6;color:var(--muted)}
 .stateblock h3{margin:0 0 6px;font-size:15px}
 .stateblock p{margin:0;color:var(--muted);max-width:62ch}
 .stateblock.unauthorized,.stateblock.forbidden{border-color:#f0c36b;background:#fff8e8}
