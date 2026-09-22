@@ -301,6 +301,42 @@ carries source, limitation and what would be required. Both render from the same
 server inventory. `WAN interface` is **`WAN interface assignment — RECORDED`**:
 what is measured is the interface a person recorded at staging, not the link.
 
+## The plugin is installable, with two blockers — `docs/96`
+
+Measured end to end, from a built tarball into a PostgreSQL cluster created for
+the test: **install → serve → simulate → uninstall leaves zero residue** (32
+checks). The classification is **B — an independent Domain-B service**. It is
+**measurably not a UCRM plugin** — no UCRM manifest, hook, API client or table
+access; the lone `ucrm_client_id` column is a stored reference nothing
+dereferences. **Do not call it a UCRM plugin because the directory is named
+`plugin`.**
+
+- **B-1 — six role passwords are SQL literals in `migrations/`**, published in
+  this repository, and `Database::connect()` defaults to the same strings.
+  Measured by connecting: all six accept them after a clean install. **This
+  blocks any non-disposable install.** Fixing it is a migration change and is
+  **not authorized**; `plugin.php doctor` refuses while it holds.
+- **B-2 — the panel renders nothing under the production identity binding.**
+  `DenyAllIdentity` → 401 on every route; only `DN_DEV_STAFF_IDENTITY` makes it
+  render. W-4 is OPEN, so a **demonstration** install is possible and an
+  operational one is not. Do not bind an identity to work around this.
+- **The 12 roles install creates are cluster-wide.** Installing onto the cluster
+  that serves UCRM would add them there, and uninstall would drop them
+  cluster-wide. **Prefer a separate PostgreSQL instance.**
+- **Nothing is installed anywhere.** This session cannot reach the DishNet
+  server — no SSH client, no DSN, egress 403 — so requirement 6's "test on the
+  existing server" **was not performed**. `plugin/bin/install-test.sh` is the
+  operator's equivalent; `docs/96` §H is the runbook.
+- The package **excludes `tests/`** (it needs a BYPASSRLS fixture identity),
+  `tools/`, `docs/`, and **`public/`** (the customer API front controller, which
+  nothing in this install serves). Do not add them.
+- `tools/dev_server.php` served `/../src/Db/Database.php` with HTTP 200 —
+  measured, now fixed in both servers. Source disclosure is credential
+  disclosure here, because of B-1.
+
+No gate moved. F6-B still NOT AUTHORIZED, Admin writes still unbound, portal
+still unbuilt, Decision 5 still OPEN and gated, the census still next.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
