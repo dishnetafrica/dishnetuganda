@@ -30,6 +30,20 @@ the index and a decision document disagree, **the decision document is right.**
 - **The customer/site ownership invariant covers `mt_devices`, `mt_vouchers`
   and `mt_voucher_batches` only.** `mt_plans` is **out of scope** — do not add
   it because the column names match. (`docs/75` §5, `docs/77` §3)
+- **P-B — CLOSED.** `mt_principals.phone` stays **globally UNIQUE**. Do not
+  narrow it per-customer, weaken or drop it: `mt_auth_issue_code` resolves the
+  tenant with a non-`STRICT` `SELECT … INTO`, so duplicates would bind a
+  one-time code — and the session's customer — to an arbitrary principal,
+  silently. **C10 may not be solved by weakening it.** (`docs/107` §2)
+- **P-C — CLOSED: principal reassignment is PROHIBITED.** No operation may
+  change `mt_principals.customer_id`. Resolution re-reads `p.status` live but
+  takes `customer_id` from the session's own snapshot, so disable is enforced
+  immediately and reassignment would not be enforced at all. The lifecycle is
+  **disable, then create a new principal**. (`docs/107` §3)
+- **S-A — CLOSED: service migration is PROHIBITED** as an ordinary operation.
+  `mt_services.customer_id` is not a mutable field. If commercial ownership
+  genuinely changes: **end the service and create a new one**, never re-point
+  it. (`docs/107` §4)
 
 ## Chosen ≠ built
 
@@ -969,6 +983,94 @@ transaction with one audit trail. **I-A** needs a **non-tenant** store reachable
 by `dnb_adminwrite`; four of five writers have no natural key at all. **U-1
 refined, still open**: proposed first hard gate at `mt_service_create`, decided
 together with U-5.
+
+## Identity and onboarding decisions (`docs/107`)
+
+The last identity/onboarding design checkpoint before the spine is implemented.
+**P-B, P-C and S-A are CLOSED and listed under *Settled* above.** What follows is
+what binds the work that comes next.
+
+### O-1 — closed as a design, with TWO operational gates
+
+```
+GATE 1  census (read-only)  →  CLEAR | BLOCKED(n) | INDETERMINATE
+                                    │  operator reviews; per-row decisions
+GATE 2  migration (one transaction) →  applies, or refuses
+```
+
+**Do not combine them into one script.** A script that measures and then acts on
+its own measurement gives the operator nothing to approve. Violating rows must be
+**zero** before gate 2; it refuses by itself if they are not, but its error names
+only **one** pair — the census is what enumerates.
+
+### U-1 / U-5 — OPEN, reduced to one operator question
+
+> **Q7 — when DishNet sets up a new service, does the uCRM service record always
+> exist before the Domain-B service is created, or is the Domain-B service
+> sometimes created first?**
+
+- **A** — uCRM first → gate at **creation**, **no schema change**.
+- **B/C** — sometimes Domain-B first → gate at **activation**, which needs a new
+  `mt_services.status` value. The CHECK permits only `active · suspended ·
+  ended`, so **that is a schema decision** — and the `UNCLAIMED` rule applies:
+  do not add an enum value to express what a predicate could.
+
+Ruled out by evidence and not to be revisited: gating at `mt_customer_create`,
+gating **only** at `mt_device_assign`, and a blanket `NOT NULL` (U-2, still
+**E-2**). **U-5 is decided WITH U-1**, because the coherence rule needs both
+links.
+
+### I-A — both existing mechanisms are tenant-scoped
+
+Measured: `mt_idempotency` is keyed `(customer_id, key)`, and
+`mt_intents_idem_uq` is `(customer_id, idempotency_key)` with a lookup that
+**relies on RLS to scope itself** — `IntentQueue::enqueue` documents the
+precondition (*"call inside `TenantContext::run()`"*). **Neither can serve an
+operation that has no customer yet.** The spine needs a **non-tenant** store
+reachable by `dnb_adminwrite`, keyed `(endpoint, key)` with a request digest.
+
+**Three mechanisms across eight operations, deliberately:** a **unique
+constraint** where a natural key exists (uCRM links, intents, principal-by-phone);
+a **domain-specific invariant** for `mt_device_assign`, which is a state
+assertion — identical arguments are a no-op with **no audit row and no
+`claimed_at` re-stamp**, while different arguments are a *reassignment, not a
+retry*; a **table** only where there is genuinely no natural key — customer,
+service and site creation, and the NULL-phone principal. **A replay must not
+write a second audit row**, so replay detection happens **before** the function
+body, since W-1 makes the audit row unskippable inside it.
+
+Also measured: of the three production `enqueue` call sites only
+`voucher.publish` passes a key — **`voucher.revoke` and `session.disconnect`
+pass none**, so a retry enqueues a second intent that reaches a router.
+
+### Convergence is `mt_device_assign` — and convergence is NOT a gate
+
+The commercial chain (customer → service → site) and the network chain
+(register → stage → ship) are **independent**; neither needs the other, and both
+are identical in both journeys. **`mt_device_assign` is the only operation taking
+both a device and a customer/site**, so it is where they meet — in customer-first
+and equipment-first alike.
+
+> **The two journeys are not two designs. They are one design, entered from
+> either end.** That is why no placeholder customer is ever needed.
+
+But `docs/102` measured that `service → site → plan → voucher` completes a sale
+with nothing assigned, so `mt_device_assign` is **not** where commercial
+authority is established. Do not conflate the two.
+
+### The census must also measure the SCHEMA
+
+Data counts alone cannot reveal that production is at a different migration
+level. The census reports migrations applied and the latest filename
+(development: **21**, `021_admin_services_and_voucher.sql`), the existing FK and
+UNIQUE constraints on `mt_sites`/`mt_services`/`mt_devices`, current indexes, and
+**whether migration 020 is applied** — if it is not, W-2 is absent too. Run as
+`dnb_adminapi` through the `mt_admin_*()` projections. **No superuser, and no
+`BYPASSRLS` role** — one created for a census would outlive it.
+
+**RC1 must NOT be installed into the live UISP/uCRM or production environment.**
+The production migration, the voucher activation path and the onboarding identity
+model are each still short of their gates.
 
 ## Open and parked
 
