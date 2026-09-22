@@ -1306,6 +1306,89 @@ implement.** Nothing in `mt_customers`, `mt_services` or the spine changes at
 step 1 — designing columns before the bridge was defined is what produced the
 withdrawn proposal.
 
+## The uCRM bridge — designed, NOT authorized (`docs/111`)
+
+**APIs only, never Domain-B PostgreSQL.** The bridge holds no Domain-B role
+credential, writes no Domain-B table, calls no provisioning function, and is
+**never a dependency of guest redemption** — `dnb_portal` and `dnb_radius` hold
+no table privileges and one EXECUTE each, so neither could reach it.
+
+### The measured surface
+
+`plugin/plugin.json` declares — and a test asserts equal to what is served —
+**15 GET routes**, `"surface": "read-only"`, and **7 declared-unbound POSTs that
+each answer 501** (routers, assign, actions, sites, plans, voucher-batches,
+session disconnect).
+
+- **N-1 — the bridge's two required endpoints do not exist**, not even as 501s:
+  there is **no route to create a Domain-B operator and none to link one to a
+  uCRM client**. **The bridge therefore depends on the onboarding spine**, not
+  the reverse.
+- **N-2 — a bridge could not authenticate today.** `DenyAllIdentity` answers
+  **401 on every route**; only `DN_DEV_STAFF_IDENTITY` renders the panel. W-4.
+- **N-3 — if S-2 (signed assertion) is chosen, its signing key is a new secret**
+  and inherits every B-1 lesson: not in source control, not in a migration,
+  provisioned at install, rotatable.
+
+### What the bridge can never reach — measured, two layers
+
+> A query for `dnb_def_admin` `USING(true)` policies across
+> `mt_device_secrets`, `mt_hotspot_users`, `mt_auth_sessions` and `mt_auth_codes`
+> returns **NONE**. **The Admin read boundary structurally cannot reach a
+> secret-bearing table** — the projection omitting a column is the *second*
+> layer, not the first.
+
+`mt_admin_router()` returns **no `wg_pubkey`** — even the *public* key is
+withheld — and no secret column. `code` is absent from **both** voucher
+projections, whose column lists are identical so a detail view cannot leak one
+row at a time. RADIUS credentials live in a **separate PostgreSQL instance** the
+Admin API has no connection to.
+
+### Write surface — at most two operations
+
+`POST /customers/{id}/ucrm-link` (link · relink · unlink) and, **only if the
+bridge is to onboard from uCRM at all**, `POST /customers`. Both
+`dnb_adminwrite`, definer functions, W-1 audit, actor a parameter. **The bridge
+must not be given the other five POSTs** — router registration, assignment,
+actions, sites, plans, voucher batches and disconnect are **network** operations.
+**A CRM plugin has no business rebooting a router.**
+
+### Cardinality is OPEN — and it cuts both ways
+
+**`mt_customers.ucrm_client_id` is `integer UNIQUE`, so the schema already
+enforces 1:1** — anything else is a **schema change**. Against assuming it: the
+working precedent is a **pair-unique link table** chosen over a column
+deliberately, and many-to-many has consequences for RLS and `/me` nothing has
+examined. **Decide C10 before cardinality, not after** — they are entangled.
+`Domain-B service ↔ uCRM service` has **no column at all** and its far side is
+not known to exist, so **U-5 stays deferred**.
+
+### Staff identity
+
+The uCRM cookie is trustworthy **only server-side in the plugin**, where
+`/current-user` answered it, and **only same-origin**. **Domain B must never
+accept a staff identity from a browser.** The actor is **`staff`** — no new actor
+kind — arriving as a **parameter from the identity boundary**, per W-1. And:
+**being logged into uCRM establishes *who*, never *what they may do in Domain
+B*** — uCRM's permission model is not Domain B's authorization. W-4/W-5/W-6 stay
+open.
+
+### When uCRM is unavailable
+
+**Fail closed on identity, fail soft on data.** If `/current-user` is
+unreachable the bridge must **refuse to assert an identity** — never a cached or
+assumed one. A failed commercial read renders **"not available"**, never a zero
+that reads like a fact. **No queue of pending commercial writes that later
+auto-apply** — a link is an audited act, and replaying it with a stale actor
+would misattribute it. **A uCRM outage must never widen Domain-B authorization.**
+
+### The one legitimate live dependency
+
+The **coherence check** — the uCRM service's `clientId` must equal the client
+linked to that service's customer — is the single place a Domain-B write depends
+on a live uCRM read. It is an **administrative** operation, never on the
+operating path, and no FK can express it.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
