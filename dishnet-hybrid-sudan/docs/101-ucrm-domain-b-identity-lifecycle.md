@@ -85,6 +85,37 @@ needed, and none may be invented to satisfy a foreign key.
 
 ---
 
+## 4A. L-1 — **CLOSED**
+
+> **A staged or shipped device does NOT require an intended customer to be
+> recorded before the uCRM customer exists.** *(Operator.)*
+
+Equipment-first is represented by:
+
+```
+device.customer_id = NULL      across REGISTERED → STAGED → SHIPPED
+        ↓
+mt_device_assign()             customer_id set
+        ↓
+customer / site relationship
+```
+
+**No fake customer. No pending customer. No provisional uCRM customer. No
+customer inference from phone or email.**
+
+A DishNet warehouse row is legitimate and complete as:
+
+```
+serial XXXXXXXX · model RB4011 · WireGuard identity XXXXX
+state STAGED · customer_id NULL
+```
+
+*Inventory is not ownership.* `docs/35` §9 records possession — serial, model,
+RouterOS version, public key, tunnel address, staged-at, staged-by — and no
+owner. §5.1 measures that such a device is already invisible to every customer.
+
+---
+
 ## 5. Device and customer stay separable — and the PWA is already safe
 
 ### 5.1 Unclaimed devices are invisible to customers — MEASURED
@@ -120,6 +151,60 @@ disagree: a row could be `state='unclaimed'` with a `customer_id`, or
 `state='shipped'` with none. The condition is already expressible, already
 enforced, and already measured. **Recommendation: express it as a predicate and
 a UI label, not as an enum value.**
+
+---
+
+## 5C. U-1 — the proposed rule, and the identity split
+
+> - A Domain-B **device** may exist with no customer.
+> - A Domain-B **customer** may exist **temporarily** with no uCRM link.
+> - **But before that customer becomes customer-facing or commercially active,
+>   it must carry a valid uCRM customer link** — and a valid uCRM *service* link
+>   wherever a service is involved.
+
+That separates two identities that have been conflated:
+
+```
+        NETWORK INVENTORY IDENTITY          COMMERCIAL CUSTOMER IDENTITY
+        (may stand alone)                   (requires the uCRM link)
+        ──────────────────────────          ────────────────────────────
+        device registered                   visible in the customer PWA
+        device staged                       plans, and their prices
+        device shipped                      vouchers issued and sold
+        a customer row created              billing
+        the audit of all the above          support
+                                            service activation
+```
+
+**`mt_customers.ucrm_client_id` does NOT become `NOT NULL` globally.** That is
+**U-2**, and it still waits on **E-2, the production census** — `docs/100`
+proved by execution that an existing customer cannot simply be deleted, so the
+migration is link-or-keep, one row at a time, by a person.
+
+The rule is therefore enforced **at the operations that constitute commercial
+activity**, not at row creation. Enforcing it at `mt_customer_create` would
+block the legitimate internal inventory workflow L-1 just protected.
+
+> **Which operations those are is measured, not assumed, in `docs/102`.**
+
+**There is no single structural gate.** `mt_device_assign` looked like one —
+setting `customer_id` is what makes a device visible through RLS — but it is
+not sufficient, and the estate disproves it:
+
+```
+mt_sites    columns: id, customer_id, service_id, name, location, created_at
+mt_vouchers references a device?  NO
+live estate: sites with no device = 1
+```
+
+**Neither a site nor a voucher references a router.** So the chain
+`service → site → plan → voucher` runs to a completed sale with no device ever
+assigned, and an assignment-only gate would never fire for that customer.
+
+> **The rule is therefore enforced at a measured SET of commercial operations,
+> not at one moment.** `docs/102` enumerates every operation, states whether it
+> exists at all, and classifies each as requiring only Domain-B identity, a
+> customer link, or a customer *and* service link.
 
 ---
 
