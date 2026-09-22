@@ -683,6 +683,71 @@ evidence that the change happened.**
 
 Nothing authorized to build. No gate moved.
 
+## The onboarding spine — designed, NOT built (`docs/104`)
+
+The four missing writers from `docs/103` are **one lifecycle**, not four tasks.
+Cardinality below is read off the schema; **do not invent cardinality the
+repository has not established.**
+
+- **Measured cardinality:** uCRM client **1:1** customer (`ucrm_client_id`
+  UNIQUE, nullable) · customer **1:N** principals · customer **1:N** services ·
+  service **1:N** sites (`mt_sites.service_id` **NOT NULL**) · site **1:N**
+  devices · **`mt_principals.phone` is UNIQUE GLOBALLY**, not per customer, so
+  one person cannot act for two customers · device `serial`/`wg_pubkey`/
+  `tunnel_ip` are globally unique.
+- **`mt_services.kind` permits exactly one value, `mikrotik_hotspot`.**
+- **The minimum valid customer is a name and an actor.** No uCRM link, service,
+  site, router, phone or voucher. `radius_ref` is supplied by a column DEFAULT.
+- **A principal may exist with `phone` NULL** — and then cannot authenticate at
+  all, since `mt_auth_issue_code` looks up `mt_principals WHERE phone = ? AND
+  status = 'active'`. That is a design question (U-6), not a bug.
+- **A site cannot exist without a service; a service needs no site and a site
+  needs no device.** Measured in the estate: 5 sites, **1 with no device**.
+- **Steps 1–6 of the journey produce a commercially active customer with no
+  hardware** — plans and vouchers need no device. **This is why the uCRM link
+  cannot be gated on device assignment.**
+- **The four onboarding events stay separate:** A customer created · B
+  authentication principal created · C network service created · D physical
+  device assigned. Only A and D exist; **B and C have no production writer.**
+- **`operator` vs `owner` is undefined** — the CHECK allows both and **nothing
+  in code branches on it** (P-A, open).
+
+### O-1 — a tenant can attach its site to another customer's service
+
+**Proved by execution, as `dnb_app`, under RLS.** `mt_sites` has two
+*independent* single-column FKs (`customer_id`, `service_id`) and nothing
+requires them to agree. RLS checks the written row's own `customer_id`, which is
+correctly the attacker's, while `service_id` points at a row they cannot read.
+
+- **No disclosure** — measured: the cross-tenant site is dangling to its owner;
+  RLS still hides the other tenant's service row.
+- **Confirmed integrity defect and cross-tenant denial** — `DELETE FROM
+  mt_services` is refused by `mt_sites_service_id_fkey`, so **the victim can
+  never end that service.**
+- **It is exactly the defect W-2 closed for devices**, one level up. The fix has
+  the same shape — `UNIQUE (id, customer_id)` on `mt_services` plus a composite
+  FK from `mt_sites` — and is **a schema change, NOT authorized here.**
+- **Latent only because `mt_sites` has no production writer.** The spine builds
+  that writer, so **O-1 must be closed first** — it is step 0 of the sequence,
+  before `mt_site_create` exists.
+
+**Proposed sequence (not authorized):** 0 close O-1 · 1 `mt_principal_create` /
+`_disable` · 2 `mt_service_create` · 3 `mt_site_create` · 4 a production caller
+for `mt_customer_create` · 5 **then** revisit U-1. Each follows the W-1 pattern
+exactly: `SECURITY DEFINER`, definer-role owned, `EXECUTE` to `dnb_adminwrite`
+only, audit row in the same transaction, actor a parameter. **`dnb_app` gains
+nothing** — a customer must not create their own principal, service or site.
+
+**Idempotency is a per-writer decision, not a default.** Today only
+`POST /me/vouchers` has a key; creating a principal or a site twice on a retry
+is a real hazard.
+
+**U-1 is deliberately NOT closed**, and no gate was added. New open items:
+**O-1**, **P-A** (`operator`'s meaning), **P-B** (is a globally unique phone
+right?), **P-C** (may a principal be reassigned, given `sold_by`/`created_by`
+would misattribute?), **S-A** (may a service be migrated between customers?),
+**I-A** (idempotency per writer). Nothing authorized to build. No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
