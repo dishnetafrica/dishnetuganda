@@ -18,7 +18,12 @@
       "json",
       "openssl"
     ],
-    "postgresql": ">=14"
+    "postgresql": ">=14",
+    "postgresql_role": "the plugin does not create its database. plugin/bin/bootstrap.sql creates an owner role with CREATEROLE and CREATEDB (not superuser, not BYPASSRLS) and an empty database owned by it.",
+    "worker": "bin/worker.php is a long-running process for the intent queue. The Admin read panel does not need it; provisioning does. Not bound.",
+    "redis": false,
+    "docker": false,
+    "web_server": "any server that serves panel/ as static files and routes /api/v1/admin/* to plugin/public/api.php. The API reads the raw REQUEST_URI path, so a prefix mount must be stripped before PHP sees it."
   },
   "config": {
     "DNB_DSN": {
@@ -45,6 +50,96 @@
       "required": false,
       "secret": false,
       "description": "F6-B gate. Absent or not 'yes-f6b-authorized' means every hardware adapter stays simulated."
+    },
+    "DNB_SECRET_KEY": {
+      "required": false,
+      "secret": true,
+      "description": "Symmetric key for stored device credentials. SecretBox refuses to run without it, so every device-credential path fails closed while it is unset. The Admin read panel does not use it."
+    },
+    "DNB_OWNER_USER": {
+      "required": false,
+      "secret": false,
+      "description": "Schema owner. Install-time only; never serves a request. Defaults to the migration role name."
+    },
+    "DNB_OWNER_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "Schema owner. Install-time only; never serves a request. MUST be set: the migrations create this role with a password literal that is published in the repository."
+    },
+    "DNB_APP_USER": {
+      "required": false,
+      "secret": false,
+      "description": "Customer request role. Defaults to the migration role name."
+    },
+    "DNB_APP_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "Customer request role. MUST be set: the migrations create this role with a password literal that is published in the repository."
+    },
+    "DNB_WORKER_USER": {
+      "required": false,
+      "secret": false,
+      "description": "Intent worker role. Defaults to the migration role name."
+    },
+    "DNB_WORKER_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "Intent worker role. MUST be set: the migrations create this role with a password literal that is published in the repository."
+    },
+    "DNB_ADMIN_USER": {
+      "required": false,
+      "secret": false,
+      "description": "Legacy Admin role; carries migration 015 blanket grants. Defaults to the migration role name."
+    },
+    "DNB_ADMIN_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "Legacy Admin role; carries migration 015 blanket grants. MUST be set: the migrations create this role with a password literal that is published in the repository."
+    },
+    "DNB_ADMINWRITE_USER": {
+      "required": false,
+      "secret": false,
+      "description": "Admin write role: EXECUTE on seven functions, zero table privileges. Defaults to the migration role name."
+    },
+    "DNB_ADMINWRITE_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "Admin write role: EXECUTE on seven functions, zero table privileges. MUST be set: the migrations create this role with a password literal that is published in the repository."
+    },
+    "DNB_RADIUS_USER": {
+      "required": false,
+      "secret": false,
+      "description": "RADIUS accounting ingestion role. Defaults to the migration role name."
+    },
+    "DNB_RADIUS_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "RADIUS accounting ingestion role. MUST be set: the migrations create this role with a password literal that is published in the repository."
+    },
+    "DNB_INTERNAL_TOKEN": {
+      "required": false,
+      "secret": true,
+      "description": "Shared secret for the internal RADIUS accounting route. Unset means that route admits nobody."
+    },
+    "DNB_EXPOSE_OTP": {
+      "required": false,
+      "secret": false,
+      "description": "DEVELOPMENT ONLY. Returns the OTP in API responses. plugin.php doctor treats this as a blocker outside a disposable environment."
+    },
+    "DN_DEV_STAFF_IDENTITY": {
+      "required": false,
+      "secret": false,
+      "description": "DEVELOPMENT ONLY. Binds the Admin panel to a fabricated staff identity. Staff authentication (W-4) is not built, so this is currently the only way the panel renders anything."
+    },
+    "DNB_INSPECT_USER": {
+      "required": false,
+      "secret": false,
+      "description": "TESTS ONLY. A BYPASSRLS fixture identity. Setting it in a deployment puts a row-level-security bypass into the runtime environment."
+    },
+    "DNB_INSPECT_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "TESTS ONLY. See DNB_INSPECT_USER."
     }
   },
   "api": {
@@ -171,19 +266,36 @@
     }
   },
   "install": {
+    "prerequisite": "psql -U <superuser> -d postgres -v db=dnb -v owner=dnb -v owner_pass=<generated> -f plugin/bin/bootstrap.sql",
+    "preflight": "php plugin/bin/plugin.php doctor",
     "command": "php plugin/bin/plugin.php install",
+    "serve": "php -S 127.0.0.1:8099 plugin/bin/serve.php",
     "creates": [
-      "postgresql schema",
-      "postgresql roles"
+      "postgresql schema (tables, policies, functions)",
+      "postgresql roles: 6 login + 6 definer, cluster-wide"
+    ],
+    "does_not_create": [
+      "the database",
+      "the owner role",
+      "any web server configuration",
+      "any systemd unit",
+      "any container",
+      "any reverse-proxy route"
     ],
     "idempotent": true
   },
   "uninstall": {
     "command": "php plugin/bin/plugin.php uninstall --i-understand-this-drops-data",
     "removes": [
-      "postgresql schema objects owned by this plugin"
+      "every mt_* table and function in the public schema",
+      "the 12 roles the migrations create"
     ],
-    "refuses_without_confirmation": true
+    "does_not_remove": [
+      "the database",
+      "the owner role created by bootstrap.sql"
+    ],
+    "refuses_without_confirmation": true,
+    "verifies_afterwards": true
   },
   "gates": {
     "F6-B": {
@@ -199,5 +311,24 @@
       "state": "NOT BUILT",
       "meaning": "Guest voucher activation. Blocked on Decision 5 (gated) and the F-7 remediation design."
     }
+  },
+  "package": {
+    "command": "sh plugin/bin/package.sh",
+    "artifact": "dishnet-mikrotik-<version>.tar.gz",
+    "contains": [
+      "src/",
+      "migrations/",
+      "plugin/",
+      "panel/",
+      "bin/worker.php",
+      "VERSION",
+      "SHA256SUMS"
+    ],
+    "excludes": [
+      "tests/ (needs a BYPASSRLS fixture identity)",
+      "tools/",
+      "docs/",
+      "public/ (the customer API front controller, which nothing here serves)"
+    ]
   }
 }

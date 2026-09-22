@@ -3,6 +3,7 @@ declare(strict_types=1);
 /**
  * The plugin lifecycle: install, uninstall, status.
  *
+ *   php plugin/bin/plugin.php doctor [--disposable]
  *   php plugin/bin/plugin.php status
  *   php plugin/bin/plugin.php install
  *   php plugin/bin/plugin.php uninstall --i-understand-this-drops-data
@@ -16,6 +17,7 @@ require dirname(__DIR__, 2) . '/src/autoload.php';
 
 use Dn\Plugin\Manifest;
 use Dn\Plugin\Installer;
+use Dn\Plugin\Doctor;
 use Dn\Plugin\Simulator;
 
 $root = dirname(__DIR__, 2);
@@ -49,6 +51,33 @@ switch ($cmd) {
         }
         echo "\n";
         exit($inst->status()['db'] ? 0 : 1);
+
+    case 'doctor':
+        // Preflight. Run it before install, and again after.
+        //
+        // --disposable says this is a throwaway environment, which downgrades
+        // the development-affordance checks from blocker to warning. It does
+        // NOT relax anything else: a development password is a blocker in a
+        // disposable environment too, because the check exists to stop that
+        // password from travelling.
+        $disposable = in_array('--disposable', $argv, true);
+        $doc  = new Doctor($m, $root, $disposable);
+        $rows = $doc->run();
+        printf("\n%s %s — preflight%s\n\n", $m->name, $m->version,
+               $disposable ? ' (disposable environment)' : '');
+        $mark = ['ok' => '  ok   ', 'warn' => '  warn ', 'blocker' => '  BLOCK', 'skip' => '  skip '];
+        foreach ($rows as $row) {
+            printf("%s  %-34s %s\n", $mark[$row['state']], $row['label'], $row['detail']);
+        }
+        $b = $doc->blockers($rows);
+        $counts = array_count_values(array_column($rows, 'state'));
+        printf("\n  %d checks: %d ok, %d warn, %d blocker, %d not measured\n\n",
+               count($rows), $counts['ok'] ?? 0, $counts['warn'] ?? 0,
+               $counts['blocker'] ?? 0, $counts['skip'] ?? 0);
+        if ($b !== []) {
+            echo "  Not ready. Each blocker above must be cleared first.\n\n";
+        }
+        exit($b === [] ? 0 : 1);
 
     case 'install':
         echo "installing {$m->id} {$m->version}\n";
@@ -90,6 +119,9 @@ switch ($cmd) {
         exit(0);
 
     default:
-        fwrite(STDERR, "unknown command: {$cmd}\nuse: status | install | uninstall | simulate\n");
+        fwrite(STDERR, "unknown command: {$cmd}\n"
+                     . "use: doctor | status | install | uninstall | simulate\n"
+                     . "serve the panel and API with:\n"
+                     . "  php -S 127.0.0.1:8099 plugin/bin/serve.php\n");
         exit(2);
 }
