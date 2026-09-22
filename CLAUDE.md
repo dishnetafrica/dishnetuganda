@@ -577,6 +577,54 @@ key.
 **No schema change, no migration, no backfill, no sync engine.** `NOT NULL`
 (U-2) still waits on **E-2, the production census**. No gate moved.
 
+## The commercial identity boundary — measured (`docs/102`)
+
+**L-1 CLOSED.** A staged or shipped device needs **no** intended customer
+recorded before uCRM has the client. Equipment-first is
+`device.customer_id = NULL` across `REGISTERED → STAGED → SHIPPED`, then
+`mt_device_assign()`. **No fake, pending or provisional customer; no inference
+from phone or email.** *Inventory is not ownership.*
+
+**U-1's rule (proposed):** a device may exist with no customer; a customer may
+be **temporarily** unlinked; but before it becomes customer-facing or
+commercially active it needs a valid uCRM customer link, and a service link
+wherever a service is involved. **`ucrm_client_id` does NOT become `NOT NULL`
+globally** — U-2, still gated on **E-2**.
+
+Three measurements, each contradicting the obvious answer:
+
+- **The effective boundary is RLS + triggers + which functions exist — NOT the
+  grants.** `dnb_app` holds write grants on 20 tables including `mt_customers`
+  and `mt_audit_log` and can use almost none of it: the customer INSERT is
+  refused by **RLS `WITH CHECK`**, the audit DELETE by the **append-only
+  trigger**. Proved by execution. **Never classify an operation by its grant.**
+- **`mt_services` and `mt_sites` have NO production writer** — only
+  `Plugin/Simulator.php`. They cannot be gated; they must be **built**, gate
+  included.
+- **There is no single gate.** `mt_device_assign` looked like one, but neither
+  `mt_sites` nor `mt_vouchers` references a device, and the estate already holds
+  a site with no router — so `service → site → plan → voucher` completes a sale
+  with nothing assigned. **The rule binds a SET of operations, never
+  `mt_customer_create`.**
+
+Two classifications that invert the obvious:
+
+- **Voucher redemption must NEVER consult uCRM — FORBIDDEN, not required.**
+  `docs/89`: tenant data must not be required for the anti-enumeration check,
+  since an unknown code resolves no customer — exactly what enumeration
+  produces. A remote round-trip would also break response uniformity, which is
+  not tradeable. Redemption authorizes from `voucher.site_id` alone.
+- **Audit must NEVER be gated on a link**, or the least-established records
+  become the least recorded. `actor_kind` stays `principal | staff | system`.
+
+> **B-2 — the customer-plane commercial writes are not behind functions.**
+> `PlanRepository` and `VoucherService` write `mt_plans`, `mt_voucher_batches`
+> and `mt_vouchers` **directly** under RLS. Gating plans and vouchers means
+> giving them definer functions with audit, the shape W-1 gave the seven.
+> **The largest single item U-1 implies — not a flag.**
+
+Nothing authorized to build. No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
