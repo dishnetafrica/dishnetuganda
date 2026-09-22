@@ -467,6 +467,62 @@ any Admin write route, and W-4/W-5/W-6 stay open.
 
 Nothing here is authorized to build. No gate moved.
 
+## Identity census — read-only, development databases only (`docs/100`)
+
+> **This is NOT E-2.** The census ran against `dnb_sim`/`dnb_test` in this
+> container. **Production data state remains NOT ESTABLISHED**; `docs/79` is
+> still the handoff and U-2 still waits on it. Do not quote `docs/100`'s row
+> counts as production facts — they describe the simulator.
+
+What it *does* establish are schema properties, which hold wherever the schema
+is installed:
+
+- **An existing customer cannot be deleted. Proved by execution**, not read off
+  the DDL: the transaction is refused and the error names
+  `mt_principals_customer_id_fkey`. **27 foreign keys** — 18 → `mt_customers`
+  (15 RESTRICT, 2 NO ACTION, 1 CASCADE), 7 → `mt_principals`, 2 →
+  `mt_services`. The two `NO ACTION` constraints are **not** a hole: nothing in
+  the schema is `DEFERRABLE`, so they block exactly as RESTRICT does.
+  **"Delete the unlinked rows" is therefore not an available migration step** —
+  an unlinked customer with any history must be linked, not removed.
+- **Every customer that has ever been used has an audit row**, because W-1
+  writes one inside every provisioning function. There are no bare rows to drop.
+- **`mt_principals.phone` is the AUTHENTICATION KEY**, not duplicated contact
+  data — `mt_auth_issue_code` looks up `mt_principals WHERE phone = ?`. It is
+  uniquely indexed, so the lookup is safe. **U-6 is therefore not a caching
+  question**: refreshing the phone from uCRM would lock the customer out the
+  moment uCRM's record is corrected. Decide what is authoritative for the login
+  number and what happens when the two disagree.
+- **`credential_hash` is dead** — no code reads or writes it. Authentication is
+  entirely OTP.
+- **Deleting a principal silently erases attribution**: `sold_by`,
+  `created_by` and `actor_principal_id` are `SET NULL` and nothing errors.
+- **uCRM does expose stable service identifiers** — `clients/services?clientId=`
+  with `id`, `clientId`, `servicePlanId`, already read by the working plugins.
+  **Domain B cannot represent them at all**: `mt_services` has no uCRM column,
+  so a client with several services, or two separately-billed MikroTik sites,
+  is not distinguishable. **U-5 should be decided WITH U-1, not after it.**
+- **The working precedent is a LINK TABLE, not a column** — `lte_service_links`,
+  `UNIQUE` on the **pair** (so many-to-many capable), with `linked_by`/
+  `linked_at`/`notes`, and its own comment says that was chosen over a column
+  deliberately. Recorded as evidence, **not adopted**: many-to-many has
+  consequences for RLS and `/me` that nothing has examined.
+- **Webhook registration is programmatic**, not manual-only — `CrmApiClient`
+  has `getWebhooks`/`createWebhook`/`updateWebhook`. This **refines `docs/98`
+  §2.8**.
+- **Support may not be API-reachable at all.** `tickets` appears in the code but
+  **no `tickets` endpoint is among the uCRM paths called**. Support moves from
+  "not built" to **"not known to be possible"**.
+
+**Operator questions reduced 13 → 4**: **Q5** (does DishNet ever stage
+equipment before the uCRM customer exists — *the* input for U-1), Q1 (version),
+Q2 (may a disposable uCRM exist), Q6 (must the panel survive a uCRM upgrade).
+Three more need a physical instance: client-zone support, the webhook event
+list, and the live `clients/services` response shape.
+
+**Nothing chosen. No sync engine, no webhook, no backfill, no automatic linking,
+no schema change — including the trivial `credential_hash` drop.** No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
