@@ -625,6 +625,64 @@ Two classifications that invert the obvious:
 
 Nothing authorized to build. No gate moved.
 
+## Write paths — four identity entities have none (`docs/103`)
+
+The schema and the simulator make Domain B look more complete than it is.
+Enumerated from the code, **not** from grants:
+
+```
+mt_customers   function exists, NO production caller
+mt_principals  NONE — Plugin/Simulator.php only
+mt_services    NONE — Plugin/Simulator.php only
+mt_sites       NONE — Plugin/Simulator.php only
+mt_devices     YES — seven definer functions (no route bound)
+mt_plans       YES — Policy/PlanRepository      ← POST /me/plans
+mt_vouchers    YES — Vouchers/VoucherService    ← POST /me/vouchers
+mt_sessions    YES — mt_session_account         ← dnb_radius
+```
+
+**`src/Customers/` is an empty directory.** The simulator is excluded from the
+release package, so **an installed RC1 cannot create a principal, a service or a
+site at all.**
+
+> **You cannot gate an operation that does not exist.** The largest item ahead
+> is not the uCRM link — it is that customer, principal, service and site have
+> no production write path. A synchronisation engine built now would synchronise
+> against workflows that exist only in the simulator.
+
+- **35 mutating operations inventoried**, with actor, tables, audit class and
+  idempotency. Audit falls in three classes: **W-1 unskippable** (the seven +
+  customer create), **caller-written and skippable** (the six customer routes +
+  the worker, F-8), and **none at all** (intent enqueue, redemption F-7,
+  accounting ingest, uplink, idempotency, migrations).
+- **`POST /me/vouchers` is the only idempotent route.** Everything else has no
+  idempotency key.
+- **Voucher issuance requires no router** — `mt_vouchers` has no device column,
+  and a sale completes with no hardware.
+- **Accounting ingest must never consult uCRM** — `dnb_radius` holds EXECUTE on
+  one function and no table privileges; a NAS packet must not trigger a CRM
+  lookup.
+
+### Two project engineering rules — now binding
+
+**The security evidence hierarchy.** Strongest first:
+`1 execution test · 2 RLS/policy · 3 SECURITY DEFINER boundary · 4 application
+authorization · 5 route/UI availability · 6 grants alone`.
+**Grants are the weakest evidence and are not proof.** Earned, not asserted:
+`dnb_app` holds write grants on 20 tables and can use almost none of them —
+RLS `WITH CHECK` and the append-only trigger stop it. **Never cite a grant, a
+route or a button as proof that something is permitted or prevented.**
+
+**Repository-edit safety.** Three documentation edits in this project used
+`str.replace` with no assertion; when the anchor did not match they **changed
+nothing and reported success**. Any automated source or document transformation
+must assert — and exit non-zero on failure — that the **anchor exists**, the
+**occurrence count** is expected, the **replacement count** is expected, and the
+**result contains the intended section**. **"The script exited 0" is not
+evidence that the change happened.**
+
+Nothing authorized to build. No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
