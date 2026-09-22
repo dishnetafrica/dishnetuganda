@@ -42,11 +42,17 @@ the index and a decision document disagree, **the decision document is right.**
 
 ## The next gate
 
-**The production census** — `tools/audit/production_census.sql`, run by an
-operator with access (`docs/77` §4). **Production data state is NOT
-ESTABLISHED**; never infer it from a disposable database or from what a
-document permits. The provisioning writer (`docs/71`) is designed but
+**The production census** — the operator runs it; **`docs/79` is the handoff**.
+This session **cannot** reach production: no SSH client, no DSN, egress 403, and
+the Phase 0 database is loopback-only (`docs/78` §1.1). **Do not attempt network
+access, SSH discovery, DSN guessing or production probing.** **Production data
+state is NOT ESTABLISHED**; never infer it from a disposable database or from
+what a document permits. The provisioning writer (`docs/71`) is designed but
 unapproved and blocked. **It is not F6, and F6 is not the next step.**
+
+- **`mt_voucher_batches.site_id NOT NULL` is an OPEN SCHEMA DECISION**, not a
+  consequence of the voucher decision and **not** in the migration plan. It
+  awaits production evidence and explicit approval. (`docs/78` §4.2)
 
 ## Open and parked
 

@@ -114,8 +114,10 @@ record written; `customer_id` is never adopted from a site reference.
   guest is using it. The census counts them separately precisely so this is not
   discovered mid-migration.
 
-**Step 4 — `mt_voucher_batches`.** Composite FK. Whether `site_id NOT NULL`
-joins depends on **Decision B**.
+**Step 4 — `mt_voucher_batches`.** Composite FK **only**. `site_id NOT NULL`
+is **not part of this plan**: it is an **OPEN schema decision** (§4.2) awaiting
+production evidence and explicit approval, and it must not be carried into the
+migration by implication.
 
 **Step 5 — tests.** Guard tests for every state; fix the site-less call sites;
 re-run. **The assertion count will change from 718, and that is expected.**

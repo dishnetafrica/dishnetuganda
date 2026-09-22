@@ -66,10 +66,17 @@ every voucher in it. So under §1:
 - and those are now forbidden
 - therefore **a NULL-site batch can no longer produce a single valid voucher**
 
-That makes `mt_voucher_batches.site_id NOT NULL` the coherent consequence of §1.
-**It is not recorded as decided**, because §1 was approved on evidence about
-*vouchers*, and extending a NOT NULL to a second table on inference is the
-pattern this process has refused. **Listed in §5 as requiring confirmation.**
+**This is an argument for `mt_voucher_batches.site_id NOT NULL`. It is not a
+consequence of §1 and must not be treated as one.** §1 was approved on evidence
+about *vouchers*; extending a NOT NULL to a second table on a propagation
+argument is the inference this process refuses.
+
+**`mt_voucher_batches.site_id NOT NULL` is an OPEN SCHEMA DECISION**, pending
+production evidence and explicit approval — docs/78 §4.2 states both options and
+their consequences. It is not "likely", not "pending", and not scheduled. A
+NULL-site batch may already contain vouchers, some sold or used, so adding the
+constraint blindly would turn a data-cleanup question into a migration failure.
+The census counts exactly that, and the decision waits for the number.
 
 ---
 
