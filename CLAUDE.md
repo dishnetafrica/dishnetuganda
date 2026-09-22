@@ -301,38 +301,67 @@ carries source, limitation and what would be required. Both render from the same
 server inventory. `WAN interface` is **`WAN interface assignment — RECORDED`**:
 what is measured is the interface a person recorded at staging, not the link.
 
-## The plugin is installable, with two blockers — `docs/96`
+## The plugin is installable — B-1 closed, B-2 open (`docs/96`, `docs/97`)
 
-Measured end to end, from a built tarball into a PostgreSQL cluster created for
-the test: **install → serve → simulate → uninstall leaves zero residue** (32
-checks). The classification is **B — an independent Domain-B service**. It is
-**measurably not a UCRM plugin** — no UCRM manifest, hook, API client or table
-access; the lone `ucrm_client_id` column is a stored reference nothing
-dereferences. **Do not call it a UCRM plugin because the directory is named
-`plugin`.**
+Release candidate **`dishnet-mikrotik-0.1.0-rc1`**, content digest `aa48b4b4…b1db63c7` —
+the digest of the archive's `SHA256SUMS`, which is stable across rebuilds. The
+archive's own sha256 is **not** an identity: tar records mtimes, so identical
+source yields different bytes. Compare the content digest.
+Measured end to end from the built tarball into a PostgreSQL cluster created for
+the test: **install → serve → simulate → uninstall leaves zero residue**, then a
+**second install from the artifact alone** (67 checks). The classification is
+**B — an independent Domain-B service**, measurably **not** a UCRM plugin. **Do
+not call it a UCRM plugin because the directory is named `plugin`.**
 
-- **B-1 — six role passwords are SQL literals in `migrations/`**, published in
-  this repository, and `Database::connect()` defaults to the same strings.
-  Measured by connecting: all six accept them after a clean install. **This
-  blocks any non-disposable install.** Fixing it is a migration change and is
-  **not authorized**; `plugin.php doctor` refuses while it holds.
-- **B-2 — the panel renders nothing under the production identity binding.**
-  `DenyAllIdentity` → 401 on every route; only `DN_DEV_STAFF_IDENTITY` makes it
-  render. W-4 is OPEN, so a **demonstration** install is possible and an
-  operational one is not. Do not bind an identity to work around this.
+**B-1 — CLOSED.** *Migrations declare privilege; the installer supplies
+credentials; neither ever carries a secret in source control.* The six
+`CREATE ROLE … PASSWORD '<literal>'` clauses are gone — **nothing else in
+`migrations/` changed**, not one attribute, grant or policy. `rolpassword` stays
+NULL, so under `scram-sha-256` a role cannot authenticate until
+`plugin.php install` provisions one, supplied via `DNB_*_PASS` or generated into
+`DNB_SECRETS_OUT` at mode 0600. `Database::connect()` has **no password
+defaults** — an unset one raises.
+
+- **Do not put a credential in a migration, ever**, however well chosen. The
+  defect was the location, not the entropy.
+- **`Doctor::DEV_PASSWORDS` is the BURNED list**, not a description of the
+  migrations. Those six strings are in Git history; the check exists only to
+  keep proving they are dead. Do not delete it and do not "update" it.
+- **A credential check needs a positive control.** Under `trust` every password
+  succeeds, and the check reported six live credentials on a database where none
+  was set. A deliberately wrong password goes first; if that connects the result
+  is **SKIP**, never a verdict.
+- **The installer must not alter anything it might then refuse over.** The first
+  version generated six credentials, applied them, and only then found it had
+  nowhere to write them.
+- **`pg_authid` is superuser-only** and the owner is deliberately not a
+  superuser. Do not widen its privilege to ask a convenience question — the
+  installer asks "did this role predate this install?" instead.
+- **Quote every value a shell will source.** An unquoted DSN contains semicolons
+  and becomes three commands.
+- Roles are provisioned only where the owner created them; PostgreSQL refuses
+  otherwise. On a development cluster with older roles, drop them and let the
+  migrations rebuild them — **do not grant the owner more privilege**.
+- `tests/run.sh` mints fresh credentials per run and installs the way an
+  operator does. `tools/dev_panel.sh` restores the local panel workflow.
+
+**B-2 — OPEN, and deliberately untouched.** `DenyAllIdentity` → 401 on every
+route; only `DN_DEV_STAFF_IDENTITY` makes the panel render. W-4 is OPEN, so a
+**demonstration** install is possible and an operational one is not. **Do not
+invent a staff identity to work around this.**
+
 - **The 12 roles install creates are cluster-wide.** Installing onto the cluster
   that serves UCRM would add them there, and uninstall would drop them
   cluster-wide. **Prefer a separate PostgreSQL instance.**
 - **Nothing is installed anywhere.** This session cannot reach the DishNet
-  server — no SSH client, no DSN, egress 403 — so requirement 6's "test on the
-  existing server" **was not performed**. `plugin/bin/install-test.sh` is the
-  operator's equivalent; `docs/96` §H is the runbook.
+  server — no SSH client, no DSN, egress 403. `plugin/bin/install-test.sh` is
+  the operator's equivalent; `plugin/doc/INSTALL.md` ships the runbook.
 - The package **excludes `tests/`** (it needs a BYPASSRLS fixture identity),
   `tools/`, `docs/`, and **`public/`** (the customer API front controller, which
   nothing in this install serves). Do not add them.
-- `tools/dev_server.php` served `/../src/Db/Database.php` with HTTP 200 —
-  measured, now fixed in both servers. Source disclosure is credential
-  disclosure here, because of B-1.
+- Both static servers resolve with `realpath` and require containment under
+  `panel/`. Ten representative paths — source, migration, manifest, env
+  template, and the generated secrets file — are asserted unreachable.
 
 No gate moved. F6-B still NOT AUTHORIZED, Admin writes still unbound, portal
 still unbuilt, Decision 5 still OPEN and gated, the census still next.

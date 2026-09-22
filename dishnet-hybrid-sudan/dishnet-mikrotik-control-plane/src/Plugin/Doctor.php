@@ -28,13 +28,19 @@ final class Doctor
     public const OK = 'ok', WARN = 'warn', BLOCKER = 'blocker', SKIP = 'skip';
 
     /**
-     * The development role passwords, as migration 001 and its successors write
-     * them and as Database::connect() defaults to them. They are not secrets —
-     * they are in the repository — which is exactly the problem: an install
-     * that leaves them in place has six known passwords on the cluster.
+     * BURNED CREDENTIALS. Six strings that must never authenticate again.
      *
-     * tests/test_installability.php asserts this list still matches the
-     * literals in migrations/, so it cannot drift into being decorative.
+     * The migrations used to create the login roles with these as literals, and
+     * Database::connect() used to default to them. Both are gone (docs/97) —
+     * but they remain in this repository's history, so they are burned rather
+     * than merely obsolete, and any database where one still works was built
+     * before the fix or had it re-introduced.
+     *
+     * This is therefore the only reason the list still exists: not to describe
+     * the current migrations, which contain no password at all, but to keep
+     * testing that these exact strings are dead. tests/test_installability.php
+     * asserts both halves — that migrations/ carries no literal, and that this
+     * list is still checked.
      *
      * @var array<string,string>
      */
@@ -188,47 +194,97 @@ final class Doctor
 
     // ── the one that matters ────────────────────────────────────────────────
     /**
-     * Does any login role still accept its development password?
+     * Do the burned credentials still work — and can that even be measured here?
      *
-     * Measured by attempting a connection, not by reading pg_authid: the stored
-     * verifier is a SCRAM hash and cannot be compared to a candidate, so the
-     * only honest test is to try it. A success here is a blocker; a failure is
-     * the good outcome.
+     * The measurement is a connection attempt, because the stored verifier is a
+     * SCRAM hash and cannot be compared to a candidate. But a connection
+     * attempt only means something if the cluster asks for a credential at all:
+     * under a `trust` entry in pg_hba.conf every password succeeds, including
+     * the burned ones, and this check reported six live credentials on a
+     * database where none of them was set. A control that fails without
+     * measuring anything is as useless as one that passes without measuring
+     * anything.
+     *
+     * So a random wrong password goes first. If that connects, the cluster
+     * requires no password — which is its own blocker, and a different one —
+     * and the burned-credential check reports SKIP rather than a verdict it did
+     * not earn.
      */
     private function credentials(): array
     {
         $dsn = getenv('DNB_DSN') ?: '';
         if ($dsn === '') {
-            return [$this->row('creds.dev', 'development passwords', self::SKIP,
-                'NOT MEASURED — DNB_DSN is unset')];
+            return [
+                $this->row('creds.enforced', 'cluster requires a password', self::SKIP,
+                    'NOT MEASURED — DNB_DSN is unset'),
+                $this->row('creds.dev', 'burned credentials', self::SKIP,
+                    'NOT MEASURED — DNB_DSN is unset'),
+            ];
         }
-        $live = [];
-        $tested = 0;
+
+        // The positive control.
+        $probe  = 'not-a-password-' . bin2hex(random_bytes(16));
+        $roles  = array_keys(self::DEV_PASSWORDS);
+        $trust  = null;                 // null = could not tell
+        foreach ($roles as $role) {
+            try {
+                new PDO($dsn, $role, $probe, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                $trust = true;          // a wrong password got in
+                break;
+            } catch (\PDOException $e) {
+                if ($this->isAuthFailure($e)) { $trust = false; break; }
+                // role absent, database unreachable: try the next role
+            }
+        }
+
+        if ($trust === null) {
+            return [
+                $this->row('creds.enforced', 'cluster requires a password', self::SKIP,
+                    'NOT MEASURED — no role answered an authentication attempt'),
+                $this->row('creds.dev', 'burned credentials', self::SKIP,
+                    'NOT MEASURED — the positive control could not run'),
+            ];
+        }
+        if ($trust === true) {
+            return [
+                $this->row('creds.enforced', 'cluster requires a password',
+                    $this->disposable ? self::WARN : self::BLOCKER,
+                    'NO — a random wrong password was accepted. pg_hba.conf trusts these '
+                    . 'connections, so role passwords are decorative here'),
+                $this->row('creds.dev', 'burned credentials', self::SKIP,
+                    'NOT MEASURED — every password succeeds on this cluster, so an '
+                    . 'accepted one would prove nothing'),
+            ];
+        }
+
+        // The cluster enforces passwords, so the burned check means something.
+        $live = $tested = [];
         foreach (self::DEV_PASSWORDS as $role => $pass) {
             try {
                 new PDO($dsn, $role, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
                 $live[] = $role;
-                $tested++;
+                $tested[] = $role;
             } catch (\PDOException $e) {
-                // 28P01 is "password authentication failed" — the good answer.
-                // Anything else (role absent, database unreachable) is not a
-                // measurement of this role's password, so it is not counted.
-                if (str_contains($e->getMessage(), '28P01')
-                    || str_contains(strtolower($e->getMessage()), 'password authentication failed')) {
-                    $tested++;
-                }
+                if ($this->isAuthFailure($e)) { $tested[] = $role; }
             }
         }
-        if ($tested === 0) {
-            return [$this->row('creds.dev', 'development passwords', self::SKIP,
-                'NOT MEASURED — no role answered an authentication attempt')];
-        }
-        return [$this->row('creds.dev', 'development passwords',
-            $live === [] ? self::OK : self::BLOCKER,
-            $live === []
-                ? 'none of ' . $tested . ' role(s) accepts its development password'
-                : 'ACCEPTED by: ' . implode(', ', $live)
-                  . ' — these are published in the repository')];
+        return [
+            $this->row('creds.enforced', 'cluster requires a password', self::OK,
+                'yes — a random wrong password was rejected'),
+            $this->row('creds.dev', 'burned credentials',
+                $live === [] ? self::OK : self::BLOCKER,
+                $live === []
+                    ? 'dead on all ' . count($tested) . ' role(s) tested'
+                    : 'STILL LIVE on: ' . implode(', ', $live)
+                      . ' — these strings are in this repository\'s history'),
+        ];
+    }
+
+    /** 28P01, whatever wording the driver chose. */
+    private function isAuthFailure(\PDOException $e): bool
+    {
+        $m = strtolower($e->getMessage());
+        return str_contains($m, '28p01') || str_contains($m, 'password authentication failed');
     }
 
     /**

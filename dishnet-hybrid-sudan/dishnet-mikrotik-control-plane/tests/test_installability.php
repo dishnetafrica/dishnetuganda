@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 
+use Dn\Plugin\Credentials;
 use Dn\Plugin\Doctor;
 use Dn\Plugin\Installer;
 use Dn\Plugin\Manifest;
@@ -46,15 +47,26 @@ is_(count($files) > 40, true, 'the sweep found ' . count($files) . ' php files (
 
 $read = [];
 foreach ($files as $f) {
-    if (preg_match_all("/getenv\('([A-Z0-9_]+)'\)/", (string) file_get_contents($f), $mm)) {
-        foreach ($mm[1] as $v) { $read[$v] = true; }
+    $src = (string) file_get_contents($f);
+    // getenv('X'), and $need('X', ...) — the fail-closed reader in Database,
+    // which names the variable as an argument rather than calling getenv on it.
+    foreach (["/getenv\\('([A-Z0-9_]+)'\\)/", "/\\\$need\\('([A-Z0-9_]+)'/"] as $re) {
+        if (preg_match_all($re, $src, $mm)) {
+            foreach ($mm[1] as $v) { $read[$v] = true; }
+        }
     }
 }
-// Constants hold two of them rather than literals.
+// Three sets are held as constants rather than as literals at the call site.
 $read['DN_DEV_STAFF_IDENTITY'] = true;
 $read['DN_ALLOW_REAL_BINDINGS'] = true;
+foreach (Credentials::ROLE_ENV as $env)      { $read[$env] = true; }
+foreach (array_keys(Credentials::APP_SECRETS) as $env) { $read[$env] = true; }
 ksort($read);
 is_(count($read) >= 20, true, 'the code reads ' . count($read) . ' distinct environment variables');
+foreach (Credentials::ROLE_ENV as $role => $env) {
+    is_(str_contains((string) file_get_contents($root . '/src/Db/Database.php'), "\$need('{$env}'"), true,
+        "Database::connect() requires {$env} rather than defaulting it");
+}
 
 $undeclared = array_values(array_diff(array_keys($read), array_keys($m->config)));
 is_($undeclared, [], 'every variable the code reads is declared in the manifest'
@@ -96,16 +108,58 @@ is_(in_array('dnb', Installer::ROLES, true), false,
     'the owner role is NOT dropped — bootstrap.sql created it, not the installer');
 
 // ───────────────────────────────────────────────────────────────────────────
-t('the doctor tests the passwords the migrations actually set');
+t('B-1 — no credential is in the repository, and the burned ones stay burned');
 
+// The fix itself: not one password literal survives in any migration.
 preg_match_all("/CREATE ROLE ([a-z_]+) LOGIN PASSWORD '([^']*)'/", $sql, $pp, PREG_SET_ORDER);
-$literals = [];
-foreach ($pp as $row) { $literals[$row[1]] = $row[2]; }
-ksort($literals);
-$known = Doctor::DEV_PASSWORDS;
-ksort($known);
-is_(count($literals) >= 6, true, 'the migrations set ' . count($literals) . ' password literals');
-is_($known, $literals, 'Doctor::DEV_PASSWORDS matches them exactly, so the check cannot go stale');
+is_($pp, [], 'no migration creates a role with a password literal'
+    . ($pp ? ' — FOUND: ' . implode(', ', array_column($pp, 1)) : ''));
+
+// And the six login roles are still created — the fix removed a clause, not a role.
+preg_match_all('/CREATE ROLE ([a-z_]+) LOGIN\b/', $sql, $lg);
+$loginRoles = array_values(array_unique($lg[1]));
+sort($loginRoles);
+$expected = array_keys(Credentials::ROLE_ENV);
+sort($expected);
+is_($loginRoles, $expected, 'all six login roles are still created, just without a credential');
+
+// Nothing anywhere re-introduces one.
+$offenders = [];
+foreach ($phpFiles(['src', 'bin', 'plugin', 'tools']) as $f) {
+    if (str_ends_with($f, 'src/Plugin/Doctor.php')) { continue; }   // the burned list
+    $src = (string) file_get_contents($f);
+    foreach (Doctor::DEV_PASSWORDS as $burned) {
+        if (str_contains($src, $burned)) { $offenders[] = basename($f) . ':' . $burned; }
+    }
+}
+is_($offenders, [], 'no burned credential appears in any source file outside the burned list'
+    . ($offenders ? ' — ' . implode(', ', $offenders) : ''));
+foreach (Doctor::DEV_PASSWORDS as $burned) {
+    is_(str_contains($sql, $burned), false, "the burned string for its role is gone from migrations/");
+}
+is_(count(Doctor::DEV_PASSWORDS), 6, 'the doctor still checks all six burned strings');
+
+// Exactly one file in the tree may carry them. install-test.sh used to hold a
+// second copy; it now reads them from this constant, so there is one place to
+// look and one place that can go stale.
+$carriers = [];
+$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,
+        RecursiveDirectoryIterator::SKIP_DOTS));
+foreach ($it as $f) {
+    if (!$f->isFile()) { continue; }
+    $path = $f->getPathname();
+    if (str_contains($path, '/.git/') || str_contains($path, '/dist/')) { continue; }
+    if (str_contains($path, '/tests/test_installability.php')) { continue; }  // this file
+    $body = (string) @file_get_contents($path);
+    foreach (Doctor::DEV_PASSWORDS as $burned) {
+        if (str_contains($body, $burned)) { $carriers[] = str_replace($root . '/', '', $path); break; }
+    }
+}
+is_(array_values(array_unique($carriers)), ['src/Plugin/Doctor.php'],
+    'src/Plugin/Doctor.php is the ONLY file carrying a burned string'
+    . ($carriers ? ' — carriers: ' . implode(', ', array_unique($carriers)) : ''));
+is_(array_keys(Doctor::DEV_PASSWORDS), array_keys(Credentials::ROLE_ENV),
+    'and covers exactly the six login roles');
 
 // ───────────────────────────────────────────────────────────────────────────
 t('the doctor reports what it could not measure, rather than passing');
@@ -146,6 +200,95 @@ is_($strict['env.DNB_EXPOSE_OTP'], Doctor::BLOCKER, 'DNB_EXPOSE_OTP blocks a rea
 is_($loose['env.DNB_EXPOSE_OTP'],  Doctor::WARN,    'and only warns in a disposable one');
 
 // ───────────────────────────────────────────────────────────────────────────
+t('the credential mechanism itself');
+
+$saved = [];
+foreach (array_merge(array_values(Credentials::ROLE_ENV),
+                     array_keys(Credentials::APP_SECRETS)) as $env) {
+    $saved[$env] = getenv($env);
+    putenv("{$env}=supplied-for-this-assertion");
+}
+is_(Credentials::wouldGenerate(), [],
+    'nothing is generated when every secret is supplied');
+putenv('DNB_APP_PASS');
+is_(Credentials::wouldGenerate(), ['DNB_APP_PASS'],
+    'and exactly the unset one is named — checked BEFORE anything is altered');
+foreach ($saved as $env => $v) { putenv($v === false ? $env : "{$env}={$v}"); }
+
+$a = Credentials::generate();
+$b = Credentials::generate();
+is_(strlen($a), 64, 'a generated secret is 32 bytes, hex');
+is_($a === $b, false, 'two generations differ');
+is_(preg_match('/^[0-9a-f]+$/', $a), 1, 'and it is hex, so it survives an env file');
+
+// The secrets file must be unreadable by anyone else BEFORE it holds anything.
+$tmp = sys_get_temp_dir() . '/dnb-secrets-' . bin2hex(random_bytes(6)) . '.env';
+Credentials::writeSecretsFile($tmp, ['DNB_APP_PASS' => 'value-under-test']);
+is_(substr(sprintf('%o', fileperms($tmp)), -4), '0600', 'the secrets file is created 0600');
+$body = (string) file_get_contents($tmp);
+is_(str_contains($body, 'DNB_APP_PASS="value-under-test"'), true,
+    'and holds what it was given, quoted for the shell that will source it');
+is_(str_contains($body, 'Keep the mode at 0600'), true, 'and says so to whoever opens it');
+unlink($tmp);
+Credentials::writeSecretsFile($tmp, []);
+is_(file_exists($tmp), false, 'nothing is written when there is nothing to write');
+
+is_(count(Credentials::ROLE_ENV), 6, 'six login roles are provisioned');
+is_(count(Credentials::APP_SECRETS), 2, 'plus two application secrets that never reach the database');
+foreach (array_keys(Credentials::APP_SECRETS) as $env) {
+    is_(in_array($env, array_values(Credentials::ROLE_ENV), true), false,
+        "{$env} is not a role password");
+}
+
+// The installer must not be able to alter a role it does not own the name of.
+$src = (string) file_get_contents($root . '/src/Plugin/Credentials.php');
+is_(str_contains($src, 'refusing to alter an unknown role'), true,
+    'apply() refuses a role name outside its own constant');
+is_(preg_match('/ALTER ROLE \' \. \$role \. \' PASSWORD \' \. \$quoted/', $src), 1,
+    'and the value is quoted by the driver, never interpolated raw');
+// Judged on CODE, not on prose. The first version of this check matched the
+// word "prints" in this class's own docblock — the seventh time in this project
+// that a guard has failed on its author's explanation rather than on the thing
+// it guards.
+$codeOnly = '';
+foreach (token_get_all($src) as $tk) {
+    if (is_array($tk) && in_array($tk[0], [T_COMMENT, T_DOC_COMMENT], true)) { continue; }
+    $codeOnly .= is_array($tk) ? $tk[1] : $tk;
+}
+is_(str_contains($codeOnly, 'prints'), false,
+    'the comment stripper works — the docblock word is gone from the code view');
+$writes = [];
+foreach (['echo ', 'print ', 'print_r', 'var_dump', 'error_log', 'printf', 'fputs(STDOUT', 'STDERR'] as $fn) {
+    if (str_contains($codeOnly, $fn)) { $writes[] = trim($fn); }
+}
+is_($writes, [], 'no code in the credential path writes to output'
+    . ($writes ? ' — FOUND: ' . implode(', ', $writes) : ''));
+
+// ───────────────────────────────────────────────────────────────────────────
+t('every value a shell will source is quoted');
+
+// A DSN contains semicolons. `set -a; . file; set +a` — which INSTALL.md tells
+// the operator to run — parses an unquoted one as three commands and leaves
+// DNB_DSN holding only the first fragment. Measured: the installer then tried
+// to reach a database called "dnb" that did not exist.
+$tpl = (string) file_get_contents($root . '/plugin/.env.example');
+preg_match_all('/^(DNB_[A-Z_]+)=(.*)$/m', $tpl, $mm, PREG_SET_ORDER);
+$unquoted = [];
+foreach ($mm as $row) {
+    $v = trim($row[2]);
+    if ($v === '' || $v[0] === '"' || $v[0] === "'") { continue; }
+    if (str_contains($v, ';') || str_contains($v, ' ') || str_contains($v, '&')) {
+        $unquoted[] = $row[1];
+    }
+}
+is_($unquoted, [], 'no value needing quotes is left bare in .env.example'
+    . ($unquoted ? ' — ' . implode(', ', $unquoted) : ''));
+is_(preg_match('/^DNB_DSN="/m', $tpl), 1, 'and the DSN in particular is quoted');
+is_(str_contains((string) file_get_contents($root . '/src/Plugin/Credentials.php'),
+    '\'="\' . $v . \'"\''), true,
+    'the generated secrets file quotes its values too');
+
+// ───────────────────────────────────────────────────────────────────────────
 t('the package excludes what must never ship');
 
 $pkg = (string) file_get_contents($root . '/plugin/bin/package.sh');
@@ -160,6 +303,10 @@ is_(str_contains($pkg, 'sha256sum -c SHA256SUMS'), true,
     'the builder verifies the archive by extracting it, not by having written it');
 is_(str_contains($pkg, 'rm -f "$dest/plugin/.env"'), true,
     'a configured .env can never travel inside the package');
+foreach (['INSTALL.md', 'UNINSTALL.md'] as $doc) {
+    is_(is_file($root . '/plugin/doc/' . $doc), true, "plugin/doc/{$doc} ships with the package");
+}
+is_($m->version, '0.1.0-rc1', 'the manifest carries the release-candidate version');
 
 // ───────────────────────────────────────────────────────────────────────────
 t('neither static server serves a file outside panel/');
@@ -198,11 +345,15 @@ $proofs = [
     'panel loads'                      => 'the panel is served',
     'API admits nobody by default'     => 'the production identity binding admits nobody',
     'API health answers'               => 'the API answers',
-    'simulated $k visible through the API' => 'simulator data reaches the API',
+    'the simulator builds 5 routers'   => 'the simulated estate is the expected size',
+    'the simulator builds 17 vouchers' => 'the voucher count is checked, not assumed',
     'install creates the 12 plugin roles' => 'the positive control for the residue check',
     'no plugin role remains'           => 'uninstall leaves no role',
     'no mt_ table remains'             => 'uninstall leaves no table',
-    'refuses path traversal'           => 'the traversal regression',
+    'no source, config, secret or manifest file is reachable' => 'the source-disclosure regression',
+    'B-1: no burned credential authenticates' => 'the burned credentials are dead',
+    'cluster rejects a wrong password'        => 'the control that makes the credential checks mean anything',
+    'a second install from the artifact alone succeeds' => 'the artifact is self-sufficient',
 ];
 foreach ($proofs as $needle => $what) {
     is_(str_contains($it, $needle), true, "it checks {$what}");

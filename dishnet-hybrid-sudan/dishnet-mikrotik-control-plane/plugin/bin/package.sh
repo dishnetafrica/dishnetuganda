@@ -67,11 +67,22 @@ tar -xzf "$out/$name.tar.gz" -C "$check"
 ( cd "$check/$name" && sha256sum -c SHA256SUMS --quiet ) \
   || { echo "REFUSING: the archive does not match its own checksums" >&2; rm -rf "$check"; exit 1; }
 extracted=$(find "$check/$name" -type f | wc -l | tr -d ' ')
+check_sums=$(mktemp); cp "$check/$name/SHA256SUMS" "$check_sums"
 rm -rf "$check"
 
 [ "$files" = "$extracted" ] \
   || { echo "REFUSING: staged $files files, archive extracts $extracted" >&2; exit 1; }
 
+content=$(sha256sum < "$check_sums")
+
 echo "$out/$name.tar.gz"
 echo "  $files files, verified against SHA256SUMS after extraction"
 echo "  $(du -h "$out/$name.tar.gz" | cut -f1) compressed"
+echo "  archive sha256  $(sha256sum "$out/$name.tar.gz" | cut -d" " -f1)"
+echo "  content  sha256 ${content%% *}"
+echo
+echo "  The archive digest identifies THIS BUILD: tar records modification times,"
+echo "  so rebuilding the same source produces different bytes. The content digest"
+echo "  is the digest of SHA256SUMS, which lists every file by content, and IS"
+echo "  stable across rebuilds. Compare that one when asking whether two"
+echo "  artifacts hold the same code."

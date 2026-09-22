@@ -1,7 +1,7 @@
 {
   "id": "dishnet-mikrotik",
   "name": "DishNet MikroTik Control Plane",
-  "version": "0.9.0-dev",
+  "version": "0.1.0-rc1",
   "domain": "B",
   "summary": "Router registry, provisioning, HotSpot policy, vouchers, sessions and AAA publication for MikroTik estates.",
   "boundary": {
@@ -64,7 +64,7 @@
     "DNB_OWNER_PASS": {
       "required": false,
       "secret": true,
-      "description": "Schema owner. Install-time only; never serves a request. MUST be set: the migrations create this role with a password literal that is published in the repository."
+      "description": "Schema owner. Install-time only; never serves a request. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_APP_USER": {
       "required": false,
@@ -74,7 +74,7 @@
     "DNB_APP_PASS": {
       "required": false,
       "secret": true,
-      "description": "Customer request role. MUST be set: the migrations create this role with a password literal that is published in the repository."
+      "description": "Customer request role. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_WORKER_USER": {
       "required": false,
@@ -84,7 +84,7 @@
     "DNB_WORKER_PASS": {
       "required": false,
       "secret": true,
-      "description": "Intent worker role. MUST be set: the migrations create this role with a password literal that is published in the repository."
+      "description": "Intent worker role. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_ADMIN_USER": {
       "required": false,
@@ -94,7 +94,7 @@
     "DNB_ADMIN_PASS": {
       "required": false,
       "secret": true,
-      "description": "Legacy Admin role; carries migration 015 blanket grants. MUST be set: the migrations create this role with a password literal that is published in the repository."
+      "description": "Legacy Admin role; carries migration 015 blanket grants. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_ADMINWRITE_USER": {
       "required": false,
@@ -104,7 +104,7 @@
     "DNB_ADMINWRITE_PASS": {
       "required": false,
       "secret": true,
-      "description": "Admin write role: EXECUTE on seven functions, zero table privileges. MUST be set: the migrations create this role with a password literal that is published in the repository."
+      "description": "Admin write role: EXECUTE on seven functions, zero table privileges. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_RADIUS_USER": {
       "required": false,
@@ -114,7 +114,7 @@
     "DNB_RADIUS_PASS": {
       "required": false,
       "secret": true,
-      "description": "RADIUS accounting ingestion role. MUST be set: the migrations create this role with a password literal that is published in the repository."
+      "description": "RADIUS accounting ingestion role. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_INTERNAL_TOKEN": {
       "required": false,
@@ -140,6 +140,16 @@
       "required": false,
       "secret": true,
       "description": "TESTS ONLY. See DNB_INSPECT_USER."
+    },
+    "DNB_SECRETS_OUT": {
+      "required": false,
+      "secret": false,
+      "description": "Install-time only. File the installer writes GENERATED secrets to, created 0600 before anything is written. Required when any secret has to be generated; unused when every password is supplied."
+    },
+    "DNB_ROTATE_CREDENTIALS": {
+      "required": false,
+      "secret": false,
+      "description": "Install-time only. Set to yes-rotate-now to mint new passwords for roles that predate this installation. Refused by default because the roles are cluster-wide and may belong to another database."
     }
   },
   "api": {
@@ -272,7 +282,8 @@
     "serve": "php -S 127.0.0.1:8099 plugin/bin/serve.php",
     "creates": [
       "postgresql schema (tables, policies, functions)",
-      "postgresql roles: 6 login + 6 definer, cluster-wide"
+      "postgresql roles: 6 login + 6 definer, cluster-wide",
+      "role credentials, supplied or generated \u2014 never in the repository"
     ],
     "does_not_create": [
       "the database",
@@ -282,7 +293,8 @@
       "any container",
       "any reverse-proxy route"
     ],
-    "idempotent": true
+    "idempotent": true,
+    "credentials": "supplied via DNB_*_PASS, or generated into DNB_SECRETS_OUT at mode 0600. No credential exists in the repository or the package."
   },
   "uninstall": {
     "command": "php plugin/bin/plugin.php uninstall --i-understand-this-drops-data",
@@ -318,7 +330,7 @@
     "contains": [
       "src/",
       "migrations/",
-      "plugin/",
+      "plugin/ (manifest, installer, entrypoint, docs)",
       "panel/",
       "bin/worker.php",
       "VERSION",
@@ -329,6 +341,10 @@
       "tools/",
       "docs/",
       "public/ (the customer API front controller, which nothing here serves)"
+    ],
+    "documentation": [
+      "plugin/doc/INSTALL.md",
+      "plugin/doc/UNINSTALL.md"
     ]
   }
 }

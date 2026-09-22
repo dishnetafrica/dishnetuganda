@@ -410,3 +410,48 @@ Decision 5 remains OPEN and gated. The production census remains the next gate.
 | added — `tests/test_installability.php` | **+68** |
 | **total** | **1,556**, 27 suites, all green |
 | install test | 32 checks, separate from the suite (it builds a PostgreSQL cluster) |
+
+
+---
+
+# AMENDMENT — B-1 is closed (`docs/97`)
+
+**`dishnet-mikrotik-0.1.0-rc1.tar.gz`** — 94 files.
+
+**Content digest `aa48b4b46c9e4e15c97262f31e3e7f44961062a733b9499fc7a65863b1db63c7`.**
+
+That is the digest of the archive's own `SHA256SUMS`, which lists every file by
+content. The archive's *own* sha256 is **not** an identity: `tar` records
+modification times, so two builds of identical source produce different bytes —
+measured, not assumed. Compare the content digest when asking whether two
+artifacts hold the same code; `package.sh` prints both and says which is which.
+
+**B-1 no longer stands.** The migrations create every login role with no
+password; the installer provisions one, supplied or generated, at install time.
+Measured on a cluster that requires `scram-sha-256`: **0 of 6 burned credentials
+authenticate**, the generated one does, and one role's password does not open
+another. `docs/97` has the mechanism and the five defects finding it produced.
+
+The status above therefore reads, as of this amendment:
+
+> ## STATUS: **INSTALLABLE WITH ONE CONDITION**
+
+| | | |
+|---|---|---|
+| **B-1** | role credentials in the repository | **CLOSED** — `docs/97` |
+| **B-2** | no staff authentication; the panel renders only under the development identity | **OPEN** — W-4 |
+| B-3 | the 12 roles are cluster-wide | condition |
+| B-4 | no TLS, no process supervision | condition |
+| B-5 | `DNB_SECRET_KEY` must be set before any device-credential path is used | now generated at install |
+
+**B-2 is deliberately untouched.** It is W-4, and inventing a staff identity to
+clear it was explicitly out of scope.
+
+The installation plan in §H stands, with two changes: step 3 now requires the
+cluster to enforce `scram-sha-256` (`doctor` tests this with a deliberately
+wrong password), and step 4 chooses between supplied and generated credentials.
+`plugin/doc/INSTALL.md` ships the current version inside the artifact.
+
+The disposable test grew from 32 checks to **67**, adding credential security,
+role security, source disclosure over ten representative paths, exact simulator
+counts, and a **second installation from the release artifact alone**.
