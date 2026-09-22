@@ -169,6 +169,29 @@ environment dump.
 
 ---
 
+## 7b. If the census is CLEAR, the migration is still a SEPARATE act
+
+**Do not run `census → looks clean → ALTER TABLE`.** The synthetic acceptance
+harness disproved the assumption that made that sequence look safe: a
+constraint can be added and marked `convalidated = true` while violating rows
+remain, if the role applying it cannot see them. Exit code 0 is therefore
+**not** evidence that the invariant now holds.
+
+The sequence is six steps, and steps 3 and 4 are decisions, not formalities:
+
+| | Step | Why it is separate |
+|---|---|---|
+| 1 | **Establish role and provenance** | the transcript must say which role, which database, and which read path — a census whose provenance is unknown is not evidence |
+| 2 | **Run the census** (both runs, §3) | read-only; it enumerates, where the migration's error would name only one pair |
+| 3 | **Review the anomalies** | `BLOCKED(n)` lists the offending rows; each needs a per-row decision, and repair is not automatic |
+| 4 | **Authorise the migration separately** | a `CLEAR` census authorises nothing by itself. GATE 2 is its own decision on its own evidence |
+| 5 | **Execute the guarded migration** | as a role that can see every row. `SET LOCAL row_security = off` makes it refuse rather than validate a partial view |
+| 6 | **Verify independently, afterwards** | re-run the census, and confirm the constraint exists **and** that no violating row survives beneath it. **Do not accept "the migration returned 0".** |
+
+Step 6 exists because of exactly what step 5's guard prevents: the failure mode
+is a constraint that reports success while the data underneath still violates
+it. The only way to know is to look again, with a role that can see.
+
 ## 8. What happens next
 
 `AUTHORITATIVE PRODUCTION CENSUS → REVIEW EVIDENCE → DECIDE B → FINALIZE

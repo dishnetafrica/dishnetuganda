@@ -1801,9 +1801,14 @@ the dangerous one — **the invariant is asserted but not true, and nothing
 would ever re-check it.**
 
 **The fix is one line**, now in `tools/audit/o1_composite_fk.sql`:
-`SET LOCAL row_security = off;`. It bypasses nothing — under FORCE RLS it makes
-the query **error** rather than silently return fewer rows, so the migration
-refuses to run blind whatever role runs it.
+`SET LOCAL row_security = off;`.
+
+> **Do not describe this as "bypassing RLS".** The property it buys is narrower
+> and is the one that matters: **the migration refuses to proceed when its own
+> validation query would be affected by row-level security**, instead of
+> validating against whatever subset happened to be visible. Under FORCE RLS
+> that setting makes such a query **error** rather than silently return fewer
+> rows. The migration fails closed; it gains sight of nothing.
 
 > **This raises the census from useful to load-bearing.** The migration cannot
 > be relied on to catch a violation, and its error names only **one** pair
@@ -1844,6 +1849,29 @@ decommissioned device still sited.
 Suite **29 suites / 1,763 assertions / 0 failed**, unchanged by this work.
 Acceptance harness **52 assertions**, stable over two runs, leaving **zero
 residue** — no synthetic database and no `O1FIX-` row anywhere.
+
+### Three kinds of O-1 evidence — do not let them blur
+
+| | Status | What it can and cannot support |
+|---|---|---|
+| **Synthetic validation** | **✅ obtained** | proves the census DETECTS each anomaly and the guarded migration fails closed. Proves **nothing** about the DishNet estate |
+| **Production census** | **❌ NOT OBTAINED** | the only thing that can say whether production holds zero, one or many violations, or legacy rows needing repair |
+| **Migration authorisation** | **❌ NOT GIVEN** | a separate operator decision. **A `CLEAR` census authorises nothing by itself** |
+
+```
+synthetic instrument   OK        production census       NOT OBTAINED
+synthetic detection    OK        production O-1 migration NOT APPLIED
+synthetic safety       OK
+```
+
+**The migration is a SEPARATE act from the census**, and `census → looks clean
+→ ALTER TABLE` is precisely the sequence this finding rules out. The six-step
+operator sequence is in `docs/79` §7b, and step 6 — **verify independently
+afterwards** — exists because *"the migration returned exit code 0"* is now
+known not to be evidence that the invariant holds.
+
+**`o1_composite_fk.sql` stays out of `migrations/`** until the census is
+obtained, reviewed, and the migration separately authorised.
 
 ## Open and parked
 

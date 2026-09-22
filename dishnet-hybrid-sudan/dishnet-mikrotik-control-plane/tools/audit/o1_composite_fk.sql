@@ -36,9 +36,19 @@ BEGIN;
 --                               security policy for table "mt_sites", ROLLBACK
 --
 -- The first outcome is the dangerous one: the invariant is ASSERTED but not
--- TRUE, and nothing would ever re-check it. row_security = off does not
--- bypass anything -- under FORCE RLS it makes the query ERROR instead of
--- silently returning fewer rows. So the migration now refuses to run blind.
+-- TRUE, and nothing would ever re-check it.
+--
+-- WHAT THIS LINE DOES, STATED PRECISELY. It is NOT a way of bypassing RLS and
+-- must not be described as one. The property it buys is narrower, and it is
+-- the one that matters:
+--
+--   the migration REFUSES TO PROCEED when its own validation query would be
+--   affected by row-level security, instead of validating against whatever
+--   subset of rows happened to be visible.
+--
+-- Under FORCE RLS, row_security = off makes such a query ERROR rather than
+-- silently return fewer rows. The migration fails closed; it does not gain
+-- sight of anything it could not already see.
 -- ---------------------------------------------------------------------------
 SET LOCAL row_security = off;
 

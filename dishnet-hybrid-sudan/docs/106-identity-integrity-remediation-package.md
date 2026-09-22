@@ -193,7 +193,47 @@ protect, and re-pointing one silently changes which customer owns a site.
 
 ---
 
-## 6. Migration safety — it fails closed, measured
+## 6. Migration safety — ~~it fails closed, measured~~ **PARTLY WITHDRAWN**
+
+> ### ⚠ CORRECTION — the claim below was DISPROVEN BY EXECUTION
+>
+> §6's conclusion *"the migration fails closed by itself. No guard clause is
+> needed, and none should be added"* holds **only for a role that can see every
+> row**. The measurement behind it was run as a role that could. **The schema
+> owner cannot**, and the owner is who applies a migration.
+>
+> Since migration 017 (finding F2) `dnb` is **not a superuser**, and `mt_sites`
+> has **FORCE ROW LEVEL SECURITY**, so with no tenant context it sees **zero
+> rows**. Re-measured against an estate holding one violating site:
+>
+> | Run as | Outcome |
+> |---|---|
+> | the owner, as §6 assumed | **`ALTER TABLE` / `COMMIT`, no error** — the FK is added and marked **`convalidated = true`** while the violating row remains underneath |
+> | a role that sees every row | refuses, names the constraint and the offending pair, rolls back, 0 constraints |
+> | the owner, with the guard below | refuses — *query would be affected by row-level security policy* — 0 constraints |
+>
+> **The first outcome is the dangerous one: the invariant is asserted but not
+> true, and nothing would ever re-check it.**
+>
+> **A guard IS therefore needed**, contrary to this section.
+> `tools/audit/o1_composite_fk.sql` carries it:
+>
+> ```sql
+> SET LOCAL row_security = off;
+> ```
+>
+> **This is not a way of bypassing RLS, and must not be described as one.** The
+> property it buys is narrower and is the one that matters: **the migration
+> refuses to proceed when its own validation query would be affected by
+> row-level security**, instead of validating against whatever subset happened
+> to be visible.
+>
+> Everything else in §6 stands — including that the error names only ONE pair,
+> which is why the census enumerates and the error merely diagnoses. Measured
+> in the synthetic acceptance harness, `tools/audit/o1_acceptance.php`.
+
+### The original section, kept for the record
+
 
 One violating row was injected and the migration attempted:
 
@@ -208,6 +248,7 @@ ALTER TABLE mt_sites ADD CONSTRAINT mt_sites_service_customer_fkey …;
 --         is not present in table "mt_services".
 ```
 
+> **[WITHDRAWN — see the correction at the top of §6]**
 > **The migration fails closed by itself.** No guard clause is needed, and none
 > should be added — PostgreSQL validates the constraint against every existing
 > row before accepting it, and the whole migration is one transaction, so a
