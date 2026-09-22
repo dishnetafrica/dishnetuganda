@@ -267,6 +267,19 @@ routers" came to sit beside a Router Detail showing one.
 
 - Everything is built through the **real Domain-B write paths**, so the estate
   obeys every constraint and the audit trail exists because the acts happened.
+- **Fixture debris travels BOTH ways — measured 2026-09-22.** `dnb_sim` was found
+  holding **two customers named `Riverside Hotel` and `Kabale Hostel` with
+  `ucrm_client_id` 1001/1002**, zero `SIM-` identifiers of any kind, and
+  **`test:seed` as its only audit actor**. Those are `tests/bootstrap.php`'s
+  `seed_two_customers()` fixtures, not an estate: a bootstrap-based probe had
+  been run with `DNB_DSN` pointed at `dnb_sim`. **Not caused by migration 022** —
+  a targeted audit revoke neither creates nor deletes a customer, and the proof
+  is positive rather than absent: `ucrm_client_id`'s only writer is the test
+  bootstrap, and the simulator's own `sim:seed` actor appears **zero** times.
+  **The append-only audit trail is what made this answerable** — simulator rows
+  could not have been deleted, so their absence proves they were never written.
+  Rebuild with `plugin.php simulate`; never diagnose a panel from row counts
+  alone.
 - Every identifier is `SIM-` prefixed. A test asserts no `WAN-UNSET`-shaped
   value survives.
 - The simulator **refuses to run when `DN_ALLOW_REAL_BINDINGS` is set**: a
@@ -1544,11 +1557,12 @@ the first spine writer** — it costs a `REVOKE`.
 the repository creates**. Not one of the twelve. **The production census must
 enumerate roles**, not assume them.
 
-## A-1 / T1 is IMPLEMENTED — migration 022
+## A-1 — T1 and T2 IMPLEMENTED, T3 REPORTED BLOCKED (migrations 022, 023)
 
 **The first remediation shipped in code.** `migrations/022_audit_write_boundary.sql`
-plus `tests/test_audit_boundary.php`. Suite: **28 suites, 1,617 assertions, 0
-failed** (was 27 / 1,599; the new suite adds 18).
+plus `migrations/023_worker_audit_boundary.sql` and
+`tests/test_audit_boundary.php`. Suite: **28 suites, 1,641 assertions, 0
+failed** (1,599 before T1 → 1,617 after T1 → 1,641 after T2/T3).
 
 ```sql
 REVOKE INSERT ON mt_audit_log FROM dnb_admin;
@@ -1572,7 +1586,57 @@ migration:
 > of audit INSERT breaks nothing, because the simulator's own comment is
 > accurate — its audit rows are *"written by those acts, not inserted"*.
 
-**T2 and T3 remain open.** Each needs its controlled path built *first*.
+**T2 is now DONE and T3 is reported blocked** — see below. The table above is
+kept because it is what was measured before 022; `dnb_worker`'s row is closed by
+023, and `dnb_app`'s row is the reason T3 stops.
+
+### T2 — migration 023, `mt_intent_audit()`
+
+`dnb_def_work` **already owns the intent lifecycle** (`mt_intent_claim`,
+`mt_intent_expire_overdue`) and its own `mt_intents` policies, so the audit
+write went where the lifecycle already lives rather than into a boundary
+invented for it. `IntentWorker`'s two sites now call
+`SELECT mt_intent_audit(intent, worker, outcome[, reason])`, then:
+
+```sql
+REVOKE INSERT ON mt_audit_log FROM dnb_worker;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE INSERT ON TABLES FROM dnb_worker;
+```
+
+**What the caller can no longer choose.** Under the direct INSERT the worker
+supplied `customer_id`, `actor_kind` and the action string itself. Through the
+function: `customer_id` is **DERIVED from the intent row**, `actor_kind` is
+**fixed to `system`**, `action` is **constrained to two values**, and the target
+is the intent by construction. Only `p_worker` remains the worker's to supply —
+which is exactly the W-1 shape, the actor as a parameter from the identity
+boundary. `dnb_worker` **keeps `mt_intents` UPDATE**: the claim/lease is not
+audit, and a test asserts it still runs.
+
+### T3 — STOPPED AND REPORTED, not done
+
+**All six `dnb_app` audit sites have no definer/function boundary to move into.**
+Measured, not inferred — `dnb_app` may EXECUTE exactly six `SECURITY DEFINER`
+functions and **not one performs any of the six audited mutations**: five are
+`mt_auth_*` (whose routes audit nothing at all), and the sixth is
+`mt_voucher_redeem`, which has **no caller** and is to be **deleted**
+(`docs/87`). `PlanRepository`, `VoucherService` and `IntentQueue` all write raw
+DML under RLS.
+
+> **Granting `dnb_app` EXECUTE on `mt_audit_write()` is NOT the remediation.**
+> Measured: of `mt_audit_log`'s ten columns, **only `id` and `at` are not caller
+> parameters**. EXECUTE on that function is therefore **exactly as forgeable as
+> INSERT** — it would relocate the forgery while *looking* remediated, and it
+> breaks W-1's *"no HTTP role may write an audit row directly."*
+
+Building the six definer functions **is B-2** (`docs/102`: *"the largest single
+item U-1 implies — not a flag"*). So T3 stops here, per instruction, rather than
+inventing a boundary. **`dnb_app` remains the one role that can forge an audit
+row**, and the suite says so.
+
+Also measured, and stronger than expected: **even the schema owner cannot
+`GRANT EXECUTE ON mt_audit_write`** — the function belongs to `dnb_def_audit`
+and `dnb` is not a member of it. Handing that privilege out requires a migration
+that deliberately assumes the role.
 
 ### The default privilege was the half that would have expired
 
@@ -1583,9 +1647,12 @@ creates a table and asserts `dnb_admin` gets nothing on it.
 
 ### A-2 — the residue is asserted, not hidden
 
-The suite asserts that **`dnb_app` and `dnb_worker` still hold audit INSERT**, so
-**finishing T2/T3 will break those assertions** — which is how the residue gets
-removed rather than forgotten. It also asserts the same new table *does* still
+The suite asserts that **`dnb_app` still holds audit INSERT** and that
+`dnb_worker` no longer does, and it pins the **count of caller-written audit
+sites in `Routes.php` at six** — so **closing B-2/T3 must break those lines**,
+which is how the residue gets removed rather than forgotten. (T2 landing broke
+the two `dnb_worker` assertions exactly as designed; they were rewritten to the
+new truth, not deleted.) It also asserts the same new table *does* still
 grant `dnb_app` INSERT, so the A-2 hazard is visible rather than implied.
 
 ### Controls
