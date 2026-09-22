@@ -1161,6 +1161,66 @@ cannot be deleted (18 `ON DELETE RESTRICT` FKs) · `1` principal create/disable 
 > whether the gate lives in the function or in a service state that does not yet
 > exist. **That makes Q7 the critical path.**
 
+## Q7 — searched for, NOT answered (`docs/109`)
+
+Operational sources were searched, not schema. Five findings, all measured:
+
+- **The deployed Uganda sales assistant does not sell HotSpot.** Its own system
+  prompt: *"We sell **Starlink** — kits and monthly internet plans… We do NOT
+  sell fiber, and we do NOT sell SIM cards."*
+- **No HotSpot or MikroTik revenue path exists in the live stack.** The only
+  `MikroTik` occurrence is a vendor name in a hardware-advice list
+  (`HardwareKnowledge.php:145`).
+- **No uCRM service plan names HotSpot or MikroTik** anywhere in the repository.
+- **`hotspot.html` is a lead-generation page, not a product** — vouchers
+  mentioned, three *contact* calls-to-action, **no price of any kind**.
+- **The site README records its own uncertainty:** *"If any of these is not
+  actually sold in Uganda yet, remove the page… an advertised service nobody can
+  buy costs trust."*
+
+> **Q7 is therefore not an archaeological question.** There is no onboarding
+> history to recover: the product is at the enquiry stage and the platform that
+> would onboard an operator has never run. Asking *"what do you currently do?"*
+> presumes a practice that may not exist.
+
+**Reduced to one lookup the operator can do in a single uCRM screen:** *does a
+HotSpot / MikroTik / WiFi-zone service plan exist, and does any client hold a
+service on it?* No plan ⇒ uCRM has nothing from which a HotSpot service could be
+created, so Domain-B-first is forced for the first operator — **a decision to
+ratify, not a fact to discover**. A plan with clients ⇒ the practice exists and
+Q7 is answered from those records.
+
+**U-1 and U-5 remain OPEN.** Not closed, not narrowed by assumption. **U-5's
+premise may be empty** — if no uCRM HotSpot service plan exists, the service link
+has nothing to reference yet. Recorded, not concluded: the repository is not
+uCRM's database.
+
+### A divergence flagged, not resolved
+
+`docs/107` §9.2 proposed that voucher issuance require the uCRM customer link.
+That diverges from the stated boundary that uCRM must not be a prerequisite of
+`voucher issuance → redemption → AAA publication → RADIUS → session →
+accounting`. The distinction that may dissolve it:
+
+| | |
+|---|---|
+| **runtime dependency** — calling uCRM during the operation | **FORBIDDEN**, already settled (`docs/102`) for redemption and accounting |
+| **stored-link precondition** — reading a local column | no network call, no latency, no availability coupling — **but still a prerequisite in effect** |
+
+**Whether that is wanted is a business decision.** Flagged rather than silently
+resolved either way. Redemption onward is not in question.
+
+### The three identities
+
+**Domain-B customer/operator** (the HotSpot platform customer) · **uCRM
+customer/service** (the commercial relationship, where one applies) · **guest /
+voucher user** (transient, **never requires uCRM**, no `mt_customers` row, no
+principal, no actor kind — `docs/89`; **no `guest` actor kind is to be added**).
+
+> **`mt_customers` existing is not a reason to make uCRM mandatory.** It is the
+> Domain-B **authorization boundary** — what RLS keys on — carrying a uCRM
+> relationship when one exists. It is not a projection of uCRM.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
