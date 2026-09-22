@@ -872,6 +872,104 @@ gating at `mt_customer_create`, and gating only at `mt_device_assign`.
 **Order: O-1 → census → decide I-A/U-1/U-5/C6/P-B → writers.** Nothing
 authorized to build. No gate moved.
 
+## The remediation package — demonstrated, NOT applied (`docs/106`)
+
+Every DDL statement below was **executed against the real schema inside a
+rolled-back transaction**. Residue checked afterwards: **zero rows, zero
+constraints.** `migrations/` is untouched and nothing is authorized to build.
+
+```sql
+ALTER TABLE mt_services ADD CONSTRAINT mt_services_id_customer_key
+  UNIQUE (id, customer_id);
+ALTER TABLE mt_sites    ADD CONSTRAINT mt_sites_service_customer_fkey
+  FOREIGN KEY (customer_id, service_id) REFERENCES mt_services (customer_id, id);
+```
+
+- **Referenced column order is cosmetic.** Measured: both `(customer_id, id)`
+  and `(id, customer_id)` are accepted against the same UNIQUE — PostgreSQL
+  matches the column **set**, not the sequence. W-2's order is equally valid.
+- **The supporting UNIQUE cannot fail on existing data.** `PRIMARY KEY (id)` is
+  strictly stronger, so `(id, customer_id)` can never reject a row the PK
+  accepts — proved twice, including once with a violating site row present. It
+  adds an index, not a restriction, and **legitimate cardinality is unchanged**.
+  **Only the foreign key can refuse.**
+- **No `MATCH FULL`, and no CHECK.** Both `mt_sites` columns are already
+  `NOT NULL`, so `MATCH SIMPLE` is equivalent and no row can present a partial
+  key. `mt_devices` needed a CHECK only because its `site_id` *is* nullable.
+  Adding either here would be inert **and would imply to a future reader that a
+  NULL case exists**. If `mt_sites.customer_id` were ever relaxed, `MATCH FULL`
+  would become necessary — that is the reason to record.
+- **The migration fails closed by itself** — PostgreSQL validates against every
+  existing row, and the whole file is one transaction. **No guard clause is
+  needed and none should be added.** But its error names only **one** offending
+  pair, so the census enumerates and the error merely diagnoses. **`NOT VALID`
+  is available and NOT recommended** — it would declare the invariant without
+  enforcing it.
+- **Locks, measured per statement:** the UNIQUE takes **ACCESS EXCLUSIVE on
+  `mt_services`** — the only read-blocking window. The FK takes **SHARE ROW
+  EXCLUSIVE** on both, so **`mt_sites` readers are never blocked.** The index
+  builds fine inside the migration transaction; only `CONCURRENTLY` cannot.
+  **Duration is UNMEASURED — claim no production timing until E-2.** If E-2
+  shows `mt_services` too large, the alternative needs a **migrator change**,
+  which must not be invented pre-emptively.
+
+**Matrix measured against the proposed schema**, as `dnb_app` under RLS, every
+zero paired with a non-zero control in the same session: A→own service
+`INSERT 0 1`; A→B's service **refused**; repointing an existing site **refused**;
+A reads B's service `0`; B reads A's site `0`; B deleting a service its own sites
+reference still refused by `mt_sites_service_id_fkey` — **unchanged and
+correct**. **T-9 is mandatory**: the regression test must be shown to fail when
+the constraint is removed.
+
+### P-B is BREAKING — measured
+
+`mt_auth_issue_code` resolves the tenant with a **non-`STRICT`**
+`SELECT … INTO`, **no `ORDER BY`, no `LIMIT`**:
+
+| Form | Two matching rows |
+|---|---|
+| `SELECT … INTO` | **first row, NO ERROR** |
+| `SELECT … INTO STRICT` | raises `P0003` |
+
+> Relaxing phone uniqueness would **silently bind a one-time code to an
+> arbitrary principal, and therefore an arbitrary customer** — the code row
+> stores `customer_id` and `mt_auth_verify_code` returns it, so the session's
+> tenant would be non-deterministic. **The unique index is load-bearing for
+> correctness, not lookup speed.**
+
+Whether one person may legitimately hold two customers is **C10** (*"Is the
+Reseller the same person as the Customer PWA user?"* — ARCH, *"Highest. Rebuilds
+permission logic"*), with C6 and C16. **Not P-B's to settle.** Candidate
+answers if ever needed: a second number, a principal-selection step after OTP, or
+a login that names the customer first. **Do not change it.**
+
+### P-C — recommended FORBIDDEN
+
+`mt_auth_sessions` carries **its own `customer_id`**, and `mt_auth_resolve_token`
+returns **`s.customer_id`** — the session's copy; the join to `mt_principals`
+only checks `status`. **Reassigning a principal would leave every live session
+serving the old tenant** until expiry — a cross-tenant window opened
+administratively and invisible to everyone. With the already-measured `SET NULL`
+attribution erasure: **no operation may change `mt_principals.customer_id`.**
+Disable and create anew. If ever built, it must revoke every live session in the
+same transaction.
+
+### `mt_site_create` — derive, never accept
+
+No `p_customer` parameter exists, so the forgery is **unrepresentable** rather
+than rejected: authenticated customer → requested service → verify ownership →
+**derive** `customer_id` → insert, with the composite FK as the floor beneath.
+**An application check alone is not the fix** — integrity is evaluated *below*
+RLS, an application check *above* it.
+
+**S-A — UNIMPLEMENTED**, and forbidden-by-constraint once O-1 lands
+(`ON UPDATE NO ACTION` refuses while a site references the service). If ever
+wanted it is **administrative reassignment** — service, sites and devices in one
+transaction with one audit trail. **I-A** needs a **non-tenant** store reachable
+by `dnb_adminwrite`; four of five writers have no natural key at all. **U-1
+refined, still open**: proposed first hard gate at `mt_service_create`, decided
+together with U-5.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
