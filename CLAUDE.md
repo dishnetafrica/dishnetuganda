@@ -1041,7 +1041,9 @@ body, since W-1 makes the audit row unskippable inside it.
 
 Also measured: of the three production `enqueue` call sites only
 `voucher.publish` passes a key — **`voucher.revoke` and `session.disconnect`
-pass none**, so a retry enqueues a second intent that reaches a router.
+pass none**. **Corrected by `docs/108`:** the clause that once followed here
+("…that reaches a router") was an **overstatement and is withdrawn** — see the
+`docs/108` section below.
 
 ### Convergence is `mt_device_assign` — and convergence is NOT a gate
 
@@ -1071,6 +1073,93 @@ UNIQUE constraints on `mt_sites`/`mt_services`/`mt_devices`, current indexes, an
 **RC1 must NOT be installed into the live UISP/uCRM or production environment.**
 The production migration, the voucher activation path and the onboarding identity
 model are each still short of their gates.
+
+## Onboarding spine and intent idempotency (`docs/108`)
+
+### A correction: nothing reaches a router today
+
+Measured: **`bin/worker.php` — the only production construction of
+`IntentWorker` — binds `NullDelivery`**, whose `deliver()` returns
+`retryable('no delivery path is configured')` and whose `confirm()` returns
+`false`. `RouterOsDelivery` is not referenced by `Runtime/Bindings.php` at all;
+`Bindings::defaults()` is `NullDelivery` + `NullPublisher`, and a real binding
+needs `DN_ALLOW_REAL_BINDINGS`. **The router consequence of a duplicate intent is
+latent until F6-B.** `docs/107`'s "reaches a router" is withdrawn — an overstated
+risk is as much a measurement failure as an understated one.
+
+### The intent asymmetry is THREE-way, not two
+
+| Operation | Key | Guard | Retry-safe today |
+|---|---|---|---|
+| `voucher.publish` | **yes** | — | **safe** — `enqueue` returns the first intent |
+| `voucher.revoke` | no | **yes — a state guard in the SQL** | **safe, incidentally** |
+| `session.disconnect` | no | **none** | **NOT safe** — duplicate intent **and** duplicate audit row |
+
+`VoucherService::revoke` is
+`UPDATE … WHERE id = ? AND state IN ('unused','active') RETURNING *`, and the
+handler returns **404 before reaching the enqueue** when it yields null. So the
+replay is stopped — **but by where the guard sits, not by design**: the replay
+answers a misleading 404, and any future edit reordering those statements would
+silently remove the safety. `session.disconnect` only does a `find()` read
+first, so every retry proceeds.
+
+> **`session.disconnect` replay is a NEW BLOCKER — it must be fixed before
+> F6-B.** Today its cost is a duplicate audit row, not a duplicated router
+> action.
+
+### RULE I-1 — detection before the audited mutation
+
+> **Idempotency detection must occur BEFORE the mutating, audited operation
+> executes. A replay must not create a second audit event.**
+
+Forced by W-1, not chosen: the audit row is written by `mt_audit_write()` inside
+the function, in the same transaction, so a replay check placed after the call —
+or inside it after the mutation — cannot prevent the duplicate. The check is the
+**first** thing the function does, and a replay returns the stored result while
+writing **nothing**. `mt_audit_log` is append-only by trigger, so **a duplicate
+audit row is a false record that cannot be corrected afterwards.**
+
+### Where the existing mechanisms suffice — and where they cannot
+
+**Seven of the eight onboarding operations have NO tenant context at execution**;
+only intent enqueue does, and it already has its mechanism. So:
+
+- **unique constraint, no table needed** — the uCRM customer link
+  (`ucrm_client_id` is already UNIQUE), the uCRM service link (U-5, column does
+  not exist), intents, and principal-creation's common case (`phone`);
+- **domain-specific invariant** — `mt_device_assign`, a state assertion;
+- **a non-tenant table, keyed `(endpoint, key)` with a request digest** — the
+  four with no natural key: customer, service and site creation, and the
+  NULL-phone principal.
+
+A unique constraint is **stronger** than a table here, because it cannot be
+bypassed by a caller that omits the key.
+
+### Q7 was searched for and NOT answered
+
+The sibling plugin shows `lte_subscribers` carrying **no uCRM column at all**,
+with the relationship in a separate `lte_service_links` table
+(`UNIQUE(lte_subscriber_id, ucrm_client_id)`, `linked_by`, `linked_at`) — so the
+local entity **can exist unlinked**, and linking is a separate, later, attributed
+act. **But that table links a uCRM *client*, not a *service*, despite its name**,
+and it is the Sudan LTE product, not Uganda MikroTik.
+
+> **It raises the prior for "sometimes Domain-B first" — it does not answer Q7.**
+> Reading a sales workflow off a table definition in another product line is
+> exactly the inference this project forbids. **U-1 and U-5 stay OPEN**, and Q7
+> is an operator question.
+
+### Writer order — Q7 is the critical path, not O-1
+
+`0a` O-1 (census → decision → migration) · **`0b` the non-tenant idempotency
+store — before the first writer, not after**, because a duplicate customer
+cannot be deleted (18 `ON DELETE RESTRICT` FKs) · `1` principal create/disable ·
+`2` `mt_service_create` · `3` `mt_site_create` · `4` a caller for
+`mt_customer_create` · `5` the uCRM link writers · `6` the intent replay fix.
+
+> **Step 2 cannot begin until Q7 is answered**, because the answer decides
+> whether the gate lives in the function or in a service state that does not yet
+> exist. **That makes Q7 the critical path.**
 
 ## Open and parked
 

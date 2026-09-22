@@ -311,9 +311,18 @@ column at all today.
 
 **Also measured:** of the three production `enqueue` call sites, only
 `voucher.publish` passes a key. **`voucher.revoke` and `session.disconnect` pass
-none**, so a retried revoke or disconnect enqueues a second intent that reaches a
-router. Consistent with `docs/103` — `POST /me/vouchers` is the only idempotent
+none.** Consistent with `docs/103` — `POST /me/vouchers` is the only idempotent
 route. *(Recorded as evidence; not in scope to fix here.)*
+
+> **CORRECTED by `docs/108` §0 and §4.** This paragraph originally ended *"so a
+> retried revoke or disconnect enqueues a second intent that reaches a router."*
+> **That clause was an overstatement and is withdrawn.** `bin/worker.php` binds
+> **`NullDelivery`**, so no intent of any kind reaches a router today; the router
+> consequence is latent until F6-B. And the split is **three-way, not two-way**:
+> `voucher.revoke` *is* retry-safe, by a state guard inside its `UPDATE`
+> (`WHERE id = ? AND state IN ('unused','active')`) that returns 404 before the
+> enqueue is reached. **Only `session.disconnect` is unguarded**, and its
+> present-day cost is a duplicate audit row, not a duplicated router action.
 
 ### 6.2 Per-operation design
 
