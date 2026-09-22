@@ -28,6 +28,14 @@ final class AdminProjection
     private const SITE = ['id', 'customer_id', 'service_id', 'name', 'location', 'created_at'];
 
     /**
+     * The service record. `status` is what the control plane RECORDED — what it
+     * was told to set up. It is NOT a liveness signal, and no screen may read it
+     * as one: whether a HotSpot server is actually running on a router stays
+     * unmeasured until F6-B, and SignalReport keeps saying so.
+     */
+    private const SERVICE = ['id', 'customer_id', 'kind', 'status', 'started_at', 'ended_at'];
+
+    /**
      * The estate view of a router. Deliberately includes operational state the
      * customer projection withholds, and deliberately excludes the sealed
      * credential, which no screen renders.
@@ -115,6 +123,10 @@ final class AdminProjection
     public static function session(array $r): array  { return self::pick($r, self::SESSION); }
     public static function intent(array $r): array   { return self::pick($r, self::INTENT); }
     public static function audit(array $r): array    { return self::pick($r, self::AUDIT); }
+    public static function service(array $r): array  { return self::pick($r, self::SERVICE); }
+    /** Detail reuses the LIST allowlist on purpose: a detail view that returned
+     *  more would be a way to reach a withheld field one row at a time. */
+    public static function voucherDetail(array $r): array { return self::pick($r, self::VOUCHER); }
 
     /** @param list<array> $rows */
     public static function many(string $kind, array $rows): array

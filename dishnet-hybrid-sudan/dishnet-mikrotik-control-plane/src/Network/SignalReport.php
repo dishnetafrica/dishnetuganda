@@ -51,12 +51,16 @@ final class SignalReport
                 'admin_readable' => true,
             ],
             [
-                'key' => 'wan_interface', 'label' => 'WAN interface',
+                'key' => 'wan_interface', 'label' => 'WAN interface assignment',
                 'status' => self::MEASURED,
+                // The headline word matters. "MEASURED" beside "WAN interface"
+                // reads as a claim about the link. What is measured is the
+                // interface a person RECORDED at staging, so the panel says so.
+                'verdict' => 'recorded',
                 'source' => 'mt_devices.wan_interface',
                 // Worth saying out loud: this is which port, established by a
                 // named person at staging. It is not a link-state signal.
-                'reason' => 'The interface a person recorded at staging, with their name and the time. Not a link state.',
+                'reason' => 'Staging metadata: the interface a person recorded when the router was prepared, with their name and the time. It is not a link state and says nothing about whether the port is up.',
                 'needs'  => null,
                 'admin_readable' => true,
             ],

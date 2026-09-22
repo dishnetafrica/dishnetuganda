@@ -98,6 +98,32 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
 .op b{font-size:22px}
 .op small{display:block;margin-top:6px;font-size:11.5px;color:var(--muted);line-height:1.4}
 .muted{color:var(--muted);font-size:14px}
+.signals.tight{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.signals.tight .signal{padding:10px 12px}
+.hint{margin:6px 20px 0;font-size:12.5px;color:var(--muted)}
+.lnk{color:var(--accent);cursor:pointer;text-decoration:underline}
+.hscard{margin:10px 20px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.hscard h3{margin:0 0 10px;font-size:15px}
+.hscard h4{margin:14px 0 6px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.hscard .tw{margin:0}
+.hsrow{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.hsrow dt{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.hsrow dd{margin:3px 0 0}
+.hsrow small{display:block;margin-top:3px;font-size:11.5px;color:var(--muted)}
+.vcount{display:flex;flex-wrap:wrap;gap:8px}
+.vc{padding:6px 11px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:var(--muted)}
+.vc b{color:var(--ink);font-size:15px;margin-right:4px}
+.vc.total{background:#11151b;color:#c9d0d8;border-color:#11151b}
+.vc.total b{color:#fff}
+.lifecycle{margin:8px 20px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.lc{display:flex;gap:10px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.lc .dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px;background:var(--green)}
+.lc.unreachable{background:#fbfbfc}
+.lc.unreachable .dot{background:transparent;border:2px solid var(--gray);width:7px;height:7px}
+.lc b{font-size:13.5px;text-transform:capitalize}
+.lc .verdict{margin-left:7px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.lc.reachable .verdict{color:var(--green)}
+.lc p{margin:5px 0 0;font-size:12.5px;color:var(--muted)}
 
 /* Actions, shown inert. Visible so an operator can see what the product will
    do and why it cannot yet. */

@@ -10,6 +10,7 @@ use Dn\Http\Response;
 use Dn\Http\Router;
 use Dn\Http\Serializer\AdminProjection;
 use Dn\Network\SignalReport;
+use Dn\Vouchers\LifecycleReport;
 use Dn\Runtime\Bindings;
 
 /**
@@ -90,6 +91,10 @@ final class AdminRoutes
                 'signals' => SignalReport::inventory(),
                 'actions' => SignalReport::actions(),
                 'summary' => SignalReport::summary(),
+                // Which voucher states this system can actually reach. Declared
+                // here so a screen cannot draw a lifecycle the product lacks.
+                'voucher_lifecycle' => LifecycleReport::voucherStates(),
+                'voucher_lifecycle_summary' => LifecycleReport::summary(),
             ])), auth: false);
 
         // ── estate reads ────────────────────────────────────────────────
@@ -108,6 +113,7 @@ final class AdminRoutes
 
         foreach ([
             ['/api/v1/admin/customers',       Capability::CUSTOMERS_READ, 'mt_admin_customers',       'customer'],
+            ['/api/v1/admin/services',        Capability::SERVICES_READ,  'mt_admin_services',        'service'],
             ['/api/v1/admin/sites',           Capability::SITES_READ,     'mt_admin_sites',           'site'],
             ['/api/v1/admin/routers',         Capability::ROUTERS_READ,   'mt_admin_routers',         'router'],
             ['/api/v1/admin/plans',           Capability::PLANS_READ,     'mt_admin_plans',           'plan'],
@@ -138,6 +144,17 @@ final class AdminRoutes
                 $rows = $reader('mt_admin_router', [$req->params['device_id'] ?? '']);
                 return $rows === [] ? Response::notFound()
                                     : Response::ok(['router' => AdminProjection::router($rows[0])]);
+            }), auth: false);
+
+        // Voucher detail returns EXACTLY the list's fields. Asking for one row
+        // must not be a way to reach a column the list withholds — the code
+        // above all, which stays out of every Admin path (Decision 3).
+        $r->get('/api/v1/admin/vouchers/{voucher_id}',
+            $guard(Capability::VOUCHERS_READ, static function (Request $req) use ($reader, $unconfigured) {
+                if ($unconfigured) { return self::estateReadNotAuthorized(); }
+                $rows = $reader('mt_admin_voucher', [$req->params['voucher_id'] ?? '']);
+                return $rows === [] ? Response::notFound()
+                                    : Response::ok(['voucher' => AdminProjection::voucherDetail($rows[0])]);
             }), auth: false);
 
         // ── mutations ───────────────────────────────────────────────────

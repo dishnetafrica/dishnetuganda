@@ -19,6 +19,7 @@ export const NAV = [
   { sec: 'Network plane' },
   { id: 'dashboard',   label: 'Overview' },
   { id: 'routers',     label: 'Routers' },
+  { id: 'hotspot',     label: 'HotSpot' },
   { id: 'network',     label: 'Network health' },
   { id: 'intents',     label: 'Provisioning jobs' },
   { id: 'sessions',    label: 'Active sessions' },
@@ -136,18 +137,40 @@ function ladder(r) {
  * An unmeasured signal is drawn grey and says what would have to exist. It is
  * never drawn green and never drawn red: red would claim a fault was observed,
  * and nothing observed anything. */
-function signalPanel(sig) {
+function verdictOf(x) {
+  if (x.verdict) return x.verdict;
+  if (x.status !== 'measured') return 'not measured';
+  return x.admin_readable ? 'measured' : 'measured, not exposed';
+}
+
+/* Two audiences, one source.
+ *
+ * `concise` is the operator's view: the signal and a short verdict, nothing
+ * else. An administrator on a normal day should not have to read why a
+ * handshake timestamp is missing in order to use the screen.
+ *
+ * The full form — source, limitation, and what would be required — lives in
+ * Diagnostics, where that is exactly what someone came for. Both read the same
+ * server inventory, so the two can never disagree. */
+function signalPanel(sig, concise = false) {
   if (!sig || !sig.signals) {
     return `<div class="note">The signal inventory could not be read, so no signal is being shown.</div>`;
+  }
+  if (concise) {
+    return `<div class="signals tight">` + sig.signals.map(x => `
+      <div class="signal ${esc(x.status)}${x.status === 'measured' && !x.admin_readable ? ' unexposed' : ''}">
+        <span class="dot"></span>
+        <div><b>${esc(x.label)}</b><span class="verdict">${esc(verdictOf(x))}</span></div>
+      </div>`).join('') + `</div>
+      <div class="hint">Why a signal is unavailable, and what it would take, is in
+        <a class="lnk" data-view="diagnostics">Diagnostics</a>.</div>`;
   }
   return `<div class="signals">` + sig.signals.map(x => `
     <div class="signal ${esc(x.status)}${x.status === 'measured' && !x.admin_readable ? ' unexposed' : ''}">
       <span class="dot"></span>
       <div>
         <b>${esc(x.label)}</b>
-        <span class="verdict">${x.status === 'measured'
-          ? (x.admin_readable ? 'measured' : 'measured, not exposed')
-          : 'no signal'}</span>
+        <span class="verdict">${esc(verdictOf(x))}</span>
         ${x.reason ? `<p>${esc(x.reason)}</p>` : ''}
         ${x.source ? `<p class="src">${esc(x.source)}</p>` : ''}
         ${x.needs ? `<p class="needs">Needs: ${esc(x.needs)}</p>` : ''}
@@ -232,8 +255,122 @@ async function vRouter() {
       router, so its uplink is not measurable. That is a provisioning gap, not a fault.</div>`) +
     `<h2 class="sub">Provisioning</h2>` + ladder(r) +
     `<h2 class="sub">Operations</h2>` + operations +
-    `<h2 class="sub">Signals</h2>` + signalPanel(sig) +
+    `<h2 class="sub">Signals</h2>` + signalPanel(sig, true) +
     actionPanel(sig);
+}
+
+/* Voucher lifecycle, as the DOMAIN currently supports it — not as the
+ * commercial model describes it. Two states are reachable; three are not, and
+ * each says what is missing. Simulating the others would make the prototype
+ * less trustworthy, not more complete. */
+function lifecyclePanel(sig) {
+  const ls = sig && sig.voucher_lifecycle;
+  if (!ls) return '';
+  const sum = sig.voucher_lifecycle_summary || {};
+  return `<div class="note">${esc(sum.note || '')}</div>
+    <div class="lifecycle">${ls.map(x => `
+      <div class="lc ${esc(x.status)}">
+        <span class="dot"></span>
+        <div><b>${esc(x.state)}</b>
+          <span class="verdict">${x.status === 'reachable' ? 'available now' : 'not reachable'}</span>
+          <p>${esc(x.via || x.blocked_by || '')}</p></div>
+      </div>`).join('')}</div>`;
+}
+
+const bytes = n => n == null ? '\u2014' :
+  n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(0) + ' MB' : n + ' B';
+
+async function vHotspot() {
+  const [svcs, plans, vous, custs, sites, sres] = await Promise.all([
+    api.services(), api.plans(), api.vouchers(), api.customers(), api.sites(), api.networkSignals()]);
+  if (!isOk(svcs)) return head('HotSpot') + stateBlock(svcs, 'service');
+  const custName = nameResolver(custs);
+  const sig = sres.status === 200 ? sres.data : null;
+  const hot = svcs.rows.filter(x => x.kind === 'mikrotik_hotspot');
+  const byState = rows => rows.reduce((a, v) => (a[v.state] = (a[v.state] || 0) + 1, a), {});
+
+  const cards = hot.map(sv => {
+    const vp = isOk(plans) ? plans.rows.filter(p => p.customer_id === sv.customer_id) : [];
+    const vv = isOk(vous) ? vous.rows.filter(v => v.customer_id === sv.customer_id) : [];
+    const c = byState(vv);
+    return `<div class="hscard">
+      <h3>${esc(custName(sv.customer_id))}</h3>
+      <div class="hsrow">
+        <div><dt>Service</dt><dd><span class="pill">${esc(sv.status)}</span>
+          <small>recorded, not observed</small></dd></div>
+        <div><dt>RADIUS</dt><dd><span class="muted">not measured</span></dd></div>
+        <div><dt>Active users</dt><dd><span class="muted">not attributable per router</span></dd></div>
+      </div>
+      <h4>Plans</h4>
+      ${vp.length ? table(['Plan', 'Duration', 'Down', 'Price', 'Active'], vp,
+        p => `<tr><td>${esc(p.name)}</td><td>${esc(Math.round(p.duration_s / 60))} min</td>
+              <td>${esc(Math.round(p.rate_down_bps / 1e6))} Mbps</td>
+              <td>${ugx(p.price_minor)}</td>
+              <td>${p.active ? 'yes' : 'retired'}</td></tr>`)
+        : `<p class="muted">No plans.</p>`}
+      <h4>Vouchers</h4>
+      <div class="vcount">${['unused', 'active', 'expired', 'revoked'].map(st =>
+        `<span class="vc"><b>${c[st] || 0}</b> ${st}</span>`).join('')}
+        <span class="vc total"><b>${vv.length}</b> total</span></div>
+    </div>`;
+  }).join('');
+
+  return head('HotSpot', `${hot.length} service${hot.length === 1 ? '' : 's'}`) +
+    `<div class="note">Service state is what the control plane <b>recorded</b>. Whether a
+      HotSpot server is running on a router is not observed by anything here, and stays
+      unavailable until the hardware gate opens.</div>` +
+    cards +
+    `<h2 class="sub">Voucher lifecycle</h2>` + lifecyclePanel(sig);
+}
+
+async function vVoucher() {
+  const [res, plans, sites, custs] = await Promise.all([
+    api.voucher(state.arg), api.plans(), api.sites(), api.customers()]);
+  if (res.state !== S.OK && !(res.data && res.data.voucher)) {
+    return head('Voucher') + stateBlock(res, 'voucher');
+  }
+  const v = res.data.voucher;
+  const planName = nameResolver(plans), siteName = nameResolver(sites),
+        custName = nameResolver(custs);
+  const f = [
+    ['Reference', short(v.id)], ['State', v.state],
+    ['Customer', custName(v.customer_id)], ['Site', siteName(v.site_id)],
+    ['Plan', planName(v.plan_id)], ['Price', ugx(v.price_minor)],
+    ['Duration', Math.round(v.duration_s / 60) + ' min'],
+    ['Issued', v.created_at], ['Activated', v.activated_at],
+    ['Expires', v.expires_at], ['Revoked', v.revoked_at],
+  ];
+  return head('Voucher', esc(short(v.id))) +
+    `<div class="kv">${f.map(([k, val]) =>
+      `<div><dt>${esc(k)}</dt><dd>${val == null || val === '' ? '\u2014' : esc(val)}</dd></div>`).join('')}</div>` +
+    `<div class="note">The voucher <b>code</b> is not shown, here or anywhere in Admin. A
+      code is a bearer credential: whoever holds it holds the access, so it stays out of
+      every path but redemption.</div>`;
+}
+
+async function vSessions() {
+  const [res, vous, sites, plans] = await Promise.all([
+    api.sessions(), api.vouchers(), api.sites(), api.plans()]);
+  if (!isOk(res)) return head('Active sessions') + stateBlock(res, 'session');
+  const vby = new Map(isOk(vous) ? vous.rows.map(v => [v.id, v]) : []);
+  const siteName = nameResolver(sites), planName = nameResolver(plans);
+  return head('Active sessions', `${res.rows.length}`) +
+    `<div class="note"><b>Router attribution unavailable.</b> RADIUS accounting carries a NAS
+      identifier, and nothing maps a NAS identifier to a device, so no session below can be
+      tied to a particular router. Site and plan are derived through the voucher.
+      Accounting source: RADIUS.</div>` +
+    table(['Session', 'Site', 'Plan', 'NAS', 'In', 'Out', 'State', 'Started'], res.rows,
+      x => {
+        const v = vby.get(x.voucher_id);
+        return `<tr>
+          <td class="mono">${esc(short(x.id))}</td>
+          <td>${esc(v ? siteName(v.site_id) : '\u2014')}</td>
+          <td>${esc(v ? planName(v.plan_id) : '\u2014')}</td>
+          <td class="mono">${esc(x.nas_identifier) || '\u2014'}</td>
+          <td>${esc(bytes(x.bytes_in))}</td><td>${esc(bytes(x.bytes_out))}</td>
+          <td><span class="pill">${esc(x.state)}</span></td>
+          <td class="mono">${esc(String(x.started_at ?? '').slice(0, 16))}</td></tr>`;
+      });
 }
 
 async function vNetwork() {
@@ -264,6 +401,8 @@ async function vDiagnostics() {
       <b>this process</b> — which adapters it loaded and which identity it accepted.</div>` +
     `<div class="kv">${rows.map(([k, v]) =>
       `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</div>` +
+    `<h2 class="sub">Why each signal is or is not available</h2>` + signalPanel(acts) +
+    `<h2 class="sub">Voucher lifecycle</h2>` + lifecyclePanel(acts) +
     actionPanel(acts);
 }
 
@@ -287,8 +426,8 @@ const vPlans = list('Plans', () => api.plans(), 'plan',
     <td>${esc(p.devices_per_voucher)}</td>
     <td>${p.active ? 'yes' : 'no'}</td></tr>`, 'plans');
 
-const vVouchers = list('MT Vouchers', () => api.vouchers(), 'voucher',
-  ['Reference', 'State', 'Price', 'Issued', 'Activated', 'Expires'], v => `<tr>
+const vVouchers = list('Vouchers', () => api.vouchers(), 'voucher',
+  ['Reference', 'State', 'Price', 'Issued', 'Activated', 'Expires'], v => `<tr data-voucher="${esc(v.id)}">
     <td class="mono">${short(v.id)}</td><td><span class="pill">${esc(v.state)}</span></td>
     <td>${ugx(v.price_minor)}</td><td>${esc((v.created_at||'').slice(0,16).replace('T',' '))}</td>
     <td>${esc((v.activated_at||'').slice(0,16).replace('T',' ')) || '—'}</td>
@@ -300,13 +439,6 @@ const vBatches = list('Batches', () => api.batches(), 'batch',
     <td>${esc(b.issued_count)}</td><td><span class="pill">${esc(b.state)}</span></td>
     <td>${esc((b.created_at||'').slice(0,16).replace('T',' '))}</td></tr>`, 'batches');
 
-const vSessions = list('MT Sessions', () => api.sessions(), 'session',
-  ['Reference', 'NAS', 'Address', 'In', 'Out', 'State', 'Started'], s => `<tr>
-    <td class="mono">${short(s.id)}</td><td>${esc(s.nas_identifier) || '—'}</td>
-    <td class="mono">${esc(s.ip) || '—'}</td>
-    <td>${esc(s.bytes_in)}</td><td>${esc(s.bytes_out)}</td>
-    <td><span class="pill">${esc(s.state)}</span></td>
-    <td>${esc((s.started_at||'').slice(0,16).replace('T',' '))}</td></tr>`, 'sessions');
 
 /* Intents: state, attempts and target — never payload or last_error (D-2). */
 const vIntents = list('MT Intents', () => api.intents(), 'intent',
@@ -346,7 +478,8 @@ async function vDashboard() {
 const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, plans: vPlans,
                 vouchers: vVouchers, batches: vBatches, sessions: vSessions,
                 intents: vIntents, audit: vAudit, dashboard: vDashboard,
-                network: vNetwork, diagnostics: vDiagnostics };
+                network: vNetwork, diagnostics: vDiagnostics,
+                hotspot: vHotspot, voucher: vVoucher };
 
 function head(title, sub) {
   return `<div class="appbar"><h1>${esc(title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</h1></div>`;
@@ -383,6 +516,9 @@ function wire() {
   });
   document.querySelectorAll('[data-router]').forEach(tr => tr.onclick = () => {
     state.view = 'router'; state.arg = tr.dataset.router; render();
+  });
+  document.querySelectorAll('[data-voucher]').forEach(tr => tr.onclick = () => {
+    state.view = 'voucher'; state.arg = tr.dataset.voucher; render();
   });
   const q = document.getElementById('q');
   if (q) {

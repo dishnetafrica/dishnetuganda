@@ -16,6 +16,7 @@ final class Capability
     public const CUSTOMERS_READ      = 'customers.read';
     public const CUSTOMERS_WRITE     = 'customers.write';
 
+    public const SERVICES_READ       = 'services.read';
     public const SITES_READ          = 'sites.read';
     public const SITES_WRITE         = 'sites.write';
 
@@ -44,6 +45,7 @@ final class Capability
     public const ALL = [
         self::HEALTH_READ,
         self::CUSTOMERS_READ, self::CUSTOMERS_WRITE,
+        self::SERVICES_READ,
         self::SITES_READ, self::SITES_WRITE,
         self::ROUTERS_READ, self::ROUTERS_REGISTER, self::ROUTERS_ASSIGN, self::ROUTERS_ACT,
         self::PLANS_READ, self::PLANS_WRITE, self::PROFILES_READ, self::PROFILES_WRITE,

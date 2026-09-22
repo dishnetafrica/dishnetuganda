@@ -7,7 +7,7 @@ use Dn\Db\Database;
 /**
  * The only way the Admin API reaches data.
  *
- * It can call migration 019's projections and nothing else. The allowlist below
+ * It can call migrations 019 and 021's projections and nothing else. The allowlist below
  * is not politeness — it is the reason a future route cannot pass an arbitrary
  * function name, or SQL, through this seam. The connecting role (`dnb_admin`)
  * holds EXECUTE on exactly these functions and no privilege on any table, so
@@ -22,6 +22,8 @@ final class AdminReader
         'mt_admin_plans' => 0,     'mt_admin_vouchers' => 0,
         'mt_admin_voucher_batches' => 0, 'mt_admin_sessions' => 0,
         'mt_admin_intents' => 0,   'mt_admin_audit' => 0,
+        // Migration 021, approved as an extension of the eleven.
+        'mt_admin_services' => 0,  'mt_admin_voucher' => 1,
     ];
 
     public function __construct(private readonly Database $db) {}

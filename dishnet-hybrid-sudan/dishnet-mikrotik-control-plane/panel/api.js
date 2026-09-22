@@ -46,11 +46,13 @@ export class AdminApi {
   customers()     { return this.get('/api/v1/admin/customers', 'customer'); }
   customer(id)    { return this.get('/api/v1/admin/customers/' + encodeURIComponent(id)); }
   sites()         { return this.get('/api/v1/admin/sites', 'site'); }
+  services()      { return this.get('/api/v1/admin/services', 'service'); }
   routers()       { return this.get('/api/v1/admin/routers', 'router'); }
   router(id)      { return this.get('/api/v1/admin/routers/' + encodeURIComponent(id)); }
   plans()         { return this.get('/api/v1/admin/plans', 'plan'); }
   vouchers()      { return this.get('/api/v1/admin/vouchers', 'voucher'); }
   batches()       { return this.get('/api/v1/admin/voucher-batches', 'batch'); }
+  voucher(id)     { return this.get('/api/v1/admin/vouchers/' + encodeURIComponent(id)); }
   sessions()      { return this.get('/api/v1/admin/sessions', 'session'); }
   intents()       { return this.get('/api/v1/admin/intents', 'intent'); }
   audit()         { return this.get('/api/v1/admin/audit', 'audit'); }

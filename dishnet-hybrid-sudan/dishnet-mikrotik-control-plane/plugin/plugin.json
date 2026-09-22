@@ -74,6 +74,11 @@
       },
       {
         "method": "GET",
+        "path": "/services",
+        "capability": "services.read"
+      },
+      {
+        "method": "GET",
         "path": "/sites",
         "capability": "sites.read"
       },
@@ -95,6 +100,11 @@
       {
         "method": "GET",
         "path": "/vouchers",
+        "capability": "vouchers.read"
+      },
+      {
+        "method": "GET",
+        "path": "/vouchers/{voucher_id}",
         "capability": "vouchers.read"
       },
       {

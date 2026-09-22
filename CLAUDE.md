@@ -275,6 +275,32 @@ routers" came to sit beside a Router Detail showing one.
 The signal inventory separates **`status`** (measured in Domain B) from
 **`admin_readable`** (the Admin API can fetch it). Do not collapse them.
 
+## The Admin read boundary is THIRTEEN projections — `docs/93`
+
+Migration **021** added the two approved additions and nothing else:
+
+- **`mt_admin_services()`** — `id, customer_id, kind, status, started_at,
+  ended_at`. **`status` is RECORDED, not observed.** A service marked `active`
+  does **not** mean a HotSpot server is running. A test asserts `SignalReport`
+  keeps HotSpot liveness `UNMEASURED` whatever this returns. **Never derive
+  HotSpot liveness from service status or from the router's lifecycle state.**
+- **`mt_admin_voucher(uuid)`** — column list **identical to
+  `mt_admin_vouchers()`**, deliberately: a detail view that returned more would
+  be a way to reach a withheld field one row at a time. **`code` is withheld**,
+  here and everywhere in Admin.
+
+**The voucher lifecycle is declared server-side** in
+`src/Vouchers/LifecycleReport.php`: `unused` and `revoked` are reachable;
+`activating`, `active` and `expired` are **not**, each with the reason. **Do not
+manufacture `active` or `expired` vouchers in the simulator to fill a screen** —
+the estate shows 17 vouchers, all `unused`, because that is the truth.
+
+**Operator/engineer split.** Router Detail shows concise verdicts
+(`WireGuard tunnel — NOT MEASURED`) and links to Diagnostics; **Diagnostics**
+carries source, limitation and what would be required. Both render from the same
+server inventory. `WAN interface` is **`WAN interface assignment — RECORDED`**:
+what is measured is the interface a person recorded at staging, not the link.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

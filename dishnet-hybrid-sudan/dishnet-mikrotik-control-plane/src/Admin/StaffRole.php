@@ -31,7 +31,8 @@ enum StaffRole: string
             // for Provisioning, Alerts and Intents.
             self::Noc => [
                 Capability::HEALTH_READ,
-                Capability::CUSTOMERS_READ, Capability::SITES_READ,
+                Capability::CUSTOMERS_READ, Capability::SERVICES_READ,
+                Capability::SITES_READ,
                 Capability::ROUTERS_READ, Capability::ROUTERS_REGISTER,
                 Capability::ROUTERS_ASSIGN, Capability::ROUTERS_ACT,
                 Capability::PLANS_READ, Capability::VOUCHERS_READ,
@@ -45,6 +46,7 @@ enum StaffRole: string
             self::Sales => [
                 Capability::HEALTH_READ,
                 Capability::CUSTOMERS_READ, Capability::CUSTOMERS_WRITE,
+                Capability::SERVICES_READ,
                 Capability::SITES_READ, Capability::SITES_WRITE,
                 Capability::ROUTERS_READ,
                 Capability::PLANS_READ, Capability::PLANS_WRITE,
@@ -55,7 +57,8 @@ enum StaffRole: string
             // change the estate.
             self::Support => [
                 Capability::HEALTH_READ,
-                Capability::CUSTOMERS_READ, Capability::SITES_READ,
+                Capability::CUSTOMERS_READ, Capability::SERVICES_READ,
+                Capability::SITES_READ,
                 Capability::ROUTERS_READ, Capability::PLANS_READ,
                 Capability::VOUCHERS_READ, Capability::SESSIONS_READ,
                 Capability::INTENTS_READ,

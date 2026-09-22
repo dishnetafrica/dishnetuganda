@@ -233,9 +233,30 @@ is_(preg_match('/signalPanel\s*\(\s*sig/', $code), 1,
     'and the panel renders what it was given');
 
 // The decisive one: the panel must not contain its own opinion about these.
+// A POSITIVE claim is the defect; a denial is the correct copy. The earlier
+// form matched "whether a HotSpot server is running ... is not observed",
+// which is the screen saying exactly the right thing. So the window must
+// contain no negator, and — the stronger half — the verdict word a signal
+// renders must come from the server through verdictOf(), never from a literal.
+// Judged on the WHOLE LINE: a non-greedy match stops at the verb, so the
+// negator that makes it a denial often sits just past the match.
+$negated = static fn(string $l): bool =>
+    (bool) preg_match('/\b(not|never|no|none|unavailable|unmeasured|without)\b/i', $l);
+$lines = explode("\n", $code);
 foreach (['wireguard', 'WireGuard', 'RADIUS', 'HotSpot'] as $w) {
-    is_(preg_match('/' . preg_quote($w, '/') . '[^\n]{0,40}(connected|healthy|running|up\b)/i', $code), 0,
-        "the panel asserts nothing about {$w} on its own");
+    $claims = [];
+    foreach ($lines as $l) {
+        if (preg_match('/' . preg_quote($w, '/') . '[^\n]{0,60}?(connected|healthy|running|up\b)/i', $l)
+            && !$negated($l)) {
+            $claims[] = trim(substr($l, 0, 70));
+        }
+    }
+    is_($claims, [], "the panel makes no positive claim about {$w}");
+}
+is_(preg_match('/\$\{esc\(verdictOf\(x\)\)\}/', $code), 1,
+    'a signal\'s verdict word is rendered from the server, never from a literal');
+foreach (['>Connected', '>Healthy', '>Running', '>Up<'] as $lit) {
+    is_(str_contains($code, $lit), false, "no hardcoded verdict {$lit} is rendered");
 }
 is_(preg_match('/class="signal \$\{esc\(x\.status\)\}/', $code), 1,
     'the signal class comes from the server status, so the UI cannot colour it in');
