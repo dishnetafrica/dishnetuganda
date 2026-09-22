@@ -81,6 +81,36 @@ instruction.** `DenyAllIdentity` is still the production Admin binding.
 - **New findings:** **F-7** — `mt_voucher_redeem` changes business state and
   writes no audit row; it is on the frozen redemption path and was **not**
   changed. **F-8** — six caller-written audit sites remain on the customer API.
+  Both audited in `docs/86`; see below.
+
+## The redemption path contradicts Decisions 1 and 3 — `docs/86`
+
+Measured, not inferred:
+
+- **Redemption is wired to nothing.** `mt_voucher_redeem` is called only by
+  `VoucherService::redeem()`, which **has no caller** — no route, no worker, no
+  PWA reference. Adding an audit row to it would be a control that never runs.
+- **The AAA registry row is written at ISSUE time**, not at redemption
+  (`VoucherService::issueBatch`) — Decision 1 says Model B, publish at
+  redemption.
+- **`radius_username` is a reversible transform of the voucher code**
+  (`radius_ref . '-' . code-without-dashes`) — Decision 3 says the voucher code
+  **never** enters the AAA credential path. **This blocks any production-capable
+  voucher activation path.**
+- `mt_hotspot_users` holds **no secret** and **no site**; `RadiusPublisherPort`
+  is called by no production code; Decision 2b is not enforced at activation.
+- **Do not invent an actor taxonomy.** `mt_audit_log` already constrains
+  `actor_kind` by CHECK to `principal | staff | system`. `guest` and `worker` do
+  **not** exist; adding either is a schema decision.
+- **F-8 corrected:** the six customer-API audit sites *are* transactional
+  (`Kernel` wraps every authenticated handler in `TenantContext::run`). The
+  defect is **skippability** — measured. Separately, four mutating routes audit
+  nothing at all: `auth/request-code`, `auth/verify`, `auth/logout`, and
+  `internal/radius/accounting`; the three auth routes also run outside any
+  transaction.
+
+**Q-F7-1…7 and F-8.1…5 are OPEN.** Nothing in this area may be implemented
+without an explicit instruction.
 - **W-4, W-5, W-6 remain OPEN.** Do not invent a staff credential store, a
   suspended state, customer/site editing, or a delivery case that does not exist.
 

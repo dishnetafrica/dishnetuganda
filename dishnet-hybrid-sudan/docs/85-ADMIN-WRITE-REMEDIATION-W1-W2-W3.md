@@ -252,6 +252,14 @@ each is classified rather than quietly folded into scope:
 Six call sites in `src/Api/Routes.php` still write their audit rows from the
 route, on the **customer principal** path (plan created/updated/retired, voucher
 issued/revoked, session disconnect requested). They are the same F-1 pattern.
+
+> **CORRECTED by `docs/86` §B.1 — "the same F-1 pattern" is half right, and the
+> wrong half matters.** These six *are* already written inside the same
+> transaction as their mutation, because `Kernel::handle()` wraps every
+> authenticated handler in `TenantContext::run()`. The defect is
+> **skippability**, not atomicity — measured: calling the service directly
+> instead of through the route produced no audit row at all. `docs/86` also
+> found four mutating routes that audit nothing whatsoever.
 They were not changed because they are the customer API, not the Admin write
 boundary, and moving them means changing the plan/voucher/session services too.
 **Recorded as finding F-8**, for the D-3 audit-scope decision.
