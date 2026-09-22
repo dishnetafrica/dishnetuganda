@@ -49,11 +49,11 @@ $tokB = $signIn('+256700001002');
 // devices
 $devA = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->register(
     'HGX-T-0001', 'hAP ax2', '7.14.3', 'pk-a', '10.66.0.21', 'tech:t'));
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($devA['id'], $A['customer'], $A['site'], 'Lobby AP'));
-$ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setCredentials($devA['id'], 'u', 'p'));
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'shipped'));
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'connected'));
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'provisioned'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($devA['id'], $A['customer'], $A['site'], 'Lobby AP', 'test:staff'));
+$ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->setCredentials($devA['id'], 'u', 'p', 'test:staff'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'shipped', 'test:staff'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'connected', 'test:staff'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($devA['id'], 'provisioned', 'test:staff'));
 // R4: which interface carries the uplink is a staging fact, not a constant.
 // Deliberately NOT ether1 — the fake below offers an ether1 carrying different
 // numbers, so if the sampler ever goes back to guessing, these assertions fail

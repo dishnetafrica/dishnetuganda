@@ -38,6 +38,20 @@ final class Database
     public static function adminApi(): self { return self::connect('adminapi'); }
 
     /**
+     * The Admin API's WRITE identity (migration 020, W-3).
+     *
+     * Holds EXECUTE on the seven approved provisioning functions and NOTHING
+     * else: no INSERT, UPDATE or DELETE on any table, now or by default. It
+     * therefore cannot mutate business state except through a function that
+     * writes its own audit row, which is what makes the audit unskippable
+     * rather than merely customary.
+     *
+     * Deliberately not admin(): dnb_admin still carries migration 015's blanket
+     * table grant, and docs/84 F-3 records why that grant is not revoked here.
+     */
+    public static function adminWrite(): self { return self::connect('adminwrite'); }
+
+    /**
      * RADIUS accounting ingestion. Holds EXECUTE on one function and nothing
      * else — no table privileges at all (migration 018, audit finding F1).
      *
@@ -91,6 +105,7 @@ final class Database
             'worker' => [getenv('DNB_WORKER_USER') ?: 'dnb_worker', getenv('DNB_WORKER_PASS') ?: 'worker-local-dev'],
             'admin'  => [getenv('DNB_ADMIN_USER')  ?: 'dnb_admin',  getenv('DNB_ADMIN_PASS')  ?: 'admin-local-dev'],
             'adminapi' => [getenv('DNB_ADMINAPI_USER') ?: 'dnb_adminapi', getenv('DNB_ADMINAPI_PASS') ?: 'adminapi-local-dev'],
+            'adminwrite' => [getenv('DNB_ADMINWRITE_USER') ?: 'dnb_adminwrite', getenv('DNB_ADMINWRITE_PASS') ?: 'adminwrite-local-dev'],
             'radius' => [getenv('DNB_RADIUS_USER') ?: 'dnb_radius', getenv('DNB_RADIUS_PASS') ?: 'radius-local-dev'],
             default  => [getenv('DNB_APP_USER')    ?: 'dnb_app',    getenv('DNB_APP_PASS')    ?: 'app-local-dev'],
         };

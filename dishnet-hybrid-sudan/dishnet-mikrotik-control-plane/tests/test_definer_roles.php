@@ -107,10 +107,10 @@ t('F2 — the operations that silently did nothing now have side effects');
 $dev = $admin->one("SELECT id FROM mt_device_register('SER-F2','hAP',null,null,'10.81.0.1','tech:f2')")['id'];
 is_((int) $inspect->one('SELECT count(*) AS n FROM mt_devices WHERE serial=?', ['SER-F2'])['n'], 1,
     'register wrote a device row');
-$admin->one('SELECT id FROM mt_device_assign(?,?,?,?)', [$dev, $A['customer'], $A['site'], 'F2 AP']);
+$admin->one('SELECT id FROM mt_device_assign(?,?,?,?,?)', [$dev, $A['customer'], $A['site'], 'F2 AP', 'test:staff']);
 is_($inspect->one('SELECT name FROM mt_devices WHERE id = ?', [$dev])['name'], 'F2 AP',
     'assign genuinely assigned — it used to return a row shape and change nothing');
-$admin->one('SELECT mt_device_set_secret(?,?,?) AS ok', [$dev, 'mgmt', 'sealed-f2']);
+$admin->one('SELECT mt_device_set_secret(?,?,?,?) AS ok', [$dev, 'mgmt', 'sealed-f2', 'test:staff']);
 is_((int) $inspect->one('SELECT count(*) AS n FROM mt_device_secrets WHERE device_id=?', [$dev])['n'],
     1, 'set_secret stored a credential');
 $admin->one('SELECT wan_interface FROM mt_device_set_wan(?,?,?)', [$dev, 'sfp-f2', 'tech:f2']);

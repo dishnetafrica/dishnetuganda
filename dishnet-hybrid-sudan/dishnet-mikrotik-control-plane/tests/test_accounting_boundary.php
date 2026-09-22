@@ -101,7 +101,7 @@ foreach (['mt_sessions','mt_hotspot_users','mt_vouchers','mt_customers','mt_devi
         false, "dnb_radius cannot INSERT into {$tbl}");
 }
 foreach (['mt_intent_claim(text,interval,integer)', 'mt_voucher_redeem(text)',
-          'mt_device_set_secret(uuid,text,text)', 'mt_customer_create(text,text)'] as $fn) {
+          'mt_device_set_secret(uuid,text,text,text)', 'mt_customer_create(text,text)'] as $fn) {
     is_($inspect->one('SELECT has_function_privilege(?,?,?) AS p', ['dnb_radius', $fn, 'EXECUTE'])['p'],
         false, 'dnb_radius cannot execute ' . explode('(', $fn)[0]);
 }

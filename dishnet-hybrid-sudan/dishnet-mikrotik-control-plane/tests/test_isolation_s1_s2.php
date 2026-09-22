@@ -29,8 +29,8 @@ $dev = [];
 foreach (['P' => $P, 'Q' => $Q] as $k => $who) {
     $d = $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->register(
         "SER-{$k}", 'hAP ax2', '7.14.3', "pk-{$k}", '10.66.0.' . ord($k), 'tech:t'));
-    $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->setCredentials($d['id'], 'dn-mgmt', "pw-{$k}"));
-    $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->assign($d['id'], $who['customer'], $who['site'], "AP {$k}"));
+    $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->setCredentials($d['id'], 'dn-mgmt', "pw-{$k}", 'test:staff'));
+    $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->assign($d['id'], $who['customer'], $who['site'], "AP {$k}", 'test:staff'));
     $dev[$k] = $d['id'];
 }
 
@@ -69,7 +69,7 @@ foreach ([$dev['Q'], '00000000-0000-4000-8000-000000000000'] as $probe) {
 
 t('S1 — ATTACK: steal the device first, then read (the two-step from §10.1)');
 throws_(fn() => $ctx->run($P['customer'], fn($db) => $db->one(
-    'SELECT * FROM mt_device_assign(?,?,?,?)', [$dev['Q'], $P['customer'], null, 'stolen'])),
+    'SELECT * FROM mt_device_assign(?,?,?,?,?)', [$dev['Q'], $P['customer'], null, 'stolen', 'test:staff'])),
     'permission denied', 'the request role cannot call mt_device_assign at all');
 is_($owner->one('SELECT customer_id FROM mt_devices WHERE id = ?', [$dev['Q']])['customer_id'],
     $Q['customer'], "and Q's device still belongs to Q");
@@ -77,8 +77,8 @@ is_($owner->one('SELECT customer_id FROM mt_devices WHERE id = ?', [$dev['Q']])[
 t('S1 — ATTACK: the other admin primitives are equally closed');
 foreach ([
     ['mt_device_register(?,?,?,?,?,?)', ['S','m',null,null,null,'t']],
-    ['mt_device_set_state(?,?)', [null, 'active']],
-    ['mt_device_set_secret(?,?,?)', [null, 'u', 'v1.x']],
+    ['mt_device_set_state(?,?,?)', [null, 'active', 'test:staff']],
+    ['mt_device_set_secret(?,?,?,?)', [null, 'u', 'v1.x', 'test:staff']],
 ] as [$sql, $args]) {
     throws_(fn() => $ctx->run($P['customer'], fn($db) => $db->one("SELECT * FROM {$sql}", $args)),
         'permission denied', 'request role denied: ' . explode('(', $sql)[0]);
@@ -93,7 +93,7 @@ $wrongCtx = $ctxW->run($Q['customer'], fn($db) => (new DeviceRegistry($db))->cre
 is_($wrongCtx, null, 'but a worker in the WRONG context gets nothing — the context is the authority');
 
 t('S1 — device configuration is closed the same way (finding S3)');
-$ctxA->run($P['customer'], fn($db) => (new DeviceRegistry($db))->setDesired($dev['P'], ['k' => 'v']));
+$ctxA->run($P['customer'], fn($db) => (new DeviceRegistry($db))->setDesired($dev['P'], ['k' => 'v'], 'test:staff'));
 is_($ctx->run($Q['customer'], fn($db) => $db->one('SELECT desired FROM mt_device_config WHERE device_id = ?', [$dev['P']])),
     null, "Q cannot read P's desired configuration");
 

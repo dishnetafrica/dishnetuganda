@@ -49,15 +49,21 @@ final class DeviceRegistry
             [$deviceId, $interface, $establishedBy]);
     }
 
-    /** Store management credentials sealed, bound to this device. */
-    public function setCredentials(string $deviceId, string $username, string $password): void
-    {
+    /**
+     * Store management credentials sealed, bound to this device.
+     *
+     * $actor is required, not defaulted: the function refuses an unattributed
+     * rotation, and a default here would let a caller quietly become nobody.
+     */
+    public function setCredentials(
+        string $deviceId, string $username, string $password, string $actor
+    ): void {
         $box = $this->box ?? new SecretBox();
         // Via the admin function: a device may still be unassigned when it is
         // staged, and the policy on mt_device_secrets would refuse a row with
         // no customer under any context.
-        $this->db->one('SELECT mt_device_set_secret(?,?,?) AS ok',
-            [$deviceId, $username, $box->seal($password, $deviceId)]);
+        $this->db->one('SELECT mt_device_set_secret(?,?,?,?) AS ok',
+            [$deviceId, $username, $box->seal($password, $deviceId), $actor]);
     }
 
     /** @return array{username:string,password:string}|null */
@@ -83,15 +89,25 @@ final class DeviceRegistry
                 'password' => $box->open($row['secret_sealed'], $deviceId)];
     }
 
-    public function assign(string $deviceId, string $customerId, ?string $siteId, ?string $name): array
-    {
-        return $this->db->one('SELECT * FROM mt_device_assign(?,?,?,?)',
-            [$deviceId, $customerId, $siteId, $name]);
+    /**
+     * Assign a device to a customer, and optionally to one of that customer's
+     * sites.
+     *
+     * The customer/site pairing is checked by a CONSTRAINT, not here, so the
+     * same rule binds a direct UPDATE (migration 020, W-2). A mismatched pair
+     * therefore raises a foreign-key violation and takes the audit row with it.
+     */
+    public function assign(
+        string $deviceId, string $customerId, ?string $siteId, ?string $name, string $actor
+    ): array {
+        return $this->db->one('SELECT * FROM mt_device_assign(?,?,?,?,?)',
+            [$deviceId, $customerId, $siteId, $name, $actor]);
     }
 
-    public function transition(string $deviceId, string $state): array
+    public function transition(string $deviceId, string $state, string $actor): array
     {
-        return $this->db->one('SELECT * FROM mt_device_set_state(?,?)', [$deviceId, $state]);
+        return $this->db->one('SELECT * FROM mt_device_set_state(?,?,?)',
+            [$deviceId, $state, $actor]);
     }
 
     public function find(string $deviceId): ?array
@@ -105,11 +121,11 @@ final class DeviceRegistry
         return $this->db->query('SELECT * FROM mt_devices ORDER BY name NULLS LAST, serial');
     }
 
-    public function setDesired(string $deviceId, array $desired): void
+    public function setDesired(string $deviceId, array $desired, string $actor): void
     {
         // Admin function, for the same reason as the secret above.
-        $this->db->one('SELECT mt_device_set_desired(?, ?::jsonb) AS ok',
-            [$deviceId, json_encode($desired, JSON_THROW_ON_ERROR)]);
+        $this->db->one('SELECT mt_device_set_desired(?, ?::jsonb, ?) AS ok',
+            [$deviceId, json_encode($desired, JSON_THROW_ON_ERROR), $actor]);
     }
 
     public function setActual(string $deviceId, array $actual): void

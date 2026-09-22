@@ -54,6 +54,36 @@ unapproved and blocked. **It is not F6, and F6 is not the next step.**
   consequence of the voucher decision and **not** in the migration plan. It
   awaits production evidence and explicit approval. (`docs/78` §4.2)
 
+## The Admin write floor — built, but bound to nothing
+
+Migration **020** (`docs/85`) implemented W-1/W-2/W-3 **in the development and
+test schema only**:
+
+- **W-1** — all seven provisioning functions write their own audit row inside
+  the same transaction, via `mt_audit_write()`, owned by `dnb_def_audit` and
+  callable **only** by `dnb_def_prov`. No HTTP role may write an audit row
+  directly. The actor is a **parameter from the Admin identity boundary** —
+  never a session GUC, never a request field. Four signatures changed and the
+  four old ones were **dropped**.
+- **W-2** — `device.site_id IS NULL OR device.customer_id = site.customer_id` is
+  a **constraint** (`UNIQUE (id, customer_id)` + composite FK + CHECK), so it
+  binds the direct-`UPDATE` path too. **Nothing was backfilled.**
+- **W-3** — `dnb_adminwrite`: EXECUTE on the seven, **zero table privileges**.
+  `dnb_admin`'s existing grants were **not** revoked (needs its own audit).
+
+**No Admin write route or button is bound, and none may be without a new
+instruction.** `DenyAllIdentity` is still the production Admin binding.
+`Database::adminWrite()` exists and is used by no route.
+
+- **Applying 020 to production is NOT authorized.** It assumes zero existing
+  customer/site violations, which is established for the development schema
+  only. The census comes first.
+- **New findings:** **F-7** — `mt_voucher_redeem` changes business state and
+  writes no audit row; it is on the frozen redemption path and was **not**
+  changed. **F-8** — six caller-written audit sites remain on the customer API.
+- **W-4, W-5, W-6 remain OPEN.** Do not invent a staff credential store, a
+  suspended state, customer/site editing, or a delivery case that does not exist.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

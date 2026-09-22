@@ -31,10 +31,10 @@ $A = $ids['A'];
 $mk = function (string $serial, string $ip) use ($ctxA, $A): array {
     $d = $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->register(
         $serial, 'hAP ax2', '7.14.3', 'pk-' . $serial, $ip, 'tech:t'));
-    $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->assign($d['id'], $A['customer'], $A['site'], $serial));
-    $ctxA->run($A['customer'], fn($x) => (new DeviceRegistry($x))->setCredentials($d['id'], 'u', 'p'));
+    $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->assign($d['id'], $A['customer'], $A['site'], $serial, 'test:staff'));
+    $ctxA->run($A['customer'], fn($x) => (new DeviceRegistry($x))->setCredentials($d['id'], 'u', 'p', 'test:staff'));
     foreach (['shipped', 'connected', 'provisioned'] as $st) {
-        $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->transition($d['id'], $st));
+        $ctxA->runUnscoped(fn($x) => (new DeviceRegistry($x))->transition($d['id'], $st, 'test:staff'));
     }
     return $d;
 };

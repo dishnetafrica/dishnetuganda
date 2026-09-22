@@ -16,13 +16,22 @@ $id = $ctx->run($A['customer'], fn($db) => (new AuditLog($db))->record(
     $A['customer'], $A['principal'], 'principal', 'site.created',
     'site', $A['site'], '10.0.0.1', ['name' => 'lobby']));
 is_(is_string($id) && strlen($id) === 36, true, 'record() returns a uuid');
-$rows = $ctx->run($A['customer'], fn($db) => $db->query('SELECT action, detail FROM mt_audit_log'));
-is_(count($rows), 1, 'A sees its own audit row');
-is_(json_decode($rows[0]['detail'], true)['name'], 'lobby', 'detail survives the round trip');
+$rows = $ctx->run($A['customer'], fn($db) => $db->query(
+    'SELECT action, detail FROM mt_audit_log ORDER BY at'));
+// Two rows, not one: since migration 020 (W-1) onboarding writes its own audit
+// row inside mt_customer_create, so seeding A is itself an audited act. A test
+// that still expected one row would be asserting that the fix is absent.
+is_(array_column($rows, 'action'), ['customer.created', 'site.created'],
+    'A sees the onboarding row it caused and the row it wrote');
+is_(json_decode($rows[1]['detail'], true)['name'], 'lobby', 'detail survives the round trip');
 
 t('audit is isolated like everything else');
-$rows = $ctx->run($B['customer'], fn($db) => $db->query('SELECT id FROM mt_audit_log'));
-is_(count($rows), 0, "B cannot see A's audit rows");
+$rows = $ctx->run($B['customer'], fn($db) => $db->query(
+    'SELECT action, target_id FROM mt_audit_log'));
+is_(array_column($rows, 'action'), ['customer.created'],
+    'B sees only its own onboarding row');
+is_(in_array($A['site'], array_column($rows, 'target_id'), true), false,
+    "B cannot see A's audit rows");
 $rows = $ctx->run($B['customer'], fn($db) => $db->query('SELECT id FROM mt_audit_log WHERE id = ?', [$id]));
 is_(count($rows), 0, "B cannot read A's audit row by id");
 

@@ -91,7 +91,7 @@ is_($unstaged['state'], 'registered', 'a device nobody staged is only registered
 // ===========================================================================
 t('CREDENTIALS — sealed at rest, never a password in a column');
 $reg = new DeviceRegistry($db);
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setCredentials($dev['id'], 'dn-mgmt', 'correct-horse'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setCredentials($dev['id'], 'dn-mgmt', 'correct-horse', 'test:staff'));
 $row = $owner->one('SELECT * FROM mt_device_secrets WHERE device_id = ?', [$dev['id']]);
 is_(str_contains($row['secret_sealed'], 'correct-horse'), false, 'the column does not contain the password');
 is_(str_starts_with($row['secret_sealed'], 'v1.'), true, 'it is a versioned envelope');
@@ -107,7 +107,7 @@ t('CREDENTIALS — an unassigned device\'s secret belongs to nobody');
 is_($ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->credentials($dev['id'])), null,
     'a customer cannot read the secret of a device that is not theirs yet');
 
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($dev['id'], $A['customer'], $A['site'], 'Lobby AP'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->assign($dev['id'], $A['customer'], $A['site'], 'Lobby AP', 'test:staff'));
 $back = $ctxA->run($A['customer'], fn($d) => (new DeviceRegistry($d))->credentials($dev['id']));
 is_($back['password'], 'correct-horse', 'and once assigned, its owner can open it');
 
@@ -148,7 +148,7 @@ is_(RestClient::isTunnelHost('10.66.0.11'), true, 'and accepts a tunnel address'
 // ===========================================================================
 t('DELIVERY — provisioning pushes desired state and confirms by reading back');
 $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setDesired($dev['id'],
-    ['ip/hotspot/profile' => ['use-radius' => 'yes']]));
+    ['ip/hotspot/profile' => ['use-radius' => 'yes']], 'test:staff'));
 $intent = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']],
     $A['principal'], 'device', $dev['id']));
@@ -230,12 +230,12 @@ t('LIFECYCLE — the database refuses an illegal transition');
 // assert the grant, not the rule. Refusing a bad transition is a property of
 // the state machine and has to be shown to someone allowed to attempt it.
 throws_(fn() => $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))
-        ->transition($unstaged['id'], 'active')),
+        ->transition($unstaged['id'], 'active', 'test:staff')),
     'illegal', 'registered cannot jump to active');
 
-$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($unstaged['id'], 'decommissioned'));
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($unstaged['id'], 'decommissioned', 'test:staff'));
 throws_(fn() => $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))
-        ->transition($unstaged['id'], 'staged')),
+        ->transition($unstaged['id'], 'staged', 'test:staff')),
     'decommissioned', 'a decommissioned device cannot come back');
 
 // The delete trigger is asserted as the OWNER, because the app role cannot
@@ -244,7 +244,7 @@ throws_(fn() => $owner->exec('DELETE FROM mt_devices WHERE id = ?', [$unstaged['
     'not deleted', 'and even the owner cannot delete it');
 
 t('a legal transition is allowed');
-$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'shipped'));
+$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'shipped', 'test:staff'));
 is_($ok['state'], 'shipped', 'staged -> shipped is accepted');
 
 t('DIVERGENCE is computed, not stored');
