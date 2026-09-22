@@ -319,7 +319,7 @@ rule. **W-4 is open, so none of this may be bound to an HTTP route.**
 | device assignment | *proposed: required* | no | asserts ownership — but **not the only gate** (`docs/102`) |
 | **service creation** | **proposed: REQUIRED — the first hard gate** | **proposed: required** | the first act asserting a **billable** relationship, and where `docs/101`'s coherence rule lands (*the uCRM service's `clientId` must equal the client linked to that service's customer*) — uncheckable unless both links exist |
 | site creation | **inherited** | inherited | a site needs a service; §1 binds it to that service's customer. **No separate gate** |
-| plan / voucher creation | *proposed: required* | where a service is involved | revenue-bearing; **this is B-2 work** — they write directly under RLS with nowhere to put a check |
+| plan / voucher creation | **~~required~~ — WITHDRAWN by `docs/110` §1** | **~~required~~ — WITHDRAWN** | no uCRM link is required for plan or voucher operations. HotSpot must operate standalone; `docs/110` §4 is the authoritative table |
 | voucher redemption | **FORBIDDEN** | forbidden | `docs/89`, `docs/102` |
 | accounting ingest | **FORBIDDEN** | forbidden | one EXECUTE, no table privileges |
 | audit write | **FORBIDDEN** | forbidden | or the least-established records become the least recorded |

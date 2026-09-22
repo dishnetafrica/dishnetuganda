@@ -176,7 +176,8 @@ voucher issuance → portal redemption → AAA publication
   → RADIUS authentication → HotSpot session → accounting
 ```
 
-`docs/107` §9.2 proposed the opposite for the **first** link in that chain: that
+`docs/105` §9.2 / `docs/106` §9 proposed the opposite for the **first** link in that chain
+*(this document first mis-cited that as `docs/107`; the proposal is in 105 and 106)*: that
 plan creation and voucher issuance, being revenue-bearing, should require the
 uCRM customer link.
 

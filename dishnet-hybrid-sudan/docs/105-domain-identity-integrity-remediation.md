@@ -534,7 +534,7 @@ for approval.
 | `mt_device_assign` | **proposed: yes** | no | the first act that asserts *this customer owns this hardware*. **But it is not the only gate** — `docs/102` measured that a sale completes without it |
 | **`mt_service_create`** | **proposed: YES — the first hard requirement** | **proposed: yes, at or immediately after creation** | a service is the first object that asserts a **billable relationship**. It is also where `docs/101`'s coherence rule lands: *the uCRM service's `clientId` must equal the client linked to that service's customer* — which cannot be checked unless both links exist |
 | `mt_site_create` | **inherited** | inherited | a site cannot exist without a service, and §2 binds it to that service's customer. **No separate gate is needed or wanted** |
-| plan create, voucher issue | **proposed: yes** | yes where a service is involved | revenue-bearing. **This is B-2 work** — they write directly under RLS with no definer function, so today there is nowhere to put the check |
+| plan create, voucher issue | **~~proposed: yes~~ — WITHDRAWN by `docs/110` §1** | **~~yes~~ — WITHDRAWN** | a stored uCRM link is **not** a prerequisite for HotSpot network operation. The error was treating commercial representation and technical capability as one requirement: a voucher sale is revenue to the **operator**, and becomes DishNet revenue only where DishNet bills that operator |
 | voucher redemption | **FORBIDDEN** | forbidden | `docs/89`, `docs/102` |
 | accounting ingest | **FORBIDDEN** | forbidden | `dnb_radius` holds one EXECUTE and no table privileges |
 | any audit write | **FORBIDDEN** | forbidden | or the least-established records become the least recorded |

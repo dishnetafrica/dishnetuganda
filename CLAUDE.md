@@ -876,11 +876,11 @@ be resolved **within the caller's own visibility**, exactly as `docs/88` D-1a
 treats `nas_claimed` — untrusted context may reject early, never establish
 authority.
 
-**U-1 is still OPEN.** Proposed boundary, for approval: the uCRM link becomes
-mandatory at **`mt_service_create`** (the first act asserting a billable
-relationship, and where `docs/101`'s coherence rule lands), and again at the
-commercial writes (B-2). Customer create, principal create and device possession
-stay **unconditional**. Ruled out by evidence: a blanket `NOT NULL` (U-2),
+**U-1 is still OPEN.** ~~Proposed boundary: the uCRM link becomes mandatory at
+`mt_service_create` and again at the commercial writes (B-2).~~ **The commercial-writes
+half is WITHDRAWN by `docs/110` §1 — no uCRM link is required for plan or voucher
+operations.** Customer create, principal create and device possession stay
+**unconditional**, and so now do plans and vouchers. Ruled out by evidence: a blanket `NOT NULL` (U-2),
 gating at `mt_customer_create`, and gating only at `mt_device_assign`.
 
 **Order: O-1 → census → decide I-A/U-1/U-5/C6/P-B → writers.** Nothing
@@ -1220,6 +1220,91 @@ principal, no actor kind — `docs/89`; **no `guest` actor kind is to be added**
 > **`mt_customers` existing is not a reason to make uCRM mandatory.** It is the
 > Domain-B **authorization boundary** — what RLS keys on — carrying a uCRM
 > relationship when one exists. It is not a projection of uCRM.
+
+## Domain B is standalone — the boundary is FROZEN (`docs/110`)
+
+### Withdrawn
+
+**`docs/105` §9.2 and `docs/106` §9 are WITHDRAWN.** A stored uCRM link is **not**
+a prerequisite for plan creation or voucher issuance. The error was treating
+**commercial representation** and **technical capability** as one requirement: a
+voucher sale is revenue to the **operator**, and becomes DishNet revenue only
+where DishNet bills that operator commercially.
+
+### The boundary is MEASURED, not designed
+
+- **Zero** non-column uCRM references in Domain-B `src/` — no client, no adapter,
+  no API call. `ucrm_client_id`'s only writer is still `tests/bootstrap.php`.
+- The **only** outbound HTTP client in Domain B is
+  `Delivery/RouterOs/RestClient.php` — to a **router**, not to uCRM, and inert.
+- `Projection.php` already withholds the field from customers: *"`ucrm_client_id`
+  is internal billing linkage."*
+
+> **Therefore the standalone boundary requires NO migration.** `ucrm_client_id`
+> is already nullable. The one decision that would break it is **U-2**
+> (`NOT NULL`), still gated on **E-2**.
+
+### Nothing on this list needs uCRM
+
+`Domain-B customer → principal → service → site → router register/stage/ship →
+assign → provisioning → plan → voucher batch → voucher → guest redemption → AAA
+→ RADIUS → session → accounting`. Both journeys complete end to end with **no
+uCRM record in existence**.
+
+**"Optional" does NOT mean "uCRM is never used."** The bridge (R-1) remains the
+architecture for every operator DishNet manages commercially. What is rejected is
+uCRM as a **technical dependency of HotSpot operation**.
+
+### uCRM is NOT in the real-time path
+
+```
+guest code → redemption → AAA publication → RADIUS auth → session → accounting
+                  └── uCRM appears NOWHERE on this line ──┘
+```
+
+Not a performance preference — a **security** requirement: anti-enumeration
+(tenant data must not be *required*, since an unknown code resolves no
+customer), **response uniformity is not tradeable**, availability (a CRM outage
+must never stop a paying guest), and privilege (`dnb_portal` and `dnb_radius`
+hold no table privileges and one EXECUTE each). **Putting a uCRM call on this
+line is a regression, not a feature.**
+
+### Where uCRM enters — exactly one point
+
+**An audited link recorded against an existing Domain-B operator**, written once
+with provenance, `dnb_adminwrite` only, never inferred per request and **never
+from a phone number**. It sits *beside* the lifecycle, not inside it.
+
+### If uCRM is unavailable
+
+**Every HotSpot operation continues** — Domain B cannot call uCRM, so there is
+nothing to fail. **Billing, invoicing, dunning and support stop** (they exist
+only in uCRM; `tickets` may not even be API-reachable). And one consequence to
+accept knowingly: under the proposed bridge (U-7 S-1/S-2) **staff authentication
+into the Admin panel depends on uCRM**, so a uCRM outage removes Admin write
+access while the network plane and every guest transaction keep running.
+
+### The three identities
+
+**Domain-B operator** (the RLS authorization boundary) · **uCRM commercial
+customer/service** (where DishNet bills that operator) · **guest** (transient;
+**never** a CRM record of any kind — not a client, not a lead, not a contact; no
+`mt_customers` row, no principal, **no `guest` actor kind**).
+
+### U-1 restated, U-5 deferred
+
+> **U-1 — when, and under what commercial circumstances, does a Domain-B
+> operator get linked to uCRM?**
+
+A **commercial/integration decision**, not a technical dependency. The previous
+framing — *which operation first requires the link* — presumed the answer now
+withdrawn. **Q7 must not be turned into a technical prerequisite for Domain-B
+onboarding.** **U-5 is deferred** until the bridge actually needs it.
+
+**Sequence: freeze the boundary → define the bridge → design the columns →
+implement.** Nothing in `mt_customers`, `mt_services` or the spine changes at
+step 1 — designing columns before the bridge was defined is what produced the
+withdrawn proposal.
 
 ## Open and parked
 
