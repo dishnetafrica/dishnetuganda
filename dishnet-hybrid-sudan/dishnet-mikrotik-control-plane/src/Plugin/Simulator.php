@@ -65,6 +65,9 @@ final class Simulator
         $admin = Database::admin();
         $app   = Database::app();
         $ctx   = new TenantContext($app);
+        // B-2: dnb_app is read-only on the commercial tables since migration
+        // 025, so the acts that are NOT customer acts need their own context.
+        $ctxAdmin = new TenantContext($admin);
 
         // ── customers, each with a service, a principal and sites ──────────
         $estate = [];
@@ -208,7 +211,12 @@ final class Simulator
         foreach (['SIM-MT-0001' => 'SIM-CUST-001', 'SIM-MT-0002' => 'SIM-CUST-001',
                   'SIM-MT-0005' => 'SIM-CUST-003'] as $serial => $ref) {
             $e = $estate[$ref];
-            $ctx->run($e['customer'], function (Database $db) use ($e, $routers, $serial, &$jobs) {
+            // B-2: dnb_app may no longer write mt_intents. A device provisioning
+            // job is a NETWORK-plane act anyway -- when the Admin route that
+            // raises it is finally bound it will be dnb_adminwrite, never the
+            // customer role. The row written is identical; only the connection
+            // differs, and $ctxAdmin is subject to the same RLS.
+            $ctxAdmin->run($e['customer'], function (Database $db) use ($e, $routers, $serial, &$jobs) {
                 (new IntentQueue($db))->enqueue(
                     $e['customer'], 'device.provision',
                     ['device_id' => $routers[$serial]['id']],

@@ -117,8 +117,10 @@ $admin->one('SELECT wan_interface FROM mt_device_set_wan(?,?,?)', [$dev, 'sfp-f2
 is_($inspect->one('SELECT wan_interface FROM mt_devices WHERE id=?', [$dev])['wan_interface'],
     'sfp-f2', 'set_wan recorded the fact');
 
-$ctx->run($A['customer'], fn($db) => $db->exec(
-    "INSERT INTO mt_intents (customer_id, kind) VALUES (?, 'f2.work')", [$A['customer']]));
+// Fixture identity: dnb_app lost mt_intents INSERT in migration 025. What F2
+// is about is whether the WORKER can claim, not who queued the row.
+$inspect->exec(
+    "INSERT INTO mt_intents (customer_id, kind) VALUES (?, 'f2.work')", [$A['customer']]);
 $claimed = $work->query("SELECT * FROM mt_intent_claim('w-f2','5 minutes'::interval,10)");
 is_(count($claimed) >= 1, true, 'the worker claims — it used to report an empty queue forever');
 is_((int) $inspect->one("SELECT count(*) AS n FROM mt_intents WHERE claimed_by='w-f2'")['n'] >= 1,

@@ -99,10 +99,13 @@ is_($ctx->run($Q['customer'], fn($db) => $db->one('SELECT desired FROM mt_device
 
 // ===========================================================================
 t('S2 — ATTACK: the request role invokes the worker claim primitive');
-$iQ = $ctx->run($Q['customer'], fn($db) => (new IntentQueue($db))
-        ->enqueue($Q['customer'], 'secret.work', ['confidential' => 'Q-payload']));
-$iP = $ctx->run($P['customer'], fn($db) => (new IntentQueue($db))
-        ->enqueue($P['customer'], 'other.work', ['x' => 1]));
+// Manufactured on the fixture identity: since migration 025 dnb_app may not
+// INSERT mt_intents at all. What is under attack below is the CLAIM primitive,
+// not the enqueue, so the rows only need to exist.
+$iQ = (new IntentQueue($owner))
+        ->enqueue($Q['customer'], 'secret.work', ['confidential' => 'Q-payload']);
+$iP = (new IntentQueue($owner))
+        ->enqueue($P['customer'], 'other.work', ['x' => 1]);
 
 throws_(fn() => $ctx->run($P['customer'], fn($db) => (new IntentQueue($db))->claim('attacker', '5 minutes', 10)),
     'permission denied', 'the request role cannot call claim() — it has no EXECUTE');
@@ -150,7 +153,7 @@ is_($owner->one('SELECT state FROM mt_intents WHERE id = ?', [$iQ['id']])['state
 t('S2 — LEGITIMATE: concurrent workers still claim disjoint sets');
 $owner->exec('UPDATE mt_intents SET claimed_by = NULL, lease_expires_at = NULL');
 for ($i = 0; $i < 18; $i++) {
-    $ctx->run($P['customer'], fn($db) => (new IntentQueue($db))->enqueue($P['customer'], 'race.test'));
+    (new IntentQueue($owner))->enqueue($P['customer'], 'race.test');
 }
 $a = (new IntentQueue(Database::worker()))->claim('race-a', '5 minutes', 30);
 $b = (new IntentQueue(Database::worker()))->claim('race-b', '5 minutes', 30);

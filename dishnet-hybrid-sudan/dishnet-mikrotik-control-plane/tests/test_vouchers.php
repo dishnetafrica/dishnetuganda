@@ -190,9 +190,15 @@ foreach (['batch_id', 'plan_id', 'sold_by', 'radius', 'profile'] as $f) {
 }
 
 t('EXPIRE, never delete');
+// Fixture identity first, so the refusal is the TRIGGER and not a privilege
+// check; then dnb_app, which since migration 025 cannot reach the trigger.
+throws_(fn() => $owner->exec('DELETE FROM mt_vouchers WHERE id = ?', [$before['id']]),
+    'not deleted', 'the database refuses to delete a voucher');
 throws_(fn() => $ctx->run($A['customer'], fn($d) => $d->exec(
     'DELETE FROM mt_vouchers WHERE id = ?', [$before['id']])),
-    'not deleted', 'the database refuses to delete a voucher');
+    'permission denied', 'and dnb_app cannot even attempt it (B-2)');
+is_($owner->one('SELECT id FROM mt_vouchers WHERE id = ?', [$before['id']]) !== null, true,
+    'CONTROL: the voucher survived both attempts');
 
 t('a retired plan cannot be issued against');
 $call('POST', '/api/v1/me/plans/' . $planA['id'] . '/retire', [], $tokA);

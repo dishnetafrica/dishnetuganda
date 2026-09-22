@@ -255,28 +255,88 @@ is_(count($audits($A['customer'], 'session.disconnect_requested')), 2,
     'and still writes a second audit row. T3 gave it a boundary, not replay safety');
 
 // ===========================================================================
-t('what T3 did NOT close — asserted, so it cannot quietly be assumed closed');
+t('B-2 closed — dnb_app cannot mutate a commercial table at all any more');
 
 $priv = fn(string $tbl, string $p): int => (int) $ins->one(
     'SELECT has_table_privilege(?,?,?)::int AS p', ['dnb_app', $tbl, $p])['p'];
 
-// Migration 015 granted dnb_app SELECT/INSERT/UPDATE/DELETE on ALL tables and
-// only the audit INSERT has been taken back. So the audit trail can no longer
-// be FORGED, but a mutation can still be made WITHOUT one by writing a
-// business table directly. Making these six functions the ONLY write path is
-// the remaining half of B-2: it needs its own caller audit, not least because
-// test_rls_isolation.php deliberately writes these tables as dnb_app to prove
-// RLS, and would measure permission denial instead if the grants went.
-foreach (['mt_plans', 'mt_vouchers', 'mt_voucher_batches',
-          'mt_hotspot_users', 'mt_intents'] as $tbl) {
-    is_($priv($tbl, 'INSERT'), 1,
-        "dnb_app still holds direct INSERT on {$tbl} — the B-2 remainder");
-}
-is_($priv('mt_audit_log', 'INSERT'), 0,
-    'CONTROL: but not on mt_audit_log, which is the one T3 closed');
+$PROTECTED = ['mt_plans', 'mt_vouchers', 'mt_voucher_batches',
+              'mt_hotspot_users', 'mt_intents'];
 
-// And the reason a grant is the weakest evidence in this project, measured in
-// one pair: dnb_app IS granted UPDATE on the audit log and still cannot use it.
+foreach ($PROTECTED as $tbl) {
+    is_([$priv($tbl, 'INSERT'), $priv($tbl, 'UPDATE'), $priv($tbl, 'DELETE')], [0, 0, 0],
+        "dnb_app holds no INSERT, UPDATE or DELETE on {$tbl}");
+    is_($priv($tbl, 'SELECT'), 1,
+        "CONTROL: it can still READ {$tbl} — the routes list and show these");
+}
+is_($priv('mt_profiles', 'INSERT'), 0,
+    'and no INSERT on mt_profiles either — ProfileResolver was deleted with its caller');
+
+t('B-2 — proved by EXECUTION, not by has_table_privilege');
+
+// A grant is the weakest evidence this project accepts, so each revoked verb
+// is run. Every attempt is inside a real tenant context, so nothing is refused
+// merely for want of one.
+$plan2 = $ctx->run($A['customer'], fn(Database $db) =>
+    (new PlanRepository($db))->create($planValues('execution probe'), $A['principal'],
+                                      $A['site'], '10.1.1.1'));
+is_($plan2['customer_id'], $A['customer'],
+    'CONTROL: the legitimate boundary still works, so the connection is live');
+
+$attempts = [
+    'INSERT mt_plans'    => ["INSERT INTO mt_plans (customer_id,profile_id,name,duration_s,
+                              rate_down_bps,rate_up_bps,devices_per_voucher,mode,price_minor,currency)
+                              VALUES (?,?,'direct',60,1,1,1,'elapsed',0,'UGX')",
+                             [$A['customer'], $plan2['profile_id']]],
+    'UPDATE mt_plans'    => ["UPDATE mt_plans SET price_minor = 1 WHERE id = ?", [$plan2['id']]],
+    'DELETE mt_plans'    => ["DELETE FROM mt_plans WHERE id = ?", [$plan2['id']]],
+    'INSERT mt_vouchers' => ["INSERT INTO mt_vouchers (customer_id,plan_id,code,price_minor,currency,duration_s)
+                              VALUES (?,?,'DIRECT-00001',0,'UGX',60)", [$A['customer'], $plan2['id']]],
+    'UPDATE mt_vouchers' => ["UPDATE mt_vouchers SET state = 'revoked' WHERE customer_id = ?", [$A['customer']]],
+    'DELETE mt_vouchers' => ["DELETE FROM mt_vouchers WHERE customer_id = ?", [$A['customer']]],
+    'INSERT mt_voucher_batches' => ["INSERT INTO mt_voucher_batches (customer_id,plan_id,requested_count)
+                                     VALUES (?,?,1)", [$A['customer'], $plan2['id']]],
+    'INSERT mt_hotspot_users'   => ["INSERT INTO mt_hotspot_users (voucher_id,customer_id,radius_username)
+                                     VALUES (?,?,'direct')", [$v['id'], $A['customer']]],
+    'INSERT mt_intents'  => ["INSERT INTO mt_intents (customer_id,kind) VALUES (?,'direct.work')",
+                             [$A['customer']]],
+    'UPDATE mt_intents'  => ["UPDATE mt_intents SET state = 'confirmed' WHERE customer_id = ?",
+                             [$A['customer']]],
+];
+foreach ($attempts as $label => [$sql, $args]) {
+    throws_(fn() => $ctx->run($A['customer'], fn(Database $db) => $db->exec($sql, $args)),
+        'permission denied', "dnb_app: {$label} is refused");
+}
+
+// The whole point: nothing above could have slipped through unaudited.
+is_(count($audits($A['customer'], 'plan.created')), 3,
+    'CONTROL: exactly the three legitimate plan.created rows exist — no direct write landed');
+
+t('B-2 — the default privilege does not expire either');
+
+// Created by the OWNER, deliberately. ALTER DEFAULT PRIVILEGES is recorded
+// per granting role, so it only applies to objects that role creates -- a
+// table made here by the BYPASSRLS fixture identity inherits nothing at all
+// and would make this probe report a clean result for the wrong reason.
+$dbOwner = Database::owner();
+$dbOwner->exec('CREATE TABLE mt_b2_default_probe (id int)');
+try {
+    $p2 = fn(string $v): int => (int) $ins->one(
+        "SELECT has_table_privilege('dnb_app','mt_b2_default_probe',?)::int AS p", [$v])['p'];
+    is_([$p2('INSERT'), $p2('UPDATE'), $p2('DELETE')], [0, 0, 0],
+        'a NEWLY created table grants dnb_app no write of any kind');
+    is_($p2('SELECT'), 1,
+        'CONTROL: it does still grant SELECT — only the writes were taken out of the default');
+} finally {
+    $dbOwner->exec('DROP TABLE mt_b2_default_probe');
+}
+
+t('what remains open, asserted so it cannot be assumed closed');
+
+// mt_audit_log UPDATE/DELETE are still GRANTED to dnb_app and still refused by
+// the append-only trigger. Left alone deliberately: it is outside this pass,
+// and it is the clearest demonstration in the schema that a grant was never
+// the boundary.
 is_($priv('mt_audit_log', 'UPDATE'), 1, 'dnb_app is still GRANTED audit UPDATE');
 throws_(fn() => $ctx->run($A['customer'], fn(Database $db) => $db->exec(
     "UPDATE mt_audit_log SET action = 'tampered' WHERE customer_id = ?", [$A['customer']])),

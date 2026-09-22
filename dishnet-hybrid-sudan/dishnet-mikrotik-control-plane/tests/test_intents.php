@@ -49,18 +49,18 @@ $yes    = fn() => true;
 
 // ---------------------------------------------------------------------------
 t('enqueue');
-$i1 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
-    $A['customer'], 'voucher.create', ['count' => 5], $A['principal'], 'site', $A['site']));
+$i1 = (new IntentQueue($owner))->enqueue(
+    $A['customer'], 'voucher.create', ['count' => 5], $A['principal'], 'site', $A['site']);
 is_($i1['state'], IntentState::QUEUED, 'a new intent is queued');
 is_((int) $i1['attempts'], 0, 'with no attempts yet');
 is_($i1['kind'], 'voucher.create', 'and the kind it was given');
 
 t('an idempotency key does not queue the same work twice');
 $k = 'req-abc';
-$x1 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
-    $A['customer'], 'voucher.create', ['count' => 5], $A['principal'], null, null, $k));
-$x2 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
-    $A['customer'], 'voucher.create', ['count' => 5], $A['principal'], null, null, $k));
+$x1 = (new IntentQueue($owner))->enqueue(
+    $A['customer'], 'voucher.create', ['count' => 5], $A['principal'], null, null, $k);
+$x2 = (new IntentQueue($owner))->enqueue(
+    $A['customer'], 'voucher.create', ['count' => 5], $A['principal'], null, null, $k);
 is_($x1['id'], $x2['id'], 'the second call returns the first intent');
 $n = $ctx->run($A['customer'], fn($d) => (int) $d->one(
     'SELECT count(*) AS n FROM mt_intents WHERE idempotency_key = ?', [$k])['n']);
@@ -68,23 +68,23 @@ is_($n, 1, 'and exactly one row exists');
 
 // ---------------------------------------------------------------------------
 t('STATE MACHINE — the database refuses illegal transitions');
-$bad = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'x'));
-throws_(fn() => $ctx->run($A['customer'], fn($d) => $d->exec(
-    "UPDATE mt_intents SET state = 'confirmed' WHERE id = ?", [$bad['id']])),
+$bad = (new IntentQueue($owner))->enqueue($A['customer'], 'x');
+throws_(fn() => $owner->exec(
+    "UPDATE mt_intents SET state = 'confirmed' WHERE id = ?", [$bad['id']]),
     'illegal', 'queued cannot jump straight to confirmed');
 
-$ctx->run($A['customer'], fn($d) => $d->exec("UPDATE mt_intents SET state='sent' WHERE id=?", [$bad['id']]));
-$ctx->run($A['customer'], fn($d) => $d->exec("UPDATE mt_intents SET state='confirmed' WHERE id=?", [$bad['id']]));
-throws_(fn() => $ctx->run($A['customer'], fn($d) => $d->exec(
-    "UPDATE mt_intents SET state = 'queued' WHERE id = ?", [$bad['id']])),
+$owner->exec("UPDATE mt_intents SET state='sent' WHERE id=?", [$bad['id']]);
+$owner->exec("UPDATE mt_intents SET state='confirmed' WHERE id=?", [$bad['id']]);
+throws_(fn() => $owner->exec(
+    "UPDATE mt_intents SET state = 'queued' WHERE id = ?", [$bad['id']]),
     'terminal', 'a confirmed intent cannot be reopened');
-throws_(fn() => $ctx->run($A['customer'], fn($d) => $d->exec(
-    "UPDATE mt_intents SET state = 'sent' WHERE id = ?", [$bad['id']])),
+throws_(fn() => $owner->exec(
+    "UPDATE mt_intents SET state = 'sent' WHERE id = ?", [$bad['id']]),
     'terminal', 'nor moved back to sent');
 
 // ---------------------------------------------------------------------------
 t('CRASH SAFETY — a claim is a lease, not a handover');
-$c = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'crash.test'));
+$c = (new IntentQueue($owner))->enqueue($A['customer'], 'crash.test');
 $got = $q->claim('worker-1', '5 minutes', 10);
 $mine = array_filter($got, fn($r) => $r['id'] === $c['id']);
 is_(count($mine), 1, 'worker-1 claims it');
@@ -108,7 +108,7 @@ t('CRASH SAFETY — two workers racing never claim the same intent');
 // the same row and both would deliver.
 $owner->exec('DELETE FROM mt_intents');
 for ($i = 0; $i < 20; $i++) {
-    $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'race.test'));
+    (new IntentQueue($owner))->enqueue($A['customer'], 'race.test');
 }
 $w1 = (new IntentQueue(Database::worker()))->claim('race-1', '5 minutes', 20);
 $w2 = (new IntentQueue(Database::worker()))->claim('race-2', '5 minutes', 20);
@@ -119,7 +119,7 @@ is_(count($o1) + count($o2), 20, 'and between them they claim every one, exactly
 // ---------------------------------------------------------------------------
 t('RETRY — a retryable failure backs off rather than spinning');
 $owner->exec('DELETE FROM mt_intents');
-$r = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'retry.test'));
+$r = (new IntentQueue($owner))->enqueue($A['customer'], 'retry.test');
 $flaky = new Scripted(fn() => DeliveryResult::retryable('router unreachable'), $yes);
 $w = new IntentWorker($workDb, $ctxW, $q, $flaky, 'w-retry');
 $out = $w->runOnce();
@@ -140,7 +140,7 @@ is_($row['state'], IntentState::FAILED, 'the last attempt fails it permanently')
 is_(str_contains($row['last_error'], 'unreachable'), true, 'and records why');
 
 t('RETRY — a permanent failure does not burn five attempts first');
-$p = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'perm.test'));
+$p = (new IntentQueue($owner))->enqueue($A['customer'], 'perm.test');
 $broken = new Scripted(fn() => DeliveryResult::permanent('malformed request'), $yes);
 (new IntentWorker($workDb, $ctxW, $q, $broken, 'w-perm'))->runOnce();
 $row = $owner->one('SELECT state, attempts FROM mt_intents WHERE id = ?', [$p['id']]);
@@ -150,7 +150,7 @@ is_((int) $row['attempts'] <= 1, true, 'without retrying something that can neve
 // ---------------------------------------------------------------------------
 t('CONFIRMATION is a read, never the write\'s own return value');
 $owner->exec('DELETE FROM mt_intents');
-$ok = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'confirm.test'));
+$ok = (new IntentQueue($owner))->enqueue($A['customer'], 'confirm.test');
 // The router ACCEPTS the command and does not apply it. A design that trusted
 // the write's success would call this done.
 $lying = new Scripted($always, fn() => false);
@@ -162,7 +162,7 @@ is_($row['state'], IntentState::QUEUED, 'it goes back for another look rather th
 
 t('the happy path confirms');
 $owner->exec('DELETE FROM mt_intents');
-$h = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'happy.test'));
+$h = (new IntentQueue($owner))->enqueue($A['customer'], 'happy.test');
 $good = new Scripted($always, $yes);
 $out = (new IntentWorker($workDb, $ctxW, $q, $good, 'w-good'))->runOnce();
 is_($out['confirmed'], 1, 'delivered and confirmed');
@@ -174,7 +174,7 @@ is_([$row['s'], $row['c']], [true, true], 'both timestamps are set');
 // ---------------------------------------------------------------------------
 t('EXPIRY — work past its deadline stops rather than queueing forever');
 $owner->exec('DELETE FROM mt_intents');
-$e = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'old.test'));
+$e = (new IntentQueue($owner))->enqueue($A['customer'], 'old.test');
 $owner->exec("UPDATE mt_intents SET deadline_at = now() - interval '1 hour' WHERE id = ?", [$e['id']]);
 is_($q->expireOverdue(), 1, 'the sweep expires it');
 is_($owner->one('SELECT state FROM mt_intents WHERE id = ?', [$e['id']])['state'],
@@ -184,8 +184,12 @@ is_(count($q->claim('w-z', '5 minutes', 10)), 0, 'and it is no longer claimable'
 // ---------------------------------------------------------------------------
 t('ISOLATION — intents do not cross customers');
 $owner->exec('DELETE FROM mt_intents');
-$ia = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue($A['customer'], 'a.only'));
-$ib = $ctx->run($B['customer'], fn($d) => (new IntentQueue($d))->enqueue($B['customer'], 'b.only'));
+$ia = (new IntentQueue($owner))->enqueue($A['customer'], 'a.only');
+$ib = (new IntentQueue($owner))->enqueue($B['customer'], 'b.only');
+// The READS stay on dnb_app. Manufacturing the rows moved to the fixture
+// identity (B-2: dnb_app may no longer INSERT mt_intents), but the isolation
+// under test is what dnb_app can SEE, and the fixture identity is BYPASSRLS --
+// running these through it would make the assertion vacuous.
 $seen = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->forCustomer());
 is_(count($seen), 1, 'A sees one intent');
 is_($seen[0]['kind'], 'a.only', "and it is A's");

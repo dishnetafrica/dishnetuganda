@@ -193,9 +193,18 @@ is_($r->body['plan']['active'], false, 'and the plan is inactive');
 is_($owner->one('SELECT id FROM mt_plans WHERE id = ?', [$p3['id']]) !== null, true,
     'the row still exists');
 
+// Run on the fixture identity, which is BYPASSRLS and holds every privilege:
+// the refusal can then only be the TRIGGER, which is what is under test. Since
+// migration 025 the same statement as dnb_app would stop at the privilege
+// check and prove nothing about the trigger -- so both are asserted, in that
+// order, and neither stands in for the other.
+throws_(fn() => $owner->exec('DELETE FROM mt_plans WHERE id = ?', [$p3['id']]),
+    'retired, not deleted', 'the database refuses a DELETE outright');
 throws_(fn() => $ctx->run($A['customer'], fn($d) => $d->exec(
     'DELETE FROM mt_plans WHERE id = ?', [$p3['id']])),
-    'retired, not deleted', 'the database refuses a DELETE outright');
+    'permission denied', 'and dnb_app cannot even attempt it (B-2)');
+is_($owner->one('SELECT id FROM mt_plans WHERE id = ?', [$p3['id']]) !== null, true,
+    'CONTROL: the row survived both attempts');
 
 t('a retired plan still appears, marked inactive');
 $list = $call('GET', '/api/v1/me/plans', [], $tokA)->body['plans'];

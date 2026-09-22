@@ -112,8 +112,8 @@ is_($fnpriv('dnb_admin'),  0, 'dnb_admin may not');
 
 // An intent to audit, enqueued the way the customer API does.
 $ctxApp2 = new TenantContext($app);
-$intentId = $ctxApp2->run($A, fn(Database $db) => (new \Dn\Intents\IntentQueue($db))
-    ->enqueue($A, 'voucher.publish', ['probe' => true], null, 'probe', 'x', null, 'system'))['id'];
+$intentId = (new \Dn\Intents\IntentQueue($ins))
+    ->enqueue($A, 'voucher.publish', ['probe' => true], null, 'probe', 'x', null, 'system')['id'];
 is_(is_string($intentId) && $intentId !== '', true, 'CONTROL: an intent exists to audit');
 
 $worker = Database::worker();

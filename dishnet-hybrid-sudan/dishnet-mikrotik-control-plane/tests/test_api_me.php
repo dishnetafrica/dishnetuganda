@@ -124,10 +124,10 @@ foreach (['serial','wg_ip','wgIp','endpoint','ros_version','tunnel_ip',
 t('GET /me/intents — a customer sees its own queued work and no more');
 $qa = new \Dn\Intents\IntentQueue($db);
 $ctx = new TenantContext($db);
-$ia = $ctx->run($A['customer'], fn($d) => (new \Dn\Intents\IntentQueue($d))
-        ->enqueue($A['customer'], 'voucher.create', ['secret_count' => 99], $A['principal']));
-$ib = $ctx->run($B['customer'], fn($d) => (new \Dn\Intents\IntentQueue($d))
-        ->enqueue($B['customer'], 'voucher.create', [], $B['principal']));
+$ia = (new \Dn\Intents\IntentQueue($owner))
+        ->enqueue($A['customer'], 'voucher.create', ['secret_count' => 99], $A['principal']);
+$ib = (new \Dn\Intents\IntentQueue($owner))
+        ->enqueue($B['customer'], 'voucher.create', [], $B['principal']);
 
 $r = $call('GET', '/api/v1/me/intents', [], $tokA);
 is_($r->status, 200, 'the route responds');

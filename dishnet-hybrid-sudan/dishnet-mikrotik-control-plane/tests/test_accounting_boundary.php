@@ -27,8 +27,11 @@ $ids = seed_two_customers($inspect);
 $P = $ids['A']; $Q = $ids['B'];
 
 /** Give a customer a plan, a voucher and a hotspot user. */
-$hotspot = function (array $who, string $tag) use ($ctx, $inspect): string {
-    return $ctx->run($who['customer'], function (Database $db) use ($who, $tag) {
+// Manufactured on the fixture identity. Since migration 025 dnb_app may not
+// write these tables at all -- and it never should have here: what this suite
+// tests is the ACCOUNTING boundary, so the rows only need to exist.
+$hotspot = function (array $who, string $tag) use ($inspect): string {
+    return (function (Database $db) use ($who, $tag) {
         $prof = $db->one('INSERT INTO mt_profiles (rate_down_bps,rate_up_bps,session_timeout_s,shared_users)
                           VALUES (?,?,?,?) ON CONFLICT DO NOTHING RETURNING id',
                          [1000000 + crc32($tag) % 9000, 500000, 3600, 2])['id']
@@ -45,7 +48,7 @@ $hotspot = function (array $who, string $tag) use ($ctx, $inspect): string {
         $db->exec('INSERT INTO mt_hotspot_users (voucher_id,customer_id,radius_username) VALUES (?,?,?)',
                   [$v, $who['customer'], $u]);
         return $u;
-    });
+    })($inspect);
 };
 $uP = $hotspot($P, 'P');
 $uQ = $hotspot($Q, 'Q');
