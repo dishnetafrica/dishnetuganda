@@ -66,18 +66,49 @@ docker exec -i <container> psql -q -U <role> -d <database> \
   < tools/audit/production_census.sql > census.txt 2>&1
 ```
 
-## 3. Minimum role requirements
+## 3. Minimum role requirements — NO SUPERUSER, NO `BYPASSRLS`
+
+**This section was rewritten once the census was re-routed through the Admin
+projections. It no longer needs a bypassing role, and you should not create
+one: a role created to bypass RLS for a census outlives the census.**
+
+Every data measurement now reads through `mt_admin_sites()`,
+`mt_admin_services()`, `mt_admin_routers()`, `mt_admin_vouchers()`,
+`mt_admin_voucher_batches()` and `mt_admin_customers()`. `dnb_def_admin` holds
+SELECT-only `USING (true)` policies behind them, so an ordinary
+**`dnb_adminapi`** login sees the whole estate with **`superuser = f`,
+`bypassrls = f`**. The script prints the path it actually took.
+
+**Run it TWICE, with two ordinary roles. Neither is a superuser.**
+
+| Run | Role | What it establishes | Why the other role cannot |
+|---|---|---|---|
+| **1** | **`dnb_adminapi`** | all DATA — sections 1b, 2, 3, 4 | the owner cannot EXECUTE the projections, so it falls back to base tables and is blinded by `FORCE RLS` |
+| **2** | the schema **owner** (`dnb`) | the SCHEMA level — section 1, the migration ledger and applied filenames | the projections do not cover `mt_migrations`, and `dnb_adminapi` has no `SELECT` on it |
+
+**Do not grant anything to make one run do both.** No production privilege
+change is authorised for the census. Two transcripts is the correct answer.
 
 | | Requirement | Why |
 |---|---|---|
-| **`BYPASSRLS`** (or superuser) | **essential** | These tables use `FORCE ROW LEVEL SECURITY`, which binds even the table owner. Without it **the counts can read 0 while rows exist** |
 | `CONNECT` on the database, `USAGE` on schema `public` | essential | to run at all |
-| `SELECT` on `mt_devices`, `mt_vouchers`, `mt_voucher_batches`, `mt_sites`, `mt_migrations` | essential | `BYPASSRLS` removes the row filter, not the need for `SELECT` |
+| Run 1: `EXECUTE` on the `mt_admin_*()` projections | essential | `dnb_adminapi` already has it |
+| Run 2: `SELECT` on `mt_migrations` | essential | the owner already has it |
+| `BYPASSRLS` / superuser | **NOT required, and not to be created** | the projection path replaces it |
 | Any write privilege | **not required** | the script cannot write — §7 |
 
-The script checks this itself and prints a warning **before and after** the
-counts if the role cannot bypass RLS. **If that warning appears, the numbers are
-lower bounds, not totals — re-run as a bypassing role.**
+**A section the role cannot read is now SKIPPED, not fatal.** Earlier the whole
+run aborted on the first permission error, which could be mistaken for a short
+but clean census. It now prints `*** SECTION n UNREADABLE by <role>` and
+carries on.
+
+### The verdict is withheld unless the run proved it could see something
+
+`SECTION 6` prints `CLEAR`, `BLOCKED(n)` or `INDETERMINATE`. It reports
+**INDETERMINATE** whenever any measurement was refused *or* when every table
+read empty and nothing proved the session can see anything at all — because a
+zero-row read has seven possible causes and only one of them is a finding.
+**A census that reports INDETERMINATE has not been run.**
 
 ## 4. Confirming you are on the authoritative database
 
