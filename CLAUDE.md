@@ -1474,6 +1474,76 @@ remains a blocker before F6-B.
 **None of the nine is customer-facing.** The customer plane keeps exactly what it
 has — plans, vouchers, sessions, `/me`. **B-2** is separate work.
 
+## A-1 audit integrity — remediation designed (`docs/113`)
+
+Every login role was **execution-tested** with a connection control, so no
+refusal below is a false negative.
+
+| Role | direct INSERT | UPDATE | DELETE | Required final |
+|---|---|---|---|---|
+| `dnb_admin` | **ALLOWED** | refused | refused | **NONE** |
+| `dnb_app` | **ALLOWED** | refused | refused | **NONE**, after F-8 |
+| `dnb_worker` | **ALLOWED** | refused | refused | **NONE**, via a definer |
+| `dnb_adminapi` · `dnb_adminwrite` · `dnb_radius` | refused | refused | refused | already correct |
+| `dnb_def_audit` | owns `mt_audit_write` | no | no | **the only writer** |
+
+- **THREE roles can forge, not two.** `docs/112` named `dnb_admin` and
+  `dnb_worker`; **`dnb_app` is the third, and it is the customer-facing HTTP
+  role** — it writes six audit sites today (F-8), so it **cannot simply be
+  revoked**.
+- **UPDATE and DELETE are refused for every role, including those holding the
+  grant.** The append-only trigger holds universally, so the exposure is
+  **forgery only — never tampering or erasure**.
+
+### The diagnosis
+
+Migration 015's blanket grant rested on its own stated reasoning: *"Each is
+subject to RLS on every table; the difference between them is only which
+SECURITY DEFINER functions they may call."* That **holds for business tables**
+and **fails for `mt_audit_log`**, because **RLS constrains which tenant a row
+belongs to — not whether the row is true.** A forged row naming another actor
+satisfies `customer_id = mt_current_customer()` perfectly.
+
+> **A-1 is not an error in migration 015's logic; it is a table to which that
+> logic does not apply.**
+
+### Proven safe to remediate
+
+Run as `dnb_adminwrite`: it **cannot INSERT** `mt_audit_log` (*permission
+denied*) and **cannot even SELECT** it (no EXECUTE on `mt_current_customer`, so
+it cannot evaluate the policy) — yet `mt_customer_create(…)` **succeeds and
+writes 1 audit row**. **The eight functions depend on `dnb_def_audit`'s
+privilege, never the caller's**, so revoking direct INSERT cannot break them.
+
+### Three tiers
+
+| | Role | Action | New objects | Breaks |
+|---|---|---|---|---|
+| **T1** | `dnb_admin` | `REVOKE` | **none — no schema change** | the **simulator only** |
+| **T2** | `dnb_worker` | one definer for `intent.confirmed`/`.failed`, then revoke | one function | nothing |
+| **T3** | `dnb_app` | the **F-8 remediation**, then revoke | six sites | the customer API until done |
+
+- **`dnb_admin` has no production caller.** The only caller of
+  `Database::admin()` is **`Simulator.php`**, excluded from the package. So T1
+  breaks the simulator and nothing else — and the simulator builds its estate
+  *through the real write paths* deliberately, so **do not silently break it**:
+  point it at the owner role or give it a development-only identity.
+- **`dnb_worker` genuinely needs `mt_intents`** (the claim/lease `UPDATE`), so it
+  cannot go to zero privileges like `dnb_adminwrite`. Only its audit write moves.
+- **A revoke that leaves `ALTER DEFAULT PRIVILEGES` in place is a fix that
+  expires** — future tables would silently re-acquire the grant.
+
+### Binding on the spine
+
+**No spine function may be granted EXECUTE to `dnb_admin`, `dnb_worker` or
+`dnb_app`** while each can independently forge an audit row. An unskippable
+audit row gains nothing if a forged one can sit beside it. **T1 should precede
+the first spine writer** — it costs a `REVOKE`.
+
+**Also found: `dnb_plain`**, a role in the development cluster that **nothing in
+the repository creates**. Not one of the twelve. **The production census must
+enumerate roles**, not assume them.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
