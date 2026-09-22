@@ -168,9 +168,30 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
   .tiles{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
   th,td{padding:9px 10px}
 }
+/* ── the login gate ───────────────────────────────────────────────────── */
+#gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.lg{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:28px 30px;max-width:520px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.lg h1{margin:0;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lg h2{margin:6px 0 4px;font-size:23px}
+.lg p{margin:8px 0;color:var(--muted)}
+.lg .lg-sub{margin-top:0}
+.lg .lg-label{color:var(--ink);font-weight:600;margin-top:18px}
+.lg-roles{display:flex;gap:8px;flex-wrap:wrap}
+.lg-btn{font:inherit;cursor:pointer;background:var(--accent);color:#fff;border:0;
+        border-radius:8px;padding:9px 16px;text-transform:capitalize}
+.lg-btn:hover{filter:brightness(1.08)}
+.lg-stop .lg-btn{background:#11151b}
+.lg-dev{border:1px solid #f0c36b;background:#fff8e8;color:#3b2a00;border-radius:8px;padding:10px 12px;font-size:12.5px}
+.lg-dev b{letter-spacing:.06em}
+.lg-stop{border-color:#e6b4b4}
+.lg-meta{font-size:12.5px}
+.lg-busy .lg-spin{color:var(--ink);font-weight:600}
+@media (max-width:520px){ .lg{padding:22px 18px} }
 </style>
 </head><body>
-<div class="shell">
+<div id="gate" hidden></div>
+<div class="shell" hidden>
   <aside><div class="brand">DishNet Admin</div><nav id="nav"></nav></aside>
   <main>
     <div id="evidence"></div>

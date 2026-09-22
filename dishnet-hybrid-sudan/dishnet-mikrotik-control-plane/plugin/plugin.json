@@ -273,6 +273,27 @@
         }
       ],
       "reason": "These paths EXIST and every one answers 501. They are declared so the capability matrix is complete and testable, not because anything is bound. Binding them needs the staff identity provider (W-4) first, otherwise an audit row has no actor to name. The write floor itself is built (migration 020) and used by nothing."
+    },
+    "session": {
+      "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. These routes write no Domain-B table, which is why 'surface' stays read-only and 'writes.bound' stays empty.",
+      "production": "POST answers 501 production_authentication_unavailable unless a staff identity provider is configured. The default is DenyAllIdentity (W-4) and there is no fallback from it to the development identity.",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/session",
+          "capability": null
+        },
+        {
+          "method": "POST",
+          "path": "/session",
+          "capability": null
+        },
+        {
+          "method": "DELETE",
+          "path": "/session",
+          "capability": null
+        }
+      ]
     }
   },
   "install": {

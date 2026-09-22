@@ -24,6 +24,8 @@ require dirname(__DIR__, 2) . '/src/autoload.php';
 
 use Dn\Admin\AdminReader;
 use Dn\Admin\DenyAllIdentity;
+use Dn\Admin\AdminSession;
+use Dn\Admin\DevSessionIdentity;
 use Dn\Admin\DevStaffIdentity;
 use Dn\Admin\StaffRole;
 use Dn\Api\AdminRoutes;
@@ -38,10 +40,21 @@ $bindings = Bindings::defaults();
 // A development identity is opt-in, loud, and impossible alongside F6-B.
 // DevStaffIdentity throws rather than degrading, so a misconfigured deployment
 // fails to start instead of quietly admitting a staff member who does not exist.
+//
+// THE FALLBACK ONLY RUNS ONE WAY. DenyAllIdentity is the start and the
+// default; a development identity can REPLACE it inside the gate below, and
+// nothing anywhere replaces a failed development identity with a working one,
+// or a production identity with a development one. $issuer stays null unless
+// this block ran, and the login route has nothing to mint with when it is.
 $identity = new DenyAllIdentity();
+$issuer   = null;
 $devMode  = (getenv(DevStaffIdentity::ENV) ?: '') === DevStaffIdentity::VALUE;
 if ($devMode) {
-    $identity = new DevStaffIdentity(StaffRole::Admin);
+    // DevSessionIdentity requires a real login, so the panel has an
+    // unauthenticated state to render. It throws rather than degrading if
+    // either gate fails -- the process does not start, which is the point.
+    $issuer   = new DevSessionIdentity(new AdminSession());
+    $identity = $issuer;
 }
 
 // ── the projection reader ───────────────────────────────────────────────────
@@ -54,7 +67,7 @@ try {
     error_log('[dnb-plugin] admin read connection unavailable: ' . $e::class);
 }
 
-$router = AdminRoutes::build($identity, $bindings, $reader);
+$router = AdminRoutes::build($identity, $bindings, $reader, $issuer);
 $req    = Request::fromGlobals();
 
 $match = $router->match($req->method, $req->path);

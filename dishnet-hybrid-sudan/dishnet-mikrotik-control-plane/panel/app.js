@@ -6,6 +6,7 @@
  *
  * READ ONLY. No view renders a control that changes state.
  */
+import { Session, renderGate, L } from './login.js';
 import { AdminApi, S, cohort, COHORT_LABEL, contactAge, evidenceLevel } from './api.js';
 
 const api = new AdminApi();
@@ -528,8 +529,57 @@ function wire() {
   }
 }
 
+/**
+ * THE GATE RUNS FIRST, AND IT RUNS ON THE SERVER'S ANSWER.
+ *
+ * Nothing is fetched and nothing is drawn until GET /session has said who —
+ * if anyone — this browser is. The panel does not decide it is authenticated;
+ * it asks, and re-asks whenever a screen comes back 401.
+ */
+export const session = new Session();
+
+function paintGate() {
+  const html = renderGate(session);
+  const gate = document.getElementById('gate');
+  const shell = document.querySelector('.shell');
+  if (html === null) {
+    gate.innerHTML = ''; gate.hidden = true;
+    if (shell) { shell.hidden = false; }
+    return false;
+  }
+  if (shell) { shell.hidden = true; }
+  gate.hidden = false;
+  gate.innerHTML = html;
+  gate.querySelectorAll('[data-act="login"]').forEach(b => {
+    b.onclick = async () => {
+      paintGateBusy();
+      await session.login(b.dataset.role);
+      if (!paintGate()) { await boot(); }
+    };
+  });
+  const back = gate.querySelector('[data-act="back"]');
+  if (back) { back.onclick = async () => { await session.refresh(); if (!paintGate()) { await boot(); } }; }
+  return true;
+}
+
+function paintGateBusy() {
+  const gate = document.getElementById('gate');
+  gate.hidden = false;
+  gate.innerHTML = renderGate({ ...session, state: L.WORKING });
+}
+
+/** Any screen answering 401 sends us back to the gate rather than drawing nothing. */
+export async function onUnauthorized() {
+  await session.refresh();
+  paintGate();
+}
+
 export async function boot() {
+  await session.refresh();
+  if (paintGate()) { return; }          // not signed in: the gate is the whole UI
+
   const h = await api.health();
+  if (h.status === 401) { return onUnauthorized(); }
   state.health = h.status === 200 ? h.data : null;
   await render();
 }

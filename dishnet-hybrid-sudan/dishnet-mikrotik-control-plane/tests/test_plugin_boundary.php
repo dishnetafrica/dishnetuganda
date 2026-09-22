@@ -59,6 +59,9 @@ $routes = AdminRoutes::build(new FixedStaff(new StaffIdentity('s', StaffRole::Ad
 $declared = [];
 foreach ($m->routes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 foreach ($m->unboundWrites as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// The login boundary. Declared separately because it is the only part of the
+// surface with no capability — see the manifest note.
+foreach ($m->sessionRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 sort($declared);
 
 $served = [];
@@ -76,6 +79,12 @@ is_($declared, $served, 'every route the manifest declares is a route the plugin
 
 is_($m->writeRoutes, [], 'the manifest declares ZERO BOUND write routes');
 is_(count($m->unboundWrites), 7, 'and seven declared-but-unbound write paths');
+is_(count($m->sessionRoutes), 3, 'and three session paths — who am I, log in, log out');
+is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? null) !== null)), [],
+    'none of the three declares a capability: a capability is what logging in GRANTS');
+is_($m->apiSurface, 'read-only',
+    'the surface is still read-only — a session writes no Domain-B table');
+is_($m->writeRoutes, [], 'and no write route became bound by adding a login');
 
 // The honest part: those paths exist. Prove each answers 501 and writes nothing.
 $reqW = new Request('POST', '/', [], [], [], '127.0.0.1');

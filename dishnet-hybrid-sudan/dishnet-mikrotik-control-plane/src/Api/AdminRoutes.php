@@ -3,6 +3,9 @@ declare(strict_types=1);
 namespace Dn\Api;
 
 use Dn\Admin\AdminIdentityPort;
+use Dn\Admin\AdminSession;
+use Dn\Admin\StaffRole;
+use Dn\Admin\DevSessionIdentity;
 use Dn\Admin\Capability;
 use Dn\Admin\StaffIdentity;
 use Dn\Http\Request;
@@ -41,7 +44,8 @@ final class AdminRoutes
      *        database connection should be.
      */
     public static function build(AdminIdentityPort $identity, Bindings $bindings,
-                                 ?callable $reader = null): Router
+                                 ?callable $reader = null,
+                                 ?DevSessionIdentity $issuer = null): Router
     {
         $r = new Router();
         // No reader configured = no admin database connection in this process.
@@ -176,7 +180,96 @@ final class AdminRoutes
             $r->add($method, $path, $guard($cap, static fn() => self::estateReadNotAuthorized()), auth: false);
         }
 
+        // ── session ─────────────────────────────────────────────────────
+        // The login boundary. Three routes, NONE of them capability-gated,
+        // because a capability is what you get BY authenticating -- gating the
+        // login on one would be a lock whose key is behind the lock.
+        //
+        // $issuer is null in production and there is no code path that makes
+        // one appear: plugin/public/api.php constructs it only inside the same
+        // development gate that DevSessionIdentity enforces for itself. So the
+        // login route in a deployment has nothing to mint with, and says so.
+        self::session($r, $identity, $issuer);
+
         return $r;
+    }
+
+    /**
+     * GET    /session  who am I           200 identity | 401
+     * POST   /session  log in             200 + cookie | 400 | 501
+     * DELETE /session  log out            204, always
+     */
+    private static function session(Router $r, AdminIdentityPort $identity,
+                                    ?DevSessionIdentity $issuer): void
+    {
+        $r->get('/api/v1/admin/session', static function (Request $req) use ($identity, $issuer) {
+            $staff = $identity->identify($req);
+            if ($staff === null) {
+                // The panel needs to know WHICH unauthenticated state to draw:
+                // a login form, or "production authentication unavailable".
+                // That is a property of the deployment, not of the visitor, so
+                // it is safe to state. It names no user and no secret.
+                return new Response(401, [
+                    'error'           => 'unauthenticated',
+                    'provider'        => $identity->providerName(),
+                    'can_authenticate' => $issuer !== null,
+                    'roles'           => $issuer === null ? [] : self::roleNames(),
+                ]);
+            }
+            return Response::ok(['identity' => [
+                'subject'      => $staff->subject,
+                'role'         => $staff->role->value,
+                'provider'     => $staff->provider,
+                'capabilities' => $staff->role->capabilities(),
+            ]]);
+        }, auth: false);
+
+        $r->post('/api/v1/admin/session', static function (Request $req) use ($identity, $issuer) {
+            if ($issuer === null) {
+                // NOT 401, and NOT a fallback. There is no identity provider
+                // that can authenticate anybody in this deployment, which is a
+                // configuration fact the operator must see rather than a
+                // credential problem the visitor could fix by trying again.
+                return new Response(501, [
+                    'error'    => 'production_authentication_unavailable',
+                    'detail'   => 'no staff identity provider is configured; this deployment '
+                                . 'authenticates nobody (W-4)',
+                    'provider' => $identity->providerName(),
+                ]);
+            }
+            $role = StaffRole::tryFrom((string) ($req->body['role'] ?? ''));
+            if ($role === null) {
+                return Response::badRequest('role must be one of: ' . implode(', ', self::roleNames()));
+            }
+            $token = $issuer->issue($role);
+            return new Response(200, ['identity' => [
+                'subject'      => 'dev',
+                'role'         => $role->value,
+                'provider'     => $issuer->providerName(),
+                'capabilities' => $role->capabilities(),
+                'expires_in'   => AdminSession::TTL_SECONDS,
+            ]], ['Set-Cookie' => AdminSession::setCookie(
+                    $token, self::isHttps($req), AdminSession::TTL_SECONDS)]);
+        }, auth: false);
+
+        $r->add('DELETE', '/api/v1/admin/session', static function (Request $req) {
+            // Always 204, whether or not anything was signed in. A logout that
+            // reported "you were not logged in" would answer a question the
+            // caller has no business asking about somebody else's cookie.
+            return new Response(204, [], ['Set-Cookie' => AdminSession::clearCookie(self::isHttps($req))]);
+        }, auth: false);
+    }
+
+    /** @return list<string> */
+    private static function roleNames(): array
+    {
+        return array_map(static fn(StaffRole $r) => $r->value, StaffRole::cases());
+    }
+
+    private static function isHttps(Request $req): bool
+    {
+        return ($req->header('X-Forwarded-Proto') ?? '') === 'https'
+            || (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off');
     }
 
     /**

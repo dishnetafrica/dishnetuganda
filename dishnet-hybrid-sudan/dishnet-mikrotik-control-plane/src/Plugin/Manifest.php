@@ -22,6 +22,10 @@ final class Manifest
         public readonly array  $routes,
         public readonly array  $writeRoutes,
         public readonly array  $unboundWrites,
+        /** The login boundary. Declared apart from routes because these are
+         *  the ONLY paths with no capability: a capability is what
+         *  authenticating grants. */
+        public readonly array  $sessionRoutes,
         public readonly array  $config,
         public readonly array  $gates,
         public readonly array  $requires,
@@ -54,6 +58,7 @@ final class Manifest
             routes:          (array) $need($api, 'routes', 'api.'),
             writeRoutes:     (array) ($api['writes']['bound'] ?? []),
             unboundWrites:   (array) ($api['writes']['declared_unbound'] ?? []),
+            sessionRoutes:   (array) ($api['session']['routes'] ?? []),
             config:          (array) $need($j, 'config', ''),
             gates:           (array) $need($j, 'gates', ''),
             requires:        (array) $need($j, 'requires', ''),

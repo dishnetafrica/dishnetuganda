@@ -1873,6 +1873,86 @@ known not to be evidence that the invariant holds.
 **`o1_composite_fk.sql` stays out of `migrations/`** until the census is
 obtained, reviewed, and the migration separately authorised.
 
+## The Admin login boundary — built; production authentication is NOT
+
+**You can open the Admin panel and sign in. Real staff cannot.** Those are two
+different things and the build keeps them apart deliberately.
+
+`src/Admin/AdminSession.php` (signed, short-lived, stateless) +
+`DevSessionIdentity` + three session routes + the panel's login gate.
+**`DenyAllIdentity` is still the production binding and W-4 is still open.**
+
+### What production does
+
+| | |
+|---|---|
+| `GET /api/v1/admin/session` | **401** with `can_authenticate: false`, `roles: []`, `provider: deny-all` |
+| `POST /api/v1/admin/session` | **501 `production_authentication_unavailable`** — *not* 401 |
+| every estate route | **401** |
+
+**501, not 401, is the point.** A deployment that authenticates nobody has a
+configuration state, not a credential problem. Answering 401 would invite staff
+to type credentials at something that will never accept them and conclude their
+own details were wrong.
+
+### There is no fallback from production to development — proved, not asserted
+
+`DevSessionIdentity` **throws** if `DN_DEV_STAFF_IDENTITY` is not the exact
+string, and throws again if the process is authorized for real bindings
+(F6-B). It never degrades to `DenyAllIdentity`, and `DenyAllIdentity` never
+upgrades to it. `$issuer` stays `null` outside the gate, so **the login route
+has nothing to mint with** in a deployment.
+
+> **A security gate asserted against a guessed environment variable proves
+> nothing.** The first version of this test set `DN_ALLOW_REAL_BINDINGS=1`; the
+> real value is `yes-f6b-authorized`, so the assertion would have passed by
+> never firing. It now reads `Bindings::REAL_GATE_ENV` and
+> `REAL_GATE_VALUE` from the constants, with a control proving the gate is
+> genuinely open before the refusal is expected.
+
+### The seven UI states
+
+login · invalid · working · authenticated · **expired** · **forbidden** ·
+**unavailable**. The last three are the ones usually collapsed into "something
+went wrong": expired says you *were* signed in; forbidden says you *are* signed
+in and lack a capability, so signing in again will not help; unavailable says
+nobody can sign in here and therefore **shows no form at all**.
+
+### What "logging in" means here, and what it does not
+
+There is **no password and no credential store**, because
+`AdminIdentityPort` exists so the provider can be chosen later and a password
+table written now is the one thing that would make that harder. **The
+environment gate is the credential**; the form only picks a role, so the
+capability boundary can be exercised.
+
+- **The signing key is DERIVED, not reused.** `DNB_SECRET_KEY` is documented as
+  the key for stored device credentials; signing sessions with the same bytes
+  would be key reuse across unrelated purposes. The session key is
+  HMAC-derived under a distinct label. No new secret to provision, none in
+  source control.
+- The cookie is **HttpOnly + SameSite=Strict**, `Secure` only over TLS — a
+  Secure cookie on plain http is dropped and the developer sees a login that
+  silently never works.
+- **Logout clears a cookie; it does not revoke.** Found by driving the real
+  HTTP server, not the router: a client still replaying the old cookie is
+  admitted until the token expires. Acceptable for a one-hour development
+  token, **not** for a production provider, which needs real revocation. The
+  suite asserts the limitation so it stays visible.
+
+### The panel carries nothing secret
+
+Asserted on the bundle with **comments stripped first** — scanning prose
+flagged the login screen's own honest copy. The credential guard checks
+credential *shapes* (`password:`, `secret=`, a quoted `token:`), not the bare
+word, because a screen that says *"nothing is asked for here"* should not fail
+a test for saying so. Two pre-existing panel guards (no `SELECT`, no
+`password`) fired on the new UI copy and **the copy was reworded — the guards
+were not weakened.**
+
+Suite **30 suites / 1,846 assertions / 0 failed**, stable over two runs.
+Proved over real HTTP in both modes as well as in-process.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
