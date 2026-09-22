@@ -1064,7 +1064,7 @@ authority is established. Do not conflate the two.
 
 Data counts alone cannot reveal that production is at a different migration
 level. The census reports migrations applied and the latest filename
-(development: **21**, `021_admin_services_and_voucher.sql`), the existing FK and
+(development: **22**, `022_audit_write_boundary.sql`), the existing FK and
 UNIQUE constraints on `mt_sites`/`mt_services`/`mt_devices`, current indexes, and
 **whether migration 020 is applied** — if it is not, W-2 is absent too. Run as
 `dnb_adminapi` through the `mt_admin_*()` projections. **No superuser, and no
@@ -1543,6 +1543,65 @@ the first spine writer** — it costs a `REVOKE`.
 **Also found: `dnb_plain`**, a role in the development cluster that **nothing in
 the repository creates**. Not one of the twelve. **The production census must
 enumerate roles**, not assume them.
+
+## A-1 / T1 is IMPLEMENTED — migration 022
+
+**The first remediation shipped in code.** `migrations/022_audit_write_boundary.sql`
+plus `tests/test_audit_boundary.php`. Suite: **28 suites, 1,617 assertions, 0
+failed** (was 27 / 1,599; the new suite adds 18).
+
+```sql
+REVOKE INSERT ON mt_audit_log FROM dnb_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE INSERT ON TABLES FROM dnb_admin;
+```
+
+### Scope: dnb_admin ONLY, and the reason is measured
+
+`docs/113` listed three forging roles. **Only `dnb_admin` could be revoked
+without breaking a live path**, and this was established before writing the
+migration:
+
+| Role | Direct audit writer | Revoking today |
+|---|---|---|
+| `dnb_admin` | only caller is `Simulator.php`, which **only SELECTs** `mt_audit_log` | **breaks nothing** |
+| `dnb_app` | `public/index.php` → `Database::app()`; `AuditLog::record` INSERTs at **six** `Routes.php` sites | **breaks the customer API** |
+| `dnb_worker` | `bin/worker.php` → `Database::worker()`; `IntentWorker` audits at lines 63/77 | **breaks the worker** |
+
+> **`docs/113` predicted T1 would break the simulator. It does not.** That
+> prediction was about revoking the *whole* blanket grant; a **targeted** revoke
+> of audit INSERT breaks nothing, because the simulator's own comment is
+> accurate — its audit rows are *"written by those acts, not inserted"*.
+
+**T2 and T3 remain open.** Each needs its controlled path built *first*.
+
+### The default privilege was the half that would have expired
+
+015 also set `ALTER DEFAULT PRIVILEGES`, so the **next table created** would
+have handed `dnb_admin` INSERT again — and the attempt store (`docs/89`) and the
+non-tenant idempotency store (`docs/108`) are both still to be created. A test
+creates a table and asserts `dnb_admin` gets nothing on it.
+
+### A-2 — the residue is asserted, not hidden
+
+The suite asserts that **`dnb_app` and `dnb_worker` still hold audit INSERT**, so
+**finishing T2/T3 will break those assertions** — which is how the residue gets
+removed rather than forgotten. It also asserts the same new table *does* still
+grant `dnb_app` INSERT, so the A-2 hazard is visible rather than implied.
+
+### Controls
+
+Every negative is paired with a positive. `dnb_adminwrite` holds **no** audit
+privilege yet `mt_customer_create` writes exactly **one** audit row through
+`dnb_def_audit`. Append-only still refuses UPDATE and DELETE for every role.
+Roles are **enumerated from `pg_roles`**, never from a hardcoded list.
+**Control on the control, proved separately:** with the revoke in place the
+insert is *permission denied*; reverting the grant in the same transaction makes
+the identical statement return **`INSERT 0 1`**, then rolled back — so the
+assertion has real subject matter.
+
+> **A-1 is NOT closed. It is: remediation designed (`docs/113`), T1 implemented
+> and tested in development.** Production application is a separate gate, and
+> the production census still comes first.
 
 ## Open and parked
 
