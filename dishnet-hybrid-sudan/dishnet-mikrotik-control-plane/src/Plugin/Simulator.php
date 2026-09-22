@@ -99,7 +99,6 @@ final class Simulator
 
             // One plan per customer, at its first site.
             $plan[$ref] = $ctx->run($cid, fn(Database $db) => (new PlanRepository($db))->create(
-                $cid,
                 ['name' => "{$ref} 1-hour", 'duration_s' => 3600,
                  'rate_down_bps' => 5_000_000, 'rate_up_bps' => 2_000_000,
                  'data_cap_bytes' => null, 'devices_per_voucher' => 1,
@@ -147,7 +146,7 @@ final class Simulator
         foreach (['SIM-CUST-001' => 8, 'SIM-CUST-002' => 5, 'SIM-CUST-003' => 4] as $ref => $n) {
             $e = $estate[$ref];
             $out = $ctx->run($e['customer'], fn(Database $db) => (new VoucherService($db))->issueBatch(
-                $e['customer'], $plan[$ref], $n, $e['sites'][0], $e['principal']));
+                $plan[$ref], $n, $e['sites'][0], $e['principal']));
             $vouchers += count($out['vouchers']);
         }
         $this->say("{$vouchers} simulated vouchers in 3 batches, issued through the real service");

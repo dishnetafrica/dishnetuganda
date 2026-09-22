@@ -35,6 +35,30 @@ final class SessionService
      * Deliberately not a per-guest breakdown: the customer needs to know how
      * much their Wi-Fi is being used, not what any individual did with it.
      */
+    /**
+     * Ask for a session to be disconnected (migration 024, A-1/T3, B-2).
+     *
+     * Disconnecting reaches a router, so it is an intent like everything else
+     * that does -- and the intent and its audit row are now one operation
+     * inside mt_session_disconnect_request().
+     *
+     * DELIBERATELY NOT REPLAY SAFE. There is still no idempotency key and no
+     * state guard, so a retry enqueues a second intent exactly as it does
+     * today. That is the open blocker docs/108 records for F6-B; fixing it
+     * inside a privilege remediation would be a silent behaviour change.
+     *
+     * @return string|null the intent id, or null when the session is not this
+     *         customer's -- which the route answers as 404.
+     */
+    public function requestDisconnect(string $id, ?string $actor,
+                                      ?string $source = null): ?string
+    {
+        $row = $this->db->one(
+            'SELECT mt_session_disconnect_request(?,?,?) AS intent_id',
+            [$id, $actor, $source]);
+        return $row['intent_id'] ?? null;
+    }
+
     public function usage(): array
     {
         return $this->db->one(

@@ -4,32 +4,42 @@ namespace Dn\Policy;
 
 use Dn\Db\Database;
 
-/** Customer-scoped. Call inside TenantContext::run(). */
+/**
+ * Plans, through the commercial write boundary (migration 024, A-1/T3, B-2).
+ *
+ * Every mutation here is one call to a SECURITY DEFINER function owned by
+ * dnb_def_comm, which performs the write AND its audit row in the same
+ * transaction. dnb_app holds EXECUTE on those functions and no INSERT on
+ * mt_audit_log at all, so the audit row is a consequence of the act rather
+ * than a separate statement a caller could omit.
+ *
+ * NOTE there is no $customerId parameter any more. The function reads
+ * mt_current_customer(), set by TenantContext from the authenticated
+ * principal, so a forged customer is unrepresentable rather than rejected.
+ * Reads are unchanged: they are RLS-scoped SELECTs and need no boundary.
+ *
+ * Customer-scoped. Call inside TenantContext::run().
+ */
 final class PlanRepository
 {
     public function __construct(private Database $db) {}
 
-    public function create(string $customerId, array $p, ?string $createdBy, ?string $siteId = null): array
+    /**
+     * @param array       $p      validated plan values (see PlanValidator)
+     * @param string|null $actor  the authenticated principal, never a request field
+     * @param string|null $source request context, recorded and not trusted
+     */
+    public function create(array $p, ?string $actor, ?string $siteId = null,
+                           ?string $source = null): array
     {
-        $profileId = (new ProfileResolver($this->db))->resolve(
-            (int) $p['rate_down_bps'], (int) $p['rate_up_bps'],
-            (int) $p['duration_s'], (int) $p['devices_per_voucher'],
-            isset($p['data_cap_bytes']) && $p['data_cap_bytes'] !== null
-                ? (int) $p['data_cap_bytes'] : null
-        );
-
         return $this->db->one(
-            'INSERT INTO mt_plans
-               (customer_id, site_id, profile_id, name, duration_s,
-                rate_down_bps, rate_up_bps, data_cap_bytes,
-                devices_per_voucher, mode, price_minor, currency, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *',
-            [$customerId, $siteId, $profileId, trim((string) $p['name']),
-             (int) $p['duration_s'], (int) $p['rate_down_bps'], (int) $p['rate_up_bps'],
-             isset($p['data_cap_bytes']) && $p['data_cap_bytes'] !== null
-                 ? (int) $p['data_cap_bytes'] : null,
+            'SELECT * FROM mt_plan_create(?,?,?,?,?,?,?,?,?,?,?,?)',
+            [trim((string) $p['name']), (int) $p['duration_s'],
+             (int) $p['rate_down_bps'], (int) $p['rate_up_bps'],
+             self::intOrNull($p['data_cap_bytes'] ?? null),
              (int) $p['devices_per_voucher'], $p['mode'],
-             (int) $p['price_minor'], strtoupper((string) $p['currency']), $createdBy]
+             (int) $p['price_minor'], strtoupper((string) $p['currency']),
+             $siteId, $actor, $source]
         );
     }
 
@@ -49,38 +59,50 @@ final class PlanRepository
     /**
      * Update a plan's commercial face. Its technical values move the profile
      * with them, so enforcement follows what is being sold.
+     *
+     * A null field means UNCHANGED, which is what
+     * array_filter($body, fn($v) => $v !== null) meant before the merge moved
+     * into the function -- including the consequence that there is no way to
+     * clear a data cap.
      */
-    public function update(string $id, array $p): ?array
+    public function update(string $id, array $p, ?string $actor,
+                           ?string $source = null): ?array
     {
-        $cur = $this->find($id);
-        if ($cur === null) { return null; }
-
-        $merged = array_merge($cur, array_filter($p, fn($v) => $v !== null));
-        $profileId = (new ProfileResolver($this->db))->resolve(
-            (int) $merged['rate_down_bps'], (int) $merged['rate_up_bps'],
-            (int) $merged['duration_s'], (int) $merged['devices_per_voucher'],
-            $merged['data_cap_bytes'] !== null ? (int) $merged['data_cap_bytes'] : null
-        );
-
-        return $this->db->one(
-            'UPDATE mt_plans
-                SET name = ?, duration_s = ?, rate_down_bps = ?, rate_up_bps = ?,
-                    data_cap_bytes = ?, devices_per_voucher = ?, mode = ?,
-                    price_minor = ?, currency = ?, profile_id = ?
-              WHERE id = ? RETURNING *',
-            [trim((string) $merged['name']), (int) $merged['duration_s'],
-             (int) $merged['rate_down_bps'], (int) $merged['rate_up_bps'],
-             $merged['data_cap_bytes'] !== null ? (int) $merged['data_cap_bytes'] : null,
-             (int) $merged['devices_per_voucher'], $merged['mode'],
-             (int) $merged['price_minor'], strtoupper((string) $merged['currency']),
-             $profileId, $id]
-        );
+        return self::rowOrNull($this->db->one(
+            'SELECT * FROM mt_plan_update(?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id,
+             isset($p['name']) ? trim((string) $p['name']) : null,
+             self::intOrNull($p['duration_s'] ?? null),
+             self::intOrNull($p['rate_down_bps'] ?? null),
+             self::intOrNull($p['rate_up_bps'] ?? null),
+             self::intOrNull($p['data_cap_bytes'] ?? null),
+             self::intOrNull($p['devices_per_voucher'] ?? null),
+             $p['mode'] ?? null,
+             self::intOrNull($p['price_minor'] ?? null),
+             isset($p['currency']) ? strtoupper((string) $p['currency']) : null,
+             $actor, $source]
+        ));
     }
 
     /** Retire, never delete: a voucher sold against a plan is a revenue record. */
-    public function retire(string $id): ?array
+    public function retire(string $id, ?string $actor, ?string $source = null): ?array
     {
-        return $this->db->one(
-            'UPDATE mt_plans SET active = false WHERE id = ? RETURNING *', [$id]);
+        return self::rowOrNull($this->db->one(
+            'SELECT * FROM mt_plan_retire(?,?,?)', [$id, $actor, $source]));
+    }
+
+    private static function intOrNull(mixed $v): ?int
+    {
+        return $v === null ? null : (int) $v;
+    }
+
+    /**
+     * A composite-returning function that returns NULL still yields ONE row,
+     * with every column null -- not zero rows. Without this a "not found"
+     * would look like a successful update of a plan with no id.
+     */
+    private static function rowOrNull(?array $row): ?array
+    {
+        return ($row['id'] ?? null) === null ? null : $row;
     }
 }

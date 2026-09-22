@@ -137,7 +137,7 @@ final class Installer
     }
 
     /**
-     * Every role the migrations create. Dropping four of twelve left eight
+     * Every role the migrations create. Dropping four of them left eight
      * behind on the cluster, and a cleanup that leaves residue cannot support
      * the claim that a test install left the server unchanged.
      *
@@ -148,7 +148,7 @@ final class Installer
     public const ROLES = [
         // definer roles first: they own the functions
         'dnb_def_auth', 'dnb_def_net', 'dnb_def_work', 'dnb_def_prov',
-        'dnb_def_admin', 'dnb_def_audit',
+        'dnb_def_admin', 'dnb_def_audit', 'dnb_def_comm',
         // then the login roles
         'dnb_app', 'dnb_worker', 'dnb_admin', 'dnb_adminapi',
         'dnb_adminwrite', 'dnb_radius',

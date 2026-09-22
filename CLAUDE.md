@@ -1557,12 +1557,20 @@ the first spine writer** — it costs a `REVOKE`.
 the repository creates**. Not one of the twelve. **The production census must
 enumerate roles**, not assume them.
 
-## A-1 — T1 and T2 IMPLEMENTED, T3 REPORTED BLOCKED (migrations 022, 023)
+## A-1 is CLOSED in development — T1, T2 and T3 (migrations 022, 023, 024)
 
 **The first remediation shipped in code.** `migrations/022_audit_write_boundary.sql`
-plus `migrations/023_worker_audit_boundary.sql` and
-`tests/test_audit_boundary.php`. Suite: **28 suites, 1,641 assertions, 0
-failed** (1,599 before T1 → 1,617 after T1 → 1,641 after T2/T3).
+plus `023_worker_audit_boundary.sql`, `024_commercial_write_boundary.sql`,
+`tests/test_audit_boundary.php` and `tests/test_commercial_boundary.php`.
+Suite: **29 suites, 1,740 assertions, 0 failed** (1,599 → 1,617 after T1 →
+1,641 after T2 → 1,740 after T3).
+
+> **NO LOGIN ROLE CAN WRITE AN AUDIT ROW.** `dnb_admin` (022), `dnb_worker`
+> (023) and `dnb_app` (024) are all revoked, each with its matching
+> `ALTER DEFAULT PRIVILEGES`. The only writer is `mt_audit_write()`, owned by
+> `dnb_def_audit` and callable only by the definer roles that own audited
+> mutations. **Production application is still a separate gate behind the
+> census.**
 
 ```sql
 REVOKE INSERT ON mt_audit_log FROM dnb_admin;
@@ -1612,31 +1620,73 @@ which is exactly the W-1 shape, the actor as a parameter from the identity
 boundary. `dnb_worker` **keeps `mt_intents` UPDATE**: the claim/lease is not
 audit, and a test asserts it still runs.
 
-### T3 — STOPPED AND REPORTED, not done
+### T3 — BUILT: migration 024, six commercial boundaries
 
-**All six `dnb_app` audit sites have no definer/function boundary to move into.**
-Measured, not inferred — `dnb_app` may EXECUTE exactly six `SECURITY DEFINER`
-functions and **not one performs any of the six audited mutations**: five are
-`mt_auth_*` (whose routes audit nothing at all), and the sixth is
-`mt_voucher_redeem`, which has **no caller** and is to be **deleted**
-(`docs/87`). `PlanRepository`, `VoucherService` and `IntentQueue` all write raw
-DML under RLS.
+The measurement that shaped it: `dnb_app` could EXECUTE exactly six
+`SECURITY DEFINER` functions and **not one performed any of the six audited
+mutations** (five `mt_auth_*`, plus `mt_voucher_redeem`, which has no caller
+and is to be deleted). There was no boundary to move the audit into, so one
+was built per mutation.
 
-> **Granting `dnb_app` EXECUTE on `mt_audit_write()` is NOT the remediation.**
-> Measured: of `mt_audit_log`'s ten columns, **only `id` and `at` are not caller
-> parameters**. EXECUTE on that function is therefore **exactly as forgeable as
-> INSERT** — it would relocate the forgery while *looking* remediated, and it
-> breaks W-1's *"no HTTP role may write an audit row directly."*
+| Function | Route | Audit action |
+|---|---|---|
+| `mt_plan_create` | `POST /me/plans` | `plan.created` |
+| `mt_plan_update` | `PATCH /me/plans/{id}` | `plan.updated` |
+| `mt_plan_retire` | `POST /me/plans/{id}/retire` | `plan.retired` |
+| `mt_voucher_batch_issue` | `POST /me/vouchers` | `voucher.issued` |
+| `mt_voucher_revoke` | `POST /me/vouchers/{id}/revoke` | `voucher.revoked` |
+| `mt_session_disconnect_request` | `POST /me/sessions/{id}/disconnect` | `session.disconnect_requested` |
 
-Building the six definer functions **is B-2** (`docs/102`: *"the largest single
-item U-1 implies — not a flag"*). So T3 stops here, per instruction, rather than
-inventing a boundary. **`dnb_app` remains the one role that can forge an audit
-row**, and the suite says so.
+**`dnb_def_comm` is a NEW definer role, and the reason is measured.** Every
+existing definer role already carries a widening `USING (true)` policy on
+exactly the table these functions must write — `dnb_def_net` on `mt_vouchers`
+and `mt_hotspot_users`, `dnb_def_work` on `mt_intents`, `dnb_def_admin` on all
+of them. Owning the commercial writers with any of those would have **removed**
+the tenant isolation that makes them safe.
 
-Also measured, and stronger than expected: **even the schema owner cannot
-`GRANT EXECUTE ON mt_audit_write`** — the function belongs to `dnb_def_audit`
-and `dnb` is not a member of it. Handing that privilege out requires a migration
-that deliberately assumes the role.
+> **Tenancy is NOT enforced by the function bodies.** `dnb_def_comm` was
+> created with **no policy of its own**, so it inherits
+> `<table>_isolation FOR ALL TO public` and is bound by
+> `customer_id = mt_current_customer()` exactly as `dnb_app` is. **Proved by
+> execution:** adding a widening policy for `dnb_def_comm` breaks **11**
+> assertions; removing it restores all 89.
+
+- **There is no `p_customer` parameter in any of the six.** The customer is
+  `mt_current_customer()`, so a forged one is **unrepresentable** rather than
+  rejected — the `mt_site_create` contract from `docs/105`.
+- **The actor is a parameter**, per W-1, and is verified to be a principal of
+  *this* customer by a SELECT that RLS has already scoped.
+- **`src/Audit/AuditLog.php` was DELETED.** After the revoke it could only
+  fail; `test_audit.php` now writes its row through a real boundary.
+- **Behaviour was reproduced, not redesigned.** The `mt_hotspot_users` row is
+  still written at issue with the reversible `radius_username` (the `docs/86`
+  defects, carried over verbatim — Decision 1 stays Model B and **no AAA
+  publication was reintroduced**); a NULL update field still means *unchanged*,
+  so a data cap still cannot be cleared; `plan.retire` still has no state
+  guard; an idempotency key still deduplicates only the **intent**.
+- **Voucher codes are still drawn from the injectable `CodeSource`** and passed
+  in with spares; the function skips any the unique index rejects. Eager rather
+  than lazy drawing is the one mechanical change, and the outcome is identical.
+
+> **`session.disconnect` replay is deliberately NOT fixed, and the suite
+> asserts the gap** — a replay still enqueues a second intent and writes a
+> second audit row. T3 gave it a boundary, not replay safety. It remains the
+> blocker `docs/108` records for F6-B.
+
+### What T3 did NOT close — asserted, not assumed
+
+**`dnb_app` still holds direct INSERT/UPDATE/DELETE on `mt_plans`,
+`mt_vouchers`, `mt_voucher_batches`, `mt_hotspot_users` and `mt_intents`**
+(migration 015's blanket grant). So the audit trail can no longer be **forged**,
+but a mutation can still be made **without one** by writing a business table
+directly. Making the six functions the *only* write path is the **remaining
+half of B-2** and needs its own caller audit — not least because
+`test_rls_isolation.php` deliberately writes those tables as `dnb_app` to prove
+RLS, and would measure permission denial instead if the grants went.
+
+The suite also pins the project's own rule in one pair: `dnb_app` **is granted**
+UPDATE on `mt_audit_log` and still cannot use it, because the append-only
+trigger refuses it. **The grant was never the boundary.**
 
 ### The default privilege was the half that would have expired
 
@@ -1647,13 +1697,14 @@ creates a table and asserts `dnb_admin` gets nothing on it.
 
 ### A-2 — the residue is asserted, not hidden
 
-The suite asserts that **`dnb_app` still holds audit INSERT** and that
-`dnb_worker` no longer does, and it pins the **count of caller-written audit
-sites in `Routes.php` at six** — so **closing B-2/T3 must break those lines**,
-which is how the residue gets removed rather than forgotten. (T2 landing broke
-the two `dnb_worker` assertions exactly as designed; they were rewritten to the
-new truth, not deleted.) It also asserts the same new table *does* still
-grant `dnb_app` INSERT, so the A-2 hazard is visible rather than implied.
+**The residue is now empty, and that is asserted too.** The mechanism worked
+twice: the lines written in 022 to fail when T2 landed did fail, and the lines
+written in 023 to fail when T3 landed did fail. Each was rewritten to the new
+truth rather than deleted. What the suite now pins is the **closed** state —
+no login role holds audit INSERT, no `AuditLog` class exists, a newly created
+table grants `dnb_app` no INSERT — each paired with a control (`dnb_app` can
+still SELECT the audit log and the new table; `dnb_def_audit` still holds the
+INSERT that it should).
 
 ### Controls
 
@@ -1666,9 +1717,10 @@ insert is *permission denied*; reverting the grant in the same transaction makes
 the identical statement return **`INSERT 0 1`**, then rolled back — so the
 assertion has real subject matter.
 
-> **A-1 is NOT closed. It is: remediation designed (`docs/113`), T1 implemented
-> and tested in development.** Production application is a separate gate, and
-> the production census still comes first.
+> **A-1 is closed IN DEVELOPMENT ONLY.** All three tiers are implemented and
+> tested; **production application is a separate gate and the production census
+> still comes first.** B-2's remaining half — revoking `dnb_app`'s direct DML on
+> the five business tables — is open, and so is `session.disconnect` replay.
 
 ## Open and parked
 

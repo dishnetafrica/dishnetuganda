@@ -3,7 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 use Dn\Db\Database;
 use Dn\Tenancy\TenantContext;
-use Dn\Audit\AuditLog;
+use Dn\Policy\PlanRepository;
 
 $owner = Database::inspector();
 $ids = seed_two_customers($owner);
@@ -12,17 +12,27 @@ $app = Database::app();
 $ctx = new TenantContext($app);
 
 t('audit writes and reads within a customer');
-$id = $ctx->run($A['customer'], fn($db) => (new AuditLog($db))->record(
-    $A['customer'], $A['principal'], 'principal', 'site.created',
-    'site', $A['site'], '10.0.0.1', ['name' => 'lobby']));
-is_(is_string($id) && strlen($id) === 36, true, 'record() returns a uuid');
+// Written the way production writes now: through a commercial boundary
+// function (migration 024), which emits its audit row inside the same
+// transaction. Dn\Audit\AuditLog is gone -- no login role may INSERT into
+// mt_audit_log directly any more, so a class that did could only fail.
+$plan = $ctx->run($A['customer'], fn($db) => (new PlanRepository($db))->create(
+    ['name' => 'lobby', 'duration_s' => 3600,
+     'rate_down_bps' => 2000000, 'rate_up_bps' => 1000000, 'data_cap_bytes' => null,
+     'devices_per_voucher' => 1, 'mode' => 'elapsed',
+     'price_minor' => 1000, 'currency' => 'UGX'],
+    $A['principal'], $A['site'], '10.0.0.1'));
+$id = $owner->one("SELECT id FROM mt_audit_log
+                    WHERE customer_id = ? AND action = 'plan.created'",
+                  [$A['customer']])['id'];
+is_(is_string($id) && strlen($id) === 36, true, 'the act wrote exactly one audit row, and it has a uuid');
 $rows = $ctx->run($A['customer'], fn($db) => $db->query(
     'SELECT action, detail FROM mt_audit_log ORDER BY at'));
 // Two rows, not one: since migration 020 (W-1) onboarding writes its own audit
 // row inside mt_customer_create, so seeding A is itself an audited act. A test
 // that still expected one row would be asserting that the fix is absent.
-is_(array_column($rows, 'action'), ['customer.created', 'site.created'],
-    'A sees the onboarding row it caused and the row it wrote');
+is_(array_column($rows, 'action'), ['customer.created', 'plan.created'],
+    'A sees the onboarding row it caused and the row its act wrote');
 is_(json_decode($rows[1]['detail'], true)['name'], 'lobby', 'detail survives the round trip');
 
 t('audit is isolated like everything else');
@@ -30,7 +40,7 @@ $rows = $ctx->run($B['customer'], fn($db) => $db->query(
     'SELECT action, target_id FROM mt_audit_log'));
 is_(array_column($rows, 'action'), ['customer.created'],
     'B sees only its own onboarding row');
-is_(in_array($A['site'], array_column($rows, 'target_id'), true), false,
+is_(in_array($plan['id'], array_column($rows, 'target_id'), true), false,
     "B cannot see A's audit rows");
 $rows = $ctx->run($B['customer'], fn($db) => $db->query('SELECT id FROM mt_audit_log WHERE id = ?', [$id]));
 is_(count($rows), 0, "B cannot read A's audit row by id");
@@ -53,7 +63,7 @@ throws_(fn() => $app->pdo()->exec('TRUNCATE mt_audit_log'),
     '', 'app role has no TRUNCATE privilege');
 
 $still = $owner->one('SELECT action FROM mt_audit_log WHERE id = ?', [$id]);
-is_($still['action'], 'site.created', 'the row is genuinely intact after every attempt');
+is_($still['action'], 'plan.created', 'the row is genuinely intact after every attempt');
 
 t('a system event with no customer belongs to nobody');
 $owner->exec("INSERT INTO mt_audit_log (customer_id, actor, actor_kind, action)

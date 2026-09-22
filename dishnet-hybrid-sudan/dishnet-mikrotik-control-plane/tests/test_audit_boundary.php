@@ -16,14 +16,16 @@ use Dn\Tenancy\TenantContext;
  *   T1 (022)  dnb_admin   REVOKED — its only caller is the excluded simulator
  *   T2 (023)  dnb_worker  REVOKED — its two audit sites now go through
  *                         mt_intent_audit(), a dnb_def_work definer
- *   T3        dnb_app     STILL HOLDS IT. Not an omission: none of its six
- *                         audited mutations sits behind a definer function to
- *                         move the audit into, and granting EXECUTE on
- *                         mt_audit_write would relocate the forgery rather
- *                         than remove it. Building those functions is B-2.
+ *   T3 (024)  dnb_app     REVOKED — its six audited mutations now sit behind
+ *                         six SECURITY DEFINER functions owned by
+ *                         dnb_def_comm (see test_commercial_boundary.php),
+ *                         each writing its own audit row in the same
+ *                         transaction. That was B-2.
  *
- * The residue is asserted, not described, so closing B-2/T3 breaks these lines
- * rather than leaving the last forging role to be forgotten.
+ * A-1 is therefore closed in development: NO login role can write an audit
+ * row. The assertions that used to record the residue now record its absence,
+ * each still paired with a control proving the measurement could have come
+ * out the other way.
  *
  * Every negative assertion is paired with something proving the measurement
  * could have come out the other way, and the revoke itself is proved by
@@ -42,8 +44,8 @@ $priv = fn(string $role, string $tbl, string $p): int => (int) $owner->one(
 
 t('A-1/T1 — dnb_admin can no longer forge an audit row');
 
-is_($priv('dnb_app', 'mt_audit_log', 'INSERT'), 1,
-    'CONTROL: the privilege probe still reports 1 for a role that does hold INSERT');
+is_($priv('dnb_app', 'mt_plans', 'SELECT'), 1,
+    'CONTROL: the privilege probe still reports 1 for a privilege that is held');
 is_($priv('dnb_admin', 'mt_audit_log', 'INSERT'), 0,
     'dnb_admin holds no INSERT on mt_audit_log');
 
@@ -84,14 +86,16 @@ foreach (['dnb_admin' => $admin, 'dnb_app' => $app] as $label => $conn) {
         'append-only', "{$label} cannot DELETE an audit row");
 }
 
-t('A-2 — the remaining residue is asserted, not hidden');
+t('A-2 — the residue is now EMPTY, and that is asserted too');
 
-// T2/T3 are not done. Finishing them must BREAK these two lines, which is how
-// the residue gets removed rather than forgotten.
-is_($priv('dnb_app', 'mt_audit_log', 'INSERT'), 1,
-    'dnb_app still holds audit INSERT — six customer-API sites need it (F-8/T3)');
+// These lines were written to FAIL when T2 and T3 landed, and they did, twice.
+// They now record the closed state instead of the open one.
 is_($priv('dnb_worker', 'mt_audit_log', 'INSERT'), 0,
-    'dnb_worker no longer holds audit INSERT — T2 closed it');
+    'dnb_worker holds no audit INSERT — T2 closed it');
+is_($priv('dnb_app', 'mt_audit_log', 'INSERT'), 0,
+    'dnb_app holds no audit INSERT either — T3 closed the last one');
+is_($priv('dnb_app', 'mt_audit_log', 'SELECT'), 1,
+    'CONTROL: dnb_app can still READ its own audit rows — only writing was taken away');
 
 t('A-1/T2 — the worker audits through a definer, not a direct INSERT');
 
@@ -176,9 +180,10 @@ is_((int) $ins->one("SELECT count(*)::int AS c FROM mt_audit_log
                       WHERE actor = 'FORGERY'")['c'], 0,
     'no forged row survived the control — the probe left nothing behind');
 
-t('A-1/T3 — NOT done, and the reason is asserted rather than described');
+t('A-1/T3 — done, and the shortcut it did NOT take is still asserted');
 
-// T3 cannot be completed by granting dnb_app EXECUTE on mt_audit_write.
+// T3 was not completed by granting dnb_app EXECUTE on mt_audit_write, and
+// nothing later may do so either.
 // Measured: of mt_audit_log's ten columns only `id` and `at` are not caller
 // parameters, so EXECUTE on that function is exactly as forgeable as INSERT —
 // it would relocate the forgery, not remove it, while looking remediated.
@@ -197,13 +202,16 @@ is_($exec('dnb_def_prov'), 1,
     'CONTROL: the probe reports 1 for a role that does hold EXECUTE on mt_audit_write');
 is_($exec('dnb_app'), 0, 'dnb_app holds no EXECUTE on mt_audit_write — and must not be given it');
 
-// The residue itself. dnb_app writes its own audit rows at six call sites, and
-// none of the six mutations sits behind a definer function to move them into
-// (that is B-2). This count is asserted so that closing B-2 breaks this line
-// rather than leaving the residue to be forgotten.
+// F-8 is now closed by construction: there is no class left that COULD write
+// an audit row from a caller. src/Audit/AuditLog.php was deleted, because
+// after the revoke it could only ever fail.
 $routes = file_get_contents(__DIR__ . '/../src/Api/Routes.php');
-is_(substr_count($routes, 'new \\Dn\\Audit\\AuditLog($db))->record('), 6,
-    'six caller-written audit sites remain on the customer API (F-8 / T3 open)');
+is_(substr_count($routes, 'AuditLog'), 0,
+    'no caller-written audit site remains on the customer API (F-8 closed)');
+is_(is_file(__DIR__ . '/../src/Audit/AuditLog.php'), false,
+    'and the class that wrote them no longer exists');
+is_(is_file(__DIR__ . '/../src/Api/Routes.php'), true,
+    'CONTROL: the file probe does find a file that is genuinely there');
 
 $defs = $owner->query(
     "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -214,8 +222,50 @@ $names = array_column($defs, 'proname');
 is_(count(array_filter($names, fn($n) => str_starts_with($n, 'mt_auth_'))), 5,
     'CONTROL: dnb_app does reach definer functions — the five auth ones');
 is_(array_values(array_filter($names, fn($n) => !str_starts_with($n, 'mt_auth_'))),
-    ['mt_voucher_redeem'],
-    'and the only other one is mt_voucher_redeem, which has no caller and is to be deleted');
+    ['mt_plan_create', 'mt_plan_retire', 'mt_plan_update',
+     'mt_session_disconnect_request', 'mt_voucher_batch_issue',
+     'mt_voucher_redeem', 'mt_voucher_revoke'],
+    'and the rest are the six commercial boundaries plus mt_voucher_redeem, still to be deleted');
+
+t('A-1/T3 — the revoke is proved by EXECUTION, and the control has subject matter');
+
+$ctxApp3 = new TenantContext($app);
+$forgeApp = fn(Database $db) => $db->exec(
+    'INSERT INTO mt_audit_log (customer_id,actor,actor_kind,action,target_type,target_id,source)
+     VALUES (?,?,?,?,?,?,?)',
+    [$A, 'FORGERY', 'principal', 'probe.forge', 'probe', 'x', 'app']);
+
+$seenApp = (int) $ctxApp3->run($A, fn(Database $db) =>
+    $db->one('SELECT count(*)::int AS c FROM mt_audit_log'))['c'];
+is_($seenApp >= 0, true, 'CONTROL: dnb_app is connected and can read audit rows in its tenant');
+
+throws_(fn() => $ctxApp3->run($A, $forgeApp), 'permission denied',
+    'dnb_app attempting a direct audit INSERT is refused');
+
+// CONTROL ON THE CONTROL: restore the grant and the identical statement must
+// succeed, or the refusal above could be any failure at all rather than the
+// revoke. The forged row is rolled back so the probe leaves nothing behind.
+$owner->exec('GRANT INSERT ON mt_audit_log TO dnb_app');
+try {
+    $grantedApp = null;
+    try {
+        $ctxApp3->run($A, function (Database $db) use ($forgeApp, &$grantedApp) {
+            $grantedApp = $forgeApp($db);
+            throw new RuntimeException('__rollback__');
+        });
+    } catch (RuntimeException $e) {
+        if ($e->getMessage() !== '__rollback__') { throw $e; }
+    }
+    is_($grantedApp, 1, 'CONTROL: with the grant restored the SAME statement inserts a row');
+} finally {
+    $owner->exec('REVOKE INSERT ON mt_audit_log FROM dnb_app');
+}
+
+throws_(fn() => $ctxApp3->run($A, $forgeApp), 'permission denied',
+    'and with the revoke back in place it is refused again');
+is_((int) $ins->one("SELECT count(*)::int AS c FROM mt_audit_log
+                      WHERE actor = 'FORGERY'")['c'], 0,
+    'no forged row survived either probe');
 
 t('default privileges — the fix does not expire for dnb_admin');
 
@@ -223,8 +273,10 @@ $owner->exec('CREATE TABLE mt_t1_default_probe (id int)');
 try {
     is_($priv('dnb_admin', 'mt_t1_default_probe', 'INSERT'), 0,
         'a NEWLY created table grants dnb_admin no INSERT');
-    is_($priv('dnb_app', 'mt_t1_default_probe', 'INSERT'), 1,
-        'CONTROL: the same new table does still grant dnb_app INSERT (A-2, open)');
+    is_($priv('dnb_app', 'mt_t1_default_probe', 'INSERT'), 0,
+        'and grants dnb_app none either — T3 fixed the default privilege too');
+    is_($priv('dnb_app', 'mt_t1_default_probe', 'SELECT'), 1,
+        'CONTROL: the same new table DOES still grant dnb_app SELECT — only INSERT went');
 } finally {
     $owner->exec('DROP TABLE mt_t1_default_probe');
 }
@@ -242,7 +294,12 @@ is_(in_array('dnb_admin', $writers, true), false,
     'dnb_admin is absent from the login roles that can write audit rows');
 is_(in_array('dnb_worker', $writers, true), false,
     'dnb_worker is absent too, after T2');
-is_(in_array('dnb_app', $writers, true), true,
-    'CONTROL: the enumeration does still find dnb_app, which legitimately can');
+is_(in_array('dnb_app', $writers, true), false,
+    'and so is dnb_app, after T3 — NO login role can write an audit row');
+// The enumeration has to be shown to find something, or "nobody can" would be
+// indistinguishable from a query that never matched anything at all.
+is_((int) $owner->one(
+    "SELECT has_table_privilege('dnb_def_audit','mt_audit_log','INSERT')::int AS p")['p'], 1,
+    'CONTROL: the one role that SHOULD hold it, dnb_def_audit, still does');
 
 exit(t_summary());

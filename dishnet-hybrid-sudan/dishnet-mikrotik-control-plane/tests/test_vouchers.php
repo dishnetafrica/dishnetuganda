@@ -83,7 +83,7 @@ $fixed = new class implements \Dn\Vouchers\CodeSource {
     }
 };
 $out = $ctx->run($A['customer'], fn($d) => (new VoucherService($d, $fixed))
-    ->issueBatch($A['customer'], $planA['id'], 2, null, $A['principal']));
+    ->issueBatch($planA['id'], 2, null, $A['principal']));
 $got = array_column($out['vouchers'], 'code');
 is_(count(array_unique($got)), 2, 'two distinct codes despite the generator repeating itself');
 is_(in_array('AAAAA-AAAAA', $got, true), true, 'the first use of the repeated code succeeded');
@@ -125,7 +125,7 @@ is_($again, $never, 'and is identical to a code that never existed');
 
 t('a revoked voucher cannot be redeemed');
 $v = $ctx->run($A['customer'], fn($d) => (new VoucherService($d))->list('unused')[0]);
-$ctx->run($A['customer'], fn($d) => (new VoucherService($d))->revoke($v['id']));
+$ctx->run($A['customer'], fn($d) => (new VoucherService($d))->revoke($v['id'], $A['principal']));
 is_($ctx->runUnscoped(fn($d) => (new VoucherService($d))->redeem($v['code'])), null,
     'a revoked code is refused');
 

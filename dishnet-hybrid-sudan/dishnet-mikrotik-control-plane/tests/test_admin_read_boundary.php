@@ -201,13 +201,13 @@ t('021 — voucher detail returns the LIST fields and nothing more');
 // detail assertion against an empty estate would pass by proving nothing.
 $ctxV = new \Dn\Tenancy\TenantContext(Database::app());
 $ctxV->run($A['customer'], function (Database $db) use ($A) {
-    $plan = (new \Dn\Policy\PlanRepository($db))->create($A['customer'],
+    $plan = (new \Dn\Policy\PlanRepository($db))->create(
         ['name' => 'boundary probe', 'duration_s' => 3600,
          'rate_down_bps' => 2000000, 'rate_up_bps' => 1000000, 'data_cap_bytes' => null,
          'devices_per_voucher' => 1, 'mode' => 'elapsed',
          'price_minor' => 1000, 'currency' => 'UGX'], $A['principal'], $A['site']);
     (new \Dn\Vouchers\VoucherService($db))->issueBatch(
-        $A['customer'], $plan['id'], 2, $A['site'], $A['principal']);
+        $plan['id'], 2, $A['site'], $A['principal']);
 });
 $one = ($reader)('mt_admin_vouchers')[0] ?? null;
 is_($one !== null, true, 'the estate has a voucher to open');

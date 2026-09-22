@@ -120,18 +120,16 @@ final class Routes
             }
             try {
                 // Savepointed so a duplicate name leaves the transaction
-                // usable for the audit write that follows on the happy path.
+                // usable: the function writes its own audit row inside the
+                // same transaction, so a refused create audits nothing.
                 $plan = $db->attempt(fn($d) => (new \Dn\Policy\PlanRepository($d))
-                    ->create($who['customer_id'], $req->body, $who['principal_id'], $site));
+                    ->create($req->body, $who['principal_id'], $site, $req->ip));
             } catch (\PDOException $e) {
                 if (($e->errorInfo[0] ?? '') === '23505') {
                     return Response::conflict('a plan with that name already exists');
                 }
                 throw $e;
             }
-            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
-                'principal', 'plan.created', 'plan', $plan['id'], $req->ip,
-                ['name' => $plan['name']]);
             return new Response(201, ['plan' => P::plan($plan)]);
         });
 
@@ -146,19 +144,17 @@ final class Routes
             $errors = (new \Dn\Policy\PlanValidator())->check($merged);
             if ($errors) { return new Response(422, ['error' => 'invalid_plan', 'reasons' => $errors]); }
 
-            $plan = $repo->update($id, $req->body);
-            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
-                'principal', 'plan.updated', 'plan', $id, $req->ip);
+            $plan = $repo->update($id, $req->body, $who['principal_id'], $req->ip);
+            if ($plan === null) { return Response::notFound(); }
             return Response::ok(['plan' => P::plan($plan)]);
         });
 
         $r->post('/api/v1/me/plans/{plan_id}/retire', function (Request $req, Database $db, array $who) {
             $id = $req->params['plan_id'] ?? '';
             if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
-            $plan = (new \Dn\Policy\PlanRepository($db))->retire($id);
+            $plan = (new \Dn\Policy\PlanRepository($db))
+                ->retire($id, $who['principal_id'], $req->ip);
             if ($plan === null) { return Response::notFound(); }
-            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
-                'principal', 'plan.retired', 'plan', $id, $req->ip);
             return Response::ok(['plan' => P::plan($plan)]);
         });
 
@@ -189,14 +185,10 @@ final class Routes
             $key = $req->header('Idempotency-Key');
             try {
                 $out = (new \Dn\Vouchers\VoucherService($db))->issueBatch(
-                    $who['customer_id'], $planId, $count, $site, $who['principal_id'], $key);
+                    $planId, $count, $site, $who['principal_id'], $key, $req->ip);
             } catch (\InvalidArgumentException) {
                 return Response::notFound();   // unknown or retired plan
             }
-
-            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
-                'principal', 'voucher.issued', 'voucher_batch', $out['batch']['id'], $req->ip,
-                ['count' => count($out['vouchers'])]);
 
             // 202, not 200: the codes exist, and the work of publishing them
             // is queued. Says nothing about how or when that reaches a router.
@@ -210,17 +202,14 @@ final class Routes
         $r->post('/api/v1/me/vouchers/{voucher_id}/revoke', function (Request $req, Database $db, array $who) {
             $id = $req->params['voucher_id'] ?? '';
             if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
-            $svc = new \Dn\Vouchers\VoucherService($db);
-            $v = $svc->revoke($id);
-            if ($v === null) { return Response::notFound(); }
+            $out = (new \Dn\Vouchers\VoucherService($db))
+                ->revoke($id, $who['principal_id'], $req->ip);
+            if ($out === null) { return Response::notFound(); }
 
-            $intent = (new \Dn\Intents\IntentQueue($db))->enqueue(
-                $who['customer_id'], 'voucher.revoke', ['voucher_id' => $id],
-                $who['principal_id'], 'voucher', $id);
-            (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
-                'principal', 'voucher.revoked', 'voucher', $id, $req->ip);
-
-            return Response::accepted(['voucher' => P::voucher($v), 'intent_id' => $intent['id']]);
+            return Response::accepted([
+                'voucher'   => P::voucher($out['voucher']),
+                'intent_id' => $out['intent_id'],
+            ]);
         });
 
         // ── sessions: connected devices ─────────────────────────────────
@@ -244,18 +233,15 @@ final class Routes
             function (Request $req, Database $db, array $who) {
                 $id = $req->params['session_id'] ?? '';
                 if (!preg_match('/^[0-9a-f-]{36}$/i', $id)) { return Response::notFound(); }
-                $s = (new \Dn\Sessions\SessionService($db))->find($id);
-                if ($s === null) { return Response::notFound(); }
-
                 // Disconnecting reaches a router, so it is an intent like
-                // everything else that does.
-                $intent = (new \Dn\Intents\IntentQueue($db))->enqueue(
-                    $who['customer_id'], 'session.disconnect',
-                    ['session_id' => $id], $who['principal_id'], 'session', $id);
-                (new \Dn\Audit\AuditLog($db))->record($who['customer_id'], $who['principal_id'],
-                    'principal', 'session.disconnect_requested', 'session', $id, $req->ip);
+                // everything else that does. The intent and its audit row are
+                // one operation inside the function; the session's ownership
+                // is established there too, so no separate find() is needed.
+                $intentId = (new \Dn\Sessions\SessionService($db))
+                    ->requestDisconnect($id, $who['principal_id'], $req->ip);
+                if ($intentId === null) { return Response::notFound(); }
 
-                return Response::accepted(['intent_id' => $intent['id']]);
+                return Response::accepted(['intent_id' => $intentId]);
             });
 
         // ── uplink: measured, shown, never acted on ─────────────────────
