@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DishNet Admin</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#15181d; --muted:#6b7280; --line:#e3e6ea;
+  --green:#128a4b; --amber:#b26a00; --red:#c02626; --gray:#9aa1aa; --accent:#1f4fd8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+     -webkit-text-size-adjust:100%}
+.shell{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+aside{background:#11151b;color:#cdd3da;padding:14px 0;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{padding:0 16px 14px;font-weight:700;color:#fff;letter-spacing:.2px}
+.navsec{padding:14px 16px 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6f7a87}
+.navitem{display:block;padding:9px 16px;color:#cdd3da;text-decoration:none;cursor:pointer;border-left:3px solid transparent}
+.navitem:hover{background:#1a212a;color:#fff}
+.navitem.on{background:#1a212a;color:#fff;border-left-color:var(--accent)}
+main{min-width:0;padding:0 0 40px}
+.appbar{padding:18px 20px 10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.appbar h1{margin:0;font-size:20px}
+.appbar .sub{color:var(--muted);font-weight:400;font-size:13px}
+.evidence{margin:0 20px;padding:9px 12px;border-radius:8px;display:flex;gap:10px;align-items:center;
+          flex-wrap:wrap;font-size:12.5px;border:1px solid var(--line);background:#fff}
+.evidence b{letter-spacing:.06em;font-size:11px;padding:2px 7px;border-radius:5px;background:#eef1f5}
+.evidence.simulated{border-color:#f0c36b;background:#fff8e8}
+.evidence.simulated b{background:#f0c36b;color:#3b2a00}
+.evidence.production{border-color:#a9d8b8;background:#f0fbf4}
+.evidence.production b{background:var(--green);color:#fff}
+.cohorts{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px 4px}
+.fl{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:6px 13px;cursor:pointer;font:inherit;color:inherit}
+.fl i{width:7px;height:7px;border-radius:50%;flex:none;background:var(--gray)}
+.fl.fresh i{background:var(--green)} .fl.warm i{background:var(--amber)}
+.fl.cold i{background:var(--red)} .fl.never i{background:var(--gray);opacity:.6}
+.fl .fl-n{font-weight:700} .fl .fl-l{color:var(--muted);text-transform:capitalize}
+.fl.zero{opacity:.55} .fl.on{background:#11151b;color:#fff;border-color:#11151b}
+.fl.on .fl-l{color:#c9d0d8}
+.searchbar{padding:10px 20px 6px}
+.searchbar input{width:100%;max-width:460px;padding:9px 12px;border:1px solid var(--line);
+                 border-radius:8px;font:inherit;background:#fff}
+.tw{margin:10px 20px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:#fafbfc}
+tbody tr:last-child td{border-bottom:0}
+tbody tr[data-router]{cursor:pointer}
+tbody tr[data-router]:hover{background:#f4f7ff}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef1f5;font-size:12px}
+.pill.failed{background:#fde8e8;color:var(--red)}
+.hs{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.hs i{width:7px;height:7px;border-radius:50%;flex:none}
+.hs.fresh i{background:var(--green)} .hs.fresh{color:var(--green)}
+.hs.warm i{background:var(--amber)} .hs.warm{color:var(--amber)}
+.hs.cold i{background:var(--red)} .hs.cold{color:var(--red)}
+.hs.never i{background:var(--gray);opacity:.6} .hs.never{color:var(--muted)}
+.stateblock{margin:14px 20px;padding:20px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.stateblock h3{margin:0 0 6px;font-size:15px}
+.stateblock p{margin:0;color:var(--muted);max-width:62ch}
+.stateblock.unauthorized,.stateblock.forbidden{border-color:#f0c36b;background:#fff8e8}
+.stateblock.offline,.stateblock.failed{border-color:#e9b0b0;background:#fdf3f3}
+.kv{margin:12px 20px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0}
+.kv>div{padding:11px 14px;border-bottom:1px solid var(--line);min-width:0}
+.kv dt{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 3px}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.note{margin:12px 20px;padding:11px 14px;border-left:3px solid var(--accent);background:#fff;
+      color:var(--muted);border-radius:0 8px 8px 0;max-width:72ch}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:12px 20px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.tile b{display:block;font-size:26px;line-height:1.1}
+.tile span{color:var(--muted);font-size:12.5px}
+.tile.bad{border-color:#e9b0b0;background:#fdf3f3} .tile.warn{border-color:#f0c36b;background:#fff8e8}
+.burger{display:none}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  aside{position:static;height:auto;display:flex;gap:2px;overflow-x:auto;padding:8px;
+        scrollbar-width:none}
+  aside::-webkit-scrollbar{display:none}
+  .brand{display:none}
+  .navsec{display:none}
+  .navitem{border-left:0;border-bottom:3px solid transparent;white-space:nowrap;padding:8px 12px;border-radius:6px}
+  .navitem.on{border-left:0;border-bottom-color:var(--accent)}
+  .appbar,.evidence,.cohorts,.searchbar,.tw,.stateblock,.kv,.note,.tiles{margin-left:0;margin-right:0}
+  .appbar,.cohorts,.searchbar{padding-left:14px;padding-right:14px}
+  .evidence,.tw,.stateblock,.kv,.note,.tiles{margin-left:14px;margin-right:14px}
+}
+@media (max-width:420px){
+  .appbar h1{font-size:18px}
+  .tiles{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+  th,td{padding:9px 10px}
+}
+</style>
+</head><body>
+<div class="shell">
+  <aside><div class="brand">DishNet Admin</div><nav id="nav"></nav></aside>
+  <main>
+    <div id="evidence"></div>
+    <div id="main"></div>
+  </main>
+</div>
+<script type="module">
+  import { boot } from './app.js';
+  boot();
+</script>
+</body></html>
