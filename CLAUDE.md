@@ -109,6 +109,27 @@ Measured, not inferred:
   `internal/radius/accounting`; the three auth routes also run outside any
   transaction.
 
+**Remediation is DESIGNED in `docs/87`, and NOT authorized to build.** The
+current voucher/AAA implementation is classified **NON-CONFORMING — NOT
+PRODUCTION CAPABLE**. Key points that bind any future work:
+
+- The target flow is `docs/66` (Decisions 1 and 7) + `docs/67` (Decision 3), not
+  a new design: `mt_portal_redeem(code, nas)` in one control-plane transaction →
+  `activating` → a **separate** publication store (never `mt_intents`, whose
+  timings `docs/66` §2.7 explicitly refuses) → the AAA Publisher mints
+  username **and** password independently from a CSPRNG → `publish()` in the
+  `radius` database → `active`.
+- **`dnb_cred_site` must be written from `voucher.site_id`, never from the
+  guest-asserted NAS.** The portal's NAS claim may only reject early; C-b at
+  FreeRADIUS is the enforcement.
+- **Do not add a `guest` actor kind.** `principal | staff | system` is
+  CHECK-constrained in the schema and `system` is correct for portal activation.
+- `mt_voucher_redeem`, `VoucherService::redeem()` and `radiusUsername()` are all
+  to be **deleted**, not made reachable.
+- **P-1…P-7 in `docs/87` §H.1 must be decided first** — including `dnb_portal`,
+  Decision 5's numbers, and the `mt_vouchers.site_id NOT NULL` migration, which
+  is still gated on the production census.
+
 **Q-F7-1…7 and F-8.1…5 are OPEN.** Nothing in this area may be implemented
 without an explicit instruction.
 - **W-4, W-5, W-6 remain OPEN.** Do not invent a staff credential store, a
