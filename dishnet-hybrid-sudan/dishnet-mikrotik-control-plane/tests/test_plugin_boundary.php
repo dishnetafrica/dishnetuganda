@@ -237,7 +237,7 @@ foreach (['wireguard', 'WireGuard', 'RADIUS', 'HotSpot'] as $w) {
     is_(preg_match('/' . preg_quote($w, '/') . '[^\n]{0,40}(connected|healthy|running|up\b)/i', $code), 0,
         "the panel asserts nothing about {$w} on its own");
 }
-is_(preg_match('/class="signal \$\{esc\(x\.status\)\}"/', $code), 1,
+is_(preg_match('/class="signal \$\{esc\(x\.status\)\}/', $code), 1,
     'the signal class comes from the server status, so the UI cannot colour it in');
 
 t('5b. the actions render inert');

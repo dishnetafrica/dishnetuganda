@@ -88,6 +88,16 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
 .signal p{margin:5px 0 0;font-size:12.5px;color:var(--muted)}
 .signal p.needs{color:#4b5563;font-style:italic}
 .signal p.src{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#7a828c}
+.signal.unexposed{background:#fbfaf6}
+.signal.unexposed .dot{background:var(--amber)}
+.signal.unexposed .verdict{color:var(--amber)}
+.opgrid{margin:8px 20px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.op{padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.op h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.op p{margin:0;font-size:16px}
+.op b{font-size:22px}
+.op small{display:block;margin-top:6px;font-size:11.5px;color:var(--muted);line-height:1.4}
+.muted{color:var(--muted);font-size:14px}
 
 /* Actions, shown inert. Visible so an operator can see what the product will
    do and why it cannot yet. */

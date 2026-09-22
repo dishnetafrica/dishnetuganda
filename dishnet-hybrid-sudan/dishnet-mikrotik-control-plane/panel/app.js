@@ -62,9 +62,17 @@ function table(cols, rows, rowFn) {
 }
 
 /* ---- Routers: the fleet-centric operational view (V2's landing screen) --- */
+/* Resolve an id to the name its own projection carries. A truncated uuid in a
+ * Customer column tells an operator nothing and reads like a stray identifier. */
+function nameResolver(res) {
+  const by = new Map(isOk(res) ? res.rows.map(x => [x.id, x.name]) : []);
+  return id => by.get(id) ?? (id ? short(id) : null);
+}
+
 async function vRouters() {
-  const res = await api.routers();
-  if (!isOk(res)) return head('MT Routers') + stateBlock(res, 'routers');
+  const [res, custs, sites] = await Promise.all([api.routers(), api.customers(), api.sites()]);
+  if (!isOk(res)) return head('Routers') + stateBlock(res, 'routers');
+  const custName = nameResolver(custs), siteName = nameResolver(sites);
 
   const all = res.rows;
   const counts = { fresh: 0, warm: 0, cold: 0, never: 0 };
@@ -87,7 +95,7 @@ async function vRouters() {
     <button class="fl all ${state.cohortFilter ? '' : 'on'}" data-cohort="">
       <span class="fl-n">${all.length}</span><span class="fl-l">all</span></button></div>`;
 
-  return head('MT Routers', `${all.length} in the estate`) + cohorts + search() + (
+  return head('Routers', `${all.length} in the estate`) + cohorts + search() + (
     rows.length === 0
       ? `<div class="stateblock empty"><h3>Nothing matches</h3><p>${
           esc(all.length)} routers exist; none match this filter.</p></div>`
@@ -98,8 +106,8 @@ async function vRouters() {
             <td>${esc(r.model)}</td>
             <td><span class="pill">${esc(r.state)}</span></td>
             <td><span class="hs ${cohort(r.last_seen_at)}"><i></i>${esc(contactAge(r.last_seen_at))}</span></td>
-            <td class="mono">${short(r.customer_id)}</td>
-            <td class="mono">${short(r.site_id)}</td></tr>`));
+            <td>${esc(custName(r.customer_id)) || '—'}</td>
+            <td>${esc(siteName(r.site_id)) || '—'}</td></tr>`));
 }
 
 
@@ -133,11 +141,13 @@ function signalPanel(sig) {
     return `<div class="note">The signal inventory could not be read, so no signal is being shown.</div>`;
   }
   return `<div class="signals">` + sig.signals.map(x => `
-    <div class="signal ${esc(x.status)}">
+    <div class="signal ${esc(x.status)}${x.status === 'measured' && !x.admin_readable ? ' unexposed' : ''}">
       <span class="dot"></span>
       <div>
         <b>${esc(x.label)}</b>
-        <span class="verdict">${x.status === 'measured' ? 'measured' : 'no signal'}</span>
+        <span class="verdict">${x.status === 'measured'
+          ? (x.admin_readable ? 'measured' : 'measured, not exposed')
+          : 'no signal'}</span>
         ${x.reason ? `<p>${esc(x.reason)}</p>` : ''}
         ${x.source ? `<p class="src">${esc(x.source)}</p>` : ''}
         ${x.needs ? `<p class="needs">Needs: ${esc(x.needs)}</p>` : ''}
@@ -166,25 +176,65 @@ async function vRouter() {
     return head('Router') + stateBlock(res, 'router');
   }
   const r = res.data.router;
-  const f = [['Serial', r.serial], ['Name', r.name], ['Model', r.model],
-             ['RouterOS', r.ros_version], ['State', r.state],
-             ['Tunnel address', r.tunnel_ip], ['WAN interface', r.wan_interface],
-             ['WAN established by', r.wan_interface_set_by],
-             ['Last contact', contactAge(r.last_seen_at)],
-             ['Staged by', r.staged_by], ['Claimed', r.claimed_at],
-             ['Customer', short(r.customer_id)], ['Site', short(r.site_id)]];
-  const sres = await api.networkSignals();
+
+  /* Everything the OPERATIONS section shows is filtered from the estate reads
+   * the Admin API already exposes. Nothing here asks a router anything. */
+  const [sres, sess, vous, jobs, custs, sites] = await Promise.all([
+    api.networkSignals(), api.sessions(), api.vouchers(), api.intents(),
+    api.customers(), api.sites()]);
+  const custName = nameResolver(custs), siteName = nameResolver(sites);
   const sig = sres.status === 200 ? sres.data : null;
+  const mine = (res2, pred) => isOk(res2) ? res2.rows.filter(pred) : null;
+  const rJobs = mine(jobs, x => x.target_id === r.id);
+  const rVous = r.site_id ? mine(vous, x => x.site_id === r.site_id) : [];
+
+  const kv = (pairs) => `<div class="kv">${pairs.map(([k, v]) =>
+    `<div><dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd></div>`).join('')}</div>`;
+
+  const identity = kv([
+    ['Name', r.name], ['Serial', r.serial], ['Model', r.model],
+    ['RouterOS', r.ros_version], ['Lifecycle state', r.state],
+    ['Customer', custName(r.customer_id)], ['Site', siteName(r.site_id)],
+  ]);
+
+  /* CONNECTIVITY carries only what is recorded. The observed half of it — link
+   * state, tunnel handshake, RADIUS and HotSpot — lives in SIGNALS, where each
+   * one says it has no source. */
+  const connectivity = kv([
+    ['Tunnel address', r.tunnel_ip],
+    ['WAN interface', r.wan_interface],
+    ['WAN established by', r.wan_interface_set_by],
+    ['Last contact', contactAge(r.last_seen_at)],
+  ]);
+
+  const count = (rows, noun) => rows === null
+    ? `<span class="muted">unavailable</span>`
+    : `<b>${rows.length}</b> ${esc(noun)}${rows.length === 1 ? '' : 's'}`;
+  const operations = `<div class="opgrid">
+    <div class="op"><h3>Active sessions</h3><p><span class="muted">not attributable</span></p>
+      <small>RADIUS accounting carries a NAS identifier and mt_session_account never sets
+      device_id, so a session cannot be tied to one router. The estate-wide count is on
+      Active sessions.</small></div>
+    <div class="op"><h3>Vouchers at this site</h3><p>${count(rVous, 'voucher')}</p></div>
+    <div class="op"><h3>Provisioning jobs</h3><p>${count(rJobs, 'job')}</p></div>
+    <div class="op"><h3>Uplink</h3><p><span class="muted">not exposed to Admin</span></p>
+      <small>Recorded in Domain B. Exposing telemetry to Admin is decision D-4, which is open.</small></div>
+  </div>` + (rJobs && rJobs.length ? table(
+    ['Kind', 'State', 'Attempts', 'Created'], rJobs,
+    j => `<tr><td>${esc(j.kind)}</td><td><span class="pill ${esc(j.state)}">${esc(j.state)}</span></td>
+          <td>${esc(j.attempts)}/${esc(j.max_attempts)}</td>
+          <td class="mono">${esc(String(j.created_at ?? '').slice(0, 16))}</td></tr>`) : '');
+
   return head('Router', esc(r.serial)) +
-    `<div class="kv">${f.map(([k, v]) =>
-      `<div><dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd></div>`).join('')}</div>` +
+    `<h2 class="sub">Identity</h2>` + identity +
+    `<h2 class="sub">Connectivity</h2>` + connectivity +
     (r.wan_interface ? '' : `<div class="note">No WAN interface has been established for this
       router, so its uplink is not measurable. That is a provisioning gap, not a fault.</div>`) +
     `<h2 class="sub">Provisioning</h2>` + ladder(r) +
+    `<h2 class="sub">Operations</h2>` + operations +
     `<h2 class="sub">Signals</h2>` + signalPanel(sig) +
     actionPanel(sig);
 }
-
 
 async function vNetwork() {
   const res = await api.networkSignals();

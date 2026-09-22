@@ -31,7 +31,13 @@ final class SignalReport
      * Every `unmeasured` entry names what would have to exist. That turns the
      * screen into a to-do list an operator can read, instead of a wall of grey.
      *
-     * @return list<array{key:string,label:string,status:string,source:?string,reason:?string,needs:?string}>
+     * `admin_readable` is a SEPARATE question from `status`. A signal can be
+     * measured in Domain B and still not be readable through the Admin API —
+     * uplink telemetry is exactly that, because exposing telemetry to Admin is
+     * decision D-4 and D-4 is open. Collapsing the two would make the panel
+     * claim it can show a number it cannot fetch.
+     *
+     * @return list<array{key:string,label:string,status:string,source:?string,reason:?string,needs:?string,admin_readable:bool}>
      */
     public static function inventory(): array
     {
@@ -42,6 +48,7 @@ final class SignalReport
                 'source' => 'mt_devices.state',
                 'reason' => null,
                 'needs'  => null,
+                'admin_readable' => true,
             ],
             [
                 'key' => 'wan_interface', 'label' => 'WAN interface',
@@ -51,6 +58,7 @@ final class SignalReport
                 // named person at staging. It is not a link-state signal.
                 'reason' => 'The interface a person recorded at staging, with their name and the time. Not a link state.',
                 'needs'  => null,
+                'admin_readable' => true,
             ],
             [
                 'key' => 'wan_link', 'label' => 'WAN link up/down',
@@ -58,6 +66,7 @@ final class SignalReport
                 'source' => null,
                 'reason' => 'No column, no probe. Only the interface NAME is recorded.',
                 'needs'  => 'A RouterOS read-back of interface status (F6-B), or a device-reported heartbeat.',
+                'admin_readable' => true,
             ],
             [
                 'key' => 'wireguard', 'label' => 'WireGuard tunnel',
@@ -65,6 +74,7 @@ final class SignalReport
                 'source' => null,
                 'reason' => 'wg_pubkey and tunnel_ip are CONFIGURATION INTENT — what we mean to set up. Neither says a handshake occurred.',
                 'needs'  => 'A handshake timestamp from the WireGuard peer, or a reachability probe of tunnel_ip.',
+                'admin_readable' => true,
             ],
             [
                 'key' => 'radius', 'label' => 'RADIUS',
@@ -72,6 +82,7 @@ final class SignalReport
                 'source' => null,
                 'reason' => 'No health probe exists anywhere in this application, and the AAA publisher has never been built.',
                 'needs'  => 'The AAA Publisher (Decision 7) plus a reachability check of the radius database.',
+                'admin_readable' => true,
             ],
             [
                 'key' => 'hotspot', 'label' => 'HotSpot service',
@@ -79,6 +90,7 @@ final class SignalReport
                 'source' => null,
                 'reason' => 'Nothing in this system observes whether a HotSpot server is running on a router.',
                 'needs'  => 'A RouterOS read-back (F6-B).',
+                'admin_readable' => true,
             ],
             [
                 'key' => 'last_seen', 'label' => 'Last contact',
@@ -88,20 +100,24 @@ final class SignalReport
                 // the column is real, and nothing anywhere writes it.
                 'reason' => 'The column exists but NOTHING WRITES IT. Every router reads null, so it is not a liveness signal — it is an empty field.',
                 'needs'  => 'A writer. Which mechanism supplies it is the unresolved delivery-model question, so none is named here.',
+                'admin_readable' => true,
             ],
             [
                 'key' => 'uplink', 'label' => 'Uplink throughput',
                 'status' => self::MEASURED,
                 'source' => 'mt_uplink_samples',
-                'reason' => 'Sampled rx/tx and session counts. Present only for routers a sampler has actually visited.',
-                'needs'  => null,
+                'reason' => 'Sampled rx/tx and session counts. Recorded in Domain B, but NOT exposed through the Admin read boundary: telemetry exposure is decision D-4, and D-4 is open.',
+                'needs'  => 'An Admin projection for uplink samples, which needs D-4 decided first.',
+                'admin_readable' => false,
             ],
             [
                 'key' => 'sessions', 'label' => 'Active sessions',
                 'status' => self::MEASURED,
+                'per_router' => false,
                 'source' => 'mt_sessions (RADIUS accounting)',
-                'reason' => 'Ingested from RADIUS accounting, so it reflects what the NAS reported.',
+                'reason' => 'Ingested from RADIUS accounting, so it reflects what the NAS reported. ESTATE-WIDE ONLY: accounting carries a NAS identifier, and mt_session_account never sets device_id, so a session cannot be attributed to a particular router.',
                 'needs'  => null,
+                'admin_readable' => true,
             ],
         ];
     }
@@ -134,6 +150,7 @@ final class SignalReport
             'total'      => count($inv),
             'measured'   => count($measured),
             'unmeasured' => count($inv) - count($measured),
+            'admin_readable'    => count(array_filter($inv, static fn($s) => $s['admin_readable'])),
             'actions_available' => count(array_filter(self::actions(), static fn($a) => $a['available'])),
             'actions_total'     => count(self::actions()),
         ];

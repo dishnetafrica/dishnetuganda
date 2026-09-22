@@ -243,6 +243,38 @@ cannot colour a dot in, and a test fails if anything starts writing
 All four router actions (push config, reboot, reprovision, diagnostics) render
 **inert** with specific reasons. Suite **1,349** assertions.
 
+## The simulated estate — `docs/91`
+
+`php plugin/bin/plugin.php simulate` builds a coherent, explicitly synthetic
+MikroTik estate. **It has its own database.** Never point the panel at
+`dnb_test`: `tests/run.sh` drops and recreates that on every run, so the panel
+then shows fixture debris — which is exactly how a Routers list saying "no
+routers" came to sit beside a Router Detail showing one.
+
+- Everything is built through the **real Domain-B write paths**, so the estate
+  obeys every constraint and the audit trail exists because the acts happened.
+- Every identifier is `SIM-` prefixed. A test asserts no `WAN-UNSET`-shaped
+  value survives.
+- The simulator **refuses to run when `DN_ALLOW_REAL_BINDINGS` is set**: a
+  simulated router must never share a process with a real adapter.
+- It must not use `Database::inspector()` (F2), must not write
+  `mt_entitlements` (F8/F10), and must read `Gigawords` wherever it reads
+  octets (RFC 2869). The suite caught all three.
+
+**Three more things the panel may not claim** (`docs/91` §4):
+
+- **Sessions cannot be attributed to a router.** `mt_session_account` never sets
+  `device_id`; accounting carries a NAS identifier and nothing maps it to a
+  device. The panel says **"not attributable"**, never `0`.
+- **Uplink is measured but NOT Admin-readable.** There is no Admin projection
+  for `mt_uplink_samples`, and telemetry exposure is **D-4, which is open**.
+  Do not add a projection — that would decide D-4.
+- **`wan_interface_set_at` is not in the Admin projection**, so it is not shown
+  at all rather than shown as an em dash.
+
+The signal inventory separates **`status`** (measured in Domain B) from
+**`admin_readable`** (the Admin API can fetch it). Do not collapse them.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

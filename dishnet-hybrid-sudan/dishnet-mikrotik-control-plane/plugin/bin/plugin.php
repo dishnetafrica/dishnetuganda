@@ -16,6 +16,7 @@ require dirname(__DIR__, 2) . '/src/autoload.php';
 
 use Dn\Plugin\Manifest;
 use Dn\Plugin\Installer;
+use Dn\Plugin\Simulator;
 
 $root = dirname(__DIR__, 2);
 $cmd  = $argv[1] ?? 'status';
@@ -68,7 +69,27 @@ switch ($cmd) {
         foreach ($inst->uninstall() as $line) { echo "  {$line}\n"; }
         exit(0);
 
+    case 'simulate':
+        // A clearly-labelled demo estate, built through the real write paths.
+        // It refuses to run where real bindings are allowed: a simulated router
+        // must never appear in a process that can reach a real one.
+        if (\Dn\Runtime\Bindings::realBindingsAllowed()) {
+            fwrite(STDERR, "Refusing: real bindings are enabled. The simulator must not\n"
+                         . "share a process with real MikroTik or FreeRADIUS adapters.\n");
+            exit(2);
+        }
+        $sim = new Simulator(true);
+        if ($sim->alreadyBuilt() && ($argv[2] ?? '') !== '--again') {
+            fwrite(STDERR, "A simulated estate is already present. Use --again to add another.\n");
+            exit(2);
+        }
+        echo "building the simulated estate\n";
+        $sim->build();
+        echo "done. Every identifier is prefixed " . Simulator::MARK . " so nothing here\n"
+           . "can be mistaken for a production record.\n";
+        exit(0);
+
     default:
-        fwrite(STDERR, "unknown command: {$cmd}\nuse: status | install | uninstall\n");
+        fwrite(STDERR, "unknown command: {$cmd}\nuse: status | install | uninstall | simulate\n");
         exit(2);
 }
