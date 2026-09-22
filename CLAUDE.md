@@ -416,6 +416,57 @@ this session cannot touch.
 
 Nothing here is authorized to build. No gate moved.
 
+## Customer identity — designed, NOT chosen (`docs/99`)
+
+Two models are written out and compared. **Neither is recommended and neither
+may be implemented without an explicit instruction.**
+
+- **Model A** — the uCRM client is the source of truth; `mt_customers` becomes a
+  projection; `ucrm_client_id` becomes `NOT NULL`.
+- **Model B** — `mt_customers` stays an entity carrying a linked
+  `ucrm_client_id` with provenance (`ucrm_linked_by`, `ucrm_linked_at`).
+
+**Do not pick one by assumption.** What decides it is operator evidence
+(`docs/99` §3.1): does DishNet ever install before the customer exists in uCRM,
+must the panel survive a uCRM upgrade, and **E-2 — how many `mt_customers` rows
+production actually holds.**
+
+> **U-2 (`ucrm_client_id NOT NULL`) cannot be closed by choosing a value.** It
+> needs the production census, and 18 foreign keys use `ON DELETE RESTRICT`, so
+> an unlinked row with a site, voucher or audit history cannot simply be
+> deleted. **`docs/79` remains the handoff; production data state is NOT
+> ESTABLISHED.**
+
+New findings that bind any future work:
+
+- **I-2 — the duplication is not only `mt_customers`.** `mt_principals` holds
+  `display_name`, `phone`, `email` — fields uCRM owns for the same person.
+  Deciding the customer model without deciding this just moves the problem down
+  a level (**U-6**).
+- **`mt_services` has NO uCRM service reference of any kind** — only
+  `customer_id` and `kind`. One uCRM client with several services cannot be
+  represented today (**U-5**).
+- **The estate already solved this once**: the sibling plugin's
+  `026_lte_financial_ledger.sql` links its own entity to `ucrm_client_id
+  NOT NULL` and records `linked_by`. That is Model B in miniature, running.
+- **Never resolve a uCRM client from a phone number at request time.**
+  `lib/LeadMatcher.php` matches on the last nine digits, and the plugin's own
+  manifest says loose matching "can identify the WRONG customer and disclose
+  their balance". **The link is stored once, with provenance — never inferred
+  per request.**
+
+**The staff trust boundary — U-7.** The uCRM session cookie is trustworthy only
+on the **server side** of the bridge plugin, where `/current-user` answered it.
+**Domain B must never accept a staff identity from a browser.** Two
+arrangements, neither chosen: **S-1** the plugin proxies every call, or **S-2**
+the plugin mints a short-lived signed assertion. Either way the audit actor is
+**`staff`**, which `actor_kind` already permits — **invent no new actor kind**,
+and the actor arrives as a parameter from the identity boundary, exactly as W-1
+requires. This closes B-2 **only inside uCRM**; it does not authorize binding
+any Admin write route, and W-4/W-5/W-6 stay open.
+
+Nothing here is authorized to build. No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
