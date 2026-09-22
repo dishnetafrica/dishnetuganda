@@ -1389,6 +1389,91 @@ linked to that service's customer — is the single place a Domain-B write depen
 on a live uCRM read. It is an **administrative** operation, never on the
 operating path, and no FK can express it.
 
+## The onboarding spine — final design (`docs/112`)
+
+All nine operations specified. **Nothing authorized to build.**
+
+### A-1 — the audit trail is forgeable, and it extends `docs/84` F-3
+
+F-3 already records that migration 015 grants `dnb_admin`
+`SELECT, INSERT, UPDATE, DELETE` on **all tables**, with `ALTER DEFAULT
+PRIVILEGES` so new tables inherit it — but states it as a hypothetical. **Proved
+by execution as `dnb_admin` under RLS, rolled back, with a non-zero control:**
+
+| | | |
+|---|---|---|
+| **A-1a** | `INSERT INTO mt_audit_log …` | **`INSERT 0 1`** |
+| **A-1b** | `INSERT INTO mt_customers …` | **refused by RLS `WITH CHECK`** |
+| **A-1c** | `dnb_worker` `mt_audit_log` INSERT | **true** — line 73 grants **both**; F-3 names only `dnb_admin` |
+
+- **A forged audit row cannot be removed** — `mt_audit_log` is append-only by
+  trigger. That is worse than a forgeable business write, which can be reversed.
+- **RLS still bounds it to the caller's own tenant** (A-1b), so this is an
+  **attribution/integrity** problem, **not** a tenancy breach. Do not overstate
+  it.
+- **Latent**: no production route connects as `dnb_admin`, and `Database`
+  documents `adminApi()`/`adminWrite()` as *"separate from `admin()` on
+  purpose"*.
+
+> **Binding: none of the nine spine functions may be EXECUTE-able by
+> `dnb_admin`, and no new route may connect as it.** W-1's *"no HTTP role may
+> write an audit row directly"* is true of `dnb_adminwrite` and `dnb_adminapi`
+> — **not of `dnb_admin` or `dnb_worker`.** Revoking the blanket grant is F-3's
+> own remediation, out of scope here, but **A-1 raises its priority** because the
+> forgeable target is the audit trail.
+
+**Also: a security-critical comment names the wrong role.**
+`src/Api/AdminRoutes.php:103` says *"dnb_admin holds EXECUTE and no table
+privilege whatsoever"* — true of **`dnb_adminapi`**, which the route actually
+uses, and **false of the role it names**. The behaviour is correct; the comment
+is wrong.
+
+### Required vs optional — settled
+
+| Step | Required for |
+|---|---|
+| customer | everything |
+| **principal** | **a login only** — an operator managed entirely by DishNet staff needs none |
+| service | a site |
+| site | a voucher (2b) and a router's `site_id` |
+| **device** | **nothing in the commercial chain** |
+| **uCRM link** | **nothing** |
+
+### Per-writer notes that bind implementation
+
+- **`mt_customer_create` exists and is audited — what is missing is the caller.**
+  No new signature is needed; `docs/110` withdrew the link-at-creation idea.
+- **Principal creation is the highest-risk writer** — the only operation granting
+  a human a login. A duplicate phone is a **REFUSAL** (P-B); it may **store**
+  `kind` but **not branch on it** (C6); there is **no reassignment** (P-C).
+  Disable **does** close live sessions, because `p.status` is re-read on every
+  resolution.
+- **`mt_service_create` has no natural key whatsoever** — `customer_id` plus a
+  `kind` with one legal value. The worst of the nine; a caller-supplied key is
+  mandatory.
+- **`mt_site_create` takes no `p_customer`** — derive, never accept — and is
+  **blocked on O-1**.
+- **`mt_device_assign` idempotency is a domain invariant, not a table**, and it
+  returns **NULL** rather than raising for a missing device — a retry handler
+  must not read that as success.
+- **uCRM link cardinality is OPEN** — `ucrm_client_id UNIQUE` already enforces
+  1:1, so **decide C10 first**. **U-5 deferred**: no column, and the far side is
+  unevidenced.
+
+### Idempotency classes
+
+**Non-tenant table** (customer, service, site, NULL-phone principal — the four
+with no natural key) · **existing UNIQUE** (principal-by-phone, uCRM link,
+intents — stronger, because a caller cannot bypass it by omitting the key) ·
+**domain invariant** (device assign). Conflict is uniform: same key, different
+digest → **refuse**. **`session.disconnect` deliberately NOT fixed here**; it
+remains a blocker before F6-B.
+
+### Customer-facing vs staff-only
+
+**None of the nine is customer-facing.** The customer plane keeps exactly what it
+has — plans, vouchers, sessions, `/me`. **B-2** is separate work.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
