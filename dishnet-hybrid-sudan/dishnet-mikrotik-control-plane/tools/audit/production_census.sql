@@ -173,7 +173,6 @@ ELSE
   EXECUTE format('SELECT count(*) FROM %s s JOIN %s v ON v.id = s.service_id
              WHERE s.customer_id IS DISTINCT FROM v.customer_id', src_sit, src_svc) INTO n;
   RAISE NOTICE 'sites whose service belongs to ANOTHER customer : %   <= BLOCKS the FK', n;
-  block := block + n;
   IF n > 0 THEN
     FOR r IN EXECUTE format('SELECT left(s.id::text,8) AS site, left(s.customer_id::text,8) AS site_cust,
                              left(v.id::text,8) AS svc, left(v.customer_id::text,8) AS svc_cust
@@ -213,7 +212,6 @@ ELSE
   EXECUTE format('SELECT count(*) FROM (SELECT service_id FROM %s
              GROUP BY service_id HAVING count(DISTINCT customer_id) > 1) x', src_sit) INTO n;
   RAISE NOTICE 'services reached by sites of >1 CUSTOMER: %   <= BLOCKS the FK', n;
-  block := block + n;
  EXCEPTION WHEN insufficient_privilege THEN
   blind := true;
   RAISE NOTICE '*** SECTION 1b UNREADABLE by % — insufficient privilege.', current_user;
@@ -362,7 +360,8 @@ RAISE NOTICE '============================================================';
 -- unless this session PROVED it could see something it is entitled to see.
 RAISE NOTICE 'rows this session could actually see    : %   (positive control)', seen;
 RAISE NOTICE 'measurements refused or hidden          : %', blind;
-RAISE NOTICE 'rows that would refuse the O-1 FK       : %', block;
+RAISE NOTICE 'rows that would refuse the O-1 FK       : %   (distinct rows, not', block;
+RAISE NOTICE '                                              a sum of detectors)';
 RAISE NOTICE '';
 IF blind THEN
   RAISE NOTICE '>> INDETERMINATE — at least one measurement was refused or hidden.';

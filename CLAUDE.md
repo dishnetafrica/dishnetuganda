@@ -1775,6 +1775,76 @@ assertion has real subject matter.
 > comes first.** `session.disconnect` replay remains open, and is asserted in
 > the suite rather than assumed.
 
+## O-1 acceptance — SYNTHETIC, and it overturned a documented claim
+
+`tools/audit/o1_acceptance.php` builds a throwaway `dnb_o1acc`, seeds an
+`O1FIX-` prefixed estate, runs the **exact** `production_census.sql` against
+it, and drops the database. **52 assertions, and NONE of it is production
+evidence** — production remains **CENSUS NOT OBTAINED**.
+
+### The finding: the O-1 migration does NOT fail closed
+
+> **`docs/106`'s "the migration fails closed by itself… No guard clause is
+> needed and none should be added" is WITHDRAWN.** It is true only for a role
+> that can see every row. Proved by execution against a violating estate:
+
+| Run as | Result |
+|---|---|
+| the owner `dnb`, no guard | **`ALTER TABLE` / `COMMIT`, no error** — constraint added and marked **`convalidated = true`** with the violating row still underneath |
+| a role that sees every row | **refuses**, names `mt_sites_service_customer_fkey` and the offending pair, rolls back, **0 constraints** |
+| the owner `dnb`, **with the guard** | **refuses** — *query would be affected by row-level security policy* — **0 constraints** |
+
+The cause: since migration 017 (F2) the owner is **not** a superuser and
+`mt_sites` has **FORCE RLS**, so with no tenant context it sees **zero rows**
+and the FK validation scan finds nothing to object to. The first outcome is
+the dangerous one — **the invariant is asserted but not true, and nothing
+would ever re-check it.**
+
+**The fix is one line**, now in `tools/audit/o1_composite_fk.sql`:
+`SET LOCAL row_security = off;`. It bypasses nothing — under FORCE RLS it makes
+the query **error** rather than silently return fewer rows, so the migration
+refuses to run blind whatever role runs it.
+
+> **This raises the census from useful to load-bearing.** The migration cannot
+> be relied on to catch a violation, and its error names only **one** pair
+> anyway. **The census is the only thing that enumerates.**
+
+### The candidate DDL is NOT a migration
+
+`tools/audit/o1_composite_fk.sql`, deliberately **not** in `migrations/`:
+putting it there would apply it on every install, which is precisely the
+authorisation that has not been given. `tools/` is also excluded from the
+package.
+
+### Five of the fourteen anomalies CANNOT EXIST at migration level 25
+
+Measured: orphan `customer_id`, orphan `service_id`, NULL `service_id`,
+device customer/site mismatch and duplicate `tunnel_ip` are each already
+refused by an existing constraint. The harness proves the **current schema
+refuses each one first**, then drops that single guard in its own throwaway
+database to prove the census would still **detect** it at an earlier migration
+level, then restores it. That is instrument testing, not a claim that such
+rows are reachable.
+
+**What IS representable today:** the O-1 cross-customer site→service (two
+independent single-column FKs that nothing requires to agree), a service
+reached from two customers' sites, a voucher with NULL `site_id`, and a
+decommissioned device still sited.
+
+### Census corrections made by running it
+
+- **`BLOCKED(n)` counted detectors, not rows.** One bad row reported
+  `BLOCKED(3)`. `n` is now the distinct offending row count from the
+  authoritative SECTION 4 check; the other detectors stay as diagnostics.
+- A test tool must not invent configuration. `test_installability.php` sweeps
+  `tools/` and refused two undeclared env vars the harness had introduced;
+  host and port now come from the declared `DNB_DSN`. **The guard was right;
+  the tool was wrong.**
+
+Suite **29 suites / 1,763 assertions / 0 failed**, unchanged by this work.
+Acceptance harness **52 assertions**, stable over two runs, leaving **zero
+residue** — no synthetic database and no `O1FIX-` row anywhere.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
