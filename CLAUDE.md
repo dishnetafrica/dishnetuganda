@@ -366,6 +366,56 @@ invent a staff identity to work around this.**
 No gate moved. F6-B still NOT AUTHORIZED, Admin writes still unbound, portal
 still unbuilt, Decision 5 still OPEN and gated, the census still next.
 
+## UISP/uCRM integration — audited, nothing decided (`docs/98`)
+
+The plugin contract is **MEASURED** from two plugins already running on the
+DishNet server (`dishnet-hybrid-sudan/`, `dishnet-ai/`) — not from documentation,
+which is unreachable (egress 403), and not from the production server, which
+this session cannot touch.
+
+- **The contract:** a **ZIP with `manifest.json` at the archive ROOT**;
+  `main.php` executed on a **~5-minute tick**, never a daemon; **exactly one**
+  public file — *"UCRM only exposes public.php directly"* — routed by
+  `public.php?page=`; uCRM writes `ucrm.json` (`ucrmLocalUrl`, `ucrmPublicUrl`,
+  `pluginAppKey`); the CRM REST API is `api/v1.0/*` with `X-Auth-App-Key`;
+  storage is a data dir that survives updates, holding **SQLite and JSON —
+  there is no PostgreSQL**.
+- **Staff identity is already solved, in the sibling plugin:** forward the uCRM
+  session cookie (`nms-crm-php-session-id`, `nms-session`, `PHPSESSID`) to
+  `/current-user`; 403 when nobody is logged in. **It works only same-origin.**
+  A uCRM admin arriving that way is **`staff`** — `actor_kind` already allows it
+  and **no new actor kind may be invented**.
+- **RC1 is NOT installable through the plugin mechanism, and must not be
+  forced.** Wrong archive, wrong manifest, and — decisively — a plugin has no
+  PostgreSQL, cannot `CREATE ROLE`, and offers no RLS or `SECURITY DEFINER`.
+  **Every Domain-B control lives in exactly those features.** Cramming it in
+  deletes the security model.
+- **Recommendation R-1 — a thin bridge plugin; Domain B stays a separate
+  service.** The plugin supplies the menu, the staff identity and the uCRM
+  adapter. It must **never** connect to Domain-B PostgreSQL, hold a Domain-B
+  role credential, write a Domain-B table, or call a provisioning function.
+
+> **I-1 — Domain B is today a SECOND, UNLINKED CUSTOMER MASTER.** Measured:
+> `mt_customers.ucrm_client_id` is nullable, its **only writer in the whole
+> repository is `tests/bootstrap.php`**, `mt_customer_create(p_name, p_created_by)`
+> cannot set it, Domain B contains no uCRM client code at all, and the simulator
+> shows 3 customers with 0 linked. `docs/45` says the commercial identity lives
+> in uCRM; nothing implements that. **Decide U-1 (projection or independent
+> record) and U-2 (`NOT NULL`?) before more customers accumulate.**
+
+- **Billing and Support do not exist in Domain B** — zero matches in
+  `src/Api/Routes.php`. They can only come from uCRM, and no adapter exists.
+  **Do not fabricate either screen.**
+- **UNVERIFIED and only the operator can answer** (`docs/98` §14): the installed
+  UISP/uCRM version, whether a **client-zone** plugin page is supported, the full
+  webhook event list, and whether a disposable uCRM may be stood up at all.
+  Without that last one the plugin test plan cannot even begin.
+- **M-1:** `dishnet-hybrid-sudan/manifest.json` says `ucrmVersionCompliability`
+  where `dishnet-ai` says `ucrmVersionCompliancy`. One is wrong; confirm against
+  the real installation before touching it.
+
+Nothing here is authorized to build. No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
