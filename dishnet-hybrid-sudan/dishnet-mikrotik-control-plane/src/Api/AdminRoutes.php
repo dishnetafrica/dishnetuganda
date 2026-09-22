@@ -8,6 +8,7 @@ use Dn\Admin\StaffIdentity;
 use Dn\Http\Request;
 use Dn\Http\Response;
 use Dn\Http\Router;
+use Dn\Http\Serializer\AdminProjection;
 use Dn\Runtime\Bindings;
 
 /**
@@ -31,9 +32,21 @@ use Dn\Runtime\Bindings;
  */
 final class AdminRoutes
 {
-    public static function build(AdminIdentityPort $identity, Bindings $bindings): Router
+    /**
+     * @param callable|null $reader fn(string $function, array $args = []): array
+     *        Executes one of migration 019's projections. Null keeps the
+     *        surface unreachable, which is what a process with no admin
+     *        database connection should be.
+     */
+    public static function build(AdminIdentityPort $identity, Bindings $bindings,
+                                 ?callable $reader = null): Router
     {
         $r = new Router();
+        // No reader configured = no admin database connection in this process.
+        // The honest answer is the same 501 the surface gave before the
+        // boundary existed, NOT a fatal and NOT an empty list.
+        $unconfigured = $reader === null;
+        $reader ??= static fn(string $fn, array $args = []): array => [];
 
         /**
          * The only way into a handler.
@@ -68,29 +81,52 @@ final class AdminRoutes
             ])), auth: false);
 
         // ── estate reads ────────────────────────────────────────────────
-        // Each is declared, capability-gated, and currently blocked at the
-        // DATABASE by design: staff read across customers, every tenant table
-        // has FORCE ROW LEVEL SECURITY, and the privilege path for a
-        // cross-customer read is a separate decision that has NOT been taken
-        // (docs/81, "the estate-read privilege"). These routes therefore
-        // return an explicit, honest 501 rather than an empty list — an empty
-        // list would look like "no customers exist", which is exactly the kind
-        // of plausible-looking wrong answer this project keeps finding.
+        // Each goes through ONE controlled SECURITY DEFINER projection
+        // (migration 019). The route never writes SQL against a base table:
+        // dnb_admin holds EXECUTE and no table privilege whatsoever, so it
+        // could not if it tried. RLS stays enabled and FORCED everywhere, and
+        // no function reads a caller-supplied tenant context.
+        $read = static function (string $cap, string $fn, string $kind) use ($guard, $reader, $unconfigured): array {
+            return [$cap, $guard($cap, static function (Request $req) use ($fn, $kind, $reader, $unconfigured) {
+                if ($unconfigured) { return self::estateReadNotAuthorized(); }
+                $rows = $reader($fn);
+                return Response::ok([$kind => AdminProjection::many($kind, $rows)]);
+            })];
+        };
+
         foreach ([
-            ['/api/v1/admin/customers',       Capability::CUSTOMERS_READ],
-            ['/api/v1/admin/customers/{customer_id}', Capability::CUSTOMERS_READ],
-            ['/api/v1/admin/sites',           Capability::SITES_READ],
-            ['/api/v1/admin/routers',         Capability::ROUTERS_READ],
-            ['/api/v1/admin/routers/{device_id}', Capability::ROUTERS_READ],
-            ['/api/v1/admin/plans',           Capability::PLANS_READ],
-            ['/api/v1/admin/vouchers',        Capability::VOUCHERS_READ],
-            ['/api/v1/admin/voucher-batches', Capability::VOUCHERS_READ],
-            ['/api/v1/admin/sessions',        Capability::SESSIONS_READ],
-            ['/api/v1/admin/intents',         Capability::INTENTS_READ],
-            ['/api/v1/admin/audit',           Capability::AUDIT_READ],
-        ] as [$path, $cap]) {
-            $r->get($path, $guard($cap, static fn() => self::estateReadNotAuthorized()), auth: false);
+            ['/api/v1/admin/customers',       Capability::CUSTOMERS_READ, 'mt_admin_customers',       'customer'],
+            ['/api/v1/admin/sites',           Capability::SITES_READ,     'mt_admin_sites',           'site'],
+            ['/api/v1/admin/routers',         Capability::ROUTERS_READ,   'mt_admin_routers',         'router'],
+            ['/api/v1/admin/plans',           Capability::PLANS_READ,     'mt_admin_plans',           'plan'],
+            ['/api/v1/admin/vouchers',        Capability::VOUCHERS_READ,  'mt_admin_vouchers',        'voucher'],
+            ['/api/v1/admin/voucher-batches', Capability::VOUCHERS_READ,  'mt_admin_voucher_batches', 'batch'],
+            ['/api/v1/admin/sessions',        Capability::SESSIONS_READ,  'mt_admin_sessions',        'session'],
+            ['/api/v1/admin/intents',         Capability::INTENTS_READ,   'mt_admin_intents',         'intent'],
+            ['/api/v1/admin/audit',           Capability::AUDIT_READ,     'mt_admin_audit',           'audit'],
+        ] as [$path, $cap, $fn, $kind]) {
+            [, $handler] = $read($cap, $fn, $kind);
+            $r->get($path, $handler, auth: false);
         }
+
+        // Single-record reads. The id is a LOOKUP inside an estate the staff
+        // member is already authorized for — it is not an authorization input,
+        // and an unknown id simply returns nothing.
+        $r->get('/api/v1/admin/customers/{customer_id}',
+            $guard(Capability::CUSTOMERS_READ, static function (Request $req) use ($reader, $unconfigured) {
+                if ($unconfigured) { return self::estateReadNotAuthorized(); }
+                $rows = $reader('mt_admin_customer', [$req->params['customer_id'] ?? '']);
+                return $rows === [] ? Response::notFound()
+                                    : Response::ok(['customer' => AdminProjection::customer($rows[0])]);
+            }), auth: false);
+
+        $r->get('/api/v1/admin/routers/{device_id}',
+            $guard(Capability::ROUTERS_READ, static function (Request $req) use ($reader, $unconfigured) {
+                if ($unconfigured) { return self::estateReadNotAuthorized(); }
+                $rows = $reader('mt_admin_router', [$req->params['device_id'] ?? '']);
+                return $rows === [] ? Response::notFound()
+                                    : Response::ok(['router' => AdminProjection::router($rows[0])]);
+            }), auth: false);
 
         // ── mutations ───────────────────────────────────────────────────
         // Declared with their capabilities so the matrix is complete and

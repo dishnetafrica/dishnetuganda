@@ -20,13 +20,7 @@ use Dn\Http\Request;
 use Dn\Http\Serializer\AdminProjection;
 use Dn\Runtime\Bindings;
 
-/** A test-only provider. Lives in the test file, never in src/. */
-final class FixedStaff implements AdminIdentityPort
-{
-    public function __construct(private readonly ?StaffIdentity $who) {}
-    public function identify(Request $req): ?StaffIdentity { return $this->who; }
-    public function providerName(): string { return 'test-double'; }
-}
+require_once __DIR__ . '/admin_identity_double.php';
 
 $req = new Request('GET', '/api/v1/admin/health');
 

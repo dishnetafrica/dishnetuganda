@@ -28,6 +28,16 @@ final class Database
     public static function admin(): self  { return self::connect('admin'); }
 
     /**
+     * The Admin API's READ identity (migration 019).
+     *
+     * Separate from admin() on purpose. dnb_admin carries migration 015's
+     * blanket table grant; this role holds EXECUTE on the eleven admin
+     * projections and NO privilege on any table, so the estate read boundary
+     * is a property of the connection rather than of the caller's restraint.
+     */
+    public static function adminApi(): self { return self::connect('adminapi'); }
+
+    /**
      * RADIUS accounting ingestion. Holds EXECUTE on one function and nothing
      * else — no table privileges at all (migration 018, audit finding F1).
      *
@@ -80,6 +90,7 @@ final class Database
             'inspector' => [getenv('DNB_INSPECT_USER') ?: 'postgres', getenv('DNB_INSPECT_PASS') ?: ''],
             'worker' => [getenv('DNB_WORKER_USER') ?: 'dnb_worker', getenv('DNB_WORKER_PASS') ?: 'worker-local-dev'],
             'admin'  => [getenv('DNB_ADMIN_USER')  ?: 'dnb_admin',  getenv('DNB_ADMIN_PASS')  ?: 'admin-local-dev'],
+            'adminapi' => [getenv('DNB_ADMINAPI_USER') ?: 'dnb_adminapi', getenv('DNB_ADMINAPI_PASS') ?: 'adminapi-local-dev'],
             'radius' => [getenv('DNB_RADIUS_USER') ?: 'dnb_radius', getenv('DNB_RADIUS_PASS') ?: 'radius-local-dev'],
             default  => [getenv('DNB_APP_USER')    ?: 'dnb_app',    getenv('DNB_APP_PASS')    ?: 'app-local-dev'],
         };
