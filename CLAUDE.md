@@ -130,6 +130,50 @@ PRODUCTION CAPABLE**. Key points that bind any future work:
   Decision 5's numbers, and the `mt_vouchers.site_id NOT NULL` migration, which
   is still gated on the production census.
 
+**D-1a and P-1 are now CLOSED** (`docs/88` §C.1):
+
+- **D-1a** — the guest NAS is `detail.nas_claimed`, **untrusted request context
+  only**. Do not overload `source`. Authorization derives from `voucher.site_id`
+  and that site's authorized NAS set. The portal may never choose or establish a
+  voucher's site.
+- **P-1** — **`dnb_portal`**, a distinct unauthenticated guest-portal role.
+  **Never `dnb_app`.** Minimum privilege: EXECUTE on one narrowly scoped
+  redemption function plus ticket status, and **no table privileges** — it may
+  not enumerate vouchers, customers or sites, read credentials or sessions,
+  modify arbitrary voucher state, run arbitrary SQL, or call Admin functions.
+
+**Decision 5 has a REFUTED PREMISE — it cannot be closed by picking numbers**
+(`docs/88` §A.0). `docs/65` §9.3 made per-NAS the primary rate-limit dimension;
+`docs/68` §2.2 refuted the claim it rested on (a portal POST's NAS is
+guest-asserted, so per-NAS limiting is evadable); `docs/65` §9.2 records that
+per-code *"does not slow an enumeration run at all"*; and §9.3 says source IP is
+**not primary** because a NAT'd venue shares one address. **No dimension is both
+trustworthy and effective.** Four resolutions R-a…R-d are tabled; **R-b — making
+the NAS verifiable — is the only one that restores the design, and it depends on
+unverified MikroTik hardware (H1–H7).** Decision 5's numbers are meaningless
+until this is resolved.
+
+**The attempt store is a PREREQUISITE, not an extra** (`docs/88` §C.2,
+correcting `docs/87` §E). `docs/65` §8 (SETTLED) requires failed unauthenticated
+attempts in a **separate non-tenant store** — never `mt_audit_log` — classified
+by outcome, holding `code_prefix` + `code_hash` and **never the raw code**.
+`docs/65` §9.5 puts Decision 5's counters in that same store.
+
+**Open question left by `docs/65` §8:** it is marked SETTLED and proposes adding
+a **`guest`** actor kind. `docs/64` §10 offered two ways to satisfy it — add
+`guest`, **or** give redemption its own log table. The reading recorded in
+`docs/88` §C.3 is that the attempt store satisfies it, so no `actor_kind` change
+is needed and `system` remains correct for portal activation. **Confirm or
+supersede that reading**, or a future session will read §8's SETTLED heading the
+other way. `docs/65` §8's *"site resolved from that NAS"* is superseded by
+`docs/68` §2.2 and D-1a.
+
+**Decision 4 does not block F-7** (`docs/88` Part B). `docs/64` Q5 recommends
+**no** front-desk activation; if ever built it is a **separate function with a
+separate grant**, never a flag on the portal one, and **`dnb_app` must never get
+generic redemption authority because it might exist**. The tenant-crossing
+danger is measured, not theoretical.
+
 **Q-F7-1…7 and F-8.1…5 are OPEN.** Nothing in this area may be implemented
 without an explicit instruction.
 - **W-4, W-5, W-6 remain OPEN.** Do not invent a staff credential store, a
