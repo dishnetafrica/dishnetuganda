@@ -317,11 +317,14 @@ foreach ($src() as $f) {
     $rel = str_replace($root . '/src/', '', $f);
     if (!preg_match('#^(Http|Api)/#', $rel)) { continue; }
     $body = strip_php_comments(file_get_contents($f));
-    foreach (['DeliveryPort', 'Dn\\Delivery', 'NullDelivery', 'IntentWorker'] as $needle) {
+    // The AAA publisher joins the same containment: an HTTP request must not
+    // be able to mint or withdraw a RADIUS credential within one process.
+    foreach (['DeliveryPort', 'Dn\\Delivery', 'NullDelivery', 'IntentWorker',
+              'RadiusPublisherPort', 'Dn\\Radius'] as $needle) {
         if (str_contains($body, $needle)) { $violations[] = "{$rel} -> {$needle}"; }
     }
 }
-is_($violations, [], 'no file in Http/ or Api/ references the delivery port or the worker');
+is_($violations, [], 'no file in Http/ or Api/ references the delivery port, the publisher or the worker');
 
 $jobs = glob($root . '/src/Jobs/*.php');
 is_(count($jobs) > 0, true, 'and there is a Jobs/ directory that does');
