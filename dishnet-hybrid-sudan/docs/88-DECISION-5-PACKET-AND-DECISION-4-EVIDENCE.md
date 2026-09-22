@@ -55,6 +55,12 @@ abuse; none of them makes an evadable dimension unevadable.
 
 ### A.1 The eight parameters
 
+> **SUPERSEDED by `docs/89` §3.1.** That table is authoritative: it carries a
+> fifth column, **evidence still required**, and replaces every proposed number
+> below with **UNMEASURED / OPEN** where the evidence does not support one. The
+> version below is kept for its reasoning, not for its values. **Do not take a
+> number from this section.**
+
 Precedents cited from code are measured, not remembered:
 `Authenticator::CODE_TTL = PT10M`; `TOKEN_TTL = P30D`;
 `mt_auth_issue_code` → 5 codes per phone per **15 minutes**, `DN429`;

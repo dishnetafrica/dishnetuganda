@@ -142,34 +142,66 @@ PRODUCTION CAPABLE**. Key points that bind any future work:
   not enumerate vouchers, customers or sites, read credentials or sessions,
   modify arbitrary voucher state, run arbitrary SQL, or call Admin functions.
 
-**Decision 5 has a REFUTED PREMISE — it cannot be closed by picking numbers**
-(`docs/88` §A.0). `docs/65` §9.3 made per-NAS the primary rate-limit dimension;
+**Decision 5 is OPEN and GATED — it cannot be closed by picking numbers**
+(`docs/89` §3). Its premise was refuted: `docs/65` §9.3 made per-NAS primary,
 `docs/68` §2.2 refuted the claim it rested on (a portal POST's NAS is
-guest-asserted, so per-NAS limiting is evadable); `docs/65` §9.2 records that
-per-code *"does not slow an enumeration run at all"*; and §9.3 says source IP is
-**not primary** because a NAT'd venue shares one address. **No dimension is both
-trustworthy and effective.** Four resolutions R-a…R-d are tabled; **R-b — making
-the NAS verifiable — is the only one that restores the design, and it depends on
-unverified MikroTik hardware (H1–H7).** Decision 5's numbers are meaningless
-until this is resolved.
+guest-asserted, so per-NAS limiting is evadable), `docs/65` §9.2 records that
+per-code *"does not slow an enumeration run at all"*, and §9.3 that source IP is
+**not primary** because a NAT'd venue shares one address.
 
-**The attempt store is a PREREQUISITE, not an extra** (`docs/88` §C.2,
-correcting `docs/87` §E). `docs/65` §8 (SETTLED) requires failed unauthenticated
-attempts in a **separate non-tenant store** — never `mt_audit_log` — classified
-by outcome, holding `code_prefix` + `code_hash` and **never the raw code**.
-`docs/65` §9.5 puts Decision 5's counters in that same store.
+> **The gate.** Decision 5 cannot close until the remaining
+> trustworthy/effective portal-rate-limit dimension is established. Per-NAS and
+> per-code alone are insufficient; source-IP alone is operationally
+> problematic. **The next required evidence is whether the MikroTik
+> redirect/portal path can provide a verifiable infrastructure-bound signal, or
+> whether another anti-enumeration mechanism must be designed.** That is a
+> hardware/RouterOS evidence question (H1–H7 unverified) and cannot be answered
+> from documentation. Disposable environment only.
 
-**Open question left by `docs/65` §8:** it is marked SETTLED and proposes adding
-a **`guest`** actor kind. `docs/64` §10 offered two ways to satisfy it — add
-`guest`, **or** give redemption its own log table. The reading recorded in
-`docs/88` §C.3 is that the attempt store satisfies it, so no `actor_kind` change
-is needed and `system` remains correct for portal activation. **Confirm or
-supersede that reading**, or a future session will read §8's SETTLED heading the
-other way. `docs/65` §8's *"site resolved from that NAS"* is superseded by
-`docs/68` §2.2 and D-1a.
+**Do not choose R-a/R-b/R-c/R-d. Do not invent numeric limits.** The eight
+parameters are recorded in `docs/89` §3.1 with a fifth column, *evidence still
+required*, and read **UNMEASURED / OPEN** wherever a number would be invented —
+`docs/88` §A.1 is **superseded** and its numbers must not be used. **Publication
+latency stays unmeasured until the publisher exists and is exercised against the
+disposable FreeRADIUS environment.** Two properties are not tradeable: response
+uniformity, and decaying windows rather than hard locks.
 
-**Decision 4 does not block F-7** (`docs/88` Part B). `docs/64` Q5 recommends
-**no** front-desk activation; if ever built it is a **separate function with a
+## Attempt store and site authority — CLOSED (`docs/89`)
+
+**The attempt store is a CLOSED requirement and a prerequisite** (`docs/65` §8
+remains authoritative). Failed unauthenticated redemption attempts go to a
+**separate non-tenant store**, never `mt_audit_log`:
+
+- **never the raw voucher code** — store `code_prefix` + `code_hash` only;
+- **classify the outcome** (`unknown_code`, `wrong_site`, `race_lost`, …) while
+  the guest is told `invalid` for every one;
+- **the rate-limit counters live here**, transactional with the attempt, inside
+  the redemption function where a second caller cannot bypass them;
+- it is operational/security telemetry, not business audit — volume, tenancy and
+  retention all differ;
+- **tenant/customer data must not be required to perform the anti-enumeration
+  check**: an unknown code resolves no customer, so a check needing one could
+  not run in exactly the case enumeration produces.
+
+**`guest` is NOT added to `actor_kind`.** `docs/64` §10 offered two ways to
+satisfy `docs/65` §8 — add `guest`, or give redemption its own log table — and
+the attempt store **is** that table, so §8's enum proposal is **superseded**.
+**No actor kind is not no attribution:** the attempt store records source,
+`nas_claimed`, code prefix/hash and outcome for abuse control without pretending
+an unauthenticated guest is a `principal` or `staff` actor.
+
+**Site authority — CLOSED.** `docs/65` §8/§9.3's *"site resolved from that NAS"*
+is **superseded**. The authoritative rule is
+`voucher.site_id` → that site's authorized `dnb_site_nas` mapping → decision.
+`nas_claimed` is untrusted context that may only reject early; it may never
+establish, select or widen the NAS set a voucher is valid at.
+
+> **SI-1 — changing `nas_claimed` alone must never change the site to which a
+> voucher is authorized.** Proven by execution at implementation time
+> (`docs/87` T-13, and T-18, the mandatory C1 guard).
+
+**Decision 4 — no second redemption path required** (`docs/88` Part B).
+`docs/64` Q5 recommends **no**; if ever built it is a **separate function with a
 separate grant**, never a flag on the portal one, and **`dnb_app` must never get
 generic redemption authority because it might exist**. The tenant-crossing
 danger is measured, not theoretical.
