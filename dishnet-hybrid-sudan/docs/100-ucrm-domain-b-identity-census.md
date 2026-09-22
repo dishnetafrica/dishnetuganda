@@ -326,7 +326,17 @@ Exactly one question, asked plainly, not interpreted:
 >   is created.
 > - **C — Both**, depending on the workflow.
 
-Recorded on answer, uninterpreted. This is the primary input for U-1.
+### ANSWERED — **C — BOTH**
+
+> *Operator: "DishNet uses both workflows. Customer-first: the uCRM
+> customer/service may exist before the MikroTik is staged or assigned.
+> Equipment-first: DishNet may stage or ship a MikroTik before the final
+> customer exists in uCRM."*
+
+Recorded uninterpreted. **Q5 is CLOSED.** The consequences are designed in
+`docs/101`; in short, equipment-first is a **device without a customer**, which
+`mt_devices.customer_id` already permits, so C settles the *gate* question
+(U-1) rather than the model question.
 
 ---
 

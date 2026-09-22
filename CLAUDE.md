@@ -523,6 +523,60 @@ list, and the live `clients/services` response shape.
 **Nothing chosen. No sync engine, no webhook, no backfill, no automatic linking,
 no schema change — including the trivial `credential_hash` drop.** No gate moved.
 
+## Q5 is CLOSED — C, BOTH. Identity lifecycle designed (`docs/101`)
+
+**DishNet uses both workflows: customer-first AND equipment-first.** Operator,
+recorded uninterpreted.
+
+**It does not force a Domain-B customer without a uCRM client.** "Equipment-first"
+means a **device with no customer**, and that is already built and exercised:
+`mt_devices.customer_id` is nullable (`-- NULL until assigned`),
+`mt_device_register` takes no customer, `mt_device_assign` is a separate later
+call, and `docs/35` §9 records possession — serial, model, keys, staged-by —
+never ownership. **Both lifecycles converge at exactly one operation,
+`mt_device_assign`.** Never invent a placeholder customer to satisfy a foreign
+key.
+
+- **`UNCLAIMED` must NOT become a device state.** It is the predicate
+  `customer_id IS NULL`, true across `registered`/`staged`/`shipped`. Adding an
+  enum value creates two sources of truth that can disagree.
+- **Unclaimed devices are already invisible to customers — measured.** Ground
+  truth 5 devices, 1 unclaimed; the three tenants see 2+1+1 = 4, their own, and
+  none sees the unclaimed one; with no tenant context, 0. The mechanism is
+  `NULL = <uuid>` being NULL, not true. **Do not weaken RLS to accommodate
+  equipment-first — nothing needs accommodating.**
+- **The question is the GATE, not "Model A or B"**: at which moment must a
+  customer carry a uCRM link — creation, device assignment, first voucher, or
+  never (**the status quo, which is how I-1 happened**). That is **U-1**, open.
+
+**Determined in `docs/101`, for approval:**
+
+| | |
+|---|---|
+| customer link | **1:1**, unique both sides — cheap to relax, expensive to tighten |
+| service link | **1:1**, unique both sides |
+| shape | **columns on the existing tables**, *given* 1:1 — they inherit RLS; a new link table must be given `FORCE RLS` deliberately, and history lives in `mt_audit_log` either way |
+| service identity | the uCRM **service id**, **never** a type or plan name |
+| write authority | **`dnb_adminwrite` only** — never `dnb_app`, never `dnb_portal`. W-1 pattern: definer function, audit row in the same transaction, actor a parameter, `actor_kind = 'staff'` |
+| coherence | **the uCRM service's `clientId` must equal the client linked to that service's customer.** No FK can express it; the linking function must check it against uCRM. This is the most dangerous operation in the bridge |
+| unlink / relink | **required** (a customer can be re-papered onto a new uCRM client) and **audited**, carrying previous and new relationship plus a reason |
+
+- **No phone matching, ever, for linking.** `LeadMatcher` warns it "can identify
+  the WRONG customer and disclose their balance". Phone stays the OTP key only.
+- **Do not copy uCRM contact data into `mt_principals`** — `phone` is the
+  authentication key, so a contact edit would silently rotate a credential
+  (U-6, open).
+- **Nothing is deleted because a uCRM relationship ended.** Eleven orphan states
+  are enumerated; rows 7, 8, 10 and 11 are not representable today.
+- **`mt_customers` is neither deleted nor demoted to a cache.** It is the
+  Domain-B authorization boundary, carrying an explicit uCRM relationship when
+  one exists.
+- **L-1 — OPERATOR:** must an *intended* customer be recorded for a shipped
+  router before uCRM has the client? Not representable today.
+
+**No schema change, no migration, no backfill, no sync engine.** `NOT NULL`
+(U-2) still waits on **E-2, the production census**. No gate moved.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

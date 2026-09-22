@@ -502,3 +502,30 @@ Nothing in this list is authorized by this document.
 
 **No model recommended. No production installation, no migration, no Domain-A
 change, no hardware claim, no code written. Stopping here for approval.**
+
+
+---
+
+# ADDENDUM — Q5 ANSWERED: **C — BOTH** (`docs/101`)
+
+> DishNet uses **both** workflows: customer-first *and* equipment-first.
+> Recorded uninterpreted from the operator.
+
+What that settles, and what it does not:
+
+- **It does not force Model B.** "Equipment-first" in Domain B means a **device
+  with no customer**, not a customer with no uCRM client — and that is already
+  built: `mt_devices.customer_id` is nullable (`-- NULL until assigned`),
+  `mt_device_register` takes no customer, and the simulator's `staged` router
+  has none. Both lifecycles converge at **`mt_device_assign`**, the only
+  operation where a device acquires a customer.
+- **It does settle the shape of the question.** The choice is not "A or B" but
+  **the gate**: at which moment must a Domain-B customer carry a uCRM link —
+  creation, device assignment, first voucher, or never (**the status quo, which
+  is how I-1 happened**). That is **U-1**, open.
+- **It raises L-1**, for the operator: must an *intended* customer be recorded
+  for a staged or shipped router **before** uCRM has the client? Measured: not
+  representable today — `mt_devices` has no intended-owner field.
+
+**`docs/101` supersedes §1–§3 of this document** as the working design. The
+model comparison here stands as the record of how the question was framed.
