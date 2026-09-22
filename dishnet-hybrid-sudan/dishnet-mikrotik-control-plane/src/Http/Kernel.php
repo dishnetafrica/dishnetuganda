@@ -1,0 +1,57 @@
+<?php
+declare(strict_types=1);
+namespace Dn\Http;
+
+use Dn\Auth\Authenticator;
+use Dn\Db\Database;
+use Dn\Tenancy\TenantContext;
+use Throwable;
+
+/**
+ * Dispatch. Three things happen here and nowhere else:
+ *
+ *  1. the bearer token becomes a derived (principal, customer) pair
+ *  2. every authenticated handler runs INSIDE the tenant context
+ *  3. anything unroutable, unauthorised or unreachable becomes the same 404
+ *
+ * A handler therefore cannot run without a tenant context, and cannot choose
+ * its own customer. That is F4 as a code path rather than a convention.
+ */
+final class Kernel
+{
+    public function __construct(
+        private Router $router,
+        private Database $db,
+        private Authenticator $auth,
+        private TenantContext $ctx,
+    ) {}
+
+    public function handle(Request $req): Response
+    {
+        $m = $this->router->match($req->method, $req->path);
+        if ($m === null) { return Response::notFound(); }
+        [$handler, $params, $needsAuth] = $m;
+        $req = $req->withParams($params);
+
+        try {
+            if (!$needsAuth) {
+                return $handler($req, $this->db, null);
+            }
+
+            $who = $this->auth->resolve($req->bearer());
+            if ($who === null) { return Response::unauthorized(); }
+
+            // Every authenticated handler runs inside the tenant context.
+            // There is no route by which one does not.
+            return $this->ctx->run($who['customer_id'],
+                fn(Database $db) => $handler($req, $db, $who));
+
+        } catch (Throwable $e) {
+            // An internal failure must not describe itself to the caller: a
+            // message like 'relation mt_devices does not exist' tells an
+            // attacker the schema. Log it, return a shape that says nothing.
+            error_log('[dnb] ' . $e::class . ': ' . $e->getMessage());
+            return new Response(500, ['error' => 'internal']);
+        }
+    }
+}
