@@ -261,6 +261,11 @@
         "method": "GET",
         "path": "/audit",
         "capability": "audit.read"
+      },
+      {
+        "method": "GET",
+        "path": "/principals",
+        "capability": "customers.read"
       }
     ],
     "writes": {
@@ -300,9 +305,14 @@
           "method": "POST",
           "path": "/sessions/{session_id}/disconnect",
           "capability": "sessions.disconnect"
+        },
+        {
+          "method": "POST",
+          "path": "/customers/{customer_id}/principals",
+          "capability": "customers.write"
         }
       ],
-      "reason": "These paths EXIST and every one answers 501. They are declared so the capability matrix is complete and testable, not because anything is bound. Binding them needs the staff identity provider (W-4) first, otherwise an audit row has no actor to name. The write floor itself is built (migration 020) and used by nothing."
+      "reason": "These paths EXIST and every one answers 501. They are declared so the capability matrix is complete and testable, not because anything is bound. The seven estate writes wait for G-C / G-C2. The eighth, principal creation for an explicit target operator, has its function since migration 027 (mt_admin_principal_create, dnb_adminwrite, docs/116 D.9) and its route binding is a separate instruction (docs/116 §J J-1)."
     },
     "session": {
       "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. Since migration 026 these routes DO write identity state (a revocable session row, an audit row) through definer functions owned by dnb_def_staff; they write no estate table, which is why 'writes.bound' stays empty.",
@@ -384,6 +394,10 @@
           "capability": "staff.manage"
         }
       ]
+    },
+    "operator_plane": {
+      "note": "The /api/v1/me surface (public/index.php, not this entry point) is capability-guarded since migration 027 (docs/116 §E): kind and capabilities are re-read live from mt_auth_resolve_token() on every request, every /me route declares an op.* capability, and the six commercial functions refuse with SQLSTATE 42501 beneath the guard. Five staff-management routes (/me/staff) exist, all op.staff.manage, which only an owner can hold.",
+      "capabilities_source": "mt_op_capabilities() — the single canonical list; Dn\\Auth\\OpCapability::ALL is asserted equal by the suite."
     }
   },
   "install": {

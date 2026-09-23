@@ -37,6 +37,7 @@ DECLARE
   -- Read path per entity: the Admin PROJECTION where it exists and this role
   -- may execute it, the base table otherwise. See the note before SECTION 1b.
   src_sit text; src_svc text; src_dev text; src_vou text; src_bat text; src_cus text;
+  src_pri text;   -- SECTION 1c (migration 027)
   blind bool := false;   -- set whenever a measurement was refused or hidden
   seen  bigint := 0;     -- POSITIVE CONTROL: rows this session could actually see
   block bigint := 0;     -- rows that would refuse the O-1 constraint
@@ -217,6 +218,47 @@ ELSE
   RAISE NOTICE '*** SECTION 1b UNREADABLE by % — insufficient privilege.', current_user;
   RAISE NOTICE '    SKIPPED, not clean. A section that stopped early must never';
   RAISE NOTICE '    be read as one that found nothing.';
+ END;
+END IF;
+
+RAISE NOTICE '';
+RAISE NOTICE '';
+RAISE NOTICE '============================================================';
+RAISE NOTICE 'SECTION 1c — mt_principals by kind and status  (027 rewrite)';
+RAISE NOTICE '============================================================';
+-- Added with migration 027 (docs/116 D.1, §J J-4). That migration rewrites
+-- every mt_principals.kind = 'operator' to 'staff' before tightening the CHECK
+-- to (owner | staff). How many production rows that touches is NOT known from
+-- the development schema — this section is what establishes it. Read through
+-- mt_admin_principals() where 027 is already applied (it did not exist
+-- before), the base table otherwise. The base table is FORCE RLS: a role that
+-- does not bypass RLS reads 0 with no tenant context (SECTION 0), and a role
+-- without SELECT on it is refused — both are reported, neither is a count.
+IF to_regclass('public.mt_principals') IS NULL THEN
+  RAISE NOTICE 'mt_principals ABSENT — nothing for 027 to rewrite here.';
+ELSE
+ BEGIN
+  src_pri := CASE WHEN to_regproc('public.mt_admin_principals') IS NULL THEN 'mt_principals'
+                  WHEN NOT has_function_privilege(current_user,'public.mt_admin_principals()','EXECUTE') THEN 'mt_principals'
+                  ELSE 'mt_admin_principals()' END;
+  RAISE NOTICE 'read path — principals:%   (mt_admin_principals exists: %)',
+    src_pri, to_regproc('public.mt_admin_principals') IS NOT NULL;
+  EXECUTE format('SELECT count(*) FROM %s', src_pri) INTO n;
+  RAISE NOTICE 'mt_principals total                     : %', n;
+  seen := seen + n;
+  FOR r IN EXECUTE format('SELECT kind, status, count(*) AS c FROM %s GROUP BY 1, 2 ORDER BY 1, 2', src_pri) LOOP
+    RAISE NOTICE '    kind = %  status = %  : %', rpad(r.kind, 8), rpad(r.status, 8), r.c;
+  END LOOP;
+  EXECUTE format('SELECT count(*) FROM %s WHERE kind = %L', src_pri, 'operator') INTO n;
+  RAISE NOTICE 'kind = operator (rows 027 rewrites)     : %', n;
+  IF to_regproc('public.mt_admin_principals') IS NOT NULL AND n > 0 THEN
+    RAISE NOTICE '*** INCONSISTENT: mt_admin_principals() exists (027 applied) yet operator rows remain.';
+  END IF;
+ EXCEPTION WHEN insufficient_privilege THEN
+  blind := true;
+  RAISE NOTICE '*** SECTION 1c UNREADABLE by % — insufficient privilege.', current_user;
+  RAISE NOTICE '    Before 027 there is no Admin projection of mt_principals, so this';
+  RAISE NOTICE '    needs a role with SELECT on the table that also sees every row.';
  END;
 END IF;
 

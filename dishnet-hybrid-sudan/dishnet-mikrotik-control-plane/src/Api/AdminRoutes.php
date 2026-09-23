@@ -154,6 +154,8 @@ final class AdminRoutes
             ['/api/v1/admin/sessions',        Capability::SESSIONS_READ,  'mt_admin_sessions',        'session'],
             ['/api/v1/admin/intents',         Capability::INTENTS_READ,   'mt_admin_intents',         'intent'],
             ['/api/v1/admin/audit',           Capability::AUDIT_READ,     'mt_admin_audit',           'audit'],
+            // Migration 027: every operator's people. phone/email/credential withheld.
+            ['/api/v1/admin/principals',      Capability::CUSTOMERS_READ, 'mt_admin_principals',      'principal'],
         ] as [$path, $cap, $fn, $kind]) {
             [, $handler] = $read($cap, $fn, $kind);
             $r->get($path, $handler, auth: false);
@@ -204,6 +206,9 @@ final class AdminRoutes
             ['POST', '/api/v1/admin/plans',                        Capability::PLANS_WRITE],
             ['POST', '/api/v1/admin/voucher-batches',              Capability::VOUCHERS_GENERATE],
             ['POST', '/api/v1/admin/sessions/{session_id}/disconnect', Capability::SESSIONS_DISCONNECT],
+            // Migration 027 built mt_admin_principal_create (target operator explicit);
+            // binding this route is its own instruction (docs/116 §J J-1).
+            ['POST', '/api/v1/admin/customers/{customer_id}/principals', Capability::CUSTOMERS_WRITE],
         ] as [$method, $path, $cap]) {
             $r->add($method, $path, $guard($cap, static fn() => self::estateReadNotAuthorized()), auth: false);
         }

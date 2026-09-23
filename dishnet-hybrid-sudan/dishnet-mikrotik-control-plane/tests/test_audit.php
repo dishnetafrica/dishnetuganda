@@ -28,18 +28,21 @@ $id = $owner->one("SELECT id FROM mt_audit_log
 is_(is_string($id) && strlen($id) === 36, true, 'the act wrote exactly one audit row, and it has a uuid');
 $rows = $ctx->run($A['customer'], fn($db) => $db->query(
     'SELECT action, detail FROM mt_audit_log ORDER BY at'));
-// Two rows, not one: since migration 020 (W-1) onboarding writes its own audit
-// row inside mt_customer_create, so seeding A is itself an audited act. A test
-// that still expected one row would be asserting that the fix is absent.
-is_(array_column($rows, 'action'), ['customer.created', 'plan.created'],
-    'A sees the onboarding row it caused and the row its act wrote');
-is_(json_decode($rows[1]['detail'], true)['name'], 'lobby', 'detail survives the round trip');
+// Three rows, not one: since migration 020 (W-1) onboarding writes its own
+// audit row inside mt_customer_create, so seeding A is itself an audited act,
+// and since 027 the first owner is created by mt_admin_principal_create, which
+// audits too (actor_kind 'staff', the seeding identity). A test that still
+// expected fewer rows would be asserting that a fix is absent.
+is_(array_column($rows, 'action'), ['customer.created', 'principal.created', 'plan.created'],
+    'A sees the onboarding rows it caused and the row its act wrote');
+$planRow = array_values(array_filter($rows, fn($r) => $r['action'] === 'plan.created'))[0];
+is_(json_decode($planRow['detail'], true)['name'], 'lobby', 'detail survives the round trip');
 
 t('audit is isolated like everything else');
 $rows = $ctx->run($B['customer'], fn($db) => $db->query(
-    'SELECT action, target_id FROM mt_audit_log'));
-is_(array_column($rows, 'action'), ['customer.created'],
-    'B sees only its own onboarding row');
+    'SELECT action, target_id FROM mt_audit_log ORDER BY at'));
+is_(array_column($rows, 'action'), ['customer.created', 'principal.created'],
+    'B sees only its own two onboarding rows');
 is_(in_array($plan['id'], array_column($rows, 'target_id'), true), false,
     "B cannot see A's audit rows");
 $rows = $ctx->run($B['customer'], fn($db) => $db->query('SELECT id FROM mt_audit_log WHERE id = ?', [$id]));

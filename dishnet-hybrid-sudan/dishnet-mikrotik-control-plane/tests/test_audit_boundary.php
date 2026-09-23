@@ -223,9 +223,12 @@ is_(count(array_filter($names, fn($n) => str_starts_with($n, 'mt_auth_'))), 5,
     'CONTROL: dnb_app does reach definer functions — the five auth ones');
 is_(array_values(array_filter($names, fn($n) => !str_starts_with($n, 'mt_auth_'))),
     ['mt_plan_create', 'mt_plan_retire', 'mt_plan_update',
+     // Migration 027: the operator-plane identity boundary, dnb_def_comm.
+     'mt_principal_can', 'mt_principal_create', 'mt_principal_disable',
+     'mt_principal_set_capabilities', 'mt_principal_set_kind',
      'mt_session_disconnect_request', 'mt_voucher_batch_issue',
      'mt_voucher_redeem', 'mt_voucher_revoke'],
-    'and the rest are the six commercial boundaries plus mt_voucher_redeem, still to be deleted');
+    'and the rest are the six commercial boundaries, the five 027 principal functions, plus mt_voucher_redeem, still to be deleted');
 
 t('A-1/T3 — the revoke is proved by EXECUTION, and the control has subject matter');
 

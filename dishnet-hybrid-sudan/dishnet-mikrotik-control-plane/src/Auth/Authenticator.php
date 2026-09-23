@@ -65,15 +65,24 @@ final class Authenticator
                 'customer_id'  => $row['customer_id']];
     }
 
-    /** @return array{principal_id:string,customer_id:string}|null */
+    /**
+     * Who this token is, RIGHT NOW. kind and capabilities come from the
+     * principal row on every call (migration 027), never from the session and
+     * never from the request: a demotion or a removed capability is enforced
+     * on the next request, exactly as a disabled status already was.
+     *
+     * @return array{principal_id:string,customer_id:string,kind:string,capabilities:list<string>}|null
+     */
     public function resolve(string $token): ?array
     {
         if ($token === '') { return null; }
         $row = $this->db->one(
-            'SELECT principal_id, customer_id FROM mt_auth_resolve_token(?)',
+            'SELECT principal_id, customer_id, kind, capabilities FROM mt_auth_resolve_token(?)',
             [$this->hash($token)]
         );
-        return $row ?: null;
+        if (!$row) { return null; }
+        $row['capabilities'] = OpCapability::fromPg($row['capabilities'] ?? null);
+        return $row;
     }
 
     public function revoke(string $token): bool

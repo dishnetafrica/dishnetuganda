@@ -18,8 +18,16 @@ final class Projection
     /** ucrm_client_id is internal billing linkage; status is not the customer's business */
     private const CUSTOMER = ['id', 'name'];
 
-    /** credential_hash and phone/email of OTHER principals never leave */
-    private const PRINCIPAL = ['id', 'kind', 'display_name'];
+    /** credential_hash and phone/email of OTHER principals never leave.
+     *  status and capabilities (migration 027) are the caller's own role. */
+    private const PRINCIPAL = ['id', 'kind', 'display_name', 'status', 'capabilities'];
+
+    /**
+     * A principal as the owner sees it on /me/staff: the same fields plus a
+     * MASKED phone — never another principal's full number (docs/116 §E.3).
+     * Masked here, once, so no route can forget to.
+     */
+    private const PRINCIPAL_LISTING = ['id', 'kind', 'display_name', 'status', 'capabilities', 'phone_masked'];
 
     private const SERVICE = ['id', 'kind', 'status', 'started_at'];
 
@@ -92,7 +100,32 @@ final class Projection
     public static function plan(array $r): array        { return self::pick($r, self::PLAN); }
     public static function intent(array $r): array      { return self::pick($r, self::INTENT); }
     public static function customer(array $r): array    { return self::pick($r, self::CUSTOMER); }
-    public static function principal(array $r): array   { return self::pick($r, self::PRINCIPAL); }
+    public static function principal(array $r): array   { return self::pick(self::withCapabilities($r), self::PRINCIPAL); }
+
+    public static function principalListing(array $r): array
+    {
+        $r = self::withCapabilities($r);
+        $r['phone_masked'] = self::maskPhone($r['phone'] ?? null);
+        return self::pick($r, self::PRINCIPAL_LISTING);
+    }
+
+    /** `{op.a,op.b}` from PostgreSQL becomes a JSON list; absent stays absent. */
+    private static function withCapabilities(array $r): array
+    {
+        if (array_key_exists('capabilities', $r) && !is_array($r['capabilities'])) {
+            $r['capabilities'] = \Dn\Auth\OpCapability::fromPg($r['capabilities']);
+        }
+        return $r;
+    }
+
+    /** All but the last three digits. NULL stays NULL: a principal with no phone cannot sign in. */
+    private static function maskPhone(?string $phone): ?string
+    {
+        if ($phone === null || $phone === '') { return null; }
+        $keep = 3;
+        return strlen($phone) <= $keep ? str_repeat('•', strlen($phone))
+             : str_repeat('•', strlen($phone) - $keep) . substr($phone, -$keep);
+    }
     public static function service(array $r): array     { return self::pick($r, self::SERVICE); }
     public static function site(array $r): array        { return self::pick($r, self::SITE); }
     public static function entitlement(array $r): array { return self::pick($r, self::ENTITLEMENT); }
@@ -110,6 +143,7 @@ final class Projection
         return match ($name) {
             'customer'    => self::CUSTOMER,
             'principal'   => self::PRINCIPAL,
+            'principalListing' => self::PRINCIPAL_LISTING,
             'service'     => self::SERVICE,
             'site'        => self::SITE,
             'entitlement' => self::ENTITLEMENT,

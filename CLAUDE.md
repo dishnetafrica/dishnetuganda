@@ -14,7 +14,7 @@ the index and a decision document disagree, **the decision document is right.**
 |---|---|---|
 | **Operator** | the Domain-B **tenant** — the RLS boundary | `mt_customers`, `customer_id`, `mt_current_customer()`, `/api/v1/admin/customers`, JSON key `customer` |
 | **Operator Owner** | a principal with `kind = 'owner'` — every operator-plane capability | `mt_principals` |
-| **Operator Staff** | a principal with `kind = 'staff'` — **today the stored value is still `'operator'`**, renamed by migration **027** | `mt_principals` |
+| **Operator Staff** | a principal with `kind = 'staff'` — the stored value `'operator'` is renamed by migration **027** (built; the production row count it would touch is **NOT ESTABLISHED**, census §1c) | `mt_principals` |
 | **DishNet Staff** | DishNet's own people (Admin · NOC · Sales · Support) | `mt_staff` (planned, 026); `StaffRole`; **`actor_kind = 'staff'` means them and nobody else** |
 | **DishNet engineer** | the human installing or operating the platform — what documents before `docs/115` call "the operator" | — |
 | **Guest** | a voucher, then a session; never an account, never an actor kind | `mt_vouchers`, `mt_sessions` |
@@ -2091,8 +2091,9 @@ copied, and the personal details on its pages are reproduced nowhere.
   because the `operator → staff` value rewrite touches existing rows.
 - **Sequence:** T-1 vocabulary pass → **G-B** (migration 026) → **027**
   (this model + principal grant closure + `mt_admin_principal_create` with
-  target operator) → G-C → B-3 → O-1. G-B is now BUILT (below); 027 is the
-  next step and has NOT been started.
+  target operator) → G-C → B-3 → O-1. G-B is BUILT (below) and **027 is
+  BUILT** (the T-2 section below); G-C is the next step and has NOT been
+  started.
 
 ## G-B — DishNet Staff authentication is BUILT (migration 026); NOT bound by default
 
@@ -2174,6 +2175,80 @@ file exists; 027 / T-2 / B-3 / G-C / O-1 were NOT begun.** Full record:
   one process → 500 on every request with the reason logged.
 
 Suite **31 suites / 2,375 assertions / 0 failed**, twice (was 30 / 1,846).
+
+## T-2 — Operator Owner / Staff capabilities are BUILT (migration 027); B-3 still OPEN
+
+**Development and test schema only.** Nothing is installed anywhere; migrations
+end at **027** and no `028*` file exists; the production census is still the
+handoff. Full record: `docs/116` §J (decisions taken before code) and §K (the
+build and its proofs).
+
+- **`mt_principals.kind` is `owner | staff`.** The `operator → staff` rewrite
+  runs **as `dnb_def_auth`** with a `RAISE NOTICE` census per kind and status
+  and an assertion that none remain, *then* the CHECK tightens — because the
+  migration owner under FORCE RLS sees **0** principals (the O-1 lesson; the
+  control printed 0). Proved on a disposable level-026 database seeded with
+  two legacy rows: census 2 + 1, rewrote 2, 0 remain, dropped. **That is not
+  production evidence; census SECTION 1c is.**
+- **`capabilities text[]`, one canonical list** — `mt_op_capabilities()`
+  (17 names); `OpCapability::ALL` is asserted equal. Owner implies all and
+  stores `{}` by CHECK; **`op.staff.manage` is never grantable to staff** by
+  CHECK; an unknown name is a constraint violation. Manager / Seller / Viewer
+  are PHP presets only; the row stores the list.
+- **The last-owner invariant is checked BEFORE the self-guard** in
+  `mt_principal_set_kind` and `_disable`. Only an active owner can act, so with
+  one owner left the actor *is* that owner: checked second, the invariant
+  could never fire, and a guard that cannot fire cannot be proved.
+- **`dnb_app` holds SELECT only on `mt_principals`.** INSERT, UPDATE and
+  DELETE each proved refused by execution; `dnb_def_comm` (INSERT + UPDATE,
+  **no widening policy**, so tenant-bound *below* the function) is the
+  positive control, and is refused by the policy when it names another tenant.
+  The four writers and `mt_principal_can` → **`dnb_app` only**; the floor
+  `mt_principal_require` is granted to **nobody**; `dnb_admin` / `dnb_worker`
+  still hold migration 015's blanket grant here — **F-3, OPEN**, asserted, not
+  027's to revoke.
+- **`mt_op_capabilities()` is EXECUTE-able by exactly `dnb_def_comm`,
+  `dnb_def_prov`, `dnb_def_auth`** (a CHECK runs as the writing role; 007's
+  `last_login_at` UPDATE re-evaluates every CHECK). It was first
+  PUBLIC-executable; `test_isolation_s1_s2` refused it — **no `mt_` function
+  may be PUBLIC-executable, with no exceptions** — and the guard was right.
+- **Resolution is live.** `mt_auth_resolve_token` returns kind and
+  capabilities on every request; a removed capability or a demotion binds the
+  next request of an existing session; **disable revokes every session in the
+  same transaction** (proved by rolling one back). A kind change clears the
+  list and revokes nothing (J-7). Self-disable and self-demote are refused
+  (J-6).
+- **Every `/me` route runs through `Routes::$guard(capability, handler)`** — a
+  route cannot be added without naming a capability. 403 is
+  `{error: forbidden, capability}` and describes the caller's own role; **the
+  404 record rule is untouched** (a foreign id is still indistinguishable from
+  an absent one, capability or not). Five `/me/staff` routes, all
+  `op.staff.manage`. `Kernel` maps **only** a 42501 whose message is
+  `capability required: <op.x>` to 403; **any other 42501 stays 500**.
+- **The six commercial functions carry the floor inside**, after the actor
+  check and before any mutation: **42501, no audit row**, and the detail
+  records `principal_kind` + `capability` at act time. Proved with an
+  unguarded route through the Kernel: the floor answers 403 by itself.
+- **Admin plane:** `mt_admin_principal_create(p_operator, …, p_actor)` —
+  target explicit, `dnb_def_prov` with an INSERT-only policy, body contains no
+  `mt_current_customer` (asserted on `prosrc`), audits `actor_kind = 'staff'`
+  with `detail.operator`. `GET /api/v1/admin/principals` is bound as the
+  **fourteenth** projection (phone, email, credential unreturnable);
+  `POST /api/v1/admin/customers/{customer_id}/principals` is **declared unbound
+  and answers 501** (J-1) — binding it needs its own instruction.
+- **Fixtures and the simulator create the first owner through the Admin
+  creator**, on the Admin write connection; A's seed now carries
+  `customer.created` **and** `principal.created` (actor `test:seed` /
+  `sim:seed`, `actor_kind = 'staff'`).
+- **The naming rule is asserted:** every `mt_audit_write(` call in every
+  migration passes a literal actor kind; no PHP maps `kind` onto `actor_kind`;
+  `actor_kind` stays `principal | staff | system`.
+- **Not built, deliberately:** B-3 (the thirteen other `dnb_app` write grants
+  are asserted unchanged), G-C, G-C2, O-1, G-D, T-6, T-10, T-11, the PWA staff
+  screens (J-14), idempotency for `POST /me/staff` (J-8, I-A), F-3.
+
+Suite **32 suites / 2,769 assertions / 0 failed**, twice (was 31 / 2,375);
+`tests/test_operator_staff.php` alone 378.
 
 ## Open and parked
 

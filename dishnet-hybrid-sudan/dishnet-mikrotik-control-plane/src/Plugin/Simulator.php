@@ -64,6 +64,9 @@ final class Simulator
     {
         $admin = Database::admin();
         $app   = Database::app();
+        // The first owner of every simulated operator: mt_admin_principal_create
+        // is dnb_adminwrite's, and since 027 the only creator outside a tenant.
+        $adminWrite = Database::adminWrite();
         $ctx   = new TenantContext($app);
         // B-2: dnb_app is read-only on the commercial tables since migration
         // 025, so the acts that are NOT customer acts need their own context.
@@ -84,10 +87,13 @@ final class Simulator
             $ctx->run($cid, fn(Database $db) => $db->exec(
                 'UPDATE mt_customers SET radius_ref = ? WHERE id = ?', [$radiusRef, $cid]));
 
-            $built = $ctx->run($cid, function (Database $db) use ($cid, $ref, $siteNames) {
-                $p = $db->one("INSERT INTO mt_principals (customer_id, kind, display_name, phone)
-                               VALUES (?, 'owner', ?, ?) RETURNING id",
-                              [$cid, "{$ref} owner", '+2567' . substr(md5($ref), 0, 8)]);
+            // The first owner of a new operator is created on the Admin plane and
+            // nowhere else (migration 027, docs/116 D.9): dnb_app holds no INSERT
+            // on mt_principals any more, and this is the real path.
+            $p = ['id' => $adminWrite->one(
+                'SELECT mt_admin_principal_create(?,?,?,?,?::text[],?) AS id',
+                [$cid, 'owner', "{$ref} owner", '+2567' . substr(md5($ref), 0, 8), '{}', 'sim:seed'])['id']];
+            $built = $ctx->run($cid, function (Database $db) use ($cid, $ref, $siteNames, $p) {
                 $s = $db->one("INSERT INTO mt_services (customer_id, kind)
                                VALUES (?, 'mikrotik_hotspot') RETURNING id", [$cid]);
                 $sites = [];

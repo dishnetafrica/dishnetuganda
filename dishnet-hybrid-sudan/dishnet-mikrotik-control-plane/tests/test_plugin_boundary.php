@@ -81,7 +81,7 @@ sort($served);
 is_($declared, $served, 'every route the manifest declares is a route the plugin serves, and no other');
 
 is_($m->writeRoutes, [], 'the manifest declares ZERO BOUND write routes');
-is_(count($m->unboundWrites), 7, 'and seven declared-but-unbound write paths');
+is_(count($m->unboundWrites), 8, 'and eight declared-but-unbound write paths (the eighth: the 027 principal creator, docs/116 §J J-1)');
 is_(count($m->sessionRoutes), 6,
     'and six session paths — who am I, log in, log out, change password, enrol, confirm');
 is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? null) !== null)), [],
@@ -99,7 +99,7 @@ is_(array_values(array_unique(array_column($m->staffRoutes, 'capability'))), ['s
 // The honest part: those paths exist. Prove each answers 501 and writes nothing.
 $reqW = new Request('POST', '/', [], [], [], '127.0.0.1');
 foreach ($m->unboundWrites as $w) {
-    $path = str_replace(['{device_id}', '{session_id}'],
+    $path = str_replace(['{device_id}', '{session_id}', '{customer_id}'],
                         '00000000-0000-4000-8000-000000000000', $m->apiBase . $w['path']);
     $mm = $routes->match($w['method'], $path);
     is_($mm !== null, true, "declared write path is routed: {$w['method']} {$w['path']}");

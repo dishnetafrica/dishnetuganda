@@ -26,6 +26,8 @@ final class AdminReader
         'mt_admin_services' => 0,  'mt_admin_voucher' => 1,
         // Migration 026: the DishNet staff roster. No hash, no secret, no session.
         'mt_admin_staff' => 0,
+        // Migration 027: every operator's people. phone, email and credential_hash withheld.
+        'mt_admin_principals' => 0,
     ];
 
     public function __construct(private readonly Database $db) {}

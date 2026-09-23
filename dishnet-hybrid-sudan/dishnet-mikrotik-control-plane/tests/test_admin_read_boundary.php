@@ -114,7 +114,9 @@ $pairs = [['mt_admin_customers', 'customer'], ['mt_admin_sites', 'site'],
           ['mt_admin_audit', 'audit'],
           // Migration 021, approved as an extension of the eleven.
           ['mt_admin_services', 'service'],
-          ['mt_admin_voucher', 'voucherDetail']];
+          ['mt_admin_voucher', 'voucherDetail'],
+          // Migration 027: every operator's people, non-secret fields only.
+          ['mt_admin_principals', 'principal']];
 foreach ($pairs as [$fn, $kind]) {
     $cols = array_column($inspect->query(
         "SELECT unnest(proargnames) AS c FROM pg_proc WHERE proname = ?", [$fn]), 'c');
@@ -130,11 +132,14 @@ t('6/7/8. NO SECRET, FREE-FORM OR CREDENTIAL FIELD CROSSES THE BOUNDARY');
 $blob = '';
 foreach (['/api/v1/admin/customers','/api/v1/admin/sites','/api/v1/admin/routers',
           '/api/v1/admin/plans','/api/v1/admin/vouchers','/api/v1/admin/voucher-batches',
-          '/api/v1/admin/sessions','/api/v1/admin/intents','/api/v1/admin/audit'] as $p) {
+          '/api/v1/admin/sessions','/api/v1/admin/intents','/api/v1/admin/audit',
+          '/api/v1/admin/principals'] as $p) {
     $blob .= json_encode(hitr($routes, 'GET', $p, $req)->body);
 }
 foreach (['radius_ref','wg_pubkey','secret_sealed','credential_hash','token_hash',
-          'code_hash','"code"','radius_username','mac'] as $f) {
+          'code_hash','"code"','radius_username','mac',
+          // 027: a principal's phone (the OTP key) and email never cross either.
+          '"phone"','"email"'] as $f) {
     is_(str_contains($blob, $f), false, "no admin response carries {$f}");
 }
 // D-2. Asserted at the DATABASE, not merely on today's values: the function
@@ -157,7 +162,7 @@ foreach (array_column($pairs, 0) as $fn) {
     is_((int) $pub, 0, "PUBLIC holds no EXECUTE on {$fn}");
 }
 
-t('THE READER accepts only the thirteen approved projections');
+t('THE READER accepts only the fourteen approved projections');
 throws_(fn() => ($reader)('mt_customers'), 'not an admin projection', 'a table name is refused');
 throws_(fn() => ($reader)('mt_device_secrets'), 'not an admin projection', 'and a secret table especially');
 throws_(fn() => ($reader)('mt_admin_customer'), 'wrong arity', 'arity is checked');

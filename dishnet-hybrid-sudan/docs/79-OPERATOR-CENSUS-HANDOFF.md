@@ -139,6 +139,7 @@ read or printed."*
 |---|---|
 | **§0** | role and RLS visibility, database identity |
 | **§1** | deployment evidence — tables present, migrations applied |
+| **§1c** | `mt_principals` **by kind and status** — the rows migration 027's `operator → staff` rewrite would touch (`docs/116` §J J-4). Reads `mt_admin_principals()` where 027 is applied, the base table otherwise; **UNREADABLE** or **0 under RLS** is reported as such, never as a count |
 | **§2** | `mt_devices` — totals, unsited, partial-null, cross-customer, orphaned, decommissioned-but-sited, shared tunnel IPs |
 | **§3** | `mt_vouchers` and `mt_voucher_batches` — totals, NULL site, cross-customer, orphaned, **site-less vouchers broken down by state**, and **NULL-site batches that already contain vouchers** |
 | **§4** | per-constraint blocking-row counts |

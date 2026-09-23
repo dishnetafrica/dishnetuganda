@@ -1,6 +1,6 @@
 # 116 — T-2: the Operator Staff capability model (C6 / C16)
 
-**Status: DESIGN, for approval. Nothing implemented.** Vocabulary per `docs/117`. **Migration 027 remains PENDING; B-3 remains OPEN; the `dnb_app` finding in §0 is a measured fact that no document closes.** Answers `docs/115` T-2
+**Status: BUILT 2026-09-23 in the development and test schema — migration 027; §J records the pre-implementation review, §K the build and its proofs. Production: NOT applied, nothing installed anywhere, and the production count of `kind = 'operator'` rows is NOT ESTABLISHED — census §1c (`docs/79`) is what establishes it.** Vocabulary per `docs/117`. **B-3 remains OPEN.** Answers `docs/115` T-2
 after T-1 (**`mt_customers` = Operator, vocabulary only**) and T-8 (**resume
 `docs/114` with `dnb_staffauth` and *target operator*)** were closed on
 2026-09-23. C6 (*owner vs staff roles in the Customer PWA*, `docs/47`) and
@@ -295,7 +295,161 @@ What does **not** block G-B: O-1 and the census, this document's migration
 8  later, each its own decision             T-6 location scope · T-10 reports · T-11 access log
 ```
 
-*Nothing above is implemented. Migrations end at 025, `DenyAllIdentity`
-remains the production binding, `dnb_app` can still rewrite a principal's
-kind until 027 lands, and the production census remains the handoff for O-1
-and now also counts principals by kind.*
+*When §A–§I were written nothing was implemented and migrations ended at
+025. §J and §K below record the build of migration 027.*
+
+---
+
+## J. T-2 pre-implementation review — 2026-09-23, before any code
+
+Read again before coding: this document (§A–§I), `docs/114` §M.3 (D-AUTH-3
+*target operator*, D-AUTH-6 audit identity, D-AUTH-7) and §O (what G-B built),
+`docs/117` (vocabulary), and the closed decisions P-B, P-C, S-A, T-1, T-8.
+**No contradiction with a closed decision was found.** The points below are
+where the instruction, this document and the code as it stands leave a choice;
+each is resolved here, in writing, so the build resolves nothing silently.
+
+| # | Point | Resolution |
+|---|---|---|
+| **J-1** | §E.4 binds `POST /operators/{id}/staff` on the Admin plane; the instruction's API scope names the `/me/staff` routes only, forbids G-C/G-C2, and `docs/117` kept the `/customers` Admin paths for a later non-breaking change | **`mt_admin_principal_create` is built and proved at the function level (instruction item 6). The Admin HTTP route is NOT bound**: it is declared in the manifest under `declared_unbound` as `POST /customers/{customer_id}/principals` (`customers.write`) and answers 501 like the seven estate writes, so the served surface stays truthful. Binding it is one guarded handler and needs its own instruction |
+| **J-2** | §D.12 specifies the `mt_admin_principals()` projection but no route | **`GET /api/v1/admin/principals` (`customers.read`) is bound** — a read projection like the thirteen, declared in the manifest, tested for withheld fields. A projection nothing serves cannot be proved over the API |
+| **J-3** | §D.9 leaves the owner of `mt_admin_principal_create` to measurement | **Measured:** `dnb_def_prov` already holds an `INSERT WITH CHECK (true)` policy on `mt_customers` and no other definer role writes across tenants; `dnb_def_auth` holds SELECT/UPDATE only and is the authentication role. **`dnb_def_prov` owns it**, gains exactly one policy — `INSERT WITH CHECK (true)` on `mt_principals` — and no SELECT: the function pre-generates the uuid and inserts without `RETURNING`, the `mt_customer_create` pattern, so an unknown target operator is refused by the foreign key and a duplicate phone by the unique index. `dnb_def_prov` reads no principal of any tenant |
+| **J-4** | the data rewrite `operator → staff` runs as the migration owner, which since 017 is subject to FORCE RLS and sees **zero** principals with no tenant context (the O-1 lesson) | **The rewrite runs `SET LOCAL ROLE dnb_def_auth`**, whose `UPDATE USING (true)` policy sees every row; the migration reports the count it rewrote (`RAISE NOTICE`), then asserts as the same role that no `operator` value remains before the new CHECK is added — the CHECK validates the real rows anyway and would refuse, but the assertion names the count. **The production count is still a census line** (`docs/79` and `production_census.sql` gain *principals by kind and status*); this migration is not authorised for production any more than 020–026 are |
+| **J-5** | §D.8 signatures carry no request source; the six commercial functions record `p_source` | the four operator-plane writers take a trailing **`p_source text DEFAULT NULL`**, so the audit row carries the request address exactly as the six do |
+| **J-6** | may an owner disable or demote **itself**? §B is silent | **Refused** (`check_violation`), as 026 refuses staff self-disable: an owner removing its own authority mid-session is a footgun, and the last-owner invariant already covers the only case where it would matter. Recorded, not silent |
+| **J-7** | `mt_principal_set_kind` and the `capabilities` column | demotion to `staff` **clears** capabilities to `{}` (the CHECK requires an owner's list empty; a freshly demoted staff member holds nothing until an owner grants it); promotion clears too. Neither revokes sessions: §D.10's live re-read makes the change effective on the next request, which the suite proves |
+| **J-8** | idempotency for `POST /me/staff` (§D: NULL-phone principal → `mt_idempotency`) | **Not built.** `src/Http/Idempotency.php` is wired to no route today and I-A is open; the phone-unique index covers every principal who can sign in. Recorded as the I-A item it is |
+| **J-9** | the capability floor's SQLSTATE | **`42501` with the message `capability required: <op.x>`**, raised before the mutation so no audit row exists to roll back. The customer API maps *that message* on 42501 to **403 `forbidden`** naming the capability; any other 42501 (a missing grant) stays a 500, so a misconfiguration cannot masquerade as a policy refusal |
+| **J-10** | `mt_principal_can` vs the floor | `mt_principal_can(p_principal, p_capability)` is the boolean §D.7 specifies, EXECUTE to `dnb_app` (RLS-bound: a foreign or disabled principal answers `false`). The floor inside the writers is an internal `mt_principal_require(p_actor, p_capability)` that raises 42501 and returns the actor's kind for the audit detail; it is granted to nobody |
+| **J-11** | which roles may call the four operator-plane writers | `dnb_app` only, as §D.8 says; **not** `dnb_admin`, `dnb_worker` or `dnb_adminwrite`. `dnb_def_comm` gains `INSERT, UPDATE` on `mt_principals` and stays without any widening policy, so the writers are tenant-bound by RLS below the function |
+| **J-12** | the two test fixtures and the simulator insert principals **directly as `dnb_app`** | they cannot after D.6, and that is the point. They now create principals through **`mt_admin_principal_create`** on the Admin write connection — the real path — and the isolation test proves the RLS floor beneath the revoked grant with the table **owner**, which still holds INSERT and is still bound by FORCE RLS |
+| **J-13** | §E.2's 403 on a `/me` route vs the customer plane's *"404, never 403"* | preserved exactly as §E.2 states: 403 describes the caller's own role inside its own operator; a foreign record stays 404. The matrix test asserts both on the same route |
+| **J-14** | the Customer PWA screens for staff management | **Not in scope** (instruction item 9 lists the API). The PWA keeps rendering `/me`; `principal` gains `status` and `capabilities` |
+
+None of these changes a decision this document froze. Every one is measured or
+asserted by the suite where a claim is made.
+
+---
+
+## K. T-2 build record — 2026-09-23 (migration 027)
+
+**Built in the development and test schema only.** Nothing is installed
+anywhere; production remains behind the census (`docs/79`), and the production
+count of `kind = 'operator'` rows is **NOT ESTABLISHED** — §1c of the census is
+what will establish it. The suite: **32 suites / 2,769 assertions / 0 failed,
+twice** (was 31 / 2,375). `tests/test_operator_staff.php` alone: **378**.
+
+### K.1 What shipped, against §D and §J
+
+| # | §D item | Delivered as |
+|---|---|---|
+| D.1 | `kind` → `owner \| staff`; data rewrite | **as `dnb_def_auth`** (J-4): `RAISE NOTICE` census per kind and status, `UPDATE … SET kind = 'staff' WHERE kind = 'operator'`, the rewritten count reported, an assertion that none remain, **then** `CHECK (kind IN ('owner','staff'))` |
+| D.2 | `capabilities text[] NOT NULL DEFAULT '{}'` | as specified, column comments on both |
+| D.3 | `mt_op_capabilities()` | the 17 names of §A, `IMMUTABLE`; `OpCapability::ALL` asserted equal element for element. **EXECUTE to `dnb_def_comm`, `dnb_def_prov`, `dnb_def_auth` only** — see K.2.3 |
+| D.4 / D.5 | the two CHECKs | `mt_principals_capabilities_known`, `mt_principals_kind_capabilities` |
+| D.6 | `REVOKE INSERT, UPDATE, DELETE ON mt_principals FROM dnb_app` | done; SELECT kept; proved by execution (K.4) |
+| D.7 | `mt_principal_can` | `STABLE SECURITY DEFINER`, `dnb_def_comm`, EXECUTE `dnb_app`; RLS-bound (foreign → `false`, disabled → `false`, unknown name → `false`) |
+| D.8 | the four writers | `mt_principal_create / _set_capabilities / _set_kind / _disable`, each with trailing `p_source` (J-5), owner `dnb_def_comm`, EXECUTE **`dnb_app` only** (J-11); the floor is the internal `mt_principal_require` (J-10), granted to nobody; self-acts refused (J-6); `set_kind` clears the list and revokes nothing (J-7); `disable` revokes every session through `mt_auth_revoke_principal_sessions` (`dnb_def_auth`, EXECUTE `dnb_def_comm` only) |
+| D.9 | `mt_admin_principal_create(p_operator, …, p_actor)` | owner **`dnb_def_prov`** with one `INSERT WITH CHECK (true)` policy and no SELECT (J-3); target explicit; the body never references `mt_current_customer()` (asserted on `prosrc`); audit `actor_kind = 'staff'`, `source = 'admin'`, `detail.operator`; EXECUTE `dnb_adminwrite` |
+| D.10 | `mt_auth_resolve_token` → `(principal_id, customer_id, kind, capabilities)` | dropped and re-created; `Authenticator::resolve()` carries both into `$who`; re-read live, proved on an existing session |
+| D.11 | the floor in the six | each re-created with `v_kind := mt_principal_require(p_actor_principal, '<op.x>')` **after** the actor check and **before** any mutation; detail gains `principal_kind` + `capability`; refusal is **`42501` `capability required: <op.x>`** (J-9) and writes nothing |
+| D.12 | `mt_admin_principals()` | eight columns exactly; `phone`, `email`, `credential_hash` unreturnable; `dnb_def_admin` gains a SELECT-only policy on `mt_principals`; EXECUTE `dnb_adminapi`; **bound** as `GET /api/v1/admin/principals` (`customers.read`, J-2) |
+| §E.2 | a guard on every `/me` route | `Routes::$guard(capability, handler)` on all 17 existing routes — a route cannot be added without naming a capability; 403 `{error: forbidden, capability}`; `Kernel` maps **only** the `capability required:` 42501 to 403, any other 42501 stays 500 |
+| §E.3 | the staff routes | `GET /me/staff` (listing with `phone_masked`, last three digits), `POST /me/staff`, `POST /me/staff/{id}/capabilities`, `…/kind`, `…/disable` — all `op.staff.manage`; 23505 → 409 `phone unavailable`; the function's `check_violation` messages → 409; NULL → 404 |
+| §E.4 | the Admin plane | `POST /api/v1/admin/customers/{customer_id}/principals` **declared unbound, 501** (J-1) |
+| §G | audit | every operator-plane act `actor_kind = 'principal'` with `detail.principal_kind` and `detail.capability` at act time; Admin-plane creation `actor_kind = 'staff'`; a test scans every `mt_audit_write(` call in every migration for a literal third argument and `src/` for any mapping of `kind` onto `actor_kind` |
+| J-12 | fixtures and the simulator | `tests/bootstrap.php` and `Plugin/Simulator.php` create the first owner through `mt_admin_principal_create` on the Admin write connection; A's seed now carries `customer.created` **and** `principal.created` |
+| census | `docs/79` §6 + `production_census.sql` SECTION 1c | principals by kind and status, `mt_admin_principals()` where 027 is applied, the base table otherwise, UNREADABLE / 0-under-RLS reported as such |
+
+### K.2 Three findings made while building
+
+**K.2.1 The rewrite is RLS-blind for the migration owner — measured, so 027
+does not run it as the owner.** A disposable database was built to level 026
+with the real `Migrator`, seeded as the fixture identity with **two
+`operator` principals and one `owner`**, and 027 applied as the owner `dnb` in
+one transaction with its notices captured:
+
+```
+CONTROL, owner dnb with no tenant context sees: 0 principals (FORCE RLS)
+NOTICE:  027 census — principals kind=operator status=active: 2
+NOTICE:  027 census — principals kind=owner status=active: 1
+NOTICE:  027 — rewrote 2 principal row(s) from operator to staff
+after: kind=owner status=active caps={} n=1
+after: kind=staff status=active caps={} n=2
+after: retired value remaining: 0
+after: kind CHECK: CHECK ((kind = ANY (ARRAY['owner'::text, 'staff'::text])))
+after: audit rows written by the migration: 0
+```
+
+The database was dropped; residue zero. **This is NOT production evidence** —
+it proves the instrument (the migration counts what is there and rewrites all
+of it) on synthetic rows. Unlike the O-1 foreign-key validation, an `ADD
+CONSTRAINT … CHECK` scan is *not* RLS-blind, so even an owner-run rewrite that
+saw nothing would have failed closed on the CHECK; what the `dnb_def_auth`
+rewrite adds is that the count is **reported and asserted** rather than the
+migration merely erroring.
+
+**K.2.2 The last-owner invariant was unreachable as first written.** Only an
+active owner can be the actor of `set_kind` / `disable`; with one owner left,
+the actor *is* that owner, so a self-guard checked first shadowed the
+invariant forever — and a guard that cannot fire cannot be proved. The
+invariant is now checked **before** the self-guard in both functions; both
+messages are reached and asserted over HTTP and at the function.
+
+**K.2.3 `mt_op_capabilities()` was first PUBLIC-executable** "because it
+names no secret". `test_isolation_s1_s2` refused it — no `mt_` function may be
+PUBLIC-executable, no exceptions — and its sweep revoked the grant mid-run,
+after which every `INSERT` into `mt_principals` failed: a CHECK expression
+runs as the role writing the row. EXECUTE now goes to exactly the three
+definer roles that write or update the table (`dnb_def_auth` because 007's
+`last_login_at` UPDATE re-evaluates every CHECK), the owner implicitly. **The
+guard was right; the migration was wrong.**
+
+### K.3 The instruction's sixteen proofs — where each lives (`tests/test_operator_staff.php`)
+
+| Proof | Section |
+|---|---|
+| owner holds every capability · staff holds exactly its list · staff cannot receive `op.staff.manage` | 3 (function level, both CHECKs and the PHP mirror), 5 (the 22-route × 5-identity matrix) |
+| last active owner cannot be disabled · cannot be demoted | 8 — over HTTP (409) and at the function (23514), with two owners present for the self-guard cases |
+| staff cannot manage staff even if the HTTP guard is bypassed | 4 (direct calls as `dnb_app`, five 42501s, zero audit rows) and 11b (an unguarded route through the Kernel → 403) |
+| `dnb_app` cannot directly mutate `mt_principals` | 2 — UPDATE kind, INSERT owner, DELETE, UPDATE capabilities, each `permission denied`; SELECT as the control; `dnb_def_comm` as the positive control, refused by policy across tenants |
+| cross-tenant principal mutation fails | 9 — NULL from all three writers under B, `false` from `can`, 404 over HTTP indistinguishable from an absent id, foreign actor refused |
+| live capability re-read | 7 — the same token is refused on its next request; promotion and demotion likewise |
+| disabling revokes sessions | 10 — proved **in one transaction** by rolling one back (sessions and status both return), then for real (two tokens → 401, `sessions_revoked` in the detail) |
+| Admin Staff can target an explicit Operator · target cannot be substituted by `mt_current_customer()` | 12 — row lands in B with `app.customer_id` set to A on the connection; NULL target refused; `prosrc` contains no `mt_current_customer` |
+| six commercial functions enforce the floor · refusal produces no audit row | 11 — six 42501s, delta 0, the plan untouched; the seller's own `voucher.issued` audited with `principal_kind = staff` |
+| audit `actor_kind` semantics | 6, 12, 14 — literal scan of every `mt_audit_write(` call; no `kind → actor_kind` mapping in `src/`; CHECK still `principal \| staff \| system` |
+| Admin projection contains no withheld identity fields | 13 — eight keys exactly; no `phone`/`email`/`credential`/`token`/`hash`/`secret` and no seeded digit string in the response; `proargnames` cannot return them |
+| security regression | 15 — migrations end at 027, no 028, ledger 27; census §1c present; 1b — EXECUTE on every 027 function enumerated from `pg_roles`; 2b — B-3's thirteen tables asserted unchanged |
+
+### K.4 `dnb_app` privilege evidence — exact, by execution
+
+| Measurement (as `dnb_app`, inside its own tenant context unless stated) | Result |
+|---|---|
+| `has_table_privilege('dnb_app','mt_principals', INSERT / UPDATE / DELETE)` | **false / false / false** |
+| `has_table_privilege('dnb_app','mt_principals', SELECT)` | true |
+| `UPDATE mt_principals SET kind = 'owner' WHERE id = <own owner>` | **42501 permission denied for table mt_principals** |
+| `INSERT INTO mt_principals (customer_id, kind, display_name) VALUES (<own>, 'owner', 'forged')` | **42501 permission denied** |
+| `DELETE FROM mt_principals WHERE id = …` | **42501 permission denied** |
+| `UPDATE mt_principals SET capabilities = '{op.staff.manage}' …` | **42501 permission denied** |
+| `SELECT count(*) FROM mt_principals` (control) | ≥ 1 |
+| `dnb_def_comm`, same context, INSERT under its own tenant (control, rolled back) | `INSERT 0 1` |
+| `dnb_def_comm`, same context, INSERT naming the other tenant | **42501 new row violates row-level security policy** |
+| policies whose role list names `dnb_def_comm` | **0** |
+| `dnb_app` write grants remaining (B-3) | exactly `mt_audit_log mt_auth_sessions mt_customers mt_device_config mt_device_secrets mt_devices mt_entitlements mt_idempotency mt_migrations mt_services mt_sessions mt_sites mt_uplink_samples` — thirteen; `mt_principals` absent |
+| `dnb_admin`, `dnb_worker` INSERT on `mt_principals` | **true** — migration 015's blanket grant, **F-3, OPEN**, no production route connects as either; recorded and asserted, not 027's to revoke |
+
+### K.5 What did NOT move
+
+- **B-3 is OPEN** — the thirteen tables above keep their `dnb_app` write
+  grants; inventory every writer before revoking, as B-2 did; its own task.
+- **G-C, G-C2, O-1, G-D, T-6, T-10, T-11 — not begun.** `DenyAllIdentity`
+  is still the default Admin binding; no production TLS; no
+  `staff:bootstrap` anywhere; nothing installed; the production census is
+  still the handoff and still first.
+- **Not built, by decision recorded in §J:** the Admin HTTP route (J-1, 501
+  declared), idempotency for `POST /me/staff` (J-8, I-A), the Customer PWA
+  staff screens (J-14).
+- **F-3** — `dnb_admin` / `dnb_worker` still hold 015's blanket grants on
+  `mt_principals`; measured and asserted, out of scope here.
+- `credential_hash` untouched (its own decision).

@@ -145,7 +145,15 @@ $expected = [
     'dnb_def_prov' => ['mt_devices'       => 'SELECT,INSERT,UPDATE',
                        'mt_device_secrets'=> 'SELECT,INSERT,UPDATE',
                        'mt_device_config' => 'SELECT,INSERT,UPDATE',
-                       'mt_customers'     => 'INSERT'],
+                       'mt_customers'     => 'INSERT',
+                       // 027: mt_admin_principal_create — INSERT across tenants,
+                       // no SELECT: the function never reads a principal back.
+                       'mt_principals'    => 'INSERT'],
+    // 024/027: the commercial and operator-identity writers are TENANT-BOUND
+    // BELOW the function — dnb_def_comm holds no policy of its own anywhere,
+    // so it inherits <table>_isolation like dnb_app. A widening policy added
+    // for it would show up here first.
+    'dnb_def_comm' => [],
 ];
 $order = ['SELECT' => 0, 'INSERT' => 1, 'UPDATE' => 2, 'DELETE' => 3];
 foreach ($expected as $role => $tables) {

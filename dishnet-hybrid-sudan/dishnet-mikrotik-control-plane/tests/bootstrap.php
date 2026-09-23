@@ -259,6 +259,10 @@ function seed_two_customers(\Dn\Db\Database $owner): array
     $admin = \Dn\Db\Database::admin();
     $app   = \Dn\Db\Database::app();
     $ctx   = new \Dn\Tenancy\TenantContext($app);
+    // Since migration 027 dnb_app cannot INSERT a principal at all; the first
+    // owner of a new operator is created on the Admin plane, for an explicit
+    // target operator, by the one function built for it (docs/116 D.9).
+    $adminWrite = \Dn\Db\Database::adminWrite();
 
     $out = [];
     foreach ([['A','Riverside Hotel',1001], ['B','Kabale Hostel',1002]] as [$k,$name,$ucrm]) {
@@ -267,12 +271,12 @@ function seed_two_customers(\Dn\Db\Database $owner): array
                            [$name, 'test:seed'])['id'];
         $owner->exec('UPDATE mt_customers SET ucrm_client_id = ? WHERE id = ?', [$ucrm, $cid]);
 
+        $p = $adminWrite->one('SELECT mt_admin_principal_create(?,?,?,?,?::text[],?) AS id',
+                              [$cid, 'owner', $name . ' owner', '+25670000' . $ucrm, '{}', 'test:seed']);
+
         // Everything else belongs to that customer, so it is created inside
         // that customer's own context — which is how the application does it.
-        $ids = $ctx->run($cid, function (\Dn\Db\Database $db) use ($cid, $name, $ucrm) {
-            $p = $db->one("INSERT INTO mt_principals (customer_id, kind, display_name, phone)
-                           VALUES (?, 'owner', ?, ?) RETURNING id",
-                          [$cid, $name . ' owner', '+25670000' . $ucrm]);
+        $ids = $ctx->run($cid, function (\Dn\Db\Database $db) use ($cid, $name, $ucrm, $p) {
             $s = $db->one("INSERT INTO mt_services (customer_id, kind)
                            VALUES (?, 'mikrotik_hotspot') RETURNING id", [$cid]);
             $e = $db->one("INSERT INTO mt_entitlements (service_id, customer_id, key, int_value)

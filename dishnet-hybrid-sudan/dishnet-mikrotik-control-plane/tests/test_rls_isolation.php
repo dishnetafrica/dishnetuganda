@@ -152,12 +152,30 @@ is_(count($rows), 0, "join pinned to B's service id yields nothing");
 // ---------------------------------------------------------------------------
 t('MODIFY — A cannot update B');
 // column chosen per table: mt_sites has no status column
-foreach (['mt_sites' => ['site','name'], 'mt_services' => ['service','status'],
-          'mt_principals' => ['principal','display_name']] as $tbl => [$key,$col]) {
+foreach (['mt_sites' => ['site','name'], 'mt_services' => ['service','status']] as $tbl => [$key,$col]) {
     $n = $ctx->run($A['customer'], fn($db) => $db->exec(
         "UPDATE {$tbl} SET {$col} = {$col} WHERE id = ?", [$B[$key]]));
     is_($n, 0, "{$tbl}: UPDATE of B's row affects 0 rows");
 }
+// mt_principals: since migration 027 the request role holds no UPDATE at all,
+// so its refusal is a PRIVILEGE refusal — and the policy beneath it is proved
+// on the writer role that does hold UPDATE (dnb_def_comm, no widening policy),
+// with a positive control so the 0 is a measurement and not a blind spot.
+throws_(fn() => $ctx->run($A['customer'], fn($db) => $db->exec(
+        'UPDATE mt_principals SET display_name = display_name WHERE id = ?', [$B['principal']])),
+    'permission denied', 'mt_principals: dnb_app cannot UPDATE at all (027)');
+$asRole = function (string $role, string $sql, array $args) use ($owner, $A): int {
+    $owner->exec('BEGIN');
+    try {
+        $owner->exec("SET LOCAL ROLE {$role}");
+        $owner->exec("SELECT set_config('app.customer_id', ?, true)", [$A['customer']]);
+        return (int) $owner->exec($sql, $args);
+    } finally { $owner->exec('ROLLBACK'); }
+};
+is_($asRole('dnb_def_comm', 'UPDATE mt_principals SET display_name = display_name WHERE id = ?', [$B['principal']]), 0,
+    "mt_principals: the writer role under A's context — UPDATE of B's row affects 0 rows (policy)");
+is_($asRole('dnb_def_comm', 'UPDATE mt_principals SET display_name = display_name WHERE id = ?', [$A['principal']]), 1,
+    "CONTROL: the same role and context updates A's own row (rolled back)");
 $n = $ctx->run($A['customer'], fn($db) => $db->exec(
     "UPDATE mt_sites SET name = 'hijacked' WHERE id = ?", [$B['site']]));
 is_($n, 0, "mt_sites: renaming B's site affects 0 rows");
@@ -173,6 +191,18 @@ is_($bLoc['location'], 'ground floor', "B's site untouched by A's unfiltered UPD
 t('MODIFY — A cannot delete B');
 foreach ($SCOPED as $tbl => $key) {
     if ($tbl === 'mt_services') { continue; }   // FK-restricted; covered by sites
+    if ($tbl === 'mt_principals') {
+        // 027: no HTTP role holds DELETE here (disable, never delete — P-C). The
+        // policy beneath is proved with dnb_admin, which still holds migration
+        // 015's blanket DELETE (F-3, open) and has no widening policy.
+        throws_(fn() => $ctx->run($A['customer'], fn($db) => $db->exec('DELETE FROM mt_principals WHERE id = ?', [$B[$key]])),
+            'permission denied', 'mt_principals: dnb_app cannot DELETE at all (027)');
+        is_($asRole('dnb_admin', 'DELETE FROM mt_principals WHERE id = ?', [$B[$key]]), 0,
+            "mt_principals: a role that CAN delete, under A's context, deletes 0 of B's rows (policy)");
+        is_($asRole('dnb_admin', 'DELETE FROM mt_principals WHERE id = ?', [$A[$key]]), 1,
+            "CONTROL: the same role and context deletes A's own row (rolled back)");
+        continue;
+    }
     $n = $ctx->run($A['customer'], fn($db) => $db->exec("DELETE FROM {$tbl} WHERE id = ?", [$B[$key]]));
     is_($n, 0, "{$tbl}: DELETE of B's row affects 0 rows");
 }
@@ -185,13 +215,31 @@ throws_(
     'policy',
     'inserting a site under B\'s customer_id is rejected by the policy'
 );
+// Migration 027: the request role holds no INSERT on mt_principals at all, so
+// the refusal is now a PRIVILEGE refusal — and the policy beneath it is proved
+// on the one role that CAN insert (dnb_def_comm, no widening policy of its own).
 throws_(
     fn() => $ctx->run($A['customer'], fn($db) => $db->exec(
         "INSERT INTO mt_principals (customer_id, kind, display_name)
-         VALUES (?, 'operator', 'planted')", [$B['customer']])),
-    'policy',
-    'inserting a principal under B\'s customer_id is rejected'
+         VALUES (?, 'staff', 'planted')", [$B['customer']])),
+    'permission denied',
+    'inserting a principal under B\'s customer_id is refused by privilege (027)'
 );
+$asComm = function (string $ctxCustomer, string $rowCustomer) use ($owner): void {
+    $owner->exec('BEGIN');
+    try {
+        $owner->exec('SET LOCAL ROLE dnb_def_comm');
+        $owner->exec("SELECT set_config('app.customer_id', ?, true)", [$ctxCustomer]);
+        $owner->exec("INSERT INTO mt_principals (customer_id, kind, display_name)
+                      VALUES (?, 'staff', 'planted')", [$rowCustomer]);
+    } finally {
+        $owner->exec('ROLLBACK');
+    }
+};
+throws_(fn() => $asComm($A['customer'], $B['customer']), 'policy',
+    'the writer role, under A\'s context, is refused by the POLICY when the row names B');
+$asComm($A['customer'], $A['customer']);
+ok('control: the same writer role, same context, inserts under A (rolled back)');
 
 // ---------------------------------------------------------------------------
 t('INFER — B\'s id is indistinguishable from an id that does not exist');
@@ -208,13 +256,19 @@ is_($u1, $u2, 'UPDATE rowcount is identical for a real foreign id and a fake one
 t('INFER — a unique constraint does not confirm B\'s existence');
 // B's phone is unique. If A could provoke a unique violation naming it,
 // that would confirm the row exists. The policy must refuse first.
-throws_(
-    fn() => $ctx->run($A['customer'], fn($db) => $db->exec(
-        "INSERT INTO mt_principals (customer_id, kind, display_name, phone)
-         VALUES (?, 'operator', 'probe', '+256700001002')", [$B['customer']])),
-    'policy',
-    'probing B\'s unique phone under B\'s customer_id is refused by policy, not by the unique index'
-);
+$probe = function () use ($owner, $A, $B): void {
+    $owner->exec('BEGIN');
+    try {
+        $owner->exec('SET LOCAL ROLE dnb_def_comm');
+        $owner->exec("SELECT set_config('app.customer_id', ?, true)", [$A['customer']]);
+        $owner->exec("INSERT INTO mt_principals (customer_id, kind, display_name, phone)
+                      VALUES (?, 'staff', 'probe', '+256700001002')", [$B['customer']]);
+    } finally {
+        $owner->exec('ROLLBACK');
+    }
+};
+throws_(fn() => $probe(), 'policy',
+    'probing B\'s unique phone under B\'s customer_id is refused by policy, not by the unique index');
 
 // ---------------------------------------------------------------------------
 t('FAIL CLOSED — no tenant context means no rows, never all rows');
