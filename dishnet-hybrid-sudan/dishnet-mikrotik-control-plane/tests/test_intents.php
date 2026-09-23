@@ -29,6 +29,9 @@ $q      = new IntentQueue($workDb);
 /** A delivery double whose behaviour each test chooses. */
 final class Scripted implements DeliveryPort
 {
+    // G-C: every binding names itself and says whether it is a double.
+    public function bindingName(): string { return 'test-scripted'; }
+    public function isSimulated(): bool { return true; }
     public array $delivered = [];
     public array $confirmed = [];
     public function __construct(

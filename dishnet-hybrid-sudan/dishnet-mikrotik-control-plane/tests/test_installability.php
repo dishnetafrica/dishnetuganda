@@ -372,10 +372,12 @@ is_(str_contains($it, 'initdb'), true, 'it builds its own cluster rather than us
 is_(str_contains($it, "listen_addresses=''"), true, 'and that cluster opens no TCP port');
 
 // ───────────────────────────────────────────────────────────────────────────
-t('the manifest still describes a read-only, ungated plugin');
+t('the manifest still describes an estate-read plugin with exactly two router writes, gated');
 
 is_($m->consumesDomainA, false, 'it declares no Domain A dependency');
-is_($m->writeRoutes, [], 'no write route is bound');
+// G-C (docs/118): register and assign are the only bound estate writes.
+is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'], $m->writeRoutes),
+    ['POST /routers', 'POST /routers/{device_id}/assign'], 'the only bound write routes are the two G-C router routes');
 is_($m->gateIsOpen('F6-B'), false, 'the F6-B gate is shut');
 is_(($m->requires['redis'] ?? null), false, 'it requires no Redis');
 is_(($m->requires['docker'] ?? null), false, 'it requires no Docker');

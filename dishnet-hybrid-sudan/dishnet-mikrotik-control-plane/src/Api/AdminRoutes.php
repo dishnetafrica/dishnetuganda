@@ -6,11 +6,14 @@ use Dn\Admin\AdminIdentityPort;
 use Dn\Admin\AdminSession;
 use Dn\Admin\Capability;
 use Dn\Admin\Csrf;
+use Dn\Admin\RouterAdmin;
+use Dn\Admin\RouterRefused;
 use Dn\Admin\StaffAdmin;
 use Dn\Admin\StaffIdentity;
 use Dn\Admin\StaffRefused;
 use Dn\Admin\StaffRole;
 use Dn\Admin\StaffSessionPort;
+use Dn\Devices\TunnelAddress;
 use Dn\Http\Request;
 use Dn\Http\Response;
 use Dn\Http\Router;
@@ -41,10 +44,17 @@ use Dn\Runtime\Bindings;
  *    request to establish staff authority.
  *
  * 4. Two kinds of write exist on this surface and they are kept apart. ESTATE
- *    writes (routers, sites, plans, vouchers, disconnect) are declared and
- *    every one answers 501 — binding them is a separate gate. IDENTITY writes
- *    (a session row; the DishNet staff roster) are bound, each through one
+ *    writes are declared with their capabilities; since G-C (docs/118) TWO of
+ *    them are bound — router register and router assign, each one W-1
+ *    function on dnb_adminwrite with the authenticated subject as the actor —
+ *    and the rest (the router action, sites, plans, voucher batches,
+ *    disconnect, principal creation) still answer 501. IDENTITY writes (a
+ *    session row; the DishNet staff roster) are bound, each through one
  *    SECURITY DEFINER function that audits itself, and the manifest says so.
+ *
+ * A router write here is a ROW in the registry. Nothing on this surface can
+ * reach a router: rule 2 holds, and the action that would queue work for one
+ * is exactly the route that is not bound.
  */
 final class AdminRoutes
 {
@@ -58,7 +68,8 @@ final class AdminRoutes
                                  ?callable $reader = null,
                                  ?StaffSessionPort $issuer = null,
                                  ?StaffAdmin $staff = null,
-                                 ?Csrf $csrf = null): Router
+                                 ?Csrf $csrf = null,
+                                 ?RouterAdmin $routers = null): Router
     {
         $r = new Router();
         // Cross-site protection for every mutating route, capability-gated or
@@ -191,17 +202,25 @@ final class AdminRoutes
                                     : Response::ok(['voucher' => AdminProjection::voucherDetail($rows[0])]);
             }), auth: false);
 
-        // ── mutations ───────────────────────────────────────────────────
+        // ── estate writes: the two bound ones (G-C) ─────────────────────
+        self::routers($r, $guard, $routers);
+
+        // ── estate writes still declared-unbound ────────────────────────
         // Declared with their capabilities so the matrix is complete and
-        // testable. Each returns the same honest 501: the write paths exist as
-        // SECURITY DEFINER functions reachable by dnb_admin, but binding an
-        // HTTP route to them requires the staff identity provider first —
-        // otherwise the audit row has no actor to name (docs/72 §A.4 found
-        // mt_device_assign writes no audit row at all).
+        // testable. Each returns an honest 501. The router ACTION has its own
+        // reason: queuing a device.provision intent from this plane needs an
+        // enqueue function dnb_adminwrite may execute, which is a migration
+        // G-C did not authorise (docs/118 D-2). Nothing is queued by it.
+        $r->add('POST', '/api/v1/admin/routers/{device_id}/actions',
+            $guard(Capability::ROUTERS_ACT, static fn() => new Response(501, [
+                'error'  => 'router_action_not_bound',
+                'detail' => 'queuing a device.provision intent from the Admin plane needs a '
+                          . 'SECURITY DEFINER enqueue function for dnb_adminwrite, which is a '
+                          . 'migration; G-C did not authorise one. Nothing was queued and nothing '
+                          . 'reaches a router.',
+                'see'    => 'docs/118',
+            ])), auth: false);
         foreach ([
-            ['POST', '/api/v1/admin/routers',                      Capability::ROUTERS_REGISTER],
-            ['POST', '/api/v1/admin/routers/{device_id}/assign',   Capability::ROUTERS_ASSIGN],
-            ['POST', '/api/v1/admin/routers/{device_id}/actions',  Capability::ROUTERS_ACT],
             ['POST', '/api/v1/admin/sites',                        Capability::SITES_WRITE],
             ['POST', '/api/v1/admin/plans',                        Capability::PLANS_WRITE],
             ['POST', '/api/v1/admin/voucher-batches',              Capability::VOUCHERS_GENERATE],
@@ -231,6 +250,91 @@ final class AdminRoutes
         self::staff($r, $guard, $reader, $unconfigured, $staff);
 
         return $r;
+    }
+
+    /**
+     * POST /routers                       register a router staged at the bench      201 | 400 | 409 | 501
+     * POST /routers/{device_id}/assign    assign it to an operator (+ site, name)     200 | 400 | 404 | 409 | 501
+     *
+     * Bound only where the process holds an Admin write connection; otherwise
+     * 501 says so. The actor is the authenticated subject: a body that tries
+     * to supply one is refused rather than ignored, so nothing silently
+     * accepts a forged attribution. A tunnel address must lie inside the
+     * management network, so a row RestClient would refuse to talk to cannot
+     * be registered (docs/118 D-6, D-11).
+     */
+    private static function routers(Router $r, callable $guard, ?RouterAdmin $routers): void
+    {
+        $off = static fn() => new Response(501, [
+            'error'  => 'router_writes_unavailable',
+            'detail' => 'router registration and assignment are bound only where this process '
+                      . 'holds an Admin write connection (dnb_adminwrite); it holds none',
+        ]);
+        $uuid = '/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i';
+        /** Fields the server derives. Present in a body, they are a forgery attempt, not a hint. */
+        $derived = static function (array $body, array $keys): ?Response {
+            foreach ($keys as $k) {
+                if (array_key_exists($k, $body)) {
+                    return Response::badRequest("{$k} is not accepted: it is derived on the server, never from the request");
+                }
+            }
+            return null;
+        };
+
+        $r->post('/api/v1/admin/routers', $guard(Capability::ROUTERS_REGISTER,
+            static function (Request $req, StaffIdentity $s) use ($routers, $off, $derived) {
+                if ($routers === null) { return $off(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['staged_by', 'actor', 'state', 'customer_id', 'site_id', 'id'])) !== null) { return $bad; }
+                $serial = is_string($b['serial'] ?? null) ? trim($b['serial']) : '';
+                $model  = is_string($b['model'] ?? null) ? trim($b['model']) : '';
+                if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$/', $serial)) {
+                    return Response::badRequest('serial is required: 4-64 letters, digits, dot, underscore or dash');
+                }
+                if ($model === '' || mb_strlen($model) > 64) { return Response::badRequest('model is required (up to 64 characters)'); }
+                $ros = $b['ros_version'] ?? null;
+                if ($ros !== null && (!is_string($ros) || trim($ros) === '' || mb_strlen($ros) > 32)) {
+                    return Response::badRequest('ros_version must be a string of up to 32 characters');
+                }
+                $key = $b['wg_pubkey'] ?? null;
+                if ($key !== null && (!is_string($key) || !preg_match('#^[A-Za-z0-9+/]{43}=$#', $key))) {
+                    return Response::badRequest('wg_pubkey must be a WireGuard public key: 32 bytes, base64');
+                }
+                $tip = $b['tunnel_ip'] ?? null;
+                if ($tip !== null && (!is_string($tip) || !TunnelAddress::isRegistrable($tip))) {
+                    return Response::badRequest('tunnel_ip must be one address inside the management network ' . TunnelAddress::NETWORK);
+                }
+                try {
+                    $row = $routers->register($serial, $model, $ros, $key, $tip, $s->subject);
+                } catch (RouterRefused $e) {
+                    return new Response(409, ['error' => 'refused', 'detail' => $e->getMessage()]);
+                }
+                return new Response(201, ['router' => AdminProjection::router($row)]);
+            }), auth: false);
+
+        $r->post('/api/v1/admin/routers/{device_id}/assign', $guard(Capability::ROUTERS_ASSIGN,
+            static function (Request $req, StaffIdentity $s) use ($routers, $off, $derived, $uuid) {
+                if ($routers === null) { return $off(); }
+                $id = (string) ($req->params['device_id'] ?? '');
+                if (!preg_match($uuid, $id)) { return Response::notFound(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['actor', 'staged_by', 'state', 'claimed_at'])) !== null) { return $bad; }
+                $cust = $b['customer_id'] ?? null;
+                if (!is_string($cust) || !preg_match($uuid, $cust)) {
+                    return Response::badRequest('customer_id, the target operator, is required');
+                }
+                $site = $b['site_id'] ?? null;
+                if ($site !== null && (!is_string($site) || !preg_match($uuid, $site))) { return Response::badRequest('site_id must be a uuid'); }
+                $name = $b['name'] ?? null;
+                if ($name !== null && (!is_string($name) || mb_strlen($name) > 64)) { return Response::badRequest('name must be up to 64 characters'); }
+                try {
+                    $row = $routers->assign($id, $cust, $site, $name, $s->subject);
+                } catch (RouterRefused $e) {
+                    return new Response(409, ['error' => 'refused', 'detail' => $e->getMessage()]);
+                }
+                if ($row === null) { return Response::notFound(); }
+                return Response::ok(['router' => AdminProjection::router($row)]);
+            }), auth: false);
     }
 
     /**

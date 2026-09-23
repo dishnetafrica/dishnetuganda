@@ -12,7 +12,8 @@ changes none of them.
 | Serve the Admin panel against a simulated estate | **yes** |
 | Read real Domain-B data once you put some there | **yes** |
 | Authenticate DishNet staff | **yes, when you bind it** — see *The identity gate* below. Off by default; needs TLS in front of PHP |
-| Reach a real MikroTik router | **no** — F6-B is not authorized |
+| Register a router and assign it to an operator over the Admin API | **yes** (G-C, `docs/118`): `POST /api/v1/admin/routers`, `POST /api/v1/admin/routers/{id}/assign` — the two routes audit the signed-in staff member as the actor. Every other estate write still answers 501 |
+| Reach a real MikroTik router | **no** — F6-B is not authorized. The worker's delivery binding (`DN_DELIVERY`) is `null` unless you say otherwise, `simulated` is an in-memory router that says so, and `routeros` refuses to start without the gate. **Nothing is HARDWARE VERIFIED** |
 | Publish a RADIUS credential | **no** |
 | Redeem a voucher | **no** |
 
@@ -147,6 +148,27 @@ PHP sees it.
 
 **This release ships no TLS and no process supervision.** Do not put the
 built-in server on a public interface.
+
+## 8. The worker and its delivery binding
+
+```sh
+php bin/worker.php            # loops; --once runs a single pass
+```
+
+The worker is the only process that turns a queued intent into anything, and
+**what it turns it into is chosen by `DN_DELIVERY`, never by fallback**:
+
+| `DN_DELIVERY` | Binding | What happens to an intent |
+|---|---|---|
+| unset, or `null` | `NullDelivery` | nothing is delivered; the intent stays queued and says *no delivery path is configured* |
+| `simulated` | `SimulatedRouterOs` | an **in-memory** router accepts and confirms; every result is tagged simulated, the audit actor carries `simulated-routeros`, and **no device state or read-back is written** — a simulator answering never makes a router `connected`, `provisioned` or `active`. Refuses to start if the F6-B gate is open |
+| `routeros` | `RouterOsDelivery` | the real adapter over REST on the WireGuard tunnel. **Requires `DN_ALLOW_REAL_BINDINGS=yes-f6b-authorized`** and refuses to start without it; the REST client checks the gate again before opening a socket. **Not authorized for this release** |
+| anything else | — | the worker refuses to start |
+
+The worker prints its binding on startup and `GET /api/v1/admin/health`
+reports `delivery_configured` so the panel can never imply a router was
+contacted. Queuing a router action from the Admin API is **not** bound in this
+release (`POST /routers/{id}/actions` answers 501 and says why).
 
 ## The identity gate
 

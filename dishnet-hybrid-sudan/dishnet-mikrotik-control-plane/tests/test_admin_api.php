@@ -73,7 +73,11 @@ is_(hit($sales, 'POST', '/api/v1/admin/routers', $req)->status, 403,
 t('CAPABILITY — NOC operates routers but is not commercial');
 $noc = AdminRoutes::build(new FixedStaff(new StaffIdentity('s-3', StaffRole::Noc, 'test')),
                           Bindings::defaults());
-is_(hit($noc, 'POST', '/api/v1/admin/routers', $req)->status, 501, 'NOC may register a router');
+// 501 here, not 403: NOC holds the capability; this test process simply has no
+// Admin write connection bound (G-C binds the route where one exists).
+$nocReg = hit($noc, 'POST', '/api/v1/admin/routers', $req);
+is_($nocReg->status, 501, 'NOC may register a router (501: no Admin write connection in this process)');
+is_($nocReg->body['error'], 'router_writes_unavailable', 'and the 501 says exactly that');
 is_(hit($noc, 'POST', '/api/v1/admin/sessions/{session_id}/disconnect', $req)->status, 501,
     'NOC may queue a disconnect');
 is_(hit($noc, 'POST', '/api/v1/admin/plans', $req)->status, 403, 'NOC may NOT write plans');

@@ -147,6 +147,10 @@ is_(RestClient::isTunnelHost('10.66.0.11'), true, 'and accepts a tunnel address'
 
 // ===========================================================================
 t('DELIVERY — provisioning pushes desired state and confirms by reading back');
+// G-C (docs/118 D-4): delivery presumes a tunnel, and the registry records one
+// as `connected` or later. A staff act moves the row there — nothing in the
+// delivery path does, and tests/test_router_control_plane.php proves both.
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'connected', 'test:staff'));
 $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setDesired($dev['id'],
     ['ip/hotspot/profile' => ['use-radius' => 'yes']], 'test:staff'));
 $intent = (new IntentQueue($owner))->enqueue(
@@ -174,6 +178,8 @@ $diverging = new class(new RouterOsDelivery($clientFactory)) implements \Dn\Deli
     public function __construct(private RouterOsDelivery $inner) {}
     public function deliver(\Dn\Db\Database $db, array $i): \Dn\Delivery\DeliveryResult { return $this->inner->deliver($db, $i); }
     public function confirm(\Dn\Db\Database $db, array $i): bool { return false; }
+    public function bindingName(): string { return 'test-diverging'; }
+    public function isSimulated(): bool { return true; }
 };
 $i2 = (new IntentQueue($owner))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']],
@@ -244,8 +250,10 @@ throws_(fn() => $owner->exec('DELETE FROM mt_devices WHERE id = ?', [$unstaged['
     'not deleted', 'and even the owner cannot delete it');
 
 t('a legal transition is allowed');
-$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'shipped', 'test:staff'));
-is_($ok['state'], 'shipped', 'staged -> shipped is accepted');
+// The device was moved to `connected` for the delivery section above, so the
+// legal step from here is the one the trigger allows after a tunnel.
+$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'provisioned', 'test:staff'));
+is_($ok['state'], 'provisioned', 'connected -> provisioned is accepted');
 
 t('DIVERGENCE is computed, not stored');
 $cols = array_column($owner->query(

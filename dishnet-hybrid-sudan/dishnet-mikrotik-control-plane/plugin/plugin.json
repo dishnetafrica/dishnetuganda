@@ -180,12 +180,17 @@
       "required": false,
       "secret": false,
       "description": "Install-time only. Set to yes-rotate-now to mint new passwords for roles that predate this installation. Refused by default because the roles are cluster-wide and may belong to another database."
+    },
+    "DN_DELIVERY": {
+      "required": false,
+      "secret": false,
+      "description": "Worker delivery binding: unset or 'null' (nothing is delivered, intents stay queued), 'simulated' (an in-memory router that reports itself simulated and refuses to start if the F6-B gate is open), 'routeros' (the real RouterOS adapter; requires DN_ALLOW_REAL_BINDINGS). Any other value refuses to start. There is no fallback."
     }
   },
   "api": {
     "base": "/api/v1/admin",
     "entrypoint": "plugin/public/api.php",
-    "surface": "estate read-only; identity read-write",
+    "surface": "estate read + router register/assign; identity read-write",
     "routes": [
       {
         "method": "GET",
@@ -269,18 +274,27 @@
       }
     ],
     "writes": {
-      "bound": [],
-      "declared_unbound": [
+      "bound": [
         {
           "method": "POST",
           "path": "/routers",
-          "capability": "routers.register"
+          "capability": "routers.register",
+          "function": "mt_device_register",
+          "role": "dnb_adminwrite",
+          "gate": "G-C",
+          "actor": "the authenticated staff subject; a staged_by or actor field in the body is refused"
         },
         {
           "method": "POST",
           "path": "/routers/{device_id}/assign",
-          "capability": "routers.assign"
-        },
+          "capability": "routers.assign",
+          "function": "mt_device_assign",
+          "role": "dnb_adminwrite",
+          "gate": "G-C",
+          "actor": "the authenticated staff subject; customer_id in the body is the explicit TARGET operator, never a tenant context"
+        }
+      ],
+      "declared_unbound": [
         {
           "method": "POST",
           "path": "/routers/{device_id}/actions",
@@ -312,7 +326,7 @@
           "capability": "customers.write"
         }
       ],
-      "reason": "These paths EXIST and every one answers 501. They are declared so the capability matrix is complete and testable, not because anything is bound. The seven estate writes wait for G-C / G-C2. The eighth, principal creation for an explicit target operator, has its function since migration 027 (mt_admin_principal_create, dnb_adminwrite, docs/116 D.9) and its route binding is a separate instruction (docs/116 §J J-1)."
+      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign, each one W-1 function on dnb_adminwrite writing its own audit row with the authenticated subject as actor. The six paths under declared_unbound EXIST and every one answers 501. The router ACTION needs an Admin-plane enqueue function dnb_adminwrite may execute (a migration G-C did not authorise, docs/118 D-2); sites wait for O-1; plans and voucher batches for G-C2; disconnect for the replay fix; principal creation for its own instruction (docs/116 J-1)."
     },
     "session": {
       "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. Since migration 026 these routes DO write identity state (a revocable session row, an audit row) through definer functions owned by dnb_def_staff; they write no estate table, which is why 'writes.bound' stays empty.",
@@ -438,12 +452,12 @@
   "gates": {
     "F6-B": {
       "state": "NOT AUTHORIZED",
-      "meaning": "Real MikroTik and real FreeRADIUS bindings. While closed, every hardware adapter is a simulator and says so.",
+      "meaning": "Real MikroTik and real FreeRADIUS bindings. While closed, every hardware adapter is a simulator and says so. DN_DELIVERY=routeros additionally requires it: the worker refuses to start otherwise, and RouterOS REST checks it again at the socket.",
       "env": "DN_ALLOW_REAL_BINDINGS=yes-f6b-authorized"
     },
     "admin-write": {
-      "state": "NOT BOUND",
-      "meaning": "No state-changing ESTATE route exists: every declared estate write answers 501. The identity routes (session, staff roster) are bound since migration 026 and change identity state only."
+      "state": "PARTIALLY BOUND (G-C)",
+      "meaning": "Two ESTATE writes are bound: POST /routers and POST /routers/{device_id}/assign (dnb_adminwrite, migration 020's W-1 functions, actor = the authenticated staff subject). The router action, sites, plans, voucher batches, disconnect and principal creation still answer 501. Identity routes (session, staff roster) are bound since migration 026. No route reaches a router: a router write is a registry row, and only the worker turns rows into connections."
     },
     "portal": {
       "state": "NOT BUILT",
@@ -453,6 +467,11 @@
       "state": "BUILT, NOT BOUND BY DEFAULT",
       "meaning": "Migration 026 and DishnetStaffIdentity exist. DenyAllIdentity remains the default binding; DN_STAFF_IDENTITY=dishnet selects the real provider explicitly. Production authentication also needs TLS in front of PHP (DN_TRUSTED_PROXY) and a first administrator from staff:bootstrap.",
       "env": "DN_STAFF_IDENTITY=dishnet"
+    },
+    "delivery": {
+      "state": "NULL BY DEFAULT",
+      "meaning": "The worker's delivery binding is chosen by DN_DELIVERY and never by fallback: unset or null delivers nothing; simulated is an in-memory router that reports itself simulated and writes no device state; routeros is the real adapter behind the F6-B gate. Nothing is HARDWARE VERIFIED (docs/118 §C).",
+      "env": "DN_DELIVERY=null|simulated|routeros"
     }
   },
   "package": {

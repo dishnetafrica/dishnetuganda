@@ -132,7 +132,7 @@ final class SignalReport
         return [
             ['key' => 'push_config', 'label' => 'Push configuration',
              'available' => false,
-             'reason' => 'A delivery case exists (RouterOsDelivery) but no Admin write route is bound, and F6-B is not authorized — so this would reach a simulator, not a router.'],
+             'reason' => 'A delivery case exists (RouterOsDelivery), but the Admin action route is not bound (G-C: queuing it needs an Admin-plane enqueue function, a migration) and F6-B is not authorized — so nothing can queue it, and a queued job would reach a simulator, not a router.'],
             ['key' => 'reboot', 'label' => 'Reboot router',
              'available' => false,
              'reason' => 'No delivery case exists for reboot. There is nothing to queue and nothing to deliver.'],

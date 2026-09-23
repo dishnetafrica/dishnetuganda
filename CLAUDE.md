@@ -109,9 +109,12 @@ test schema only**:
 - **W-3** — `dnb_adminwrite`: EXECUTE on the seven, **zero table privileges**.
   `dnb_admin`'s existing grants were **not** revoked (needs its own audit).
 
-**No Admin write route or button is bound, and none may be without a new
-instruction.** `DenyAllIdentity` is still the production Admin binding.
-`Database::adminWrite()` exists and is used by no route.
+**Since G-C (`docs/118`) exactly TWO Admin write routes are bound — router
+register and router assign, each one W-1 function on `dnb_adminwrite` with the
+authenticated staff subject as the actor. No other Admin write route or button
+is bound, and none may be without a new instruction.** `DenyAllIdentity` is
+still the default Admin binding. `Database::adminWrite()` is reached by those
+two routes through `RouterAdmin` and by nothing else.
 
 - **Applying 020 to production is NOT authorized.** It assumes zero existing
   customer/site violations, which is established for the development schema
@@ -2091,9 +2094,9 @@ copied, and the personal details on its pages are reproduced nowhere.
   because the `operator → staff` value rewrite touches existing rows.
 - **Sequence:** T-1 vocabulary pass → **G-B** (migration 026) → **027**
   (this model + principal grant closure + `mt_admin_principal_create` with
-  target operator) → G-C → B-3 → O-1. G-B is BUILT (below) and **027 is
-  BUILT** (the T-2 section below); G-C is the next step and has NOT been
-  started.
+  target operator) → G-C → B-3 → O-1. G-B is BUILT (below), **027 is
+  BUILT** (the T-2 section below) and **G-C is BUILT in software** (the G-C
+  section below); G-C2 / B-3 / O-1 have NOT been started.
 
 ## G-B — DishNet Staff authentication is BUILT (migration 026); NOT bound by default
 
@@ -2249,6 +2252,95 @@ build and its proofs).
 
 Suite **32 suites / 2,769 assertions / 0 failed**, twice (was 31 / 2,375);
 `tests/test_operator_staff.php` alone 378.
+
+## G-C — the MikroTik router control-plane boundary is BUILT in software; NOTHING is HARDWARE VERIFIED
+
+**Development schema only, no migration (still 027), nothing installed, no
+physical MikroTik.** Full record: `docs/118` — §A the governing rules quoted,
+§B fifteen decisions taken before code, §C/§F the evidence register with the
+`docs/00` labels, §D–§E the build and the proofs. **Do not describe anything
+built here as hardware activation, RouterOS compatibility, WireGuard push
+viability or HotSpot operation.** The Phase-0 protocol (`docs/31`, `docs/32`)
+remains the only instrument for those, `tools/chr_harness.sh` is still unrun,
+and B1 (push vs poll) is decided nowhere.
+
+- **Names.** The instruction's *MikroTikDeliveryAdapter* is
+  `Dn\Delivery\RouterOsDelivery`; its *RouterOsClient* is
+  `Dn\Delivery\RouterOs\RestClient`. Kept, not renamed (D-1).
+- **The destination is derived, never accepted.** `Dn\Delivery\DeliveryTarget`
+  is the one resolver both adapters use: the device row read under the
+  intent's tenant context is the only source of a router's address; a payload
+  carrying `host`, `endpoint`, `address`, `tunnel_ip`, `ip`, `url`, `port`,
+  `serial`, `username`, `password`, `secret` or `wg_pubkey` is a **permanent
+  refusal before any connection**; a malformed or unknown device id fails
+  closed; another operator's device is *not found*.
+- **Lifecycle gate.** Delivery only to `connected` / `provisioned` / `active` /
+  `diverged`; `decommissioned` permanent; everything else retryable. **The
+  adapter and the worker never write `mt_devices.state`** — moving a router to
+  `connected` or `provisioned` is a staff act through `mt_device_set_state`,
+  and whether a confirmed delivery may drive it is **UNRESOLVED** (a migration
+  and a B1 question). A simulated delivery moves nothing either.
+- **Identity check (H8, VERSION/MODEL DEPENDENT).** Before its first write the
+  adapter reads `system/routerboard` and refuses permanently if the serial is
+  not the registry's, making exactly one call; a router with no serial (CHR)
+  is refused unless constructed with `requireSerial: false`, which only the
+  CHR harness may do. A consistency guard, not the trust anchor — the
+  WireGuard key at the transport layer is that, and `docs/30` §6.3 says the
+  serial may be spoofable.
+- **The F6-B gate is at the socket.** `RestClient`'s real transport calls
+  `Bindings::requireRealBindingsAllowed()` before `curl`; the injected test
+  transport never opens a socket. `DN_DELIVERY` selects the worker's binding
+  — unset/`null` → `NullDelivery`; `simulated` → `SimulatedRouterOs`, which
+  **refuses to construct inside a gated process**; `routeros` → requires the
+  gate, else throws; anything else throws. **No fallback in any direction.**
+  Every result carries `simulated`; `/health` reports `delivery_binding`,
+  `delivery_simulated`, `delivery_configured`; the worker id carries the
+  binding name into every audit row.
+- **`SimulatedRouterOs` writes nothing to the database** — not device state,
+  not `mt_device_config.actual` — and confirms from its own memory. What it
+  proves is the worker, queue, lease and confirm-is-a-read logic. What it
+  proves about RouterOS: nothing.
+- **Timeouts and malformed answers.** 5 s connect / 10 s total (H11,
+  UNRESOLVED on the tunnel); a transport failure is retryable and its message
+  names no address or credential; a 2xx with a non-JSON body is `malformed`,
+  retryable, and **never a confirmation**. The adapter scrubs the device's
+  username, password and tunnel address from anything the worker records.
+- **Admin plane: exactly two estate writes are bound** — `POST
+  /api/v1/admin/routers` (`routers.register`) and `POST
+  /api/v1/admin/routers/{device_id}/assign` (`routers.assign`) — through
+  `Dn\Admin\RouterAdmin` on `dnb_adminwrite`, the W-1 functions, **actor =
+  `StaffIdentity::$subject`**; a body carrying `staged_by`, `actor`, `state`,
+  `customer_id`/`site_id` (on register) or `id` is **400, refused rather than
+  ignored**; a tunnel address must be one address in `10.66.0.0/16`
+  (`Dn\Devices\TunnelAddress`, the one rule the client and the route share);
+  W-2 refuses a foreign site below the function. Bound under any identity
+  provider the process runs (the development identity's actor is the literal
+  `dev`, and it cannot exist in a gated process).
+- **The router ACTION route is NOT bound** and answers 501
+  `router_action_not_bound`: queuing a `device.provision` intent from the
+  Admin plane needs a SECURITY DEFINER enqueue function for `dnb_adminwrite`
+  — a migration — and G-C fixed the state at 027. **Recorded (D-2), not
+  worked around**; `docs/114` §K G-C is met for register and assign and says
+  so. Do not route the action through `dnb_admin` or `dnb_app` to close it.
+- **Manifest:** `writes.bound` = the two routes with function, role and actor
+  rule; `declared_unbound` = six (action, sites, plans, voucher-batches,
+  disconnect, principals); `surface` = *estate read + router register/assign;
+  identity read-write*; gates `admin-write` = *PARTIALLY BOUND (G-C)*,
+  `delivery` = *NULL BY DEFAULT*; `DN_DELIVERY` declared (read literally —
+  the installability sweep only sees `getenv('X')`).
+- **The evidence register** (`docs/118` §C, §F): H1 self-signed REST and H5,
+  H7 — VERSION/MODEL DEPENDENT; H6 — UNRESOLVED; H8 routerboard serial —
+  VERSION/MODEL DEPENDENT; H9 `system/resource`, H10 `system/identity` —
+  DOCUMENTED; H11 timeouts, H12 error shapes — UNRESOLVED; B1 — UNRESOLVED.
+  **Nothing became HARDWARE VERIFIED and nothing may without a physical
+  unit.**
+- **Not started, deliberately:** G-C2, B-3 (the thirteen `dnb_app` grants
+  asserted unchanged), O-1, G-D, T-6, T-10, T-11, the action route and its
+  migration, panel forms, device-state automation, any B1 decision.
+
+Suite **33 suites / 3,026 assertions / 0 failed**, twice (was 32 / 2,769);
+`tests/test_router_control_plane.php` alone 250; G-B 487 and T-2 378
+unchanged; `plugin/bin/install-test.sh` 85/85.
 
 ## Open and parked
 

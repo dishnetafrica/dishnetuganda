@@ -59,6 +59,8 @@ $routes = AdminRoutes::build(new FixedStaff(new StaffIdentity('s', StaffRole::Ad
 $declared = [];
 foreach ($m->routes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 foreach ($m->unboundWrites as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// The BOUND estate writes (G-C): router register and assign.
+foreach ($m->writeRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 // The login boundary. Declared separately because it is the only part of the
 // surface with no capability — see the manifest note.
 foreach ($m->sessionRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
@@ -80,8 +82,17 @@ foreach ((new ReflectionClass($routes))->getProperties() as $p) {
 sort($served);
 is_($declared, $served, 'every route the manifest declares is a route the plugin serves, and no other');
 
-is_($m->writeRoutes, [], 'the manifest declares ZERO BOUND write routes');
-is_(count($m->unboundWrites), 8, 'and eight declared-but-unbound write paths (the eighth: the 027 principal creator, docs/116 §J J-1)');
+// G-C (docs/118): the first two estate writes are bound, and the manifest says
+// which function, which role and where the actor comes from for each.
+is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'], $m->writeRoutes),
+    ['POST /routers', 'POST /routers/{device_id}/assign'],
+    'the manifest declares exactly TWO bound estate writes: router register and assign');
+foreach ($m->writeRoutes as $r) {
+    is_([$r['role'], $r['gate'], str_contains($r['actor'] ?? '', 'authenticated staff subject')],
+        ['dnb_adminwrite', 'G-C', true], "{$r['path']}: dnb_adminwrite, G-C, actor from the identity boundary");
+    is_(in_array($r['function'], ['mt_device_register', 'mt_device_assign'], true), true, "{$r['path']} names its W-1 function");
+}
+is_(count($m->unboundWrites), 6, 'and six declared-but-unbound write paths (action, sites, plans, voucher batches, disconnect, principals)');
 is_(count($m->sessionRoutes), 6,
     'and six session paths — who am I, log in, log out, change password, enrol, confirm');
 is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? null) !== null)), [],
@@ -89,9 +100,9 @@ is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? 
 // Changed DELIBERATELY with migration 026 (docs/114 §N R-7): a session is now a
 // revocable row and an audit row, written through dnb_def_staff's functions.
 // The ESTATE stays read-only, and that half is what writes.bound still asserts.
-is_($m->apiSurface, 'estate read-only; identity read-write',
-    'the surface says the truth: estate read-only, identity read-write');
-is_($m->writeRoutes, [], 'and no ESTATE write route became bound by adding a login');
+is_($m->apiSurface, 'estate read + router register/assign; identity read-write',
+    'the surface says the truth: estate read plus the two router writes, identity read-write');
+is_(count($m->writeRoutes), 2, 'and the only estate writes bound are the two G-C router routes');
 is_(count($m->staffRoutes), 7, 'seven staff-roster routes are declared');
 is_(array_values(array_unique(array_column($m->staffRoutes, 'capability'))), ['staff.manage'],
     'every one of them gated on staff.manage, which only Admin carries');
