@@ -6,6 +6,8 @@ use Dn\Admin\AdminIdentityPort;
 use Dn\Admin\AdminSession;
 use Dn\Admin\Capability;
 use Dn\Admin\Csrf;
+use Dn\Admin\OnboardingAdmin;
+use Dn\Admin\OnboardingRefused;
 use Dn\Admin\RouterAdmin;
 use Dn\Admin\RouterRefused;
 use Dn\Admin\StaffAdmin;
@@ -44,12 +46,13 @@ use Dn\Runtime\Bindings;
  *    request to establish staff authority.
  *
  * 4. Two kinds of write exist on this surface and they are kept apart. ESTATE
- *    writes are declared with their capabilities; FOUR of them are bound —
+ *    writes are declared with their capabilities; SEVEN of them are bound —
  *    router register and assign (G-C, docs/118), router lifecycle and the
- *    push-configuration action (migration 028, docs/121) — each one SECURITY
- *    DEFINER function on dnb_adminwrite with the authenticated subject as the
- *    actor — and the rest (sites, plans, voucher batches, disconnect,
- *    principal creation) still answer 501. IDENTITY writes (a session row; the
+ *    push-configuration action (migration 028, docs/121), and creating an
+ *    operator, its HotSpot service and its locations (migration 030,
+ *    docs/125) — each one SECURITY DEFINER function on dnb_adminwrite with the
+ *    authenticated subject as the actor — and the rest (plans, voucher
+ *    batches, disconnect, principal creation) still answer 501. IDENTITY writes (a session row; the
  *    DishNet staff roster) are bound, each through one SECURITY DEFINER
  *    function that audits itself, and the manifest says so.
  *
@@ -70,7 +73,8 @@ final class AdminRoutes
                                  ?StaffSessionPort $issuer = null,
                                  ?StaffAdmin $staff = null,
                                  ?Csrf $csrf = null,
-                                 ?RouterAdmin $routers = null): Router
+                                 ?RouterAdmin $routers = null,
+                                 ?OnboardingAdmin $onboarding = null): Router
     {
         $r = new Router();
         // Cross-site protection for every mutating route, capability-gated or
@@ -206,14 +210,16 @@ final class AdminRoutes
         // ── estate writes: the four bound router writes (G-C, docs/121) ──
         self::routers($r, $guard, $routers);
 
+        // ── estate writes: operator onboarding (migration 030, docs/125) ──
+        self::onboarding($r, $guard, $onboarding);
+
         // ── estate writes still declared-unbound ────────────────────────
         // Declared with their capabilities so the matrix is complete and
-        // testable. Each returns an honest 501: sites wait for their writer
-        // (O-1 itself is closed by migration 029, docs/124), plans and
-        // voucher batches for G-C2, disconnect for the replay fix (docs/108),
-        // principal creation for its own instruction (docs/116 J-1).
+        // testable. Each returns an honest 501: plans and voucher batches wait
+        // for G-C2, disconnect for the replay fix (docs/108), principal
+        // creation for its own instruction (docs/116 J-1). Sites are bound
+        // since migration 030 (docs/125).
         foreach ([
-            ['POST', '/api/v1/admin/sites',                        Capability::SITES_WRITE],
             ['POST', '/api/v1/admin/plans',                        Capability::PLANS_WRITE],
             ['POST', '/api/v1/admin/voucher-batches',              Capability::VOUCHERS_GENERATE],
             ['POST', '/api/v1/admin/sessions/{session_id}/disconnect', Capability::SESSIONS_DISCONNECT],
@@ -259,6 +265,103 @@ final class AdminRoutes
      * 012's trigger's decision (409 with its reason); the action route queues
      * a row for the worker and touches no router (F2; docs/121 D-9, D-10).
      */
+    /**
+     * Operator onboarding (migration 030, docs/125): create an operator, start
+     * its HotSpot service, add a location. Each is one SECURITY DEFINER
+     * function on dnb_adminwrite with the authenticated subject as the actor.
+     *
+     * A body carrying a field the server derives is refused, never ignored. An
+     * idempotency key is required: the same key for the same request answers
+     * 200 with the first result and writes nothing (RULE I-1); a new act is 201.
+     * A location carries NO operator — the function reads it from the service
+     * row — so a customer_id in its body is a forgery attempt and is refused.
+     */
+    private static function onboarding(Router $r, callable $guard, ?OnboardingAdmin $onboarding): void
+    {
+        $off = static fn() => new Response(501, [
+            'error'  => 'onboarding_writes_unavailable',
+            'detail' => 'operator, service and location creation are bound only where this process '
+                      . 'holds an Admin write connection (dnb_adminwrite); it holds none',
+        ]);
+        $uuid = '/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i';
+        $derived = static function (array $body, array $keys): ?Response {
+            foreach ($keys as $k) {
+                if (array_key_exists($k, $body)) {
+                    return Response::badRequest("{$k} is not accepted: it is derived on the server, never from the request");
+                }
+            }
+            return null;
+        };
+        $key = static function (array $body): string|Response {
+            $k = $body['idempotency_key'] ?? null;
+            if (!is_string($k) || !preg_match('/^[A-Za-z0-9._:-]{8,128}$/', trim($k))) {
+                return Response::badRequest('idempotency_key is required: 8 to 128 letters, digits, dots, underscores, colons or dashes');
+            }
+            return trim($k);
+        };
+        $name = static function (array $body, string $what): string|Response {
+            $n = is_string($body['name'] ?? null) ? trim($body['name']) : '';
+            if ($n === '' || mb_strlen($n) > 120) { return Response::badRequest("name is required: the {$what}'s name, 1 to 120 characters"); }
+            return $n;
+        };
+        $refused = static fn(OnboardingRefused $e) => new Response(409, ['error' => 'refused', 'detail' => $e->getMessage()]);
+
+        $r->post('/api/v1/admin/customers', $guard(Capability::CUSTOMERS_WRITE,
+            static function (Request $req, StaffIdentity $s) use ($onboarding, $off, $derived, $key, $name, $refused) {
+                if ($onboarding === null) { return $off(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['id', 'actor', 'created_by', 'status', 'created_at', 'radius_ref', 'ucrm_client_id', 'customer_id'])) !== null) { return $bad; }
+                if (($n = $name($b, 'operator')) instanceof Response) { return $n; }
+                if (($k = $key($b)) instanceof Response) { return $k; }
+                try {
+                    $res = $onboarding->createOperator($n, $k, $s->subject);
+                } catch (OnboardingRefused $e) { return $refused($e); }
+                return new Response($res['replayed'] ? 200 : 201,
+                    ['customer' => AdminProjection::customer($res['customer']), 'replayed' => $res['replayed']]);
+            }), auth: false);
+
+        $r->post('/api/v1/admin/customers/{customer_id}/services', $guard(Capability::SERVICES_WRITE,
+            static function (Request $req, StaffIdentity $s) use ($onboarding, $off, $derived, $key, $uuid, $refused) {
+                if ($onboarding === null) { return $off(); }
+                $id = (string) ($req->params['customer_id'] ?? '');
+                if (!preg_match($uuid, $id)) { return Response::notFound(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['id', 'actor', 'customer_id', 'status', 'started_at', 'ended_at'])) !== null) { return $bad; }
+                if (($b['kind'] ?? 'mikrotik_hotspot') !== 'mikrotik_hotspot') {
+                    return Response::badRequest('kind must be mikrotik_hotspot, the only service this platform provides');
+                }
+                if (($k = $key($b)) instanceof Response) { return $k; }
+                try {
+                    $res = $onboarding->startService($id, $k, $s->subject);
+                } catch (OnboardingRefused $e) { return $refused($e); }
+                if ($res === null) { return Response::notFound(); }
+                return new Response($res['replayed'] ? 200 : 201,
+                    ['service' => AdminProjection::service($res['service']), 'replayed' => $res['replayed']]);
+            }), auth: false);
+
+        $r->post('/api/v1/admin/sites', $guard(Capability::SITES_WRITE,
+            static function (Request $req, StaffIdentity $s) use ($onboarding, $off, $derived, $key, $name, $uuid, $refused) {
+                if ($onboarding === null) { return $off(); }
+                $b = $req->body;
+                // Derive, never accept (docs/105): the operator comes from the service row.
+                if (($bad = $derived($b, ['id', 'actor', 'customer_id', 'operator', 'operator_id', 'created_at'])) !== null) { return $bad; }
+                $svc = $b['service_id'] ?? null;
+                if (!is_string($svc) || !preg_match($uuid, $svc)) { return Response::badRequest('service_id is required: the service the location belongs to'); }
+                if (($n = $name($b, 'location')) instanceof Response) { return $n; }
+                $loc = $b['location'] ?? null;
+                if ($loc !== null && (!is_string($loc) || mb_strlen(trim($loc)) > 200)) {
+                    return Response::badRequest('location must be a description of up to 200 characters');
+                }
+                if (($k = $key($b)) instanceof Response) { return $k; }
+                try {
+                    $res = $onboarding->addLocation($svc, $n, is_string($loc) ? trim($loc) : null, $k, $s->subject);
+                } catch (OnboardingRefused $e) { return $refused($e); }
+                if ($res === null) { return new Response(409, ['error' => 'refused', 'detail' => 'no such service']); }
+                return new Response($res['replayed'] ? 200 : 201,
+                    ['site' => AdminProjection::site($res['site']), 'replayed' => $res['replayed']]);
+            }), auth: false);
+    }
+
     private static function routers(Router $r, callable $guard, ?RouterAdmin $routers): void
     {
         $off = static fn() => new Response(501, [
@@ -595,7 +698,8 @@ final class AdminRoutes
     public static function declaredCapabilities(): array
     {
         return [
-            Capability::HEALTH_READ, Capability::CUSTOMERS_READ, Capability::SITES_READ,
+            Capability::HEALTH_READ, Capability::CUSTOMERS_READ, Capability::CUSTOMERS_WRITE,
+            Capability::SERVICES_WRITE, Capability::SITES_READ,
             Capability::SITES_WRITE, Capability::ROUTERS_READ, Capability::ROUTERS_REGISTER,
             Capability::ROUTERS_ASSIGN, Capability::ROUTERS_LIFECYCLE, Capability::ROUTERS_ACT, Capability::PLANS_READ,
             Capability::PLANS_WRITE, Capability::VOUCHERS_READ, Capability::VOUCHERS_GENERATE,

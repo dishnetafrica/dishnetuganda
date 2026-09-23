@@ -178,6 +178,9 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
 }
 /* ── the login gate ───────────────────────────────────────────────────── */
 #gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+/* An id rule with display:flex outranks the browser's own [hidden] rule, so the signed-out gate stayed
+   on the page, empty and a full screen tall, above the panel after sign-in. Hidden must mean hidden. */
+#gate[hidden],.shell[hidden]{display:none}
 .lg{background:var(--panel);border:1px solid var(--line);border-radius:12px;
     padding:28px 30px;max-width:520px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 .lg h1{margin:0;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}

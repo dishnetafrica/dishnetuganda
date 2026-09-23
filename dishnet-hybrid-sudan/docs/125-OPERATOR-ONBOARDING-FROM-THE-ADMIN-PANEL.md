@@ -1,0 +1,157 @@
+# 125 — Operators, their HotSpot service and their locations, created from the Admin panel
+
+**Status:** review written **before** code, 2026-09-23 (§A–§C). The build record
+follows in §D. **Development schema only; nothing deployed.** The staging command
+for this work comes **after** the migration-029 result (`docs/124` §H), so the
+operator's 029 command stays valid.
+
+**Why now.** Roadmap step 3. The operator approved the plan *"add the fix
+[O-1] … then I'll start on the screens for creating real operators and their
+locations"* with *"i will go with your receommadantion"*. O-1 is closed in code
+(`docs/124`), which `docs/105` required before any site writer exists.
+
+---
+
+## A. What governs this
+
+| Rule | Where | Consequence here |
+|---|---|---|
+| Every spine writer is W-1: `SECURITY DEFINER`, a definer role owns it, `EXECUTE` to **`dnb_adminwrite` only**, one audit row in the same transaction, the actor a parameter from the identity boundary | `docs/112` §1, §5.3 | the three new functions, asserted |
+| **No spine function may be EXECUTE-able by `dnb_admin`, `dnb_worker` or `dnb_app`**, and no new route may connect as `dnb_admin` | `docs/112` A-1, `docs/113` | asserted by enumeration |
+| **Derive, never accept:** `mt_site_create` has **no customer parameter**; the operator comes from the service row; the route carries no customer | `docs/105`, `docs/106`, `docs/112` §1.5 | asserted on the catalogue and the route |
+| **RULE I-1:** replay detection happens **before** the audited mutation; a replay writes no audit row | `docs/108` | the check is the first thing each function does after validation |
+| The idempotency store must be **non-tenant**, keyed `(endpoint, key)` with a request digest, reachable by `dnb_adminwrite` only through functions | `docs/107` I-A, `docs/108` 0b, `docs/112` §4 | built here, **before** the first writer that needs it |
+| Same key + different digest → **refuse**; a unique violation is not a replay until the stored digest matches | `docs/112` §4 | both paths tested, and the race |
+| A table must not be created as the owner if it must stay private: migration 015's default privileges would hand `dnb_admin` rights on it | `docs/114` §N, migration 026 | the store is created under `SET LOCAL ROLE dnb_def_prov` |
+| The first operator owner (a principal) is created only on its own instruction | `docs/116` J-1 | `POST /customers/{id}/principals` stays 501 |
+| The uCRM link is its own audited act and is never required | `docs/110` | no uCRM field is accepted |
+| Operators are `mt_customers`; the JSON key stays `customer` | `docs/117` | unchanged |
+| Nothing contacts a router | F2 | none of this reaches the delivery boundary |
+
+### A.1 What is measured, not assumed
+
+| Fact | Evidence |
+|---|---|
+| `mt_customer_create(name, actor)` exists, is audited (`customer.created`, `actor_kind = 'staff'`), is owned by `dnb_def_prov`, and has **no production caller** | catalogue, 2026-09-23 |
+| It is EXECUTE-able by **`dnb_admin`** as well as `dnb_adminwrite` — a pre-existing grant that `docs/112` A-1 would not allow for a new function | catalogue. **Not changed here**: the simulator and the test fixtures call it that way; revoking it is F-3's remediation |
+| Every function `dnb_def_prov` owns is reachable **only** from `dnb_admin` and `dnb_adminwrite` — no customer-plane role | catalogue, enumerated |
+| `dnb_def_prov` holds INSERT on `mt_customers` and **nothing** on `mt_services` or `mt_sites` | catalogue |
+| `mt_idempotency` is keyed `(customer_id, key)` with `customer_id NOT NULL`, and `dnb_adminwrite` holds no table privilege at all | `docs/107`, `docs/112` §4 |
+| `mt_customers.status` is `active · suspended · closed`, default `active`; `mt_services.kind` permits exactly `mikrotik_hotspot`; `mt_services.status` is `active · suspended · ended` | catalogue |
+| The panel draws write controls without checking capabilities itself; the server's 403 is the authority | `panel/app.js` |
+
+---
+
+## B. Decisions
+
+| # | Decision | Reason |
+|---|---|---|
+| D-1 | **Scope:** three writes — create an operator, start its HotSpot service, add a location — and the store they need. **Not here:** the operator-owner login (J-1), the uCRM link (U-1), plans and vouchers (G-C2), editing or ending anything | the approved step, and nothing it does not need |
+| D-2 | **The store:** `mt_admin_idempotency (endpoint, key, request_digest, actor, result, created_at)`, primary key `(endpoint, key)`; `endpoint` limited to the three names; `key` `^[A-Za-z0-9._:-]{8,128}$`; digest 64 hex characters. **Created under `SET LOCAL ROLE dnb_def_prov`** so no login role inherits a default privilege, and asserted: **no login role holds any privilege on it.** No row security: it has no tenant, and its isolation is privilege, as with `mt_staff` | `docs/108` 0b; the 026 lesson |
+| D-3 | **Order inside every function:** validate → compute the digest **in SQL** from the parameters → look up the key (replay or refuse) → read-only existence checks, returning NULL with nothing claimed when the target does not exist → **claim the key** with `ON CONFLICT DO NOTHING`, re-reading on conflict → mutate → audit → store the result | RULE I-1; the digest cannot be forged by the caller; the claim closes the race |
+| D-4 | **Operator:** `mt_admin_operator_create(name, key, actor)` wraps the existing `mt_customer_create`, which stays the one implementation and writes the one audit row. Name required, at most 120 characters. **No uniqueness on the name** — none is established, and inventing one is a business rule. The panel warns when the name already exists; the key stops a double submission | one writer; `docs/112` §1.1 |
+| D-5 | **Service:** `mt_admin_service_create(operator, key, actor)`. The kind is the one legal value. The operator must exist (else 404) and be `active` (else refused). An operator may hold more than one service — the schema is 1:N — so only the key stops a duplicate | `docs/112` §1.4 |
+| D-6 | **Location:** `mt_admin_site_create(service, name, location, key, actor)` — **no operator parameter**. The operator is read from the service row. The service must exist (else 404) and be `active`, and its operator `active` (else refused). Name required, at most 120 characters; location optional, at most 200. The O-1 key (029) is the floor beneath | derive, never accept |
+| D-7 | `dnb_def_prov` gains row policies and grants exactly for what the three functions do: SELECT on `mt_customers`, `mt_services`, `mt_sites`; INSERT on `mt_services`, `mt_sites`. Named as 017 names them. It is reachable only from the Admin plane (§A.1), so no customer-plane path widens | least privilege for the job |
+| D-8 | **Capabilities:** operator create → `customers.write`; service → **`services.write`, new**; location → `sites.write`. Admin holds all; **Sales** holds the three; NOC and Support hold none of them | creating commercial records is a sales act; NOC's role is the network |
+| D-9 | **Routes:** `POST /api/v1/admin/customers`, `POST /api/v1/admin/customers/{customer_id}/services`, `POST /api/v1/admin/sites`. A body carrying a field the server derives — `id`, `actor`, `status`, `created_at`, `customer_id` on a location, `ucrm_client_id`, `radius_ref` — is **400, refused rather than ignored**. `idempotency_key` is required. **201** new, **200** replay, 404, 409 with the reason | the router routes' shape (`docs/121`) |
+| D-10 | **Façade:** `Dn\Admin\OnboardingAdmin` on `dnb_adminwrite`, reaching exactly the three functions and never a table | as `RouterAdmin` |
+| D-11 | **Panel:** a fourth client, `panel/onboarding.js`, with exactly three methods; `api.js` stays read-only. *Add an operator* on the Operators page; an operator page listing its services and locations, with *Start the HotSpot service* and *Add a location*. **The location form sends no operator.** Keys are minted once per rendered form | the 028 pattern |
+| D-12 | **Simulator:** operators through the new wrapper; services and locations through the new writers, with fixed `sim-` keys. They are the real path now, and the simulator is built on real paths | `docs/91` |
+| D-13 | **Manifest:** `writes.bound` becomes seven; `declared_unbound` keeps plans, voucher batches, disconnect and principal creation | the served surface must equal the declared one |
+| D-14 | **Staging:** a separate command, after the 029 result; the 029 command stays pinned to its commit | `docs/124` §E |
+
+---
+
+## C. What this does not do
+
+- It creates no login for anybody. An operator created here is managed by
+  DishNet staff until a principal exists (`docs/112` §2.1).
+- It changes no existing function. `mt_customer_create`'s `dnb_admin` grant
+  stays (F-3). The test fixtures keep creating services and sites as `dnb_app`
+  (B-3, open).
+- It does not bind `POST /customers/{id}/principals`, plans, voucher batches or
+  disconnect.
+- Nothing in it is HARDWARE VERIFIED, and F6-B stays NOT AUTHORIZED.
+
+---
+
+## D. Build record
+
+### D.1 What was built
+
+| File | What |
+|---|---|
+| `migrations/030_admin_operator_onboarding.sql` | the store (D-2); two internal helpers, `mt_admin_idem_seen` and `mt_admin_idem_claim`, which run with their caller's privileges and are executable by their owner only; the three writers (D-4…D-6); the policies of D-7; a self-verification block that refuses to commit if any of it is wrong |
+| `src/Admin/OnboardingAdmin.php`, `OnboardingRefused.php` | the façade (D-10) |
+| `src/Admin/Capability.php`, `StaffRole.php` | `services.write`, held by Admin and Sales (D-8) |
+| `src/Api/AdminRoutes.php`, `plugin/public/api.php` | the three routes (D-9) and their wiring; `/sites` leaves the declared-unbound list |
+| `plugin/plugin.json` | seven bound estate writes, the three new ones on the `admin-write` gate; four declared-unbound (D-13) |
+| `src/Plugin/Simulator.php` | operators, services and locations through the new writers (D-12) |
+| `panel/onboarding.js`, `panel/app.js` | the client and the screens (D-11) |
+| `panel/index.html` | one CSS rule, §D.3 |
+| `plugin/doc/INSTALL.md` | one row in the capability table |
+
+### D.2 Proofs
+
+**`tests/test_operator_onboarding.php`, 153 assertions:**
+
+- **Catalogue.** All five functions are owned by `dnb_def_prov`, with no `PUBLIC` EXECUTE. The three writers are `SECURITY DEFINER` with a fixed `search_path`, executable by `dnb_adminwrite` and their owner only. The helpers are callable by their owner only. The location writer's arguments are exactly service, name, description, key and actor, with no operator. None reads a tenant context.
+- **The store.** Its owner is `dnb_def_prov` and it has no row security. **No login role holds any privilege on it**, enumerated from `pg_roles`, with the owner as the positive control. The control on the control: an owner-created table **would** have handed `dnb_admin` SELECT by default, which is why the table is created as `dnb_def_prov`.
+- **Operator.** One row and one audit row (`customer.created`, the staff actor, `actor_kind = 'staff'`). A replay returns the first result and writes nothing. The same key with another name is refused and writes nothing. Validation refusals are tested for the name, the key and the actor.
+- **The race, by execution.** A second database session claims a key and holds it uncommitted. The same request from the suite **waits on that claim, about one second**, and is then answered as a replay. The result is one operator and one audit row.
+- **Service.** The target operator, the one legal kind, and `service.created`. A replay writes nothing. The key reused for another operator is refused. An unknown operator returns nothing. A suspended operator is refused. A second service with a new key is a new, audited act.
+- **Location.** The operator is **derived**: naming B's service makes a location of B's. The audit detail names the operator and the service. Replays and a reused key behave as above. An unknown service returns nothing. An ended service and a suspended operator are refused. The name and description limits hold, and 029's key still stands beneath.
+- **Routes.** NOC and Support get 403 naming the capability on all three routes; Admin and Sales hold all three capabilities. A new act answers 201 and a replay 200. The operator comes back through the Admin projection, without `radius_ref`, and the audit actor is the signed-in subject. **Every derived field is refused with 400**: eight on operators, two on services, five on locations. Missing keys, long names and other service kinds are 400. An unknown operator is 404; an unknown service or a suspended operator is 409 with the reason. A process with no write connection answers 501.
+- **Panel.** `onboarding.js` makes exactly three POSTs and nothing else, sending through `routers.js`. `addLocation` sends nothing that names an operator. `api.js` is unchanged. Each form and the Start button carry a key minted per render. Nothing is credential-shaped. The gate rule of §D.3 is present.
+- **Manifest, simulator, repository.** Each is asserted as §D.1 describes.
+
+**Controls on the controls — four weakened copies of 030, each caught by the assertions aimed at it:**
+
+| Copy | Caught by |
+|---|---|
+| the claim without `ON CONFLICT` | the race: the second request fails with a unique violation instead of replaying |
+| the store created as the owner | the privilege scan: `dnb_admin`, `dnb_app` and others hold privileges on it |
+| the writers also granted to `dnb_admin` | the EXECUTE enumeration, for all three |
+| the operator inserted **before** the replay check | the counts: three operators where there should be one, and a replay that wrote |
+
+**Deliberately updated existing assertions**, each with its reason in the text: the provisioning role's policy matrix; the last-migration pins; the manifest's bound and unbound lists and its surface string, in four suites; and the UI guard, which **did not see the three new calls at all**, because none of their names was on its verb list. That guard now names the onboarding calls and bounds them, adds their create shapes to the verbs forbidden elsewhere, and carries a control showing the scan fires. The O-1 suite's throwaway-database proof now applies 029 **alone** (files 001–029), so a later migration cannot blur what it shows.
+
+**Numbers.**
+
+| Check | Result |
+|---|---|
+| full suite | **36 suites, 3,500 assertions, 0 failed**, twice (was 35 / 3,327) |
+| `plugin/bin/install-test.sh` | **85 of 85** |
+| `o1_acceptance.php` | **75 of 75** |
+| package | **123 files**, content digest **`4a6291849f0b687d2472909dd1e416af837227dcf648fd41fb99fc5c7a5fd571`** |
+
+### D.3 Driven in a real browser — and one layout fault found
+
+Headless Chromium drove the screens against a fresh local install with the
+development sign-in, signed in as *sales*. It walked: the empty operator list,
+*Add an operator*, the operator's page, *Start the HotSpot service*, *Add a
+location*, and back to the list. A second operator with the same name made the
+panel **ask first**; dismissing the question created nothing. The database
+afterwards held one operator, one service and one location, with
+`customer.created`, `service.created` and `site.created` by `dev`, `staff`. The
+only failed request was the sign-in gate's own first question — 401, nobody
+signed in yet, which is its job.
+
+**Found, and fixed:** after sign-in an empty block a full screen tall sat
+above the panel. The earlier record calls it *"a blank band above the sidebar on
+first load"*. The cause is that `#gate{display:flex}` is an id rule, so it
+outranks the browser's own rule for `hidden`, and the signed-out gate never
+disappeared. One CSS line makes `hidden` win. **Measured:** the gate is
+**860 px** tall after sign-in with the old stylesheet, and **0** with the new one.
+
+### D.4 What comes next
+
+- **Staging:** after the migration-029 result is back (`docs/124` §H), a
+  separate command pinned to this build's commit applies 030 and restarts the
+  two application containers. It is not written yet, so nothing can race the
+  029 command.
+- **The operator-owner login** (`POST /customers/{id}/principals`) is the next
+  decision: `docs/116` J-1 reserves it for its own instruction.
+- Plans and voucher batches from the Admin plane wait for G-C2; the
+  `session.disconnect` replay fix is still owed before F6-B.

@@ -145,7 +145,13 @@ $expected = [
     'dnb_def_prov' => ['mt_devices'       => 'SELECT,INSERT,UPDATE',
                        'mt_device_secrets'=> 'SELECT,INSERT,UPDATE',
                        'mt_device_config' => 'SELECT,INSERT,UPDATE',
-                       'mt_customers'     => 'INSERT',
+                       // 030 (docs/125 D-7): the onboarding writers read an
+                       // operator's status and a service row, and insert services
+                       // and locations. SELECT is what lets the location writer
+                       // DERIVE the operator from the service (derive, never accept).
+                       'mt_customers'     => 'SELECT,INSERT',
+                       'mt_services'      => 'SELECT,INSERT',
+                       'mt_sites'         => 'SELECT,INSERT',
                        // 027: mt_admin_principal_create — INSERT across tenants,
                        // no SELECT: the function never reads a principal back.
                        'mt_principals'    => 'INSERT',

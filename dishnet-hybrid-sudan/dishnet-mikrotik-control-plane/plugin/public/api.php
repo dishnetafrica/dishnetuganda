@@ -30,6 +30,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/autoload.php';
 
 use Dn\Admin\AdminReader;
+use Dn\Admin\OnboardingAdmin;
 use Dn\Admin\RouterAdmin;
 use Dn\Admin\StaffIdentityFactory;
 use Dn\Api\AdminRoutes;
@@ -60,14 +61,16 @@ try {
     error_log('[dnb-plugin] admin read connection unavailable: ' . $e::class);
 }
 
-// ── the router writes (G-C) ─────────────────────────────────────────────────
-// The Admin WRITE connection is opened on first use and only for the two bound
-// router routes. dnb_adminwrite holds EXECUTE on the W-1 functions and no
+// ── the estate writes (G-C, docs/121, docs/125) ─────────────────────────────
+// The Admin WRITE connection is opened on first use and only for the bound
+// estate routes: the four router writes and the three onboarding writes.
+// dnb_adminwrite holds EXECUTE on those SECURITY DEFINER functions and no
 // table privilege, so this connection cannot read the estate or write past
 // those functions whatever a request asks.
-$routers = new RouterAdmin(static fn(): Database => Database::adminWrite());
+$routers    = new RouterAdmin(static fn(): Database => Database::adminWrite());
+$onboarding = new OnboardingAdmin(static fn(): Database => Database::adminWrite());
 
-$router = AdminRoutes::build($identity, $bindings, $reader, $issuer, $staff, null, $routers);
+$router = AdminRoutes::build($identity, $bindings, $reader, $issuer, $staff, null, $routers, $onboarding);
 $req    = Request::fromGlobals();
 
 $match = $router->match($req->method, $req->path);

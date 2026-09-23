@@ -46,7 +46,7 @@ enum StaffRole: string
             self::Sales => [
                 Capability::HEALTH_READ,
                 Capability::CUSTOMERS_READ, Capability::CUSTOMERS_WRITE,
-                Capability::SERVICES_READ,
+                Capability::SERVICES_READ, Capability::SERVICES_WRITE,
                 Capability::SITES_READ, Capability::SITES_WRITE,
                 Capability::ROUTERS_READ,
                 Capability::PLANS_READ, Capability::PLANS_WRITE,

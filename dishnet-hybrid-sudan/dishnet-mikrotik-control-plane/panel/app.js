@@ -7,13 +7,16 @@
  * Estate READS go through api.js, which stays read-only and is tested to. The
  * estate WRITES a view renders are the four router writes of routers.js —
  * register, assign, lifecycle state, push configuration (migration 028,
- * docs/121) — and nothing else; identity writes go through staff.js. Nothing
- * in this file contacts a router: every write is a row on the server.
+ * docs/121) — and the three onboarding writes of onboarding.js — an operator,
+ * its HotSpot service, a location (migration 030, docs/125) — and nothing
+ * else; identity writes go through staff.js. Nothing in this file contacts a
+ * router: every write is a row on the server.
  */
 import { Session, renderGate, L } from './login.js';
 import { AdminApi, S, cohort, COHORT_LABEL, contactAge, evidenceLevel } from './api.js';
 import { StaffApi, AccountApi } from './staff.js';
 import { RouterWriteApi, NEXT_STATES, STEP_MEANING, freshKey } from './routers.js';
+import { OnboardingWriteApi } from './onboarding.js';
 
 const api = new AdminApi();
 /* The identity plane has its own client (staff.js) so that api.js stays
@@ -23,6 +26,9 @@ const accountApi = new AccountApi();
 /* The router-write client (docs/121 D-12): four operations, every one a row
  * on the server. Kept apart from api.js so its read-only guard keeps holding. */
 const routersApi = new RouterWriteApi();
+/* The onboarding-write client (docs/125 D-11): three operations, every one a
+ * row on the server. A location is sent with its service only. */
+const onboardingApi = new OnboardingWriteApi();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const short = id => id ? String(id).slice(0, 8) : '—';
@@ -491,11 +497,79 @@ const list = (title, fetch, key, cols, rowFn, noun) => async () => {
   return head(title, `${res.rows.length}`) + table(cols, res.rows, rowFn);
 };
 
-const vCustomers = list('Operators & Sites', () => api.customers(), 'customer',
-  ['Name', 'Account', 'Status', 'Since'], c => `<tr>
-    <td>${esc(c.name)}</td><td class="mono">${esc(c.ucrm_client_id) || '—'}</td>
-    <td><span class="pill">${esc(c.status)}</span></td>
-    <td>${esc((c.created_at || '').slice(0, 10))}</td></tr>`, 'operators');
+/* Operators & sites (docs/125). Each row opens the operator's page. The form
+ * to add an operator is drawn on an empty estate too — the first operator has
+ * to come from somewhere — and the server's 403 is the authority on who may
+ * use it. Names already in use are remembered for the submit-time warning:
+ * nothing makes a name unique, and a duplicate operator cannot be deleted. */
+async function vCustomers() {
+  const res = await api.customers();
+  state.operatorNames = res.state === S.OK ? res.rows.map(c => String(c.name || '')) : [];
+  const msg = takeMsg();
+  if (res.state !== S.OK && res.state !== S.EMPTY) return head('Operators & Sites') + msg + stateBlock(res, 'operators');
+  const rows = res.state === S.OK
+    ? table(['Name', 'Account', 'Status', 'Since'], res.rows, c => `<tr data-operator="${esc(c.id)}">
+        <td>${esc(c.name)}</td><td class="mono">${esc(c.ucrm_client_id) || '—'}</td>
+        <td><span class="pill">${esc(c.status)}</span></td>
+        <td>${esc((c.created_at || '').slice(0, 10))}</td></tr>`)
+    : `<div class="note">No operators yet. Add the first one below.</div>`;
+  return head('Operators & Sites', `${res.rows.length}`) + msg + rows + addOperatorForm();
+}
+
+function addOperatorForm() {
+  return `<form class="sform" data-oform="operator" data-key="${esc(freshKey())}">
+    <h3>Add an operator</h3>
+    <label>Name <input name="name" required maxlength="120" placeholder="Riverside Hotel"></label>
+    <button class="btn" type="submit">Create operator</button>
+    <small>Recorded as created by you. The operator can then hold a HotSpot service and locations;
+      nobody can sign in for it yet. Nothing here contacts a router.</small></form>`;
+}
+
+/* One operator: its HotSpot service and its locations (docs/125 D-11). A
+ * location is added to a SERVICE; the server reads the operator from it, so
+ * this form sends no operator at all. */
+async function vOperator() {
+  const [op, svcs, sites] = await Promise.all([api.customer(state.arg), api.services(), api.sites()]);
+  if (!(op.data && op.data.customer)) return head('Operator') + takeMsg() + stateBlock(op, 'operator');
+  const c = op.data.customer;
+  const mine = r => r.state === S.OK ? r.rows.filter(x => x.customer_id === c.id) : [];
+  const services = mine(svcs), locations = mine(sites);
+  const active = services.filter(x => x.status === 'active');
+  const facts = `<div class="kv">${[['Status', c.status], ['Since', (c.created_at || '').slice(0, 10)],
+      ['Account', c.ucrm_client_id], ['Reference', short(c.id)]].map(([k, v]) =>
+      `<div><dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd></div>`).join('')}</div>`;
+  const svcBlock = services.length
+    ? table(['Service', 'Kind', 'Status', 'Started'], services, x => `<tr>
+        <td class="mono">${short(x.id)}</td><td>${esc(x.kind)}</td>
+        <td><span class="pill">${esc(x.status)}</span></td>
+        <td>${esc((x.started_at || '').slice(0, 10))}</td></tr>`)
+    : `<div class="note">No HotSpot service yet. A location can be added only to a service.</div>`;
+  const start = active.length || c.status !== 'active' ? '' : `<div class="actions">
+      <button class="btn live" data-oservice="start" data-id="${esc(c.id)}" data-key="${esc(freshKey())}">Start the HotSpot service</button></div>`;
+  const locBlock = locations.length
+    ? table(['Location', 'Where', 'Added'], locations, x => `<tr>
+        <td>${esc(x.name)}</td><td>${esc(x.location) || '—'}</td>
+        <td>${esc((x.created_at || '').slice(0, 10))}</td></tr>`)
+    : `<div class="note">No locations yet.</div>`;
+  return head(c.name, 'Operator') + takeMsg() + facts +
+    `<h2 class="sub">HotSpot service</h2>` + svcBlock + start +
+    `<h2 class="sub">Locations</h2>` + locBlock + addLocationForm(active) +
+    `<div class="note">Routers are assigned to an operator and a location from the router's own page.</div>`;
+}
+
+function addLocationForm(active) {
+  if (!active.length) return '';
+  const opts = active.map(x => `<option value="${esc(x.id)}">HotSpot service ${short(x.id)}</option>`).join('');
+  return `<form class="sform" data-oform="location" data-key="${esc(freshKey())}">
+    <h3>Add a location</h3>
+    ${active.length > 1 ? `<label>Service <select name="service_id" required>${opts}</select></label>`
+                        : `<input type="hidden" name="service_id" value="${esc(active[0].id)}">`}
+    <label>Name <input name="name" required maxlength="120" placeholder="Lobby"></label>
+    <label>Where <input name="location" maxlength="200" placeholder="ground floor, main building"></label>
+    <button class="btn" type="submit">Add location</button>
+    <small>The location belongs to this service's operator; the server reads it from the service.
+      Nothing here contacts a router.</small></form>`;
+}
 
 const vPlans = list('Plans', () => api.plans(), 'plan',
   ['Name', 'Price', 'Duration', 'Down/Up', 'Devices', 'Active'], p => `<tr>
@@ -672,7 +746,7 @@ function enrolMarkup(e) {
     <p class="muted">Shown once. An administrator can clear it later if the device is lost.</p>`;
 }
 
-const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, plans: vPlans,
+const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, operator: vOperator, plans: vPlans,
                 vouchers: vVouchers, batches: vBatches, sessions: vSessions,
                 intents: vIntents, audit: vAudit, dashboard: vDashboard,
                 network: vNetwork, diagnostics: vDiagnostics,
@@ -723,6 +797,9 @@ function wire() {
   document.querySelectorAll('[data-voucher]').forEach(tr => tr.onclick = () => {
     state.view = 'voucher'; state.arg = tr.dataset.voucher; render();
   });
+  document.querySelectorAll('[data-operator]').forEach(tr => tr.onclick = () => {
+    state.view = 'operator'; state.arg = tr.dataset.operator; render();
+  });
   const q = document.getElementById('q');
   if (q) {
     q.oninput = () => { state.q = q.value; };
@@ -734,6 +811,7 @@ function wire() {
   });
   wireIdentity();
   wireRouters();
+  wireOnboarding();
 }
 
 /* The identity-plane controls. Each answer is re-rendered from the server's
@@ -827,6 +905,48 @@ function wireRouters() {
     const r = await routersApi.pushConfig(b.dataset.id, b.dataset.key);
     return after(r, r.status === 202 ? 'Configuration job queued for the worker. It is delivered through the worker\'s binding, not from here.'
                   : r.status === 200 ? 'That job was already queued; nothing new was added.' : '');
+  });
+}
+
+/* The onboarding-write controls (docs/125 D-11). Each answer is re-rendered
+ * from the server's reply; nothing here assumes an act succeeded. A 200 is a
+ * replay of the same form — the server recorded nothing new — and says so. */
+function wireOnboarding() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status === 0 ? `<div class="msg err">No response from the server; nothing was recorded.</div>`
+                : res.status < 300 ? `<div class="msg ok">${esc(ok)}</div>`
+                : notice(res, res.data && res.data.error);
+    render();
+  };
+  document.querySelectorAll('form[data-oform]').forEach(f => {
+    f.onsubmit = async ev => {
+      ev.preventDefault();
+      const val = n => { const el = f.querySelector(`[name="${n}"]`); return el ? String(el.value).trim() : ''; };
+      const btn = f.querySelector('button[type="submit"]');
+      switch (f.dataset.oform) {
+        case 'operator': {
+          const name = val('name');
+          const taken = (state.operatorNames || []).some(n => n.toLowerCase() === name.toLowerCase());
+          if (taken && !confirm(`An operator named "${name}" already exists. Create another one with the same name? An operator cannot be deleted.`)) return;
+          if (btn) btn.disabled = true;
+          const r = await onboardingApi.createOperator(name, f.dataset.key);
+          if (r.status < 300 && r.data && r.data.customer) { state.view = 'operator'; state.arg = r.data.customer.id; }
+          return after(r, r.status === 200 ? `${name} was already created from this form; nothing new was recorded.` : `Operator ${name} created.`);
+        }
+        case 'location': {
+          if (btn) btn.disabled = true;
+          const name = val('name');
+          const r = await onboardingApi.addLocation(val('service_id'), name, val('location'), f.dataset.key);
+          return after(r, r.status === 200 ? `${name} was already added from this form; nothing new was recorded.` : `Location ${name} added.`);
+        }
+      }
+    };
+  });
+  document.querySelectorAll('[data-oservice]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await onboardingApi.startService(b.dataset.id, b.dataset.key);
+    return after(r, r.status === 200 ? 'That service was already started; nothing new was recorded.' : 'HotSpot service started.');
   });
 }
 

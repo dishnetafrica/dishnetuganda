@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace Dn\Plugin;
 
+use Dn\Admin\OnboardingAdmin;
 use Dn\Db\Database;
 use Dn\Devices\DeviceRegistry;
 use Dn\Policy\PlanRepository;
@@ -21,8 +22,9 @@ use Dn\Vouchers\VoucherService;
  *
  * TWO RULES THIS CLASS KEEPS.
  *
- * 1. **Everything is built through the real Domain-B write paths.** Customers
- *    come from mt_customer_create, routers from mt_device_register, assignment
+ * 1. **Everything is built through the real Domain-B write paths.** Operators,
+ *    their services and their locations come from the Admin onboarding writers
+ *    (migration 030, docs/125), routers from mt_device_register, assignment
  *    from mt_device_assign, vouchers from VoucherService, sessions from RADIUS
  *    accounting ingest. Nothing is hand-inserted to make a screen look full. So
  *    the estate obeys every constraint and state-machine rule the real system
@@ -66,6 +68,7 @@ final class Simulator
         // The first owner of every simulated operator: mt_admin_principal_create
         // is dnb_adminwrite's, and since 027 the only creator outside a tenant.
         $adminWrite = Database::adminWrite();
+        $onboard    = OnboardingAdmin::on($adminWrite);
         $ctx   = new TenantContext($app);
 
         // ── customers, each with a service, a principal and sites ──────────
@@ -76,8 +79,9 @@ final class Simulator
             ['SIM-CUST-002', 'Kabale Hostel',    'sim-cust-002', ['SIM-SITE-003 Common room']],
             ['SIM-CUST-003', 'Mbarara Lodge',    'sim-cust-003', ['SIM-SITE-004 Reception', 'SIM-SITE-005 Annex']],
         ] as [$ref, $label, $radiusRef, $siteNames]) {
-            $cid = $admin->one('SELECT mt_customer_create(?,?) AS id',
-                               ["{$ref} {$label}", 'sim:seed'])['id'];
+            // The Admin onboarding writers (migration 030, docs/125) — the path a
+            // DishNet staff member's form takes. Fixed keys: a re-run is a replay.
+            $cid = $onboard->createOperator("{$ref} {$label}", "sim:operator:{$ref}", 'sim:seed')['customer']['id'];
             // Inside the customer's own context: the tenant policy admits a row
             // whose id is the current customer, so no elevated role is needed.
             $ctx->run($cid, fn(Database $db) => $db->exec(
@@ -89,17 +93,14 @@ final class Simulator
             $p = ['id' => $adminWrite->one(
                 'SELECT mt_admin_principal_create(?,?,?,?,?::text[],?) AS id',
                 [$cid, 'owner', "{$ref} owner", '+2567' . substr(md5($ref), 0, 8), '{}', 'sim:seed'])['id']];
-            $built = $ctx->run($cid, function (Database $db) use ($cid, $ref, $siteNames, $p) {
-                $s = $db->one("INSERT INTO mt_services (customer_id, kind)
-                               VALUES (?, 'mikrotik_hotspot') RETURNING id", [$cid]);
-                $sites = [];
-                foreach ($siteNames as $n) {
-                    $sites[] = $db->one('INSERT INTO mt_sites (customer_id, service_id, name, location)
-                                         VALUES (?,?,?,?) RETURNING id',
-                                        [$cid, $s['id'], $n, 'simulated location'])['id'];
-                }
-                return ['principal' => $p['id'], 'service' => $s['id'], 'sites' => $sites];
-            });
+            // The service and its locations, likewise; each location's operator is
+            // derived from its service by the writer, never passed in.
+            $svc = $onboard->startService($cid, "sim:service:{$ref}", 'sim:seed')['service']['id'];
+            $sites = [];
+            foreach ($siteNames as $i => $n) {
+                $sites[] = $onboard->addLocation($svc, $n, 'simulated location', "sim:site:{$ref}:{$i}", 'sim:seed')['site']['id'];
+            }
+            $built = ['principal' => $p['id'], 'service' => $svc, 'sites' => $sites];
             $estate[$ref] = ['customer' => $cid] + $built;
 
             // One plan per customer, at its first site.

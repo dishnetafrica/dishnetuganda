@@ -223,11 +223,13 @@ t('9. AS THE OWNER, ON A THROWAWAY DATABASE — 029 refuses a violating estate; 
 $mainDsn = getenv('DNB_DSN') ?: '';
 $tmpDb   = 'dnb_o1m_' . bin2hex(random_bytes(4));
 $tmpDir  = sys_get_temp_dir() . '/' . $tmpDb . '-mig028';
+$tmpDir29 = sys_get_temp_dir() . '/' . $tmpDb . '-mig029';   // 001-029 only: 029's effect, isolated from later files
 $ownerMain = Database::owner();
 $ownerMain->pdo()->exec("CREATE DATABASE {$tmpDb}");
-@mkdir($tmpDir, 0700, true);
+@mkdir($tmpDir, 0700, true); @mkdir($tmpDir29, 0700, true);
 foreach (glob($root . '/migrations/*.sql') as $f) {
     if (strcmp(basename($f), '029') < 0) { copy($f, $tmpDir . '/' . basename($f)); }
+    if (strcmp(basename($f), '030') < 0) { copy($f, $tmpDir29 . '/' . basename($f)); }
 }
 $res = [];
 try {
@@ -257,7 +259,7 @@ try {
     $res['truth']     = (int) $sup->one('SELECT count(*)::int AS n FROM mt_sites')['n'];
 
     // Migration 029 as the owner, against the violating estate.
-    try { $res['m029bad'] = (new Migrator($own, $root . '/migrations'))->run(true); }
+    try { $res['m029bad'] = (new Migrator($own, $tmpDir29))->run(true); }
     catch (PDOException $e) { $res['m029bad'] = $e->getMessage(); }
     $res['afterBad'] = [
         (int) $own->one('SELECT count(*)::int AS n FROM mt_migrations')['n'],
@@ -268,7 +270,7 @@ try {
 
     // The per-row decision (here: the cross site is removed), then 029 again.
     $sup->exec('DELETE FROM mt_sites WHERE service_id = ? AND customer_id = ?', [$sb, $ca]);
-    $res['m029ok'] = (new Migrator($own, $root . '/migrations'))->run(true);
+    $res['m029ok'] = (new Migrator($own, $tmpDir29))->run(true);
     $res['afterOk'] = [
         (int) $own->one('SELECT count(*)::int AS n FROM mt_migrations')['n'],
         $own->one("SELECT convalidated AS v FROM pg_constraint WHERE conname = '{$FK}'")['v'] ?? null,
@@ -283,7 +285,8 @@ try {
     $own = $adm = $a2 = $t2 = $sup = null;
     putenv('DNB_DSN=' . $mainDsn);
     Database::inspector()->pdo()->exec("DROP DATABASE IF EXISTS {$tmpDb} WITH (FORCE)");
-    array_map('unlink', glob($tmpDir . '/*.sql') ?: []); @rmdir($tmpDir);
+    array_map('unlink', array_merge(glob($tmpDir . '/*.sql') ?: [], glob($tmpDir29 . '/*.sql') ?: []));
+    @rmdir($tmpDir); @rmdir($tmpDir29);
 }
 is_([count($res['base'] ?? []), $res['level'] ?? null], [28, 28], 'the throwaway database is built to level 028 by the Migrator itself');
 is_([$res['owner']['u'] ?? null, $res['owner']['s'] ?? null, $res['owner']['b'] ?? null], ['dnb', false, false],
@@ -302,13 +305,13 @@ is_($res['afterOk'] ?? null, [29, true, true], 'ledger 29, the key VALIDATED, FO
 is_(is_string($res['attack029'] ?? null) && str_contains($res['attack029'], $FK), true, 'the same real-path attack is now refused by name');
 is_($res['control029'] ?? null, 1, 'CONTROL: the same-operator site is still accepted');
 $gone = (int) $ins->one('SELECT count(*)::int AS n FROM pg_database WHERE datname = ?', [$tmpDb])['n'];
-is_([$gone, is_dir($tmpDir)], [0, false], 'residue: the throwaway database and its migration copy are gone');
+is_([$gone, is_dir($tmpDir), is_dir($tmpDir29)], [0, false, false], 'residue: the throwaway database and its migration copies are gone');
 
 // ===========================================================================
-t('10. REPOSITORY STATE — 029 is the last migration; the candidate says it is superseded');
+t('10. REPOSITORY STATE — 029 exists once and is applied; the candidate says it is superseded');
 $files = array_map('basename', glob($root . '/migrations/*.sql')); sort($files);
-is_(end($files), $MIG, 'the last migration is 029');
-is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 29, 'the ledger records 29');
+is_(array_values(array_filter($files, static fn($f) => str_starts_with($f, '029'))), [$MIG], 'exactly one 029 file, this one');
+is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], count($files), 'the ledger records every migration file, 029 among them');
 $cand = file_get_contents($root . '/tools/audit/o1_composite_fk.sql');
 is_(str_contains($cand, 'SUPERSEDED') && str_contains($cand, 'migration 029'), true, 'tools/audit/o1_composite_fk.sql is marked SUPERSEDED by migration 029');
 is_(str_contains($sql, 'docs/124') && str_contains($sql, 'docs/123'), true, 'the migration cites its review and the census that authorised it');

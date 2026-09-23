@@ -372,13 +372,15 @@ is_(str_contains($it, 'initdb'), true, 'it builds its own cluster rather than us
 is_(str_contains($it, "listen_addresses=''"), true, 'and that cluster opens no TCP port');
 
 // ───────────────────────────────────────────────────────────────────────────
-t('the manifest still describes an estate-read plugin with exactly four router writes, gated');
+t('the manifest still describes an estate-read plugin with exactly seven gated estate writes: four router, three onboarding');
 
 is_($m->consumesDomainA, false, 'it declares no Domain A dependency');
-// G-C (docs/118): register and assign are the only bound estate writes.
+// G-C (docs/118) and 028 (docs/121): the four router writes; 030 (docs/125):
+// operator, service and location creation. Nothing else is bound.
 is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'], $m->writeRoutes),
-    ['POST /routers', 'POST /routers/{device_id}/assign', 'POST /routers/{device_id}/state', 'POST /routers/{device_id}/actions'],
-    'the only bound write routes are the four router routes (G-C + docs/121)');
+    ['POST /routers', 'POST /routers/{device_id}/assign', 'POST /routers/{device_id}/state', 'POST /routers/{device_id}/actions',
+     'POST /customers', 'POST /customers/{customer_id}/services', 'POST /sites'],
+    'the only bound write routes are the four router routes (G-C + docs/121) and the three onboarding routes (docs/125)');
 is_($m->gateIsOpen('F6-B'), false, 'the F6-B gate is shut');
 is_(($m->requires['redis'] ?? null), false, 'it requires no Redis');
 is_(($m->requires['docker'] ?? null), false, 'it requires no Docker');

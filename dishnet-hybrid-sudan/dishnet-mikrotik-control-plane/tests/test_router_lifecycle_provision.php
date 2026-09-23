@@ -385,24 +385,26 @@ foreach (['login.js', 'app.js', 'api.js', 'staff.js', 'routers.js'] as $f) {
 }
 
 // ===========================================================================
-t('9. THE MANIFEST — four bound router writes, five declared-unbound, the capability matrix');
+t('9. THE MANIFEST — four bound router writes (then three onboarding writes, docs/125), four declared-unbound, the capability matrix');
 $m = Manifest::load($root . '/plugin/plugin.json');
-is_(array_map(static fn($r) => $r['path'], $m->writeRoutes), ['/routers', '/routers/{device_id}/assign', '/routers/{device_id}/state', '/routers/{device_id}/actions'], 'the four bound router writes');
-is_(array_map(static fn($r) => $r['function'], $m->writeRoutes), ['mt_device_register', 'mt_device_assign', 'mt_device_set_state', 'mt_device_provision_request'], 'each naming its function');
+$routerWrites = array_slice($m->writeRoutes, 0, 4);
+is_(array_map(static fn($r) => $r['path'], $routerWrites), ['/routers', '/routers/{device_id}/assign', '/routers/{device_id}/state', '/routers/{device_id}/actions'], 'the four bound router writes come first');
+is_(array_map(static fn($r) => $r['function'], $routerWrites), ['mt_device_register', 'mt_device_assign', 'mt_device_set_state', 'mt_device_provision_request'], 'each naming its function');
 is_(array_unique(array_map(static fn($r) => $r['role'], $m->writeRoutes)), ['dnb_adminwrite'], 'all on dnb_adminwrite');
-is_(array_map(static fn($r) => $r['see'] ?? null, array_slice($m->writeRoutes, 2)), ['docs/121', 'docs/121'], 'the two new ones point at docs/121');
-is_(array_map(static fn($r) => $r['path'], $m->unboundWrites), ['/sites', '/plans', '/voucher-batches', '/sessions/{session_id}/disconnect', '/customers/{customer_id}/principals'], 'five declared-unbound paths remain');
-is_($m->apiSurface, 'estate read + router register/assign/lifecycle/provision; identity read-write', 'the surface names the four');
+is_(array_map(static fn($r) => $r['see'] ?? null, array_slice($routerWrites, 2)), ['docs/121', 'docs/121'], 'the two from 028 point at docs/121');
+is_(array_map(static fn($r) => $r['path'], array_slice($m->writeRoutes, 4)), ['/customers', '/customers/{customer_id}/services', '/sites'], 'then the three onboarding writes of 030 (docs/125)');
+is_(array_map(static fn($r) => $r['path'], $m->unboundWrites), ['/plans', '/voucher-batches', '/sessions/{session_id}/disconnect', '/customers/{customer_id}/principals'], 'four declared-unbound paths remain — /sites is bound since 030');
+is_($m->apiSurface, 'estate read + operator/service/location create + router register/assign/lifecycle/provision; identity read-write', 'the surface names both groups'); 
 is_($m->gateIsOpen('admin-write'), false, 'the admin-write gate is still not OPEN — partially bound, said so');
 is_(str_contains($m->requires['worker'], 'ONLY the worker delivers'), true, 'the worker requirement says the action needs the worker');
 foreach ([StaffRole::Admin, StaffRole::Noc] as $r) { is_([$r->can('routers.lifecycle'), $r->can('routers.act')], [true, true], "{$r->value} holds lifecycle and act"); }
 foreach ([StaffRole::Sales, StaffRole::Support] as $r) { is_([$r->can('routers.lifecycle'), $r->can('routers.act')], [false, false], "{$r->value} holds neither"); }
 
 // ===========================================================================
-t('10. REPOSITORY STATE — 028 is followed only by 029 (O-1, docs/124); the ledger agrees; nothing claims hardware');
+t('10. REPOSITORY STATE — 028 is followed by 029 (O-1, docs/124) and 030 (onboarding, docs/125); the ledger agrees; nothing claims hardware');
 $files = array_map('basename', glob($root . '/migrations/*.sql')); sort($files);
-is_(array_slice($files, -2), ['028_admin_router_lifecycle_and_provisioning.sql', '029_o1_site_service_same_operator.sql'], '028 is followed only by 029 (O-1, docs/124)');
-is_((int) $ins->one('SELECT count(*)::int n FROM mt_migrations')['n'], 29, 'the ledger records 29');
+is_(array_slice($files, -3), ['028_admin_router_lifecycle_and_provisioning.sql', '029_o1_site_service_same_operator.sql', '030_admin_operator_onboarding.sql'], '028 is followed by 029 (O-1, docs/124) and 030 (onboarding, docs/125)');
+is_((int) $ins->one('SELECT count(*)::int n FROM mt_migrations')['n'], 30, 'the ledger records 30');
 $m028 = file_get_contents($root . '/migrations/028_admin_router_lifecycle_and_provisioning.sql');
 is_(str_contains($m028, 'docs/121') && str_contains($m028, 'RULE I-1') && str_contains($m028, 'ON CONFLICT (customer_id, idempotency_key)'), true, 'it cites its review, RULE I-1 and closes the race inside the function');
 is_(preg_match('/10\.66/', (string) $ins->one("SELECT prosrc FROM pg_proc WHERE oid = ?::regprocedure", [$fn])['prosrc']), 0,

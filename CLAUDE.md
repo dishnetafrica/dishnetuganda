@@ -2846,6 +2846,68 @@ tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
   idempotency store (0b) before the first spine writer. **Not decided here:**
   `mt_vouchers.site_id NOT NULL`, U-1, U-5, B-3, F-3. `POST /sites` still 501.
 
+## Operators, their HotSpot service and their locations from the Admin panel — BUILT (migration 030, `docs/125`); development only
+
+**Roadmap step 3, started on the operator's approval of the plan.** Development
+schema only; **nothing deployed.** The staging command for 030 comes **after**
+the 029 result, as its own command pinned to its own commit, so the 029 command
+stays valid. Nothing here is HARDWARE VERIFIED.
+
+- **Migration 030:** `mt_admin_idempotency`, the **non-tenant** idempotency store
+  `docs/108` 0b required before the first spine writer. It is keyed
+  `(endpoint, key)` with a SHA-256 request digest **computed inside the
+  function**, and it is **created as `dnb_def_prov`**, so migration 015's default
+  privileges cannot hand `dnb_admin` anything. No login role holds any privilege
+  on it, enumerated from `pg_roles`. Three writers, all `SECURITY DEFINER` and
+  owned by `dnb_def_prov`, **EXECUTE `dnb_adminwrite` only**:
+  `mt_admin_operator_create` (wraps `mt_customer_create`, the one
+  implementation), `mt_admin_service_create`, and `mt_admin_site_create`, which
+  has **no operator parameter** — the operator is read from the service row.
+  Two internal helpers, replay-check and claim, run with their caller's
+  privileges and are callable by their owner only.
+- **RULE I-1 order in every writer:** validate → digest → answer a replay →
+  read-only checks (NULL, nothing claimed) → claim with `ON CONFLICT DO
+  NOTHING` → mutate → audit → store the result. **Proved by execution:** a
+  second session holding the claim makes an identical request wait about a
+  second, and the request is then answered as a replay. The result is one
+  operator and one audit row.
+- **`dnb_def_prov` gains** SELECT on `mt_customers`, and SELECT plus INSERT on
+  `mt_services` and `mt_sites`, nothing else. It is reachable only from the
+  Admin plane (measured), so no customer-plane path widens. **New capability
+  `services.write`** (Admin, Sales); operator create is `customers.write`, a
+  location is `sites.write`; NOC and Support hold none of the three.
+- **Routes:** `POST /customers`, `POST /customers/{customer_id}/services`,
+  `POST /sites`. A derived field in the body is **400, refused not ignored**
+  (on a location that includes `customer_id` and `operator`). `idempotency_key`
+  is required; **201** new, **200** replay; 404 or 409 with the reason. Seven
+  estate writes are now bound; declared-unbound are plans, voucher batches,
+  disconnect and principal creation (J-1).
+- **Panel:** a fourth client, `panel/onboarding.js`, with exactly three POSTs;
+  `api.js` is unchanged. *Operators & sites* gets *Add an operator*, even on an
+  empty estate; each row opens an operator page with *Start the HotSpot service*
+  and *Add a location*. **The location form sends no operator.** A same-name
+  operator is asked about first: nothing makes names unique, and an operator
+  cannot be deleted.
+- **Driven in headless Chromium** (`docs/125` §D.3): the whole path worked, and
+  the database held 1/1/1 with three audit rows by `dev`. **It found and fixed
+  the "blank band"**: `#gate{display:flex}` outranked the browser's `[hidden]`
+  rule, so the signed-out gate stayed **860 px** tall after sign-in; one CSS
+  rule makes it 0.
+- **The UI guard in `test_admin_ui` §8 did not see the three new calls at all** —
+  none of their names was on its verb list. It now names and bounds them, with a
+  control. **A guard that lists forbidden words only catches the words it lists.**
+- **Proofs:** `tests/test_operator_onboarding.php` **153**. **Four weakened
+  copies of 030 are each caught**: no `ON CONFLICT`, store created as the owner,
+  writers granted to `dnb_admin`, mutation before the replay check. Suite **36
+  suites / 3,500 / 0 failed**, twice; install-test **85/85**; `o1_acceptance.php`
+  **75**; package **123 files**, digest `4a629184…c5a5fd571` (not deployed, not
+  pinned anywhere).
+- **Not here, deliberately:** the operator-owner login (J-1, its own
+  instruction), the uCRM link (U-1), plans and vouchers (G-C2), editing or ending
+  anything. `mt_customer_create`'s pre-existing `dnb_admin` EXECUTE is recorded
+  and left for F-3. The fixtures still create services and sites as `dnb_app`
+  (B-3).
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
