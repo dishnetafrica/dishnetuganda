@@ -2728,6 +2728,42 @@ one command.
   remains the package default. Step 3 (operator onboarding) still waits on the
   O-1 census decision; the MikroTik bench (`docs/119`) still waits on a unit.
 
+## The deployment census in one command — HANDED OVER; result PENDING (`docs/123`)
+
+**GATE 1 of O-1, made runnable by the operator. Read only; GATE 2 (the O-1
+migration) is untouched.** Step 3 (operator onboarding) needs `mt_site_create`,
+which may not exist until O-1 is closed; `docs/79` was the census handoff and
+was never run. `scripts/dnb-staging-census.sh` is that handoff as one command.
+
+- **Running the documented procedure first found three census defects,
+  measured in the sandbox, not inferred:** (1) the `docs/79` §3 DATA run as
+  `dnb_adminapi` **could never reach a verdict** — its refusal to read the
+  migration ledger (schema evidence) counted as data blindness, so it saw a
+  planted violation and printed INDETERMINATE, and the owner's run is blind by
+  design; (2) a refused read **aborted the whole run** (psql exit 3, no
+  verdict); (3) latent: a base-table read under FORCE RLS **counted as a
+  measurement** — with one constructed grant, sites via the base table and
+  services via the projection read **CLEAR over a real violation**. The O-1
+  acceptance harness had pinned (1) as intended; its other phases ran as a
+  superuser, which is why none showed.
+- **Fixed in `tools/audit/production_census.sql`:** the ledger is reported
+  beside the verdict, not in it; sections 2–4 skip on refusal; any base-table
+  read of an RLS table by a non-bypassing role is **HIDDEN** and withholds the
+  verdict. `o1_acceptance.php`: `DNB_STAFFAUTH_PASS` added (it could no longer
+  install after 026), Phase 6 **rewritten, not deleted**, Phase 7 added —
+  **68/68** (was 52); **11 of 68 fail against the pre-fix census**.
+- **The script:** DNB_DSN searched in every container and swarm service, only
+  host/port/dbname printed; every PostgreSQL container's databases checked for
+  `public.mt_migrations` at **catalog level, read-only sessions**, anything
+  unopenable **NOT CHECKED, never "no ledger"**; the census on staging twice;
+  the SQL refused unless its sha256 is `513218…3983`. Prints no secret.
+- **Harness `scripts/harness/census/`: 27/27.** Four deliberately broken copies
+  each fail — **one only after an assertion gap was closed** (an unopenable
+  database counted as clean passed everything until scenario S5b was added).
+- **If the result is "nothing outside staging, ledger only in staging,
+  CLEAR"**, there is no production Domain B, and GATE 2 becomes the operator's
+  decision about staging and future installs. **A CLEAR authorises nothing.**
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

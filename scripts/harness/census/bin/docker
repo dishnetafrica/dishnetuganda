@@ -1,0 +1,71 @@
+#!/bin/bash
+# Fake `docker` for the census harness (scripts/harness/census). A server made of
+# files under $HSIM/cstate: containers.txt (name|image|status), env/<name>.env,
+# services.txt (id|name), senv/<id>.env, and pgmap.txt
+# (container|database-as-seen|real-local-database|ok|deny) mapping each fake
+# PostgreSQL container onto real databases of the local cluster. Anything the
+# census script does not call fails loudly, so a new call cannot pass unseen.
+C="${HSIM:?}/cstate"; PGH="${HSIM_PGHOST:-/var/tmp}"; PGP="${HSIM_PGPORT:-55432}"
+echo "docker $*" >> "$C/calls.log"
+cmd=$1; shift
+case "$cmd" in
+  ps)
+    case "$*" in
+      "-a --format {{.Names}}") cut -d'|' -f1 "$C/containers.txt";;
+      "--format {{.Names}} {{.Image}}") awk -F'|' '$3=="running"{print $1" "$2}' "$C/containers.txt";;
+      *) echo "STUB: ps $*" >&2; exit 99;;
+    esac;;
+  inspect)
+    [ "$1" = -f ] || { echo "STUB: inspect $*" >&2; exit 99; }; fmt=$2; n=$3
+    grep -q "^$n|" "$C/containers.txt" || { echo "Error: No such object: $n" >&2; exit 1; }
+    case "$fmt" in
+      '{{range .Config.Env}}{{println .}}{{end}}') cat "$C/env/$n.env" 2>/dev/null; echo;;
+      '{{.State.Status}}') grep "^$n|" "$C/containers.txt" | cut -d'|' -f3;;
+      *) echo "STUB: inspect format $fmt" >&2; exit 99;;
+    esac;;
+  service)
+    sub=$1; shift
+    case "$sub" in
+      ls) [ "$*" = -q ] && cut -d'|' -f1 "$C/services.txt";;
+      inspect)
+        [ "$1" = -f ] || exit 99; fmt=$2; id=$3
+        case "$fmt" in
+          '{{.Spec.Name}}') grep "^$id|" "$C/services.txt" | cut -d'|' -f2;;
+          '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}') cat "$C/senv/$id.env" 2>/dev/null; echo;;
+          *) echo "STUB: service inspect $fmt" >&2; exit 99;;
+        esac;;
+      *) echo "STUB: service $sub" >&2; exit 99;;
+    esac;;
+  exec)
+    stdin=0; ro=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -i) stdin=1; shift;;
+        -e) [ "$2" = "PGOPTIONS=-c default_transaction_read_only=on" ] && ro=1; shift 2;;
+        *) break;;
+      esac
+    done
+    c=$1; shift; [ "$1" = psql ] || { echo "STUB: exec $c $*" >&2; exit 99; }; shift
+    grep -q "^$c|.*|running$" "$C/containers.txt" || { echo "Error response from daemon: container $c is not running" >&2; exit 1; }
+    u=""; d=""; sql=""
+    while [ $# -gt 0 ]; do
+      case "$1" in -U) u=$2; shift 2;; -d) d=$2; shift 2;; -c) sql=$2; shift 2;; -X|-A|-t|-w|-q) shift;; *) echo "STUB: psql arg $1" >&2; exit 99;; esac
+    done
+    if grep -q "^$c|\*|\*|deny$" "$C/pgmap.txt"; then
+      echo "psql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"$u\" does not exist" >&2; exit 2
+    fi
+    if [ "$stdin" = 1 ]; then       # the census, piped in
+      real=$(awk -F'|' -v c="$c" -v d="$d" '$1==c && $2==d {print $3}' "$C/pgmap.txt")
+      [ -n "$real" ] || { echo "psql: error: FATAL:  database \"$d\" does not exist" >&2; exit 2; }
+      exec psql -h "$PGH" -p "$PGP" -X -q -w -U "$u" -d "$real"
+    fi
+    [ "$ro" = 1 ] || { echo "STUB: catalog query without a read-only session: $sql" >&2; exit 98; }
+    if [ "$sql" = "SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn ORDER BY 1" ]; then
+      awk -F'|' -v c="$c" '$1==c && $4=="ok" {print $2}' "$C/pgmap.txt" | sort; exit 0
+    fi
+    [ "$sql" = "SELECT to_regclass('public.mt_migrations') IS NOT NULL" ] || { echo "STUB: unexpected catalog SQL: $sql" >&2; exit 99; }
+    real=$(awk -F'|' -v c="$c" -v d="$d" '$1==c && $2==d && $4=="ok" {print $3}' "$C/pgmap.txt")
+    [ -n "$real" ] || { echo "psql: error: FATAL:  database \"$d\" does not exist" >&2; exit 2; }
+    PGOPTIONS="-c default_transaction_read_only=on" exec psql -h "$PGH" -p "$PGP" -X -A -t -w -U postgres -d "$real" -c "$sql";;
+  *) echo "STUB: docker $cmd $*" >&2; exit 99;;
+esac

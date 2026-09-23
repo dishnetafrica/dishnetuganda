@@ -103,7 +103,7 @@ function num(string $s): int
 function census(string $user = null): array
 {
     global $insp, $repo;
-    [, $out] = psql($user ?? $insp, DB, $repo . '/tools/audit/production_census.sql', true);
+    [$rc, $out] = psql($user ?? $insp, DB, $repo . '/tools/audit/production_census.sql', true);
     $verdict = 'NO VERDICT';
     if (preg_match('/>> (CLEAR|INDETERMINATE)/', $out, $m))      { $verdict = $m[1]; }
     if (preg_match('/>> BLOCKED\((\d+)\)/', $out, $m))           { $verdict = 'BLOCKED'; }
@@ -111,7 +111,7 @@ function census(string $user = null): array
     if (preg_match('/rows that would refuse the O-1 FK\s+:\s+(\d+)/', $out, $m)) { $block = (int) $m[1]; }
     $mismatch = 0;
     if (preg_match('/ANOTHER customer\s*:\s*(\d+)/', $out, $m)) { $mismatch = (int) $m[1]; }
-    return ['verdict' => $verdict, 'block' => $block, 'mismatch' => $mismatch, 'raw' => $out];
+    return ['verdict' => $verdict, 'block' => $block, 'mismatch' => $mismatch, 'raw' => $out, 'rc' => $rc];
 }
 
 // ===========================================================================
@@ -122,11 +122,13 @@ t('the throwaway estate is built, and it is unmistakably synthetic');
 psql($own, 'postgres', 'DROP DATABASE IF EXISTS ' . DB . ';');
 psql($own, 'postgres', 'CREATE DATABASE ' . DB . ';');
 $pw  = bin2hex(random_bytes(24));
+// DNB_STAFFAUTH_PASS since migration 026 (docs/114 §O): without it the installer
+// refuses, rightly, to invent a credential it has nowhere to write.
 $env = sprintf('DNB_DSN=%s DNB_APP_PASS=%s DNB_WORKER_PASS=%s DNB_ADMIN_PASS=%s '
              . 'DNB_ADMINAPI_PASS=%s DNB_ADMINWRITE_PASS=%s DNB_RADIUS_PASS=%s '
-             . 'DNB_TOKEN_PEPPER=%s DNB_SECRET_KEY=%s',
+             . 'DNB_STAFFAUTH_PASS=%s DNB_TOKEN_PEPPER=%s DNB_SECRET_KEY=%s',
     escapeshellarg("pgsql:host={$host};port={$port};dbname=" . DB),
-    ...array_fill(0, 8, escapeshellarg($pw)));
+    ...array_fill(0, 9, escapeshellarg($pw)));
 exec("cd " . escapeshellarg($repo) . " && {$env} php plugin/bin/plugin.php install 2>&1", $io, $irc);
 is_($irc, 0, 'the plugin schema installed into the throwaway database');
 is_(num('SELECT count(*) FROM mt_migrations') > 0, true,
@@ -401,14 +403,67 @@ is_($asApp($B, "SELECT count(*) FROM mt_sites WHERE name LIKE 'O1FIX-SITE-A%';")
     "and none of A's — isolation holds in the synthetic estate too");
 
 // ===========================================================================
-t('PHASE 6 — the two-role census split behaves as documented');
+t('PHASE 6 — the documented two-role census reaches a verdict (docs/79 §3, corrected by docs/123)');
 
+// Until docs/123 this phase asserted that the dnb_adminapi run is INDETERMINATE
+// "because it cannot read the migration ledger". The ledger is SCHEMA evidence,
+// and the owner's run cannot see the data at all, so neither documented run
+// could ever say CLEAR or BLOCKED. The assertion is rewritten to the verdict the
+// documented DATA run must give, not deleted.
 $GLOBALS['rolepw'] = $pw;
 $adm = census('dnb_adminapi');
-is_($adm['verdict'], 'INDETERMINATE',
-    'dnb_adminapi cannot read the migration ledger, so its verdict is withheld');
-is_(str_contains($adm['raw'], 'read path — sites:mt_admin_sites()'), true,
-    'CONTROL: it did take the projection path and did see the estate');
+is_($adm['verdict'], 'CLEAR', 'dnb_adminapi — the documented DATA run — reads CLEAR on the clean estate');
+is_(str_contains($adm['raw'], 'read path — sites:mt_admin_sites()  services:mt_admin_services()'), true,
+    'CONTROL: it took the projection path and did see the estate');
+is_(str_contains($adm['raw'], 'migration ledger read in this run       : f'), true,
+    'and it says, beside the verdict, that it did NOT read the schema — the owner run supplies that');
+$ow = census($own);
+is_($ow['verdict'], 'INDETERMINATE', 'the owner run withholds a verdict — FORCE RLS hides the data from it');
+is_(str_contains($ow['raw'], '*** HIDDEN'), true, 'and says why: its reads fall back to base tables under RLS');
+is_((bool) preg_match('/migrations applied\s+:\s+[1-9][0-9]*/', $ow['raw']), true,
+    'while it reads the schema level — the ledger — which is what it is run for');
+
+// Re-admit a violation: drop the O-1 constraints PHASE 4 applied (throwaway database).
+sql("ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_customer_fkey;
+     ALTER TABLE mt_services DROP CONSTRAINT mt_services_id_customer_key;");
+sql("INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
+     ('00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-00000000000a',
+      '00000000-0000-4000-8000-0000000000b1', 'O1FIX-SITE-CROSS');");
+is_(num("SELECT count(*) FROM mt_sites WHERE name = 'O1FIX-SITE-CROSS'"), 1,
+    'CONTROL: the violating row is present again');
+$adm = census('dnb_adminapi');
+is_($adm['verdict'], 'BLOCKED', 'dnb_adminapi reads BLOCKED over a real violation');
+is_($adm['block'], 1, 'BLOCKED(1) — the one row, from the documented role, with no superuser');
+
+// ===========================================================================
+t('PHASE 7 — a read the census cannot trust withholds the verdict (docs/123)');
+
+// Constructed grants, in THIS throwaway database only. No current role mixes a
+// projection with a base-table read, but a database at an earlier migration
+// level could. Measured before docs/123: sites through the base table and
+// services through the projection read CLEAR over this very violation.
+is_(num_as('dnb_admin', 'SELECT count(*) FROM mt_sites'), 0,
+    'PREMISE: dnb_admin reading the base table sees ZERO sites — FORCE RLS, no tenant context');
+is_(num('SELECT count(*) FROM mt_sites') > 0, true, 'CONTROL: while the sites exist');
+sql('GRANT EXECUTE ON FUNCTION mt_admin_services() TO dnb_admin');
+$mix = census('dnb_admin');
+is_($mix['verdict'], 'INDETERMINATE', 'sites via the base table + services via the projection: INDETERMINATE, not CLEAR');
+is_(str_contains($mix['raw'], '*** HIDDEN — read from base table(s) under row-level security: mt_sites'), true,
+    'and it names the hidden read');
+sql('REVOKE EXECUTE ON FUNCTION mt_admin_services() FROM dnb_admin');
+sql('GRANT EXECUTE ON FUNCTION mt_admin_sites() TO dnb_admin');
+is_(census('dnb_admin')['verdict'], 'INDETERMINATE',
+    'the reverse mix: INDETERMINATE, not a confident BLOCKED over a hidden table');
+sql('REVOKE EXECUTE ON FUNCTION mt_admin_sites() FROM dnb_admin');
+
+sql('REVOKE EXECUTE ON FUNCTION mt_admin_services() FROM dnb_adminapi');
+$gap = census('dnb_adminapi');
+is_($gap['rc'], 0, 'a missing projection no longer aborts the run — psql exits 0');
+is_($gap['verdict'], 'INDETERMINATE', 'and the verdict is withheld');
+is_(str_contains($gap['raw'], '*** SECTION 4 UNREADABLE'), true, 'naming the section it could not read');
+sql('GRANT EXECUTE ON FUNCTION mt_admin_services() TO dnb_adminapi');
+is_(census('dnb_adminapi')['verdict'], 'BLOCKED',
+    'CONTROL: with the projection restored the same run reads BLOCKED again');
 
 // ===========================================================================
 psql($own, 'postgres', 'DROP DATABASE IF EXISTS ' . DB . ';');

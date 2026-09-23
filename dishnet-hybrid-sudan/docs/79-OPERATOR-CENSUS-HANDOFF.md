@@ -6,6 +6,14 @@ no credential.
 
 **Do not send credentials back — return the census output only.**
 
+> **2026-09-23 — `docs/123`:** this procedure now runs as **one read-only
+> command**, `scripts/dnb-staging-census.sh`, which also answers §0 and §6
+> (a)–(c) from the server itself. Running it first exposed three census
+> defects, corrected there: the `dnb_adminapi` run of §3 could never reach a
+> verdict (the migration-ledger refusal counted as data blindness), a refused
+> read aborted the whole run, and a base-table read under row security counted
+> as a measurement. This document remains the specification.
+
 ---
 
 ## 0. Before anything: find the right database
@@ -109,6 +117,12 @@ carries on.
 read empty and nothing proved the session can see anything at all — because a
 zero-row read has seven possible causes and only one of them is a finding.
 **A census that reports INDETERMINATE has not been run.**
+
+**Corrected by `docs/123`:** run 1's SECTION 6 **is** the GATE-1 verdict.
+Before the correction it was always INDETERMINATE, because the migration ledger
+it cannot read counted as a data measurement. Run 2's verdict is INDETERMINATE
+**by design** — FORCE RLS hides the data from the owner, and the census now says
+so (HIDDEN) — so read only its SECTION 1.
 
 ## 4. Confirming you are on the authoritative database
 

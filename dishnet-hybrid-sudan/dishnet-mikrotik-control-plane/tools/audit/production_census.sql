@@ -38,7 +38,11 @@ DECLARE
   -- may execute it, the base table otherwise. See the note before SECTION 1b.
   src_sit text; src_svc text; src_dev text; src_vou text; src_bat text; src_cus text;
   src_pri text;   -- SECTION 1c (migration 027)
-  blind bool := false;   -- set whenever a measurement was refused or hidden
+  blind bool := false;   -- set whenever a DATA measurement was refused or hidden
+  ledger_read bool := false;  -- SCHEMA evidence; reported, never part of the verdict
+  is_priv bool := false;      -- superuser or BYPASSRLS
+  hidden text[] := '{}';      -- base tables read under RLS by a role that does not bypass it
+  t text;
   seen  bigint := 0;     -- POSITIVE CONTROL: rows this session could actually see
   block bigint := 0;     -- rows that would refuse the O-1 constraint
   r record;
@@ -55,13 +59,15 @@ RAISE NOTICE 'server address    : %   port : %',
 RAISE NOTICE '(identity only — no password or connection string is read or printed)';
 SELECT rolsuper, rolbypassrls INTO r FROM pg_roles WHERE rolname = current_user;
 RAISE NOTICE 'superuser         : %   bypassrls : %', r.rolsuper, r.rolbypassrls;
-IF NOT (r.rolsuper OR r.rolbypassrls) THEN
+is_priv := r.rolsuper OR r.rolbypassrls;
+IF NOT is_priv THEN
   RAISE NOTICE '';
-  RAISE NOTICE '*** WARNING — THIS CENSUS MAY BE BLINDED ***';
-  RAISE NOTICE 'These tables use FORCE ROW LEVEL SECURITY, which binds even the';
-  RAISE NOTICE 'table owner. Without superuser or BYPASSRLS the counts below can';
-  RAISE NOTICE 'read 0 while rows exist. A zero from this run is NOT evidence of';
-  RAISE NOTICE 'an empty table. Re-run as a role that bypasses RLS.';
+  RAISE NOTICE 'This role does not bypass row-level security, and these tables use';
+  RAISE NOTICE 'FORCE ROW LEVEL SECURITY, which binds even their owner. Every data';
+  RAISE NOTICE 'read below therefore goes through an Admin projection where this role';
+  RAISE NOTICE 'may execute one (dnb_def_admin sees every row behind them). A read that';
+  RAISE NOTICE 'falls back to a base table is marked HIDDEN, and one that is refused is';
+  RAISE NOTICE 'marked UNREADABLE; either withholds the verdict in SECTION 6.';
   RAISE NOTICE '';
 END IF;
 
@@ -81,12 +87,17 @@ IF NOT has_mig THEN
 ELSE
   BEGIN
     EXECUTE 'SELECT count(*) FROM mt_migrations' INTO n;
+    ledger_read := true;
     RAISE NOTICE 'migrations applied       : %', n;
     FOR r IN EXECUTE 'SELECT filename FROM mt_migrations ORDER BY filename' LOOP
       RAISE NOTICE '    %', r.filename;
     END LOOP;
   EXCEPTION WHEN insufficient_privilege THEN
-    blind := true;
+    -- SCHEMA evidence, not data. Until docs/123 this refusal also set
+    -- `blind`, so the documented dnb_adminapi run could never reach CLEAR or
+    -- BLOCKED -- and the owner's run cannot see the data at all -- so no run
+    -- of the documented two could produce a verdict. It is reported in
+    -- SECTION 6 instead, and the owner's run supplies it.
     RAISE NOTICE 'migrations applied       : UNREADABLE by % — no SELECT on mt_migrations', current_user;
     RAISE NOTICE '  (the Admin projections do not cover the migration ledger; the';
     RAISE NOTICE '   schema level therefore needs a role with SELECT on that table)';
@@ -132,6 +143,27 @@ src_cus := CASE WHEN to_regproc('public.mt_admin_customers') IS NULL THEN 'mt_cu
 RAISE NOTICE '';
 RAISE NOTICE 'read path — sites:%  services:%  routers:%', src_sit, src_svc, src_dev;
 RAISE NOTICE '            vouchers:%  batches:%  customers:%', src_vou, src_bat, src_cus;
+-- A base-table read by a role that does not bypass RLS is HIDDEN, not a count.
+-- Under FORCE ROW LEVEL SECURITY, with no tenant context, it returns zero rows
+-- while rows exist -- silently, with no error to catch. Measured (docs/123 §A.2)
+-- with one constructed grant: sites read through the base table and services
+-- through the projection reported CLEAR over a real O-1 violation; the reverse
+-- reported BLOCKED(6) where one row blocks. A refused read already withholds
+-- the verdict; a hidden one now does the same.
+IF NOT is_priv THEN
+  FOREACH t IN ARRAY ARRAY[src_sit, src_svc, src_dev, src_vou, src_bat, src_cus] LOOP
+    IF right(t, 2) <> '()'
+       AND coalesce((SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = to_regclass('public.' || t)), false)
+       AND has_table_privilege(current_user, 'public.' || t, 'SELECT') THEN
+      hidden := hidden || t;
+    END IF;
+  END LOOP;
+  IF cardinality(hidden) > 0 THEN
+    blind := true;
+    RAISE NOTICE '*** HIDDEN — read from base table(s) under row-level security: %', array_to_string(hidden, ', ');
+    RAISE NOTICE '    Their counts below can read zero while rows exist. NOT MEASURED, not clean.';
+  END IF;
+END IF;
 
 RAISE NOTICE '';
 RAISE NOTICE '============================================================';
@@ -243,6 +275,13 @@ ELSE
                   ELSE 'mt_admin_principals()' END;
   RAISE NOTICE 'read path — principals:%   (mt_admin_principals exists: %)',
     src_pri, to_regproc('public.mt_admin_principals') IS NOT NULL;
+  IF NOT is_priv AND src_pri = 'mt_principals'
+     AND coalesce((SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = to_regclass('public.mt_principals')), false)
+     AND has_table_privilege(current_user, 'public.mt_principals', 'SELECT') THEN
+    blind := true;
+    RAISE NOTICE '*** HIDDEN — mt_principals read from the base table under row-level security;';
+    RAISE NOTICE '    the counts below can read zero while rows exist. NOT MEASURED, not clean.';
+  END IF;
   EXECUTE format('SELECT count(*) FROM %s', src_pri) INTO n;
   RAISE NOTICE 'mt_principals total                     : %', n;
   seen := seen + n;
@@ -266,6 +305,7 @@ RAISE NOTICE '';
 RAISE NOTICE '============================================================';
 RAISE NOTICE 'SECTION 2 — mt_devices';
 RAISE NOTICE '============================================================';
+ BEGIN
 EXECUTE format('SELECT count(*) FROM %s', src_dev) INTO n;
 RAISE NOTICE 'total                                   : %', n;
 EXECUTE format('SELECT count(*) FROM %s WHERE site_id IS NULL', src_dev) INTO n;
@@ -297,11 +337,17 @@ ELSE
 END IF;
 RAISE NOTICE '  note: reuse of a RETIRED tunnel_ip is not detectable from current rows';
 RAISE NOTICE '        alone (no history is kept) — that is T10, docs/71 §5';
+ EXCEPTION WHEN insufficient_privilege THEN
+  blind := true;
+  RAISE NOTICE '*** SECTION 2 UNREADABLE by % — insufficient privilege.', current_user;
+  RAISE NOTICE '    SKIPPED, not clean: a section that stopped early is NOT MEASURED.';
+ END;
 
 RAISE NOTICE '';
 RAISE NOTICE '============================================================';
 RAISE NOTICE 'SECTION 3 — mt_vouchers and mt_voucher_batches';
 RAISE NOTICE '============================================================';
+ BEGIN
 EXECUTE format('SELECT count(*) FROM %s', src_vou) INTO n;
 EXECUTE format('SELECT count(*) FROM %s WHERE site_id IS NULL', src_vou) INTO m;
 RAISE NOTICE 'mt_vouchers total                       : %', n;
@@ -337,11 +383,17 @@ RAISE NOTICE 'mt_voucher_batches ORPHANED site_id     : %', n;
 EXECUTE format('SELECT count(*) FROM %s b WHERE b.site_id IS NULL
            AND EXISTS (SELECT 1 FROM %s v WHERE v.batch_id = b.id)', src_bat, src_vou) INTO n;
 RAISE NOTICE '  NULL-site batches that HAVE vouchers  : %   <= every such voucher is site-less', n;
+ EXCEPTION WHEN insufficient_privilege THEN
+  blind := true;
+  RAISE NOTICE '*** SECTION 3 UNREADABLE by % — insufficient privilege.', current_user;
+  RAISE NOTICE '    SKIPPED, not clean: a section that stopped early is NOT MEASURED.';
+ END;
 
 RAISE NOTICE '';
 RAISE NOTICE '============================================================';
 RAISE NOTICE 'SECTION 4 — would each proposed constraint VALIDATE right now?';
 RAISE NOTICE '============================================================';
+ BEGIN
 EXECUTE format('SELECT count(*) FROM (SELECT id, customer_id FROM %s
            GROUP BY id, customer_id HAVING count(*)>1) x', src_sit) INTO n;
 RAISE NOTICE 'mt_sites UNIQUE (id, customer_id)       : % blocking row(s)', n;
@@ -371,18 +423,25 @@ RAISE NOTICE 'mt_vouchers composite FK                : % blocking row(s)', n;
 EXECUTE format('SELECT count(*) FROM %s b WHERE b.site_id IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM %s s WHERE s.id=b.site_id AND s.customer_id=b.customer_id)', src_bat, src_sit) INTO n;
 RAISE NOTICE 'mt_voucher_batches composite FK         : % blocking row(s)', n;
+ EXCEPTION WHEN insufficient_privilege THEN
+  blind := true;
+  RAISE NOTICE '*** SECTION 4 UNREADABLE by % — insufficient privilege.', current_user;
+  RAISE NOTICE '    SKIPPED, not clean: a section that stopped early is NOT MEASURED.';
+ END;
 
 RAISE NOTICE '';
 RAISE NOTICE '============================================================';
 RAISE NOTICE 'SECTION 5 — what this census CANNOT establish';
 RAISE NOTICE '============================================================';
-SELECT rolsuper, rolbypassrls INTO r FROM pg_roles WHERE rolname = current_user;
-IF NOT (r.rolsuper OR r.rolbypassrls) THEN
-  RAISE NOTICE '*** EVERY COUNT ABOVE IS POTENTIALLY INCOMPLETE ***';
-  RAISE NOTICE 'The executing role (%) cannot bypass RLS, and these tables', current_user;
-  RAISE NOTICE 'use FORCE ROW LEVEL SECURITY. Treat every number above as a';
-  RAISE NOTICE 'LOWER BOUND, not a total. Re-run as a bypassing role before';
-  RAISE NOTICE 'any migration decision is taken on these figures.';
+IF blind THEN
+  RAISE NOTICE '*** SOME COUNTS ABOVE ARE NOT MEASURED ***';
+  RAISE NOTICE 'At least one read was refused (UNREADABLE) or hidden by row-level';
+  RAISE NOTICE 'security (HIDDEN). Those sections are NOT MEASURED, never zero.';
+  RAISE NOTICE '';
+ELSIF NOT is_priv THEN
+  RAISE NOTICE 'Every data read above went through an Admin projection, so the counts';
+  RAISE NOTICE 'are complete for this database although this role (%) does not', current_user;
+  RAISE NOTICE 'bypass row-level security.';
   RAISE NOTICE '';
 END IF;
 RAISE NOTICE 'It speaks for THIS database only. To establish that no control';
@@ -402,6 +461,7 @@ RAISE NOTICE '============================================================';
 -- unless this session PROVED it could see something it is entitled to see.
 RAISE NOTICE 'rows this session could actually see    : %   (positive control)', seen;
 RAISE NOTICE 'measurements refused or hidden          : %', blind;
+RAISE NOTICE 'migration ledger read in this run       : %   (schema evidence — not part of the verdict)', ledger_read;
 RAISE NOTICE 'rows that would refuse the O-1 FK       : %   (distinct rows, not', block;
 RAISE NOTICE '                                              a sum of detectors)';
 RAISE NOTICE '';
