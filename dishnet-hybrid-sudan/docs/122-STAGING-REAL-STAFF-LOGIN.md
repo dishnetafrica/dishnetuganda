@@ -1,7 +1,8 @@
 # 122 — Real DishNet staff login on the staging estate (roadmap step 4): review, harness evidence, one-command handover
 
 **Status:** review and harness evidence written **before** the handover,
-2026-09-23. **Result PENDING** the operator's run. **Staging only:** nothing
+2026-09-23. **RESULT: SWITCHED 2026-09-23 21:41:56 UTC** — every step passed on
+the first attempt; the trusted-proxy address was proved without correction (§E). **Staging only:** nothing
 here touches production, and nothing here is HARDWARE VERIFIED (`docs/119` is
 unchanged). **No application code changed.** Everything used exists since G-B
 (`docs/114` §O, migration 026) and the build on staging is the one `docs/121` §H
@@ -179,6 +180,58 @@ first three on the server; the operator's browser proves the last.
 
 ---
 
-## E. Result
+## E. Result — SWITCHED 2026-09-23 21:41:56 UTC
 
-**PENDING** the operator's pasted output.
+The operator ran the command at 21:41:49 UTC. Every step passed on the first
+attempt; the script's own lines are quoted where they carry the measurement.
+
+| Step | Measured on the server |
+|---|---|
+| 0 | build `dishnet-mikrotik-0.1.0-rc1`, content digest `1bc95524…7a7af74b` (the `docs/121` §H build); identity before: the development identity only; `dnb-staging` bridge gateway `172.22.0.1`; route in the stage-2 shape; **all 71 connections in the API's log came from `172.22.0.1`**, so that was the candidate; staff rows 0 |
+| 1 | API up at once with `DN_STAFF_IDENTITY=dishnet`, `DN_TRUSTED_PROXY=172.22.0.1`, `DN_PORTAL_ORIGIN=https://portal-staging.dishnetuganda.com`, second factor required |
+| 2 | `GET /session` → 401 `provider: dishnet`, `can_authenticate: true`, `mode: credentials`, `second_factor: required`; `POST /session` over plain HTTP → **403 `insecure_transport`** |
+| 3 | doctor, production posture: **24 checks, 23 ok, 1 warn (no staff yet, expected), 0 blockers**; PHP 8.3.33; PostgreSQL 16.15; the cluster rejects a wrong password; the burned credentials are dead on all six roles |
+| 4 | basic auth removed (YAML checked); Traefik handed the session route to the API after **2 s**; the wrong-password sign-in through Traefik → **401 `invalid_credentials`, arriving from `172.22.0.1` — PROVED on the first attempt, no correction** |
+| 5 | `dishnet-admin` created (id `4db5eaf3…`, actor `cli:root`); the password went to the terminal and is **not** in the log |
+| 6 | **the widening applies** (the loopback probe reached the credential check, 401); only `dnb-staging-api` changed; staff rows 1 |
+
+**A.1's expectation is now a measurement:** Traefik's connections reach the API
+from the `dnb-staging` bridge gateway, the same address as every connection
+through either publish.
+
+### E.1 The widening, measured — and what production needs instead
+
+On this host any client that reaches either publish — a process on the host
+through `127.0.0.1:8099`, or any container through `172.17.0.1:8099` — arrives
+as `172.22.0.1`. Such a client can assert `X-Forwarded-Proto: https` and receive
+a session cookie over plain HTTP, though only with a valid password **and** an
+authenticator code. **Accepted for staging**, where the data is synthetic.
+
+> **Binding on G-E (production):** the address named in `DN_TRUSTED_PROXY` must
+> be reachable by the TLS proxy **alone**. A bridge gateway shared by every
+> published-port connection does not meet that. How to meet it — the API on the
+> proxy's own network, or a publish no other client can reach — is a G-E design
+> decision, not taken here.
+
+### E.2 The one-time password came back in the chat
+
+The operator pasted the **terminal**, and the terminal showed the sign-in box, so
+the one-time password is in the chat transcript. The script kept it out of its
+log, which is all a script controls. Consequences and handling:
+
+- It stops being useful at the operator's **first authenticator enrolment**
+  (from then on every sign-in needs a code) and stops working at the **first
+  password change** (proved in the harness: *the one-time password no longer
+  signs in → 401*). Advised: sign in, enrol, change the password, now.
+- Until that enrolment, anyone holding it could sign in and enrol **their** own
+  authenticator first. If the operator's own sign-in is ever refused, the
+  account is to be treated as taken, and recovered on the server.
+- **This is the second time.** Stage 2's basic-auth password came back the same
+  way (`docs/120` §15.8.6). *"Paste this whole output back"* is read as *copy the
+  terminal*. **Lesson, binding on every later handover script that shows a
+  secret:** deliver it where a copy of the terminal cannot carry it — a 0600
+  file the operator reads separately — or pause, then clear the screen and its
+  scrollback before the result block; and ask for the **log file**, not the
+  terminal.
+
+Recorded **without** the password. Nothing in the repository carries it.

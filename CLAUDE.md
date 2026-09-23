@@ -2392,7 +2392,7 @@ column is empty by construction.
   that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
   migration 028, any deployment. Migrations still end at **027**.
 
-## Staging on the existing server — STAGES 1 AND 2 IN PLACE (`docs/120`); REDEPLOYED to migration 028 on 2026-09-23 17:34 UTC (`docs/121` §H)
+## Staging on the existing server — STAGES 1 AND 2 IN PLACE (`docs/120`); REDEPLOYED to migration 028 on 2026-09-23 17:34 UTC (`docs/121` §H); REAL STAFF LOGIN since 21:41 UTC (`docs/122`)
 
 **A read-only deployment feasibility audit, nothing more.** This session
 cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
@@ -2412,7 +2412,8 @@ runs first; only the package side was measured from the repository.
   API container only. `DN_STAFF_IDENTITY` stays unset, so `DenyAllIdentity`
   remains the default and production binding; **no `staff:bootstrap`**; the
   doctor's WARN on `DN_DEV_STAFF_IDENTITY` under `--disposable` is the truth
-  of a demonstration install and is recorded, not silenced.
+  of a demonstration install and is recorded, not silenced. **Superseded on
+  staging at 2026-09-23 21:41 UTC by the real staff login (`docs/122`).**
 - **A hostname (`portal-staging.dishnetuganda.com`) is stage 2 and its own
   approval:** it needs a DNS record and a Traefik route, which on this host
   belong to EasyPanel, **and** an IP allow-list plus basic auth in front,
@@ -2661,7 +2662,7 @@ Review (§A–§C) was written before code; the build record is §D–§H.
   NOT AUTHORIZED); G-C2, B-3, O-1, G-D, T-6/T-10/T-11, F-3; any production
   deployment.
 
-## Real DishNet staff login on staging — roadmap step 4, HANDED OVER; result PENDING (`docs/122`)
+## Real DishNet staff login on staging — roadmap step 4, SWITCHED 2026-09-23 21:41:56 UTC (`docs/122`)
 
 **Configuration only, staging only, no code change.** After steps 1 and 2 the
 operator accepted the recommendation to take **step 4 before step 3**: replace
@@ -2669,6 +2670,25 @@ the credential-less development identity on the staging panel with the real
 DishNet staff login built in G-B (migration 026). `docs/122` is the review, the
 harness evidence and the handover; `scripts/dnb-staging-staff-login.sh` is the
 one command.
+
+- **RESULT (`docs/122` §E): every step passed on the first attempt.** Build
+  `1bc95524…`; all 71 logged connections came from `172.22.0.1`, the
+  `dnb-staging` bridge gateway; doctor 23 ok / 1 warn / 0 blockers; Traefik
+  took the route in 2 s; **the sign-in proof answered 401 from `172.22.0.1`,
+  no correction**; `dishnet-admin` created; only the API container changed.
+  Staging now runs the real provider; the development identity is gone from it.
+- **Measured, binding on G-E:** the widening **applies** here — every
+  connection through either publish arrives as the gateway, so a host process
+  or any container can assert `X-Forwarded-Proto` (it still needs a password
+  and a code). **In production the address in `DN_TRUSTED_PROXY` must belong to
+  the TLS proxy alone**; how is a G-E decision.
+- **A secret came back in the chat a second time.** The operator pasted the
+  terminal, which showed the one-time password (stage 2's basic-auth password
+  came back the same way). It dies at the first enrolment and password change,
+  advised at once. **Binding on every later script that shows a secret:** put
+  it where a copy of the terminal cannot carry it (a 0600 file read
+  separately), or pause and clear screen and scrollback first; ask for the
+  **log file**, not the terminal. **Never write the pasted value anywhere.**
 
 - **`DN_TRUSTED_PROXY` is PROVED, never looked up.** `TransportPolicy` matches
   `REMOTE_ADDR` exactly, and what address Traefik's connections carry is a
