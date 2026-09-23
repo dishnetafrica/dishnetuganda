@@ -2661,6 +2661,53 @@ Review (§A–§C) was written before code; the build record is §D–§H.
   NOT AUTHORIZED); G-C2, B-3, O-1, G-D, T-6/T-10/T-11, F-3; any production
   deployment.
 
+## Real DishNet staff login on staging — roadmap step 4, HANDED OVER; result PENDING (`docs/122`)
+
+**Configuration only, staging only, no code change.** After steps 1 and 2 the
+operator accepted the recommendation to take **step 4 before step 3**: replace
+the credential-less development identity on the staging panel with the real
+DishNet staff login built in G-B (migration 026). `docs/122` is the review, the
+harness evidence and the handover; `scripts/dnb-staging-staff-login.sh` is the
+one command.
+
+- **`DN_TRUSTED_PROXY` is PROVED, never looked up.** `TransportPolicy` matches
+  `REMOTE_ADDR` exactly, and what address Traefik's connections carry is a
+  property of the host's Docker networking. **PHP's built-in server logs no
+  request line for a request its router script handles** (only `Accepted` /
+  `Closing`), so the log cannot say which connection was the browser's. The
+  script takes a candidate from the log (preferring the `dnb-staging` bridge
+  gateway, the expected answer) and proves it with **its own wrong-password
+  sign-in through Traefik**: 401 `invalid_credentials` = proved; a 403 from
+  another address is corrected **once**; anything else rolls back. The first
+  draft read `GET /app.js` log lines that never exist and was corrected before
+  handover (`docs/122` A.2).
+- **Order and fail-closed rollbacks:** recreate `dnb-staging-api` with
+  `DN_STAFF_IDENTITY=dishnet`, `DN_PORTAL_ORIGIN` and **no** development
+  identity → loopback proofs (403 `insecure_transport` over plain HTTP) →
+  doctor in **production posture**, 0 blockers → remove the stop-gap basic
+  auth → **the proof** → only then `staff:bootstrap dishnet-admin`, so a
+  rollback never leaves a live password behind. Any failure restores the route
+  file (the step-0 copy) **and** the container (its own previous identity
+  settings) — including the real provider on a failed re-run.
+- **The password is never logged and never lost**: to `/dev/tty` (which `tee`
+  does not capture), else a 0600 file; an unparseable bootstrap output goes
+  there whole. TOTP stays required; the panel shows a setup key, no QR code.
+- **The widening is measured, not asserted:** step 6 reports whether a
+  host-local client asserting `X-Forwarded-Proto` over loopback reaches the
+  credential check. Same class as the stage-2 widening; staging data is
+  synthetic.
+- **Harness, `scripts/harness/staff-login/`:** the real script, unchanged,
+  against a fake Docker (the API is a real `php -S` of the release package at
+  `1bc95524…`), a fake Traefik proxying from a chosen source address, and a
+  real PostgreSQL with the installer and the simulated estate. **108/108,
+  twice**, including the operator's whole first sign-in through the proxy.
+  Four deliberately broken copies of the script each fail the assertions that
+  guard them. **It refuses to run where the server could be** (four guards,
+  each proved); never run it on the DishNet host.
+- **This is G-D rehearsed on staging, not production.** `DenyAllIdentity`
+  remains the package default. Step 3 (operator onboarding) still waits on the
+  O-1 census decision; the MikroTik bench (`docs/119`) still waits on a unit.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
