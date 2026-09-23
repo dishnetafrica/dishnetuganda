@@ -1519,11 +1519,10 @@ auth-enforcing proxy inside the `dnb-staging` bridge that owns the gateway
 publish instead of the API (**S2-8, optional, not built**).
 
 **Not machine-checked here:** the harness's permission classifier refused to
-run the local template test (`test_route_template.py`) and the `dash -n` pass
-over block G in this session, so block E's YAML rendering was validated by
-reading, block G by reading, and block E's own on-server PyYAML check and
-Traefik log check remain the executable validation. Block E itself passed
-`dash -n` and `bash -n` before the refusals began.
+run the local template test (`test_route_template.py`) in this session, so
+block E's YAML rendering was validated by reading, and block E's own on-server
+PyYAML check and Traefik log check remain the executable validation. Block E
+passed `dash -n` and `bash -n`; block G passed `dash -n` on a later attempt.
 
 #### 15.8.2 Block D — on the Mac: the address to allow
 
