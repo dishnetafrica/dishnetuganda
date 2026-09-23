@@ -8,6 +8,11 @@ WhatsApp, mail, the website and every other production service stay untouched.
 **Deployment waits for explicit approval of the proposal below; this document
 executes none of it.**
 
+> **Update 2026-09-23 14:02 UTC — the operator ran §1.2 on the server and
+> pasted the output back. §1.3 records the result: the 19 September baseline
+> is CONFIRMED, every go / no-go threshold of §9 is met, and two facts amend
+> §3 and §6. Still nothing deployed.**
+
 > **The one limit to state first.** This session cannot reach the
 > `dishnetuganda` server: it has no SSH client, no credential, its egress is a
 > proxy that refuses that host, and the standing rule (`CLAUDE.md`, `docs/78`
@@ -175,6 +180,65 @@ free today; whether the host has PHP at all; whether `postgres:16-alpine` is
 already present (Phase 0 pulled it); that `8099` and `5434` are unused; that
 the staging hostname does **not** resolve yet.
 
+### 1.3 Verification result — the operator's read-only run, 2026-09-23 14:02 UTC
+
+The §1.2 block was run as root on `dishnetuganda` and its whole output pasted
+back. The block only reads, so the server is exactly as it was before the run.
+Compared line by line with §1.1:
+
+| Item | RECORDED 19 Sep | VERIFIED 23 Sep | Verdict |
+|---|---|---|---|
+| OS / kernel / timezone | Ubuntu 24.04.4, 6.8.0-139, `Etc/UTC` | same | unchanged |
+| uptime | 3 days | 7 d 16 h — one boot around 16 Sep, none since Phase 0 (`dn-phase0-*` Up 4 days) | consistent |
+| CPU / RAM | 2 cores, 5.3 GB available | 2 cores; MemTotal 7,941 MB; **MemAvailable 5,314 MB**; **swap 0**; load 0.25 / 0.40 / 0.36 | **≥ 2 GB — GO** |
+| disk | 138 GB free, 11 % | **137 GB free, 12 %**; `/` and `/var/lib/docker` are one filesystem (`/dev/vda1`, 154 GB) | **≥ 20 GB — GO** |
+| Docker / swarm | Swarm + EasyPanel | Docker **27.5.1**; swarm `active`, one node, manager; `overlay2`; 21 containers, 20 running, 21 images | unchanged |
+| containers | 18 production + 2 Phase 0 | **the same 20 names, all Up**; one *exited* container is the superseded task of `web_web-uganda` from an update 7 days ago — normal swarm behaviour, not a failure | **all Up — GO** |
+| swarm services | six | seven: the six plus **`web_web-sudan` at 0/0 replicas** (defined, scaled to zero; absent from the 19 Sep list); `docker stack ls` shows none — EasyPanel creates services directly | noted |
+| networks | 5 bridges + 4 overlays | same subnets, plus `dn-phase0 172.21.0.0/16` and `dishnet-mail_default 172.20.0.0/16` (the mail stack's bridge). Bridges used: 172.17, 172.18.251.0/25, 172.18.251.128/25, 172.19, 172.20, 172.21 → **a new bridge would draw `172.22.0.0/16`**; nothing near `10.66` | unchanged |
+| PostgreSQL / Redis | three PG, one Redis | `unms-postgres`, `wa_evolution-api-db` (postgres:17), `dn-phase0-postgres` (16-alpine on `127.0.0.1:5433`); `wa_evolution-api-redis` (redis:7); `unms-siridb` | unchanged — **none reused** |
+| Phase 0 | per `docs/36` | both containers Up 4 days; `dn-phase0` bridge; `dn-phase0-pgdata` present; `wg0` up, public key `ftGs/7LjO/aVmKJ9xS/fz+QDt73JcGI+X3vgSCZpJT4=`, port 51820, **no peers** | unchanged |
+| listeners | baseline list | baseline list + `51820/udp` (v4 and v6), `10.66.0.1:1812/1813`, `[::1]:1812/1813`, `127.0.0.1:18120`, `127.0.0.1:5433`; **8099 free; 5434 free** | **GO** |
+| Traefik | version and configuration unknown | **`traefik:3.6.7`**; `args=["traefik"]` — **no CLI flags, so it is configured by files**; `/etc/easypanel/traefik → /data`; `acme.json` (128 KB) present; `default-domain.crt/.key`; **dynamic configuration = `config/main.yaml` (EasyPanel-written, 8,968 B, 16 Sep), `config/uisp.yaml` (3 Sep), `config/traefik-mail.yml` (11 Sep)**; **no swarm service carries a `traefik.*` label**; 80 and 443 published on IPv4 **and IPv6** | **§6 amended** |
+| host PHP | unknown | **PHP 8.3.6 CLI is installed** (`php8.3-cli`, `-common`, `-opcache`, `-readline`) — **but not `php8.3-pgsql` and not `php8.3-fpm`**: `pdo_pgsql` is missing | **§3 amended** |
+| images | unknown | **`postgres:16-alpine` present** (294 MB) — no pull for the database; **no PHP image** — the app image needs one pull from Docker Hub | noted |
+| firewall | UFW inactive, 54 iptables rules | UFW inactive, **61 rules** — the +7 are Phase 0's `127.0.0.1:5433` publish (`docs/36` §6.1c) | unchanged |
+| `daemon.json` | none | none — the address pool is still unpinned | unchanged |
+| DNS | — | `portal-staging.dishnetuganda.com` **does not resolve**; `crm.dishnetuganda.com → 209.97.137.203` | as expected |
+| by-product | `docs/98` §14 Q1 (installed version) UNVERIFIED | **UISP/UNMS 3.0.159, uCRM 4.5.33** (`ubnt/unms-crm:4.5.33`) | recorded for `docs/98` Q1; nothing acted on |
+
+**Verdict: the baseline is confirmed and every go / no-go threshold of §9 is
+met.** Stage 1 (§4, §11) may proceed **on explicit approval**, which this
+document does not give itself.
+
+Resource snapshot at the time of the run: the twenty containers together held
+about **3.3 GB** of memory (largest: `ucrm` 730 MB, `unms-postgres` 450 MB,
+`unms-api` 407 MB under a 4 GiB limit); CPU under 1 % everywhere; **no swap**,
+so the 5.3 GB available is real memory, and the staging's estimated < 400 MB
+fits with a wide margin.
+
+Pre-existing, unchanged and out of this audit's scope (`docs/34` §6 item 4):
+the swarm's `2377/tcp` and `7946` and every published production port listen
+on all interfaces with no enforcing host firewall.
+
+**Two amendments the run forces**, made in place below:
+
+- **§3:** the host has PHP, but not the one extension the package needs. A
+  native path would be `apt-get install php8.3-pgsql` (one package, as
+  `wireguard-tools` was) plus two systemd units for the API and the worker.
+  Viable, but it changes the host's package set and creates units; the
+  container path changes neither. **Recommendation unchanged: containers.**
+- **§6:** routing on this host is Traefik's **file provider**, not labels.
+  EasyPanel writes `config/main.yaml`; two hand-added files (`uisp.yaml`,
+  `traefik-mail.yml`) show that services outside EasyPanel — UISP's nginx and
+  the mail stack — are routed by **adding a YAML file to
+  `/etc/easypanel/traefik/config/`**. Stage 2 would therefore be one such file
+  for the staging hostname. It is still a Traefik change under EasyPanel's
+  directory and still its own approval; the entrypoint and resolver names it
+  must use are inside `main.yaml` / `uisp.yaml`, which would be **read
+  (read-only) only after stage 2 is approved**. The host listens on IPv6 too,
+  so an `AAAA` record is a real question for that stage.
+
 ---
 
 ## 2. Current Domain-B package requirements — MEASURED at `e5db549`
@@ -272,10 +336,13 @@ through the Traefik that EasyPanel owns (80 and 443 are its), and because a
 credential-less identity behind a public hostname needs an access layer in
 front of it that this audit cannot verify EasyPanel offers.
 
-**Why not host PHP.** The host almost certainly has no PHP (VERIFY); putting an
-interpreter and `php-fpm` on a production host is a larger and harder-to-remove
-change than one image that lives and dies with `docker rm`. `docs/34` §3.3's
-rule for this host is *everything later in a container*.
+**Why not host PHP.** VERIFIED 23 Sep (§1.3): the host has PHP 8.3.6 CLI but
+**not `pdo_pgsql`** and not `php-fpm`, so a native path needs
+`apt-get install php8.3-pgsql` plus systemd units for two processes. That is a
+change to the production host's package set; one image that lives and dies
+with `docker rm` is not. `docs/34` §3.3's rule for this host is *everything
+later in a container*. The native path is recorded as **option B′**, viable
+and not recommended.
 
 ---
 
@@ -330,9 +397,9 @@ show it does not), and nothing creates it.
 
 | Layer | Required configuration | Who owns it on this host |
 |---|---|---|
-| DNS | an `A` record `portal-staging.dishnetuganda.com → 209.97.137.203` (and `AAAA` only if Traefik serves IPv6 today — VERIFY) | the DNS provider for `dishnetuganda.com`; **the operator creates it, when approved** |
+| DNS | an `A` record `portal-staging.dishnetuganda.com → 209.97.137.203`; **Traefik listens on IPv6 too (VERIFIED)**, so whether to add an `AAAA` record is a stage-2 decision | the DNS provider for `dishnetuganda.com`; **the operator creates it, when approved** |
 | TLS | a certificate from the ACME resolver Traefik already runs for the other hostnames (`mail-certs-dumper` implies one exists; its **name is unknown — VERIFY from `args=`**) | Traefik / EasyPanel |
-| Traefik router | rule `Host(\`portal-staging.dishnetuganda.com\`)`, on the HTTPS entrypoint (name unknown — VERIFY; commonly `websecure`), `tls.certresolver=<the existing one>`, service → the staging app on port 8099 (or, better for a public hostname, an nginx + php-fpm pair replacing `php -S`, §10) | **EasyPanel** — it owns `easypanel-traefik`; a hand-edited file or a label on a plain container may be ignored or overwritten. **This is a Traefik change and therefore its own approval** |
+| Traefik router | rule `Host(\`portal-staging.dishnetuganda.com\`)`, on the HTTPS entrypoint, `tls.certresolver=<the existing one>`, service → the staging app on port 8099 (or, better for a public hostname, an nginx + php-fpm pair replacing `php -S`, §10). **VERIFIED 23 Sep (§1.3): Traefik 3.6.7 is configured by the file provider — labels are not used on this host.** The mechanism is **one YAML file in `/etc/easypanel/traefik/config/`**, exactly as `uisp.yaml` and `traefik-mail.yml` already route UISP and the mail stack; the entrypoint and resolver names come from `main.yaml`, read only after approval | **Traefik, under EasyPanel's directory** — EasyPanel writes `main.yaml` there; a hand-added file coexists with it today (two do). **Still a Traefik change and therefore its own approval** |
 | access control in front | **mandatory before the hostname exists**, because the development identity has no credential: an IP allow-list middleware limited to your address(es) **and** an HTTP basic-auth middleware; whether EasyPanel's UI exposes both is **VERIFY**; if not, stage 2 cannot use the development identity at all | EasyPanel / Traefik |
 | path | the panel **must be at the root** of the hostname (`api.js` and `staff.js` call `/api/v1/admin/...` absolutely); a sub-path mount is not supported | — |
 | headers | Traefik sets `X-Forwarded-Proto: https`, which makes the dev cookie `Secure`; set `DN_PORTAL_ORIGIN=https://portal-staging.dishnetuganda.com` so a mutating request from any other origin is refused; add HSTS / `X-Frame-Options: DENY` at the proxy | staging env + proxy |
@@ -380,9 +447,10 @@ proxy's own authentication must sit in front.
 
 ## 9. Resource impact
 
-RECORDED headroom (19 Sep): 2 cores, **5.3 GB available**, **138 GB free**;
-Phase 0 has since added two containers (a few hundred MB at most). **Re-measure
-with §1.2 before deploying; the thresholds below are the go / no-go.**
+VERIFIED 23 Sep 14:02 UTC (§1.3): 2 cores, **MemAvailable 5,314 MB**, **137 GB
+free**, load 0.25, no swap; the twenty running containers hold about 3.3 GB
+between them. **Every threshold below is met.** Re-measure with §1.2 on the day
+of deployment anyway; the numbers age.
 
 | Component | Estimated steady state | Basis |
 |---|---|---|
@@ -434,6 +502,7 @@ ss -tulpn | sort > /root/dnb-staging-evidence/listeners.before
 free -m > /root/dnb-staging-evidence/free.before; df -h > /root/dnb-staging-evidence/df.before
 #   go/no-go (§9): MemAvailable >= 2 GB, disk free >= 20 GB, all production containers Up,
 #   8099 and 5434 unused, portal-staging.dishnetuganda.com does NOT resolve.
+#   (all of these held on 2026-09-23 14:02 UTC — §1.3; repeat on the day, do not reuse that run)
 
 # ── 1. copy the artifact (built from e5db549 on the repository machine) ────
 #   sh plugin/bin/package.sh  -> dist/dishnet-mikrotik-0.1.0-rc1.tar.gz  (116 files, 212 KB)
@@ -593,9 +662,9 @@ verification script; it is not a fresh observation.
 
 1. **Approve stage 1** as written in §4/§11 (container-based, loopback + SSH,
    development identity, simulated delivery) — or amend it.
-2. **Run §1.2** and return the output; deployment must not start until §1.1 is
-   confirmed or corrected from it, including whether the host has PHP and
-   whether `postgres:16-alpine` is already present.
+2. ~~Run §1.2 and return the output.~~ **DONE 2026-09-23 14:02 UTC** — §1.3:
+   baseline confirmed, thresholds met, `postgres:16-alpine` present, host PHP
+   present but without `pdo_pgsql`, Traefik file-configured.
 3. **Stage 2** — whether `portal-staging.dishnetuganda.com` is wanted at all;
    if so, its Traefik route goes through EasyPanel, needs the DNS record, and
    needs both an IP allow-list and basic auth in front of the development

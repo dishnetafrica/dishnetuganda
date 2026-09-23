@@ -2421,6 +2421,16 @@ runs first; only the package side was measured from the repository.
 - **Nothing real:** `DN_ALLOW_REAL_BINDINGS` absent, no MikroTik, no
   FreeRADIUS, no WireGuard peer, no Domain A, no uCRM; the worker idles
   because the Admin plane cannot enqueue (`docs/118` D-2).
+- **Server state VERIFIED 2026-09-23 14:02 UTC** by the operator's read-only
+  run (`docs/120` §1.3): the 19 September baseline is confirmed — the same
+  20 containers Up, 5.3 GB available, 137 GB free, 8099 free, the staging
+  hostname unresolved, `postgres:16-alpine` present. Two facts amend the
+  proposal's wording, not its recommendation: **the host has PHP 8.3 CLI but
+  no `pdo_pgsql`** (containers stay the recommendation), and **Traefik 3.6.7 is
+  configured by the file provider** — a stage-2 route would be one YAML file
+  under `/etc/easypanel/traefik/config/`, as `uisp.yaml` and
+  `traefik-mail.yml` already do for non-EasyPanel services. By-product for
+  `docs/98` Q1: UISP/UNMS 3.0.159, uCRM 4.5.33.
 - **Zero server changes were made by the audit**, and none may be made until
   the proposal is explicitly approved. `docs/00` §10's host constraints hold.
 
