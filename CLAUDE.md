@@ -2390,7 +2390,7 @@ column is empty by construction.
   that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
   migration 028, any deployment. Migrations still end at **027**.
 
-## Staging on the existing server — AUDITED; stage 1 APPROVED and HANDED OVER, result PENDING (`docs/120`)
+## Staging on the existing server — STAGE 1 DEPLOYED AND VERIFIED; stage 2 requested, NOT started (`docs/120`)
 
 **A read-only deployment feasibility audit, nothing more.** This session
 cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
@@ -2462,7 +2462,40 @@ runs first; only the package side was measured from the repository.
   own check**: `bool||text` prints `true/false`, psql `-A -t` prints `t/f`.
   The state was correct; the check was wrong. Recovery is **block R** (remove
   the four inert objects, prove the baseline) then **block B revision 2** as one
-  clean pass — never a resume with a password reset. **Result still PENDING.**
+  clean pass — never a resume with a password reset. **Result: see the next bullet.**
+- **STAGE 1 DEPLOYED AND VERIFIED 2026-09-23 15:41 UTC (`docs/120` §15.6).**
+  Block R returned the host to the baseline (every snapshot identical); block B
+  revision 2 ran as one clean pass and **all nine post-deployment checks hold**:
+  three `dnb-staging-*` containers Up; PostgreSQL 16.15 answers only from the
+  `dnb-staging` bridge (no response from the default bridge, none towards
+  `dn-phase0-postgres` or `unms-postgres`, no host listener on 5432);
+  `127.0.0.1:8099` is the only new listener and the nat rule carries
+  `-d 127.0.0.1/32`; 27 migrations (last 027), 16 `dnb*` roles, `mt_staff` 0;
+  the 20 production containers unchanged (`StartedAt`, `RestartCount`); iptables
+  filter +7/−0, nat +4/−0, all for the new bridge; `wg show` identical. The
+  simulated estate is 3 / 5 / 17 / 6 with 41 audit rows. **Nothing real was
+  contacted.**
+- **The panel has NOT been seen.** Block C failed on the Mac: `nc` and `ssh`
+  to port 22 **timed out** while a probe of 8099 was *refused* — the operator's
+  network drops outbound 22; the server's `sshd` is unchanged. **Zero-change
+  path: any network that allows port 22 (a phone hotspot), then block C as
+  written.**
+- **Stage 2 ("make it publicly accessible") was requested and is NOT started**
+  (`docs/120` §15.8). It needs Traefik (a file under EasyPanel's directory) and
+  DNS — production boundaries the stage-1 approval excluded — and the
+  development identity has no credential, so an IP allow-list **and** basic auth
+  in front are mandatory (§6, §10). Traefik is a swarm task and cannot reach the
+  host loopback, so the API's publish address must follow `uisp.yaml`'s
+  precedent, read only after approval. Seven itemised steps S2-1…S2-7 await
+  explicit approval plus the Traefik config paste, the address(es) to allow and
+  a basic-auth username. **Never publish 8099 on `0.0.0.0`.**
+- **Simulator finding, not a deployment fault:** its routers carry tunnel
+  addresses `10.99.0.10–14`, outside `10.66.0.0/16`, so its three
+  `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and
+  reach `failed` after five attempts with no `intent.failed` audit row (the
+  retryable-exhausted path in `IntentWorker::handle` audits nothing). The three
+  `voucher.publish` intents confirm through `SimulatedRouterOs`. Recorded for a
+  later instruction; unchanged.
 
 ## Open and parked
 

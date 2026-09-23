@@ -22,6 +22,15 @@ executes none of it.**
 > At the commit that adds §15 nothing on the server has changed; §15.6
 > records the result.**
 
+> **Update 2026-09-23 15:41 UTC — STAGE 1 IS DEPLOYED AND VERIFIED (§15.6).**
+> Block B revision 2 ran as one clean pass and every one of the nine
+> post-deployment checks holds on the server. **The SSH tunnel could not be
+> opened from the operator's Mac: that network drops outbound port 22**
+> (block C's first line), so the panel is running but has not yet been seen.
+> The operator then asked for the portal to be made publicly accessible —
+> **that is stage 2, it touches Traefik and DNS, and it is NOT started**
+> (§15.8).
+
 > **The one limit to state first.** This session cannot reach the
 > `dishnetuganda` server: it has no SSH client, no credential, its egress is a
 > proxy that refuses that host, and the standing rule (`CLAUDE.md`, `docs/78`
@@ -663,6 +672,11 @@ remove the domain/service through EasyPanel, delete the DNS record.
 
 ## 13. Confirmation — this audit made ZERO server changes
 
+> **Superseded for the server state by §15.6 (2026-09-23 15:41 UTC): stage 1
+> is deployed. The statements below describe the audit itself, which changed
+> nothing; stage 1 changed exactly the objects §4 lists and nothing else,
+> proved by the before/after comparison in §15.6.**
+
 This session **never connected to the `dishnetuganda` server**: no SSH, no
 `psql`, no HTTP request, no DNS query against it, no Docker command on it. The
 only commands run were in this development container — reading the repository,
@@ -681,7 +695,7 @@ verification script; it is not a fresh observation.
 2. ~~Run §1.2 and return the output.~~ **DONE 2026-09-23 14:02 UTC** — §1.3:
    baseline confirmed, thresholds met, `postgres:16-alpine` present, host PHP
    present but without `pdo_pgsql`, Traefik file-configured.
-3. **Stage 2** — whether `portal-staging.dishnetuganda.com` is wanted at all;
+3. **Stage 2** — **requested by the operator 2026-09-23 after stage 1 (§15.8), NOT started; needs the itemised approval and inputs listed there.** Whether `portal-staging.dishnetuganda.com` is wanted at all;
    if so, its Traefik route goes through EasyPanel, needs the DNS record, and
    needs both an IP allow-list and basic auth in front of the development
    identity. That is a separate approval on its own evidence.
@@ -1210,19 +1224,68 @@ changes no device state (`docs/118`).
 | production published ports unchanged | *containers removed or changed* → **empty**; *listeners removed* → **empty**; *listeners added* → exactly `127.0.0.1:8099`; iptables *removed* → 0 and every added rule names the new bridge or `127.0.0.1` |
 | existing PostgreSQL / Redis untouched | `unms-postgres`, `wa_evolution-api-db`, `dn-phase0-postgres`, `wa_evolution-api-redis` unchanged in the inspect comparison; no `dnb-staging` member on any other network; the two cross-network probes answer *no response* |
 
-### 15.6 Result
+### 15.6 Result — STAGE 1 DEPLOYED AND VERIFIED, 2026-09-23 15:41 UTC
 
-**PENDING.** Attempt 1 (§15.7) stopped at step 4 by the block's own check and
-left four inert stage-1 objects, which block R removes; the corrected block B
-has been handed over. Until its output is back **nothing is deployed and
-every statement of §13 still holds** — the server holds an empty staging
-PostgreSQL, an unused bridge, an unused volume, a 601 MB local image and
-`/opt/dnb-staging/`, none of which touches any production object.
+Block R ran at 15:41:26 UTC and returned the host to block A's baseline (every
+snapshot `identical to before`; only the image differed). Block B revision 2
+ran at 15:41:35 UTC as **one clean pass**: the pre-placed tarball (content
+digest `4e7467ad…16c798e`), the verified image, bridge `172.22.0.0/16`,
+PostgreSQL 16.15 ready in 2 s, the bootstrap with `f|f|t|t`, the two doctor
+runs (2 expected blockers before install, **0 after**, 20 ok, 1 warn =
+deny-all in the one-shot process), 27 migrations applied, 7 credentials
+generated and copied unquoted, the simulated estate (3 customers, 5 routers,
+17 vouchers, 6 sessions, 36 uplink samples, 3 provisioning jobs, 27
+tenant-visible audit rows), the API answering after 1 s, the worker reporting
+`simulated-routeros`.
 
-Rollback stays §12; `/opt/dnb-staging/` — which now also holds
-`env/secrets.docker.env` — is removed by its `rm -rf` line, and
-`/root/dnb-staging-evidence/` keeps the artifact, the build log and the
-before/after snapshots for the record.
+| Check (the operator's list) | Evidence from the run |
+|---|---|
+| all three containers healthy | `dnb-staging-postgres` Up (accepting connections), `dnb-staging-api` Up (`GET /` → 200 after 1 s), `dnb-staging-worker` Up (`running`, binding line printed); memory 38 MiB + 8.5 MiB + 5.4 MiB |
+| PostgreSQL reachable only through the Domain-B network | `PortBindings={}`; no host listener on 5432; `pg_isready` from `dnb-staging` by name → **accepting connections**; from the default bridge to `172.22.0.2` → **no response**; from `dnb-staging` to `dn-phase0-postgres 172.21.0.2` and `unms-postgres 172.18.251.136` → **no response** |
+| API answers on 127.0.0.1:8099 | `/` 200 · `/api/v1/admin/health` 401 · `/api/v1/admin/session` 401 with `{"provider":"DEVELOPMENT-ONLY","can_authenticate":true,"mode":"development","roles":["admin","noc","sales","support"]}` · `/api/v1/admin/routers` 401 · `/../src/Db/Database.php` 404 · `/plugin/plugin.json` 404 |
+| 8099 not publicly reachable | `ss`: one listener, `127.0.0.1:8099` (`docker-proxy`), nothing on `0.0.0.0` or `[::]`; the nat rule is `-A DOCKER -d 127.0.0.1/32 … --dport 8099 -j DNAT --to-destination 172.22.0.3:8099`; from the Mac `nc 209.97.137.203 8099` → *Connection refused* — **but that probe ran before block B, when nothing listened; §15.8 asks for it again now** |
+| worker in simulated mode | `{"worker":"…:1:simulated-routeros","bindings":{"delivery_binding":"simulated-routeros","delivery_simulated":true,"delivery_configured":"simulated","publisher_binding":"null","publisher_simulated":true,"real_bindings_allowed":false,"phase":"F6-A"}}` |
+| migrations end at 027 | `27 applied, last: 027_operator_staff_capabilities.sql`; **16** `dnb*` roles (owner + 7 login + 8 definer); the only superuser is the instance's `postgres`; databases `dnb`, `postgres`; `mt_staff` **0 rows** (no `staff:bootstrap`); non-`SIM-` devices **0** |
+| production containers healthy | all 20 pre-existing containers `running`, `StartedAt` 15, 16 and 19 September unchanged, `restarts=0`; *status/StartedAt/RestartCount changed* → **empty** |
+| production published ports unchanged | *containers removed or changed* → **empty**; *listeners removed* → **empty**; *listeners added* → exactly `127.0.0.1:8099`; iptables filter **+7 / −0** with no `UNEXPECTED` line; nat **+4 / −0**, all four for the new bridge or `127.0.0.1:8099` |
+| existing PostgreSQL / Redis untouched | `unms-postgres`, `wa_evolution-api-db`, `dn-phase0-postgres`, `wa_evolution-api-redis` unchanged in the inspect comparison; no `dnb-staging` member on any other network; the two cross-network probes → *no response*; `wg show` identical |
+
+Two facts the run adds to the record:
+
+- **`images added` listed one image, not two.** The `php:8.3-cli-alpine` base
+  is held in BuildKit's build cache, not in the image store, so only
+  `dnb-staging-php:8.3` (601 MB) appears. The §15.5 expectation was written
+  for the classic builder.
+- **The worker's first pass: `claimed 6, confirmed 3, retrying 3`.** Read off
+  the code, not guessed: the simulator queues **3 `device.provision`** jobs
+  and the three voucher batches enqueue **3 `voucher.publish`** intents.
+  `SimulatedRouterOs` accepts and confirms `voucher.publish` unconditionally
+  → **the 3 confirmed** (three `intent.confirmed` audit rows, actor `system`,
+  worker id carrying `simulated-routeros`). The simulator registers its
+  routers with tunnel addresses `10.99.0.10–14`, which are **outside the
+  management network `10.66.0.0/16`** that G-C's `TunnelAddress` rule
+  requires, so `DeliveryTarget` answers *device has no management address
+  recorded* — **retryable** — for every provisioning job → **the 3 retrying**.
+  Backoff is 30 s, 60 s, 120 s, 240 s; `max_attempts` is 5, so within about
+  eight minutes all three reach state `failed` with that `last_error`, and —
+  observed in `IntentWorker::handle` — **the retryable-exhausted path writes
+  no `intent.failed` audit row** (only a permanent refusal does). **This is
+  the simulator's estate predating G-C's address rule, not a deployment
+  fault**, and nothing reached a router. Verify with the read-only query in
+  §15.8. Recorded here as a simulator finding for a later instruction; not
+  changed now.
+
+The 41 audit rows are the simulator's acts (27 tenant-visible plus the
+staff-actor creation rows its own count does not see) and the worker's three
+confirmations.
+
+**What did not happen: the panel has not been seen.** Block C's first line,
+`nc -vz -w 5 209.97.137.203 22`, **timed out** on the operator's Mac, and so
+did `ssh`; the two `curl`s through the absent tunnel returned `000`. The
+server's `sshd` is unchanged and listening (block A); **the operator's current
+network drops outbound port 22** — the same symptom this project met once
+before. `nc … 8099` from the same Mac was *refused*, so packets to the server
+do arrive; only 22 is filtered on the way out.
 
 ### 15.7 Run record
 
@@ -1273,6 +1336,18 @@ Then block B revision 2 runs as a single pass: step 1 uses the pre-placed
 tarball, step 2 verifies the existing image instead of rebuilding, step 4
 compares the columns correctly.
 
+**Block R — 15:41:26 UTC.** Found exactly the four objects (container Up 9
+minutes, network, volume, directory), removed them, renamed attempt 1's log,
+kept the image and the tarball; `diff` against every block A snapshot:
+containers, inspect, networks, volumes, iptables filter, iptables nat and
+listeners all **identical to before**; images: one addition,
+`dnb-staging-php:8.3|2f90bacee952`.
+
+**Block B, attempt 2 (revision 2) — 15:41:35 UTC — `STAGE 1 DEPLOYED`.**
+Steps 0–10 as §15.6 records. Step 1 used the pre-placed tarball; step 2
+verified the existing image (PHP 8.3.33, `json openssl pdo_pgsql`); step 4's
+check read `f|f|t|t`.
+
 #### 15.7.1 Block R — remove attempt 1's four objects (run before block B revision 2)
 
 ```sh
@@ -1321,3 +1396,63 @@ DNB_RESET
 ```
 
 Block C (§15.4) is unchanged.
+
+### 15.8 Public access requested — STAGE 2, NOT started
+
+Immediately after block B's `STAGE 1 DEPLOYED` line the operator wrote:
+*"make it avaible publically accessable."* Recorded as a **stage-2 request**.
+Nothing was done about it, for three reasons that are each sufficient:
+
+1. The stage-1 approval said *"Do not expose the portal publicly"*, *"do NOT
+   create the staging hostname, DNS, or modify Traefik"*, and *"if any
+   deployment step would require modifying an existing production service or
+   boundary, STOP and report it instead of improvising."* Public access
+   requires **Traefik** (a file under EasyPanel's `/etc/easypanel/traefik/config/`)
+   and **DNS** — both production boundaries.
+2. The identity the panel runs is the **development identity, which has no
+   credential**: anyone who can reach the port can sign in as `admin`. §6 and
+   §10 make an **IP allow-list and HTTP basic auth in front** mandatory before
+   any hostname exists. Publishing 8099 on the public address, with or without
+   a hostname, would hand the Admin panel to the Internet, and the API is
+   PHP's built-in server, which its own file says does not belong on a public
+   interface.
+3. Stage 2 has open questions §6 could not answer without reading Traefik's
+   dynamic configuration: the entrypoint and certificate-resolver names in
+   `main.yaml`, and **how a non-swarm container is addressed** — Traefik runs
+   as a swarm task and cannot reach the host's loopback, so `127.0.0.1:8099`
+   is not a valid backend for it; `uisp.yaml` (UISP's nginx is also a plain
+   container) is the precedent to copy. Reading those files is a read-only
+   step that itself waits for stage-2 approval (§1.3).
+
+**The zero-change alternative that gives access today:** the block C failure
+is on the Mac's side. From any network that allows outbound port 22 — a phone
+hotspot is the usual one — block C works as written and the panel is reachable
+at `http://127.0.0.1:8099/` within a minute, with nothing changed on the
+server.
+
+**What stage 2 would consist of, if approved (from §6; each item its own
+line so it can be approved or struck):**
+
+| # | Item | Who / what |
+|---|---|---|
+| S2-1 | read-only paste of `/etc/easypanel/traefik/config/main.yaml`, `uisp.yaml`, `traefik-mail.yml` (any `users:` hash line redacted) | operator; answers the entrypoint, resolver and backend-addressing questions |
+| S2-2 | DNS `A` record `portal-staging.dishnetuganda.com → 209.97.137.203` (AAAA is a separate decision; Traefik listens on IPv6 too) | operator, at the DNS provider |
+| S2-3 | the API re-published on an address Traefik's container can reach, chosen from S2-1's precedent — the loopback publish stays or goes accordingly; **never `0.0.0.0`** | one `docker rm` + `docker run` of `dnb-staging-api` with `DN_PORTAL_ORIGIN=https://portal-staging.dishnetuganda.com` |
+| S2-4 | one Traefik file-provider YAML: router `Host(\`portal-staging.dishnetuganda.com\`)` on the HTTPS entrypoint with the existing ACME resolver → the S2-3 backend; middlewares **`ipAllowList`** (the operator's public address or addresses) **and `basicAuth`** (one user, password generated on the server and shown once, stored as a hash), plus security headers | one new file under EasyPanel's directory; `main.yaml` untouched |
+| S2-5 | verification from outside: the hostname answers 401 to the wrong address and to no credentials, the panel to the right address with credentials; `nc … 8099` still refused | operator + this record |
+| S2-6 | **deferred unless the audience widens beyond the operator:** replace `php -S` with nginx + php-fpm (§6, §10) | a new image and container; not needed while the allow-list limits callers to one person |
+| S2-7 | rollback: delete the YAML file, delete the DNS record, re-run the S2-3 container with the loopback publish | — |
+
+**Inputs needed before any of it can be written in executable form:** an
+explicit approval naming the items above; the S2-1 paste; the public
+address(es) to allow (`dig +short myip.opendns.com @resolver1.opendns.com`
+on the Mac gives the current one — a changing address makes S2-4's allow-list
+brittle and is itself a decision); and the basic-auth username.
+
+**Two read-only lines for the operator now**, independent of stage 2 — from
+the Mac (the API is up this time) and on the server:
+
+```sh
+nc -vz -w 5 209.97.137.203 8099        # Mac: must still be refused now that the API is running
+docker exec dnb-staging-postgres psql -U postgres -d dnb -Atc "select kind, state, attempts, coalesce(last_error,'-') from mt_intents order by created_at"   # server: expect 3 voucher.publish confirmed, 3 device.provision retrying or failed with 'device has no management address recorded'
+```
