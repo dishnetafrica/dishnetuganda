@@ -173,12 +173,19 @@ curl -fsSL -o /root/dnb-redeploy.sh https://raw.githubusercontent.com/dishnetafr
 | Step | What it does | If it fails |
 |---|---|---|
 | 0 | read-only checks; reads which staff identity the API runs; refuses if `DN_ALLOW_REAL_BINDINGS` is set anywhere | stops, nothing changed |
-| 1 | builds the artifact **on the server** from the public branch; refuses unless the content digest is `780023ff…`; checks the census file is the reviewed one | stops, nothing changed |
+| 1 | builds the artifact **on the server** from the reviewed commit **`83edb98`**, fetched by its hash; refuses unless the content digest is `780023ff…`; checks the census file is the reviewed one | stops, nothing changed |
 | 2 | **GATE 1 re-taken:** the census as `dnb_adminapi` must read **CLEAR**; the new build's doctor must report no blocker, in production posture | stops, nothing changed, and prints the census lines that matter |
 | 3 | swaps the tree (the previous one is kept) and runs the installer, which applies only 029 | if 029 refuses, **the previous tree is put back** and no container is restarted |
 | 4 | **verifies independently:** the key validated, the UNIQUE present, both single-column keys kept, FORCE on both tables; the census again, CLEAR over a visible estate; through the projections as `dnb_adminapi`, sites seen and none crossing; an **execution test** as `dnb_app` in a transaction that is always rolled back — own site accepted, a site on another operator's service refused by name — and residue 0 | stops with the reason |
 | 5 | restarts **only** the API and worker containers; checks loopback and the hostname; asserts no other container changed | stops with the reason |
 | 6 | one result line | — |
+
+**Why a pinned commit and not the branch tip.** The script used to build
+whatever the branch tip was. Any later push, such as the step-3 work that
+follows this document, would then change the build and make the operator's
+command refuse on the digest. The commit is now fetched by its hash, which
+GitHub serves both to `git fetch` and as a tarball (both measured), so the
+command stays valid however far the branch moves on.
 
 It prints no secret, so its whole output may be pasted back. It touches no
 production container, Traefik file, DNS record, firewall rule or other
@@ -199,9 +206,14 @@ route, and the API switched to the real staff login **by the real
 `dnb-staging-staff-login.sh`**. Only `docker` is faked; every database is real
 PostgreSQL, and the build is fetched from a clone of the committed branch.
 
+Before any scenario, the harness **moves the branch on**: it pushes a later
+commit that changes a packaged file, and asserts that the new tip no longer
+builds the reviewed digest. Every scenario therefore runs against a branch
+that has moved past the reviewed commit, as the real one will.
+
 | Scenario | What is asserted |
 |---|---|
-| **R1** staging now | exit 0; census CLEAR before; doctor in production posture with no blocker; the installer applies exactly 029; ledger 29; catalogue `1|1|2|true`; census CLEAR after; projections show sites and none crossing; the execution test refused by name with the control accepted and residue 0; loopback and hostname answer as the real provider; exactly the API and worker changed; the previous tree kept; no container created or removed |
+| **R1** staging now | exit 0; the pinned commit was built, not the tip; census CLEAR before; doctor in production posture with no blocker; the installer applies exactly 029; ledger 29; catalogue `1|1|2|true`; census CLEAR after; projections show sites and none crossing; the execution test refused by name with the control accepted and residue 0; loopback and hostname answer as the real provider; exactly the API and worker changed; the previous tree kept; no container created or removed |
 | **R2** run again | exit 0; notes the build is already deployed; *schema already current*; verification passes again |
 | **R5** wrong digest pinned | refused before anything changes; no new tree, ledger 28, no restart |
 | **R3** a cross-operator site exists | census **BLOCKED(1)**; stops with *nothing was changed*; no installer run, no restart; ledger 28, no key, FORCE on |
@@ -213,15 +225,17 @@ The counts are in §F.1.
 
 ### F.1 Counts
 
-**67 of 67 passed**, on the second full run. The first run passed 65 of 66: the
-harness's own race check looked for an `UPDATE 1` line that its quiet `psql`
-never printed, while the race itself had happened, as 029's refusal showed. The
-check was corrected and a second assertion added — the violating row is still
-there afterwards.
+**69 of 69 passed** on the final run, with the branch moved past the reviewed
+commit. Two earlier runs are part of the record. The first passed 65 of 66:
+the harness's own race check looked for an `UPDATE 1` line that its quiet
+`psql` never printed, while the race itself had happened, as 029's refusal
+showed; the check was corrected and a second assertion added. The second run
+passed 67 of 67 before the commit pin existed.
 
 | Scenario | Assertions |
 |---|---|
-| R1 staging now | 28 |
+| setup: the branch tip no longer builds the reviewed digest | 1 |
+| R1 staging now | 29 |
 | R2 second run | 5 |
 | R5 wrong digest | 4 |
 | R3 violation before the run | 7 |

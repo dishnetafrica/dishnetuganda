@@ -64,11 +64,21 @@ violate() {   # one site of one operator pointed at another operator's service â
         WHERE id = (SELECT id FROM mt_sites ORDER BY id LIMIT 1)" > /dev/null
 }
 
-echo "== setup: the 028 build and a bare clone of the committed branch"
+PIN=$(grep -m1 '^COMMIT=' "$SCRIPT" | cut -d= -f2)
+echo "== setup: the 028 build, a bare clone of this repository, and a branch that has MOVED ON since review"
 build028
 rm -rf "$HSIM/remote"; mkdir -p "$HSIM/remote"
 git clone -q --bare "$REPO" "$HSIM/remote/dishnetuganda.git"
-echo "   remote head: $(git -C "$HSIM/remote/dishnetuganda.git" rev-parse --short claude/study-this-jhe2eg)"
+git -C "$HSIM/remote/dishnetuganda.git" cat-file -e "$PIN^{commit}" || { echo "the pinned commit $PIN is not in this repository"; exit 1; }
+# A later commit on the branch that changes a packaged file: the command must still build the pinned commit.
+W=$HSIM/remote/work; git clone -q -b claude/study-this-jhe2eg "$HSIM/remote/dishnetuganda.git" "$W"
+echo "// a later change on the branch (redeploy harness)" >> "$W/dishnet-hybrid-sudan/dishnet-mikrotik-control-plane/src/autoload.php"
+git -C "$W" -c user.email=harness@localhost -c user.name=harness commit -qam "a later change on the branch"
+git -C "$W" push -q origin claude/study-this-jhe2eg
+sh "$W/dishnet-hybrid-sudan/dishnet-mikrotik-control-plane/plugin/bin/package.sh" "$HSIM/remote/tipdist" > /dev/null 2>&1
+mkdir -p "$HSIM/remote/tipx"; tar -xzf "$HSIM"/remote/tipdist/*.tar.gz -C "$HSIM/remote/tipx" --strip-components=1
+echo "   pinned $PIN; branch tip now $(git -C "$HSIM/remote/dishnetuganda.git" rev-parse --short claude/study-this-jhe2eg)"
+check "the branch tip no longer builds the reviewed digest" bash -c "[ \"\$(sha256sum $HSIM/remote/tipx/SHA256SUMS | cut -d' ' -f1)\" != $D029 ]"
 
 echo; echo "== R1 the staging state now (real staff login, ledger 28): redeploy applies 029 and verifies it"
 fresh real
@@ -78,6 +88,7 @@ check "precondition: the API runs the real provider" has "$S/api.env" '^DN_STAFF
 redeploy r1; L=$HSIM/r1.log
 check "exit 0"                                       has "$L" '^EXIT=0$'
 check "API identity detected as the real login"      has "$L" '^API identity: the real DishNet staff login'
+check "the pinned commit was built, not the tip"     has "$L" "^$PIN\$"
 check "digest refused nothing: artifact-ok"          has "$L" "^artifact-ok: .*content digest $D029"
 check "census before: CLEAR"                         has "$L" '^census before the migration: CLEAR, [1-9][0-9]* row'
 check "doctor in production posture, no blocker"     has "$L" '^doctor \(production posture\): no blocker'

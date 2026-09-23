@@ -7,8 +7,9 @@
 #
 # GATE 2 of docs/107, in the order docs/79 §7b sets, each step its own evidence:
 #   0  read-only checks: stage 1 healthy; which staff identity the API runs.
-#   1  build the artifact ON THIS SERVER from the public branch; refuse unless
-#      its content digest is the reviewed one. Nothing live changes.
+#   1  build the artifact ON THIS SERVER from the reviewed commit, fetched by
+#      its hash, so a later push to the branch cannot change what is built;
+#      refuse unless its content digest is the reviewed one. Nothing live changes.
 #   2  read-only again: the census as dnb_adminapi must read CLEAR (GATE 1,
 #      re-taken minutes before the migration), and the new build's doctor
 #      must report no blocker. Anything else stops here with nothing changed.
@@ -42,6 +43,9 @@ IMG=dnb-staging-php:8.3
 # redeploy). It cannot change what is deployed: the digest below decides.
 REPO=${DNB_REDEPLOY_REPO:-https://github.com/dishnetafrica/dishnetuganda}
 BRANCH=claude/study-this-jhe2eg
+# The reviewed commit on that branch (docs/124 §E). Fetched by its hash, never as
+# "the branch tip": the branch moves on, this build does not.
+COMMIT=83edb9875f88c09ffe9c752d7c8fe196f3cd770c
 CP=dishnet-hybrid-sudan/dishnet-mikrotik-control-plane
 HOST=portal-staging.dishnetuganda.com
 # Content digest of the reviewed build = sha256 of the archive's SHA256SUMS (docs/124 §D).
@@ -113,16 +117,20 @@ echo "migrations before: $before_n (last $before_last)"
 [ "$(code http://127.0.0.1:8099/)" = 200 ] || fail "the panel does not answer 200 on 127.0.0.1:8099"
 echo "ok: stage 1 is healthy"
 
-step "1/6 build the artifact on this server from $BRANCH and check its content digest"
+step "1/6 build the artifact on this server from commit ${COMMIT%${COMMIT#????????????}} of $BRANCH and check its content digest"
 SRC="$EV/src-$TS"
 install -d "$SRC"
 if command -v git >/dev/null 2>&1; then
-  git clone -q --depth 1 --branch "$BRANCH" "$REPO.git" "$SRC"
-  ( cd "$SRC" && git rev-parse HEAD ) | tee "$EV/redeploy-$TS.commit"
+  git init -q "$SRC"
+  git -C "$SRC" fetch -q --depth 1 "$REPO.git" "$COMMIT"
+  git -C "$SRC" checkout -q FETCH_HEAD
+  head=$(git -C "$SRC" rev-parse HEAD)
+  [ "$head" = "$COMMIT" ] || fail "fetched $head, not the reviewed commit $COMMIT — nothing was changed"
+  echo "$head" | tee "$EV/redeploy-$TS.commit"
 else
-  curl -fsSL "https://codeload.github.com/dishnetafrica/dishnetuganda/tar.gz/refs/heads/$BRANCH" \
+  curl -fsSL "https://codeload.github.com/dishnetafrica/dishnetuganda/tar.gz/$COMMIT" \
     | tar -xz -C "$SRC" --strip-components=1
-  echo "branch tarball of $BRANCH (no git on this host)" | tee "$EV/redeploy-$TS.commit"
+  echo "tarball of commit $COMMIT (no git on this host)" | tee "$EV/redeploy-$TS.commit"
 fi
 sh "$SRC/$CP/plugin/bin/package.sh" "$EV/dist-$TS" | sed -n '1,4p'
 ART=$(ls "$EV/dist-$TS"/*.tar.gz | head -1)

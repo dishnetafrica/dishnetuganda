@@ -2833,8 +2833,10 @@ tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
   the projections, and an **execution test as `dnb_app` in a transaction that is
   always rolled back** (own site accepted, cross-operator site refused by name,
   residue 0); then only the API and worker restart. The API keeps the real staff
-  login. Rehearsed in `scripts/harness/redeploy/` — six scenarios plus three
-  broken copies of the script, each caught.
+  login. **It builds the reviewed commit `83edb98`, fetched by its hash — never
+  the branch tip**, so later pushes (step 3) cannot break the operator's command.
+  Rehearsed in `scripts/harness/redeploy/` with the branch moved on: **69/69**,
+  six scenarios plus three broken copies of the script, each caught.
 - **A local fault, not a product one:** two sandbox processes from the `docs/122`
   harness held ports 8099 and 443 and made the install test fail 12 of 85. The
   redeploy harness stops both at exit. **Check for stray harness servers before
