@@ -1243,7 +1243,7 @@ tenant-visible audit rows), the API answering after 1 s, the worker reporting
 | all three containers healthy | `dnb-staging-postgres` Up (accepting connections), `dnb-staging-api` Up (`GET /` → 200 after 1 s), `dnb-staging-worker` Up (`running`, binding line printed); memory 38 MiB + 8.5 MiB + 5.4 MiB |
 | PostgreSQL reachable only through the Domain-B network | `PortBindings={}`; no host listener on 5432; `pg_isready` from `dnb-staging` by name → **accepting connections**; from the default bridge to `172.22.0.2` → **no response**; from `dnb-staging` to `dn-phase0-postgres 172.21.0.2` and `unms-postgres 172.18.251.136` → **no response** |
 | API answers on 127.0.0.1:8099 | `/` 200 · `/api/v1/admin/health` 401 · `/api/v1/admin/session` 401 with `{"provider":"DEVELOPMENT-ONLY","can_authenticate":true,"mode":"development","roles":["admin","noc","sales","support"]}` · `/api/v1/admin/routers` 401 · `/../src/Db/Database.php` 404 · `/plugin/plugin.json` 404 |
-| 8099 not publicly reachable | `ss`: one listener, `127.0.0.1:8099` (`docker-proxy`), nothing on `0.0.0.0` or `[::]`; the nat rule is `-A DOCKER -d 127.0.0.1/32 … --dport 8099 -j DNAT --to-destination 172.22.0.3:8099`; from the Mac `nc 209.97.137.203 8099` → *Connection refused* — **but that probe ran before block B, when nothing listened; §15.8 asks for it again now** |
+| 8099 not publicly reachable | `ss`: one listener, `127.0.0.1:8099` (`docker-proxy`), nothing on `0.0.0.0` or `[::]`; the nat rule is `-A DOCKER -d 127.0.0.1/32 … --dport 8099 -j DNAT --to-destination 172.22.0.3:8099`; from the Mac `nc 209.97.137.203 8099` → *Connection refused* (before block B, when nothing listened); **repeated after deployment, this time on the server itself: `nc -vz 209.97.137.203 8099` → *Connection refused*** while `curl http://127.0.0.1:8099/` on the same host answers 200 — same host, same moment, only the address differs, so the listener is loopback-only. Docker's nat `OUTPUT` sends locally-originated packets to a LOCAL address through the `DOCKER` chain, whose only 8099 rule matches `-d 127.0.0.1/32`, so the public address reaches the host stack, where nothing listens |
 | worker in simulated mode | `{"worker":"…:1:simulated-routeros","bindings":{"delivery_binding":"simulated-routeros","delivery_simulated":true,"delivery_configured":"simulated","publisher_binding":"null","publisher_simulated":true,"real_bindings_allowed":false,"phase":"F6-A"}}` |
 | migrations end at 027 | `27 applied, last: 027_operator_staff_capabilities.sql`; **16** `dnb*` roles (owner + 7 login + 8 definer); the only superuser is the instance's `postgres`; databases `dnb`, `postgres`; `mt_staff` **0 rows** (no `staff:bootstrap`); non-`SIM-` devices **0** |
 | production containers healthy | all 20 pre-existing containers `running`, `StartedAt` 15, 16 and 19 September unchanged, `restarts=0`; *status/StartedAt/RestartCount changed* → **empty** |
@@ -1273,7 +1273,10 @@ Two facts the run adds to the record:
   the simulator's estate predating G-C's address rule, not a deployment
   fault**, and nothing reached a router. Verify with the read-only query in
   §15.8. Recorded here as a simulator finding for a later instruction; not
-  changed now.
+  changed now. **Measured 2026-09-23 (the §15.8 query, run by the
+  operator):** `voucher.publish|confirmed|1|-` three times and
+  `device.provision|failed|5|device has no management address recorded`
+  three times — exactly the prediction, including the five attempts.
 
 The 41 audit rows are the simulator's acts (27 tenant-visible plus the
 staff-actor creation rows its own count does not see) and the worker's three
@@ -1450,7 +1453,10 @@ on the Mac gives the current one — a changing address makes S2-4's allow-list
 brittle and is itself a decision); and the basic-auth username.
 
 **Two read-only lines for the operator now**, independent of stage 2 — from
-the Mac (the API is up this time) and on the server:
+the Mac (the API is up this time) and on the server. **Both were run
+2026-09-23; the operator ran the `nc` line on the server rather than the Mac,
+which is a valid negative with `curl 127.0.0.1:8099 → 200` on the same host as
+its positive control (§15.6). Results recorded in §15.6.**
 
 ```sh
 nc -vz -w 5 209.97.137.203 8099        # Mac: must still be refused now that the API is running

@@ -2494,8 +2494,12 @@ runs first; only the package side was measured from the repository.
   `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and
   reach `failed` after five attempts with no `intent.failed` audit row (the
   retryable-exhausted path in `IntentWorker::handle` audits nothing). The three
-  `voucher.publish` intents confirm through `SimulatedRouterOs`. Recorded for a
-  later instruction; unchanged.
+  `voucher.publish` intents confirm through `SimulatedRouterOs`. **Measured on
+  the staging database: 3 × `voucher.publish|confirmed|1`, 3 ×
+  `device.provision|failed|5|device has no management address recorded`.**
+  Recorded for a later instruction; unchanged. The post-deployment probe of
+  `209.97.137.203:8099` was *refused* on the server itself while
+  `127.0.0.1:8099` answered 200 there — loopback-only, proved.
 
 ## Open and parked
 
