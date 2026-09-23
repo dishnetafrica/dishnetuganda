@@ -8,8 +8,13 @@
  */
 import { Session, renderGate, L } from './login.js';
 import { AdminApi, S, cohort, COHORT_LABEL, contactAge, evidenceLevel } from './api.js';
+import { StaffApi, AccountApi } from './staff.js';
 
 const api = new AdminApi();
+/* The identity plane has its own client (staff.js) so that api.js stays
+ * estate read-only and a test can keep saying so. */
+const staffApi = new StaffApi();
+const accountApi = new AccountApi();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const short = id => id ? String(id).slice(0, 8) : '—';
@@ -32,6 +37,8 @@ export const NAV = [
   { id: 'batches',     label: 'Batches' },
   { sec: 'Administration' },
   { id: 'audit',       label: 'Audit log' },
+  { id: 'staff',       label: 'DishNet staff' },
+  { id: 'account',     label: 'My account' },
 ];
 
 const state = { view: 'routers', arg: null, health: null, q: '', cohortFilter: null };
@@ -45,7 +52,7 @@ const state = { view: 'routers', arg: null, health: null, q: '', cohortFilter: n
 function stateBlock(res, noun) {
   const m = {
     [S.EMPTY]:        [`No ${noun} yet`, `The estate contains no ${noun}. This is a real count, not a failure.`],
-    [S.UNAUTHORIZED]: ['Not signed in',  'No staff identity was accepted. A staff identity provider has not been selected yet, so the default binding admits nobody.'],
+    [S.UNAUTHORIZED]: ['Not signed in',  'No staff identity was accepted for this request. Where no identity provider is bound the default binding admits nobody; otherwise the session has ended.'],
     [S.FORBIDDEN]:    ['Not permitted',  `Your role does not include the capability this screen needs${res.data && res.data.capability ? ' (' + esc(res.data.capability) + ')' : ''}.`],
     [S.UNAVAILABLE]:  ['Not available',  'The backend cannot answer this yet. This is not an empty estate.'],
     [S.OFFLINE]:      ['No response',    'The request did not reach the server. Nothing is known about the estate right now.'],
@@ -476,11 +483,128 @@ async function vDashboard() {
      assert that any router was contacted just now.</div>`;
 }
 
+/* -------------------------------------------------------------------------
+ * IDENTITY PLANE — DishNet staff (Admin only) and the signed-in person's own
+ * account. Everything here goes through staff.js; nothing here reads or writes
+ * the estate. A generated password is rendered ONCE from the response and is
+ * kept by nothing on this page.
+ * ---------------------------------------------------------------------- */
+const ROLES = ['admin', 'noc', 'sales', 'support'];
+const once = { text: null };   // the last one-time value to show, cleared on the next render
+
+function onceBox() {
+  if (!once.text) return '';
+  const t = once.text; once.text = null;
+  return `<div class="once"><b>Shown once — it is stored nowhere and cannot be retrieved.</b>
+    <p>${esc(t.what)}</p><code>${esc(t.value)}</code></div>`;
+}
+
+function notice(res, fallback) {
+  const d = res && res.data;
+  if (res && res.status === 409 && d) return `<div class="msg err">${esc(d.detail || 'refused')}</div>`;
+  if (res && res.status === 403 && d && d.error === 'second_factor_required')
+    return `<div class="msg err">Set up your authenticator first (My account).</div>`;
+  if (res && res.status === 403) return `<div class="msg err">Your role does not carry ${esc(d && d.capability || 'this capability')}.</div>`;
+  if (res && res.status === 501) return `<div class="msg err">${esc(d && d.detail || 'not available under this identity provider')}</div>`;
+  if (res && res.status >= 400) return `<div class="msg err">${esc(fallback || ('the server answered ' + res.status))}</div>`;
+  return '';
+}
+const pending = { msg: '' };
+
+function radios(name, current) {
+  return `<span class="radios">${ROLES.map(r => `<label><input type="radio" name="${esc(name)}"
+    value="${esc(r)}" ${r === current ? 'checked' : ''}> ${esc(r)}</label>`).join('')}</span>`;
+}
+
+async function vStaff() {
+  const res = await staffApi.list();
+  if (res.state !== 'ok' && res.state !== 'empty') {
+    const map = { unauthorized: S.UNAUTHORIZED, forbidden: S.FORBIDDEN, unavailable: S.UNAVAILABLE,
+                  offline: S.OFFLINE, failed: S.FAILED };
+    return head('DishNet staff') + stateBlock({ state: map[res.state] || S.FAILED, status: res.status, data: res.data }, 'staff');
+  }
+  const me = session.identity ? session.identity.subject : '';
+  const msg = pending.msg; pending.msg = '';
+  const form = `<form class="sform" data-sform="create">
+    <h3>Add a DishNet staff member</h3>
+    <label>Username <input name="username" autocapitalize="none" pattern="[a-z0-9][a-z0-9._-]{1,62}" required></label>
+    <label>Display name <input name="display_name" required></label>
+    <label>Role ${radios('role', 'support')}</label>
+    <button class="btn" type="submit">Create</button>
+    <small>The password is generated and shown once. The new person should change it and set up an
+      authenticator on first sign-in.</small></form>`;
+  const rows = res.rows.map(x => `<tr>
+    <td class="mono">${esc(x.username)}${x.username === me ? ' <span class="pill">you</span>' : ''}</td>
+    <td>${esc(x.display_name)}</td>
+    <td><span class="pill">${esc(x.role)}</span></td>
+    <td><span class="pill ${x.status === 'disabled' ? 'failed' : ''}">${esc(x.status)}</span></td>
+    <td>${x.totp_enrolled ? 'enrolled' : '<span class="muted">not yet</span>'}</td>
+    <td class="mono">${esc(String(x.last_login_at || '').slice(0, 16).replace('T', ' ')) || '—'}</td>
+    <td class="acts">
+      ${x.status === 'active'
+        ? `<button class="btn small" data-sact="disable" data-id="${esc(x.id)}" ${x.username === me ? 'disabled aria-disabled="true" title="you cannot disable yourself"' : ''}>Disable</button>`
+        : `<button class="btn small" data-sact="enable" data-id="${esc(x.id)}">Enable</button>`}
+      <button class="btn small" data-sact="pw" data-id="${esc(x.id)}">New password</button>
+      <button class="btn small" data-sact="totp" data-id="${esc(x.id)}" ${x.totp_enrolled ? '' : 'disabled aria-disabled="true" title="no authenticator to clear"'}>Clear authenticator</button>
+      <span class="rolechange">${ROLES.filter(r => r !== x.role).map(r =>
+        `<button class="btn small ghost" data-sact="role" data-role="${esc(r)}" data-id="${esc(x.id)}">→ ${esc(r)}</button>`).join('')}</span>
+    </td></tr>`).join('');
+  return head('DishNet staff', `${res.rows.length}`) +
+    `<div class="note">DishNet's own people, who sign in here. Operators and their staff are a
+      different plane (Operators &amp; sites) and never appear in this list. Disabling a person
+      ends their live sessions at once; so does changing their role or their password.</div>` +
+    msg + onceBox() + form +
+    (res.rows.length
+      ? `<div class="tw"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th>
+          <th>Authenticator</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="stateblock empty"><h3>No staff yet</h3><p>The first administrator is created on the server with
+          <code>plugin.php staff:bootstrap</code>.</p></div>`);
+}
+
+async function vAccount() {
+  const id = session.identity || {};
+  const sf = id.second_factor || {};
+  const real = id.provider === 'dishnet';
+  const msg = pending.msg; pending.msg = '';
+  const kv = [['Signed in as', id.subject], ['Role', id.role], ['Identity provider', id.provider],
+              ['Authenticator', real ? (sf.enrolled ? 'enrolled' : 'not set up') : 'not applicable']];
+  let body = `<div class="kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v ?? '—')}</dd></div>`).join('')}</div>`;
+  if (!real) {
+    body += `<div class="note">This is the development identity: it has no password to change and
+      no authenticator to set up. Under the real provider this screen manages both.</div>`;
+  } else {
+    if (!sf.enrolled) {
+      body += session.enrolment
+        ? `<div class="sform"><h3>Authenticator setup</h3>${enrolMarkup(session.enrolment)}
+            <form data-sform="confirm"><label>Code from the app <input name="code" inputmode="numeric"
+              pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
+            <button class="btn" type="submit">Confirm</button></form></div>`
+        : `<div class="sform"><h3>Authenticator</h3><p>Not set up. Any time-based authenticator app works.</p>
+            <button class="btn" data-sact="enrol">Begin setup</button></div>`;
+    }
+    body += `<form class="sform" data-sform="pw"><h3>Change password</h3>
+      <label>Current <input name="current" type="password" autocomplete="current-password" required></label>
+      <label>New (12 characters or more) <input name="replacement" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button class="btn" type="submit">Change</button>
+      <small>Every other session of yours is ended when it changes; this one continues.</small></form>`;
+  }
+  return head('My account') + msg + body +
+    `<div class="note"><a class="lnk" data-act="signout">Sign out</a> — ends this session on the server, not just in this tab.</div>`;
+}
+
+function enrolMarkup(e) {
+  return `<div class="lg-key"><span>Account</span><b>${esc(e.account)}</b>
+    <span>Setup key</span><b class="mono">${esc(String(e.key).replace(/(.{4})/g, '$1 ').trim())}</b>
+    <span>Or paste</span><b class="mono small">${esc(e.uri)}</b></div>
+    <p class="muted">Shown once. An administrator can clear it later if the device is lost.</p>`;
+}
+
 const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, plans: vPlans,
                 vouchers: vVouchers, batches: vBatches, sessions: vSessions,
                 intents: vIntents, audit: vAudit, dashboard: vDashboard,
                 network: vNetwork, diagnostics: vDiagnostics,
-                hotspot: vHotspot, voucher: vVoucher };
+                hotspot: vHotspot, voucher: vVoucher,
+                staff: vStaff, account: vAccount };
 
 function head(title, sub) {
   return `<div class="appbar"><h1>${esc(title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</h1></div>`;
@@ -502,6 +626,11 @@ export async function render() {
     : `<a class="navitem ${state.view === n.id ? 'on' : ''}" data-view="${n.id}">${esc(n.label)}</a>`
   ).join('');
   document.getElementById('evidence').innerHTML = banner();
+  const who = document.getElementById('who');
+  if (who) {
+    const id = session.identity;
+    who.innerHTML = id ? `<b>${esc(id.subject)}</b> · ${esc(id.role)}<a class="lnk" data-act="signout">Sign out</a>` : '';
+  }
   const view = VIEWS[state.view] || vRouters;
   document.getElementById('main').innerHTML = '<div class="stateblock loading"><h3>Loading…</h3></div>';
   document.getElementById('main').innerHTML = await view();
@@ -527,6 +656,56 @@ function wire() {
     q.onkeyup = e => { if (e.key === 'Enter' || state.q === '') render(); };
     q.onsearch = () => render();
   }
+  document.querySelectorAll('[data-act="signout"]').forEach(a => a.onclick = async () => {
+    await session.logout(); paintGate();
+  });
+  wireIdentity();
+}
+
+/* The identity-plane controls. Each answer is re-rendered from the server's
+ * reply; nothing here assumes an act succeeded. */
+function wireIdentity() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status < 300 ? (ok ? `<div class="msg ok">${esc(ok)}</div>` : '') : notice(res);
+    render();
+  };
+  document.querySelectorAll('[data-sact]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.id;
+    switch (b.dataset.sact) {
+      case 'disable': return after(await staffApi.disable(id), 'Disabled; their sessions are ended.');
+      case 'enable':  return after(await staffApi.enable(id), 'Enabled.');
+      case 'role':    return after(await staffApi.setRole(id, b.dataset.role), 'Role changed; their sessions are ended.');
+      case 'totp':    return after(await staffApi.clearTotp(id), 'Authenticator cleared; they will set up a new one at next sign-in.');
+      case 'pw': {
+        const r = await staffApi.newPassword(id);
+        if (r.status === 200 && r.data) { once.text = { what: 'New password for this person:', value: r.data.password }; }
+        return after(r, '');
+      }
+      case 'enrol': {
+        await session.enrol();
+        pending.msg = session.enrolment ? '' : `<div class="msg err">${esc(session.detail || 'could not begin')}</div>`;
+        return render();
+      }
+    }
+  });
+  document.querySelectorAll('form[data-sform]').forEach(f => f.onsubmit = async ev => {
+    ev.preventDefault();
+    const fields = Object.fromEntries(new FormData(f));
+    switch (f.dataset.sform) {
+      case 'create': {
+        const r = await staffApi.create(fields);
+        if (r.status === 201 && r.data) { once.text = { what: `Password for ${r.data.staff.username}:`, value: r.data.password }; }
+        return after(r, '');
+      }
+      case 'pw':      return after(await accountApi.changePassword(fields), 'Password changed. Your other sessions are ended.');
+      case 'confirm': {
+        await session.confirm(fields.code);
+        pending.msg = session.detail ? `<div class="msg err">${esc(session.detail)}</div>` : `<div class="msg ok">Authenticator confirmed.</div>`;
+        return render();
+      }
+    }
+  });
 }
 
 /**
@@ -553,10 +732,32 @@ function paintGate() {
   gate.querySelectorAll('[data-act="login"]').forEach(b => {
     b.onclick = async () => {
       paintGateBusy();
-      await session.login(b.dataset.role);
+      await session.login({ role: b.dataset.role });
       if (!paintGate()) { await boot(); }
     };
   });
+  const creds = gate.querySelector('form[data-act="credentials"]');
+  if (creds) {
+    creds.onsubmit = async ev => {
+      ev.preventDefault();
+      const fields = Object.fromEntries(new FormData(creds));
+      paintGateBusy();
+      await session.login(fields);
+      if (!paintGate()) { await boot(); }
+    };
+  }
+  const enrol = gate.querySelector('[data-act="enrol"]');
+  if (enrol) { enrol.onclick = async () => { await session.enrol(); paintGate(); }; }
+  const confirm = gate.querySelector('form[data-act="confirm"]');
+  if (confirm) {
+    confirm.onsubmit = async ev => {
+      ev.preventDefault();
+      await session.confirm(Object.fromEntries(new FormData(confirm)).code);
+      if (!paintGate()) { await boot(); }
+    };
+  }
+  const signout = gate.querySelector('[data-act="signout"]');
+  if (signout) { signout.onclick = async () => { await session.logout(); paintGate(); }; }
   const back = gate.querySelector('[data-act="back"]');
   if (back) { back.onclick = async () => { await session.refresh(); if (!paintGate()) { await boot(); } }; }
   return true;

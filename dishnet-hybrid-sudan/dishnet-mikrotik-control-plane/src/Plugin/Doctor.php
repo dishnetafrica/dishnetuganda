@@ -74,7 +74,7 @@ final class Doctor
         $r = [];
         foreach ([
             'environment', 'configuration', 'files', 'database',
-            'schema', 'credentials', 'cohabitation', 'exposure',
+            'schema', 'credentials', 'cohabitation', 'exposure', 'identity',
         ] as $group) {
             foreach ($this->{$group}() as $row) { $r[] = $row; }
         }
@@ -154,9 +154,10 @@ final class Doctor
     private function database(): array
     {
         $r = [];
-        foreach (['owner' => 'owner', 'adminapi' => 'Admin read role'] as $role => $label) {
+        foreach (['owner' => 'owner', 'adminapi' => 'Admin read role', 'staffauth' => 'staff authentication role']
+                 as $role => $label) {
             try {
-                $db = Database::{$role === 'owner' ? 'owner' : 'adminApi'}();
+                $db = Database::{['owner' => 'owner', 'adminapi' => 'adminApi', 'staffauth' => 'staffAuth'][$role]}();
                 $v  = (string) ($db->one('SHOW server_version')['server_version'] ?? '?');
                 $min = ltrim((string) ($this->manifest->requires['postgresql'] ?? '>=14'), '>=');
                 $ok  = version_compare(explode(' ', $v)[0], $min, '>=');
@@ -324,6 +325,67 @@ final class Doctor
             $r[] = $this->row('env.' . $key, $key,
                 !$set ? self::OK : ($this->disposable ? self::WARN : self::BLOCKER),
                 !$set ? 'unset' : 'SET — ' . $why);
+        }
+        return $r;
+    }
+
+    // ── who can sign in ─────────────────────────────────────────────────────
+    /**
+     * The staff identity provider is an explicit choice (docs/114 §G.8), and
+     * this reports the choice as made, not as intended. Three things it will
+     * not let pass quietly outside a disposable environment: the real provider
+     * with its second factor switched off (D-AUTH-5), the real provider beside
+     * the development gate (they refuse to coexist), and the real provider
+     * with nothing in front of PHP that terminates TLS (no session can be
+     * issued, and the engineer should learn that here rather than from a 403).
+     */
+    private function identity(): array
+    {
+        $r    = [];
+        $mode = trim(getenv('DN_STAFF_IDENTITY') ?: '');
+        $dev  = (getenv('DN_DEV_STAFF_IDENTITY') ?: '') !== '';
+        if ($mode === '') {
+            $r[] = $this->row('identity.provider', 'staff identity provider', self::WARN,
+                $dev ? 'DEVELOPMENT-ONLY — a fabricated identity; nobody real can sign in'
+                     : 'deny-all — nobody can sign in. Set DN_STAFF_IDENTITY=dishnet to bind the real provider');
+            return $r;
+        }
+        if ($mode !== 'dishnet') {
+            $r[] = $this->row('identity.provider', 'staff identity provider', self::BLOCKER,
+                "DN_STAFF_IDENTITY='{$mode}' is not a provider; the API refuses every request");
+            return $r;
+        }
+        $r[] = $this->row('identity.provider', 'staff identity provider',
+            $dev ? self::BLOCKER : self::OK,
+            $dev ? 'dishnet AND the development gate are both set — they refuse to coexist, so the API answers 500'
+                 : 'dishnet (migration 026): bcrypt + TOTP in PostgreSQL, revocable sessions');
+
+        $totp = strtolower(trim(getenv('DN_STAFF_REQUIRE_TOTP') ?: ''));
+        $r[] = $this->row('identity.totp', 'second factor',
+            in_array($totp, ['', 'yes'], true) ? self::OK
+                : ($totp === 'no' ? ($this->disposable ? self::WARN : self::BLOCKER) : self::BLOCKER),
+            in_array($totp, ['', 'yes'], true)
+                ? 'required — a password-only session may only enrol an authenticator'
+                : ($totp === 'no'
+                    ? 'DISABLED — mandatory before a public hostname (docs/114 D-AUTH-5)'
+                    : "DN_STAFF_REQUIRE_TOTP='{$totp}' is not yes or no; the API refuses every request"));
+
+        $proxy = trim(getenv('DN_TRUSTED_PROXY') ?: '');
+        $r[] = $this->row('identity.tls', 'TLS in front of PHP',
+            $proxy !== '' ? self::OK : self::WARN,
+            $proxy !== ''
+                ? 'X-Forwarded-Proto is believed from ' . $proxy . ' and from nobody else'
+                : 'DN_TRUSTED_PROXY unset — a session is issued only when PHP itself terminated TLS; '
+                  . 'behind a proxy every login answers 403 insecure_transport until this names it');
+
+        try {
+            $n = (int) (Database::adminApi()->one('SELECT count(*)::int c FROM mt_admin_staff()')['c'] ?? 0);
+            $r[] = $this->row('identity.staff', 'DishNet staff on record',
+                $n > 0 ? self::OK : self::WARN,
+                $n > 0 ? $n . ' staff row(s)' : 'none — run `plugin.php staff:bootstrap <username>` for the first administrator');
+        } catch (\Throwable) {
+            $r[] = $this->row('identity.staff', 'DishNet staff on record', self::SKIP,
+                'NOT MEASURED — no Admin read connection, or migration 026 not applied');
         }
         return $r;
     }

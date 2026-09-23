@@ -2011,16 +2011,17 @@ DishNet-owned, at DishNet's own URL.
   measurement), idempotent through `mt_idempotency(customer_id, key)` with
   the check before the mutation (RULE I-1). `POST /sites` waits for O-1;
   `disconnect` waits for the replay fix.
-- **Nothing is implemented.** `DenyAllIdentity` remains the production
-  binding, migrations end at 025, the preview artifact is a recording, and
-  the production census remains the handoff for O-1. Gates G-A…G-F and
-  decisions D-AUTH-1…7 are in `docs/114` §K–§L.
+- **Superseded by G-B (built, see the section below):** at the time of the
+  plan nothing was implemented and migrations ended at 025. `DenyAllIdentity`
+  is still the DEFAULT binding, the preview artifact is a recording, and the
+  production census remains the handoff for O-1. Gates G-A…G-F and decisions
+  D-AUTH-1…7 are in `docs/114` §K–§L; the build is recorded in `docs/114` §O.
 
 ## Multi-operator tenancy — ANALYSED, not decided (`docs/115`); D-AUTH SUSPENDED
 
 **D-AUTH-1…7 were measured and provisionally frozen (`docs/114` §M) and then
-SUSPENDED the same day, before any code.** Migrations still end at 025. Do not
-resume them without T-1 and T-8 of `docs/115` being answered.
+SUSPENDED the same day, before any code.** T-1 and T-8 were then answered
+(`docs/116`) and G-B was built (migration 026) — see the G-B section below.
 
 The product is **DishNet → Operators → Operator Staff → Locations → routers /
 HotSpot / plans / vouchers / sessions → guests**. A reference ISP portal was
@@ -2090,7 +2091,89 @@ copied, and the personal details on its pages are reproduced nowhere.
   because the `operator → staff` value rewrite touches existing rows.
 - **Sequence:** T-1 vocabulary pass → **G-B** (migration 026) → **027**
   (this model + principal grant closure + `mt_admin_principal_create` with
-  target operator) → G-C → B-3 → O-1. Nothing blocks G-B.
+  target operator) → G-C → B-3 → O-1. G-B is now BUILT (below); 027 is the
+  next step and has NOT been started.
+
+## G-B — DishNet Staff authentication is BUILT (migration 026); NOT bound by default
+
+**W-4 is closed in code and in the development schema; the production posture
+did not move.** `DenyAllIdentity` is still the default binding. A deployment
+binds the real provider explicitly with `DN_STAFF_IDENTITY=dishnet`, and that
+also needs TLS in front of PHP and a first administrator — G-D territory, not
+authorised. **Nothing is installed anywhere; migrations end at 026; no `027*`
+file exists; 027 / T-2 / B-3 / G-C / O-1 were NOT begun.** Full record:
+`docs/114` §O.
+
+- **Migration 026:** `mt_staff` + `mt_staff_sessions` **created under
+  `SET LOCAL ROLE dnb_def_staff`** (migration 015's default ACL would
+  otherwise hand `dnb_admin` SELECT on password hashes), no RLS — isolation is
+  by privilege: **no login role holds any privilege on either table**, asserted
+  over a `pg_roles` enumeration (stray `dnb_plain` included) with the owner as
+  positive control. `pgcrypto` is the schema's first extension, created by the
+  non-superuser owner. bcrypt (cost 12) and RFC 6238 TOTP are verified
+  **inside `mt_staff_login()`**, in one transaction with the decaying lockout
+  (5 → 15 min, ×2 per lock, 24 h ceiling, never permanent) and the audit row.
+  **Every number lives in `mt_staff_policy()` and nowhere else** — a test
+  asserts no PHP file carries one. Every failing path returns the empty set
+  after spending a bcrypt → **one byte-identical 401**; the lock is audited,
+  failures are counters.
+- **Roles:** `dnb_staffauth` (LOGIN, 14th role) reaches **exactly** login /
+  resolve / logout + the constants function, zero table privileges, no write
+  function, no projection. Lifecycle and self-service → `dnb_adminwrite`
+  (**W-3's approved list updated deliberately**, still zero table
+  privileges). `mt_admin_staff()` → `dnb_adminapi`, no hash/secret/session.
+  15 roles now: 7 login + 8 definer; `Doctor::DEV_PASSWORDS` **stays at six** —
+  it is the burned list and `dnb_staffauth` never had a burned credential.
+- **Provider selection is explicit and never falls back:** unset → DenyAll;
+  `dishnet` → `DishnetStaffIdentity`; any other value → refuses to start;
+  **dev gate + dishnet → refuse to coexist**; the real provider **works under
+  the F6-B gate** that makes the dev identity throw; a provider that cannot
+  connect → **500 on every request** with one log line, never deny-all, never
+  the dev identity. `StaffIdentityFactory` is the only construction site.
+- **Sessions:** opaque 256-bit cookie, HttpOnly · Secure · SameSite=Strict,
+  stored only as `HMAC(token, K)` with `K` derived from `DNB_TOKEN_PEPPER`
+  under a label (no new secret); 8 h absolute; **revocable** — logout,
+  disable, role change, password reset and TOTP reset revoke in the same
+  transaction; resolve **re-reads status live**, proved by flipping status
+  under an unrevoked row. **Issued only over TLS**: PHP terminated it, or
+  `X-Forwarded-Proto` from an address in `DN_TRUSTED_PROXY`; otherwise **403
+  `insecure_transport`** and no row. So over an SSH tunnel to plain HTTP the
+  real provider refuses; the demonstration path stays `DN_DEV_STAFF_IDENTITY`.
+- **Second factor required by default** (`DN_STAFF_REQUIRE_TOTP=no` is
+  development-only; the doctor blocks it outside a disposable environment). A
+  pending session may only GET/DELETE `/session` and enrol/confirm; every
+  capability route answers **403 `second_factor_required`**, distinct from
+  `forbidden`. Enrolment returns the new key once; an independent RFC 6238
+  implementation in the suite computes the code the database accepts; ±1
+  window; replay of a code, and any older step, refused.
+- **CSRF:** SameSite + Origin (must equal `DN_PORTAL_ORIGIN`, or Host when
+  unset) + `Sec-Fetch-Site` + JSON only → 403 `cross_origin` / 415.
+- **Routes:** six session routes (no capability), seven `/staff` routes
+  (`staff.manage`, Admin only, **bound only under the real provider**; the dev
+  identity gets 501). The seven estate POSTs still answer 501; manifest
+  `surface` is now `estate read-only; identity read-write` and
+  `writes.bound` is still `[]`. **No role, customer or operator from the
+  browser establishes authority** — `role: admin` in the body yields the
+  row's role; the actor-taking functions are called only from `StaffAdmin`
+  with `$s->subject`.
+- **Audit:** eleven actions, `actor_kind='staff'` (no new kind), actor = the
+  immutable username, `customer_id NULL`; delta-counted exactly once per act,
+  none on any refusal; every password, key, secret, token and hash generated
+  in the suite is searched for in every detail — none.
+- **Bootstrap:** `plugin.php staff:bootstrap <username> [--display]` on the
+  server, once; prints the generated password once; refuses once any staff
+  row exists. Passwords are always **generated server-side and shown once**.
+- **Guard amendments, each with a control:** the frozen-guards column rule
+  exempts `mt_staff.totp_secret` (R-5) and proves no login role can read it,
+  and skips timestamp/boolean columns; the simulator's bare `password` needle
+  became the credential-shape pattern; `panel/staff.js` is a separate
+  identity-plane client so `api.js` stays estate read-only under its guards.
+- **Proved over real HTTP** (`php -S … plugin/bin/serve.php`): 401 → 403
+  plain → 401 wrong → 200 with `Secure; HttpOnly` → estate 200 → roster 403
+  for sales → logout 204 → **replayed cookie 401**; and dev gate + dishnet in
+  one process → 500 on every request with the reason logged.
+
+Suite **31 suites / 2,375 assertions / 0 failed**, twice (was 30 / 1,846).
 
 ## Open and parked
 

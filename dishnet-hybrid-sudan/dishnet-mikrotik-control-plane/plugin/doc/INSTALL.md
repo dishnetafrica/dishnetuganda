@@ -11,7 +11,7 @@ changes none of them.
 |---|---|
 | Serve the Admin panel against a simulated estate | **yes** |
 | Read real Domain-B data once you put some there | **yes** |
-| Authenticate staff | **no** — see *The identity gate* below |
+| Authenticate DishNet staff | **yes, when you bind it** — see *The identity gate* below. Off by default; needs TLS in front of PHP |
 | Reach a real MikroTik router | **no** — F6-B is not authorized |
 | Publish a RADIUS credential | **no** |
 | Redeem a voucher | **no** |
@@ -20,7 +20,8 @@ changes none of them.
 
 - PHP **8.1+** with `pdo_pgsql`, `json`, `openssl`
 - PostgreSQL **14+**, **preferably an instance of its own** — see *Why its own
-  instance*
+  instance*. Migration 026 creates the `pgcrypto` extension (shipped with
+  PostgreSQL, trusted, created by the non-superuser owner — no superuser step)
 - a superuser on that instance, for step 2 only
 - a directory the account that serves HTTP can read
 
@@ -30,9 +31,9 @@ at runtime.
 ## Why its own instance
 
 PostgreSQL roles belong to the **cluster**, not the database. This plugin
-creates twelve. Installing onto the cluster that serves UCRM would add twelve
-roles visible there — granted nothing in it, but present — and uninstalling
-would drop them cluster-wide.
+creates fifteen (seven login, eight definer). Installing onto the cluster that
+serves UCRM would add fifteen roles visible there — granted nothing in it, but
+present — and uninstalling would drop them cluster-wide.
 
 If you must share a cluster, know that going in, and do not run the uninstall
 while anything else depends on those role names.
@@ -149,19 +150,79 @@ built-in server on a public interface.
 
 ## The identity gate
 
-The production identity binding is `DenyAllIdentity`, which admits nobody, and
-staff authentication is **not built** (W-4 is open). So out of the box every API
-route answers **401** and the panel renders an empty shell — correctly.
+Out of the box the identity binding is `DenyAllIdentity`, which admits nobody:
+every API route answers **401**, `POST /session` answers **501**, and the panel
+says so instead of showing a form. Who may sign in is an explicit choice, and
+there are exactly two ways to make it.
 
-To look at the panel, set the development gate:
+### Demonstration: the development identity
 
 ```sh
 DN_DEV_STAFF_IDENTITY=yes-development-only php -S 127.0.0.1:8099 plugin/bin/serve.php
 ```
 
-That is a **demonstration** installation. It fabricates a staff identity and
-must not be used where anyone but you can reach it. It refuses to start
-alongside `DN_ALLOW_REAL_BINDINGS`.
+A fabricated identity with a role picker and no credential. It must not be
+used where anyone but you can reach it, it refuses to start alongside
+`DN_ALLOW_REAL_BINDINGS`, and it refuses to start alongside the real provider.
+
+### Real: DishNet staff sign-in (migration 026)
+
+```sh
+DN_STAFF_IDENTITY=dishnet
+DN_TRUSTED_PROXY=127.0.0.1        # the address of whatever terminates TLS
+```
+
+Passwords (bcrypt, cost 12) and authenticator codes (RFC 6238 TOTP) are
+verified **inside PostgreSQL** by `mt_staff_login()`, in one transaction with
+a decaying lockout (5 failures → 15 minutes, doubling, 24-hour ceiling, never
+permanent) and the audit row. Sessions are opaque 256-bit cookies — HttpOnly,
+Secure, SameSite=Strict — stored only as an HMAC, 8 hours absolute, and
+revocable: signing out, disabling a person, changing their role or resetting
+their password ends their sessions at once. No login role can read the
+credential tables at all; `plugin.php doctor` and the suite assert it.
+
+**The first administrator is created on the server, once:**
+
+```sh
+php plugin/bin/plugin.php staff:bootstrap alice --display "Alice A."
+```
+
+It prints the generated password **once** and stores it nowhere. Sign in with
+it, set up an authenticator when the panel asks, then change the password from
+*My account*. It refuses to run once any staff row exists; everyone after the
+first is created from *DishNet staff* in the panel by an Admin.
+
+**A second factor is required by default.** A password-only session can do
+nothing but enrol an authenticator. `DN_STAFF_REQUIRE_TOTP=no` relaxes that
+for a development machine; the doctor treats it as a blocker anywhere else,
+because it is mandatory before a public hostname.
+
+### TLS and the reverse proxy — required for the real provider
+
+The real provider **refuses to issue a session over plain HTTP**
+(`403 insecure_transport`): a cookie without the Secure flag is a session
+anyone on the path can replay. PHP knows a request was TLS in two cases only:
+
+1. PHP terminated TLS itself, or
+2. a reverse proxy that terminated TLS says `X-Forwarded-Proto: https` **and
+   its address is in `DN_TRUSTED_PROXY`**. The header is ignored from anyone
+   else, so a client cannot claim TLS it did not have.
+
+So a real deployment is: TLS at a reverse proxy on the same host (any of
+nginx, Caddy or Apache will do), proxying to `php -S 127.0.0.1:8099
+plugin/bin/serve.php` or to php-fpm, with `DN_TRUSTED_PROXY=127.0.0.1` and,
+optionally, `DN_PORTAL_ORIGIN=https://<your hostname>` so a mutating request
+from any other origin is refused. Nothing here configures that proxy for you,
+and this document does not tell you to change a live server.
+
+An SSH tunnel to plain HTTP is **not** TLS as far as this provider is
+concerned: over a tunnel the real provider answers 403, and the demonstration
+identity remains the way to look at the panel that way.
+
+**A misconfigured real provider fails loudly.** A wrong `DN_STAFF_IDENTITY`
+value, the development gate set beside it, or a staff-auth connection that
+cannot open makes every request answer **500** with one line in the log. It
+never quietly becomes deny-all, and never the development identity.
 
 ## Verify
 

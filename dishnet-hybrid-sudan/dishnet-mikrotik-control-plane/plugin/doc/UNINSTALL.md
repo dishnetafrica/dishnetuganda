@@ -25,7 +25,7 @@ Without that flag it refuses and explains why.
 
 - every `mt_*` table in the `public` schema
 - every `mt_*` function in the `public` schema
-- the twelve roles the migrations create — six login, six definer — including
+- the fifteen roles the migrations create — seven login, eight definer — including
   their schema-level grants and default privileges
 
 Grants are revoked before the roles are dropped. A role holding a grant cannot
@@ -73,6 +73,6 @@ rm -rf /opt/dishnet-mikrotik-<version> /etc/dnb
 
 ## On a shared cluster
 
-If you installed onto a cluster that serves anything else, the twelve roles are
+If you installed onto a cluster that serves anything else, the fifteen roles are
 **cluster-wide**. Dropping them affects every database on that cluster that
 references them. Check before you run the uninstall, not after.

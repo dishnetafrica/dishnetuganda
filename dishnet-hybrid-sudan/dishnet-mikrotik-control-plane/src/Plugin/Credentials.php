@@ -32,6 +32,7 @@ final class Credentials
         'dnb_adminapi'   => 'DNB_ADMINAPI_PASS',
         'dnb_adminwrite' => 'DNB_ADMINWRITE_PASS',
         'dnb_radius'     => 'DNB_RADIUS_PASS',
+        'dnb_staffauth'  => 'DNB_STAFFAUTH_PASS',
     ];
 
     /**

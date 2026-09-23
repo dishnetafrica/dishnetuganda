@@ -412,6 +412,202 @@ Every row names what was run; nothing below is inferred.
 | **D-AUTH-6** | audit identity | `actor` = **immutable username**; `mt_staff.id` (uuid) retained as the internal identity and carried in `detail`; `display_name` is mutable and appears nowhere in audit |
 | **D-AUTH-7** | staff management | capability **`staff.manage`, Admin only**; NOC, Sales and Support cannot create, modify, disable or reset staff; every lifecycle mutation is audited **inside** its function |
 
-*Nothing above is implemented. `DenyAllIdentity` remains the production
+---
+
+## N. G-B pre-implementation review — 2026-09-23, before any code
+
+Step 2 of `docs/116` §I, authorised after `e94d3d8`. Every requirement below
+was re-read from §C–§G, §K (G-B) and §M.3 and from the G-B instruction; each
+unresolved point is **resolved here in writing**, not in code.
+
+### N.1 Requirements carried into the build
+
+| # | Requirement | Source |
+|---|---|---|
+| 1 | migration **026 only**: `mt_staff`, `mt_staff_sessions`, `dnb_def_staff` (NOLOGIN owner), `dnb_staffauth` (LOGIN, EXECUTE on login / resolve / logout only, zero table privileges); no `mt_principals` change, no operator capabilities, no B-3, no O-1 | §D, §M.3 D-AUTH-1, instruction 1 |
+| 2 | tables created **under `SET LOCAL ROLE dnb_def_staff`** so migration 015's default ACL cannot reach them; no RLS on them; access only through functions | §D, §M.2 M3 |
+| 3 | `CREATE EXTENSION pgcrypto` by the non-superuser owner — proved on this cluster (M5) and re-proved by the suite's installer on every run | §D, §M.1 |
+| 4 | bcrypt cost 12 **verified in the database**; **no function callable by a login role returns a hash or a TOTP secret** (enrolment returns the new secret once, to the session that asked) | §C.1, §M.3 D-AUTH-2, §G.5 |
+| 5 | TOTP verified in the database; **mandatory before the public hostname**; `DN_STAFF_REQUIRE_TOTP` defaults to required when the provider is bound; a password-only session is admitted **only to enrol**; development may set `no` | §M.3 D-AUTH-5, instruction 3 |
+| 6 | decaying lockout **inside `mt_staff_login()`**: 5 → 15 min, doubling per lock, ceiling 24 h, no permanent lock; every value in `mt_staff_policy()`, nowhere else | §M.3 D-AUTH-4, instruction 3 |
+| 7 | uniform failure: unknown user · wrong password · wrong code · locked · disabled → **byte-identical 401**; a bcrypt is evaluated on every failing path | §C.1, §G.3 |
+| 8 | opaque 256-bit cookie, **HttpOnly · Secure · SameSite=Strict**; only `HMAC-SHA256(token, K)` stored, `K` derived from `DNB_TOKEN_PEPPER` under a label; **no new secret** | §C.1, §G.6 |
+| 9 | **Secure mandatory** outside the dev gate: the provider refuses to issue a session over plain HTTP unless a **configured trusted proxy** asserts `X-Forwarded-Proto: https` | §G.6 |
+| 10 | sessions **8 h absolute**, server-side, **revocable**; logout revokes; disable / role change / password reset revoke transactionally; resolve re-reads `status` and `role` live | §C.1, §G.9 |
+| 11 | provider selection **explicit** (`DN_STAFF_IDENTITY=dishnet`); unset → `DenyAllIdentity` as today; **no fallback in either direction**; dev + dishnet → refuse to start; the real provider **works** under real bindings | §C.1, §G.8, instruction 2 |
+| 12 | CSRF: SameSite **plus** Origin check against `DN_PORTAL_ORIGIN` **plus** JSON content-type on every mutating route | §C.1, §G.7 |
+| 13 | audit through `mt_audit_write` **inside** each function; `actor_kind = 'staff'`; actor = immutable username; `mt_staff.id` in `detail`; **no** actor kind added; **no secret in `detail`**; refused acts write nothing; failed logins are counters, lockouts are rows | §G.1–2, §M.3 D-AUTH-6, instruction 5 |
+| 14 | `staff.manage` capability, **Admin only**; NOC / Sales / Support cannot touch staff | §M.3 D-AUTH-7 |
+| 15 | **no role and no operator identity from the browser** establishes staff authority; the existing `AdminRoutes` `guard()` and capability model are preserved | §C.3, instruction 4 and 8 |
+| 16 | first administrator by `plugin.php staff:bootstrap` on the server; refuses if any staff row exists; password printed once | §C.2 |
+| 17 | the twelve G-B proofs of §K, plus the instruction's list, plus the suite twice and a real HTTP path | §K, instruction 6 |
+| 18 | no production deployment, database access, migration, or change to the live stack; TLS / reverse-proxy requirements **documented**, not applied | §H, instruction 7 |
+
+### N.2 Contradictions and unresolved points — resolved explicitly
+
+| # | Point | Resolution |
+|---|---|---|
+| **R-1** | §C.2 says login / logout execute as `dnb_adminwrite`; §M.3 D-AUTH-1 says `dnb_staffauth` | **§M.3 governs** (later, measured, and instructed): `mt_staff_login`, `mt_staff_session_resolve`, `mt_staff_logout` → `dnb_staffauth`, and nothing else. Lifecycle (`create`, `disable`, `enable`, `set_role`, `reset_password`, `totp_reset`) and self-service (`change_password`, `totp_enrol`, `totp_confirm`) → `dnb_adminwrite`: post-authentication writes belong to the write connection. **`dnb_adminwrite`'s W-3 test ("the seven and nothing else") is therefore updated deliberately** to the new approved list |
+| **R-2** | the instruction asks for **re-enable**; §C.2 has only `disable` | `mt_staff_enable(p_staff, p_actor)`, audited `staff.enabled`. A disabled DishNet staff member is a person on leave, not a retired principal (P-C's *"disable, never reassign"* is about tenant identity and does not apply) |
+| **R-3** | no status code was specified for the insecure-transport refusal | **403 `{error: 'insecure_transport'}`**. Not 401 (nothing about the credential is being said), not 501 (the provider *is* configured). The panel maps it to the *unavailable* state |
+| **R-4** | CSRF when `DN_PORTAL_ORIGIN` is unset | if set, `Origin` must equal it; if unset, `Origin` must match the request's own `Host`; a request with **no** `Origin` and no `Sec-Fetch-Site: cross-site` (curl, tests, another service) passes — CSRF is a browser problem, and every browser sends `Origin` on a cross-site POST |
+| **R-5** | TOTP secret at rest | stored as raw bytes in a table **no login role can read**; verified by pgcrypto in place. At-rest encryption under a per-call, label-derived key is a **hardening option recorded, not built** (it would put a key on every login call) |
+| **R-6** | must lifecycle functions verify `p_actor` is an existing active admin? | **No** — W-1: the actor is a parameter from the identity boundary; the route guard (`staff.manage`) is the authorisation. Verifying existence would break the bootstrap (`cli:<user>`) and the development identity (`dev`). What the functions *do* enforce: the **last active admin cannot be disabled or demoted** (409), and an admin cannot disable itself |
+| **R-7** | the manifest says `surface: read-only` and a test asserts *"a session writes no Domain-B table"*; after 026 the session routes write `mt_staff_sessions` | the truth changes, so the manifest and the test change **deliberately**: `surface` → `estate read-only; identity read-write`; `writes.bound` (estate) stays `[]`; session routes grow to six, a `staff` route block is added with `staff.manage`; the equality test declares them |
+| **R-8** | missing credential fields: 400 or the uniform 401? | **401, uniform.** A body that is not JSON or has non-string fields is 400; anything credential-shaped that fails is indistinguishable from a wrong credential |
+| **R-9** | `AdminRoutes::isHttps()` trusts any `X-Forwarded-Proto` for the **dev** cookie's Secure flag | left as is for the dev provider (development only, refuses under real bindings). The real provider uses a `TransportPolicy` that trusts the header **only from `DN_TRUSTED_PROXY`** |
+| **R-10** | which act audits TOTP enrolment: start or confirm? | **confirm** (`staff.totp_enrolled`). An unconfirmed secret changes no security state. An admin's `staff.totp_reset` is audited |
+| **R-11** | how does the panel know whether to show the code field? | it always shows it. The server never says whether an account is enrolled to an unauthenticated caller (uniformity) |
+| **R-12** | what a second-factor-pending session may do | `GET /session`, `DELETE /session`, `POST /session/totp`, `POST /session/totp/confirm`. Every capability route answers **403 `second_factor_required`**; `StaffIdentity::can()` is false while pending |
+| **R-13** | password reset by an admin: typed or generated? | **generated server-side**, returned once in the response, like the first password — an admin never chooses a colleague's password |
+| **R-14** | a provider whose database connection fails at boot | **fails loudly (500 on every request, one log line)** — never a quiet `DenyAllIdentity`, never the dev identity. A misconfigured real provider must look broken, not locked |
+| **R-15** | the panel bundle guard forbids `password\s*[:=]` shapes | the login form is written with shorthand properties (`{ username, password, code }`) and field names without a following colon, so **no guard is amended** — the amendment §F allowed is not needed |
+
+None of these changes an architectural decision; each is recorded so the
+build cannot resolve it silently.
+
+*Nothing above was implemented when §N was written; §O records the build. `DenyAllIdentity` remains the production
 binding, W-4 is designed and OPEN, migrations end at 025, and the production
 census remains the handoff for O-1.*
+
+## O. G-B built — 2026-09-23, results
+
+**Scope delivered exactly as instructed: migration 026 and the DishNet Staff
+identity provider behind the existing `AdminIdentityPort` seam. Nothing of
+027, T-2, B-3, G-C or O-1 was begun. Nothing was installed anywhere; no
+production connection exists in this session (no DSN, egress 403), and none
+was attempted.**
+
+### O.1 The migration
+
+`migrations/026_staff_identity.sql` (582 lines), applied by the real installer
+on every suite run and by the disposable install test:
+
+| Object | Owner / privilege |
+|---|---|
+| `CREATE EXTENSION pgcrypto` | the schema's first extension, created by the non-superuser owner (trusted) |
+| `dnb_def_staff` NOLOGIN, `dnb_staffauth` LOGIN (no password clause) | the 15th and 14th plugin roles; `Installer::ROLES`, `Credentials::ROLE_ENV`, `tests/run.sh` and `install-test.sh` know them |
+| `mt_staff`, `mt_staff_sessions` | **created under `SET LOCAL ROLE dnb_def_staff`**, no RLS, `REVOKE ALL FROM PUBLIC`; **no login role holds any privilege** — asserted over a `pg_roles` enumeration (8 `dnb_*` login roles on this cluster, the stray `dnb_plain` included) with the owner as positive control |
+| `mt_staff_policy()` IMMUTABLE | 8 h · 5 failures · 15 min · ×2 · 24 h ceiling · 1 h decay · 12 chars · 30 s ±1 · cost 12 — **the only place any number lives**; a test asserts no PHP file under `src/Admin` carries one |
+| `mt_staff_totp_step`, `mt_staff_revoke_sessions`, `mt_staff_insert` | internal; EXECUTE-able by **no** login role |
+| `mt_staff_login`, `mt_staff_session_resolve`, `mt_staff_logout` | → **`dnb_staffauth` only** (plus the constants function): the enumeration of what it can EXECUTE is exactly four names |
+| `mt_staff_bootstrap/create/disable/enable/set_role/reset_password/totp_reset`, `mt_staff_change_password/totp_enrol/totp_confirm` | → `dnb_adminwrite` (§N R-1); **W-3's approved list updated deliberately** and still zero table privileges |
+| `mt_admin_staff()` | → `dnb_adminapi`; `totp_enrolled boolean` and no hash, secret or session column |
+
+`mt_staff_login()` is one transaction: lockout check → bcrypt (`crypt`) →
+TOTP (`hmac(... 'sha1')`, ±1 step, replay guard on the accepted step) →
+counters → session row → audit. **Every failing path returns the empty set
+after spending a bcrypt.** The lock engaging is audited (`staff.locked`);
+failures are counters, not rows.
+
+### O.2 The provider and its seam
+
+`src/Admin/StaffSessionPort.php` (extends `AdminIdentityPort` with
+`loginSurface / login / logout / changePassword / totpEnrol / totpConfirm`);
+`DishnetStaffIdentity.php` (the provider); `StaffIdentityFactory.php` (the
+one place the provider is chosen); `StaffToken.php` (256-bit token,
+`HMAC-SHA256(token, K)`, `K` derived from `DNB_TOKEN_PEPPER` under a label —
+no new secret); `TransportPolicy.php` (`X-Forwarded-Proto` believed only from
+`DN_TRUSTED_PROXY`); `Csrf.php` (Origin vs `DN_PORTAL_ORIGIN` or Host,
+`Sec-Fetch-Site`, JSON only); `StaffAdmin.php` + `StaffRefused.php` (the
+lifecycle façade over `dnb_adminwrite`, passwords generated server-side and
+returned once). `DevSessionIdentity` now implements the port (self-service
+answers 501 there). `StaffIdentity` gained `secondFactorPending` /
+`secondFactorEnrolled` and `describe()`; `Request` gained `https`.
+
+`AdminRoutes::build(identity, bindings, reader, ?StaffSessionPort $issuer,
+?StaffAdmin $staff, ?Csrf $csrf)`: the guard now runs the cross-site check,
+then identify, then **403 `second_factor_required`** for a pending session,
+then the unchanged capability check. Six session routes (no capability),
+seven `/staff` routes (`staff.manage`, Admin only, **bound only under the real
+provider** — the development identity gets 501 `staff_management_unavailable`).
+The seven estate POSTs still answer 501; `writes.bound` is still `[]`.
+
+`plugin/public/api.php` chooses through the factory and answers **500
+`identity_provider_unavailable`** with one log line when it throws — never
+deny-all, never the development identity. `plugin.php staff:bootstrap
+<username> [--display]` creates the first administrator once, printing the
+generated password once.
+
+### O.3 The proofs — `tests/test_staff_identity.php`, 487 assertions
+
+| Required proof | Where, and the control |
+|---|---|
+| zero privilege, with positive control | §1: every `dnb_*` login role × both tables × four privileges = false; `dnb_def_staff` SELECT = true; tables owned by `dnb_def_staff`; no default ACL for it; pgcrypto present; the credential columns exist |
+| byte-identical failure | §3: unknown user · wrong password · missing fields · empty strings · disabled account — status, body and headers `===` the first; no session row; no audit row; **the wrong password WAS counted** (control); an unknown user still costs > 40 ms (a bcrypt was spent) |
+| decaying lockout in the function | §6: 4 failures counted, the 5th locks for ~15 min and audits `staff.locked`; the right password is refused while locked with the same body; expiry → success → counters and lock history reset; second lock 30 min; 21st lock capped at 24 h; four stale failures + one new = one |
+| disabled staff revokes a live session | §8: two live sessions → disable through the route as alice → both 401 at once, rows revoked in the same transaction, one `staff.disabled` row naming alice and `sessions_revoked: 2`; **status flipped under an unrevoked row → 401** (live re-read), flipped back → 200 |
+| no credential/hash return | §1c: every `mt_staff*` result type scanned for `password_hash`, `totp_secret`, `token_hash`; the one bytea-returning function is enrolment, callable by `dnb_adminwrite` only; the roster response scanned |
+| provider selection | §10: unset → DenyAll; `dishnet` → the real provider; typo → refuses; unknown name → refuses; **dev + dishnet → refuses to coexist**; the dev gate alone still binds the dev identity; the entry point chooses through the factory and neither catches its way to another provider |
+| dev + real binding refusal / real works under real bindings | §10: under `DN_ALLOW_REAL_BINDINGS=yes-f6b-authorized` (read from the constants, with a control) `DevSessionIdentity` throws, the factory with the dev gate throws, and **the real provider constructs and signs somebody in** |
+| cross-origin refusal | §4b: foreign Origin → 403 `cross_origin`; `Sec-Fetch-Site: cross-site` → 403; form body → 415; matching Origin → 200 (control); with `DN_PORTAL_ORIGIN` set, Host-matching Origin → 403 and the configured origin → 200 |
+| one audit row per act / none where specified / no secret | §5, §8, §9: delta-counted; logout once and a replayed logout none; eleven actions and **not** a failed login; every row `actor_kind='staff'`, `customer_id NULL`, actor = username; every password, key, secret, token and hash generated in the file searched for in every detail — none; `actor_kind` CHECK still three values |
+| insecure-cookie refusal | §4: right password over plain HTTP → 403 `insecure_transport`, no session row, no audit row; header from a non-proxy ignored; wrong proxy address ignored; PHP-terminated TLS → 200 with `Secure`; token stored only as HMAC (a different pepper derives a different hash — control) |
+| no role / operator from the browser | §5, §11: `role: admin` in the body → noc; support with a claimed role cannot create an admin or touch anyone; the actor-taking functions are called only from `StaffAdmin` with its own `$actor`; the routes pass `$s->subject`; the identity code never touches a customer, operator, tenant context or `mt_principals` |
+| second factor | §7: pending session → estate 403 `second_factor_required`, roster 403, password change 403; enrolment returns a 32-char base32 key whose bytes equal the row's (control); **an independent RFC 6238 implementation in the test computes the code the database accepts**; ±1 window; same code twice → refused; older step after a newer one → refused; enrolling again → 409 |
+| real HTTP path | §12: `php -S … plugin/bin/serve.php` with the real provider: 401 → 403 plain → 401 wrong → 200 with `Secure; HttpOnly` cookie → estate 200 → roster 403 for sales → logout 204 → **replayed cookie 401** → panel and `staff.js` served; no fatal in the log. §12b: dev gate + dishnet in one process → **500 on every request** with the reason in the log |
+| W-3 updated deliberately | §13: `dnb_adminwrite` reaches exactly the ten lifecycle/self-service functions plus the constants — not login, resolve or logout — and still holds zero table privileges |
+
+### O.4 Contracts changed on purpose, each with its control
+
+- `plugin.json`: `surface` → `estate read-only; identity read-write`; session
+  routes 3 → 6; a `staff` block of 7 routes; six new config keys
+  (`DNB_STAFFAUTH_USER/PASS`, `DN_STAFF_IDENTITY`, `DN_STAFF_REQUIRE_TOTP`,
+  `DN_PORTAL_ORIGIN`, `DN_TRUSTED_PROXY`); `install.creates` 7 + 8 roles;
+  uninstall removes 15; gate `staff-identity: BUILT, NOT BOUND BY DEFAULT`;
+  the W-4 posture and the 501 stay recorded. `test_plugin_boundary` asserts
+  declared = served over all three route blocks.
+- `test_frozen_guards` column rule: one documented exemption,
+  `mt_staff.totp_secret` (§N R-5), with the control that the column exists
+  **and** that no login role can read it; timestamp and boolean columns
+  excluded (`password_set_at` is *when*, not *what*).
+- `test_simulator`: the bare word `password` replaced by the credential-shape
+  pattern `test_admin_login` already uses, with the control that the pattern
+  matches a credential-shaped assignment and that the login gate really has a
+  password field.
+- `test_installability`: seven login roles; **`Doctor::DEV_PASSWORDS` stays
+  at six** — it is the burned list, and `dnb_staffauth` never had a burned
+  credential; the proof needle for the disposable test reads 15 roles.
+- `panel/staff.js` is a **new identity-plane client** so `api.js` stays
+  estate read-only under its existing guards (one `fetch`, no `method:`, no
+  `POST` in `app.js`). Written with shorthand properties, so no bundle guard
+  is amended (§N R-15).
+
+### O.5 What did NOT move
+
+`DenyAllIdentity` is still the default binding and the production posture;
+binding the real provider is an explicit deployment choice
+(`DN_STAFF_IDENTITY=dishnet`) that also needs TLS in front of PHP and a first
+administrator from `staff:bootstrap` — that is G-D territory and is not
+authorised. Migrations end at **026**; no `027*` file exists. Admin estate
+writes are still unbound (7 × 501). `mt_principals`, RLS, the operator plane
+and B-3 are untouched. No production database, FreeRADIUS, deployment or
+Domain-A change; the live server was not touched.
+
+### O.6 For the DishNet engineer to decide or do — not decided here
+
+1. **TLS.** The real provider refuses a session over plain HTTP. Over the SSH
+   tunnel to `php -S` it will answer 403; the demonstration identity remains
+   the way to look at the panel through a tunnel. A real deployment puts a TLS
+   reverse proxy in front and names it in `DN_TRUSTED_PROXY`
+   (`plugin/doc/INSTALL.md`, *TLS and the reverse proxy*).
+2. **`DN_STAFF_REQUIRE_TOTP=no`** exists for a development machine only; the
+   doctor blocks it elsewhere.
+3. **R-5** — sealing the TOTP secret at rest — remains a recorded option.
+4. **`DN_PORTAL_ORIGIN`** should be set to the portal's hostname in any real
+   deployment; unset, Origin is matched against Host.
+
+### O.7 Numbers
+
+Suite **31 suites / 2,375 assertions / 0 failed**, run twice through the real
+installer (`tests/run.sh` recreates the database and mints credentials per
+run). Before G-B: 30 / 1,846. `tests/test_staff_identity.php` alone: 487.
+`plugin/bin/install-test.sh` (its own throwaway cluster, from the built
+tarball): **85 checks**, including the real provider over the wire — the first
+administrator from `staff:bootstrap`, 403 over plain HTTP, 200 with TLS
+asserted by the trusted proxy, a Secure + HttpOnly cookie, the roster for an
+Admin, logout as a server-side revocation, no password in any audit row, no
+login role able to read `mt_staff`. Its development-identity section had
+drifted since the login boundary (`fbefede`): it expected the development
+identity to authenticate without a sign-in. It now signs in and carries the
+cookie, which is what a browser does.

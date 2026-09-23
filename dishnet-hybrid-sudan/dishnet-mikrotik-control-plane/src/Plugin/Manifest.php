@@ -26,6 +26,10 @@ final class Manifest
          *  the ONLY paths with no capability: a capability is what
          *  authenticating grants. */
         public readonly array  $sessionRoutes,
+        /** The DishNet staff roster (migration 026): the one capability-gated
+         *  write block, Admin only. Declared apart from estate writes because
+         *  it changes identity state, never estate state. */
+        public readonly array  $staffRoutes,
         public readonly array  $config,
         public readonly array  $gates,
         public readonly array  $requires,
@@ -59,6 +63,7 @@ final class Manifest
             writeRoutes:     (array) ($api['writes']['bound'] ?? []),
             unboundWrites:   (array) ($api['writes']['declared_unbound'] ?? []),
             sessionRoutes:   (array) ($api['session']['routes'] ?? []),
+            staffRoutes:     (array) ($api['staff']['routes'] ?? []),
             config:          (array) $need($j, 'config', ''),
             gates:           (array) $need($j, 'gates', ''),
             requires:        (array) $need($j, 'requires', ''),

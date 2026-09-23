@@ -7,6 +7,7 @@ declare(strict_types=1);
  *   php plugin/bin/plugin.php status
  *   php plugin/bin/plugin.php install
  *   php plugin/bin/plugin.php uninstall --i-understand-this-drops-data
+ *   php plugin/bin/plugin.php staff:bootstrap <username> [--display "Full Name"]
  *
  * This is what makes the control plane an installable unit rather than a
  * directory that happens to contain code: one manifest, one entry point, and
@@ -15,6 +16,9 @@ declare(strict_types=1);
  */
 require dirname(__DIR__, 2) . '/src/autoload.php';
 
+use Dn\Admin\StaffAdmin;
+use Dn\Admin\StaffRefused;
+use Dn\Db\Database;
 use Dn\Plugin\Manifest;
 use Dn\Plugin\Installer;
 use Dn\Plugin\Doctor;
@@ -118,9 +122,43 @@ switch ($cmd) {
            . "can be mistaken for a production record.\n";
         exit(0);
 
+    case 'staff:bootstrap':
+        // The first DishNet administrator (docs/114 §C.2, migration 026). Runs on
+        // the server, as the Admin write connection, and REFUSES once any staff
+        // row exists — later people are created from the panel by an Admin.
+        // The generated password is printed ONCE, to the terminal, and nowhere
+        // else: not logged, not audited, not written to a file.
+        $username = strtolower(trim((string) ($argv[2] ?? '')));
+        if ($username === '' || str_starts_with($username, '--')) {
+            fwrite(STDERR, "use: php plugin/bin/plugin.php staff:bootstrap <username> [--display \"Full Name\"]\n");
+            exit(2);
+        }
+        $display = $username;
+        $at = array_search('--display', $argv, true);
+        if ($at !== false && isset($argv[$at + 1])) { $display = trim((string) $argv[$at + 1]); }
+        // The actor is the person at the keyboard, recorded as such. This is the
+        // one act with no authenticated DishNet staff member to name, because it
+        // is the act that creates the first one.
+        $actor = 'cli:' . (get_current_user() ?: 'unknown');
+        try {
+            $made = StaffAdmin::on(Database::adminWrite())->bootstrap($username, $display, $actor);
+        } catch (StaffRefused $e) {
+            fwrite(STDERR, "refused: {$e->getMessage()}\n");
+            exit(1);
+        }
+        echo "created the first DishNet administrator\n";
+        $out('username', $username);
+        $out('display name', $display);
+        $out('role', 'admin');
+        $out('id', $made['id']);
+        echo "\n  ONE-TIME PASSWORD (shown once, stored nowhere):\n\n    {$made['password']}\n\n"
+           . "  Sign in with DN_STAFF_IDENTITY=dishnet, then enrol an authenticator and\n"
+           . "  change this password from the panel. It cannot be recovered from the database.\n";
+        exit(0);
+
     default:
         fwrite(STDERR, "unknown command: {$cmd}\n"
-                     . "use: doctor | status | install | uninstall | simulate\n"
+                     . "use: doctor | status | install | uninstall | simulate | staff:bootstrap\n"
                      . "serve the panel and API with:\n"
                      . "  php -S 127.0.0.1:8099 plugin/bin/serve.php\n");
         exit(2);

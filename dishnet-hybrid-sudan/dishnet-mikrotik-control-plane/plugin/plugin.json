@@ -116,6 +116,16 @@
       "secret": true,
       "description": "RADIUS accounting ingestion role. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
+    "DNB_STAFFAUTH_USER": {
+      "required": false,
+      "secret": false,
+      "description": "DishNet staff AUTHENTICATION role (migration 026): EXECUTE on mt_staff_login, mt_staff_session_resolve and mt_staff_logout, zero table privileges. Defaults to the migration role name."
+    },
+    "DNB_STAFFAUTH_PASS": {
+      "required": false,
+      "secret": true,
+      "description": "DishNet staff authentication role password. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
+    },
     "DNB_INTERNAL_TOKEN": {
       "required": false,
       "secret": true,
@@ -130,6 +140,26 @@
       "required": false,
       "secret": false,
       "description": "DEVELOPMENT ONLY. Binds the Admin panel to a fabricated staff identity. Staff authentication (W-4) is not built, so this is currently the only way the panel renders anything."
+    },
+    "DN_STAFF_IDENTITY": {
+      "required": false,
+      "secret": false,
+      "description": "Selects the DishNet staff identity provider. Unset: DenyAllIdentity, nobody can sign in. 'dishnet': the real provider of migration 026 (bcrypt + TOTP verified in PostgreSQL, revocable server-side sessions). Any other value refuses to start. Refuses to coexist with DN_DEV_STAFF_IDENTITY."
+    },
+    "DN_STAFF_REQUIRE_TOTP": {
+      "required": false,
+      "secret": false,
+      "description": "Whether a DishNet staff session needs a confirmed authenticator before it can do anything but enrol one. Unset or 'yes' (the default): required. 'no': password-only sessions are complete — development only; plugin.php doctor treats it as a blocker outside a disposable environment (D-AUTH-5: mandatory before a public hostname)."
+    },
+    "DN_PORTAL_ORIGIN": {
+      "required": false,
+      "secret": false,
+      "description": "The DishNet Portal's origin, e.g. https://admin.example. A mutating request whose Origin header names anything else is refused (403 cross_origin). Unset: the Origin must match the request's own Host."
+    },
+    "DN_TRUSTED_PROXY": {
+      "required": false,
+      "secret": false,
+      "description": "Comma-separated addresses of the reverse proxy that terminates TLS. X-Forwarded-Proto is believed only from these; from anyone else it is ignored. Unset: only a request PHP itself received over TLS counts as TLS, and the real provider refuses to issue a session over anything else (403 insecure_transport)."
     },
     "DNB_INSPECT_USER": {
       "required": false,
@@ -155,7 +185,7 @@
   "api": {
     "base": "/api/v1/admin",
     "entrypoint": "plugin/public/api.php",
-    "surface": "read-only",
+    "surface": "estate read-only; identity read-write",
     "routes": [
       {
         "method": "GET",
@@ -275,8 +305,8 @@
       "reason": "These paths EXIST and every one answers 501. They are declared so the capability matrix is complete and testable, not because anything is bound. Binding them needs the staff identity provider (W-4) first, otherwise an audit row has no actor to name. The write floor itself is built (migration 020) and used by nothing."
     },
     "session": {
-      "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. These routes write no Domain-B table, which is why 'surface' stays read-only and 'writes.bound' stays empty.",
-      "production": "POST answers 501 production_authentication_unavailable unless a staff identity provider is configured. The default is DenyAllIdentity (W-4) and there is no fallback from it to the development identity.",
+      "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. Since migration 026 these routes DO write identity state (a revocable session row, an audit row) through definer functions owned by dnb_def_staff; they write no estate table, which is why 'writes.bound' stays empty.",
+      "production": "POST answers 501 production_authentication_unavailable unless a staff identity provider is configured. The default is DenyAllIdentity (the W-4 posture) and there is no fallback from it to the development identity. DN_STAFF_IDENTITY=dishnet binds the real provider of migration 026, which closes W-4 in development; whether a deployment binds it is that deployment's explicit choice.",
       "routes": [
         {
           "method": "GET",
@@ -292,6 +322,66 @@
           "method": "DELETE",
           "path": "/session",
           "capability": null
+        },
+        {
+          "method": "POST",
+          "path": "/session/password",
+          "capability": null
+        },
+        {
+          "method": "POST",
+          "path": "/session/totp",
+          "capability": null
+        },
+        {
+          "method": "POST",
+          "path": "/session/totp/confirm",
+          "capability": null
+        }
+      ],
+      "providers": {
+        "deny-all": "the default. Nobody can sign in; every estate route is 401 and POST /session is 501.",
+        "DEVELOPMENT-ONLY": "DN_DEV_STAFF_IDENTITY=yes-development-only. No credential; a role picker. Refuses to construct alongside real bindings (F6-B) or alongside the real provider.",
+        "dishnet": "DN_STAFF_IDENTITY=dishnet. Migration 026: bcrypt (pgcrypto, cost 12) and RFC 6238 TOTP verified inside mt_staff_login() with a decaying lockout (5 failures -> 15 min, doubling, 24 h ceiling, never permanent); an opaque 256-bit cookie (HttpOnly, Secure, SameSite=Strict) stored only as an HMAC under a label-derived key; 8 h absolute, server-side, revocable sessions; a session is issued only over TLS."
+      }
+    },
+    "staff": {
+      "note": "The DishNet staff roster (migration 026, docs/114 D-AUTH-7). Admin only. Every act is one SECURITY DEFINER function owned by dnb_def_staff, EXECUTE-able by dnb_adminwrite, that writes its own audit row (actor_kind='staff', actor = the authenticated username) in the same transaction. Bound only when the real provider is. The generated password is returned once and stored nowhere. No route here reads or writes an estate table.",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/staff",
+          "capability": "staff.manage"
+        },
+        {
+          "method": "POST",
+          "path": "/staff",
+          "capability": "staff.manage"
+        },
+        {
+          "method": "POST",
+          "path": "/staff/{staff_id}/disable",
+          "capability": "staff.manage"
+        },
+        {
+          "method": "POST",
+          "path": "/staff/{staff_id}/enable",
+          "capability": "staff.manage"
+        },
+        {
+          "method": "POST",
+          "path": "/staff/{staff_id}/role",
+          "capability": "staff.manage"
+        },
+        {
+          "method": "POST",
+          "path": "/staff/{staff_id}/password",
+          "capability": "staff.manage"
+        },
+        {
+          "method": "POST",
+          "path": "/staff/{staff_id}/totp-reset",
+          "capability": "staff.manage"
         }
       ]
     }
@@ -302,9 +392,9 @@
     "command": "php plugin/bin/plugin.php install",
     "serve": "php -S 127.0.0.1:8099 plugin/bin/serve.php",
     "creates": [
-      "postgresql schema (tables, policies, functions)",
-      "postgresql roles: 6 login + 6 definer, cluster-wide",
-      "role credentials, supplied or generated \u2014 never in the repository"
+      "postgresql schema (tables, policies, functions); pgcrypto, the schema's first extension (migration 026)",
+      "postgresql roles: 7 login + 8 definer, cluster-wide",
+      "role credentials, supplied or generated — never in the repository"
     ],
     "does_not_create": [
       "the database",
@@ -315,13 +405,14 @@
       "any reverse-proxy route"
     ],
     "idempotent": true,
-    "credentials": "supplied via DNB_*_PASS, or generated into DNB_SECRETS_OUT at mode 0600. No credential exists in the repository or the package."
+    "credentials": "supplied via DNB_*_PASS, or generated into DNB_SECRETS_OUT at mode 0600. No credential exists in the repository or the package.",
+    "first_administrator": "php plugin/bin/plugin.php staff:bootstrap <username> --display \"Full Name\" — refuses once any staff row exists; prints the generated password once."
   },
   "uninstall": {
     "command": "php plugin/bin/plugin.php uninstall --i-understand-this-drops-data",
     "removes": [
       "every mt_* table and function in the public schema",
-      "the 12 roles the migrations create"
+      "the 15 roles the migrations create"
     ],
     "does_not_remove": [
       "the database",
@@ -338,11 +429,16 @@
     },
     "admin-write": {
       "state": "NOT BOUND",
-      "meaning": "No state-changing Admin route exists. DenyAllIdentity is the production Admin identity binding."
+      "meaning": "No state-changing ESTATE route exists: every declared estate write answers 501. The identity routes (session, staff roster) are bound since migration 026 and change identity state only."
     },
     "portal": {
       "state": "NOT BUILT",
       "meaning": "Guest voucher activation. Blocked on Decision 5 (gated) and the F-7 remediation design."
+    },
+    "staff-identity": {
+      "state": "BUILT, NOT BOUND BY DEFAULT",
+      "meaning": "Migration 026 and DishnetStaffIdentity exist. DenyAllIdentity remains the default binding; DN_STAFF_IDENTITY=dishnet selects the real provider explicitly. Production authentication also needs TLS in front of PHP (DN_TRUSTED_PROXY) and a first administrator from staff:bootstrap.",
+      "env": "DN_STAFF_IDENTITY=dishnet"
     }
   },
   "package": {

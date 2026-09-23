@@ -29,6 +29,7 @@ rnd() { php -r 'echo bin2hex(random_bytes(24));'; }
 export DNB_APP_PASS="$(rnd)"        DNB_WORKER_PASS="$(rnd)"
 export DNB_ADMIN_PASS="$(rnd)"      DNB_ADMINAPI_PASS="$(rnd)"
 export DNB_ADMINWRITE_PASS="$(rnd)" DNB_RADIUS_PASS="$(rnd)"
+export DNB_STAFFAUTH_PASS="$(rnd)"
 export DNB_TOKEN_PEPPER="$(rnd)"    DNB_SECRET_KEY="$(rnd)"
 
 php plugin/bin/plugin.php install >/dev/null || { echo "install failed"; exit 1; }

@@ -162,7 +162,7 @@ php plugin/bin/plugin.php install > "$base/install.log" 2>&1
 sqlcount=$(ls migrations/*.sql | wc -l | tr -d ' ')
 check "install applies every migration" "$sqlcount" \
   "$(psql -U postgres -d dnb_itest -Atc 'SELECT count(*) FROM mt_migrations')"
-check "install creates the 12 plugin roles" 12 \
+check "install creates the 15 plugin roles" 15 \
   "$(psql -U postgres -d postgres -Atc "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'dnb\_%' AND rolname <> 'dnb_itest_owner'")"
 check "the secrets file exists" "yes" "$([ -f "$DNB_SECRETS_OUT" ] && echo yes || echo no)"
 check "the secrets file is 0600" "600" \
@@ -171,8 +171,8 @@ check "no secret was printed by the installer" 0 \
   "$(grep -cE '^[A-Z_]+=[0-9a-f]{32,}' "$base/install.log" || true)"
 check "the installer said where it put them, not what they are" "yes" \
   "$(grep -q 'values not shown' "$base/install.log" && echo yes || echo no)"
-check "it generated a credential for every login role" 6 \
-  "$(grep -cE '^DNB_(APP|WORKER|ADMIN|ADMINAPI|ADMINWRITE|RADIUS)_PASS=' "$DNB_SECRETS_OUT")"
+check "it generated a credential for every login role" 7 \
+  "$(grep -cE '^DNB_(APP|WORKER|ADMIN|ADMINAPI|ADMINWRITE|RADIUS|STAFFAUTH)_PASS=' "$DNB_SECRETS_OUT")"
 
 set -a; . "$DNB_SECRETS_OUT"; set +a
 
@@ -211,10 +211,10 @@ check "no plugin role bypasses RLS" 0 \
 # CREATEDB, which is how the migrations can create roles at all.
 check "no plugin role may create roles or databases" 0 \
   "$(q "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'dnb\_%' AND rolname <> 'dnb_itest_owner' AND (rolcreaterole OR rolcreatedb)")"
-check "the six definer roles cannot log in" 6 \
+check "the eight definer roles cannot log in" 8 \
   "$(q "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'dnb\_def\_%' AND NOT rolcanlogin")"
-check "the six application roles can" 6 \
-  "$(q "SELECT count(*) FROM pg_roles WHERE rolname IN ('dnb_app','dnb_worker','dnb_admin','dnb_adminapi','dnb_adminwrite','dnb_radius') AND rolcanlogin")"
+check "the seven application roles can" 7 \
+  "$(q "SELECT count(*) FROM pg_roles WHERE rolname IN ('dnb_app','dnb_worker','dnb_admin','dnb_adminapi','dnb_adminwrite','dnb_radius','dnb_staffauth') AND rolcanlogin")"
 # No plugin role may be a member of another — with the OWNER excluded as the
 # member, which migration 017 §1 explains and which is not an escalation:
 # PostgreSQL requires membership in a role before it will hand that role
@@ -230,7 +230,7 @@ check "no plugin role is a member of another" 0 \
 # carry two: the migration's explicit GRANT and the creator's automatic one.
 # Counting rows here expected 6 and got 12 — the number was an artefact of the
 # catalogue, not of the privilege.
-check "the owner is a member of the six definer roles" 6 \
+check "the owner is a member of the eight definer roles" 8 \
   "$(q "SELECT count(DISTINCT g.rolname) FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member JOIN pg_roles g ON g.oid=m.roleid WHERE r.rolname = 'dnb_itest_owner' AND g.rolname LIKE 'dnb\_def\_%'")"
 # The security-relevant half: not one of those memberships inherits.
 check "and not one of those memberships inherits" 0 \
@@ -250,6 +250,8 @@ SRV=$!; sleep 2
 u=http://127.0.0.1:$port
 check "panel loads" 200 "$(curl -s -o /dev/null -w '%{http_code}' "$u/")"
 check "API admits nobody by default" 401 "$(curl -s -o /dev/null -w '%{http_code}' "$u/api/v1/admin/health")"
+check "sign-in is 501 under the production binding, not 401" 501 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$u/api/v1/admin/session")"
 
 # Source disclosure: representative files of every kind the package contains.
 leaked=0
@@ -272,22 +274,34 @@ check "panel files themselves still serve" 200 "$(curl -s -o /dev/null -w '%{htt
 kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true; SRV=
 
 # ── 9. serve, with the development identity ─────────────────────────────────
+# Since the login boundary (fbefede) the development identity is a real
+# SIGN-IN, not an always-on identity: it offers a role picker and admits
+# nothing until a session is issued. So the test signs in as it would in a
+# browser, and carries the cookie jar from then on.
 export DN_DEV_STAFF_IDENTITY=yes-development-only
 php -S 127.0.0.1:"$port" plugin/bin/serve.php > "$base/serve2.log" 2>&1 &
 SRV=$!; sleep 2
-check "API health answers" 200 "$(curl -s -o /dev/null -w '%{http_code}' "$u/api/v1/admin/health")"
+jar=$base/run/dev.cookies
+check "the development identity still admits nobody without a sign-in" 401 \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$u/api/v1/admin/health")"
+check "signing in as a development admin issues a session" 200 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -c "$jar" -X POST -H 'Content-Type: application/json' \
+      -d '{"role":"admin"}' "$u/api/v1/admin/session")"
+check "API health answers" 200 "$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" "$u/api/v1/admin/health")"
 check "estate is empty before the simulator runs" 0 \
-  "$(curl -s "$u/api/v1/admin/routers" | php -r '$j=json_decode(stream_get_contents(STDIN),true);echo count($j["router"]??[]);')"
+  "$(curl -s -b "$jar" "$u/api/v1/admin/routers" | php -r '$j=json_decode(stream_get_contents(STDIN),true);echo count($j["router"]??[]);')"
+check "staff management is unavailable under the development identity" 501 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" "$u/api/v1/admin/staff")"
 
 # ── 10. simulator ───────────────────────────────────────────────────────────
 php plugin/bin/plugin.php simulate > "$base/simulate.log" 2>&1
-count() { curl -s "$u/api/v1/admin/$2" | php -r '$j=json_decode(stream_get_contents(STDIN),true);echo count($j[$argv[1]]??[]);' "$1"; }
+count() { curl -s -b "$jar" "$u/api/v1/admin/$2" | php -r '$j=json_decode(stream_get_contents(STDIN),true);echo count($j[$argv[1]]??[]);' "$1"; }
 check "the simulator builds 3 customers"  3  "$(count customer customers)"
 check "the simulator builds 5 routers"    5  "$(count router routers)"
 check "the simulator builds 17 vouchers"  17 "$(count voucher vouchers)"
 check "the simulator builds 6 sessions"   6  "$(count session sessions)"
 check "every simulated serial carries the SIM- mark" 0 \
-  "$(curl -s "$u/api/v1/admin/routers" | php -r '
+  "$(curl -s -b "$jar" "$u/api/v1/admin/routers" | php -r '
      $rs=json_decode(stream_get_contents(STDIN),true)["router"]??[];
      echo count(array_filter($rs, fn($x)=>!str_starts_with((string)($x["serial"]??""),"SIM-")));')"
 check "the simulator refuses alongside real bindings" "yes" \
@@ -295,6 +309,56 @@ check "the simulator refuses alongside real bindings" "yes" \
      | grep -q 'Refusing' && echo yes || echo no)"
 kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true; SRV=
 unset DN_DEV_STAFF_IDENTITY
+rm -f "$jar"
+
+# ── 10b. the real DishNet staff provider (migration 026), over the wire ─────
+# The first administrator is created on the server, once; the generated
+# password is captured into a variable and written to no file. The provider
+# refuses a session over plain HTTP and issues one only when the configured
+# proxy asserts TLS — here curl plays the proxy from 127.0.0.1.
+boot=$(php plugin/bin/plugin.php staff:bootstrap itest-admin --display "Install Test" 2>&1)
+adminpw=$(printf '%s\n' "$boot" | grep -oE '[a-z2-9]{6}(-[a-z2-9]{6}){3}' | head -1)
+check "staff:bootstrap creates the first administrator" "yes" \
+  "$([ -n "$adminpw" ] && printf '%s' "$boot" | grep -q 'created the first DishNet administrator' && echo yes || echo no)"
+check "staff:bootstrap refuses to run twice" "yes" \
+  "$(php plugin/bin/plugin.php staff:bootstrap second --display X 2>&1 | grep -q 'already exist' && echo yes || echo no)"
+export DN_STAFF_IDENTITY=dishnet DN_TRUSTED_PROXY=127.0.0.1 DN_STAFF_REQUIRE_TOTP=no
+php -S 127.0.0.1:"$port" plugin/bin/serve.php > "$base/serve3.log" 2>&1 &
+SRV=$!; sleep 2
+jar=$base/run/staff.cookies
+body=$(printf '{"username":"itest-admin","password":"%s"}' "$adminpw")
+check "the real provider answers 401 with a credential form, not a role picker" "credentials" \
+  "$(curl -s "$u/api/v1/admin/session" | php -r 'echo json_decode(stream_get_contents(STDIN),true)["mode"]??"?";')"
+check "the real provider refuses a session over plain HTTP" 403 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$body" "$u/api/v1/admin/session")"
+check "and refuses a wrong password even with TLS asserted" 401 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Forwarded-Proto: https' \
+      -d '{"username":"itest-admin","password":"not-the-password-at-all"}' "$u/api/v1/admin/session")"
+check "the real provider signs the first administrator in over the wire" 200 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -c "$jar" -X POST -H 'Content-Type: application/json' -H 'X-Forwarded-Proto: https' \
+      -d "$body" "$u/api/v1/admin/session")"
+# Netscape jar columns: domain, tailmatch, path, SECURE, expiry, name, value —
+# and curl prefixes an HttpOnly cookie's domain with #HttpOnly_.
+check "the session cookie is Secure and HttpOnly" "yes" \
+  "$(grep -qE '^#HttpOnly_127\.0\.0\.1[[:space:]]+FALSE[[:space:]]+/[[:space:]]+TRUE[[:space:]]+[0-9]+[[:space:]]+dnb_staff_session[[:space:]]' "$jar" && echo yes || echo no)"
+check "the estate answers the real staff session" 200 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" "$u/api/v1/admin/routers")"
+check "the staff roster answers an Admin under the real provider" 200 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" "$u/api/v1/admin/staff")"
+check "the roster carries no hash, secret or session material" 0 \
+  "$(curl -s -b "$jar" "$u/api/v1/admin/staff" | grep -cE 'password_hash|totp_secret|token_hash' || true)"
+check "signing out revokes the session on the server" 401 \
+  "$(curl -s -o /dev/null -X DELETE -H 'X-Forwarded-Proto: https' -b "$jar" "$u/api/v1/admin/session"; \
+     curl -s -o /dev/null -w '%{http_code}' -b "$jar" "$u/api/v1/admin/routers")"
+check "no staff audit row carries the password" 0 \
+  "$(psql -U postgres -d dnb_itest -Atc "SELECT count(*) FROM mt_audit_log WHERE action LIKE 'staff.%' AND detail::text LIKE '%${adminpw}%'")"
+check "every staff act was audited as actor_kind staff" "staff" \
+  "$(psql -U postgres -d dnb_itest -Atc "SELECT string_agg(DISTINCT actor_kind, ',') FROM mt_audit_log WHERE action LIKE 'staff.%'")"
+check "no login role can read the credential table" 0 \
+  "$(psql -U postgres -d dnb_itest -Atc "SELECT count(*) FROM pg_roles r WHERE r.rolcanlogin AND r.rolname LIKE 'dnb\_%' AND has_table_privilege(r.rolname, 'mt_staff', 'SELECT')")"
+kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true; SRV=
+unset DN_STAFF_IDENTITY DN_TRUSTED_PROXY DN_STAFF_REQUIRE_TOTP adminpw body
+rm -f "$jar"
 
 # ── 11. re-install is safe ──────────────────────────────────────────────────
 php plugin/bin/plugin.php install > "$base/reinstall.log" 2>&1

@@ -24,6 +24,8 @@ final class AdminReader
         'mt_admin_intents' => 0,   'mt_admin_audit' => 0,
         // Migration 021, approved as an extension of the eleven.
         'mt_admin_services' => 0,  'mt_admin_voucher' => 1,
+        // Migration 026: the DishNet staff roster. No hash, no secret, no session.
+        'mt_admin_staff' => 0,
     ];
 
     public function __construct(private readonly Database $db) {}

@@ -11,6 +11,9 @@ final class Request
         public readonly array  $body = [],
         public readonly array  $params = [],
         public readonly string $ip = '',
+        /** True only when THIS process terminated TLS. A proxy's X-Forwarded-Proto is a
+         *  header, trusted by TransportPolicy from a configured address and by nothing else. */
+        public readonly bool   $https = false,
     ) {}
 
     public function header(string $name): ?string
@@ -29,7 +32,7 @@ final class Request
 
     public function withParams(array $p): self
     {
-        return new self($this->method, $this->path, $this->headers, $this->body, $p, $this->ip);
+        return new self($this->method, $this->path, $this->headers, $this->body, $p, $this->ip, $this->https);
     }
 
     public static function fromGlobals(): self
@@ -45,7 +48,9 @@ final class Request
         return new self(
             $_SERVER['REQUEST_METHOD'] ?? 'GET',
             parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/',
-            $h, is_array($body) ? $body : [], [], $_SERVER['REMOTE_ADDR'] ?? ''
+            $h, is_array($body) ? $body : [], [], $_SERVER['REMOTE_ADDR'] ?? '',
+            (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off')
+                || (($_SERVER['REQUEST_SCHEME'] ?? '') === 'https')
         );
     }
 }

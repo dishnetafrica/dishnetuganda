@@ -62,6 +62,9 @@ foreach ($m->unboundWrites as $r) { $declared[] = $r['method'] . ' ' . $m->apiBa
 // The login boundary. Declared separately because it is the only part of the
 // surface with no capability — see the manifest note.
 foreach ($m->sessionRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// The DishNet staff roster (migration 026): the one capability-gated write
+// block, declared apart from estate writes because it changes identity state.
+foreach ($m->staffRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 sort($declared);
 
 $served = [];
@@ -79,12 +82,19 @@ is_($declared, $served, 'every route the manifest declares is a route the plugin
 
 is_($m->writeRoutes, [], 'the manifest declares ZERO BOUND write routes');
 is_(count($m->unboundWrites), 7, 'and seven declared-but-unbound write paths');
-is_(count($m->sessionRoutes), 3, 'and three session paths — who am I, log in, log out');
+is_(count($m->sessionRoutes), 6,
+    'and six session paths — who am I, log in, log out, change password, enrol, confirm');
 is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? null) !== null)), [],
-    'none of the three declares a capability: a capability is what logging in GRANTS');
-is_($m->apiSurface, 'read-only',
-    'the surface is still read-only — a session writes no Domain-B table');
-is_($m->writeRoutes, [], 'and no write route became bound by adding a login');
+    'none of the six declares a capability: a capability is what logging in GRANTS');
+// Changed DELIBERATELY with migration 026 (docs/114 §N R-7): a session is now a
+// revocable row and an audit row, written through dnb_def_staff's functions.
+// The ESTATE stays read-only, and that half is what writes.bound still asserts.
+is_($m->apiSurface, 'estate read-only; identity read-write',
+    'the surface says the truth: estate read-only, identity read-write');
+is_($m->writeRoutes, [], 'and no ESTATE write route became bound by adding a login');
+is_(count($m->staffRoutes), 7, 'seven staff-roster routes are declared');
+is_(array_values(array_unique(array_column($m->staffRoutes, 'capability'))), ['staff.manage'],
+    'every one of them gated on staff.manage, which only Admin carries');
 
 // The honest part: those paths exist. Prove each answers 501 and writes nothing.
 $reqW = new Request('POST', '/', [], [], [], '127.0.0.1');
@@ -151,8 +161,13 @@ foreach (['/api/v1/admin/routers', '/api/v1/admin/network-signals', '/api/v1/adm
 }
 
 $entry = file_get_contents($root . '/' . $m->apiEntrypoint);
-is_(str_contains($entry, 'new DenyAllIdentity()'), true,
-    'the entrypoint binds DenyAllIdentity as its default');
+$factory = file_get_contents($root . '/src/Admin/StaffIdentityFactory.php');
+is_(str_contains($entry, 'StaffIdentityFactory::fromEnvironment()'), true,
+    'the entrypoint chooses its identity through the one factory');
+is_(str_contains($factory, 'new DenyAllIdentity()'), true,
+    'and the factory binds DenyAllIdentity as its default');
+is_(preg_match('/DN_STAFF_IDENTITY[^;]*\n[^;]*DenyAllIdentity|\$mode === \'\'/', $factory) === 1, true,
+    'reached only when DN_STAFF_IDENTITY is unset — the real provider is selected, never assumed');
 is_(str_contains($entry, 'Database::adminApi()'), true,
     'and reads through dnb_adminapi, which holds no table privilege');
 is_(str_contains($entry, 'Database::owner()') || str_contains($entry, 'Database::admin()'), false,

@@ -52,6 +52,17 @@ final class Database
     public static function adminWrite(): self { return self::connect('adminwrite'); }
 
     /**
+     * The DishNet Staff AUTHENTICATION identity (migration 026, D-AUTH-1).
+     *
+     * EXECUTE on exactly three functions — mt_staff_login, mt_staff_session_resolve,
+     * mt_staff_logout — and no table privilege at all. Separate from adminWrite()
+     * on purpose: that role can EXECUTE seven write functions (docs/114 §M.1, M1),
+     * and a code path that runs BEFORE anyone is authenticated may not connect as
+     * something that can register a router.
+     */
+    public static function staffAuth(): self { return self::connect('staffauth'); }
+
+    /**
      * RADIUS accounting ingestion. Holds EXECUTE on one function and nothing
      * else — no table privileges at all (migration 018, audit finding F1).
      *
@@ -131,6 +142,7 @@ final class Database
             'admin'      => [getenv('DNB_ADMIN_USER')      ?: 'dnb_admin',      $need('DNB_ADMIN_PASS', 'admin')],
             'adminapi'   => [getenv('DNB_ADMINAPI_USER')   ?: 'dnb_adminapi',   $need('DNB_ADMINAPI_PASS', 'adminapi')],
             'adminwrite' => [getenv('DNB_ADMINWRITE_USER') ?: 'dnb_adminwrite', $need('DNB_ADMINWRITE_PASS', 'adminwrite')],
+            'staffauth'  => [getenv('DNB_STAFFAUTH_USER')  ?: 'dnb_staffauth',  $need('DNB_STAFFAUTH_PASS', 'staffauth')],
             'radius'     => [getenv('DNB_RADIUS_USER')     ?: 'dnb_radius',     $need('DNB_RADIUS_PASS', 'radius')],
             default      => [getenv('DNB_APP_USER')        ?: 'dnb_app',        $need('DNB_APP_PASS', 'app')],
         };

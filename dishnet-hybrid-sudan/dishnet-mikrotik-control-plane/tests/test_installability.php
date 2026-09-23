@@ -121,7 +121,7 @@ $loginRoles = array_values(array_unique($lg[1]));
 sort($loginRoles);
 $expected = array_keys(Credentials::ROLE_ENV);
 sort($expected);
-is_($loginRoles, $expected, 'all six login roles are still created, just without a credential');
+is_($loginRoles, $expected, 'all seven login roles are still created, just without a credential');
 
 // Nothing anywhere re-introduces one.
 $offenders = [];
@@ -158,8 +158,14 @@ foreach ($it as $f) {
 is_(array_values(array_unique($carriers)), ['src/Plugin/Doctor.php'],
     'src/Plugin/Doctor.php is the ONLY file carrying a burned string'
     . ($carriers ? ' — carriers: ' . implode(', ', array_unique($carriers)) : ''));
-is_(array_keys(Doctor::DEV_PASSWORDS), array_keys(Credentials::ROLE_ENV),
-    'and covers exactly the six login roles');
+// The burned list is HISTORY, not a description of the roles: it names the six
+// roles that ever carried a password literal. dnb_staffauth (migration 026) was
+// born after B-1 and never had one, so it is correctly absent — and the list
+// must not be "updated" to include it.
+is_(array_keys(Doctor::DEV_PASSWORDS), array_values(array_diff(array_keys(Credentials::ROLE_ENV), ['dnb_staffauth'])),
+    'and covers exactly the six login roles that ever had a burned credential');
+is_(in_array('dnb_staffauth', array_keys(Credentials::ROLE_ENV), true), true,
+    'CONTROL: dnb_staffauth is a provisioned login role that the burned list rightly omits');
 
 // ───────────────────────────────────────────────────────────────────────────
 t('the doctor reports what it could not measure, rather than passing');
@@ -233,7 +239,7 @@ unlink($tmp);
 Credentials::writeSecretsFile($tmp, []);
 is_(file_exists($tmp), false, 'nothing is written when there is nothing to write');
 
-is_(count(Credentials::ROLE_ENV), 6, 'six login roles are provisioned');
+is_(count(Credentials::ROLE_ENV), 7, 'seven login roles are provisioned (migration 026 added dnb_staffauth)');
 is_(count(Credentials::APP_SECRETS), 2, 'plus two application secrets that never reach the database');
 foreach (array_keys(Credentials::APP_SECRETS) as $env) {
     is_(in_array($env, array_values(Credentials::ROLE_ENV), true), false,
@@ -347,7 +353,11 @@ $proofs = [
     'API health answers'               => 'the API answers',
     'the simulator builds 5 routers'   => 'the simulated estate is the expected size',
     'the simulator builds 17 vouchers' => 'the voucher count is checked, not assumed',
-    'install creates the 12 plugin roles' => 'the positive control for the residue check',
+    'install creates the 15 plugin roles' => 'the positive control for the residue check',
+    'sign-in is 501 under the production binding' => 'the production posture is checked over the wire',
+    'the real provider refuses a session over plain HTTP' => 'the migration 026 provider is exercised, and refuses plain HTTP',
+    'the real provider signs the first administrator in over the wire' => 'and signs somebody in when TLS is asserted by the trusted proxy',
+    'signing out revokes the session on the server' => 'and logout is a revocation, not a cookie clear',
     'no plugin role remains'           => 'uninstall leaves no role',
     'no mt_ table remains'             => 'uninstall leaves no table',
     'no source, config, secret or manifest file is reachable' => 'the source-disclosure regression',

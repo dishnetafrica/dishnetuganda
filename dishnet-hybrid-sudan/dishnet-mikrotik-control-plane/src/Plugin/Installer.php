@@ -148,10 +148,10 @@ final class Installer
     public const ROLES = [
         // definer roles first: they own the functions
         'dnb_def_auth', 'dnb_def_net', 'dnb_def_work', 'dnb_def_prov',
-        'dnb_def_admin', 'dnb_def_audit', 'dnb_def_comm',
+        'dnb_def_admin', 'dnb_def_audit', 'dnb_def_comm', 'dnb_def_staff',
         // then the login roles
         'dnb_app', 'dnb_worker', 'dnb_admin', 'dnb_adminapi',
-        'dnb_adminwrite', 'dnb_radius',
+        'dnb_adminwrite', 'dnb_radius', 'dnb_staffauth',
     ];
 
     /**

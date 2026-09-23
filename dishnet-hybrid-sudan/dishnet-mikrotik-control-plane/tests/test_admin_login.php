@@ -95,11 +95,17 @@ putenv('DN_DEV_STAFF_IDENTITY');
 try { new DevSessionIdentity($sessions); } catch (\RuntimeException) { $threw = true; }
 is_($threw, true, 'it throws rather than quietly returning a deny-all identity');
 
+// Since migration 026 the entry point chooses through StaffIdentityFactory,
+// which is where the development identity is constructed; the gates above are
+// load-bearing because that is the only construction site outside tests.
 $src = (string) file_get_contents(__DIR__ . '/../plugin/public/api.php');
-is_(str_contains($src, 'DevSessionIdentity'), true,
-    'CONTROL: the entry point does construct it — so the gates above are load-bearing');
-is_(preg_match('/catch[^}]*DenyAllIdentity/s', $src), 0,
-    'and the entry point never catches a failed dev identity to fall back to deny-all');
+$fac = (string) file_get_contents(__DIR__ . '/../src/Admin/StaffIdentityFactory.php');
+is_(str_contains($src, 'StaffIdentityFactory::fromEnvironment()'), true,
+    'CONTROL: the entry point chooses its identity through the factory');
+is_(str_contains($fac, 'new DevSessionIdentity('), true,
+    'CONTROL: and the factory does construct it — so the gates above are load-bearing');
+is_(preg_match('/catch[^}]*DenyAllIdentity/s', $src . $fac), 0,
+    'and neither the entry point nor the factory catches a failed dev identity to fall back to deny-all');
 
 // ===========================================================================
 t('with the gate set, a login is required — and it works');
@@ -217,7 +223,7 @@ $stripJs = static function (string $code): string {
     return preg_replace('!^\s*//.*$!m', ' ', $code) ?? $code;
 };
 $js = '';
-foreach (['login.js', 'app.js', 'api.js'] as $f) {
+foreach (['login.js', 'app.js', 'api.js', 'staff.js'] as $f) {
     $js .= $stripJs((string) file_get_contents(__DIR__ . '/../panel/' . $f));
 }
 $html = (string) file_get_contents(__DIR__ . '/../panel/index.html');

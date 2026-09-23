@@ -187,12 +187,39 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
 .lg-stop{border-color:#e6b4b4}
 .lg-meta{font-size:12.5px}
 .lg-busy .lg-spin{color:var(--ink);font-weight:600}
+.lg-form{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.lg-form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.lg-form input{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;color:var(--ink)}
+.lg-form .lg-btn{align-self:flex-start;text-transform:none}
+.lg-key{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0;padding:12px 14px;
+        background:#f6f7f9;border:1px solid var(--line);border-radius:8px;font-size:13px}
+.lg-key span{color:var(--muted)} .lg-key b.small{font-size:11.5px;overflow-wrap:anywhere;font-weight:400}
+.lg-err{color:var(--red)}
 @media (max-width:520px){ .lg{padding:22px 18px} }
+/* ── identity plane: who is signed in, the roster, the account ─────────── */
+.who{margin:14px 16px 0;padding-top:12px;border-top:1px solid #232a33;font-size:12.5px;color:#9aa1aa}
+.who b{color:#fff;display:block} .who .lnk{display:inline-block;margin-top:6px;color:#cdd3da}
+.sform{margin:12px 20px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+       display:flex;flex-direction:column;gap:9px;max-width:560px}
+.sform h3{margin:0 0 2px;font-size:14px}
+.sform label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.sform input[type=text],.sform input:not([type]),.sform input[type=password]{font:inherit;padding:8px 10px;
+       border:1px solid var(--line);border-radius:8px;color:var(--ink)}
+.sform .btn{align-self:flex-start} .sform small{color:var(--muted)}
+.radios{display:flex;gap:12px;flex-wrap:wrap;color:var(--ink)} .radios label{flex-direction:row;align-items:center;gap:4px}
+.btn.small{padding:4px 9px;font-size:12px} .btn.ghost{background:transparent;color:var(--muted)}
+.acts{white-space:normal;min-width:320px} .acts .btn{margin:2px 4px 2px 0} .rolechange{display:inline-block}
+.once{margin:12px 20px;padding:12px 14px;border:2px solid var(--amber);background:#fff8e8;border-radius:10px;max-width:560px}
+.once code{display:block;margin-top:8px;font-size:16px;letter-spacing:.04em;user-select:all}
+.once p{margin:6px 0 0;color:var(--muted)}
+.msg{margin:12px 20px;padding:10px 14px;border-radius:8px;max-width:560px}
+.msg.ok{background:#f0fbf4;border:1px solid #a9d8b8} .msg.err{background:#fdf3f3;border:1px solid #e9b0b0;color:var(--red)}
+@media (max-width:860px){ .who{display:none} .sform,.once,.msg{margin-left:14px;margin-right:14px} }
 </style>
 </head><body>
 <div id="gate" hidden></div>
 <div class="shell" hidden>
-  <aside><div class="brand">DishNet Admin</div><nav id="nav"></nav></aside>
+  <aside><div class="brand">DishNet Admin</div><nav id="nav"></nav><div id="who" class="who"></div></aside>
   <main>
     <div id="evidence"></div>
     <div id="main"></div>

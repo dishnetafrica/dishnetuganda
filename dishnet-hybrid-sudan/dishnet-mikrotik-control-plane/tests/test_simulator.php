@@ -161,10 +161,17 @@ $panel = implode("\n", array_map(
 // 'RADIUS' appears as screen copy explaining why a per-router session count is
 // not derivable, which is legitimate visible text. What must not appear is a
 // credential, an AAA table, or a router endpoint.
-foreach (['password', 'secret', 'api_key', 'apikey', 'Authorization',
+foreach (['secret', 'api_key', 'apikey', 'Authorization',
           'radius_ref', 'radcheck', 'radreply', 'rest/', '8728', '8729'] as $leak) {
     is_(stripos($panel, $leak), false, "the panel code carries no {$leak}");
 }
+// Since migration 026 the login gate has a real password FIELD, so the bare
+// word is legitimate screen markup. What must not appear is a credential-
+// SHAPED thing — an assignment or a stored value — the same discriminator
+// tests/test_admin_login.php uses, with the same control.
+is_(preg_match('/password\s*[:=]/i', $panel), 0, 'the panel code assigns or stores no password');
+is_(preg_match('/password\s*[:=]/i', 'password: "hunter2"'), 1, 'CONTROL: that pattern DOES match a credential-shaped assignment');
+is_(stripos($panel, 'name="password"') !== false, true, 'CONTROL: the login gate really does carry a password field, so the scan sees markup');
 
 t('5b. the simulation banner is always rendered');
 $app = file_get_contents($root . '/panel/app.js');
