@@ -26,7 +26,7 @@ export const NAV = [
   { id: 'sessions',    label: 'Active sessions' },
   { id: 'diagnostics', label: 'Diagnostics' },
   { sec: 'Commercial plane' },
-  { id: 'customers',   label: 'Customers & sites' },
+  { id: 'customers',   label: 'Operators & sites' },
   { id: 'plans',       label: 'Plans' },
   { id: 'vouchers',    label: 'Vouchers' },
   { id: 'batches',     label: 'Batches' },
@@ -65,7 +65,7 @@ function table(cols, rows, rowFn) {
 
 /* ---- Routers: the fleet-centric operational view (V2's landing screen) --- */
 /* Resolve an id to the name its own projection carries. A truncated uuid in a
- * Customer column tells an operator nothing and reads like a stray identifier. */
+ * Operator column tells DishNet staff nothing and reads like a stray identifier. */
 function nameResolver(res) {
   const by = new Map(isOk(res) ? res.rows.map(x => [x.id, x.name]) : []);
   return id => by.get(id) ?? (id ? short(id) : null);
@@ -101,7 +101,7 @@ async function vRouters() {
     rows.length === 0
       ? `<div class="stateblock empty"><h3>Nothing matches</h3><p>${
           esc(all.length)} routers exist; none match this filter.</p></div>`
-      : table(['Serial', 'Name', 'Model', 'State', 'Last contact', 'Customer', 'Site'], rows,
+      : table(['Serial', 'Name', 'Model', 'State', 'Last contact', 'Operator', 'Site'], rows,
           r => `<tr data-router="${esc(r.id)}">
             <td class="mono">${esc(r.serial)}</td>
             <td>${esc(r.name) || '—'}</td>
@@ -146,7 +146,7 @@ function verdictOf(x) {
 
 /* Two audiences, one source.
  *
- * `concise` is the operator's view: the signal and a short verdict, nothing
+ * `concise` is the NOC view: the signal and a short verdict, nothing
  * else. An administrator on a normal day should not have to read why a
  * handshake timestamp is missing in order to use the screen.
  *
@@ -181,7 +181,7 @@ function signalPanel(sig, concise = false) {
 
 /* Every action is rendered inert, with the server's reason attached.
  *
- * They are shown rather than hidden on purpose: an operator should be able to
+ * They are shown rather than hidden on purpose: DishNet staff should be able to
  * see what this product will eventually do and why it cannot do it yet. The
  * buttons carry the disabled attribute and no handler is bound to them. */
 function actionPanel(sig) {
@@ -218,7 +218,7 @@ async function vRouter() {
   const identity = kv([
     ['Name', r.name], ['Serial', r.serial], ['Model', r.model],
     ['RouterOS', r.ros_version], ['Lifecycle state', r.state],
-    ['Customer', custName(r.customer_id)], ['Site', siteName(r.site_id)],
+    ['Operator', custName(r.customer_id)], ['Site', siteName(r.site_id)],
   ]);
 
   /* CONNECTIVITY carries only what is recorded. The observed half of it — link
@@ -335,7 +335,7 @@ async function vVoucher() {
         custName = nameResolver(custs);
   const f = [
     ['Reference', short(v.id)], ['State', v.state],
-    ['Customer', custName(v.customer_id)], ['Site', siteName(v.site_id)],
+    ['Operator', custName(v.customer_id)], ['Site', siteName(v.site_id)],
     ['Plan', planName(v.plan_id)], ['Price', ugx(v.price_minor)],
     ['Duration', Math.round(v.duration_s / 60) + ' min'],
     ['Issued', v.created_at], ['Activated', v.activated_at],
@@ -413,11 +413,11 @@ const list = (title, fetch, key, cols, rowFn, noun) => async () => {
   return head(title, `${res.rows.length}`) + table(cols, res.rows, rowFn);
 };
 
-const vCustomers = list('Customers & Sites', () => api.customers(), 'customer',
+const vCustomers = list('Operators & Sites', () => api.customers(), 'customer',
   ['Name', 'Account', 'Status', 'Since'], c => `<tr>
     <td>${esc(c.name)}</td><td class="mono">${esc(c.ucrm_client_id) || '—'}</td>
     <td><span class="pill">${esc(c.status)}</span></td>
-    <td>${esc((c.created_at || '').slice(0, 10))}</td></tr>`, 'customers');
+    <td>${esc((c.created_at || '').slice(0, 10))}</td></tr>`, 'operators');
 
 const vPlans = list('Plans', () => api.plans(), 'plan',
   ['Name', 'Price', 'Duration', 'Down/Up', 'Devices', 'Active'], p => `<tr>

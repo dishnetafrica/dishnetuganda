@@ -201,7 +201,7 @@ foreach ($inv as $x) {
 }
 
 t('4b. last_seen_at is claimed unwritten — prove the claim');
-// The panel tells an operator that this column is never written. If a future
+// The panel tells DishNet staff that this column is never written. If a future
 // change starts writing it, this assertion fails and the copy gets corrected
 // rather than becoming a lie.
 $writes = [];

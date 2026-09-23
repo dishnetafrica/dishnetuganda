@@ -207,7 +207,7 @@ duplicated (`docs/108`'s "existing UNIQUE" class).
 | `POST /session/password`, `POST /session/totp`, `POST /session/totp/confirm` | self-service; authenticated; no capability beyond being signed in |
 | `GET /staff`, `POST /staff`, `POST /staff/{id}/disable`, `POST /staff/{id}/role`, `POST /staff/{id}/password` | capability **`staff.manage`**; the read is a projection that withholds every hash and secret |
 | `POST /routers`, `POST /routers/{id}/assign`, `POST /routers/{id}/actions` | **bound** to `mt_device_register`, `mt_device_assign`, and a new `mt_device_provision_request()` (`dnb_def_prov`, enqueues the intent the simulator already enqueues on the admin connection). `p_actor = identity.subject`, `source = request ip` |
-| `POST /voucher-batches`, `POST /plans` | **bound** to new Admin-plane issuers taking an explicit target customer (D-AUTH-3). Idempotent through the existing `mt_idempotency(customer_id, key)` — the target customer **is** known here, so `docs/105`'s "nothing to key on" does not apply; the check runs **before** the mutation (RULE I-1) |
+| `POST /voucher-batches`, `POST /plans` | **bound** to new Admin-plane issuers taking an explicit target operator (D-AUTH-3). Idempotent through the existing `mt_idempotency(customer_id, key)` — the target operator **is** known here, so `docs/105`'s "nothing to key on" does not apply; the check runs **before** the mutation (RULE I-1) |
 | `POST /sites` | stays 501 until **O-1** |
 | `POST /sessions/{id}/disconnect` | stays 501 until the replay fix (`docs/108`) |
 | all mutating routes | `Database::adminWrite()`; Origin + content-type check; 403 when the capability is absent, as today |
@@ -260,7 +260,7 @@ duplicated (`docs/108`'s "existing UNIQUE" class).
    resolve re-reads `status` and `role` live, so enforcement is immediate
    even for a session row a later bug forgot to revoke.
 10. Actor is a parameter from the identity boundary (W-1). Never a GUC.
-11. `mt_current_customer()` is never set on the Admin plane; a target customer
+11. `mt_current_customer()` is never set on the Admin plane; a target operator
     is a validated function parameter (C.4).
 12. No login role gains an audit INSERT; `mt_audit_write` stays
     definer-only. The A-1 closure is preserved and asserted.
@@ -297,7 +297,7 @@ duplicated (`docs/108`'s "existing UNIQUE" class).
 | Migration 026, functions, `DishnetStaffIdentity`, session routes, staff routes | the suite, plus real HTTP through `serve.php` behind a local TLS-terminating proxy in the disposable install test |
 | Capability matrix on real logins | admin / noc / sales / support each exercised against every bound route |
 | Router register → assign → action (intent queued) | `IntentWorker` with `NullDelivery` reports `retryable('no delivery path is configured')` — proves queue, audit and actor; **proves nothing about a router**, and the screen says so |
-| Admin voucher batch and plan for a target customer (D-AUTH-3) | rows visible in Admin **and** in that customer's `/me/vouchers`, and **not** in another customer's — tenant boundary proved from both sides with controls |
+| Admin voucher batch and plan for a target operator (D-AUTH-3) | rows visible in Admin **and** in that operator's `/me/vouchers`, and **not** in another customer's — tenant boundary proved from both sides with controls |
 | Vouchers all `unused` | `LifecycleReport` keeps `activating / active / expired` unreachable; the estate stays truthful |
 | Redemption path, attempt store, `dnb_portal`, AAA Publisher | **separately gated** (`docs/87` §H.1 P-2…P-7) but buildable and provable against the **disposable** FreeRADIUS; Decision 5's rate-limit dimension stays **UNMEASURED / OPEN** |
 | Deployment rehearsal (G-D) | disposable VM, tarball, TLS, bootstrap, login, sign-out, revocation |
@@ -333,7 +333,7 @@ authorisation, `docs/70` §8.3) · **Decision 5** · a writer for
 |---|---|---|
 | 1 | Which role executes login / logout? | **`dnb_adminwrite`** (writes → the write connection, as `dnb_app` executes `mt_auth_*` on the customer plane); resolve as `dnb_adminapi`. Alternative: a dedicated `dnb_staffauth` login role — one more credential to provision, tighter pre-auth blast radius |
 | 2 | Where is the password verified? | **In PostgreSQL** (pgcrypto bcrypt): hashes never leave the database, counters are transactional with the attempt. Alternative: Argon2id in PHP, hash fetched per attempt |
-| 3 | Admin-plane voucher / plan issuance for a target customer | **Build it** as new definer functions. Which definer role owns them is decided **by measurement** at build time: `dnb_def_comm` has no widening policy (that is what makes it safe for customers) and `dnb_def_net` widens `mt_vouchers` / `mt_hotspot_users` only — so either a new `dnb_def_commadmin` with its own explicit policies, or `dnb_def_prov`; not guessed here |
+| 3 | Admin-plane voucher / plan issuance for a target operator | **Build it** as new definer functions. Which definer role owns them is decided **by measurement** at build time: `dnb_def_comm` has no widening policy (that is what makes it safe for customers) and `dnb_def_net` widens `mt_vouchers` / `mt_hotspot_users` only — so either a new `dnb_def_commadmin` with its own explicit policies, or `dnb_def_prov`; not guessed here |
 | 4 | Session lifetime and lockout parameters | proposed 8 h absolute; 5 → 15 min doubling, ceiling 24 h. **Operator confirms**; nothing here is measured |
 | 5 | Second factor mandatory? | **Yes, before G-D** — the console controls a network estate from the public Internet |
 | 6 | Audit subject | **username**, immutable, human-readable in `mt_audit_log.actor` |
@@ -406,7 +406,7 @@ Every row names what was run; nothing below is inferred.
 |---|---|---|
 | **D-AUTH-1** | authentication DB role | **`dnb_staffauth`** — a **LOGIN** role (a NOLOGIN role cannot serve a connection; the least-privilege *owner* is the NOLOGIN `dnb_def_staff`). EXECUTE on `mt_staff_login`, `mt_staff_session_resolve`, `mt_staff_logout` only; **zero table privileges, now and by default**; provisioned by the installer like the other six. `dnb_adminwrite` is **not** used for authentication (M1) |
 | **D-AUTH-2** | password verification | **inside PostgreSQL**, pgcrypto bcrypt cost 12. **No function callable by any HTTP role returns a hash.** The HTTP role receives success/failure and `(staff id, username, role, factor)` only |
-| **D-AUTH-3** | Admin-plane commercial writes | **dedicated Admin-plane functions** taking a **validated target customer** explicitly; `mt_current_customer()` is **never set** on the Admin plane; the target is authorised by the staff capability (`vouchers.generate`, `plans.write`); RLS, customer/site integrity and transactional audit preserved. **Built in G-C2, not G-B**; the owner role is chosen by measurement then |
+| **D-AUTH-3** | Admin-plane commercial writes | **dedicated Admin-plane functions** taking a **validated target operator** explicitly; `mt_current_customer()` is **never set** on the Admin plane; the target is authorised by the staff capability (`vouchers.generate`, `plans.write`); RLS, customer/site integrity and transactional audit preserved. **Built in G-C2, not G-B**; the owner role is chosen by measurement then |
 | **D-AUTH-4** | session and lockout | session **8 h absolute**; lockout **5 failures → 15 min**, decaying (doubling per lock, ceiling 24 h, counter reset after a success or once the decay window passes); **no permanent lock**. Every value lives in **one** place, `mt_staff_policy()`, read by the login function and by the tests — no duplicated constants |
 | **D-AUTH-5** | second factor | **TOTP mandatory before the public hostname.** `DN_STAFF_REQUIRE_TOTP` defaults to **required** whenever the `dishnet` provider is bound; a password-only session is admitted **only** to enrol, and every capability route answers 403 `second_factor_required` until it has. Development may set it to `no` (the controlled test mechanism). Secrets are generated and verified in the database and shown once, to the enrolling user |
 | **D-AUTH-6** | audit identity | `actor` = **immutable username**; `mt_staff.id` (uuid) retained as the internal identity and carried in `detail`; `display_name` is mutable and appears nowhere in audit |

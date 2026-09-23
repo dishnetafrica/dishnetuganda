@@ -69,12 +69,12 @@
     "DNB_APP_USER": {
       "required": false,
       "secret": false,
-      "description": "Customer request role. Defaults to the migration role name."
+      "description": "Operator-plane request role (the Customer PWA API). Defaults to the migration role name."
     },
     "DNB_APP_PASS": {
       "required": false,
       "secret": true,
-      "description": "Customer request role. Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
+      "description": "Operator-plane request role (the Customer PWA API). Provisioned at install time (docs/97). The migrations create this role with no password at all, and Database::connect() has no default, so an unset value raises rather than attempting an empty string."
     },
     "DNB_WORKER_USER": {
       "required": false,
@@ -361,7 +361,7 @@
       "tests/ (needs a BYPASSRLS fixture identity)",
       "tools/",
       "docs/",
-      "public/ (the customer API front controller, which nothing here serves)"
+      "public/ (the Customer PWA API front controller, which nothing here serves)"
     ],
     "documentation": [
       "plugin/doc/INSTALL.md",

@@ -29,7 +29,7 @@ final class SignalReport
      * The structural inventory: which router signals have a source at all.
      *
      * Every `unmeasured` entry names what would have to exist. That turns the
-     * screen into a to-do list an operator can read, instead of a wall of grey.
+     * screen into a to-do list DishNet staff can read, instead of a wall of grey.
      *
      * `admin_readable` is a SEPARATE question from `status`. A signal can be
      * measured in Domain B and still not be readable through the Admin API —

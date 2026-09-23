@@ -2,7 +2,7 @@
 --
 -- The plugin's own installer deliberately cannot do this. Creating a database
 -- and a role is a privileged act on someone else's cluster, so it is a separate
--- file the operator can read in full before running, rather than something a
+-- file the installing engineer can read in full before running, rather than something a
 -- PHP process does on their behalf with credentials it was handed.
 --
 -- Run as a cluster superuser, supplying the owner password on the command line

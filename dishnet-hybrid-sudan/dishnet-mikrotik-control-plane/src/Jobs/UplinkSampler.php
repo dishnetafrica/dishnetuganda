@@ -121,7 +121,7 @@ final class UplinkSampler
      * what the person staging the device read off it, and following a rename
      * through default-name would silently re-point the measurement at an
      * interface nobody chose. A rename should surface as wan_absent — a device
-     * that changed under us is worth noticing, and is the operator's to
+     * that changed under us is worth noticing, and is DishNet staff's to
      * re-establish.
      *
      * There is deliberately no fallback. Returning "some other interface"

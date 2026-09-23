@@ -228,7 +228,7 @@ final class AdminRoutes
             if ($issuer === null) {
                 // NOT 401, and NOT a fallback. There is no identity provider
                 // that can authenticate anybody in this deployment, which is a
-                // configuration fact the operator must see rather than a
+                // configuration fact DishNet staff must see rather than a
                 // credential problem the visitor could fix by trying again.
                 return new Response(501, [
                     'error'    => 'production_authentication_unavailable',

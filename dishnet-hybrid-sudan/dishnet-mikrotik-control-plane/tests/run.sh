@@ -10,7 +10,7 @@
 # CREDENTIALS ARE GENERATED PER RUN. Since docs/97 the migrations create every
 # login role with no password, so there is nothing to fall back to — which is
 # the point. Each run mints fresh random passwords, exports them, and lets the
-# real installer apply them, so the suite exercises the operator's own install
+# real installer apply them, so the suite exercises the engineer's own install
 # path rather than a shortcut around it. Nothing is written to disk.
 set -uo pipefail
 cd "$(dirname "$0")/.."

@@ -142,7 +142,7 @@ final class Installer
      * the claim that a test install left the server unchanged.
      *
      * The owner role is deliberately NOT here: bootstrap.sql created it, this
-     * installer did not, and dropping it would remove the identity the operator
+     * installer did not, and dropping it would remove the identity the installing engineer
      * uses to reach the database.
      */
     public const ROLES = [

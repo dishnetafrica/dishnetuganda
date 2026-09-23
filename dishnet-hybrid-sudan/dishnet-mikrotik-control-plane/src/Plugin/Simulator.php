@@ -87,7 +87,7 @@ final class Simulator
             $built = $ctx->run($cid, function (Database $db) use ($cid, $ref, $siteNames) {
                 $p = $db->one("INSERT INTO mt_principals (customer_id, kind, display_name, phone)
                                VALUES (?, 'owner', ?, ?) RETURNING id",
-                              [$cid, "{$ref} operator", '+2567' . substr(md5($ref), 0, 8)]);
+                              [$cid, "{$ref} owner", '+2567' . substr(md5($ref), 0, 8)]);
                 $s = $db->one("INSERT INTO mt_services (customer_id, kind)
                                VALUES (?, 'mikrotik_hotspot') RETURNING id", [$cid]);
                 $sites = [];

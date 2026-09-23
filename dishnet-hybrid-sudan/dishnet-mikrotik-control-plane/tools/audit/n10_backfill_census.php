@@ -2,7 +2,7 @@
 /**
  * N10 backfill/data-state census. Read-only with respect to design: it counts
  * states and classifies them. Runs against whatever DNB_DSN points at, so the
- * SAME script can later be run by an operator against production — which is the
+ * SAME script can later be run by the DishNet engineer against production — which is the
  * point, because a disposable database cannot speak for production.
  *
  *   DNB_DSN=... php tools/audit/n10_backfill_census.php

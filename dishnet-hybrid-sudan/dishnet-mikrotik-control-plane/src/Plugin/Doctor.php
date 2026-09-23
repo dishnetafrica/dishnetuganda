@@ -6,7 +6,7 @@ use Dn\Db\Database;
 use PDO;
 
 /**
- * Preflight. The command an operator runs BEFORE install, and again after.
+ * Preflight. The command the installing engineer runs BEFORE install, and again after.
  *
  * Every check here answers by looking, not by reading configuration back. The
  * difference matters: this project has recorded four separate controls that
@@ -17,7 +17,7 @@ use PDO;
  * Four states, and they are not interchangeable:
  *
  *   OK      measured, and the measurement is what a working install looks like
- *   WARN    measured, and it is a defensible choice that an operator should see
+ *   WARN    measured, and it is a defensible choice that the engineer should see
  *   BLOCKER measured, and installing or serving in this state is not safe
  *   SKIP    NOT measured — the check could not run, and says why
  *
@@ -293,7 +293,7 @@ final class Doctor
      * The plugin owns objects named mt_*. Anything else in the public schema
      * belongs to another system, and installing alongside it means uninstall
      * cannot be clean. Naming what is there is the point: "the database is not
-     * empty" is a fact an operator should decide about, not one to suppress.
+     * empty" is a fact the engineer should decide about, not one to suppress.
      */
     private function cohabitation(): array
     {

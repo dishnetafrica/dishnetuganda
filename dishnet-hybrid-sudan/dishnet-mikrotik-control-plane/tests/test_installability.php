@@ -268,7 +268,7 @@ is_($writes, [], 'no code in the credential path writes to output'
 t('every value a shell will source is quoted');
 
 // A DSN contains semicolons. `set -a; . file; set +a` — which INSTALL.md tells
-// the operator to run — parses an unquoted one as three commands and leaves
+// the engineer to run — parses an unquoted one as three commands and leaves
 // DNB_DSN holding only the first fragment. Measured: the installer then tried
 // to reach a database called "dnb" that did not exist.
 $tpl = (string) file_get_contents($root . '/plugin/.env.example');

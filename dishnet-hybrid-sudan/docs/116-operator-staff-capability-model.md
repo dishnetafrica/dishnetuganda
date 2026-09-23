@@ -1,6 +1,6 @@
 # 116 — T-2: the Operator Staff capability model (C6 / C16)
 
-**Status: DESIGN, for approval. Nothing implemented.** Answers `docs/115` T-2
+**Status: DESIGN, for approval. Nothing implemented.** Vocabulary per `docs/117`. **Migration 027 remains PENDING; B-3 remains OPEN; the `dnb_app` finding in §0 is a measured fact that no document closes.** Answers `docs/115` T-2
 after T-1 (**`mt_customers` = Operator, vocabulary only**) and T-8 (**resume
 `docs/114` with `dnb_staffauth` and *target operator*)** were closed on
 2026-09-23. C6 (*owner vs staff roles in the Customer PWA*, `docs/47`) and
@@ -82,7 +82,7 @@ asserts `OpCapability::ALL` in PHP equals it.
 
 ---
 
-## B. Owner vs operator-staff — the differences
+## B. Owner vs Operator Staff — the differences
 
 | | Owner | Staff |
 |---|---|---|
@@ -262,7 +262,7 @@ any mapping from `mt_principals.kind` to `actor_kind` and fails on one.
 ## H. Remaining blockers to G-B
 
 **None from T-2.** G-B is DishNet staff authentication (`docs/114`); it does
-not depend on operator-staff capabilities, and the reverse dependency runs
+not depend on Operator Staff capabilities, and the reverse dependency runs
 the other way (the Admin-plane principal creator needs a staff actor).
 
 What precedes G-B: **the T-1 vocabulary pass** — a small, mechanical commit

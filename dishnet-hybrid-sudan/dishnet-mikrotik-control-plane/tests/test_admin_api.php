@@ -94,7 +94,7 @@ is_($res->status, 501, 'an estate read returns 501, not 200');
 is_($res->body['error'], 'estate_access_not_authorized', 'and names why');
 // An empty 200 would render as "no customers exist" — a plausible-looking
 // wrong answer, which is the failure mode this project keeps finding.
-is_(isset($res->body['detail']), true, 'with the reason spelled out for the operator');
+is_(isset($res->body['detail']), true, 'with the reason spelled out for DishNet staff');
 
 // ===========================================================================
 t('RESELLER — is not a role, and cannot be constructed');

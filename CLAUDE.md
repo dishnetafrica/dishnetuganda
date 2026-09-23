@@ -8,6 +8,30 @@ from the repository root.
 anything it covers, read the authoritative decision document it points to. Where
 the index and a decision document disagree, **the decision document is right.**
 
+## Vocabulary — binding since 2026-09-23 (`docs/117`)
+
+| Term | Means | Stored / named in code as (unchanged) |
+|---|---|---|
+| **Operator** | the Domain-B **tenant** — the RLS boundary | `mt_customers`, `customer_id`, `mt_current_customer()`, `/api/v1/admin/customers`, JSON key `customer` |
+| **Operator Owner** | a principal with `kind = 'owner'` — every operator-plane capability | `mt_principals` |
+| **Operator Staff** | a principal with `kind = 'staff'` — **today the stored value is still `'operator'`**, renamed by migration **027** | `mt_principals` |
+| **DishNet Staff** | DishNet's own people (Admin · NOC · Sales · Support) | `mt_staff` (planned, 026); `StaffRole`; **`actor_kind = 'staff'` means them and nobody else** |
+| **DishNet engineer** | the human installing or operating the platform — what documents before `docs/115` call "the operator" | — |
+| **Guest** | a voucher, then a session; never an account, never an actor kind | `mt_vouchers`, `mt_sessions` |
+| **Location / Site** | `mt_sites`; the UI still says *sites* (T-1b, open wording) | `mt_sites`, `site_id` |
+| **Customer PWA** | the product name of the operator-plane app; its users are Operator Staff | `public/`, `/api/v1/me/*` |
+| **Commercial customer** | the external billing relationship (uCRM/Splynx), not a Domain-B entity | `ucrm_client_id` |
+
+**Reading rule.** Documents `30`–`113` and the CLAUDE.md sections above
+`docs/115` were written before this vocabulary: there, *"the operator"* is the
+DishNet engineer and *"customer"* is the tenant. They are records and are
+**not rewritten**. `mt_principals.kind = 'operator'` in those documents is the
+schema value that still exists; it becomes `'staff'` in 027.
+
+**Never** add a tenant table above `mt_customers`, rename it, or add an
+`actor_kind` to tell Operator Staff from DishNet Staff — the former are
+`principal`, the latter `staff`.
+
 ## Settled — do not reopen without an explicit instruction
 
 - **F1–F13 are FROZEN.** Amendment only by the process in `docs/53` §5.

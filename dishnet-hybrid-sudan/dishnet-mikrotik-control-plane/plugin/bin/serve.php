@@ -8,7 +8,7 @@ declare(strict_types=1);
  * This ships INSIDE the package because tools/ does not: a tarball whose only
  * way to be served lives in a directory it excludes is not installable.
  *
- * What this is for: an isolated installation test, and a single-operator
+ * What this is for: an isolated installation test, and a single-administrator
  * install behind something else that terminates TLS. PHP's built-in server is
  * single-threaded and does not belong on a public interface. The alternative
  * is any web server that can serve panel/ as static files and route

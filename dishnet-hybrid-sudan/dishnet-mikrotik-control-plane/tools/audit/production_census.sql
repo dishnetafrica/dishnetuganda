@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- Control-plane integrity census — OPERATOR-SIDE, READ ONLY
+-- Control-plane integrity census — RUN BY THE DISHNET ENGINEER ON THE PRODUCTION HOST, READ ONLY
 --
 --   psql "<production control-plane DSN>" -f tools/audit/production_census.sql
 --
