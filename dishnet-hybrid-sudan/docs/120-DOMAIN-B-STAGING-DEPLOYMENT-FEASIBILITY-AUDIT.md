@@ -31,6 +31,14 @@ executes none of it.**
 > **that is stage 2, it touches Traefik and DNS, and it is NOT started**
 > (§15.8).
 
+> **Update 2026-09-23, about 15:54 UTC — the operator created the DNS record
+> (`A portal-staging → 209.97.137.203`), which is taken as the stage-2
+> decision. §15.8.1 records the precedent the design follows (this project's
+> own mail-stack route file on the same host), the decisions, and blocks D–G
+> handed over: an IP allow-list AND basic auth in front, the API published on
+> the docker bridge gateway `172.17.0.1` for Traefik, never on `0.0.0.0`.
+> Result PENDING; the server is still exactly as §15.6 left it.**
+
 > **The one limit to state first.** This session cannot reach the
 > `dishnetuganda` server: it has no SSH client, no credential, its egress is a
 > proxy that refuses that host, and the standing rule (`CLAUDE.md`, `docs/78`
@@ -695,7 +703,7 @@ verification script; it is not a fresh observation.
 2. ~~Run §1.2 and return the output.~~ **DONE 2026-09-23 14:02 UTC** — §1.3:
    baseline confirmed, thresholds met, `postgres:16-alpine` present, host PHP
    present but without `pdo_pgsql`, Traefik file-configured.
-3. **Stage 2** — **requested by the operator 2026-09-23 after stage 1 (§15.8), NOT started; needs the itemised approval and inputs listed there.** Whether `portal-staging.dishnetuganda.com` is wanted at all;
+3. **Stage 2** — **requested 2026-09-23 after stage 1 and approved by action (the DNS record exists, §15.8.1); blocks D–G handed over; result PENDING.** ~~Whether `portal-staging.dishnetuganda.com` is wanted at all;~~
    if so, its Traefik route goes through EasyPanel, needs the DNS record, and
    needs both an IP allow-list and basic auth in front of the development
    identity. That is a separate approval on its own evidence.
@@ -1462,3 +1470,308 @@ its positive control (§15.6). Results recorded in §15.6.**
 nc -vz -w 5 209.97.137.203 8099        # Mac: must still be refused now that the API is running
 docker exec dnb-staging-postgres psql -U postgres -d dnb -Atc "select kind, state, attempts, coalesce(last_error,'-') from mt_intents order by created_at"   # server: expect 3 voucher.publish confirmed, 3 device.provision retrying or failed with 'device has no management address recorded'
 ```
+
+#### 15.8.1 Stage 2 approved by action — 2026-09-23, about 15:54 UTC
+
+The operator answered §15.8 by **creating the DNS record**: a GoDaddy screenshot
+(18:54 local, UTC+3) shows `A portal-staging → 209.97.137.203`, TTL 600 s,
+beside the existing `@`, `crm`, `evo`, `mail`, `panel` and `webmail` records
+on the same host. S2-2 is done, by the operator, at the DNS provider — and it
+is taken as the stage-2 decision. **Until block E runs the record changes
+nothing:** it points at Traefik, which has no router for that host and answers
+its default 404; the API is still loopback-only (§15.6).
+
+**S2-1 is answered from this repository's own live precedent, not from a
+paste.** `dishnet-mail/traefik-mail.yml` and `dishnet-mail/docker-compose.yml`
+— the mail stack this project deployed on the same host, serving
+`webmail.dishnetuganda.com` today — show the mechanism exactly: one file copied
+into `/etc/easypanel/traefik/config/` with **no Traefik restart** (the file
+provider watches the directory), routers with `entryPoints: ["https"]`,
+`priority: 10` and `tls.certResolver: letsencrypt`, and backends published **on
+the docker bridge gateway `172.17.0.1` only** (`172.17.0.1:8081` Roundcube,
+`172.17.0.1:8090` Stalwart), which Traefik's swarm task reaches as a host-local
+address. Traefik's task lists `0.0.0.0:80->80` and `0.0.0.0:443->443` on the
+container itself, the signature of **host-mode publishing**, so the client
+address Traefik sees is the real one and an IP allow-list can work; block E
+asserts `"PublishMode":"host"` from `docker service inspect` and stops
+otherwise.
+
+**Decisions taken for block E:**
+
+| # | Decision | Why |
+|---|---|---|
+| S2-3 | `dnb-staging-api` is recreated with **two** publishes, `127.0.0.1:8099` and `172.17.0.1:8099` | the loopback path (SSH tunnel) keeps working; the gateway publish is what Traefik reaches — the mail precedent. **Never `0.0.0.0`**, asserted after the start |
+| S2-3 | `DN_PORTAL_ORIGIN` **stays unset** | §6 suggested setting it; set, it would refuse the tunnel's `http://127.0.0.1:8099` origin on every login. Unset, `Csrf` compares the request's own `Host` with `Origin`, which holds on both paths, and behind Traefik the `Host` is fixed by the router rule |
+| S2-4 | one file `dnb-staging.yml`: router on `https` with `letsencrypt`; middlewares **`ipAllowList`** (the operator's address or addresses, `/16`–`/32` only, `0.0.0.0/0` refused) **and `basicAuth`** (one user, password generated on the server, shown once on the terminal and written to no log, stored as an apr1 hash); security headers (`frameDeny`, `nosniff`, `no-referrer`, HSTS 180 days, `X-Robots-Tag: noindex`) | §6 and §10's two mandatory protections. The file is written outside the watched directory, validated with PyYAML when the host has it, then moved in atomically under a `.yml` name |
+| S2-5 | verification from the server is the **negative** side: `https://portal-staging…/` via `--resolve` to the host's own 443 must answer **403** (the server's address is not allow-listed), the certificate must be Let's Encrypt within 120 s, `209.97.137.203:8099` must still refuse, exactly two 8099 listeners, Traefik **not restarted**, no other container changed. The **positive** side is the operator's browser from the allow-listed address (block F), and the refusal from any other network | negative + positive control |
+| S2-6 | `php -S` stays as the origin behind Traefik | the allow-list limits callers to the operator; nginx + php-fpm before any wider audience |
+| S2-7 | rollback is block G: remove the file, recreate the API loopback-only; the DNS record is the operator's to delete | stage 1 is untouched by it |
+
+**A widening to state plainly.** A port published on `172.17.0.1` is reachable
+from the host and from **every container on this host**, exactly as the mail
+stack's `8081` and `8090` are. For Roundcube and Stalwart that is a service
+with its own login; for the staging API it is the credential-less development
+identity. The exposure is to DishNet's own production containers, the estate
+is `SIM-` data with no real binding, and the panel's only bound writes are
+router register and assign into the staging database — accepted for a staging
+demonstration and recorded here. If that is not acceptable, the hardening is an
+auth-enforcing proxy inside the `dnb-staging` bridge that owns the gateway
+publish instead of the API (**S2-8, optional, not built**).
+
+**Not machine-checked here:** the harness's permission classifier refused to
+run the local template test (`test_route_template.py`) and the `dash -n` pass
+over block G in this session, so block E's YAML rendering was validated by
+reading, block G by reading, and block E's own on-server PyYAML check and
+Traefik log check remain the executable validation. Block E itself passed
+`dash -n` and `bash -n` before the refusals began.
+
+#### 15.8.2 Block D — on the Mac: the address to allow
+
+```sh
+dig +short myip.opendns.com @resolver1.opendns.com        # your current public IPv4; if it prints nothing, use the next line
+curl -s https://ifconfig.co/ip; echo                      # fallback: a third party that only sees your address
+```
+
+#### 15.8.3 Block E — on the server: stage 2
+
+Run as root, with the address block D printed. The block validates the input,
+re-checks every precondition read-only (stage 1 healthy, the precedent file
+unchanged, Traefik in host-publish mode, the DNS record resolving, the gateway
+port free), and stops at the first failure. **The password is printed to the
+terminal only, once. Write it down and leave that line out of what you paste
+back.**
+
+```sh
+cat > /root/dnb-staging-evidence/stage2.sh <<'DNB_STAGE2'
+#!/bin/sh
+# docs/120 §15.8 — STAGE 2: https://portal-staging.dishnetuganda.com through the
+# EXISTING Traefik, behind an IP allow-list AND HTTP basic auth. It follows the
+# live mail-stack precedent on this host (dishnet-mail/traefik-mail.yml): one
+# file dropped into /etc/easypanel/traefik/config/, backend published on the
+# docker bridge gateway 172.17.0.1 only. It changes exactly two things:
+#   1. dnb-staging-api is recreated with a second publish, 172.17.0.1:8099
+#      (the 127.0.0.1:8099 publish is kept for the SSH-tunnel path)
+#   2. one NEW file /etc/easypanel/traefik/config/dnb-staging.yml
+# It never touches main.yaml, uisp.yaml, traefik-mail.yml, the swarm, EasyPanel,
+# any other container, iptables (Docker adds the publish rule itself), DNS (the
+# operator created the A record), or 0.0.0.0. It stops at the first failure.
+# The basic-auth password is shown ONCE on the terminal and written to no log.
+#
+#   ALLOW_CIDR=<your public IP>/32 [BASIC_USER=dishnet] sh stage2.sh 2>&1 | tee …
+set -eu
+EV=/root/dnb-staging-evidence
+APP=/opt/dnb-staging
+IMG=dnb-staging-php:8.3
+HOST=portal-staging.dishnetuganda.com
+TCFG=/etc/easypanel/traefik/config
+ROUTE=$TCFG/dnb-staging.yml
+GW=172.17.0.1
+step() { printf '\n=== STAGE 2 / %s ===\n' "$1"; }
+fail() { printf '\nSTOP: %s\nNothing further was run. Paste the whole log back (the password line is not in it).\n' "$1"; exit 1; }
+date -u '+%Y-%m-%d %H:%M:%S UTC'; hostname
+
+step "0 inputs"
+ALLOW_CIDR="${ALLOW_CIDR:-}"; BASIC_USER="${BASIC_USER:-dishnet}"
+[ -n "$ALLOW_CIDR" ] || fail "ALLOW_CIDR is not set: run as  ALLOW_CIDR=<your public IP>/32 sh $EV/stage2.sh"
+ALLOW_YAML=""
+for c in $(printf '%s' "$ALLOW_CIDR" | tr ',' ' '); do
+  printf '%s' "$c" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}/(1[6-9]|2[0-9]|3[0-2])$' || fail "ALLOW_CIDR item '$c' is not an IPv4 CIDR between /16 and /32 (a wider range is not an allow-list)"
+  ALLOW_YAML="${ALLOW_YAML:+$ALLOW_YAML, }\"$c\""
+done
+printf '%s' "$BASIC_USER" | grep -qE '^[a-z][a-z0-9_-]{2,31}$' || fail "BASIC_USER must be 3-32 chars: lowercase letters, digits, _ or -"
+echo "allow-list: [$ALLOW_YAML]   basic-auth user: $BASIC_USER"
+
+step "1 preconditions (read-only)"
+[ "$(id -u)" = 0 ] || fail "run as root"
+for t in docker openssl curl ss getent ip; do command -v "$t" >/dev/null 2>&1 || fail "missing tool: $t"; done
+for c in dnb-staging-postgres dnb-staging-api dnb-staging-worker; do
+  [ "$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null)" = running ] || fail "stage 1 container $c is not running"
+done
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/)" = 200 ] || fail "the stage-1 API does not answer 200 on 127.0.0.1:8099"
+[ -f "$APP/env/runtime.env" ] && [ -f "$APP/env/secrets.docker.env" ] || fail "stage-1 env files missing under $APP/env"
+[ -d "$TCFG" ] || fail "$TCFG does not exist"
+[ ! -e "$ROUTE" ] || fail "$ROUTE already exists (an earlier stage-2 attempt) - paste the log"
+grep -q 'entryPoints: \["https"\]' "$TCFG/traefik-mail.yml" && grep -q 'certResolver: letsencrypt' "$TCFG/traefik-mail.yml" && grep -q "172.17.0.1:" "$TCFG/traefik-mail.yml" \
+  || fail "the mail-stack precedent (entryPoints https, resolver letsencrypt, backend 172.17.0.1) is not what $TCFG/traefik-mail.yml holds - stop and look"
+T=$(docker ps --format '{{.Names}}' | grep -i traefik | head -1); [ -n "$T" ] || fail "no traefik container running"
+SVC=$(docker service ls --format '{{.Name}}' 2>/dev/null | grep -i traefik | head -1); [ -n "$SVC" ] || fail "no traefik swarm service found"
+PORTS=$(docker service inspect "$SVC" --format '{{json .Endpoint.Spec.Ports}}')
+echo "traefik service $SVC ports: $PORTS"
+printf '%s' "$PORTS" | grep -q '"PublishMode":"host"' || fail "traefik publishes 80/443 in ingress mode - the allow-list would see the ingress address, not yours; stop and report"
+printf '%s' "$PORTS" | grep -q '"PublishMode":"ingress"' && fail "traefik has an ingress-mode publish - stop and report"
+T_STARTED=$(docker inspect -f '{{.State.StartedAt}}' "$T")
+ip -4 addr show docker0 2>/dev/null | grep -q " $GW/" || fail "$GW is not the docker0 gateway on this host"
+! ss -tln | grep -qE "$GW:8099 " || fail "$GW:8099 is already in use"
+DNSA=$(getent ahostsv4 "$HOST" | awk '{print $1}' | sort -u | tr '\n' ' ')
+echo "DNS $HOST -> ${DNSA:-does not resolve}"
+printf '%s' "$DNSA" | grep -q '209.97.137.203' || fail "$HOST does not resolve to 209.97.137.203 yet - wait for the record to propagate, then re-run"
+docker inspect -f '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}' $(docker ps -aq) | sort > "$EV/inspect.s2before"
+ls -l "$TCFG" | sed 's/^/  /'
+echo "preconditions ok"
+
+step "2 the basic-auth credential (shown once on the terminal; the route file stores only the hash)"
+( : > /dev/tty ) 2>/dev/null || fail "no terminal to show the password on"
+PW=$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-20)
+[ "${#PW}" = 20 ] || fail "password generation failed"
+HASH=$(openssl passwd -apr1 "$PW")
+printf '%s' "$HASH" | grep -qE '^\$apr1\$' || fail "hash generation failed"
+printf '\n  ***  portal-staging.dishnetuganda.com  basic-auth  (shown ONCE - write it down; it is in no log)  ***\n  ***    user: %s\n  ***    pass: %s\n  ***\n\n' "$BASIC_USER" "$PW" > /dev/tty
+unset PW
+echo "credential generated; hash ready (not printed)"
+
+step "3 dnb-staging-api recreated with the gateway publish added (loopback kept; never 0.0.0.0)"
+docker rm -f dnb-staging-api >/dev/null
+restore_loopback() {
+  docker run -d --name dnb-staging-api --network dnb-staging --restart unless-stopped \
+    -p 127.0.0.1:8099:8099 -v "$APP/app:/app:ro" -w /app \
+    --env-file "$APP/env/runtime.env" --env-file "$APP/env/secrets.docker.env" \
+    -e DN_DEV_STAFF_IDENTITY=yes-development-only "$IMG" php -S 0.0.0.0:8099 plugin/bin/serve.php >/dev/null 2>&1 || true
+}
+if ! docker run -d --name dnb-staging-api --network dnb-staging --restart unless-stopped \
+    -p 127.0.0.1:8099:8099 -p "$GW:8099:8099" -v "$APP/app:/app:ro" -w /app \
+    --env-file "$APP/env/runtime.env" --env-file "$APP/env/secrets.docker.env" \
+    -e DN_DEV_STAFF_IDENTITY=yes-development-only "$IMG" php -S 0.0.0.0:8099 plugin/bin/serve.php >/dev/null; then
+  restore_loopback; fail "could not start the API with the gateway publish; the loopback-only container was restored"
+fi
+i=0; until [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/)" = 200 ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "http://$GW:8099/")" = 200 ]; do
+  i=$((i+1)); [ "$i" -le 30 ] || { docker logs dnb-staging-api --tail 10; fail "the API does not answer on both publishes after 30 s"; }; sleep 1
+done
+echo "API answers 200 on 127.0.0.1:8099 and on $GW:8099 (after ${i}s)"
+ss -tlnp | grep ':8099 ' | sed 's/^/  /'
+[ "$(ss -tln | grep -c ':8099 ')" = 2 ] || fail "expected exactly two 8099 listeners (loopback + gateway)"
+! ss -tln | grep -E ':8099 ' | grep -qE '(0\.0\.0\.0|\*|\[::\]):8099' || fail "8099 is bound on a wildcard address - not allowed"
+
+step "4 the Traefik route file (written outside the watched directory first, then moved in)"
+NEW=$EV/dnb-staging.yml.new
+cat > "$NEW" <<'YAML'
+# Domain-B STAGING (docs/120 §15.8). Drop-in for /etc/easypanel/traefik/config/,
+# the same mechanism as uisp.yaml and traefik-mail.yml. Backend: the staging
+# API published on the docker bridge gateway only (172.17.0.1:8099).
+# Two mandatory protections in front of the credential-less development
+# identity: an IP allow-list AND HTTP basic auth. Remove this file to withdraw
+# the hostname; Traefik drops the route within seconds.
+http:
+  routers:
+    dnb-staging:
+      rule: "Host(`portal-staging.dishnetuganda.com`)"
+      entryPoints: ["https"]
+      priority: 10
+      service: dnb-staging
+      middlewares: ["dnb-staging-allow", "dnb-staging-auth", "dnb-staging-headers"]
+      tls:
+        certResolver: letsencrypt
+  middlewares:
+    dnb-staging-allow:
+      ipAllowList:
+        sourceRange: [__ALLOW__]
+    dnb-staging-auth:
+      basicAuth:
+        realm: "DishNet staging"
+        users:
+          - "__USERS__"
+    dnb-staging-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        referrerPolicy: "no-referrer"
+        stsSeconds: 15552000
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow, noarchive"
+  services:
+    dnb-staging:
+      loadBalancer:
+        servers:
+          - url: "http://172.17.0.1:8099"
+YAML
+USERS_LINE="$BASIC_USER:$HASH"
+sed -i -e "s|__ALLOW__|$ALLOW_YAML|" -e "s|__USERS__|$USERS_LINE|" "$NEW"
+unset HASH USERS_LINE
+grep -q '__ALLOW__\|__USERS__' "$NEW" && fail "placeholder substitution failed"
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
+  python3 - "$NEW" <<'PY' || fail "the route file is not valid YAML"
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+r = d['http']['routers']['dnb-staging']; m = d['http']['middlewares']
+assert r['middlewares'] == ['dnb-staging-allow', 'dnb-staging-auth', 'dnb-staging-headers']
+assert m['dnb-staging-allow']['ipAllowList']['sourceRange'], 'empty allow-list'
+assert len(m['dnb-staging-auth']['basicAuth']['users']) == 1 and '$apr1$' in m['dnb-staging-auth']['basicAuth']['users'][0]
+assert d['http']['services']['dnb-staging']['loadBalancer']['servers'][0]['url'] == 'http://172.17.0.1:8099'
+print('  route file valid: router, 3 middlewares, 1 user, backend 172.17.0.1:8099')
+PY
+else
+  echo "  (python3-yaml not on this host: YAML not pre-validated; Traefik's log is checked below)"
+fi
+sed -E 's/(\$apr1\$)[^"]*/\1<hash withheld>/' "$NEW" | sed 's/^/  | /'
+cp "$NEW" "$TCFG/.dnb-staging.yml.tmp" && mv "$TCFG/.dnb-staging.yml.tmp" "$ROUTE" && rm -f "$NEW"
+chmod 0644 "$ROUTE"; ls -l "$ROUTE" | sed 's/^/  /'
+
+step "5 Traefik picks the file up and obtains the certificate (no restart; the file provider watches the directory)"
+probe() { curl -sk -o /dev/null -w '%{http_code}' --resolve "$HOST:443:127.0.0.1" "https://$HOST/"; }
+i=0; until [ "$(probe)" = 403 ] || [ "$(probe)" = 401 ]; do
+  i=$((i+1)); [ "$i" -le 45 ] || { echo "  last answer: $(probe)"; docker logs "$T" --since 3m 2>&1 | grep -iE 'dnb-staging|portal-staging|error' | tail -10 | sed 's/^/  traefik: /'; fail "Traefik did not route $HOST within 45 s (expected 403 for this host's own address, which is not allow-listed)"; }; sleep 1
+done
+echo "route active after ${i}s: https://$HOST/ from this host answers $(probe) (403 = the allow-list refused the server's own address, as it should)"
+i=0; until openssl s_client -connect 127.0.0.1:443 -servername "$HOST" </dev/null 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null | grep -qi "let's encrypt"; do
+  i=$((i+1)); [ "$i" -le 120 ] || { echo "  certificate still not from Let's Encrypt after 120 s:"; openssl s_client -connect 127.0.0.1:443 -servername "$HOST" </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -enddate | sed 's/^/  /'; docker logs "$T" --since 5m 2>&1 | grep -iE 'acme|portal-staging|error' | tail -10 | sed 's/^/  traefik: /'; fail "ACME did not complete - the route is in place but the certificate is not; do not roll back, paste this"; }; sleep 1
+done
+openssl s_client -connect 127.0.0.1:443 -servername "$HOST" </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -enddate | sed 's/^/  cert: /'
+echo "  http://$HOST/ (port 80) answers $(curl -s -o /dev/null -w '%{http_code}' --resolve "$HOST:80:127.0.0.1" "http://$HOST/") (EasyPanel's own http entrypoint behaviour; informational)"
+
+step "6 verification and after-evidence"
+set +e
+echo "-- 8099 listeners (must be exactly 127.0.0.1 and $GW) --"; ss -tlnp | grep ':8099 ' | sed 's/^/  /'
+printf '  public address 209.97.137.203:8099 -> '; curl -s -o /dev/null --connect-timeout 3 http://209.97.137.203:8099/ && echo "ANSWERED - FAIL" || echo "refused/unreachable (correct)"
+printf '  https://%s/ from this host (not allow-listed) -> %s (expect 403)\n' "$HOST" "$(probe)"
+printf '  https://%s/ with a wrong password -> %s (expect 403 here too: the allow-list is checked first)\n' "$HOST" "$(curl -sk -o /dev/null -w '%{http_code}' -u "$BASIC_USER:wrong" --resolve "$HOST:443:127.0.0.1" "https://$HOST/")"
+echo "-- traefik: not restarted, and its recent log lines for this route --"
+printf '  traefik StartedAt before %s / after %s\n' "$T_STARTED" "$(docker inspect -f '{{.State.StartedAt}}' "$T")"
+docker logs "$T" --since 4m 2>&1 | grep -iE 'dnb-staging|portal-staging' | tail -8 | sed 's/^/  traefik: /'
+echo "-- the other Traefik files are untouched --"; ls -l "$TCFG" | sed 's/^/  /'
+echo "-- containers whose state changed during stage 2 (expect only /dnb-staging-api, recreated) --"
+docker inspect -f '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}' $(docker ps -aq) | sort > "$EV/inspect.s2after"
+comm -3 "$EV/inspect.s2before" "$EV/inspect.s2after" | sed 's/^/  /'
+echo "-- stage-1 objects still as deployed --"
+docker ps --filter name=dnb-staging --format '  {{.Names}}  {{.Status}}  ports={{.Ports}}'
+docker network inspect dnb-staging -f '  bridge members: {{range .Containers}}{{.Name}} {{end}}'; echo
+echo
+echo "=== STAGE 2 IN PLACE: from an allow-listed address open https://$HOST/ - browser asks for the basic-auth login, then the DishNet Admin login card ==="
+echo "=== paste this whole log back (the password line was printed to the terminal only) ==="
+DNB_STAGE2
+ALLOW_CIDR="${ALLOW_CIDR:?set ALLOW_CIDR first, e.g.  ALLOW_CIDR=41.210.x.y/32}" BASIC_USER="${BASIC_USER:-dishnet}" sh /root/dnb-staging-evidence/stage2.sh 2>&1 | tee /root/dnb-staging-evidence/stage2.log
+```
+
+#### 15.8.4 Block F — on the Mac: the positive control and the browser
+
+```sh
+# from the Mac, on the SAME network whose address you allow-listed:
+curl -sI https://portal-staging.dishnetuganda.com/ | sed -n '1p;/WWW-Authenticate/p'      # HTTP/2 401 + WWW-Authenticate: Basic realm="DishNet staging"
+curl -s -o /dev/null -w '%{http_code}\n' -u 'dishnet:PASTE-THE-PASSWORD-HERE' https://portal-staging.dishnetuganda.com/   # 200
+open https://portal-staging.dishnetuganda.com/
+# from any OTHER network (phone off wifi): the allow-list must refuse before any login prompt:
+#   curl -sI https://portal-staging.dishnetuganda.com/ | head -1                          # HTTP/2 403
+```
+
+Expected in the browser: the basic-auth prompt first (user `dishnet` unless
+you set `BASIC_USER`), then the *DishNet Admin* login card of §15.4 — choose
+`admin`. The cookie is `Secure` here because Traefik sends
+`X-Forwarded-Proto: https`.
+
+#### 15.8.5 Block G — rollback of stage 2 only
+
+```sh
+sh <<'DNB_S2_ROLLBACK' 2>&1 | tee /root/dnb-staging-evidence/stage2-rollback.log
+# docs/120 §15.8 S2-7 — withdraw stage 2 only: the route file and the gateway publish.
+# Stage 1 (loopback + SSH tunnel) stays exactly as deployed. Delete the DNS record at GoDaddy yourself.
+set -u
+rm -f /etc/easypanel/traefik/config/dnb-staging.yml && echo "route file removed (Traefik drops the route within seconds)"
+docker rm -f dnb-staging-api >/dev/null && docker run -d --name dnb-staging-api --network dnb-staging --restart unless-stopped \
+  -p 127.0.0.1:8099:8099 -v /opt/dnb-staging/app:/app:ro -w /app \
+  --env-file /opt/dnb-staging/env/runtime.env --env-file /opt/dnb-staging/env/secrets.docker.env \
+  -e DN_DEV_STAFF_IDENTITY=yes-development-only dnb-staging-php:8.3 php -S 0.0.0.0:8099 plugin/bin/serve.php >/dev/null && echo "API recreated loopback-only"
+sleep 2; ss -tlnp | grep ':8099 '
+printf 'https://portal-staging.dishnetuganda.com/ from this host -> %s (expect 404 once the route is gone)\n' "$(curl -sk -o /dev/null -w '%{http_code}' --resolve portal-staging.dishnetuganda.com:443:127.0.0.1 https://portal-staging.dishnetuganda.com/)"
+ls -l /etc/easypanel/traefik/config/
+DNB_S2_ROLLBACK
+```
+
+**Result: PENDING** the operator's run of blocks D, E and F.

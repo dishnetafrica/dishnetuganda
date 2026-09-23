@@ -2489,6 +2489,19 @@ runs first; only the package side was measured from the repository.
   precedent, read only after approval. Seven itemised steps S2-1…S2-7 await
   explicit approval plus the Traefik config paste, the address(es) to allow and
   a basic-auth username. **Never publish 8099 on `0.0.0.0`.**
+- **Stage 2 approved by action (`docs/120` §15.8.1):** the operator created the
+  DNS record. The design follows this project's own live precedent on the same
+  host, `dishnet-mail/traefik-mail.yml`: one file in
+  `/etc/easypanel/traefik/config/` (no Traefik restart), `entryPoints: ["https"]`,
+  `certResolver: letsencrypt`, backend published on the docker bridge gateway
+  **`172.17.0.1:8099`** (loopback kept; never `0.0.0.0`); middlewares
+  `ipAllowList` + `basicAuth` (password shown once, hash in the file) + security
+  headers; `DN_PORTAL_ORIGIN` stays unset so the tunnel path still logs in;
+  block E asserts Traefik's host-mode publishing before writing anything and
+  verifies 403 from the server's own address, a Let's Encrypt certificate, two
+  8099 listeners and no Traefik restart. **Widening, accepted for staging:** a
+  `172.17.0.1` publish is reachable by every container on the host, as the mail
+  stack's are. Blocks D–G handed over; **result PENDING**.
 - **Simulator finding, not a deployment fault:** its routers carry tunnel
   addresses `10.99.0.10–14`, outside `10.66.0.0/16`, so its three
   `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and
