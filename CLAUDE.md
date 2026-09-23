@@ -1953,6 +1953,45 @@ were not weakened.**
 Suite **30 suites / 1,846 assertions / 0 failed**, stable over two runs.
 Proved over real HTTP in both modes as well as in-process.
 
+## The DishNet Portal direction — staff authentication PLANNED, not built (`docs/114`)
+
+**Direction corrected 2026-09-23.** The product is the **DishNet Portal**:
+DishNet Admin + the Customer PWA, both over the Domain-B API, both
+DishNet-owned, at DishNet's own URL.
+
+- **uCRM / UISP / Splynx are NOT the operating portal, NOT a login
+  dependency, and there is NO staff-auth bridge.** Do not move the Admin UI
+  into any of them and do not redesign Domain B around them. `docs/111`'s
+  staff-identity path (U-7, S-1/S-2) is **superseded**; its data-adapter half
+  is parked, not chosen. They may later be integrations for selected
+  commercial data at the one audited link point `docs/110` defines.
+- **W-4 is now authorised to be DESIGNED** — and only designed. `docs/114`
+  is the plan: `mt_staff` + `mt_staff_sessions` owned by a new NOLOGIN
+  `dnb_def_staff`; password (bcrypt) and TOTP verified **inside PostgreSQL**
+  via pgcrypto — the schema's first extension, to be proved installable by
+  the non-superuser owner; decaying lockout **inside `mt_staff_login()`**;
+  opaque 256-bit cookie, HttpOnly/Secure/SameSite=Strict, stored hashed under
+  a **label-derived** key (no new secret); resolve re-reads `status` and
+  `role` live; disable revokes sessions transactionally; actor = username,
+  a parameter from the identity boundary (W-1); `mt_current_customer()` is
+  **never set on the Admin plane** — a target customer is a validated
+  function parameter, never tenant context.
+- **Credential tables must be created under `SET LOCAL ROLE dnb_def_staff`**,
+  never as the owner: migration 015's default privileges for `dnb_admin` are
+  per granting role and 022 revoked only INSERT, so an owner-created table
+  would hand `dnb_admin` SELECT on password hashes by default. A test must
+  assert every login role holds zero privileges on them.
+- Bound writes come **after** the provider: routers first (three existing
+  W-1 functions + one new enqueue function), then Admin-plane voucher/plan
+  issuers for a **target** customer (D-AUTH-3, owner role decided by
+  measurement), idempotent through `mt_idempotency(customer_id, key)` with
+  the check before the mutation (RULE I-1). `POST /sites` waits for O-1;
+  `disconnect` waits for the replay fix.
+- **Nothing is implemented.** `DenyAllIdentity` remains the production
+  binding, migrations end at 025, the preview artifact is a recording, and
+  the production census remains the handoff for O-1. Gates G-A…G-F and
+  decisions D-AUTH-1…7 are in `docs/114` §K–§L.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
