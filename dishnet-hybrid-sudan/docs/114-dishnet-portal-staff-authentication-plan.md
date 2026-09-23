@@ -341,6 +341,69 @@ authorisation, `docs/70` §8.3) · **Decision 5** · a writer for
 
 ---
 
+---
+
+## M. D-AUTH-1…7 — measured and provisionally frozen 2026-09-23, then SUSPENDED the same day
+
+> **Suspended before any code was written.** The tenancy re-evaluation in
+> `docs/115` interrupts this build. Its finding — `mt_customers` *is* the
+> Operator — leaves every decision below intact and changes one word:
+> D-AUTH-3's *target customer* becomes *target operator*. Resumption is
+> `docs/115` T-8, after T-1 is accepted.
+
+Measured on `dnb_sim` at migration level 25 before a line of code was written.
+Every row names what was run; nothing below is inferred.
+
+### M.1 The measurements
+
+| # | Measurement | Result |
+|---|---|---|
+| **M1** | functions `dnb_adminwrite` may EXECUTE (`has_function_privilege`, PUBLIC excluded) | **7**: `mt_customer_create`, `mt_device_register`, `mt_device_assign`, `mt_device_set_state`, `mt_device_set_secret`, `mt_device_set_desired`, `mt_device_set_wan` — every one a **write** |
+| **M2** | table privileges per LOGIN role (`has_table_privilege` over every `public` table, SELECT/INSERT/UPDATE/DELETE) | `dnb_adminapi` **0/0/0/0** · `dnb_adminwrite` **0/0/0/0** · `dnb_radius` 0/0/0/0 · `dnb_app` 20/13/14/11 · `dnb_admin` 21/20/21/20 · `dnb_worker` 21/20/21/20 · owner `dnb` 21/21/21/21 |
+| **M3** | `pg_default_acl` — default privileges, **per granting role** | exactly one granting role, the owner `dnb`: `dnb_app=r`, `dnb_worker=rwd`, `dnb_admin=rwd` on tables. **Any table the owner creates hands `dnb_admin` and `dnb_worker` SELECT/UPDATE/DELETE and `dnb_app` SELECT automatically.** No default ACL exists for any definer role |
+| **M4** | pgcrypto on this cluster | available, version 1.3, **trusted = t** |
+| **M5** | can the non-superuser, non-BYPASSRLS owner create it? | throwaway `dnb_m5` owned by `dnb` (`rolsuper=f`, `rolbypassrls=f`): `CREATE EXTENSION pgcrypto` → **CREATE EXTENSION**; `crypt('x', gen_salt('bf', 12))` → `$2a$12$…` **ok**; `hmac(…, 'sha1')` **ok**; database dropped, residue **0** |
+
+### M.2 What the measurements decide
+
+- **M1 rules out `dnb_adminwrite` for authentication.** The condition was
+  *"unless measurement proves it can be reduced to exactly the required
+  authentication operations without widening unrelated privileges."* It holds
+  EXECUTE on seven write functions that the bound Admin routes will need; it
+  cannot be reduced to the three authentication functions without removing
+  the grants it exists for, and a pre-authentication code path connecting as
+  a role that can call `mt_device_set_secret` is exactly the inheritance the
+  decision forbids. **A dedicated login role it is.**
+- **M2 shows the shape the new role must have:** `dnb_adminapi` and
+  `dnb_adminwrite` both hold zero table privileges, and the test suite
+  already proves that shape. `dnb_staffauth` copies it: EXECUTE on exactly
+  three functions, nothing else, asserted the same way.
+- **M3 is the finding that shapes the migration.** A `CREATE TABLE mt_staff`
+  run as the owner would grant `dnb_admin` **SELECT on password hashes** and
+  `dnb_worker` the same, silently, through a default ACL set in migration
+  015 and only partly revoked since. The credential tables are therefore
+  created **under `SET LOCAL ROLE dnb_def_staff`**, which has no default
+  ACL, and a test asserts every login role — `dnb_admin` and `dnb_worker`
+  included — holds zero privileges on them, with `dnb_def_staff` as the
+  positive control.
+- **M4–M5 make in-database verification available without a superuser.** The
+  extension is trusted and the owner created it in a database it owns. That
+  is the production shape too (`bootstrap.sql` makes the owner own the
+  database), and `test_installability` must prove it on every run rather
+  than assume it.
+
+### M.3 The frozen decisions
+
+| # | Decision | Frozen as |
+|---|---|---|
+| **D-AUTH-1** | authentication DB role | **`dnb_staffauth`** — a **LOGIN** role (a NOLOGIN role cannot serve a connection; the least-privilege *owner* is the NOLOGIN `dnb_def_staff`). EXECUTE on `mt_staff_login`, `mt_staff_session_resolve`, `mt_staff_logout` only; **zero table privileges, now and by default**; provisioned by the installer like the other six. `dnb_adminwrite` is **not** used for authentication (M1) |
+| **D-AUTH-2** | password verification | **inside PostgreSQL**, pgcrypto bcrypt cost 12. **No function callable by any HTTP role returns a hash.** The HTTP role receives success/failure and `(staff id, username, role, factor)` only |
+| **D-AUTH-3** | Admin-plane commercial writes | **dedicated Admin-plane functions** taking a **validated target customer** explicitly; `mt_current_customer()` is **never set** on the Admin plane; the target is authorised by the staff capability (`vouchers.generate`, `plans.write`); RLS, customer/site integrity and transactional audit preserved. **Built in G-C2, not G-B**; the owner role is chosen by measurement then |
+| **D-AUTH-4** | session and lockout | session **8 h absolute**; lockout **5 failures → 15 min**, decaying (doubling per lock, ceiling 24 h, counter reset after a success or once the decay window passes); **no permanent lock**. Every value lives in **one** place, `mt_staff_policy()`, read by the login function and by the tests — no duplicated constants |
+| **D-AUTH-5** | second factor | **TOTP mandatory before the public hostname.** `DN_STAFF_REQUIRE_TOTP` defaults to **required** whenever the `dishnet` provider is bound; a password-only session is admitted **only** to enrol, and every capability route answers 403 `second_factor_required` until it has. Development may set it to `no` (the controlled test mechanism). Secrets are generated and verified in the database and shown once, to the enrolling user |
+| **D-AUTH-6** | audit identity | `actor` = **immutable username**; `mt_staff.id` (uuid) retained as the internal identity and carried in `detail`; `display_name` is mutable and appears nowhere in audit |
+| **D-AUTH-7** | staff management | capability **`staff.manage`, Admin only**; NOC, Sales and Support cannot create, modify, disable or reset staff; every lifecycle mutation is audited **inside** its function |
+
 *Nothing above is implemented. `DenyAllIdentity` remains the production
 binding, W-4 is designed and OPEN, migrations end at 025, and the production
 census remains the handoff for O-1.*

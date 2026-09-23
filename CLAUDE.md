@@ -1992,6 +1992,46 @@ DishNet-owned, at DishNet's own URL.
   the production census remains the handoff for O-1. Gates G-A…G-F and
   decisions D-AUTH-1…7 are in `docs/114` §K–§L.
 
+## Multi-operator tenancy — ANALYSED, not decided (`docs/115`); D-AUTH SUSPENDED
+
+**D-AUTH-1…7 were measured and provisionally frozen (`docs/114` §M) and then
+SUSPENDED the same day, before any code.** Migrations still end at 025. Do not
+resume them without T-1 and T-8 of `docs/115` being answered.
+
+The product is **DishNet → Operators → Operator Staff → Locations → routers /
+HotSpot / plans / vouchers / sessions → guests**. A reference ISP portal was
+supplied for its **operating model only** — nothing of its implementation is
+copied, and the personal details on its pages are reproduced nowhere.
+
+- **`mt_customers` already IS the Operator — measured, not assumed.** Nothing
+  references anything above it (`FKs FROM mt_customers: NONE`); sites (via
+  services), devices, plans, vouchers, sessions, principals and audit all key
+  on it; 19 of 21 `mt_*` tables carry FORCED RLS with 18 policies on
+  `customer_id = mt_current_customer()`; `docs/110` already calls it "the
+  Domain-B operator". The commercial customer is **external** (the nullable,
+  withheld `ucrm_client_id`).
+- **Do NOT add a tenant layer above it.** `mt_operators` above `mt_customers`
+  would make `mt_customers` mean subscriber accounts — which the product does
+  not have (**F11**) — and re-key **18 tables, 18 policies, 32 functions, 21
+  migrations, 15 PHP files, 19 test files and `mt_auth_sessions`** while
+  contradicting F4, F5 and `docs/81` §9. **Rejected on evidence.**
+- **Recommended: vocabulary at the API/UI** (Operators & locations), no
+  physical rename (same blast radius, zero security gain) — **T-1, awaiting
+  instruction.**
+- **Operator Staff = `mt_principals`** (exactly one operator, phone-OTP, PWA).
+  Their intra-operator **capability model is UNDEFINED** — `kind
+  owner|operator` is stored and never branched (C6/C16 = **T-2**). **Guests
+  have no identity** and get none (F11, `docs/89`). **DishNet Staff** stay
+  global by capability and name a **target operator** explicitly; D-AUTH-3
+  reads *target operator* from now on.
+- **Subscriber accounts are not a gap.** The reference's subscriber lifecycle
+  is a different product shape; if ever wanted it is a child of the operator
+  (T-3), never a layer above.
+- Sessions attribute to the operator (via the HotSpot user) and to the
+  location (via the voucher) — **never to a router** (unchanged).
+- Sequence: T-1 → resume `docs/114` → T-2 → O-1/spine → projections and
+  reports → G-C. Twelve open decisions in `docs/115` §N.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
