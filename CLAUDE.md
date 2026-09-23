@@ -2392,7 +2392,7 @@ column is empty by construction.
   that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
   migration 028, any deployment. Migrations still end at **027**.
 
-## Staging on the existing server — STAGES 1 AND 2 IN PLACE (`docs/120`); the redeploy for migration 028 is handed over (`docs/121` §H)
+## Staging on the existing server — STAGES 1 AND 2 IN PLACE (`docs/120`); REDEPLOYED to migration 028 on 2026-09-23 17:34 UTC (`docs/121` §H)
 
 **A read-only deployment feasibility audit, nothing more.** This session
 cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
@@ -2535,12 +2535,14 @@ runs first; only the package side was measured from the repository.
   `209.97.137.203:8099` was *refused* on the server itself while
   `127.0.0.1:8099` answered 200 there — loopback-only, proved.
 
-## Router lifecycle and provisioning from the Admin plane — BUILT (migration 028); staging redeploy HANDED OVER (`docs/121`)
+## Router lifecycle and provisioning from the Admin plane — BUILT (migration 028); staging REDEPLOYED (`docs/121`)
 
 **Steps 1 and 2 of the production roadmap the operator accepted after stage 2.**
-Development and test schema only; nothing is installed by this work; the
-staging redeploy is a one-command handover whose result is **PENDING**. **NOTHING
-here is HARDWARE VERIFIED**; F6-B stays NOT AUTHORIZED; `docs/119` is unchanged.
+Development and test schema, plus the **staging** estate: the operator ran the
+one-command redeploy at **2026-09-23 17:34:30 UTC** (`docs/121` §H.1) —
+migration 028 is applied there and **nowhere else**; production is untouched.
+**NOTHING here is HARDWARE VERIFIED**; F6-B stays NOT AUTHORIZED; `docs/119` is
+unchanged.
 Review (§A–§C) was written before code; the build record is §D–§H.
 
 - **Migration 028** (`028_admin_router_lifecycle_and_provisioning.sql`):
@@ -2633,8 +2635,13 @@ Review (§A–§C) was written before code; the build record is §D–§H.
   (was 33 / 3,026); `tests/test_router_lifecycle_provision.php` alone **214**;
   `plugin/bin/install-test.sh` **85/85**; migration 028 trialled on a throwaway
   copy of the test database first (eleven probes, all as designed), then dropped.
-- **Staging redeploy — HANDED OVER, result PENDING** (`docs/121` §H):
-  `scripts/dnb-staging-redeploy.sh`, one command as root, builds the artifact
+- **Staging redeploy — DONE 2026-09-23 17:34:30 UTC** (`docs/121` §H.1): from
+  commit `d0fca1e`, digest matched, *applied 1 migration(s): 028*, 28 recorded,
+  doctor 20 ok / 1 warn (deny-all in the one-shot process, as in stage 1) / 0
+  blockers, panel 200, `routers.js` 200, session 401, Traefik 401, worker
+  `simulated-routeros`, exactly the two application containers changed, none
+  removed. **The new screens have not yet been seen in a browser** (PENDING).
+  The script: `scripts/dnb-staging-redeploy.sh`, one command as root, builds the artifact
   on the server, refuses unless the content digest is
   **`1bc95524cd36f38413b5325fe26cdf76a20cb9d67e4253051c5b0bae7a7af74b`**
   (118 files; the name is still `0.1.0-rc1` — **compare the digest, never the
@@ -2651,7 +2658,8 @@ Review (§A–§C) was written before code; the build record is §D–§H.
   `reboot`/`reprovision`/`diagnostics` (no delivery case); device-state
   automation from a confirmed delivery (a B1 question); the simulator's
   addresses; NAS/RADIUS (Decision 2a chose a mechanism, nothing is built, F6
-  NOT AUTHORIZED); G-C2, B-3, O-1, G-D, T-6/T-10/T-11, F-3; any deployment.
+  NOT AUTHORIZED); G-C2, B-3, O-1, G-D, T-6/T-10/T-11, F-3; any production
+  deployment.
 
 ## Open and parked
 

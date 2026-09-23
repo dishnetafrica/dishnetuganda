@@ -310,4 +310,27 @@ seconds *Provisioning jobs* shows `confirmed`, the router's state is still
 `device.provision_requested` by `dev` and `intent.confirmed` by the worker with
 `simulated-routeros` in its name.
 
-**Result: PENDING** the operator's pasted output.
+### H.1 Result — REDEPLOYED 2026-09-23 17:34:30 UTC
+
+The operator ran the one command at 17:34:05 UTC and pasted the whole output.
+Every step held; nothing stopped it.
+
+| Step | Pasted evidence |
+|---|---|
+| 0 | deployed content digest **`4e7467ad…16c798e`** (stage 1's build); migrations before **27** (last `027_operator_staff_capabilities.sql`); the panel answered 200 on `127.0.0.1:8099` |
+| 1 | cloned commit **`d0fca1e07ec4486bb44b2b5e4b1f993589a52396`**; built `dishnet-mikrotik-0.1.0-rc1.tar.gz`, 118 files verified against `SHA256SUMS`; **content digest `1bc95524…7af74b` — the reviewed build**. The archive's own sha256 (`af2b6c0c…`) differs from the local build's, as `docs/96` says it must (tar records mtimes); the content digest is the identity and it matched |
+| 2 | swapped; previous tree kept at `/opt/dnb-staging/app.prev-20260923T173405Z` |
+| 3 | `install`: *applied 1 migration(s): 028_admin_router_lifecycle_and_provisioning.sql · credentials: 7 supplied · verified: 28 migrations recorded* — exactly the pending one, with the installation's own secrets. Doctor: **21 checks, 20 ok, 1 warn, 0 blockers** — the warn is *staff identity provider deny-all* in the **one-shot doctor process**, which carries no `DN_DEV_STAFF_IDENTITY` (the API container does), exactly as `docs/120` §15.6 recorded for stage 1. Ledger after: **28** (last 028); migration files in the build: 28. `mt_device_provision_request`: 1 function, **`dnb_adminwrite` may execute: true** |
+| 4 | `dnb-staging-api` and `dnb-staging-worker` restarted |
+| 5 | loopback: panel **200**, `routers.js` **200**, `GET /api/v1/admin/session` **401** (nobody signed in); the public hostname through Traefik **401** (basic auth in front); worker binding **`"delivery_binding":"simulated-routeros"`**; containers whose status/StartedAt/RestartCount changed: **exactly `dnb-staging-api dnb-staging-worker`**; containers removed: **none** |
+| 6 | `=== REDEPLOYED 2026-09-23T17:34:30Z: dishnet-mikrotik-0.1.0-rc1, content digest 1bc95524…, migrations 28 (last 028_…) ===` |
+
+Posture unchanged: no production container, Traefik file, DNS record, firewall
+rule or other PostgreSQL instance was touched; `DN_ALLOW_REAL_BINDINGS` absent;
+delivery `simulated`; nothing real contacted. **Migration 028 is applied on the
+staging database — and nowhere else.**
+
+**Not yet seen:** the new screens in the operator's browser. The walkthrough
+above (register a `10.66.0.x` router → assign → *connected* → *Push
+configuration* → `confirmed`) is the positive control for the redeploy and is
+**PENDING**.
