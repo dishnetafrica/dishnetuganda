@@ -1774,3 +1774,38 @@ DNB_S2_ROLLBACK
 ```
 
 **Result: PENDING** the operator's run of blocks D, E and F.
+
+#### 15.8.6 The one-command form — `scripts/dnb-staging-stage2.sh`
+
+Right after blocks D–G were handed over the operator wrote: *"now this becoming
+to technical for me do something ready which can work with one command on
+server and i can access using portal-staging.dishnetuganda.com domain."* The
+stage-2 script therefore moved into the repository as
+**`scripts/dnb-staging-stage2.sh`** (beside the operator's existing deploy
+scripts; outside the control-plane tree, so no installability sweep reads it)
+and is fetched and run by **one command on the server**:
+
+```sh
+curl -fsSL -o /root/dnb-stage2.sh https://raw.githubusercontent.com/dishnetafrica/dishnetuganda/claude/study-this-jhe2eg/scripts/dnb-staging-stage2.sh && sh /root/dnb-stage2.sh 2>&1 | tee /root/dnb-staging-evidence/stage2.log
+```
+
+It is block E with these differences, each a deliberate trade for "no input
+required":
+
+| | Block E (§15.8.3) | One-command form |
+|---|---|---|
+| IP allow-list | mandatory, `ALLOW_CIDR` required | **optional** — the operator cannot easily supply a stable address (the Mac reaches the server through a network that also drops SSH, and the address may change). When `ALLOW_CIDR` is set the middleware is added exactly as in block E |
+| in its place | — | a **per-address rate limit** (`rateLimit` average 20 / burst 50) beside basic auth, so password guessing is slowed as well as refused |
+| basic auth | one user, generated password, apr1 hash in the file | same; the password is printed **at the end**, once, to the terminal only (or, with no terminal, to a root-only `portal-login.txt`) |
+| `http://` | not routed (404) | a second router on the `http` entrypoint redirects to `https` (Traefik's ACME handler runs ahead of routers, so the HTTP-01 challenge is unaffected) |
+| re-runs | refused if the route file exists | **idempotent** — the route file is rewritten and the password rotates; the API container is recreated the same way |
+| everything else | | identical: precondition checks (stage 1 healthy, precedent unchanged, Traefik host-mode publishing, DNS resolving, gateway address), API recreated with `127.0.0.1:8099` **and** `172.17.0.1:8099`, never `0.0.0.0`; file written outside the watched directory, PyYAML-validated where available, moved in atomically; 401/403 and Let's Encrypt waits; the same after-checks |
+
+**What this trades away, stated plainly:** without the allow-list, anyone on
+the Internet can reach Traefik's basic-auth prompt for the hostname. What
+stands between them and the credential-less development identity is a 20-
+character random password over TLS, rate-limited per address, with the panel
+carrying `SIM-` data and no real binding. §6 and §10 asked for both
+protections; the operator's request for a no-input command is the reason the
+allow-list became optional, and the script still takes `ALLOW_CIDR` the moment
+an address is known. **Result: PENDING** the operator's run.

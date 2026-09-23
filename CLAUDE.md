@@ -2502,6 +2502,16 @@ runs first; only the package side was measured from the repository.
   8099 listeners and no Traefik restart. **Widening, accepted for staging:** a
   `172.17.0.1` publish is reachable by every container on the host, as the mail
   stack's are. Blocks D–G handed over; **result PENDING**.
+- **One-command form (`docs/120` §15.8.6, `scripts/dnb-staging-stage2.sh`):**
+  at the operator's request ("too technical, one command") block E became a
+  script fetched from the public branch and run with no input. Differences,
+  all deliberate: the IP allow-list is **optional** (`ALLOW_CIDR`) because the
+  operator cannot supply a stable address; a per-address **rate limit** stands
+  beside basic auth instead; `http://` redirects to `https`; re-runs are
+  idempotent (route rewritten, password rotates). Everything else is block E.
+  **Trade stated in the record:** without the allow-list the basic-auth prompt
+  is reachable from the Internet; a 20-character random password over TLS,
+  rate-limited, guards `SIM-` data with no real binding. Result PENDING.
 - **Simulator finding, not a deployment fault:** its routers carry tunnel
   addresses `10.99.0.10–14`, outside `10.66.0.0/16`, so its three
   `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and
