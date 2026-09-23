@@ -72,86 +72,99 @@ Domain-B staging just as much.
 
 ### 1.2 Read-only verification — for the operator to run before anything else
 
-**Every command reads. None writes, restarts, pulls, installs or creates.
-It prints no secret: it never opens `acme.json`, an env file, or the
-`easypanel` container's environment.** Run as root, paste the whole output
-back. The deployment steps in §11 start by comparing it with §1.1 and **stop on
+**Every command reads. None writes, restarts, pulls, installs or creates,
+and nothing is written to the server's disk: the block runs from a quoted
+heredoc, not from a script file. It prints no secret: it never opens
+`acme.json`, an env file, or any container's environment.** Run as root,
+paste the whole output back. The deployment steps in §11 start by comparing it with §1.1 and **stop on
 any deviation** that is not understood.
 
 ```sh
-#!/bin/sh
-# docs/120 §1.2 — READ-ONLY server verification. Nothing here changes state.
+sh <<'DNB_VERIFY'
+# docs/120 §1.2 — READ-ONLY server verification. Every command below only READS.
+# Nothing is created, modified, restarted, removed, pulled or installed, and no
+# file is written: this runs from a quoted heredoc, not from a script on disk.
+# It prints no secret: it never opens acme.json, an env file or a container's
+# environment.
 set -u
-sec() { printf '\n=== %s ===\n' "$1"; }
+sec() { printf '\n=== READ-ONLY: %s ===\n' "$1"; }
 
-sec host
+sec "host: CPU / RAM / disk / clock"
 hostnamectl 2>/dev/null | sed -n '1,8p'; uname -r; uptime; nproc; free -m
+grep -E 'MemTotal|MemAvailable' /proc/meminfo; cat /proc/loadavg
 df -h / /var/lib/docker 2>/dev/null; timedatectl show -p Timezone 2>/dev/null
 
-sec docker
+sec "docker / swarm state"
 docker version --format 'client {{.Client.Version}} server {{.Server.Version}}'
 docker info --format 'swarm={{.Swarm.LocalNodeState}} manager={{.Swarm.ControlAvailable}} nodes={{.Swarm.Nodes}} containers={{.Containers}} running={{.ContainersRunning}} images={{.Images}} storage={{.Driver}} root={{.DockerRootDir}}'
 
-sec containers
+sec "containers (recorded 19 Sep: 18 production + 2 phase-0)"
 docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+printf 'running now: '; docker ps -q | wc -l
 
-sec swarm-services
+sec "swarm services and stacks"
 docker service ls 2>/dev/null; docker stack ls 2>/dev/null
 
-sec networks
+sec "docker networks and subnets"
 docker network ls
 for n in $(docker network ls -q); do
   docker network inspect -f '{{.Name}} driver={{.Driver}} scope={{.Scope}} subnets={{range .IPAM.Config}}{{.Subnet}} {{end}} attached={{len .Containers}}' "$n"
 done
 
-sec volumes
+sec "volumes and disk used by docker"
 docker volume ls; docker system df
 
-sec listeners
+sec "published ports / listeners"
 ss -tulpn | sort -k5
 
-sec traefik
-docker inspect easypanel-traefik --format 'image={{.Config.Image}}{{"\n"}}cmd={{json .Config.Cmd}}{{"\n"}}args={{json .Args}}{{"\n"}}mounts={{range .Mounts}}{{.Source}} -> {{.Destination}}; {{end}}{{"\n"}}ports={{json .HostConfig.PortBindings}}' 2>/dev/null
+sec "traefik: how it is configured (arguments only; no certificate file is opened)"
+docker ps --format '{{.Names}} {{.Image}}' | grep -i traefik || echo 'no container with traefik in its name'
+T=$(docker ps --format '{{.Names}}' | grep -i traefik | head -1)
+[ -n "$T" ] && docker inspect "$T" --format 'image={{.Config.Image}}{{"\n"}}cmd={{json .Config.Cmd}}{{"\n"}}args={{json .Args}}{{"\n"}}mounts={{range .Mounts}}{{.Source}} -> {{.Destination}}; {{end}}{{"\n"}}ports={{json .HostConfig.PortBindings}}'
 
-sec traefik-routing-example   # how EasyPanel routes a domain today (labels vs files)
-docker service inspect web_web-uganda --format '{{json .Spec.Labels}}' 2>/dev/null | tr ',' '\n' | grep -i traefik
-docker service inspect web_web-uganda --format '{{json .Spec.TaskTemplate.ContainerSpec.Labels}}' 2>/dev/null | tr ',' '\n' | grep -i traefik
+sec "how easypanel attaches a domain today (traefik labels on every swarm service)"
+for s in $(docker service ls -q 2>/dev/null); do
+  n=$(docker service inspect "$s" --format '{{.Spec.Name}}')
+  docker service inspect "$s" --format '{{json .Spec.Labels}} {{json .Spec.TaskTemplate.ContainerSpec.Labels}}' | tr ',' '\n' | grep -i traefik | sed "s/^/$n: /"
+done
 
-sec easypanel-files           # listing only. DO NOT cat acme.json — it holds private keys
-ls -la /etc/easypanel 2>/dev/null; ls -la /etc/easypanel/traefik 2>/dev/null; ls -la /etc/easypanel/traefik/config 2>/dev/null
+sec "easypanel files (listing only; acme.json is NOT opened)"
+ls -la /etc/easypanel 2>/dev/null || echo 'no /etc/easypanel'
+ls -la /etc/easypanel/traefik 2>/dev/null; ls -la /etc/easypanel/traefik/config 2>/dev/null
 
-sec postgres-redis
-docker ps --format '{{.Names}} {{.Image}} {{.Ports}}' | grep -iE 'postgres|redis|siridb'
+sec "existing postgres / redis / siridb (never reused)"
+docker ps --format '{{.Names}} {{.Image}} {{.Ports}}' | grep -iE 'postgres|redis|siridb' || echo none-found
 
-sec phase0
+sec "phase-0 stack (must be unchanged)"
 docker ps -a --filter name=dn-phase0 --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
-docker network inspect dn-phase0 -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null
-docker volume inspect dn-phase0-pgdata -f '{{.Mountpoint}}' 2>/dev/null
-wg show 2>/dev/null
+docker network inspect dn-phase0 -f 'dn-phase0 subnet={{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null
+docker volume inspect dn-phase0-pgdata -f 'dn-phase0-pgdata mountpoint={{.Mountpoint}}' 2>/dev/null
+wg show 2>/dev/null || echo 'wg show unavailable'
 
-sec resources-now
+sec "resources right now (one snapshot)"
 docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
-cat /proc/loadavg
 
-sec php-on-host
+sec "php on the host"
 command -v php >/dev/null 2>&1 && php -v | head -1 || echo 'no php on the host'
 dpkg -l 2>/dev/null | awk '/^ii  php/ {print $2, $3}'
 
-sec images-present
-docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -iE 'postgres|php|nginx|caddy|alpine'
+sec "images already present (postgres:16-alpine expected from phase 0)"
+docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -iE 'postgres|php|nginx|caddy|alpine' || echo none-matching
 
-sec ports-wanted-by-staging
+sec "ports the staging would use: 8099 (api on loopback); 5434 informational"
 ss -tulpn | grep -E ':(8099|5434)\b' || echo 'free: neither 8099 nor 5434 is in use'
 
-sec firewall
+sec "firewall (status only)"
 ufw status 2>/dev/null | head -3; printf 'iptables rules: '; iptables -S 2>/dev/null | wc -l
 
-sec daemon-json
+sec "docker daemon.json (address-pool pinning?)"
 cat /etc/docker/daemon.json 2>/dev/null || echo 'no /etc/docker/daemon.json'
 
-sec dns                       # a lookup, not a change
+sec "dns: a lookup, not a change"
 getent hosts portal-staging.dishnetuganda.com || echo 'portal-staging.dishnetuganda.com does not resolve'
-getent hosts crm.dishnetuganda.com
+getent hosts crm.dishnetuganda.com || echo 'crm.dishnetuganda.com does not resolve'
+echo; echo '=== END OF READ-ONLY VERIFICATION ==='
+DNB_VERIFY
 ```
 
 **What the output must settle before §11 may start:** still 18 + 2 containers
@@ -414,7 +427,7 @@ you do not understand, stop.**
 
 ```sh
 # ── 0. verify, and capture the BEFORE evidence (read-only) ─────────────────
-sh docs120-verify.sh > /root/dnb-staging-evidence/verify-before.txt 2>&1   # §1.2
+#   run the §1.2 block and keep its output as /root/dnb-staging-evidence/verify-before.txt
 docker ps --format '{{.Names}}|{{.Status}}' | sort > /root/dnb-staging-evidence/containers.before
 iptables -S | sort > /root/dnb-staging-evidence/iptables.before
 ss -tulpn | sort > /root/dnb-staging-evidence/listeners.before
