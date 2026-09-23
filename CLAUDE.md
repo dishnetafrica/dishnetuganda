@@ -2748,7 +2748,8 @@ one command.
   host**; staging's data is synthetic. Limits: this host only; stopped database
   containers not opened; crontab/systemd not searched.
 - **GATE 2 of O-1 — `o1_composite_fk.sql` as migration 029 — is now the
-  operator's decision.** Not taken. `mt_vouchers.site_id NOT NULL` also shows 0
+  operator's decision.** Not taken. **Taken 2026-09-23 — see the next section:
+  029 is NOT that file, because the owner cannot run it (`docs/124` §A.1).** `mt_vouchers.site_id NOT NULL` also shows 0
   blocking rows, but is a **separate** decision and must not be bundled.
 
 **GATE 1 of O-1, made runnable by the operator. Read only; GATE 2 (the O-1
@@ -2784,6 +2785,64 @@ was never run. `scripts/dnb-staging-census.sh` is that handoff as one command.
 - **If the result is "nothing outside staging, ledger only in staging,
   CLEAR"**, there is no production Domain B, and GATE 2 becomes the operator's
   decision about staging and future installs. **A CLEAR authorises nothing.**
+
+## O-1 CLOSED in code — migration 029 (`docs/124`); staging command handed over, result PENDING
+
+**GATE 2 of `docs/107`, taken on the operator's decision after GATE 1 read
+CLEAR.** Development and test schema, plus the staging command. Production holds
+no Domain B (`docs/123` §F), so a first production install applies 029 to empty
+tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
+
+- **The shape is exactly `docs/106`'s:** `UNIQUE (id, customer_id)` on
+  `mt_services` + `FOREIGN KEY (customer_id, service_id) REFERENCES mt_services
+  (customer_id, id)` on `mt_sites`. Both single-column keys kept; `NO ACTION`;
+  `MATCH SIMPLE`; no CHECK; no `NOT VALID`; nothing else bundled.
+- **The candidate DDL could not be the migration — measured.** The Migrator runs
+  a file as the schema OWNER, and the owner is bound by FORCE row security. With
+  the guard, `o1_composite_fk.sql` **refuses on every estate, an empty install
+  included**; without it, it validates zero visible rows. It is kept in
+  `tools/audit/`, marked **SUPERSEDED**. **Never apply it.**
+- **029 lifts FORCE on exactly the two tables inside its own transaction**,
+  validates against every row, restores FORCE and **verifies itself** before
+  committing. FORCE binds only the owner, which only the installer uses;
+  `NO FORCE` takes **ACCESS EXCLUSIVE** on each table until commit (measured), so
+  nobody else can read them meanwhile; a failure undoes all of it, FORCE
+  included. The guard `row_security = off` stays. **Cost, stated:** `mt_sites`
+  is now locked for the migration too, not only `mt_services` as `docs/106`
+  planned; duration unmeasured at scale.
+- **It enumerates before it refuses:** a count and up to five site→service
+  pairs, then *"nothing was changed"*. **Apply it only as ONE transaction** — the
+  installer, or `psql --single-transaction -v ON_ERROR_STOP=1`; plain `psql -f`
+  commits statement by statement.
+- **Proofs:** `tests/test_o1_site_service.php` **65** — the attack as `dnb_app`
+  refused by name with the same-operator control accepted, re-pointing refused,
+  refusal below row security, a referenced service's operator fixed (S-A by
+  constraint), delete unchanged, isolation unchanged, **T-9** (the key dropped in
+  a rolled-back transaction → the attack succeeds), and on a throwaway database
+  **the owner-run 029 refuses a violating estate, changes nothing, keeps FORCE**,
+  then applies after the per-row decision. **Three weakened copies of 029 fail
+  it: 7, 6 and 29 of 65.** `o1_acceptance.php` **75**, twice (O-1 now
+  constraint-suppressed like the other five; phase 4 runs 029 itself as the
+  owner). Suite **35 suites / 3,327 / 0 failed**, three runs; install-test
+  **85/85**; package digest **`780023ff…b1c46d0`**, 119 files.
+- **The staging command** (`scripts/dnb-staging-redeploy.sh`, rewritten): the
+  census as `dnb_adminapi` **must read CLEAR first** (else stop, nothing
+  changed); the new build's doctor must show no blocker; the installer applies
+  only 029 — **if it refuses, the previous tree is put back** and nothing is
+  restarted; then **independent verification** — the catalogue, the census again,
+  the projections, and an **execution test as `dnb_app` in a transaction that is
+  always rolled back** (own site accepted, cross-operator site refused by name,
+  residue 0); then only the API and worker restart. The API keeps the real staff
+  login. Rehearsed in `scripts/harness/redeploy/` — six scenarios plus three
+  broken copies of the script, each caught.
+- **A local fault, not a product one:** two sandbox processes from the `docs/122`
+  harness held ports 8099 and 443 and made the install test fail 12 of 85. The
+  redeploy harness stops both at exit. **Check for stray harness servers before
+  trusting an install-test failure.**
+- **What this unblocks:** `mt_site_create` may now be built — **derive, never
+  accept** (`docs/105`). `docs/108`'s order still holds: the non-tenant
+  idempotency store (0b) before the first spine writer. **Not decided here:**
+  `mt_vouchers.site_id NOT NULL`, U-1, U-5, B-3, F-3. `POST /sites` still 501.
 
 ## Open and parked
 

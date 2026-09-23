@@ -1,0 +1,133 @@
+#!/bin/bash
+# Fake `docker` for the redeploy harness (scripts/harness/redeploy), extended from
+# the staff-login harness's stub: `restart`, the worker's environment and log, and
+# `exec` that honours the ROLE and flags asked for. Only the calls the staging scripts
+# make are implemented; anything else fails loudly so a new call cannot pass
+# silently. dnb-staging-api is a REAL `php -S` process on 127.0.0.1:8099 running
+# the extracted package with exactly the environment the call names.
+S="${HSIM:?}/state"; APPDIR=/opt/dnb-staging/app; DB="${HSIM_DB:-dnb_hsim}"; NGW="${HSIM_NGW:-127.0.0.1}"
+echo "$(date +%T) docker $*" >> "$S/calls.log"
+api_up() { [ -f "$S/api.pid" ] && kill -0 "$(cat "$S/api.pid")" 2>/dev/null; }
+now() { date -u +%Y-%m-%dT%H:%M:%S.%NZ; }
+cmd=$1; shift
+case "$cmd" in
+  inspect)
+    fmt=""; names=()
+    while [ $# -gt 0 ]; do case "$1" in -f|--format) fmt=$2; shift 2;; *) names+=("$1"); shift;; esac; done
+    for n in "${names[@]}"; do
+      case "$fmt" in
+        '{{.State.Running}}')
+          case "$n" in dnb-staging-postgres|dnb-staging-worker) echo true;;
+            dnb-staging-api) if api_up; then echo true; else echo "Error: No such object: $n" >&2; exit 1; fi;;
+            *) echo "Error: No such object: $n" >&2; exit 1;; esac;;
+        '{{range .Config.Env}}{{println .}}{{end}}')
+          case "$n" in
+            dnb-staging-api) api_up || { echo "Error: No such object: $n" >&2; exit 1; }; cat "$S/api.env"; echo;;
+            dnb-staging-worker) cat "$S/worker.env" 2>/dev/null; echo;;
+            *) echo "Error: No such object: $n" >&2; exit 1;;
+          esac;;
+        '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}')
+          line=$(grep "^$n|" "$S/containers") || { echo "Error: No such object: $n" >&2; exit 1; }
+          IFS='|' read -r _id name st started rc <<< "$line"; echo "/$name|$st|$started|$rc";;
+        *) echo "STUB: unsupported inspect format: $fmt" >&2; exit 99;;
+      esac
+    done;;
+  image) [ "$1" = inspect ] && [ "$2" = dnb-staging-php:8.3 ] && { echo '[{}]'; exit 0; }; echo "Error: No such image" >&2; exit 1;;
+  network) [ "$1" = inspect ] && [ "$2" = dnb-staging ] && { echo "$NGW"; exit 0; }; exit 1;;
+  ps)
+    case "$1" in -aq) cut -d'|' -f1 "$S/containers";; --format) cut -d'|' -f2 "$S/containers";; *) echo "STUB: ps $*" >&2; exit 99;; esac;;
+  logs)
+    name=$1; shift; tl=""
+    while [ $# -gt 0 ]; do case "$1" in --tail) tl=$2; shift 2;; --since) shift 2;; *) shift;; esac; done
+    case "$name" in
+      dnb-staging-api) [ -f "$S/api.log" ] || exit 0; if [ -n "$tl" ]; then tail -n "$tl" "$S/api.log"; else cat "$S/api.log"; fi;;
+      *traefik*) cat "$S/traefik.log" 2>/dev/null || true;;
+      dnb-staging-worker) cat "$S/worker.log" 2>/dev/null || true;;
+      *) echo "Error: No such container: $name" >&2; exit 1;;
+    esac;;
+  exec)
+    stdin=0; pgopt=""
+    while [ $# -gt 0 ]; do
+      case "$1" in -i) stdin=1; shift;; -e) case "$2" in PGOPTIONS=*) pgopt=${2#PGOPTIONS=};; *) echo "STUB: exec -e $2" >&2; exit 99;; esac; shift 2;; *) break;; esac
+    done
+    c=$1; shift; [ "$c" = dnb-staging-postgres ] && [ "$1" = psql ] || { echo "STUB: exec $c $*" >&2; exit 99; }; shift
+    role=""; d=""; args=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -U) role=$2; shift 2;; -d) d=$2; shift 2;;
+        -Atc) args+=(-A -t -c "$2"); shift 2;; -c) args+=(-c "$2"); shift 2;;
+        -v) args+=(-v "$2"); shift 2;;
+        -X|-A|-t|-q|-w) args+=("$1"); shift;;
+        *) echo "STUB: psql arg $1" >&2; exit 99;;
+      esac
+    done
+    [ "$d" = dnb ] || { echo "psql: error: FATAL:  database \"$d\" does not exist" >&2; exit 2; }
+    [ -n "$role" ] || { echo "STUB: psql without -U" >&2; exit 99; }
+    if [ "$stdin" = 0 ]; then exec < /dev/null; fi
+    PGOPTIONS="$pgopt" exec psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U "$role" -d "$DB" "${args[@]}";;
+  restart)
+    for n in "$@"; do
+      grep -q "|$n|" "$S/containers" || { echo "Error response from daemon: No such container: $n" >&2; exit 1; }
+      case "$n" in
+        dnb-staging-api)
+          api_up || { echo "Error response from daemon: container $n is not running" >&2; exit 1; }
+          p=$(cat "$S/api.pid"); kill "$p"; for _ in $(seq 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+          mapfile -t list < "$S/api.env"
+          # A restart re-resolves the bind mount: the process now serves whatever /opt/dnb-staging/app IS.
+          ( cd "$APPDIR" && exec setsid nohup env -i "${list[@]}" php -S 127.0.0.1:8099 plugin/bin/serve.php ) >> "$S/api.log" 2>&1 < /dev/null &
+          echo $! > "$S/api.pid";;
+        dnb-staging-worker)
+          echo "{\"worker\":\"started\",\"delivery_binding\":\"simulated-routeros\",\"at\":\"$(now)\"}" >> "$S/worker.log";;
+        *) echo "STUB: restart $n" >&2; exit 99;;
+      esac
+      t=$(now); awk -F'|' -v n="$n" -v t="$t" 'BEGIN{OFS="|"} $2==n {$4=t} {print}' "$S/containers" > "$S/containers.new" && mv "$S/containers.new" "$S/containers"
+      echo "$n"
+    done;;
+  rm)
+    [ "$1" = -f ] && [ "$2" = dnb-staging-api ] || { echo "STUB: rm $*" >&2; exit 99; }
+    if api_up; then p=$(cat "$S/api.pid"); kill "$p"; for _ in $(seq 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done; fi
+    rm -f "$S/api.pid" "$S/api.env" "$S/api.log"; sed -i '/|dnb-staging-api|/d' "$S/containers"; echo dnb-staging-api;;
+  run)
+    detach=0; name=""; files=(); envs=(); appdir=$APPDIR
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -d) detach=1; shift;; --rm) shift;; --name) name=$2; shift 2;;
+        -v) case "$2" in *:/app:ro|*:/app) appdir=${2%%:/app*};; esac; shift 2;;   # which tree is mounted at /app
+        --network|--restart|-p|-w) shift 2;;
+        --env-file) files+=("$2"); shift 2;; -e) envs+=("$2"); shift 2;;
+        -*) echo "STUB: unknown run flag $1" >&2; exit 99;; *) break;;
+      esac
+    done
+    img=$1; shift; [ "$img" = dnb-staging-php:8.3 ] || { echo "Unable to find image '$img'" >&2; exit 125; }
+    list=("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "PHP_INI_DIR=/usr/local/etc/php")
+    for f in "${files[@]}"; do
+      [ -f "$f" ] || { echo "docker: open $f: no such file or directory." >&2; exit 125; }
+      while IFS= read -r l || [ -n "$l" ]; do case "$l" in ''|\#*) continue;; esac; list+=("$l"); done < "$f"
+    done
+    list+=("${envs[@]}")
+    if [ "$detach" = 1 ]; then
+      [ "$name" = dnb-staging-api ] || { echo "STUB: run -d $name" >&2; exit 99; }
+      api_up && { echo "docker: Error response from daemon: Conflict. The container name \"/dnb-staging-api\" is already in use." >&2; exit 125; }
+      if [ -n "${HSIM_FAIL_RUN:-}" ] && [ ! -f "$S/failed-once" ]; then touch "$S/failed-once"; echo "docker: simulated failure" >&2; exit 125; fi
+      [ "$1 $2 $4" = "php -S plugin/bin/serve.php" ] || { echo "STUB: run -d command $*" >&2; exit 99; }
+      : > "$S/api.log"
+      ( cd "$appdir" && exec setsid nohup env -i "${list[@]}" php -S 127.0.0.1:8099 plugin/bin/serve.php ) >> "$S/api.log" 2>&1 < /dev/null &
+      echo $! > "$S/api.pid"; printf '%s\n' "${list[@]}" > "$S/api.env"
+      echo "api$RANDOM|dnb-staging-api|running|$(now)|0" >> "$S/containers"
+      echo "0123456789abcdef$RANDOM"
+    else
+      if [ -n "${HSIM_RACE:-}" ] && [ "$3" = install ]; then
+        # A cross-operator site written between the census and the migration: 029 must refuse it by itself.
+        psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U postgres -d "$DB" -c \
+          "UPDATE mt_sites SET service_id = (SELECT v.id FROM mt_services v WHERE v.customer_id <> mt_sites.customer_id ORDER BY v.id LIMIT 1)
+            WHERE id = (SELECT id FROM mt_sites ORDER BY id LIMIT 1)" >> "$S/race.log" 2>&1
+      fi
+      if [ -n "${HSIM_MANGLE_BOOTSTRAP:-}" ] && [ "$3" = staff:bootstrap ]; then
+        # A bootstrap whose password line no parser expects: the fallback must still deliver it.
+        ( set -o pipefail; cd "$appdir" && env -i "${list[@]}" "$@" | sed -E 's/^    ([a-z2-9]{6}-)/    pw: \1/' )
+      else
+        ( cd "$appdir" && exec env -i "${list[@]}" "$@" )
+      fi
+    fi;;
+  *) echo "STUB: unsupported docker $cmd $*" >&2; exit 99;;
+esac

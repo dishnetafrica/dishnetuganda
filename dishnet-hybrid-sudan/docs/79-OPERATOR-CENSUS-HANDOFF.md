@@ -18,6 +18,13 @@ no credential.
 > service is deployed outside staging on the DishNet host, and no other
 > database there holds the Domain-B ledger. Staging's synthetic estate is CLEAR
 > at migration 028.
+>
+> **GATE 2 taken 2026-09-23 (`docs/124`):** O-1 is migration 029. §7b step 5's
+> guard alone could not work — the owner is bound by FORCE row security, so the
+> guarded candidate refused on every estate — and 029 lifts FORCE on the two
+> tables inside its own transaction instead. The staging command runs §7b in
+> order: the census first (must read CLEAR), the migration, then step 6's
+> independent verification, including an execution test that is rolled back.
 
 ---
 
