@@ -1,3 +1,18 @@
+-- ===========================================================================
+-- SUPERSEDED 2026-09-23 BY migration 029 (migrations/029_o1_site_service_same_operator.sql,
+-- docs/124). Kept unchanged below as the record of what was measured.
+--
+-- Why it was superseded, measured: the Migrator applies a file as the schema
+-- OWNER, and the owner is subject to FORCE ROW LEVEL SECURITY on both tables.
+-- With the guard below, the owner REFUSES this file on every estate -- a clean
+-- one and an empty install included -- because its own validation query is
+-- affected by row security. Without the guard, the owner validates against
+-- zero visible rows. Neither can be the migration. Migration 029 keeps the
+-- guard and lifts FORCE on exactly these two tables inside its own single
+-- transaction, validates against every row, and restores FORCE before the
+-- transaction ends. tests/test_o1_site_service.php proves both behaviours.
+-- ===========================================================================
+--
 -- O-1 COMPOSITE INTEGRITY — CANDIDATE DDL, NOT A MIGRATION.
 --
 -- This file is deliberately NOT in migrations/. Putting it there would apply it

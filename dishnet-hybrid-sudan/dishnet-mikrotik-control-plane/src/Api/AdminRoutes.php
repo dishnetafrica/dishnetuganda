@@ -208,7 +208,8 @@ final class AdminRoutes
 
         // ── estate writes still declared-unbound ────────────────────────
         // Declared with their capabilities so the matrix is complete and
-        // testable. Each returns an honest 501: sites wait for O-1, plans and
+        // testable. Each returns an honest 501: sites wait for their writer
+        // (O-1 itself is closed by migration 029, docs/124), plans and
         // voucher batches for G-C2, disconnect for the replay fix (docs/108),
         // principal creation for its own instruction (docs/116 J-1).
         foreach ([

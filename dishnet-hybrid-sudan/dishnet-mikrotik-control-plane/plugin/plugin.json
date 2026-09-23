@@ -341,7 +341,7 @@
           "capability": "customers.write"
         }
       ],
-      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign; migration 028 (docs/121) bound the router lifecycle and the push_config action, lifting docs/118 D-2 — each one SECURITY DEFINER function on dnb_adminwrite writing its own audit row with the authenticated subject as actor, and none reaching a router. The five paths under declared_unbound EXIST and every one answers 501: sites wait for O-1; plans and voucher batches for G-C2; disconnect for the replay fix (docs/108); principal creation for its own instruction (docs/116 J-1)."
+      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign; migration 028 (docs/121) bound the router lifecycle and the push_config action, lifting docs/118 D-2 — each one SECURITY DEFINER function on dnb_adminwrite writing its own audit row with the authenticated subject as actor, and none reaching a router. The five paths under declared_unbound EXIST and every one answers 501: sites wait for their writer, mt_site_create (O-1 itself is closed by migration 029, docs/124); plans and voucher batches for G-C2; disconnect for the replay fix (docs/108); principal creation for its own instruction (docs/116 J-1)."
     },
     "session": {
       "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. Since migration 026 these routes DO write identity state (a revocable session row, an audit row) through definer functions owned by dnb_def_staff; they write no estate table, which is why 'writes.bound' stays empty.",

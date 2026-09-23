@@ -19,13 +19,17 @@ declare(strict_types=1);
  *   1. the INSTRUMENT works — tools/audit/production_census.sql detects each
  *      anomaly it claims to detect, and its verdict is CLEAR only when the
  *      estate really is clean;
- *   2. the CONSTRAINT works — the candidate O-1 DDL applies to a clean estate,
- *      refuses a violating one, and leaves no partial schema change;
+ *   2. the CONSTRAINT works — migration 029 (docs/124), run as the schema
+ *      OWNER exactly as the installer runs it, refuses a violating estate with
+ *      the rows counted, leaves no partial schema change, and applies to a
+ *      clean one; the superseded candidate DDL is kept only to show why it
+ *      could not have been the migration;
  *   3. RLS isolation is still substantive in the synthetic estate, so a
  *      "clean" reading is not a blinded one.
  *
- * Five of the fourteen anomalies CANNOT EXIST at this migration level -- the
- * schema already forbids them. For those, the harness drops the guarding
+ * Six of the fourteen anomalies CANNOT EXIST at this migration level -- the
+ * schema already forbids them: five since earlier migrations, and the O-1
+ * cross-operator site itself since migration 029. For those, the harness drops the guarding
  * constraint in its own throwaway database, injects, measures, and restores.
  * That tests the census's detection, and is marked "constraint-suppressed"
  * wherever it is used: it is not a claim that such rows are reachable.
@@ -63,6 +67,23 @@ function psql(string $user, string $db, string $sqlOrFile, bool $isFile = false)
     return [$rc, implode("\n", $out)];
 }
 function sql(string $s): string { [, $o] = psql($GLOBALS['insp'], DB, $s); return $o; }
+
+/**
+ * Apply a file as ONE transaction that stops at the first error -- the only way
+ * a migration may be run by hand (migration 029's header). Plain `psql -f`
+ * would commit statement by statement.
+ */
+function psql_tx(string $user, string $file): array
+{
+    global $host, $port;
+    $pw  = $GLOBALS['rolepw'] ?? '';
+    $cmd = sprintf('%sPGHOST=%s PGPORT=%s psql -U %s -d %s -X -q --single-transaction -v ON_ERROR_STOP=1 -f %s 2>&1',
+        $pw !== '' ? 'PGPASSWORD=' . escapeshellarg($pw) . ' ' : '',
+        escapeshellarg($host), escapeshellarg($port), escapeshellarg($user), escapeshellarg(DB),
+        escapeshellarg($file));
+    exec($cmd, $out, $rc);
+    return [$rc, implode("\n", $out)];
+}
 
 /**
  * A single scalar. Returns null when the query yields no value, so a caller
@@ -204,13 +225,21 @@ is_(str_contains($c['raw'], 'mt_sites total                          : 3'), true
 t('PHASE 2 — each anomaly the schema PERMITS is detected');
 
 // case 6 + case 10 in one row: a site of customer A pointing at B's service.
-// Representable because mt_sites carries two independent single-column FKs and
-// nothing requires them to agree. That IS O-1.
-sql("INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
+// That IS O-1. Since migration 029 the schema refuses it, so -- like PHASE 3 --
+// it is measured CONSTRAINT-SUPPRESSED: refused first, then the composite key
+// is dropped in THIS throwaway database only, to prove the census still sees
+// the row in a database below 029. Production below 029 is exactly that case.
+$crossSql = "INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
      ('00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-00000000000a',
-      '00000000-0000-4000-8000-0000000000b1', 'O1FIX-SITE-CROSS');");
+      '00000000-0000-4000-8000-0000000000b1', 'O1FIX-SITE-CROSS');";
+$o1fk = "ALTER TABLE mt_sites ADD CONSTRAINT mt_sites_service_customer_fkey
+           FOREIGN KEY (customer_id, service_id) REFERENCES mt_services (customer_id, id)";
+is_(str_contains(sql($crossSql), 'mt_sites_service_customer_fkey'), true,
+    'case 6 — the CURRENT schema refuses it outright, by name (migration 029)');
+sql('ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_customer_fkey');
+sql($crossSql);
 is_(num("SELECT count(*) FROM mt_sites WHERE name = 'O1FIX-SITE-CROSS'"), 1,
-    'CONTROL: the cross-customer site was genuinely inserted — the schema permits it today');
+    'CONTROL: with the key suppressed the cross-customer site was genuinely inserted');
 $c = census();
 is_($c['verdict'], 'BLOCKED', 'case 6 cross-customer site/service — verdict BLOCKED');
 is_($c['mismatch'], 1, 'and the mismatch count is exactly the one row injected');
@@ -219,7 +248,10 @@ is_(str_contains($c['raw'], 'services reached by sites of >1 CUSTOMER: 1'), true
 is_($c['block'], 1,
     'BLOCKED(1) — one offending ROW, not a sum of the detectors that saw it');
 sql("DELETE FROM mt_sites WHERE name = 'O1FIX-SITE-CROSS';");
+sql($o1fk);
 is_(census()['verdict'], 'CLEAR', 'CONTROL: removing it returns the estate to CLEAR');
+is_(num("SELECT count(*) FROM pg_constraint WHERE conname = 'mt_sites_service_customer_fkey' AND convalidated"), 1,
+    'and the composite key is restored, validated');
 
 // case 14: a voucher with no site
 sql("UPDATE mt_vouchers SET site_id = NULL WHERE code = 'O1FIX-AAAAA';");
@@ -251,24 +283,31 @@ t('PHASE 3 — anomalies the schema FORBIDS, measured constraint-suppressed');
 // that such rows are reachable here.
 $suppressed = [
   ['case 7  orphan customer_id',
-   "ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_customer_id_fkey",
+   // Since 029 the composite key refuses an unknown customer as well, so both go.
+   "ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_customer_id_fkey;
+    ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_customer_fkey",
    "INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
      ('00000000-0000-4000-8000-00000000007a','00000000-0000-4000-8000-0000000007ff',
       '00000000-0000-4000-8000-0000000000a1','O1FIX-SITE-ORPHANCUST')",
    'mt_sites ORPHANED customer_id           : 1',
    "DELETE FROM mt_sites WHERE name='O1FIX-SITE-ORPHANCUST'",
    "ALTER TABLE mt_sites ADD CONSTRAINT mt_sites_customer_id_fkey
-      FOREIGN KEY (customer_id) REFERENCES mt_customers(id) ON DELETE RESTRICT"],
+      FOREIGN KEY (customer_id) REFERENCES mt_customers(id) ON DELETE RESTRICT;
+    ALTER TABLE mt_sites ADD CONSTRAINT mt_sites_service_customer_fkey
+      FOREIGN KEY (customer_id, service_id) REFERENCES mt_services (customer_id, id)"],
 
   ['case 8  orphan service_id',
-   "ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_id_fkey",
+   "ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_id_fkey;
+    ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_customer_fkey",
    "INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
      ('00000000-0000-4000-8000-00000000008a','00000000-0000-4000-8000-00000000000a',
       '00000000-0000-4000-8000-0000000008ff','O1FIX-SITE-ORPHANSVC')",
    'mt_sites ORPHANED service_id            : 1',
    "DELETE FROM mt_sites WHERE name='O1FIX-SITE-ORPHANSVC'",
    "ALTER TABLE mt_sites ADD CONSTRAINT mt_sites_service_id_fkey
-      FOREIGN KEY (service_id) REFERENCES mt_services(id) ON DELETE RESTRICT"],
+      FOREIGN KEY (service_id) REFERENCES mt_services(id) ON DELETE RESTRICT;
+    ALTER TABLE mt_sites ADD CONSTRAINT mt_sites_service_customer_fkey
+      FOREIGN KEY (customer_id, service_id) REFERENCES mt_services (customer_id, id)"],
 
   ['case 9  NULL service_id',
    "ALTER TABLE mt_sites ALTER COLUMN service_id DROP NOT NULL",
@@ -313,11 +352,20 @@ foreach ($suppressed as [$label, $drop, $inject, $expect, $undo, $restore]) {
     sql($restore);
 }
 is_(census()['verdict'], 'CLEAR', 'CONTROL: every guard was restored — the estate is CLEAR again');
+is_($o1constraints(), 2, 'CONTROL: including both O-1 constraints');
 
 // ===========================================================================
-t('PHASE 4 — the candidate O-1 constraint, applied for real');
+t('PHASE 4 — migration 029, as the OWNER, against a violating and a clean estate (docs/124)');
 
-is_($o1constraints(), 0, 'neither O-1 constraint is present to begin with');
+$m029 = $repo . '/migrations/029_o1_site_service_same_operator.sql';
+$force = fn(): ?string => one("SELECT bool_and(relrowsecurity AND relforcerowsecurity)::text
+                                FROM pg_class WHERE relname IN ('mt_sites','mt_services')");
+is_($o1constraints(), 2, 'both O-1 constraints are present from the install — migration 029 applied');
+// Constraint-suppressed: THIS throwaway database is returned to the level-028
+// shape, so the migration can be run for real against data it must refuse.
+sql("ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_customer_fkey;
+     ALTER TABLE mt_services DROP CONSTRAINT mt_services_id_customer_key;");
+is_($o1constraints(), 0, 'constraint-suppressed: neither O-1 constraint is present (the level-028 shape)');
 
 sql("INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
      ('00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-00000000000a',
@@ -325,7 +373,7 @@ sql("INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
 is_(num("SELECT count(*) FROM mt_sites WHERE name = 'O1FIX-SITE-CROSS'"), 1,
     'CONTROL: a violating row is present before the migration is attempted');
 
-// --- 4a. THE FINDING -------------------------------------------------------
+// --- 4a. THE FINDING (the record that shaped 029) --------------------------
 // docs/106 recorded that the migration "fails closed by itself" and that no
 // guard clause is needed. That is FALSE for a role subject to RLS, and the
 // schema owner is one: since migration 017 (F2) dnb is not a superuser, and
@@ -349,26 +397,32 @@ is_(num("SELECT count(*) FROM mt_sites s JOIN mt_services v ON v.id = s.service_
 sql("ALTER TABLE mt_sites DROP CONSTRAINT o1probe_fkey;
      ALTER TABLE mt_services DROP CONSTRAINT o1probe_unique;");
 
-// --- 4b. the guard makes it fail closed regardless of role -----------------
+// --- 4b. the superseded candidate: guarded, but the owner cannot run it ----
 [, $out] = psql($own, DB, __DIR__ . '/o1_composite_fk.sql', true);
 is_(str_contains($out, 'would be affected by row-level security policy'), true,
-    'WITH the guard the same blinded role REFUSES rather than mis-validating');
+    'the candidate WITH the guard makes the blinded owner REFUSE rather than mis-validate');
 is_($o1constraints(), 0, 'and leaves no partial schema change');
-
-// --- 4c. a role that can see every row refuses for the right reason --------
 [, $out2] = psql($insp, DB, __DIR__ . '/o1_composite_fk.sql', true);
-is_(str_contains($out2, 'violates foreign key constraint "mt_sites_service_customer_fkey"'), true,
-    'a role that CAN see every row refuses, naming the constraint');
-is_(str_contains($out2, 'Key (customer_id, service_id)='), true,
-    'and names the offending pair — which is why the census must enumerate, not the error');
-is_($o1constraints(), 0,
-    'still no partial schema change — not even the UNIQUE that would have succeeded');
+is_(str_contains($out2, 'violates foreign key constraint "mt_sites_service_customer_fkey"')
+    && str_contains($out2, 'Key (customer_id, service_id)='), true,
+    'a role that CAN see every row refuses it naming ONE pair — why the census, not the error, enumerates');
+is_($o1constraints(), 0, 'still no partial schema change — not even the UNIQUE that would have succeeded');
 
-// --- 4d. clean estate: it applies, and then it does its job ----------------
+// --- 4c. MIGRATION 029, as the owner, over the violating estate ------------
+[$rc, $o29] = psql_tx($own, $m029);
+is_($rc !== 0 && str_contains($o29, 'O-1 (029): 1 site(s) point at another operator'), true,
+    'migration 029 as the OWNER REFUSES the violating estate and counts the rows');
+is_(str_contains($o29, 'site 00000000 -> service 00000000') && str_contains($o29, 'nothing was changed'), true,
+    'naming the pairs it found and saying nothing was changed');
+is_([$o1constraints(), $force()], [0, 'true'], 'and nothing was: no constraint, FORCE still on both tables');
+
+// --- 4d. clean estate: 029 applies as the owner, then does its job ---------
 sql("DELETE FROM mt_sites WHERE name = 'O1FIX-SITE-CROSS';");
-[, $out3] = psql($insp, DB, __DIR__ . '/o1_composite_fk.sql', true);
-is_(str_contains($out3, 'ERROR'), false, 'against a clean estate the migration applies');
-is_($o1constraints(), 2, 'both constraints are now present');
+[$rc, $o29] = psql_tx($own, $m029);
+is_([$rc, str_contains($o29, 'ERROR')], [0, false], 'against a clean estate migration 029 applies, as the owner');
+is_([$o1constraints(), $force()], [2, 'true'], 'both constraints present, FORCE restored');
+is_(num("SELECT count(*) FROM pg_constraint WHERE conname = 'mt_sites_service_customer_fkey' AND convalidated"), 1,
+    'the key is VALIDATED — against every row, because FORCE was lifted inside its transaction');
 
 $after = sql("INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES
      ('00000000-0000-4000-8000-0000000000ab', '00000000-0000-4000-8000-00000000000a',
@@ -423,7 +477,8 @@ is_(str_contains($ow['raw'], '*** HIDDEN'), true, 'and says why: its reads fall 
 is_((bool) preg_match('/migrations applied\s+:\s+[1-9][0-9]*/', $ow['raw']), true,
     'while it reads the schema level — the ledger — which is what it is run for');
 
-// Re-admit a violation: drop the O-1 constraints PHASE 4 applied (throwaway database).
+// Re-admit a violation: drop the O-1 constraints migration 029 re-applied in PHASE 4
+// (constraint-suppressed, throwaway database).
 sql("ALTER TABLE mt_sites DROP CONSTRAINT mt_sites_service_customer_fkey;
      ALTER TABLE mt_services DROP CONSTRAINT mt_services_id_customer_key;");
 sql("INSERT INTO mt_sites (id, customer_id, service_id, name) VALUES

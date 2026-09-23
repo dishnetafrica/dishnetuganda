@@ -597,10 +597,10 @@ foreach (['src/Api/AdminRoutes.php', 'src/Admin/RouterAdmin.php'] as $f) {
 }
 
 // ===========================================================================
-t('13. REPOSITORY STATE — migrations end at 028 (docs/121); the gate variable is declared; nothing claims hardware');
+t('13. REPOSITORY STATE — migrations end at 029 (O-1, docs/124) after 028 (docs/121); the gate variable is declared; nothing claims hardware');
 $files = array_map('basename', glob(__DIR__ . '/../migrations/*.sql')); sort($files);
-is_([substr(end($files), 0, 3), count(array_filter($files, fn($f) => str_starts_with($f, '028')))], ['028', 1], 'the last migration is 028 (docs/121); G-C itself added none');
-is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 28, 'the ledger records 28');
+is_([substr(end($files), 0, 3), count(array_filter($files, fn($f) => str_starts_with($f, '028')))], ['029', 1], 'the last migration is 029 (O-1, docs/124), after one 028 (docs/121); G-C itself added none');
+is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 29, 'the ledger records 29');
 $client = file_get_contents(__DIR__ . '/../src/Delivery/RouterOs/RestClient.php');
 is_(str_contains($client, 'requireRealBindingsAllowed'), true, 'RestClient checks the F6-B gate before its real transport');
 is_(str_contains($client, 'HARDWARE VERIFIED'), true, 'and says in its header that nothing in it is HARDWARE VERIFIED');

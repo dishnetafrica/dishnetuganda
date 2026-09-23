@@ -119,6 +119,14 @@ set -a; . /etc/dnb/dnb.env; . /etc/dnb/secrets.env; set +a
 predates this installation, because on a shared cluster that role may belong to
 someone else.
 
+**Upgrading.** Re-running `install` over an existing installation applies only
+the migrations its ledger has not recorded. **Migration 029** (O-1, `docs/124`)
+makes a site and its service belong to the same operator. On an estate where a
+site already names another operator's service it **refuses and changes
+nothing**, and its error counts the rows and names up to five. Before upgrading
+an installation that holds real data, run the census from the repository
+(`docs/79`) and resolve each reported row first.
+
 ## 6. Demonstration data (optional)
 
 ```sh
