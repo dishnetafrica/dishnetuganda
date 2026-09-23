@@ -2455,6 +2455,14 @@ runs first; only the package side was measured from the repository.
   tunnel is `ssh -N -L 8099:127.0.0.1:8099 root@209.97.137.203` (sshd verified on
   22; the run was root) — but the Mac's path to port 22 once timed out from one
   network, so block C checks it first.
+- **Run record (`docs/120` §15.7):** block A → `GO`; block B attempt 1 passed
+  steps 0–3 (clone at `7848816`, digest match, image **601 MB** — the ~90 MB
+  estimate was wrong, bridge 172.22.0.0/16, PostgreSQL 16.15) and the
+  bootstrap (`owner_is_superuser f`), then **stopped at step 4 on the block's
+  own check**: `bool||text` prints `true/false`, psql `-A -t` prints `t/f`.
+  The state was correct; the check was wrong. Recovery is **block R** (remove
+  the four inert objects, prove the baseline) then **block B revision 2** as one
+  clean pass — never a resume with a password reset. **Result still PENDING.**
 
 ## Open and parked
 

@@ -364,7 +364,7 @@ listens on a public interface.
 | Object | Kind | Definition |
 |---|---|---|
 | `/opt/dnb-staging/` | directory tree, root-owned | `app/` — the extracted artifact, mounted read-only; `env/runtime.env` (0640: DSN, pepper, secret key), `env/install.env` (0600: the owner credential, given only to the one-shot install containers) and `env/secrets.env` (0600, the seven role passwords, **written by `install`**); `build/Dockerfile` |
-| `dnb-staging-php:8.3` | local image, ~90 MB | `FROM php:8.3-cli-alpine` + `apk add postgresql-dev` + `docker-php-ext-install pdo_pgsql`. Built once on the host from a two-line Dockerfile; no application code inside the image (the app is bind-mounted read-only), so the image is generic and disposable |
+| `dnb-staging-php:8.3` | local image, **601 MB as built** (§15.7; *~90 MB* was the estimate) | `FROM php:8.3-cli-alpine` + `apk add postgresql-dev` + `docker-php-ext-install pdo_pgsql`. Built once on the host from a two-line Dockerfile; no application code inside the image (the app is bind-mounted read-only), so the image is generic and disposable |
 | `dnb-staging` | Docker **bridge** network (user-defined; Docker isolates it from every other bridge with `DOCKER-ISOLATION-STAGE-2`, as `docs/36` §6.1c measured for `dn-phase0`) | subnet from the `172.x` bridge pool — next free, probably `172.22.0.0/16`; nowhere near `10.66/24` or the overlays |
 | `dnb-staging-pgdata` | Docker volume | the only persistent state |
 | `dnb-staging-postgres` | container, `postgres:16-alpine` (the image Phase 0 already pulled — VERIFY it is present) | **no published port at all**; reachable only by name on `dnb-staging`; `POSTGRES_PASSWORD` set (so the image's default is `scram-sha-256` for network connections); `-c shared_buffers=64MB`; `--restart unless-stopped` |
@@ -885,7 +885,13 @@ echo "=== END OF BLOCK A ==="
 DNB_BEFORE
 ```
 
-### 15.3 Block B — the deployment (the §11 steps in order; stops at the first failure)
+### 15.3 Block B — the deployment (the §11 steps in order; stops at the first failure) — REVISION 2
+
+> **Revision 2 (§15.7).** Attempt 1 stopped at step 4 on this block's own
+> attribute check, which concatenated four booleans into text and so compared
+> `false|false|true|true` against `f|f|t|t`. The server state was correct. The
+> check now reads the four columns separately, and an image left by an
+> earlier attempt is verified rather than rebuilt. Run block R first (§15.7).
 
 Run as root, only after `RESULT: GO`. It writes the script to
 `/root/dnb-staging-evidence/deploy-stage1.sh`, runs it, and keeps the whole log
@@ -905,6 +911,8 @@ cat > /root/dnb-staging-evidence/deploy-stage1.sh <<'DNB_DEPLOY'
 # Traefik, DNS, UFW, any existing container, network, volume or image, and it
 # publishes exactly one port: 127.0.0.1:8099. The whole log is kept at
 # /root/dnb-staging-evidence/deploy-stage1.log. No secret is printed.
+# Revision 2 (§15.7): the step-4 attribute check reads the four booleans as
+# separate columns, and an image left by an earlier attempt is verified, not rebuilt.
 set -eu
 EV=/root/dnb-staging-evidence
 APP=/opt/dnb-staging
@@ -970,7 +978,11 @@ cat > "$APP/build/Dockerfile" <<'EOF'
 FROM php:8.3-cli-alpine
 RUN apk add --no-cache postgresql-dev && docker-php-ext-install pdo_pgsql
 EOF
-docker build -t "$IMG" "$APP/build" > "$EV/docker-build.log" 2>&1 || { tail -30 "$EV/docker-build.log"; fail "docker build failed (full log: $EV/docker-build.log)"; }
+if docker image inspect "$IMG" >/dev/null 2>&1; then
+  echo "image $IMG is already present (built by an earlier attempt) - verified below instead of rebuilt"
+else
+  docker build -t "$IMG" "$APP/build" > "$EV/docker-build.log" 2>&1 || { tail -30 "$EV/docker-build.log"; fail "docker build failed (full log: $EV/docker-build.log)"; }
+fi
 ext=$(docker run --rm "$IMG" php -m | grep -xE 'pdo_pgsql|json|openssl' | sort | tr '\n' ' ')
 [ "$(printf '%s' "$ext" | wc -w)" = 3 ] || fail "image lacks a required extension: have '$ext'"
 echo "image $IMG: $(docker run --rm "$IMG" php -v | head -1); extensions: $ext"
@@ -996,8 +1008,10 @@ step "4 bootstrap.sql - the privileged step: owner role dnb + empty database dnb
 OWNERPASS=$(openssl rand -hex 24)
 docker exec -i dnb-staging-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
   -v db=dnb -v owner=dnb -v owner_pass="$OWNERPASS" < "$APP/app/plugin/bin/bootstrap.sql"
-attrs=$(docker exec dnb-staging-postgres psql -U postgres -Atc "select rolsuper||'|'||rolbypassrls||'|'||rolcreaterole||'|'||rolcreatedb from pg_roles where rolname='dnb'")
-[ "$attrs" = "f|f|t|t" ] || fail "owner role attributes unexpected: super|bypassrls|createrole|createdb = $attrs"
+# separate columns: under -A -t psql prints a boolean as t/f. (Concatenating a
+# boolean into text yields true/false instead - the attempt-1 stop, §15.7.)
+attrs=$(docker exec dnb-staging-postgres psql -U postgres -Atc "select rolsuper, rolbypassrls, rolcreaterole, rolcreatedb from pg_roles where rolname='dnb'")
+[ "$attrs" = "f|f|t|t" ] || fail "owner role attributes unexpected: super|bypassrls|createrole|createdb = $attrs (expected f|f|t|t)"
 echo "owner dnb: superuser f, bypassrls f, createrole t, createdb t"
 
 step "5 configuration - Docker env-file syntax, UNQUOTED, one VAR=value per line"
@@ -1198,10 +1212,112 @@ changes no device state (`docs/118`).
 
 ### 15.6 Result
 
-**PENDING** — to be recorded here from the operator's pasted output. Until
-then **nothing is deployed and every statement of §13 still holds.**
+**PENDING.** Attempt 1 (§15.7) stopped at step 4 by the block's own check and
+left four inert stage-1 objects, which block R removes; the corrected block B
+has been handed over. Until its output is back **nothing is deployed and
+every statement of §13 still holds** — the server holds an empty staging
+PostgreSQL, an unused bridge, an unused volume, a 601 MB local image and
+`/opt/dnb-staging/`, none of which touches any production object.
 
 Rollback stays §12; `/opt/dnb-staging/` — which now also holds
 `env/secrets.docker.env` — is removed by its `rm -rf` line, and
 `/root/dnb-staging-evidence/` keeps the artifact, the build log and the
 before/after snapshots for the record.
+
+### 15.7 Run record
+
+**Block A — 2026-09-23 15:31:03 UTC — `RESULT: GO`.** The full §1.2 verification
+was saved (260 lines, 19 sections); every snapshot written (21 containers, 61
+filter rules, 49 nat rules, 47 listeners, 12 networks, 4 volumes); every
+threshold met: MemAvailable 5,387,640 kB, 143,000,112 kB free, 20 containers
+running, no exited container beyond superseded swarm tasks, `ucrm` /
+`unms-postgres` / `unms-nginx` / `dn-phase0-postgres` / `dn-phase0-radius`
+running, Traefik present (`easypanel-traefik.1.…`), 8099 and 5434 free,
+`postgres:16-alpine` present, the hostname unresolved, no stage-1 object, all
+tools present, `git` present, `/opt/dishnet` and `/opt/dishnetuganda` present
+and untouched.
+
+**Block B, attempt 1 — 15:31:26 UTC — stopped at step 4 by the block's own
+check; the server state was correct.**
+
+| Step | Result |
+|---|---|
+| 0 | preconditions ok (MemAvailable 5,397,324 kB; 143,000,072 kB free) |
+| 1 | shallow clone at **`7848816`**; `package.sh` on the host's PHP: 116 files, **content digest `4e7467ad…16c798e` — matches**; no `tests/`, no `public/` |
+| 2 | image built: **PHP 8.3.33 (cli)**, extensions `json openssl pdo_pgsql`; **601 MB** — §4's *"~90 MB"* was wrong: `postgresql-dev` leaves the build toolchain in the image. Harmless here (143 GB free); slimming it (`--virtual .build-deps` + `apk del`) is a recipe change for a later instruction, not this one |
+| 3 | bridge `dnb-staging` **172.22.0.0/16** (as §4 predicted); PostgreSQL **16.15** ready after 2 s; `PortBindings={}` |
+| 4 | `bootstrap.sql`: `CREATE ROLE`, `CREATE DATABASE`, `owner_role_present 1 · database_present 1 · owner_can_create_roles t · owner_is_superuser f` — **correct**. Then the block's check read `false|false|true|true` and expected `f|f|t|t` → `STOP` |
+
+**Cause, reproduced on the development cluster:** `rolsuper||'|'||…` casts each
+boolean through the text cast, which prints `true`/`false`; psql's own `-A -t`
+column output prints `t`/`f`. The same query with the four columns selected
+separately prints `f|f|t|t`. The values the server reported are exactly the
+required attributes (not superuser, no BYPASSRLS, CREATEROLE, CREATEDB) — the
+check, not the state, was wrong. `bootstrap.sql`'s own summary table had already
+shown it correctly one line above.
+
+**What attempt 1 left behind, all inert:** the running `dnb-staging-postgres`
+holding an empty database `dnb` and a role `dnb` whose generated password
+existed only in the stopped script's memory (steps 5+ never ran, so no env
+file holds it); the bridge; the volume; `/opt/dnb-staging/` with the extracted
+app, an empty `env/` and the Dockerfile; the image; and the artifact tarball
+in the evidence directory. No API or worker container, no listener, no
+production object touched.
+
+**Recovery: one clean pass, not a resume.** Resuming would need the owner
+password reset and would split the record across two logs. Block R removes
+exactly the four objects (container, network, volume, directory), keeps the
+image and the tarball, renames attempt 1's log, and proves the host is back at
+block A's baseline (`diff` against every snapshot; only the two images differ).
+Then block B revision 2 runs as a single pass: step 1 uses the pre-placed
+tarball, step 2 verifies the existing image instead of rebuilding, step 4
+compares the columns correctly.
+
+#### 15.7.1 Block R — remove attempt 1's four objects (run before block B revision 2)
+
+```sh
+sh <<'DNB_RESET' 2>&1 | tee /root/dnb-staging-evidence/reset-attempt1.log
+# docs/120 §15.7 — BLOCK R: remove ONLY what attempt 1 of block B created before it
+# stopped at step 4, so the corrected block B can run as one clean pass. It removes
+# the empty staging PostgreSQL (container + volume), the dnb-staging bridge and
+# /opt/dnb-staging. It KEEPS the image dnb-staging-php:8.3 (inert; block B verifies
+# it), the artifact tarball, block A's snapshots and attempt 1's log (renamed).
+# It names no production object. Nothing outside those five names is touched.
+set -u
+EV=/root/dnb-staging-evidence
+date -u '+%Y-%m-%d %H:%M:%S UTC'
+echo "-- what attempt 1 left (must be exactly: postgres container, network, volume, /opt/dnb-staging) --"
+docker ps -a --filter name=dnb-staging --format '  container {{.Names}} {{.Status}}'
+docker network ls --format '{{.Name}}' | grep -x dnb-staging | sed 's/^/  network /'
+docker volume ls --format '{{.Name}}' | grep -x dnb-staging-pgdata | sed 's/^/  volume /'
+[ -e /opt/dnb-staging ] && echo "  dir /opt/dnb-staging" && ls /opt/dnb-staging/env 2>/dev/null | sed 's/^/    env: /'
+for c in dnb-staging-api dnb-staging-worker; do
+  docker ps -a --format '{{.Names}}' | grep -qx "$c" && { echo "STOP: $c exists - attempt 1 got further than step 4; do not continue, paste this"; exit 1; }
+done
+echo "-- removing --"
+docker rm -f dnb-staging-postgres 2>&1 | sed 's/^/  rm container: /'
+docker network rm dnb-staging 2>&1 | sed 's/^/  rm network:   /'
+docker volume rm dnb-staging-pgdata 2>&1 | sed 's/^/  rm volume:    /'
+rm -rf /opt/dnb-staging && echo "  rm dir:       /opt/dnb-staging"
+[ -f "$EV/deploy-stage1.log" ] && mv "$EV/deploy-stage1.log" "$EV/deploy-stage1.attempt1.log" && echo "  kept attempt-1 log as deploy-stage1.attempt1.log"
+echo "-- after: must all read none / absent --"
+printf '  dnb-staging containers: '; docker ps -a --format '{{.Names}}' | grep '^dnb-staging' || echo none
+printf '  dnb-staging network:    '; docker network ls --format '{{.Name}}' | grep -x dnb-staging || echo none
+printf '  dnb-staging-pgdata:     '; docker volume ls --format '{{.Name}}' | grep -x dnb-staging-pgdata || echo none
+printf '  /opt/dnb-staging:       '; [ -e /opt/dnb-staging ] && echo STILL PRESENT || echo absent
+printf '  image kept:             '; docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' dnb-staging-php:8.3
+printf '  artifact kept:          '; ls "$EV"/dishnet-mikrotik-0.1.0-rc1.tar.gz
+echo "-- back to block A's baseline? (must be empty except the two images added by the build) --"
+docker ps -a --format '{{.Names}}|{{.Image}}|{{.Ports}}' | sort | diff "$EV/containers.before" - && echo "  containers: identical to before"
+docker inspect -f '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}' $(docker ps -aq) | sort | diff "$EV/inspect.before" - && echo "  inspect: identical to before"
+docker network ls --format '{{.Name}}|{{.Driver}}|{{.Scope}}' | sort | diff "$EV/networks.before" - && echo "  networks: identical to before"
+docker volume ls --format '{{.Name}}' | sort | diff "$EV/volumes.before" - && echo "  volumes: identical to before"
+iptables -S | sort | diff "$EV/iptables.before" - && echo "  iptables filter: identical to before"
+iptables -t nat -S | sort | diff "$EV/nat.before" - && echo "  iptables nat: identical to before"
+ss -tulpn | sort | diff "$EV/listeners.before" - && echo "  listeners: identical to before"
+docker images --format '{{.Repository}}:{{.Tag}}|{{.ID}}' | sort | diff "$EV/images.before" - | sed 's/^/  images: /'
+echo "=== END OF BLOCK R - if every line above reads identical/none/absent, run the corrected block B ==="
+DNB_RESET
+```
+
+Block C (§15.4) is unchanged.
