@@ -2322,6 +2322,8 @@ and B1 (push vs poll) is decided nowhere.
   — a migration — and G-C fixed the state at 027. **Recorded (D-2), not
   worked around**; `docs/114` §K G-C is met for register and assign and says
   so. Do not route the action through `dnb_admin` or `dnb_app` to close it.
+  **Superseded 2026-09-23: the action IS bound by migration 028 (`docs/121`) —
+  see the *Router lifecycle and provisioning* section below.**
 - **Manifest:** `writes.bound` = the two routes with function, role and actor
   rule; `declared_unbound` = six (action, sites, plans, voucher-batches,
   disconnect, principals); `surface` = *estate read + router register/assign;
@@ -2390,7 +2392,7 @@ column is empty by construction.
   that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
   migration 028, any deployment. Migrations still end at **027**.
 
-## Staging on the existing server — STAGE 1 DEPLOYED AND VERIFIED; stage 2 requested, NOT started (`docs/120`)
+## Staging on the existing server — STAGES 1 AND 2 IN PLACE (`docs/120`); the redeploy for migration 028 is handed over (`docs/121` §H)
 
 **A read-only deployment feasibility audit, nothing more.** This session
 cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
@@ -2532,6 +2534,124 @@ runs first; only the package side was measured from the repository.
   Recorded for a later instruction; unchanged. The post-deployment probe of
   `209.97.137.203:8099` was *refused* on the server itself while
   `127.0.0.1:8099` answered 200 there — loopback-only, proved.
+
+## Router lifecycle and provisioning from the Admin plane — BUILT (migration 028); staging redeploy HANDED OVER (`docs/121`)
+
+**Steps 1 and 2 of the production roadmap the operator accepted after stage 2.**
+Development and test schema only; nothing is installed by this work; the
+staging redeploy is a one-command handover whose result is **PENDING**. **NOTHING
+here is HARDWARE VERIFIED**; F6-B stays NOT AUTHORIZED; `docs/119` is unchanged.
+Review (§A–§C) was written before code; the build record is §D–§H.
+
+- **Migration 028** (`028_admin_router_lifecycle_and_provisioning.sql`):
+  `mt_device_provision_request(p_device, p_idempotency_key, p_actor) RETURNS
+  jsonb {replayed, intent}` — owner `dnb_def_prov`, EXECUTE **`dnb_adminwrite`
+  only** (never `dnb_admin`/`dnb_worker`/`dnb_app`, `docs/112` A-1), **no
+  `p_customer`: the operator is DERIVED from the device row**; payload
+  `{device_id}` and nothing else; refuses with `DN409` and writes **nothing**
+  for a router that is unassigned (an intent needs a tenant to run under), not
+  recorded `connected`/`provisioned`/`active`/`diverged`, decommissioned, or
+  without a `tunnel_ip` — the states are exactly
+  `DeliveryTarget::DELIVERABLE_STATES`, **asserted equal by execution over all
+  nine states**; the **`10.66/16` rule is NOT copied into SQL** (it lives once,
+  in `TunnelAddress`, and binds at registration). **RULE I-1:** the replay check
+  runs **before** the insert and the audit — same key, same router → the
+  existing intent, `replayed: true`, no audit row; same key, different request
+  → refused; the race is closed inside the function with `ON CONFLICT
+  (customer_id, idempotency_key) … DO NOTHING`. Audit `device.provision_requested`,
+  `actor_kind = 'staff'`, source `admin`.
+- **`dnb_def_prov` gains SELECT + INSERT on `mt_intents`** (policies
+  `dnb_def_prov_mt_intents_select/_insert`, 017's naming). SELECT is not
+  optional: with an INSERT-only policy the replay pre-check would silently read
+  **zero** rows (the O-1 lesson) and every replay would surface as a 23505.
+  `test_definer_roles`' matrix gained the row deliberately.
+- **`mt_device_set_state` is replaced (same signature, owner, grants): a state
+  the row already holds is a no-op — no UPDATE, no audit row, the row
+  returned** (RULE I-1, the domain-invariant class of `docs/107`/`112`); a blank
+  actor is refused on every path. Without it a browser retry would write a
+  false `device.state_changed` row that the append-only trigger makes permanent.
+  The one W-1 body this work changed.
+- **Two routes bound, four in total:** `POST /api/v1/admin/routers/{id}/state`
+  under the **new capability `routers.lifecycle`** (Admin + NOC; `routers.act`
+  means *queue an intent*, `routers.register` is the bench act) records one of
+  **seven** states a person may observe — `staged shipped connected provisioned
+  active orphaned decommissioned`; **`diverged` is never recorded by hand**
+  (012: divergence is COMPUTED; `docs/90`'s rule) and `registered` is the start
+  — legality is **migration 012's trigger's** decision, surfaced as 409 with the
+  trigger's own reason; the restriction lives in `RouterAdmin::RECORDABLE_STATES`,
+  **not** in the SQL function (the simulator and a future detector set
+  `diverged` legitimately). `POST /api/v1/admin/routers/{id}/actions` under
+  `routers.act`: `{action: push_config, idempotency_key}` → **202** new / **200**
+  replay with `{intent, replayed}` through `AdminProjection::intent()`;
+  `idempotency_key` is **required** (`[A-Za-z0-9._:-]{8,128}`) so the constraint
+  cannot be bypassed by omitting it; `reboot`/`reprovision`/`diagnostics` → 501
+  `router_action_not_available` carrying **`SignalReport::actions()`'s own
+  reason** (one source); derived fields in a body are 400. `SignalReport` marks
+  exactly `push_config` available; `summary.actions_available` = 1, derived.
+  `AdminRoutes.php` still names no SQL function; `RouterAdmin` reaches exactly
+  four functions, never a table, never a router (F2 asserted).
+- **Manifest:** `writes.bound` = four (each with function, role, gate `G-C`,
+  actor rule; the two new carry `see: docs/121`); `declared_unbound` = five
+  (sites, plans, voucher-batches, disconnect, principals); surface *estate read
+  + router register/assign/lifecycle/provision; identity read-write*; the
+  `admin-write` gate is still not OPEN and says *PARTIALLY BOUND*.
+- **The panel** gained a **third client, `panel/routers.js`** — estate WRITE for
+  routers only: `register`, `assign`, `setState`, `pushConfig`, every path
+  under `/routers`, asserted; **`api.js` is byte-identical and still read-only**
+  (one `fetch`, no POST). Forms: *Add a router* (Routers page), *Assignment*
+  (operator and site selects, sites filtered to the chosen operator), *Record
+  the next step* (buttons from **`NEXT_STATES`**, a strict-JSON literal mirroring
+  012's trigger minus `diverged`, **proved by execution: 20 offered pairs
+  accepted by the trigger, two non-offered pairs refused**), and the live *Push
+  configuration* button drawn **only where the server inventory says
+  available**, with an idempotency key minted once per rendered page
+  (`crypto.randomUUID()`) so a double click is one job. Copy says *Nothing here
+  contacts the router*. The Diagnostics page shows every action inert (no router
+  in view).
+- **Guards amended deliberately, never deleted, each with its reason and a
+  control:** `test_admin_ui` §5 (the WireGuard key may appear in `app.js` only
+  as the Add-router form's field name, counted) and §8 (estate writes only as
+  `routersApi.<four>(…)`; `app.js` opens no `fetch` carrying a URL — its `list()`
+  helper's parameter is called `fetch`); `test_plugin_boundary` (the SQL-leak
+  needle `SELECT ` is now **case-sensitive** because `<select>` and
+  `querySelector` are HTML and DOM; 4c/5b one available action, the live control
+  only where the server says so); `test_simulator` (one action available);
+  `test_router_control_plane` §12/§13, `test_operator_staff` §15,
+  `test_installability`, `test_admin_write_boundary`, `test_definer_roles`,
+  `test_admin_login`, `test_admin_api`. Two guards caught their author first
+  (the migration's own comment saying `10.66` is *not* copied; `list()`'s
+  `fetch` parameter) — resolved by narrowing to the function body from the
+  catalog and to a call carrying a URL, with controls.
+- **The simulator** queues its three provisioning jobs through the new function
+  on `dnb_adminwrite` (as 025's comment anticipated). **Its `10.99.0.x` tunnel
+  addresses are unchanged** — the `docs/120` finding is recorded, not silently
+  repaired; those jobs still queue and still fail at the worker's `10.66/16`
+  gate. A router registered through the new form with a `10.66.0.x` address,
+  assigned, recorded `connected` and pushed confirms end to end under
+  `DN_DELIVERY=simulated` — **proving the queue, not RouterOS**.
+- **Proof runs:** full suite **34 suites / 3,262 assertions / 0 failed, twice**
+  (was 33 / 3,026); `tests/test_router_lifecycle_provision.php` alone **214**;
+  `plugin/bin/install-test.sh` **85/85**; migration 028 trialled on a throwaway
+  copy of the test database first (eleven probes, all as designed), then dropped.
+- **Staging redeploy — HANDED OVER, result PENDING** (`docs/121` §H):
+  `scripts/dnb-staging-redeploy.sh`, one command as root, builds the artifact
+  on the server, refuses unless the content digest is
+  **`1bc95524cd36f38413b5325fe26cdf76a20cb9d67e4253051c5b0bae7a7af74b`**
+  (118 files; the name is still `0.1.0-rc1` — **compare the digest, never the
+  name**), swaps `/opt/dnb-staging/app` keeping the previous tree, applies
+  exactly the pending migration with `plugin.php install` and the
+  installation's own secrets (proved locally: a second install with the same
+  secrets is *schema already current*; one with 028 missing applies only 028),
+  restarts **only** `dnb-staging-api` and `dnb-staging-worker`, and verifies
+  (panel 200, `routers.js` 200, session 401, Traefik 401, only those two
+  containers changed). Touches no production container, Traefik file, DNS,
+  firewall or other PostgreSQL. Rollback is printed by the script.
+- **Not done, deliberately:** desired-state authoring (no screen composes
+  `mt_device_config.desired`); device secrets and the WAN fact from the panel;
+  `reboot`/`reprovision`/`diagnostics` (no delivery case); device-state
+  automation from a confirmed delivery (a B1 question); the simulator's
+  addresses; NAS/RADIUS (Decision 2a chose a mechanism, nothing is built, F6
+  NOT AUTHORIZED); G-C2, B-3, O-1, G-D, T-6/T-10/T-11, F-3; any deployment.
 
 ## Open and parked
 

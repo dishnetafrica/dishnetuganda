@@ -340,6 +340,8 @@ $approved = [
     'mt_device_set_desired(uuid,jsonb,text)',
     'mt_device_set_wan(uuid,text,text)',
     'mt_customer_create(text,text)',
+    // 028 (docs/121 D-5): the Admin-plane enqueue function docs/118 D-2 named.
+    'mt_device_provision_request(uuid,text,text)',
 ];
 foreach ($approved as $fn) {
     is_($ins->one('SELECT has_function_privilege(?,?,?) AS p',

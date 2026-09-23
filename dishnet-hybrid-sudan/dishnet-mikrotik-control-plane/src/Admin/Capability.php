@@ -23,6 +23,8 @@ final class Capability
     public const ROUTERS_READ        = 'routers.read';
     public const ROUTERS_REGISTER    = 'routers.register';
     public const ROUTERS_ASSIGN      = 'routers.assign';
+    /** Record where a router is in its lifecycle: a registry row a person observed, never a command (docs/121 D-2). */
+    public const ROUTERS_LIFECYCLE   = 'routers.lifecycle';
     /** Queue an intent against a router. Never a direct command — F2. */
     public const ROUTERS_ACT         = 'routers.act';
 
@@ -49,7 +51,7 @@ final class Capability
         self::CUSTOMERS_READ, self::CUSTOMERS_WRITE,
         self::SERVICES_READ,
         self::SITES_READ, self::SITES_WRITE,
-        self::ROUTERS_READ, self::ROUTERS_REGISTER, self::ROUTERS_ASSIGN, self::ROUTERS_ACT,
+        self::ROUTERS_READ, self::ROUTERS_REGISTER, self::ROUTERS_ASSIGN, self::ROUTERS_LIFECYCLE, self::ROUTERS_ACT,
         self::PLANS_READ, self::PLANS_WRITE, self::PROFILES_READ, self::PROFILES_WRITE,
         self::VOUCHERS_READ, self::VOUCHERS_GENERATE, self::VOUCHERS_REVOKE,
         self::SESSIONS_READ, self::SESSIONS_DISCONNECT,

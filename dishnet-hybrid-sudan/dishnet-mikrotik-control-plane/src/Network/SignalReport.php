@@ -131,8 +131,8 @@ final class SignalReport
     {
         return [
             ['key' => 'push_config', 'label' => 'Push configuration',
-             'available' => false,
-             'reason' => 'A delivery case exists (RouterOsDelivery), but the Admin action route is not bound (G-C: queuing it needs an Admin-plane enqueue function, a migration) and F6-B is not authorized — so nothing can queue it, and a queued job would reach a simulator, not a router.'],
+             'available' => true,
+             'reason' => 'Queues a device.provision job for the worker (migration 028, docs/121). Nothing here contacts the router: the worker delivers the job through ITS binding — nothing under DN_DELIVERY=null, an in-memory simulator under simulated, a real router only under F6-B, which is not authorized. The job carries whatever desired configuration the registry holds for this router; no screen authors one yet.'],
             ['key' => 'reboot', 'label' => 'Reboot router',
              'available' => false,
              'reason' => 'No delivery case exists for reboot. There is nothing to queue and nothing to deliver.'],

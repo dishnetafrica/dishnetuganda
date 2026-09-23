@@ -69,6 +69,10 @@ is_(hit($sales, 'POST', '/api/v1/admin/routers/{device_id}/actions', $req)->stat
     'Sales may NOT queue a router action');
 is_(hit($sales, 'POST', '/api/v1/admin/routers', $req)->status, 403,
     'Sales may NOT register a router');
+is_(hit($sales, 'POST', '/api/v1/admin/routers/{device_id}/state', $req)->body['capability'] ?? null,
+    Capability::ROUTERS_LIFECYCLE, 'Sales may NOT record a router lifecycle state (403 naming routers.lifecycle)');
+is_(hit($sr, 'POST', '/api/v1/admin/routers/{device_id}/state', $req)->status, 403,
+    'nor may Support');
 
 t('CAPABILITY — NOC operates routers but is not commercial');
 $noc = AdminRoutes::build(new FixedStaff(new StaffIdentity('s-3', StaffRole::Noc, 'test')),
@@ -80,6 +84,10 @@ is_($nocReg->status, 501, 'NOC may register a router (501: no Admin write connec
 is_($nocReg->body['error'], 'router_writes_unavailable', 'and the 501 says exactly that');
 is_(hit($noc, 'POST', '/api/v1/admin/sessions/{session_id}/disconnect', $req)->status, 501,
     'NOC may queue a disconnect');
+is_(hit($noc, 'POST', '/api/v1/admin/routers/{device_id}/state', $req)->body['error'] ?? null, 'router_writes_unavailable',
+    'NOC may record a lifecycle state (501: no Admin write connection in this process)');
+is_(hit($noc, 'POST', '/api/v1/admin/routers/{device_id}/actions', $req)->body['error'] ?? null, 'router_writes_unavailable',
+    'NOC may queue the push_config action (501 here for the same reason)');
 is_(hit($noc, 'POST', '/api/v1/admin/plans', $req)->status, 403, 'NOC may NOT write plans');
 is_(hit($noc, 'POST', '/api/v1/admin/voucher-batches', $req)->status, 403,
     'NOC may NOT generate vouchers');

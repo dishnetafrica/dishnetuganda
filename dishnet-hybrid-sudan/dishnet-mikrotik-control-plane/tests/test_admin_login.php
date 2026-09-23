@@ -223,7 +223,7 @@ $stripJs = static function (string $code): string {
     return preg_replace('!^\s*//.*$!m', ' ', $code) ?? $code;
 };
 $js = '';
-foreach (['login.js', 'app.js', 'api.js', 'staff.js'] as $f) {
+foreach (['login.js', 'app.js', 'api.js', 'staff.js', 'routers.js'] as $f) {
     $js .= $stripJs((string) file_get_contents(__DIR__ . '/../panel/' . $f));
 }
 $html = (string) file_get_contents(__DIR__ . '/../panel/index.html');

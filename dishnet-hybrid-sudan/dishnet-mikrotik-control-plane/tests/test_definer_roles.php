@@ -148,7 +148,12 @@ $expected = [
                        'mt_customers'     => 'INSERT',
                        // 027: mt_admin_principal_create — INSERT across tenants,
                        // no SELECT: the function never reads a principal back.
-                       'mt_principals'    => 'INSERT'],
+                       'mt_principals'    => 'INSERT',
+                       // 028: mt_device_provision_request — INSERT the intent
+                       // and SELECT it back for the replay check (RULE I-1).
+                       // With INSERT only, the pre-check would silently read
+                       // zero rows (docs/121 D-16).
+                       'mt_intents'       => 'SELECT,INSERT'],
     // 024/027: the commercial and operator-identity writers are TENANT-BOUND
     // BELOW the function — dnb_def_comm holds no policy of its own anywhere,
     // so it inherits <table>_isolation like dnb_app. A widening policy added

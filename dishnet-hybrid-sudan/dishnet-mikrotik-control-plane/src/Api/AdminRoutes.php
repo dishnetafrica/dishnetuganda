@@ -44,17 +44,18 @@ use Dn\Runtime\Bindings;
  *    request to establish staff authority.
  *
  * 4. Two kinds of write exist on this surface and they are kept apart. ESTATE
- *    writes are declared with their capabilities; since G-C (docs/118) TWO of
- *    them are bound — router register and router assign, each one W-1
- *    function on dnb_adminwrite with the authenticated subject as the actor —
- *    and the rest (the router action, sites, plans, voucher batches,
- *    disconnect, principal creation) still answer 501. IDENTITY writes (a
- *    session row; the DishNet staff roster) are bound, each through one
- *    SECURITY DEFINER function that audits itself, and the manifest says so.
+ *    writes are declared with their capabilities; FOUR of them are bound —
+ *    router register and assign (G-C, docs/118), router lifecycle and the
+ *    push-configuration action (migration 028, docs/121) — each one SECURITY
+ *    DEFINER function on dnb_adminwrite with the authenticated subject as the
+ *    actor — and the rest (sites, plans, voucher batches, disconnect,
+ *    principal creation) still answer 501. IDENTITY writes (a session row; the
+ *    DishNet staff roster) are bound, each through one SECURITY DEFINER
+ *    function that audits itself, and the manifest says so.
  *
- * A router write here is a ROW in the registry. Nothing on this surface can
- * reach a router: rule 2 holds, and the action that would queue work for one
- * is exactly the route that is not bound.
+ * A router write here is a ROW: a registry row, or an intent row that only the
+ * worker turns into a connection. Nothing on this surface can reach a router:
+ * rule 2 holds, and the action route queues an intent and nothing more.
  */
 final class AdminRoutes
 {
@@ -202,24 +203,14 @@ final class AdminRoutes
                                     : Response::ok(['voucher' => AdminProjection::voucherDetail($rows[0])]);
             }), auth: false);
 
-        // ── estate writes: the two bound ones (G-C) ─────────────────────
+        // ── estate writes: the four bound router writes (G-C, docs/121) ──
         self::routers($r, $guard, $routers);
 
         // ── estate writes still declared-unbound ────────────────────────
         // Declared with their capabilities so the matrix is complete and
-        // testable. Each returns an honest 501. The router ACTION has its own
-        // reason: queuing a device.provision intent from this plane needs an
-        // enqueue function dnb_adminwrite may execute, which is a migration
-        // G-C did not authorise (docs/118 D-2). Nothing is queued by it.
-        $r->add('POST', '/api/v1/admin/routers/{device_id}/actions',
-            $guard(Capability::ROUTERS_ACT, static fn() => new Response(501, [
-                'error'  => 'router_action_not_bound',
-                'detail' => 'queuing a device.provision intent from the Admin plane needs a '
-                          . 'SECURITY DEFINER enqueue function for dnb_adminwrite, which is a '
-                          . 'migration; G-C did not authorise one. Nothing was queued and nothing '
-                          . 'reaches a router.',
-                'see'    => 'docs/118',
-            ])), auth: false);
+        // testable. Each returns an honest 501: sites wait for O-1, plans and
+        // voucher batches for G-C2, disconnect for the replay fix (docs/108),
+        // principal creation for its own instruction (docs/116 J-1).
         foreach ([
             ['POST', '/api/v1/admin/sites',                        Capability::SITES_WRITE],
             ['POST', '/api/v1/admin/plans',                        Capability::PLANS_WRITE],
@@ -255,13 +246,17 @@ final class AdminRoutes
     /**
      * POST /routers                       register a router staged at the bench      201 | 400 | 409 | 501
      * POST /routers/{device_id}/assign    assign it to an operator (+ site, name)     200 | 400 | 404 | 409 | 501
+     * POST /routers/{device_id}/state     record the lifecycle state a person saw   200 | 400 | 404 | 409 | 501
+     * POST /routers/{device_id}/actions   queue an INTENT (push_config only)     202 | 200 | 400 | 404 | 409 | 501
      *
      * Bound only where the process holds an Admin write connection; otherwise
      * 501 says so. The actor is the authenticated subject: a body that tries
      * to supply one is refused rather than ignored, so nothing silently
      * accepts a forged attribution. A tunnel address must lie inside the
      * management network, so a row RestClient would refuse to talk to cannot
-     * be registered (docs/118 D-6, D-11).
+     * be registered (docs/118 D-6, D-11). Lifecycle legality is migration
+     * 012's trigger's decision (409 with its reason); the action route queues
+     * a row for the worker and touches no router (F2; docs/121 D-9, D-10).
      */
     private static function routers(Router $r, callable $guard, ?RouterAdmin $routers): void
     {
@@ -334,6 +329,73 @@ final class AdminRoutes
                 }
                 if ($row === null) { return Response::notFound(); }
                 return Response::ok(['router' => AdminProjection::router($row)]);
+            }), auth: false);
+
+        // ── lifecycle (docs/121 D-3, D-4, D-10) ──────────────────────────
+        // Records what a person OBSERVED. Legality is migration 012's
+        // trigger's decision and comes back as 409 with the trigger's own
+        // reason; the 400 here covers only words staff may never record
+        // (diverged is computed; registered is the start). A state the row
+        // already holds is 200 with no audit row (RULE I-1). Nothing here
+        // contacts a router.
+        $r->post('/api/v1/admin/routers/{device_id}/state', $guard(Capability::ROUTERS_LIFECYCLE,
+            static function (Request $req, StaffIdentity $s) use ($routers, $off, $derived, $uuid) {
+                if ($routers === null) { return $off(); }
+                $id = (string) ($req->params['device_id'] ?? '');
+                if (!preg_match($uuid, $id)) { return Response::notFound(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['actor', 'staged_by', 'customer_id', 'site_id', 'claimed_at', 'last_seen_at'])) !== null) { return $bad; }
+                $state = $b['state'] ?? null;
+                if (!is_string($state) || !in_array($state, RouterAdmin::RECORDABLE_STATES, true)) {
+                    return Response::badRequest('state must be one a staff member may record: '
+                        . implode(', ', RouterAdmin::RECORDABLE_STATES));
+                }
+                try {
+                    $row = $routers->setState($id, $state, $s->subject);
+                } catch (RouterRefused $e) {
+                    return new Response(409, ['error' => 'refused', 'detail' => $e->getMessage()]);
+                }
+                if ($row === null) { return Response::notFound(); }
+                return Response::ok(['router' => AdminProjection::router($row)]);
+            }), auth: false);
+
+        // ── the action: an INTENT, never a command (F2; docs/121 D-9) ────
+        // SignalReport::actions() is the one source of which actions exist
+        // and which are available. Exactly one is executable here —
+        // push_config, a device.provision intent for the worker — and it must
+        // ALSO be marked available in the inventory; anything else answers 501
+        // with the inventory's own reason. The idempotency key is required:
+        // the same key on a retry returns the same job (202 new, 200 replay).
+        $r->post('/api/v1/admin/routers/{device_id}/actions', $guard(Capability::ROUTERS_ACT,
+            static function (Request $req, StaffIdentity $s) use ($routers, $off, $derived, $uuid) {
+                if ($routers === null) { return $off(); }
+                $id = (string) ($req->params['device_id'] ?? '');
+                if (!preg_match($uuid, $id)) { return Response::notFound(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['actor', 'staged_by', 'customer_id', 'device_id', 'kind', 'payload', 'state', 'target_id'])) !== null) { return $bad; }
+                $inventory = SignalReport::actions();
+                $known = null;
+                foreach ($inventory as $a) { if (($b['action'] ?? null) === $a['key']) { $known = $a; } }
+                if ($known === null) {
+                    return Response::badRequest('action must be one of: ' . implode(', ', array_column($inventory, 'key')));
+                }
+                if ($known['key'] !== 'push_config' || !$known['available']) {
+                    return new Response(501, ['error' => 'router_action_not_available',
+                        'action' => $known['key'], 'detail' => $known['reason']]);
+                }
+                $key = $b['idempotency_key'] ?? null;
+                if (!is_string($key) || !preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $key)) {
+                    return Response::badRequest('idempotency_key is required: 8-128 letters, digits, dot, underscore, '
+                        . 'colon or dash; the same key on a retry returns the same job');
+                }
+                try {
+                    $out = $routers->requestProvision($id, $key, $s->subject);
+                } catch (RouterRefused $e) {
+                    return new Response(409, ['error' => 'refused', 'detail' => $e->getMessage()]);
+                }
+                if ($out === null) { return Response::notFound(); }
+                return new Response($out['replayed'] ? 200 : 202,
+                    ['intent' => AdminProjection::intent($out['intent']), 'replayed' => $out['replayed']]);
             }), auth: false);
     }
 
@@ -534,7 +596,7 @@ final class AdminRoutes
         return [
             Capability::HEALTH_READ, Capability::CUSTOMERS_READ, Capability::SITES_READ,
             Capability::SITES_WRITE, Capability::ROUTERS_READ, Capability::ROUTERS_REGISTER,
-            Capability::ROUTERS_ASSIGN, Capability::ROUTERS_ACT, Capability::PLANS_READ,
+            Capability::ROUTERS_ASSIGN, Capability::ROUTERS_LIFECYCLE, Capability::ROUTERS_ACT, Capability::PLANS_READ,
             Capability::PLANS_WRITE, Capability::VOUCHERS_READ, Capability::VOUCHERS_GENERATE,
             Capability::SESSIONS_READ, Capability::SESSIONS_DISCONNECT,
             Capability::INTENTS_READ, Capability::AUDIT_READ,

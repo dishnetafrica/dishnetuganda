@@ -229,9 +229,11 @@ is_($inv['sessions']['admin_readable'], true, 'while sessions are, estate-wide')
 t('6. ALL REAL-NETWORK ACTIONS REMAIN UNAVAILABLE');
 
 foreach (SignalReport::actions() as $a) {
-    is_($a['available'], false, "{$a['key']} is unavailable");
+    // Since migration 028 (docs/121) push_config is available: it queues an
+    // intent for the worker, which the simulator's own three jobs now use.
+    is_($a['available'], $a['key'] === 'push_config', "{$a['key']} is " . ($a['key'] === 'push_config' ? 'available (an intent for the worker)' : 'unavailable'));
 }
-is_(SignalReport::summary()['actions_available'], 0, 'none of them is actionable');
+is_(SignalReport::summary()['actions_available'], 1, 'exactly one of them is actionable — push_config, and it queues, never commands');
 
 $psql("DROP DATABASE IF EXISTS {$db}");
 exit(t_summary());

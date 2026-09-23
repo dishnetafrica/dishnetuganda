@@ -663,12 +663,12 @@ foreach (array_merge(glob(__DIR__ . '/../src/*.php'), glob(__DIR__ . '/../src/*/
 is_($mapping, [], "no PHP file maps a principal's kind onto actor_kind");
 
 // ===========================================================================
-t('15. REPOSITORY STATE — migrations end at 027; the ledger agrees; the census gained its line');
+t('15. REPOSITORY STATE — 027 is applied and 028 (docs/121) follows it; the ledger agrees; the census gained its line');
 $files = array_map('basename', glob(__DIR__ . '/../migrations/*.sql')); sort($files);
-is_(substr(end($files), 0, 3), '027', 'the last migration file is 027');
-is_(count(array_filter($files, fn($f) => str_starts_with($f, '028'))), 0, 'and no 028 exists');
-is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 27, 'the ledger records 27 migrations');
-is_(substr($ins->one('SELECT max(filename) AS f FROM mt_migrations')['f'], 0, 3), '027', 'the latest applied is 027');
+is_(count(array_filter($files, fn($f) => str_starts_with($f, '027'))), 1, 'exactly one 027 file exists');
+is_(substr(end($files), 0, 3), '028', 'the last migration file is 028 — router lifecycle and provisioning (docs/121), not a T-2 change');
+is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 28, 'the ledger records 28 migrations');
+is_(substr($ins->one('SELECT max(filename) AS f FROM mt_migrations')['f'], 0, 3), '028', 'the latest applied is 028');
 $census = file_get_contents(__DIR__ . '/../tools/audit/production_census.sql');
 is_(str_contains($census, 'SECTION 1c') && str_contains($census, 'mt_admin_principals'), true,
     'the production census counts principals by kind and status (docs/79 §1c)');

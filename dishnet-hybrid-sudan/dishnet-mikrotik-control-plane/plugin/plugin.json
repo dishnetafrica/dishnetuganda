@@ -20,7 +20,7 @@
     ],
     "postgresql": ">=14",
     "postgresql_role": "the plugin does not create its database. plugin/bin/bootstrap.sql creates an owner role with CREATEROLE and CREATEDB (not superuser, not BYPASSRLS) and an empty database owned by it.",
-    "worker": "bin/worker.php is a long-running process for the intent queue. The Admin read panel does not need it; provisioning does. Not bound.",
+    "worker": "bin/worker.php is a long-running process for the intent queue. The Admin read panel does not need it; provisioning does: POST /routers/{device_id}/actions (push_config) queues a device.provision intent that ONLY the worker delivers, through whatever DN_DELIVERY selects (nothing by default).",
     "redis": false,
     "docker": false,
     "web_server": "any server that serves panel/ as static files and routes /api/v1/admin/* to plugin/public/api.php. The API reads the raw REQUEST_URI path, so a prefix mount must be stripped before PHP sees it."
@@ -190,7 +190,7 @@
   "api": {
     "base": "/api/v1/admin",
     "entrypoint": "plugin/public/api.php",
-    "surface": "estate read + router register/assign; identity read-write",
+    "surface": "estate read + router register/assign/lifecycle/provision; identity read-write",
     "routes": [
       {
         "method": "GET",
@@ -292,14 +292,29 @@
           "role": "dnb_adminwrite",
           "gate": "G-C",
           "actor": "the authenticated staff subject; customer_id in the body is the explicit TARGET operator, never a tenant context"
-        }
-      ],
-      "declared_unbound": [
+        },
+        {
+          "method": "POST",
+          "path": "/routers/{device_id}/state",
+          "capability": "routers.lifecycle",
+          "function": "mt_device_set_state",
+          "role": "dnb_adminwrite",
+          "gate": "G-C",
+          "see": "docs/121",
+          "actor": "the authenticated staff subject; records the lifecycle state a person observed (staged, shipped, connected, provisioned, active, orphaned, decommissioned); migration 012's trigger decides legality; a state the row already holds writes nothing (RULE I-1)"
+        },
         {
           "method": "POST",
           "path": "/routers/{device_id}/actions",
-          "capability": "routers.act"
-        },
+          "capability": "routers.act",
+          "function": "mt_device_provision_request",
+          "role": "dnb_adminwrite",
+          "gate": "G-C",
+          "see": "docs/121",
+          "actor": "the authenticated staff subject; push_config only — queues a device.provision INTENT for the worker (F2), the operator derived from the device row, idempotency_key required and checked before the insert and the audit; every other action answers 501 with the inventory's reason"
+        }
+      ],
+      "declared_unbound": [
         {
           "method": "POST",
           "path": "/sites",
@@ -326,7 +341,7 @@
           "capability": "customers.write"
         }
       ],
-      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign, each one W-1 function on dnb_adminwrite writing its own audit row with the authenticated subject as actor. The six paths under declared_unbound EXIST and every one answers 501. The router ACTION needs an Admin-plane enqueue function dnb_adminwrite may execute (a migration G-C did not authorise, docs/118 D-2); sites wait for O-1; plans and voucher batches for G-C2; disconnect for the replay fix; principal creation for its own instruction (docs/116 J-1)."
+      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign; migration 028 (docs/121) bound the router lifecycle and the push_config action, lifting docs/118 D-2 — each one SECURITY DEFINER function on dnb_adminwrite writing its own audit row with the authenticated subject as actor, and none reaching a router. The five paths under declared_unbound EXIST and every one answers 501: sites wait for O-1; plans and voucher batches for G-C2; disconnect for the replay fix (docs/108); principal creation for its own instruction (docs/116 J-1)."
     },
     "session": {
       "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. Since migration 026 these routes DO write identity state (a revocable session row, an audit row) through definer functions owned by dnb_def_staff; they write no estate table, which is why 'writes.bound' stays empty.",
@@ -456,8 +471,8 @@
       "env": "DN_ALLOW_REAL_BINDINGS=yes-f6b-authorized"
     },
     "admin-write": {
-      "state": "PARTIALLY BOUND (G-C)",
-      "meaning": "Two ESTATE writes are bound: POST /routers and POST /routers/{device_id}/assign (dnb_adminwrite, migration 020's W-1 functions, actor = the authenticated staff subject). The router action, sites, plans, voucher batches, disconnect and principal creation still answer 501. Identity routes (session, staff roster) are bound since migration 026. No route reaches a router: a router write is a registry row, and only the worker turns rows into connections."
+      "state": "PARTIALLY BOUND (G-C routers complete, docs/121)",
+      "meaning": "Four ESTATE writes are bound, all router writes on dnb_adminwrite with the authenticated staff subject as actor: POST /routers and POST /routers/{device_id}/assign (G-C, migration 020's W-1 functions), POST /routers/{device_id}/state (mt_device_set_state, RULE I-1 no-op since 028) and POST /routers/{device_id}/actions for push_config (mt_device_provision_request, migration 028). Sites, plans, voucher batches, disconnect and principal creation still answer 501. Identity routes (session, staff roster) are bound since migration 026. No route reaches a router: a router write is a registry row or an intent row, and only the worker turns rows into connections."
     },
     "portal": {
       "state": "NOT BUILT",

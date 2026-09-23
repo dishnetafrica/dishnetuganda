@@ -306,9 +306,10 @@ RouterBOARD serial, no factory-reset behaviour).
 
 G-C2 · B-3 (the thirteen `dnb_app` write grants are asserted unchanged by
 `test_operator_staff`) · O-1 (no composite FK applied, no census run) · G-D
-(no TLS, no `staff:bootstrap`, no deployment) · T-6 / T-10 / T-11 · the Admin
-action route and its enqueue migration · the panel's register/assign forms ·
-any device-state automation · any B1 decision.
+(no TLS, no `staff:bootstrap`, no deployment) · T-6 / T-10 / T-11 · ~~the Admin
+action route and its enqueue migration · the panel's register/assign forms~~
+(**built 2026-09-23 by `docs/121`: migration 028, the lifecycle route, the
+forms**) · any device-state automation · any B1 decision.
 
 ## G. Proof runs
 

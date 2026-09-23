@@ -4,17 +4,25 @@
  * preserved, not redesigned. Reseller navigation and tenant management are
  * absent by decision (docs/81 §9), not by omission.
  *
- * READ ONLY. No view renders a control that changes state.
+ * Estate READS go through api.js, which stays read-only and is tested to. The
+ * estate WRITES a view renders are the four router writes of routers.js —
+ * register, assign, lifecycle state, push configuration (migration 028,
+ * docs/121) — and nothing else; identity writes go through staff.js. Nothing
+ * in this file contacts a router: every write is a row on the server.
  */
 import { Session, renderGate, L } from './login.js';
 import { AdminApi, S, cohort, COHORT_LABEL, contactAge, evidenceLevel } from './api.js';
 import { StaffApi, AccountApi } from './staff.js';
+import { RouterWriteApi, NEXT_STATES, STEP_MEANING, freshKey } from './routers.js';
 
 const api = new AdminApi();
 /* The identity plane has its own client (staff.js) so that api.js stays
  * estate read-only and a test can keep saying so. */
 const staffApi = new StaffApi();
 const accountApi = new AccountApi();
+/* The router-write client (docs/121 D-12): four operations, every one a row
+ * on the server. Kept apart from api.js so its read-only guard keeps holding. */
+const routersApi = new RouterWriteApi();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const short = id => id ? String(id).slice(0, 8) : '—';
@@ -104,7 +112,7 @@ async function vRouters() {
     <button class="fl all ${state.cohortFilter ? '' : 'on'}" data-cohort="">
       <span class="fl-n">${all.length}</span><span class="fl-l">all</span></button></div>`;
 
-  return head('Routers', `${all.length} in the estate`) + cohorts + search() + (
+  return head('Routers', `${all.length} in the estate`) + takeMsg() + cohorts + search() + (
     rows.length === 0
       ? `<div class="stateblock empty"><h3>Nothing matches</h3><p>${
           esc(all.length)} routers exist; none match this filter.</p></div>`
@@ -116,7 +124,8 @@ async function vRouters() {
             <td><span class="pill">${esc(r.state)}</span></td>
             <td><span class="hs ${cohort(r.last_seen_at)}"><i></i>${esc(contactAge(r.last_seen_at))}</span></td>
             <td>${esc(custName(r.customer_id)) || '—'}</td>
-            <td>${esc(siteName(r.site_id)) || '—'}</td></tr>`));
+            <td>${esc(siteName(r.site_id)) || '—'}</td></tr>`)) +
+    registerForm();
 }
 
 
@@ -186,19 +195,80 @@ function signalPanel(sig, concise = false) {
     </div>`).join('') + `</div>`;
 }
 
-/* Every action is rendered inert, with the server's reason attached.
+/* Actions, from the server inventory and nowhere else.
  *
- * They are shown rather than hidden on purpose: DishNet staff should be able to
- * see what this product will eventually do and why it cannot do it yet. The
- * buttons carry the disabled attribute and no handler is bound to them. */
-function actionPanel(sig) {
+ * An action the SERVER marks available is live on a router's own page — and
+ * only there: the button queues a job for the worker (an intent, F2) under a
+ * key minted once per rendered page, so a double click is one job and a fresh
+ * page a fresh request. Everything else is rendered inert with the server's
+ * reason: shown rather than hidden, so DishNet staff can see what the product
+ * will eventually do and why it cannot yet. The Diagnostics page has no router
+ * in view, so every button there is inert. */
+function actionPanel(sig, routerId = null) {
   const acts = (sig && sig.actions) || [];
   if (!acts.length) return '';
-  return `<h2 class="sub">Actions</h2><div class="actions">` + acts.map(a => `
+  const key = freshKey();
+  return `<h2 class="sub">Actions</h2><div class="actions">` + acts.map(a => a.available && routerId ? `
+    <div class="action live">
+      <button class="btn live" data-raction="${esc(a.key)}" data-id="${esc(routerId)}" data-key="${esc(key)}">${esc(a.label)}</button>
+      <p>${esc(a.reason)}</p>
+    </div>` : `
     <div class="action">
       <button class="btn" disabled aria-disabled="true" title="${esc(a.reason)}">${esc(a.label)}</button>
       <p>${esc(a.reason)}</p>
     </div>`).join('') + `</div>`;
+}
+
+/* ---- Router writes (migration 028, docs/121) --------------------------- */
+/* Add a router: the bench act (docs/31 §3.1 step 11). What is typed here is the
+ * unit's IDENTITY as staged by the signed-in person — serial, model, RouterOS
+ * version, WireGuard public key, tunnel address inside 10.66.0.0/16. The server
+ * records who staged it from the session, never from this form. */
+function registerForm() {
+  return `<form class="sform" data-rform="register">
+    <h3>Add a router</h3>
+    <label>Serial <input name="serial" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{3,63}" autocapitalize="characters" spellcheck="false"></label>
+    <label>Model <input name="model" required maxlength="64" placeholder="hAP ax2"></label>
+    <label>RouterOS version <input name="ros_version" maxlength="32" placeholder="7.14.3"></label>
+    <label>WireGuard public key <input name="wg_pubkey" pattern="[A-Za-z0-9+/]{43}=" autocapitalize="none" spellcheck="false"></label>
+    <label>Tunnel address <input name="tunnel_ip" pattern="10\\.66\\.[0-9]{1,3}\\.[0-9]{1,3}" placeholder="10.66.0.21" spellcheck="false"></label>
+    <button class="btn" type="submit">Register</button>
+    <small>Recorded as staged by you and owned by nobody until it is assigned. Nothing here contacts the router.</small></form>`;
+}
+
+/* Assign to an operator: the explicit TARGET (docs/114 D-AUTH-3), chosen here by
+ * name and sent as its id. A site must belong to that operator — the server
+ * refuses any other pairing below the function (W-2). Reassignment is a
+ * legitimate act and is audited as one. */
+function assignForm(r, custs, sites) {
+  if (!isOk(custs)) return `<div class="note">Operators could not be read, so no assignment is offered.</div>`;
+  const ops = custs.rows.map(c => `<option value="${esc(c.id)}"${c.id === r.customer_id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  const sts = (isOk(sites) ? sites.rows : []).map(s =>
+    `<option value="${esc(s.id)}" data-op="${esc(s.customer_id)}"${s.id === r.site_id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  const verb = r.customer_id ? 'Reassign' : 'Assign';
+  return `<form class="sform" data-rform="assign" data-id="${esc(r.id)}">
+    <h3>${verb} to an operator</h3>
+    <label>Operator <select name="customer_id" required><option value="">— choose —</option>${ops}</select></label>
+    <label>Site <select name="site_id"><option value="">— none —</option>${sts}</select></label>
+    <label>Name shown to the operator <input name="name" maxlength="64" value="${esc(r.name ?? '')}"></label>
+    <button class="btn" type="submit">${verb}</button>
+    <small>A site must belong to the chosen operator; the server refuses any other pairing.</small></form>`;
+}
+
+/* Record the next lifecycle step a person OBSERVED (docs/121 D-3, D-10). The
+ * steps offered come from NEXT_STATES; migration 012's trigger is the authority
+ * and a refusal shows the trigger's own reason. */
+function recordPanel(r) {
+  const next = NEXT_STATES[r.state] || [];
+  if (!next.length) {
+    return `<div class="note">This router is <b>${esc(r.state)}</b>; no further step can be recorded for it.</div>`;
+  }
+  return `<div class="steps">
+    <div class="steps-head">Record the next step you observed — this router is currently <b>${esc(r.state)}</b>.
+      Nothing here contacts the router; a recorded state is what a person saw.</div>
+    ${next.map(s => `<button class="btn small${s === 'decommissioned' ? ' ghost' : ''}" data-rstate="${esc(s)}" data-id="${esc(r.id)}"
+        title="${esc(STEP_MEANING[s] || '')}">→ ${esc(s)}</button>`).join('')}
+  </div>`;
 }
 
 async function vRouter() {
@@ -256,15 +326,16 @@ async function vRouter() {
           <td>${esc(j.attempts)}/${esc(j.max_attempts)}</td>
           <td class="mono">${esc(String(j.created_at ?? '').slice(0, 16))}</td></tr>`) : '');
 
-  return head('Router', esc(r.serial)) +
+  return head('Router', esc(r.serial)) + takeMsg() +
     `<h2 class="sub">Identity</h2>` + identity +
+    `<h2 class="sub">Assignment</h2>` + assignForm(r, custs, sites) +
     `<h2 class="sub">Connectivity</h2>` + connectivity +
     (r.wan_interface ? '' : `<div class="note">No WAN interface has been established for this
       router, so its uplink is not measurable. That is a provisioning gap, not a fault.</div>`) +
-    `<h2 class="sub">Provisioning</h2>` + ladder(r) +
+    `<h2 class="sub">Provisioning</h2>` + ladder(r) + recordPanel(r) +
     `<h2 class="sub">Operations</h2>` + operations +
     `<h2 class="sub">Signals</h2>` + signalPanel(sig, true) +
-    actionPanel(sig);
+    actionPanel(sig, r.id);
 }
 
 /* Voucher lifecycle, as the DOMAIN currently supports it — not as the
@@ -510,6 +581,8 @@ function notice(res, fallback) {
   return '';
 }
 const pending = { msg: '' };
+/** The one message for the next render, shown once. */
+const takeMsg = () => { const m = pending.msg; pending.msg = ''; return m; };
 
 function radios(name, current) {
   return `<span class="radios">${ROLES.map(r => `<label><input type="radio" name="${esc(name)}"
@@ -660,6 +733,7 @@ function wire() {
     await session.logout(); paintGate();
   });
   wireIdentity();
+  wireRouters();
 }
 
 /* The identity-plane controls. Each answer is re-rendered from the server's
@@ -705,6 +779,54 @@ function wireIdentity() {
         return render();
       }
     }
+  });
+}
+
+/* The router-write controls (docs/121 D-12). Each answer is re-rendered from
+ * the server's reply; nothing here assumes an act succeeded. A 401 sends the
+ * whole panel back to the gate. */
+function wireRouters() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status === 0 ? `<div class="msg err">No response from the server; nothing was recorded.</div>`
+                : res.status < 300 ? (ok ? `<div class="msg ok">${esc(ok)}</div>` : '')
+                : notice(res, res.data && res.data.error);
+    render();
+  };
+  /* Empty optional fields are left out, so the server sees absence, not ''. */
+  const clean = f => Object.fromEntries([...new FormData(f)].filter(([, v]) => String(v).trim() !== ''));
+  document.querySelectorAll('form[data-rform]').forEach(f => {
+    const op = f.querySelector('select[name="customer_id"]'), site = f.querySelector('select[name="site_id"]');
+    if (op && site) {
+      const filter = () => { [...site.options].forEach(o => {
+        const mine = !o.value || o.dataset.op === op.value;
+        o.hidden = !mine; o.disabled = !mine; if (!mine && o.selected) site.value = '';
+      }); };
+      op.onchange = filter; filter();
+    }
+    f.onsubmit = async ev => {
+      ev.preventDefault();
+      const fields = clean(f);
+      switch (f.dataset.rform) {
+        case 'register': {
+          const r = await routersApi.register(fields);
+          if (r.status === 201 && r.data && r.data.router) { state.view = 'router'; state.arg = r.data.router.id; }
+          return after(r, `Registered ${fields.serial}: staged by you, owned by nobody yet.`);
+        }
+        case 'assign': return after(await routersApi.assign(f.dataset.id, fields), 'Assigned.');
+      }
+    };
+  });
+  document.querySelectorAll('[data-rstate]').forEach(b => b.onclick = async () => {
+    const s = b.dataset.rstate;
+    if (s === 'decommissioned' && !confirm('Decommission this router? No further state can be recorded for it afterwards.')) return;
+    return after(await routersApi.setState(b.dataset.id, s), `Recorded as ${s}.`);
+  });
+  document.querySelectorAll('[data-raction]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await routersApi.pushConfig(b.dataset.id, b.dataset.key);
+    return after(r, r.status === 202 ? 'Configuration job queued for the worker. It is delivered through the worker\'s binding, not from here.'
+                  : r.status === 200 ? 'That job was already queued; nothing new was added.' : '');
   });
 }
 

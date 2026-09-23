@@ -12,7 +12,7 @@ changes none of them.
 | Serve the Admin panel against a simulated estate | **yes** |
 | Read real Domain-B data once you put some there | **yes** |
 | Authenticate DishNet staff | **yes, when you bind it** — see *The identity gate* below. Off by default; needs TLS in front of PHP |
-| Register a router and assign it to an operator over the Admin API | **yes** (G-C, `docs/118`): `POST /api/v1/admin/routers`, `POST /api/v1/admin/routers/{id}/assign` — the two routes audit the signed-in staff member as the actor. Every other estate write still answers 501 |
+| Register a router, assign it to an operator, record its lifecycle and queue its configuration over the Admin API — and from the panel's forms | **yes** (G-C, `docs/118`; migration 028, `docs/121`): `POST /api/v1/admin/routers`, `…/routers/{id}/assign`, `…/routers/{id}/state`, `…/routers/{id}/actions` (`push_config`) — every one audits the signed-in staff member as the actor; the action queues an intent that only the worker delivers. Every other estate write still answers 501 |
 | Reach a real MikroTik router | **no** — F6-B is not authorized. The worker's delivery binding (`DN_DELIVERY`) is `null` unless you say otherwise, `simulated` is an in-memory router that says so, and `routeros` refuses to start without the gate. **Nothing is HARDWARE VERIFIED** |
 | Publish a RADIUS credential | **no** |
 | Redeem a voucher | **no** |
@@ -167,8 +167,14 @@ The worker is the only process that turns a queued intent into anything, and
 
 The worker prints its binding on startup and `GET /api/v1/admin/health`
 reports `delivery_configured` so the panel can never imply a router was
-contacted. Queuing a router action from the Admin API is **not** bound in this
-release (`POST /routers/{id}/actions` answers 501 and says why).
+contacted. `POST /routers/{id}/actions` with `{"action": "push_config",
+"idempotency_key": …}` queues a `device.provision` intent (migration 028,
+`docs/121`); **only the worker delivers it, through the binding above** — with
+`DN_DELIVERY` unset the job stays queued, under `simulated` an in-memory router
+confirms it. A router must be assigned to an operator, recorded `connected` or
+later, and carry a management address before a job is accepted; otherwise the
+API answers 409 with the reason instead of queuing a job that would only fail
+later. The other three actions answer 501 with the inventory's reason.
 
 ## The identity gate
 

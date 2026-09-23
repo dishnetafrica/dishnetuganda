@@ -34,7 +34,7 @@ enum StaffRole: string
                 Capability::CUSTOMERS_READ, Capability::SERVICES_READ,
                 Capability::SITES_READ,
                 Capability::ROUTERS_READ, Capability::ROUTERS_REGISTER,
-                Capability::ROUTERS_ASSIGN, Capability::ROUTERS_ACT,
+                Capability::ROUTERS_ASSIGN, Capability::ROUTERS_LIFECYCLE, Capability::ROUTERS_ACT,
                 Capability::PLANS_READ, Capability::VOUCHERS_READ,
                 Capability::SESSIONS_READ, Capability::SESSIONS_DISCONNECT,
                 Capability::INTENTS_READ,

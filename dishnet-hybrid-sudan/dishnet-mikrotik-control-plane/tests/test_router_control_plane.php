@@ -492,7 +492,7 @@ is_(count(SignalReport::actions()), 4, 'the four router actions are still declar
 foreach (SignalReport::actions() as $act) { is_(($act['reason'] ?? '') !== '', true, "action {$act['key']} is inert, with its reason"); }
 
 // ===========================================================================
-t('12. ADMIN PLANE — register and assign are bound; the actor is the subject; the action is not bound');
+t('12. ADMIN PLANE — register and assign are bound; the actor is the subject; the action is bound since 028 (docs/121)');
 $hit = static function (Router $r, string $m, string $p, array $body = []) {
     $mm = $r->match($m, $p);
     if ($mm === null) { bad("no route {$m} {$p}"); return new \Dn\Http\Response(404); }
@@ -568,10 +568,15 @@ is_($hit($admin, 'POST', '/api/v1/admin/routers', ['serial' => 'HGX6666666', 'mo
 $unwired = $as('noc-user', StaffRole::Noc, null);
 $res = $hit($unwired, 'POST', '/api/v1/admin/routers', ['serial' => 'HGX6666667', 'model' => 'x']);
 is_([$res->status, $res->body['error']], [501, 'router_writes_unavailable'], 'a process without an Admin write connection says so with 501');
-$res = $hit($noc, 'POST', "/api/v1/admin/routers/{$rt['id']}/actions", ['action' => 'push_config']);
-is_([$res->status, $res->body['error'], $res->body['see']], [501, 'router_action_not_bound', 'docs/118'], 'the ACTION route is not bound, and says exactly why (docs/118 D-2)');
+// Since migration 028 (docs/121) the ACTION route is bound. This router is
+// assigned but still recorded `staged`, so the function refuses to queue a job
+// the worker could only fail later: 409 with the reason, nothing queued. The
+// full proof of the route lives in tests/test_router_lifecycle_provision.php.
+$res = $hit($noc, 'POST', "/api/v1/admin/routers/{$rt['id']}/actions", ['action' => 'push_config', 'idempotency_key' => 'gc-act-' . bin2hex(random_bytes(4))]);
+is_([$res->status, $res->body['error'], str_contains($res->body['detail'], 'recorded as staged')], [409, 'refused', true],
+    'the ACTION route is bound (028): a router recorded staged is refused with the reason, not queued to fail later');
 is_((int) $ins->one("SELECT count(*)::int AS c FROM mt_intents WHERE target_id = ?", [$rt['id']])['c'], 0, 'and it queued nothing');
-is_($hit($as('sales', StaffRole::Sales, $ra), 'POST', "/api/v1/admin/routers/{$rt['id']}/actions", [])->status, 403, 'sales cannot even reach the unbound action');
+is_($hit($as('sales', StaffRole::Sales, $ra), 'POST', "/api/v1/admin/routers/{$rt['id']}/actions", [])->status, 403, 'sales cannot reach the action');
 foreach (StaffRole::cases() as $role) {
     is_([$role->can('routers.register'), $role->can('routers.assign')],
         in_array($role, [StaffRole::Admin, StaffRole::Noc], true) ? [true, true] : [false, false],
@@ -582,9 +587,9 @@ is_(preg_match('/\$req->body\[[\'"](staged_by|actor)[\'"]\]/', $src), 0, 'AdminR
 is_(substr_count($src, '$s->subject') >= 2, true, 'and hands the SUBJECT to both router writes');
 is_(str_contains($src, 'mt_device_'), false, 'the route file names no SQL function — RouterAdmin does, on dnb_adminwrite');
 $fa = strip_php_comments(file_get_contents(__DIR__ . '/../src/Admin/RouterAdmin.php'));
-is_(str_contains($fa, 'mt_device_register') && str_contains($fa, 'mt_device_assign') && !str_contains($fa, 'mt_device_set_state')
-    && !str_contains($fa, 'mt_intents') && !str_contains($fa, 'RestClient'), true,
-    'RouterAdmin reaches exactly the two W-1 functions: no state change, no intent, no router');
+is_(str_contains($fa, 'mt_device_register') && str_contains($fa, 'mt_device_assign') && str_contains($fa, 'mt_device_set_state')
+    && str_contains($fa, 'mt_device_provision_request') && !str_contains($fa, 'mt_intents') && !str_contains($fa, 'RestClient'), true,
+    'RouterAdmin reaches exactly the four router functions (docs/121): never a table, never a router');
 foreach (['src/Api/AdminRoutes.php', 'src/Admin/RouterAdmin.php'] as $f) {
     $b = strip_php_comments(file_get_contents(__DIR__ . '/../' . $f));
     is_(str_contains($b, 'Dn\\Delivery') || str_contains($b, 'DeliveryPort') || str_contains($b, 'IntentWorker'), false,
@@ -592,10 +597,10 @@ foreach (['src/Api/AdminRoutes.php', 'src/Admin/RouterAdmin.php'] as $f) {
 }
 
 // ===========================================================================
-t('13. REPOSITORY STATE — migrations end at 027; the gate variable is declared; nothing claims hardware');
+t('13. REPOSITORY STATE — migrations end at 028 (docs/121); the gate variable is declared; nothing claims hardware');
 $files = array_map('basename', glob(__DIR__ . '/../migrations/*.sql')); sort($files);
-is_([substr(end($files), 0, 3), count(array_filter($files, fn($f) => str_starts_with($f, '028')))], ['027', 0], 'the last migration is 027 and no 028 exists — G-C added no migration');
-is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 27, 'the ledger records 27');
+is_([substr(end($files), 0, 3), count(array_filter($files, fn($f) => str_starts_with($f, '028')))], ['028', 1], 'the last migration is 028 (docs/121); G-C itself added none');
+is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 28, 'the ledger records 28');
 $client = file_get_contents(__DIR__ . '/../src/Delivery/RouterOs/RestClient.php');
 is_(str_contains($client, 'requireRealBindingsAllowed'), true, 'RestClient checks the F6-B gate before its real transport');
 is_(str_contains($client, 'HARDWARE VERIFIED'), true, 'and says in its header that nothing in it is HARDWARE VERIFIED');

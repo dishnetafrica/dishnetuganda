@@ -4,7 +4,6 @@ namespace Dn\Plugin;
 
 use Dn\Db\Database;
 use Dn\Devices\DeviceRegistry;
-use Dn\Intents\IntentQueue;
 use Dn\Policy\PlanRepository;
 use Dn\Sessions\AccountingIngest;
 use Dn\Telemetry\UplinkRepository;
@@ -68,9 +67,6 @@ final class Simulator
         // is dnb_adminwrite's, and since 027 the only creator outside a tenant.
         $adminWrite = Database::adminWrite();
         $ctx   = new TenantContext($app);
-        // B-2: dnb_app is read-only on the commercial tables since migration
-        // 025, so the acts that are NOT customer acts need their own context.
-        $ctxAdmin = new TenantContext($admin);
 
         // ── customers, each with a service, a principal and sites ──────────
         $estate = [];
@@ -214,21 +210,17 @@ final class Simulator
 
         // ── provisioning jobs ──────────────────────────────────────────────
         $jobs = 0;
-        foreach (['SIM-MT-0001' => 'SIM-CUST-001', 'SIM-MT-0002' => 'SIM-CUST-001',
-                  'SIM-MT-0005' => 'SIM-CUST-003'] as $serial => $ref) {
-            $e = $estate[$ref];
-            // B-2: dnb_app may no longer write mt_intents. A device provisioning
-            // job is a NETWORK-plane act anyway -- when the Admin route that
-            // raises it is finally bound it will be dnb_adminwrite, never the
-            // customer role. The row written is identical; only the connection
-            // differs, and $ctxAdmin is subject to the same RLS.
-            $ctxAdmin->run($e['customer'], function (Database $db) use ($e, $routers, $serial, &$jobs) {
-                (new IntentQueue($db))->enqueue(
-                    $e['customer'], 'device.provision',
-                    ['device_id' => $routers[$serial]['id']],
-                    $e['principal'], 'device', $routers[$serial]['id']);
-                $jobs++;
-            });
+        foreach (['SIM-MT-0001', 'SIM-MT-0002', 'SIM-MT-0005'] as $serial) {
+            // The Admin-plane path, exactly as the bound action route takes it
+            // (migration 028, docs/121 D-15): dnb_adminwrite, the operator
+            // DERIVED from the device row, a payload naming the device only,
+            // and the audit row written by the function itself. These routers'
+            // 10.99.0.x tunnel addresses lie outside 10.66/16, so the worker
+            // still refuses the jobs as retryable (docs/120 §15.8.6) — a
+            // recorded finding, deliberately not repaired here.
+            $adminWrite->one('SELECT mt_device_provision_request(?,?,?) AS r',
+                [$routers[$serial]['id'], 'SIM-JOB-' . $serial, 'sim:provisioning']);
+            $jobs++;
         }
         $this->say("{$jobs} simulated provisioning jobs queued");
 

@@ -85,14 +85,16 @@ is_($declared, $served, 'every route the manifest declares is a route the plugin
 // G-C (docs/118): the first two estate writes are bound, and the manifest says
 // which function, which role and where the actor comes from for each.
 is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'], $m->writeRoutes),
-    ['POST /routers', 'POST /routers/{device_id}/assign'],
-    'the manifest declares exactly TWO bound estate writes: router register and assign');
+    ['POST /routers', 'POST /routers/{device_id}/assign', 'POST /routers/{device_id}/state', 'POST /routers/{device_id}/actions'],
+    'the manifest declares exactly FOUR bound estate writes, all router writes: register, assign (G-C), lifecycle and the push_config action (028, docs/121)');
 foreach ($m->writeRoutes as $r) {
     is_([$r['role'], $r['gate'], str_contains($r['actor'] ?? '', 'authenticated staff subject')],
         ['dnb_adminwrite', 'G-C', true], "{$r['path']}: dnb_adminwrite, G-C, actor from the identity boundary");
-    is_(in_array($r['function'], ['mt_device_register', 'mt_device_assign'], true), true, "{$r['path']} names its W-1 function");
+    is_(in_array($r['function'], ['mt_device_register', 'mt_device_assign', 'mt_device_set_state', 'mt_device_provision_request'], true), true,
+        "{$r['path']} names its SECURITY DEFINER function");
 }
-is_(count($m->unboundWrites), 6, 'and six declared-but-unbound write paths (action, sites, plans, voucher batches, disconnect, principals)');
+is_(count($m->unboundWrites), 5, 'and five declared-but-unbound write paths (sites, plans, voucher batches, disconnect, principals)');
+is_(array_filter($m->unboundWrites, fn($w) => str_contains($w['path'], '/actions')), [], 'the router action is no longer among them');
 is_(count($m->sessionRoutes), 6,
     'and six session paths — who am I, log in, log out, change password, enrol, confirm');
 is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? null) !== null)), [],
@@ -100,9 +102,9 @@ is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? 
 // Changed DELIBERATELY with migration 026 (docs/114 §N R-7): a session is now a
 // revocable row and an audit row, written through dnb_def_staff's functions.
 // The ESTATE stays read-only, and that half is what writes.bound still asserts.
-is_($m->apiSurface, 'estate read + router register/assign; identity read-write',
-    'the surface says the truth: estate read plus the two router writes, identity read-write');
-is_(count($m->writeRoutes), 2, 'and the only estate writes bound are the two G-C router routes');
+is_($m->apiSurface, 'estate read + router register/assign/lifecycle/provision; identity read-write',
+    'the surface says the truth: estate read plus the four router writes, identity read-write');
+is_(count($m->writeRoutes), 4, 'and the only estate writes bound are the four router routes');
 is_(count($m->staffRoutes), 7, 'seven staff-roster routes are declared');
 is_(array_values(array_unique(array_column($m->staffRoutes, 'capability'))), ['staff.manage'],
     'every one of them gated on staff.manage, which only Admin carries');
@@ -245,15 +247,17 @@ foreach (array_merge(glob($root . '/src/**/*.php') ?: [], glob($root . '/src/*.p
 is_($writes, [], 'nothing writes mt_devices.last_seen_at, exactly as the panel says');
 is_($byKey['last_seen']['status'], SignalReport::UNMEASURED, 'so it is declared unmeasured');
 
-t('4c. every router action is unavailable, with a reason');
+t('4c. exactly one router action is available — push_config, an intent for the worker — and every one carries a reason');
 $acts = SignalReport::actions();
 is_(count($acts), 4, 'the four actions in the brief are all represented');
 foreach ($acts as $a) {
-    is_($a['available'], false, "{$a['key']} is NOT available");
+    is_($a['available'], $a['key'] === 'push_config', "{$a['key']} is " . ($a['key'] === 'push_config' ? 'available (028, docs/121)' : 'NOT available'));
     is_(is_string($a['reason']) && strlen($a['reason']) > 20, true,
         "{$a['key']} gives a specific reason, not a shrug");
 }
-is_(SignalReport::summary()['actions_available'], 0, 'nothing is actionable in this increment');
+is_(str_contains(SignalReport::actions()[0]['reason'], 'Nothing here contacts the router'), true,
+    'and the available one says plainly that queuing it contacts no router');
+is_(SignalReport::summary()['actions_available'], 1, 'one action is actionable, derived from the inventory, not typed');
 
 // ===========================================================================
 t('5. THE PANEL TAKES THE INVENTORY FROM THE SERVER, NOT FROM A LITERAL');
@@ -296,10 +300,12 @@ foreach (['>Connected', '>Healthy', '>Running', '>Up<'] as $lit) {
 is_(preg_match('/class="signal \$\{esc\(x\.status\)\}/', $code), 1,
     'the signal class comes from the server status, so the UI cannot colour it in');
 
-t('5b. the actions render inert');
-is_(preg_match('/<button[^>]*\bdisabled\b/', $code), 1, 'the action button carries disabled');
+t('5b. unavailable actions render inert; the one live control is wired only where the SERVER says available');
+is_(preg_match('/<button[^>]*\bdisabled\b/', $code), 1, 'the inert action button carries disabled');
 is_(str_contains($code, 'aria-disabled="true"'), true, 'and is disabled for assistive technology too');
-is_(preg_match('/data-action\s*=/', $code), 0, 'no action handler is wired to anything');
+is_(preg_match('/data-action\s*=/', $code), 0, 'no generic action handler is wired to anything');
+is_(preg_match_all('/data-raction=/', $code), 1, 'exactly one live action control exists (data-raction), rendered from the server inventory');
+is_(preg_match('/a\.available\s*&&\s*routerId/', $code), 1, 'and it is drawn only when the server marks the action available and a router is in view');
 
 t('5c. the navigation is two planes');
 foreach (['Network plane', 'Commercial plane'] as $sec) {
@@ -324,8 +330,13 @@ foreach (glob($root . '/panel/*') as $f) {
 $panelCode = implode("\n", array_map(
     static fn($f) => $stripJs(file_get_contents($f)),
     array_filter(glob($root . '/panel/*'), static fn($f) => str_ends_with($f, '.js'))));
+// 'SELECT ' is matched CASE-SENSITIVELY since migration 028 (docs/121 D-13):
+// the leak this guards against is SQL, which this project writes upper-case,
+// while the Assign form's <select name=…> and querySelector are HTML and DOM.
+// The control below shows the guard still catches an SQL statement.
+is_(strpos('x = "SELECT id FROM mt_devices"', 'SELECT '), 5, 'CONTROL: the case-sensitive needle does find an SQL SELECT');
 foreach (['pdo', 'pgsql', 'SELECT ', 'dnb_'] as $leak) {
-    is_(stripos($panelCode, $leak), false,
+    is_($leak === 'SELECT ' ? strpos($panelCode, $leak) : stripos($panelCode, $leak), false,
         "the panel CODE contains no {$leak} — it reaches the estate only through the API");
 }
 
