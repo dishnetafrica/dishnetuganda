@@ -2032,6 +2032,42 @@ copied, and the personal details on its pages are reproduced nowhere.
 - Sequence: T-1 → resume `docs/114` → T-2 → O-1/spine → projections and
   reports → G-C. Twelve open decisions in `docs/115` §N.
 
+## T-1 / T-8 CLOSED — and the Operator Staff capability model is DESIGNED (`docs/116`)
+
+- **T-1 CLOSED:** `mt_customers` **= Domain-B Operator**. UI/API/business say
+  **Operator**; the table stays `mt_customers`. **Never create `mt_operators`,
+  never physically rename.** Operator isolation through `customer_id` + RLS
+  remains authoritative.
+- **T-8 CLOSED:** `docs/114` resumes with the **dedicated `dnb_staffauth`**
+  login role (M1: `dnb_adminwrite` reaches seven write functions) and
+  **D-AUTH-3 = *target operator***. The Admin plane never sets
+  `mt_current_customer()`; a target operator is an explicit validated
+  parameter authorised by the staff capability.
+- **T-2 DESIGNED, not built (`docs/116`)** — C6/C16 answered. Four planes:
+  DishNet Staff (`mt_staff`) · Operator Owner (`kind='owner'`, every `op.*`)
+  · Operator Staff (`kind='staff'`, exactly `capabilities[]`) · Guest (none).
+  The value **`operator` is renamed to `staff`** because after T-1 "operator"
+  means the tenant. **`mt_audit_log.actor_kind = 'staff'` means DishNet staff
+  only; every operator person is `principal`** — pinned by a test; no actor
+  kind is added. Owner implies all; `op.staff.manage` is **not grantable**;
+  **at least one active owner per operator**. Location scoping is **later**
+  (T-6), nothing reserved physically.
+- **Measured, proved by execution (rolled back, residue 0): `dnb_app` can
+  `UPDATE` a principal's `kind` and `INSERT` a forged `owner` inside its own
+  tenant today.** Not a tenancy breach (RLS bounds it), but a capability
+  column would have no floor below the application until
+  `REVOKE INSERT, UPDATE, DELETE ON mt_principals FROM dnb_app` lands — so the
+  capability model ships **with** that revoke (migration 027) or not at all.
+  **B-3:** thirteen more tables still carry `dnb_app` write grants after
+  024/025 (`mt_customers`, `mt_sites`, `mt_services`, `mt_devices`,
+  `mt_auth_sessions`, `mt_sessions`, `mt_idempotency`, …) — inventory every
+  writer before revoking, as B-2 did; its own task after G-B.
+- The census (`docs/79`) gains one line: **principals by kind and status**,
+  because the `operator → staff` value rewrite touches existing rows.
+- **Sequence:** T-1 vocabulary pass → **G-B** (migration 026) → **027**
+  (this model + principal grant closure + `mt_admin_principal_create` with
+  target operator) → G-C → B-3 → O-1. Nothing blocks G-B.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**

@@ -350,6 +350,14 @@ authorisation, `docs/70` §8.3) · **Decision 5** · a writer for
 > Operator — leaves every decision below intact and changes one word:
 > D-AUTH-3's *target customer* becomes *target operator*. Resumption is
 > `docs/115` T-8, after T-1 is accepted.
+>
+> **Resumed 2026-09-23 — T-1 and T-8 CLOSED.** `mt_customers` is the Operator
+> (vocabulary only; no `mt_operators`, no physical rename). **D-AUTH-1 is final:
+> the dedicated `dnb_staffauth` LOGIN role**, EXECUTE on the three session
+> functions and nothing else. **D-AUTH-3 now reads *target operator*** wherever
+> this document says *target customer*; `mt_current_customer()` is never set on
+> the Admin plane. The operator-staff capability model is `docs/116` (T-2) and
+> precedes the principal writer, not G-B.
 
 Measured on `dnb_sim` at migration level 25 before a line of code was written.
 Every row names what was run; nothing below is inferred.
