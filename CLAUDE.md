@@ -2516,6 +2516,11 @@ runs first; only the package side was measured from the repository.
   without login / 200 with it, `http` → 301 → `https`, public 8099 still
   refused, Traefik not restarted, only `dnb-staging-api` recreated. The
   operator pasted the password back; rotation (re-run the command) was advised.
+  **Seen in the operator's browser at 16:35 UTC:** the panel on *Routers* with
+  the SIMULATED banner, 5 routers all *Never Seen* — the full path DNS →
+  Traefik → TLS → basic auth → `172.17.0.1:8099` → development identity works.
+  **Stages 1 and 2 are complete.** A blank band above the sidebar on first load
+  is noted as a possible panel layout item for a later instruction.
 - **Simulator finding, not a deployment fault:** its routers carry tunnel
   addresses `10.99.0.10–14`, outside `10.66.0.0/16`, so its three
   `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and

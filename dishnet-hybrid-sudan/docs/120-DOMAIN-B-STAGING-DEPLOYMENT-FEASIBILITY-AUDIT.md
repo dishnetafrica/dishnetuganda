@@ -1829,3 +1829,17 @@ The credential therefore exists in this conversation's transcript, and the
 operator was told to rotate it by running the same command again, which
 rewrites the route file with a new password. The value is not reproduced in
 this repository.
+
+**Seen from the operator's browser, 2026-09-23 19:35 EAT (16:35 UTC):** a
+screenshot of `portal-staging.dishnetuganda.com` shows the DishNet Admin panel
+signed in, on *Routers*: the **SIMULATED — no router or AAA system has been
+contacted** banner, *5 in the estate*, the tally *5 Never Seen · 0 Cold ·
+0 Warm · 0 Fresh*, and the rows `SIM-MT-0001 hAP ax2 active` and `SIM-MT-0002
+hEX S provisioned` with *Last contact: Never*, operator `SIM-CUST-001
+Riverside Hotel`, sites `SIM-SITE-001 Lobby` / `SIM-SITE-002 Poolside`. Basic
+auth was passed and a role chosen, so the whole path — DNS → Traefik → TLS →
+basic auth → `172.17.0.1:8099` → the development identity — is exercised end
+to end. **Both stages are complete.** One observation for a later instruction,
+not a deployment matter: the screenshot shows a blank band above the sidebar
+and the banner on first load; if it persists after a reload it is a panel
+layout item.
