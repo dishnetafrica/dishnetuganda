@@ -2390,6 +2390,40 @@ column is empty by construction.
   that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
   migration 028, any deployment. Migrations still end at **027**.
 
+## Staging on the existing server — AUDITED, NOT deployed (`docs/120`)
+
+**A read-only deployment feasibility audit, nothing more.** This session
+cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
+refused, and probing is forbidden), so `docs/120` §1 is the **recorded
+19 September baseline** plus a **read-only verification script** the operator
+runs first; only the package side was measured from the repository.
+
+- **Recommended shape: the Phase-0 pattern**, not an EasyPanel service and
+  not a hand-made Traefik route — three plain `docker run` containers on a
+  dedicated bridge outside the swarm: `dnb-staging-postgres` (own instance,
+  **no published port**; the fifteen roles are cluster-wide, so no existing
+  PostgreSQL may be reused), `dnb-staging-api` on **`127.0.0.1:8099` only**,
+  `dnb-staging-worker` with `DN_DELIVERY=simulated`. Browser access over an
+  SSH tunnel. No host package: one two-line image (`php:8.3-cli-alpine` +
+  `pdo_pgsql`).
+- **Authentication for the inspection is the development identity**, on the
+  API container only. `DN_STAFF_IDENTITY` stays unset, so `DenyAllIdentity`
+  remains the default and production binding; **no `staff:bootstrap`**; the
+  doctor's WARN on `DN_DEV_STAFF_IDENTITY` under `--disposable` is the truth
+  of a demonstration install and is recorded, not silenced.
+- **A hostname (`portal-staging.dishnetuganda.com`) is stage 2 and its own
+  approval:** it needs a DNS record and a Traefik route, which on this host
+  belong to EasyPanel, **and** an IP allow-list plus basic auth in front,
+  because the development identity has no credential. Never expose it bare.
+- **Docker env-file quoting:** `--env-file` keeps quotes literally, so the
+  shell-quoted `DNB_DSN` of `.env.example` must be written **unquoted** for a
+  container.
+- **Nothing real:** `DN_ALLOW_REAL_BINDINGS` absent, no MikroTik, no
+  FreeRADIUS, no WireGuard peer, no Domain A, no uCRM; the worker idles
+  because the Admin plane cannot enqueue (`docs/118` D-2).
+- **Zero server changes were made by the audit**, and none may be made until
+  the proposal is explicitly approved. `docs/00` §10's host constraints hold.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
