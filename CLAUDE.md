@@ -2511,7 +2511,11 @@ runs first; only the package side was measured from the repository.
   idempotent (route rewritten, password rotates). Everything else is block E.
   **Trade stated in the record:** without the allow-list the basic-auth prompt
   is reachable from the Internet; a 20-character random password over TLS,
-  rate-limited, guards `SIM-` data with no real binding. Result PENDING.
+  rate-limited, guards `SIM-` data with no real binding. **STAGE 2 IN PLACE
+  2026-09-23 16:32 UTC:** route active in 2 s, Let's Encrypt certificate, 401
+  without login / 200 with it, `http` → 301 → `https`, public 8099 still
+  refused, Traefik not restarted, only `dnb-staging-api` recreated. The
+  operator pasted the password back; rotation (re-run the command) was advised.
 - **Simulator finding, not a deployment fault:** its routers carry tunnel
   addresses `10.99.0.10–14`, outside `10.66.0.0/16`, so its three
   `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and

@@ -1808,4 +1808,24 @@ character random password over TLS, rate-limited per address, with the panel
 carrying `SIM-` data and no real binding. §6 and §10 asked for both
 protections; the operator's request for a no-input command is the reason the
 allow-list became optional, and the script still takes `ALLOW_CIDR` the moment
-an address is known. **Result: PENDING** the operator's run.
+an address is known.
+
+**Result — STAGE 2 IN PLACE, 2026-09-23 16:32:18 UTC**, from the operator's
+paste of the one command's output:
+
+| Check | Result |
+|---|---|
+| preconditions | stage 1 healthy, Traefik in host mode, DNS resolves, precedent file unchanged |
+| API publishes | `127.0.0.1:8099` and `172.17.0.1:8099`, nothing else; `209.97.137.203:8099` → **refused** |
+| route file | valid (`dnb-staging-auth`, `dnb-staging-ratelimit`, `dnb-staging-headers`); the other files untouched |
+| Traefik | route active after **2 s**; **not restarted** (`StartedAt` 2026-09-15T21:09:50 before and after) |
+| certificate | issued by **Let's Encrypt** (`C = US, O = Let's Encrypt, CN = YR2`) |
+| `https://portal-staging.dishnetuganda.com/` | **401** without a login, **401** with a wrong password, **200** with the right one (from the server; no allow-list, so 200 rather than 403) |
+| `http://portal-staging.dishnetuganda.com/` | **301** to https |
+| containers changed | only `/dnb-staging-api`, recreated at 16:32:19 UTC |
+
+**The operator pasted the password box back despite the instruction not to.**
+The credential therefore exists in this conversation's transcript, and the
+operator was told to rotate it by running the same command again, which
+rewrites the route file with a new password. The value is not reproduced in
+this repository.
