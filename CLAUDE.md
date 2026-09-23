@@ -2390,7 +2390,7 @@ column is empty by construction.
   that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
   migration 028, any deployment. Migrations still end at **027**.
 
-## Staging on the existing server — AUDITED, NOT deployed (`docs/120`)
+## Staging on the existing server — AUDITED; stage 1 APPROVED and HANDED OVER, result PENDING (`docs/120`)
 
 **A read-only deployment feasibility audit, nothing more.** This session
 cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
@@ -2433,6 +2433,28 @@ runs first; only the package side was measured from the repository.
   `docs/98` Q1: UISP/UNMS 3.0.159, uCRM 4.5.33.
 - **Zero server changes were made by the audit**, and none may be made until
   the proposal is explicitly approved. `docs/00` §10's host constraints hold.
+- **Stage 1 APPROVED 2026-09-23 (`docs/120` §15).** The operator approved §4/§11
+  exactly; this session **cannot execute it** and handed over three blocks: **A**
+  read-only before-evidence with a computed `GO`/`NO-GO`, **B** the deployment
+  script (refuses to start over a partial attempt, `set -eu`, stops at the first
+  failure, then nine after-checks and before/after comparisons), **C** the SSH
+  tunnel and browser on the Mac. **Nothing was deployed at that commit; the
+  result is PENDING** the operator's pasted output, to be recorded in §15.6.
+- **Seven amendments to §11 were found before any server run** (`docs/120`
+  §15.1). The decisive one: **`install` writes its secrets file `KEY="value"`**
+  (it is meant to be sourced by a shell) **and Docker's `--env-file` keeps the
+  quotes literally** — the containers must read an unquoted `secrets.docker.env`
+  or every role password is wrong. Also: the worker's log line is
+  `"delivery_binding":"simulated-routeros"`, not `bindingName`; wait for TCP
+  `pg_isready` inside the container, not `sleep 5`; the artifact is built **on
+  the server** from the public repository and checked against the content
+  digest `4e7467ad…16c798e`; compare `docker inspect` `StartedAt`/`RestartCount`,
+  not `docker ps` status text; never store the instance superuser password.
+- **`/opt/dishnet` (uCRM plugin deploy checkout) and `/opt/dishnetuganda` (an
+  earlier disposable clone) exist on the server and are NOT touched.** The SSH
+  tunnel is `ssh -N -L 8099:127.0.0.1:8099 root@209.97.137.203` (sshd verified on
+  22; the run was root) — but the Mac's path to port 22 once timed out from one
+  network, so block C checks it first.
 
 ## Open and parked
 

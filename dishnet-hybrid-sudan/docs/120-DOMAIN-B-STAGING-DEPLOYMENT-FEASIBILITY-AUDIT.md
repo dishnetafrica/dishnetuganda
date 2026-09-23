@@ -13,6 +13,15 @@ executes none of it.**
 > is CONFIRMED, every go / no-go threshold of §9 is met, and two facts amend
 > §3 and §6. Still nothing deployed.**
 
+> **Update 2026-09-23, later — STAGE 1 APPROVED by the operator, exactly as
+> §4/§11 describe it. §15 holds the executable form handed over: block A
+> (read-only before-evidence and go / no-go), block B (the deployment) and
+> block C (the SSH tunnel and the browser), with seven amendments to §11 that
+> were found while making it executable — before any server run. This
+> session cannot run them; the operator does, and pastes the output back.
+> At the commit that adds §15 nothing on the server has changed; §15.6
+> records the result.**
+
 > **The one limit to state first.** This session cannot reach the
 > `dishnetuganda` server: it has no SSH client, no credential, its egress is a
 > proxy that refuses that host, and the standing rule (`CLAUDE.md`, `docs/78`
@@ -487,7 +496,13 @@ production container `Up`. Otherwise stop and report.
 
 ---
 
-## 11. Exact deployment steps — WRITTEN, NOT EXECUTED, awaiting approval
+## 11. Exact deployment steps — WRITTEN, then APPROVED 2026-09-23; the executable form is §15
+
+> **Read with §15.1.** Seven points below were amended when the steps were
+> turned into the block the operator actually runs; the most consequential is
+> that `install` writes its secrets file **quoted**, so the containers must
+> read an unquoted copy (`secrets.docker.env`). The text of this section is
+> kept as written on 22–23 September; §15 is what ran.
 
 Every command below is for the operator, after approval, on the server. Steps
 0 and 1 change nothing. **If any check in step 0 deviates from §1.1 in a way
@@ -660,8 +675,9 @@ verification script; it is not a fresh observation.
 
 ## 14. What needs your decision
 
-1. **Approve stage 1** as written in §4/§11 (container-based, loopback + SSH,
-   development identity, simulated delivery) — or amend it.
+1. ~~**Approve stage 1** as written in §4/§11 (container-based, loopback + SSH,
+   development identity, simulated delivery) — or amend it.~~ **APPROVED
+   2026-09-23** — handed over as §15; result pending the operator's output.
 2. ~~Run §1.2 and return the output.~~ **DONE 2026-09-23 14:02 UTC** — §1.3:
    baseline confirmed, thresholds met, `postgres:16-alpine` present, host PHP
    present but without `pdo_pgsql`, Traefik file-configured.
@@ -672,3 +688,520 @@ verification script; it is not a fresh observation.
 4. Nothing else moves: F6-B, `staff:bootstrap`, `DN_STAFF_IDENTITY=dishnet`,
    G-C2, B-3, O-1, G-D, the physical-hardware gate (`docs/119`) and the
    production census (`docs/79`) are all unchanged by this audit.
+
+---
+
+## 15. Stage 1 — APPROVED 2026-09-23 and handed over; result PENDING
+
+**The operator approved stage 1 exactly as §4/§11 describe it:** the three
+`dnb-staging-*` containers, the dedicated bridge and the volume, nothing else;
+a **separate** PostgreSQL 16 with **no published port**, carrying only the
+Domain-B database at migration **027**, touching no existing instance; the API
+bound to **`127.0.0.1:8099` only**, under the development identity exactly as
+documented, `DenyAllIdentity` unchanged as the production/default binding, no
+`DN_STAFF_IDENTITY=dishnet`, **no `staff:bootstrap`**; the worker with
+`DN_DELIVERY=simulated` and no real RouterOS, WireGuard, RADIUS, MikroTik or
+Domain-A access; **no change** to the swarm, EasyPanel, Traefik, any
+production container, UCRM, UISP, WhatsApp, mail, the existing PostgreSQL and
+Redis instances, the firewall, DNS or any public port; **no hostname**; the
+baseline evidence captured **before**, the nine checks **after**; no other
+application change, no G-C2, B-3, O-1, no production staff authentication, no
+public exposure; **STOP** once the panel is reachable through the SSH tunnel;
+and *"if any deployment step would require modifying an existing production
+service or boundary, STOP and report it instead of improvising."*
+
+**This session still cannot execute any of it** (the limit stated in §0). The
+deployment is therefore three blocks the operator runs and pastes back: **A**
+(read-only: the before-evidence and a computed go / no-go), **B** (the
+deployment — one script, stops at the first failure) and **C** (on the Mac:
+the tunnel and the browser). **At the commit that adds this section nothing
+on the server has changed**; §15.6 records the result when the output is back.
+
+### 15.1 Amendments to §11, found while making it executable — before any server run
+
+| # | §11 as written | Amended in block B | Why |
+|---|---|---|---|
+| 1 | steps 6, 8, 9 pass `--env-file …/secrets.env` straight to the containers | `install` writes `KEY="value"` (`Credentials::writeSecretsFile`: *"this file is sourced by a shell"*); block B derives **`secrets.docker.env`** — the same seven values, unquoted, mode 0600, asserted to hold exactly 7 × 64-hex passwords and no quote — and every container reads that copy | Docker's `--env-file` keeps quotes literally (the very trap §4 records for `DNB_DSN`). The quoted file would have made every role password wrong and every container fail to connect |
+| 2 | step 9 expects `"bindingName":"simulated-routeros"` in the worker log | the worker prints `{"worker":"<host>:<pid>:simulated-routeros","bindings":{"delivery_binding":"simulated-routeros","delivery_simulated":true,…,"real_bindings_allowed":false,…}}` (`bin/worker.php` line 26); block B asserts those three keys | the documented string does not occur, so a check for it would always fail |
+| 3 | step 3 `sleep 5`, then read the log | wait until `pg_isready -h 127.0.0.1` **inside** the container succeeds (up to 60 s) | the first start runs `initdb`; the temporary server during init listens on no TCP address, so the TCP check cannot pass early and the bootstrap cannot run against a half-started instance |
+| 4 | step 1 *"copy the artifact (built on the repository machine)"* | built **on the server** from the **public** repository: a shallow clone of the branch (or the GitHub branch tarball when `git` is absent), `plugin/bin/package.sh` with the host's PHP 8.3 CLI (verified in §1.3), the source tree deleted afterwards; the extracted tree must reproduce the content digest `4e7467ad…16c798e` and must carry no `tests/` or `public/`, or the block stops | nothing has to be carried by hand, and the digest — not the transport — is the artifact's identity. A tarball pre-placed at `/root/dnb-staging-evidence/` is honoured instead |
+| 5 | no guard against a partial earlier attempt | block B refuses to start if `/opt/dnb-staging`, any `dnb-staging-*` container, the network or the volume already exists, if block A's snapshots are missing, or if a §9 threshold fails; `set -eu` stops it at the first failing step, and its `STOP:` line says to paste and wait, not to roll back | a half-deployed estate must be looked at, not deployed over |
+| 6 | before/after compared on `docker ps` *Status* text | compared on `docker inspect` `Status|StartedAt|RestartCount` per container, plus networks, volumes, images, listeners, filter and nat rules, each as *added* / *removed* lists | *"Up 4 days"* becomes *"Up 5 days"* by itself; `StartedAt` and `RestartCount` change only if something was restarted |
+| 7 | the instance superuser password is generated and used | generated and used once — for the container's environment — and **not stored**. Later access is `docker exec … psql -U postgres`, the image's local `trust` inside the container, as Phase 0 | a password nobody needs must not be written down |
+
+Also recorded: **`/opt/dishnet`** (the checkout the uCRM plugins are deployed
+from) and **`/opt/dishnetuganda`** (a disposable clone of this branch made
+earlier in this project to look at the login screen) both exist on the
+server. **Neither is touched**: block A reports them, block B never
+references them, and stage 1 clones its own copy under the evidence
+directory and deletes it after the build.
+
+### 15.2 Block A — before-evidence and go / no-go (READ-ONLY; it writes only under `/root/dnb-staging-evidence/`)
+
+Run as root and paste the whole output back. It ends with `RESULT: GO` or
+`RESULT: NO-GO`; block B runs only on GO. The full §1.2 verification is run
+again inside it and kept as `verify-before.txt`.
+
+```sh
+install -d -m 0700 /root/dnb-staging-evidence
+sh <<'DNB_BEFORE' 2>&1 | tee /root/dnb-staging-evidence/before.log
+# docs/120 §15 — BLOCK A: the BEFORE evidence and the go / no-go. READ-ONLY on
+# the server: every command reads. The only writes are the evidence files under
+# /root/dnb-staging-evidence/. Nothing is created, pulled, modified or restarted
+# anywhere else, and no secret is printed.
+set -u
+EV=/root/dnb-staging-evidence
+sec() { printf '\n=== READ-ONLY: %s ===\n' "$1"; }
+date -u '+%Y-%m-%d %H:%M:%S UTC'; hostname
+
+sec "A1 the full docs/120 §1.2 verification, saved to verify-before.txt"
+sh <<'DNB_VERIFY' > "$EV/verify-before.txt" 2>&1
+# docs/120 §1.2 — READ-ONLY server verification. Every command below only READS.
+# Nothing is created, modified, restarted, removed, pulled or installed, and no
+# file is written: this runs from a quoted heredoc, not from a script on disk.
+# It prints no secret: it never opens acme.json, an env file or a container's
+# environment.
+set -u
+sec() { printf '\n=== READ-ONLY: %s ===\n' "$1"; }
+
+sec "host: CPU / RAM / disk / clock"
+hostnamectl 2>/dev/null | sed -n '1,8p'; uname -r; uptime; nproc; free -m
+grep -E 'MemTotal|MemAvailable' /proc/meminfo; cat /proc/loadavg
+df -h / /var/lib/docker 2>/dev/null; timedatectl show -p Timezone 2>/dev/null
+
+sec "docker / swarm state"
+docker version --format 'client {{.Client.Version}} server {{.Server.Version}}'
+docker info --format 'swarm={{.Swarm.LocalNodeState}} manager={{.Swarm.ControlAvailable}} nodes={{.Swarm.Nodes}} containers={{.Containers}} running={{.ContainersRunning}} images={{.Images}} storage={{.Driver}} root={{.DockerRootDir}}'
+
+sec "containers (recorded 19 Sep: 18 production + 2 phase-0)"
+docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+printf 'running now: '; docker ps -q | wc -l
+
+sec "swarm services and stacks"
+docker service ls 2>/dev/null; docker stack ls 2>/dev/null
+
+sec "docker networks and subnets"
+docker network ls
+for n in $(docker network ls -q); do
+  docker network inspect -f '{{.Name}} driver={{.Driver}} scope={{.Scope}} subnets={{range .IPAM.Config}}{{.Subnet}} {{end}} attached={{len .Containers}}' "$n"
+done
+
+sec "volumes and disk used by docker"
+docker volume ls; docker system df
+
+sec "published ports / listeners"
+ss -tulpn | sort -k5
+
+sec "traefik: how it is configured (arguments only; no certificate file is opened)"
+docker ps --format '{{.Names}} {{.Image}}' | grep -i traefik || echo 'no container with traefik in its name'
+T=$(docker ps --format '{{.Names}}' | grep -i traefik | head -1)
+[ -n "$T" ] && docker inspect "$T" --format 'image={{.Config.Image}}{{"\n"}}cmd={{json .Config.Cmd}}{{"\n"}}args={{json .Args}}{{"\n"}}mounts={{range .Mounts}}{{.Source}} -> {{.Destination}}; {{end}}{{"\n"}}ports={{json .HostConfig.PortBindings}}'
+
+sec "how easypanel attaches a domain today (traefik labels on every swarm service)"
+for s in $(docker service ls -q 2>/dev/null); do
+  n=$(docker service inspect "$s" --format '{{.Spec.Name}}')
+  docker service inspect "$s" --format '{{json .Spec.Labels}} {{json .Spec.TaskTemplate.ContainerSpec.Labels}}' | tr ',' '\n' | grep -i traefik | sed "s/^/$n: /"
+done
+
+sec "easypanel files (listing only; acme.json is NOT opened)"
+ls -la /etc/easypanel 2>/dev/null || echo 'no /etc/easypanel'
+ls -la /etc/easypanel/traefik 2>/dev/null; ls -la /etc/easypanel/traefik/config 2>/dev/null
+
+sec "existing postgres / redis / siridb (never reused)"
+docker ps --format '{{.Names}} {{.Image}} {{.Ports}}' | grep -iE 'postgres|redis|siridb' || echo none-found
+
+sec "phase-0 stack (must be unchanged)"
+docker ps -a --filter name=dn-phase0 --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+docker network inspect dn-phase0 -f 'dn-phase0 subnet={{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null
+docker volume inspect dn-phase0-pgdata -f 'dn-phase0-pgdata mountpoint={{.Mountpoint}}' 2>/dev/null
+wg show 2>/dev/null || echo 'wg show unavailable'
+
+sec "resources right now (one snapshot)"
+docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
+
+sec "php on the host"
+command -v php >/dev/null 2>&1 && php -v | head -1 || echo 'no php on the host'
+dpkg -l 2>/dev/null | awk '/^ii  php/ {print $2, $3}'
+
+sec "images already present (postgres:16-alpine expected from phase 0)"
+docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -iE 'postgres|php|nginx|caddy|alpine' || echo none-matching
+
+sec "ports the staging would use: 8099 (api on loopback); 5434 informational"
+ss -tulpn | grep -E ':(8099|5434)\b' || echo 'free: neither 8099 nor 5434 is in use'
+
+sec "firewall (status only)"
+ufw status 2>/dev/null | head -3; printf 'iptables rules: '; iptables -S 2>/dev/null | wc -l
+
+sec "docker daemon.json (address-pool pinning?)"
+cat /etc/docker/daemon.json 2>/dev/null || echo 'no /etc/docker/daemon.json'
+
+sec "dns: a lookup, not a change"
+getent hosts portal-staging.dishnetuganda.com || echo 'portal-staging.dishnetuganda.com does not resolve'
+getent hosts crm.dishnetuganda.com || echo 'crm.dishnetuganda.com does not resolve'
+echo; echo '=== END OF READ-ONLY VERIFICATION ==='
+DNB_VERIFY
+printf '%s lines, %s sections saved to %s\n' "$(wc -l < "$EV/verify-before.txt")" "$(grep -c '=== READ-ONLY' "$EV/verify-before.txt")" "$EV/verify-before.txt"
+
+sec "A2 snapshots for the after-comparison (block B diffs against these)"
+docker ps -a --format '{{.Names}}|{{.Image}}|{{.Ports}}' | sort > "$EV/containers.before"
+docker inspect -f '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}' $(docker ps -aq) | sort > "$EV/inspect.before"
+iptables -S | sort > "$EV/iptables.before"
+iptables -t nat -S | sort > "$EV/nat.before"
+ss -tulpn | sort > "$EV/listeners.before"
+docker network ls --format '{{.Name}}|{{.Driver}}|{{.Scope}}' | sort > "$EV/networks.before"
+docker volume ls --format '{{.Name}}' | sort > "$EV/volumes.before"
+docker images --format '{{.Repository}}:{{.Tag}}|{{.ID}}' | sort > "$EV/images.before"
+free -m > "$EV/free.before"; df -h / /var/lib/docker > "$EV/df.before"
+wg show > "$EV/wg.before" 2>&1
+wc -l "$EV"/*.before | sed 's/^/  /'
+
+sec "A3 go / no-go against docs/120 §9"
+go=1
+chk() { if [ "$1" = 0 ]; then echo "  ok     $2"; else echo "  NO-GO  $2"; go=0; fi; }
+ma=$(awk '/MemAvailable/ {print $2}' /proc/meminfo); [ "$ma" -ge 2000000 ]; chk $? "MemAvailable ${ma} kB (need >= 2000000)"
+da=$(df --output=avail -k /var/lib/docker | tail -1); [ "$da" -ge 20000000 ]; chk $? "disk available ${da} kB on /var/lib/docker (need >= 20000000)"
+run=$(docker ps -q | wc -l); [ "$run" -ge 20 ]; chk $? "containers running: $run (baseline 20)"
+ex=$(docker ps -a --filter status=exited --format '{{.Names}}' | grep -vE '\.[0-9]+\.[a-z0-9]{20,}$'); [ -z "$ex" ]; chk $? "no exited container other than superseded swarm tasks${ex:+: }$ex"
+for c in ucrm unms-postgres unms-nginx dn-phase0-postgres dn-phase0-radius; do
+  st=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null); [ "$st" = running ]; chk $? "$c is ${st:-absent}"
+done
+T=$(docker ps --format '{{.Names}}' | grep -i traefik | head -1); [ -n "$T" ]; chk $? "traefik container present${T:+: $T}"
+! ss -tln | grep -qE ':8099 '; chk $? "port 8099 free"
+! ss -tln | grep -qE ':5434 '; chk $? "port 5434 free (informational)"
+docker images --format '{{.Repository}}:{{.Tag}}' | grep -qx postgres:16-alpine; chk $? "image postgres:16-alpine present (no pull for the database)"
+! getent hosts portal-staging.dishnetuganda.com >/dev/null 2>&1; chk $? "portal-staging.dishnetuganda.com does not resolve"
+[ ! -e /opt/dnb-staging ]; chk $? "/opt/dnb-staging absent"
+! docker ps -a --format '{{.Names}}' | grep -q '^dnb-staging'; chk $? "no dnb-staging container"
+! docker network ls --format '{{.Name}}' | grep -qx dnb-staging; chk $? "no dnb-staging network"
+! docker volume ls --format '{{.Name}}' | grep -qx dnb-staging-pgdata; chk $? "no dnb-staging-pgdata volume"
+miss=""; for t in docker openssl curl tar sha256sum sed grep awk comm diff ss iptables getent php; do command -v "$t" >/dev/null 2>&1 || miss="$miss $t"; done
+[ -z "$miss" ]; chk $? "tools present${miss:+ - MISSING:$miss}"
+command -v git >/dev/null 2>&1 && echo "  info   git present: block B builds the artifact from a shallow clone of the branch" || echo "  info   no git: block B builds the artifact from the GitHub branch tarball (curl)"
+[ -d /opt/dishnet/.git ] && echo "  info   /opt/dishnet (the uCRM plugin deploy checkout) is present and is NOT touched by stage 1"
+[ -e /opt/dishnetuganda ] && echo "  info   /opt/dishnetuganda (the earlier disposable clone) is present and is NOT touched by stage 1"
+echo
+if [ "$go" = 1 ]; then echo "RESULT: GO - block B may run"; else echo "RESULT: NO-GO - do not run block B; paste this output"; fi
+echo "=== END OF BLOCK A ==="
+DNB_BEFORE
+```
+
+### 15.3 Block B — the deployment (the §11 steps in order; stops at the first failure)
+
+Run as root, only after `RESULT: GO`. It writes the script to
+`/root/dnb-staging-evidence/deploy-stage1.sh`, runs it, and keeps the whole log
+at `deploy-stage1.log`. Paste the whole output back. **If it prints `STOP:`,
+run nothing else and do not roll back — paste, and wait.**
+
+```sh
+cat > /root/dnb-staging-evidence/deploy-stage1.sh <<'DNB_DEPLOY'
+#!/bin/sh
+# docs/120 §15 — BLOCK B: the STAGE 1 deployment, approved 2026-09-23. It runs
+# the §11 steps in order and STOPS at the first failure. It creates ONLY:
+#   /opt/dnb-staging/ (app read-only, env files, Dockerfile)
+#   the local image dnb-staging-php:8.3
+#   the bridge network dnb-staging and the volume dnb-staging-pgdata
+#   the containers dnb-staging-postgres, dnb-staging-api, dnb-staging-worker
+# It never touches /opt/dishnet, /opt/dishnetuganda, the swarm, EasyPanel,
+# Traefik, DNS, UFW, any existing container, network, volume or image, and it
+# publishes exactly one port: 127.0.0.1:8099. The whole log is kept at
+# /root/dnb-staging-evidence/deploy-stage1.log. No secret is printed.
+set -eu
+EV=/root/dnb-staging-evidence
+APP=/opt/dnb-staging
+IMG=dnb-staging-php:8.3
+BRANCH=claude/study-this-jhe2eg
+REPO=https://github.com/dishnetafrica/dishnetuganda
+CP=dishnet-hybrid-sudan/dishnet-mikrotik-control-plane
+ART=dishnet-mikrotik-0.1.0-rc1.tar.gz
+DIGEST=4e7467ad060c3974aa1f40c093c257eaf8408601612bdcaeead6eb6f916c798e
+step() { printf '\n=== STEP %s ===\n' "$1"; }
+fail() { printf '\nSTOP: %s\nNothing further was run. Paste the whole log back; do not roll back unless told.\n' "$1"; exit 1; }
+date -u '+%Y-%m-%d %H:%M:%S UTC'; hostname
+
+step "0 preconditions - nothing is created here"
+[ "$(id -u)" = 0 ] || fail "run as root"
+for t in docker openssl curl tar sha256sum sed grep awk comm diff ss iptables getent php; do
+  command -v "$t" >/dev/null 2>&1 || fail "missing tool: $t"
+done
+[ -f "$EV/containers.before" ] && [ -f "$EV/inspect.before" ] || fail "block A has not been run: $EV/*.before missing"
+[ ! -e "$APP" ] || fail "$APP already exists (a previous attempt) - do not re-run; paste the log"
+for o in dnb-staging-postgres dnb-staging-api dnb-staging-worker; do
+  ! docker ps -a --format '{{.Names}}' | grep -qx "$o" || fail "container $o already exists"
+done
+! docker network ls --format '{{.Name}}' | grep -qx dnb-staging || fail "network dnb-staging already exists"
+! docker volume ls --format '{{.Name}}' | grep -qx dnb-staging-pgdata || fail "volume dnb-staging-pgdata already exists"
+! ss -tln | grep -qE ':8099 ' || fail "port 8099 is in use"
+ma=$(awk '/MemAvailable/ {print $2}' /proc/meminfo); [ "$ma" -ge 2000000 ] || fail "MemAvailable ${ma} kB < 2 GB"
+da=$(df --output=avail -k /var/lib/docker | tail -1); [ "$da" -ge 20000000 ] || fail "disk available ${da} kB < 20 GB"
+docker images --format '{{.Repository}}:{{.Tag}}' | grep -qx postgres:16-alpine || fail "postgres:16-alpine is not present"
+! getent hosts portal-staging.dishnetuganda.com >/dev/null 2>&1 || fail "portal-staging.dishnetuganda.com resolves - not expected at stage 1"
+echo "ok: MemAvailable ${ma} kB, disk ${da} kB, 8099 free, no stage-1 object exists, postgres:16-alpine present"
+
+step "1 the artifact - built on this server from the public repository, digest-checked"
+if [ -f "$EV/$ART" ]; then
+  echo "using the pre-placed $EV/$ART"
+else
+  rm -rf "$EV/src" "$EV/dist"
+  if command -v git >/dev/null 2>&1; then
+    git clone -q --depth 1 --branch "$BRANCH" "$REPO.git" "$EV/src"
+    git -C "$EV/src" rev-parse HEAD > "$EV/source-commit.txt"
+  else
+    install -d "$EV/src"
+    curl -fsSL "https://codeload.github.com/dishnetafrica/dishnetuganda/tar.gz/refs/heads/$BRANCH" | tar -xz -C "$EV/src" --strip-components=1
+    echo "branch tarball of $BRANCH (no git on this host)" > "$EV/source-commit.txt"
+  fi
+  echo "source: $(cat "$EV/source-commit.txt")"
+  sh "$EV/src/$CP/plugin/bin/package.sh" "$EV/dist" | sed -n '1,5p'
+  mv "$EV/dist/$ART" "$EV/$ART"
+  rm -rf "$EV/src" "$EV/dist"
+fi
+install -d -m 0750 "$APP/app" "$APP/env" "$APP/build"
+tar -xzf "$EV/$ART" -C "$APP/app" --strip-components=1
+( cd "$APP/app" && sha256sum -c SHA256SUMS --quiet ) || fail "the extracted files do not match SHA256SUMS"
+got=$(sha256sum "$APP/app/SHA256SUMS" | cut -d' ' -f1)
+[ "$got" = "$DIGEST" ] || fail "content digest $got is not the reviewed build $DIGEST"
+echo "artifact-ok: $(cat "$APP/app/VERSION"), $(find "$APP/app" -type f | wc -l) files, content digest $got"
+[ -e "$APP/app/tests" ] && fail "the package carries tests/ - not the reviewed artifact"
+[ -e "$APP/app/public" ] && fail "the package carries public/ - not the reviewed artifact"
+echo "package excludes tests/ tools/ docs/ public/ as documented"
+
+step "2 the PHP image - a Docker build on this host; no host package"
+cat > "$APP/build/Dockerfile" <<'EOF'
+FROM php:8.3-cli-alpine
+RUN apk add --no-cache postgresql-dev && docker-php-ext-install pdo_pgsql
+EOF
+docker build -t "$IMG" "$APP/build" > "$EV/docker-build.log" 2>&1 || { tail -30 "$EV/docker-build.log"; fail "docker build failed (full log: $EV/docker-build.log)"; }
+ext=$(docker run --rm "$IMG" php -m | grep -xE 'pdo_pgsql|json|openssl' | sort | tr '\n' ' ')
+[ "$(printf '%s' "$ext" | wc -w)" = 3 ] || fail "image lacks a required extension: have '$ext'"
+echo "image $IMG: $(docker run --rm "$IMG" php -v | head -1); extensions: $ext"
+docker images --format '{{.Repository}}:{{.Tag}} id={{.ID}} size={{.Size}}' "$IMG"
+
+step "3 the isolated bridge, the volume, PostgreSQL 16 with NO published port"
+docker network create dnb-staging >/dev/null
+docker network inspect dnb-staging -f 'network dnb-staging driver={{.Driver}} scope={{.Scope}} subnet={{range .IPAM.Config}}{{.Subnet}}{{end}}'
+docker volume create dnb-staging-pgdata >/dev/null
+PGSUPER=$(openssl rand -hex 24)
+docker run -d --name dnb-staging-postgres --network dnb-staging --restart unless-stopped \
+  -e POSTGRES_PASSWORD="$PGSUPER" -v dnb-staging-pgdata:/var/lib/postgresql/data \
+  postgres:16-alpine -c shared_buffers=64MB >/dev/null
+unset PGSUPER
+i=0; until docker exec dnb-staging-postgres pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do
+  i=$((i+1)); [ "$i" -le 60 ] || { docker logs dnb-staging-postgres --tail 20; fail "postgres not ready after 60 s"; }; sleep 1
+done
+echo "postgres ready after ${i}s: PostgreSQL $(docker exec dnb-staging-postgres psql -U postgres -Atc 'show server_version')"
+pb=$(docker inspect dnb-staging-postgres --format '{{json .HostConfig.PortBindings}}'); echo "PortBindings=$pb (must be null or {})"
+case "$pb" in null|'{}') ;; *) fail "postgres has a published port" ;; esac
+
+step "4 bootstrap.sql - the privileged step: owner role dnb + empty database dnb"
+OWNERPASS=$(openssl rand -hex 24)
+docker exec -i dnb-staging-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  -v db=dnb -v owner=dnb -v owner_pass="$OWNERPASS" < "$APP/app/plugin/bin/bootstrap.sql"
+attrs=$(docker exec dnb-staging-postgres psql -U postgres -Atc "select rolsuper||'|'||rolbypassrls||'|'||rolcreaterole||'|'||rolcreatedb from pg_roles where rolname='dnb'")
+[ "$attrs" = "f|f|t|t" ] || fail "owner role attributes unexpected: super|bypassrls|createrole|createdb = $attrs"
+echo "owner dnb: superuser f, bypassrls f, createrole t, createdb t"
+
+step "5 configuration - Docker env-file syntax, UNQUOTED, one VAR=value per line"
+umask 077
+cat > "$APP/env/runtime.env" <<EOF
+DNB_DSN=pgsql:host=dnb-staging-postgres;port=5432;dbname=dnb
+DNB_TOKEN_PEPPER=$(openssl rand -hex 32)
+DNB_SECRET_KEY=$(openssl rand -hex 32)
+EOF
+cat > "$APP/env/install.env" <<EOF
+DNB_OWNER_USER=dnb
+DNB_OWNER_PASS=$OWNERPASS
+DNB_SECRETS_OUT=/run/dnb/secrets.env
+EOF
+unset OWNERPASS
+chmod 0640 "$APP/env/runtime.env"; chmod 0600 "$APP/env/install.env"
+ls -l "$APP/env" | sed 's/^/  /'
+echo "deliberately ABSENT everywhere: DN_ALLOW_REAL_BINDINGS DN_STAFF_IDENTITY DNB_EXPOSE_OTP DNB_INSPECT_USER DNB_INSPECT_PASS"
+
+step "6 doctor -> install -> unquoted secrets copy -> status -> doctor"
+RUN="docker run --rm --network dnb-staging -v $APP/app:/app:ro -v $APP/env:/run/dnb -w /app --env-file $APP/env/runtime.env --env-file $APP/env/install.env"
+echo "-- doctor BEFORE install (BLOCKERs for the two roles that do not exist yet are expected) --"
+$RUN "$IMG" php plugin/bin/plugin.php doctor --disposable || echo "(doctor exit $? before install - expected while the schema is absent)"
+echo "-- install --"
+$RUN "$IMG" php plugin/bin/plugin.php install
+[ -f "$APP/env/secrets.env" ] || fail "install did not write $APP/env/secrets.env"
+stat -c '  secrets.env mode=%a owner=%U size=%s' "$APP/env/secrets.env"
+# The installer quotes every value for a shell to source. Docker's --env-file
+# keeps quotes literally, so the containers get an UNQUOTED copy. The values
+# are hex, so nothing but the quotes changes. (docs/120 §15 amendment 1)
+sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)="([^"]*)"$/\1=\2/' "$APP/env/secrets.env" > "$APP/env/secrets.docker.env"
+n=$(grep -cE '^DNB_(APP|WORKER|ADMIN|ADMINAPI|ADMINWRITE|RADIUS|STAFFAUTH)_PASS=[0-9a-f]{64}$' "$APP/env/secrets.docker.env")
+[ "$n" = 7 ] || fail "expected 7 unquoted role passwords in secrets.docker.env, found $n"
+! grep -q '"' "$APP/env/secrets.docker.env" || fail "quotes remain in secrets.docker.env"
+echo "  secrets.docker.env: 7 role passwords, unquoted, mode $(stat -c '%a' "$APP/env/secrets.docker.env")"
+SEC="--env-file $APP/env/secrets.docker.env"
+echo "-- status --"
+$RUN $SEC "$IMG" php plugin/bin/plugin.php status
+echo "-- doctor AFTER install: must report 0 blockers; the identity row reads deny-all in this one-shot process --"
+$RUN $SEC "$IMG" php plugin/bin/plugin.php doctor --disposable
+
+step "7 the simulated estate (every identifier SIM- prefixed; refuses if the F6-B gate were set)"
+$RUN $SEC "$IMG" php plugin/bin/plugin.php simulate
+
+step "8 the API on 127.0.0.1:8099 with the development identity (runtime + role secrets; never the owner credential)"
+docker run -d --name dnb-staging-api --network dnb-staging --restart unless-stopped \
+  -p 127.0.0.1:8099:8099 -v "$APP/app:/app:ro" -w /app \
+  --env-file "$APP/env/runtime.env" --env-file "$APP/env/secrets.docker.env" \
+  -e DN_DEV_STAFF_IDENTITY=yes-development-only \
+  "$IMG" php -S 0.0.0.0:8099 plugin/bin/serve.php >/dev/null
+i=0; until [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/)" = 200 ]; do
+  i=$((i+1)); [ "$i" -le 30 ] || { docker logs dnb-staging-api --tail 20; fail "the API does not answer 200 on / after 30 s"; }; sleep 1
+done
+echo "API answering on 127.0.0.1:8099 after ${i}s"
+
+step "9 the worker with SIMULATED delivery - no port, no dev identity"
+docker run -d --name dnb-staging-worker --network dnb-staging --restart unless-stopped \
+  -v "$APP/app:/app:ro" -w /app \
+  --env-file "$APP/env/runtime.env" --env-file "$APP/env/secrets.docker.env" \
+  -e DN_DELIVERY=simulated "$IMG" php bin/worker.php >/dev/null
+sleep 4
+docker logs dnb-staging-worker 2>&1 | head -3
+docker logs dnb-staging-worker 2>&1 | grep -q '"delivery_binding":"simulated-routeros"' || fail "the worker did not report the simulated binding"
+docker logs dnb-staging-worker 2>&1 | grep -q '"delivery_simulated":true' || fail "the worker did not report delivery_simulated true"
+docker logs dnb-staging-worker 2>&1 | grep -q '"real_bindings_allowed":false' || fail "the worker did not report real_bindings_allowed false"
+[ "$(docker inspect -f '{{.State.Status}}' dnb-staging-worker)" = running ] || fail "the worker is not running"
+echo "worker running, binding simulated-routeros, real bindings NOT allowed"
+
+step "10 verification and the AFTER evidence (from here every check is reported; none aborts)"
+set +e
+code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+echo "GET /                              -> $(code http://127.0.0.1:8099/)   expect 200 (the panel)"
+echo "GET /api/v1/admin/health           -> $(code http://127.0.0.1:8099/api/v1/admin/health)   expect 401 (nobody is signed in)"
+echo "GET /api/v1/admin/session          -> $(code http://127.0.0.1:8099/api/v1/admin/session)   expect 401 with the development role list:"
+echo "  $(curl -s http://127.0.0.1:8099/api/v1/admin/session)"
+echo "GET /api/v1/admin/routers          -> $(code http://127.0.0.1:8099/api/v1/admin/routers)   expect 401"
+echo "GET /../src/Db/Database.php        -> $(code --path-as-is http://127.0.0.1:8099/../src/Db/Database.php)   expect 404 (containment)"
+echo "GET /plugin/plugin.json            -> $(code http://127.0.0.1:8099/plugin/plugin.json)   expect 404"
+echo "-- the listener: 127.0.0.1:8099 and nothing else --"
+ss -tlnp | grep ':8099 ' | sed 's/^/  /'
+ss -tlnp | grep ':8099 ' | grep -vq '127\.0\.0\.1:8099' && echo "  FAIL: 8099 listens beyond loopback"
+echo "-- the nat rule Docker added for 8099 (must carry -d 127.0.0.1/32) --"
+iptables -t nat -S DOCKER | grep 8099 | sed 's/^/  /'
+echo "-- schema: migrations applied --"
+docker exec dnb-staging-postgres psql -U postgres -d dnb -Atc "select count(*)||' applied, last: '||max(filename) from mt_migrations" | sed 's/^/  /'
+echo "-- roles on this instance (expect 16 dnb*: owner + 7 login + 8 definer) --"
+docker exec dnb-staging-postgres psql -U postgres -Atc "select count(*)||' roles: '||string_agg(rolname||case when rolcanlogin then '' else '(nologin)' end, ' ' order by rolname) from pg_roles where rolname like 'dnb%'" | sed 's/^/  /'
+docker exec dnb-staging-postgres psql -U postgres -Atc "select 'superusers: '||string_agg(rolname, ' ') from pg_roles where rolsuper" | sed 's/^/  /'
+docker exec dnb-staging-postgres psql -U postgres -Atc "select 'databases: '||string_agg(datname, ' ' order by datname) from pg_database where not datistemplate" | sed 's/^/  /'
+echo "-- rows (read as the instance superuser inside the container; every business row is SIM-) --"
+docker exec dnb-staging-postgres psql -U postgres -d dnb -Atc "select 'customers '||count(*) from mt_customers union all select 'devices '||count(*) from mt_devices union all select 'vouchers '||count(*) from mt_vouchers union all select 'sessions '||count(*) from mt_sessions union all select 'audit rows '||count(*) from mt_audit_log union all select 'mt_staff rows (staff:bootstrap NOT run) '||count(*) from mt_staff" | sed 's/^/  /'
+docker exec dnb-staging-postgres psql -U postgres -d dnb -Atc "select 'non-SIM devices: '||count(*) from mt_devices where serial not like 'SIM-%'" | sed 's/^/  /'
+echo "-- PostgreSQL reachability: only from the dnb-staging bridge --"
+printf '  from dnb-staging by name:            '; docker run --rm --network dnb-staging postgres:16-alpine pg_isready -h dnb-staging-postgres -t 5
+PGIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dnb-staging-postgres)
+printf '  from the default bridge to %s: ' "$PGIP"; docker run --rm postgres:16-alpine pg_isready -h "$PGIP" -t 5
+printf '  from the host (bridge gateway):     '; ss -tln | grep -q ':5432 ' && echo "5432 IS LISTENING ON THE HOST - FAIL" || echo "no host listener on 5432 (correct: nothing published)"
+for c in dn-phase0-postgres unms-postgres; do
+  ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$c" 2>/dev/null | awk '{print $1}')
+  [ -n "$ip" ] && { printf '  from dnb-staging to %s %s: ' "$c" "$ip"; docker run --rm --network dnb-staging postgres:16-alpine pg_isready -h "$ip" -t 5; }
+done
+echo "  (expected: the first line 'accepting connections'; every other probe 'no response')"
+echo "-- AFTER snapshots and the comparison with block A --"
+docker ps -a --format '{{.Names}}|{{.Image}}|{{.Ports}}' | sort > "$EV/containers.after"
+docker inspect -f '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}' $(docker ps -aq) | sort > "$EV/inspect.after"
+iptables -S | sort > "$EV/iptables.after"; iptables -t nat -S | sort > "$EV/nat.after"
+ss -tulpn | sort > "$EV/listeners.after"
+docker network ls --format '{{.Name}}|{{.Driver}}|{{.Scope}}' | sort > "$EV/networks.after"
+docker volume ls --format '{{.Name}}' | sort > "$EV/volumes.after"
+docker images --format '{{.Repository}}:{{.Tag}}|{{.ID}}' | sort > "$EV/images.after"
+wg show > "$EV/wg.after" 2>&1
+echo "containers added (expect exactly the three):"; comm -13 "$EV/containers.before" "$EV/containers.after" | sed 's/^/  + /'
+echo "containers removed or changed (must be empty; an old swarm task name here is swarm housekeeping):"; comm -23 "$EV/containers.before" "$EV/containers.after" | sed 's/^/  - /'
+echo "pre-existing container status/StartedAt/RestartCount changed (must be empty):"; comm -23 "$EV/inspect.before" "$EV/inspect.after" | sed 's/^/  - /'
+echo "networks added (expect dnb-staging only):"; comm -13 "$EV/networks.before" "$EV/networks.after" | sed 's/^/  + /'
+echo "networks removed (must be empty):"; comm -23 "$EV/networks.before" "$EV/networks.after" | sed 's/^/  - /'
+echo "volumes added (expect dnb-staging-pgdata only):"; comm -13 "$EV/volumes.before" "$EV/volumes.after" | sed 's/^/  + /'
+echo "volumes removed (must be empty):"; comm -23 "$EV/volumes.before" "$EV/volumes.after" | sed 's/^/  - /'
+echo "images added (expect dnb-staging-php:8.3 and its php:8.3-cli-alpine base):"; comm -13 "$EV/images.before" "$EV/images.after" | sed 's/^/  + /'
+echo "images removed (must be empty):"; comm -23 "$EV/images.before" "$EV/images.after" | sed 's/^/  - /'
+echo "listeners added (expect one: 127.0.0.1:8099):"; comm -13 "$EV/listeners.before" "$EV/listeners.after" | sed 's/^/  + /'
+echo "listeners removed (must be empty):"; comm -23 "$EV/listeners.before" "$EV/listeners.after" | sed 's/^/  - /'
+echo "iptables filter: +$(comm -13 "$EV/iptables.before" "$EV/iptables.after" | wc -l) rules, -$(comm -23 "$EV/iptables.before" "$EV/iptables.after" | wc -l) rules (removed must be 0; added must all name the new bridge or 127.0.0.1)"
+comm -13 "$EV/iptables.before" "$EV/iptables.after" | grep -vE 'br-|127\.0\.0\.1|dnb' | sed 's/^/  UNEXPECTED: /'
+echo "iptables nat:    +$(comm -13 "$EV/nat.before" "$EV/nat.after" | wc -l) rules, -$(comm -23 "$EV/nat.before" "$EV/nat.after" | wc -l) rules"
+comm -13 "$EV/nat.before" "$EV/nat.after" | sed 's/^/  + /'
+echo "-- members of the new bridge (the three, nothing else) --"
+printf '  '; docker network inspect dnb-staging -f '{{range .Containers}}{{.Name}} {{end}}'; echo
+echo "-- a dnb-staging container on any OTHER network? (must print nothing) --"
+for n in $(docker network ls -q); do docker network inspect -f '{{.Name}}: {{range .Containers}}{{.Name}} {{end}}' "$n"; done | grep dnb-staging | grep -v '^dnb-staging:' | sed 's/^/  UNEXPECTED: /'
+echo "-- pre-existing containers now --"
+for c in $(docker ps --format '{{.Names}}' | grep -v '^dnb-staging' | sort); do docker inspect -f '  {{.Name}} {{.State.Status}} started={{.State.StartedAt}} restarts={{.RestartCount}}' "$c"; done
+echo "-- wireguard (unchanged) --"; wg show | head -3 | sed 's/^/  /'; diff "$EV/wg.before" "$EV/wg.after" >/dev/null && echo "  wg show identical to before" || echo "  wg show differs from before (handshake timers change by themselves; peers must not)"
+echo "-- the three stage-1 containers --"
+docker ps --filter name=dnb-staging --format '  {{.Names}}  {{.Status}}  ports={{.Ports}}'
+docker stats --no-stream --format '  {{.Name}} mem={{.MemUsage}} cpu={{.CPUPerc}}' dnb-staging-postgres dnb-staging-api dnb-staging-worker
+free -m | sed -n '1,2p' | sed 's/^/  /'
+echo
+echo "=== STAGE 1 DEPLOYED - paste this whole log back (also saved at $EV/deploy-stage1.log) ==="
+DNB_DEPLOY
+sh /root/dnb-staging-evidence/deploy-stage1.sh 2>&1 | tee /root/dnb-staging-evidence/deploy-stage1.log
+```
+
+### 15.4 Block C — from the Mac: the tunnel and the browser
+
+The **server** side is verified: `sshd` listens on `0.0.0.0:22` (the §1.2
+listeners) and the verification run was `root@dishnetuganda`. The **client**
+side is not: earlier in this project an attempt from a laptop to
+`209.97.137.203:22` timed out on one network, so the first command checks the
+path. Use the same user and port you used to run blocks A and B; the forward
+needs no root privilege. A DigitalOcean web console cannot carry the tunnel —
+it has to be SSH from the Mac.
+
+```sh
+nc -vz -w 5 209.97.137.203 22          # must say succeeded/open; a timeout means THIS network blocks SSH - change network
+ssh -N -L 8099:127.0.0.1:8099 root@209.97.137.203    # leave it running; add -p <port> only if your usual ssh command has one
+# second terminal, through the tunnel:
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8099/                    # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8099/api/v1/admin/health  # 401 (nobody signed in)
+# NOT through the tunnel - must FAIL (refused or timed out):
+nc -vz -w 5 209.97.137.203 8099
+open http://127.0.0.1:8099/
+```
+
+**Signing in.** The page is *DishNet Admin*. The login card says
+**DEVELOPMENT IDENTITY — this deployment is not authenticating real staff**
+and offers the four roles (`admin`, `noc`, `sales`, `support`); there is no password, because
+the identity has no credential — the API container's `DN_DEV_STAFF_IDENTITY`
+gate is the whole of it, and only the holder of an SSH key to the server can
+reach the port. Choose `admin`. The panel then shows **Signed in as `dev` ·
+Role admin · Identity provider DEVELOPMENT-ONLY**; the session lasts 3600 s;
+*Sign out* clears the cookie but cannot revoke the token (`docs/114` §A —
+acceptable on a loopback listener behind SSH). Under this provider the
+`/staff` routes answer 501 and the staff roster says *not available under this
+identity provider*; the estate is the simulator's — `SIM-` on every
+identifier, the counts block B's step 7 printed, every voucher `unused`, every
+router signal *no signal* in grey, every router action inert. The Health card
+describes the **API** process — delivery binding `null`, publisher simulated
+`true`, identity provider `DEVELOPMENT-ONLY`. The **worker's**
+`simulated-routeros` binding is in its own log line (block B step 9) and in
+the worker id of every `intent.confirmed` audit row it writes while draining
+the simulator's queued provisioning jobs through the simulated adapter — which
+changes no device state (`docs/118`).
+
+### 15.5 What the pasted output settles — the nine post-deployment checks
+
+| Check (the operator's list) | Where block B answers it |
+|---|---|
+| all three containers healthy | step 10 *the three stage-1 containers* all `Up`; API `200` on `/`; worker `running` with its binding line; postgres `accepting connections` |
+| PostgreSQL reachable only through the Domain-B network | `PortBindings={}`; no host listener on 5432; `pg_isready` **accepting** from `dnb-staging` by name, **no response** from the default bridge to its address, and **no response** from `dnb-staging` to `dn-phase0-postgres` and `unms-postgres` |
+| API answers on 127.0.0.1:8099 | step 8 readiness; step 10 `GET /` → 200, `/api/v1/admin/health` → 401, `/api/v1/admin/session` → 401 with the development role list |
+| 8099 not publicly reachable | `ss` shows `127.0.0.1:8099` and nothing else; the nat rule carries `-d 127.0.0.1/32`; block C's outside `nc` fails |
+| worker in simulated mode | step 9 asserts `"delivery_binding":"simulated-routeros"`, `"delivery_simulated":true`, `"real_bindings_allowed":false` |
+| migrations end at 027 | step 10 `27 applied, last: 027_operator_staff_capabilities.sql`; 16 `dnb*` roles (owner + 7 login + 8 definer); the only superuser is the instance's `postgres`; `mt_staff` holds 0 rows |
+| production containers healthy | *pre-existing containers now*: every one `running`; *status/StartedAt/RestartCount changed* → **empty** |
+| production published ports unchanged | *containers removed or changed* → **empty**; *listeners removed* → **empty**; *listeners added* → exactly `127.0.0.1:8099`; iptables *removed* → 0 and every added rule names the new bridge or `127.0.0.1` |
+| existing PostgreSQL / Redis untouched | `unms-postgres`, `wa_evolution-api-db`, `dn-phase0-postgres`, `wa_evolution-api-redis` unchanged in the inspect comparison; no `dnb-staging` member on any other network; the two cross-network probes answer *no response* |
+
+### 15.6 Result
+
+**PENDING** — to be recorded here from the operator's pasted output. Until
+then **nothing is deployed and every statement of §13 still holds.**
+
+Rollback stays §12; `/opt/dnb-staging/` — which now also holds
+`env/secrets.docker.env` — is removed by its `rm -rf` line, and
+`/root/dnb-staging-evidence/` keeps the artifact, the build log and the
+before/after snapshots for the record.
