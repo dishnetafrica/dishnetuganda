@@ -2342,6 +2342,54 @@ Suite **33 suites / 3,026 assertions / 0 failed**, twice (was 32 / 2,769);
 `tests/test_router_control_plane.php` alone 250; G-B 487 and T-2 378
 unchanged; `plugin/bin/install-test.sh` 85/85.
 
+## The physical-hardware gate — STOPPED here; `docs/119` is the handoff
+
+**The project is stopped at the physical-hardware verification gate.** G-C
+(`9a09cc7`) was accepted as the software boundary; the fourth layer —
+`physical MikroTik → WireGuard → RouterOS REST → HotSpot → RADIUS → accounting`
+— cannot be proved from a development database, and **no further simulated
+implementation is authorised**. `docs/119` is the single physical-test
+handoff: every item still *HARDWARE VERIFIED pending*, in eleven categories
+(A router identity · B WireGuard transport · C REST management · D RouterOS
+provisioning · E HotSpot · F RADIUS authentication · G accounting ·
+H disconnect/CoA · I reset/recovery · **J B1 push-vs-poll** · K state
+ownership / `last_seen_at`), each row with the exact command, expected
+observation, evidence, pass/fail, model/version dependence and the decision it
+gates; the `docs/32` §0.1 inventory and §0.4 export **and restore** test; a
+result template; and a *Physical Gate Status* table whose `HARDWARE VERIFIED`
+column is empty by construction.
+
+- **Checklist IDs are `HW-<category><n>`.** `docs/31`'s Tests A–E and
+  `docs/32`'s Step 0 / Run Sheets keep their own numbering; `docs/119` adds
+  nothing to that protocol and invents no staging command where it already
+  specifies one. Every RouterOS command is still an **UNVERIFIED proposal**
+  (`docs/32` Prime Directive) until the unit accepts it.
+- **The Domain-B software stays out of the loop at the bench.** F6-B is NOT
+  AUTHORIZED; `DN_ALLOW_REAL_BINDINGS` is never set; `DN_DELIVERY` stays
+  unset. The REST paths the adapter *would* send (`docs/119` §3) are exercised
+  by hand with `curl` from the gateway. A green session does not open F6-B.
+- **B1 is measured, not decided, and nothing is implemented either way.** The
+  result is PUSH / POLL / UNRESOLVED per `docs/32` B.idle and `docs/00` §14,
+  and only a capture that separates *direct* reachability from
+  *keepalive-refreshed* reachability counts — a WireGuard handshake alone is
+  not push evidence. **Do not write a poller because a result made it
+  convenient.**
+- **The only server-side changes the session may make** are the two
+  `docs/35`/`docs/36` already prescribe on the Phase-0 stack (one `[Peer]` via
+  `wg syncconf`, the `t1-` test voucher rows), undone afterwards; the
+  `docs/00` §10 constraints hold throughout. **Never a customer router.**
+- **Two software facts recorded for the evidence to inform, not hardware
+  findings:** the production `session.disconnect` intent carries `session_id`
+  only while the adapter needs a device and a HotSpot `.id` (a session cannot
+  yet be attributed to a router, `docs/91`); and the adapter PATCHes the
+  *collection* path `ip/hotspot/profile` — whether RouterOS accepts that is
+  `HW-D2`, a desired-state-contract question if it does not.
+- **CHR is lab evidence only** (`tools/chr_harness.sh`, still unrun); it never
+  yields `HARDWARE VERIFIED`.
+- **Not started, deliberately:** G-C2, B-3, O-1 (the census `docs/79` is still
+  that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
+  migration 028, any deployment. Migrations still end at **027**.
+
 ## Open and parked
 
 - **Whether a site may have several MikroTik HotSpot routers is OPEN**
