@@ -13,6 +13,11 @@ no credential.
 > verdict (the migration-ledger refusal counted as data blindness), a refused
 > read aborted the whole run, and a base-table read under row security counted
 > as a measurement. This document remains the specification.
+>
+> **Question 1 answered 2026-09-23 22:08 UTC (`docs/123` §F):** no Domain B
+> service is deployed outside staging on the DishNet host, and no other
+> database there holds the Domain-B ledger. Staging's synthetic estate is CLEAR
+> at migration 028.
 
 ---
 

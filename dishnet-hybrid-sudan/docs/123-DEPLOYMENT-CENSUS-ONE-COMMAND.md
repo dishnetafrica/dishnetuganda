@@ -1,7 +1,8 @@
 # 123 — The deployment census in one command: is Domain B anywhere but staging, and is staging ready for O-1?
 
 **Status:** review, census corrections and harness evidence written **before**
-the handover, 2026-09-23. **Result PENDING** the operator's run. **Read only:**
+the handover, 2026-09-23. **RESULT 2026-09-23 22:08 UTC (§F): no Domain B
+outside staging; staging CLEAR at migration 028.** **Read only:**
 nothing is migrated, repaired or configured. **GATE 2 of `docs/107` — the O-1
 migration — is untouched and not authorised by anything here.**
 
@@ -151,6 +152,49 @@ local socket (if not, it is reported NOT CHECKED, D-3).
 
 ---
 
-## F. Result
+## F. Result — 2026-09-23 22:08 UTC: nothing outside staging; staging CLEAR
 
-**PENDING** the operator's pasted output.
+The operator ran the command at 22:08:00 UTC; it ended at 22:08:03 and changed
+nothing.
+
+| Step | Measured on the server |
+|---|---|
+| 0 | census file verified, sha256 `513218…3983` |
+| 1 | **24 containers (running and stopped) and 7 swarm services searched**; `DNB_DSN` is carried by `dnb-staging-api` and `dnb-staging-worker` only, both `host=dnb-staging-postgres port=5432 dbname=dnb`; host PHP lacks `pdo_pgsql` |
+| 2 | **4 running PostgreSQL containers, 8 databases, every one opened**: the ledger only in `dnb-staging-postgres / dnb`; none in `dn-phase0-postgres` (`postgres`, `radius`), `wa_evolution-api-db` (`postgres`, `wa`) or `unms-postgres` (`postgres`, `unms`); **NOT CHECKED: none** |
+| 3, run 1 | `dnb_adminapi`, every read through a projection, **nothing hidden or refused**: 5 sites, 3 services, 3 principals (all `owner`/`active`; 0 `operator` rows for 027 to rewrite), 5 devices (1 unsited, 5 distinct tunnel addresses), 17 vouchers, 3 batches; **every proposed constraint 0 blocking rows**; **`>> CLEAR — 11 row(s) seen, 0 would refuse the O-1 composite FK`** |
+| 3, run 2 | owner `dnb`: **28 migrations, `001` … `028_admin_router_lifecycle_and_provisioning.sql`**; data HIDDEN and verdict INDETERMINATE, as designed |
+
+### F.1 What this establishes, and its limits
+
+- **`docs/79` question 1 is answered: no Domain B service is deployed outside
+  staging** on this host, checked by the configuration of every container,
+  stopped ones included, and every swarm service. Per `docs/79` §0 no
+  production census is needed.
+- `docs/79` §6: **(a)** no other running PostgreSQL database on this host holds
+  the Domain-B ledger; **(b)** nothing runs against one; **(c)** the census ran
+  on the DSN the staging deployment itself uses.
+- **Production Domain B is therefore NOT DEPLOYED, and that is the production
+  data state for this host at 22:08 UTC.** The only Domain-B database is
+  staging's, and its data is synthetic (`SIM-`).
+- **Limits, stated:** this host only; another DishNet host, if one exists, was
+  not examined. Step 2 opens running PostgreSQL containers whose image name
+  contains *postgres*; a stopped database container is not opened, though step
+  1 found no Domain-B configuration anywhere, stopped containers included.
+  Crontab and systemd were not searched, and host PHP cannot reach PostgreSQL.
+
+### F.2 What it unblocks, and what it does not decide
+
+- **GATE 2 of O-1 is now the operator's decision** (`docs/107`): whether
+  `tools/audit/o1_composite_fk.sql` becomes **migration 029**, applied to the
+  development and test schema and, through the redeploy script, to staging. Its
+  evidence is complete: staging CLEAR under the documented role, nothing else
+  anywhere. **Nothing here takes that decision**, and the migration keeps
+  `docs/79` §7b's six steps, including independent verification afterwards.
+- SECTION 4 also shows 0 blocking rows for `mt_vouchers.site_id NOT NULL` and
+  for the voucher and batch composite FKs. Those are **separate** decisions
+  (`docs/77`, `docs/78` §4.2), and `docs/105` forbids bundling them with O-1.
+- U-2 (`ucrm_client_id NOT NULL`) waited on E-2, *how many `mt_customers` rows
+  production holds*. The answer is **none, because no production Domain-B
+  database exists**. U-2 itself stays a design decision; `docs/110` froze the
+  standalone boundary it would break.

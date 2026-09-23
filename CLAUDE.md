@@ -80,6 +80,13 @@ schema value that still exists; it becomes `'staff'` in 027.
 
 ## The next gate
 
+> **Answered 2026-09-23 22:08 UTC (`docs/123` §F).** The census ran on the
+> DishNet host: no Domain B service or schema exists outside staging, and
+> staging's synthetic estate is CLEAR at migration 028. **Production Domain B is
+> NOT DEPLOYED — that is the production data state for this host.** GATE 2 of
+> O-1 is now the operator's decision. The text below is the record as it stood
+> before; the constraints it lists still bind anything they name.
+
 **The production census** — the operator runs it; **`docs/79` is the handoff**.
 This session **cannot** reach production: no SSH client, no DSN, egress 403, and
 the Phase 0 database is loopback-only (`docs/78` §1.1). **Do not attempt network
@@ -2728,7 +2735,21 @@ one command.
   remains the package default. Step 3 (operator onboarding) still waits on the
   O-1 census decision; the MikroTik bench (`docs/119`) still waits on a unit.
 
-## The deployment census in one command — HANDED OVER; result PENDING (`docs/123`)
+## The deployment census — RESULT 2026-09-23 22:08 UTC: no Domain B outside staging; staging CLEAR (`docs/123`)
+
+- **RESULT (`docs/123` §F), measured on the server, nothing changed:** 24
+  containers (stopped ones included) and 7 swarm services searched — `DNB_DSN`
+  only in `dnb-staging-api` and `dnb-staging-worker`; 4 running PostgreSQL
+  containers, 8 databases, every one opened — the Domain-B ledger only in
+  `dnb-staging-postgres / dnb`, none in the Phase-0 RADIUS, Evolution or UISP
+  databases; run 1 as `dnb_adminapi`: 11 rows seen, nothing hidden or refused,
+  **every proposed constraint 0 blocking rows, CLEAR**; run 2 as the owner:
+  **28 migrations, last 028**. **Production Domain B is NOT DEPLOYED on this
+  host**; staging's data is synthetic. Limits: this host only; stopped database
+  containers not opened; crontab/systemd not searched.
+- **GATE 2 of O-1 — `o1_composite_fk.sql` as migration 029 — is now the
+  operator's decision.** Not taken. `mt_vouchers.site_id NOT NULL` also shows 0
+  blocking rows, but is a **separate** decision and must not be bundled.
 
 **GATE 1 of O-1, made runnable by the operator. Read only; GATE 2 (the O-1
 migration) is untouched.** Step 3 (operator onboarding) needs `mt_site_create`,
