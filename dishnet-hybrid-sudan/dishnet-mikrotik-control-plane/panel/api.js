@@ -56,6 +56,9 @@ export class AdminApi {
   sessions()      { return this.get('/api/v1/admin/sessions', 'session'); }
   intents()       { return this.get('/api/v1/admin/intents', 'intent'); }
   audit()         { return this.get('/api/v1/admin/audit', 'audit'); }
+  /* Every operator's people (migration 027). The projection withholds phone,
+   * email and every credential, so none can reach this client. */
+  principals()    { return this.get('/api/v1/admin/principals', 'principal'); }
 
   /* Which router signals the plugin can actually produce, and which it cannot.
    * The inventory is the SERVER'S answer, never this file's: a panel that

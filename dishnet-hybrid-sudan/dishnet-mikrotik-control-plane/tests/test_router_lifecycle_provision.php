@@ -392,9 +392,10 @@ is_(array_map(static fn($r) => $r['path'], $routerWrites), ['/routers', '/router
 is_(array_map(static fn($r) => $r['function'], $routerWrites), ['mt_device_register', 'mt_device_assign', 'mt_device_set_state', 'mt_device_provision_request'], 'each naming its function');
 is_(array_unique(array_map(static fn($r) => $r['role'], $m->writeRoutes)), ['dnb_adminwrite'], 'all on dnb_adminwrite');
 is_(array_map(static fn($r) => $r['see'] ?? null, array_slice($routerWrites, 2)), ['docs/121', 'docs/121'], 'the two from 028 point at docs/121');
-is_(array_map(static fn($r) => $r['path'], array_slice($m->writeRoutes, 4)), ['/customers', '/customers/{customer_id}/services', '/sites'], 'then the three onboarding writes of 030 (docs/125)');
-is_(array_map(static fn($r) => $r['path'], $m->unboundWrites), ['/plans', '/voucher-batches', '/sessions/{session_id}/disconnect', '/customers/{customer_id}/principals'], 'four declared-unbound paths remain — /sites is bound since 030');
-is_($m->apiSurface, 'estate read + operator/service/location create + router register/assign/lifecycle/provision; identity read-write', 'the surface names both groups'); 
+is_(array_map(static fn($r) => $r['path'], array_slice($m->writeRoutes, 4)), ['/customers', '/customers/{customer_id}/services', '/sites', '/customers/{customer_id}/principals'],
+    'then the three onboarding writes of 030 (docs/125) and the principals route (docs/126)');
+is_(array_map(static fn($r) => $r['path'], $m->unboundWrites), ['/plans', '/voucher-batches', '/sessions/{session_id}/disconnect'], 'three declared-unbound paths remain — /sites is bound since 030, principals since docs/126');
+is_($m->apiSurface, 'estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write', 'the surface names both groups'); 
 is_($m->gateIsOpen('admin-write'), false, 'the admin-write gate is still not OPEN — partially bound, said so');
 is_(str_contains($m->requires['worker'], 'ONLY the worker delivers'), true, 'the worker requirement says the action needs the worker');
 foreach ([StaffRole::Admin, StaffRole::Noc] as $r) { is_([$r->can('routers.lifecycle'), $r->can('routers.act')], [true, true], "{$r->value} holds lifecycle and act"); }

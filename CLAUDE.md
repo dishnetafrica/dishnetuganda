@@ -2245,7 +2245,8 @@ build and its proofs).
   with `detail.operator`. `GET /api/v1/admin/principals` is bound as the
   **fourteenth** projection (phone, email, credential unreturnable);
   `POST /api/v1/admin/customers/{customer_id}/principals` is **declared unbound
-  and answers 501** (J-1) — binding it needs its own instruction.
+  and answers 501** (J-1) — binding it needs its own instruction. **Bound since
+  `docs/126`** (the section below).
 - **Fixtures and the simulator create the first owner through the Admin
   creator**, on the Admin write connection; A's seed now carries
   `customer.created` **and** `principal.created` (actor `test:seed` /
@@ -2959,10 +2960,65 @@ Domain B. Nothing here is HARDWARE VERIFIED.
   - **Next: try the screens in a browser.** What is created there stays: an
     operator's audit row holds it with `ON DELETE RESTRICT`.
 - **Not here, deliberately:** the operator-owner login (J-1, its own
-  instruction), the uCRM link (U-1), plans and vouchers (G-C2), editing or ending
-  anything. `mt_customer_create`'s pre-existing `dnb_admin` EXECUTE is recorded
+  instruction — now `docs/126`), the uCRM link (U-1), plans and vouchers (G-C2),
+  editing or ending anything. `mt_customer_create`'s pre-existing `dnb_admin` EXECUTE is recorded
   and left for F-3. The fixtures still create services and sites as `dnb_app`
   (B-3).
+
+## The operator-owner login (J-1) — the Admin route BUILT (`docs/126`); development only; NOBODY CAN SIGN IN YET
+
+**On the operator's "go-ahead"** to *"letting an operator log in themselves"*.
+`docs/116` J-1 had reserved the route for its own instruction. Development only;
+nothing deployed; nothing HARDWARE VERIFIED.
+
+- **No migration.** `POST /api/v1/admin/customers/{customer_id}/principals`
+  (`customers.write`: Admin, Sales) is bound through migration 027's
+  `mt_admin_principal_create`, unchanged, on `dnb_adminwrite`, with
+  `OnboardingAdmin::addPrincipal()` as the façade. The operator comes **from the
+  path** (D-AUTH-3). Derived fields in the body are 400. `kind` is `owner` by
+  default, or `staff` with known `op.*` capabilities and never
+  `op.staff.manage`.
+- **The phone is the sign-in key and is looked up EXACTLY**, so it has one form:
+  `Dn\Auth\Phone::canonical()` removes separators and requires E.164. A national
+  form is refused, not guessed at. The phone is **never returned**, neither in
+  the answer (the projection) nor in the audit detail.
+- **The replay guard is the phone's global unique index** (`docs/108`). A repeat,
+  another spelling of the same number, or the number under another operator is
+  **409 `phone unavailable`**, which names nobody, and writes **no second row and
+  no second audit row**.
+- **The panel:** the operator's page gains *People who can sign in* and *Add an
+  owner*. `addOwner` is the fourth onboarding call; `api.js` gains the read. The
+  copy says plainly that **nobody can sign in yet**.
+- **Proved by execution:** an owner created this way **can sign in at the API
+  level once a code reaches them** — a session for that operator, and `/me`
+  answers with its name. `test_operator_owner_login.php` **71**; five weakened
+  copies are each caught. The owner-capability copy fell to the **function's own
+  check** (409): the floor held beneath the route. Driven in headless Chromium.
+  Suite **37 / 3,577 / 0**, twice; install-test 85/85; package **124 files**,
+  `82b8f4bf…8991`.
+
+### What an operator still needs to sign in — measured, not assumed
+
+1. **The code reaches the phone — DELIVERED NOWHERE today.** `issueCode()`
+   returns it and the route answers `{status: sent}`. **No SMS or messaging
+   provider exists in this repository.** The only gateway on the server is
+   **Domain A's** WhatsApp, which may not be used without explicit authorisation.
+   **The operator's decision** (`docs/126` §B.1); SMS is recommended.
+   - **Never** `DNB_EXPOSE_OTP` on a public host.
+   - **Never** a code shown to staff to read out.
+2. **F-J1-1 — sign-in ignores the operator's status.** `mt_auth_issue_code`,
+   `_verify_code` and `_resolve_token` check the **principal's** status only, so
+   a suspended operator's people can still sign in. **Must be closed (a
+   migration) before the operator app is served.** Asserted as a gap in the
+   suite.
+3. **D-4 — the sign-in side must apply the same canonical form.** Today someone
+   typing their number with spaces is not found. Asserted as a gap.
+4. **The operator app is not served.**
+   - `public/pwa/` is the data layer only. The screens are in the prototype.
+   - `public/` is **excluded** from the package, a rule recorded *because nothing
+     served it*.
+   - Serving it is its own review: the unauthenticated auth routes, rate limits,
+     and F-8's unaudited auth routes.
 
 ## Open and parked
 

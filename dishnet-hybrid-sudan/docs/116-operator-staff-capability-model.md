@@ -329,6 +329,9 @@ each is resolved here, in writing, so the build resolves nothing silently.
 None of these changes a decision this document froze. Every one is measured or
 asserted by the suite where a claim is made.
 
+**J-1 bound on 2026-09-24 by `docs/126`**, on its own instruction, with no
+migration: the route calls this document's `mt_admin_principal_create` unchanged.
+
 ---
 
 ## K. T-2 build record — 2026-09-23 (migration 027)

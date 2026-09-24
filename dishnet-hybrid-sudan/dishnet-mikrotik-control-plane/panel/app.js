@@ -529,7 +529,7 @@ function addOperatorForm() {
  * location is added to a SERVICE; the server reads the operator from it, so
  * this form sends no operator at all. */
 async function vOperator() {
-  const [op, svcs, sites] = await Promise.all([api.customer(state.arg), api.services(), api.sites()]);
+  const [op, svcs, sites, people] = await Promise.all([api.customer(state.arg), api.services(), api.sites(), api.principals()]);
   if (!(op.data && op.data.customer)) return head('Operator') + takeMsg() + stateBlock(op, 'operator');
   const c = op.data.customer;
   const mine = r => r.state === S.OK ? r.rows.filter(x => x.customer_id === c.id) : [];
@@ -551,10 +551,34 @@ async function vOperator() {
         <td>${esc(x.name)}</td><td>${esc(x.location) || '—'}</td>
         <td>${esc((x.created_at || '').slice(0, 10))}</td></tr>`)
     : `<div class="note">No locations yet.</div>`;
+  const persons = mine(people);
+  const peopleBlock = people.state === S.OK || people.state === S.EMPTY
+    ? (persons.length
+        ? table(['Name', 'Role', 'Status', 'Last sign-in'], persons, x => `<tr>
+            <td>${esc(x.display_name)}</td><td>${esc(x.kind)}</td>
+            <td><span class="pill">${esc(x.status)}</span></td>
+            <td>${esc((x.last_login_at || '').slice(0, 10)) || '—'}</td></tr>`)
+        : `<div class="note">Nobody can sign in for this operator yet.</div>`)
+    : stateBlock(people, 'people');
   return head(c.name, 'Operator') + takeMsg() + facts +
     `<h2 class="sub">HotSpot service</h2>` + svcBlock + start +
     `<h2 class="sub">Locations</h2>` + locBlock + addLocationForm(active) +
+    `<h2 class="sub">People who can sign in</h2>` + peopleBlock + addOwnerForm(c) +
     `<div class="note">Routers are assigned to an operator and a location from the router's own page.</div>`;
+}
+
+/* The operator's owner (docs/126, J-1): a name and the phone number they sign
+ * in with. The copy says plainly what is still missing — nothing may imply a
+ * sign-in that cannot happen yet. */
+function addOwnerForm(c) {
+  return `<form class="sform" data-oform="owner" data-id="${esc(c.id)}">
+    <h3>Add an owner</h3>
+    <label>Name <input name="display_name" required maxlength="120" placeholder="Jane Namusoke"></label>
+    <label>Phone <input name="phone" required inputmode="tel" autocomplete="off" maxlength="32" placeholder="+256 700 123 456"></label>
+    <button class="btn" type="submit">Add owner</button>
+    <small>With the country code. This is the number they will sign in with; it is never shown again here.
+      <b>Nobody can sign in yet:</b> the operator app is not live and sign-in codes are not sent to phones
+      until a delivery channel is chosen (docs/126).</small></form>`;
 }
 
 function addLocationForm(active) {
@@ -939,6 +963,19 @@ function wireOnboarding() {
           const name = val('name');
           const r = await onboardingApi.addLocation(val('service_id'), name, val('location'), f.dataset.key);
           return after(r, r.status === 200 ? `${name} was already added from this form; nothing new was recorded.` : `Location ${name} added.`);
+        }
+        case 'owner': {
+          if (btn) btn.disabled = true;
+          const name = val('display_name');
+          const r = await onboardingApi.addOwner(f.dataset.id, name, val('phone'));
+          // A second submission of the same number is refused, never duplicated.
+          // The list re-renders from the server, so a person who WAS added shows.
+          if (r.status === 409 && r.data && r.data.detail === 'phone unavailable') {
+            pending.msg = `<div class="msg err">That phone number is already in use for a sign-in, so nothing was added.
+              If you just added this person, they are in the list below.</div>`;
+            return render();
+          }
+          return after(r, `Owner ${name} added. They cannot sign in yet: the operator app is not live and sign-in codes are not sent (docs/126).`);
         }
       }
     };

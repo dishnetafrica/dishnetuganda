@@ -286,8 +286,10 @@ $ojs = $stripJs(file_get_contents($root . '/panel/onboarding.js'));
 $app = $stripJs(file_get_contents($root . '/panel/app.js'));
 $api = $stripJs(file_get_contents($root . '/panel/api.js'));
 preg_match_all("/send\('(\w+)',\s*'([^']*)'/", $ojs, $sends, PREG_SET_ORDER);
-is_(array_map(static fn($c) => $c[1] . ' ' . $c[2], $sends), ['POST /customers', "POST /customers/", 'POST /sites'],
-    'onboarding.js issues exactly three requests, all POST: /customers, /customers/{id}/services, /sites');
+// Since docs/126 (J-1) a fourth: the operator's owner, POSTed under the operator's path.
+is_(array_map(static fn($c) => $c[1] . ' ' . $c[2], $sends), ['POST /customers', "POST /customers/", 'POST /sites', "POST /customers/"],
+    'onboarding.js issues exactly four requests, all POST: /customers, /customers/{id}/services, /sites, /customers/{id}/principals');
+is_(str_contains($ojs, "'/principals'"), true, 'the fourth is the principals path (docs/126)');
 is_(str_contains($ojs, "'/services'"), true, 'the second is the services path');
 is_(preg_match_all('/\b(GET|DELETE|PATCH|PUT)\b/', $ojs) + substr_count($ojs, 'fetch('), 0, 'no other verb and no fetch of its own: it sends through routers.js');
 is_(str_contains($ojs, "from './routers.js'"), true, 'it imports send from the router client rather than copying it');
@@ -310,7 +312,7 @@ $htm = file_get_contents($root . '/panel/index.html');
 is_(str_contains($htm, '#gate[hidden],.shell[hidden]{display:none}'), true, 'index.html makes hidden mean hidden for the gate and the shell');
 
 // ===========================================================================
-t('8. THE MANIFEST — three onboarding writes bound, /sites among them, principals still unbound');
+t('8. THE MANIFEST — three onboarding writes bound, /sites among them; principals bound since docs/126');
 $m = Manifest::load($root . '/plugin/plugin.json');
 $ob = array_values(array_filter($m->writeRoutes, static fn($r) => ($r['see'] ?? null) === 'docs/125'));
 is_(array_map(static fn($r) => [$r['path'], $r['capability'], $r['function'], $r['role'], $r['gate']], $ob), [
@@ -320,7 +322,9 @@ is_(array_map(static fn($r) => [$r['path'], $r['capability'], $r['function'], $r
 ], 'each names its capability, function, role and gate');
 is_(str_contains($ob[2]['actor'] ?? '', 'DERIVED'), true, 'the location entry says the operator is derived');
 is_(in_array('/sites', array_column($m->unboundWrites, 'path'), true), false, '/sites is no longer declared-unbound');
-is_(in_array('/customers/{customer_id}/principals', array_column($m->unboundWrites, 'path'), true), true, 'principal creation still is (docs/116 J-1)');
+// Rewritten, not deleted, when docs/126 (J-1) bound it: principal creation is no longer declared-unbound.
+is_(in_array('/customers/{customer_id}/principals', array_column($m->unboundWrites, 'path'), true), false, 'principal creation is no longer declared-unbound (docs/126, J-1)');
+is_(in_array('/customers/{customer_id}/principals', array_column($m->writeRoutes, 'path'), true), true, 'it is bound (docs/126)');
 is_($m->gateIsOpen('admin-write'), false, 'the admin-write gate is still not OPEN — partially bound, said so');
 
 // ===========================================================================

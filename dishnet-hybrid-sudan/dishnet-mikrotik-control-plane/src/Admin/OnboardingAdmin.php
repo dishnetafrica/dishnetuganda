@@ -22,6 +22,12 @@ use Dn\Db\Database;
  *
  * A location takes NO operator: the function reads it from the service row
  * (derive, never accept). Nothing here contacts a router.
+ *
+ * Since docs/126 (J-1) the same connection also creates the people who can
+ * sign in for an operator, through mt_admin_principal_create (migration 027).
+ * That function takes no idempotency key: the phone's global unique index is
+ * its replay guard (docs/108), so a retry fails at the insert, before the
+ * audit row, and nothing is written twice.
  */
 final class OnboardingAdmin
 {
@@ -53,6 +59,44 @@ final class OnboardingAdmin
     {
         return $this->call('SELECT mt_admin_site_create(?,?,?,?,?) AS r',
             [$serviceId, $name, $location, $idempotencyKey, self::actor($actor)], 'site');
+    }
+
+    /**
+     * A person who can sign in for an operator (docs/126). The target operator
+     * is explicit — the Admin plane never sets tenant context — and the phone
+     * arrives already in its canonical form (Dn\Auth\Phone). The capability
+     * names must already be known ones: OpCapability::toPg() does not quote.
+     *
+     * @param list<string> $capabilities
+     * @return string|null the new principal's id; null when no such operator exists
+     */
+    public function addPrincipal(string $operatorId, string $kind, string $displayName, string $phone,
+                                 array $capabilities, string $actor): ?string
+    {
+        if (!\Dn\Auth\OpCapability::known($capabilities)) {
+            throw new \InvalidArgumentException('only known op.* capabilities may be passed');
+        }
+        $args = [$operatorId, $kind, $displayName, $phone,
+                 \Dn\Auth\OpCapability::toPg($capabilities), self::actor($actor)];
+        try {
+            $db  = $this->db ??= ($this->connect)();
+            $row = $db->attempt(static fn(Database $d) => $d->one(
+                'SELECT mt_admin_principal_create(?,?,?,?,?::text[],?) AS id', $args));
+        } catch (\PDOException $e) {
+            $state = (string) ($e->errorInfo[0] ?? $e->getCode());
+            if ($state === '23503') { return null; }
+            if ($state === '23505') {
+                // P-B: one phone, one principal. The wording is the customer
+                // plane's and says nothing about WHERE the number is in use.
+                throw new OnboardingRefused('phone unavailable', 0, $e);
+            }
+            if (in_array($state, ['23514', '23502', '22001'], true)) {
+                $why = self::reason($e->getMessage());
+                throw new OnboardingRefused(str_contains($why, 'violates check constraint') ? 'refused' : $why, 0, $e);
+            }
+            throw $e;
+        }
+        return (string) ($row['id'] ?? throw new \LogicException('mt_admin_principal_create returned nothing'));
     }
 
     private static function actor(string $actor): string

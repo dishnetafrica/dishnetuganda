@@ -123,7 +123,7 @@ is_(str_contains(file_get_contents(__DIR__ . '/../src/Admin/DevStaffIdentity.php
     'DenyAllIdentity'), true, 'the class documents that it does not degrade');
 
 // ===========================================================================
-t('8. THE READ-ONLY CLIENT STAYS READ-ONLY; every estate write the UI makes is one of seven: four through routers.js (docs/121 D-13), three through onboarding.js (docs/125 D-11)');
+t('8. THE READ-ONLY CLIENT STAYS READ-ONLY; every estate write the UI makes is one of eight: four through routers.js (docs/121 D-13), four through onboarding.js (docs/125 D-11, docs/126 D-11)');
 // Checked as CALLS, not as words: "a provisioning gap" is legitimate screen
 // copy, while `provision(` would be a write. The earlier version of this
 // assertion matched the prose and was wrong about it.
@@ -143,22 +143,25 @@ is_(count(array_unique($writeCalls[1])) >= 4, true, 'CONTROL: the scan does find
 // calls into panel/onboarding.js. The guard above did not see them at all:
 // none of their names was on its verb list. They are now named and bounded
 // here, and the verb list gains the create shapes they must not take elsewhere.
+// Since docs/126 (J-1) there is a fourth: addOwner, the operator's first login.
+// Bounded here like the other three, and its create shapes join the verb list.
 $onCalls = [];
 preg_match_all('/\bonboardingApi\.(\w+)\s*\(/', $stripJs($app), $onCalls);
 $onUsed = array_values(array_unique($onCalls[1])); sort($onUsed);
-is_($onUsed, ['addLocation', 'createOperator', 'startService'], 'every onboardingApi call in app.js is one of createOperator, startService, addLocation — and all three are used');
+is_($onUsed, ['addLocation', 'addOwner', 'createOperator', 'startService'], 'every onboardingApi call in app.js is one of createOperator, startService, addLocation, addOwner — and all four are used');
 $codeSans = preg_replace('/\broutersApi\.(register|assign|setState|pushConfig)\s*\(/', 'ROUTER_WRITE(', $code);
-$codeSans = preg_replace('/\bonboardingApi\.(createOperator|startService|addLocation)\s*\(/', 'ONBOARDING_WRITE(', $codeSans);
+$codeSans = preg_replace('/\bonboardingApi\.(createOperator|startService|addLocation|addOwner)\s*\(/', 'ONBOARDING_WRITE(', $codeSans);
 is_(preg_match('/\bcreateOperator\s*\(/', 'x.createOperator(1)'), 1, 'CONTROL: the call scan does match a bare createOperator() call');
 foreach (['assign','provision','reprovision','reboot','reset','revoke','disconnect',
           'createVoucher','createBatch','editPlan','delete',
-          'createOperator','createCustomer','startService','addLocation','createSite','createService'] as $w) {
+          'createOperator','createCustomer','startService','addLocation','createSite','createService',
+          'addOwner','addPrincipal','createPrincipal','createOwner'] as $w) {
     is_(preg_match('/\b' . preg_quote($w, '/') . '\s*\(/i', $codeSans), 0,
         "outside routers.js and onboarding.js the admin client makes no {$w}() call");
 }
 is_(preg_match('/\bassign\s*\(/i', 'x.assign(1)'), 1, 'CONTROL: the call scan does match a bare assign() call');
 is_(stripos($stripJs($js), 'POST') === false, true, 'the read-only client issues no POST');
-is_(stripos($stripJs($app), 'POST') === false, true, 'and app.js carries no HTTP verb of its own: its writes are the four routers.js methods, the three onboarding.js methods and the identity-plane clients');
+is_(stripos($stripJs($app), 'POST') === false, true, 'and app.js carries no HTTP verb of its own: its writes are the four routers.js methods, the four onboarding.js methods and the identity-plane clients');
 // app.js has a list() helper whose PARAMETER is called fetch and is called
 // with no arguments; a global fetch carries a URL. Scan for the latter.
 is_(preg_match('/\bfetch\s*\(\s*[^)\s]/', $stripJs($app)), 0, 'app.js opens no fetch of its own (no fetch call carrying a URL)');

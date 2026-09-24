@@ -190,7 +190,7 @@
   "api": {
     "base": "/api/v1/admin",
     "entrypoint": "plugin/public/api.php",
-    "surface": "estate read + operator/service/location create + router register/assign/lifecycle/provision; identity read-write",
+    "surface": "estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write",
     "routes": [
       {
         "method": "GET",
@@ -342,6 +342,16 @@
           "gate": "admin-write",
           "see": "docs/125",
           "actor": "the authenticated staff subject; adds a location to an active service; the operator is DERIVED from the service row and a customer_id in the body is refused (derive, never accept); migration 029's key is the floor; idempotency_key required"
+        },
+        {
+          "method": "POST",
+          "path": "/customers/{customer_id}/principals",
+          "capability": "customers.write",
+          "function": "mt_admin_principal_create",
+          "role": "dnb_adminwrite",
+          "gate": "admin-write",
+          "see": "docs/126",
+          "actor": "the authenticated staff subject; creates a person who can sign in for the operator named in the PATH (an owner by default, or staff with op.* capabilities); the phone is required and stored in one canonical E.164 form; a duplicate phone is refused as 'phone unavailable' and that unique index is the replay guard (docs/108); the phone is never returned"
         }
       ],
       "declared_unbound": [
@@ -359,14 +369,9 @@
           "method": "POST",
           "path": "/sessions/{session_id}/disconnect",
           "capability": "sessions.disconnect"
-        },
-        {
-          "method": "POST",
-          "path": "/customers/{customer_id}/principals",
-          "capability": "customers.write"
         }
       ],
-      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign; migration 028 (docs/121) bound the router lifecycle and the push_config action, lifting docs/118 D-2 — each one SECURITY DEFINER function on dnb_adminwrite writing its own audit row with the authenticated subject as actor, and none reaching a router. Migration 030 (docs/125) bound operator onboarding: creating an operator, its HotSpot service and its locations, each idempotent and audited, the location's operator derived from its service. The four paths under declared_unbound EXIST and every one answers 501: plans and voucher batches for G-C2; disconnect for the replay fix (docs/108); principal creation for its own instruction (docs/116 J-1)."
+      "reason": "G-C (docs/118) bound the first two ESTATE writes: router register and assign; migration 028 (docs/121) bound the router lifecycle and the push_config action, lifting docs/118 D-2 — each one SECURITY DEFINER function on dnb_adminwrite writing its own audit row with the authenticated subject as actor, and none reaching a router. Migration 030 (docs/125) bound operator onboarding: creating an operator, its HotSpot service and its locations, each idempotent and audited, the location's operator derived from its service. docs/126 (J-1) bound the creation of an operator's people through migration 027's function, with no migration. The three paths under declared_unbound EXIST and every one answers 501: plans and voucher batches for G-C2; disconnect for the replay fix (docs/108)."
     },
     "session": {
       "note": "The login boundary. NOT capability-gated -- a capability is what authenticating grants, so gating login on one would be a lock whose key is behind the lock. Since migration 026 these routes DO write identity state (a revocable session row, an audit row) through definer functions owned by dnb_def_staff; they write no estate table, which is why 'writes.bound' stays empty.",
@@ -496,7 +501,7 @@
       "env": "DN_ALLOW_REAL_BINDINGS=yes-f6b-authorized"
     },
     "admin-write": {
-      "state": "PARTIALLY BOUND (G-C routers complete, docs/121; operator onboarding, docs/125)",
+      "state": "PARTIALLY BOUND (G-C routers complete, docs/121; operator onboarding, docs/125; operator owners, docs/126)",
       "meaning": "Seven ESTATE writes are bound, all on dnb_adminwrite with the authenticated staff subject as actor. Four router writes: POST /routers and POST /routers/{device_id}/assign (G-C, migration 020's W-1 functions), POST /routers/{device_id}/state (mt_device_set_state, RULE I-1 no-op since 028) and POST /routers/{device_id}/actions for push_config (mt_device_provision_request, migration 028). Three onboarding writes (migration 030, docs/125): POST /customers (an operator), POST /customers/{customer_id}/services (its HotSpot service) and POST /sites (a location, the operator derived from its service), each idempotent. Plans, voucher batches, disconnect and principal creation still answer 501. Identity routes (session, staff roster) are bound since migration 026. No route reaches a router: a router write is a registry row or an intent row, and only the worker turns rows into connections."
     },
     "portal": {

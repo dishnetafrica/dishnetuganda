@@ -15,6 +15,8 @@ use Dn\Admin\StaffIdentity;
 use Dn\Admin\StaffRefused;
 use Dn\Admin\StaffRole;
 use Dn\Admin\StaffSessionPort;
+use Dn\Auth\OpCapability;
+use Dn\Auth\Phone;
 use Dn\Devices\TunnelAddress;
 use Dn\Http\Request;
 use Dn\Http\Response;
@@ -211,21 +213,17 @@ final class AdminRoutes
         self::routers($r, $guard, $routers);
 
         // ── estate writes: operator onboarding (migration 030, docs/125) ──
-        self::onboarding($r, $guard, $onboarding);
+        self::onboarding($r, $guard, $onboarding, $reader);
 
         // ── estate writes still declared-unbound ────────────────────────
         // Declared with their capabilities so the matrix is complete and
         // testable. Each returns an honest 501: plans and voucher batches wait
-        // for G-C2, disconnect for the replay fix (docs/108), principal
-        // creation for its own instruction (docs/116 J-1). Sites are bound
-        // since migration 030 (docs/125).
+        // for G-C2, disconnect for the replay fix (docs/108). Sites are bound
+        // since migration 030 (docs/125), principal creation since docs/126 (J-1).
         foreach ([
             ['POST', '/api/v1/admin/plans',                        Capability::PLANS_WRITE],
             ['POST', '/api/v1/admin/voucher-batches',              Capability::VOUCHERS_GENERATE],
             ['POST', '/api/v1/admin/sessions/{session_id}/disconnect', Capability::SESSIONS_DISCONNECT],
-            // Migration 027 built mt_admin_principal_create (target operator explicit);
-            // binding this route is its own instruction (docs/116 §J J-1).
-            ['POST', '/api/v1/admin/customers/{customer_id}/principals', Capability::CUSTOMERS_WRITE],
         ] as [$method, $path, $cap]) {
             $r->add($method, $path, $guard($cap, static fn() => self::estateReadNotAuthorized()), auth: false);
         }
@@ -276,7 +274,7 @@ final class AdminRoutes
      * A location carries NO operator — the function reads it from the service
      * row — so a customer_id in its body is a forgery attempt and is refused.
      */
-    private static function onboarding(Router $r, callable $guard, ?OnboardingAdmin $onboarding): void
+    private static function onboarding(Router $r, callable $guard, ?OnboardingAdmin $onboarding, callable $reader): void
     {
         $off = static fn() => new Response(501, [
             'error'  => 'onboarding_writes_unavailable',
@@ -359,6 +357,56 @@ final class AdminRoutes
                 if ($res === null) { return new Response(409, ['error' => 'refused', 'detail' => 'no such service']); }
                 return new Response($res['replayed'] ? 200 : 201,
                     ['site' => AdminProjection::site($res['site']), 'replayed' => $res['replayed']]);
+            }), auth: false);
+
+        // A person who can sign in for an operator (docs/126, J-1) — the first
+        // owner of a new operator can be created by nobody else (docs/116 §B).
+        // The operator comes from the PATH, the one explicit target the Admin
+        // plane allows (D-AUTH-3). There is no idempotency key: the phone's
+        // global unique index is the replay guard (docs/108), so a retry is
+        // refused at the insert and nothing is written twice.
+        $r->post('/api/v1/admin/customers/{customer_id}/principals', $guard(Capability::CUSTOMERS_WRITE,
+            static function (Request $req, StaffIdentity $s) use ($onboarding, $off, $derived, $uuid, $refused, $reader) {
+                if ($onboarding === null) { return $off(); }
+                $id = (string) ($req->params['customer_id'] ?? '');
+                if (!preg_match($uuid, $id)) { return Response::notFound(); }
+                $b = $req->body;
+                if (($bad = $derived($b, ['id', 'actor', 'customer_id', 'operator', 'operator_id', 'status',
+                                          'created_at', 'last_login_at', 'credential_hash'])) !== null) { return $bad; }
+                $kind = $b['kind'] ?? 'owner';
+                if (!in_array($kind, ['owner', 'staff'], true)) { return Response::badRequest('kind must be owner or staff'); }
+                $name = is_string($b['display_name'] ?? null) ? trim($b['display_name']) : '';
+                if ($name === '' || mb_strlen($name) > 120) {
+                    return Response::badRequest("display_name is required: the person's name, 1 to 120 characters");
+                }
+                // The phone is the sign-in key and is looked up exactly: one canonical form (D-3).
+                $phone = is_string($b['phone'] ?? null) ? Phone::canonical($b['phone']) : null;
+                if ($phone === null) {
+                    return Response::badRequest('phone is required: the number this person signs in with, in international form, e.g. +256 700 123 456');
+                }
+                $caps = $b['capabilities'] ?? [];
+                if (!is_array($caps) || !array_is_list($caps)) {
+                    return Response::badRequest('capabilities must be a list of op.* capability names');
+                }
+                if ($kind === 'owner' && $caps !== []) {
+                    return Response::badRequest('an owner holds every capability: send no capabilities');
+                }
+                if (!OpCapability::known($caps)) {
+                    return Response::badRequest('capabilities may name only the op.* capabilities this platform defines');
+                }
+                if (in_array(OpCapability::STAFF_MANAGE, $caps, true)) {
+                    return Response::badRequest('op.staff.manage belongs to owners and cannot be granted');
+                }
+                try {
+                    $pid = $onboarding->addPrincipal($id, $kind, $name, $phone, array_values(array_unique($caps)), $s->subject);
+                } catch (OnboardingRefused $e) { return $refused($e); }
+                if ($pid === null) { return Response::notFound(); }
+                // Read back through the Admin projection, so the answer carries
+                // exactly its allowlist — never the phone.
+                $rows = array_values(array_filter($reader('mt_admin_principals'), static fn(array $p) => ($p['id'] ?? '') === $pid));
+                return new Response(201, ['principal' => $rows !== []
+                    ? AdminProjection::principal($rows[0])
+                    : ['id' => $pid, 'customer_id' => $id]]);
             }), auth: false);
     }
 

@@ -620,9 +620,13 @@ is_([$f['o'], (bool) $f['d'], str_contains($f['c'], 'search_path=public, pg_temp
 $mrow = current(array_filter($rows, fn($r) => $r['id'] === $mandy));
 is_($mrow['status'], 'disabled', 'a disabled principal is visible as such');
 $mm = $routes->match('POST', "/api/v1/admin/customers/{$B['customer']}/principals");
-is_($mm !== null, true, 'the Admin creator PATH is declared');
-is_(($mm[0])(new Request('POST', '/x', [], [], $mm[1], '127.0.0.1'), null, null)->status, 501,
-    'and answers 501 — the function exists, binding the route is a separate instruction (J-1)');
+is_($mm !== null, true, 'the Admin creator PATH is routed');
+// Rewritten, not deleted, when docs/126 (J-1) bound the route. This router is
+// built with no Admin write connection, so the route answers 501 for THAT
+// reason and says so; the bound behaviour is proved in test_operator_owner_login.
+$r501 = ($mm[0])(new Request('POST', '/x', [], [], $mm[1], '127.0.0.1'), null, null);
+is_([$r501->status, $r501->body['error'] ?? null], [501, 'onboarding_writes_unavailable'],
+    'without the Admin write connection it answers 501 onboarding_writes_unavailable — bound since docs/126 (J-1)');
 
 // ===========================================================================
 t('14. ACTOR KIND — staff means DishNet staff; every operator person is principal; nothing maps kind onto it');
