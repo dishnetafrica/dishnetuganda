@@ -65,11 +65,15 @@ throws_(fn() => $owner->exec("INSERT INTO mt_customers (name) VALUES ('by the ow
 t('F2 — the authentication path WORKS, proven by side effect');
 $phone = '+256700001001';   // seed_two_customers gives A's principal this number
 $inspect->exec('TRUNCATE mt_auth_codes CASCADE');
-$code = $app->one('SELECT mt_auth_issue_code(?,?,?::interval) AS id',
-                  [$phone, 'hash-f2', '10 minutes'])['id'];
+// Since 032 the function takes the code SEALED for the SMS outbox as well
+// (docs/127 S-3); the three-argument form no longer exists.
+$code = $app->one('SELECT mt_auth_issue_code(?,?,?::interval,?) AS id',
+                  [$phone, 'hash-f2', '10 minutes', (new \Dn\Notify\CodeEnvelope())->seal('000000', $phone)])['id'];
 is_($code !== null, true, 'issue_code returned an id');
 is_((int) $inspect->one('SELECT count(*) AS n FROM mt_auth_codes')['n'], 1,
     'AND A ROW EXISTS — the old failure returned an id-shaped answer and wrote nothing');
+is_($inspect->one('SELECT state FROM mt_auth_sms_outbox WHERE code_id = ?', [$code])['state'] ?? null, 'queued',
+    'AND its outbox row (032) — queued, because the number is an active owner\'s');
 
 $v = $app->query('SELECT * FROM mt_auth_verify_code(?,?)', [$phone, 'hash-f2']);
 is_(count($v), 1, 'verify_code resolves the principal');

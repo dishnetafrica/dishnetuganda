@@ -15,6 +15,7 @@ changes none of them.
 | Register a router, assign it to an operator, record its lifecycle and queue its configuration over the Admin API — and from the panel's forms | **yes** (G-C, `docs/118`; migration 028, `docs/121`): `POST /api/v1/admin/routers`, `…/routers/{id}/assign`, `…/routers/{id}/state`, `…/routers/{id}/actions` (`push_config`) — every one audits the signed-in staff member as the actor; the action queues an intent that only the worker delivers |
 | Create an operator, start its HotSpot service and add its locations over the Admin API — and from the panel's *Operators & sites* screens | **yes** (migration 030, `docs/125`): `POST /api/v1/admin/customers`, `…/customers/{id}/services`, `POST /api/v1/admin/sites` — each idempotent (an `idempotency_key` is required; a repeat answers 200 and records nothing) and audited with the signed-in staff member as the actor; a location's operator is read from its service, never sent. Plans, voucher batches and disconnect still answer 501 |
 | Add an operator's owner — the person who will sign in for it — over the Admin API and from the operator's page | **yes** (`docs/126`, no migration): `POST /api/v1/admin/customers/{id}/principals` — a name and the phone number they sign in with, stored in one international form; a number already in use is refused as *phone unavailable*; the number is never returned. **Nobody can sign in yet:** this install does not serve the operator app, and no channel delivers sign-in codes to phones |
+| Send an operator's sign-in code by SMS | **yes, when you configure it** (migration 032, `docs/127` phase 2): the worker sends through Africa's Talking when `DN_SMS=africastalking` — see *Sign-in codes by SMS* below. Off by default: with `DN_SMS` unset nothing is sent. **The operator app itself is not served yet** (phase 3). The adapter is DOCUMENTED, UNVERIFIED until your account sends a real message |
 | Reach a real MikroTik router | **no** — F6-B is not authorized. The worker's delivery binding (`DN_DELIVERY`) is `null` unless you say otherwise, `simulated` is an in-memory router that says so, and `routeros` refuses to start without the gate. **Nothing is HARDWARE VERIFIED** |
 | Publish a RADIUS credential | **no** |
 | Redeem a voucher | **no** |
@@ -185,6 +186,35 @@ confirms it. A router must be assigned to an operator, recorded `connected` or
 later, and carry a management address before a job is accepted; otherwise the
 API answers 409 with the reason instead of queuing a job that would only fail
 later. The other three actions answer 501 with the inventory's reason.
+
+### Sign-in codes by SMS (migration 032, `docs/127` phase 2)
+
+When an operator's person asks for a sign-in code, the API **seals** the code
+and files it in an outbox in the same transaction; **the worker sends it**. The
+request never waits on the provider. What the worker sends through is chosen
+by `DN_SMS` in **the worker's environment**, never by fallback:
+
+| `DN_SMS` | Binding | What happens to a code |
+|---|---|---|
+| unset, or `null` | `NullSms` | nothing is sent; the message expires with its code. **No operator can sign in** — the doctor warns |
+| `africastalking` | `AfricasTalkingSms` | sent through Africa's Talking. Needs `DNB_SMS_USERNAME` and `DNB_SMS_API_KEY`, and the `curl` extension; refuses to start without them. The username `sandbox` selects the provider's sandbox, which delivers to its simulator, **not to phones** |
+| anything else | — | the worker refuses to start |
+
+- **Only a person who could sign in is ever sent a code**: an active person of
+  an active operator. An unknown number gets the same answer and is sent
+  nothing, so the endpoint cannot be used to spend your SMS credit.
+- **The API key is a secret.** Type it on the server into the worker's
+  environment file, mode 0600. Never put it in chat, a log, a command line or
+  source control. The doctor reports it as *set (value withheld)*.
+- **`DNB_SECRET_KEY` must be the same for the API and the worker**: the API
+  seals with a key derived from it and the worker opens with the same one.
+- **Never set `DNB_EXPOSE_OTP` on a reachable host**, and never read a code out
+  to someone: the code goes to the phone and nowhere else.
+- The adapter is **DOCUMENTED, UNVERIFIED**. The request format was taken from
+  the provider's official SDK; the answer's status codes come from its
+  documentation. It becomes verified when your account sends a real message.
+- The worker needs **outbound HTTPS** to `api.africastalking.com`. Check that
+  from the worker's network before relying on it.
 
 ## The identity gate
 

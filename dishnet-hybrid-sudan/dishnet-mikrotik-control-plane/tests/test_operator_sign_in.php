@@ -45,7 +45,10 @@ $reset = static fn(string $phone) => $ins->exec('DELETE FROM mt_auth_codes WHERE
 
 // ===========================================================================
 t('1. MIGRATION 031 — the three functions read the operator; dnb_def_auth may READ mt_customers, nothing more');
-foreach (['mt_auth_issue_code(text,text,interval)', 'mt_auth_verify_code(text,text)', 'mt_auth_resolve_token(text)'] as $f) {
+// mt_auth_issue_code is checked under its CURRENT signature: 032 added the
+// sealed payload (docs/127 §C) and dropped the three-argument form, keeping
+// 031's check of the operator — the assertions below still read it.
+foreach (['mt_auth_issue_code(text,text,interval,text)', 'mt_auth_verify_code(text,text)', 'mt_auth_resolve_token(text)'] as $f) {
     $r = $ins->one("SELECT pg_get_userbyid(proowner) AS o, prosecdef AS d, position('mt_customers' IN prosrc) > 0 AS c
                       FROM pg_proc WHERE oid = ?::regprocedure", [$f]);
     is_([$r['o'], (bool) $r['d'], (bool) $r['c']], ['dnb_def_auth', true, true], "{$f}: dnb_def_auth, SECURITY DEFINER, reads mt_customers");

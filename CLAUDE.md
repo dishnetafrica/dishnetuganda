@@ -3003,8 +3003,9 @@ nothing deployed; nothing HARDWARE VERIFIED.
    returns it and the route answers `{status: sent}`. **No SMS or messaging
    provider exists in this repository.** The only gateway on the server is
    **Domain A's** WhatsApp, which may not be used without explicit authorisation.
-   **The operator chose "SMS (Recommended)"** — designed in `docs/127` §C,
-   phase 2, not yet built.
+   **The operator chose "SMS (Recommended)"** — designed in `docs/127` §C and
+   **built in development** (§G, migration 032). Not yet on staging, and no
+   message has reached a phone.
    - **Never** `DNB_EXPOSE_OTP` on a public host.
    - **Never** a code shown to staff to read out.
 2. **F-J1-1 — sign-in ignored the operator's status. CLOSED in development by
@@ -3020,7 +3021,7 @@ nothing deployed; nothing HARDWARE VERIFIED.
    - Serving it is its own review: the unauthenticated auth routes, rate limits,
      and F-8's unaudited auth routes.
 
-## Operator sign-in end to end (`docs/127`) — phase 1 BUILT (migration 031); SMS chosen; development only
+## Operator sign-in end to end (`docs/127`) — phases 1 and 2 BUILT (migrations 031, 032); development only
 
 The operator chose **"SMS (Recommended)"** for sign-in codes. `docs/127` designs
 all four missing pieces together, because none is useful alone, and builds them
@@ -3071,31 +3072,71 @@ NOT AUTHORIZED.
 - **Staging:** 031 **travels with phase 2's command**. On its own it would change
   nothing anyone on staging could see (§F.7).
 
-### Phases 2–3 — designed, NOT built
+### Phase 2 — BUILT (migration 032, `docs/127` §G); no message has reached a phone
 
-- **SMS (§C).**
-  - A **sealed outbox** row is written **for every request**, so timing does not
-    reveal who is registered.
-  - The code is sealed with `SecretBox` under a key derived from
-    `DNB_SECRET_KEY` with the label `dn-sms-outbox-v1`, the phone as associated
-    data. It is erased when the row settles.
-  - **The worker sends**, through definer claim/settle/expire functions for
-    `dnb_worker` only.
-  - **Codes go only to an active person of an active operator** (S-1).
-  - `Dn\Notify\SmsSender`: `DN_SMS` unset → `NullSms`; `africastalking` → the
-    adapter (**DOCUMENTED, UNVERIFIED** until the operator's account sends a
-    real message); anything else refuses to start. **No fallback.**
-- **SMS operating rules.**
-  - The API key is **typed on the server**, never in chat, a log or the
-    terminal.
-  - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
-  - Domain A's WhatsApp gateway stays unused without explicit authorisation.
+- **The outbox.** `mt_auth_sms_outbox` is created as `dnb_def_auth`. **No login
+  role holds any privilege on it**, enumerated from `pg_roles`.
+  - `mt_auth_issue_code` gains the **sealed code** as a fourth parameter. The
+    three-argument form is **dropped**. A missing or malformed payload gets
+    `22023` for every number, before any write.
+  - **Every request writes one code row and one outbox row.** Only an active
+    person of an active operator gets `queued` with the envelope; everyone else
+    gets `no_recipient` with **no payload**. Nobody else is ever sent a code.
+- **The code never rests in clear.** `Dn\Notify\CodeEnvelope` is AES-256-GCM
+  under `HMAC(DNB_SECRET_KEY, 'dn-sms-outbox-v1')`, with the phone as
+  associated data.
+  - The raw key does not open it, and another phone does not.
+  - **Every final state erases the envelope**, and the table's own CHECKs are
+    the floor under the functions.
+- **The worker sends; the request never waits.**
+  - `mt_auth_sms_claim` (60-second lease, `SKIP LOCKED`, at most 3 attempts),
+    `_settle` (the attempt number is the claim's token) and `_expire` are
+    executable by **`dnb_worker` only**.
+  - `SmsWorker` opens envelopes only in memory. Its report is counts only, and
+    a throwing sender's message is not kept.
+  - Codes are handled every second; intents keep their five-second cadence.
+- **`DN_SMS`, in the WORKER's environment, never falls back.** Unset → `NullSms`:
+  nothing is claimed and codes expire. `africastalking` → the adapter, which
+  refuses to start without `DNB_SMS_USERNAME` and `DNB_SMS_API_KEY`. Anything
+  else refuses to start.
+  - The **doctor constructs exactly what the worker would**: WARN when unset,
+    BLOCKER naming a missing variable, OK with *value withheld*.
+  - **`DNB_SECRET_KEY` is now required.**
+- **Africa's Talking evidence, per piece.**
+  - The endpoint, the sandbox rule, headers, form fields and **201-only
+    success** are **MEASURED** from the provider's official SDK (npm
+    `africastalking` 0.7.9).
+  - The answer's status codes are **DOCUMENTED, UNVERIFIED**: its documentation
+    host is blocked by this session's egress policy.
+  - Delivery is **UNVERIFIED** until a real message is sent.
+  - **The endpoint is not configurable from the environment.**
+- **Measured while building.** The installing owner is a member of
+  `dnb_def_auth` **without inherit**, so a `REVOKE` it issues after `RESET
+  ROLE` is a **warning that changes nothing**. **Grant inside the owner's role
+  block.** 032's own verification caught it.
+- **Proofs.**
+  - `tests/test_sms_delivery.php` **115**, including the whole chain: route →
+    worker → the real adapter against a loopback fake provider → **the code
+    received signs the owner in**.
+  - **Fourteen weakened copies, all caught.**
+  - Suite **39 / 3,730 / 0**, twice.
+  - install-test **86/86**: the refusal check was split so both guards are
+    exercised.
+  - Package **134 files**, `0b9b1a58…c4684f5`. Not deployed.
+
+### Phase 3 — designed, NOT built
+
 - **Serving the operator app (§D).**
   - Its **own host name**, and `serve.php` routes by host. The Admin cookie must
     never be usable from the operator app.
   - `public/` joins the package.
   - The app is the prototype's audited screens on the real data layer.
   - Whether sign-in writes an audit row (F-8) is decided in its own review.
+- **Operating rules, binding on the staging command.**
+  - The SMS API key is **typed on the server**, never in chat, a log or the
+    terminal.
+  - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
+  - Domain A's WhatsApp gateway stays unused without explicit authorisation.
 - **The operator's action:** open an SMS provider account (Africa's Talking was
   suggested; say first if you prefer another) and request a sender name.
 

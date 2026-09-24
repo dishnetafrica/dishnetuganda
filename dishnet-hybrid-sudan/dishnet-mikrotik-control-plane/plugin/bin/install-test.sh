@@ -152,7 +152,18 @@ check "owner does not bypass RLS" "f" \
   "$(psql -U postgres -d postgres -Atc "SELECT rolbypassrls FROM pg_roles WHERE rolname='dnb_itest_owner'")"
 
 # ── 4. install refuses to leave a generated secret nowhere ──────────────────
-php plugin/bin/plugin.php install > "$base/install-refused.log" 2>&1 || true
+# Two refusals, each exercised on its own. DNB_SECRET_KEY is required since
+# migration 032 (docs/127 §G: no sign-in code can be sealed without it), so
+# with it unset and nowhere to generate it the installer refuses on
+# configuration first...
+php plugin/bin/plugin.php install > "$base/install-refused-key.log" 2>&1 || true
+check "install refuses without DNB_SECRET_KEY and nowhere to generate it" "yes" \
+  "$(grep 'required configuration is missing' "$base/install-refused-key.log" | grep -q 'DNB_SECRET_KEY' && echo yes || echo no)"
+# ...and with the key supplied, the role passwords are still unsupplied, so the
+# second guard — nothing is generated when there is nowhere to write it — is
+# what refuses. Supplied for this one command only: step 5 generates its own.
+DNB_SECRET_KEY="itest-$(php -r 'echo bin2hex(random_bytes(16));')" \
+  php plugin/bin/plugin.php install > "$base/install-refused.log" 2>&1 || true
 check "install refuses to generate secrets with nowhere to put them" "yes" \
   "$(grep -qi 'DNB_SECRETS_OUT names no file' "$base/install-refused.log" && echo yes || echo no)"
 

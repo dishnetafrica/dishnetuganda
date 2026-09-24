@@ -5,6 +5,8 @@ require __DIR__ . '/../src/autoload.php';
 use Dn\Db\Database;
 use Dn\Intents\IntentQueue;
 use Dn\Jobs\IntentWorker;
+use Dn\Jobs\SmsWorker;
+use Dn\Notify\SmsSenders;
 use Dn\Runtime\Bindings;
 use Dn\Tenancy\TenantContext;
 
@@ -20,19 +22,38 @@ $q  = new IntentQueue($db);
 $bindings = Bindings::fromEnvironment();
 $delivery = $bindings->delivery();
 
+// The SMS sender for sign-in codes comes from the environment too, and never
+// falls back either (docs/127 S-5): DN_SMS unset → nothing is sent and queued
+// codes expire; 'africastalking' → the real adapter, which throws here, before
+// anything is claimed, without its username and key.
+$sms = SmsSenders::fromEnvironment();
+
 // The binding's name travels in the worker id, so every claim and every
 // intent.confirmed / intent.failed audit row says which world produced it.
 $workerId = gethostname() . ':' . getmypid() . ':' . $delivery->bindingName();
-fwrite(STDERR, json_encode(['worker' => $workerId, 'bindings' => $bindings->describe()]) . "\n");
+fwrite(STDERR, json_encode(['worker' => $workerId, 'bindings' => $bindings->describe(),
+                            'sms' => $sms->bindingName()]) . "\n");
 
-$w = new IntentWorker($db, new TenantContext($db), $q, $delivery, $workerId);
+$w     = new IntentWorker($db, new TenantContext($db), $q, $delivery, $workerId);
+$texts = new SmsWorker($db, $sms);
 
+// Sign-in codes every second — someone is waiting at a sign-in screen. Intents
+// every fifth second, the cadence they have always had. The SMS log line holds
+// counts only: never a number, a code or a reason.
 $once = in_array('--once', $argv, true);
+$tick = 0;
 do {
-    $expired = $q->expireOverdue();
-    $r = $w->runOnce();
-    if ($r['claimed'] || $expired) {
-        fwrite(STDOUT, json_encode($r + ['expired' => $expired]) . "\n");
+    $s = $texts->runOnce();
+    if ($s['claimed'] || $s['expired']) {
+        fwrite(STDOUT, json_encode(['sms' => $s]) . "\n");
     }
-    if (!$once) { sleep(5); }
+    if ($tick % 5 === 0) {
+        $expired = $q->expireOverdue();
+        $r = $w->runOnce();
+        if ($r['claimed'] || $expired) {
+            fwrite(STDOUT, json_encode($r + ['expired' => $expired]) . "\n");
+        }
+    }
+    $tick++;
+    if (!$once) { sleep(1); }
 } while (!$once);

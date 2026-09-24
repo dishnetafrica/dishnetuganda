@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace Dn\Plugin;
 
 use Dn\Db\Database;
+use Dn\Notify\SmsSenders;
 use PDO;
 
 /**
@@ -74,7 +75,7 @@ final class Doctor
         $r = [];
         foreach ([
             'environment', 'configuration', 'files', 'database',
-            'schema', 'credentials', 'cohabitation', 'exposure', 'identity',
+            'schema', 'credentials', 'cohabitation', 'exposure', 'identity', 'messaging',
         ] as $group) {
             foreach ($this->{$group}() as $row) { $r[] = $row; }
         }
@@ -388,6 +389,36 @@ final class Doctor
                 'NOT MEASURED — no Admin read connection, or migration 026 not applied');
         }
         return $r;
+    }
+
+    // ── how a sign-in code reaches a phone ──────────────────────────────────
+    /**
+     * The SMS sender is the WORKER's choice (docs/127 S-5), and this reports it
+     * by constructing exactly what the worker would construct — so the doctor
+     * and the worker cannot disagree about whether it starts. Unset is a WARN,
+     * not a blocker: the install works, but no operator can sign in, and the
+     * engineer should read that here rather than hear it from an operator.
+     */
+    private function messaging(): array
+    {
+        $mode = SmsSenders::configuredName();
+        if ($mode === 'null') {
+            return [$this->row('sms.sender', 'sign-in codes by SMS', self::WARN,
+                'DN_SMS unset — no sign-in code is sent, so no operator can sign in. '
+                . 'Set it in the WORKER\'s environment (docs/127)')];
+        }
+        try {
+            $sender = SmsSenders::fromEnvironment();
+        } catch (\Throwable $e) {
+            // SmsSenders' reasons name variables, never their values.
+            return [$this->row('sms.sender', 'sign-in codes by SMS', self::BLOCKER,
+                $this->safe($e->getMessage()) . ' — the worker refuses to start')];
+        }
+        $sandbox = $sender instanceof \Dn\Notify\AfricasTalkingSms && $sender->isSandbox();
+        return [$this->row('sms.sender', 'sign-in codes by SMS', self::OK,
+            $sender->bindingName() . ($sandbox ? ' — SANDBOX: messages go to the provider\'s simulator, not to phones'
+                                               : ' — live')
+            . '; API key set (value withheld). DOCUMENTED, UNVERIFIED until a real message arrives (docs/127 S-6)')];
     }
 
     private function row(string $id, string $label, string $state, string $detail): array

@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace Dn\Auth;
 
 use Dn\Db\Database;
+use Dn\Notify\CodeEnvelope;
 
 /**
  * Turns a credential into a derived (principal, customer) pair — and nothing more.
@@ -17,10 +18,12 @@ use Dn\Db\Database;
  */
 final class Authenticator
 {
-    private const CODE_TTL  = 'PT10M';
+    /** How long a sign-in code is valid — the one number the SMS text also states. */
+    public const CODE_TTL_MINUTES = 10;
+    private const CODE_TTL  = 'PT' . self::CODE_TTL_MINUTES . 'M';
     private const TOKEN_TTL = 'P30D';
 
-    public function __construct(private Database $db) {}
+    public function __construct(private Database $db, private ?CodeEnvelope $envelope = null) {}
 
     /**
      * The phone as the key it is stored under. The Admin plane stores every
@@ -37,9 +40,14 @@ final class Authenticator
     /**
      * Issue a sign-in code.
      *
-     * Returns the plaintext code for the caller to deliver by SMS. In a real
-     * deployment this goes to the SMS gateway and is never returned over HTTP;
-     * the controller decides that, not this class.
+     * The code is SEALED for the SMS outbox before the database sees it, and
+     * mt_auth_issue_code files the envelope in the same transaction as the code
+     * (migration 032); the worker sends it (docs/127 §C). Every request is
+     * sealed, registered or not, so the work — and the time — is the same.
+     *
+     * The plaintext is still returned, for the controller: it is shown only
+     * when DNB_EXPOSE_OTP is set, which the doctor blocks outside a disposable
+     * environment, and never otherwise.
      *
      * An unregistered phone gets a code row too, with no principal attached.
      * It can never verify, but it costs the same work and produces the same
@@ -47,11 +55,12 @@ final class Authenticator
      */
     public function issueCode(string $phone): string
     {
-        $phone = self::keyOf($phone);
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $phone  = self::keyOf($phone);
+        $code   = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $sealed = ($this->envelope ??= new CodeEnvelope())->seal($code, $phone);
         try {
-            $this->db->one('SELECT mt_auth_issue_code(?,?,?::interval) AS id',
-                [$phone, $this->hash($code), self::CODE_TTL]);
+            $this->db->one('SELECT mt_auth_issue_code(?,?,?::interval,?) AS id',
+                [$phone, $this->hash($code), self::CODE_TTL, $sealed]);
         } catch (\PDOException $e) {
             if (($e->errorInfo[0] ?? '') === 'DN429') { throw new RateLimited('rate limited', 0, $e); }
             throw $e;
