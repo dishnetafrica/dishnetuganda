@@ -156,3 +156,13 @@ The failed requests were:
 - **Then, each with its own review:** close F-J1-1 (a migration to the three
   authentication functions); apply the canonical form at sign-in (D-4); serve
   the operator app (piece 3).
+
+**Since (2026-09-24):**
+
+- The operator chose **"SMS (Recommended)"**. The rest of the path is reviewed in
+  `docs/127`.
+- **F-J1-1 and D-4 are CLOSED in development** by `docs/127` §F (migration 031
+  and `Authenticator::keyOf()`). This suite's two gap assertions were rewritten
+  to CLOSED, not deleted.
+- **No separate J-1 staging command was produced.** J-1 reaches staging inside
+  `docs/127`'s phase-2 command, together with 031.

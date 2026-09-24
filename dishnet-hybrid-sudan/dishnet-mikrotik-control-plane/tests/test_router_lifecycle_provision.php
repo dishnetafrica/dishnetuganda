@@ -402,10 +402,11 @@ foreach ([StaffRole::Admin, StaffRole::Noc] as $r) { is_([$r->can('routers.lifec
 foreach ([StaffRole::Sales, StaffRole::Support] as $r) { is_([$r->can('routers.lifecycle'), $r->can('routers.act')], [false, false], "{$r->value} holds neither"); }
 
 // ===========================================================================
-t('10. REPOSITORY STATE — 028 is followed by 029 (O-1, docs/124) and 030 (onboarding, docs/125); the ledger agrees; nothing claims hardware');
+t('10. REPOSITORY STATE — 028 is followed by 029 (O-1, docs/124), 030 (onboarding, docs/125) and 031 (sign-in, docs/127); the ledger agrees; nothing claims hardware');
 $files = array_map('basename', glob($root . '/migrations/*.sql')); sort($files);
-is_(array_slice($files, -3), ['028_admin_router_lifecycle_and_provisioning.sql', '029_o1_site_service_same_operator.sql', '030_admin_operator_onboarding.sql'], '028 is followed by 029 (O-1, docs/124) and 030 (onboarding, docs/125)');
-is_((int) $ins->one('SELECT count(*)::int n FROM mt_migrations')['n'], 30, 'the ledger records 30');
+is_(array_slice($files, -4), ['028_admin_router_lifecycle_and_provisioning.sql', '029_o1_site_service_same_operator.sql', '030_admin_operator_onboarding.sql', '031_sign_in_requires_active_operator.sql'],
+    '028 is followed by 029 (O-1, docs/124), 030 (onboarding, docs/125) and 031 (sign-in, docs/127)');
+is_((int) $ins->one('SELECT count(*)::int n FROM mt_migrations')['n'], 31, 'the ledger records 31');
 $m028 = file_get_contents($root . '/migrations/028_admin_router_lifecycle_and_provisioning.sql');
 is_(str_contains($m028, 'docs/121') && str_contains($m028, 'RULE I-1') && str_contains($m028, 'ON CONFLICT (customer_id, idempotency_key)'), true, 'it cites its review, RULE I-1 and closes the race inside the function');
 is_(preg_match('/10\.66/', (string) $ins->one("SELECT prosrc FROM pg_proc WHERE oid = ?::regprocedure", [$fn])['prosrc']), 0,

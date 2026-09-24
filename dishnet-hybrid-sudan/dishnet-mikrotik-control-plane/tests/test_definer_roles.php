@@ -134,7 +134,10 @@ t('F2 — each definer role holds ONLY the privileges its functions need');
 $expected = [
     'dnb_def_auth' => ['mt_auth_codes'    => 'SELECT,INSERT,UPDATE',
                        'mt_principals'    => 'SELECT,UPDATE',
-                       'mt_auth_sessions' => 'SELECT,INSERT,UPDATE'],
+                       'mt_auth_sessions' => 'SELECT,INSERT,UPDATE',
+                       // 031 (docs/127 F-2): sign-in reads the OPERATOR's status —
+                       // at issue, at verification and on every request. Read only.
+                       'mt_customers'     => 'SELECT'],
     'dnb_def_net'  => ['mt_vouchers'      => 'SELECT,UPDATE',
                        'mt_hotspot_users' => 'SELECT',
                        'mt_sessions'      => 'SELECT,INSERT,UPDATE'],

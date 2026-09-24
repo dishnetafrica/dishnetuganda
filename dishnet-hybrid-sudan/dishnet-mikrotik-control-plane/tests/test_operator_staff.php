@@ -667,12 +667,12 @@ foreach (array_merge(glob(__DIR__ . '/../src/*.php'), glob(__DIR__ . '/../src/*/
 is_($mapping, [], "no PHP file maps a principal's kind onto actor_kind");
 
 // ===========================================================================
-t('15. REPOSITORY STATE — 027 is applied; 028 (docs/121), 029 (O-1, docs/124) and 030 (onboarding, docs/125) follow it; the ledger agrees; the census gained its line');
+t('15. REPOSITORY STATE — 027 is applied; 028 (docs/121), 029 (O-1, docs/124), 030 (onboarding, docs/125) and 031 (sign-in, docs/127) follow it; the ledger agrees; the census gained its line');
 $files = array_map('basename', glob(__DIR__ . '/../migrations/*.sql')); sort($files);
 is_(count(array_filter($files, fn($f) => str_starts_with($f, '027'))), 1, 'exactly one 027 file exists');
-is_(substr(end($files), 0, 3), '030', 'the last migration file is 030 — operator onboarding from the Admin plane (docs/125), not a T-2 change');
-is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 30, 'the ledger records 30 migrations');
-is_(substr($ins->one('SELECT max(filename) AS f FROM mt_migrations')['f'], 0, 3), '030', 'the latest applied is 030');
+is_(substr(end($files), 0, 3), '031', 'the last migration file is 031 — sign-in requires an active operator (docs/127), not a T-2 change');
+is_((int) $ins->one('SELECT count(*)::int AS n FROM mt_migrations')['n'], 31, 'the ledger records 31 migrations');
+is_(substr($ins->one('SELECT max(filename) AS f FROM mt_migrations')['f'], 0, 3), '031', 'the latest applied is 031');
 $census = file_get_contents(__DIR__ . '/../tools/audit/production_census.sql');
 is_(str_contains($census, 'SECTION 1c') && str_contains($census, 'mt_admin_principals'), true,
     'the production census counts principals by kind and status (docs/79 §1c)');

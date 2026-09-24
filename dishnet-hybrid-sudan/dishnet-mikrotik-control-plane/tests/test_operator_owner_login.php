@@ -179,20 +179,19 @@ $other = $k->handle(new Request('GET', '/api/v1/me/sites', ['Authorization' => '
 is_(array_filter($other->body['sites'] ?? [], static fn($s) => ($s['id'] ?? '') === $A['site']), [],
     "and it cannot see another operator's location");
 
-// GAP, asserted (docs/126 D-4): the sign-in side does not yet canonicalise. The
-// same person typing the number with spaces is not found today. When the
-// operator app is served this assertion must fail and be rewritten.
+// Both gaps this suite asserted when J-1 was built were closed by docs/127
+// phase 1 (migration 031, and the canonical form in the Authenticator). The
+// assertions are REWRITTEN to the new truth, not deleted; the full proofs are in
+// tests/test_operator_sign_in.php.
 $spaced = '+256 772 010 203';
 $c2 = $auth->issueCode($spaced);
-is_($auth->verifyCode($spaced, $c2), null,
-    'GAP (D-4): typed with spaces, today\'s sign-in side does not find the owner — the canonical form must be applied there too');
-
-// GAP, asserted (F-J1-1): sign-in ignores the operator's status.
+$s2 = $auth->verifyCode($spaced, $c2);
+is_([$s2 !== null, $s2['principal_id'] ?? null], [true, $pr['id']],
+    'CLOSED (D-4, docs/127 F-5): typed with spaces, the same owner signs in — one form at both ends');
 $ins->exec("UPDATE mt_customers SET status = 'suspended' WHERE id = ?", [$op['id']]);
 $c3 = $auth->issueCode($canon);
-$s3 = $auth->verifyCode($canon, $c3);
-is_($s3 !== null && $auth->resolve($s3['token']) !== null, true,
-    'GAP (F-J1-1): the owner of a SUSPENDED operator can still sign in — to be closed before the operator app is served');
+is_([$auth->verifyCode($canon, $c3), $auth->resolve($s2['token'])], [null, null],
+    'CLOSED (F-J1-1, migration 031): the owner of a SUSPENDED operator can no longer sign in, and a live session stops');
 $ins->exec("UPDATE mt_customers SET status = 'active' WHERE id = ?", [$op['id']]);
 
 // ===========================================================================
@@ -231,7 +230,10 @@ is_(array_map(static fn($r) => $r['path'], $m->unboundWrites), ['/plans', '/vouc
 // ===========================================================================
 t('9. REPOSITORY STATE — no migration; the review exists and says what is missing');
 $files = array_map('basename', glob($root . '/migrations/*.sql')); sort($files);
-is_(end($files), '030_admin_operator_onboarding.sql', 'no migration was added: the function has existed since 027');
+// J-1 itself added no migration; 031 is docs/127's, and it does not touch the creator.
+$defs = array_values(array_filter($files, static fn($f) => preg_match('/CREATE (OR REPLACE )?FUNCTION mt_admin_principal_create\b/',
+                                     (string) file_get_contents($root . '/migrations/' . $f)) === 1));
+is_($defs, ['027_operator_staff_capabilities.sql'], 'the creator J-1 binds is defined in 027 and nowhere after');
 $doc = (string) @file_get_contents($root . '/../docs/126-OPERATOR-OWNER-LOGIN-J1.md');
 is_(str_contains($doc, 'The code is delivered nowhere') && str_contains($doc, 'F-J1-1') && str_contains($doc, 'Nothing checks the operator'), true,
     'docs/126 records both findings');

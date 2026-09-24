@@ -3003,22 +3003,101 @@ nothing deployed; nothing HARDWARE VERIFIED.
    returns it and the route answers `{status: sent}`. **No SMS or messaging
    provider exists in this repository.** The only gateway on the server is
    **Domain A's** WhatsApp, which may not be used without explicit authorisation.
-   **The operator's decision** (`docs/126` §B.1); SMS is recommended.
+   **The operator chose "SMS (Recommended)"** — designed in `docs/127` §C,
+   phase 2, not yet built.
    - **Never** `DNB_EXPOSE_OTP` on a public host.
    - **Never** a code shown to staff to read out.
-2. **F-J1-1 — sign-in ignores the operator's status.** `mt_auth_issue_code`,
-   `_verify_code` and `_resolve_token` check the **principal's** status only, so
-   a suspended operator's people can still sign in. **Must be closed (a
-   migration) before the operator app is served.** Asserted as a gap in the
-   suite.
-3. **D-4 — the sign-in side must apply the same canonical form.** Today someone
-   typing their number with spaces is not found. Asserted as a gap.
+2. **F-J1-1 — sign-in ignored the operator's status. CLOSED in development by
+   migration 031** (`docs/127` §F). The gap assertion was rewritten to CLOSED,
+   not deleted.
+3. **D-4 — the sign-in side must apply the same canonical form. CLOSED in
+   development** by `Authenticator::keyOf()` (`docs/127` §F). The gap assertion
+   was rewritten to CLOSED.
 4. **The operator app is not served.**
    - `public/pwa/` is the data layer only. The screens are in the prototype.
    - `public/` is **excluded** from the package, a rule recorded *because nothing
      served it*.
    - Serving it is its own review: the unauthenticated auth routes, rate limits,
      and F-8's unaudited auth routes.
+
+## Operator sign-in end to end (`docs/127`) — phase 1 BUILT (migration 031); SMS chosen; development only
+
+The operator chose **"SMS (Recommended)"** for sign-in codes. `docs/127` designs
+all four missing pieces together, because none is useful alone, and builds them
+in order: **1** the operator's status and one phone form · **2** SMS delivery ·
+**3** serving the operator app · **4** staging. **Nothing is exposed to
+operators until phases 1–3 are all in place.** Nothing HARDWARE VERIFIED; F6-B
+NOT AUTHORIZED.
+
+### Phase 1 — BUILT (`docs/127` §F)
+
+- **Migration 031:** `mt_auth_issue_code`, `mt_auth_verify_code` and
+  `mt_auth_resolve_token` require an **active operator** as well as an active
+  person.
+  - Every status but `active` is refused: `suspended` and `closed` alike.
+  - A refused person is treated **exactly as an unknown number**. The code row
+    is still written, naming nobody, and the answer is the same `202` / `401`.
+  - A code issued before a suspension opens nothing after it.
+  - A live session stops **on the next request**.
+  - Reinstatement restores both. Suspension **revokes nothing** (F-4): the live
+    check is the enforcement.
+- **The operator checked is the one the session ACTS FOR** — the session's own
+  `customer_id`, and at verification the code row's — **never the person's
+  current row** (§F.2).
+  - They are equal while P-C holds.
+  - Proved by moving a person inside rolled-back transactions. Two weakenings
+    that read the person's operator are each caught.
+- **The only new privilege:** `dnb_def_auth` may **read** `mt_customers`, with
+  one `USING (true)` policy. EXECUTE on the three functions is still `dnb_app`
+  only. The migration verifies all of this itself before committing.
+  - **Measured:** without that policy, `dnb_def_auth` falls under the `TO public`
+    isolation policy, which it cannot evaluate. Every sign-in then fails with
+    **42501**: closed, and loudly.
+- **One phone form at sign-in:** `Authenticator::keyOf()` applies
+  `Phone::canonical()` in `issueCode()` and `verifyCode()`, where every sign-in
+  enters. Input with no canonical form passes on, matches nobody, and gets the
+  same `202`.
+- **Nothing sets `mt_customers.status`** except the fixtures. 031 makes the
+  status count at sign-in; a writer that suspends or closes an operator is its
+  own instruction.
+- **Proofs:** `tests/test_operator_sign_in.php` **37**, including the control on
+  the control (the pre-031 resolver, swapped back in a rolled-back transaction,
+  lets the suspended session through).
+  - **Twelve weakened copies are all caught:** eight by counted failures, three
+    by **the migration refusing itself**, and one by every sign-in failing
+    closed.
+  - Suite **38 / 3,614 / 0**, twice. install-test 85/85.
+  - Package **125 files**, content digest `9118f2e7…c0316e`. Not deployed.
+- **Staging:** 031 **travels with phase 2's command**. On its own it would change
+  nothing anyone on staging could see (§F.7).
+
+### Phases 2–3 — designed, NOT built
+
+- **SMS (§C).**
+  - A **sealed outbox** row is written **for every request**, so timing does not
+    reveal who is registered.
+  - The code is sealed with `SecretBox` under a key derived from
+    `DNB_SECRET_KEY` with the label `dn-sms-outbox-v1`, the phone as associated
+    data. It is erased when the row settles.
+  - **The worker sends**, through definer claim/settle/expire functions for
+    `dnb_worker` only.
+  - **Codes go only to an active person of an active operator** (S-1).
+  - `Dn\Notify\SmsSender`: `DN_SMS` unset → `NullSms`; `africastalking` → the
+    adapter (**DOCUMENTED, UNVERIFIED** until the operator's account sends a
+    real message); anything else refuses to start. **No fallback.**
+- **SMS operating rules.**
+  - The API key is **typed on the server**, never in chat, a log or the
+    terminal.
+  - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
+  - Domain A's WhatsApp gateway stays unused without explicit authorisation.
+- **Serving the operator app (§D).**
+  - Its **own host name**, and `serve.php` routes by host. The Admin cookie must
+    never be usable from the operator app.
+  - `public/` joins the package.
+  - The app is the prototype's audited screens on the real data layer.
+  - Whether sign-in writes an audit row (F-8) is decided in its own review.
+- **The operator's action:** open an SMS provider account (Africa's Talking was
+  suggested; say first if you prefer another) and request a sender name.
 
 ## Open and parked
 

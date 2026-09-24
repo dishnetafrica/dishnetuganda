@@ -23,6 +23,18 @@ final class Authenticator
     public function __construct(private Database $db) {}
 
     /**
+     * The phone as the key it is stored under. The Admin plane stores every
+     * sign-in phone in one canonical form (docs/126 D-3) and the lookup is
+     * EXACT, so the same form is applied here, where every sign-in enters
+     * (docs/127 F-5). Input with no canonical form passes on as typed, trimmed: it
+     * matches nobody, and every answer stays the same either way.
+     */
+    private static function keyOf(string $phone): string
+    {
+        return Phone::canonical($phone) ?? trim($phone);
+    }
+
+    /**
      * Issue a sign-in code.
      *
      * Returns the plaintext code for the caller to deliver by SMS. In a real
@@ -35,6 +47,7 @@ final class Authenticator
      */
     public function issueCode(string $phone): string
     {
+        $phone = self::keyOf($phone);
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         try {
             $this->db->one('SELECT mt_auth_issue_code(?,?,?::interval) AS id',
@@ -49,6 +62,7 @@ final class Authenticator
     /** @return array{token:string,principal_id:string,customer_id:string}|null */
     public function verifyCode(string $phone, string $code): ?array
     {
+        $phone = self::keyOf($phone);
         $row = $this->db->one(
             'SELECT principal_id, customer_id FROM mt_auth_verify_code(?,?)',
             [$phone, $this->hash($code)]
