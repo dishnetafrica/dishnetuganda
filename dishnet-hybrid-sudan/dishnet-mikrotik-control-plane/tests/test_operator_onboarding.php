@@ -336,6 +336,8 @@ $files = array_map('basename', glob($root . '/migrations/*.sql')); sort($files);
 is_(array_values(array_filter($files, static fn($f) => str_starts_with($f, '030'))), ['030_admin_operator_onboarding.sql'], 'exactly one 030 file');
 is_((int) $ins->one("SELECT count(*)::int AS n FROM mt_migrations WHERE filename = '030_admin_operator_onboarding.sql'")['n'], 1, 'and the ledger records it');
 $doc = (string) @file_get_contents($root . '/../docs/125-OPERATOR-ONBOARDING-FROM-THE-ADMIN-PANEL.md');
-is_(str_contains($doc, 'Development schema only') && str_contains($doc, 'derive, never accept'), true, 'docs/125 says development only, and states the rule');
+// Rewritten, not deleted, when the staging result came in (docs/125 §F): the
+// document now records staging, and must still say production holds none of it.
+is_(str_contains($doc, 'REDEPLOYED on staging') && str_contains($doc, 'Not in production') && str_contains($doc, 'derive, never accept'), true, 'docs/125 records the staging result, says it is not in production, and states the rule');
 
 exit(t_summary());

@@ -1,10 +1,10 @@
 # 125 — Operators, their HotSpot service and their locations, created from the Admin panel
 
 **Status:** review written **before** code, 2026-09-23 (§A–§C). The build record
-follows in §D. **Development schema only; nothing deployed.** The staging command
-for this work was to come **after** the migration-029 result. That result is in:
-029 was REDEPLOYED on staging at 2026-09-24 04:14:49 UTC (`docs/124` §H). **The
-staging command for 030 is handed over (§E); its result is PENDING (§F).**
+follows in §D. **REDEPLOYED on staging 2026-09-24 04:47:05 UTC, first attempt,
+every check held (§F).** It came after the migration-029 result (`docs/124` §H),
+by its own command pinned to its own commit (§E). **Not in production:** the
+DishNet host holds no production Domain B (`docs/123` §F).
 
 **Why now.** Roadmap step 3. The operator approved the plan *"add the fix
 [O-1] … then I'll start on the screens for creating real operators and their
@@ -153,7 +153,7 @@ disappeared. One CSS line makes `hidden` win. **Measured:** the gate is
   two application containers. It is not written yet, so nothing can race the
   029 command. **The 029 result is back** — REDEPLOYED 2026-09-24 04:14:49 UTC
   — so the prerequisite is met. **The command is written, rehearsed and handed
-  over in §E.**
+  over in §E, and REDEPLOYED on staging at 04:47:05 UTC (§F).**
 - **The operator-owner login** (`POST /customers/{id}/principals`) is the next
   decision: `docs/116` J-1 reserves it for its own instruction.
 - Plans and voucher batches from the Admin plane wait for G-C2; the
@@ -240,10 +240,75 @@ The counts are in §E.2.
 
 ### E.2 Counts
 
-PENDING — filled in from the final rehearsal run.
+**98 of 98 passed on two consecutive runs** (3 min 12 s and 3 min 11 s). The
+first full run passed 97 of 97. After it, the fake `docker logs` was fixed: it
+read `--since` as the container name, so the sandbox never saw the worker's log
+line, although the real server prints it. One assertion was added for the
+worker's binding. The script under test did not change between the runs.
+Afterwards the development cluster held no leaked role membership, and ports
+8099 and 443 were free.
+
+| Scenario | Assertions |
+|---|---|
+| setup: the 029 command byte for byte; the branch tip no longer builds the reviewed digest | 2 |
+| R1 staging now | 43 |
+| R2 run again | 6 |
+| R3 029 not applied | 5 |
+| R4 wrong digest | 4 |
+| R5 a default privilege; 030 refuses by itself | 8 |
+| R7 a role membership after the migration | 7 |
+| R8 a store grant after the migration | 4 |
+| R6 the stage-2 posture | 7 |
+| M1–M5 broken copies | 12 |
 
 ---
 
 ## F. Result
 
-PENDING — the operator's pasted output is recorded here.
+**REDEPLOYED 2026-09-24 04:47:05 UTC, on the first attempt, with no
+correction.** The operator ran the §E command as root on the server, starting at
+04:46:38 UTC, and pasted the whole output back. It printed no secret. The log
+stays on the server under `/root/dnb-staging-evidence/`.
+
+| Step | What the output shows |
+|---|---|
+| 0 | deployed build `780023ff…` (029); the real DishNet staff login — trusted proxy `172.22.0.1`, origin `https://portal-staging.dishnetuganda.com`; 29 migrations, last 029; **029 found applied, and O-1 `1|1|2|true`, before anything else** |
+| 1 | built from commit **`46c778e6efd5…`, fetched by its hash**; 123 files verified against `SHA256SUMS`; archive sha256 `b9719337…03c461a6`; **content digest `4a629184…`, the reviewed one** |
+| 2 | the new build's doctor, production posture: **24 checks, 23 ok, 1 warn, 0 blockers**. The warning is printed, and it is the expected one: *plugin schema — 29 of 30 migration(s) applied* |
+| 3 | tree swapped, previous kept at `/opt/dnb-staging/app.prev-20260924T044638Z`; **the installer applied exactly one migration, 030**; 30 recorded, 30 files in the build |
+| 4 | store owned by `dnb_def_prov`, row security off; writers **`3|3|0`**; helpers **`2|0`**; the location writer takes `p_service, p_name, p_location, p_idempotency_key, p_actor` — **no operator**; **O-1 after: `1|1|2|true`**; projections: 5 sites, 0 crossing. **Execution test as `dnb_adminwrite`, rolled back:** an operator created; the replay returned the same one; the reused key refused (*this idempotency key was already used for a different request*); the service started for it; the location's operator was the operator of its service. **8 login roles, enumerated from the instance: every one refused the store, and the 7 other than `dnb_adminwrite` refused all three writers** — `dnb`, the owner, included. Positive control: the store read as the superuser, 0 rows. **Residue 0** |
+| 5 | loopback: panel, `routers.js` and **`onboarding.js` 200**; **the sign-in gate fix is in the served page**; session 401 from the `dishnet` provider, second factor required. **An anonymous POST on each of the three new routes: 401** — routed and guarded. Through Traefik: `/` 200, `onboarding.js` 200, session 401 the same. Worker `simulated-routeros`. **Only `dnb-staging-api` and `dnb-staging-worker` changed, and no container was removed** |
+
+The doctor's warning is consistent with the expectation `docs/124` §H recorded
+for the 029 run: on the same server, in the same posture, the one warning is the
+migration the installer has not yet applied. It remains an observation of this
+run, not of that one.
+
+**What this establishes, on staging:**
+
+- The three onboarding writes are live, behind the real staff login and one
+  capability each.
+- **Only `dnb_adminwrite` can call the writers, and no login role can touch the
+  store.** This is proved by execution for every login role the instance has,
+  not read off the grants.
+- In the deployed schema, a replay returns the same operator, a reused key is
+  refused, and a location's operator is derived from its service.
+- O-1 is untouched, and the blank band is gone from the served page.
+
+**What it does not establish:** that the screens work in a browser for a real
+person — that is the next thing to try (§F.1). Nothing about production, which
+holds no Domain B (`docs/123` §F). Nothing about a MikroTik: nothing is HARDWARE
+VERIFIED, and F6-B stays NOT AUTHORIZED. The operator-owner login (J-1) is still
+not bound.
+
+### F.1 Trying the screens
+
+Sign in at `https://portal-staging.dishnetuganda.com` as a DishNet staff member
+with Admin or Sales. Open *Operators & sites*, then *Add an operator*. Open the
+operator and use *Start the HotSpot service*, then *Add a location*.
+
+**What is created there stays.** An operator cannot be deleted. Its creation
+writes an audit row, and that row's key to the operator is `ON DELETE RESTRICT`
+(`004_audit.sql`), so the delete is refused, as `docs/100` proved by execution.
+Nothing in this build edits or ends an operator either. Staging data is not production data, but give
+anything created there a name that says it is a test.

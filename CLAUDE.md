@@ -2859,12 +2859,13 @@ tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
   `mt_vouchers.site_id NOT NULL`, U-1, U-5, B-3, F-3. `POST /sites` was still 501
   at 029; migration 030 binds it (next section).
 
-## Operators, their HotSpot service and their locations from the Admin panel — BUILT (migration 030, `docs/125`); development only
+## Operators, their HotSpot service and their locations from the Admin panel — BUILT (migration 030, `docs/125`); REDEPLOYED on staging 2026-09-24 04:47:05 UTC
 
 **Roadmap step 3, started on the operator's approval of the plan.** Development
-schema only; **nothing deployed.** The staging command for 030 comes **after**
-the 029 result, as its own command pinned to its own commit, so the 029 command
-stays valid. Nothing here is HARDWARE VERIFIED.
+schema, and **staging since 2026-09-24 04:47:05 UTC** (`docs/125` §F). It came
+after the 029 result, as its own command pinned to its own commit (`46c778e`,
+digest `4a629184…`). **Not in production** — the host holds no production
+Domain B. Nothing here is HARDWARE VERIFIED.
 
 - **Migration 030:** `mt_admin_idempotency`, the **non-tenant** idempotency store
   `docs/108` 0b required before the first spine writer. It is keyed
@@ -2913,8 +2914,50 @@ stays valid. Nothing here is HARDWARE VERIFIED.
   copies of 030 are each caught**: no `ON CONFLICT`, store created as the owner,
   writers granted to `dnb_admin`, mutation before the replay check. Suite **36
   suites / 3,500 / 0 failed**, twice; install-test **85/85**; `o1_acceptance.php`
-  **75**; package **123 files**, digest `4a629184…c5a5fd571` (not deployed, not
-  pinned anywhere).
+  **75**; package **123 files**, digest `4a629184…c5a5fd571` — pinned by the
+  staging command and deployed on staging.
+- **The staging command** (`scripts/dnb-staging-redeploy.sh`, rewritten again;
+  the 029 version as run stays at `938c002`, the 028 one at `d0fca1e`):
+  **requires 029 already applied, with its key** — it applies 030 on top of 029
+  and nothing else. It builds `46c778e` by hash, **prints the doctor's warning
+  lines**, and puts the previous tree back if 030 refuses. Then it **verifies
+  independently**:
+  - the catalogue: the store's owner; writers `3|3|0`, where an ACL at its
+    default counts as `PUBLIC`; helpers `2|0`; a location writer with no
+    operator; O-1 `1|1|2|true`;
+  - an **execution test as `dnb_adminwrite`, always rolled back**: create, the
+    replay returns the same operator, a reused key is refused, a service starts,
+    and the location's operator is derived;
+  - **every other login role, enumerated from `pg_roles`, refused each writer,
+    and every login role refused the store**; residue 0.
+
+  Only then do the API and worker restart, and each new route answers an
+  anonymous POST with 401. **No census step:** 030 validates nothing against
+  existing rows. **Measured: `CREATE POLICY` takes ACCESS EXCLUSIVE until
+  commit; `GRANT` takes no table lock.**
+- **Rehearsed** in `scripts/harness/redeploy/` from the post-029 state, built by
+  the **real 029 command** byte for byte: **98/98 on two consecutive runs**. A
+  first run passed 97/97, before a stub fix and one added assertion. Two leaks
+  are planted after the migration. **A role membership (`GRANT dnb_adminwrite
+  TO dnb_admin WITH INHERIT TRUE`) leaves the catalogue reading `3|3|0`, and only
+  the execution test finds it.** Five broken copies of the script are each
+  caught. Roles are cluster-wide, so the harness revokes the membership it
+  plants, at exit too.
+- **RESULT (`docs/125` §F): REDEPLOYED 2026-09-24 04:47:05 UTC, first attempt,
+  no correction.**
+  - Built `4a629184…` from `46c778e` by hash.
+  - Doctor 23 ok / 1 warn / 0 blockers. The warning is printed and is the
+    expected one, *29 of 30 applied*. That is consistent with the `docs/124` §H
+    expectation for the 029 run — same server, same posture — but still not an
+    observation of that run.
+  - The installer applied **exactly 030**. Catalogue `3|3|0` and `2|0`, O-1
+    `1|1|2|true` before and after.
+  - The rolled-back execution test passed. **8 login roles were refused by
+    execution, the owner `dnb` included.** Residue 0.
+  - `onboarding.js` and the gate fix are served. **The three routes answer 401
+    anonymously**, and only the API and worker changed.
+  - **Next: try the screens in a browser.** What is created there stays: an
+    operator's audit row holds it with `ON DELETE RESTRICT`.
 - **Not here, deliberately:** the operator-owner login (J-1, its own
   instruction), the uCRM link (U-1), plans and vouchers (G-C2), editing or ending
   anything. `mt_customer_create`'s pre-existing `dnb_admin` EXECUTE is recorded
