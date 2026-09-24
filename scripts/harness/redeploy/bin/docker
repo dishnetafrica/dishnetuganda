@@ -37,8 +37,9 @@ case "$cmd" in
   ps)
     case "$1" in -aq) cut -d'|' -f1 "$S/containers";; --format) cut -d'|' -f2 "$S/containers";; *) echo "STUB: ps $*" >&2; exit 99;; esac;;
   logs)
-    name=$1; shift; tl=""
-    while [ $# -gt 0 ]; do case "$1" in --tail) tl=$2; shift 2;; --since) shift 2;; *) shift;; esac; done
+    # Options may come before or after the name, as with the real CLI.
+    name=""; tl=""
+    while [ $# -gt 0 ]; do case "$1" in --tail) tl=$2; shift 2;; --since) shift 2;; -*) shift;; *) name=$1; shift;; esac; done
     case "$name" in
       dnb-staging-api) [ -f "$S/api.log" ] || exit 0; if [ -n "$tl" ]; then tail -n "$tl" "$S/api.log"; else cat "$S/api.log"; fi;;
       *traefik*) cat "$S/traefik.log" 2>/dev/null || true;;
@@ -122,9 +123,18 @@ case "$cmd" in
           "UPDATE mt_sites SET service_id = (SELECT v.id FROM mt_services v WHERE v.customer_id <> mt_sites.customer_id ORDER BY v.id LIMIT 1)
             WHERE id = (SELECT id FROM mt_sites ORDER BY id LIMIT 1)" >> "$S/race.log" 2>&1
       fi
+      if [ -n "${HSIM_PRE_INSTALL_SQL:-}" ] && [ "$3" = install ]; then
+        # A fault planted just before the installer runs (redeploy harness, migration 030).
+        psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U postgres -d "$DB" -c "$HSIM_PRE_INSTALL_SQL" >> "$S/inject.log" 2>&1
+      fi
       if [ -n "${HSIM_MANGLE_BOOTSTRAP:-}" ] && [ "$3" = staff:bootstrap ]; then
         # A bootstrap whose password line no parser expects: the fallback must still deliver it.
         ( set -o pipefail; cd "$appdir" && env -i "${list[@]}" "$@" | sed -E 's/^    ([a-z2-9]{6}-)/    pw: \1/' )
+      elif [ -n "${HSIM_POST_INSTALL_SQL:-}" ] && [ "$3" = install ]; then
+        # A fault planted just after the installer committed: the independent verification must find it.
+        rc=0; ( cd "$appdir" && exec env -i "${list[@]}" "$@" ) || rc=$?
+        psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U postgres -d "$DB" -c "$HSIM_POST_INSTALL_SQL" >> "$S/inject.log" 2>&1
+        exit $rc
       else
         ( cd "$appdir" && exec env -i "${list[@]}" "$@" )
       fi

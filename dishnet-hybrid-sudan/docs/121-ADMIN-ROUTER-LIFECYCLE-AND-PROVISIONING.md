@@ -273,6 +273,10 @@ curl -fsSL -o /root/dnb-redeploy.sh https://raw.githubusercontent.com/dishnetafr
   && sh /root/dnb-redeploy.sh 2>&1 | tee /root/dnb-staging-evidence/redeploy-$(date -u +%Y%m%dT%H%M%SZ).log
 ```
 
+**This URL has since served later builds' commands** (`docs/124` §E, then
+`docs/125` §E). The 028 command as run stays at commit `d0fca1e`:
+`https://raw.githubusercontent.com/dishnetafrica/dishnetuganda/d0fca1e07ec4486bb44b2b5e4b1f993589a52396/scripts/dnb-staging-redeploy.sh`.
+
 `scripts/dnb-staging-redeploy.sh` (repository root, outside the package):
 
 | Step | What it does | Stops when |

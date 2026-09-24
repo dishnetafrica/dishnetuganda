@@ -3,7 +3,8 @@
 **Status:** review written **before** code, 2026-09-23 (§A–§C). The build record
 follows in §D. **Development schema only; nothing deployed.** The staging command
 for this work was to come **after** the migration-029 result. That result is in:
-029 was REDEPLOYED on staging at 2026-09-24 04:14:49 UTC (`docs/124` §H).
+029 was REDEPLOYED on staging at 2026-09-24 04:14:49 UTC (`docs/124` §H). **The
+staging command for 030 is handed over (§E); its result is PENDING (§F).**
 
 **Why now.** Roadmap step 3. The operator approved the plan *"add the fix
 [O-1] … then I'll start on the screens for creating real operators and their
@@ -151,8 +152,98 @@ disappeared. One CSS line makes `hidden` win. **Measured:** the gate is
   separate command pinned to this build's commit applies 030 and restarts the
   two application containers. It is not written yet, so nothing can race the
   029 command. **The 029 result is back** — REDEPLOYED 2026-09-24 04:14:49 UTC
-  — so the prerequisite is met.
+  — so the prerequisite is met. **The command is written, rehearsed and handed
+  over in §E.**
 - **The operator-owner login** (`POST /customers/{id}/principals`) is the next
   decision: `docs/116` J-1 reserves it for its own instruction.
 - Plans and voucher batches from the Admin plane wait for G-C2; the
   `session.disconnect` replay fix is still owed before F6-B.
+
+---
+
+## E. The handover — one command, as root on the server
+
+```sh
+curl -fsSL -o /root/dnb-redeploy.sh https://raw.githubusercontent.com/dishnetafrica/dishnetuganda/claude/study-this-jhe2eg/scripts/dnb-staging-redeploy.sh \
+  && sh /root/dnb-redeploy.sh 2>&1 | tee /root/dnb-staging-evidence/redeploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+The same URL and file name as the 029 command, rewritten for this build. The 029
+version, as the operator ran it, stays at commit `938c002`. Running the command
+again is safe: it notes that the build and 030 are already in place, applies
+nothing, and verifies everything again.
+
+| Step | What it does | If it fails |
+|---|---|---|
+| 0 | read-only checks; reads which staff identity the API runs; refuses if `DN_ALLOW_REAL_BINDINGS` is set. **Requires 029 already applied, with its key in place** (`1|1|2|true`) — this command applies 030 on top of 029 and nothing else, because 029 needs the census re-taken and only its own command does that | stops, nothing changed |
+| 1 | builds the artifact **on the server** from the reviewed commit **`46c778e`**, fetched by its hash; refuses unless the content digest is `4a629184…` and the build carries 030 and `onboarding.js` | stops, nothing changed |
+| 2 | the new build's doctor must report no blocker. **Its warning lines are now printed**; one is expected, *plugin schema — 29 of 30 migration(s) applied*, because the doctor runs before the installer | stops, nothing changed |
+| 3 | swaps the tree (the previous one kept) and runs the installer, which applies only 030. 030 checks its own catalogue and refuses to commit if anything is wrong | if 030 refuses, **the previous tree is put back** and nothing is restarted |
+| 4 | **verifies independently.** (a) The catalogue: the store is owned by `dnb_def_prov` with no row security. The three writers are `SECURITY DEFINER`, owned by `dnb_def_prov`, and executable by `dnb_adminwrite` and nobody else; an ACL still at its default counts as `PUBLIC` holding EXECUTE. The helpers are callable by their owner only. The location writer takes no operator. 029's key holds, and the projections show sites with none crossing. (b) **An execution test as `dnb_adminwrite`, always rolled back:** create an operator; replay it and get the same operator; reuse its key for another name and be refused; start its service; add a location whose operator is **derived** from the service. (c) **Every other login role, enumerated from `pg_roles`, is refused each of the three writers, and every login role is refused the store**, each call in its own rolled-back transaction; the superuser's read of the store is the positive control. (d) Residue 0: no audit row by the probe actor, and no probe operator, location or key | stops with the reason; the new schema is in place and the old code keeps serving until someone restarts it (the previous build does not use 030) |
+| 5 | restarts **only** the API and worker. Loopback: panel, `routers.js` and **`onboarding.js`** 200; the sign-in gate fix of §D.3 present in the page; session 401 from the `dishnet` provider. **Each of the three new routes answers an anonymous POST with 401** — routed and guarded, where a missing route answers 404 and an unbound one 501. Through the hostname: `/` and `onboarding.js` 200, session 401. No other container changed | stops with the reason |
+| 6 | one result line | — |
+
+**No census step, deliberately.** 030 validates nothing against existing rows: it
+adds a table, five functions, grants and row policies. The census was GATE 1 for
+029, and a census that is CLEAR authorises nothing anyway (`docs/79` §7b). The
+command keeps the cheap evidence that O-1 still holds — the catalogue line and the
+projection check — and requires 029 to be in place before it starts.
+
+**Locks, measured.** `CREATE POLICY` takes **ACCESS EXCLUSIVE** on its table until
+the migration commits; `GRANT` takes no table lock (both measured in a
+rolled-back transaction on the development cluster). 030 creates policies on
+`mt_customers`, `mt_services` and `mt_sites`, so readers of those three tables wait
+for the length of the migration — milliseconds on staging's handful of rows.
+Nothing fails; the API and worker keep running.
+
+**Why an execution test and not only the catalogue.** Grants are the weakest
+evidence in this project's hierarchy (`docs/103`). Rehearsal scenario R7 plants
+`GRANT dnb_adminwrite TO dnb_admin WITH INHERIT TRUE` after the migration: the
+catalogue still reads `3|3|0`, because a role membership is not in a function's
+ACL, and **only the execution test finds it**.
+
+It prints no secret, so its whole output may be pasted back. It touches no
+production container, Traefik file, DNS record, firewall rule or other
+PostgreSQL instance. The API keeps the real DishNet staff login.
+
+**Rollback of the code**, printed by the script: move the previous tree back and
+restart the two containers. Migration 030 needs no undoing — the previous build
+never calls the table, the functions or the policies it adds.
+
+### E.1 Rehearsal — `scripts/harness/redeploy/`
+
+The real script, against a sandbox rebuilt from nothing into the staging state
+**now**: the 028 build reproduced from commit `9f95353`, the simulated estate, the
+stage-2 route, the API switched to the real staff login by the real
+`dnb-staging-staff-login.sh`, and then **029 applied by the real 029 command**,
+byte for byte the one the operator ran (sha256 `c558e26a…`, from commit
+`938c002`). Only `docker` is faked; every database is real PostgreSQL. Before any
+scenario the harness moves the branch on past the reviewed commit and asserts
+that the new tip no longer builds the reviewed digest.
+
+The fake `docker` gained two hooks for this: SQL planted just before the
+installer runs, and just after it commits.
+
+| Scenario | What is asserted |
+|---|---|
+| **R1** staging now | exit 0; the pinned commit built, not the tip; the doctor's one warning printed (*29 of 30 applied*); the installer applies exactly 030; ledger 30; the catalogue lines; the rolled-back execution test (replay, reused key refused, operator derived); **every login role of the cluster listed and refused**, the owner included; residue 0; `onboarding.js` and the gate fix served; the three anonymous POSTs 401; the hostname; exactly the API and worker changed; the estate's counts unchanged by the command |
+| **R2** run again | exit 0; build and 030 already in place; *schema already current*; verification passes again |
+| **R3** 029 not applied (ledger 28) | refused in step 0 with *on top of 029 and nothing else*; nothing built, installed or restarted; ledger 28 |
+| **R4** wrong digest pinned | refused before anything changes; ledger 29, no store, no restart |
+| **R5** a default privilege planted before the installer that would hand `dnb_admin` the store | **030 refuses by its own check**, naming `dnb_admin`; the previous tree is live again and the refused one kept aside; ledger 29, no store, no restart |
+| **R7** `GRANT dnb_adminwrite TO dnb_admin WITH INHERIT TRUE` planted after the installer | the catalogue still reads `3|3|0`; **the execution test names `dnb_admin`**; no restart; the writes it made rolled back; the membership revoked again, because roles are cluster-wide |
+| **R8** `GRANT SELECT ON mt_admin_idempotency TO dnb_app` planted after the installer | the execution test names `dnb_app`; no restart |
+| **R6** the stage-2 posture | exit 0 with the development identity; doctor `--disposable`; the three anonymous POSTs 401; basic auth in front |
+| **M1–M5** | five broken copies of the script, each caught: both step-0 gates removed (029 would ride in without its census, and the ledger leaves 28); no swap-back on refusal; the writer refusal not enforced (R7 then passes); the store refusal not enforced (R8 then passes); the execution test committing instead of rolling back (the script's own residue check fails it) |
+
+The counts are in §E.2.
+
+### E.2 Counts
+
+PENDING — filled in from the final rehearsal run.
+
+---
+
+## F. Result
+
+PENDING — the operator's pasted output is recorded here.

@@ -169,6 +169,11 @@ curl -fsSL -o /root/dnb-redeploy.sh https://raw.githubusercontent.com/dishnetafr
   && sh /root/dnb-redeploy.sh 2>&1 | tee /root/dnb-staging-evidence/redeploy-$(date -u +%Y%m%dT%H%M%SZ).log
 ```
 
+**Since 2026-09-24 this URL serves the next build's command** (`docs/125` §E),
+as this command replaced the 028 one before it. The 029 command, byte for byte as
+the operator ran it (sha256 `c558e26a…`), stays at commit `938c002`:
+`https://raw.githubusercontent.com/dishnetafrica/dishnetuganda/938c00291d8ff7519ddce88b7e66627ac7d9fb46/scripts/dnb-staging-redeploy.sh`.
+
 `scripts/dnb-staging-redeploy.sh` is rewritten for this build. Its steps:
 
 | Step | What it does | If it fails |
@@ -283,7 +288,9 @@ line. By the doctor's own rules the warning expected at that moment is
 doctor runs **before** the installer. The warning `docs/122` recorded (*no staff
 on record*) no longer applies, since `dishnet-admin` exists. **This is an
 expectation, not an observation.** The next staging command prints its warning
-lines.
+lines. Its rehearsal, in the same posture, prints exactly one — *plugin schema,
+29 of 30 migration(s) applied*, 23 ok / 1 warn (`docs/125` §E.1). That is
+consistent with the expectation, and still not an observation of this run.
 
 **What this establishes, on staging:**
 
