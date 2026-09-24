@@ -295,16 +295,41 @@ is_(str_contains((string) file_get_contents($root . '/src/Plugin/Credentials.php
     'the generated secrets file quotes its values too');
 
 // ───────────────────────────────────────────────────────────────────────────
-t('the package excludes what must never ship');
+t('the package ships what runs and excludes what must never ship — read from the built archive');
 
+// public/ was the fourth exclusion here until docs/127 phase 3 shipped the
+// operator app (H-11, on the operator's approval). The check it had asked only
+// whether package.sh NAMED public/ — and the comment explaining why public/
+// now ships named it, so the check stayed green while the rule was reversed.
+// A guard that reads words passes on words. The exclusions are now measured
+// on the archive the script actually builds.
 $pkg = (string) file_get_contents($root . '/plugin/bin/package.sh');
-foreach (['tests', 'tools', 'docs', 'public'] as $dir) {
+foreach (['tests', 'tools', 'docs'] as $dir) {
     is_(str_contains($pkg, $dir . '/'), true, "package.sh names {$dir}/ in its exclusion rationale");
+    is_(str_contains($pkg, '"$root/' . $dir . '"'), false, "and never copies {$dir}/");
 }
-foreach (['src', 'panel', 'plugin', 'migrations'] as $dir) {
+foreach (['src', 'panel', 'public', 'plugin', 'migrations'] as $dir) {
     is_(str_contains($pkg, '"$root/' . $dir . '"') || str_contains($pkg, '"$root"/' . $dir . '/*.sql'), true,
         "package.sh copies {$dir}/");
 }
+$pkgOut = sys_get_temp_dir() . '/dnb-pkg-' . getmypid();
+exec('sh ' . escapeshellarg($root . '/plugin/bin/package.sh') . ' ' . escapeshellarg($pkgOut) . ' 2>&1', $pkgLog, $pkgRc);
+is_($pkgRc, 0, 'package.sh builds the archive and verifies it against its own checksums');
+$pkgTar = (glob($pkgOut . '/*.tar.gz') ?: [''])[0];
+exec('tar -tzf ' . escapeshellarg($pkgTar) . ' 2>/dev/null', $pkgEntries);
+$shipped = array_values(array_filter(array_map(static fn($e) => (string) preg_replace('#^[^/]+/#', '', $e), $pkgEntries),
+    static fn($n) => $n !== '' && !str_ends_with($n, '/')));
+exec('rm -rf ' . escapeshellarg($pkgOut));
+is_(count($shipped) > 100, true, 'control: the archive lists its files (' . count($shipped) . '), so an absence below means something');
+foreach (['public/index.php', 'public/app/index.html', 'public/app/app.js', 'public/app/app.css', 'public/app/icon.svg',
+          'public/pwa/api.js', 'public/pwa/store.js', 'plugin/bin/serve-app.php', 'plugin/bin/serve.php',
+          'panel/index.html', 'bin/worker.php', 'VERSION', 'SHA256SUMS'] as $f) {
+    is_(in_array($f, $shipped, true), true, "the archive ships {$f}");
+}
+foreach (['tests/', 'tools/', 'docs/'] as $d) {
+    is_(array_values(array_filter($shipped, static fn($n) => str_starts_with($n, $d))), [], "the archive holds nothing under {$d}");
+}
+is_(array_values(array_filter($shipped, static fn($n) => basename($n) === '.env')), [], 'and no .env anywhere in it');
 is_(str_contains($pkg, 'sha256sum -c SHA256SUMS'), true,
     'the builder verifies the archive by extracting it, not by having written it');
 is_(str_contains($pkg, 'rm -f "$dest/plugin/.env"'), true,
@@ -325,6 +350,13 @@ foreach (['plugin/bin/serve.php' => 'the packaged server',
         "{$label} requires the resolved path to sit under panel/");
     is_(str_contains($src, 'X-Content-Type-Options'), true, "{$label} sends nosniff");
 }
+// The operator app's server (docs/127 §H) serves from public/app and public/pwa,
+// not panel/: the same containment, under each prefix's OWN directory. It is
+// measured over HTTP — traversal, symlinks, .php — in test_operator_app.php.
+$appSrv = (string) file_get_contents($root . '/plugin/bin/serve-app.php');
+is_(str_contains($appSrv, 'realpath'), true, 'the operator app server resolves the target with realpath too');
+is_(preg_match('/str_starts_with\(\$target,\s*\$base \. DIRECTORY_SEPARATOR\)/', $appSrv), 1,
+    'and requires the resolved path to sit under its own directory');
 
 // ───────────────────────────────────────────────────────────────────────────
 t('bootstrap.sql does the privileged step and nothing more');

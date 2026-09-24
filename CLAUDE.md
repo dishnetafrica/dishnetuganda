@@ -418,8 +418,13 @@ invent a staff identity to work around this.**
   server — no SSH client, no DSN, egress 403. `plugin/bin/install-test.sh` is
   the operator's equivalent; `plugin/doc/INSTALL.md` ships the runbook.
 - The package **excludes `tests/`** (it needs a BYPASSRLS fixture identity),
-  `tools/`, `docs/`, and **`public/`** (the customer API front controller, which
-  nothing in this install serves). Do not add them.
+  `tools/` and `docs/`. Do not add them.
+- **`public/` was the fourth exclusion until 2026-09-24**, recorded because
+  nothing served it. **It ships since `docs/127` phase 3, on the operator's
+  explicit approval** (*"Yes, own address (Recommended)"*). Only
+  `plugin/bin/serve-app.php`, its own process, serves it. The old guard only
+  read `package.sh`'s words and stayed green through the reversal; it now reads
+  the built archive.
 - Both static servers resolve with `realpath` and require containment under
   `panel/`. Ten representative paths — source, migration, manifest, env
   template, and the generated secrets file — are asserted unreachable.
@@ -3014,14 +3019,11 @@ nothing deployed; nothing HARDWARE VERIFIED.
 3. **D-4 — the sign-in side must apply the same canonical form. CLOSED in
    development** by `Authenticator::keyOf()` (`docs/127` §F). The gap assertion
    was rewritten to CLOSED.
-4. **The operator app is not served.**
-   - `public/pwa/` is the data layer only. The screens are in the prototype.
-   - `public/` is **excluded** from the package, a rule recorded *because nothing
-     served it*.
-   - Serving it is its own review: the unauthenticated auth routes, rate limits,
-     and F-8's unaudited auth routes.
+4. **The operator app was not served. Served in development since `docs/127`
+   phase 3** (§I): `plugin/bin/serve-app.php`, its own process, and `public/`
+   ships. F-8, the sign-in routes' audit, stays OPEN (H-10).
 
-## Operator sign-in end to end (`docs/127`) — phases 1 and 2 BUILT (migrations 031, 032); development only
+## Operator sign-in end to end (`docs/127`) — phases 1, 2 and 3 BUILT (migrations 031, 032; the operator app served); development only
 
 The operator chose **"SMS (Recommended)"** for sign-in codes. `docs/127` designs
 all four missing pieces together, because none is useful alone, and builds them
@@ -3124,21 +3126,70 @@ NOT AUTHORIZED.
     exercised.
   - Package **134 files**, `0b9b1a58…c4684f5`. Not deployed.
 
-### Phase 3 — designed, NOT built
+### Phase 3 — BUILT (`docs/127` §H review, §I build); development only
 
-- **Serving the operator app (§D).**
-  - Its **own host name**, and `serve.php` routes by host. The Admin cookie must
-    never be usable from the operator app.
-  - `public/` joins the package.
-  - The app is the prototype's audited screens on the real data layer.
-  - Whether sign-in writes an audit row (F-8) is decided in its own review.
+The operator approved it: *"Yes, own address (Recommended)"*.
+
+- **Two processes, not host routing in one** (H-1). `plugin/bin/serve-app.php`
+  serves the app. It holds **exactly** `DNB_DSN`, `DNB_APP_PASS`,
+  `DNB_TOKEN_PEPPER` and `DNB_SECRET_KEY`, proved from `/proc/<pid>/environ`.
+  `serve.php` stays the Admin server. **Each answers 404 for the other's
+  surface**, tested both ways, each with a positive control.
+- **What it passes:** exactly `/api/v1/me`, `/api/v1/me/…` and `/api/v1/auth/…`
+  to `public/index.php`. The manifest's `app.api` states `exact` and `prefixes`
+  apart, because a bare `/api/v1/me` prefix would let `/api/v1/meta` through.
+- **What it refuses — its own `404`:** the Admin API, **`/internal/*`**, any
+  `.php` as a file, traversal plain and encoded, a symlink out of its
+  directory, and every other path. Static files come only from `public/app` and
+  `public/pwa`, each contained by `realpath` under its **own** directory, with
+  an extension allow-list that has no `php`.
+- **Five headers on every answer** (H-3): a CSP of `script-src 'self'` with
+  nothing widening it, plus `nosniff`, `no-referrer`, COOP and
+  `Permissions-Policy`. So **the bundle carries no inline script, handler or
+  style, and no other origin**, and the suite asserts all four.
+- **Never point a web server's document root at `public/`.** That would expose
+  `/internal/radius/accounting`.
+- **The screens** (`public/app/`) are the prototype's, on the real data layer.
+  - No mock data, and one `fetch`, in `api.js`.
+  - The token lives in `sessionStorage` only.
+  - `FORBIDDEN` (403) is its own state.
+  - Codes are *"on their way"* only **if** the number can sign in.
+  - Vouchers are recorded, but **guests cannot use them yet**.
+  - Access points, billing and support are *not available*, and a 202 is
+    *queued*.
+- **No `Idempotency-Key` on voucher creation, and no POST is ever retried**
+  (H-8): today a replay makes an unpublished second batch (I-A).
+- **Not built:** J-14 staff screens, plan editing, a service worker, the guest
+  portal, billing and support. **F-8 (sign-in audit) stays OPEN.**
+- **Proofs:**
+  - `tests/test_operator_app.php` **152**, over real HTTP, including a
+    sign-in with the code the worker sent.
+  - **21 weakened copies** of the server and the bundle, plus 2 of the
+    builder, are each caught.
+  - Headless Chromium: every screen, **zero CSP violations**.
+  - Suite **40 / 3,906 / 0, twice**; install-test 86/86; package **142 files**, `2874d643…a0c4`. Not deployed.
+
+### Phase 4 — the staging command (next)
+
+- **Shape (H-13):**
+  - one command applies 031 and 032;
+  - it adds a `dnb-staging-app` container with only the four variables,
+    published on port **8098** (loopback and the bridge gateway, the 8099
+    precedent);
+  - it adds a Traefik route for **`app-staging.dishnetuganda.com`** with a
+    per-address rate limit;
+  - it is rehearsed in the harness with weakened copies first.
 - **Operating rules, binding on the staging command.**
   - The SMS API key is **typed on the server**, never in chat, a log or the
     terminal.
   - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
   - Domain A's WhatsApp gateway stays unused without explicit authorisation.
-- **The operator's action:** open an SMS provider account (Africa's Talking was
-  suggested; say first if you prefer another) and request a sender name.
+- **The operator's actions:**
+  - create the DNS record for `app-staging.dishnetuganda.com` **before** the
+    command;
+  - open an SMS provider account (Africa's Talking was suggested; say first if
+    you prefer another) and request a sender name. Without a key, the app
+    signs in nobody: `DN_SMS` stays unset and no code is sent.
 
 ## Open and parked
 

@@ -17,10 +17,12 @@
 #            server that puts the panel and the API on one origin — is shipped
 #            as plugin/bin/serve.php instead.
 #   docs/    the decision record. Useful to read, not needed to run.
-#   public/  the CUSTOMER API front controller. This package installs the
-#            Domain-B control plane and its Admin panel; nothing here serves the
-#            customer API, so shipping its entry point would put an unbound HTTP
-#            surface on the server.
+#
+# public/ — the operator app and its API front controller — WAS excluded until
+# 2026-09-24, because nothing served it. It ships now, on the operator's
+# explicit approval (docs/127 §H H-11), served by plugin/bin/serve-app.php as
+# its own process on its own host name; serve.php still serves only the panel
+# and the Admin API.
 #
 # The archive carries SHA256SUMS of every file it contains, so what was built
 # and what was extracted can be compared rather than assumed.
@@ -43,6 +45,7 @@ mkdir -p "$dest"
 mkdir -p "$dest/bin" "$dest/migrations"
 cp -R "$root/src"    "$dest/src"
 cp -R "$root/panel"  "$dest/panel"
+cp -R "$root/public" "$dest/public"
 cp -R "$root/plugin" "$dest/plugin"
 cp "$root/bin/worker.php" "$dest/bin/worker.php"
 cp "$root"/migrations/*.sql "$dest/migrations/"

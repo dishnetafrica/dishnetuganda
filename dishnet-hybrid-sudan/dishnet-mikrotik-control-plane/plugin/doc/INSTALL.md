@@ -14,8 +14,9 @@ changes none of them.
 | Authenticate DishNet staff | **yes, when you bind it** — see *The identity gate* below. Off by default; needs TLS in front of PHP |
 | Register a router, assign it to an operator, record its lifecycle and queue its configuration over the Admin API — and from the panel's forms | **yes** (G-C, `docs/118`; migration 028, `docs/121`): `POST /api/v1/admin/routers`, `…/routers/{id}/assign`, `…/routers/{id}/state`, `…/routers/{id}/actions` (`push_config`) — every one audits the signed-in staff member as the actor; the action queues an intent that only the worker delivers |
 | Create an operator, start its HotSpot service and add its locations over the Admin API — and from the panel's *Operators & sites* screens | **yes** (migration 030, `docs/125`): `POST /api/v1/admin/customers`, `…/customers/{id}/services`, `POST /api/v1/admin/sites` — each idempotent (an `idempotency_key` is required; a repeat answers 200 and records nothing) and audited with the signed-in staff member as the actor; a location's operator is read from its service, never sent. Plans, voucher batches and disconnect still answer 501 |
-| Add an operator's owner — the person who will sign in for it — over the Admin API and from the operator's page | **yes** (`docs/126`, no migration): `POST /api/v1/admin/customers/{id}/principals` — a name and the phone number they sign in with, stored in one international form; a number already in use is refused as *phone unavailable*; the number is never returned. **Nobody can sign in yet:** this install does not serve the operator app, and no channel delivers sign-in codes to phones |
-| Send an operator's sign-in code by SMS | **yes, when you configure it** (migration 032, `docs/127` phase 2): the worker sends through Africa's Talking when `DN_SMS=africastalking` — see *Sign-in codes by SMS* below. Off by default: with `DN_SMS` unset nothing is sent. **The operator app itself is not served yet** (phase 3). The adapter is DOCUMENTED, UNVERIFIED until your account sends a real message |
+| Add an operator's owner — the person who will sign in for it — over the Admin API and from the operator's page | **yes** (`docs/126`, no migration): `POST /api/v1/admin/customers/{id}/principals` — a name and the phone number they sign in with, stored in one international form; a number already in use is refused as *phone unavailable*; the number is never returned. They sign in through the operator app (§7b) with a code the worker sends by SMS (§8) — **with `DN_SMS` unset, no code reaches anyone** |
+| Send an operator's sign-in code by SMS | **yes, when you configure it** (migration 032, `docs/127` phase 2): the worker sends through Africa's Talking when `DN_SMS=africastalking` — see *Sign-in codes by SMS* below. Off by default: with `DN_SMS` unset nothing is sent. The adapter is DOCUMENTED, UNVERIFIED until your account sends a real message |
+| Serve the operator app — an operator's people sign in, issue and revoke vouchers, create and retire plans | **yes** (`docs/127` phase 3): `plugin/bin/serve-app.php`, **its own process on its own host name** — see §7b. Access points, billing and support say *not available yet*. **Guests cannot use the vouchers yet**: the Wi-Fi login that accepts them is not built |
 | Reach a real MikroTik router | **no** — F6-B is not authorized. The worker's delivery binding (`DN_DELIVERY`) is `null` unless you say otherwise, `simulated` is an in-memory router that says so, and `routeros` refuses to start without the gate. **Nothing is HARDWARE VERIFIED** |
 | Publish a RADIUS credential | **no** |
 | Redeem a voucher | **no** |
@@ -159,6 +160,38 @@ PHP sees it.
 
 **This release ships no TLS and no process supervision.** Do not put the
 built-in server on a public interface.
+
+## 7b. Serve the operator app — its own process (`docs/127` phase 3)
+
+The operator app — where an operator's people sign in, issue and revoke
+vouchers and manage their plans — is served by a **second** process, never by
+`serve.php`:
+
+```sh
+php_bin=$(command -v php)     # env -i clears PATH, so name php by its full path
+env -i DNB_DSN="$DNB_DSN" DNB_APP_PASS="$DNB_APP_PASS" \
+       DNB_TOKEN_PEPPER="$DNB_TOKEN_PEPPER" DNB_SECRET_KEY="$DNB_SECRET_KEY" \
+       "$php_bin" -S 127.0.0.1:8098 plugin/bin/serve-app.php
+```
+
+- **It needs exactly those four variables.** Give it no Admin, worker, staff or
+  RADIUS credential: it has no use for one, and the test suite starts it with
+  nothing else.
+- **Give it its own host name**, not a path beside the Admin panel. The Admin
+  session cookie is then never sent to it.
+- It passes exactly `/api/v1/auth/*`, `/api/v1/me` and `/api/v1/me/*` to
+  `public/index.php`, serves `public/app/` and `public/pwa/`, and answers 404 to
+  everything else — the Admin API and `/internal/*` included. Every answer
+  carries a strict Content-Security-Policy.
+- **Never point a web server's document root at `public/`.** That would expose
+  `/internal/radius/accounting` and leave the front controller's own routing as
+  the only guard. Use `serve-app.php`, or reproduce its allow-list exactly.
+- **TLS in front, as for the panel.** The page holds a bearer token. Do not put
+  the built-in server on a public interface.
+- **`DNB_SECRET_KEY` must be the worker's**: this process seals sign-in codes
+  and the worker opens them (§8). **Never set `DNB_EXPOSE_OTP` here.**
+- A person signs in with the number the Admin panel recorded for them. The code
+  reaches their phone only when the worker's `DN_SMS` is configured.
 
 ## 8. The worker and its delivery binding
 

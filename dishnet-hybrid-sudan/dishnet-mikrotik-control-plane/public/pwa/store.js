@@ -89,6 +89,17 @@ export class Store {
     };
   }
 
+  /** Reload one collection after a write, keeping its own state honest. */
+  async reload(key) {
+    const read = { plans: 'plans', vouchers: 'vouchers', sessions: 'sessions',
+                   intents: 'intents', services: 'services', sites: 'sites' }[key];
+    if (!read) return null;
+    const r = await this.api[read]();
+    this.state[key] = r.state;
+    this[key] = r.items ?? [];
+    return r;
+  }
+
   /** Queue a voucher batch. Returns the classified result — 202 stays queued. */
   async requestVouchers(planId, count, siteId) {
     const r = await this.api.createVouchers(planId, count, siteId);

@@ -25,6 +25,7 @@ export const State = Object.freeze({
   EMPTY:       'empty',        // 200, but the collection is genuinely empty
   QUEUED:      'queued',       // 202 — accepted, not done. NOT success.
   UNAVAILABLE: 'unavailable',  // 404/501 — this capability does not exist yet
+  FORBIDDEN:   'forbidden',    // 403 — signed in, but this person's role does not include it
   OFFLINE:     'offline',      // the request never reached the server
   FAILED:      'failed',       // 4xx/5xx the user must be told about
 });
@@ -74,6 +75,10 @@ export class Api {
     try { data = await res.json(); } catch { data = null; }
 
     if (res.status === 401) { this.forget(); return { state: State.FAILED, data, status: 401 }; }
+    // 403 is not a failure to retry and not a missing feature: the platform
+    // can do this, and the signed-in person's role does not include it
+    // (migration 027). The body names the capability.
+    if (res.status === 403) return { state: State.FORBIDDEN, data, status: 403 };
     if (res.status === 202) return { state: State.QUEUED, data, status: 202 };
     // 501 is the honest "not built yet" the admin surface also uses; 404 on a
     // collection route means the same thing to a screen.
@@ -134,6 +139,11 @@ export class Api {
     return this.post('/api/v1/me/vouchers', body);
   }
   revokeVoucher(id) { return this.post('/api/v1/me/vouchers/' + encodeURIComponent(id) + '/revoke', {}); }
+
+  /* Plans are the operator's own products (docs/127 §H H-9). Creating one
+     is 201; retiring one keeps it on record and stops new vouchers on it. */
+  createPlan(plan)  { return this.post('/api/v1/me/plans', plan); }
+  retirePlan(id)    { return this.post('/api/v1/me/plans/' + encodeURIComponent(id) + '/retire', {}); }
   disconnect(id)    { return this.post('/api/v1/me/sessions/' + encodeURIComponent(id) + '/disconnect', {}); }
 }
 

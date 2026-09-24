@@ -3,8 +3,11 @@
 **Status:** review written **before** code, 2026-09-24 (§A–§E). **Phase 1 BUILT**
 the same day (§F: migration 031 and one phone form at sign-in). **Phase 2 BUILT**
 the same day (§G: migration 032, sign-in codes by SMS through the worker).
-Phase 3 follows. **Development only; nothing deployed.** Nothing here is
-HARDWARE VERIFIED; F6-B stays NOT AUTHORIZED.
+**Phase 3 approved by the operator** (*"Yes, own address (Recommended)"*),
+reviewed before code in §H and **BUILT** the same day (§I: the operator app,
+served by its own process). **Development only; nothing deployed.** Phase 4, the
+staging command, is next. Nothing here is HARDWARE VERIFIED; F6-B stays NOT
+AUTHORIZED.
 
 **Why now.** `docs/126` bound the owner login and found that an operator still
 cannot sign in: the code is delivered nowhere (§B.1 there), sign-in ignores the
@@ -513,3 +516,294 @@ rewritten:
 - **The staging command** carries 031 and 032 together (§F.7), with the key
   typed on the server (§E).
 
+---
+
+## H. Phase 3 — serving the operator app: review before code (2026-09-24)
+
+**The operator's decision**, asked because it reverses a written rule:
+*"May I reverse that rule and serve the operator app at
+app-staging.dishnetuganda.com on staging?"* → **"Yes, own address
+(Recommended)"**. The rule was CLAUDE.md's *"public/ … Do not add them"*,
+recorded because nothing served the app.
+
+### H.1 What exists — measured
+
+- **`public/index.php`** is the customer API front controller: `Database::app()`,
+  `Routes::build()`, the Kernel. It serves the three sign-in routes, every
+  `/api/v1/me…` route, and **`/internal/radius/accounting`**. Nothing serves it
+  today, and the package excludes it.
+- **`public/pwa/api.js` and `store.js`** are the data layer (`docs/82`). The
+  token is held in `sessionStorage` only. Responses are classified into seven
+  states, `202` counts as `queued` and never as success, and G1–G3 are
+  `unavailable`.
+- **The screens exist only in the prototype**,
+  `prototype/dishnet-customer-pwa-prototype.html`. It is mock data from top to
+  bottom (customers, sites, routers, plans, vouchers, sessions, invoices),
+  reviewer chrome (a persona switcher, an *identity chain*, a tamper demo, a
+  guest-portal preview), inline `onclick` handlers, and Google Fonts.
+- **The operator-plane API** has 21 `/me` routes. Each is guarded by an `op.*`
+  capability. A 403 is `{error: forbidden, capability}`, and a foreign id is a
+  404.
+- **Voucher creation's `Idempotency-Key` deduplicates only the intent**
+  (migration 024, I-A open). A replay creates a **second batch** and returns
+  the first intent, so that second batch is never published.
+- **`plugin/bin/serve.php`** serves the Admin panel and sends every `/api/` to
+  the **Admin** API. It could not serve the operator app even by mistake: its
+  static branch is contained under `panel/`.
+
+### H.2 Decisions
+
+| # | Decision | Reason |
+|---|---|---|
+| H-1 | **Two entry points, two processes.** `serve.php` stays the Admin: `panel/` plus `/api/v1/admin/*`. A new **`plugin/bin/serve-app.php`** serves the operator app and passes **only** `/api/v1/auth/*` and `/api/v1/me` / `/api/v1/me/*` to `public/index.php`. Each answers **404** for the other's surface, tested both ways. **Refines A-1**: host routing inside one process becomes separate processes | the app process never holds an Admin credential. It needs exactly `DNB_DSN`, `DNB_APP_PASS`, `DNB_TOKEN_PEPPER` and `DNB_SECRET_KEY`. A-1's browser boundary holds either way: another host name means the Admin cookie is never sent there |
+| H-2 | The app host refuses `/internal/*` (RADIUS accounting), `/api/v1/admin/*` and every other path. Static files are served only from `public/app/` and `public/pwa/`, contained by `realpath`, with an **extension allow-list**, so **a `.php` file is never served as a file**. `/` is `public/app/index.html` | a static branch that can read `public/` could otherwise print `index.php`'s source |
+| H-3 | **Headers on every answer:** `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, plus `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin` and a restrictive `Permissions-Policy`. **The app therefore carries no inline script, no inline handler, no inline style and no third-party URL**, and a test asserts all four | the page holds a bearer token. A strict script policy is what keeps an injected string from reaching it |
+| H-4 | The token stays in **`sessionStorage`** (the `docs/82` rule). A 401 on any request returns to sign-in with *"Your session ended"*. That is how a suspended operator's person sees 031 | a front-desk device is shared |
+| H-5 | **`api.js` gains one state, `forbidden` (403)**, and the plan calls (`createPlan`, `retirePlan`). Each screen names its capability. A 403 renders *"Your role doesn't include this"*, distinct from *unavailable* and *failed* | collapsing *not allowed* into *failed* sends a staff member to retry something they can never do |
+| H-6 | **The screens:** sign-in (request code → enter code) · home (operator, person, services, queued requests) · Wi-Fi and locations · a location · vouchers (list by state, **new**, **revoke**, copy a code) · plans (list, **new**, **retire**) · devices (**disconnect**) · usage · account (sign out). Access points (G1), billing (G2) and support (G3) render **unavailable** with the reason, never empty | the operator's go-ahead was *"to manage their own vouchers and plans"* |
+| H-7 | **What the app may say, in this build:** after a code request, *"If this number can sign in, a code is on its way by SMS"*, never *"sent"* (F-3). Vouchers: *"Codes are recorded; the Wi-Fi login that accepts them is not switched on yet."* Devices: *"No device has been reported"*, never *"nobody is connected"*. Access points: *unavailable*, never *"0 of 0 on"*. A `202` is *queued* with no word about when a router is reached (B1). Usage shows the four measured counters and no invented chart | `LifecycleReport` has `activating`/`active`/`expired` unreachable; the voucher path is NON-CONFORMING (`docs/86`); sessions exist only when accounting reports them |
+| H-8 | **No `Idempotency-Key` on voucher creation.** The button is disabled while a request is in flight, and **no POST is ever retried**. Making the route idempotent is its own item (I-A) | today the key would turn a replay into an unpublished second batch |
+| H-9 | **Plans:** create (name, duration, download and upload speed, devices, optional data allowance, price) and retire. **Editing is not in this build.** Currency **UGX**, which has **no minor unit** (ISO 4217 exponent 0), so `price_minor` is whole shillings | the smallest honest version of *manage their plans* |
+| H-10 | **Not in this build:** the staff-management screens (**J-14**; the API exists), plan editing, a service worker or offline install, the guest captive portal (the redemption path is unbuilt), billing and support (not in Domain B), and **any sign-in audit — F-8 stays OPEN**. CLAUDE.md: *"F-8.1…5 are OPEN. Nothing in this area may be implemented without an explicit instruction"* | recorded, not silently skipped |
+| H-11 | **Packaging:** `public/` joins the package on the operator's approval. `tests/`, `tools/` and `docs/` stay excluded. CLAUDE.md's rule text is updated to record the approval, not deleted | the exclusion's premise, *nothing serves it*, is gone |
+| H-12 | **The manifest gains `app`:** its entry point, static prefixes, headers, and the API routes it passes. A test asserts those routes equal what `Routes::build()` serves, minus `/internal/*` | the Admin surface is asserted that way already (`docs/90`) |
+| H-13 | **Staging (phase 4):** a container of its own, `dnb-staging-app`, with only the four variables above, published on loopback and the bridge gateway (port **8098**, the 8099 precedent). A Traefik route for **app-staging.dishnetuganda.com** with a per-address rate limit, as stage 2 has. **The operator creates the DNS record first.** The SMS key is typed on the server, as §E says | one command, rehearsed first |
+
+
+---
+
+## I. Phase 3 — build record (2026-09-24)
+
+**Development only. Nothing deployed.** The operator app runs in this container
+and nowhere else. No operator has seen it and no SMS has reached a phone.
+
+### I.1 What was built
+
+- **`plugin/bin/serve-app.php`** — the operator app's server, its own process
+  (H-1). Everything in H-2 and H-3, and nothing more:
+  - `/` is `public/app/index.html`;
+  - `/app/…` and `/pwa/…` are static files, each contained by `realpath` under
+    its **own** directory, by an extension allow-list with no `php` on it;
+  - exactly `/api/v1/me`, `/api/v1/me/…` and `/api/v1/auth/…` reach
+    `public/index.php`;
+  - everything else is its own `404`, with the same five headers as every other
+    answer.
+- **`public/app/`** — the prototype's screens on the real data layer:
+  `index.html` (one empty module script tag), `app.js`, `app.css`, `icon.svg`.
+  - No mock data, no reviewer chrome, no web fonts.
+  - No inline script, handler or style: clicks and submissions are delegated
+    from `data-act` and `data-form` attributes.
+  - The wording is H-7's.
+  - Voucher creation sends **no** `Idempotency-Key` (H-8). A write disables its
+    button while in flight, and nothing retries a POST.
+- **`public/pwa/api.js`** gains `FORBIDDEN` (403) and the two plan calls.
+  **`store.js`** gains `reload(key)`, to reread one collection after a write.
+- **Packaging (H-11):** `package.sh` copies `public/`. Its comment records why
+  `public/` was excluded and when that ended, instead of deleting the history.
+- **Manifest (H-12):** a new `app` section — entry point, front controller,
+  static map and types, the API allow-list, what is refused, the four variables,
+  the five headers, what is unavailable and what is not in this build.
+- **Doctor:** `files.present` requires five more paths — `serve-app.php`,
+  `public/index.php`, `public/app/index.html`, `public/app/app.js`,
+  `public/pwa/api.js`.
+- **`plugin/doc/INSTALL.md`:** §7b says how to serve the app — its own process,
+  its own host name, the four variables, **never a document root at
+  `public/`**, TLS in front, never `DNB_EXPOSE_OTP`. The capability table no
+  longer says the app is not served.
+
+### I.2 Found while building
+
+- **The manifest's allow-list was ambiguous.** It was first written as three
+  *prefixes*, one of which, `/api/v1/me`, the server treats as an **exact**
+  path. Read as a prefix, it would let `/api/v1/meta` through. The manifest now
+  states `exact` and `prefixes` apart. The suite derives its predicate from the
+  manifest and probes `/api/v1/meta` over HTTP. A weakened server with a bare
+  prefix (S2) is caught by that probe.
+- **`form.name` is the form's own name**, not its `name` control. A form's own
+  properties shadow its controls. Every form value is now read through
+  `form.elements.namedItem`.
+- **The browser asks for `/favicon.ico` by itself.** The host answered its own
+  404 — correctly — but that put a console error on every page load. The page
+  now declares `/app/icon.svg`. `/favicon.ico` still answers 404, and the suite
+  asserts it. The one `http://` string in the bundle is the SVG namespace: a
+  name, not a fetch. It is excepted exactly once, and counted.
+- **A guard that read words, not the archive.** `test_installability` checked
+  whether `package.sh` *named* `public/` in its exclusion rationale. The comment
+  explaining why `public/` now ships names it, so the check stayed green while
+  the rule was reversed. It was **rewritten, not deleted**:
+  - it now builds the archive and reads its file list;
+  - `public/` and `serve-app.php` must be in it;
+  - nothing under `tests/`, `tools/` or `docs/` may be, and no `.env` anywhere.
+  
+  Two weakened builders fail it: one without `public/` (8 of 141) and one that
+  ships `tests/` (2 of 141).
+
+### I.3 Evidence, per piece
+
+| Piece | Label | How |
+|---|---|---|
+| The served surface: files, 404s, headers, the API allow-list | **MEASURED** | over real HTTP, against PHP's built-in server — the server staging will run — started with only the four variables |
+| The two processes refuse each other's surface | **MEASURED** | both servers started in the suite, each with its own positive control |
+| Sign-in with the code the worker sent; a plan; a 403; sign-out | **MEASURED** | over HTTP, with a recording SMS sender standing in for the phone |
+| The CSP holds in a browser: no inline code runs, nothing is blocked that the page needs | **MEASURED in headless Chromium only** | §I.6: zero CSP violations on every screen visited |
+| Other browsers, a real phone, its keyboard and clipboard | **UNVERIFIED** | not run |
+| A code reaching a phone | **UNVERIFIED** | phase 2's adapter, until a real message is sent (§G.3) |
+
+### I.4 Tests
+
+**`tests/test_operator_app.php` — 152 assertions**, in fourteen sections:
+
+1. **The manifest against the code.**
+   - The declared static types are the ones the server serves; `php` is not
+     one of them.
+   - Every one of the 25 operator routes `Routes::build()` serves is inside the
+     allow-list. The one outside it is RADIUS accounting.
+   - None of the Admin router's 40 routes is inside it.
+2. **The process** holds exactly the four variable names, read from
+   `/proc/<pid>/environ`. It was started with `env -i`, from the **package
+   root**: were the server ever to fall through to PHP's own file server,
+   `src/` would be one request away.
+3. **Seven static files**, each byte for byte, with its type and `no-cache`.
+4. **Thirty refusals, each the host's own 404.** The page, the source, the
+   canary and PHP are each checked absent from every body. A new `.json` file
+   under `public/app` is served first, as the control. The refused paths:
+   - the front controller by name and by package path;
+   - traversal out of `/app/` and `/pwa/`, plain and encoded;
+   - a `.json` in `public/` but outside `/app/`, a `.php` and a `.txt` placed
+     in `public/app`, and a `.js` symlink pointing out of it;
+   - the directories themselves;
+   - `src/`, a migration, the manifest, the env template, the panel and the
+     test harness;
+   - the Admin API and RADIUS accounting, by GET and by POST;
+   - `/api/v1/meta`, `/api/v1/authx/…` and `/api/v1/auth`.
+5. **The five headers, exactly, on six answers**: a page, a script, its own
+   404, the Admin path's 404, an API 401 and an API 400. The script policy is
+   `'self'` alone.
+6. **All 25 operator routes reach the front controller** (JSON), none refused
+   by the host.
+7. **Sign-in over the wire.**
+   - A spaced number gets `202 {status: sent}` and no code; an unknown number
+     gets the byte-identical answer.
+   - The worker sends **one** message, to the canonical number.
+   - A wrong code is 401. The received code gives a token and `/me` as owner.
+8. **A plan in UGX:** `201`, 5000 whole shillings. A Seller can read plans
+   (the control) and is `403 {forbidden, op.plans.write}` on creating one.
+9. **Sign-out:** `204`, and the same token then gets 401. RADIUS accounting
+   with a token header is still the host's 404.
+10. **`serve.php` refuses the app's surface** while its Admin API (401) and
+    panel (200) answer. Neither server's code names the other's front
+    controller.
+11. **The bundle:**
+    - one empty script tag; no style or handler attribute in the page; every
+      `src` and `href` under `/app/`;
+    - no other origin anywhere; no `@import`, font or `url(` in the styles;
+    - one `fetch`, in `api.js`; no other connection, storage or `eval`;
+    - `sessionStorage` in `api.js` alone; three request headers and no other;
+    - no `Idempotency-Key`.
+12. **No mock data.** The control shows the prototype does carry those
+    constants. The screen's numbers come from their sources:
+    `Authenticator::CODE_TTL_MINUTES`, and the rate window read out of
+    `mt_auth_issue_code`'s body. The review's words are present; the claims
+    are absent: no *sent*, no *nobody*, no router timing. 403 is `FORBIDDEN`.
+13. **The doctor:** OK on this tree, with fifteen required paths. On an empty
+    tree, the refusal names each of the five app paths.
+14. **Repository state.**
+
+**Deliberate updates:** `test_installability` — the packaging section is
+rewritten (§I.2), and the operator app server's `realpath` containment is added
+beside the panel servers'.
+
+### I.5 Weakened copies — each caught
+
+The server (`test_operator_app`):
+
+| Copy | Weakening | Caught by |
+|---|---|---|
+| S1 | `/internal/` passed to the front controller | 3 — both RADIUS probes and the post-sign-out probe |
+| S2 | `/api/v1/me` as a bare prefix | 1 — `/api/v1/meta` |
+| S3 | every `/api/` path passed | 7 — the three Admin paths, `meta`, `authx`, `auth` and `health` |
+| S4 | contained under `public/`, not the prefix's own directory | 1 — the `.json` outside `/app/` |
+| S5 | no extension allow-list | 2 — the `.php` (its source was printed) and the `.txt` |
+| S6 | no Content-Security-Policy | 6 — every header check |
+| S7 | `'unsafe-inline'` added to `script-src` | 6 — every header check |
+| S8 | an unknown path falls through to PHP's own file server | 22 — all 21 static refusals, because PHP's own file server answered them instead (it served the manifest), and the headers on the 404 |
+| S9 | headers sent only for static files | 3 — the Admin 404 and both API answers |
+
+The bundle (`test_operator_app`):
+
+| Copy | Weakening | Caught by |
+|---|---|---|
+| B1 | an `onclick` in a screen | 1 |
+| B2 | a `style` attribute in a screen | 1 |
+| B3 | an `Idempotency-Key` on every POST | 2 |
+| B4 | the token in `localStorage` | 1 |
+| B5 | the screen's code lifetime set to 5 minutes | 1 |
+| B6 | an inline `<script>` in the page | 1 |
+| B7 | a web font from another origin | 2 |
+| B8 | *"a code has been sent"* | 2 |
+| B9 | 403 no longer `FORBIDDEN` | 1 |
+| B10 | a second `fetch`, outside `api.js` | 1 |
+| B11 | the prototype's `SITES` constant | 1 |
+| B12 | the data layer imported from another origin | 2 |
+
+And the builder (`test_installability`): P1 without `public/` (8 of 141), P2
+shipping `tests/` (2 of 141).
+
+### I.6 The browser run — headless Chromium
+
+The installed Chromium (build 1194), driven by Playwright at 390 × 844, against
+`serve-app.php`. The server was started with only the four variables, on a
+fresh database seeded through the Admin plane's real writers. The drive:
+
+1. It signed in with `+256 700 555 001`, typed with spaces. The code stage said
+   *"If +256 700 555 001 can sign in, a code is on its way by SMS. It is valid
+   for 10 minutes."*
+2. A wrong code said *"That code didn't work. Check it, or send a new one."*
+3. The code the worker sent — a file-writing stand-in for the phone — signed in.
+4. It created a plan, *1 Day*, shown as **UGX 5,000**.
+5. It created two codes at *Poolside*. The result sheet showed both codes and
+   said **Queued.**, and *Copy codes* put both on the clipboard.
+6. It revoked one. The toast said *"Revoked. Removing it from your Wi-Fi is
+   queued."* and *Finished* listed it as *Revoked*.
+7. The other screens each said only what the platform knows:
+   - *Wi-Fi*: access points *not available*, locations listed;
+   - *Devices*: *No device has been reported*;
+   - *Usage*: *No measurements yet*;
+   - *Home*: the two requests, queued;
+   - *Account*: role *Owner*, billing and support *not available yet*.
+8. Signing out returned to sign-in and left **no token** in `sessionStorage`.
+
+**Zero CSP violations and zero page errors.** The one 4xx was the deliberate
+wrong code. The database afterwards:
+
+- one plan;
+- one voucher revoked and one unused;
+- two queued intents (`voucher.publish`, `voucher.revoke`);
+- one SMS `sent`;
+- audit rows from the Admin plane (`customer.created`, `service.created`, two
+  `site.created`, `principal.created`) and from the operator's own person
+  (`plan.created`, `voucher.issued`, `voucher.revoked`).
+
+The screenshots stayed in the session's scratch space; the drive script is not
+part of the suite.
+
+### I.7 Proof runs
+
+- **Full suite:** 40 suites / **3,906** assertions / 0 failed, twice. `test_operator_app.php` alone is 152, and `test_installability.php` went from 117 to 141.
+- **`plugin/bin/install-test.sh`:** **86/86**. Ports 8099, 8098, 8131 and 443 were checked first for stray harness servers.
+- **Package:** **142 files** (was 134), content digest `2874d64346b927e6ec2da77ceecb19714a623030ea7e89b74590d7bc6640a0c4`. The eight new files are `public/index.php`, four under `public/app/`, two under `public/pwa/` and `plugin/bin/serve-app.php`. Not deployed; phase 4's command will pin it.
+
+### I.8 Not done here
+
+- **Phase 4, the staging command:**
+  - apply 031 and 032;
+  - add the `dnb-staging-app` container and the Traefik route for
+    `app-staging.dishnetuganda.com`, after the operator creates its DNS record;
+  - take the SMS key, typed on the server.
+- **J-14** (the staff screens), plan editing, a service worker or offline
+  install, and the guest captive portal. Billing and support are not in Domain
+  B.
+- **F-8 — the sign-in routes' audit** stays OPEN (H-10). **I-A** — voucher
+  creation's idempotency — stays open. The app sends no key and never retries.
+- **Vouchers are still NON-CONFORMING** (`docs/86`). The app records codes and
+  says plainly that guests cannot use them yet.

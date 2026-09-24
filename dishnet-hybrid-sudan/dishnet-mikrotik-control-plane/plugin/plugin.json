@@ -479,6 +479,62 @@
       "capabilities_source": "mt_op_capabilities() — the single canonical list; Dn\\Auth\\OpCapability::ALL is asserted equal by the suite."
     }
   },
+  "app": {
+    "note": "The operator app (the Customer PWA) and the operator-plane API, served by their OWN process on their OWN host name (docs/127 §H H-1). serve.php serves the Admin panel and /api/v1/admin/*; serve-app.php serves this and answers 404 for everything else, the Admin API and /internal/* included. The two never share a process, so the app process holds no Admin credential.",
+    "entrypoint": "plugin/bin/serve-app.php",
+    "front_controller": "public/index.php",
+    "static": {
+      "/": "public/app/index.html",
+      "/app/": "public/app/",
+      "/pwa/": "public/pwa/"
+    },
+    "static_types": [
+      "html",
+      "js",
+      "css",
+      "svg",
+      "png",
+      "ico",
+      "json",
+      "webmanifest"
+    ],
+    "api": {
+      "note": "Passed to the front controller: this one exact path, and every path under these two prefixes. Nothing else reaches PHP. /api/v1/meta, /api/v1/auth and /api/v1/authx are not under them and answer 404.",
+      "exact": ["/api/v1/me"],
+      "prefixes": ["/api/v1/auth/", "/api/v1/me/"]
+    },
+    "refused": [
+      "/api/v1/admin/*",
+      "/internal/*",
+      "any .php file as a file",
+      "any path outside public/app and public/pwa"
+    ],
+    "config": [
+      "DNB_DSN",
+      "DNB_APP_PASS",
+      "DNB_TOKEN_PEPPER",
+      "DNB_SECRET_KEY"
+    ],
+    "headers": {
+      "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    },
+    "unavailable": {
+      "access_points": "G1 — no route returns them (docs/82)",
+      "billing": "G2 — not in Domain B",
+      "support": "G3 — not in Domain B"
+    },
+    "not_in_this_build": [
+      "staff management screens (J-14; the API exists)",
+      "plan editing",
+      "offline install / service worker",
+      "the guest captive portal",
+      "sign-in audit (F-8, OPEN)"
+    ]
+  },
   "install": {
     "prerequisite": "psql -U <superuser> -d postgres -v db=dnb -v owner=dnb -v owner_pass=<generated> -f plugin/bin/bootstrap.sql",
     "preflight": "php plugin/bin/plugin.php doctor",
@@ -547,6 +603,7 @@
       "migrations/",
       "plugin/ (manifest, installer, entrypoint, docs)",
       "panel/",
+      "public/ (the operator app and its API front controller, served by plugin/bin/serve-app.php since docs/127 phase 3)",
       "bin/worker.php",
       "VERSION",
       "SHA256SUMS"
@@ -554,8 +611,7 @@
     "excludes": [
       "tests/ (needs a BYPASSRLS fixture identity)",
       "tools/",
-      "docs/",
-      "public/ (the Customer PWA API front controller, which nothing here serves)"
+      "docs/"
     ],
     "documentation": [
       "plugin/doc/INSTALL.md",

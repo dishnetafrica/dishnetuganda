@@ -134,6 +134,9 @@ final class Doctor
             'plugin/plugin.json', 'plugin/public/api.php', 'plugin/bin/plugin.php',
             'plugin/bin/serve.php', 'plugin/bin/bootstrap.sql',
             'panel/index.html', 'panel/app.js', 'panel/api.js',
+            // The operator app and its server (docs/127 §H).
+            'plugin/bin/serve-app.php', 'public/index.php',
+            'public/app/index.html', 'public/app/app.js', 'public/pwa/api.js',
             'src/autoload.php', 'migrations',
         ];
         $missing = array_values(array_filter($need,
