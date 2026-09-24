@@ -2,8 +2,8 @@
 
 **Status:** review written **before** code, 2026-09-23 (§A–§C). The build record
 follows in §D. **Development schema only; nothing deployed.** The staging command
-for this work comes **after** the migration-029 result (`docs/124` §H), so the
-operator's 029 command stays valid.
+for this work was to come **after** the migration-029 result. That result is in:
+029 was REDEPLOYED on staging at 2026-09-24 04:14:49 UTC (`docs/124` §H).
 
 **Why now.** Roadmap step 3. The operator approved the plan *"add the fix
 [O-1] … then I'll start on the screens for creating real operators and their
@@ -150,7 +150,8 @@ disappeared. One CSS line makes `hidden` win. **Measured:** the gate is
 - **Staging:** after the migration-029 result is back (`docs/124` §H), a
   separate command pinned to this build's commit applies 030 and restarts the
   two application containers. It is not written yet, so nothing can race the
-  029 command.
+  029 command. **The 029 result is back** — REDEPLOYED 2026-09-24 04:14:49 UTC
+  — so the prerequisite is met.
 - **The operator-owner login** (`POST /customers/{id}/principals`) is the next
   decision: `docs/116` J-1 reserves it for its own instruction.
 - Plans and voucher batches from the Admin plane wait for G-C2; the

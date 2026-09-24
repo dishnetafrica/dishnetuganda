@@ -1,7 +1,8 @@
 # 124 — O-1 closed: migration 029 makes a site and its service belong to one operator
 
-**Status:** built and proved in the development schema, 2026-09-23. The staging
-command is handed over; **its result is PENDING (§H)**. **Production:** there is
+**Status:** built and proved in the development schema, 2026-09-23.
+**REDEPLOYED on staging 2026-09-24 04:14:49 UTC, first attempt, every check
+held (§H).** **Production:** there is
 no Domain B outside staging on the DishNet host (`docs/123` §F), so there is
 nothing to migrate there; a first production install applies 029 to empty
 tables like every other migration.
@@ -247,8 +248,8 @@ passed 67 of 67 before the commit pin existed.
 
 ## G. What this unblocks, and what it does not
 
-- **O-1 is closed in the development schema**, and on staging once §H reads
-  REDEPLOYED. `mt_site_create` may now be designed and built (`docs/105`: *"do
+- **O-1 is closed in the development schema, and on staging since 2026-09-24
+  04:14:49 UTC** (§H). `mt_site_create` may now be designed and built (`docs/105`: *"do
   not build it until O-1 is closed"*) — as **derive, never accept**: no
   `p_customer`, the operator read from the service row.
 - **The writer order of `docs/108` still holds:** the non-tenant idempotency
@@ -262,4 +263,40 @@ passed 67 of 67 before the commit pin existed.
 
 ## H. Result
 
-PENDING — the operator's pasted output is recorded here.
+**REDEPLOYED 2026-09-24 04:14:49 UTC, on the first attempt, with no
+correction.** The operator ran the §E command as root on the server, starting at
+04:14:22 UTC, and pasted the whole output back. It printed no secret. The log and
+the two census outputs stay on the server under `/root/dnb-staging-evidence/`.
+
+| Step | What the output shows |
+|---|---|
+| 0 | deployed build `1bc95524…` (028); the API runs the **real DishNet staff login** — trusted proxy `172.22.0.1`, origin `https://portal-staging.dishnetuganda.com`; 28 migrations, last 028; stage 1 healthy |
+| 1 | built from commit **`83edb9875f88…`, fetched by its hash**. By then the branch had moved on to the step-3 work (`46c778e`), which is exactly the case the pin exists for. 119 files verified against `SHA256SUMS`; archive sha256 `3b200fae…dce18772`; **content digest `780023ff…b1c46d0`, the reviewed one**; the census file is the reviewed one |
+| 2 | **GATE 1 re-taken: the census read CLEAR, 11 rows seen.** The new build's doctor, production posture: **24 checks, 23 ok, 1 warn, 0 blockers** |
+| 3 | tree swapped, previous kept at `/opt/dnb-staging/app.prev-20260924T041422Z`; **the installer applied exactly one migration, 029**; 29 recorded, 29 files in the build |
+| 4 | catalogue **`1|1|2|true`** — the composite key present and validated, the supporting UNIQUE present, both single-column keys kept, FORCE on both tables. **Census after: CLEAR, 11 rows seen.** Through the Admin projections as `dnb_adminapi`: **5 sites seen, 0 whose service is another operator's**. **Execution test as `dnb_app`, operator `482c71c7…`, rolled back:** own site `INSERT 0 1`; a site on another operator's service **refused by `mt_sites_service_customer_fkey`** (*Key is not present in table "mt_services"* — the other operator's row stays invisible, as §D expects); residue 0 |
+| 5 | loopback: panel 200, `routers.js` 200, session **401 from the `dishnet` provider**, second factor required; through Traefik: `/` 200, session 401 the same; worker `simulated-routeros`; **only `dnb-staging-api` and `dnb-staging-worker` changed, and no container was removed** |
+
+**The one doctor warning is not printed** — the script shows only the count
+line. By the doctor's own rules the warning expected at that moment is
+`schema.present`, *28 of 29 migration(s) applied*, because the new build's
+doctor runs **before** the installer. The warning `docs/122` recorded (*no staff
+on record*) no longer applies, since `dishnet-admin` exists. **This is an
+expectation, not an observation.** The next staging command prints its warning
+lines.
+
+**What this establishes, on staging:**
+
+- **O-1 is closed.** The invariant is enforced by a validated key, below row
+  security. It is demonstrated by execution as the customer-facing role, with a
+  positive control in the same transaction and residue 0.
+- **GATE 1 and GATE 2 stayed separate acts.** The census was taken twice by the
+  command, as a role with no special privilege. The migration is the installer's.
+  Verification is independent of both, as `docs/79` §7b step 6 requires.
+- **The pin worked as designed.** The branch had moved on and the command still
+  built the reviewed digest.
+
+**What it does not establish:** anything about production, which holds no
+Domain B (`docs/123` §F); anything about a MikroTik — nothing is HARDWARE
+VERIFIED, and F6-B stays NOT AUTHORIZED; and nothing about `mt_vouchers.site_id
+NOT NULL`, U-1, U-5, B-3 or F-3, none of which 029 touches.

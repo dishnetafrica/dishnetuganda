@@ -2786,10 +2786,11 @@ was never run. `scripts/dnb-staging-census.sh` is that handoff as one command.
   CLEAR"**, there is no production Domain B, and GATE 2 becomes the operator's
   decision about staging and future installs. **A CLEAR authorises nothing.**
 
-## O-1 CLOSED in code — migration 029 (`docs/124`); staging command handed over, result PENDING
+## O-1 CLOSED — migration 029 (`docs/124`); REDEPLOYED on staging 2026-09-24 04:14:49 UTC
 
 **GATE 2 of `docs/107`, taken on the operator's decision after GATE 1 read
-CLEAR.** Development and test schema, plus the staging command. Production holds
+CLEAR.** Development and test schema, and **staging since 2026-09-24 04:14:49
+UTC** (the result bullet below). Production holds
 no Domain B (`docs/123` §F), so a first production install applies 029 to empty
 tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
 
@@ -2837,6 +2838,17 @@ tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
   the branch tip**, so later pushes (step 3) cannot break the operator's command.
   Rehearsed in `scripts/harness/redeploy/` with the branch moved on: **69/69**,
   six scenarios plus three broken copies of the script, each caught.
+- **RESULT (`docs/124` §H): REDEPLOYED 2026-09-24 04:14:49 UTC, first attempt,
+  no correction.** Built `780023ff…` from `83edb98` fetched by hash **while the
+  branch already stood at `46c778e`** — the pin did its job; census **CLEAR, 11
+  rows, before and after**; doctor 23 ok / 1 warn / 0 blockers (the warning is
+  not printed — *28 of 29 applied* is expected before the installer, **an
+  expectation, not an observation**); the installer applied **exactly 029**;
+  catalogue `1|1|2|true`; projections 5 sites / 0 crossing; **as `dnb_app`, own
+  site accepted, the cross-operator site refused by
+  `mt_sites_service_customer_fkey`, residue 0**; the real staff login answers on
+  loopback and through Traefik; only the API and worker changed. **O-1 is closed
+  on staging.** Production still holds no Domain B (`docs/123` §F).
 - **A local fault, not a product one:** two sandbox processes from the `docs/122`
   harness held ports 8099 and 443 and made the install test fail 12 of 85. The
   redeploy harness stops both at exit. **Check for stray harness servers before
@@ -2844,7 +2856,8 @@ tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
 - **What this unblocks:** `mt_site_create` may now be built — **derive, never
   accept** (`docs/105`). `docs/108`'s order still holds: the non-tenant
   idempotency store (0b) before the first spine writer. **Not decided here:**
-  `mt_vouchers.site_id NOT NULL`, U-1, U-5, B-3, F-3. `POST /sites` still 501.
+  `mt_vouchers.site_id NOT NULL`, U-1, U-5, B-3, F-3. `POST /sites` was still 501
+  at 029; migration 030 binds it (next section).
 
 ## Operators, their HotSpot service and their locations from the Admin panel — BUILT (migration 030, `docs/125`); development only
 
