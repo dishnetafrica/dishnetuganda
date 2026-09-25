@@ -197,6 +197,10 @@ source cannot answer is marked **UNCONFIRMED** rather than filled in.
 
 ### B1. Endpoints — *confirmed*
 
+> **Corrected 25 September 2026.** DPO's onboarding for this account gives
+> `/API/v6/` for both calls and the checkout page `payv3.php`. Their instruction
+> wins over the published code quoted below. See the build spec, §9.
+
 ```php
 public static string $testApiUrl = 'https://secure.3gdirectpay.com/API/v6/';
 public static string $testPayUrl = 'https://secure.3gdirectpay.com/payv2.php';

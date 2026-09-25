@@ -10,18 +10,23 @@ declare(strict_types=1);
  *
  * ── WHAT IS READ FROM DPO'S OWN SOURCE ──────────────────────────────────
  *
- * The endpoints, the XML shapes and both result-code tables are taken from
- * DPO Group's published production code — the DPO-Pay-Common class every
- * official DPO module uses, and their WooCommerce gateway. Two details from
- * there are easy to mistake for typos and are not:
+ * The XML shapes and both result-code tables are taken from DPO Group's
+ * published production code — the DPO-Pay-Common class every official DPO
+ * module uses, and their WooCommerce gateway.
  *
- *   · createToken posts to /API/v6/ and verifyToken posts to /API/v7/.
- *     Different versions, same class, in DPO's current release.
+ * The URLs are DPO's instructions for THIS account, which win over their
+ * published code (docs/UGANDA-DPO-PAY-BUILD-SPEC.md says so). DPO's Uganda
+ * onboarding (25 September 2026) gives one endpoint, /API/v6/, for
+ * createToken and verifyToken alike, and the checkout page payv3.php.
+ * Their common class still posts verifyToken to /API/v7/ and sends
+ * customers to payv2.php; we followed that until DPO told us otherwise.
+ * The verifyToken V6 answer carries TransactionAmount, TransactionCurrency
+ * and CustomerCreditType — every figure settle() checks.
  *
- *   · the test and live API URLs are IDENTICAL. There is no sandbox host.
- *     "Test mode" is entirely which company token you send. This class
- *     therefore does NOT branch its URL on environment — inventing a test
- *     host would be a fiction that fails only in production.
+ * The test and live API URLs are IDENTICAL. There is no sandbox host.
+ * "Test mode" is entirely which company token you send. This class
+ * therefore does NOT branch its URL on environment — inventing a test host
+ * would be a fiction that fails only in production.
  *
  * ── AUTHENTICATION ──────────────────────────────────────────────────────
  *
@@ -40,10 +45,10 @@ declare(strict_types=1);
  */
 final class DpoClient
 {
-    /** From DPO's own class. Test and live are deliberately the same. */
+    /** From DPO's onboarding for this account. Test and live are deliberately the same. */
     const API_CREATE = 'https://secure.3gdirectpay.com/API/v6/';
-    const API_VERIFY = 'https://secure.3gdirectpay.com/API/v7/';
-    const PAY_URL    = 'https://secure.3gdirectpay.com/payv2.php';
+    const API_VERIFY = 'https://secure.3gdirectpay.com/API/v6/';
+    const PAY_URL    = 'https://secure.3gdirectpay.com/payv3.php';
 
     /** createToken result codes, verbatim from DPO's published table. */
     const CREATE_CODES = [
@@ -107,8 +112,9 @@ final class DpoClient
         $this->verifyUrl     = (string)($cfg['api_verify'] ?? self::API_VERIFY);
         $this->payUrl        = (string)($cfg['pay_url']    ?? self::PAY_URL);
         $this->timeout       = max(5, (int)($cfg['timeout'] ?? 30));
-        // Omitted entirely when unset: DPO's own modules never send PTL, and
-        // the accepted PTLtype spelling is not established from their source.
+        // Omitted entirely when unset. The spelling is DPO's: their recurring
+        // payments guide sends <PTL>15</PTL><PTLtype>hours</PTLtype>, and
+        // their WooCommerce gateway offers PTLtype "minutes".
         $this->ptl           = (int)($cfg['ptl'] ?? 0);
         $this->ptlType       = (string)($cfg['ptl_type'] ?? 'minutes');
     }

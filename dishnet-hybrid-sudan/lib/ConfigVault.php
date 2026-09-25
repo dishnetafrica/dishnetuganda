@@ -92,6 +92,11 @@ class ConfigVault
         'dpo_payment_method_uuid',
         'dpo_ptl',
         'dpo_ptl_type',
+        // Who may pay while the environment is TEST, and the key of the test
+        // link for DPO's reviewer. Losing the first after a re-install fails
+        // closed (nobody can pay in test); losing the second closes the link.
+        'dpo_test_clients',
+        'dpo_test_link_key',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

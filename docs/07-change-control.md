@@ -402,3 +402,45 @@ with no horizontal scroll.
 `web`, app `web-uganda`), which also publishes 5.18.31's pay page.
 **Rollback:** the previous build.
 **Status:** not deployed.
+
+## 5.18.32 — DPO Pay checked against DPO's instructions; a test link for their review
+
+**25 September 2026** · `lib/DpoClient.php`, `lib/DpoPaymentService.php`,
+`lib/DpoBootstrap.php`, `lib/ConfigVault.php`, `dpo_test.php` (new),
+`dpo_return.php`, `public.php`, `tabs/admin/dpo_payments.php`,
+`tabs/customer_app/portal_data.php`, `tools/dpo_probe.php` (new),
+`tests/test_dpo_review_link.php` (new), the two DPO fakes and two DPO suites.
+Record: [32](32-dpo-pay-review.md); technical: the DPO build spec §9.
+
+DPO sent test credentials and asked for a test link their team can pay through
+before they issue live credentials. Checked against their instructions:
+
+- **DPO's endpoint and page.** verifyToken now posts to `/API/v6/`, not `/API/v7/`,
+  and customers go to `payv3.php`, not `payv2.php`. Both older values came from
+  DPO's published code.
+- **The test environment was open to every customer**, and a payment with DPO's
+  public test cards would have been posted to uCRM against a real invoice. Now
+  only the test customers named on the admin screen can pay while the
+  environment is test. A test payment for anyone else is quarantined, never
+  posted.
+- **A test link:** `public.php?page=dpo_test&k=<key>`. It lists the test
+  customers' unpaid invoices with a Pay button and needs no sign-in. It opens
+  in the test environment only, with a key the admin screen makes and can
+  replace.
+- **Only unpaid and part-paid invoices** (uCRM 1 and 2) can be paid online. The
+  code had read 4 as paid; in uCRM 3 is paid and 4 is void. Nothing was ever
+  wrongly payable.
+- **`tools/dpo_probe.php`** asks DPO whether the saved token and currency are
+  accepted, before anyone is sent the link. It runs in test only and never
+  prints the token.
+
+Tests: 85 checks in the new file, including the test link through `php -S` from
+Pay to *Payment successful*; 16 weakened copies each caught by counted
+failures; full suite green twice.
+
+**Applied by:** the operator: `deploy-hybrid.sh`, then the steps in
+[32](32-dpo-pay-review.md) §4 — test client in uCRM, DPO Pay settings, the probe,
+the link to DPO.
+**Rollback:** set DPO Pay to *Disabled* on the admin screen, or
+`git checkout a987f08` (5.18.31) and deploy again.
+**Status:** built and tested; not deployed.

@@ -826,6 +826,16 @@ if ($page === 'dpo_push') {
     exit;
 }
 
+// ── DPO Pay: the test checkout DPO's reviewer opens ──
+// URL: public.php?page=dpo_test&k=<key from the DPO Pay admin screen>
+// Test environment only, and only with the key; 404 otherwise. It starts a
+// payment through the same initiate() as Pay Now — see the file.
+if ($page === 'dpo_test') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/dpo_test.php';
+    exit;
+}
+
 //  EFRIS fiscal e-invoice PDF (HMAC-tokened link from the admin tab)
 // URL: public.php?page=efris_pdf&file=…&token=…
 if ($page === 'efris_pdf') {

@@ -53,22 +53,43 @@ if ($path === '/__test/clients') fu_out(['clients' => $state['clients'] ?? [],
 //
 // Invoice ids ARE the scenario here, so a test names the case it wants by the
 // invoice it asks to pay.
-if (preg_match('#^/invoices/(\d+)$#', $path, $m)) {
-    $id = (int)$m[1];
+// uCRM's statuses, as Ubiquiti's own revenue-report plugin states them:
+// 1 = Unpaid, 2 = Partially paid, 3 = Paid; 4 is void, 0 a draft.
+function fu_invoice(int $id): array
+{
     $inv = ['id' => $id, 'clientId' => 7, 'number' => 'INV-2026-' . str_pad((string)$id, 5, '0', STR_PAD_LEFT),
             'total' => 299000.0, 'amountPaid' => 0.0, 'currencyCode' => 'UGX', 'status' => 1,
             'createdDate' => '2026-09-01', 'dueDate' => '2026-09-15',
             'items' => [['label' => 'DishNet Home - Monthly Internet Service']]];
     switch ($id) {
         case 126: $inv['amountPaid'] = 100000.0; $inv['status'] = 2; break;   // part-paid elsewhere
-        case 127: $inv['amountPaid'] = 299000.0; $inv['status'] = 4; break;   // already settled
+        case 127: $inv['amountPaid'] = 299000.0; $inv['status'] = 3; break;   // already settled
         case 128: $inv['status'] = 9; break;                                   // a blocked status
         case 129: $inv['clientId'] = 999; break;                               // someone else's
         case 130: $inv['currencyCode'] = 'KES'; break;                         // a currency we do not take
         case 131: $inv['currencyCode'] = ''; break;                            // no currency recorded
-        case 999: fu_out(['error' => 'FAKE-UCRM-TEST: no such invoice'], 404);
+        case 132: $inv['status'] = 4; break;                                   // void, nothing paid
+        case 133: $inv['status'] = 0; break;                                   // a draft
+        case 140: $inv['clientId'] = 12; $inv['total'] = 1000.0; break;        // the test customer's
     }
-    fu_out($inv);
+    return $inv;
+}
+if (preg_match('#^/invoices/(\d+)$#', $path, $m)) {
+    if ((int)$m[1] === 999) fu_out(['error' => 'FAKE-UCRM-TEST: no such invoice'], 404);
+    fu_out(fu_invoice((int)$m[1]));
+}
+// A client's open invoices, the way the DPO test checkout asks for them.
+if ($path === '/invoices') {
+    $cid  = (int)($q['clientId'] ?? 0);
+    $want = array_map('intval', (array)($q['statuses'] ?? []));
+    $rows = [];
+    foreach ([125, 126, 127, 132, 133, 140] as $id) {
+        $inv = fu_invoice($id);
+        if ($inv['clientId'] !== $cid) continue;
+        if ($want !== [] && !in_array($inv['status'], $want, true)) continue;
+        $rows[] = $inv;
+    }
+    fu_out($rows);
 }
 if ($path === '/payment-methods') {
     fu_out([['id' => '6efe0fa8-36b2-4dd1-b049-427bffc7d369', 'name' => 'Cash'],
@@ -211,7 +232,11 @@ if ($path === '/clients' || strpos($path, '/clients?') === 0) {
 if (preg_match('#^/clients/(\d+)$#', $path, $m)) {
     // client 9 belongs to the Uganda org; client 8 to the other one
     $id = (int)$m[1];
-    fu_out(['id' => $id, 'organizationId' => $id === 8 ? 7 : 1]);
+    $c  = ['id' => $id, 'organizationId' => $id === 8 ? 7 : 1];
+    // client 12 is the DPO test customer the test checkout lists
+    if ($id === 12) $c += ['firstName' => 'DPO', 'lastName' => 'Test Customer',
+                           'contacts' => [['email' => 'dpo-test@example.invalid', 'phone' => '+256700000012']]];
+    fu_out($c);
 }
 // The product catalogue the assistant quotes from.
 //

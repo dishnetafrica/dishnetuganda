@@ -169,17 +169,21 @@ Notes on specific fields:
   it must be registered with DPO out of band. **UNCONFIRMED — for DPO.**
 - **`PTL` / `PTLtype`** — `PTLtype: minutes` comes from DPO's API documentation
   as surfaced in search; I could not open the page from here.
-  **Treat the spelling as unconfirmed.** Both values are config, and the field
+  ~~Treat the spelling as unconfirmed.~~ **Confirmed 25 September 2026 (§9):**
+  DPO's recurring payments guide sends `<PTL>15</PTL><PTLtype>hours</PTLtype>`,
+  and their WooCommerce gateway offers `minutes`. Both values are config, and the field
   pair is omitted entirely when unset. Worth knowing: **DPO's own WooCommerce
   module never sends PTL at all** — only their common class supports it. This
   is exactly why `attempt_expires_at` exists on our side.
 - Every value is XML-escaped before interpolation. DPO's own class interpolates
   raw, which would break on an ampersand in a customer's name; ours will not.
 
-### verifyToken — `POST https://secure.3gdirectpay.com/API/v7/`
+### verifyToken — `POST https://secure.3gdirectpay.com/API/v6/`
 
-Note the version change. This is not a typo: DPO's current common class posts
-createToken to v6 and verifyToken to v7.
+**Corrected 25 September 2026 (§9).** This said `/API/v7/`: DPO's common class
+posts createToken to v6 and verifyToken to v7. DPO's onboarding for this account
+gives one endpoint, `/API/v6/`, and the verifyToken V6 documentation — their
+instruction wins, as the end of this document says it must.
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -208,7 +212,13 @@ Expected success shape:
 
 **Field names in the verify response beyond `Result`, `ResultExplanation`,
 `CompanyRef` and `CustomerCreditType` are UNCONFIRMED** — those four are the
-ones DPO's own plugin reads. The client will parse defensively: a missing
+ones DPO's own plugin reads. *25 September 2026:* the verifyToken V6 example in
+DPO's documentation (read through search results; the page itself is blocked
+from here) carries `TransactionAmount`, `TransactionCurrency`,
+`TransactionApproval` and `CustomerCreditType`, and **no `CompanyRef`**. The
+client already treats an absent `CompanyRef` as "not stated", and only a
+different one as a mismatch; `tests/test_dpo_review_link.php` settles a
+V6-shaped answer. The client will parse defensively: a missing
 amount or currency element means *we could not confirm the figures*, which
 quarantines rather than settles. It never means *assume they match*.
 
@@ -413,11 +423,62 @@ produce, and it makes failures deterministic.
 Unchanged and not to be invented. Framework building proceeds; **go-live does
 not** until DPO confirms:
 
-UGX availability · MTN Mobile Money · Airtel Money · test company token · live
+UGX availability · MTN Mobile Money · Airtel Money · ~~test company token~~ · live
 company token · `ServiceType` · `CompanyAccRef` · push/callback registration
 process · refund process · transaction limits · merchant onboarding
-requirements · the `PTLtype` spelling.
+requirements · ~~the `PTLtype` spelling~~.
+
+*25 September 2026:* DPO sent test company tokens with their service types, and
+their guide settles the `PTLtype` spelling (§9). DPO issues the **live** token
+only after their team has paid through a test link of ours; they have also asked
+again for the merchant onboarding documents.
 
 Where DPO's current merchant onboarding gives account-specific instructions that
 differ from the published code read here, **DPO's instructions win** and this
 document is corrected.
+
+---
+
+## 9. DPO's onboarding, 25 September 2026 — and what it changed (5.18.32)
+
+DPO's Country Director for Uganda sent test credentials and their *Recurring
+Payments* guide, and set out the integration as **Option A**: `createToken`, send
+the customer to `https://secure.3gdirectpay.com/payv3.php?ID=<token>`, then
+`verifyToken`. The endpoint for both calls: `https://secure.3gdirectpay.com/API/v6/`.
+Before DPO issues live credentials, their team pays through **a test link of
+ours**. The tokens themselves are not recorded in this repository.
+
+| | Built before | DPO's instruction | Now |
+|---|---|---|---|
+| verifyToken | `/API/v7/` (DPO's common class) | `/API/v6/` | `/API/v6/` |
+| checkout page | `payv2.php` (DPO's common class) | `payv3.php` | `payv3.php` |
+| `PTLtype` | unconfirmed | `hours` in their guide; `minutes` in their plugin | confirmed |
+
+**Found while checking, and fixed:**
+
+- **The test environment was open to every customer.** Pay Now showed whenever
+  DPO Pay was switched on and configured, whatever the environment, and a test
+  payment settled like a live one. DPO's test cards are published, so with a
+  test token switched on anyone could have cleared a real invoice with one. Now
+  a new setting, `dpo_test_clients`, names the uCRM clients who may pay while the
+  environment is **test**. Nobody else sees Pay Now or can start a payment, and a
+  test payment for anybody else is **quarantined, never posted to uCRM**.
+- **DPO's reviewer had no way in.** The portal signs customers in with a
+  one-time code sent to their own phone. `public.php?page=dpo_test&k=<key>`
+  (`dpo_test.php`) lists the test customers' unpaid invoices with a Pay button,
+  and pays through the same `initiate()`. It works in the **test environment
+  only**, and only with the key made on the admin screen, which can replace it.
+  It sends no referrer, so the key never reaches DPO. The result page sends a
+  test payer back to it instead of to the portal.
+- **The paid status.** `UCRM_STATUS_PAID` was 4. uCRM's paid status is **3** —
+  Ubiquiti's own revenue-report plugin: *"1 = Unpaid, 2 = Partially paid, 3 =
+  Paid"* — and this plugin's product screens read 4 as void. Nothing was ever
+  wrongly payable: a void invoice was refused as "already paid", and a paid one
+  had nothing outstanding. Now only statuses 1 and 2 can be paid online; 0
+  (draft), 4 (void) and anything else are refused.
+
+**New:** `tools/dpo_probe.php` asks DPO whether the saved token, service type and
+currency are accepted — `createToken`, then `verifyToken` expecting `900` — before
+anyone is sent the link. It runs only in the test environment and never prints
+the token. The record for the operator is `docs/32-dpo-pay-review.md` at the
+repository root.

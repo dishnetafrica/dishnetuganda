@@ -45,6 +45,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['dp_action'] ?? 
         'dpo_currencies'         => trim((string)($_POST['dpo_currencies'] ?? '')),
         'dpo_unpayable_statuses' => trim((string)($_POST['dpo_unpayable_statuses'] ?? '')),
         'dpo_ptl'                => (string)max(0, (int)($_POST['dpo_ptl'] ?? 30)),
+        'dpo_test_clients'       => implode(', ', DpoBootstrap::testClients(
+                                        ['dpo_test_clients' => (string)($_POST['dpo_test_clients'] ?? '')])),
     ];
     // A blank token field LEAVES the stored one alone. Clearing a live
     // credential must be deliberate, not the result of saving the form
@@ -63,6 +65,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['dp_action'] ?? 
     if (function_exists('logActivity')) {
         logActivity($dpDataDir, 'dpo_settings_saved', 'DPO Pay settings changed',
             'environment=' . $dpPairs['dpo_environment'] . ' enabled=' . $dpPairs['dpo_enabled']);
+    }
+}
+
+// ── The test link for DPO's reviewer ────────────────────────────────────
+// A new key replaces the old one, so a link that went further than it
+// should can be closed from here.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['dp_action'] ?? '') === 'new_test_link') {
+    if (function_exists('csrfCheck')) csrfCheck();
+    $dpPairs  = ['dpo_test_link_key' => bin2hex(random_bytes(16))];
+    $dpConfig = array_merge($dpConfig, $dpPairs);
+    $store->save('kyc_config.json', $dpConfig);
+    $dpV = ConfigVault::store($dpRoot, $dpDataDir, $dpPairs);
+    $dpNotice = empty($dpV['ok'])
+        ? 'New test link made, but NOT vaulted: ' . ($dpV['error'] ?? 'unknown') . '.'
+        : 'New test link made. Any earlier link no longer opens.';
+    if (function_exists('logActivity')) {
+        logActivity($dpDataDir, 'dpo_test_link_made', 'DPO Pay test link replaced', '');
     }
 }
 
@@ -263,6 +282,13 @@ table.dp tr:last-child td{border-bottom:none;}
           <div class="hint">Expires the attempt, never the invoice.</div>
         </div>
         <div class="dp-f">
+          <label>Test customers (uCRM client ids)</label>
+          <input type="text" name="dpo_test_clients"
+                 value="<?= $h($dpConfig['dpo_test_clients'] ?? '') ?>" placeholder="e.g. 1234">
+          <div class="hint">Test environment only: nobody else sees Pay Now or can pay,
+            because DPO's test cards are public. Ignored when live.</div>
+        </div>
+        <div class="dp-f">
           <label>uCRM statuses that cannot be paid</label>
           <input type="text" name="dpo_unpayable_statuses"
                  value="<?= $h($dpConfig['dpo_unpayable_statuses'] ?? '') ?>" placeholder="e.g. 0, 5">
@@ -292,6 +318,38 @@ table.dp tr:last-child td{border-bottom:none;}
       <label style="font-size:11px;font-weight:700;color:#475569;margin-top:9px;display:block">Push / notify URL</label>
       <div class="dp-url"><?= $h(DpoBootstrap::pushUrl($dpConfig)) ?></div>
     </div>
+  </div>
+
+  <!-- ── The test link for DPO's reviewer ───────────────────────────── -->
+  <div class="dp-card">
+    <div style="font-size:13px;font-weight:700;color:#0F172A;margin-bottom:4px">
+      Test link for DPO's review</div>
+    <div style="font-size:12px;color:#64748B;line-height:1.55">
+      DPO issues live credentials after their team pays through a test link. This one
+      opens a page listing the test customers' unpaid invoices, each with a Pay button —
+      no sign-in, because DPO cannot receive a customer's one-time code. It works only in
+      the Test environment.
+    </div>
+    <?php $dpTestLink = DpoBootstrap::testLinkUrl($dpConfig); ?>
+    <?php if ($dpReady['environment'] !== 'test'): ?>
+      <div class="dp-note grey" style="margin-top:10px">The environment is Live, so the test
+        link does not open.</div>
+    <?php else: ?>
+      <?php if ($dpReady['test_clients'] === []): ?>
+        <div class="dp-note amber" style="margin-top:10px">No test customer yet. In the Test
+          environment Pay Now is hidden from everyone until one is named in the settings
+          above: a uCRM client made for testing, with an unpaid invoice.</div>
+      <?php endif; ?>
+      <?php if ($dpTestLink !== ''): ?>
+        <label style="font-size:11px;font-weight:700;color:#475569;margin-top:10px;display:block">Send DPO this link</label>
+        <div class="dp-url"><?= $h($dpTestLink) ?></div>
+      <?php endif; ?>
+      <form method="post" style="margin-top:10px">
+        <?php if (function_exists('csrfField')) echo csrfField(); ?>
+        <input type="hidden" name="dp_action" value="new_test_link">
+        <button class="dp-btn" type="submit"><?= $dpTestLink === '' ? 'Make the test link' : 'Replace the test link' ?></button>
+      </form>
+    <?php endif; ?>
   </div>
 
   <!-- ── One payment in full ────────────────────────────────────────── -->
