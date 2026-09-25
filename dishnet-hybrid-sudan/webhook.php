@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/lib/timezone.php';
 require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/QuoteWaLedger.php';
+require_once __DIR__ . '/lib/PaymentOptions.php';
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -2671,7 +2672,7 @@ switch ($changeType) {
             }
 
             $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n\n"
-                 . "💳 Cash / Transfer / Card\n"
+                 . PaymentOptions::quoteLines($config)   // 5.18.31: Airtel Money when pay_airtel_merchant is set
                  . "✅ Reply *YES* to proceed.\n\n";
 
             // Contact info

@@ -159,6 +159,13 @@ $FLAGS = [
     'kyc_messages_like_crm' => ['bool',
         'KYC customers get the WhatsApp a customer created in uCRM gets: "Welcome to DishNet!", then the '
       . 'Quotation & Order Summary with its PDF (unset = the plugin\'s "Request Confirmed!" and proforma)'],
+    // 5.18.31: the Airtel Money Pay merchant ID customers pay (dial *185*9#).
+    // Printed on the WhatsApp quotation summary and in the e-mails' "How to
+    // pay"; unset prints nothing new. The assistant's answer is its own
+    // setting, ai_fact_payment, and the website has its own pay page.
+    'pay_airtel_merchant' => ['text',
+        'Airtel Money merchant ID customers pay — digits only; shown on quotations and in e-mails '
+      . 'with "dial *185*9#" (unset = not shown)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {

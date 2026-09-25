@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/EmailTemplate.php';
+require_once __DIR__ . '/PaymentOptions.php';
 
 /**
  * CustomerEmails — the eight emails a DishNet customer actually needs.
@@ -89,7 +90,8 @@ class CustomerEmails
 
     /**
      * How to pay. Configured bank details are printed; without them the email
-     * points at the document rather than inventing an account number.
+     * points at the document rather than inventing an account number. The
+     * Airtel Money merchant ID (5.18.31) comes first when it is configured.
      */
     private static function payHow(array $c): string
     {
@@ -98,8 +100,9 @@ class CustomerEmails
         $ugx  = trim((string)($c['email_bank_account_ugx'] ?? ''));
         $usd  = trim((string)($c['email_bank_account_usd'] ?? ''));
         $swift= trim((string)($c['email_bank_swift'] ?? ''));
-        if ($ben === '' && $ugx === '') return '';
-        $rows = [];
+        $airtel = PaymentOptions::emailRows($c);
+        if ($ben === '' && $ugx === '' && $airtel === []) return '';
+        $rows = $airtel;
         if ($ben  !== '') $rows['Beneficiary'] = $ben;
         if ($bank !== '') $rows['Bank']        = $bank;
         if ($ugx  !== '') $rows['Account (UGX)'] = $ugx;
@@ -112,8 +115,11 @@ class CustomerEmails
     {
         $ben = trim((string)($c['email_bank_beneficiary'] ?? ''));
         $ugx = trim((string)($c['email_bank_account_ugx'] ?? ''));
-        if ($ben === '' && $ugx === '') return '';
+        $airtel = '';
+        foreach (PaymentOptions::emailRows($c) as $label => $value) $airtel .= "  {$label}: {$value}\r\n";
+        if ($ben === '' && $ugx === '' && $airtel === '') return '';
         return "How to pay:\r\n"
+             . $airtel
              . ($ben !== '' ? "  Beneficiary: {$ben}\r\n" : '')
              . (trim((string)($c['email_bank_name'] ?? '')) !== '' ? '  Bank: ' . $c['email_bank_name'] . "\r\n" : '')
              . ($ugx !== '' ? "  Account (UGX): {$ugx}\r\n" : '')

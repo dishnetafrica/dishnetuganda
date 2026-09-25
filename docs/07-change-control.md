@@ -329,3 +329,38 @@ once), or `git checkout 96c0f91` and deploy again.
 reads it back ON. The KYC form reads the store's copy instead; a read-only
 check of that copy showed `'1'` there too ([30](30-kyc-customers-not-reaching-ucrm.md)
 §9). Live evidence of the messages waits for the next KYC registration.
+
+## 5.18.31 + website — Airtel Money, merchant ID 4428146
+
+**25 September 2026** · `lib/PaymentOptions.php` (new), `webhook.php`,
+`lib/CustomerEmails.php`, `lib/DishNetAiBrain.php`, `tools/ai_facts.php`,
+`tools/set_config.php`, `tests/test_airtel_money.php` (new);
+`dishnet-web-uganda/site/pay.html`, `faq.html`. Record:
+[31](31-airtel-money-merchant.md).
+
+DishNet's Airtel Money Pay merchant ID becomes a payment option everywhere
+the system tells a customer how to pay. A customer dials `*185*9#`, enters
+4428146, the amount and their PIN — free of charge to them — then sends the
+transaction ID so billing can record it.
+
+- **Website:** `pay.html` leads with an Airtel Money section (steps, the app
+  QR, what to send afterwards), and no longer promises automatic reflection.
+  The FAQ answer and its structured data match.
+- **Plugin:** the setting `pay_airtel_merchant` puts Airtel Money on the
+  WhatsApp quotation summary and in the e-mails' "How to pay". **Unset
+  changes nothing.**
+- **The assistant:** a new `ai_fact_payment` text, Airtel Money plus the
+  unchanged Ecobank transfer. When that text carries a USSD code, the prompt
+  tells the assistant to keep the code off lines with other asterisks,
+  because WhatsApp bold can eat one of them.
+
+Tests: 58 assertions, including the quotation through the real webhook to a
+fake Evolution API that keeps whole messages; 13 weakened copies each caught
+by counted failures; full suite 188 files green twice. Both site verifiers
+pass.
+
+**Applied by:** the operator: `deploy-hybrid.sh`, two `set_config.php`
+lines, and a website redeploy in EasyPanel.
+**Rollback:** `--clear` on either setting, `git checkout d52b30a` for the
+code, the previous build for the website.
+**Status:** built and tested; not deployed.
