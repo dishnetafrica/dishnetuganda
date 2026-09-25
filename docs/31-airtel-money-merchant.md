@@ -143,16 +143,64 @@ change, as for the shop on 16 September ([21](21-shop-on-the-website.md)).
 
 ## 5. Open — not decided here
 
-- **MTN MoMo.** The website says, on over twenty pages, that DishNet accepts
-  MTN Mobile Money. No MTN merchant code has been given. Send one and it gets
-  the same treatment; if MTN is not accepted, those claims should go.
-- **In-app and portal payment.** The pay page still offers "In the app →
-  Invoices → Pay … MTN MoMo or Airtel Money" and portal mobile money. The
-  app is not published (the site's own README lists the APK as a
-  placeholder), and the DPO integration is a plan. Left as found; to be
-  confirmed or removed.
+- ~~**MTN MoMo.**~~ **Answered 25 September 2026: *"we dont have momo for
+  now"*.** The claims are gone (§7).
+- ~~**In-app and portal payment.**~~ **Answered: *"app is not yet
+  published"*.** Both offers are gone, and the app page says *coming soon*
+  (§7). The operator did not say the portal takes payments, and nothing
+  here shows that it does: the website's portal link opens uCRM's client
+  zone (`crm.dishnetuganda.com/crm`), and the plugin's DPO payment page sits
+  behind the `dpo_enabled` switch and is not what the website links to. If
+  the portal does take payments, one line on the pay page puts it back.
+- **The app's other mentions.** The *Get the App* link on 37 pages, the 18
+  tutorials, and lines such as *"in the customer portal or the DishNet
+  app"* on the services, fiber and contact pages still describe the app as
+  if it were out. They make no payment claim, so they were left as found.
+  Hiding them until the app is published is the operator's call.
+- **WiFi zones.** The HotSpot pages say zone customers pay *"by Airtel
+  Money"* (they said MTN MoMo or Airtel Money). No captive portal that takes
+  that payment is built yet, and whose merchant ID a zone would use is not
+  decided.
 - **`dishnet-ai`.** If the separate DishNet AI plugin still answers
   customers, its free-text *"Extra instructions for the AI"* field in uCRM
   needs the same payment text. That field is not in this repository.
 - **The office QR.** The pages say the QR code is at the office — read from
   the photo of a desk sign. If it is somewhere else, one line changes.
+
+## 6. Deployed — 25 September 2026
+
+- The operator deployed `f3ab37e` over `723233a`; *"✓ container now serves
+  f3ab37e"*.
+- Both settings were set straight after. The settings tool's listing reads
+  each back: `pay_airtel_merchant` "4428146", and `ai_fact_payment` starting
+  *"Pay by Airtel Money or by bank transfer."* The first listing, printed
+  between the two commands, still showed the old payment text, as it
+  should.
+- The standard note about account numbers was printed after the payment
+  text.
+- **Not yet seen:** a quotation carrying the Airtel line, an e-mail with the
+  Airtel row, and the assistant answering a payment question. Each waits
+  for the next real one.
+- **The website redeploy has not been reported.** Until it runs, the live
+  pay page is the old one.
+
+## 7. The website after the operator's answers
+
+The operator answered two open items: *"we dont have momo for now"* and
+*"app is not yet published"*. Eight pages changed.
+
+| Page | Said | Now says |
+| --- | --- | --- |
+| `pay.html` | Three cards: *In the app* (MTN MoMo or Airtel Money), the portal (*"pay by mobile money"*), and *MTN, bank or cash* | Two cards: the portal shows invoices and payment history — *"To pay, use Airtel Money above"*; and *Bank or cash*, ending *"We do not take MTN Mobile Money at the moment"* |
+| `faq.html` | *"use the DishNet app or the customer portal … to pay by mobile money in a few taps"* | The portal shows invoices and payments; pay with Airtel Money, then send the transaction ID. The mobile-money answer also says MTN is not taken. Visible text and structured data match |
+| `get-the-app.html` | *Download for Android*, a button to `dishnet-africa.apk` (never on the site), *"pay bills with mobile money"*, *"Pay in two taps … MTN MoMo or Airtel Money"* | *Coming soon for Android*, a WhatsApp *"Tell me when it is ready"* button; the bills card says to pay with Airtel Money and links to the steps |
+| `why-dishnet.html` | *Mobile money native — MTN MoMo and Airtel Money for everything* | *Pay with Airtel Money — dial \*185\*9# and pay Merchant ID 4428146* |
+| `about.html`, `services.html`, `hotspot.html` (and its three descriptions), `blog-wifi-hotspot-business-uganda.html` | *MTN MoMo and Airtel Money* | *Airtel Money* |
+
+- `README-DEPLOY.md` now says the APK is not published, and what to put
+  back when it is.
+- **Checks:** MTN appears only in *"We do not take MTN Mobile Money at the
+  moment"*. No link points at an APK. `verify-address.py` says *"The site
+  agrees with itself."* and `verify-site.sh` passes. Checked in a browser
+  at desktop and phone width, with no horizontal scroll.
+- **Deploy:** the same EasyPanel redeploy as §4 publishes both changes.

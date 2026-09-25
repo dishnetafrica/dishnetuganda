@@ -56,7 +56,7 @@ Prices and the product list live in uCRM only.
 | Item | Where |
 | --- | --- |
 | Email `info@dishnetafrica.com` | 45 files — confirm this mailbox is monitored for Uganda enquiries |
-| APK | drop the signed app at `site/dishnet-africa.apk` (get-the-app.html links it; nginx already serves `.apk` with the right MIME type) |
+| APK | not published (operator, 25 Sep 2026). `get-the-app.html` says *coming soon* with a WhatsApp "tell me" button instead of a download that 404'd. When the signed app exists: drop it at `site/dishnet-africa.apk` and put the download button back (nginx already serves `.apk` with the right MIME type) |
 | Testimonials / gallery | deliberately absent — send real Ugandan quotes and photos and the pages get built; invented ones are fake reviews |
 | Portal deep-link | once the DishNet Hybrid plugin is installed on the Uganda uCRM, point "Customer Login" at its `public.php?page=customer_portal` instead of the bare `/crm` zone |
 | Website AI chat | the Sudan site's `chat.js` widget can be added once the plugin (and its `web_chat.php` + spend guard) is live on the Uganda uCRM |

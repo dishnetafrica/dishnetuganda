@@ -363,4 +363,41 @@ pass.
 lines, and a website redeploy in EasyPanel.
 **Rollback:** `--clear` on either setting, `git checkout d52b30a` for the
 code, the previous build for the website.
-**Status:** built and tested; not deployed.
+**Status:** plugin deployed 25 September 2026 (`f3ab37e`, over `723233a`);
+the container serves `f3ab37e`. Both settings were set straight after, and
+the settings listing reads each back: `pay_airtel_merchant` "4428146", and
+`ai_fact_payment` starting *"Pay by Airtel Money or by bank transfer."*
+The website redeploy has not been reported yet; the entry below goes out
+with it.
+
+## Website — no MTN Mobile Money, and the app is coming soon
+
+**25 September 2026** · `dishnet-web-uganda/site/pay.html`, `faq.html`,
+`get-the-app.html`, `about.html`, `why-dishnet.html`, `services.html`,
+`hotspot.html`, `blog-wifi-hotspot-business-uganda.html`;
+`dishnet-web-uganda/README-DEPLOY.md`. Record:
+[31](31-airtel-money-merchant.md) §7.
+
+The operator answered the two questions [31](31-airtel-money-merchant.md)
+§5 had left open: *"we dont have momo for now"* and *"app is not yet
+published"*. The website said the opposite of both.
+
+- **MTN Mobile Money is no longer offered.** The only mention left is
+  *"We do not take MTN Mobile Money at the moment"*, on the pay page and in
+  the FAQ answer (its visible text and its structured data).
+- **Paying in the app or the portal is no longer offered.** The pay page's
+  "In the app" card is gone. The portal card now says the portal shows
+  invoices and payment history, and to pay with Airtel Money. The FAQ's
+  balance-and-bill answer says the same.
+- **The app page says *coming soon*.** Its download button pointed at a file
+  that was never on the site; it is now a WhatsApp "Tell me when it is
+  ready" button. The page's description no longer says the app pays bills.
+- Six other pages that said "MTN MoMo and Airtel Money" now say Airtel Money.
+
+Both site verifiers pass. Checked in a browser at desktop and phone width,
+with no horizontal scroll.
+
+**Applied by:** the operator: the website redeploy in EasyPanel (project
+`web`, app `web-uganda`), which also publishes 5.18.31's pay page.
+**Rollback:** the previous build.
+**Status:** not deployed.
