@@ -473,7 +473,7 @@ the fake DPO are all this touches: the seven tests that use them passed twice.
 **Applied by:** the operator: `deploy-hybrid.sh`. Optional — the probe already
 works when only the DPO token is pasted.
 **Rollback:** `git checkout 1fd1478` and deploy again.
-**Status:** built and tested; not deployed.
+**Status:** deployed 25 September 2026 with 5.18.36 (`c82e0b9`).
 
 ## 5.18.34 + website — links without `:8443`
 
@@ -525,7 +525,8 @@ path and now do not.
 (and `--set https://crm.dishnetuganda.com` if it shows none). Then, after
 opening `/crm/login` once, the website redeploy in EasyPanel.
 **Rollback:** `git checkout b4cc109` and deploy again; the website's previous build.
-**Status:** built and tested; not deployed.
+**Status:** plugin deployed 25 September 2026 with 5.18.36 (`c82e0b9`). The
+`crm_url_check.php` result is not reported yet. The website is not redeployed.
 
 ## 5.18.35 — the DPO probe shows nothing typed at either prompt
 
@@ -564,7 +565,7 @@ Tests: `test_dpo_review_link.php` 103 checks (was 93).
 **Applied by:** the operator: `deploy-hybrid.sh`. It deploys 5.18.33, 5.18.34
 and this together.
 **Rollback:** `git checkout bd0b329` and deploy again.
-**Status:** built and tested; not deployed.
+**Status:** deployed 25 September 2026 with 5.18.36 (`c82e0b9`).
 
 ## 5.18.36 — every DPO door reads what the DPO Pay screen saved
 
@@ -612,4 +613,10 @@ Tests:
 the DPO Pay screen (the token field can stay blank), which backs up the
 settings in effect.
 **Rollback:** `git checkout e7b754f` and deploy again.
-**Status:** built and tested; not deployed.
+**Status:** deployed 25 September 2026 (`c82e0b9`, "✓ container now serves
+c82e0b9"). On the server afterwards:
+- The probe read the saved settings. Its vault line listed every DPO setting,
+  which only a Save made on the screen can put there, so the Save now reaches
+  the vault.
+- It refused the saved company token because it is not shaped like one of
+  DPO's, before sending anything.

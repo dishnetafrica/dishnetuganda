@@ -255,6 +255,13 @@ again later:
   - **5.18.36:** every one of them reads what the screen saved first. The
     batch goes through, a failure shows in red, and the probe says where its
     settings came from.
+- **5.18.36 deployed** (`c82e0b9`).
+  - The probe read the saved settings, and the vault now holds all of them.
+  - It refused what is saved as the company token: that value is not shaped
+    like one of DPO's. Nothing was sent.
+  - The operator reports that no test token has been received from DPO. The
+    token and service type to use are the ones in DPO's 25 September e-mail
+    (§1). If they cannot be found, ask Collins for one that takes UGX.
 - **5.18.34:** the return, push and test addresses on the DPO screen, and the
   addresses Pay Now gives DPO, carried `:8443`. The screen read a copy of the
   settings without the setting that removes the port. Fixed; see
