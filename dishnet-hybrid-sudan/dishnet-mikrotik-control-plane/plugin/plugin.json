@@ -20,7 +20,7 @@
     ],
     "postgresql": ">=14",
     "postgresql_role": "the plugin does not create its database. plugin/bin/bootstrap.sql creates an owner role with CREATEROLE and CREATEDB (not superuser, not BYPASSRLS) and an empty database owned by it.",
-    "worker": "bin/worker.php is a long-running process for the intent queue and the sign-in SMS outbox. Sign-in codes are sent ONLY by the worker, through whatever DN_SMS selects (nothing by default). The Admin read panel does not need it; provisioning does: POST /routers/{device_id}/actions (push_config) queues a device.provision intent that ONLY the worker delivers, through whatever DN_DELIVERY selects (nothing by default).",
+    "worker": "bin/worker.php is a long-running process for the intent queue and the sign-in SMS outbox. Sign-in codes are sent ONLY by the worker: through what an Admin saved in the panel (Administration → SMS for sign-in, migration 033) when DN_SMS is unset, or through whatever DN_SMS selects when it is set (nothing by default either way). The Admin read panel does not need it; provisioning does: POST /routers/{device_id}/actions (push_config) queues a device.provision intent that ONLY the worker delivers, through whatever DN_DELIVERY selects (nothing by default).",
     "redis": false,
     "docker": false,
     "web_server": "any server that serves panel/ as static files and routes /api/v1/admin/* to plugin/public/api.php. The API reads the raw REQUEST_URI path, so a prefix mount must be stripped before PHP sees it."
@@ -189,7 +189,7 @@
     "DN_SMS": {
       "required": false,
       "secret": false,
-      "description": "Worker SMS binding for sign-in codes (docs/127): unset or 'null' (nothing is sent; every queued code expires, and no operator can sign in), 'africastalking' (the Africa's Talking adapter; needs DNB_SMS_USERNAME and DNB_SMS_API_KEY). Any other value refuses to start. There is no fallback."
+      "description": "Worker SMS binding for sign-in codes (docs/127, docs/128). Unset: the settings a DishNet Admin saves in the Admin panel decide (migration 033), re-read every second; none until someone sets them, so nothing is sent and every queued code expires. 'null': nothing is sent, whatever the panel says. 'africastalking': the Africa's Talking adapter from DNB_SMS_USERNAME and DNB_SMS_API_KEY, and the panel's settings are ignored (the panel says so). Any other value refuses to start. There is no fallback."
     },
     "DNB_SMS_USERNAME": {
       "required": false,
@@ -210,7 +210,7 @@
   "api": {
     "base": "/api/v1/admin",
     "entrypoint": "plugin/public/api.php",
-    "surface": "estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write",
+    "surface": "estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write; SMS settings read-write (Admin)",
     "routes": [
       {
         "method": "GET",
@@ -471,6 +471,26 @@
           "method": "POST",
           "path": "/staff/{staff_id}/totp-reset",
           "capability": "staff.manage"
+        }
+      ]
+    },
+    "settings": {
+      "note": "SMS for sign-in codes (migration 033, docs/128). Admin only (sms.manage), bound only when the real provider is. The write is one SECURITY DEFINER function, mt_sms_settings_set(), owned by dnb_def_auth and EXECUTE-able by dnb_adminwrite only, that writes its own audit row (actor_kind='staff', actor = the authenticated username; never the key). The API key is sealed in the Admin API before the database sees it, is opened only in the worker's memory, and is never returned: the read says whether one is set. The read is mt_admin_sms_settings() on dnb_adminapi: the settings without the key, the worker's own report, and the outbox's counts, with no phone number and no code.",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/settings/sms",
+          "capability": "sms.manage",
+          "function": "mt_admin_sms_settings",
+          "role": "dnb_adminapi"
+        },
+        {
+          "method": "POST",
+          "path": "/settings/sms",
+          "capability": "sms.manage",
+          "function": "mt_sms_settings_set",
+          "role": "dnb_adminwrite",
+          "actor": "the authenticated staff subject; the body carries only provider, username, api_key and sender, and anything else is refused"
         }
       ]
     },

@@ -161,10 +161,20 @@ $panel = implode("\n", array_map(
 // 'RADIUS' appears as screen copy explaining why a per-router session count is
 // not derivable, which is legitimate visible text. What must not appear is a
 // credential, an AAA table, or a router endpoint.
-foreach (['secret', 'api_key', 'apikey', 'Authorization',
+foreach (['secret', 'apikey', 'Authorization',
           'radius_ref', 'radcheck', 'radreply', 'rest/', '8728', '8729'] as $leak) {
     is_(stripos($panel, $leak), false, "the panel code carries no {$leak}");
 }
+// Since migration 033 (docs/128) the SMS page has an API key FIELD, which an
+// Admin types into and the panel posts once: the bare word 'api_key' is now
+// legitimate markup, exactly as 'password' became in 026. What must not appear
+// is a credential-SHAPED thing (a quoted value assigned to it), and the word may
+// appear only where that one form puts it — counted, so a fifth use fails here.
+is_(preg_match('/api_?key\s*[:=]\s*[\'"`]/i', $panel), 0, 'the panel code assigns or stores no API key value');
+is_(preg_match('/api_?key\s*[:=]\s*[\'"`]/i', 'api_key: "atsk_0123456789abcdef"'), 1, 'CONTROL: that pattern DOES match a credential-shaped assignment');
+is_(preg_match_all('/api_key/i', $panel), 4, 'the word api_key appears exactly four times in the panel code');
+is_([substr_count($panel, 'name="api_key"'), substr_count($panel, "fd.get('api_key')"), substr_count($panel, 'body.api_key = key;')], [2, 1, 1],
+    'all four in the SMS form: its field (and the line that empties it), the read of what was typed, and the one request body that carries it');
 // Since migration 026 the login gate has a real password FIELD, so the bare
 // word is legitimate screen markup. What must not appear is a credential-
 // SHAPED thing — an assignment or a stored value — the same discriminator

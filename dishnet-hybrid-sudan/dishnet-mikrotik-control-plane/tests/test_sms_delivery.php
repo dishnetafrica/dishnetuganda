@@ -536,8 +536,15 @@ $runWorker = static function (array $env) use ($root): array {
     exec("{$pre}php " . escapeshellarg($root . '/bin/worker.php') . ' --once 2>&1', $out, $rc);
     return [$rc, implode("\n", $out)];
 };
+// Since migration 033 (docs/128 SS-9) an UNSET DN_SMS means "the Admin panel's
+// settings decide" — rewritten from "the binding is null", not deleted. With
+// nothing set in the panel the worker still sends nothing, and says so.
 [$rc0, $o0] = $runWorker([]);
-is_([$rc0, str_contains($o0, '"sms":"null"')], [0, true], 'DN_SMS unset: the worker starts, runs a pass, and says its SMS binding is null');
+is_([$rc0, str_contains($o0, '"sms":"panel"'), (bool) preg_match('/"sms_settings":\{"version":\d+,"state":"off"/', $o0)], [0, true, true],
+    'DN_SMS unset: the worker starts, runs a pass, follows the Admin panel, and reports it off (nothing set there)');
+[$rcN, $oN] = $runWorker(['DN_SMS' => 'null']);
+is_([$rcN, str_contains($oN, '"sms":"null"'), str_contains($oN, '"sms_settings"')], [0, true, false],
+    'DN_SMS=null: the environment decides — its binding is null, and the panel is not followed');
 [$rc1, $o1] = $runWorker(['DN_SMS' => 'twilio']);
 is_([$rc1 !== 0, str_contains($o1, "DN_SMS='twilio' is not an SMS binding")], [true, true], 'an unknown binding: it refuses to start');
 [$rc2, $o2] = $runWorker(['DN_SMS' => 'africastalking', 'DNB_SMS_USERNAME' => 'user-canary-7', 'DNB_SMS_API_KEY' => '']);

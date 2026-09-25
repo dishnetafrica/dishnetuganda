@@ -9,6 +9,9 @@ use Dn\Admin\Csrf;
 use Dn\Admin\OnboardingAdmin;
 use Dn\Admin\OnboardingRefused;
 use Dn\Admin\RouterAdmin;
+use Dn\Admin\SettingsAdmin;
+use Dn\Admin\SettingsRefused;
+use Dn\Notify\SmsSettings;
 use Dn\Admin\RouterRefused;
 use Dn\Admin\StaffAdmin;
 use Dn\Admin\StaffIdentity;
@@ -76,7 +79,8 @@ final class AdminRoutes
                                  ?StaffAdmin $staff = null,
                                  ?Csrf $csrf = null,
                                  ?RouterAdmin $routers = null,
-                                 ?OnboardingAdmin $onboarding = null): Router
+                                 ?OnboardingAdmin $onboarding = null,
+                                 ?SettingsAdmin $settings = null): Router
     {
         $r = new Router();
         // Cross-site protection for every mutating route, capability-gated or
@@ -245,7 +249,108 @@ final class AdminRoutes
         // authenticated subject, never a field of the request.
         self::staff($r, $guard, $reader, $unconfigured, $staff);
 
+        // ── SMS for sign-in codes (migration 033, docs/128) ─────────────
+        // Admin only (sms.manage), bound only beside the real provider — like
+        // the staff roster, and for the same reason: it decides where every
+        // sign-in code goes. The API key goes in once and never comes back.
+        self::settings($r, $guard, $reader, $unconfigured, $staff !== null ? $settings : null);
+
         return $r;
+    }
+
+    /**
+     * GET  /settings/sms   the settings, whether a key is set (never the key),
+     *                      what the worker reports, and the outbox's counts
+     * POST /settings/sms   {provider, username, api_key, sender}         200 | 400 | 409 | 501
+     *
+     * The body carries exactly those four fields: anything else — an actor, a
+     * version, an envelope — is refused, never ignored. An absent or empty
+     * api_key keeps the stored one, for the same username only. The answer says
+     * what happened to the key (set, replaced, kept, removed) and nothing of it.
+     */
+    private static function settings(Router $r, callable $guard, callable $reader,
+                                     bool $unconfigured, ?SettingsAdmin $settings): void
+    {
+        $off = static fn() => new Response(501, [
+            'error'  => 'sms_settings_unavailable',
+            'detail' => 'SMS settings are bound only under the real identity provider (DN_STAFF_IDENTITY=dishnet) '
+                      . 'with an Admin write connection; this process runs without them',
+        ]);
+
+        $r->get('/api/v1/admin/settings/sms', $guard(Capability::SMS_MANAGE,
+            static function (Request $req) use ($reader, $unconfigured, $settings, $off) {
+                if ($settings === null || $unconfigured) { return $off(); }
+                $x = $reader('mt_admin_sms_settings')[0] ?? null;
+                if ($x === null) { return $off(); }
+                return Response::ok([
+                    'sms' => [
+                        'provider' => $x['provider'], 'username' => $x['username'], 'sender' => $x['sender'],
+                        'key_set' => (bool) $x['key_set'], 'version' => (int) $x['version'],
+                        'updated_at' => $x['updated_at'], 'updated_by' => $x['updated_by'],
+                    ],
+                    // What the worker SAID it is doing — never inferred from the form.
+                    'worker' => [
+                        'state' => $x['worker_state'], 'version' => $x['worker_version'] === null ? null : (int) $x['worker_version'],
+                        'detail' => $x['worker_detail'], 'seen_at' => $x['worker_seen_at'],
+                        'recent' => (bool) $x['worker_recent'],
+                    ],
+                    // The outbox's own record: counts and times. No number, no code.
+                    'delivery' => [
+                        'sent_24h' => (int) $x['sent_24h'], 'failed_24h' => (int) $x['failed_24h'],
+                        'expired_24h' => (int) $x['expired_24h'], 'no_recipient_24h' => (int) $x['no_recipient_24h'],
+                        'pending_now' => (int) $x['pending_now'],
+                        'last_sent_at' => $x['last_sent_at'],
+                        'last_failure_at' => $x['last_failure_at'], 'last_failure' => $x['last_failure'],
+                    ],
+                ]);
+            }), auth: false);
+
+        $r->post('/api/v1/admin/settings/sms', $guard(Capability::SMS_MANAGE,
+            static function (Request $req, StaffIdentity $s) use ($settings, $off) {
+                if ($settings === null) { return $off(); }
+                $body = $req->body;
+                foreach (array_keys($body) as $k) {
+                    if (!in_array($k, ['provider', 'username', 'api_key', 'sender'], true)) {
+                        return Response::badRequest("{$k} is not accepted: the body carries only provider, username, api_key and sender");
+                    }
+                }
+                $provider = $body['provider'] ?? null;
+                if (!is_string($provider) || !in_array($provider, SmsSettings::PROVIDERS, true)) {
+                    return Response::badRequest('provider must be one of: ' . implode(', ', SmsSettings::PROVIDERS));
+                }
+                $text = static function (string $k) use ($body): ?string {
+                    $v = $body[$k] ?? null;
+                    return is_string($v) && trim($v) !== '' ? trim($v) : null;
+                };
+                foreach (['username', 'api_key', 'sender'] as $k) {
+                    if (array_key_exists($k, $body) && $body[$k] !== null && !is_string($body[$k])) {
+                        return Response::badRequest("{$k} must be text");
+                    }
+                }
+                [$user, $key, $sender] = [$text('username'), $text('api_key'), $text('sender')];
+                if ($provider === 'none') {
+                    if ($user !== null || $key !== null || $sender !== null) {
+                        return Response::badRequest('turning SMS off takes no username, api_key or sender');
+                    }
+                } else {
+                    if ($user === null || !SmsSettings::validUsername($user)) {
+                        return Response::badRequest('username must be 1-64 letters, digits, dots, dashes or underscores');
+                    }
+                    // Never echo the value: a key that fails the rule may still be a key.
+                    if ($key !== null && !SmsSettings::validApiKey($key)) {
+                        return Response::badRequest('api_key must be 16-256 letters, digits, dashes or underscores');
+                    }
+                    if ($sender !== null && !SmsSettings::validSender($sender)) {
+                        return Response::badRequest('sender must be 1-15 letters, digits, spaces, dots, dashes or underscores');
+                    }
+                }
+                try {
+                    $done = $settings->saveSms($provider, $user, $key, $sender, $s->subject);
+                } catch (SettingsRefused $e) {
+                    return new Response(409, ['error' => 'refused', 'detail' => $e->getMessage()]);
+                }
+                return Response::ok(['changed' => $done['changed'], 'version' => $done['version'], 'key' => $done['key']]);
+            }), auth: false);
     }
 
     /**
@@ -753,7 +858,7 @@ final class AdminRoutes
             Capability::PLANS_WRITE, Capability::VOUCHERS_READ, Capability::VOUCHERS_GENERATE,
             Capability::SESSIONS_READ, Capability::SESSIONS_DISCONNECT,
             Capability::INTENTS_READ, Capability::AUDIT_READ,
-            Capability::STAFF_MANAGE,
+            Capability::STAFF_MANAGE, Capability::SMS_MANAGE,
         ];
     }
 }

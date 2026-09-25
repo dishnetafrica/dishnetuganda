@@ -395,19 +395,19 @@ is_(array_map(static fn($r) => $r['see'] ?? null, array_slice($routerWrites, 2))
 is_(array_map(static fn($r) => $r['path'], array_slice($m->writeRoutes, 4)), ['/customers', '/customers/{customer_id}/services', '/sites', '/customers/{customer_id}/principals'],
     'then the three onboarding writes of 030 (docs/125) and the principals route (docs/126)');
 is_(array_map(static fn($r) => $r['path'], $m->unboundWrites), ['/plans', '/voucher-batches', '/sessions/{session_id}/disconnect'], 'three declared-unbound paths remain — /sites is bound since 030, principals since docs/126');
-is_($m->apiSurface, 'estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write', 'the surface names both groups'); 
+is_($m->apiSurface, 'estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write; SMS settings read-write (Admin)', 'the surface names all three groups — the SMS settings since 033 (docs/128)'); 
 is_($m->gateIsOpen('admin-write'), false, 'the admin-write gate is still not OPEN — partially bound, said so');
 is_(str_contains($m->requires['worker'], 'ONLY the worker delivers'), true, 'the worker requirement says the action needs the worker');
 foreach ([StaffRole::Admin, StaffRole::Noc] as $r) { is_([$r->can('routers.lifecycle'), $r->can('routers.act')], [true, true], "{$r->value} holds lifecycle and act"); }
 foreach ([StaffRole::Sales, StaffRole::Support] as $r) { is_([$r->can('routers.lifecycle'), $r->can('routers.act')], [false, false], "{$r->value} holds neither"); }
 
 // ===========================================================================
-t('10. REPOSITORY STATE — 028 is followed by 029 (O-1, docs/124), 030 (onboarding, docs/125), 031 and 032 (sign-in, docs/127); the ledger agrees; nothing claims hardware');
+t('10. REPOSITORY STATE — 028 is followed by 029 (O-1, docs/124), 030 (onboarding, docs/125), 031 and 032 (sign-in, docs/127) and 033 (SMS settings, docs/128); the ledger agrees; nothing claims hardware');
 $files = array_map('basename', glob($root . '/migrations/*.sql')); sort($files);
-is_(array_slice($files, -5), ['028_admin_router_lifecycle_and_provisioning.sql', '029_o1_site_service_same_operator.sql', '030_admin_operator_onboarding.sql',
-                             '031_sign_in_requires_active_operator.sql', '032_sign_in_codes_by_sms.sql'],
-    '028 is followed by 029 (O-1, docs/124), 030 (onboarding, docs/125), 031 and 032 (sign-in, docs/127)');
-is_((int) $ins->one('SELECT count(*)::int n FROM mt_migrations')['n'], 32, 'the ledger records 32');
+is_(array_slice($files, -6), ['028_admin_router_lifecycle_and_provisioning.sql', '029_o1_site_service_same_operator.sql', '030_admin_operator_onboarding.sql',
+                             '031_sign_in_requires_active_operator.sql', '032_sign_in_codes_by_sms.sql', '033_sms_settings_from_the_admin_panel.sql'],
+    '028 is followed by 029 (O-1, docs/124), 030 (onboarding, docs/125), 031 and 032 (sign-in, docs/127) and 033 (SMS settings, docs/128)');
+is_((int) $ins->one('SELECT count(*)::int n FROM mt_migrations')['n'], 33, 'the ledger records 33');
 $m028 = file_get_contents($root . '/migrations/028_admin_router_lifecycle_and_provisioning.sql');
 is_(str_contains($m028, 'docs/121') && str_contains($m028, 'RULE I-1') && str_contains($m028, 'ON CONFLICT (customer_id, idempotency_key)'), true, 'it cites its review, RULE I-1 and closes the race inside the function');
 is_(preg_match('/10\.66/', (string) $ins->one("SELECT prosrc FROM pg_proc WHERE oid = ?::regprocedure", [$fn])['prosrc']), 0,

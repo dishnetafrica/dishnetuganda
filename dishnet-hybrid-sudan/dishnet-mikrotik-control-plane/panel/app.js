@@ -9,7 +9,8 @@
  * register, assign, lifecycle state, push configuration (migration 028,
  * docs/121) — and the three onboarding writes of onboarding.js — an operator,
  * its HotSpot service, a location (migration 030, docs/125) — and nothing
- * else; identity writes go through staff.js. Nothing in this file contacts a
+ * else; identity writes go through staff.js, and the SMS settings through
+ * settings.js (migration 033, docs/128). Nothing in this file contacts a
  * router: every write is a row on the server.
  */
 import { Session, renderGate, L } from './login.js';
@@ -17,6 +18,7 @@ import { AdminApi, S, cohort, COHORT_LABEL, contactAge, evidenceLevel } from './
 import { StaffApi, AccountApi } from './staff.js';
 import { RouterWriteApi, NEXT_STATES, STEP_MEANING, freshKey } from './routers.js';
 import { OnboardingWriteApi } from './onboarding.js';
+import { SmsSettingsApi } from './settings.js';
 
 const api = new AdminApi();
 /* The identity plane has its own client (staff.js) so that api.js stays
@@ -29,6 +31,9 @@ const routersApi = new RouterWriteApi();
 /* The onboarding-write client (docs/125 D-11): three operations, every one a
  * row on the server. A location is sent with its service only. */
 const onboardingApi = new OnboardingWriteApi();
+/* The SMS-settings client (docs/128): one read and one write, Admin only. The
+ * API key goes from a password field to the request body and nowhere else. */
+const smsApi = new SmsSettingsApi();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const short = id => id ? String(id).slice(0, 8) : '—';
@@ -52,6 +57,7 @@ export const NAV = [
   { sec: 'Administration' },
   { id: 'audit',       label: 'Audit log' },
   { id: 'staff',       label: 'DishNet staff' },
+  { id: 'sms',         label: 'SMS for sign-in' },
   { id: 'account',     label: 'My account' },
 ];
 
@@ -732,6 +738,82 @@ async function vStaff() {
           <code>plugin.php staff:bootstrap</code>.</p></div>`);
 }
 
+/* SMS for sign-in codes (migration 033, docs/128). Admin only.
+ *
+ * The page says what the WORKER reported and what the outbox RECORDED — never
+ * "working" because a form was saved. The key field is a password field that
+ * is never filled in: the server does not have the key to send back, only
+ * whether one is set. */
+const SMS_SAID = {
+  set: 'Saved. The key is stored sealed and will not be shown again.',
+  replaced: 'Saved. The new key replaced the old one.',
+  removed: 'SMS is off: no sign-in code will be sent.',
+};
+async function vSms() {
+  const res = await smsApi.read();
+  if (res.state !== 'ok') {
+    const map = { unauthorized: S.UNAUTHORIZED, forbidden: S.FORBIDDEN, unavailable: S.UNAVAILABLE,
+                  offline: S.OFFLINE, failed: S.FAILED };
+    return head('SMS for sign-in') + stateBlock({ state: map[res.state] || S.FAILED, status: res.status, data: res.data }, 'settings');
+  }
+  const { sms, worker, delivery } = res.data;
+  const msg = takeMsg();
+  const on = sms.provider === 'africastalking';
+  const sandbox = on && String(sms.username || '').toLowerCase() === 'sandbox';
+  const t = v => v ? esc(String(v).slice(0, 16).replace('T', ' ')) + ' UTC' : '—';
+  // What the worker SAID it is doing, in the order that matters.
+  let wv;
+  if (worker.state === 'environment') {
+    wv = ['warn', `Set on the server (${esc(worker.detail || 'DN_SMS')}). The worker ignores this page while it is.`];
+  } else if (!worker.seen_at) {
+    wv = ['muted', 'The worker has not reported yet.'];
+  } else if (!worker.recent) {
+    wv = ['warn', `The worker last reported at ${t(worker.seen_at)}. Is it running?`];
+  } else if (worker.version !== sms.version) {
+    wv = ['warn', 'Saved. Waiting for the worker to pick it up; it checks every second.'];
+  } else if (worker.state === 'unusable') {
+    wv = ['err', 'The worker cannot use these settings: ' + esc(worker.detail || 'no reason given') + '. Nothing is sent.'];
+  } else if (worker.state === 'in_use') {
+    wv = ['ok', sandbox ? "In use by the worker. SANDBOX: codes go to the provider's simulator, not to phones."
+                        : 'In use by the worker. Whether a message arrives shows below, once one is sent.'];
+  } else {
+    wv = ['muted', 'Off: no SMS sender is set, so no sign-in code is sent and nobody can sign in to the operator app.'];
+  }
+  // Every value is escaped here, once; the markup below inserts them as they are.
+  const kv = [['SMS sender', on ? esc("Africa's Talking") : 'none'],
+              ['Username', on ? esc(sms.username) : '—'],
+              ['Sender name', on ? esc(sms.sender || '(none)') : '—'],
+              ['API key', sms.key_set ? 'set (never shown)' : 'not set'],
+              ['Last changed', sms.updated_at ? `${t(sms.updated_at)} by ${esc(sms.updated_by || '—')}` : 'never']];
+  const d = delivery;
+  const counts = [['Accepted by the provider', esc(d.sent_24h)], ['Refused or failed', esc(d.failed_24h)],
+                  ['Expired unsent', esc(d.expired_24h)], ['Numbers that cannot sign in', esc(d.no_recipient_24h)],
+                  ['Waiting now', esc(d.pending_now)],
+                  ['Last accepted', t(d.last_sent_at)],
+                  ['Last refusal', d.last_failure_at ? `${t(d.last_failure_at)}: ${esc(d.last_failure || '')}` : '—']];
+  const form = `<form class="sform" data-smsform="save">
+    <h3>Africa's Talking</h3>
+    <label>Username <input name="username" autocomplete="off" autocapitalize="none" required
+      value="${on ? esc(sms.username) : ''}"></label>
+    <label>API key <input name="api_key" type="password" autocomplete="new-password"
+      ${sms.key_set ? 'placeholder="leave empty to keep the stored key"' : 'required'}></label>
+    <label>Sender name (optional, up to 15 characters) <input name="sender" maxlength="15"
+      value="${on ? esc(sms.sender || '') : ''}"></label>
+    <button class="btn" type="submit">Save</button>
+    <small>The key is stored sealed on the server and is never shown again, here or anywhere.
+      To change it, type a new one. A new username needs its key typed again.
+      The username <b>sandbox</b> uses the provider's simulator, not phones.</small></form>`;
+  const off = on ? `<div class="note"><button class="btn small" data-smsact="off">Turn SMS off</button>
+      No sign-in code is sent while it is off.</div>` : '';
+  return head('SMS for sign-in', 'where the operator app\'s sign-in codes are sent from') + msg +
+    `<div class="msg ${wv[0]}">${wv[1]}</div>
+     <div class="kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</div>
+     <h3>Messages, last 24 hours</h3>
+     <div class="kv">${counts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</div>
+     <p class="muted">Counts only: no phone number and no code is shown here, or stored in a way this page can read.</p>` +
+    form + off;
+}
+
 async function vAccount() {
   const id = session.identity || {};
   const sf = id.second_factor || {};
@@ -775,7 +857,7 @@ const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, opera
                 intents: vIntents, audit: vAudit, dashboard: vDashboard,
                 network: vNetwork, diagnostics: vDiagnostics,
                 hotspot: vHotspot, voucher: vVoucher,
-                staff: vStaff, account: vAccount };
+                staff: vStaff, account: vAccount, sms: vSms };
 
 function head(title, sub) {
   return `<div class="appbar"><h1>${esc(title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</h1></div>`;
@@ -836,6 +918,40 @@ function wire() {
   wireIdentity();
   wireRouters();
   wireOnboarding();
+  wireSms();
+}
+
+/* The SMS-settings controls (docs/128). The key is read from its field once,
+ * cleared from the page before the request is sent, and never kept. */
+function wireSms() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status === 0 ? `<div class="msg err">No response from the server; nothing was saved.</div>`
+                : res.status < 300 ? (ok ? `<div class="msg ok">${esc(ok)}</div>` : '')
+                : notice(res, res.data && (res.data.detail || res.data.error));
+    render();
+  };
+  document.querySelectorAll('form[data-smsform]').forEach(f => f.onsubmit = async ev => {
+    ev.preventDefault();
+    const fd = new FormData(f);
+    const body = { provider: 'africastalking', username: String(fd.get('username') || '').trim(),
+                   sender: String(fd.get('sender') || '').trim() };
+    const key = String(fd.get('api_key') || '').trim();
+    if (key !== '') body.api_key = key;
+    f.querySelector('[name="api_key"]').value = '';
+    const btn = f.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    const r = await smsApi.save(body);
+    const said = r.data && r.status < 300
+      ? (SMS_SAID[r.data.key] || (r.data.changed ? 'Saved. The stored key is kept.' : 'Nothing changed.')) : '';
+    return after(r, said);
+  });
+  document.querySelectorAll('[data-smsact="off"]').forEach(b => b.onclick = async () => {
+    if (!confirm('Turn SMS off? No sign-in code will be sent until it is set again.')) return;
+    b.disabled = true;
+    const r = await smsApi.save({ provider: 'none' });
+    return after(r, r.data && r.data.changed ? SMS_SAID.removed : 'SMS was already off.');
+  });
 }
 
 /* The identity-plane controls. Each answer is re-rendered from the server's

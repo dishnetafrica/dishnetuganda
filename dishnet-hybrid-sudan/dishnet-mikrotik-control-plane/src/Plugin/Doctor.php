@@ -404,11 +404,34 @@ final class Doctor
      */
     private function messaging(): array
     {
+        if (!SmsSenders::isSetInEnvironment()) {
+            // DN_SMS unset: the settings a DishNet Admin saves in the Admin
+            // panel decide (migration 033, docs/128 SS-9, SS-12). Read through
+            // the Admin projection, which says whether a key is set and never
+            // returns it; the doctor opens nothing.
+            try {
+                $x = Database::adminApi()->one('SELECT provider, username, key_set FROM mt_admin_sms_settings()');
+            } catch (\Throwable) {
+                return [$this->row('sms.sender', 'sign-in codes by SMS', self::SKIP,
+                    'NOT MEASURED — DN_SMS is unset, so the Admin panel decides, and its settings could not be '
+                    . 'read (no Admin read connection, or migration 033 not applied)')];
+            }
+            if (($x['provider'] ?? 'none') !== 'africastalking') {
+                return [$this->row('sms.sender', 'sign-in codes by SMS', self::WARN,
+                    'no SMS sender is set — no sign-in code is sent, so no operator can sign in. Set it in the '
+                    . 'Admin panel (Administration → SMS for sign-in), or DN_SMS in the WORKER\'s environment (docs/128)')];
+            }
+            $sandbox = strtolower((string) ($x['username'] ?? '')) === 'sandbox';
+            return [$this->row('sms.sender', 'sign-in codes by SMS', self::OK,
+                'africastalking, set in the Admin panel'
+                . ($sandbox ? ' — SANDBOX: messages go to the provider\'s simulator, not to phones' : ' — live')
+                . '; API key set (value withheld). DOCUMENTED, UNVERIFIED until a real message arrives (docs/127 S-6)')];
+        }
         $mode = SmsSenders::configuredName();
         if ($mode === 'null') {
             return [$this->row('sms.sender', 'sign-in codes by SMS', self::WARN,
-                'DN_SMS unset — no sign-in code is sent, so no operator can sign in. '
-                . 'Set it in the WORKER\'s environment (docs/127)')];
+                'DN_SMS=null in the WORKER\'s environment — no sign-in code is sent, whatever the Admin panel '
+                . 'says, so no operator can sign in (docs/128)')];
         }
         try {
             $sender = SmsSenders::fromEnvironment();

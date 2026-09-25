@@ -46,6 +46,8 @@ final class Capability
     public const AUDIT_READ          = 'audit.read';
     /** Create, disable, re-enable, re-role or reset a DishNet staff member. Admin only (docs/114 D-AUTH-7). */
     public const STAFF_MANAGE        = 'staff.manage';
+    /** Choose where every sign-in code goes and whose SMS credit it spends (migration 033, docs/128 SS-5). Admin only. */
+    public const SMS_MANAGE          = 'sms.manage';
 
     /** @var list<string> */
     public const ALL = [
@@ -58,6 +60,6 @@ final class Capability
         self::VOUCHERS_READ, self::VOUCHERS_GENERATE, self::VOUCHERS_REVOKE,
         self::SESSIONS_READ, self::SESSIONS_DISCONNECT,
         self::INTENTS_READ, self::AUDIT_READ,
-        self::STAFF_MANAGE,
+        self::STAFF_MANAGE, self::SMS_MANAGE,
     ];
 }

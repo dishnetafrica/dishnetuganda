@@ -32,6 +32,7 @@ require dirname(__DIR__, 2) . '/src/autoload.php';
 use Dn\Admin\AdminReader;
 use Dn\Admin\OnboardingAdmin;
 use Dn\Admin\RouterAdmin;
+use Dn\Admin\SettingsAdmin;
 use Dn\Admin\StaffIdentityFactory;
 use Dn\Api\AdminRoutes;
 use Dn\Db\Database;
@@ -69,8 +70,11 @@ try {
 // those functions whatever a request asks.
 $routers    = new RouterAdmin(static fn(): Database => Database::adminWrite());
 $onboarding = new OnboardingAdmin(static fn(): Database => Database::adminWrite());
+// The SMS settings (migration 033, docs/128): the same Admin write connection,
+// one function. AdminRoutes binds it only beside the real staff provider.
+$settings   = new SettingsAdmin(static fn(): Database => Database::adminWrite());
 
-$router = AdminRoutes::build($identity, $bindings, $reader, $issuer, $staff, null, $routers, $onboarding);
+$router = AdminRoutes::build($identity, $bindings, $reader, $issuer, $staff, null, $routers, $onboarding, $settings);
 $req    = Request::fromGlobals();
 
 $match = $router->match($req->method, $req->path);

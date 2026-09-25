@@ -28,6 +28,10 @@ final class AdminReader
         'mt_admin_staff' => 0,
         // Migration 027: every operator's people. phone, email and credential_hash withheld.
         'mt_admin_principals' => 0,
+        // Migration 033: the SMS settings, the worker's own report and the
+        // outbox's counts. Whether a key is set — never the key, its envelope or
+        // its fingerprint; no phone number and no code.
+        'mt_admin_sms_settings' => 0,
     ];
 
     public function __construct(private readonly Database $db) {}

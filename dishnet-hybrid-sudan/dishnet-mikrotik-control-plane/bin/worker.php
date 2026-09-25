@@ -6,6 +6,7 @@ use Dn\Db\Database;
 use Dn\Intents\IntentQueue;
 use Dn\Jobs\IntentWorker;
 use Dn\Jobs\SmsWorker;
+use Dn\Notify\PanelSms;
 use Dn\Notify\SmsSenders;
 use Dn\Runtime\Bindings;
 use Dn\Tenancy\TenantContext;
@@ -22,11 +23,14 @@ $q  = new IntentQueue($db);
 $bindings = Bindings::fromEnvironment();
 $delivery = $bindings->delivery();
 
-// The SMS sender for sign-in codes comes from the environment too, and never
-// falls back either (docs/127 S-5): DN_SMS unset → nothing is sent and queued
-// codes expire; 'africastalking' → the real adapter, which throws here, before
-// anything is claimed, without its username and key.
-$sms = SmsSenders::fromEnvironment();
+// The SMS sender for sign-in codes (docs/127 S-5, docs/128 SS-9) never falls
+// back either. DN_SMS set → the environment decides, as in phase 2:
+// 'africastalking' without its username and key throws here, before anything
+// is claimed. DN_SMS unset → the settings a DishNet Admin saved in the Admin
+// panel, re-read every tick: none until someone sets them, so nothing is sent
+// and queued codes expire; a setting that cannot be used sends nothing and is
+// reported, and never stops the intents below.
+$sms = SmsSenders::forWorker($db);
 
 // The binding's name travels in the worker id, so every claim and every
 // intent.confirmed / intent.failed audit row says which world produced it.
@@ -42,10 +46,17 @@ $texts = new SmsWorker($db, $sms);
 // counts only: never a number, a code or a reason.
 $once = in_array('--once', $argv, true);
 $tick = 0;
+$applied = null;
 do {
     $s = $texts->runOnce();
     if ($s['claimed'] || $s['expired']) {
         fwrite(STDOUT, json_encode(['sms' => $s]) . "\n");
+    }
+    // What the worker applied from the panel, each time it changes: a version,
+    // a state and a fixed reason. Never the key.
+    if ($sms instanceof PanelSms && $sms->status() !== $applied) {
+        $applied = $sms->status();
+        fwrite(STDERR, json_encode(['sms_settings' => $applied]) . "\n");
     }
     if ($tick % 5 === 0) {
         $expired = $q->expireOverdue();

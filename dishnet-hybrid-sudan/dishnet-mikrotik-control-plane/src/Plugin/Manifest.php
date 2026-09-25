@@ -30,6 +30,10 @@ final class Manifest
          *  write block, Admin only. Declared apart from estate writes because
          *  it changes identity state, never estate state. */
         public readonly array  $staffRoutes,
+        /** SMS for sign-in codes (migration 033, docs/128): Admin only, and
+         *  declared apart because it is deployment configuration — where every
+         *  sign-in code goes — not estate or identity state. */
+        public readonly array  $settingsRoutes,
         public readonly array  $config,
         public readonly array  $gates,
         public readonly array  $requires,
@@ -64,6 +68,7 @@ final class Manifest
             unboundWrites:   (array) ($api['writes']['declared_unbound'] ?? []),
             sessionRoutes:   (array) ($api['session']['routes'] ?? []),
             staffRoutes:     (array) ($api['staff']['routes'] ?? []),
+            settingsRoutes:  (array) ($api['settings']['routes'] ?? []),
             config:          (array) $need($j, 'config', ''),
             gates:           (array) $need($j, 'gates', ''),
             requires:        (array) $need($j, 'requires', ''),

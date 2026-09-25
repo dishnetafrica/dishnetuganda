@@ -67,6 +67,9 @@ foreach ($m->sessionRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBa
 // The DishNet staff roster (migration 026): the one capability-gated write
 // block, declared apart from estate writes because it changes identity state.
 foreach ($m->staffRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// SMS for sign-in codes (migration 033, docs/128): deployment configuration,
+// declared apart from both — it changes where sign-in codes go.
+foreach ($m->settingsRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 sort($declared);
 
 $served = [];
@@ -110,8 +113,13 @@ is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? 
 // Changed DELIBERATELY with migration 026 (docs/114 §N R-7): a session is now a
 // revocable row and an audit row, written through dnb_def_staff's functions.
 // The ESTATE stays read-only, and that half is what writes.bound still asserts.
-is_($m->apiSurface, 'estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write',
-    'the surface says the truth: estate read, the four onboarding writes and the four router writes, identity read-write');
+// Since migration 033 (docs/128) the surface also carries the SMS settings,
+// Admin only — rewritten to the new truth, not deleted.
+is_($m->apiSurface, 'estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write; SMS settings read-write (Admin)',
+    'the surface says the truth: estate read, the four onboarding writes and the four router writes, identity read-write, and the SMS settings');
+is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'] . ' ' . $r['capability'], $m->settingsRoutes),
+    ['GET /settings/sms sms.manage', 'POST /settings/sms sms.manage'],
+    'the SMS settings are exactly one read and one write, both sms.manage');
 is_(count($m->writeRoutes), 8, 'and the only estate writes bound are those eight');
 is_(count($m->staffRoutes), 7, 'seven staff-roster routes are declared');
 is_(array_values(array_unique(array_column($m->staffRoutes, 'capability'))), ['staff.manage'],
