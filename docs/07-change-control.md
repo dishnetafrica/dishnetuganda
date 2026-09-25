@@ -443,4 +443,34 @@ failures; full suite green twice.
 the link to DPO.
 **Rollback:** set DPO Pay to *Disabled* on the admin screen, or
 `git checkout a987f08` (5.18.31) and deploy again.
+**Status:** deployed 25 September 2026 (`1fd1478`, over `f3ab37e`); the
+container serves `1fd1478`. The probe then answered *No company token is set*,
+as it should before any is entered.
+
+## 5.18.33 — the DPO probe checks what was typed before asking DPO
+
+**25 September 2026** · `tools/dpo_probe.php`, `tests/test_dpo_review_link.php`,
+`tests/fixtures/fake_dpo_server.php`. Record: [32](32-dpo-pay-review.md) §8.
+
+On the server, `dpo_probe.php --ask` was not given a DPO token. The text at the
+service-type prompt was not a service type, most likely the clipboard's
+contents. The tool sent whatever was at the token prompt to DPO, and DPO
+answered 801, *Request missing company token*.
+
+- The tool now checks **before anything goes to DPO**. A company token must look
+  like one of DPO's: 36 characters, 8-4-4-4-12. A service type must be a number.
+  Anything else is refused with what a token looks like. It is not sent and not
+  printed back.
+- The same check applies to a **saved** token.
+- A paste's bracketed-paste markers and invisible characters (non-breaking and
+  zero-width spaces, a byte-order mark) are removed first, so a real token
+  copied from an e-mail still works.
+
+Tests: 93 checks in `test_dpo_review_link.php` (was 85), including the wrong
+clipboard at both prompts; 4 weakened copies each caught. The tool, its test and
+the fake DPO are all this touches: the seven tests that use them passed twice.
+
+**Applied by:** the operator: `deploy-hybrid.sh`. Optional — the probe already
+works when only the DPO token is pasted.
+**Rollback:** `git checkout 1fd1478` and deploy again.
 **Status:** built and tested; not deployed.

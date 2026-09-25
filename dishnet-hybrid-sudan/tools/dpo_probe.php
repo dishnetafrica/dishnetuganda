@@ -60,12 +60,17 @@ if ($env !== 'test') {
     exit(2);
 }
 
-/** A line from the operator; the token is not echoed when there is a terminal. */
+/**
+ * A line from the operator; the token is not echoed when there is a terminal.
+ * A terminal can wrap a paste in bracketed-paste markers, and a copy from an
+ * e-mail can carry invisible characters; both are removed.
+ */
 $ask = static function (string $label, bool $hidden): string {
     fwrite(STDOUT, $label);
     $tty = function_exists('stream_isatty') && @stream_isatty(STDIN);
     if ($hidden && $tty) @shell_exec('stty -echo 2>/dev/null');
-    $v = trim((string)fgets(STDIN));
+    $v = str_replace(["\e[200~", "\e[201~"], '', (string)fgets(STDIN));
+    $v = trim((string)preg_replace('/[\x00-\x1F\x7F]|\xC2\xA0|\xE2\x80[\x8B-\x8D]|\xEF\xBB\xBF/', '', $v));
     if ($hidden && $tty) { @shell_exec('stty echo 2>/dev/null'); fwrite(STDOUT, "\n"); }
     return $v;
 };
@@ -80,6 +85,21 @@ if (in_array('--ask', $args, true)) {
 if ($token === '' || $stype === '') {
     echo "  " . ($token === '' ? 'No company token' : 'No service type') . " is set. Enter both on the\n"
        . "  DPO Pay admin screen, or try a pair with --ask.\n\n";
+    exit(1);
+}
+// Checked BEFORE anything goes to DPO. A company token is a GUID; a service
+// type is a number. Whatever else was pasted — on 25 September, most likely
+// the clipboard's contents — is not sent anywhere, and not printed.
+$typed = in_array('--ask', $args, true) ? 'typed' : 'saved';
+if (preg_match('/^[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$/', $token) !== 1) {
+    echo "  The company token {$typed} is not a DPO token. DPO's tokens are 36\n"
+       . "  characters in five groups, like XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX —\n"
+       . "  copy only that from DPO's e-mail. Nothing was sent to DPO.\n\n";
+    exit(1);
+}
+if (preg_match('/^\d{1,10}$/', $stype) !== 1) {
+    echo "  The service type {$typed} is not a DPO service type. It is a number from\n"
+       . "  DPO's e-mail, listed under the token, such as 54842. Nothing was sent to DPO.\n\n";
     exit(1);
 }
 

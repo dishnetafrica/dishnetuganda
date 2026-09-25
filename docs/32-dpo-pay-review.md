@@ -119,6 +119,10 @@ docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hy
 ```
 
 - **Expected:** `createToken 000`, then `verifyToken 900` (*not paid yet*).
+- **What a token looks like:** 36 characters in five groups,
+  `XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`. Its service types are the numbers
+  listed under it in DPO's e-mail. Copy only the token; with `--ask`, nothing
+  appears on screen while it is pasted. That is expected: press Enter.
 - **`904`:** that test account does not take UGX. Try another token from the
   e-mail without saving it. The token is typed without being shown:
 
@@ -202,3 +206,20 @@ again later:
 - **A refund and cancellation policy on the website.** The site has Terms of Use
   and a Privacy Policy but no refund policy. Card acquirers usually ask for one,
   and DPO's review may look.
+
+## 8. On the server, 25 September 2026
+
+- **5.18.32 deployed:** `1fd1478` over `f3ab37e`, *"✓ container now serves
+  1fd1478"*.
+- **The first probe run** answered *No company token is set*. That was correct:
+  nothing had been entered yet.
+- **The `--ask` run was not given a DPO token.** DPO answered 801, *Request
+  missing company token*.
+  - The text typed at the service-type prompt was not a service type either,
+    most likely whatever was in the clipboard. It is not recorded here.
+  - Whatever was entered at the hidden token prompt was sent to DPO as the
+    token.
+  - If either was a password or a key for anything, it has been exposed, and
+    should be changed.
+- **5.18.33:** the tool now refuses anything that is not shaped like a DPO token
+  or service type, before sending it anywhere.

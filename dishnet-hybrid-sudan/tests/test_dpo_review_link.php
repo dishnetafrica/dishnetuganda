@@ -377,7 +377,8 @@ $probe = function (array $cfgP, array $args = [], string $stdin = '') use ($root
     fclose($pipes[1]); fclose($pipes[2]);
     return [proc_close($p), $out];
 };
-$SECRET = 'TESTTOKEN-PROBE-SECRET-1234';
+// Shaped like DPO's tokens; the fake knows GUIDs that start 7E57 ("TEST").
+$SECRET = '7E57A0B1-0000-4000-8000-000000000001';
 $pc = ['dpo_environment' => 'test', 'dpo_company_token' => $SECRET, 'dpo_service_type' => '5525', 'dpo_currencies' => 'UGX'];
 
 $before = dpoCalls();
@@ -402,15 +403,38 @@ is_(!is_file($pdir . '/plugin.sqlite3'), 'it opened no database — nothing of o
 is_($code === 1 && preg_match('/createToken\s+904/', $out) === 1 && strpos($out, 'does not take XTS') !== false,
     'an account that does not take the currency: 904, and what to do', $out);
 
-[$code, $out] = $probe(['dpo_company_token' => 'LIVE-LOOKING-TOKEN'] + $pc);
+[$code, $out] = $probe(['dpo_company_token' => 'ABCDEF01-2345-4678-9ABC-DEF012345678'] + $pc);
 is_($code === 1 && preg_match('/createToken\s+802/', $out) === 1 && strpos($out, 'does not know this company token') !== false,
     'a token DPO does not know: 802, said plainly', $out);
 
-$ASKED = 'TESTTOKEN-ASKED-5678';
+$ASKED = '7E57A0B1-0000-4000-8000-000000000002';
 [$code, $out] = $probe(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], ['--ask'], $ASKED . "\n5525\n");
 t('--ask: a pair typed in is tried', $code, 0);
 is_(strpos($out, $ASKED) === false && preg_match('/createToken\s+000/', $out) === 1,
     'and the typed token is not printed either', $out);
+
+echo "\nWhat was typed is checked before anything goes to DPO\n";
+// 25 September 2026, on the server: the clipboard held something else, and
+// it went in at both prompts. DPO answered 801 — after being sent it.
+$WRONG = 'NotADpoToken123';
+$before = dpoCalls();
+[$code, $out] = $probe(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], ['--ask'], "{$WRONG}\n{$WRONG}\n");
+is_($code === 1 && strpos($out, 'is not a DPO token') !== false && strpos($out, 'Nothing was sent to DPO') !== false,
+    'the wrong clipboard at both prompts: refused, and said so', $out);
+t('nothing was sent to DPO', dpoCalls(), $before);
+is_(strpos($out, $WRONG) === false, 'and what was typed is not printed back');
+[$code, $out] = $probe(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], ['--ask'], "{$ASKED}\n{$WRONG}\n");
+is_($code === 1 && strpos($out, 'is not a DPO service type') !== false && strpos($out, $WRONG) === false,
+    'a real token with a service type that is not a number: refused', $out);
+t('and nothing was sent', dpoCalls(), $before);
+[$code, $out] = $probe(['dpo_company_token' => 'TESTTOKEN-OLD-STYLE'] + $pc);
+is_($code === 1 && strpos($out, 'company token saved is not a DPO token') !== false,
+    'a SAVED token that is not shaped like one: refused the same way', $out);
+t('without asking DPO', dpoCalls(), $before);
+$pasted = "\e[200~ \xC2\xA0" . $ASKED . "\xE2\x80\x8B\e[201~\n 5525 \n";
+[$code, $out] = $probe(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], ['--ask'], $pasted);
+is_($code === 0 && preg_match('/createToken\s+000/', $out) === 1,
+    'a real token pasted with bracketed-paste markers and invisible spaces still works', $out);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -104,7 +104,10 @@ $token   = trim((string)($in->CompanyToken ?? ''));
 // The credential IS the body field. An empty one is 801, an unknown one 802 —
 // exactly as DPO's own table says, so the client's handling of both is real.
 if ($token === '')                 fd_xml(['Result' => '801', 'ResultExplanation' => 'Request missing company token']);
-if (strpos($token, 'TEST') !== 0)  fd_xml(['Result' => '802', 'ResultExplanation' => 'Company token does not exist']);
+// A real token is a GUID, so the fake also knows GUIDs whose first group
+// starts 7E57 ("TEST"); any other GUID is one DPO has never issued.
+if (strpos($token, 'TEST') !== 0 && stripos($token, '7E57') !== 0)
+                                   fd_xml(['Result' => '802', 'ResultExplanation' => 'Company token does not exist']);
 
 $has = static fn(string $hay, string $needle): bool => stripos($hay, $needle) !== false;
 
