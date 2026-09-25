@@ -744,8 +744,8 @@ script or by hand); and the read-only webhook inspection called
 `webhook/endpoints` instead of `webhooks/endpoints`, so the first inspection was
 not evidence. **Re-run 20:15 UTC with the plugin's own client:** base
 `http://localhost/crm/api/v2.1`, the control `GET payment-methods` answered
-(23 methods), and `GET webhooks/endpoints` answered **404 Not Found** — this
-uCRM's API v2.1 does not serve the webhook-endpoint objects, so they cannot be
+(23 methods), and `GET webhooks/endpoints` answered **404 Not Found** on API v2.1 **and on
+v1.0** (20:17 UTC) — this uCRM's API does not serve the webhook-endpoint objects, so they cannot be
 read (nor a secret field seen) over the API; the uCRM UI (System → Webhooks) is
 the only view, and the operator's reading of that form decides whether
 `crm_webhook_key` can ever be configured here. **Pre-existing finding recorded
