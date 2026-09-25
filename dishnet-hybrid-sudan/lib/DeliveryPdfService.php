@@ -5,6 +5,7 @@ require_once __DIR__ . '/CustomerContact.php';
 
 require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/crm_url.php';
+require_once __DIR__ . '/PdfLinkToken.php';
 
 // PHP 7.4 polyfills
 if (!function_exists('str_contains'))  { function str_contains(string $h, string $n): bool  { return $n===''||strpos($h,$n)!==false; } }
@@ -243,8 +244,9 @@ class DeliveryPdfService
         }
 
         // ── 5. Create HMAC token for public serving ────────────────────────
-        $secret   = $this->config['webhook_secret'] ?? 'dishnet';
-        $pdfToken = hash_hmac('sha256', $pdfFile . date('Ymd'), $secret);
+        // 5.18.37: a key of its own (PdfLinkToken), generated once on this install.
+        PdfLinkToken::ensureSecret($this->store, $this->config);
+        $pdfToken = PdfLinkToken::mint($pdfFile, $this->config);
 
         // Save metadata for serve_delivery_pdf endpoint
         file_put_contents($pdfPath . '.meta', json_encode([

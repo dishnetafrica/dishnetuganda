@@ -60,10 +60,13 @@
     // ═══════════════════════════════════════════════════════════════
     // PRE-AUTH DOMAIN HANDLERS (no Bearer/session required)
     // ═══════════════════════════════════════════════════════════════
-    require __DIR__ . '/api/api_public.php';
-    require __DIR__ . '/api/api_payments_admin.php';
-    require __DIR__ . '/api/api_products_admin.php';
-    require __DIR__ . '/api/api_cron_debug.php';
+    require __DIR__ . '/api/api_public.php';         // login, customer_context (key-gated), app_* and dpo_* customer actions
+    require __DIR__ . '/api/api_public_files.php';   // PDF links with their own tokens (WhatsApp/Evolution fetch these)
+    // 5.18.37: api_payments_admin, api_products_admin and api_cron_debug used to be
+    // included HERE, before any login. They are staff operations — void a payment,
+    // post a payment to uCRM, download the data directory, replay queues — and now
+    // run behind the guard below. tests/test_preauth_allowlist.php pins the set of
+    // actions reachable without a login.
 
     // ═══════════════════════════════════════════════════════════════
     // AUTH GUARD — Bearer token or browser session required below
@@ -114,5 +117,11 @@
     require __DIR__ . '/api/api_fiber_purchase.php';
     require __DIR__ . '/api/api_hrm.php';
     require __DIR__ . '/api/api_staff_ledger.php';
+    // 5.18.37 — moved behind the guard (see the note above the pre-auth block)
+    require __DIR__ . '/api/api_staff_diagnostics.php';   // the seven diagnostics that lived in api_public.php
+    require __DIR__ . '/api/api_customer_support.php';    // login support for staff, without message bodies
+    require __DIR__ . '/api/api_payments_admin.php';
+    require __DIR__ . '/api/api_products_admin.php';
+    require __DIR__ . '/api/api_cron_debug.php';
 
     $er2("Unknown API action: {$act}", 404);

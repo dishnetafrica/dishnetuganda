@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/lib/timezone.php';
 require_once __DIR__ . '/lib/QuotePdfToken.php';
+require_once __DIR__ . '/lib/PdfLinkToken.php';
 require_once __DIR__ . '/lib/QuoteWaLedger.php';
 require_once __DIR__ . '/lib/PaymentOptions.php';
 require_once __DIR__ . '/lib/currency.php';
@@ -117,6 +118,7 @@ $config = (array)$config + PluginConfig::load(__DIR__, $dataDir);
 // The quotation-link secret: already present when public.php built $config,
 // generated here on a direct hit that found none. Reads the store itself.
 QuotePdfToken::ensureSecret($store, $config);
+PdfLinkToken::ensureSecret($store, $config);   // 5.18.37: the receipt/delivery link key, generated once
 // Contacts and currency symbols in the message copy below come from config,
 // defaulting to the exact values these lines have always printed.
 require_once __DIR__ . '/lib/CustomerContact.php';
@@ -432,7 +434,7 @@ function whSendInvoicePdf(object $crm, object $notify, string $phone, int $invoi
 
         $pdfFile  = "inv_{$invoiceId}_" . substr(md5(uniqid()), 0, 8) . '.pdf';
         $pdfPath  = $tempDir . '/' . $pdfFile;
-        $pdfToken = hash_hmac('sha256', $pdfFile, ($config['webhook_secret'] ?? 'dishnet') . date('Ymd'));
+        $pdfToken = PdfLinkToken::random();   // 5.18.37: serve_temp_pdf checks the .meta token only
 
         file_put_contents($pdfPath, $bytes);
         file_put_contents($pdfPath . '.meta', json_encode([
@@ -491,6 +493,30 @@ function whSendInvoiceNotification(object $notify, object $crm, string $phone, s
 }
 
 // ── Only accept POST ───────────────────────────────────────────────────────
+// ── 5.18.37: the posted body is a doorbell, not evidence ─────────────────────
+// uCRM's webhook endpoints carry no key of their own, so anyone who can reach
+// public.php can post a payload shaped like an event. Every handler therefore
+// re-reads its entity from uCRM by id and works on THAT; a body whose id uCRM
+// does not know is logged and skipped — the pattern dpo_push.php already uses.
+// The uCRM v2.1 paths come first; the legacy billing/* forms are tried second
+// because this codebase has used both. An unreachable uCRM also skips: the
+// event stays in uCRM's log and nothing is acted on from an unverified copy.
+function whFetchFirst($crm, array $paths): ?array {
+    foreach ($paths as $p) {
+        $row = $crm->get($p);
+        if (is_array($row) && $row !== []) return $row;
+    }
+    return null;
+}
+/** The verified entity, or a 200 "skipped" — never the posted copy. */
+function whVerified(string $label, int $id, ?array $row): array {
+    if ($row === null) {
+        whLog('entity_unverified', "{$label} #{$id} could not be read from uCRM — event skipped, posted body not trusted");
+        whResp(200, ucfirst($label) . " #{$id} could not be verified with uCRM — skipped.");
+    }
+    return $row;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') whResp(405, 'POST required.');
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -563,8 +589,29 @@ if ($source === 'splynx') {
 $rawBody = file_get_contents('php://input');
 if (empty($rawBody)) whResp(400, 'Empty body.');
 
+// ── 5.18.37: a key of the webhook's own, required whenever it is set ─────────
+// The uCRM secret check below stays optional because many uCRM versions send
+// no X-Crm-Key at all. crm_webhook_key is ours: once the operator sets it (and
+// configures uCRM to send it as X-Crm-Key), a request without a matching key
+// is refused. Unset, nothing changes. $whKeyVerified also gates the one event
+// whose content cannot be re-read from uCRM (client.message).
+$whKeyExpected = trim((string)($config['crm_webhook_key'] ?? ''));
+$whKeyVerified = false;
+if ($whKeyExpected !== '') {
+    $whKeyGot = trim((string)($_SERVER['HTTP_X_CRM_KEY'] ?? $_SERVER['HTTP_X_DISHNET_KEY'] ?? ''));
+    if ($whKeyGot === '' || !hash_equals($whKeyExpected, $whKeyGot)) {
+        whLog('auth_failed', 'crm_webhook_key missing or wrong');
+        whResp(401, 'Unauthorized.');
+    }
+    $whKeyVerified = true;
+}
 $webhookSecret = trim($config['webhook_secret'] ?? '');
-if ($webhookSecret !== '') {
+// A request that has just proved itself with crm_webhook_key (above) is not
+// re-judged against webhook_secret: uCRM sends ONE secret header, so once the
+// operator configures it to send crm_webhook_key, that value would fail this
+// older plaintext comparison and every webhook would be refused. The
+// mandatory key supersedes the optional one whenever both are set.
+if ($webhookSecret !== '' && !$whKeyVerified) {
     // UCRM sends the secret in X-Crm-Key header (plaintext match, not HMAC)
     $receivedKey = $_SERVER['HTTP_X_CRM_KEY']
                 ?? $_SERVER['HTTP_X_UCRM_KEY']
@@ -672,8 +719,8 @@ switch ($changeType) {
         $clientId = $entityId ?: (int)($entity['id'] ?? 0);
         if (!$clientId) whResp(200, 'No client ID — skipped.');
 
-        // Fetch full client to get phone & name
-        $client = $crm->get("clients/{$clientId}") ?? [];
+        // Fetch full client to get phone & name — from uCRM, never from the posted body (5.18.37)
+        $client = whVerified('client', $clientId, $crm->get("clients/{$clientId}"));
         $name   = trim(($client['firstName'] ?? '') . ' ' . ($client['lastName'] ?? ''))
              ?: ($client['companyName'] ?? 'Customer');
         $phone  = '';
@@ -780,7 +827,7 @@ switch ($changeType) {
             whResp(200, 'No invoice ID — skipped.');
         }
 
-        $invoice = $crm->get("invoices/{$invoiceId}") ?? $crm->get("billing/invoices/{$invoiceId}") ?? $entity;
+        $invoice = whVerified('invoice', $invoiceId, whFetchFirst($crm, ["invoices/{$invoiceId}", "billing/invoices/{$invoiceId}"]));
         $clientId = (int)($invoice['clientId'] ?? 0);
         $amount   = (float)($invoice['amountToPay'] ?? $invoice['total'] ?? $invoice['amount'] ?? 0);
         $invoNum  = (string)($invoice['number'] ?? $invoice['invoiceNumber'] ?? '');
@@ -968,7 +1015,7 @@ switch ($changeType) {
     case 'payment.add':
     case 'PAYMENT_ADD': {
         $paymentId = $entityId ?: (int)($entity['id'] ?? 0);
-        $payment   = $crm->get("billing/payments/{$paymentId}") ?? $entity;
+        $payment   = whVerified('payment', $paymentId, whFetchFirst($crm, ["payments/{$paymentId}", "billing/payments/{$paymentId}"]));
         $clientId  = (int)($payment['clientId'] ?? 0);
         $amount    = (float)($payment['amount']  ?? 0);
         $txnId     = (string)($payment['id']     ?? $paymentId);
@@ -1375,7 +1422,7 @@ switch ($changeType) {
     case 'service.add':
     case 'SERVICE_ADD': {
         $serviceId = $entityId ?: (int)($entity['id'] ?? 0);
-        $service   = $crm->get("clients/services/{$serviceId}") ?? $entity;
+        $service   = whVerified('service', $serviceId, whFetchFirst($crm, ["clients/services/{$serviceId}"]));
         $clientId  = (int)($service['clientId'] ?? 0);
         $svcName   = $service['name'] ?? $service['serviceName'] ?? 'Internet Service';
         $status    = (int)($service['status'] ?? 0);
@@ -1537,7 +1584,7 @@ switch ($changeType) {
     case 'service.suspend':
     case 'SERVICE_SUSPEND': {
         $serviceId = $entityId ?: (int)($entity['id'] ?? 0);
-        $service   = $crm->get("clients/services/{$serviceId}") ?? $entity;
+        $service   = whVerified('service', $serviceId, whFetchFirst($crm, ["clients/services/{$serviceId}"]));
         $clientId  = (int)($service['clientId'] ?? 0);
 
         // Clean service name — UCRM returns raw names like
@@ -1721,7 +1768,7 @@ switch ($changeType) {
     case 'service.suspend_cancel':
     case 'SERVICE_ACTIVATE': {
         $serviceId = $entityId ?: (int)($entity['id'] ?? 0);
-        $service   = $crm->get("clients/services/{$serviceId}") ?? $entity;
+        $service   = whVerified('service', $serviceId, whFetchFirst($crm, ["clients/services/{$serviceId}"]));
         $clientId  = (int)($service['clientId'] ?? 0);
         $svcName   = $service['name'] ?? 'Internet Service';
 
@@ -1933,7 +1980,7 @@ switch ($changeType) {
     case 'service.postpone':
     case 'SERVICE_POSTPONE': {
         $serviceId = $entityId ?: (int)($entity['id'] ?? 0);
-        $service   = $crm->get("clients/services/{$serviceId}") ?? $entity;
+        $service   = whVerified('service', $serviceId, whFetchFirst($crm, ["clients/services/{$serviceId}"]));
         $clientId  = (int)($service['clientId'] ?? 0);
         $svcName   = $service['name'] ?? $service['serviceName'] ?? 'Internet Service';
 
@@ -2048,7 +2095,7 @@ switch ($changeType) {
     case 'service.end':
     case 'SERVICE_END': {
         $serviceId = $entityId ?: (int)($entity['id'] ?? 0);
-        $service   = $crm->get("clients/services/{$serviceId}") ?? $entity;
+        $service   = whVerified('service', $serviceId, whFetchFirst($crm, ["clients/services/{$serviceId}"]));
         $clientId  = (int)($service['clientId'] ?? 0);
         $svcName   = $service['name'] ?? 'Internet Service';
 
@@ -2080,8 +2127,8 @@ switch ($changeType) {
         // any tag changes (notably NO_AUTO_BLOCK for VIP guard) are visible
         // immediately, instead of waiting for the daily 03:00 auto-pull.
         // We fetch first and reuse the result for both cache update and
-        // the kyc_applications sync below.
-        $client = $crm->get("clients/{$clientId}") ?? [];
+        // the kyc_applications sync below. From uCRM, never the posted body (5.18.37).
+        $client = whVerified('client', $clientId, $crm->get("clients/{$clientId}"));
         if (!empty($client) && (int)($client['id'] ?? 0) === $clientId) {
             try {
                 $cache = $store->load('ucrm_clients_cache.json') ?? [];
@@ -2222,7 +2269,7 @@ switch ($changeType) {
     case 'quote.approve':
     case 'QUOTE_APPROVE': {
         $quoteId  = $entityId ?: (int)($entity['id'] ?? 0);
-        $quote    = $crm->get("billing/quotes/{$quoteId}") ?? $entity;
+        $quote    = whVerified('quote', $quoteId, whFetchFirst($crm, ["quotes/{$quoteId}", "billing/quotes/{$quoteId}"]));
         $clientId = (int)($quote['clientId'] ?? 0);
         $total    = (float)($quote['total'] ?? 0);
         $totalFmt = number_format($total, 2);
@@ -2261,7 +2308,7 @@ switch ($changeType) {
         $jobId = $entityId ?: (int)($entity['id'] ?? 0);
         
         // Get full job details from UCRM
-        $job = $crm->get("scheduling/jobs/{$jobId}") ?? $entity;
+        $job = whVerified('job', $jobId, whFetchFirst($crm, ["scheduling/jobs/{$jobId}"]));
         
         $title       = $job['title'] ?? "Job #{$jobId}";
         $address     = $job['address'] ?? '';
@@ -2380,8 +2427,9 @@ switch ($changeType) {
     case 'ticket.add':
     case 'TICKET_ADD': {
         $ticketId = $entityId ?: (int)($entity['id'] ?? 0);
-        $subject  = $entity['subject'] ?? $entity['title'] ?? "Ticket #{$ticketId}";
-        $clientId = (int)($entity['clientId'] ?? 0);
+        $ticket   = whVerified('ticket', $ticketId, whFetchFirst($crm, ["ticketing/tickets/{$ticketId}"]));
+        $subject  = $ticket['subject'] ?? $ticket['title'] ?? "Ticket #{$ticketId}";
+        $clientId = (int)($ticket['clientId'] ?? 0);
 
         // Notify admin only (agent already knows — they raised it)
         $notify->sendAdmin(
@@ -2420,7 +2468,7 @@ switch ($changeType) {
             whResp(200, 'draft_approved — no invoice ID.');
         }
 
-        $invoice = $crm->get("invoices/{$invoiceId}") ?? $crm->get("billing/invoices/{$invoiceId}") ?? $entity;
+        $invoice = whVerified('invoice', $invoiceId, whFetchFirst($crm, ["invoices/{$invoiceId}", "billing/invoices/{$invoiceId}"]));
 
         $clientId = (int)($invoice['clientId'] ?? 0);
         $amount   = (float)($invoice['amountToPay'] ?? $invoice['total'] ?? $invoice['amount'] ?? 0);
@@ -2515,7 +2563,7 @@ switch ($changeType) {
             whResp(200, 'quote.add — already notified by cron.');
         }
 
-        $quote    = $crm->get("billing/quotes/{$quoteId}") ?? $entity;
+        $quote    = whVerified('quote', $quoteId, whFetchFirst($crm, ["quotes/{$quoteId}", "billing/quotes/{$quoteId}"]));
         $clientId = (int)($quote['clientId'] ?? 0);
         // Sum line items for accurate total. UCRM totalPrice returns only the recurring/service price
         // (e.g. $112 for Priority plan), not the full quote including hardware. Summing items = correct total.
@@ -2900,7 +2948,7 @@ switch ($changeType) {
         $creditNoteId = $entityId ?: (int)($entity['id'] ?? 0);
         if (!$creditNoteId) whResp(200, 'credit_note.add — no ID.');
 
-        $creditNote = $crm->get("billing/credit-notes/{$creditNoteId}") ?? $entity;
+        $creditNote = whVerified('credit note', $creditNoteId, whFetchFirst($crm, ["credit-notes/{$creditNoteId}", "billing/credit-notes/{$creditNoteId}"]));
         $clientId   = (int)($creditNote['clientId'] ?? 0);
         $amount     = (float)($creditNote['total'] ?? $creditNote['amount'] ?? 0);
         $cnNum      = (string)($creditNote['number'] ?? $creditNoteId);
@@ -2933,6 +2981,12 @@ switch ($changeType) {
     // ── Client message (staff sends message from CRM → forward to WA) ───
     case 'client.message':
     case 'CLIENT_MESSAGE': {
+        // 5.18.37: this event's text cannot be re-read from uCRM, so it is
+        // forwarded only when the request proved itself with crm_webhook_key.
+        if (!$whKeyVerified) {
+            whLog($changeType, 'client.message ignored — needs a verified crm_webhook_key (its text cannot be checked against uCRM)');
+            whResp(200, 'client.message — ignored without a verified webhook key.');
+        }
         $clientId = $entityId ?: (int)($entity['clientId'] ?? $entity['id'] ?? 0);
         if (!$clientId) whResp(200, 'client.message — no client ID.');
 
@@ -3112,6 +3166,18 @@ switch ($changeType) {
         }
 
         whLog($changeType, "Processing CRM payment deletion #{$paymentId}");
+
+        // 5.18.37: reverse the books only for a payment uCRM confirms is gone.
+        // A forged payment.delete must not void a real receipt; an unreachable
+        // uCRM must not either — only a definite 404 from uCRM proceeds.
+        if (whFetchFirst($crm, ["payments/{$paymentId}", "billing/payments/{$paymentId}"]) !== null) {
+            whLog($changeType, "payment #{$paymentId} still exists in uCRM — deletion not verified, skipped");
+            whResp(200, 'payment.delete — payment still exists in uCRM; skipped.');
+        }
+        if ((int)($crm->getLastError()['http_code'] ?? 0) !== 404) {
+            whLog($changeType, "payment #{$paymentId} could not be checked in uCRM — skipped");
+            whResp(200, 'payment.delete — uCRM could not confirm the deletion; skipped.');
+        }
 
         $reversedCb   = false;
         $voidedCol    = false;

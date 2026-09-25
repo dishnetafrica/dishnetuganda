@@ -1,8 +1,24 @@
 <?php
 // ═══════════════════════════════════════════════════════════════
-// PAYMENT ADMIN (pre-auth, session-authed)
+// PAYMENT ADMIN (staff — behind the guard since 5.18.37)
 // ═══════════════════════════════════════════════════════════════
 
+
+    // 5.18.37: this file used to be included BEFORE the staff guard. Voiding, patching and
+    // reconciling payments answered without a login.
+    // It now runs after the guard ($me2, $isAdmin). The actions below are
+    // administrator-only; the rest keep their own checks for any signed-in
+    // staff member, as their screens expect.
+    $_gateAdminOnly = [
+        'patch_ucrm_payment',
+        'link_collection_handover',
+        'fix_staff_ledger_collections_backfill',
+        'hq_debug_collections',
+        'voidable_payments',
+        'check_duplicate_payments',
+        'void_salary_cashin',
+    ];
+    if (in_array($act, $_gateAdminOnly, true) && empty($isAdmin)) $er2('Admin only.', 403);
 
     // ─── VOID PAYMENT: Reverse a mistaken collection ──────────────────────────
     // POST ?page=api&action=void_payment

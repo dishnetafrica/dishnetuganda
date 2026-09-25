@@ -2068,7 +2068,9 @@ class NotificationService
             'sender'  => $sender,
             'event'   => $event ?: null,
             'to'      => $to,
-            'preview' => mb_substr($message, 0, 70),
+            // 5.18.37: a login code sits in the first line of its message, and the
+            // log is read by staff screens and tools. The code is never written.
+            'preview' => $event === 'app_otp' ? '[one-time login code — text withheld]' : mb_substr($message, 0, 70),
             'success' => $success,
             'http_code' => $httpCode,
             'error'   => $curlErr ?: ($success ? null : mb_substr((string)$response, 0, 200)),

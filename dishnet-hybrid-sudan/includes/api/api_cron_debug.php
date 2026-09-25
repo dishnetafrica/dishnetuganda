@@ -1,8 +1,27 @@
 <?php
 // ═══════════════════════════════════════════════════════════════
-// CRON / DEBUG / BACKUP / SERVE (pre-auth)
+// CRON / DEBUG / BACKUP (staff — behind the guard since 5.18.37)
 // ═══════════════════════════════════════════════════════════════
 
+
+    // 5.18.37: this file used to be included BEFORE the staff guard, so every
+    // action here — posting a payment to uCRM, downloading the whole data
+    // directory, replaying queues — answered without a login (two of them
+    // behind a constant key written in this file). It now runs after the
+    // guard: $me2 is the signed-in staff member, $isAdmin their flag. The
+    // actions below are administrator-only; the rest keep the role checks
+    // they had (or none), for any signed-in staff member, as their screens
+    // expect.
+    $_cdAdminOnly = [
+        'backup_download', 'cron_trigger', 'test_payment_post', 'debug_payment_sync',
+        'run_catchup_sync', 'data_diagnostic', 'find_lost_data', 'fix_ssp_ledger',
+        'fix_relay_ledger', 'void_duplicate_ssp', 'import_cashbook_csv', 'migrate_expenses',
+        'view_error_log', 'webhook_log', 'webhook_register', 'webhook_status',
+        'wa_admin_alert', 'receipt_pdf_debug', 'receipt_pdf_retry', 'retry_quote',
+        'kyc_quote_debug', 'quote_wa_log', 'staff_ssp_rows', 'lte_feed_test',
+        'lte_sync_status', 'gdrive_status',
+    ];
+    if (in_array($act, $_cdAdminOnly, true) && empty($isAdmin)) $er2('Admin only.', 403);
 
     // ─── DIAGNOSTIC: View master scheduler status ────────────────────────────
     // GET ?page=api&action=cron_status
@@ -250,12 +269,11 @@
     }
 
     // ─── WEB-BASED CRON TRIGGER (no server access needed) ─────────────────────
-    // GET ?page=api&action=cron_trigger&key=dishnet2026
+    // GET ?page=api&action=cron_trigger   (admin, signed in)
     // Use with: cron-job.org, UptimeRobot, or any external scheduler
     // Set to run every 5 minutes
     if ($act === 'cron_trigger' && $met === 'GET') {
-        $key = $_GET['key'] ?? '';
-        if ($key !== 'dishnet2026') $er2('Invalid cron key', 403);
+        // 5.18.37: the constant key is gone; admin-only behind the staff guard.
         
         ob_start();
         $startTime = microtime(true);
@@ -407,6 +425,8 @@
     if ($act === 'test_payment_post' && $met === 'GET') {
         $colId = (int)($_GET['collection_id'] ?? 0);
         if (!$colId) $er2('collection_id required', 400);
+        // 5.18.37: an explicit second parameter, so a copied URL cannot post a payment by itself.
+        if ((string)($_GET['confirm'] ?? '') !== (string)$colId) $er2('Add &confirm=<collection_id> to post this payment to uCRM.', 400);
         
         $cols = $store->load('payment_collections.json') ?? [];
         $col = null;
@@ -423,19 +443,21 @@
             'methodId'     => PaymentUuids::resolve($col['method'] ?? 'Cash'),
             'amount'       => (float)$col['amount'],
             'currencyCode' => dn_payload_currency($col['currency'] ?? '', $config ?? null),
-            'note'         => 'Collected by '.($col['retailer_name']??'agent').' via DishNet PWA',
+            'note'         => 'Collected by '.($col['retailer_name']??'agent').' via DishNet PWA | Ref: COL-'.$colId,
             'applyToInvoicesAutomatically' => true,
         ];
         
-        $result = $crm->post('payments', $payload);
-        $lastErr = $crm->getLastError();
-        
+        // createPaymentSafe de-duplicates by the reference in the note: a second
+        // call for the same collection reports the existing uCRM payment instead
+        // of posting another.
+        $result = $crm->createPaymentSafe($payload, 'COL-' . $colId);
         $ok2([
             'collection_id' => $colId,
             'payload_sent'  => $payload,
-            'crm_response'  => $result,
-            'crm_error'     => $lastErr,
-            'success'       => !empty($result) && isset($result['id']),
+            'crm_payment_id'=> $result['id'] ?? null,
+            'duplicate'     => !empty($result['duplicate']),
+            'error'         => $result['error'] ?? '',
+            'success'       => !empty($result['success']),
         ]);
     }
 
@@ -574,10 +596,9 @@
     }
 
     // ─── BACKUP: Download all plugin data as ZIP ─────────────────────────────
-    // GET ?page=api&action=backup_download&key=dishnet2026
+    // GET ?page=api&action=backup_download   (admin, signed in)
     if ($act === 'backup_download' && $met === 'GET') {
-        $key = $_GET['key'] ?? '';
-        if ($key !== 'dishnet2026') $er2('Invalid backup key', 403);
+        // 5.18.37: the constant key is gone; admin-only behind the staff guard.
         
         // $dataDir inherited from public.php (UCRM persistent)
         $zipFile = sys_get_temp_dir() . '/dishnet-backup-' . date('Y-m-d-His') . '.zip';
@@ -616,154 +637,8 @@
         exit;
     }
 
-    // ── PUBLIC: Serve temp PDF files (no auth — WhatsML fetches these) ────
-    // GET ?page=api&action=serve_temp_pdf&file=inv_12345_abc.pdf&token=HMAC
-    // Files auto-expire after 10 minutes. Token prevents guessing.
-    if ($act === 'serve_temp_pdf') {
-        $file  = basename(trim($_GET['file']  ?? ''));
-        $token = trim($_GET['token'] ?? '');
-        if (!$file || !$token) $er2('Missing file or token', 400);
-
-        $tempDir = $dataDir . '/temp_pdf';
-        $path    = $tempDir . '/' . $file;
-        $metaPath = $path . '.meta';
-
-        if (!file_exists($path) || !file_exists($metaPath)) $er2('File not found or expired', 404);
-
-        // Verify HMAC token
-        $meta = json_decode(file_get_contents($metaPath), true) ?: [];
-        if (!hash_equals($meta['token'] ?? '', $token)) $er2('Invalid token', 403);
-
-        // Check expiry (10 min)
-        if (time() - (int)($meta['created'] ?? 0) > 600) {
-            @unlink($path);
-            @unlink($metaPath);
-            $er2('File expired', 410);
-        }
-
-        // Serve the PDF
-        while (ob_get_level() > 0) ob_end_clean();
-        header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . $file . '"');
-        header('Content-Length: ' . filesize($path));
-        header('Cache-Control: no-store');
-        readfile($path);
-
-        // Clean up after serving
-        @unlink($path);
-        @unlink($metaPath);
-        exit;
-    }
-
-    // ── PUBLIC: Serve quotation PDF files (no auth — Evolution fetches these) ──
-    // GET ?page=api&action=serve_quote_pdf&file=quote_123_abc.pdf&token=HMAC
-    // The token is QuotePdfToken::mint(): a daily HMAC over the file name,
-    // accepted for today and yesterday (UTC), then dead. The .meta file beside
-    // the PDF is metadata only — the display name — and is never consulted for
-    // authorization. Its stored token was accepted until 5.18.0; it never
-    // rotated, so every quotation URL ever logged stayed fetchable for good.
-    if ($act === 'serve_quote_pdf') {
-        $file  = basename(trim($_GET['file']  ?? ''));
-        $token = trim($_GET['token'] ?? '');
-        if (!$file || !$token) $er2('Missing file or token', 400);
-
-        $pdfDir   = $dataDir . '/quote_pdfs';
-        $path     = $pdfDir . '/' . $file;
-        $metaPath = $path . '.meta';
-
-        // Only the PDFs: the same directory holds the .meta files, which carry
-        // the customer's name and the quote total.
-        if (!preg_match('/\.pdf$/i', $file) || !file_exists($path)) $er2('Quote PDF not found', 404);
-
-        require_once dirname(__DIR__, 2) . '/lib/QuotePdfToken.php';
-        if (!QuotePdfToken::verify($file, $token, (array)$config)) $er2('Invalid or expired token', 403);
-
-        $meta = file_exists($metaPath) ? (json_decode((string)file_get_contents($metaPath), true) ?: []) : [];
-
-        while (ob_get_level() > 0) ob_end_clean();
-        header('Content-Type: application/pdf');
-        $dispName = ($meta['filename'] ?? null) ?: str_replace('_', '-', $file);
-        header('Content-Disposition: inline; filename="' . $dispName . '"');
-        header('Content-Length: ' . filesize($path));
-        header('Cache-Control: public, max-age=86400');
-        readfile($path);
-        exit;
-    }
-
-    // ── PUBLIC: Serve delivery acknowledgment PDF (no auth — WASender fetches these) ──
-    // GET ?page=api&action=serve_delivery_pdf&file=DishNet_starlink_KYC-2026-0347.pdf&token=HMAC
-    // Permanent storage — these are legal documents. Token uses daily HMAC.
-    if ($act === 'serve_delivery_pdf') {
-        $file  = basename(trim($_GET['file']  ?? ''));
-        $token = trim($_GET['token'] ?? '');
-        if (!$file || !$token) $er2('Missing file or token', 400);
-
-        $pdfDir = $dataDir . '/delivery_pdfs';
-        $path   = $pdfDir . '/' . $file;
-
-        if (!file_exists($path)) $er2('Delivery PDF not found', 404);
-
-        // Verify token — check .meta file OR recompute daily HMAC
-        $secret = ($config['webhook_secret'] ?? 'dishnet');
-        $valid  = false;
-        $metaPath = $path . '.meta';
-        if (file_exists($metaPath)) {
-            $meta = json_decode(file_get_contents($metaPath), true) ?: [];
-            if (hash_equals($meta['token'] ?? '', $token)) $valid = true;
-        }
-        // Accept recomputed token for today and yesterday (daily rotation)
-        if (!$valid) {
-            $todayTok = hash_hmac('sha256', $file . date('Ymd'), $secret);
-            $ydayTok  = hash_hmac('sha256', $file . date('Ymd', strtotime('-1 day')), $secret);
-            if (hash_equals($todayTok, $token) || hash_equals($ydayTok, $token)) $valid = true;
-        }
-        if (!$valid) $er2('Invalid token', 403);
-
-        while (ob_get_level() > 0) ob_end_clean();
-        header('Content-Type: application/pdf');
-        $dispName = ($meta['filename'] ?? null) ?: str_replace('_', '-', $file);
-        header('Content-Disposition: inline; filename="' . $dispName . '"');
-        header('Content-Length: ' . filesize($path));
-        header('Cache-Control: public, max-age=604800'); // 7 days — legal docs don't change
-        readfile($path);
-        exit;
-    }
-
-    // ── PUBLIC: Serve payment receipt PDF (no auth — WASender fetches these) ──
-    // GET ?page=api&action=serve_receipt_pdf&file=DishNet-Receipt-8386.pdf&token=HMAC
-    if ($act === 'serve_receipt_pdf') {
-        $file  = basename(trim($_GET['file']  ?? ''));
-        $token = trim($_GET['token'] ?? '');
-        if (!$file || !$token) $er2('Missing file or token', 400);
-
-        $pdfDir = $dataDir . '/receipt_pdfs';
-        $path   = $pdfDir . '/' . $file;
-
-        if (!file_exists($path)) $er2('Receipt PDF not found', 404);
-
-        $secret = ($config['webhook_secret'] ?? 'dishnet');
-        $valid  = false;
-        $metaPath = $path . '.meta';
-        if (file_exists($metaPath)) {
-            $meta = json_decode(file_get_contents($metaPath), true) ?: [];
-            if (hash_equals($meta['token'] ?? '', $token)) $valid = true;
-        }
-        if (!$valid) {
-            $todayTok = hash_hmac('sha256', $file . date('Ymd'), $secret);
-            $ydayTok  = hash_hmac('sha256', $file . date('Ymd', strtotime('-1 day')), $secret);
-            if (hash_equals($todayTok, $token) || hash_equals($ydayTok, $token)) $valid = true;
-        }
-        if (!$valid) $er2('Invalid token', 403);
-
-        while (ob_get_level() > 0) ob_end_clean();
-        header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . $file . '"');
-        header('Content-Length: ' . filesize($path));
-        header('Cache-Control: public, max-age=86400');
-        readfile($path);
-        exit;
-    }
-
+    // 5.18.37: serve_temp_pdf / serve_quote_pdf / serve_delivery_pdf /
+    // serve_receipt_pdf moved to api_public_files.php (pre-auth, token-checked).
 
     // ── Reconcile: void double-counted handover entries in cashbook ──────────
     // Handovers are internal cash transfers (Diko→Rupesh). The actual revenue

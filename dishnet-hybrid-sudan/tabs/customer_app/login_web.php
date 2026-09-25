@@ -216,6 +216,12 @@ body{display:flex;flex-direction:column;min-height:100vh}
       &nbsp;·&nbsp;
       <a href="#" onclick="sendOtp();return false">Resend code</a>
     </div>
+    <!-- 5.18.37: the server answers every number the same way, so the advice
+         for a code that never arrives lives here, not in an error message. -->
+    <div class="login-fallback">
+      <span>No code after a couple of minutes? Check it is the number or e-mail registered with DishNet, then try the other way.</span>
+      <a onclick="showStep('phone');switchTab(loginMode === 'email' ? 'phone' : 'email')">Try the other way</a>
+    </div>
   </div>
 
   <!-- Step 3 (v4.12.19): Consent (shown only on first login or version bump) -->
@@ -432,9 +438,11 @@ function recordConsent() {
   btn.disabled = true; btn.innerHTML = '<span class="spin-small"></span>Recording...';
   showErr('err-consent', '');
 
+  // 5.18.37: consent is bound to the token the code just earned — the server
+  // records it for that identity, not for whatever identifier is in the body.
   fetch(apiUrl + '&action=app_record_consent', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + pendingToken},
     body: JSON.stringify(
       loginMode === 'email'
         ? { email: loginIdentifier, tos_version: currentLegal.tos, privacy_version: currentLegal.privacy }

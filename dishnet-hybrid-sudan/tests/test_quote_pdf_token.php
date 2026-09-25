@@ -129,7 +129,7 @@ $act = $_GET["action"] ?? ""; $met = $_SERVER["REQUEST_METHOD"];
 $ok2 = function($d,$m="OK",$c=200){ while (ob_get_level() > 0) ob_end_clean(); http_response_code($c); echo json_encode(["status"=>"success","message"=>$m,"data"=>$d]); exit; };
 $er2 = function($m,$c=400){ while (ob_get_level() > 0) ob_end_clean(); http_response_code($c); echo json_encode(["status"=>"error","message"=>$m]); exit; };
 if ($act === "ping") { while (ob_get_level() > 0) ob_end_clean(); echo "QUOTE-PDF-TEST-SERVER"; exit; }
-require ' . var_export($root . '/includes/api/api_cron_debug.php', true) . ';
+require ' . var_export($root . '/includes/api/api_public_files.php', true) . ';   // 5.18.37: the serve_* actions live here
 while (ob_get_level() > 0) ob_end_clean(); http_response_code(404); echo "unhandled";
 ');
 
@@ -224,10 +224,13 @@ foreach ([
 // ═════════════════════════════════════════════════
 echo "\n4. Nobody computes the HMAC themselves; the validator reads no .meta token\n";
 // ═════════════════════════════════════════════════
-$api   = codeNC($root . '/includes/api/api_cron_debug.php');
+// 5.18.37: the four serve_* actions moved out of api_cron_debug.php (now behind the
+// staff guard) into api_public_files.php, the one pre-auth include that serves files.
+$api   = codeNC($root . '/includes/api/api_public_files.php');
 $start = strpos($api, "if (\$act === 'serve_quote_pdf')");
 $end   = strpos($api, "if (\$act === 'serve_delivery_pdf')");
-is_($start !== false && $end !== false && $end > $start, 'the serve_quote_pdf block is where it was');
+is_($start !== false && $end !== false && $end > $start, 'the serve_quote_pdf block is in the pre-auth file-serving include');
+is_(strpos(codeNC($root . '/includes/api/api_cron_debug.php'), "if (\$act === 'serve_quote_pdf')") === false, '…and no longer in api_cron_debug.php, which is staff-only since 5.18.37');
 $block = substr($api, (int)$start, (int)$end - (int)$start);
 is_(strpos($block, 'QuotePdfToken::verify(') !== false,  'serve_quote_pdf verifies through QuotePdfToken');
 is_(strpos($block, 'hash_hmac(') === false,               'serve_quote_pdf computes no HMAC of its own');
@@ -240,7 +243,7 @@ $gen = [];
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $fi) {
     $p = $fi->getPathname();
     if (substr($p, -4) !== '.php' || strpos($p, '/tests/') !== false || strpos($p, '/data/') !== false
-        || strpos($p, '/.git/') !== false || basename($p) === 'api_cron_debug.php') continue;
+        || strpos($p, '/.git/') !== false || basename($p) === 'api_public_files.php') continue;
     $src = codeNC($p);
     $off = 0;
     while (($at = strpos($src, 'action=serve_quote_pdf', $off)) !== false) {

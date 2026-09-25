@@ -20,6 +20,7 @@ class PluginConfig
 {
     /** Keys whose values must never be printed, logged or returned by an API. */
     const SECRET_KEYS = [
+        'pdf_link_secret', 'crm_webhook_key',   // 5.18.37
         'evo_api_key',
         'evo_webhook_secret',
         'quote_pdf_secret',

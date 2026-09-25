@@ -97,6 +97,11 @@ if ($path === '/scheduling/jobs/701') out($fwJob(701, 'Starlink installation', '
 if ($path === '/scheduling/jobs/702') out($fwJob(702, 'Repair visit - slow speeds', '2026-10-06T00:00:00+0300'));
 if ($path === '/scheduling/jobs/703') out($fwJob(703, 'Installation', ''));
 if ($path === '/users/5') out(['id' => 5, 'firstName' => 'Joseph', 'lastName' => 'Tech', 'email' => 'tech@example.test', 'phone' => '']);
+// 5.18.37: webhook.php re-reads every ticket from uCRM before acting on it, so the
+// two tickets test_lifecycle_email_wiring raises exist here — one with a client,
+// one without. A ticket id the fixture does not know is a 404, like the real thing.
+if ($path === '/ticketing/tickets/801') out(['id' => 801, 'subject' => 'Slow in the evenings', 'clientId' => 15, 'status' => 0]);
+if ($path === '/ticketing/tickets/802') out(['id' => 802, 'subject' => 'Public enquiry', 'clientId' => null, 'status' => 0]);
 $fwInvoice = function (int $id, string $num): array {
     return ['id' => $id, 'clientId' => 15, 'number' => $num, 'status' => 1,
             'total' => 329000.0, 'amountPaid' => 0.0, 'amountToPay' => 329000.0,

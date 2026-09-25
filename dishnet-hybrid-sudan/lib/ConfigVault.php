@@ -108,6 +108,12 @@ class ConfigVault
         // Lost in a re-install, every link the plugin sends -- portal, PDF,
         // payment return -- would go back to uCRM's internal :8443.
         'crm_public_url',
+        // 5.18.37 — keys of their own for two boundaries that used to borrow
+        // webhook_secret: the receipt/delivery PDF links, and (optionally) the
+        // uCRM webhook. Generated on the install; a re-install must not lose
+        // them, or every receipt link in a customer's WhatsApp dies at once.
+        'pdf_link_secret',
+        'crm_webhook_key',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

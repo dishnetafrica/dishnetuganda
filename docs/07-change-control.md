@@ -620,3 +620,96 @@ c82e0b9"). On the server afterwards:
   the vault.
 - It refused the saved company token because it is not shaped like one of
   DPO's, before sending anything.
+
+## 5.18.37 — the customer-login and payment doors answer only whom they should (audit Phase 1)
+
+**25 September 2026** · `includes/api_handlers.php`, `includes/api/api_public.php`,
+`includes/api/api_public_files.php` (new), `includes/api/api_staff_diagnostics.php` (new),
+`includes/api/api_customer_support.php` (new), `includes/api/api_cron_debug.php`,
+`includes/api/api_payments_admin.php`, `includes/api/api_products_admin.php`,
+`includes/api/api_customer_app.php`, `includes/routes.php`, `webhook.php`,
+`lib/PdfLinkToken.php` (new), `lib/NotificationService.php`, `lib/ConfigVault.php`,
+`lib/PluginConfig.php`, `tabs/customer_app/login_web.php`, the PDF-link minting
+sites, `tools/crm_debug.php` (new), `tools/crm_webhook_key.php` (new), six test
+suites. Record: the private Phase 1 report handed to the operator (the audit
+that produced it lists live weaknesses and is deliberately not in the
+repository).
+
+Phase 1 of the customer-login / portal / payments audit, scope §C of the
+approved remediation plan. **Code and configuration only — no migration.**
+Nothing here changes a stored row, a table, a default or a trigger; the
+previous release opens the same data directory unchanged.
+
+- **What the API answers without a login is now a list, and a test pins it**
+  (`tests/test_preauth_allowlist.php`, 47 actions: staff login, the key-gated
+  customer-context read, four PDF links with their own tokens, the customer
+  app's own actions behind the customer's token, and the two DPO actions).
+  Three staff API files that had been included before the sign-in check —
+  payments admin, products admin, cron/debug/backup — and seven diagnostics
+  in the public file now run behind it, administrator-only where they change
+  money or read the whole installation. The two actions that had hidden
+  behind a constant key written in the source no longer read a key at all.
+  `?page=crm_debug` is gone; `php tools/crm_debug.php --status` on the server
+  replaces it. `test_payment_post` needs `&confirm=<collection_id>` and posts
+  through the de-duplicating path, so a repeated URL cannot post twice.
+- **The customer sign-in door no longer says who is a customer.** A known and
+  an unknown phone or e-mail get the same answer; the difference is written to
+  the audit rows for staff. A per-address limit throttles an enumeration run
+  like a real customer (counted in the existing `app_otp_rate` table under
+  `ip:<address>` rows; no new table). The four `app_debug_*` actions —
+  account lookup with another customer's row as a sample, every message ever
+  sent to a number with its first line (the login code), every plugin's
+  tables, a WhatsApp send to any registered number — are removed. Staff get
+  `staff_login_lookup` and `staff_otp_log` (administrator only; no message
+  text, no code, nobody else's account). `app_debug_list` is administrator
+  only. The notification log's preview for a login code is a fixed notice.
+- **Consent is recorded for the identity the code proved** — the token the
+  sign-in issued — never for an identifier typed into the request. The login
+  page sends that token with the consent call.
+- **The uCRM webhook acts on uCRM's copy of every entity, never the posted
+  body.** Each handler re-reads its entity by id; an id uCRM does not know,
+  or a uCRM that cannot be reached, is skipped with a 200 and logged as
+  `entity_unverified`. `payment.delete` reverses only a payment uCRM answers
+  404 for. `client.message`, whose text cannot be re-read, is forwarded only
+  when the request carries the new optional key `crm_webhook_key`; once that
+  key is set (`php tools/crm_webhook_key.php --generate`, then the same value
+  in uCRM's webhook settings) every request without it is refused.
+- **Receipt and delivery-note links carry a key of their own**
+  (`pdf_link_secret`, generated once at boot, vaulted like the quotation key)
+  instead of `webhook_secret ?? 'dishnet'`. The old scheme is accepted for its
+  last day only where `webhook_secret` was a real value — never under the
+  `'dishnet'` default. Temporary PDFs get an unguessable token.
+
+Tests: five new suites (`test_preauth_allowlist` 105, `test_customer_login_security`
+65, `test_webhook_trust` 74, `test_pdf_link_token` 69, `test_otp_log_privacy` 16),
+three existing suites and one fixture updated to the moved code, twelve
+weakened copies of the controls each caught by the suite that guards it.
+Plugin suite: **196 files, 8,822 checks, 0 failed, twice**.
+
+Visible after deployment, to decide with eyes open:
+- A visitor who types a number that is not a customer's now sees "Code sent"
+  and the page's help copy, not "no account". Support answers with
+  `staff_login_lookup`.
+- During a uCRM outage the webhook skips events (uCRM does not retry a 200);
+  the nightly sync and the payment catch-up job still reconcile payments.
+- On an install whose `webhook_secret` is empty — Uganda's was recorded empty —
+  receipt and delivery links sent before the deployment stop opening at the
+  deployment; links minted afterwards work for 24–48 hours as before.
+- `backup_download` and `cron_trigger` need an administrator's session or
+  token; nothing on the server is known to call them over HTTP.
+
+Recorded, not changed (outside §C): the e-mail sign-in identifier cannot match
+on the structured customer index of migration 054 (no e-mail column), so e-mail
+sign-in is inert on this schema; the cashbook auto-post throws on an integer
+`method` from uCRM under strict types and logs `cashbook_error` (pre-existing);
+the two EFRIS PDF links still use the old signing scheme; the `+211` country
+prefix and the customer-token secret derivation are Phase 2.
+
+**Applied by:** the operator, after explicit approval: `deploy-hybrid.sh`.
+Then, optionally, `php tools/crm_webhook_key.php --generate` and the same key in
+uCRM → System → Webhooks; `php tools/crm_debug.php --status` for the CRM queue.
+**Rollback:** `git checkout 9b75085` and deploy again. No data step: the new
+build writes only `pdf_link_secret` into the settings store and `ip:` rows into
+`app_otp_rate`, both ignored by 5.18.36.
+**Status:** built 25 September 2026; **NOT deployed** — awaiting the operator's
+Phase 1 deployment approval.

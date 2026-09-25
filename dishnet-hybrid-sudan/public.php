@@ -514,7 +514,9 @@ if (empty($config)) {
 // once, the first time this install has none. Every other entry point that
 // mints or checks a link does the same. See lib/QuotePdfToken.php.
 require_once __DIR__ . '/lib/QuotePdfToken.php';
+require_once __DIR__ . '/lib/PdfLinkToken.php';
 QuotePdfToken::ensureSecret($store, $config);
+PdfLinkToken::ensureSecret($store, $config);   // 5.18.37: the receipt/delivery link key, generated once
 // Ensure defaults for existing configs
 if (!isset($config['commission_rate']))            $config['commission_rate'] = 5;
 if (!isset($config['lte_commission_rate']))        $config['lte_commission_rate'] = 5;

@@ -24,6 +24,7 @@
 
 // ── Bootstrap auxiliary classes ─────────────────────────────────────
 require_once dirname(__DIR__, 2) . '/lib/JwtAuth.php';
+require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';
 
 // ── Helpers (scoped with ca_ prefix to avoid collisions) ────────────
 
@@ -511,477 +512,30 @@ if ($act === 'app_health_app' && $met === 'GET') {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ACTION: app_debug_lookup  (public — no auth)
-// GET ?page=api&action=app_debug_lookup&phone=%2B211923456789
-//
-// Diagnostic tool — tells you EXACTLY what happens when a phone tries
-// to log in. Safe to call, doesn't send anything. Returns:
-//   - does phone match a CRM client (using fuzzy last-9-digits match)?
-//   - what client id?
-//   - how many OTPs sent in last hour (rate limit)?
-//   - is WASender configured (app_key/auth_key/url set)?
-//   - is dry-run mode on?
-//   - is the phone cache built / fresh?
+// 5.18.37: app_debug_lookup, app_debug_log, app_debug_schema and app_debug_send
+// are gone. They answered before any login: whether a phone belonged to a
+// customer (with another customer's row as a sample), every message sent to
+// a number with the first 70 characters of its text — the login code among
+// them — the tables and sample rows of every plugin on the host, and a
+// WhatsApp send to any registered phone. Staff diagnostics that keep what
+// support needs live in api_customer_support.php, behind the staff guard.
 // ═══════════════════════════════════════════════════════════════════
-if ($act === 'app_debug_lookup' && $met === 'GET') {
-    ca_init_tables($store->getPdo());
-    $pdo = $store->getPdo();
-
-    $rawPhone = trim($_GET['phone'] ?? '');
-    $normalized = ca_phone_normalize($rawPhone);
-    $phoneIntl = ca_phone_intl($rawPhone);
-
-    // Check client index
-    $indexSize = 0;
-    $indexSample = null;
-    $matchedClient = null;
-    try {
-        $idx = $store->load('client_search_index.json') ?? [];
-        $indexSize = count($idx);
-        // Sample: first entry
-        if (!empty($idx)) {
-            $indexSample = [
-                'id'    => $idx[0]['id'] ?? null,
-                'name'  => $idx[0]['name'] ?? null,
-                'phone' => $idx[0]['phone'] ?? null,
-                'normalized' => ca_phone_normalize($idx[0]['phone'] ?? ''),
-            ];
-        }
-        // Scan for match
-        foreach ($idx as $row) {
-            $candidate = ca_phone_normalize($row['phone'] ?? '');
-            if (strlen($normalized) >= 8 && $candidate === $normalized) {
-                $matchedClient = [
-                    'id' => (int)($row['id'] ?? 0),
-                    'name' => $row['name'] ?? '',
-                    'phone_in_cache' => $row['phone'] ?? '',
-                    'phone_normalized' => $candidate,
-                ];
-                break;
-            }
-        }
-    } catch (\Throwable $e) {}
-
-    // Rate limit check
-    $cutoff = time() - 3600;
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM app_otp_rate WHERE phone = ? AND sent_at > ?");
-    $stmt->execute([$phoneIntl, $cutoff]);
-    $recentSends = (int) $stmt->fetchColumn();
-
-    // WASender config
-    $senderEnabled = !empty($config['wa_plugin_url'])
-                  && !empty($config['wa_app_key'])
-                  && !empty($config['wa_auth_key']);
-
-    // Pending OTP (if any)
-    $stmt = $pdo->prepare("SELECT expires_at, created_at, attempts FROM app_otp_pending WHERE phone = ?");
-    $stmt->execute([$phoneIntl]);
-    $pending = $stmt->fetch(\PDO::FETCH_ASSOC);
-
-    $ok2([
-        'input' => [
-            'raw' => $rawPhone,
-            'normalized_last9' => $normalized,
-            'intl_with_plus' => $phoneIntl,
-        ],
-        'client_index' => [
-            'size' => $indexSize,
-            'first_entry_sample' => $indexSample,
-        ],
-        'match' => $matchedClient ?: ['found' => false],
-        'rate_limit' => [
-            'sent_last_hour' => $recentSends,
-            'max_per_hour' => 3,
-            'allowed' => $recentSends < 3,
-        ],
-        'wa_config' => [
-            'wa_plugin_url_set' => !empty($config['wa_plugin_url']),
-            'wa_app_key_set'    => !empty($config['wa_app_key']),
-            'wa_auth_key_set'   => !empty($config['wa_auth_key']),
-            'dry_run_mode'      => (bool)($config['dry_run_mode'] ?? false),
-            'sender_enabled'    => $senderEnabled,
-        ],
-        'pending_otp' => $pending ? [
-            'exists' => true,
-            'expires_in_seconds' => max(0, (int)$pending['expires_at'] - time()),
-            'attempts' => (int)$pending['attempts'],
-        ] : ['exists' => false],
-        'what_send_otp_would_do' => $matchedClient
-            ? ($senderEnabled
-                ? ($recentSends < 3 ? 'Send OTP via WhatsApp' : 'Rate limited (3/hr)')
-                : 'Fail — WASender not configured')
-            : 'Fail — No account with that phone',
-    ], 'Diagnostic complete.');
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// ACTION: app_debug_log  (public — debug only)
-// GET ?page=api&action=app_debug_log&phone=%2B211927797217&limit=10
-//
-// Shows last N entries from notification_log table for this phone.
-// Also shows the failed-send queue if anything is stuck.
-// ═══════════════════════════════════════════════════════════════════
-if ($act === 'app_debug_log' && $met === 'GET') {
-    ca_init_tables($store->getPdo());
-    $pdo = $store->getPdo();
-
-    $rawPhone = trim($_GET['phone'] ?? '');
-    $phoneDigits = preg_replace('/[^0-9]/', '', $rawPhone);
-    $limit = min(50, max(1, (int)($_GET['limit'] ?? 10)));
-
-    $result = [
-        'phone_digits' => $phoneDigits,
-        'notification_log' => [],
-        'failed_queue' => [],
-        'audit_log' => [],
-    ];
-
-    // Notification log — every sendVia() call
-    try {
-        if ($phoneDigits) {
-            $stmt = $pdo->prepare("
-                SELECT sender, event, phone, preview, success, http_code, error, sent_at
-                FROM notification_audit_log
-                WHERE phone = ? OR phone LIKE ?
-                ORDER BY sent_at DESC LIMIT ?
-            ");
-            $stmt->execute([$phoneDigits, '%' . substr($phoneDigits, -9), $limit]);
-        } else {
-            $stmt = $pdo->prepare("
-                SELECT sender, event, phone, preview, success, http_code, error, sent_at
-                FROM notification_audit_log
-                ORDER BY sent_at DESC LIMIT ?
-            ");
-            $stmt->execute([$limit]);
-        }
-        $result['notification_log'] = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-    } catch (\Throwable $e) {
-        $result['notification_log_error'] = $e->getMessage();
-    }
-
-    // Failed-send queue
-    try {
-        $stmt = $pdo->prepare("
-            SELECT id, sender, phone, event, status, http_code, error, attempts, last_attempt_at
-            FROM notification_queue
-            WHERE phone LIKE ? OR phone = ?
-            ORDER BY id DESC LIMIT 10
-        ");
-        $stmt->execute(['%' . substr($phoneDigits, -9), $phoneDigits]);
-        $result['failed_queue'] = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-    } catch (\Throwable $e) {
-        $result['failed_queue_error'] = $e->getMessage();
-    }
-
-    // Our own app_audit_log
-    try {
-        $stmt = $pdo->prepare("
-            SELECT action, phone, details, at
-            FROM app_audit_log
-            WHERE phone LIKE ? OR phone = ?
-            ORDER BY at DESC LIMIT ?
-        ");
-        $stmt->execute(['%' . substr($phoneDigits, -9), $phoneDigits, $limit]);
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-        foreach ($rows as &$r) {
-            $r['at_iso'] = gmdate('c', (int)$r['at']);
-        }
-        $result['audit_log'] = $rows;
-    } catch (\Throwable $e) {
-        $result['audit_log_error'] = $e->getMessage();
-    }
-
-    $ok2($result, 'Debug log retrieved.');
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// ACTION: app_debug_schema  (public — debug only)
-// GET ?page=api&action=app_debug_schema
-// GET ?page=api&action=app_debug_schema&plugin=dishnet-data-report
-// GET ?page=api&action=app_debug_schema&plugin=dishnet-data-report&table=client_usage
-//
-// Inspects sibling plugin SQLite databases to discover table/column
-// schemas. Used to wire real usage data into app_usage without guessing.
-// Safe, read-only.
-// ═══════════════════════════════════════════════════════════════════
-if ($act === 'app_debug_schema' && $met === 'GET') {
-    $targetPlugin = trim($_GET['plugin'] ?? '');
-    $targetTable = trim($_GET['table'] ?? '');
-
-    $pluginRoot = dirname(__DIR__, 2);
-    $pluginsDir = dirname($pluginRoot);
-    if (!is_dir($pluginsDir)) $er2('Cannot locate UCRM plugins directory', 500);
-
-    // ── Mode 1: list plugins + their SQLite files ─────────────────────
-    if (empty($targetPlugin)) {
-        $plugins = [];
-        foreach (scandir($pluginsDir) ?: [] as $name) {
-            if ($name === '.' || $name === '..' || $name[0] === '.') continue;
-            $path = $pluginsDir . '/' . $name;
-            if (!is_dir($path)) continue;
-
-            $sqliteFiles = [];
-            foreach (['.', 'data'] as $sub) {
-                $scanDir = $path . '/' . $sub;
-                if (!is_dir($scanDir)) continue;
-                foreach (scandir($scanDir) ?: [] as $f) {
-                    if (preg_match('/\.(sqlite3?|db)$/i', $f)) {
-                        $full = $scanDir . '/' . $f;
-                        if (is_file($full)) {
-                            $sqliteFiles[] = [
-                                'file' => ($sub === '.' ? '' : $sub . '/') . $f,
-                                'size_bytes' => filesize($full),
-                                'modified' => date('c', filemtime($full)),
-                            ];
-                        }
-                    }
-                }
-            }
-            $plugins[] = ['name' => $name, 'sqlite_files' => $sqliteFiles];
-        }
-        $ok2([
-            'plugins_dir' => $pluginsDir,
-            'plugins' => $plugins,
-            'usage_hint' => 'Call again with &plugin=<name> to inspect tables',
-        ], 'Plugin listing.');
-    }
-
-    // ── Mode 2: inspect a specific plugin ─────────────────────────────
-    $targetDir = $pluginsDir . '/' . $targetPlugin;
-    if (!is_dir($targetDir)) $er2("Plugin not found: $targetPlugin", 404);
-
-    $candidates = [];
-    foreach (['', 'data/'] as $sub) {
-        $scanDir = $targetDir . '/' . rtrim($sub, '/');
-        if (!is_dir($scanDir)) continue;
-        foreach (scandir($scanDir) ?: [] as $f) {
-            if (preg_match('/\.(sqlite3?|db)$/i', $f)) {
-                $full = $scanDir . '/' . $f;
-                if (is_file($full)) $candidates[] = $full;
-            }
-        }
-    }
-
-    // Also list JSON / CSV / TXT data files for discovery
-    $dataFiles = [];
-    foreach (['', 'data/'] as $sub) {
-        $scanDir = $targetDir . '/' . rtrim($sub, '/');
-        if (!is_dir($scanDir)) continue;
-        foreach (scandir($scanDir) ?: [] as $f) {
-            if (preg_match('/\.(json|csv|txt)$/i', $f)) {
-                $full = $scanDir . '/' . $f;
-                if (!is_file($full)) continue;
-                $info = [
-                    'file' => ($sub === '' ? '' : $sub) . $f,
-                    'size_bytes' => filesize($full),
-                    'modified' => date('c', filemtime($full)),
-                ];
-                // For JSON files: peek at top-level structure
-                if (preg_match('/\.json$/i', $f) && filesize($full) < 5000000) {
-                    try {
-                        $raw = @file_get_contents($full);
-                        $parsed = json_decode($raw, true);
-                        if (is_array($parsed)) {
-                            $keys = array_keys($parsed);
-                            $isList = ($keys === range(0, count($parsed) - 1));
-                            $info['type'] = $isList ? 'array' : 'object';
-                            if ($isList) {
-                                $info['array_length'] = count($parsed);
-                                // Sample first element if list of objects
-                                if (!empty($parsed) && is_array($parsed[0])) {
-                                    $info['first_item_keys'] = array_keys($parsed[0]);
-                                    $info['first_item_sample'] = $parsed[0];
-                                }
-                            } else {
-                                $info['top_keys'] = array_keys($parsed);
-                                // Show first 2 key-value pairs as sample
-                                $sample = [];
-                                $i = 0;
-                                foreach ($parsed as $k => $v) {
-                                    if ($i++ >= 2) break;
-                                    if (is_array($v)) {
-                                        $vKeys = array_keys($v);
-                                        $vIsList = ($vKeys === range(0, count($v) - 1));
-                                        $sample[$k] = $vIsList
-                                            ? '[array of ' . count($v) . ']'
-                                            : '{object with keys: ' . implode(',', array_keys($v)) . '}';
-                                    } else {
-                                        $sample[$k] = $v;
-                                    }
-                                }
-                                $info['sample'] = $sample;
-                            }
-                        }
-                    } catch (\Throwable $e) {
-                        $info['parse_error'] = $e->getMessage();
-                    }
-                }
-                $dataFiles[] = $info;
-            }
-        }
-    }
-
-    if (empty($candidates) && empty($dataFiles)) {
-        $er2("No SQLite or JSON data files in '$targetPlugin'. Plugin may store data elsewhere.", 404);
-    }
-
-    $databases = [];
-    foreach ($candidates as $dbPath) {
-        $dbInfo = [
-            'path' => str_replace($pluginsDir . '/', '', $dbPath),
-            'size_bytes' => filesize($dbPath),
-            'tables' => [],
-        ];
-        try {
-            $pdo2 = new \PDO('sqlite:' . $dbPath);
-            $pdo2->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-
-            $stmt = $pdo2->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
-            $tables = $stmt->fetchAll(\PDO::FETCH_COLUMN);
-
-            foreach ($tables as $tableName) {
-                $rowCount = null;
-                try {
-                    $c = $pdo2->query("SELECT COUNT(*) FROM \"$tableName\"");
-                    $rowCount = (int)$c->fetchColumn();
-                } catch (\Throwable $e) {}
-
-                $tableInfo = ['name' => $tableName, 'row_count' => $rowCount];
-
-                if ($targetTable === $tableName || $targetTable === '') {
-                    $cols = $pdo2->query("PRAGMA table_info(\"$tableName\")")->fetchAll(\PDO::FETCH_ASSOC);
-                    $tableInfo['columns'] = array_map(function($c) {
-                        return [
-                            'name' => $c['name'],
-                            'type' => $c['type'],
-                            'notnull' => (bool)$c['notnull'],
-                            'pk' => (bool)$c['pk'],
-                        ];
-                    }, $cols);
-
-                    if ($targetTable === $tableName) {
-                        try {
-                            $sample = $pdo2->query("SELECT * FROM \"$tableName\" LIMIT 3")->fetchAll(\PDO::FETCH_ASSOC);
-                            $tableInfo['sample_rows'] = $sample;
-                        } catch (\Throwable $e) {
-                            $tableInfo['sample_error'] = $e->getMessage();
-                        }
-                    }
-                }
-                $dbInfo['tables'][] = $tableInfo;
-            }
-        } catch (\Throwable $e) {
-            $dbInfo['error'] = $e->getMessage();
-        }
-        $databases[] = $dbInfo;
-    }
-
-    $ok2([
-        'plugin' => $targetPlugin,
-        'databases' => $databases,
-        'data_files' => $dataFiles,
-        'usage_hint' => $targetTable === ''
-            ? 'Call with &table=<n> for columns + sample rows, OR look at data_files for JSON structure'
-            : "Use the columns + sample_rows to write the real query",
-    ], 'Schema inspection complete.');
-}
-
-if ($act === 'app_debug_send' && $met === 'GET') {
-    ca_init_tables($store->getPdo());
-    $pdo = $store->getPdo();
-
-    $rawPhone = trim($_GET['phone'] ?? '');
-    $normalized = ca_phone_normalize($rawPhone);
-    if (strlen($normalized) < 8) $er2('Invalid phone.', 400);
-    $phoneIntl = ca_phone_intl($rawPhone);
-
-    $client = ca_find_client_by_phone($store, $rawPhone);
-    if (!$client) $er2('No CRM client matches this phone.', 404);
-
-    $code = '999000'; // Fixed test code
-    $message = "🔧 *DishNet Debug*\n\nTest code: *{$code}*\n\nThis is a debug message — do not use to log in.";
-
-    // ── Direct WASender call so we can see the RAW response ─────────
-    // Bypass NotificationService and hit WASender directly. This tells
-    // us exactly what WASender returns (JSON, HTML, error).
-    $wuUrl  = rtrim($config['wa_plugin_url'] ?? '', '/');
-    $wuApp  = $config['wa_app_key'] ?? '';
-    $wuAuth = $config['wa_auth_key'] ?? '';
-
-    if (empty($wuUrl) || empty($wuApp) || empty($wuAuth)) {
-        $er2('WASender not configured', 500);
-    }
-
-    // Phone: digits only, no +
-    $toDigits = preg_replace('/[^0-9]/', '', $phoneIntl);
-
-    $endpoint = $wuUrl . '/api/whatsapp-web/send-message';
-    $formData = [
-        'app_key'  => $wuApp,
-        'auth_key' => $wuAuth,
-        'to'       => $toDigits,
-        'message'  => $message,
-        'sandbox'  => 'false',
-    ];
-
-    $t0 = microtime(true);
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => $endpoint,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 15,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $formData,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 3,
-        CURLOPT_HEADER         => true,
-    ]);
-    $rawResp = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $effectiveUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
-    $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    $curlErr = curl_error($ch);
-    curl_close($ch);
-    $elapsedMs = (int)((microtime(true) - $t0) * 1000);
-
-    $respHeaders = substr($rawResp, 0, $headerSize);
-    $respBody = substr($rawResp, $headerSize);
-    $parsed = json_decode($respBody, true);
-
-    // Figure out actual success
-    $isJson = is_array($parsed);
-    $jsonSuccess = $isJson && ($parsed['success'] ?? false) === true;
-
-    $ok2([
-        'endpoint' => $endpoint,
-        'sent_to' => $phoneIntl,
-        'to_digits_format' => $toDigits,
-        'elapsed_ms' => $elapsedMs,
-        'http_code' => $httpCode,
-        'content_type' => $contentType,
-        'effective_url' => $effectiveUrl,
-        'curl_error' => $curlErr ?: null,
-        'response_is_json' => $isJson,
-        'json_success_flag' => $jsonSuccess,
-        'parsed_response' => $parsed,
-        'raw_body_preview' => mb_substr($respBody, 0, 500),
-        'raw_body_length' => strlen($respBody),
-        'diagnosis' => $curlErr
-            ? "CURL error — WASender unreachable: $curlErr"
-            : (!$isJson
-                ? 'WASender returned HTML instead of JSON — likely the URL is wrong, instance disconnected, or auth rejected and redirecting to login page'
-                : ($jsonSuccess
-                    ? 'WASender API accepted the request. If message did not arrive, the WA session is disconnected at the WASender/Evolution layer.'
-                    : 'WASender returned JSON but with success=false — check parsed_response for the actual error')),
-    ], 'Raw WASender diagnostic');
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // ACTION: app_send_otp  (public)
-// Body: { "phone": "+211923456789" }
+// Body: { "phone": "+2567…" }   or   { "email": "name@example.com" }
+//
+// 5.18.37 — one answer for everyone. Until now an unknown number got a 404
+// ("No DishNet account with that phone…") and a known one a 200 carrying the
+// matched client id, so the endpoint told anyone which numbers are customers.
+// Now every well-formed request is answered with the same body, after the
+// same rate-limit accounting; whether a code was actually sent is recorded in
+// the audit log for staff (staff_login_lookup / staff_otp_log), never in the
+// response. The login page's help copy carries the "didn't get a code?" advice.
+//
+// Transport is unchanged in this release (WhatsApp through NotificationService
+// when WASender is configured, e-mail otherwise); the country-aware delivery
+// fix is Phase 2 of the remediation plan.
 // ═══════════════════════════════════════════════════════════════════
 if ($act === 'app_send_otp') {
     if ($met !== 'POST') $er2('POST required.', 405);
@@ -989,72 +543,87 @@ if ($act === 'app_send_otp') {
     ca_init_tables($store->getPdo());
     $pdo = $store->getPdo();
 
-    // v4.21.7: caller may send 'phone' OR 'email'. Email mode is for
-    // customers who don't have WhatsApp on the phone they registered
-    // with DishNet. The OTP infrastructure (rate limit, pending table,
-    // verify) is keyed on a single 'identifier' string — the existing
-    // 'phone' column repurposed. For phone login: identifier = E.164
-    // phone (e.g. +211921443006). For email login: identifier =
-    // lowercase email (e.g. rachel@example.com). The two namespaces
-    // never collide because emails contain '@' and phones don't.
     $rawPhone = trim($body['phone'] ?? '');
     $rawEmail = trim($body['email'] ?? '');
 
-    $loginMode = '';   // 'phone' | 'email'
-    $identifier = '';  // what gets stored as PRIMARY KEY in app_otp_pending
-    $clients = [];     // matching CRM client records
-
+    $loginMode  = '';
+    $identifier = '';
     if ($rawEmail !== '') {
-        $loginMode = 'email';
+        $loginMode  = 'email';
         $identifier = strtolower($rawEmail);
-        if (strpos($identifier, '@') === false || strlen($identifier) < 5) {
-            $er2('Invalid email address.', 400);
-        }
-        $clients = ca_find_clients_by_email($store, $rawEmail);
-        if (empty($clients)) {
-            ca_audit($pdo, null, 'otp_no_account_email', $identifier);
-            $er2('Email not found. Try Phone login if your email isn\'t registered.', 404);
-        }
+        if (strpos($identifier, '@') === false || strlen($identifier) < 5) $er2('Invalid email address.', 400);
     } elseif ($rawPhone !== '') {
-        $loginMode = 'phone';
-        $normalized = ca_phone_normalize($rawPhone);
-        if (strlen($normalized) < 8) {
-            $er2('Invalid phone number.', 400);
-        }
+        $loginMode  = 'phone';
+        if (strlen(ca_phone_normalize($rawPhone)) < 8) $er2('Invalid phone number.', 400);
         $identifier = ca_phone_intl($rawPhone);
-        $clients = ca_find_clients_by_phone($store, $rawPhone);
-        if (empty($clients)) {
-            ca_audit($pdo, null, 'otp_no_account', $identifier);
-            $er2('No DishNet account with that phone. Contact Bidal on WhatsApp.', 404);
-        }
     } else {
         $er2('Either phone or email is required.', 400);
     }
 
-    // Rate limit: max 10 OTPs per identifier per hour. Same rule for
-    // both phone and email — prevents either channel from being abused.
-    $cutoff = time() - 3600;
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM app_otp_rate WHERE phone = ? AND sent_at > ?");
-    $stmt->execute([$identifier, $cutoff]);
-    $recent = (int)$stmt->fetchColumn();
-    if ($recent >= 10) {
-        ca_audit($pdo, null, 'otp_rate_limit', $identifier);
-        $er2('Too many requests. Try again in 1 hour.', 429);
+    $ttl     = (int)($config['app_otp_ttl_seconds'] ?? 900);
+    $ttlMin  = max(1, (int)round($ttl / 60));
+    $dryRun  = (bool)($config['dry_run_mode'] ?? false);
+    $channel = $loginMode === 'email' ? 'email' : 'whatsapp';
+
+    // The one body every caller gets. Nothing in it depends on the lookup.
+    $uniform = function () use ($ok2, $ttl, $dryRun, $channel, $loginMode): void {
+        $ok2([
+            'expires_in'  => $ttl,
+            'server_time' => time(),
+            'dry_run'     => $dryRun,
+            'channel'     => $channel,
+            'mode'        => $loginMode,
+        ], $loginMode === 'email' ? 'Code sent via Email.' : 'Code sent via WhatsApp.');
+    };
+
+    // Server-side prerequisites are checked BEFORE the lookup, so a
+    // configuration problem answers the same for every number.
+    if ($loginMode === 'phone') {
+        if (!$notify) $er2('Notification service unavailable.', 500);
+        $senderEnabled = !empty($config['wa_plugin_url']) && !empty($config['wa_app_key']) && !empty($config['wa_auth_key']);
+        if (!$senderEnabled && !$dryRun) {
+            ca_audit($pdo, null, 'otp_wa_not_configured', $identifier, [
+                'wa_plugin_url_set' => !empty($config['wa_plugin_url']),
+                'wa_app_key_set'    => !empty($config['wa_app_key']),
+                'wa_auth_key_set'   => !empty($config['wa_auth_key']),
+            ]);
+            $er2('WhatsApp sender is not configured on server. Contact admin.', 500);
+        }
     }
 
-    // Primary = first in sorted order (active first, then lowest id)
-    $client = $clients[0];
+    // Rate limits — per identifier (as before) and, new, per source address —
+    // counted for known and unknown identifiers alike, so an enumeration run is
+    // throttled exactly like a real customer. Both live in app_otp_rate; the
+    // address rows are keyed 'ip:<address>' so they never collide with a phone.
+    $cutoff  = time() - 3600;
+    $ipKey   = 'ip:' . (function_exists('getClientIp') ? getClientIp() : ($_SERVER['REMOTE_ADDR'] ?? ''));
+    $stmt    = $pdo->prepare("SELECT COUNT(*) FROM app_otp_rate WHERE phone = ? AND sent_at > ?");
+    $stmt->execute([$identifier, $cutoff]);
+    $recentId = (int)$stmt->fetchColumn();
+    $stmt->execute([$ipKey, $cutoff]);
+    $recentIp = (int)$stmt->fetchColumn();
+    $limitId  = max(1, (int)($config['app_otp_limit_per_hour'] ?? 10));
+    $limitIp  = max(1, (int)($config['app_otp_ip_limit_per_hour'] ?? 30));
+    if ($recentId >= $limitId || $recentIp >= $limitIp) {
+        ca_audit($pdo, null, 'otp_rate_limit', $identifier, ['by' => $recentId >= $limitId ? 'identifier' : 'ip']);
+        $er2('Too many requests. Try again in 1 hour.', 429);
+    }
+    $ins = $pdo->prepare("INSERT INTO app_otp_rate (phone, sent_at) VALUES (?, ?)");
+    $ins->execute([$identifier, time()]);
+    $ins->execute([$ipKey, time()]);
+    $pdo->prepare("DELETE FROM app_otp_rate WHERE sent_at < ?")->execute([time() - 86400]);
 
-    // Generate code (same code regardless of channel)
+    // Lookup. An unknown identifier is audited and answered like a known one.
+    $clients = $loginMode === 'email'
+        ? ca_find_clients_by_email($store, $rawEmail)
+        : ca_find_clients_by_phone($store, $rawPhone);
+    if (empty($clients)) {
+        ca_audit($pdo, null, $loginMode === 'email' ? 'otp_no_account_email' : 'otp_no_account', $identifier);
+        $uniform();
+    }
+    $client = $clients[0];   // primary = first in sorted order (active first, then lowest id)
+
     $code = str_pad((string)random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
-    // v4.12.20: default 900s (15 min) — up from 600s (10 min). Accommodates
-    // WASender queue latency in South Sudan where messages sometimes take
-    // 3-5 minutes to arrive in WhatsApp even after the API call succeeds.
-    // Same TTL applies to email — keeps both channels in sync so countdown
-    // displayed to user matches reality on either channel.
-    $ttl = (int)($config['app_otp_ttl_seconds'] ?? 900);
-
-    // Store (upsert) — keyed on identifier (phone or email)
     $stmt = $pdo->prepare("
         INSERT INTO app_otp_pending (phone, code, expires_at, created_at, attempts, crm_client_id)
         VALUES (?, ?, ?, ?, 0, ?)
@@ -1067,123 +636,54 @@ if ($act === 'app_send_otp') {
     ");
     $stmt->execute([$identifier, $code, time() + $ttl, time(), (int)$client['id']]);
 
-    // Record send for rate limiting
-    $pdo->prepare("INSERT INTO app_otp_rate (phone, sent_at) VALUES (?, ?)")
-        ->execute([$identifier, time()]);
-
-    // Cleanup old rate entries (>24h)
-    $pdo->prepare("DELETE FROM app_otp_rate WHERE sent_at < ?")
-        ->execute([time() - 86400]);
-
-    $ttlMin = max(1, (int)round($ttl / 60));
-    $firstName = trim($client['name'] ?? '') ?: 'there';
-    $firstName = explode(' ', $firstName)[0];
-    $message = "🔐 *DishNet Login Code*\n\n"
-             . "Your code: *{$code}*\n\n"
-             . "Valid for {$ttlMin} minutes. If you did not request this, ignore.";
+    $firstName = explode(' ', trim($client['name'] ?? '') ?: 'there')[0];
+    $message   = "🔐 *DishNet Login Code*\n\n"
+               . "Your code: *{$code}*\n\n"
+               . "Valid for {$ttlMin} minutes. If you did not request this, ignore.";
 
     $sendSuccess = false;
-    $sendError = null;
-    $senderEnabled = false;
-    $dryRun = (bool)($config['dry_run_mode'] ?? false);
-    $channelUsed = '';   // 'whatsapp' | 'email'
-
+    $sendError   = null;
     if ($loginMode === 'phone') {
-        // ─── Phone mode: send via WhatsApp (existing flow) ──────────────
-        if ($notify) {
-            $senderEnabled = !empty($config['wa_plugin_url']) && !empty($config['wa_app_key']) && !empty($config['wa_auth_key']);
-
-            if (!$senderEnabled) {
-                ca_audit($pdo, (int)$client['id'], 'otp_wa_not_configured', $identifier, [
-                    'wa_plugin_url_set' => !empty($config['wa_plugin_url']),
-                    'wa_app_key_set'    => !empty($config['wa_app_key']),
-                    'wa_auth_key_set'   => !empty($config['wa_auth_key']),
-                ]);
-                $er2('WhatsApp sender is not configured on server. Contact admin.', 500);
-            }
-
-            $notify->sendVia(
-                NotificationService::SUPPORT,
-                $identifier,  // E.164 phone
-                $message,
-                'app_otp',
-                ['crm_client_id' => (int)$client['id'], 'name' => $firstName]
-            );
-
-            // Check actual send result
-            $reflect = new ReflectionObject($notify);
-            if ($reflect->hasProperty('_lastSendSuccess')) {
-                $prop = $reflect->getProperty('_lastSendSuccess');
-                $prop->setAccessible(true);
-                $sendSuccess = (bool) $prop->getValue($notify);
-            }
-            if ($reflect->hasProperty('_lastError')) {
-                $prop = $reflect->getProperty('_lastError');
-                $prop->setAccessible(true);
-                $sendError = $prop->getValue($notify);
-            }
-
-            if (!$sendSuccess && !$dryRun) {
-                ca_audit($pdo, (int)$client['id'], 'otp_send_failed', $identifier, ['error' => $sendError, 'channel' => 'whatsapp']);
-                $er2('WhatsApp delivery failed: ' . ($sendError ?: 'unknown error'), 502);
-            }
-            $channelUsed = 'whatsapp';
-        } else {
-            error_log("[app-otp] \$notify not available — would send to {$identifier}: {$code}");
-            $er2('Notification service unavailable.', 500);
+        $notify->sendVia(
+            NotificationService::SUPPORT,
+            $identifier,
+            $message,
+            'app_otp',
+            ['crm_client_id' => (int)$client['id'], 'name' => $firstName]
+        );
+        $reflect = new ReflectionObject($notify);
+        if ($reflect->hasProperty('_lastSendSuccess')) {
+            $prop = $reflect->getProperty('_lastSendSuccess');
+            $prop->setAccessible(true);
+            $sendSuccess = (bool)$prop->getValue($notify);
+        }
+        if ($reflect->hasProperty('_lastError')) {
+            $prop = $reflect->getProperty('_lastError');
+            $prop->setAccessible(true);
+            $sendError = $prop->getValue($notify);
         }
     } else {
-        // ─── Email mode: send via SMTP ──────────────────────────────────
-        // The customer typed an email that matches a CRM record. Send the
-        // OTP to that email. We use the typed email value, not whatever's
-        // in the CRM record, because email matching was case-insensitive
-        // and they should get the response at the address they typed.
         $emailResult = ca_send_otp_email(
-            $config,
-            $store->getDataDir(),
-            $rawEmail,                     // send to address as typed
-            (string)($client['name'] ?? ''),
-            $code,
-            $ttlMin
+            $config, $store->getDataDir(), $rawEmail, (string)($client['name'] ?? ''), $code, $ttlMin
         );
-        $sendSuccess  = !empty($emailResult['ok']);
-        $sendError    = $emailResult['error'] ?? '';
-        $senderEnabled = $sendSuccess || $sendError !== 'No SMTP host configured (plugin or UCRM)';
-        $channelUsed   = 'email';
+        $sendSuccess = !empty($emailResult['ok']);
+        $sendError   = $emailResult['error'] ?? '';
+    }
 
-        if (!$sendSuccess && !$dryRun) {
-            ca_audit($pdo, (int)$client['id'], 'otp_send_failed', $identifier, [
-                'error'   => $sendError,
-                'channel' => 'email',
-            ]);
-            $er2('Email delivery failed: ' . ($sendError ?: 'unknown error'), 502);
-        }
+    if (!$sendSuccess && !$dryRun) {
+        // Recorded for staff; the caller learns nothing an unknown-number
+        // caller would not. The login page says what to do when no code arrives.
+        ca_audit($pdo, (int)$client['id'], 'otp_send_failed', $identifier, ['error' => $sendError, 'channel' => $channel]);
+        $uniform();
     }
 
     ca_audit($pdo, (int)$client['id'], 'otp_sent', $identifier, [
         'dry_run'      => $dryRun,
         'send_success' => $sendSuccess,
-        'channel'      => $channelUsed,
+        'channel'      => $channel,
         'mode'         => $loginMode,
     ]);
-
-    $successMsg = $dryRun
-        ? 'Dry run — OTP logged, not sent.'
-        : ($loginMode === 'email' ? 'Code sent via Email.' : 'Code sent via WhatsApp.');
-
-    $ok2([
-        'expires_in' => $ttl,
-        'server_time' => time(),  // v4.12.20: client can show countdown using server's clock
-        'dry_run' => $dryRun,
-        'channel' => $channelUsed,    // v4.21.7: tells UI which channel was used
-        'mode'    => $loginMode,
-        'debug' => [
-            'client_id'      => (int)$client['id'],
-            'identifier'     => $identifier,
-            'sender_enabled' => $senderEnabled,
-            'send_success'   => $sendSuccess,
-        ],
-    ], $successMsg);
+    $uniform();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2239,27 +1739,9 @@ if ($act === 'app_debug_report' && $met === 'POST') {
     $ok2(['saved' => true, 'id' => $pdo->lastInsertId()], 'Debug report saved.');
 }
 
-// ─── List debug reports (admin) ──────────────────────────────────
-if ($act === 'app_debug_list' && $met === 'GET') {
-    // v4.12.27: bootstrap $pdo from $store — was missing, causing 500s.
-    ca_init_tables($store->getPdo());
-    $pdo = $store->getPdo();
+// 5.18.37: app_debug_list moved to api_customer_support.php (staff, admin only) —
+// it listed every customer's debug reports to any customer holding a token.
 
-    $me = ca_require_auth($config, $pdo, $er2);
-
-    // Ensure table exists
-    $pdo->exec("CREATE TABLE IF NOT EXISTS app_debug_reports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        crm_client_id INTEGER NOT NULL,
-        phone TEXT,
-        report TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-    )");
-
-    $stmt = $pdo->query("SELECT * FROM app_debug_reports ORDER BY id DESC LIMIT 50");
-    $reports = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-    $ok2(['reports' => $reports], count($reports) . ' reports found.');
-}
 // ═══════════════════════════════════════════════════════════════════
 // HELPER: ca_site_dish_resolve
 // ═══════════════════════════════════════════════════════════════════
@@ -4724,7 +4206,7 @@ if ($act === 'app_invoice_send_whatsapp' && $met === 'POST') {
     $invNum   = $inv['number'] ?? ('INV-' . $invId);
     $pdfFile  = "inv_{$invId}_" . substr(md5(uniqid('', true)), 0, 8) . '.pdf';
     $pdfPath  = $tempDir . '/' . $pdfFile;
-    $pdfToken = hash_hmac('sha256', $pdfFile, ($config['webhook_secret'] ?? 'dishnet') . date('Ymd'));
+    $pdfToken = PdfLinkToken::random();   // 5.18.37: serve_temp_pdf checks the .meta token only; unguessable, derived from nothing
     file_put_contents($pdfPath, base64_decode($pdfRaw));
     file_put_contents($pdfPath . '.meta', json_encode([
         'token' => $pdfToken, 'created' => time(), 'invoice' => $invNum,
@@ -5035,22 +4517,16 @@ if ($act === 'app_record_consent' && $met === 'POST') {
     require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
     $currentVer = dnLegalVersion();
 
-    $rawPhone      = trim($body['phone']           ?? '');
-    $rawEmail      = trim($body['email']           ?? '');
+    // 5.18.37: consent is recorded for the identity the OTP just proved — the
+    // Bearer token app_verify_otp issued — never for an identifier typed into
+    // the body. Before this, anyone could write a "consent" row for any
+    // registered phone or e-mail without ever passing the code.
+    $claims        = ca_require_auth($config, $pdo, $er2);
+    $identifier    = (string)($claims['phone'] ?? '');
+    $clientId      = (int)($claims['sub'] ?? 0);
+    if ($identifier === '' || $clientId <= 0) $er2('Invalid token.', 401);
     $submittedTos  = trim($body['tos_version']     ?? '');
     $submittedPriv = trim($body['privacy_version'] ?? '');
-
-    // v4.21.15: support email-mode login (mirrors app_send_otp / app_verify_otp).
-    // Either phone OR email is required.
-    if ($rawEmail !== '') {
-        $identifier = strtolower($rawEmail);
-        if (strpos($identifier, '@') === false) $er2('Invalid email address.', 400);
-    } elseif ($rawPhone !== '') {
-        $identifier = ca_phone_intl($rawPhone);
-        if ($identifier === '') $er2('Invalid phone number.', 400);
-    } else {
-        $er2('Either phone or email is required.', 400);
-    }
 
     // Must match the CURRENT server-side version — prevents stale clients from
     // spoofing acceptance of an older wording.
@@ -5058,13 +4534,7 @@ if ($act === 'app_record_consent' && $met === 'POST') {
         $er2('Document version out of date. Refresh and try again.', 409);
     }
 
-    // Verify the identifier corresponds to a real CRM client to prevent random
-    // drive-by writes by anonymous callers.
-    $matches = $rawEmail !== ''
-        ? ca_find_clients_by_email($store, $rawEmail)
-        : ca_find_clients_by_phone($store, $rawPhone);
-    if (empty($matches)) $er2('No DishNet account found for that ' . ($rawEmail !== '' ? 'email' : 'phone') . '.', 404);
-    $clientId = (int)($matches[0]['id'] ?? 0);
+    // The token is the proof of account (5.18.37); no lookup by a typed identifier.
 
     try {
         $stmt = $pdo->prepare(
@@ -5093,7 +4563,8 @@ if ($act === 'app_record_consent' && $met === 'POST') {
     ca_audit($pdo, $clientId, 'consent_recorded', $identifier, [
         'tos_version' => $currentVer['tos'],
         'privacy_version' => $currentVer['privacy'],
-        'mode' => $rawEmail !== '' ? 'email' : 'phone',
+        // 5.18.37: the mode comes from the token, like the identity.
+        'mode' => (string)($claims['login_mode'] ?? (strpos($identifier, '@') !== false ? 'email' : 'phone')),
     ]);
 
     $ok2([

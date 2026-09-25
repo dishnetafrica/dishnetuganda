@@ -1,8 +1,25 @@
 <?php
 // ═══════════════════════════════════════════════════════════════
-// PRODUCTS / QUOTES ADMIN (pre-auth)
+// PRODUCTS / QUOTES ADMIN (staff — behind the guard since 5.18.37)
 // ═══════════════════════════════════════════════════════════════
 
+
+    // 5.18.37: this file used to be included BEFORE the staff guard. Product syncs and quote
+    // diagnostics answered without a login.
+    // It now runs after the guard ($me2, $isAdmin). The actions below are
+    // administrator-only; the rest keep their own checks for any signed-in
+    // staff member, as their screens expect.
+    $_gateAdminOnly = [
+        'quote_log',
+        'kyc_debug',
+        'sync_ucrm_quotes',
+        'ucrm_quotes',
+        'sync_ucrm_products',
+        'verify_product_mapping',
+        'auto_map_products',
+        'set_product_mapping',
+    ];
+    if (in_array($act, $_gateAdminOnly, true) && empty($isAdmin)) $er2('Admin only.', 403);
 
     // ─── DIAGNOSTIC: View quote/proforma log ─────────────────────────────────
     // GET ?page=api&action=quote_log

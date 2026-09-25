@@ -300,8 +300,9 @@ $ALLOW = [
     'lib/StarlinkBlockService.php' => ["\$ucrmJson['ucrmPublicUrl']" => 'server call to the data-report plugin'],
     'lib/StarlinkBlockBridge.php'  => ["\$ucrmJson['ucrmPublicUrl']" => 'wrapped in dn_with_override() at the end of the method; test_block_chain'],
     'lib/wa_webhook_url.php'       => ["\$_SERVER['HTTP_HOST']" => 'last resort, only when uCRM reports no public URL'],
-    'includes/routes.php'          => ["\$ucrm['ucrmPublicUrl']" => 'API base for a status read',
-                                       "\$host      = \$_SERVER['HTTP_HOST']" => 'PWA manifest: must match the page that asked',
+    // 5.18.37: the routes.php "API base for a status read" exception went with the
+    // ?page=crm_debug block it sat in (tools/crm_debug.php replaces it, under tools/).
+    'includes/routes.php'          => ["\$host      = \$_SERVER['HTTP_HOST']" => 'PWA manifest: must match the page that asked',
                                        "\$httpsUrl = 'https://'" => 'upgrades the request the browser already made'],
     'includes/api/api_crm_sync.php' => ["\$host = \$_SERVER['HTTP_HOST']" => 'same-origin check on the referer'],
     'production-preflight.php'     => ["\$ucrmJson['pluginPublicUrl']" => 'probes the internal port on purpose'],
