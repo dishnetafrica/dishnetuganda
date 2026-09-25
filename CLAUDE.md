@@ -3097,7 +3097,9 @@ NOT AUTHORIZED.
   - `SmsWorker` opens envelopes only in memory. Its report is counts only, and
     a throwing sender's message is not kept.
   - Codes are handled every second; intents keep their five-second cadence.
-- **`DN_SMS`, in the WORKER's environment, never falls back.** Unset → `NullSms`:
+- **`DN_SMS`, in the WORKER's environment, never falls back.** *(Since `docs/128`
+  (migration 033), unset means the Admin panel's settings decide; `null` still
+  means nothing is sent. The record below is phase 2's.)* Unset → `NullSms`:
   nothing is claimed and codes expire. `africastalking` → the adapter, which
   refuses to start without `DNB_SMS_USERNAME` and `DNB_SMS_API_KEY`. Anything
   else refuses to start.
@@ -3198,8 +3200,9 @@ The operator approved it: *"Yes, own address (Recommended)"*.
 
   **It never signs anyone in (J-12).**
 - **Operating rules, binding on the staging command and every later one:**
-  - The SMS API key is **typed on the server**, never in chat, a log or the
-    terminal.
+  - The SMS API key is **typed on the server** or, since `docs/128`, **into the
+    Admin panel over HTTPS by a signed-in DishNet Admin**. It is never in chat,
+    a log or the terminal, and never shown again once typed.
   - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
   - Domain A's WhatsApp gateway stays unused without explicit authorisation.
 - **Binding lessons, found while building:**
@@ -3246,14 +3249,96 @@ The operator approved it: *"Yes, own address (Recommended)"*.
   an SMS sender is configured.**
 - **Next, at the operator's instruction: SMS settings from the Admin panel**
   (`docs/128`), so that the Africa's Talking username and key are entered
-  there, not by re-running the command.
-- **The operator's actions, in order:**
-  1. create the DNS record first;
-  2. have the SMS key ready if you have one (it is optional);
-  3. run the one command;
-  4. send back the **log file**;
-  5. then *Add an owner* with your own number and sign in on the phone. **Say
-     only what the screen shows, never the code.**
+  there, not by re-running the command. **Built — see the next section.**
+- **The operator's phase-4 actions are DONE** (DNS record, the command, the log
+  file). **Do not run the operator-app command again**: once 033 is applied it
+  stops at its first check and changes nothing (`docs/128` §G, S9).
+
+## SMS settings from the Admin panel — BUILT (migration 033, `docs/128`); the staging command BUILT and rehearsed, its run PENDING
+
+**At the operator's instruction:** *"i dont have currently keep it configuratblae
+from ui i will add later"*. The Africa's Talking account is entered in the Admin
+panel, not typed into a command. Built and proved in development, and the
+staging command rehearsed. **Nothing is deployed yet.** Nothing is HARDWARE
+VERIFIED; F6-B stays NOT AUTHORIZED.
+
+- **The binding key rule changed, deliberately:** the SMS API key may now also
+  be typed into the Admin panel, over HTTPS, by a DishNet Admin signed in with
+  a password **and** an authenticator code. The rest stands. It is never in
+  chat, a log or the terminal, never in any response, audit row or error
+  message, and never shown again once typed.
+- **Migration 033:**
+  - `mt_sms_settings` holds one row and is owned by `dnb_def_auth`. **No login
+    role holds any privilege on it**, not even the installing owner `dnb`.
+  - Four SECURITY DEFINER functions, each EXECUTE-able by exactly one role:
+    - `mt_sms_settings_set` → `dnb_adminwrite`. It writes a W-1 audit row,
+      `sms.settings_changed`, with `actor_kind = 'staff'`. **RULE I-1:** an
+      identical save is a no-op with no audit row. A new username needs its
+      key typed again.
+    - `mt_sms_settings_for_worker` and `mt_sms_worker_report` → `dnb_worker`.
+    - `mt_admin_sms_settings` → `dnb_adminapi`. It is the **16th**
+      `AdminReader` function, and returns `key_set`, never the envelope or
+      the fingerprint.
+  - The migration verifies all of this itself before committing.
+- **The key never rests in clear.** The API seals it before the database sees
+  it: `SecretBox` under `HMAC(DNB_SECRET_KEY, 'dn-sms-settings-v1')`, with
+  associated data `africastalking|<username>`. It stores a keyed fingerprint
+  only to tell a re-save from a change. **Only the worker opens it**, in
+  memory.
+- **The worker:**
+  - **`DN_SMS` unset → `PanelSms`**, which follows the panel every tick and
+    rebuilds only when the version changes. **No restart is needed.**
+  - A setting it cannot use sends nothing, keeps the worker running, and is
+    reported with a fixed reason.
+  - **`DN_SMS` set → the environment wins**, as in phase 2, and the page says
+    so.
+  - It reports one of `off · in_use · unusable · environment`. **The page
+    shows what the worker reported, never what the form hoped.**
+- **Routes:** `GET` and `POST /api/v1/admin/settings/sms`, under the new
+  capability **`sms.manage`, held by Admin only**. They are bound only under
+  the real staff identity; the development identity gets 501. A body field
+  beyond `provider`, `username`, `api_key` and `sender` is 400.
+- **Binding lesson, measured:** a migration trial run as `SET ROLE dnb` from a
+  superuser **passed a check that the real install then failed**. The
+  migration's own `RESET ROLE` returned the session to the superuser. **Trial
+  a migration as the owner itself (`psql -U dnb`), never through `SET ROLE`
+  from a superuser.**
+- **Guards rewritten, never deleted.** The simulator's `api_key` guard now
+  forbids a credential-SHAPED assignment and allows the word exactly four
+  times, each place named. Its control: a planted `api_key: '…'` fails 2 of
+  103.
+- **Proofs:**
+  - `test_sms_settings.php`: **120** assertions.
+  - **21 weakened copies, each caught.** One was first caught only by a crash;
+    it is now counted.
+  - Suite **41 / 4,037 / 0, twice**; install-test 86/86.
+  - Package **149 files**, `2af800b7…9c5a5c2d`, commit `8d40936`.
+- **The staging command, `scripts/dnb-staging-sms-settings.sh`:**
+  - It is pinned to `8d40936` by hash and digest, and applies only 033. Step 0
+    accepts `32|032`, or `33|033` on a re-run.
+  - **It asks no SMS question and handles no secret.**
+  - It refuses unless `DNB_SECRET_KEY` is the same in the API, the worker and
+    the app, compared by hash and never printed.
+  - It runs the rolled-back execution tests, then tests every login role.
+  - It **restarts the API, the worker and the app, and never recreates them**.
+  - It reads the worker's mode from its log and from its report in the
+    database.
+- **The rehearsal, `scripts/harness/sms-settings/`:**
+  - It is rebuilt through the real 028, staff-login, 029, 030 and operator-app
+    commands, byte for byte.
+  - It drives **the Admin's journey through Traefik on the deployed build**: a
+    save, then the deployed worker reports `in_use`.
+  - **152/152 on two consecutive runs.** Five broken copies are each caught,
+    with a control on the control in S8.
+- **Binding lesson, measured:** harness state from an earlier run travelled
+  into a snapshot, and restoring it started a process that did not exist at
+  that point. **A harness clears stale state before it builds its snapshots.**
+- **The operator's actions:**
+  1. Run the one command.
+  2. Send back the **log file**.
+  3. Later, when the account exists, enter it in the panel under
+     **Administration → SMS for sign-in**. **Say only what the screen shows:
+     never the code, and never the key.**
 
 ## Open and parked
 
