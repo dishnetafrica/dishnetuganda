@@ -392,7 +392,8 @@ published"*. The website said the opposite of both.
 - **The app page says *coming soon*.** Its download button pointed at a file
   that was never on the site; it is now a WhatsApp "Tell me when it is
   ready" button. The page's description no longer says the app pays bills.
-- Six other pages that said "MTN MoMo and Airtel Money" now say Airtel Money.
+- Five other pages that said "MTN MoMo and Airtel Money" now say Airtel Money:
+  `about`, `why-dishnet`, `services`, `hotspot` and the WiFi-zone blog post.
 
 Both site verifiers pass. Checked in a browser at desktop and phone width,
 with no horizontal scroll.
