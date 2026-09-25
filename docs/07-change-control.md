@@ -282,4 +282,6 @@ them:
 line for `kyc_welcome_timeline`.
 **Rollback:** `git checkout 0d20e05` and deploy again; clear the setting with
 `--clear`.
-**Status:** pending deploy.
+**Status:** deployed 25 September 2026 (`ea18fef`, over `0d20e05`), and
+`kyc_welcome_timeline` set to the FAQ's wording. Application 2 still waits for
+a person to compare it with uCRM client #10.

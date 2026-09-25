@@ -269,3 +269,13 @@ The text is the FAQ's; customers read it exactly as written, so change it
 first if it should say something else. For application 2: open uCRM client
 #10 from its Orders card. Press **This is uCRM client #10** if it is the same
 customer, or **Create in CRM anyway** if it is someone else.
+
+**Deployed 25 September 2026.** The container went from `0d20e05` to
+`ea18fef`, and `set_config.php` saved `kyc_welcome_timeline` as *"🛰 Starlink:
+usually 1–3 working days after payment (Kampala and major cities)"*.
+
+- Application 2 still waits for a person to compare it with client #10.
+- The assistant's own delivery fact (`ai_fact_delivery`) tells it not to
+  promise a number of days. The confirmation now does, in the FAQ's words.
+  Whether both should say the same is the operator's call; `omit` removes the
+  timeline from the confirmation.
