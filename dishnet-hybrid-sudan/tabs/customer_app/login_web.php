@@ -39,21 +39,28 @@ $dial = PortalLocale::dialHint(ConfigVault::fill(
     $_lwRoot, getDataDir($_lwRoot), is_array($config ?? null) ? $config : [],
     ['currency_code', 'cashbook_base_currency']));
 
-// Check if already logged in via cookie
-$existingToken = $_COOKIE['dn_customer_token'] ?? '';
-if ($existingToken) {
-    // Validate token is still good
-    $parts = explode('.', $existingToken);
-    if (count($parts) === 3) {
-        $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
-        if ($payload && ($payload['exp'] ?? 0) > time()) {
-            // Token still valid — redirect to portal
-            header('Location: ' . $baseUrl . '?page=customer_portal&view=home&token=' . urlencode($existingToken));
+// Phase 2: the tenant profile answers the page's country-dependent strings
+// (explicit configuration → profile → the literal that was here before).
+require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
+$lwProfile = TenantProfile::current(is_array($config ?? null) ? $config : [], getDataDir($_lwRoot));
+
+// Already signed in? Phase 2: the HttpOnly session cookie, verified under the
+// customer key set and against the session table — a decoded-but-unchecked
+// payload proved nothing. A live session that still owes consent lands on the
+// consent step; a stale cookie of either generation is cleared.
+require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
+$lwStartStep = 'phone';
+if (isset($_COOKIE[CustomerSession::COOKIE]) || isset($_COOKIE[CustomerSession::LEGACY_COOKIE])) {
+    $_lwClaims = CustomerSession::liveClaimsFromCookie(is_array($config ?? null) ? $config : [], $store->getPdo());
+    if ($_lwClaims !== null) {
+        if (CustomerSession::hasCurrentConsent($store->getPdo(), (string)($_lwClaims['phone'] ?? ''))) {
+            header('Location: ' . $baseUrl . '?page=customer_portal&view=home');
             exit;
         }
+        $lwStartStep = 'consent';
+    } else {
+        CustomerSession::clearCookie();
     }
-    // Token expired — clear cookie
-    setcookie('dn_customer_token', '', time() - 3600, '/');
 }
 ?>
 <!DOCTYPE html>
@@ -61,7 +68,7 @@ if ($existingToken) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>DishNet Africa</title>
+<title><?= htmlspecialchars($lwProfile->login('title', 'DishNet Africa')) ?></title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#141414">
@@ -260,14 +267,14 @@ body{display:flex;flex-direction:column;min-height:100vh}
 <!-- Footer (v4.12.19) — help link + version -->
 <div class="login-foot">
   <div class="login-foot-links">
-    <a href="https://wa.me/211921443002" target="_blank" rel="noopener">Need help? WhatsApp us</a>
+    <a href="https://wa.me/<?= htmlspecialchars($lwProfile->login('footer_wa', '211921443002')) ?>" target="_blank" rel="noopener">Need help? WhatsApp us</a>
     <a href="?page=terms" target="_blank" rel="noopener">Terms</a>
     <a href="?page=privacy" target="_blank" rel="noopener">Privacy</a>
   </div>
   <div class="login-foot-meta">
-    <span>DishNet Africa Ltd.</span>
+    <span><?= htmlspecialchars($lwProfile->login('footer_entity', 'DishNet Africa Ltd.')) ?></span>
     <span>v<?= htmlspecialchars($appVersion) ?></span>
-    <span>Juba, South Sudan</span>
+    <span><?= htmlspecialchars($lwProfile->login('footer_locality', 'Juba, South Sudan')) ?></span>
   </div>
 </div>
 
@@ -278,7 +285,7 @@ var currentLegal = <?= json_encode($legalVer) ?>;
 var phone = '';
 var loginMode = 'phone';   // v4.21.7: 'phone' | 'email' — which tab is active
 var loginIdentifier = '';  // v4.21.7: phone number or email, whichever they used
-var pendingToken = ''; // JWT held back until consent recorded
+var pendingToken = ''; // Phase 2: 'session' while the server-set session awaits consent (no token reaches this page)
 
 // v4.12.20: Countdown state — driven by server time, not client.
 // client clock drift ≠ user's problem.
@@ -290,7 +297,8 @@ function showStep(s) {
   document.getElementById('step-otp').classList.toggle('active', s === 'otp');
   document.getElementById('step-consent').classList.toggle('active', s === 'consent');
 }
-
+// Phase 2: a live session that still owes consent starts on the consent step.
+if (<?= json_encode($lwStartStep) ?> === 'consent') { pendingToken = 'session'; showStep('consent'); }
 function showErr(id, msg) {
   var el = document.getElementById(id);
   el.textContent = msg; el.classList.toggle('show', !!msg);
@@ -403,15 +411,16 @@ function verifyOtp() {
     if (jsonStart > 0) jsonStr = raw.substring(jsonStart);
     var d;
     try { d = JSON.parse(jsonStr); } catch(e) { d = null; }
-    var token = d ? (d.token || (d.data && d.data.token)) : null;
+    // Phase 2: the server set the session as an HttpOnly cookie; the answer
+    // carries no token for a browser. Success is the status alone.
     var needsConsent = d && d.data && d.data.needs_consent === true;
-    if (d && (d.ok || d.status === 'success') && token) {
+    if (d && (d.ok || d.status === 'success')) {
       if (needsConsent) {
-        // v4.12.19 — hold the token until the user accepts
-        pendingToken = token;
+        // v4.12.19 — the portal stays closed until the user accepts
+        pendingToken = 'session';
         showStep('consent');
       } else {
-        completeLogin(token);
+        completeLogin();
       }
     } else {
       showErr('err-otp', (d && (d.error || d.message)) ? (d.error || d.message) : 'Invalid code. Please try again.');
@@ -438,11 +447,14 @@ function recordConsent() {
   btn.disabled = true; btn.innerHTML = '<span class="spin-small"></span>Recording...';
   showErr('err-consent', '');
 
-  // 5.18.37: consent is bound to the token the code just earned — the server
-  // records it for that identity, not for whatever identifier is in the body.
+  // 5.18.37: consent is bound to the identity the code just proved — the server
+  // records it for the session, not for whatever identifier is in the body.
+  // Phase 2: that session is the HttpOnly cookie; X-Requested-With marks the
+  // request as this page's own, which the API requires for a cookie POST.
   fetch(apiUrl + '&action=app_record_consent', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + pendingToken},
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'DishNet'},
     body: JSON.stringify(
       loginMode === 'email'
         ? { email: loginIdentifier, tos_version: currentLegal.tos, privacy_version: currentLegal.privacy }
@@ -456,8 +468,7 @@ function recordConsent() {
     var d;
     try { d = JSON.parse(jsonStr); } catch(e) { d = null; }
     if (d && (d.ok || d.status === 'success')) {
-      // Proceed with the held-back token
-      completeLogin(pendingToken);
+      completeLogin();
     } else {
       btn.disabled = false; btn.textContent = 'Accept & continue';
       showErr('err-consent', (d && (d.error || d.message)) || 'Could not save your acceptance. Try again.');
@@ -470,7 +481,12 @@ function recordConsent() {
 }
 
 function cancelConsent() {
-  // Discard the pending token and go back to phone step
+  // Phase 2: the server already holds a session for this customer; "go back"
+  // means ending it, so the portal cannot be opened without the acceptance.
+  fetch(apiUrl + '&action=app_logout', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'DishNet'}, body: '{}'
+  }).catch(function() {});
   pendingToken = '';
   document.getElementById('consent-check').checked = false;
   document.getElementById('btn-consent').disabled = true;
@@ -478,9 +494,10 @@ function cancelConsent() {
   showStep('phone');
 }
 
-function completeLogin(token) {
-  document.cookie = 'dn_customer_token=' + encodeURIComponent(token) + ';path=/;max-age=' + (30*86400) + ';SameSite=Lax';
-  window.location.href = baseUrl + '?page=customer_portal&view=home&token=' + encodeURIComponent(token);
+function completeLogin() {
+  // Phase 2: nothing to store — the server set the HttpOnly session cookie —
+  // and nothing in the URL.
+  window.location.href = baseUrl + '?page=customer_portal&view=home';
 }
 
 // v4.12.20: server-clock-driven countdown on the OTP screen. Updates every

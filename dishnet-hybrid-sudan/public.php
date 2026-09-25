@@ -517,6 +517,8 @@ require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/PdfLinkToken.php';
 QuotePdfToken::ensureSecret($store, $config);
 PdfLinkToken::ensureSecret($store, $config);   // 5.18.37: the receipt/delivery link key, generated once
+require_once __DIR__ . '/lib/CustomerJwtKeys.php';
+CustomerJwtKeys::ensure($store, $config);        // Phase 2: the customer-portal signing key set, generated once, vaulted
 // Ensure defaults for existing configs
 if (!isset($config['commission_rate']))            $config['commission_rate'] = 5;
 if (!isset($config['lte_commission_rate']))        $config['lte_commission_rate'] = 5;

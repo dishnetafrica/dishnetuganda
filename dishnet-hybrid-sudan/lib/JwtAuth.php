@@ -2,22 +2,42 @@
 declare(strict_types=1);
 
 /**
- * JwtAuth — Zero-dependency JWT for DishNet Hybrid API v2.
+ * JwtAuth — Zero-dependency JWT (HMAC-SHA256) for the DishNet Hybrid plugin.
  *
- * Uses HMAC-SHA256. Secret is derived from UCRM plugin secret + config salt.
- * Tokens include: sub (retailer_id), role, name, iat, exp.
+ * Two ways to build one:
  *
- * Usage:
- *   $jwt = new JwtAuth($secret, 86400); // 24h tokens
- *   $token = $jwt->issue(['sub' => 42, 'role' => 'engineer', 'name' => 'Diko']);
- *   $claims = $jwt->verify($token); // throws on invalid/expired
+ *   JwtAuth::fromConfig($config)     LEGACY. The key is derived from
+ *                                    webhook_secret | crm_auth_token | a constant,
+ *                                    which on an install where both are empty is a
+ *                                    constant anyone can read in this file. Kept
+ *                                    only for api/v2/router.php (staff tokens, not
+ *                                    routed by public.php) and for the data-report
+ *                                    hand-off token (see app_data_report_link).
+ *                                    NEVER for customer sessions since Phase 2.
+ *
+ *   JwtAuth::forCustomers($config)   Phase 2 of the customer-login audit (§E.1).
+ *                                    The key is one of customer_jwt_keys, chosen
+ *                                    by customer_jwt_active_kid; the token carries
+ *                                    the key id in its header and iss/aud in its
+ *                                    claims, and verify() requires all three, so a
+ *                                    token signed with the legacy derivation — or
+ *                                    with an unknown key id — is refused outright.
  *
  * PHP 7.4 compatible. Zero external dependencies.
  */
 class JwtAuth
 {
+    /** The audience every customer-portal token names. */
+    public const CUSTOMER_AUDIENCE = 'customer-portal';
+
     private string $secret;
     private int $ttl;
+    /** Customer mode: every key that may still verify, by key id. Empty in legacy mode. */
+    private array $keys = [];
+    /** Customer mode: the key id new tokens are signed with. */
+    private string $kid = '';
+    private string $iss = '';
+    private string $aud = '';
 
     /**
      * @param string $secret  HMAC signing secret (min 32 chars recommended)
@@ -33,26 +53,67 @@ class JwtAuth
     }
 
     /**
-     * Create a JwtAuth from plugin config.
-     * Derives secret from webhook_secret + crm_app_key + a constant salt.
+     * LEGACY. Derives the key from webhook_secret + crm_auth_token + a constant.
+     * Not for customer sessions — see the class comment.
      */
     public static function fromConfig(array $config): self
+    {
+        $ttl = (int)($config['jwt_ttl_seconds'] ?? 86400);
+        return new self(self::legacySecret($config), max(3600, $ttl));
+    }
+
+    /** The legacy key derivation, in one place. See the class comment for what it is still used for. */
+    public static function legacySecret(array $config): string
     {
         $parts = [
             $config['webhook_secret'] ?? '',
             $config['crm_app_key'] ?? $config['crm_auth_token'] ?? '',
             'DishNet-Hybrid-JWT-v2-2026',
         ];
-        $secret = hash('sha256', implode('|', $parts));
-        $ttl    = (int)($config['jwt_ttl_seconds'] ?? 86400);
-        return new self($secret, max(3600, $ttl));
+        return hash('sha256', implode('|', $parts));
+    }
+
+    /**
+     * Customer-portal tokens: the dedicated, generated, vaulted key set.
+     *
+     * @param int|null $ttlSeconds overrides app_jwt_ttl_days (used by tests and the
+     *                             short-lived hand-off token)
+     * @throws \RuntimeException when no customer key has been provisioned yet
+     */
+    public static function forCustomers(array $config, ?int $ttlSeconds = null): self
+    {
+        require_once __DIR__ . '/CustomerJwtKeys.php';
+        $keys = CustomerJwtKeys::keys($config);
+        $kid  = CustomerJwtKeys::activeKid($config);
+        if ($kid === '' || !isset($keys[$kid])) {
+            throw new \RuntimeException('customer JWT key not provisioned');
+        }
+        $j = new self($keys[$kid], $ttlSeconds ?? CustomerJwtKeys::ttlSeconds($config));
+        $j->keys = $keys;
+        $j->kid  = $kid;
+        $j->iss  = self::customerIssuer();
+        $j->aud  = self::CUSTOMER_AUDIENCE;
+        return $j;
+    }
+
+    /** The issuer a customer token names: this plugin, by its directory name. */
+    public static function customerIssuer(): string
+    {
+        return 'dishnet-hybrid:' . basename(dirname(__DIR__));
+    }
+
+    /** The key id new tokens are signed with ('' in legacy mode). */
+    public function kid(): string
+    {
+        return $this->kid;
     }
 
     /**
      * Issue a signed JWT.
      *
      * @param array $claims Must include 'sub' (subject/user ID).
-     *                      Automatically adds: iat, exp, jti.
+     *                      Automatically adds: iat, exp, jti — and, in customer
+     *                      mode, iss and aud, with kid in the header.
      * @return string Base64url-encoded JWT
      */
     public function issue(array $claims): string
@@ -62,6 +123,11 @@ class JwtAuth
         }
 
         $header = ['alg' => 'HS256', 'typ' => 'JWT'];
+        if ($this->kid !== '') {
+            $header['kid'] = $this->kid;
+            $claims['iss'] = $claims['iss'] ?? $this->iss;
+            $claims['aud'] = $claims['aud'] ?? $this->aud;
+        }
         $claims['iat'] = $claims['iat'] ?? time();
         $claims['exp'] = $claims['exp'] ?? (time() + $this->ttl);
         $claims['jti'] = $claims['jti'] ?? bin2hex(random_bytes(12));
@@ -93,9 +159,27 @@ class JwtAuth
 
         [$headerB64, $claimsB64, $sigB64] = $parts;
 
+        // The header decides nothing about the algorithm: HS256 is the only one
+        // this class has ever produced, and any other value is refused.
+        $header = json_decode($this->base64urlDecode($headerB64), true);
+        if (!is_array($header) || ($header['alg'] ?? '') !== 'HS256') {
+            throw new \RuntimeException('Unsupported JWT header');
+        }
+
+        // Which key. Customer mode: the header MUST name a key we hold; a token
+        // without a key id is a legacy-derived token and is refused (E3-a).
+        $key = $this->secret;
+        if ($this->keys !== []) {
+            $kid = (string)($header['kid'] ?? '');
+            if ($kid === '' || !isset($this->keys[$kid])) {
+                throw new \RuntimeException('Unknown JWT key id');
+            }
+            $key = $this->keys[$kid];
+        }
+
         // Verify signature
         $signingInput = $headerB64 . '.' . $claimsB64;
-        $expectedSig  = hash_hmac('sha256', $signingInput, $this->secret, true);
+        $expectedSig  = hash_hmac('sha256', $signingInput, $key, true);
         $actualSig    = $this->base64urlDecode($sigB64);
 
         if (!hash_equals($expectedSig, $actualSig)) {
@@ -106,6 +190,13 @@ class JwtAuth
         $claims = json_decode($this->base64urlDecode($claimsB64), true);
         if (!is_array($claims)) {
             throw new \RuntimeException('Malformed JWT claims');
+        }
+
+        // Customer mode: the token must be ours (issuer) and for the portal (audience).
+        if ($this->keys !== []) {
+            if (($claims['iss'] ?? '') !== $this->iss || ($claims['aud'] ?? '') !== $this->aud) {
+                throw new \RuntimeException('JWT issuer or audience mismatch');
+            }
         }
 
         // Check expiry (5 second leeway for clock skew)

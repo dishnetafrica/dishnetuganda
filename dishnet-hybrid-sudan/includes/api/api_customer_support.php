@@ -19,15 +19,15 @@
 // ca_find_clients_by_phone, ca_find_clients_by_email) are defined by
 // api_customer_app.php, which api_public.php includes on every API request.
 
-    $_csAdminOnly = ['staff_login_lookup', 'staff_otp_log', 'app_debug_list'];
+    $_csAdminOnly = ['staff_login_lookup', 'staff_otp_log', 'app_debug_list', 'staff_revoke_customer_sessions'];
     if (in_array($act, $_csAdminOnly, true) && empty($isAdmin)) $er2('Admin only.', 403);
 
     // How the customer typed it → how the login path keys it.
-    $_csIdentifier = static function (array $q): array {
+    $_csIdentifier = static function (array $q) use ($config): array {   // Phase 2: the profile needs the configuration in scope
         $rawPhone = trim((string)($q['phone'] ?? ''));
         $rawEmail = trim((string)($q['email'] ?? ''));
         if ($rawEmail !== '') return ['email', strtolower($rawEmail), $rawEmail];
-        if ($rawPhone !== '') return ['phone', ca_phone_intl($rawPhone), $rawPhone];
+        if ($rawPhone !== '') return ['phone', ca_phone_intl($rawPhone, is_array($config ?? null) ? $config : []), $rawPhone];   // Phase 2: the tenant's rule
         return ['', '', ''];
     };
 
@@ -44,8 +44,16 @@
 
         $matches = $mode === 'email' ? ca_find_clients_by_email($store, $raw) : ca_find_clients_by_phone($store, $raw);
         $accounts = [];
-        foreach ($matches as $m) $accounts[] = ['id' => (int)($m['id'] ?? 0), 'name' => (string)($m['name'] ?? '')];
-
+        foreach ($matches as $m) {
+            // Phase 2: whether the gates would let this account sign in, and why not.
+            $why = ca_login_eligibility($m, $config);
+            $liveQ = $pdo->prepare("SELECT COUNT(*) FROM customer_sessions WHERE client_id = ? AND revoked_at IS NULL AND expires_at > ?");
+            $liveQ->execute([(int)($m['id'] ?? 0), time()]);
+            $accounts[] = ['id' => (int)($m['id'] ?? 0), 'name' => (string)($m['name'] ?? ''),
+                'eligible' => $why === null, 'refused_because' => $why,
+                'flags' => ['is_lead' => $m['is_lead'] ?? null, 'is_archived' => $m['is_archived'] ?? null, 'has_service' => $m['has_service'] ?? null],
+                'live_sessions' => (int)$liveQ->fetchColumn()];
+        }
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM app_otp_rate WHERE phone = ? AND sent_at > ?");
         $stmt->execute([$identifier, time() - 3600]);
         $sentLastHour = (int)$stmt->fetchColumn();
@@ -57,6 +65,9 @@
 
         $senderEnabled = !empty($config['wa_plugin_url']) && !empty($config['wa_app_key']) && !empty($config['wa_auth_key']);
         $evoEnabled    = !empty($config['evo_api_url']) && !empty($config['evo_api_key']);
+        // Phase 2: what a send would actually use — the same choice sendVia() makes.
+        $_csNotify = (isset($notify) && $notify instanceof NotificationService) ? $notify : (function_exists('svc') ? svc('notify') : null);
+        $transportInUse = $_csNotify instanceof NotificationService ? $_csNotify->phoneTransport(NotificationService::SUPPORT) : '';
 
         $ok2([
             'mode'       => $mode,
@@ -75,9 +86,27 @@
             'transport' => [
                 'wasender_configured'  => $senderEnabled,
                 'evolution_configured' => $evoEnabled,
+                'in_use'               => $transportInUse !== '' ? $transportInUse : 'none',
                 'dry_run_mode'         => (bool)($config['dry_run_mode'] ?? false),
             ],
+            'eligibility_defaults' => [
+                'allow_leads'     => ca_cfg_bool($config['portal_login_allow_leads'] ?? null, false),
+                'require_service' => ca_cfg_bool($config['portal_login_require_service'] ?? null, false),
+            ],
         ], 'Login lookup complete.');
+    }
+
+    // ─── Sign one customer out everywhere (Phase 2, plan §E.5) ────────────────
+    // POST ?page=api&action=staff_revoke_customer_sessions   {"client_id": N}
+    if ($act === 'staff_revoke_customer_sessions' && $met === 'POST') {
+        ca_init_tables($store->getPdo());
+        $pdo = $store->getPdo();
+        $cid = (int)($body['client_id'] ?? 0);
+        if ($cid <= 0) $er2('client_id required', 400);
+        $by = 'staff:' . (string)($me2['email'] ?? $me2['name'] ?? 'admin');
+        $n  = CustomerSession::revokeAll($pdo, $cid, $by);
+        ca_audit($pdo, $cid, 'sessions_revoked_by_staff', null, ['count' => $n, 'by' => $by]);
+        $ok2(['client_id' => $cid, 'revoked' => $n], $n === 1 ? '1 session signed out.' : "{$n} sessions signed out.");
     }
 
     // ─── Delivery log for one identifier, without message bodies ─────────────

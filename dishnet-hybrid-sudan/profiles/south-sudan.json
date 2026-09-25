@@ -1,0 +1,49 @@
+{
+  "id": "south-sudan",
+  "_readme": "Exactly the literals the code carried before the tenant profile existed (Phase 2 of the customer-login audit, plan §D.3). Changing a value here changes what an install that configures nothing shows; tests/test_tenant_profile.php pins this file against the constants it replaced.",
+  "country": { "code": "SS", "name": "South Sudan", "dial_code": "211", "nsn_length": 9, "example": "+211 9XX XXX XXX" },
+  "currency": { "code": "USD", "symbol": "$" },
+  "timezone": "Africa/Juba",
+  "legal_entity": "DishNet Africa Ltd.",
+  "trading_name": "DishNet Africa",
+  "positioning": "Internet Service Provider",
+  "office": { "street": "Airport Road", "city": "Juba", "country": "South Sudan", "hours": null },
+  "locality": "Juba, South Sudan",
+  "website": "dishnetafrica.com",
+  "email": "info@dishnetafrica.com",
+  "contacts": {
+    "accounts_phone": "+211 921 443 002",
+    "support_phone": "+211 921 443 006",
+    "sales_phone": "+211 921 443 009",
+    "escalation_phone": "+211 927 797 217",
+    "shop_phone": "0923 400 000",
+    "sales_wa": "211923400000",
+    "support_wa": "211921443002",
+    "technical_wa": "211921443006"
+  },
+  "pay_url": "https://dishnetafrica.com/tutorials/index.html",
+  "app_url": "https://dishnetafrica.com/get-the-app.html",
+  "email_brand": {
+    "company_name": "DishNet Africa Ltd.",
+    "locality": "Juba, South Sudan",
+    "website": "dishnetafrica.com",
+    "support_phone": "+211 921 443 009",
+    "support_wa": "211921443009",
+    "reply_to": "info@dishnetafrica.com",
+    "legal_line": "",
+    "badge_line": ""
+  },
+  "dunning": {
+    "from_name": "DishNet Accounts",
+    "phone": "+211 921 443 009",
+    "accounts_email": "accounts@dishnetafrica.com",
+    "company_line": "DishNet Africa Ltd · Airport Road, Juba, South Sudan",
+    "website": "www.dishnetafrica.com"
+  },
+  "login": { "title": "DishNet Africa", "footer_wa": "211921443002", "footer_entity": "DishNet Africa Ltd.", "footer_locality": "Juba, South Sudan" },
+  "jurisdiction": { "law": "the Republic of South Sudan", "courts": "Juba" },
+  "regulators": [],
+  "legal_texts": null,
+  "products": ["starlink", "fibre", "lte"],
+  "payment_instructions": null
+}

@@ -46,6 +46,8 @@ require_once $root . '/lib/StoreInterface.php';
 require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/JwtAuth.php';
 require_once $root . '/lib/LegalContent.php';
+require_once $root . '/lib/CustomerJwtKeys.php';
+require_once $root . '/lib/CustomerSession.php';
 
 $KNOWN_PHONE   = '+256772123456';         // in the index
 $UNKNOWN_PHONE = '+256700000999';         // not in the index
@@ -186,9 +188,18 @@ t('and the known customer is throttled by the same rule (the address, not the nu
 // ═════════════════════════════════════════════════
 echo "\n3. P-1 / P-2 / P-3 / P-9 — the debug actions are gone or staff-only\n";
 // ═════════════════════════════════════════════════
-$cfgNow = SqliteStore::create($data)->load('kyc_config.json') ?? [];
-$jwt    = JwtAuth::fromConfig($cfgNow);
-$custTok = $jwt->issue(['sub' => 7, 'kind' => 'app', 'phone' => $KNOWN_PHONE, 'accounts' => [7], 'login_mode' => 'phone']);
+// Phase 2: a customer token is signed with the dedicated key set and is accepted
+// only while its customer_sessions row is live — so the test mints one the way
+// app_verify_otp does: forCustomers() + a recorded session.
+$storeNow = SqliteStore::create($data);
+$cfgNow   = $storeNow->load('kyc_config.json') ?? [];
+CustomerJwtKeys::ensure($storeNow, $cfgNow);
+$jwt      = JwtAuth::forCustomers($cfgNow, 3600);
+// The issuer names the plugin DIRECTORY; the server runs from the sandbox copy, so the test names that copy.
+$sandboxIss = 'dishnet-hybrid:' . basename($tmp);
+$custTok  = $jwt->issue(['sub' => 7, 'kind' => 'app', 'phone' => $KNOWN_PHONE, 'accounts' => [7], 'login_mode' => 'phone', 'iss' => $sandboxIss]);
+CustomerSession::record($storeNow->getPdo(), $jwt->decode($custTok) ?? [], $jwt->kid(), '127.0.0.1', 'test');
+unset($storeNow);
 $asCustomer = ["Authorization: Bearer {$custTok}"];
 foreach (['app_debug_lookup' => ['phone' => $KNOWN_PHONE], 'app_debug_log' => ['phone' => $KNOWN_PHONE],
           'app_debug_schema' => [], 'app_debug_send' => ['phone' => $KNOWN_PHONE, 'message' => 'hi']] as $gone => $body) {
@@ -220,11 +231,11 @@ echo "\n4. P-8 — consent is recorded for the identity the token proves, never 
 // ═════════════════════════════════════════════════
 $ver = dnLegalVersion();
 $r = $call('POST', 'app_record_consent', ['phone' => $KNOWN_PHONE, 'tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']]);
-t('no token: 401', [$r['code'], $r['json']['message'] ?? null], [401, 'Missing Bearer token.']);
+t('no token: 401', [$r['code'], $r['json']['message'] ?? null], [401, 'Not signed in.']);
 $r = $call('POST', 'app_record_consent', ['phone' => $KNOWN_PHONE, 'tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']],
            ['Authorization: Bearer not-a-token']);
 t('a made-up token: 401', $r['code'], 401);
-$staffLike = JwtAuth::fromConfig($cfgNow)->issue(['sub' => 7, 'kind' => 'retailer', 'phone' => $KNOWN_PHONE]);
+$staffLike = $jwt->issue(['sub' => 7, 'kind' => 'retailer', 'phone' => $KNOWN_PHONE, 'iss' => $sandboxIss]);   // right key, wrong kind
 $r = $call('POST', 'app_record_consent', ['tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']], ["Authorization: Bearer {$staffLike}"]);
 t('a token of another kind: 401', [$r['code'], $r['json']['message'] ?? null], [401, 'Wrong token type.']);
 try { $pdo()->exec("DELETE FROM app_tos_consent"); } catch (\Throwable $e) {}
@@ -239,7 +250,13 @@ t('a stale document version is still refused (409)', $r['code'], 409);
 $consentBlk = substr($src, strpos($src, "if (\$act === 'app_record_consent'"), 2600);
 is_(strpos($consentBlk, 'ca_require_auth(') !== false && strpos($consentBlk, 'ca_find_clients_by_phone') === false && strpos($consentBlk, 'ca_find_clients_by_email') === false,
     'the handler authenticates and performs no lookup by a typed identifier');
-is_(strpos($web, "'Authorization': 'Bearer ' + pendingToken") !== false, 'the login page sends the freshly issued token with the consent call');
-
+// Phase 2: the session is an HttpOnly cookie the server set at verification; the
+// consent call rides on it with the header the API requires for a cookie POST.
+is_(strpos($web, "'Authorization': 'Bearer ' + pendingToken") === false, 'the login page no longer handles a token at all');
+is_(strpos($web, "'X-Requested-With': 'DishNet'") !== false && strpos($web, "credentials: 'same-origin'") !== false, 'the consent call rides on the session cookie with the page-marker header');
+is_(strpos($web, "document.cookie = 'dn_customer_token=' +") === false && strpos($web, "&token=' + encodeURIComponent(token)") === false, 'the page writes no cookie and puts no token in the redirect');
+$legacyTok = JwtAuth::fromConfig($cfgNow)->issue(['sub' => 7, 'kind' => 'app', 'phone' => $KNOWN_PHONE, 'accounts' => [7]]);
+$r = $call('POST', 'app_record_consent', ['tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']], ["Authorization: Bearer {$legacyTok}"]);
+t('a token signed the pre-Phase-2 way is refused (E3-a)', [$r['code'], $r['json']['message'] ?? null], [401, 'Invalid or expired token.']);
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -51,6 +51,16 @@ if (!function_exists('dn_tz')) {
         if (isset($c['tz'])) return $c['tz'];
 
         $t = trim((string)(dn_tz_fromDisk()['timezone'] ?? ''));
+        if ($t === '' || !dn_tz_valid($t)) {
+            // Phase 2: the tenant profile's zone before the historical literal.
+            // An empty configuration selects south-sudan, whose zone IS that
+            // literal, so an install that configures nothing is unchanged.
+            try {
+                require_once __DIR__ . '/TenantProfile.php';
+                $pz = (string)(TenantProfile::current(dn_tz_fromDisk())->timezone() ?? '');
+                if ($pz !== '' && dn_tz_valid($pz)) $t = $pz;
+            } catch (\Throwable $e) { /* the literal below */ }
+        }
         // An unreadable or misspelt zone must not throw at the top of a cron
         // and take the whole cycle with it. Falling back to the historical
         // literal keeps the machine running on the clock it has always used.

@@ -25,6 +25,10 @@
 // ── Bootstrap auxiliary classes ─────────────────────────────────────
 require_once dirname(__DIR__, 2) . '/lib/JwtAuth.php';
 require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';
+require_once dirname(__DIR__, 2) . '/lib/CustomerJwtKeys.php';   // Phase 2: the dedicated sign-in key set
+require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';   // Phase 2: HttpOnly cookie session + customer_sessions
+require_once dirname(__DIR__, 2) . '/lib/PhoneNumber.php';       // Phase 2: the tenant's phone rule
+require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
 
 // ── Helpers (scoped with ca_ prefix to avoid collisions) ────────────
 
@@ -41,16 +45,23 @@ if (!function_exists('ca_phone_normalize')) {
 }
 
 /**
- * International form with + prefix for WA delivery.
+ * The canonical international number — the WhatsApp destination and the
+ * identifier a sign-in is recorded under.
+ *
+ * Phase 2: the tenant profile's rule (lib/PhoneNumber.php), not a dial code
+ * written into this file. Returns '' when the number cannot be canonicalised;
+ * every caller treats '' as "matches nobody". An e-mail address is never a
+ * phone.
  */
 if (!function_exists('ca_phone_intl')) {
-    function ca_phone_intl($raw) {
-        $digits = preg_replace('/[^0-9]/', '', (string)$raw);
-        $digits = ltrim($digits, '0');
-        if (strlen($digits) >= 11 && substr($digits, 0, 3) === '211') {
-            return '+' . $digits;
+    function ca_phone_intl($raw, array $config = []): string {
+        $raw = (string)$raw;
+        if (trim($raw) === '' || strpos($raw, '@') !== false) return '';
+        $dataDir = $GLOBALS['dataDir'] ?? null;
+        if (!is_string($dataDir) || $dataDir === '') {
+            $dataDir = function_exists('getDataDir') ? (string)getDataDir(dirname(__DIR__, 2)) : null;
         }
-        return '+211' . ca_phone_normalize($raw);
+        return PhoneNumber::international($raw, TenantProfile::current($config, $dataDir)) ?? '';
     }
 }
 
@@ -59,6 +70,7 @@ if (!function_exists('ca_phone_intl')) {
  */
 if (!function_exists('ca_init_tables')) {
     function ca_init_tables($pdo) {
+        CustomerSession::ensureTable($pdo);   // Phase 2: one row per issued token (migration 073 creates it too)
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS app_otp_pending (
                 phone TEXT PRIMARY KEY,
@@ -313,51 +325,71 @@ if (!function_exists('ca_audit')) {
 }
 
 /**
+ * Phase 2 — the sign-in eligibility gates (plan §B.3-G, decision 7). Read from
+ * the customer index; a NULL flag (not yet synced) never refuses anyone. The
+ * final business rule is Phase 3's; these defaults are the narrowest safe
+ * reading: leads and archived clients do not sign in, a service is not required.
+ *   portal_login_allow_leads      yes|no   default no
+ *   portal_login_require_service  yes|no   default no
+ * Returns null when the account may sign in, else the reason (lead | archived | no_service).
+ */
+if (!function_exists('ca_cfg_bool')) {
+    function ca_cfg_bool($v, bool $default): bool {
+        if ($v === null || $v === '') return $default;
+        if (is_bool($v)) return $v;
+        return in_array(strtolower(trim((string)$v)), ['1', 'yes', 'true', 'on'], true);
+    }
+}
+if (!function_exists('ca_login_eligibility')) {
+    function ca_login_eligibility(array $client, array $config): ?string {
+        $allowLeads     = ca_cfg_bool($config['portal_login_allow_leads'] ?? null, false);
+        $requireService = ca_cfg_bool($config['portal_login_require_service'] ?? null, false);
+        $archived = $client['is_archived'] ?? null;
+        $lead     = $client['is_lead'] ?? null;
+        $service  = $client['has_service'] ?? null;
+        if ($archived !== null && (int)$archived === 1) return 'archived';
+        if (!$allowLeads && $lead !== null && (int)$lead === 1) return 'lead';
+        if ($requireService && $service !== null && (int)$service === 0) return 'no_service';
+        return null;
+    }
+}
+/**
+ * Phase 2 — the stored form of a one-time code: an HMAC under a key derived
+ * from the active customer signing key, so a copy of the database shows no
+ * live code. Verification compares hashes.
+ */
+if (!function_exists('ca_otp_hash')) {
+    function ca_otp_hash(string $code, array $config): string {
+        $kid  = CustomerJwtKeys::activeKid($config);
+        $keys = CustomerJwtKeys::keys($config);
+        $secret = ($kid !== '' && isset($keys[$kid])) ? $keys[$kid] : '';
+        if ($secret === '') return 'unkeyed';   // never equals a real hash; the send path refuses before storing
+        return hash_hmac('sha256', $code, hash_hmac('sha256', 'dn-otp-pending-v1', $secret, true));
+    }
+}
+
+/**
  * Verify a customer-app Bearer JWT. Returns claims array or exits with 401.
  */
 if (!function_exists('ca_require_auth')) {
     function ca_require_auth($config, $pdo, $er2) {
-        $hdr = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-        if (empty($hdr) && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
-            $hdr = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
-        }
-        $rawToken = '';
-        if (preg_match('/^Bearer\s+(.+)$/i', $hdr, $m)) {
-            $rawToken = trim($m[1]);
-        }
-        // v4.12.14 — allow ?token= query param fallback so that direct-link PDF
-        // downloads (opened in a new tab / system viewer) don't need a Bearer
-        // header. Only accepted for GET because body-based endpoints always
-        // have their auth header. Limited to the same customer-app kind via
-        // the kind check below.
-        if ($rawToken === '' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && !empty($_GET['token'])) {
-            $rawToken = trim($_GET['token']);
-        }
-        if ($rawToken === '') {
-            $er2('Missing Bearer token.', 401);
-        }
+        // Phase 2 (plan §E.4–E.5): the session is the HttpOnly cookie the server
+        // set, or a Bearer header (native WebView, tests) — never a URL parameter.
+        // The token must verify under the customer key set (kid/iss/aud) AND have
+        // a live customer_sessions row; a cookie may only authenticate a non-GET
+        // request that our own page made (X-Requested-With, same site).
         try {
-            $jwt = JwtAuth::fromConfig($config);
-            $claims = $jwt->verify($rawToken);
-        } catch (\RuntimeException $e) {
-            $er2('Invalid or expired token.', 401);
-        }
-
-        // Must be a customer-app token (kind='app'), not a retailer token
-        if (($claims['kind'] ?? '') !== 'app') {
-            $er2('Wrong token type.', 401);
-        }
-
-        // Check blacklist
-        if (!empty($claims['jti'])) {
-            $stmt = $pdo->prepare("SELECT 1 FROM app_jwt_blacklist WHERE jti = ? LIMIT 1");
-            $stmt->execute([$claims['jti']]);
-            if ($stmt->fetchColumn()) {
-                $er2('Token revoked.', 401);
+            $s = CustomerSession::authenticate(is_array($config) ? $config : [], $pdo);
+        } catch (CustomerSessionException $e) {
+            switch ($e->reason()) {
+                case 'missing':    $er2('Not signed in.', 401); break;
+                case 'cross_site': $er2('Cross-site request refused.', 403); break;
+                case 'kind':       $er2('Wrong token type.', 401); break;
+                case 'revoked':    $er2('Token revoked.', 401); break;
+                default:           $er2('Invalid or expired token.', 401);
             }
         }
-
-        return $claims;
+        return $s['claims'];
     }
 }
 
@@ -555,10 +587,16 @@ if ($act === 'app_send_otp') {
     } elseif ($rawPhone !== '') {
         $loginMode  = 'phone';
         if (strlen(ca_phone_normalize($rawPhone)) < 8) $er2('Invalid phone number.', 400);
-        $identifier = ca_phone_intl($rawPhone);
+        // Phase 2: the tenant's rule decides the canonical number, and so the
+        // destination. A number it cannot canonicalise is answered like an
+        // unknown one below — never guessed, never addressed anywhere.
+        $identifier = ca_phone_intl($rawPhone, $config);
+        $badNumber  = ($identifier === '');
+        if ($badNumber) $identifier = 'raw:' . preg_replace('/\D+/', '', $rawPhone);
     } else {
         $er2('Either phone or email is required.', 400);
     }
+    $badNumber = $badNumber ?? false;
 
     $ttl     = (int)($config['app_otp_ttl_seconds'] ?? 900);
     $ttlMin  = max(1, (int)round($ttl / 60));
@@ -578,18 +616,25 @@ if ($act === 'app_send_otp') {
 
     // Server-side prerequisites are checked BEFORE the lookup, so a
     // configuration problem answers the same for every number.
+    // Phase 2: any configured WhatsApp transport will do — Evolution where an
+    // instance is mapped, else WASender where its three keys are set — exactly
+    // the choice sendVia() makes. The WASender-only gate that refused every
+    // Evolution-only install is gone.
     if ($loginMode === 'phone') {
         if (!$notify) $er2('Notification service unavailable.', 500);
-        $senderEnabled = !empty($config['wa_plugin_url']) && !empty($config['wa_app_key']) && !empty($config['wa_auth_key']);
-        if (!$senderEnabled && !$dryRun) {
+        $transport = $notify->phoneTransport(NotificationService::SUPPORT);
+        if ($transport === '' && !$dryRun) {
             ca_audit($pdo, null, 'otp_wa_not_configured', $identifier, [
-                'wa_plugin_url_set' => !empty($config['wa_plugin_url']),
-                'wa_app_key_set'    => !empty($config['wa_app_key']),
-                'wa_auth_key_set'   => !empty($config['wa_auth_key']),
+                'transport'         => 'none',
+                'wasender_keys_set' => !empty($config['wa_plugin_url']) && !empty($config['wa_app_key']) && !empty($config['wa_auth_key']),
+                'evolution_keys_set'=> !empty($config['evo_api_url']) && !empty($config['evo_api_key']),
             ]);
             $er2('WhatsApp sender is not configured on server. Contact admin.', 500);
         }
     }
+    // The sign-in key set must exist before a code is minted — it also keys the
+    // stored code's hash. public.php provisions it once per install; this is the floor.
+    if (!CustomerJwtKeys::ensure($store, $config)) $er2('Sign-in is not configured on this server. Contact admin.', 500);
 
     // Rate limits — per identifier (as before) and, new, per source address —
     // counted for known and unknown identifiers alike, so an enumeration run is
@@ -613,15 +658,23 @@ if ($act === 'app_send_otp') {
     $ins->execute([$ipKey, time()]);
     $pdo->prepare("DELETE FROM app_otp_rate WHERE sent_at < ?")->execute([time() - 86400]);
 
-    // Lookup. An unknown identifier is audited and answered like a known one.
-    $clients = $loginMode === 'email'
+    // Lookup. An unknown identifier is audited and answered like a known one;
+    // so is a number the tenant's rule cannot canonicalise (it would be
+    // addressed nowhere), and so is an account the eligibility gates refuse.
+    $clients = $badNumber ? [] : ($loginMode === 'email'
         ? ca_find_clients_by_email($store, $rawEmail)
-        : ca_find_clients_by_phone($store, $rawPhone);
+        : ca_find_clients_by_phone($store, $rawPhone));
     if (empty($clients)) {
-        ca_audit($pdo, null, $loginMode === 'email' ? 'otp_no_account_email' : 'otp_no_account', $identifier);
+        ca_audit($pdo, null, $loginMode === 'email' ? 'otp_no_account_email' : 'otp_no_account', $identifier,
+                 $badNumber ? ['reason' => 'not_a_number'] : null);
         $uniform();
     }
     $client = $clients[0];   // primary = first in sorted order (active first, then lowest id)
+    $ineligible = ca_login_eligibility($client, $config);
+    if ($ineligible !== null) {
+        ca_audit($pdo, (int)$client['id'], 'otp_ineligible', $identifier, ['reason' => $ineligible, 'mode' => $loginMode]);
+        $uniform();
+    }
 
     $code = str_pad((string)random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
     $stmt = $pdo->prepare("
@@ -634,7 +687,7 @@ if ($act === 'app_send_otp') {
             attempts = 0,
             crm_client_id = excluded.crm_client_id
     ");
-    $stmt->execute([$identifier, $code, time() + $ttl, time(), (int)$client['id']]);
+    $stmt->execute([$identifier, ca_otp_hash($code, $config), time() + $ttl, time(), (int)$client['id']]);   // Phase 2: the code never rests in clear
 
     $firstName = explode(' ', trim($client['name'] ?? '') ?: 'there')[0];
     $message   = "🔐 *DishNet Login Code*\n\n"
@@ -651,17 +704,9 @@ if ($act === 'app_send_otp') {
             'app_otp',
             ['crm_client_id' => (int)$client['id'], 'name' => $firstName]
         );
-        $reflect = new ReflectionObject($notify);
-        if ($reflect->hasProperty('_lastSendSuccess')) {
-            $prop = $reflect->getProperty('_lastSendSuccess');
-            $prop->setAccessible(true);
-            $sendSuccess = (bool)$prop->getValue($notify);
-        }
-        if ($reflect->hasProperty('_lastError')) {
-            $prop = $reflect->getProperty('_lastError');
-            $prop->setAccessible(true);
-            $sendError = $prop->getValue($notify);
-        }
+        $sent        = $notify->lastSendResult();   // Phase 2: a public reading, not reflection
+        $sendSuccess = (bool)$sent['success'];
+        $sendError   = $sent['error'];
     } else {
         $emailResult = ca_send_otp_email(
             $config, $store->getDataDir(), $rawEmail, (string)($client['name'] ?? ''), $code, $ttlMin
@@ -713,7 +758,8 @@ if ($act === 'app_verify_otp') {
             $er2('Invalid email address.', 400);
         }
     } elseif ($rawPhone !== '') {
-        $identifier = ca_phone_intl($rawPhone);
+        $identifier = ca_phone_intl($rawPhone, $config);
+        if ($identifier === '') $identifier = 'raw:' . preg_replace('/\D+/', '', $rawPhone);   // matches no pending row
     } else {
         $er2('Either phone or email is required.', 400);
     }
@@ -744,7 +790,7 @@ if ($act === 'app_verify_otp') {
         $er2('Too many wrong attempts. Request a new code.', 429);
     }
 
-    if (!hash_equals((string)$rec['code'], $code)) {
+    if (!hash_equals((string)$rec['code'], ca_otp_hash($code, $config))) {   // Phase 2: hashes compared, never the code
         $pdo->prepare("UPDATE app_otp_pending SET attempts = attempts + 1 WHERE phone = ?")
             ->execute([$identifier]);
         ca_audit($pdo, (int)$rec['crm_client_id'], 'otp_wrong_code', $identifier);
@@ -788,25 +834,38 @@ if ($act === 'app_verify_otp') {
     // Clear OTP
     $pdo->prepare("DELETE FROM app_otp_pending WHERE phone = ?")->execute([$identifier]);
 
-    // Issue JWT
-    $ttlDays = (int)($config['app_jwt_ttl_days'] ?? 30);
-    $ttlSec = $ttlDays * 86400;
-
-    // Override the jwt_ttl_seconds temporarily via config merge
-    $cfgForJwt = array_merge($config, ['jwt_ttl_seconds' => $ttlSec]);
-    $jwt = JwtAuth::fromConfig($cfgForJwt);
-
+    // Issue the session (Phase 2, plan §E.1/E.4/E.5): the dedicated customer key
+    // set with kid/iss/aud in the token, a customer_sessions row, and an
+    // HttpOnly cookie set here by the server. The JSON carries the token only
+    // to a client that announces itself as native (X-DishNet-Client); a
+    // browser never sees it.
+    $ttlSec       = CustomerJwtKeys::ttlSeconds($config);
+    $loginModeNow = $rawEmail !== '' ? 'email' : 'phone';
+    try {
+        $jwt = JwtAuth::forCustomers($config, $ttlSec);
+    } catch (\RuntimeException $e) {
+        $er2('Sign-in is not configured on this server. Contact admin.', 500);
+    }
     $token = $jwt->issue([
-        'sub'      => $clientId,
-        'kind'     => 'app',
-        'phone'    => $identifier,        // v4.21.7: 'phone' field holds whatever was used
-        'name'     => $client['name'] ?? '',
-        'accounts' => $accountsClaim,  // v4.12.13
+        'sub'        => $clientId,
+        'kind'       => 'app',
+        'phone'      => $identifier,        // v4.21.7: 'phone' field holds whatever was used
+        'login_mode' => $loginModeNow,
+        'name'       => $client['name'] ?? '',
+        'accounts'   => $accountsClaim,  // v4.12.13
     ]);
+    $issued = $jwt->decode($token) ?? [];
+    CustomerSession::record($pdo, $issued, $jwt->kid(),
+        function_exists('getClientIp') ? (string)getClientIp() : (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+        (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    CustomerSession::purge($pdo);
+    CustomerSession::setCookie($token, $ttlSec);
+    $nativeClient = CustomerSession::nativeClient();
 
     ca_audit($pdo, $clientId, 'login_success', $identifier, [
         'account_count' => count($accountsClaim),
-        'login_mode'    => $rawEmail !== '' ? 'email' : 'phone',
+        'login_mode'    => $loginModeNow,
+        'session'       => $nativeClient ? 'body+cookie' : 'cookie',
     ]);
 
     // v4.12.19 — Tell client whether they need to accept current T&C/Privacy.
@@ -820,7 +879,8 @@ if ($act === 'app_verify_otp') {
     })();
 
     $ok2([
-        'token' => $token,
+        'token'   => $nativeClient ? $token : null,   // Phase 2: a browser gets the cookie, never the token
+        'session' => $nativeClient ? 'body+cookie' : 'cookie',
         'expires_in' => $ttlSec,
         'customer' => [
             'id' => $clientId,
@@ -847,15 +907,35 @@ if ($act === 'app_logout') {
 
     $claims = ca_require_auth($config, $pdo, $er2);
 
-    if (!empty($claims['jti']) && !empty($claims['exp'])) {
-        $stmt = $pdo->prepare("
-            INSERT OR IGNORE INTO app_jwt_blacklist (jti, expires_at) VALUES (?, ?)
-        ");
-        $stmt->execute([$claims['jti'], (int)$claims['exp']]);
-    }
+    // Phase 2: the session row is revoked — the portal page and the API both
+    // check it — and the cookie is cleared by the server. app_jwt_blacklist
+    // stays for the record; nothing reads it for a Phase-2 token.
+    CustomerSession::revoke($pdo, (string)($claims['jti'] ?? ''), 'customer');
+    CustomerSession::clearCookie();
     ca_audit($pdo, (int)($claims['sub'] ?? 0), 'logout', $claims['phone'] ?? null);
 
     $ok2([], 'Logged out.');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ACTION: app_data_report_token  (session) — Phase 2
+// ═══════════════════════════════════════════════════════════════════
+// The data-report plugin (dishnet-data-report, a separate plugin) is opened
+// with a token in its URL. The session token no longer leaves the HttpOnly
+// cookie, so the portal asks for a purpose-bound one on click: signed the way
+// that plugin has always been given (the legacy derivation), ten minutes
+// long, the same claims as before, audience 'data-report'. Never the session.
+if ($act === 'app_data_report_token') {
+    if ($met !== 'GET') $er2('GET required.', 405);
+    ca_init_tables($store->getPdo());
+    $pdo = $store->getPdo();
+    $claims  = ca_require_auth($config, $pdo, $er2);
+    $handoff = new JwtAuth(JwtAuth::legacySecret($config), 600);
+    $tok = $handoff->issue([
+        'sub' => (int)($claims['sub'] ?? 0), 'kind' => 'app', 'phone' => (string)($claims['phone'] ?? ''),
+        'name' => (string)($claims['name'] ?? ''), 'accounts' => $claims['accounts'] ?? [], 'aud' => 'data-report',
+    ]);
+    $ok2(['token' => $tok, 'expires_in' => 600], 'Hand-off token issued.');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4469,18 +4549,14 @@ if ($act === 'app_payment_receipt_pdf' && $met === 'GET') {
  * PHP fatally errored with "Call to undefined function". Unwrapping makes
  * PHP hoist the function at file parse time, available everywhere.
  */
-function ca_has_current_consent($pdo, string $rawPhone): bool {
-    require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
-    $ver = dnLegalVersion();
-    $phone = ca_phone_intl($rawPhone);
-    if ($phone === '') return false;
+function ca_has_current_consent($pdo, string $identifier): bool {
+    // Phase 2: one implementation, shared with the login page and the portal.
+    // The identifier is already canonical — the international number or the
+    // lower-cased e-mail the token names. (Re-deriving it through the phone
+    // rule turned every e-mail into a bare dial code, so an e-mail login was
+    // asked for consent every time.)
     try {
-        $stmt = $pdo->prepare(
-            "SELECT 1 FROM app_tos_consent
-             WHERE phone = ? AND tos_version = ? AND privacy_version = ? LIMIT 1"
-        );
-        $stmt->execute([$phone, $ver['tos'], $ver['privacy']]);
-        return (bool)$stmt->fetchColumn();
+        return CustomerSession::hasCurrentConsent($pdo, $identifier);
     } catch (\Throwable $e) {
         return false;
     }

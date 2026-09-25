@@ -58,39 +58,32 @@ require_once dirname(__DIR__, 2) . '/lib/JwtAuth.php';
 $portalAuthError = null;
 $portalClaims = null;
 
-$hdr = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if (empty($hdr) && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
-    $hdr = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
-}
-// Fallback: token can be passed as query param for direct browser testing,
-// or stored in dn_customer_token cookie for PWA access.
-// Production WebView always uses Authorization header.
-$fallbackToken = trim($_GET['token'] ?? '');
-$cookieToken = trim($_COOKIE['dn_customer_token'] ?? '');
+// Phase 2 (plan §E.4–E.5): the session is the HttpOnly cookie the server set at
+// sign-in, or the Bearer header a native WebView sends. A token in the URL is
+// ignored. The token must verify under the customer key set (kid/iss/aud) and
+// have a live customer_sessions row — so a logout ends the portal too — and a
+// customer who has not accepted the current terms is sent to the consent step.
+require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
+header('Referrer-Policy: same-origin');
+header('Cache-Control: no-store');
+$_pdSrc = CustomerSession::fromRequest();
+$token  = $_pdSrc['token'];
+$loginUrl = strtok($_SERVER['REQUEST_URI'] ?? '', '?') . '?page=customer_login';
 
-$token = '';
-if (preg_match('/^Bearer\s+(.+)$/i', $hdr, $m)) {
-    $token = trim($m[1]);
-} elseif ($fallbackToken !== '') {
-    $token = $fallbackToken;
-} elseif ($cookieToken !== '') {
-    $token = $cookieToken;
-}
-
-if (!$token) {
-    // No token — redirect to web login page (PWA flow)
-    $loginUrl = strtok($_SERVER['REQUEST_URI'] ?? '', '?') . '?page=customer_login';
+if ($token === '') {
+    // No session — redirect to web login page (PWA flow)
     header('Location: ' . $loginUrl);
     exit;
 } else {
     try {
-        $jwtAuth = JwtAuth::fromConfig($config);
-        $portalClaims = $jwtAuth->verify($token);
-        if (($portalClaims['kind'] ?? '') !== 'app') {
-            $portalAuthError = 'Wrong token type.';
+        $portalClaims = CustomerSession::authenticate($config, $store->getPdo())['claims'];
+        if (!CustomerSession::hasCurrentConsent($store->getPdo(), (string)($portalClaims['phone'] ?? ''))) {
+            header('Location: ' . $loginUrl . '&step=consent');
+            exit;
         }
-    } catch (\RuntimeException $e) {
-        $portalAuthError = 'Invalid or expired token.';
+    } catch (CustomerSessionException $e) {
+        $portalAuthError = $e->reason() === 'kind' ? 'Wrong token type.'
+                         : ($e->reason() === 'revoked' ? 'Session ended. Please sign in again.' : 'Invalid or expired token.');
     }
 }
 

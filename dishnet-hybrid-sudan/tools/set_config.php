@@ -67,6 +67,18 @@ $FLAGS = [
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
 
+    // Phase 2 of the customer-login audit — the tenant profile and the
+    // sign-in eligibility gates (plan §D.3, §E.6). The profile is the one
+    // source of every country-dependent default; the gates are configurable
+    // until the lifecycle decision (Phase 3) fixes them.
+    'tenant_profile' => ['text',
+        'Country profile: south-sudan or uganda (blank = derived from the currency)'],
+    'portal_login_allow_leads' => ['bool',
+        'Let uCRM leads sign in to the customer portal (default: no)'],
+    'portal_login_require_service' => ['bool',
+        'Refuse portal sign-in to clients with no uCRM service (default: no)'],
+    'app_jwt_ttl_days' => ['number',
+        'Days a customer stays signed in after a code (default 30)'],
     // A migration instrument with an end date, not a business setting. It
     // runs the controlled customer tools beside the legacy support/accounts
     // prompt and logs whether the two readers agree — verdicts only, never
@@ -236,9 +248,9 @@ $show = function () use ($root, $dataDir, $FLAGS) {
             $shown = '"' . (string)$raw . '"';
         }
 
-        printf("    %-27s %s\n", $k, $shown);
-        if ($note !== '') printf("    %-27s %s\n", '', $note);
-        printf("    %-27s %s\n\n", '', $what);
+        printf("    %-32s %s\n", $k, $shown);
+        if ($note !== '') printf("    %-32s %s\n", '', $note);
+        printf("    %-32s %s\n\n", '', $what);
     }
 };
 
@@ -300,8 +312,19 @@ if (!$clear && preg_match('/<[A-Z][A-Z0-9 _-]{1,30}>/', $new, $ph)) {
     exit(1);
 }
 
-if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {
-    echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
+// The profile selector names a shipped profile or nothing: a misspelt value
+// would silently fall back to the currency rule and put the wrong country on
+// the login page with nothing anywhere saying so.
+if (!$clear && $key === 'tenant_profile') {
+    require_once dirname(__DIR__) . '/lib/TenantProfile.php';
+    if (!in_array(strtolower(trim($new)), TenantProfile::IDS, true)) {
+        echo "\n  \"" . $new . "\" is not a shipped profile, so nothing was saved.\n";
+        echo "  Use one of: " . implode(', ', TenantProfile::IDS) . " — or --clear to derive it from the currency.\n\n";
+        exit(1);
+    }
+    $new = strtolower(trim($new));
+}
+if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {    echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
     echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";
     echo "  with no error anywhere.\n\n";
     echo "  Uganda:      Africa/Kampala\n";

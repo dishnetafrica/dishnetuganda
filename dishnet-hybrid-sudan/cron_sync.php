@@ -502,41 +502,24 @@ function buildSearchIndex(StoreInterface $store, array $clients): void
     $store->save('client_search_index.json', $idx);
 
     // ── Write to SQLite table (Fix #5 — O(1) phone lookup) ───────────────
-    // Uses REPLACE INTO so re-running sync updates existing rows atomically.
+    // Phase 2: one row builder (lib/ClientSearchIndex.php), shared with the
+    // webhook's per-client upsert. This is the only effective writer of the
+    // table (the JSON save above is a no-op for a structured table), so the
+    // e-mail column and the eligibility flags are filled here.
     try {
+        require_once __DIR__ . '/lib/ClientSearchIndex.php';
         $pdo = $store->getPdo();
-        $pdo->exec("CREATE TABLE IF NOT EXISTS client_search_index (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL DEFAULT '',
-            phone TEXT NOT NULL DEFAULT '',
-            phone_norm TEXT NOT NULL DEFAULT '',
-            service TEXT NOT NULL DEFAULT '',
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )");
-        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_csi_phone_norm ON client_search_index(phone_norm)");
-        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_csi_name ON client_search_index(name COLLATE NOCASE)");
-
-        $replStmt = $pdo->prepare(
-            "REPLACE INTO client_search_index (id, name, phone, phone_norm, service, updated_at)
-             VALUES (?, ?, ?, ?, ?, datetime('now'))"
-        );
-        $pdo->beginTransaction();
-        foreach ($idx as $row) {
-            $pn = preg_replace('/[^0-9]/', '', $row['phone'] ?? '');
-            $pn = strlen($pn) >= 9 ? substr($pn, -9) : $pn;
-            $replStmt->execute([
-                (int)$row['id'],
-                $row['name']  ?? '',
-                $row['phone'] ?? '',
-                $pn,
-                $row['plans'] ?? '',
-            ]);
+        ClientSearchIndex::ensureTable($pdo);
+        $inv  = ClientSearchIndex::invoiceClients($store);
+        $rows = [];
+        foreach ($clients as $c) {
+            $r = ClientSearchIndex::rowFor($c, $svcByClient, $inv, $svcByClient !== []);
+            if ($r !== null) $rows[] = $r;
         }
-        $pdo->commit();
+        ClientSearchIndex::upsertMany($pdo, $rows);
     } catch (\Throwable $e) {
-        if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
         error_log('[cron_sync] client_search_index SQLite write failed: ' . $e->getMessage());
-        // Non-fatal — JSON blob is the fallback
+        // Non-fatal — the previous rows stand
     }
 }
 

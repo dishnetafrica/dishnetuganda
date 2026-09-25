@@ -5,7 +5,7 @@
     "displayName": "DishNet Hybrid — Sudan Edition",
     "description": "The full DishNet Hybrid platform for a fresh Sudan deployment, with the AI WhatsApp brain built in. Carries the complete mature feature set — CRM, customer portal and PWA, sales and KYC, support and field operations, accounting and cashbook, HRM and payroll, retailers, stock, LTE, Starlink, reporting and the existing APIs, webhooks and automation — and adds Sales, Support and Accounts on WhatsApp through Evolution API, answered by one AI brain grounded in live UISP/uCRM data. Ships with no data: no customers, no employees, no accounting records, and no default passwords. The first administrator is created through a setup step on first run.",
     "url": "https://dishnetafrica.com",
-    "version": "5.18.37",
+    "version": "5.18.38",
     "ucrmVersionCompliability": {
       "min": "2.14.0",
       "max": null
@@ -262,6 +262,34 @@
       "key": "email_ai_mailbox_pw",
       "label": "Inbound mail: mailbox password",
       "description": "SECRET. Held in the plugin data directory, readable only by the plugin. Never shown on the plugin page and never written to logs.",
+      "required": 0,
+      "type": "text"
+    },
+    {
+      "key": "tenant_profile",
+      "label": "Country profile",
+      "description": "south-sudan or uganda. Decides the dial code a customer's number is completed with, the login page's country and contacts, and the defaults for e-mail branding, dunning footers and the time zone. Leave blank to derive it from the currency (UGX = uganda, otherwise south-sudan). Explicit settings such as contact_* and email_* still win.",
+      "required": 0,
+      "type": "text"
+    },
+    {
+      "key": "portal_login_allow_leads",
+      "label": "Customer portal: let leads sign in",
+      "description": "OFF by default: a uCRM client still marked as a lead is refused at sign-in (with the same answer an unknown number gets). Turn ON only once the customer lifecycle decision allows leads into the portal.",
+      "required": 0,
+      "type": "checkbox"
+    },
+    {
+      "key": "portal_login_require_service",
+      "label": "Customer portal: require a service to sign in",
+      "description": "OFF by default. When ON, a client with no service in uCRM is refused at sign-in. Archived clients are always refused.",
+      "required": 0,
+      "type": "checkbox"
+    },
+    {
+      "key": "app_jwt_ttl_days",
+      "label": "Customer portal: session length in days",
+      "description": "How long a customer stays signed in after entering a code. Default 30. A signed-out session ends at once whatever this says.",
       "required": 0,
       "type": "text"
     }

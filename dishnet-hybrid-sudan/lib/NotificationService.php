@@ -1981,10 +1981,30 @@ class NotificationService
         return true;
     }
 
+    /**
+     * Which WhatsApp transport a send from this sender would use: 'evolution',
+     * 'wasender' or '' when none is configured. Exactly sendVia()'s own choice,
+     * so a caller that asks first is never told something sendVia() then
+     * contradicts. (Phase 2 of the customer-login audit.)
+     */
+    public function phoneTransport(string $sender): string
+    {
+        if ($this->evoAvailable($sender)) return 'evolution';
+        return $this->enabled ? 'wasender' : '';
+    }
+
+    /** The outcome of the last sendVia(): success, http_code, error. Reset at every call. (Phase 2) */
+    public function lastSendResult(): array
+    {
+        return ['success' => (bool)$this->_lastSendSuccess, 'http_code' => $this->_lastHttpCode, 'error' => $this->_lastError];
+    }
+
     public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = [], string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
-        if (empty($toPhone)) return;
-        // `enabled` is WASender's readiness alone. Returning on it was what
+        // Phase 2: a caller reading lastSendResult() after an early return must
+        // see THIS call's outcome, not the previous send's.
+        $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null;
+        if (empty($toPhone)) return;        // `enabled` is WASender's readiness alone. Returning on it was what
         // made every send on an Evolution-only install disappear in silence.
         if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
@@ -2078,12 +2098,17 @@ class NotificationService
         ]);
 
         // ── Queue failed sends for manual retry (skip if already retrying) ──
-        if (!$success && !$this->_retryMode) {
+        // Phase 2: a login code is never queued — a retry minutes later would
+        // deliver a code that no longer opens anything, and the queue stores
+        // the message text.
+        if (!$success && !$this->_retryMode && $event !== 'app_otp') {
             $this->queueFailed($sender, $to, $message, $event, $vars, $httpCode, $curlErr ?: mb_substr((string)$response, 0, 500));
         }
 
         // ── Log to conversation store (SQLite) ──────────────────────────
-        if ($success) {
+        // Phase 2: the login code is not written into the conversation store —
+        // the Inbox would show it to every staff member who opens the chat.
+        if ($success && $event !== 'app_otp') {
             try {
                 $convSvcPath = __DIR__ . '/ConversationService.php';
                 if (file_exists($convSvcPath)) {

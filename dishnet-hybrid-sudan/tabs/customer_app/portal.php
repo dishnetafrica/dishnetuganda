@@ -35,6 +35,7 @@ require __DIR__ . '/portal_data.php';
 if ($portalAuthError) {
     http_response_code(401);
     setcookie('dn_customer_token', '', time() - 3600, '/');
+    CustomerSession::clearCookie();   // Phase 2: the session cookie as well
     ?>
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Session expired</title>
@@ -1958,7 +1959,7 @@ elseif ($view === 'fiber_usage'):
         // the customer portal, not the staff app. Without it, any link click
         // (7D/14D/30D, pagination) lands on the staff interface.
         $base = '?page=customer_portal&view=fiber_usage';
-        if (!empty($_GET['token'])) $base .= '&token=' . urlencode($_GET['token']);
+        // Phase 2: no token in any URL — the session is the HttpOnly cookie.
         $merged = array_merge(['fu_range' => $fuRange, 'fu_spage' => $fuSPage], $params);
         foreach ($merged as $k => $v) $base .= '&' . $k . '=' . urlencode((string)$v);
         return $base;
@@ -5494,7 +5495,7 @@ function _apiUrl(action) {
 // Read auth token — uses existing DishNet._token pattern (set by native WebView),
 // with PHP-embedded fallback for web PWA.
 function _authHeader() {
-  var tok = (window.DishNet && window.DishNet._token) ? window.DishNet._token : '<?= pe($token) ?>';
+  var tok = (window.DishNet && window.DishNet._token) ? window.DishNet._token : '';   // Phase 2: only a native shell injects a token; the browser's session is the HttpOnly cookie
   return tok ? { 'Authorization': 'Bearer ' + tok } : {};
 }
 
@@ -6595,7 +6596,7 @@ _startPolling();
 // ══════════════════════════════════════════════════════════════════
 window.DishNet = {
   // JWT token for in-page navigation (WebView only sends Authorization header on initial load)
-  _token: '<?= pe($token) ?>',
+  _token: '',   // Phase 2: never embedded in the page — the session is the HttpOnly cookie; a native shell may set this
 
   // v4.12.20 — Multi-account state.
   // _accounts: full list from JWT accounts claim (may have 1 or many)
@@ -6648,7 +6649,6 @@ window.DishNet = {
     // Keeps the token in the URL for WebView scenarios.
     var u = new URL(location.href);
     u.searchParams.set('view', 'home');
-    if (this._token) u.searchParams.set('token', this._token);
     location.href = u.toString();
   },
 
@@ -6699,8 +6699,12 @@ window.DishNet = {
     opts = opts || {};
     var headers = Object.assign({}, opts.headers || {});
     if (this._token && !headers['Authorization']) headers['Authorization'] = 'Bearer ' + this._token;
-    var aid = this.activeAccountId();
-    if (aid) headers['X-Account-Id'] = String(aid);
+    // Phase 2: the browser's session is the HttpOnly cookie. A same-origin fetch
+    // sends it; the header marks the request as this page's own, which the API
+    // requires before a cookie may authenticate anything but a GET.
+    headers['X-Requested-With'] = 'DishNet';
+    if (!opts.credentials) opts.credentials = 'same-origin';
+    var aid = this.activeAccountId();    if (aid) headers['X-Account-Id'] = String(aid);
     opts.headers = headers;
     return fetch(url, opts);
   },
@@ -6712,15 +6716,13 @@ window.DishNet = {
     } else {
       var u = new URL(location.href);
       u.searchParams.set('view', view);
-      if (this._token) u.searchParams.set('token', this._token);
-      location.href = u.toString();
+        location.href = u.toString();
     }
   },
   // Navigate within the same WebView (for sub-pages like invoice detail, wifi change, usage)
   goInternal(view, extraParams) {
     var u = new URL(location.href);
     u.searchParams.set('view', view);
-    if (this._token) u.searchParams.set('token', this._token);
     if (extraParams) {
       for (var k in extraParams) u.searchParams.set(k, extraParams[k]);
     }
@@ -6760,7 +6762,6 @@ window.DishNet = {
     var u = new URL(location.href);
     u.searchParams.set('view', 'invoice_detail');
     u.searchParams.set('inv_id', id);
-    if (this._token) u.searchParams.set('token', this._token);
     location.href = u.toString();
   },
   notifyPayment(id, number, amount) {
@@ -6850,7 +6851,7 @@ window.DishNet = {
         errorEl.style.display = 'flex';
         // Use the original URL with token as fallback so the user can still open it
         var dlLink = document.getElementById('dn-pdf-fallback-dl');
-        if (dlLink) dlLink.href = url + '&token=' + encodeURIComponent(DishNet._token || '');
+        if (dlLink) dlLink.href = url;   // Phase 2: a same-origin GET carries the session cookie; no token in any URL
         console.warn('[viewPdf] failed:', err && err.message);
       });
   },
@@ -7406,8 +7407,15 @@ window.DishNet = {
     var clientId = <?= $portalCustomerId ?>;
     var url = location.href.split('/_plugins/')[0] + '/_plugins/dishnet-data-report/public.php?clientId=' + clientId;
     if (kitNumber) url += '&kit=' + encodeURIComponent(kitNumber);
-    if (this._token) url += '&token=' + encodeURIComponent(this._token);
-    location.href = url;
+    // Phase 2: the session token never leaves its cookie. The other plugin is
+    // handed a purpose-bound ten-minute token minted on click (app_data_report_token).
+    DishNet.apiFetch(location.pathname + '?page=api&action=app_data_report_token')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var t = (d && d.data && d.data.token) ? d.data.token : '';
+        location.href = t ? url + '&token=' + encodeURIComponent(t) : url;
+      })
+      .catch(function () { location.href = url; });
   },
   // v4.12.21: toggle the editable SSID field. Called when user taps the
   // "Advanced (change network name)" link. Accepts optional forceShow to
@@ -7575,28 +7583,21 @@ window.DishNet = {
       window.Android.confirmLogout();
     } else {
       if (confirm('Log out of DishNet?')) {
-        // 1. Call logout API to blacklist the JWT token
-        var token = this._token;
-        if (token) {
-          var u = new URL(location.href);
-          var logoutUrl = u.origin + u.pathname + '?page=api&action=app_logout';
-          fetch(logoutUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Bearer ' + token,
-              'Content-Type': 'application/json'
-            },
-            body: '{}'
-          }).catch(function() { /* best-effort */ });
-        }
-
-        // 2. Clear the dn_customer_token cookie
-        document.cookie = 'dn_customer_token=;path=/;max-age=0;SameSite=Lax';
-        document.cookie = 'dn_customer_token=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT;SameSite=Lax';
-
-        // 3. Redirect to customer login page
+        // 1. Revoke the session on the server (Phase 2: the cookie-authenticated
+        //    call carries X-Requested-With; the server revokes the row and clears
+        //    the HttpOnly cookie). The redirect waits for the answer so the
+        //    portal cannot be reopened on a session that is still live.
+        var u = new URL(location.href);
+        var logoutUrl = u.origin + u.pathname + '?page=api&action=app_logout';
         var loginUrl = location.pathname + '?page=customer_login';
-        location.href = loginUrl;
+        DishNet.apiFetch(logoutUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .catch(function() { /* best-effort */ })
+          .then(function() {
+            // 2. The old JavaScript cookie, if a pre-Phase-2 browser still holds it
+            document.cookie = 'dn_customer_token=;path=/;max-age=0;SameSite=Lax';
+            // 3. Redirect to customer login page
+            location.href = loginUrl;
+          });
       }
     }
   },

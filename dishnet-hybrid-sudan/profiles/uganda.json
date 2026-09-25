@@ -1,0 +1,49 @@
+{
+  "id": "uganda",
+  "_readme": "Populated only from values already in the repository (plan §D.3): CustomerContact::UGANDA, tools/set_email_brand.php --uganda, PortalLocale::BY_CURRENCY['UGX'], FollowUpPolicy::TZ, tools/knowledge_seed.json, the Uganda PDF templates. Everything the repository cannot answer is null and listed in plan §D.6 for the operator: office hours, the published e-mail address, bank details, fees, the regulator to name, the legal text, whether an app URL is advertised before the APK exists.",
+  "country": { "code": "UG", "name": "Uganda", "dial_code": "256", "nsn_length": 9, "example": "+256 7XX XXX XXX" },
+  "currency": { "code": "UGX", "symbol": "UGX" },
+  "timezone": "Africa/Kampala",
+  "legal_entity": "DishNet Africa Limited",
+  "trading_name": "DishNet Africa",
+  "positioning": "IT Solutions Provider · UCC Authorised Starlink Installer",
+  "office": { "street": "4th floor, Acacia Mall, 14-18 Cooper Road (office TT06)", "city": "Kampala", "country": "Uganda", "hours": null },
+  "locality": "Kampala, Uganda",
+  "website": "dishnetuganda.com",
+  "email": "accounts@dishnetuganda.com",
+  "contacts": {
+    "accounts_phone": "+256 705 993 348",
+    "support_phone": "+256 705 993 348",
+    "sales_phone": "+256 705 993 348",
+    "escalation_phone": "+256 705 993 348",
+    "shop_phone": "+256 705 993 348",
+    "sales_wa": "256705993348",
+    "support_wa": "256705993348",
+    "technical_wa": "256705993348"
+  },
+  "pay_url": "https://dishnetuganda.com/pay",
+  "app_url": "https://dishnetuganda.com/app",
+  "email_brand": {
+    "company_name": "DishNet Africa Limited",
+    "locality": "Kampala, Uganda",
+    "website": "dishnetuganda.com",
+    "support_phone": "+256 705 993 348",
+    "support_wa": "256705993348",
+    "reply_to": "accounts@dishnetuganda.com",
+    "legal_line": "TIN 1059140632 · Reg. No. 80046255496181",
+    "badge_line": "UCC Authorised Starlink Installer"
+  },
+  "dunning": {
+    "from_name": "DishNet Accounts",
+    "phone": "+256 705 993 348",
+    "accounts_email": "accounts@dishnetuganda.com",
+    "company_line": "DishNet Africa Limited · Kampala, Uganda",
+    "website": "www.dishnetuganda.com"
+  },
+  "login": { "title": "DishNet Africa", "footer_wa": "256705993348", "footer_entity": "DishNet Africa Limited", "footer_locality": "Kampala, Uganda" },
+  "jurisdiction": { "law": "the Republic of Uganda", "courts": null },
+  "regulators": ["Uganda Communications Commission"],
+  "legal_texts": null,
+  "products": ["starlink"],
+  "payment_instructions": null
+}

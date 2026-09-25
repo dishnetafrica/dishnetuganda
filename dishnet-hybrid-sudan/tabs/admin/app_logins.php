@@ -321,6 +321,31 @@ $failureLabel = [
   </form>
 </div>
 
+<!-- ─── Sign out everywhere (Phase 2) ─── -->
+<div style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:14px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+  <div style="font-weight:700;font-size:13px;">Sign a customer out everywhere</div>
+  <div style="font-size:11px;color:#64748b;">Ends every live portal session of one uCRM client id — on every phone and browser — at once. The customer signs in again with a new code.</div>
+  <input type="number" id="dnRevokeCid" min="1" placeholder="uCRM client id" style="padding:5px 10px;border-radius:7px;border:1px solid #cbd5e1;font-size:12px;width:150px;">
+  <button type="button" onclick="dnRevokeSessions()" style="padding:5px 12px;border-radius:7px;background:#D41C1C;color:#fff;border:0;font-size:11px;font-weight:700;cursor:pointer;">Sign out everywhere</button>
+  <span id="dnRevokeOut" style="font-size:12px;color:#334155;"></span>
+</div>
+<script>
+function dnRevokeSessions() {
+  var cid = parseInt(document.getElementById('dnRevokeCid').value, 10);
+  var out = document.getElementById('dnRevokeOut');
+  if (!cid || cid < 1) { out.textContent = 'Enter a client id.'; return; }
+  if (!confirm('End every live portal session of client #' + cid + '?')) return;
+  out.textContent = 'Working…';
+  fetch('?page=api&action=staff_revoke_customer_sessions', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'DishNet'},
+    body: JSON.stringify({client_id: cid})
+  }).then(function (r) { return r.json(); })
+    .then(function (d) { out.textContent = (d && d.message) ? d.message : 'No answer.'; })
+    .catch(function () { out.textContent = 'Request failed.'; });
+}
+</script>
+
 <!-- ─── Active customers table ─── -->
 <div style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:16px;margin-bottom:16px;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">

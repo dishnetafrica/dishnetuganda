@@ -114,6 +114,13 @@ class ConfigVault
         // them, or every receipt link in a customer's WhatsApp dies at once.
         'pdf_link_secret',
         'crm_webhook_key',
+        // Phase 2 — the customer-portal signing keys and the tenant profile
+        // selector. Losing the keys in a re-install would sign every customer
+        // out; losing the selector would put the wrong country on the login page.
+        'customer_jwt_keys',
+        'customer_jwt_active_kid',
+        'customer_jwt_key_dates',
+        'tenant_profile',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string
