@@ -565,3 +565,51 @@ Tests: `test_dpo_review_link.php` 103 checks (was 93).
 and this together.
 **Rollback:** `git checkout bd0b329` and deploy again.
 **Status:** built and tested; not deployed.
+
+## 5.18.36 — every DPO door reads what the DPO Pay screen saved
+
+**25 September 2026** · `lib/DpoBootstrap.php`, `lib/ConfigVault.php`,
+`tabs/admin/dpo_payments.php`, `tools/dpo_probe.php`,
+`tests/test_dpo_one_source.php`. Record: [32](32-dpo-pay-review.md) §8.
+
+After deploying 5.18.35, the operator saved the test token on the DPO Pay
+screen, and `dpo_probe.php` still answered *No company token is set*. **No save
+made on that screen had ever reached the vault**, since the first build:
+
+- `ConfigVault::store()` refuses a whole batch for one key it does not keep.
+  The screen's batch carried two such keys: `dpo_currencies` and
+  `dpo_unpayable_statuses`.
+- The screen reported the failure in green.
+- The screen, the portal and the payment API read the settings store. The
+  reviewer's test page, the return page, DPO's push, the reconcile job and the
+  probe read only files and the vault, so they never saw the token.
+- A payment could therefore be started and never verified. Whether any was
+  started shows in the DPO Pay screen's list of transactions.
+
+What changed:
+
+- **`DpoBootstrap::vaulted()`**, which every DPO door goes through, now puts
+  what the screen saved first, a saved blank included. Only keys the screen
+  never saved come from the caller or the vault.
+- The screen backs up the **settings in effect**, not only the fields posted,
+  and hands the vault only keys it keeps. A failure shows in red.
+- The two keys are now vault keys.
+- The probe says where its settings came from. When there is no token, it
+  says whether the screen has one saved.
+
+Tests:
+
+- `test_dpo_one_source.php`, 28 checks. It presses **Save settings** on the real
+  screen, then rebuilds the server's state: token saved on the screen, a stale
+  one in the vault.
+- The probe then reaches a fake DPO with the screen's token: `000`, where the
+  stale token would have been answered `802`.
+- The screen's own test had only found `ConfigVault::store` in the source.
+- 7 weakened copies are each caught.
+- Plugin suite: **191 files, 8,492 checks, 0 failed, twice**.
+
+**Applied by:** the operator: `deploy-hybrid.sh`. Then **Save settings** once on
+the DPO Pay screen (the token field can stay blank), which backs up the
+settings in effect.
+**Rollback:** `git checkout e7b754f` and deploy again.
+**Status:** built and tested; not deployed.

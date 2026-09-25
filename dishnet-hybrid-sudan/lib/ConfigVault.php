@@ -97,6 +97,13 @@ class ConfigVault
         // closed (nobody can pay in test); losing the second closes the link.
         'dpo_test_clients',
         'dpo_test_link_key',
+        // The DPO Pay screen saves these two with the rest. Missing from this
+        // list, they made store() refuse the whole save, so from the first
+        // build until 5.18.36 not one DPO setting saved on the screen reached
+        // the vault -- and the probe, the test page, the return page, DPO's
+        // push and the reconcile cron, which read the vault, never saw them.
+        'dpo_currencies',
+        'dpo_unpayable_statuses',
         // The address customers' browsers use (tools/crm_url_check.php).
         // Lost in a re-install, every link the plugin sends -- portal, PDF,
         // payment return -- would go back to uCRM's internal :8443.

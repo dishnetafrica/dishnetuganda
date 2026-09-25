@@ -110,7 +110,9 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/depl
 - **Pay Now:** Enabled.
 - **uCRM payment method:** check it is filled. It was set up on 13 September.
 
-Then **Save settings**, and **Make the test link**.
+Then **Save settings**, and **Make the test link**. The top of the screen must say
+**Saved.** in green. A red *NOT vaulted* means the backup failed: stop and send
+what it says.
 
 **4. Check that DPO accepts the token in UGX** before sending anything. This checks
 the token and service type **saved in step 3**, so nothing is typed here:
@@ -240,6 +242,19 @@ again later:
   - What went in at the service-type prompt was again not a number, and that
     prompt showed it on the screen. It is not recorded here.
   - **5.18.35:** neither prompt shows anything now.
+- **The token was saved on the screen, and the probe still said *No company
+  token is set*.** Since the first build, no save made on the DPO Pay screen
+  had reached the vault.
+  - The screen sends its settings to the vault as one batch. Two of them,
+    `dpo_currencies` and `dpo_unpayable_statuses`, were not keys the vault
+    takes, and the vault refuses a whole batch for one such key.
+  - The screen reported that in green, like a success.
+  - The probe, the test page for DPO's reviewer, the return page, DPO's push
+    and the reconcile job read only the vault, so for them the token did not
+    exist. Only the screen and Pay Now saw it.
+  - **5.18.36:** every one of them reads what the screen saved first. The
+    batch goes through, a failure shows in red, and the probe says where its
+    settings came from.
 - **5.18.34:** the return, push and test addresses on the DPO screen, and the
   addresses Pay Now gives DPO, carried `:8443`. The screen read a copy of the
   settings without the setting that removes the port. Fixed; see

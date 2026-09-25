@@ -30,6 +30,7 @@ $dpDataDir = getDataDir($dpRoot);
 // while working perfectly everywhere else.
 $dpConfig  = DpoBootstrap::vaulted($store->load('kyc_config.json') ?? []);
 $dpNotice  = null;
+$dpNoticeKind = 'green';
 $dpError   = null;
 
 // ── Saving settings ─────────────────────────────────────────────────────
@@ -58,10 +59,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['dp_action'] ?? 
     $store->save('kyc_config.json', $dpConfig);
     // Mirror into the vault so a re-install does not lose the gateway —
     // exactly how the EFRIS credentials are held.
-    $dpV = ConfigVault::store($dpRoot, $dpDataDir, $dpPairs);
-    $dpNotice = empty($dpV['ok'])
-        ? 'Saved, but NOT vaulted: ' . ($dpV['error'] ?? 'unknown') . ' — it will be lost on re-install.'
-        : 'Saved.';
+    //
+    // The EFFECTIVE settings, not only the fields posted: a token saved
+    // earlier stays out of the form, so a save that left the field blank must
+    // still back it up. And only vault keys: store() refuses the whole batch
+    // for one key it does not know, which is how, until 5.18.36, not one save
+    // made on this screen reached the vault.
+    $dpV = ConfigVault::store($dpRoot, $dpDataDir,
+        array_intersect_key($dpConfig, array_flip(array_intersect(DpoBootstrap::KEYS, ConfigVault::VAULT_KEYS))));
+    if (empty($dpV['ok'])) {
+        $dpNotice     = 'Saved, but NOT vaulted: ' . ($dpV['error'] ?? 'unknown') . ' — it will be lost on re-install.';
+        $dpNoticeKind = 'red';
+    } else {
+        $dpNotice = 'Saved.';
+    }
     if (function_exists('logActivity')) {
         logActivity($dpDataDir, 'dpo_settings_saved', 'DPO Pay settings changed',
             'environment=' . $dpPairs['dpo_environment'] . ' enabled=' . $dpPairs['dpo_enabled']);
@@ -77,9 +88,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['dp_action'] ?? 
     $dpConfig = array_merge($dpConfig, $dpPairs);
     $store->save('kyc_config.json', $dpConfig);
     $dpV = ConfigVault::store($dpRoot, $dpDataDir, $dpPairs);
-    $dpNotice = empty($dpV['ok'])
-        ? 'New test link made, but NOT vaulted: ' . ($dpV['error'] ?? 'unknown') . '.'
-        : 'New test link made. Any earlier link no longer opens.';
+    if (empty($dpV['ok'])) {
+        $dpNotice     = 'New test link made, but NOT vaulted: ' . ($dpV['error'] ?? 'unknown') . '.';
+        $dpNoticeKind = 'red';
+    } else {
+        $dpNotice = 'New test link made. Any earlier link no longer opens.';
+    }
     if (function_exists('logActivity')) {
         logActivity($dpDataDir, 'dpo_test_link_made', 'DPO Pay test link replaced', '');
     }
@@ -172,7 +186,7 @@ table.dp tr:last-child td{border-bottom:none;}
   <div class="dp-sub">Invoice payments taken online by card or mobile money, and the
     settings that govern them.</div>
 
-  <?php if ($dpNotice): ?><div class="dp-note green"><?= $h($dpNotice) ?></div><?php endif; ?>
+  <?php if ($dpNotice): ?><div class="dp-note <?= $dpNoticeKind === 'red' ? 'red' : 'green' ?>"><?= $h($dpNotice) ?></div><?php endif; ?>
   <?php if ($dpError):  ?><div class="dp-note red">Could not read payments: <?= $h($dpError) ?></div><?php endif; ?>
 
   <?php if (!$dpReady['ready']): ?>

@@ -116,9 +116,20 @@ if (in_array('--ask', $args, true)) {
     }
     echo "  Service type: " . $stype . "\n\n";
 }
+// What the DPO Pay screen saved. Every DPO entry point reads that first
+// (DpoBootstrap::vaulted), this tool included; null when there is no store.
+$screen = DpoBootstrap::screenCopy($dataDir);
 if ($token === '' || $stype === '') {
-    echo "  " . ($token === '' ? 'No company token' : 'No service type') . " is set. Enter both on the\n"
-       . "  DPO Pay admin screen, or try a pair with --ask.\n\n";
+    echo "  " . ($token === '' ? 'No company token' : 'No service type') . " is set.";
+    if ($screen === null) {
+        echo " No settings database was found in\n  " . $dataDir . ".\n"
+           . "  Run this inside the ucrm container, from the plugin directory.\n\n";
+    } else {
+        echo " The DPO Pay screen has none saved:\n"
+           . "  open the plugin's Admin -> DPO Pay, enter the token and the service type,\n"
+           . "  press Save settings, and check the top of the screen says \"Saved.\"\n"
+           . "  Or try a pair with --ask.\n\n";
+    }
     exit(1);
 }
 // Checked BEFORE anything goes to DPO. A company token is a GUID; a service
@@ -137,6 +148,10 @@ if (preg_match('/^\d{1,10}$/', $stype) !== 1) {
     exit(1);
 }
 
+if (!in_array('--ask', $args, true)) {
+    echo "  Settings: " . ((string)($screen['dpo_company_token'] ?? '') !== ''
+        ? 'as saved on the DPO Pay screen.' : 'not from the DPO Pay screen.') . "\n\n";
+}
 $currencies = DpoBootstrap::currencies($config);
 $currency   = strtoupper(trim((string)($opt('--currency') ?? ($currencies[0] ?? 'UGX'))));
 $amount     = (float)($opt('--amount') ?? 1000);

@@ -492,3 +492,24 @@ the settings store's copy of `kyc_config.json`, which does not carry
 server may refuse. `dn_public_override()` now reads the install's value when the
 caller's copy lacks it. Copy the addresses for DPO only after 5.18.34 is
 deployed. Record: `docs/33-links-without-port.md`.
+
+**5.18.36 — one source for the DPO settings.** No save made on the DPO Pay
+screen had ever reached the vault.
+
+- `ConfigVault::store()` refuses a whole batch for one key it does not keep,
+  and the screen's batch carried two it did not: `dpo_currencies` and
+  `dpo_unpayable_statuses`.
+- The screen, the portal and `api_dpo.php` read the settings store's copy.
+- `dpo_test.php`, `dpo_return.php`, `dpo_push.php`, `cron/dpo_reconcile.php`
+  and `tools/dpo_probe.php` read `PluginConfig::load()`: files and the vault.
+  With the token saved on the screen, a payment could therefore be started and
+  never verified.
+
+The fix:
+
+- `DpoBootstrap::vaulted()` puts what the screen saved first, a saved blank
+  included, and fills from the vault only the keys the screen never saved.
+- Both keys are now vault keys.
+- The screen backs up the settings in effect, not only the fields posted,
+  filtered to vault keys, and shows a failure in red.
+- Record: `docs/32-dpo-pay-review.md` §8; test: `tests/test_dpo_one_source.php`.
