@@ -2,7 +2,8 @@
 
 **Status:** review written **before** code, 2026-09-25 (§A–§E); **built in
 development** (§F, commit `8d40936`); the staging command **built and
-rehearsed** (§G); its run on the server is **PENDING** (§H). The trigger was the
+rehearsed** (§G); **DEPLOYED on staging 2026-09-25 06:38:19 UTC, first
+attempt** (§I). The trigger was the
 staging command of `docs/127` §L.2, which asked for an Africa's Talking account
 the operator does not yet have. The operator's instruction was: *"i dont have
 currently keep it configuratblae from ui i will add later"*. Nothing here is
@@ -295,7 +296,7 @@ recreates no container and touches no production container. It sets no SMS
 account and sends no message. `DN_ALLOW_REAL_BINDINGS` stays absent and router
 delivery stays simulated.
 
-## H. Handover — PENDING
+## H. Handover
 
 1. **Run the one command** on the server, as root:
 
@@ -313,3 +314,36 @@ delivery stays simulated.
    for the worker*, then *in use*.
 4. Then add an owner with your own number and sign in on the phone. **Say only
    what the screen shows: never the code, and never the key.**
+
+## I. Result — DEPLOYED on staging, 2026-09-25 06:37:39–06:38:19 UTC
+
+The operator ran the one command and pasted the terminal. That was safe this
+time: the command prints no secret. **Every step passed on the first attempt,
+with no correction.**
+
+| Step | Observed |
+|---|---|
+| 0 | the operator app's build `2874d643…` deployed; the real staff login (trusted proxy `172.22.0.1`); the worker `simulated` with **no `DN_SMS`**; **one `DNB_SECRET_KEY` in the API, the worker and the app**; ledger `32|032`; O-1 `1|1|2|true` |
+| 1 | commit `8d40936` fetched by hash; **149 files, content digest `2af800b7…9c5a5c2d`** |
+| 2 | doctor 26 checks: 24 ok, 1 warn (*32 of 33 applied*), 0 blockers, 1 not measured (the SMS row, before 033 existed) |
+| 3 | the installer applied **exactly 033**; 33 migrations recorded |
+| 4 | the store is `dnb_def_auth`'s with no RLS, **no privilege held by anyone but its owner**, one row; **4 of 4** functions SECURITY DEFINER, each granted to exactly its role; `dnb_def_auth` may audit and kept no `CREATE`; the Admin read returns `key_set` only; 031/032 grants unchanged; O-1 unchanged. **The rolled-back probe:** `first\|true\|set`, `again\|false\|kept`, the refusal *a new username needs its API key typed again*, `audit\|1\|staff\|sms.settings_changed\|true\|true`, the worker's read, `report\|ok`, the Admin read. **8 login roles refused by execution, the owner `dnb` included**; residue 0 |
+| 5 | panel 200, `settings.js` 200, the SMS page in the bundle; session 401 naming `dishnet`; **both SMS routes 401 anonymously**; the worker logs **`"sms":"panel"`** and `{"version":0,"state":"off","binding":"null"}`, and **its report in the database is `off` at version 0, written after the restart**; the three environments unchanged; the app unchanged; through Traefik 200, 401 and 200; **Traefik not restarted** (started 2026-09-15); both route files unchanged |
+| 6 | **exactly the API, the app and the worker changed**; none removed |
+
+**What this establishes:**
+- On staging, the SMS account is now set in the Admin panel.
+- **No SMS sender is set yet**, so no sign-in code is sent, as before.
+- The worker follows the panel and reports what it is doing.
+
+**What it does not establish:** no message has reached a phone, and Africa's
+Talking stays **DOCUMENTED, UNVERIFIED** until the operator's first real sign-in
+(`docs/127` S-6, J-12).
+
+**Next, by the operator:**
+1. Sign in to the Admin panel as `dishnet-admin`. The first time, it asks you
+   to set up an authenticator app and change the password.
+2. When the Africa's Talking account exists, enter it under **Administration →
+   SMS for sign-in**.
+3. Then add an owner with your own number and sign in on the phone. Say only
+   what the screen shows: never the code, and never the key.

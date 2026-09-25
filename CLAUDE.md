@@ -3254,13 +3254,13 @@ The operator approved it: *"Yes, own address (Recommended)"*.
   file). **Do not run the operator-app command again**: once 033 is applied it
   stops at its first check and changes nothing (`docs/128` §G, S9).
 
-## SMS settings from the Admin panel — BUILT (migration 033, `docs/128`); the staging command BUILT and rehearsed, its run PENDING
+## SMS settings from the Admin panel — BUILT (migration 033, `docs/128`); DEPLOYED on staging 2026-09-25 06:38 UTC
 
 **At the operator's instruction:** *"i dont have currently keep it configuratblae
 from ui i will add later"*. The Africa's Talking account is entered in the Admin
-panel, not typed into a command. Built and proved in development, and the
-staging command rehearsed. **Nothing is deployed yet.** Nothing is HARDWARE
-VERIFIED; F6-B stays NOT AUTHORIZED.
+panel, not typed into a command. Built and proved in development, rehearsed,
+and **deployed on staging 2026-09-25 06:38:19 UTC** (the RESULT bullet below).
+Not in production. Nothing is HARDWARE VERIFIED; F6-B stays NOT AUTHORIZED.
 
 - **The binding key rule changed, deliberately:** the SMS API key may now also
   be typed into the Admin panel, over HTTPS, by a DishNet Admin signed in with
@@ -3333,10 +3333,27 @@ VERIFIED; F6-B stays NOT AUTHORIZED.
 - **Binding lesson, measured:** harness state from an earlier run travelled
   into a snapshot, and restoring it started a process that did not exist at
   that point. **A harness clears stale state before it builds its snapshots.**
+- **RESULT (`docs/128` §I): DEPLOYED on staging 2026-09-25
+  06:37:39–06:38:19 UTC, first attempt, no correction.**
+  - Built `2af800b7…` from `8d40936` by hash. The step-0 checks held: one
+    `DNB_SECRET_KEY` in all three containers, and no `DN_SMS` on the worker.
+  - Doctor 24 ok, 1 warn (*32 of 33*), 0 blockers, 1 not measured.
+  - The installer applied **exactly 033**.
+  - The catalogue matched. The rolled-back probe gave `set`, then `kept`, then
+    the refusal, with one audit row. **8 login roles were refused by execution**;
+    residue 0.
+  - The worker logs **`"sms":"panel"`**, and reports `off` at version 0 in the
+    database after the restart. Both SMS routes answer 401 anonymously, also
+    through Traefik.
+  - Only the API, the app and the worker changed. Traefik was not restarted.
+  - **No SMS sender is set yet, so no code is sent**, and no message has
+    reached a phone.
 - **The operator's actions:**
-  1. Run the one command.
-  2. Send back the **log file**.
-  3. Later, when the account exists, enter it in the panel under
+  1. ~~Run the one command; send back the log~~ — done. The operator pasted the
+     terminal; this command prints no secret.
+  2. Sign in to the Admin panel as `dishnet-admin`. The first time, it asks for
+     an authenticator app and a new password.
+  3. When the Africa's Talking account exists, enter it under
      **Administration → SMS for sign-in**. **Say only what the screen shows:
      never the code, and never the key.**
 
