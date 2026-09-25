@@ -36,6 +36,7 @@ require_once __DIR__ . '/lib/bootstrap_data.php';
 require_once __DIR__ . '/lib/CrmApiClient.php';
 require_once __DIR__ . '/lib/NotificationService.php';
 require_once __DIR__ . '/lib/QuotationService.php';
+require_once __DIR__ . '/lib/QuoteWaLedger.php';
 
 $pluginRoot = __DIR__;
 $dataDir    = getDataDir($pluginRoot);
@@ -74,15 +75,11 @@ $sentIds = array_map('intval', $state['sent_ids'] ?? []);
 
 // v4.11.3: SQLite-backed dedup table — atomic guard against double-send
 // INSERT OR IGNORE means only the first send wins; duplicates are rejected atomically.
+// 5.18.30: defined in lib/QuoteWaLedger.php, which the quote.add webhook
+// claims through too (kyc_messages_like_crm).
 $_qwaPdo = $store->getPdo();
 try {
-    $_qwaPdo->exec("CREATE TABLE IF NOT EXISTS wa_sent_quotes (
-        quote_id   INTEGER NOT NULL,
-        quote_ref  TEXT    NOT NULL DEFAULT '',
-        source     TEXT    NOT NULL DEFAULT '',
-        sent_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (quote_id)
-    )");
+    QuoteWaLedger::ensure($_qwaPdo);
 } catch (\Throwable $e) {}
 
 $sent    = 0;
@@ -189,11 +186,8 @@ foreach ($apps as $app) {
 
     // v4.11.3: Atomic SQLite dedup -- INSERT OR IGNORE prevents double-send
     // If another cron run already sent this quote, rowCount=0 and we skip.
-    $_qwaInsert = $_qwaPdo->prepare(
-        "INSERT OR IGNORE INTO wa_sent_quotes (quote_id, quote_ref, source) VALUES (?, ?, ?)"
-    );
-    $_qwaInsert->execute([$quoteId, $quoteRef, 'flow_a_kyc']);
-    if ($_qwaInsert->rowCount() === 0) {
+    // 5.18.30: so does the quote.add webhook, when it sent the quote itself.
+    if (!QuoteWaLedger::claim($_qwaPdo, $quoteId, (string)$quoteRef, 'flow_a_kyc')) {
         qwa_log("DEDUP BLOCK Flow A: quote #" . $quoteId . " " . $quoteRef . " already in wa_sent_quotes -- skipping");
         $skipped++;
         $store->updateOne('kyc_applications.json', 'id', $appId, [
@@ -332,11 +326,7 @@ foreach ($quotes as $q) {
     ]);
 
     // v4.11.3: Atomic SQLite dedup for Flow B (manual UCRM quotes)
-    $_qwaInsB = $_qwaPdo->prepare(
-        "INSERT OR IGNORE INTO wa_sent_quotes (quote_id, quote_ref, source) VALUES (?, ?, ?)"
-    );
-    $_qwaInsB->execute([$qId, $qNumber, 'flow_b_ucrm']);
-    if ($_qwaInsB->rowCount() === 0) {
+    if (!QuoteWaLedger::claim($_qwaPdo, $qId, (string)$qNumber, 'flow_b_ucrm')) {
         qwa_log("DEDUP BLOCK Flow B: quote #" . $qId . " " . $qNumber . " already in wa_sent_quotes -- skipping");
         $sentIds[] = $qId;
         $skipped++;

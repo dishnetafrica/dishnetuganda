@@ -151,6 +151,14 @@ $FLAGS = [
     'kyc_welcome_timeline' => ['text',
         'Installation times in the KYC booking confirmation, sent as written ("omit" = none; '
       . 'unset = the South Sudan Fiber, Starlink and DishNet 4G lines)'],
+    // 5.18.30: which WhatsApp messages a customer the KYC form puts into uCRM
+    // gets. Unset keeps the plugin's own — "Request Confirmed!" at once, the
+    // proforma quotation three minutes later — which is what South Sudan
+    // sends. On, exactly what a customer created in uCRM gets: "Welcome to
+    // DishNet!", then the Quotation & Order Summary with the quotation PDF.
+    'kyc_messages_like_crm' => ['bool',
+        'KYC customers get the WhatsApp a customer created in uCRM gets: "Welcome to DishNet!", then the '
+      . 'Quotation & Order Summary with its PDF (unset = the plugin\'s "Request Confirmed!" and proforma)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {

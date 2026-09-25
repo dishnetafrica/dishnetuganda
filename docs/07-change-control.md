@@ -287,3 +287,41 @@ line for `kyc_welcome_timeline`.
 day, so the confirmation promises no installation time, as `ai_fact_delivery`
 already tells the assistant. Application 2 still waits for a person to compare
 it with uCRM client #10.
+
+## 5.18.30 — a KYC customer gets uCRM's WhatsApp messages
+
+**25 September 2026** · `webhook.php`, `lib/NotificationService.php`,
+`lib/QuoteWaLedger.php` (new), `cron_quote_wa.php`, `tools/set_config.php`,
+`tests/test_kyc_crm_messages.php` (new), `tests/fixtures/fake_ucrm_kyc.php`.
+Record: [30](30-kyc-customers-not-reaching-ucrm.md) §9.
+
+At the operator's request, a customer registered with the KYC form can now get
+the WhatsApp a customer created in uCRM gets: "🎉 Welcome to DishNet!", then
+the "📄 Quotation & Order Summary" with the quotation PDF. Until now they got
+the plugin's "Request Confirmed!" and, three minutes or more later, a
+proforma-style quotation. A customer the retry job created got no greeting at
+all.
+
+- New setting `kyc_messages_like_crm` (yes/no). **Unset changes nothing** —
+  South Sudan, and this install until it is set.
+- On, uCRM's `client.add` welcomes KYC customers too, and the form's own
+  customer message is not sent; the agent's message stays.
+- On, uCRM's `quote.add` sends the summary and the PDF straight away, the same
+  path as a quote made in uCRM.
+- `cron_quote_wa.php` stays as the fallback if uCRM's quote webhook never
+  arrives. The webhook and the cron claim each quote in the table the cron
+  already used against double sends (now `lib/QuoteWaLedger.php`), so only
+  one of them sends it. If the claim cannot be written, nothing is sent.
+- Fixed on the way: the dry-run message log could erase itself when a message
+  was cut through an emoji. It now cuts on a character boundary. Dry-run
+  only.
+
+Tests: 58 assertions in the new file, driving the real form, the real webhook
+under `php -S` and the real cron against a fake uCRM; 16 weakened copies each
+caught by counted failures; full suite 187 files green twice.
+
+**Applied by:** the operator: `deploy-hybrid.sh`, then one `set_config.php`
+line setting `kyc_messages_like_crm` to 1.
+**Rollback:** clear the setting with `--clear` (the old messages return at
+once), or `git checkout 96c0f91` and deploy again.
+**Status:** built and tested; not deployed.

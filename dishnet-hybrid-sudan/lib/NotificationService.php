@@ -185,7 +185,10 @@ class NotificationService
             'status'    => 'dry_run_skipped',
             'phone'     => $phone,
             'event'     => $event,
-            'message'   => substr($message, 0, 200) . (strlen($message) > 200 ? '...' : ''),
+            // mb_strcut: at most 200 bytes, never half a character. substr()
+            // split emoji, json_encode below then returned false, and the
+            // write replaced the whole log with nothing (5.18.30, measured).
+            'message'   => mb_strcut($message, 0, 200, 'UTF-8') . (strlen($message) > 200 ? '...' : ''),
             'vars'      => $vars,
             'timestamp' => date('Y-m-d H:i:s'),
         ];
@@ -378,6 +381,20 @@ class NotificationService
         $this->sendVia(self::SUPPORT, $retailer['phone'] ?? '', $agentMsg, 'ops_kyc_additional_service', $vars);
     }
 
+    /**
+     * kyc_messages_like_crm (5.18.30): a customer the KYC form puts into uCRM
+     * gets the WhatsApp messages a customer created in uCRM gets — the
+     * client.add "Welcome to DishNet!", then the quote.add "Quotation & Order
+     * Summary" with the quotation PDF (webhook.php) — instead of this class's
+     * "Request Confirmed!" and cron_quote_wa's proforma three minutes later.
+     * Off unless set, so an install that sets nothing sends what it sends
+     * today. Read with FILTER_VALIDATE_BOOLEAN, as tools/set_config.php shows it.
+     */
+    public static function kycLikeCrm(array $config): bool
+    {
+        return filter_var($config['kyc_messages_like_crm'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
     public function kycCrmCreated(array $retailer, array $application, string $crmClientId): void
     {
         $firstName    = trim($application['firstname'] ?? '');
@@ -436,9 +453,11 @@ class NotificationService
         // Skip if delivery PDF + caption was already sent (cash sale with payment).
         // The PDF caption contains the welcome message, next steps, and contacts.
         // Credit/lead customers still get this welcome message.
+        // Skip too under kyc_messages_like_crm: uCRM's client.add welcome is
+        // this customer's first message then, as for a customer made in uCRM.
         $deliveryPdfSent = !empty($application['delivery_pdf_sent']);
         $customerPhone = preg_replace('/[^0-9+]/', '', $application['mobile'] ?? '');
-        if ($customerPhone && !$deliveryPdfSent) {
+        if ($customerPhone && !$deliveryPdfSent && !self::kycLikeCrm($this->cfgForContacts)) {
             // Timeline — highlight the customer's actual service
             $fiberLine    = $isFiber
                 ? "🔴 *Fiber: 3–5 working days* ← Your service"

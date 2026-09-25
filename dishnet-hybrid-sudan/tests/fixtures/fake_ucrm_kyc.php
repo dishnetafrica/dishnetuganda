@@ -21,6 +21,12 @@ declare(strict_types=1);
  * (field 43 missing), sudan_taxfield (field 1 is efrisTin), refuse (every
  * create answers 404), down (everything answers 503).
  *
+ * Quotes (5.18.30, tests/test_kyc_crm_messages.php) are kept as uCRM keeps
+ * them — a draft (status 0) with its items and totals — listed, approved by a
+ * PATCH of their status, and served as a PDF at /quotes/{id}/pdf. The first
+ * quote of a scenario is id 77, number Q-77, as it always was here.
+ * pdf_down (via /__test/set) makes the PDF answer 404.
+ *
  * State lives in a temp file per port. /__test/reset?scenario=… resets it,
  * /__test/set (POST JSON) merges keys (existing clients, taken usernames),
  * /__test/log returns every request.
@@ -29,7 +35,7 @@ $port      = (string)($_SERVER['SERVER_PORT'] ?? '0');
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_kyc_' . $port . '.json';
 $state     = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
 $state    += ['scenario' => 'uganda', 'seq' => 900, 'log' => [], 'clients' => [], 'taken' => [], 'payments' => [],
-               'refuse_quotes' => false];
+               'refuse_quotes' => false, 'quotes' => [], 'quote_seq' => 76, 'pdf_down' => false];
 
 $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $uri    = (string)($_SERVER['REQUEST_URI'] ?? '/');
@@ -55,7 +61,8 @@ function kyc_out($data, int $code = 200): void
 if ($path === '/__test/ping')  kyc_out(['marker' => 'FAKE-UCRM-KYC', 'token' => (string)getenv('FAKE_UCRM_KYC_TOKEN')]);
 if ($path === '/__test/reset') {
     kyc_save(['scenario' => (string)($q['scenario'] ?? 'uganda'), 'seq' => 900, 'log' => [], 'clients' => [],
-              'taken' => [], 'payments' => [], 'refuse_quotes' => false], $stateFile);
+              'taken' => [], 'payments' => [], 'refuse_quotes' => false, 'quotes' => [], 'quote_seq' => 76,
+              'pdf_down' => false], $stateFile);
     kyc_out(['ok' => true]);
 }
 if ($path === '/__test/set') { kyc_save(array_merge($state, $body), $stateFile); kyc_out(['ok' => true]); }
@@ -149,11 +156,41 @@ if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'GET') {
 if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'PATCH') kyc_out(['id' => (int)$m[1]] + $body);
 if (preg_match('#^/clients/(\d+)/add-tag/(\d+)$#', $p) && $method === 'PATCH') kyc_out(['ok' => true]);
 if ($p === '/documents' && $method === 'POST') kyc_out(['id' => 1], 201);
-if (preg_match('#^/clients/(\d+)/quotes$#', $p) && $method === 'POST') {
+if (preg_match('#^/clients/(\d+)/quotes$#', $p, $m) && $method === 'POST') {
     if (!empty($state['refuse_quotes'])) kyc_out(['code' => 403, 'message' => 'Forbidden'], 403);
-    kyc_out(['id' => 77, 'number' => 'Q-77'], 201);
+    $id    = ++$state['quote_seq'];
+    $items = [];
+    $total = 0.0;
+    foreach ((array)($body['items'] ?? []) as $it) {
+        $line  = (float)($it['quantity'] ?? 1) * (float)($it['price'] ?? 0);
+        $total += $line;
+        $items[] = ['label' => (string)($it['label'] ?? ''), 'quantity' => (float)($it['quantity'] ?? 1),
+                    'price' => (float)($it['price'] ?? 0), 'total' => $line];
+    }
+    $quote = ['id' => $id, 'number' => 'Q-' . $id, 'clientId' => (int)$m[1], 'status' => 0,
+              'items' => $items, 'total' => $total, 'createdDate' => date('c')];
+    $state['quotes'][(string)$id] = $quote;
+    kyc_save($state, $stateFile);
+    kyc_out($quote, 201);
 }
-if (preg_match('#^/billing/quotes/(\d+)(/send)?$#', $p)) kyc_out(['id' => 77, 'number' => 'Q-77']);
+if (preg_match('#^/billing/quotes/(\d+)(/send)?$#', $p, $m)) {
+    $quote = $state['quotes'][$m[1]] ?? null;
+    if ($quote === null) kyc_out(['id' => (int)$m[1], 'number' => 'Q-' . $m[1]]);
+    if ($method === 'PATCH' && empty($m[2]) && isset($body['status'])) {
+        $quote['status'] = (int)$body['status'];
+        $state['quotes'][$m[1]] = $quote;
+        kyc_save($state, $stateFile);
+    }
+    kyc_out($quote);
+}
+if ($p === '/billing/quotes' && $method === 'GET') kyc_out(array_values((array)$state['quotes']));
+if (preg_match('#^/quotes/(\d+)/pdf$#', $p, $m) && $method === 'GET') {
+    if (!empty($state['pdf_down']) || !isset($state['quotes'][$m[1]])) kyc_out(['code' => 404, 'message' => 'Not Found'], 404);
+    http_response_code(200);
+    header('Content-Type: application/pdf');
+    echo "%PDF-1.4\n% FAKE uCRM quotation Q-{$m[1]} — TEST ONLY\n" . str_repeat("0", 700) . "\n%%EOF\n";
+    exit;
+}
 if ($p === '/payments' && $method === 'GET') kyc_out((array)$state['payments']);
 if ($p === '/payments' && $method === 'POST') {
     $state['seq']++;

@@ -281,3 +281,96 @@ usually 1–3 working days after payment (Kampala and major cities)"*.
   `kyc_welcome_timeline` = `omit`. The confirmation promises no installation
   time; it says the support team will call to schedule installation, and
   gives the sales and support WhatsApp links.
+
+## 9. What 5.18.30 changes — a KYC customer gets uCRM's messages
+
+**The ask (operator, 25 September):** a customer registered with the KYC form
+should get on WhatsApp what a customer created directly in uCRM gets — first
+*"🎉 Welcome to DishNet! … Your account has been created. Our team will be in
+touch to complete your connection."*, then the *"📄 Quotation & Order
+Summary"* with the quotation PDF.
+
+**What happened until now — read from the code:**
+
+- uCRM's `client.add` webhook sends that welcome only when no KYC application
+  carries the client's uCRM id. For a KYC customer it stayed silent.
+- The form sent its own message instead: *"🌟 DishNet Africa – Request
+  Confirmed!"* (`NotificationService::kycCrmCreated`).
+- uCRM's `quote.add` webhook handed a KYC customer's quote to
+  `cron_quote_wa.php`. The cron sent a different, proforma-style quotation and
+  its PDF, three or more minutes later.
+- A customer the **retry job** created got no greeting at all. `client.add`
+  found the application, and the retry sends nothing itself. Applications 1
+  and 3 are such customers.
+
+**New setting `kyc_messages_like_crm`** (yes/no). **Unset, nothing changes** —
+that is South Sudan, and this install until it is switched on. On:
+
+1. `client.add` sends the welcome to KYC customers too, including those the
+   retry job creates. The text is the one a uCRM-created customer gets.
+2. The form no longer sends *"Request Confirmed!"* to the customer. The
+   agent's *"CRM Account Created"* message and the tracking record stay.
+3. `quote.add` sends the Quotation & Order Summary, then the PDF, straight
+   away — the same code path as a quote made in uCRM.
+4. **The welcome comes first.** `client.add` fires when uCRM creates the
+   client, before any quote exists. The summary follows `quote.add`'s 5-second
+   wait for uCRM's PDF.
+5. **The cron stays as a fallback.** The form still queues the quote for
+   `cron_quote_wa.php`, in case uCRM's quote webhook never reaches the plugin.
+   - Whichever sender goes first records the quote in `wa_sent_quotes`. That
+     is the table the cron already used to stop double sends, now defined in
+     `lib/QuoteWaLedger.php`. The other sender then sends nothing.
+   - If the webhook cannot write that record, it sends nothing and leaves the
+     quote to the fallback. It never risks sending it twice.
+   - The fallback sends the old proforma format.
+
+**Not changed:**
+
+- Customers created in uCRM get the same messages, switch on or off (tested).
+- E-mail: the quotation e-mail and uCRM's own.
+- Nothing is re-sent to customers already registered, applications 1 and 3
+  included.
+- The **delivery note** for a Cash sale where money was collected still goes
+  out. It is a record of payment and equipment handed over, not a greeting.
+  Its caption still says *"Starlink setup: 1–2 working days after
+  scheduling"*, which `kyc_welcome_timeline = omit` does not reach. Recorded,
+  not changed.
+
+**Found on the way, fixed:** the dry-run message log cut every message at
+byte 200.
+- A cut through an emoji made `json_encode` fail, and the write that followed
+  replaced the whole log with nothing (measured: 0 bytes).
+- It now cuts on a character boundary (`mb_strcut`).
+- Dry-run only; live sends were never affected.
+
+**Tests:** `tests/test_kyc_crm_messages.php`, 58 assertions. It runs the real
+code in sale order: the form (`post_kyc.php` → `KycService`), then uCRM's
+`client.add` and `quote.add` through the real `webhook.php` under `php -S`,
+then the real `cron_quote_wa.php` in the live directory layout. The uCRM is
+a fake. Every WhatsApp is read back from the dry-run log, in order.
+
+- **Unset:** Request Confirmed, then the proforma and its PDF — exactly as
+  before.
+- **On:** welcome, then summary, then PDF, and nothing more from the cron.
+- **Duplicate guards:**
+  - the ledger, not the application's flag, stops a second send;
+  - a late `quote.add` stands down after the fallback has sent;
+  - uCRM with no PDF: the summary alone, still sent once;
+  - a record that cannot be written means nothing is sent.
+- **Unchanged paths:** a uCRM-created customer gets the same with the switch
+  on or off, and no record is taken for it.
+- **The retry:** a customer the retry job creates gets the welcome.
+- **Two applications, one customer:** only the quoted application is marked.
+- **The dry-run log:** survives a cut through an emoji.
+
+Sixteen weakened copies are each caught by counted failures. The full plugin
+suite passed twice: 187 files, 7,054 counted assertions, 0 failed.
+
+**Deploy, then switch it on** (as the plugin folder's owner):
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/deploy-hybrid.sh
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key kyc_messages_like_crm --value 1
+```
+
+To go back: the same line with `--clear` in place of `--value 1`.

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/lib/timezone.php';
 require_once __DIR__ . '/lib/QuotePdfToken.php';
+require_once __DIR__ . '/lib/QuoteWaLedger.php';
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -716,7 +717,11 @@ switch ($changeType) {
         if ($phone) {
             // Welcome message — only if NOT already sent by plugin (check local apps)
             $existingApp = $store->findOne('kyc_applications.json', 'crm_client_id', (string)$clientId);
-            if (!$existingApp) {
+            // kyc_messages_like_crm (5.18.30): a customer the KYC form put into
+            // uCRM gets this welcome too, as one created in uCRM does; the form
+            // then sends no booking message of its own (kycCrmCreated).
+            $kycLikeCrm = $existingApp && NotificationService::kycLikeCrm($config);
+            if (!$existingApp || $kycLikeCrm) {
                 // Client created directly in UCRM (not via our KYC form) — send welcome.
                 // The text is written here on purpose: NotificationService::send()
                 // sends exactly what it is handed since 5.18.4. Before that it built
@@ -732,7 +737,8 @@ switch ($changeType) {
                     'crm_id'        => (string)$clientId,
                     '_raw_message'  => $welcome,
                 ]);
-                whLog($changeType, "Welcome sent to {$name} ({$phone})", ['crm_id' => $clientId]);
+                whLog($changeType, "Welcome sent to {$name} ({$phone})"
+                    . ($kycLikeCrm ? ' — KYC customer, kyc_messages_like_crm' : ''), ['crm_id' => $clientId]);
             } else {
                 whLog($changeType, "KYC-registered client — welcome already sent by plugin", ['crm_id' => $clientId]);
             }
@@ -2552,7 +2558,15 @@ switch ($changeType) {
             //   2) UCRM has generated the PDF
             //   3) Customer gets text + PDF together
             $kycApp = $store->findOne('kyc_applications.json', 'crm_client_id', (string)$clientId);
-            if ($kycApp) {
+            // kyc_messages_like_crm (5.18.30): a KYC customer's quotation goes
+            // out below, exactly as one made in uCRM — there is no "Request
+            // Confirmed!" to wait for (kycCrmCreated sends none), and the
+            // welcome went first: client.add fires when the client is created,
+            // before any quote exists. The form still queues the quote for
+            // cron_quote_wa, as a fallback in case this webhook never arrives;
+            // the claim taken below keeps the two from both sending it.
+            $kycLikeCrm = $kycApp && NotificationService::kycLikeCrm($config);
+            if ($kycApp && !$kycLikeCrm) {
                 $isCashPaid = strtolower(trim($kycApp['sales_type'] ?? '')) === 'cash'
                            && (float)($kycApp['amount_charged'] ?? 0) > 0;
 
@@ -2670,6 +2684,23 @@ switch ($changeType) {
             // Keep full message for text-only fallback
             $fullMsg = $msg;
 
+            // Under kyc_messages_like_crm, once the quotation is out the
+            // application says so, and the cron's queue skips it without
+            // fetching the quote again (the claim below is what stops it
+            // sending; this saves it the work).
+            $kycSent = function () use ($kycLikeCrm, $store, $quoteId): void {
+                if (!$kycLikeCrm) return;
+                foreach ($store->findAll('kyc_applications.json', 'quote_id', $quoteId) as $qa) {
+                    if (empty($qa['id']) || !empty($qa['wa_quote_sent'])) continue;
+                    $store->updateOne('kyc_applications.json', 'id', (int)$qa['id'], [
+                        'wa_quote_pending' => false,
+                        'wa_quote_sent'    => true,
+                        'wa_quote_sent_at' => date('Y-m-d H:i:s'),
+                        'wa_quote_sent_by' => 'webhook',
+                    ]);
+                }
+            };
+
             whLog($changeType, "Quote #{$quoteNum} → preparing PDF+caption for {$name} ({$phone})", ['amount' => $amountFmt]);
 
             // NOTE: Do NOT mark sent_ids here — only mark AFTER successful send.
@@ -2698,6 +2729,27 @@ switch ($changeType) {
             } else {
                 ob_end_flush();
                 flush();
+            }
+
+            // Under kyc_messages_like_crm, one sender per quotation: the claim
+            // cron_quote_wa takes before it sends (QuoteWaLedger). Refused means
+            // the cron's fallback sent it first; an error sends nothing either,
+            // leaving the quote to that fallback rather than risking it twice.
+            // Other quotes are not claimed — their path is unchanged.
+            if ($kycLikeCrm) {
+                $kycClaimErr = '';
+                try {
+                    $kycClaimed = QuoteWaLedger::claim($store->getPdo(), (int)$quoteId, (string)$quoteNum, 'webhook_kyc');
+                } catch (\Throwable $e) {
+                    $kycClaimed  = false;
+                    $kycClaimErr = $e->getMessage();
+                }
+                if (!$kycClaimed) {
+                    whLog($changeType, $kycClaimErr === ''
+                        ? "Quote #{$quoteNum} already sent by cron_quote_wa — not sending it again"
+                        : "Quote #{$quoteNum} not sent: its send record could not be written ({$kycClaimErr}) — left to cron_quote_wa");
+                    exit;
+                }
             }
 
             // Background: fetch PDF from UCRM
@@ -2778,6 +2830,7 @@ switch ($changeType) {
                             'ops_quote_pdf');
                         whLog($changeType, "Quote TEXT + PDF SENT: #{$quoteNum} → {$name} (attempt {$retry})");
                         $pdfSent = true;
+                        $kycSent();
 
                         // Mark as sent NOW — after confirmed delivery
                         $qwaSentIds[] = $quoteId;
@@ -2802,6 +2855,7 @@ switch ($changeType) {
                     'customer_name' => $name, 'quote_num' => $quoteNum, 'amount' => $amountFmt,
                 ]);
                 whLog($changeType, "Text-only quote sent: #{$quoteNum} → {$name}");
+                $kycSent();
 
                 // Mark as sent after text-only delivery
                 $qwaSentIds[] = $quoteId;
