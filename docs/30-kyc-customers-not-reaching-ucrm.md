@@ -276,6 +276,8 @@ usually 1–3 working days after payment (Kampala and major cities)"*.
 
 - Application 2 still waits for a person to compare it with client #10.
 - The assistant's own delivery fact (`ai_fact_delivery`) tells it not to
-  promise a number of days. The confirmation now does, in the FAQ's words.
-  Whether both should say the same is the operator's call; `omit` removes the
-  timeline from the confirmation.
+  promise a number of days, and the confirmation now did, in the FAQ's words.
+  **The operator chose the assistant's rule the same day:**
+  `kyc_welcome_timeline` = `omit`. The confirmation promises no installation
+  time; it says the support team will call to schedule installation, and
+  gives the sales and support WhatsApp links.

@@ -282,6 +282,8 @@ them:
 line for `kyc_welcome_timeline`.
 **Rollback:** `git checkout 0d20e05` and deploy again; clear the setting with
 `--clear`.
-**Status:** deployed 25 September 2026 (`ea18fef`, over `0d20e05`), and
-`kyc_welcome_timeline` set to the FAQ's wording. Application 2 still waits for
-a person to compare it with uCRM client #10.
+**Status:** deployed 25 September 2026 (`ea18fef`, over `0d20e05`).
+`kyc_welcome_timeline` was set to the FAQ's wording, then to `omit` the same
+day, so the confirmation promises no installation time, as `ai_fact_delivery`
+already tells the assistant. Application 2 still waits for a person to compare
+it with uCRM client #10.
