@@ -374,3 +374,28 @@ docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hy
 ```
 
 To go back: the same line with `--clear` in place of `--value 1`.
+
+**Deployed 25 September 2026.** The container went from `ea18fef` to
+`723233a`. `set_config.php` saved `kyc_messages_like_crm = 1`, and its listing
+shows it ON.
+
+- That listing reads the **settings file**. The webhook reads the file too,
+  so uCRM's welcome and quotation messages will follow the switch.
+- The KYC form reads the **store's copy** (`public.php` line 494), which
+  `PluginConfig::saveOverrides()` updates on a best-effort basis: a failure
+  there is silent by design. If that copy lacked the key, the form would
+  still send *"Request Confirmed!"* while uCRM's webhook also sent the
+  welcome.
+- Read-only check of that copy. It opens the database read-only (a write
+  through it is refused) and prints only these two settings:
+
+```
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php -r 'require "lib/bootstrap_data.php"; $p = new PDO("sqlite:" . cliDataDir(getcwd()) . "/plugin.sqlite3", null, null, [PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]); $c = json_decode((string)$p->query("SELECT data FROM kyc_config WHERE id = 0")->fetchColumn(), true) ?: []; foreach (["kyc_messages_like_crm", "kyc_welcome_timeline"] as $k) echo $k, " = ", var_export($c[$k] ?? null, true), "\n";'
+```
+
+  Expected: `kyc_messages_like_crm = '1'` and `kyc_welcome_timeline =
+  'omit'`. `NULL` on the first line means the form has not seen the switch.
+  Rehearsed against a store built the plugin's way: `'1'` with the setting
+  mirrored, `NULL` without it. **Result on the server: pending.**
+- The first live evidence of the messages themselves is the next KYC
+  registration.
