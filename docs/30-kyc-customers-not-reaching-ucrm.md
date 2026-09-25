@@ -396,6 +396,8 @@ docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hy
   Expected: `kyc_messages_like_crm = '1'` and `kyc_welcome_timeline =
   'omit'`. `NULL` on the first line means the form has not seen the switch.
   Rehearsed against a store built the plugin's way: `'1'` with the setting
-  mirrored, `NULL` without it. **Result on the server: pending.**
+  mirrored, `NULL` without it. **Result on the server, 25 September:**
+  `kyc_messages_like_crm = '1'`, `kyc_welcome_timeline = 'omit'`. The form
+  and the webhook see the same switch, so no customer gets both greetings.
 - The first live evidence of the messages themselves is the next KYC
   registration.

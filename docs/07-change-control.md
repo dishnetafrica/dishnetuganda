@@ -326,5 +326,6 @@ line setting `kyc_messages_like_crm` to 1.
 once), or `git checkout 96c0f91` and deploy again.
 **Status:** deployed 25 September 2026 (`723233a`, over `ea18fef`).
 `kyc_messages_like_crm` was set to 1 straight after, and the settings file
-reads it back ON. The KYC form reads the store's copy instead; the read-only
-check for that copy is in [30](30-kyc-customers-not-reaching-ucrm.md) §9.
+reads it back ON. The KYC form reads the store's copy instead; a read-only
+check of that copy showed `'1'` there too ([30](30-kyc-customers-not-reaching-ucrm.md)
+§9). Live evidence of the messages waits for the next KYC registration.
