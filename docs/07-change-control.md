@@ -217,3 +217,39 @@ master switch each fail 3 assertions.
 least ten drafts have been read — no draft has ever been produced on this
 install, so there is no evidence yet about their quality, and 257 open
 follow-ups against a cap of 30/day is nine days of unread messages.
+
+## 5.18.28 — KYC customers reach uCRM
+
+**25 September 2026** · `lib/UcrmClientTarget.php` (new), `lib/KycCrmSync.php`
+(new), `lib/EfrisClientField.php` (new), `lib/KycService.php`,
+`lib/EfrisInvoiceMapper.php`, `cron/kyc_crm_sync.php`,
+`includes/post/post_kyc.php`, `tabs/sales/applications.php`, `main.php`,
+`includes/api/api_crm_misc.php`, `tests/test_kyc_crm_create.php` (new),
+`tests/fixtures/fake_ucrm_kyc.php` (new). Full record:
+[30](30-kyc-customers-not-reaching-ucrm.md).
+
+Every customer registered through the staff app's KYC wizard was saved in the
+plugin and refused by uCRM with `404 Not Found`: the create named organization
+2 and custom fields 36–43, none of which exist on this uCRM, and custom field 1
+— which it sent as *Sales Person* — is the EFRIS TIN here. The agent was told
+"Customer saved!", Orders counted the customer "In CRM ✓", and the retry job
+had never run. Three applications (12–24 September) were waiting.
+
+The organization and custom fields are now checked against the connected uCRM
+before the create: organization 2 where it exists, else the only one, else
+refuse; the nine fields only where all nine exist and none is a tax field.
+This install gets organization 1 and no custom fields; the South Sudan layout
+gets a byte-identical request. The retry job works (claim, fit, a same-phone
+check that stops for a person, create, then what the form would have done),
+a refused create is shown in amber with uCRM's reason, Orders counts from the
+uCRM id, and an admin can retry from Orders.
+
+Tests: 112 assertions in the new file; 29 weakened copies each caught by
+counted failures; full suite 186 files green twice.
+
+**Applied by:** the operator, with `deploy-hybrid.sh`.
+**Rollback:** `git checkout <the commit --check reported>` and deploy again;
+clients already created in uCRM stay.
+**Status:** pending deploy. Before deploying, check the three waiting customers
+were not typed into uCRM by hand. After it, they arrive under Leads within ten
+minutes, or stop on Orders for a person to check.

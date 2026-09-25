@@ -87,8 +87,29 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_submit'){
         $_SESSION['last_kyc_crm_id']          = $app['crm_client_id'] ?? '';
         $_SESSION['last_kyc_app_id']          = $app['id'] ?? null;
     }
-    flash($result['message'],$result['success']?'success':'danger');
+    // Saved here but not in uCRM is not a success: it is shown in amber, with
+    // the reason, instead of the green that hid every refused create.
+    $kycFlash = !$result['success'] ? 'danger'
+              : ((($result['data']['crm_sync_status'] ?? '') === 'pending') ? 'warning' : 'success');
+    flash($result['message'], $kycFlash);
     redirect('?page=dashboard&tab=form');
+}
+// ── Retry the uCRM create for an application that has not reached uCRM ──────
+// The Orders screen's "Retry now": the same code as the five-minute retry job
+// (lib/KycCrmSync.php), on the plugin's own uCRM key. force=1 is sent only by
+// the button a person presses after checking a possible duplicate that the
+// retry stopped at.
+if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_crm_retry'){
+    $admin = $auth->requireAdmin();
+    require_once __DIR__ . '/../../lib/KycCrmSync.php';
+    $retry = (new KycCrmSync($store, $crm, is_array($config ?? null) ? $config : []))->syncOne(
+        (int)($_POST['app_id'] ?? 0),
+        ($_POST['force'] ?? '') === '1',
+        'admin:' . (string)($admin['name'] ?? $admin['email'] ?? $admin['id'] ?? 'unknown')
+    );
+    flash($retry['message'], $retry['ok'] ? 'success'
+        : (in_array($retry['status'], ['review', 'busy'], true) ? 'warning' : 'danger'));
+    redirect('?page=dashboard&tab=applications');
 }
 // ── Re-upload failed KYC photos directly to an existing CRM client ───────────
 if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_reupload_docs'){

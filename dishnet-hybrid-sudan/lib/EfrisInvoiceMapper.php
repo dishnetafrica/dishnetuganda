@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/EfrisClientField.php';
+
 /**
  * EfrisInvoiceMapper — uCRM invoice + client → the plugin's INTERNAL fiscal
  * model. Pure transform: never talks to uCRM or EFRIS.
@@ -320,15 +322,12 @@ class EfrisInvoiceMapper
     {
         $out = ['tin' => '', 'brn' => '', 'nin' => '', 'taxpayer_type' => '', 'buyer_type' => ''];
         foreach (($client['attributes'] ?? []) as $a) {
-            $key = strtolower(preg_replace('/[^a-z0-9]/i', '',
-                (string)($a['key'] ?? $a['name'] ?? '')));
             $val = trim((string)($a['value'] ?? ''));
             if ($val === '') continue;
-            if (substr($key, -3) === 'tin' || $key === 'tin')            $out['tin'] = $val;
-            elseif (substr($key, -3) === 'brn')                           $out['brn'] = $val;
-            elseif (substr($key, -3) === 'nin')                           $out['nin'] = $val;
-            elseif (strpos($key, 'taxpayertype') !== false)               $out['taxpayer_type'] = $val;
-            elseif (strpos($key, 'buyertype') !== false)                  $out['buyer_type'] = $val;
+            // The rule lives in EfrisClientField so that code writing custom
+            // fields can stay out of these ones.
+            $field = EfrisClientField::of((string)($a['key'] ?? $a['name'] ?? ''));
+            if ($field !== null) $out[$field] = $val;
         }
         return $out;
     }

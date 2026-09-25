@@ -1,13 +1,20 @@
 
 <?php
-// 'new' = successfully created in CRM (active customer)
-// 'pending_sync' / 'updated' = queued for sync
-// 'synced' = explicitly confirmed synced
-// 'failed' / 'crm_failed' = error
-$activeC = count(array_filter($myApps, fn($a) => in_array($a['status']??'',['new','updated','converted'])));
-$pendC   = count(array_filter($myApps, fn($a) => in_array($a['status']??'',['pending_sync','pending'])));
+// What each tile counts. A KYC application is saved with status 'new' whether
+// or not uCRM accepted it: the uCRM result is crm_client_id and crm_sync_status.
+// So "In CRM" counts applications that have a uCRM client id, never 'new'.
+// (Until 5.18.28 'new' counted as "In CRM ✓", and every customer uCRM had
+// refused was shown there.) 'pending_sync' / 'pending' / 'failed' /
+// 'crm_failed' / 'exhausted' are statuses of the older queue-based flow.
+$inCrm   = fn($a) => !empty($a['crm_client_id']);
+$crmWait = fn($a) => !$inCrm($a) && (in_array($a['crm_sync_status'] ?? '', ['pending', 'review'], true)
+                                  || in_array($a['status'] ?? '', ['pending_sync', 'pending'], true));
+$crmFail = fn($a) => !$inCrm($a) && (($a['crm_sync_status'] ?? '') === 'failed'
+                                  || in_array($a['status'] ?? '', ['failed', 'crm_failed', 'exhausted'], true));
+$activeC = count(array_filter($myApps, $inCrm));
+$pendC   = count(array_filter($myApps, $crmWait));
 $syncC   = count(array_filter($myApps, fn($a) => ($a['status']??'')==='synced'));
-$failC   = count(array_filter($myApps, fn($a) => in_array($a['status']??'',['failed','crm_failed','exhausted'])));
+$failC   = count(array_filter($myApps, $crmFail));
 $totalC  = count($myApps);
 ?>
 
@@ -58,6 +65,12 @@ $totalC  = count($myApps);
         'crm_failed'=>['#FFEBEE','#C62828','CRM Failed'],
     ];
     $sc = $statusColors[$a['status']??'new'] ?? $statusColors['new'];
+    // 'new' is also the status of a customer uCRM refused; the badge says what is true.
+    if (empty($a['crm_client_id'])) {
+        $crmSt = $a['crm_sync_status'] ?? '';
+        if ($crmSt === 'pending' || $crmSt === 'review') $sc = ['#FFF3E0', '#E65100', 'Not in CRM yet'];
+        elseif ($crmSt === 'failed')                     $sc = ['#FFEBEE', '#C62828', 'Not in CRM'];
+    }
     $typeColors = ['StarLink'=>'#0D47A1','Fiber'=>'#2E7D32'];
     $stype = $a['customer_type'] ?? 'StarLink';
     $tc = $typeColors[$stype] ?? '#6b7280';
@@ -274,6 +287,40 @@ $totalC  = count($myApps);
             ➕ Add in UCRM
         </a>
         <?php endif; ?>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php
+    // ── Not in the CRM: why, and (for an admin) Retry ──────────────────
+    $crmSt = $a['crm_sync_status'] ?? '';
+    if (empty($a['crm_client_id']) && in_array($crmSt, ['pending', 'review', 'failed'], true)):
+        $crmReason  = (string)($a['crm_sync_error'] ?? '');
+        $crmSameIds = is_array($a['crm_review_client_ids'] ?? null) ? $a['crm_review_client_ids'] : [];
+        $crmHead    = $crmSt === 'review' ? '⚠ Not in the CRM — a person needs to check it'
+                    : ($crmSt === 'failed' ? '✗ Not in the CRM — automatic retries have stopped'
+                    : '⏳ Not in the CRM yet — retried automatically');
+    ?>
+    <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;
+         background:<?= $crmSt === 'pending' ? '#FFF7ED' : '#FEF2F2' ?>;border:1px solid <?= $crmSt === 'pending' ? '#FED7AA' : '#FECACA' ?>;">
+        <div style="font-weight:800;margin-bottom:3px;"><?= $crmHead ?></div>
+        <?php if ($crmReason !== ''): ?><div><?= h($crmReason) ?></div><?php endif; ?>
+        <?php if ($crmSameIds): ?>
+        <div style="margin-top:3px;">In uCRM:
+            <?php foreach ($crmSameIds as $sameId): ?>
+            <a href="https://<?= h($_SERVER['HTTP_HOST'] ?? '') ?>/crm/client/<?= (int)$sameId ?>" target="_blank" rel="noopener">client #<?= (int)$sameId ?></a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if ($isAdmin): ?>
+        <form method="POST" style="margin-top:6px;"<?= $crmSameIds ? ' onsubmit="return confirm(\'Create this customer in the CRM even though a client with the same phone number exists? Only do this if you checked it is a different person.\')"' : '' ?>>
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="kyc_crm_retry">
+            <input type="hidden" name="app_id" value="<?= (int)$a['id'] ?>">
+            <?php if ($crmSameIds): ?><input type="hidden" name="force" value="1"><?php endif; ?>
+            <button type="submit" style="background:#1565C0;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+                ↻ <?= $crmSameIds ? 'Create in CRM anyway' : 'Retry now' ?>
+            </button>
+        </form>
         <?php endif; ?>
     </div>
     <?php endif; ?>

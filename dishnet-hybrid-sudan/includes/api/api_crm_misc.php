@@ -362,8 +362,12 @@ require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
             }
             if (!$ccPhone) $ccPhone = trim($cc['phone'] ?? '');
 
+            // A tax field is never a sales attribution (field 1 is "EFRIS TIN"
+            // on the Uganda uCRM) — the same rule as main.php's index.
+            require_once dirname(__DIR__, 2) . '/lib/EfrisClientField.php';
             $attrs = [];
             foreach ($cc['attributes'] ?? ($cc['customAttributes'] ?? []) as $at) {
+                if (EfrisClientField::of((string)($at['key'] ?? $at['name'] ?? '')) !== null) continue;
                 $attrs[(int)($at['customAttributeId'] ?? 0)] = trim($at['value'] ?? '');
             }
             $sp  = $attrs[$ATTR_SP]  ?? ''; if (!$sp) continue;
