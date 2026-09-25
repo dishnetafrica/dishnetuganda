@@ -335,21 +335,26 @@ foreach ($new as $r) {
 }
 $unv = count(array_filter($l, function ($r) { return ($r['event'] ?? '') === 'entity_unverified'; }));
 echo "webhook_log overall: ", count($l), " kept entries, {$unv} entity_unverified (an event 5.18.37 alone writes)\n";
-// uCRM's endpoint objects, read with the plugin's own app key (never printed). A GET; nothing is changed.
-$u = @json_decode((string)@file_get_contents(getcwd() . '/ucrm.json'), true) ?: [];
-$base = rtrim((string)($u['ucrmLocalUrl'] ?? ($u['ucrmPublicUrl'] ?? '')), '/'); $key = (string)($u['pluginAppKey'] ?? '');
-if ($base === '' || $key === '') { echo "uCRM endpoints: ucrm.json has no address or app key — read System → Webhooks in the uCRM UI instead\n"; exit; }
-// The same call CrmApiClient::getWebhooks() makes: GET {base}/api/v2.1/webhooks/endpoints
-$ch = curl_init($base . '/api/v2.1/webhooks/endpoints');
-curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => ['X-Auth-App-Key: ' . $key, 'Accept: application/json'], CURLOPT_SSL_VERIFYPEER => false]);
-$raw = curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
-$eps = json_decode((string)$raw, true);
-$isList = is_array($eps) && ($eps === [] || array_keys($eps) === range(0, count($eps) - 1));
-if ($code !== 200 || !$isList) {
-    $msg = is_array($eps) ? (string)($eps['message'] ?? '') : '';
-    echo "uCRM endpoints: HTTP {$code}", $err !== '' ? " ({$err})" : '', $msg !== '' ? " — {$msg}" : '', " — no endpoint list; read System → Webhooks in the UI\n"; exit;
-}
-echo "uCRM webhook endpoints: ", count($eps), " (HTTP {$code})\n";
+// uCRM's endpoint objects, read the way the plugin itself reads them: the same
+// client, the same effective configuration (read-only load, no vault refresh),
+// the same call the Settings tab makes. Nothing is changed; no key is printed.
+require getcwd() . '/lib/PluginConfig.php';
+require getcwd() . '/lib/CrmApiClient.php';
+$config = PluginConfig::read(getcwd(), $pdd);
+$crm = CrmApiClient::fromUcrm(getcwd(), $config);
+$base = $crm->getBaseUrl();
+echo "CRM client: ", $base === '' ? 'NOT CONFIGURED (no ucrm.json address and no crm_base_url)' : "base {$base}", "  auth header ", $crm->getAuthHeader(), "\n";
+if ($base === '') exit;
+$fmtErr = function (array $e): string {
+    $m = is_array($e['response'] ?? null) ? (string)(($e['response']['message'] ?? '')) : '';
+    return json_encode(['http_code' => $e['http_code'] ?? null, 'curl_error' => $e['curl_error'] ?? null, 'message' => $m]);
+};
+$ctl = $crm->get('payment-methods');
+echo "control GET payment-methods: ", is_array($ctl) ? count($ctl) . ' methods (the base URL and app key work)' : 'FAILED ' . $fmtErr($crm->getLastError()), "\n";
+$eps = $crm->get('webhooks/endpoints');
+if (!is_array($eps)) { echo "GET webhooks/endpoints: FAILED ", $fmtErr($crm->getLastError()), " — read System → Webhooks in the UI\n"; exit; }
+if ($eps !== [] && array_keys($eps) !== range(0, count($eps) - 1)) $eps = [$eps];
+echo "uCRM webhook endpoints: ", count($eps), "\n";
 $known = ['id', 'url', 'isActive', 'anyEvent', 'eventTypes', 'verifySslCertificate'];
 $fields = [];
 foreach ($eps as $e) {
@@ -415,14 +420,17 @@ docker exec -u "$DB_OWNER" "$CONTAINER" rm -rf "$RO" 2>/dev/null || true
 hdr "F. Summary"
 # ═════════════════════════════════════════════════════════════════════════════
 echo "  deployed commit   $LIVE_AFTER  (plugin $EXPECTED_VERSION)"
-echo "  rollback commit   ${LIVE_BEFORE:-unknown}   →  cd $REPO && git checkout ${LIVE_BEFORE:-<commit>} && bash scripts/deploy-hybrid.sh"
+if [ "$AFTER_ONLY" = "0" ]; then echo "  rollback commit   ${LIVE_BEFORE:-unknown}   →  cd $REPO && git checkout ${LIVE_BEFORE:-<commit>} && bash scripts/deploy-hybrid.sh"
+else echo "  rollback commit   (this run deployed nothing — see the deployment run's log)"; fi
 [ -n "$BK" ] && echo "  backup            $BK"
 echo "  crm_webhook_key   NOT configured (by decision) — webhook events are accepted keyless and re-read from uCRM"
 echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"
 if [ "$FAIL" = "0" ]; then echo; echo "  Phase 1 smoke: PASSED. Send this LOG FILE back (not a copy of the terminal)."
 else echo; echo "  Phase 1 smoke: $FAIL FAILED — send the log file; do not roll back on your own unless customers are affected."; fi
+if [ -n "$PLUGIN_BASE" ]; then
 echo
 echo "  Positive controls to try in a browser while signed in as an administrator, if C4 was skipped:"
 echo "    $PLUGIN_BASE?page=api&action=data_dir_info"
 echo "    $PLUGIN_BASE?page=api&action=staff_login_lookup&email=nobody-phase1@example.invalid"
+fi
 [ "$FAIL" = "0" ]
