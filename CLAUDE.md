@@ -3219,6 +3219,14 @@ The operator approved it: *"Yes, own address (Recommended)"*.
   - **166/166, twice**, over fourteen scenarios;
   - seven broken copies (X1–X7) are each caught, with a control on a control in
     O9 and in O13.
+- **Run 1 — 2026-09-25 05:03:28 UTC (`docs/127` §L.1): stopped in step 0 at
+  the DNS check. `app-staging.dishnetuganda.com` resolved to nothing; NOTHING
+  CHANGED.** Every earlier check held on the server: the 030 build
+  (`4a629184…`), the real staff login, the worker `simulated` with no SMS
+  variable, ledger 30, O-1 `1|1|2|true`, the four variables, the portal
+  answering 200 through Traefik, Traefik in host mode, the gateway
+  `172.17.0.1`. Next: the GoDaddy record `A app-staging → 209.97.137.203`, then
+  the same command again.
 - **The operator's actions, in order:**
   1. create the DNS record first;
   2. have the SMS key ready if you have one (it is optional);

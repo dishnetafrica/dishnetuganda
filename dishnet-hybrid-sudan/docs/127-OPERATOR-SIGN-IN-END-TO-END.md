@@ -1080,3 +1080,43 @@ it. In O13 the old rollback order is caught by the inode check.
   WhatsApp gateway is not used.
 - F6-B is still NOT AUTHORIZED. Router delivery stays simulated. Nothing is
   HARDWARE VERIFIED.
+
+## L. Run record
+
+### L.1 Run 1 — 2026-09-25 05:03:28 UTC: stopped in step 0, at the DNS check; nothing changed
+
+The operator ran the one command on `dishnetuganda`. It stopped at the DNS
+check: **`app-staging.dishnetuganda.com` resolved to nothing** on the server.
+**Nothing was changed.** The refusal comes before step 0 writes even its
+container snapshot, so the only file written is the run's own log.
+
+Every check before it passed. Each one is `|| fail` under `set -eu`, so reaching
+the DNS check means each held. The run therefore also established, on the
+server:
+
+| Check | Result |
+|---|---|
+| the deployed build | content digest `4a629184…` — the 030 build (`docs/125` §F) |
+| the API's identity | the real DishNet staff login; trusted proxy `172.22.0.1`; origin `https://portal-staging.dishnetuganda.com` (`docs/122`) |
+| the worker | `DN_DELIVERY=simulated`; no SMS variable |
+| real bindings, exposed codes | neither `DN_ALLOW_REAL_BINDINGS` nor `DNB_EXPOSE_OTP` on the API or the worker |
+| the ledger | 30, last `030_admin_operator_onboarding.sql` |
+| O-1 | `1|1|2|true` |
+| the app's four variables | present in the stage-1 files, once each and unquoted (values not shown) |
+| the panel | 200 on `127.0.0.1:8099` |
+| the Admin route file | the pattern the new route copies: the `https` entrypoint, `letsencrypt`, the backend `172.17.0.1:8099` |
+| the portal through Traefik | 200 |
+| Traefik | a container running; its swarm service publishes in **host** mode |
+| the docker bridge gateway | `172.17.0.1` |
+| DNS | `app-staging.dishnetuganda.com` → **nothing** |
+
+The output came back as a copy of the terminal, not the log file. At step 0 the
+two are the same, and nothing secret can appear before step 1 asks for the SMS
+key. **From step 1 on, send the log file.**
+
+**Next:** create the record at the DNS provider, as for `portal-staging`
+(`docs/120` §15.8.1: GoDaddy, `A portal-staging → 209.97.137.203`, TTL 600 s).
+The new record is **`A app-staging → 209.97.137.203`**. Check it on the server
+with `getent ahostsv4 app-staging.dishnetuganda.com`: it must print
+`209.97.137.203`. Then run the same command again. It starts from the same
+state, because nothing changed.
