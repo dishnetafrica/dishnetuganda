@@ -791,3 +791,18 @@ since the plugin's first import into this repository (2 Sep 2026); it costs the
 rebuild run on the pull tick, and the one-line fix (`(string)$autoPullHour`) is
 proposed for its own window, not applied; and `dishnet-data-report/main.php:105`
 (a different plugin, not in this repository) throws a `flock()` TypeError.
+**`--otp-history`, 20:49 UTC (`527a69c`), read-only:** the three WASender keys
+are empty in the store and in the settings files alike; Evolution is set (three
+instances); `dry_run_mode` off. `app_audit_log` holds **four** sign-in rows in
+its whole history, all of 25 Sep 2026 — `otp_no_account` 1 (14:28),
+`otp_no_account_email` 2 (14:28, and 20:07 = the deploy run's C5 probe),
+`otp_wa_not_configured` 1 (20:38 = the closure test) — and no `otp_sent` or
+`login_success` ever; `notification_audit_log` holds **zero** `app_otp` rows
+ever. No sign-in code has ever been handed to a transport on this install: the
+Uganda portal sign-in never worked, and 5.18.37 inherited the dead path rather
+than causing it. The `main.php:456` line appears 276 times in the last 24 h and
+**230 times on 25 Sep before the 20:07 deploy** (oldest log line kept: 13 Sep),
+so the tick's crash predates 5.18.37; other plugins logged 27 fatal lines in
+24 h. **Phase 1 is CLOSED** on this evidence; the uCRM webhook-screen reading
+stays outstanding and `crm_webhook_key` stays unset. **Phase 2 (authentication)
+was approved by the operator on 25 Sep 2026** after this run.
