@@ -705,9 +705,23 @@ sign-in is inert on this schema; the cashbook auto-post throws on an integer
 the two EFRIS PDF links still use the old signing scheme; the `+211` country
 prefix and the customer-token secret derivation are Phase 2.
 
-**Applied by:** the operator, after explicit approval: `deploy-hybrid.sh`.
-Then, optionally, `php tools/crm_webhook_key.php --generate` and the same key in
-uCRM → System → Webhooks; `php tools/crm_debug.php --status` for the CRM queue.
+**Applied by:** the operator, after explicit approval (given 25 September
+2026, with one change to the sequence: `crm_webhook_key` is NOT configured in
+the deployment window — first prove, read-only, whether this uCRM can send a
+per-endpoint secret at all). One command, which records before-evidence, backs
+up the plugin's data directory, runs `deploy-hybrid.sh`, then the safe smoke
+tests, a read-only webhook inspection and the receipt-link check:
+
+```bash
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+  && mkdir -p /root/dnb-phase1 \
+  && bash scripts/phase1-deploy.sh 2>&1 | tee /root/dnb-phase1/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+`scripts/phase1-deploy.sh` never configures the webhook key, never contacts a
+customer, never posts a payment and prints no token, code or secret; the
+deployment report is written from its log file. `php tools/crm_debug.php
+--status` replaces the removed debug page.
 **Rollback:** `git checkout 9b75085` and deploy again. No data step: the new
 build writes only `pdf_link_secret` into the settings store and `ip:` rows into
 `app_otp_rate`, both ignored by 5.18.36.
