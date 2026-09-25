@@ -28,8 +28,8 @@ chdir(dirname(__DIR__));
  *   php tools/dpo_probe.php                       the saved settings
  *   php tools/dpo_probe.php --ask                 type a token and service type
  *                                                 to try, without saving them
- *                                                 (docker exec -it, so the token
- *                                                 is not echoed)
+ *                                                 (docker exec -it, so neither
+ *                                                 is echoed)
  *   php tools/dpo_probe.php --currency UGX --amount 1000
  */
 
@@ -61,26 +61,60 @@ if ($env !== 'test') {
 }
 
 /**
- * A line from the operator; the token is not echoed when there is a terminal.
- * A terminal can wrap a paste in bracketed-paste markers, and a copy from an
- * e-mail can carry invisible characters; both are removed.
+ * A line from the operator, never echoed when there is a terminal.
+ *
+ * The service type used to be echoed: it is a plain number. But on 25
+ * September, twice, what arrived there was not a number and looked like a
+ * password, and the echo put it on the screen, from where a copy of the
+ * terminal carried it on. So nothing typed here is shown; what is valid is
+ * printed back by the caller, and what is not is described by its shape only.
+ *
+ * Echo goes off BEFORE the label is printed, so nothing typed the moment the
+ * label appears can be echoed either. A terminal can wrap a paste in
+ * bracketed-paste markers, and a copy from an e-mail can carry invisible
+ * characters; both are removed.
  */
-$ask = static function (string $label, bool $hidden): string {
-    fwrite(STDOUT, $label);
+$ask = static function (string $label): string {
     $tty = function_exists('stream_isatty') && @stream_isatty(STDIN);
-    if ($hidden && $tty) @shell_exec('stty -echo 2>/dev/null');
+    if ($tty) @shell_exec('stty -echo 2>/dev/null');
+    fwrite(STDOUT, $label);
     $v = str_replace(["\e[200~", "\e[201~"], '', (string)fgets(STDIN));
     $v = trim((string)preg_replace('/[\x00-\x1F\x7F]|\xC2\xA0|\xE2\x80[\x8B-\x8D]|\xEF\xBB\xBF/', '', $v));
-    if ($hidden && $tty) { @shell_exec('stty echo 2>/dev/null'); fwrite(STDOUT, "\n"); }
+    if ($tty) { @shell_exec('stty echo 2>/dev/null'); fwrite(STDOUT, "\n"); }
     return $v;
 };
+/** What arrived, without showing it: its length only. */
+$arrived = static function (string $v): string {
+    $n = function_exists('mb_strlen') ? mb_strlen($v, 'UTF-8') : strlen($v);
+    return 'what arrived was ' . $n . ' character' . ($n === 1 ? '' : 's');
+};
+$GUID = '/^[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$/';
 
 $token = (string)($config['dpo_company_token'] ?? '');
 $stype = (string)($config['dpo_service_type'] ?? '');
 if (in_array('--ask', $args, true)) {
-    $token = $ask('  Company token to try (not shown, not saved): ', true);
-    $stype = $ask('  Service type to try: ', false);
-    echo "\n";
+    echo "  Nothing typed or pasted below appears on the screen: paste, then press Enter.\n\n";
+    // Each answer is checked as soon as it is given, so a wrong paste at the
+    // first prompt is not followed by another at the second.
+    $token = $ask('  Company token to try (not saved): ');
+    if (preg_match($GUID, $token) !== 1) {
+        echo "\n  " . ($token === '' ? 'Nothing arrived at the company token prompt.'
+                  : 'The company token typed is not a DPO token: ' . $arrived($token) . '.') . "\n"
+           . "  DPO's tokens are 36 characters in five groups, like\n"
+           . "  XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX. Copy only that from DPO's e-mail,\n"
+           . "  paste it at the prompt and press Enter. Nothing was sent to DPO.\n\n";
+        exit(1);
+    }
+    echo "  Company token: received, 36 characters (not shown).\n";
+    $stype = $ask('  Service type to try: ');
+    if (preg_match('/^\d{1,10}$/', $stype) !== 1) {
+        echo "\n  " . ($stype === '' ? 'Nothing arrived at the service type prompt.'
+                  : 'The service type typed is not a DPO service type: ' . $arrived($stype) . '.') . "\n"
+           . "  It is a number from DPO's e-mail, listed under the token, such as 54842.\n"
+           . "  Nothing was sent to DPO.\n\n";
+        exit(1);
+    }
+    echo "  Service type: " . $stype . "\n\n";
 }
 if ($token === '' || $stype === '') {
     echo "  " . ($token === '' ? 'No company token' : 'No service type') . " is set. Enter both on the\n"
@@ -91,7 +125,7 @@ if ($token === '' || $stype === '') {
 // type is a number. Whatever else was pasted — on 25 September, most likely
 // the clipboard's contents — is not sent anywhere, and not printed.
 $typed = in_array('--ask', $args, true) ? 'typed' : 'saved';
-if (preg_match('/^[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$/', $token) !== 1) {
+if (preg_match($GUID, $token) !== 1) {
     echo "  The company token {$typed} is not a DPO token. DPO's tokens are 36\n"
        . "  characters in five groups, like XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX —\n"
        . "  copy only that from DPO's e-mail. Nothing was sent to DPO.\n\n";

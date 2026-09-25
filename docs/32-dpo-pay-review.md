@@ -112,7 +112,8 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/depl
 
 Then **Save settings**, and **Make the test link**.
 
-**4. Check that DPO accepts the token in UGX** before sending anything:
+**4. Check that DPO accepts the token in UGX** before sending anything. This checks
+the token and service type **saved in step 3**, so nothing is typed here:
 
 ```
 docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/dpo_probe.php
@@ -121,8 +122,14 @@ docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hy
 - **Expected:** `createToken 000`, then `verifyToken 900` (*not paid yet*).
 - **What a token looks like:** 36 characters in five groups,
   `XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`. Its service types are the numbers
-  listed under it in DPO's e-mail. Copy only the token; with `--ask`, nothing
-  appears on screen while it is pasted. That is expected: press Enter.
+  listed under it in DPO's e-mail.
+- **With `--ask`** (5.18.35), nothing typed or pasted at either prompt appears
+  on the screen. That is expected: paste, then press Enter.
+  - The tool answers `Company token: received, 36 characters (not shown)`.
+  - It shows the service type back, and checks each answer as soon as it is
+    given.
+  - Anything else is refused before DPO is asked, and is described by its
+    length only.
 - **`904`:** that test account does not take UGX. Try another token from the
   e-mail without saving it. The token is typed without being shown:
 
@@ -227,6 +234,12 @@ again later:
     should be changed.
 - **5.18.33:** the tool now refuses anything that is not shaped like a DPO token
   or service type, before sending it anywhere.
+- **The second `--ask` run, the same day,** was the old tool: 5.18.33 was not
+  deployed yet.
+  - The token prompt reached DPO empty, and DPO answered 801 again.
+  - What went in at the service-type prompt was again not a number, and that
+    prompt showed it on the screen. It is not recorded here.
+  - **5.18.35:** neither prompt shows anything now.
 - **5.18.34:** the return, push and test addresses on the DPO screen, and the
   addresses Pay Now gives DPO, carried `:8443`. The screen read a copy of the
   settings without the setting that removes the port. Fixed; see

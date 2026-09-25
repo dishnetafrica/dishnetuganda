@@ -436,5 +436,76 @@ $pasted = "\e[200~ \xC2\xA0" . $ASKED . "\xE2\x80\x8B\e[201~\n 5525 \n";
 is_($code === 0 && preg_match('/createToken\s+000/', $out) === 1,
     'a real token pasted with bracketed-paste markers and invisible spaces still works', $out);
 
+echo "\nOn a real terminal, nothing typed at either prompt reaches the screen\n";
+// 25 September 2026, the second run: what arrived at the service-type prompt
+// was again not a number and looked like a password, and that prompt echoed,
+// so it went up on the screen and from there into a copy of the terminal.
+// A pipe never echoes, so the runs above cannot see this: these run the probe
+// on a pseudo-terminal, as docker exec -it does, and answer each prompt only
+// once it is on the screen, as a person does.
+$probeTty = function (array $cfgP, array $answers) use ($root, $pdir, $dpoBase): ?array {
+    file_put_contents($pdir . '/kyc_config.json', json_encode($cfgP));
+    @unlink($pdir . '/vault.json');
+    $env = ['DN_DATA_DIR' => $pdir, 'DN_VAULT_FILE' => $pdir . '/vault.json', 'DN_DPO_FAKE_URL' => $dpoBase] + getenv();
+    $p = @proc_open(['php', $root . '/tools/dpo_probe.php', '--ask'],
+        [0 => ['pty'], 1 => ['pty'], 2 => ['pty']], $pipes, $root, $env);
+    if (!is_resource($p)) return null;
+    stream_set_blocking($pipes[1], false);
+    $prompts = ['Company token to try', 'Service type to try'];
+    $screen = ''; $k = 0; $code = null; $end = microtime(true) + 15;
+    while (microtime(true) < $end) {
+        $r = [$pipes[1]]; $w = null; $e = null;
+        if (@stream_select($r, $w, $e, 0, 100000) > 0) {
+            $chunk = @fread($pipes[1], 8192);
+            if (is_string($chunk)) $screen .= $chunk;
+        }
+        if ($k < count($answers) && strpos($screen, $prompts[$k]) !== false) {
+            fwrite($pipes[0], $answers[$k] . "\n");
+            $k++;
+        }
+        $st = proc_get_status($p);
+        if (!$st['running']) {
+            $code = $st['exitcode'];
+            while (is_string($chunk = @fread($pipes[1], 8192)) && $chunk !== '') $screen .= $chunk;
+            break;
+        }
+    }
+    // Still waiting — at a prompt nobody will answer — is a failure, and must
+    // not hang the suite: a probe left reading a terminal outlives its test.
+    if ($code === null) { proc_terminate($p, 9); $screen .= "\n[still waiting after 15 s: stopped]"; }
+    foreach ($pipes as $x) @fclose($x);
+    proc_close($p);
+    return [$code, $screen];
+};
+$PASSWORDISH = 'Pw0rdLike16Chars';
+$before = dpoCalls();
+$run = $probeTty(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], [$ASKED, $PASSWORDISH]);
+if ($run === null) {
+    echo "  SKIP  no pseudo-terminal here, so what reaches the screen was not tested\n";
+} else {
+    [$code, $screen] = $run;
+    is_($code === 1 && strpos($screen, 'is not a DPO service type: what arrived was 16 characters') !== false,
+        'a password pasted at the service-type prompt: refused, and described by its length', $screen);
+    is_(strpos($screen, $PASSWORDISH) === false, 'it never appeared on the screen', $screen);
+    is_(strpos($screen, $ASKED) === false, 'and neither did the token', $screen);
+    t('nothing was sent to DPO', dpoCalls(), $before);
+
+    [$code, $screen] = $probeTty(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], [$ASKED, '5525']);
+    is_($code === 0 && preg_match('/Company token: received, 36 characters \(not shown\)/', $screen) === 1
+        && preg_match('/Service type: 5525/', $screen) === 1 && preg_match('/createToken\s+000/', $screen) === 1,
+        'a right pair: the token confirmed without being shown, the service type shown back, then DPO asked', $screen);
+    is_(strpos($screen, $ASKED) === false, 'and the token is on the screen nowhere', $screen);
+    is_(strpos($screen, substr($ASKED, 0, 8)) === false && strpos($screen, substr($ASKED, -12)) === false,
+        'not even the first or last group of it', $screen);
+
+    $before = dpoCalls();
+    [$code, $screen] = $probeTty(['dpo_environment' => 'test', 'dpo_currencies' => 'UGX'], ['']);
+    is_($code === 1 && strpos($screen, 'Nothing arrived at the company token prompt') !== false,
+        'Enter with nothing pasted: said plainly, not "no company token is set"', $screen);
+    is_(strpos($screen, 'Service type to try') === false,
+        'and it stops there, before a second prompt invites a second wrong paste', $screen);
+    t('nothing was sent to DPO', dpoCalls(), $before);
+}
+
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

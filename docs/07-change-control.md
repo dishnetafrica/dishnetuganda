@@ -526,3 +526,42 @@ path and now do not.
 opening `/crm/login` once, the website redeploy in EasyPanel.
 **Rollback:** `git checkout b4cc109` and deploy again; the website's previous build.
 **Status:** built and tested; not deployed.
+
+## 5.18.35 — the DPO probe shows nothing typed at either prompt
+
+**25 September 2026** · `tools/dpo_probe.php`, `tests/test_dpo_review_link.php`.
+Record: [32](32-dpo-pay-review.md) §8.
+
+The operator ran `dpo_probe.php --ask` a second time, with 5.18.33 not yet
+deployed, so the old tool ran. The token prompt reached DPO empty, and DPO
+answered 801. What went in at the service-type prompt was again not a number.
+That prompt echoed it, so it went up on the screen and from there into a copy of
+the terminal. It is not recorded anywhere.
+
+- **Neither prompt echoes now.** Echo is turned off before the label is
+  printed, so nothing typed the moment it appears is shown either.
+- **The tool says what arrived without showing it:**
+  `Company token: received, 36 characters (not shown)`, and the service type
+  shown back once it is known to be a number.
+- **Each answer is checked as soon as it is given.** A wrong paste at the first
+  prompt is not followed by a second one.
+  - Nothing typed: *Nothing arrived at the company token prompt*.
+  - Anything else: described by its length only.
+  - Either way, nothing is sent to DPO.
+
+Tests: `test_dpo_review_link.php` 103 checks (was 93).
+
+- The probe now also runs on a real pseudo-terminal, as `docker exec -it` does,
+  answering each prompt once it is on the screen. A pipe never echoes, so only
+  this can see what reaches the screen.
+- Six weakened copies are each caught, the 5.18.34 prompt among them.
+- The first run of the weakened copies hung the test instead of failing it: a
+  probe left waiting at an unanswered prompt. The test now stops it after 15
+  seconds and counts that as a failure.
+- Plugin suite: **190 files, 8,464 checks, 0 failed, twice**, with the terminal
+  checks run each time, not skipped.
+
+**Applied by:** the operator: `deploy-hybrid.sh`. It deploys 5.18.33, 5.18.34
+and this together.
+**Rollback:** `git checkout bd0b329` and deploy again.
+**Status:** built and tested; not deployed.
