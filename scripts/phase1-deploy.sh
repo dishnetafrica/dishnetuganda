@@ -12,6 +12,7 @@
 #
 # Options
 #   --after-only         the deploy already happened: run only the smoke tests
+#   --webhook-only       the read-only webhook inspection alone (stage D), nothing else
 #   --login <+2567…>     also sign in as a customer with a number YOU control
 #                        (it receives one WhatsApp code; the code is typed here
 #                        and never printed). Never a customer's number.
@@ -40,10 +41,11 @@ OUT="/root/dnb-phase1"; mkdir -p "$OUT"; chmod 700 "$OUT"
 SNIP="$OUT/.snippets-$$"; mkdir -p "$SNIP"; chmod 700 "$SNIP"
 trap 'rm -rf "$SNIP"' EXIT
 
-AFTER_ONLY=0; LOGIN_PHONE=""; PLUGIN_BASE="${PLUGIN_BASE:-}"
+AFTER_ONLY=0; WEBHOOK_ONLY=0; LOGIN_PHONE=""; PLUGIN_BASE="${PLUGIN_BASE:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --after-only) AFTER_ONLY=1 ;;
+    --webhook-only) AFTER_ONLY=1; WEBHOOK_ONLY=1 ;;
     --login) LOGIN_PHONE="${2:-}"; shift ;;
     --plugin-base) PLUGIN_BASE="${2:-}"; shift ;;
     *) echo "unknown option: $1" >&2; exit 64 ;;
@@ -141,7 +143,8 @@ if [ "$AFTER_ONLY" = "0" ]; then
   for d in "$DATA_HOST" "$DEST/data" "$MOUNT/ucrm/data/plugins/.$PLUGIN-data"; do
     [ -d "$d" ] || continue
     case " $DONE_DIRS " in *" $d "*) continue;; esac; DONE_DIRS="$DONE_DIRS $d"
-    n="$(basename "$d" | tr -c 'A-Za-z0-9._-\n' '_')"
+    n="$(basename "$d" | tr -c 'A-Za-z0-9._\n-' '_')"; [ -n "$n" ] || n="data-$(date -u +%s)"
+    [ -e "$BK/$n.tar.gz" ] && n="$n-$(date -u +%H%M%S)"
     if tar -C "$(dirname "$d")" -czf "$BK/$n.tar.gz" "$(basename "$d")" 2>/dev/null; then
       ok "backed up $d → $BK/$n.tar.gz ($(du -h "$BK/$n.tar.gz" | cut -f1))"
     else bad "backup of $d failed"; fi
@@ -181,16 +184,18 @@ else
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
+if [ "$WEBHOOK_ONLY" = "0" ]; then
 hdr "C. Smoke tests over HTTP (no customer is contacted, nothing is posted)"
 # ═════════════════════════════════════════════════════════════════════════════
 if [ -z "$PLUGIN_BASE" ]; then
   # The plugin's own rule: crm_public_url (config.json) → pluginPublicUrl → ucrmPublicUrl.
   PLUGIN_BASE="$(docker exec "$CONTAINER" php -r '
-    $r=$argv[1]; $c=@json_decode((string)@file_get_contents($r."/config.json"),true)?:[]; $u=@json_decode((string)@file_get_contents($r."/ucrm.json"),true)?:[];
-    $over=rtrim(trim((string)($c["crm_public_url"]??"")),"/");
+    $r=$argv[1]; $pdd=$argv[2]; $u=@json_decode((string)@file_get_contents($r."/ucrm.json"),true)?:[];
+    $over="";
+    foreach ([$r."/data/config.json", $pdd."/config.json", $pdd."/kyc_config.json"] as $f) { $c=@json_decode((string)@file_get_contents($f),true)?:[]; $v=rtrim(trim((string)($c["crm_public_url"]??"")),"/"); if($v!==""){ $over=$v; break; } }
     if($over!==""){ echo $over."/crm/_plugins/".basename($r)."/public.php"; exit; }
     if(!empty($u["pluginPublicUrl"])){ echo rtrim($u["pluginPublicUrl"],"/"); exit; }
-    $b=rtrim((string)($u["ucrmPublicUrl"]??""),"/"); $b=preg_replace("#/crm$#","",$b); echo $b?$b."/crm/_plugins/".basename($r)."/public.php":"";' "$IN_CONTAINER" 2>/dev/null || true)"
+    $b=rtrim((string)($u["ucrmPublicUrl"]??""),"/"); $b=preg_replace("#/crm$#","",$b); echo $b?$b."/crm/_plugins/".basename($r)."/public.php":"";' "$IN_CONTAINER" "$PDD_IN" 2>/dev/null || true)"
 fi
 [ -n "$PLUGIN_BASE" ] || stop "could not derive the plugin's public URL — re-run with --plugin-base https://<host>/crm/_plugins/$PLUGIN/public.php"
 echo "  plugin URL      $PLUGIN_BASE"
@@ -310,6 +315,7 @@ if docker exec "$CONTAINER" test -f "$IN_CONTAINER/tools/crm_webhook_key.php"; t
 FATALS="$(docker logs "$CONTAINER" --since "$DEPLOY_STARTED" 2>&1 | grep -ciE 'DishNet FATAL|DishNet UNCAUGHT|PHP Fatal|PHP Parse error' || true)"
 if [ "${FATALS:-0}" = "0" ]; then ok "C7 no PHP fatal/uncaught in the container log since $DEPLOY_STARTED"
 else bad "C7 $FATALS fatal/uncaught lines since the deploy:"; docker logs "$CONTAINER" --since "$DEPLOY_STARTED" 2>&1 | grep -iE 'DishNet FATAL|DishNet UNCAUGHT|PHP Fatal|PHP Parse error' | cut -c1-200 | head -10 | sed 's/^/     /'; fi
+fi   # WEBHOOK_ONLY
 
 # ═════════════════════════════════════════════════════════════════════════════
 hdr "D. Webhook — read-only (crm_webhook_key stays UNSET; nothing is configured)"
@@ -333,11 +339,16 @@ echo "webhook_log overall: ", count($l), " kept entries, {$unv} entity_unverifie
 $u = @json_decode((string)@file_get_contents(getcwd() . '/ucrm.json'), true) ?: [];
 $base = rtrim((string)($u['ucrmLocalUrl'] ?? ($u['ucrmPublicUrl'] ?? '')), '/'); $key = (string)($u['pluginAppKey'] ?? '');
 if ($base === '' || $key === '') { echo "uCRM endpoints: ucrm.json has no address or app key — read System → Webhooks in the uCRM UI instead\n"; exit; }
-$ch = curl_init($base . '/api/v2.1/webhook/endpoints');
+// The same call CrmApiClient::getWebhooks() makes: GET {base}/api/v2.1/webhooks/endpoints
+$ch = curl_init($base . '/api/v2.1/webhooks/endpoints');
 curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => ['X-Auth-App-Key: ' . $key, 'Accept: application/json'], CURLOPT_SSL_VERIFYPEER => false]);
-$raw = curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+$raw = curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
 $eps = json_decode((string)$raw, true);
-if (!is_array($eps)) { echo "uCRM endpoints: HTTP {$code}, no list — read System → Webhooks in the UI\n"; exit; }
+$isList = is_array($eps) && ($eps === [] || array_keys($eps) === range(0, count($eps) - 1));
+if ($code !== 200 || !$isList) {
+    $msg = is_array($eps) ? (string)($eps['message'] ?? '') : '';
+    echo "uCRM endpoints: HTTP {$code}", $err !== '' ? " ({$err})" : '', $msg !== '' ? " — {$msg}" : '', " — no endpoint list; read System → Webhooks in the UI\n"; exit;
+}
 echo "uCRM webhook endpoints: ", count($eps), " (HTTP {$code})\n";
 $known = ['id', 'url', 'isActive', 'anyEvent', 'eventTypes', 'verifySslCertificate'];
 $fields = [];
@@ -361,6 +372,7 @@ echo "  Report the field NAME only. If there is none, crm_webhook_key cannot be 
 echo "  If uCRM later proves it sends X-Crm-Key with a configured secret, the key can be set in a separate window with tools/crm_webhook_key.php."
 
 # ═════════════════════════════════════════════════════════════════════════════
+if [ "$WEBHOOK_ONLY" = "0" ]; then
 hdr "E. Receipt / delivery links — the old 'dishnet' scheme is dead, PdfLinkToken lives"
 # ═════════════════════════════════════════════════════════════════════════════
 docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO' && cp '$DB_IN' '$RO/db2.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/db2.sqlite3-wal' || true )" 2>/dev/null || true
@@ -396,6 +408,7 @@ if [ -n "$RCPT" ]; then
   [ "$HTTP_CODE" = "403" ] && ok "E a random token: 403" || bad "E random token → $HTTP_CODE"
 else note "E no receipt PDF on this install yet — the link rule is proved by tests/test_pdf_link_token.php; nothing to exercise live"; fi
 unset NEW_TOKEN OLD_TOKEN OLD_EMPTY_TOKEN
+fi   # WEBHOOK_ONLY
 docker exec -u "$DB_OWNER" "$CONTAINER" rm -rf "$RO" 2>/dev/null || true
 
 # ═════════════════════════════════════════════════════════════════════════════

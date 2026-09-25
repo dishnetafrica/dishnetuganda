@@ -725,5 +725,24 @@ deployment report is written from its log file. `php tools/crm_debug.php
 **Rollback:** `git checkout 9b75085` and deploy again. No data step: the new
 build writes only `pdf_link_secret` into the settings store and `ip:` rows into
 `app_otp_rate`, both ignored by 5.18.36.
-**Status:** built 25 September 2026; **NOT deployed** — awaiting the operator's
-Phase 1 deployment approval.
+**Status:** **deployed 25 September 2026 20:07 UTC** (`68f4eeb`, "✓ container
+now serves 68f4eeb", over live `c82e0b9`) by the one command above, first
+attempt. Smoke tests **35 ok, 0 failed, 2 notes**: the customer sign-in page
+answers; all 27 moved actions and the 4 removed ones are 401 anonymously; the
+constant key opens nothing; an administrator reaches the moved diagnostics and
+a non-administrator gets 403; the sign-in door answers an unknown identifier
+uniformly; the CRM debug CLI answers; no PHP fatal; `pdf_link_secret` was
+generated and vaulted at the first page load; a receipt link signed the old way
+is **403** and one minted with `PdfLinkToken` is **200** (the documented
+consequence for pre-deployment links, confirmed). `crm_webhook_key` was **not**
+configured, by decision. Two defects of the deployment script itself, found by
+the run and fixed afterwards (`b24e2f7` → the next commit): the backup archives
+were both named `.tar.gz`, so the 116 KB archive of `data/` overwrote the 91 MB
+archive of the real data directory (the deploy never touches data, so the
+rollback path is unaffected; a fresh backup is to be taken with the corrected
+script or by hand); and the read-only webhook inspection called
+`webhook/endpoints` instead of `webhooks/endpoints`, so **whether this uCRM
+offers a per-endpoint secret is still unanswered** — re-run with
+`--webhook-only`. The checks ran against the `:8443` address with certificate
+verification off because the public address was read from the wrong file;
+also fixed. Code delivery to a phone was not exercised live (no `--login`).
