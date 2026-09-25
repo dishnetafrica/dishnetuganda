@@ -352,7 +352,17 @@ $fmtErr = function (array $e): string {
 $ctl = $crm->get('payment-methods');
 echo "control GET payment-methods: ", is_array($ctl) ? count($ctl) . ' methods (the base URL and app key work)' : 'FAILED ' . $fmtErr($crm->getLastError()), "\n";
 $eps = $crm->get('webhooks/endpoints');
-if (!is_array($eps)) { echo "GET webhooks/endpoints: FAILED ", $fmtErr($crm->getLastError()), " — read System → Webhooks in the UI\n"; exit; }
+if (!is_array($eps)) {
+    echo "GET webhooks/endpoints (API v2.1): FAILED ", $fmtErr($crm->getLastError()), "\n";
+    // Diagnostic: the same route on API v1.0, same address, same key — the route
+    // the plugin used before it moved to v2.1. Read-only.
+    $u = @json_decode((string)@file_get_contents(getcwd() . '/ucrm.json'), true) ?: [];
+    $v1base = preg_replace('#/api/v[\d.]+$#', '/api/v1.0', $base);
+    $v1 = new CrmApiClient($v1base, (string)($u['pluginAppKey'] ?? ''), 'X-Auth-App-Key');
+    $eps = $v1->get('webhooks/endpoints');
+    if (!is_array($eps)) { echo "GET webhooks/endpoints (API v1.0): FAILED ", $fmtErr($v1->getLastError()), " — the endpoint objects are not readable over this uCRM's API; the UI is the only view\n"; exit; }
+    echo "GET webhooks/endpoints (API v1.0): answered — the plugin's client asks v2.1, which is why its Settings tile sees no endpoint (recorded finding)\n";
+}
 if ($eps !== [] && array_keys($eps) !== range(0, count($eps) - 1)) $eps = [$eps];
 echo "uCRM webhook endpoints: ", count($eps), "\n";
 $known = ['id', 'url', 'isActive', 'anyEvent', 'eventTypes', 'verifySslCertificate'];

@@ -741,8 +741,20 @@ were both named `.tar.gz`, so the 116 KB archive of `data/` overwrote the 91 MB
 archive of the real data directory (the deploy never touches data, so the
 rollback path is unaffected; a fresh backup is to be taken with the corrected
 script or by hand); and the read-only webhook inspection called
-`webhook/endpoints` instead of `webhooks/endpoints`, so **whether this uCRM
-offers a per-endpoint secret is still unanswered** — re-run with
-`--webhook-only`. The checks ran against the `:8443` address with certificate
+`webhook/endpoints` instead of `webhooks/endpoints`, so the first inspection was
+not evidence. **Re-run 20:15 UTC with the plugin's own client:** base
+`http://localhost/crm/api/v2.1`, the control `GET payment-methods` answered
+(23 methods), and `GET webhooks/endpoints` answered **404 Not Found** — this
+uCRM's API v2.1 does not serve the webhook-endpoint objects, so they cannot be
+read (nor a secret field seen) over the API; the uCRM UI (System → Webhooks) is
+the only view, and the operator's reading of that form decides whether
+`crm_webhook_key` can ever be configured here. **Pre-existing finding recorded
+by this run:** the plugin's own `CrmApiClient::getWebhooks()` — behind the
+Settings tab's webhook tile, the *Setup Webhook* button and `WebhookRegistrar`
+— asks that same v2.1 route and therefore sees no endpoint on this uCRM;
+delivery of events is unaffected (300 log entries) because the endpoint was
+configured in the UI. Not Phase 1's to change. Consequence to decide: while no
+key mechanism exists, `client.message` (uCRM "message to client" → WhatsApp
+forward) is ignored by 5.18.37. The checks ran against the `:8443` address with certificate
 verification off because the public address was read from the wrong file;
 also fixed. Code delivery to a phone was not exercised live (no `--login`).
