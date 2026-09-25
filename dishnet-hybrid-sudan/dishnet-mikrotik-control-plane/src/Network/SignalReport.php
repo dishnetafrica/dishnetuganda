@@ -29,7 +29,7 @@ final class SignalReport
      * The structural inventory: which router signals have a source at all.
      *
      * Every `unmeasured` entry names what would have to exist. That turns the
-     * screen into a to-do list an operator can read, instead of a wall of grey.
+     * screen into a to-do list DishNet staff can read, instead of a wall of grey.
      *
      * `admin_readable` is a SEPARATE question from `status`. A signal can be
      * measured in Domain B and still not be readable through the Admin API —
@@ -51,12 +51,16 @@ final class SignalReport
                 'admin_readable' => true,
             ],
             [
-                'key' => 'wan_interface', 'label' => 'WAN interface',
+                'key' => 'wan_interface', 'label' => 'WAN interface assignment',
                 'status' => self::MEASURED,
+                // The headline word matters. "MEASURED" beside "WAN interface"
+                // reads as a claim about the link. What is measured is the
+                // interface a person RECORDED at staging, so the panel says so.
+                'verdict' => 'recorded',
                 'source' => 'mt_devices.wan_interface',
                 // Worth saying out loud: this is which port, established by a
                 // named person at staging. It is not a link-state signal.
-                'reason' => 'The interface a person recorded at staging, with their name and the time. Not a link state.',
+                'reason' => 'Staging metadata: the interface a person recorded when the router was prepared, with their name and the time. It is not a link state and says nothing about whether the port is up.',
                 'needs'  => null,
                 'admin_readable' => true,
             ],
@@ -127,8 +131,8 @@ final class SignalReport
     {
         return [
             ['key' => 'push_config', 'label' => 'Push configuration',
-             'available' => false,
-             'reason' => 'A delivery case exists (RouterOsDelivery) but no Admin write route is bound, and F6-B is not authorized — so this would reach a simulator, not a router.'],
+             'available' => true,
+             'reason' => 'Queues a device.provision job for the worker (migration 028, docs/121). Nothing here contacts the router: the worker delivers the job through ITS binding — nothing under DN_DELIVERY=null, an in-memory simulator under simulated, a real router only under F6-B, which is not authorized. The job carries whatever desired configuration the registry holds for this router; no screen authors one yet.'],
             ['key' => 'reboot', 'label' => 'Reboot router',
              'available' => false,
              'reason' => 'No delivery case exists for reboot. There is nothing to queue and nothing to deliver.'],

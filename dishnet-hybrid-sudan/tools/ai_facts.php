@@ -28,6 +28,7 @@ $root = dirname(__DIR__);
 require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/DishNetAiBrain.php';
+require_once $root . '/lib/PaymentOptions.php';
 
 $dataDir = cliDataDir($root);
 $config  = PluginConfig::load($root, $dataDir);
@@ -194,6 +195,7 @@ if ($has('--uganda')) {
          . ($bank['usd'] !== '' ? ', USD account ' . $bank['usd'] : '')
          . ($bank['swift'] !== '' ? ', SWIFT ' . $bank['swift'] : '') . '. '
          . 'Ask them to use their quotation or invoice number as the payment reference. '
+         . (PaymentOptions::factSentence($config) !== '' ? PaymentOptions::factSentence($config) . ' ' : '')
          . 'These are the only payment details we have — do not offer any other method, '
          . 'and do not name an amount unless it is in the DATA above.';
 

@@ -8,7 +8,7 @@ namespace Dn\Radius;
  * It exists so the activation path can be built and tested before the real
  * FreeRADIUS binding is authorized (F6-B). It keeps its state in memory,
  * deliberately: a simulator that wrote to a database would leave rows an
- * operator could later mistake for published credentials.
+ * engineer could later mistake for published credentials.
  *
  * It enforces the contracts it stands in for rather than merely accepting
  * calls, because a permissive double teaches the caller nothing:

@@ -29,6 +29,8 @@ declare(strict_types=1);
  *   ref contains BADXML  → an HTML error page instead of XML
  *   ref contains CSTALL  → sleeps 8s, so the client timeout wins
  *   ref contains NOTOKEN → Result 000 with no TransToken (a liar's success)
+ *   currency XTS         → createToken 904  (ISO 4217's code for testing: an
+ *                          account that does not take the currency asked for)
  *   anything else        → 000 with a TEST- token
  *
  * Tags are matched by substring, so they are chosen NOT to contain one
@@ -47,7 +49,15 @@ declare(strict_types=1);
  *   …                        NOAMT   → 000 but with NO amount/currency at all
  *   …                        ALTCCY  → 000 in a different currency
  *   …                        VSTALL  → sleeps 8s at verify
+ *   …                        V6ANS   → 000 shaped as DPO's verifyToken V6
+ *                                      documentation shows it: the figures,
+ *                                      and NO CompanyRef
+ *   …                        PROBE   → 900 not paid yet, which is what DPO says
+ *                                      about any transaction nobody has paid
  *   anything else                    → 000 Transaction Paid, figures echoed
+ *
+ * Every request is counted in the state file ('calls'), so a test can prove
+ * that something sent nothing.
  *
  * Every token it mints is prefixed TEST- so nothing it returns can be
  * mistaken for a live DPO transaction token.
@@ -78,6 +88,9 @@ if (trim($raw) === '') {
     exit;
 }
 
+$state['calls'] = (int)($state['calls'] ?? 0) + 1;
+fd_save();
+
 $prev = libxml_use_internal_errors(true);
 try { $in = new SimpleXMLElement($raw, LIBXML_NONET); } catch (\Throwable $e) { $in = null; }
 libxml_clear_errors();
@@ -91,7 +104,10 @@ $token   = trim((string)($in->CompanyToken ?? ''));
 // The credential IS the body field. An empty one is 801, an unknown one 802 —
 // exactly as DPO's own table says, so the client's handling of both is real.
 if ($token === '')                 fd_xml(['Result' => '801', 'ResultExplanation' => 'Request missing company token']);
-if (strpos($token, 'TEST') !== 0)  fd_xml(['Result' => '802', 'ResultExplanation' => 'Company token does not exist']);
+// A real token is a GUID, so the fake also knows GUIDs whose first group
+// starts 7E57 ("TEST"); any other GUID is one DPO has never issued.
+if (strpos($token, 'TEST') !== 0 && stripos($token, '7E57') !== 0)
+                                   fd_xml(['Result' => '802', 'ResultExplanation' => 'Company token does not exist']);
 
 $has = static fn(string $hay, string $needle): bool => stripos($hay, $needle) !== false;
 
@@ -108,6 +124,7 @@ if ($request === 'createToken') {
     if ($has($ref, 'LIMIT'))    fd_xml(['Result' => '905', 'ResultExplanation' => 'The transaction amount has exceeded your allowed transaction limit']);
     if ($has($ref, 'PAIDREF'))  fd_xml(['Result' => '940', 'ResultExplanation' => 'CompanyREF already exists and paid']);
     if ($has($ref, 'NOTOKEN'))  fd_xml(['Result' => '000', 'ResultExplanation' => 'Transaction created']);
+    if ($cur === 'XTS')         fd_xml(['Result' => '904', 'ResultExplanation' => 'Currency not supported']);
 
     // A reference already created returns the SAME token — DPO enforces
     // CompanyRef uniqueness, and a fake that forgot would hide double-charges.
@@ -139,6 +156,17 @@ if ($request === 'verifyToken') {
     $cur = (string)$rec['currency'];
 
     if ($has($ref, 'VSTALL'))  { sleep(8); }
+    if ($has($ref, 'PROBE'))   fd_xml(['Result' => '900', 'ResultExplanation' => 'Transaction not paid yet']);
+    if ($has($ref, 'V6ANS'))   fd_xml(['Result' => '000', 'ResultExplanation' => 'Transaction Paid',
+                                       'CustomerName' => 'Test Customer', 'CustomerCredit' => '',
+                                       'CustomerCreditType' => 'Mobile',
+                                       'TransactionApproval' => 'TEST-APPROVAL-V6',
+                                       'TransactionCurrency' => $cur,
+                                       'TransactionAmount' => number_format($amt, 2, '.', ''),
+                                       'FraudAlert' => '001', 'FraudExplnation' => 'Low Risk (Not checked)',
+                                       'TransactionNetAmount' => number_format($amt, 2, '.', ''),
+                                       'CustomerPhone' => '700000012', 'CustomerCountry' => 'Uganda',
+                                       'MobilePaymentRequest' => 'Not sent', 'AccRef' => '']);
     if ($has($ref, 'AUTH'))    fd_xml(['Result' => '001', 'ResultExplanation' => 'Authorized', 'CompanyRef' => $ref,
                                        'TransactionAmount' => number_format($amt, 2, '.', ''), 'TransactionCurrency' => $cur]);
     if ($has($ref, 'WAIT'))    fd_xml(['Result' => '900', 'ResultExplanation' => 'Transaction not paid yet', 'CompanyRef' => $ref]);

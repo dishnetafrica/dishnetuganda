@@ -25,30 +25,43 @@
 -- ---------------------------------------------------------------------------
 -- 1. Roles. Three, because three execution contexts genuinely exist.
 --
--- DEPLOYMENT REQUIREMENT, not a suggestion. The passwords below are local
--- development literals, following the convention migration 001 set for dnb_app.
--- They are in a public repository, so on any installation the database listens
--- for beyond a local socket they are equivalent to no password at all — and a
--- role separation whose credentials are published is not a boundary. Before the
--- database accepts a non-local connection, every one of these roles must be
--- given a real password:
+-- These roles are created WITHOUT a password, and that is the whole point
+-- (docs/97). They previously carried development literals, which were
+-- published in this repository and so were equivalent to no password at all on
+-- any database reachable beyond a local socket — a role separation whose
+-- credentials are public is not a boundary.
 --
---   ALTER ROLE dnb_app    PASSWORD '<generated>';
---   ALTER ROLE dnb_worker PASSWORD '<generated>';
---   ALTER ROLE dnb_admin  PASSWORD '<generated>';
+-- rolpassword is left NULL, so under scram-sha-256 none of these roles can
+-- authenticate until an operator provisions a credential. The installer does
+-- that, at install time, from the environment or from a CSPRNG:
 --
--- and the application handed them through DNB_APP_PASS / DNB_WORKER_PASS /
--- DNB_ADMIN_PASS. This is tracked as a deployment gate in docs/57 §11.4; it is
--- deliberately not automated here, because a migration that generates and
--- stores credentials would put them somewhere this file can reach.
+--   php plugin/bin/plugin.php install
+--
+-- and the application is handed the result through DNB_APP_PASS /
+-- DNB_WORKER_PASS / DNB_ADMIN_PASS. Database::connect() no longer defaults
+-- those, so an unset one raises rather than trying an empty string.
+--
+-- The generation deliberately does not happen HERE: a migration is
+-- source-controlled and replayed identically on every installation, which is
+-- the one place a per-installation secret must never live.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dnb_worker') THEN
-    CREATE ROLE dnb_worker LOGIN PASSWORD 'worker-local-dev'
+    -- No PASSWORD clause, deliberately (docs/97). A migration is
+    -- source-controlled and replayed identically everywhere; a credential
+    -- must be neither. rolpassword stays NULL, which under scram-sha-256
+    -- means this role cannot authenticate at all until the installer sets
+    -- a credential. Privileges are declared here; credentials are not.
+    CREATE ROLE dnb_worker LOGIN
       NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dnb_admin') THEN
-    CREATE ROLE dnb_admin LOGIN PASSWORD 'admin-local-dev'
+    -- No PASSWORD clause, deliberately (docs/97). A migration is
+    -- source-controlled and replayed identically everywhere; a credential
+    -- must be neither. rolpassword stays NULL, which under scram-sha-256
+    -- means this role cannot authenticate at all until the installer sets
+    -- a credential. Privileges are declared here; credentials are not.
+    CREATE ROLE dnb_admin LOGIN
       NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
   END IF;
 END $$;

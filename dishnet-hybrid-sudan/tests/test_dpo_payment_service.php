@@ -85,6 +85,8 @@ function svc(array $cfgOver = []): array {
         'dpo_enabled' => true, 'dpo_environment' => 'test',
         'dpo_payment_method_uuid' => $METHOD, 'dpo_ptl' => 30,
         'dpo_currencies' => ['UGX'], 'dpo_unpayable_statuses' => [9],
+        // The environment is TEST, so the customer must be a test customer.
+        'dpo_test_clients' => [7],
         'dpo_return_url' => 'https://example.test/return',
         'dpo_back_url'   => 'https://example.test/back',
     ], $cfgOver);
@@ -99,7 +101,7 @@ $i = $s->initiate(7, 125, ['first' => 'Grace', 'last' => 'Nakato']);
 is_($i['ok'], 'the attempt was created');
 t('for the full outstanding amount', $i['amount'], 299000.0);
 t('in the invoice currency',         $i['currency'], 'UGX');
-is_(strpos($i['checkout_url'], 'payv2.php?ID=') !== false, 'and the customer has a checkout URL');
+is_(strpos($i['checkout_url'], 'payv3.php?ID=') !== false, 'and the customer has a checkout URL');
 $r = $s->verifyAndSettle($i['reference']);
 t('settled',           $r['status'], 'SUCCESS');
 t('one uCRM payment',  paymentCount(), 1);
@@ -171,6 +173,20 @@ t('and an invoice with no currency at all', $s->initiate(7, 131)['code'], 'NOCUR
 echo "\nA blocked invoice status is refused\n";
 [$s] = svc();
 t('the configured unpayable status', $s->initiate(7, 128)['code'], 'NOTPAYABLE');
+// 128 carries status 9, which the unpaid/partly-paid rule refuses anyway, so
+// prove the configured list on a status that would otherwise be payable.
+[$s] = svc(['dpo_unpayable_statuses' => [2]]);
+t('a configured status refuses an invoice the rule would allow', $s->initiate(7, 126)['code'], 'NOTPAYABLE');
+[$s] = svc();
+is_($s->initiate(7, 126)['ok'], 'and without it the same part-paid invoice is payable (the control)');
+
+echo "\nOnly unpaid and part-paid invoices can be paid online\n";
+// uCRM: 1 = Unpaid, 2 = Partially paid, 3 = Paid (Ubiquiti's revenue-report
+// plugin). 4 is void, 0 a draft — neither is money owed.
+[$s] = svc();
+t('a void invoice',  $s->initiate(7, 132)['code'], 'NOTPAYABLE');
+t('a draft invoice', $s->initiate(7, 133)['code'], 'NOTPAYABLE');
+t('a paid invoice (status 3) is already paid', $s->initiate(7, 127)['code'], 'SETTLED');
 
 echo "\nThe kill switch stops new payments and nothing else\n";
 resetPayments();
@@ -185,7 +201,7 @@ t('plainly',                    $blocked['code'], 'DISABLED');
 $offSame = new DpoPaymentService($st, new DpoClient(['company_token' => 'TESTTOKEN-0001',
     'service_type' => '3854', 'api_create' => $dpoBase, 'api_verify' => $dpoBase, 'timeout' => 5]),
     new CrmApiClient($crmBase, 'test-key'),
-    ['dpo_enabled' => false, 'dpo_environment' => 'test',
+    ['dpo_enabled' => false, 'dpo_environment' => 'test', 'dpo_test_clients' => [7],
      'dpo_payment_method_uuid' => $METHOD, 'dpo_currencies' => ['UGX']]);
 t('but money already taken still settles', $offSame->verifyAndSettle($live['reference'])['status'], 'SUCCESS');
 t('and it reached uCRM',                   paymentCount(), 1);

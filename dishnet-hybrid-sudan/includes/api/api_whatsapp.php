@@ -1,4 +1,6 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';
+require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_override(): links on the reachable address
 // ═══════════════════════════════════════════════════════════════
 // WHATSAPP UNIFIED INBOX — API Endpoints
 // Uses ConversationService (SQLite) for all conversation data.
@@ -679,7 +681,7 @@
 
         $pdfFile  = "quote_{$quoteId}_" . substr(md5(uniqid()), 0, 8) . '.pdf';
         $pdfPath  = $tempDir . '/' . $pdfFile;
-        $pdfToken = hash_hmac('sha256', $pdfFile, ($config['webhook_secret'] ?? 'dishnet') . date('Ymd'));
+        $pdfToken = PdfLinkToken::random();   // 5.18.37: serve_temp_pdf checks the .meta token only
         file_put_contents($pdfPath, base64_decode($pdfRaw));
         file_put_contents($pdfPath . '.meta', json_encode([
             'token' => $pdfToken, 'created' => time(), 'quote' => $quoteNum,
@@ -949,6 +951,8 @@
             . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
             . strtok($_SERVER['REQUEST_URI'] ?? '/public.php', '?'), '/');
         $publicUrl = $baseUrl . '/public.php?page=wa_media&f=' . urlencode($filename);
+        // Evolution fetches this, and refuses UISP's self-signed :8443.
+        $publicUrl = dn_with_override($publicUrl, $config);
 
         $ok2(['url' => $publicUrl, 'filename' => $filename, 'ext' => $ext, 'size' => $file['size']]);
     }

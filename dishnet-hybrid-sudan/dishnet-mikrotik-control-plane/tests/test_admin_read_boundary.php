@@ -111,7 +111,12 @@ $pairs = [['mt_admin_customers', 'customer'], ['mt_admin_sites', 'site'],
           ['mt_admin_routers', 'router'],     ['mt_admin_plans', 'plan'],
           ['mt_admin_vouchers', 'voucher'],   ['mt_admin_voucher_batches', 'batch'],
           ['mt_admin_sessions', 'session'],   ['mt_admin_intents', 'intent'],
-          ['mt_admin_audit', 'audit']];
+          ['mt_admin_audit', 'audit'],
+          // Migration 021, approved as an extension of the eleven.
+          ['mt_admin_services', 'service'],
+          ['mt_admin_voucher', 'voucherDetail'],
+          // Migration 027: every operator's people, non-secret fields only.
+          ['mt_admin_principals', 'principal']];
 foreach ($pairs as [$fn, $kind]) {
     $cols = array_column($inspect->query(
         "SELECT unnest(proargnames) AS c FROM pg_proc WHERE proname = ?", [$fn]), 'c');
@@ -127,11 +132,14 @@ t('6/7/8. NO SECRET, FREE-FORM OR CREDENTIAL FIELD CROSSES THE BOUNDARY');
 $blob = '';
 foreach (['/api/v1/admin/customers','/api/v1/admin/sites','/api/v1/admin/routers',
           '/api/v1/admin/plans','/api/v1/admin/vouchers','/api/v1/admin/voucher-batches',
-          '/api/v1/admin/sessions','/api/v1/admin/intents','/api/v1/admin/audit'] as $p) {
+          '/api/v1/admin/sessions','/api/v1/admin/intents','/api/v1/admin/audit',
+          '/api/v1/admin/principals'] as $p) {
     $blob .= json_encode(hitr($routes, 'GET', $p, $req)->body);
 }
 foreach (['radius_ref','wg_pubkey','secret_sealed','credential_hash','token_hash',
-          'code_hash','"code"','radius_username','mac'] as $f) {
+          'code_hash','"code"','radius_username','mac',
+          // 027: a principal's phone (the OTP key) and email never cross either.
+          '"phone"','"email"'] as $f) {
     is_(str_contains($blob, $f), false, "no admin response carries {$f}");
 }
 // D-2. Asserted at the DATABASE, not merely on today's values: the function
@@ -154,11 +162,70 @@ foreach (array_column($pairs, 0) as $fn) {
     is_((int) $pub, 0, "PUBLIC holds no EXECUTE on {$fn}");
 }
 
-t('THE READER accepts only the eleven projections');
+t('THE READER accepts only the fourteen approved projections');
 throws_(fn() => ($reader)('mt_customers'), 'not an admin projection', 'a table name is refused');
 throws_(fn() => ($reader)('mt_device_secrets'), 'not an admin projection', 'and a secret table especially');
 throws_(fn() => ($reader)('mt_admin_customer'), 'wrong arity', 'arity is checked');
 is_(($reader)('mt_admin_customer', ['not-a-uuid']), [], 'a non-uuid argument yields nothing');
+
+// ===========================================================================
+t('021 — THE TWO APPROVED ADDITIONS BEHAVE LIKE THE ELEVEN');
+
+foreach (['mt_admin_services()', 'mt_admin_voucher(uuid)'] as $fn) {
+    is_($inspect->one('SELECT has_function_privilege(?,?,?) AS p',
+        ['dnb_adminapi', $fn, 'EXECUTE'])['p'], true, "dnb_adminapi may execute {$fn}");
+    is_($inspect->one('SELECT has_function_privilege(?,?,?) AS p',
+        ['dnb_app', $fn, 'EXECUTE'])['p'], false, "the request role may NOT execute {$fn}");
+    $def = $inspect->one('SELECT p.prosecdef, p.proconfig::text cfg FROM pg_proc p
+                            JOIN pg_namespace n ON n.oid = p.pronamespace
+                           WHERE n.nspname = \'public\' AND p.oid::regprocedure::text = ?', [$fn]);
+    is_($def['prosecdef'], true, "{$fn} is SECURITY DEFINER");
+    is_(str_contains((string) $def['cfg'], 'search_path=public'), true,
+        "{$fn} pins its search_path");
+}
+
+t('021 — services reports a RECORDED state, across the estate');
+$svc = ($reader)('mt_admin_services');
+is_(count($svc) >= 2, true, 'more than one customer\'s service is visible — estate scope');
+is_(count(array_unique(array_column($svc, 'customer_id'))) >= 2, true,
+    'and they belong to different customers');
+foreach ($svc as $row) {
+    is_(array_key_exists('status', $row), true, 'each carries the recorded status');
+    // The word that must never appear: this is a record, not a probe.
+    is_(in_array('last_seen_at', array_keys($row), true), false,
+        'and no liveness field rides along with it');
+}
+// SignalReport must still refuse to call HotSpot measured, whatever services says.
+$hot = null;
+foreach (\Dn\Network\SignalReport::inventory() as $x) { if ($x['key'] === 'hotspot') { $hot = $x; } }
+is_($hot['status'], \Dn\Network\SignalReport::UNMEASURED,
+    'HotSpot liveness stays UNMEASURED — a recorded service state is not a running server');
+
+t('021 — voucher detail returns the LIST fields and nothing more');
+// Issued through the real service: the fixture carries no vouchers, and a
+// detail assertion against an empty estate would pass by proving nothing.
+$ctxV = new \Dn\Tenancy\TenantContext(Database::app());
+$ctxV->run($A['customer'], function (Database $db) use ($A) {
+    $plan = (new \Dn\Policy\PlanRepository($db))->create(
+        ['name' => 'boundary probe', 'duration_s' => 3600,
+         'rate_down_bps' => 2000000, 'rate_up_bps' => 1000000, 'data_cap_bytes' => null,
+         'devices_per_voucher' => 1, 'mode' => 'elapsed',
+         'price_minor' => 1000, 'currency' => 'UGX'], $A['principal'], $A['site']);
+    (new \Dn\Vouchers\VoucherService($db))->issueBatch(
+        $plan['id'], 2, $A['site'], $A['principal']);
+});
+$one = ($reader)('mt_admin_vouchers')[0] ?? null;
+is_($one !== null, true, 'the estate has a voucher to open');
+$detail = ($reader)('mt_admin_voucher', [$one['id']]);
+is_(count($detail), 1, 'the detail projection returns exactly one row');
+is_(array_keys($detail[0]), array_keys($one),
+    'with exactly the columns the list returns — asking for one row reaches nothing extra');
+foreach (['code', 'radius_username', 'secret', 'password'] as $leak) {
+    is_(array_key_exists($leak, $detail[0]), false, "voucher detail withholds {$leak}");
+}
+is_(($reader)('mt_admin_voucher', ['00000000-0000-4000-8000-000000000000']), [],
+    'an unknown id returns nothing rather than erroring');
+is_(($reader)('mt_admin_voucher', ['not-a-uuid']), [], 'and a non-uuid is refused before the query');
 
 t('14. WITH DenyAllIdentity BOUND, no projection is executed at all');
 $denied = AdminRoutes::build(new DenyAllIdentity(), Bindings::defaults(),

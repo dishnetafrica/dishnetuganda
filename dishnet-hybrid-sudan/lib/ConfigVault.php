@@ -92,6 +92,28 @@ class ConfigVault
         'dpo_payment_method_uuid',
         'dpo_ptl',
         'dpo_ptl_type',
+        // Who may pay while the environment is TEST, and the key of the test
+        // link for DPO's reviewer. Losing the first after a re-install fails
+        // closed (nobody can pay in test); losing the second closes the link.
+        'dpo_test_clients',
+        'dpo_test_link_key',
+        // The DPO Pay screen saves these two with the rest. Missing from this
+        // list, they made store() refuse the whole save, so from the first
+        // build until 5.18.36 not one DPO setting saved on the screen reached
+        // the vault -- and the probe, the test page, the return page, DPO's
+        // push and the reconcile cron, which read the vault, never saw them.
+        'dpo_currencies',
+        'dpo_unpayable_statuses',
+        // The address customers' browsers use (tools/crm_url_check.php).
+        // Lost in a re-install, every link the plugin sends -- portal, PDF,
+        // payment return -- would go back to uCRM's internal :8443.
+        'crm_public_url',
+        // 5.18.37 — keys of their own for two boundaries that used to borrow
+        // webhook_secret: the receipt/delivery PDF links, and (optionally) the
+        // uCRM webhook. Generated on the install; a re-install must not lose
+        // them, or every receipt link in a customer's WhatsApp dies at once.
+        'pdf_link_secret',
+        'crm_webhook_key',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

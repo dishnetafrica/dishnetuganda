@@ -38,8 +38,18 @@ require_once __DIR__ . '/DpoPaymentStore.php';
  */
 final class DpoPaymentService
 {
-    /** uCRM invoice status the plugin already treats as paid (portal_data.php). */
-    const UCRM_STATUS_PAID = 4;
+    /**
+     * uCRM invoice statuses, as Ubiquiti's own revenue-report plugin states
+     * them: 1 = Unpaid, 2 = Partially paid, 3 = Paid. Only the first two can
+     * be paid online. Everything else is refused — 0 draft, 4 void (as this
+     * plugin's product screens read it), and anything not established.
+     * Until 5.18.32 this said 4 = paid; a void invoice was refused as "already
+     * paid" and a paid one as having nothing outstanding, so nothing was ever
+     * wrongly payable — the words were wrong, not the money.
+     */
+    const UCRM_STATUS_UNPAID  = 1;
+    const UCRM_STATUS_PARTIAL = 2;
+    const UCRM_STATUS_PAID    = 3;
 
     private DpoPaymentStore $store;
     private DpoClient       $dpo;
@@ -71,6 +81,18 @@ final class DpoPaymentService
         return ((string)($this->cfg['dpo_environment'] ?? 'test')) === 'live' ? 'live' : 'test';
     }
 
+    /**
+     * A client named as a test customer on the DPO screen. In the TEST
+     * environment nobody else can start a payment or have one posted to
+     * uCRM: DPO's test cards are published, so a test token open to every
+     * customer would let anyone clear a real invoice with one.
+     */
+    public function isTestClient(int $clientId): bool
+    {
+        return $clientId > 0
+            && in_array($clientId, array_map('intval', (array)($this->cfg['dpo_test_clients'] ?? [])), true);
+    }
+
     // ── Initiating ──────────────────────────────────────────────────────
 
     /**
@@ -88,6 +110,9 @@ final class DpoPaymentService
         if ($clientId <= 0 || $invoiceId <= 0) {
             return self::no('BADREQUEST', 'Invoice not specified.');
         }
+        if ($this->environment() === 'test' && !$this->isTestClient($clientId)) {
+            return self::no('TESTONLY', 'Online payment is not available yet.');
+        }
 
         // LIVE, not the portal cache. The cache is right for a list and can be
         // hours stale; in that window the customer may have paid an agent.
@@ -101,17 +126,17 @@ final class DpoPaymentService
             return self::no('FORBIDDEN', 'That invoice is not on your account.');
         }
 
-        $status = (int)($inv['status'] ?? 0);
-        $blocked = array_map('intval', (array)($this->cfg['dpo_unpayable_statuses'] ?? []));
-        if (in_array($status, $blocked, true)) {
-            return self::no('NOTPAYABLE', 'This invoice cannot be paid online.');
-        }
-
+        $status  = (int)($inv['status'] ?? 0);
         $total   = (float)($inv['total'] ?? 0);
         $paid    = (float)($inv['amountPaid'] ?? 0);
         $payable = round($total - $paid, 2);
         if ($status === self::UCRM_STATUS_PAID || $payable <= 0) {
             return self::no('SETTLED', 'This invoice is already paid.');
+        }
+        $blocked = array_map('intval', (array)($this->cfg['dpo_unpayable_statuses'] ?? []));
+        if (!in_array($status, [self::UCRM_STATUS_UNPAID, self::UCRM_STATUS_PARTIAL], true)
+            || in_array($status, $blocked, true)) {
+            return self::no('NOTPAYABLE', 'This invoice cannot be paid online.');
         }
 
         $currency = (string)($inv['currencyCode'] ?? '');
@@ -347,6 +372,16 @@ final class DpoPaymentService
             return $this->quarantine($row, 'DPO settled ' . number_format($v['amount'], 2)
                 . ' against ' . number_format((float)$row['amount'], 2) . ' ' . $row['currency']
                 . ' outstanding — partial payments are not accepted');
+        }
+
+        // A payment taken with the TEST token for somebody who is not a test
+        // customer is never posted: DPO's test cards are public. If the
+        // environment was set to test by mistake while a live token was in
+        // use, the money is real — so it waits here for a person rather than
+        // being dropped.
+        if ((string)$row['environment'] === 'test' && !$this->isTestClient((int)$row['crm_client_id'])) {
+            return $this->quarantine($row, 'a test-environment payment for client #'
+                . (int)$row['crm_client_id'] . ', who is not a test customer — not posted to uCRM');
         }
 
         $method = (string)($this->cfg['dpo_payment_method_uuid'] ?? '');

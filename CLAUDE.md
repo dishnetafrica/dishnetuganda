@@ -8,6 +8,30 @@ from the repository root.
 anything it covers, read the authoritative decision document it points to. Where
 the index and a decision document disagree, **the decision document is right.**
 
+## Vocabulary — binding since 2026-09-23 (`docs/117`)
+
+| Term | Means | Stored / named in code as (unchanged) |
+|---|---|---|
+| **Operator** | the Domain-B **tenant** — the RLS boundary | `mt_customers`, `customer_id`, `mt_current_customer()`, `/api/v1/admin/customers`, JSON key `customer` |
+| **Operator Owner** | a principal with `kind = 'owner'` — every operator-plane capability | `mt_principals` |
+| **Operator Staff** | a principal with `kind = 'staff'` — the stored value `'operator'` is renamed by migration **027** (built; the production row count it would touch is **NOT ESTABLISHED**, census §1c) | `mt_principals` |
+| **DishNet Staff** | DishNet's own people (Admin · NOC · Sales · Support) | `mt_staff` (planned, 026); `StaffRole`; **`actor_kind = 'staff'` means them and nobody else** |
+| **DishNet engineer** | the human installing or operating the platform — what documents before `docs/115` call "the operator" | — |
+| **Guest** | a voucher, then a session; never an account, never an actor kind | `mt_vouchers`, `mt_sessions` |
+| **Location / Site** | `mt_sites`; the UI still says *sites* (T-1b, open wording) | `mt_sites`, `site_id` |
+| **Customer PWA** | the product name of the operator-plane app; its users are Operator Staff | `public/`, `/api/v1/me/*` |
+| **Commercial customer** | the external billing relationship (uCRM/Splynx), not a Domain-B entity | `ucrm_client_id` |
+
+**Reading rule.** Documents `30`–`113` and the CLAUDE.md sections above
+`docs/115` were written before this vocabulary: there, *"the operator"* is the
+DishNet engineer and *"customer"* is the tenant. They are records and are
+**not rewritten**. `mt_principals.kind = 'operator'` in those documents is the
+schema value that still exists; it becomes `'staff'` in 027.
+
+**Never** add a tenant table above `mt_customers`, rename it, or add an
+`actor_kind` to tell Operator Staff from DishNet Staff — the former are
+`principal`, the latter `staff`.
+
 ## Settled — do not reopen without an explicit instruction
 
 - **F1–F13 are FROZEN.** Amendment only by the process in `docs/53` §5.
@@ -30,6 +54,20 @@ the index and a decision document disagree, **the decision document is right.**
 - **The customer/site ownership invariant covers `mt_devices`, `mt_vouchers`
   and `mt_voucher_batches` only.** `mt_plans` is **out of scope** — do not add
   it because the column names match. (`docs/75` §5, `docs/77` §3)
+- **P-B — CLOSED.** `mt_principals.phone` stays **globally UNIQUE**. Do not
+  narrow it per-customer, weaken or drop it: `mt_auth_issue_code` resolves the
+  tenant with a non-`STRICT` `SELECT … INTO`, so duplicates would bind a
+  one-time code — and the session's customer — to an arbitrary principal,
+  silently. **C10 may not be solved by weakening it.** (`docs/107` §2)
+- **P-C — CLOSED: principal reassignment is PROHIBITED.** No operation may
+  change `mt_principals.customer_id`. Resolution re-reads `p.status` live but
+  takes `customer_id` from the session's own snapshot, so disable is enforced
+  immediately and reassignment would not be enforced at all. The lifecycle is
+  **disable, then create a new principal**. (`docs/107` §3)
+- **S-A — CLOSED: service migration is PROHIBITED** as an ordinary operation.
+  `mt_services.customer_id` is not a mutable field. If commercial ownership
+  genuinely changes: **end the service and create a new one**, never re-point
+  it. (`docs/107` §4)
 
 ## Chosen ≠ built
 
@@ -41,6 +79,13 @@ the index and a decision document disagree, **the decision document is right.**
   FreeRADIUS has never run this mechanism. (`docs/70` §5.2)
 
 ## The next gate
+
+> **Answered 2026-09-23 22:08 UTC (`docs/123` §F).** The census ran on the
+> DishNet host: no Domain B service or schema exists outside staging, and
+> staging's synthetic estate is CLEAR at migration 028. **Production Domain B is
+> NOT DEPLOYED — that is the production data state for this host.** GATE 2 of
+> O-1 is now the operator's decision. The text below is the record as it stood
+> before; the constraints it lists still bind anything they name.
 
 **The production census** — the operator runs it; **`docs/79` is the handoff**.
 This session **cannot** reach production: no SSH client, no DSN, egress 403, and
@@ -71,9 +116,12 @@ test schema only**:
 - **W-3** — `dnb_adminwrite`: EXECUTE on the seven, **zero table privileges**.
   `dnb_admin`'s existing grants were **not** revoked (needs its own audit).
 
-**No Admin write route or button is bound, and none may be without a new
-instruction.** `DenyAllIdentity` is still the production Admin binding.
-`Database::adminWrite()` exists and is used by no route.
+**Since G-C (`docs/118`) exactly TWO Admin write routes are bound — router
+register and router assign, each one W-1 function on `dnb_adminwrite` with the
+authenticated staff subject as the actor. No other Admin write route or button
+is bound, and none may be without a new instruction.** `DenyAllIdentity` is
+still the default Admin binding. `Database::adminWrite()` is reached by those
+two routes through `RouterAdmin` and by nothing else.
 
 - **Applying 020 to production is NOT authorized.** It assumes zero existing
   customer/site violations, which is established for the development schema
@@ -253,6 +301,19 @@ routers" came to sit beside a Router Detail showing one.
 
 - Everything is built through the **real Domain-B write paths**, so the estate
   obeys every constraint and the audit trail exists because the acts happened.
+- **Fixture debris travels BOTH ways — measured 2026-09-22.** `dnb_sim` was found
+  holding **two customers named `Riverside Hotel` and `Kabale Hostel` with
+  `ucrm_client_id` 1001/1002**, zero `SIM-` identifiers of any kind, and
+  **`test:seed` as its only audit actor**. Those are `tests/bootstrap.php`'s
+  `seed_two_customers()` fixtures, not an estate: a bootstrap-based probe had
+  been run with `DNB_DSN` pointed at `dnb_sim`. **Not caused by migration 022** —
+  a targeted audit revoke neither creates nor deletes a customer, and the proof
+  is positive rather than absent: `ucrm_client_id`'s only writer is the test
+  bootstrap, and the simulator's own `sim:seed` actor appears **zero** times.
+  **The append-only audit trail is what made this answerable** — simulator rows
+  could not have been deleted, so their absence proves they were never written.
+  Rebuild with `plugin.php simulate`; never diagnose a panel from row counts
+  alone.
 - Every identifier is `SIM-` prefixed. A test asserts no `WAN-UNSET`-shaped
   value survives.
 - The simulator **refuses to run when `DN_ALLOW_REAL_BINDINGS` is set**: a
@@ -274,6 +335,3027 @@ routers" came to sit beside a Router Detail showing one.
 
 The signal inventory separates **`status`** (measured in Domain B) from
 **`admin_readable`** (the Admin API can fetch it). Do not collapse them.
+
+## The Admin read boundary is THIRTEEN projections — `docs/93`
+
+Migration **021** added the two approved additions and nothing else:
+
+- **`mt_admin_services()`** — `id, customer_id, kind, status, started_at,
+  ended_at`. **`status` is RECORDED, not observed.** A service marked `active`
+  does **not** mean a HotSpot server is running. A test asserts `SignalReport`
+  keeps HotSpot liveness `UNMEASURED` whatever this returns. **Never derive
+  HotSpot liveness from service status or from the router's lifecycle state.**
+- **`mt_admin_voucher(uuid)`** — column list **identical to
+  `mt_admin_vouchers()`**, deliberately: a detail view that returned more would
+  be a way to reach a withheld field one row at a time. **`code` is withheld**,
+  here and everywhere in Admin.
+
+**The voucher lifecycle is declared server-side** in
+`src/Vouchers/LifecycleReport.php`: `unused` and `revoked` are reachable;
+`activating`, `active` and `expired` are **not**, each with the reason. **Do not
+manufacture `active` or `expired` vouchers in the simulator to fill a screen** —
+the estate shows 17 vouchers, all `unused`, because that is the truth.
+
+**Operator/engineer split.** Router Detail shows concise verdicts
+(`WireGuard tunnel — NOT MEASURED`) and links to Diagnostics; **Diagnostics**
+carries source, limitation and what would be required. Both render from the same
+server inventory. `WAN interface` is **`WAN interface assignment — RECORDED`**:
+what is measured is the interface a person recorded at staging, not the link.
+
+## The plugin is installable — B-1 closed, B-2 open (`docs/96`, `docs/97`)
+
+Release candidate **`dishnet-mikrotik-0.1.0-rc1`**, content digest `aa48b4b4…b1db63c7` —
+the digest of the archive's `SHA256SUMS`, which is stable across rebuilds. The
+archive's own sha256 is **not** an identity: tar records mtimes, so identical
+source yields different bytes. Compare the content digest.
+Measured end to end from the built tarball into a PostgreSQL cluster created for
+the test: **install → serve → simulate → uninstall leaves zero residue**, then a
+**second install from the artifact alone** (67 checks). The classification is
+**B — an independent Domain-B service**, measurably **not** a UCRM plugin. **Do
+not call it a UCRM plugin because the directory is named `plugin`.**
+
+**B-1 — CLOSED.** *Migrations declare privilege; the installer supplies
+credentials; neither ever carries a secret in source control.* The six
+`CREATE ROLE … PASSWORD '<literal>'` clauses are gone — **nothing else in
+`migrations/` changed**, not one attribute, grant or policy. `rolpassword` stays
+NULL, so under `scram-sha-256` a role cannot authenticate until
+`plugin.php install` provisions one, supplied via `DNB_*_PASS` or generated into
+`DNB_SECRETS_OUT` at mode 0600. `Database::connect()` has **no password
+defaults** — an unset one raises.
+
+- **Do not put a credential in a migration, ever**, however well chosen. The
+  defect was the location, not the entropy.
+- **`Doctor::DEV_PASSWORDS` is the BURNED list**, not a description of the
+  migrations. Those six strings are in Git history; the check exists only to
+  keep proving they are dead. Do not delete it and do not "update" it.
+- **A credential check needs a positive control.** Under `trust` every password
+  succeeds, and the check reported six live credentials on a database where none
+  was set. A deliberately wrong password goes first; if that connects the result
+  is **SKIP**, never a verdict.
+- **The installer must not alter anything it might then refuse over.** The first
+  version generated six credentials, applied them, and only then found it had
+  nowhere to write them.
+- **`pg_authid` is superuser-only** and the owner is deliberately not a
+  superuser. Do not widen its privilege to ask a convenience question — the
+  installer asks "did this role predate this install?" instead.
+- **Quote every value a shell will source.** An unquoted DSN contains semicolons
+  and becomes three commands.
+- Roles are provisioned only where the owner created them; PostgreSQL refuses
+  otherwise. On a development cluster with older roles, drop them and let the
+  migrations rebuild them — **do not grant the owner more privilege**.
+- `tests/run.sh` mints fresh credentials per run and installs the way an
+  operator does. `tools/dev_panel.sh` restores the local panel workflow.
+
+**B-2 — OPEN, and deliberately untouched.** `DenyAllIdentity` → 401 on every
+route; only `DN_DEV_STAFF_IDENTITY` makes the panel render. W-4 is OPEN, so a
+**demonstration** install is possible and an operational one is not. **Do not
+invent a staff identity to work around this.**
+
+- **The 12 roles install creates are cluster-wide.** Installing onto the cluster
+  that serves UCRM would add them there, and uninstall would drop them
+  cluster-wide. **Prefer a separate PostgreSQL instance.**
+- **Nothing is installed anywhere.** This session cannot reach the DishNet
+  server — no SSH client, no DSN, egress 403. `plugin/bin/install-test.sh` is
+  the operator's equivalent; `plugin/doc/INSTALL.md` ships the runbook.
+- The package **excludes `tests/`** (it needs a BYPASSRLS fixture identity),
+  `tools/` and `docs/`. Do not add them.
+- **`public/` was the fourth exclusion until 2026-09-24**, recorded because
+  nothing served it. **It ships since `docs/127` phase 3, on the operator's
+  explicit approval** (*"Yes, own address (Recommended)"*). Only
+  `plugin/bin/serve-app.php`, its own process, serves it. The old guard only
+  read `package.sh`'s words and stayed green through the reversal; it now reads
+  the built archive.
+- Both static servers resolve with `realpath` and require containment under
+  `panel/`. Ten representative paths — source, migration, manifest, env
+  template, and the generated secrets file — are asserted unreachable.
+
+No gate moved. F6-B still NOT AUTHORIZED, Admin writes still unbound, portal
+still unbuilt, Decision 5 still OPEN and gated, the census still next.
+
+## UISP/uCRM integration — audited, nothing decided (`docs/98`)
+
+The plugin contract is **MEASURED** from two plugins already running on the
+DishNet server (`dishnet-hybrid-sudan/`, `dishnet-ai/`) — not from documentation,
+which is unreachable (egress 403), and not from the production server, which
+this session cannot touch.
+
+- **The contract:** a **ZIP with `manifest.json` at the archive ROOT**;
+  `main.php` executed on a **~5-minute tick**, never a daemon; **exactly one**
+  public file — *"UCRM only exposes public.php directly"* — routed by
+  `public.php?page=`; uCRM writes `ucrm.json` (`ucrmLocalUrl`, `ucrmPublicUrl`,
+  `pluginAppKey`); the CRM REST API is `api/v1.0/*` with `X-Auth-App-Key`;
+  storage is a data dir that survives updates, holding **SQLite and JSON —
+  there is no PostgreSQL**.
+- **Staff identity is already solved, in the sibling plugin:** forward the uCRM
+  session cookie (`nms-crm-php-session-id`, `nms-session`, `PHPSESSID`) to
+  `/current-user`; 403 when nobody is logged in. **It works only same-origin.**
+  A uCRM admin arriving that way is **`staff`** — `actor_kind` already allows it
+  and **no new actor kind may be invented**.
+- **RC1 is NOT installable through the plugin mechanism, and must not be
+  forced.** Wrong archive, wrong manifest, and — decisively — a plugin has no
+  PostgreSQL, cannot `CREATE ROLE`, and offers no RLS or `SECURITY DEFINER`.
+  **Every Domain-B control lives in exactly those features.** Cramming it in
+  deletes the security model.
+- **Recommendation R-1 — a thin bridge plugin; Domain B stays a separate
+  service.** The plugin supplies the menu, the staff identity and the uCRM
+  adapter. It must **never** connect to Domain-B PostgreSQL, hold a Domain-B
+  role credential, write a Domain-B table, or call a provisioning function.
+
+> **I-1 — Domain B is today a SECOND, UNLINKED CUSTOMER MASTER.** Measured:
+> `mt_customers.ucrm_client_id` is nullable, its **only writer in the whole
+> repository is `tests/bootstrap.php`**, `mt_customer_create(p_name, p_created_by)`
+> cannot set it, Domain B contains no uCRM client code at all, and the simulator
+> shows 3 customers with 0 linked. `docs/45` says the commercial identity lives
+> in uCRM; nothing implements that. **Decide U-1 (projection or independent
+> record) and U-2 (`NOT NULL`?) before more customers accumulate.**
+
+- **Billing and Support do not exist in Domain B** — zero matches in
+  `src/Api/Routes.php`. They can only come from uCRM, and no adapter exists.
+  **Do not fabricate either screen.**
+- **UNVERIFIED and only the operator can answer** (`docs/98` §14): the installed
+  UISP/uCRM version, whether a **client-zone** plugin page is supported, the full
+  webhook event list, and whether a disposable uCRM may be stood up at all.
+  Without that last one the plugin test plan cannot even begin.
+- **M-1:** `dishnet-hybrid-sudan/manifest.json` says `ucrmVersionCompliability`
+  where `dishnet-ai` says `ucrmVersionCompliancy`. One is wrong; confirm against
+  the real installation before touching it.
+
+Nothing here is authorized to build. No gate moved.
+
+## Customer identity — designed, NOT chosen (`docs/99`)
+
+Two models are written out and compared. **Neither is recommended and neither
+may be implemented without an explicit instruction.**
+
+- **Model A** — the uCRM client is the source of truth; `mt_customers` becomes a
+  projection; `ucrm_client_id` becomes `NOT NULL`.
+- **Model B** — `mt_customers` stays an entity carrying a linked
+  `ucrm_client_id` with provenance (`ucrm_linked_by`, `ucrm_linked_at`).
+
+**Do not pick one by assumption.** What decides it is operator evidence
+(`docs/99` §3.1): does DishNet ever install before the customer exists in uCRM,
+must the panel survive a uCRM upgrade, and **E-2 — how many `mt_customers` rows
+production actually holds.**
+
+> **U-2 (`ucrm_client_id NOT NULL`) cannot be closed by choosing a value.** It
+> needs the production census, and 18 foreign keys use `ON DELETE RESTRICT`, so
+> an unlinked row with a site, voucher or audit history cannot simply be
+> deleted. **`docs/79` remains the handoff; production data state is NOT
+> ESTABLISHED.**
+
+New findings that bind any future work:
+
+- **I-2 — the duplication is not only `mt_customers`.** `mt_principals` holds
+  `display_name`, `phone`, `email` — fields uCRM owns for the same person.
+  Deciding the customer model without deciding this just moves the problem down
+  a level (**U-6**).
+- **`mt_services` has NO uCRM service reference of any kind** — only
+  `customer_id` and `kind`. One uCRM client with several services cannot be
+  represented today (**U-5**).
+- **The estate already solved this once**: the sibling plugin's
+  `026_lte_financial_ledger.sql` links its own entity to `ucrm_client_id
+  NOT NULL` and records `linked_by`. That is Model B in miniature, running.
+- **Never resolve a uCRM client from a phone number at request time.**
+  `lib/LeadMatcher.php` matches on the last nine digits, and the plugin's own
+  manifest says loose matching "can identify the WRONG customer and disclose
+  their balance". **The link is stored once, with provenance — never inferred
+  per request.**
+
+**The staff trust boundary — U-7.** The uCRM session cookie is trustworthy only
+on the **server side** of the bridge plugin, where `/current-user` answered it.
+**Domain B must never accept a staff identity from a browser.** Two
+arrangements, neither chosen: **S-1** the plugin proxies every call, or **S-2**
+the plugin mints a short-lived signed assertion. Either way the audit actor is
+**`staff`**, which `actor_kind` already permits — **invent no new actor kind**,
+and the actor arrives as a parameter from the identity boundary, exactly as W-1
+requires. This closes B-2 **only inside uCRM**; it does not authorize binding
+any Admin write route, and W-4/W-5/W-6 stay open.
+
+Nothing here is authorized to build. No gate moved.
+
+## Identity census — read-only, development databases only (`docs/100`)
+
+> **This is NOT E-2.** The census ran against `dnb_sim`/`dnb_test` in this
+> container. **Production data state remains NOT ESTABLISHED**; `docs/79` is
+> still the handoff and U-2 still waits on it. Do not quote `docs/100`'s row
+> counts as production facts — they describe the simulator.
+
+What it *does* establish are schema properties, which hold wherever the schema
+is installed:
+
+- **An existing customer cannot be deleted. Proved by execution**, not read off
+  the DDL: the transaction is refused and the error names
+  `mt_principals_customer_id_fkey`. **27 foreign keys** — 18 → `mt_customers`
+  (15 RESTRICT, 2 NO ACTION, 1 CASCADE), 7 → `mt_principals`, 2 →
+  `mt_services`. The two `NO ACTION` constraints are **not** a hole: nothing in
+  the schema is `DEFERRABLE`, so they block exactly as RESTRICT does.
+  **"Delete the unlinked rows" is therefore not an available migration step** —
+  an unlinked customer with any history must be linked, not removed.
+- **Every customer that has ever been used has an audit row**, because W-1
+  writes one inside every provisioning function. There are no bare rows to drop.
+- **`mt_principals.phone` is the AUTHENTICATION KEY**, not duplicated contact
+  data — `mt_auth_issue_code` looks up `mt_principals WHERE phone = ?`. It is
+  uniquely indexed, so the lookup is safe. **U-6 is therefore not a caching
+  question**: refreshing the phone from uCRM would lock the customer out the
+  moment uCRM's record is corrected. Decide what is authoritative for the login
+  number and what happens when the two disagree.
+- **`credential_hash` is dead** — no code reads or writes it. Authentication is
+  entirely OTP.
+- **Deleting a principal silently erases attribution**: `sold_by`,
+  `created_by` and `actor_principal_id` are `SET NULL` and nothing errors.
+- **uCRM does expose stable service identifiers** — `clients/services?clientId=`
+  with `id`, `clientId`, `servicePlanId`, already read by the working plugins.
+  **Domain B cannot represent them at all**: `mt_services` has no uCRM column,
+  so a client with several services, or two separately-billed MikroTik sites,
+  is not distinguishable. **U-5 should be decided WITH U-1, not after it.**
+- **The working precedent is a LINK TABLE, not a column** — `lte_service_links`,
+  `UNIQUE` on the **pair** (so many-to-many capable), with `linked_by`/
+  `linked_at`/`notes`, and its own comment says that was chosen over a column
+  deliberately. Recorded as evidence, **not adopted**: many-to-many has
+  consequences for RLS and `/me` that nothing has examined.
+- **Webhook registration is programmatic**, not manual-only — `CrmApiClient`
+  has `getWebhooks`/`createWebhook`/`updateWebhook`. This **refines `docs/98`
+  §2.8**.
+- **Support may not be API-reachable at all.** `tickets` appears in the code but
+  **no `tickets` endpoint is among the uCRM paths called**. Support moves from
+  "not built" to **"not known to be possible"**.
+
+**Operator questions reduced 13 → 4**: **Q5** (does DishNet ever stage
+equipment before the uCRM customer exists — *the* input for U-1), Q1 (version),
+Q2 (may a disposable uCRM exist), Q6 (must the panel survive a uCRM upgrade).
+Three more need a physical instance: client-zone support, the webhook event
+list, and the live `clients/services` response shape.
+
+**Nothing chosen. No sync engine, no webhook, no backfill, no automatic linking,
+no schema change — including the trivial `credential_hash` drop.** No gate moved.
+
+## Q5 is CLOSED — C, BOTH. Identity lifecycle designed (`docs/101`)
+
+**DishNet uses both workflows: customer-first AND equipment-first.** Operator,
+recorded uninterpreted.
+
+**It does not force a Domain-B customer without a uCRM client.** "Equipment-first"
+means a **device with no customer**, and that is already built and exercised:
+`mt_devices.customer_id` is nullable (`-- NULL until assigned`),
+`mt_device_register` takes no customer, `mt_device_assign` is a separate later
+call, and `docs/35` §9 records possession — serial, model, keys, staged-by —
+never ownership. **Both lifecycles converge at exactly one operation,
+`mt_device_assign`.** Never invent a placeholder customer to satisfy a foreign
+key.
+
+- **`UNCLAIMED` must NOT become a device state.** It is the predicate
+  `customer_id IS NULL`, true across `registered`/`staged`/`shipped`. Adding an
+  enum value creates two sources of truth that can disagree.
+- **Unclaimed devices are already invisible to customers — measured.** Ground
+  truth 5 devices, 1 unclaimed; the three tenants see 2+1+1 = 4, their own, and
+  none sees the unclaimed one; with no tenant context, 0. The mechanism is
+  `NULL = <uuid>` being NULL, not true. **Do not weaken RLS to accommodate
+  equipment-first — nothing needs accommodating.**
+- **The question is the GATE, not "Model A or B"**: at which moment must a
+  customer carry a uCRM link — creation, device assignment, first voucher, or
+  never (**the status quo, which is how I-1 happened**). That is **U-1**, open.
+
+**Determined in `docs/101`, for approval:**
+
+| | |
+|---|---|
+| customer link | **1:1**, unique both sides — cheap to relax, expensive to tighten |
+| service link | **1:1**, unique both sides |
+| shape | **columns on the existing tables**, *given* 1:1 — they inherit RLS; a new link table must be given `FORCE RLS` deliberately, and history lives in `mt_audit_log` either way |
+| service identity | the uCRM **service id**, **never** a type or plan name |
+| write authority | **`dnb_adminwrite` only** — never `dnb_app`, never `dnb_portal`. W-1 pattern: definer function, audit row in the same transaction, actor a parameter, `actor_kind = 'staff'` |
+| coherence | **the uCRM service's `clientId` must equal the client linked to that service's customer.** No FK can express it; the linking function must check it against uCRM. This is the most dangerous operation in the bridge |
+| unlink / relink | **required** (a customer can be re-papered onto a new uCRM client) and **audited**, carrying previous and new relationship plus a reason |
+
+- **No phone matching, ever, for linking.** `LeadMatcher` warns it "can identify
+  the WRONG customer and disclose their balance". Phone stays the OTP key only.
+- **Do not copy uCRM contact data into `mt_principals`** — `phone` is the
+  authentication key, so a contact edit would silently rotate a credential
+  (U-6, open).
+- **Nothing is deleted because a uCRM relationship ended.** Eleven orphan states
+  are enumerated; rows 7, 8, 10 and 11 are not representable today.
+- **`mt_customers` is neither deleted nor demoted to a cache.** It is the
+  Domain-B authorization boundary, carrying an explicit uCRM relationship when
+  one exists.
+- **L-1 — OPERATOR:** must an *intended* customer be recorded for a shipped
+  router before uCRM has the client? Not representable today.
+
+**No schema change, no migration, no backfill, no sync engine.** `NOT NULL`
+(U-2) still waits on **E-2, the production census**. No gate moved.
+
+## The commercial identity boundary — measured (`docs/102`)
+
+**L-1 CLOSED.** A staged or shipped device needs **no** intended customer
+recorded before uCRM has the client. Equipment-first is
+`device.customer_id = NULL` across `REGISTERED → STAGED → SHIPPED`, then
+`mt_device_assign()`. **No fake, pending or provisional customer; no inference
+from phone or email.** *Inventory is not ownership.*
+
+**U-1's rule (proposed):** a device may exist with no customer; a customer may
+be **temporarily** unlinked; but before it becomes customer-facing or
+commercially active it needs a valid uCRM customer link, and a service link
+wherever a service is involved. **`ucrm_client_id` does NOT become `NOT NULL`
+globally** — U-2, still gated on **E-2**.
+
+Three measurements, each contradicting the obvious answer:
+
+- **The effective boundary is RLS + triggers + which functions exist — NOT the
+  grants.** `dnb_app` holds write grants on 20 tables including `mt_customers`
+  and `mt_audit_log` and can use almost none of it: the customer INSERT is
+  refused by **RLS `WITH CHECK`**, the audit DELETE by the **append-only
+  trigger**. Proved by execution. **Never classify an operation by its grant.**
+- **`mt_services` and `mt_sites` have NO production writer** — only
+  `Plugin/Simulator.php`. They cannot be gated; they must be **built**, gate
+  included.
+- **There is no single gate.** `mt_device_assign` looked like one, but neither
+  `mt_sites` nor `mt_vouchers` references a device, and the estate already holds
+  a site with no router — so `service → site → plan → voucher` completes a sale
+  with nothing assigned. **The rule binds a SET of operations, never
+  `mt_customer_create`.**
+
+Two classifications that invert the obvious:
+
+- **Voucher redemption must NEVER consult uCRM — FORBIDDEN, not required.**
+  `docs/89`: tenant data must not be required for the anti-enumeration check,
+  since an unknown code resolves no customer — exactly what enumeration
+  produces. A remote round-trip would also break response uniformity, which is
+  not tradeable. Redemption authorizes from `voucher.site_id` alone.
+- **Audit must NEVER be gated on a link**, or the least-established records
+  become the least recorded. `actor_kind` stays `principal | staff | system`.
+
+> **B-2 — the customer-plane commercial writes are not behind functions.**
+> `PlanRepository` and `VoucherService` write `mt_plans`, `mt_voucher_batches`
+> and `mt_vouchers` **directly** under RLS. Gating plans and vouchers means
+> giving them definer functions with audit, the shape W-1 gave the seven.
+> **The largest single item U-1 implies — not a flag.**
+
+Nothing authorized to build. No gate moved.
+
+## Write paths — four identity entities have none (`docs/103`)
+
+The schema and the simulator make Domain B look more complete than it is.
+Enumerated from the code, **not** from grants:
+
+```
+mt_customers   function exists, NO production caller
+mt_principals  NONE — Plugin/Simulator.php only
+mt_services    NONE — Plugin/Simulator.php only
+mt_sites       NONE — Plugin/Simulator.php only
+mt_devices     YES — seven definer functions (no route bound)
+mt_plans       YES — Policy/PlanRepository      ← POST /me/plans
+mt_vouchers    YES — Vouchers/VoucherService    ← POST /me/vouchers
+mt_sessions    YES — mt_session_account         ← dnb_radius
+```
+
+**`src/Customers/` is an empty directory.** The simulator is excluded from the
+release package, so **an installed RC1 cannot create a principal, a service or a
+site at all.**
+
+> **You cannot gate an operation that does not exist.** The largest item ahead
+> is not the uCRM link — it is that customer, principal, service and site have
+> no production write path. A synchronisation engine built now would synchronise
+> against workflows that exist only in the simulator.
+
+- **35 mutating operations inventoried**, with actor, tables, audit class and
+  idempotency. Audit falls in three classes: **W-1 unskippable** (the seven +
+  customer create), **caller-written and skippable** (the six customer routes +
+  the worker, F-8), and **none at all** (intent enqueue, redemption F-7,
+  accounting ingest, uplink, idempotency, migrations).
+- **`POST /me/vouchers` is the only idempotent route.** Everything else has no
+  idempotency key.
+- **Voucher issuance requires no router** — `mt_vouchers` has no device column,
+  and a sale completes with no hardware.
+- **Accounting ingest must never consult uCRM** — `dnb_radius` holds EXECUTE on
+  one function and no table privileges; a NAS packet must not trigger a CRM
+  lookup.
+
+### Three project engineering rules — now binding
+
+**The security evidence hierarchy.** Strongest first:
+`1 execution test · 2 RLS/policy · 3 SECURITY DEFINER boundary · 4 application
+authorization · 5 route/UI availability · 6 grants alone`.
+**Grants are the weakest evidence and are not proof.** Earned, not asserted:
+`dnb_app` holds write grants on 20 tables and can use almost none of them —
+RLS `WITH CHECK` and the append-only trigger stop it. **Never cite a grant, a
+route or a button as proof that something is permitted or prevented.**
+
+**Repository-edit safety.** Three documentation edits in this project used
+`str.replace` with no assertion; when the anchor did not match they **changed
+nothing and reported success**. Any automated source or document transformation
+must assert — and exit non-zero on failure — that the **anchor exists**, the
+**occurrence count** is expected, the **replacement count** is expected, and the
+**result contains the intended section**. **"The script exited 0" is not
+evidence that the change happened.**
+
+**Credible evidence.** `negative result + positive control + known authorization
+context`. A `0 rows` result has **seven** possible causes and only one of them is
+a finding: genuinely zero · RLS hid everything · wrong tenant context · wrong
+database · wrong role · the query never executed · the fixture was never created.
+**Every census query and every security test must carry a positive control that
+proves the session can see something it is entitled to see**, and must state its
+role, database and tenant context. A zero-mismatch result over a zero-row read is
+**INDETERMINATE**, never "clean". Three measurements in this project have already
+failed this way — a burned-credential check with no positive control, a count of
+`mt_sites` that read `0` because no tenant was set, and a cross-tenant `INSERT …
+SELECT` that returned **`INSERT 0 0`** because the subquery ran under the
+attacker's own RLS context and the *next* statement then "passed". A regression
+test also needs **the control on the controls**: it must be shown to fail when the
+control it guards is removed. (`docs/105` §0, §5)
+
+Nothing authorized to build. No gate moved.
+
+## The onboarding spine — designed, NOT built (`docs/104`)
+
+The four missing writers from `docs/103` are **one lifecycle**, not four tasks.
+Cardinality below is read off the schema; **do not invent cardinality the
+repository has not established.**
+
+- **Measured cardinality:** uCRM client **1:1** customer (`ucrm_client_id`
+  UNIQUE, nullable) · customer **1:N** principals · customer **1:N** services ·
+  service **1:N** sites (`mt_sites.service_id` **NOT NULL**) · site **1:N**
+  devices · **`mt_principals.phone` is UNIQUE GLOBALLY**, not per customer, so
+  one person cannot act for two customers · device `serial`/`wg_pubkey`/
+  `tunnel_ip` are globally unique.
+- **`mt_services.kind` permits exactly one value, `mikrotik_hotspot`.**
+- **The minimum valid customer is a name and an actor.** No uCRM link, service,
+  site, router, phone or voucher. `radius_ref` is supplied by a column DEFAULT.
+- **A principal may exist with `phone` NULL** — and then cannot authenticate at
+  all, since `mt_auth_issue_code` looks up `mt_principals WHERE phone = ? AND
+  status = 'active'`. That is a design question (U-6), not a bug.
+- **A site cannot exist without a service; a service needs no site and a site
+  needs no device.** Measured in the estate: 5 sites, **1 with no device**.
+- **Steps 1–6 of the journey produce a commercially active customer with no
+  hardware** — plans and vouchers need no device. **This is why the uCRM link
+  cannot be gated on device assignment.**
+- **The four onboarding events stay separate:** A customer created · B
+  authentication principal created · C network service created · D physical
+  device assigned. Only A and D exist; **B and C have no production writer.**
+- **`operator` vs `owner` is undefined** — the CHECK allows both and **nothing
+  in code branches on it** (P-A, open).
+
+### O-1 — a tenant can attach its site to another customer's service
+
+**Proved by execution, as `dnb_app`, under RLS.** `mt_sites` has two
+*independent* single-column FKs (`customer_id`, `service_id`) and nothing
+requires them to agree. RLS checks the written row's own `customer_id`, which is
+correctly the attacker's, while `service_id` points at a row they cannot read.
+
+- **No disclosure** — measured: the cross-tenant site is dangling to its owner;
+  RLS still hides the other tenant's service row.
+- **Confirmed integrity defect and cross-tenant denial** — `DELETE FROM
+  mt_services` is refused by `mt_sites_service_id_fkey`, so **the victim can
+  never end that service.**
+- **It is exactly the defect W-2 closed for devices**, one level up. The fix has
+  the same shape — `UNIQUE (id, customer_id)` on `mt_services` plus a composite
+  FK from `mt_sites` — and is **a schema change, NOT authorized here.**
+- **Latent only because `mt_sites` has no production writer.** The spine builds
+  that writer, so **O-1 must be closed first** — it is step 0 of the sequence,
+  before `mt_site_create` exists.
+
+**Proposed sequence (not authorized):** 0 close O-1 · 1 `mt_principal_create` /
+`_disable` · 2 `mt_service_create` · 3 `mt_site_create` · 4 a production caller
+for `mt_customer_create` · 5 **then** revisit U-1. Each follows the W-1 pattern
+exactly: `SECURITY DEFINER`, definer-role owned, `EXECUTE` to `dnb_adminwrite`
+only, audit row in the same transaction, actor a parameter. **`dnb_app` gains
+nothing** — a customer must not create their own principal, service or site.
+
+**Idempotency is a per-writer decision, not a default.** Today only
+`POST /me/vouchers` has a key; creating a principal or a site twice on a retry
+is a real hazard.
+
+**U-1 is deliberately NOT closed**, and no gate was added. New open items:
+**O-1**, **P-A** (`operator`'s meaning), **P-B** (is a globally unique phone
+right?), **P-C** (may a principal be reassigned, given `sold_by`/`created_by`
+would misattribute?), **S-A** (may a service be migrated between customers?),
+**I-A** (idempotency per writer). Nothing authorized to build. No gate moved.
+
+## Identity integrity remediation — designed, NOT authorized (`docs/105`)
+
+**Do not build `mt_site_create`, or any other onboarding writer, until O-1 is
+closed.** A production site writer would make a known cross-customer integrity
+hole reachable.
+
+### O-1, characterised under full controls
+
+Run as `dnb_app` under RLS, one transaction, rolled back, residue 0:
+
+| | | |
+|---|---|---|
+| **C1** | B deletes its own unreferenced service | `DELETE 1` — the path works |
+| 2 | A attaches **its** site to **B's** service, by literal UUID | `INSERT 0 1` |
+| **C2** | can A *read* that service? | **0** |
+| **C3** | can B *see* the referencing row? | **0** |
+| 4 | B deletes that service again | **refused** — `mt_sites_service_id_fkey` |
+
+- **Referential integrity is enforced BELOW RLS.** Neither party can see the
+  other's row, yet the constraint binds both. **That is why a composite FK is a
+  real floor and an application-level check is not** — an application check runs
+  *above* RLS and finds nothing to object to.
+- **Not disclosure. Not enumerable.** The writer must name a `gen_random_uuid()`
+  it cannot read (C2). **The realistic trigger is not an attacker but a writer
+  that passes a `service_id` it did not derive** — a stale id, a copied request,
+  a bug. Which is exactly what the spine will build.
+- Consequence: **cross-tenant denial** — the victim can never end that service
+  and cannot see why.
+
+### The remediation — W-2's shape, one level up
+
+`UNIQUE (id, customer_id)` on `mt_services` + `FOREIGN KEY (service_id,
+customer_id) REFERENCES mt_services (id, customer_id)` on `mt_sites`.
+
+- **Both existing single-column FKs stay.** W-2 was additive; `mt_devices` kept
+  its two alongside the composite one.
+- **No CHECK, and none may be added.** `mt_devices` needs
+  `site_needs_customer` only because `site_id` is *nullable* (MATCH SIMPLE skips
+  a NULL component). `mt_sites.service_id` and `.customer_id` are **both NOT
+  NULL**, so nothing can skip it.
+- **Omit `ON DELETE`/`ON UPDATE`** — inherit `NO ACTION`, as W-2 does. Nothing in
+  this schema is `DEFERRABLE`, so it blocks as `RESTRICT` does. Deliberate
+  consequence: `mt_services.customer_id` cannot be updated while a site
+  references it, so **service migration becomes impossible by accident** (S-A).
+- **Measured migration constraint:** `Migrator` runs each file as **one implicit
+  transaction** (`PDO::exec`, `src/Db/Migrator.php:26`), so **`CREATE INDEX
+  CONCURRENTLY` is unavailable.** Lock duration is unknown until E-2.
+- **Remediate only the proven defect.** Do not bundle customer FKs, principal
+  relationships, service or device lifecycle, `mt_vouchers.site_id NOT NULL`, or
+  the `credential_hash` drop.
+
+### The census needs no superuser
+
+`dnb_def_admin` already holds SELECT-only `USING (true)` policies, and
+`mt_admin_sites()` → `(id, customer_id, service_id, …)` and
+`mt_admin_services()` → `(id, customer_id, …)` already expose every column O-1
+concerns, EXECUTE-able by **`dnb_adminapi`** — an ordinary non-superuser login
+role. **Do not create a `BYPASSRLS` role for a census**; it would outlive it. A
+superuser fallback must be reported as `method=superuser`, never silently.
+
+**This is NOT E-2.** E-2 remains the whole production census; `docs/79` is still
+the handoff.
+
+### Questions resolved, retired or newly bounded
+
+- **P-A is RETIRED — it is C6/C16**, open since `docs/47`/`docs/48`, and the
+  schema comment says so: `-- kind: owner | operator. C6/C16 OPEN`. **A writer
+  may STORE `kind` but must not branch on it** until C6 closes.
+- **P-B is genuinely new** — no document addresses the *scope* of phone
+  uniqueness. The global index is what makes `phone → exactly one principal`
+  resolvable for OTP at all. **A writer must treat a duplicate phone as a
+  refusal, never an upsert.**
+- **P-C — recommendation: no principal reassignment operation.** `sold_by`,
+  `created_by` and `actor_principal_id` are already `SET NULL` silently.
+- **S-A — UNIMPLEMENTED**, neither supported nor planned; no writer, no
+  document. Leave it forbidden-by-constraint; **do not design migration
+  behaviour.**
+- **I-A — the existing idempotency mechanism is unusable by all four writers.**
+  Measured: `mt_idempotency` is keyed `(customer_id, key)` with `customer_id NOT
+  NULL`, so **there is nothing to key a customer-creation retry on**; and
+  `dnb_adminwrite` holds **zero table privileges** —
+  `has_table_privilege(…,'mt_idempotency','INSERT') = false` — while the Admin
+  plane sets no tenant context. **Do not copy `POST /me/vouchers`.** Four of the
+  five writers have **no natural key at all** (`mt_services` worst: `customer_id`
+  + a `kind` with one legal value). `mt_device_assign` is **idempotent in state,
+  not in record** — it re-stamps `claimed_at` and writes another audit row, and
+  differing arguments are a legitimate *reassignment*, not a retry.
+
+### Site creation — derive, never accept
+
+`mt_site_create(p_service, p_name, p_location, p_actor)` — **there is no
+`p_customer` parameter.** `customer_id` is read from the service row, so the
+forgery is *unrepresentable* rather than rejected. Three layers, weakest last:
+**composite FK → the function derives → the route carries no customer.** A
+`service_id` from a browser is untrusted input naming a candidate: it may only
+be resolved **within the caller's own visibility**, exactly as `docs/88` D-1a
+treats `nas_claimed` — untrusted context may reject early, never establish
+authority.
+
+**U-1 is still OPEN.** ~~Proposed boundary: the uCRM link becomes mandatory at
+`mt_service_create` and again at the commercial writes (B-2).~~ **The commercial-writes
+half is WITHDRAWN by `docs/110` §1 — no uCRM link is required for plan or voucher
+operations.** Customer create, principal create and device possession stay
+**unconditional**, and so now do plans and vouchers. Ruled out by evidence: a blanket `NOT NULL` (U-2),
+gating at `mt_customer_create`, and gating only at `mt_device_assign`.
+
+**Order: O-1 → census → decide I-A/U-1/U-5/C6/P-B → writers.** Nothing
+authorized to build. No gate moved.
+
+## The remediation package — demonstrated, NOT applied (`docs/106`)
+
+Every DDL statement below was **executed against the real schema inside a
+rolled-back transaction**. Residue checked afterwards: **zero rows, zero
+constraints.** `migrations/` is untouched and nothing is authorized to build.
+
+```sql
+ALTER TABLE mt_services ADD CONSTRAINT mt_services_id_customer_key
+  UNIQUE (id, customer_id);
+ALTER TABLE mt_sites    ADD CONSTRAINT mt_sites_service_customer_fkey
+  FOREIGN KEY (customer_id, service_id) REFERENCES mt_services (customer_id, id);
+```
+
+- **Referenced column order is cosmetic.** Measured: both `(customer_id, id)`
+  and `(id, customer_id)` are accepted against the same UNIQUE — PostgreSQL
+  matches the column **set**, not the sequence. W-2's order is equally valid.
+- **The supporting UNIQUE cannot fail on existing data.** `PRIMARY KEY (id)` is
+  strictly stronger, so `(id, customer_id)` can never reject a row the PK
+  accepts — proved twice, including once with a violating site row present. It
+  adds an index, not a restriction, and **legitimate cardinality is unchanged**.
+  **Only the foreign key can refuse.**
+- **No `MATCH FULL`, and no CHECK.** Both `mt_sites` columns are already
+  `NOT NULL`, so `MATCH SIMPLE` is equivalent and no row can present a partial
+  key. `mt_devices` needed a CHECK only because its `site_id` *is* nullable.
+  Adding either here would be inert **and would imply to a future reader that a
+  NULL case exists**. If `mt_sites.customer_id` were ever relaxed, `MATCH FULL`
+  would become necessary — that is the reason to record.
+- **The migration fails closed by itself** — PostgreSQL validates against every
+  existing row, and the whole file is one transaction. **No guard clause is
+  needed and none should be added.** But its error names only **one** offending
+  pair, so the census enumerates and the error merely diagnoses. **`NOT VALID`
+  is available and NOT recommended** — it would declare the invariant without
+  enforcing it.
+- **Locks, measured per statement:** the UNIQUE takes **ACCESS EXCLUSIVE on
+  `mt_services`** — the only read-blocking window. The FK takes **SHARE ROW
+  EXCLUSIVE** on both, so **`mt_sites` readers are never blocked.** The index
+  builds fine inside the migration transaction; only `CONCURRENTLY` cannot.
+  **Duration is UNMEASURED — claim no production timing until E-2.** If E-2
+  shows `mt_services` too large, the alternative needs a **migrator change**,
+  which must not be invented pre-emptively.
+
+**Matrix measured against the proposed schema**, as `dnb_app` under RLS, every
+zero paired with a non-zero control in the same session: A→own service
+`INSERT 0 1`; A→B's service **refused**; repointing an existing site **refused**;
+A reads B's service `0`; B reads A's site `0`; B deleting a service its own sites
+reference still refused by `mt_sites_service_id_fkey` — **unchanged and
+correct**. **T-9 is mandatory**: the regression test must be shown to fail when
+the constraint is removed.
+
+### P-B is BREAKING — measured
+
+`mt_auth_issue_code` resolves the tenant with a **non-`STRICT`**
+`SELECT … INTO`, **no `ORDER BY`, no `LIMIT`**:
+
+| Form | Two matching rows |
+|---|---|
+| `SELECT … INTO` | **first row, NO ERROR** |
+| `SELECT … INTO STRICT` | raises `P0003` |
+
+> Relaxing phone uniqueness would **silently bind a one-time code to an
+> arbitrary principal, and therefore an arbitrary customer** — the code row
+> stores `customer_id` and `mt_auth_verify_code` returns it, so the session's
+> tenant would be non-deterministic. **The unique index is load-bearing for
+> correctness, not lookup speed.**
+
+Whether one person may legitimately hold two customers is **C10** (*"Is the
+Reseller the same person as the Customer PWA user?"* — ARCH, *"Highest. Rebuilds
+permission logic"*), with C6 and C16. **Not P-B's to settle.** Candidate
+answers if ever needed: a second number, a principal-selection step after OTP, or
+a login that names the customer first. **Do not change it.**
+
+### P-C — recommended FORBIDDEN
+
+`mt_auth_sessions` carries **its own `customer_id`**, and `mt_auth_resolve_token`
+returns **`s.customer_id`** — the session's copy; the join to `mt_principals`
+only checks `status`. **Reassigning a principal would leave every live session
+serving the old tenant** until expiry — a cross-tenant window opened
+administratively and invisible to everyone. With the already-measured `SET NULL`
+attribution erasure: **no operation may change `mt_principals.customer_id`.**
+Disable and create anew. If ever built, it must revoke every live session in the
+same transaction.
+
+### `mt_site_create` — derive, never accept
+
+No `p_customer` parameter exists, so the forgery is **unrepresentable** rather
+than rejected: authenticated customer → requested service → verify ownership →
+**derive** `customer_id` → insert, with the composite FK as the floor beneath.
+**An application check alone is not the fix** — integrity is evaluated *below*
+RLS, an application check *above* it.
+
+**S-A — UNIMPLEMENTED**, and forbidden-by-constraint once O-1 lands
+(`ON UPDATE NO ACTION` refuses while a site references the service). If ever
+wanted it is **administrative reassignment** — service, sites and devices in one
+transaction with one audit trail. **I-A** needs a **non-tenant** store reachable
+by `dnb_adminwrite`; four of five writers have no natural key at all. **U-1
+refined, still open**: proposed first hard gate at `mt_service_create`, decided
+together with U-5.
+
+## Identity and onboarding decisions (`docs/107`)
+
+The last identity/onboarding design checkpoint before the spine is implemented.
+**P-B, P-C and S-A are CLOSED and listed under *Settled* above.** What follows is
+what binds the work that comes next.
+
+### O-1 — closed as a design, with TWO operational gates
+
+```
+GATE 1  census (read-only)  →  CLEAR | BLOCKED(n) | INDETERMINATE
+                                    │  operator reviews; per-row decisions
+GATE 2  migration (one transaction) →  applies, or refuses
+```
+
+**Do not combine them into one script.** A script that measures and then acts on
+its own measurement gives the operator nothing to approve. Violating rows must be
+**zero** before gate 2; it refuses by itself if they are not, but its error names
+only **one** pair — the census is what enumerates.
+
+### U-1 / U-5 — OPEN, reduced to one operator question
+
+> **Q7 — when DishNet sets up a new service, does the uCRM service record always
+> exist before the Domain-B service is created, or is the Domain-B service
+> sometimes created first?**
+
+- **A** — uCRM first → gate at **creation**, **no schema change**.
+- **B/C** — sometimes Domain-B first → gate at **activation**, which needs a new
+  `mt_services.status` value. The CHECK permits only `active · suspended ·
+  ended`, so **that is a schema decision** — and the `UNCLAIMED` rule applies:
+  do not add an enum value to express what a predicate could.
+
+Ruled out by evidence and not to be revisited: gating at `mt_customer_create`,
+gating **only** at `mt_device_assign`, and a blanket `NOT NULL` (U-2, still
+**E-2**). **U-5 is decided WITH U-1**, because the coherence rule needs both
+links.
+
+### I-A — both existing mechanisms are tenant-scoped
+
+Measured: `mt_idempotency` is keyed `(customer_id, key)`, and
+`mt_intents_idem_uq` is `(customer_id, idempotency_key)` with a lookup that
+**relies on RLS to scope itself** — `IntentQueue::enqueue` documents the
+precondition (*"call inside `TenantContext::run()`"*). **Neither can serve an
+operation that has no customer yet.** The spine needs a **non-tenant** store
+reachable by `dnb_adminwrite`, keyed `(endpoint, key)` with a request digest.
+
+**Three mechanisms across eight operations, deliberately:** a **unique
+constraint** where a natural key exists (uCRM links, intents, principal-by-phone);
+a **domain-specific invariant** for `mt_device_assign`, which is a state
+assertion — identical arguments are a no-op with **no audit row and no
+`claimed_at` re-stamp**, while different arguments are a *reassignment, not a
+retry*; a **table** only where there is genuinely no natural key — customer,
+service and site creation, and the NULL-phone principal. **A replay must not
+write a second audit row**, so replay detection happens **before** the function
+body, since W-1 makes the audit row unskippable inside it.
+
+Also measured: of the three production `enqueue` call sites only
+`voucher.publish` passes a key — **`voucher.revoke` and `session.disconnect`
+pass none**. **Corrected by `docs/108`:** the clause that once followed here
+("…that reaches a router") was an **overstatement and is withdrawn** — see the
+`docs/108` section below.
+
+### Convergence is `mt_device_assign` — and convergence is NOT a gate
+
+The commercial chain (customer → service → site) and the network chain
+(register → stage → ship) are **independent**; neither needs the other, and both
+are identical in both journeys. **`mt_device_assign` is the only operation taking
+both a device and a customer/site**, so it is where they meet — in customer-first
+and equipment-first alike.
+
+> **The two journeys are not two designs. They are one design, entered from
+> either end.** That is why no placeholder customer is ever needed.
+
+But `docs/102` measured that `service → site → plan → voucher` completes a sale
+with nothing assigned, so `mt_device_assign` is **not** where commercial
+authority is established. Do not conflate the two.
+
+### The census must also measure the SCHEMA
+
+Data counts alone cannot reveal that production is at a different migration
+level. The census reports migrations applied and the latest filename
+(development: **22**, `022_audit_write_boundary.sql`), the existing FK and
+UNIQUE constraints on `mt_sites`/`mt_services`/`mt_devices`, current indexes, and
+**whether migration 020 is applied** — if it is not, W-2 is absent too. Run as
+`dnb_adminapi` through the `mt_admin_*()` projections. **No superuser, and no
+`BYPASSRLS` role** — one created for a census would outlive it.
+
+**RC1 must NOT be installed into the live UISP/uCRM or production environment.**
+The production migration, the voucher activation path and the onboarding identity
+model are each still short of their gates.
+
+## Onboarding spine and intent idempotency (`docs/108`)
+
+### A correction: nothing reaches a router today
+
+Measured: **`bin/worker.php` — the only production construction of
+`IntentWorker` — binds `NullDelivery`**, whose `deliver()` returns
+`retryable('no delivery path is configured')` and whose `confirm()` returns
+`false`. `RouterOsDelivery` is not referenced by `Runtime/Bindings.php` at all;
+`Bindings::defaults()` is `NullDelivery` + `NullPublisher`, and a real binding
+needs `DN_ALLOW_REAL_BINDINGS`. **The router consequence of a duplicate intent is
+latent until F6-B.** `docs/107`'s "reaches a router" is withdrawn — an overstated
+risk is as much a measurement failure as an understated one.
+
+### The intent asymmetry is THREE-way, not two
+
+| Operation | Key | Guard | Retry-safe today |
+|---|---|---|---|
+| `voucher.publish` | **yes** | — | **safe** — `enqueue` returns the first intent |
+| `voucher.revoke` | no | **yes — a state guard in the SQL** | **safe, incidentally** |
+| `session.disconnect` | no | **none** | **NOT safe** — duplicate intent **and** duplicate audit row |
+
+`VoucherService::revoke` is
+`UPDATE … WHERE id = ? AND state IN ('unused','active') RETURNING *`, and the
+handler returns **404 before reaching the enqueue** when it yields null. So the
+replay is stopped — **but by where the guard sits, not by design**: the replay
+answers a misleading 404, and any future edit reordering those statements would
+silently remove the safety. `session.disconnect` only does a `find()` read
+first, so every retry proceeds.
+
+> **`session.disconnect` replay is a NEW BLOCKER — it must be fixed before
+> F6-B.** Today its cost is a duplicate audit row, not a duplicated router
+> action.
+
+### RULE I-1 — detection before the audited mutation
+
+> **Idempotency detection must occur BEFORE the mutating, audited operation
+> executes. A replay must not create a second audit event.**
+
+Forced by W-1, not chosen: the audit row is written by `mt_audit_write()` inside
+the function, in the same transaction, so a replay check placed after the call —
+or inside it after the mutation — cannot prevent the duplicate. The check is the
+**first** thing the function does, and a replay returns the stored result while
+writing **nothing**. `mt_audit_log` is append-only by trigger, so **a duplicate
+audit row is a false record that cannot be corrected afterwards.**
+
+### Where the existing mechanisms suffice — and where they cannot
+
+**Seven of the eight onboarding operations have NO tenant context at execution**;
+only intent enqueue does, and it already has its mechanism. So:
+
+- **unique constraint, no table needed** — the uCRM customer link
+  (`ucrm_client_id` is already UNIQUE), the uCRM service link (U-5, column does
+  not exist), intents, and principal-creation's common case (`phone`);
+- **domain-specific invariant** — `mt_device_assign`, a state assertion;
+- **a non-tenant table, keyed `(endpoint, key)` with a request digest** — the
+  four with no natural key: customer, service and site creation, and the
+  NULL-phone principal.
+
+A unique constraint is **stronger** than a table here, because it cannot be
+bypassed by a caller that omits the key.
+
+### Q7 was searched for and NOT answered
+
+The sibling plugin shows `lte_subscribers` carrying **no uCRM column at all**,
+with the relationship in a separate `lte_service_links` table
+(`UNIQUE(lte_subscriber_id, ucrm_client_id)`, `linked_by`, `linked_at`) — so the
+local entity **can exist unlinked**, and linking is a separate, later, attributed
+act. **But that table links a uCRM *client*, not a *service*, despite its name**,
+and it is the Sudan LTE product, not Uganda MikroTik.
+
+> **It raises the prior for "sometimes Domain-B first" — it does not answer Q7.**
+> Reading a sales workflow off a table definition in another product line is
+> exactly the inference this project forbids. **U-1 and U-5 stay OPEN**, and Q7
+> is an operator question.
+
+### Writer order — Q7 is the critical path, not O-1
+
+`0a` O-1 (census → decision → migration) · **`0b` the non-tenant idempotency
+store — before the first writer, not after**, because a duplicate customer
+cannot be deleted (18 `ON DELETE RESTRICT` FKs) · `1` principal create/disable ·
+`2` `mt_service_create` · `3` `mt_site_create` · `4` a caller for
+`mt_customer_create` · `5` the uCRM link writers · `6` the intent replay fix.
+
+> **Step 2 cannot begin until Q7 is answered**, because the answer decides
+> whether the gate lives in the function or in a service state that does not yet
+> exist. **That makes Q7 the critical path.**
+
+## Q7 — searched for, NOT answered (`docs/109`)
+
+Operational sources were searched, not schema. Five findings, all measured:
+
+- **The deployed Uganda sales assistant does not sell HotSpot.** Its own system
+  prompt: *"We sell **Starlink** — kits and monthly internet plans… We do NOT
+  sell fiber, and we do NOT sell SIM cards."*
+- **No HotSpot or MikroTik revenue path exists in the live stack.** The only
+  `MikroTik` occurrence is a vendor name in a hardware-advice list
+  (`HardwareKnowledge.php:145`).
+- **No uCRM service plan names HotSpot or MikroTik** anywhere in the repository.
+- **`hotspot.html` is a lead-generation page, not a product** — vouchers
+  mentioned, three *contact* calls-to-action, **no price of any kind**.
+- **The site README records its own uncertainty:** *"If any of these is not
+  actually sold in Uganda yet, remove the page… an advertised service nobody can
+  buy costs trust."*
+
+> **Q7 is therefore not an archaeological question.** There is no onboarding
+> history to recover: the product is at the enquiry stage and the platform that
+> would onboard an operator has never run. Asking *"what do you currently do?"*
+> presumes a practice that may not exist.
+
+**Reduced to one lookup the operator can do in a single uCRM screen:** *does a
+HotSpot / MikroTik / WiFi-zone service plan exist, and does any client hold a
+service on it?* No plan ⇒ uCRM has nothing from which a HotSpot service could be
+created, so Domain-B-first is forced for the first operator — **a decision to
+ratify, not a fact to discover**. A plan with clients ⇒ the practice exists and
+Q7 is answered from those records.
+
+**U-1 and U-5 remain OPEN.** Not closed, not narrowed by assumption. **U-5's
+premise may be empty** — if no uCRM HotSpot service plan exists, the service link
+has nothing to reference yet. Recorded, not concluded: the repository is not
+uCRM's database.
+
+### A divergence flagged, not resolved
+
+`docs/107` §9.2 proposed that voucher issuance require the uCRM customer link.
+That diverges from the stated boundary that uCRM must not be a prerequisite of
+`voucher issuance → redemption → AAA publication → RADIUS → session →
+accounting`. The distinction that may dissolve it:
+
+| | |
+|---|---|
+| **runtime dependency** — calling uCRM during the operation | **FORBIDDEN**, already settled (`docs/102`) for redemption and accounting |
+| **stored-link precondition** — reading a local column | no network call, no latency, no availability coupling — **but still a prerequisite in effect** |
+
+**Whether that is wanted is a business decision.** Flagged rather than silently
+resolved either way. Redemption onward is not in question.
+
+### The three identities
+
+**Domain-B customer/operator** (the HotSpot platform customer) · **uCRM
+customer/service** (the commercial relationship, where one applies) · **guest /
+voucher user** (transient, **never requires uCRM**, no `mt_customers` row, no
+principal, no actor kind — `docs/89`; **no `guest` actor kind is to be added**).
+
+> **`mt_customers` existing is not a reason to make uCRM mandatory.** It is the
+> Domain-B **authorization boundary** — what RLS keys on — carrying a uCRM
+> relationship when one exists. It is not a projection of uCRM.
+
+## Domain B is standalone — the boundary is FROZEN (`docs/110`)
+
+### Withdrawn
+
+**`docs/105` §9.2 and `docs/106` §9 are WITHDRAWN.** A stored uCRM link is **not**
+a prerequisite for plan creation or voucher issuance. The error was treating
+**commercial representation** and **technical capability** as one requirement: a
+voucher sale is revenue to the **operator**, and becomes DishNet revenue only
+where DishNet bills that operator commercially.
+
+### The boundary is MEASURED, not designed
+
+- **Zero** non-column uCRM references in Domain-B `src/` — no client, no adapter,
+  no API call. `ucrm_client_id`'s only writer is still `tests/bootstrap.php`.
+- The **only** outbound HTTP client in Domain B is
+  `Delivery/RouterOs/RestClient.php` — to a **router**, not to uCRM, and inert.
+- `Projection.php` already withholds the field from customers: *"`ucrm_client_id`
+  is internal billing linkage."*
+
+> **Therefore the standalone boundary requires NO migration.** `ucrm_client_id`
+> is already nullable. The one decision that would break it is **U-2**
+> (`NOT NULL`), still gated on **E-2**.
+
+### Nothing on this list needs uCRM
+
+`Domain-B customer → principal → service → site → router register/stage/ship →
+assign → provisioning → plan → voucher batch → voucher → guest redemption → AAA
+→ RADIUS → session → accounting`. Both journeys complete end to end with **no
+uCRM record in existence**.
+
+**"Optional" does NOT mean "uCRM is never used."** The bridge (R-1) remains the
+architecture for every operator DishNet manages commercially. What is rejected is
+uCRM as a **technical dependency of HotSpot operation**.
+
+### uCRM is NOT in the real-time path
+
+```
+guest code → redemption → AAA publication → RADIUS auth → session → accounting
+                  └── uCRM appears NOWHERE on this line ──┘
+```
+
+Not a performance preference — a **security** requirement: anti-enumeration
+(tenant data must not be *required*, since an unknown code resolves no
+customer), **response uniformity is not tradeable**, availability (a CRM outage
+must never stop a paying guest), and privilege (`dnb_portal` and `dnb_radius`
+hold no table privileges and one EXECUTE each). **Putting a uCRM call on this
+line is a regression, not a feature.**
+
+### Where uCRM enters — exactly one point
+
+**An audited link recorded against an existing Domain-B operator**, written once
+with provenance, `dnb_adminwrite` only, never inferred per request and **never
+from a phone number**. It sits *beside* the lifecycle, not inside it.
+
+### If uCRM is unavailable
+
+**Every HotSpot operation continues** — Domain B cannot call uCRM, so there is
+nothing to fail. **Billing, invoicing, dunning and support stop** (they exist
+only in uCRM; `tickets` may not even be API-reachable). And one consequence to
+accept knowingly: under the proposed bridge (U-7 S-1/S-2) **staff authentication
+into the Admin panel depends on uCRM**, so a uCRM outage removes Admin write
+access while the network plane and every guest transaction keep running.
+
+### The three identities
+
+**Domain-B operator** (the RLS authorization boundary) · **uCRM commercial
+customer/service** (where DishNet bills that operator) · **guest** (transient;
+**never** a CRM record of any kind — not a client, not a lead, not a contact; no
+`mt_customers` row, no principal, **no `guest` actor kind**).
+
+### U-1 restated, U-5 deferred
+
+> **U-1 — when, and under what commercial circumstances, does a Domain-B
+> operator get linked to uCRM?**
+
+A **commercial/integration decision**, not a technical dependency. The previous
+framing — *which operation first requires the link* — presumed the answer now
+withdrawn. **Q7 must not be turned into a technical prerequisite for Domain-B
+onboarding.** **U-5 is deferred** until the bridge actually needs it.
+
+**Sequence: freeze the boundary → define the bridge → design the columns →
+implement.** Nothing in `mt_customers`, `mt_services` or the spine changes at
+step 1 — designing columns before the bridge was defined is what produced the
+withdrawn proposal.
+
+## The uCRM bridge — designed, NOT authorized (`docs/111`)
+
+**APIs only, never Domain-B PostgreSQL.** The bridge holds no Domain-B role
+credential, writes no Domain-B table, calls no provisioning function, and is
+**never a dependency of guest redemption** — `dnb_portal` and `dnb_radius` hold
+no table privileges and one EXECUTE each, so neither could reach it.
+
+### The measured surface
+
+`plugin/plugin.json` declares — and a test asserts equal to what is served —
+**15 GET routes**, `"surface": "read-only"`, and **7 declared-unbound POSTs that
+each answer 501** (routers, assign, actions, sites, plans, voucher-batches,
+session disconnect).
+
+- **N-1 — the bridge's two required endpoints do not exist**, not even as 501s:
+  there is **no route to create a Domain-B operator and none to link one to a
+  uCRM client**. **The bridge therefore depends on the onboarding spine**, not
+  the reverse.
+- **N-2 — a bridge could not authenticate today.** `DenyAllIdentity` answers
+  **401 on every route**; only `DN_DEV_STAFF_IDENTITY` renders the panel. W-4.
+- **N-3 — if S-2 (signed assertion) is chosen, its signing key is a new secret**
+  and inherits every B-1 lesson: not in source control, not in a migration,
+  provisioned at install, rotatable.
+
+### What the bridge can never reach — measured, two layers
+
+> A query for `dnb_def_admin` `USING(true)` policies across
+> `mt_device_secrets`, `mt_hotspot_users`, `mt_auth_sessions` and `mt_auth_codes`
+> returns **NONE**. **The Admin read boundary structurally cannot reach a
+> secret-bearing table** — the projection omitting a column is the *second*
+> layer, not the first.
+
+`mt_admin_router()` returns **no `wg_pubkey`** — even the *public* key is
+withheld — and no secret column. `code` is absent from **both** voucher
+projections, whose column lists are identical so a detail view cannot leak one
+row at a time. RADIUS credentials live in a **separate PostgreSQL instance** the
+Admin API has no connection to.
+
+### Write surface — at most two operations
+
+`POST /customers/{id}/ucrm-link` (link · relink · unlink) and, **only if the
+bridge is to onboard from uCRM at all**, `POST /customers`. Both
+`dnb_adminwrite`, definer functions, W-1 audit, actor a parameter. **The bridge
+must not be given the other five POSTs** — router registration, assignment,
+actions, sites, plans, voucher batches and disconnect are **network** operations.
+**A CRM plugin has no business rebooting a router.**
+
+### Cardinality is OPEN — and it cuts both ways
+
+**`mt_customers.ucrm_client_id` is `integer UNIQUE`, so the schema already
+enforces 1:1** — anything else is a **schema change**. Against assuming it: the
+working precedent is a **pair-unique link table** chosen over a column
+deliberately, and many-to-many has consequences for RLS and `/me` nothing has
+examined. **Decide C10 before cardinality, not after** — they are entangled.
+`Domain-B service ↔ uCRM service` has **no column at all** and its far side is
+not known to exist, so **U-5 stays deferred**.
+
+### Staff identity
+
+The uCRM cookie is trustworthy **only server-side in the plugin**, where
+`/current-user` answered it, and **only same-origin**. **Domain B must never
+accept a staff identity from a browser.** The actor is **`staff`** — no new actor
+kind — arriving as a **parameter from the identity boundary**, per W-1. And:
+**being logged into uCRM establishes *who*, never *what they may do in Domain
+B*** — uCRM's permission model is not Domain B's authorization. W-4/W-5/W-6 stay
+open.
+
+### When uCRM is unavailable
+
+**Fail closed on identity, fail soft on data.** If `/current-user` is
+unreachable the bridge must **refuse to assert an identity** — never a cached or
+assumed one. A failed commercial read renders **"not available"**, never a zero
+that reads like a fact. **No queue of pending commercial writes that later
+auto-apply** — a link is an audited act, and replaying it with a stale actor
+would misattribute it. **A uCRM outage must never widen Domain-B authorization.**
+
+### The one legitimate live dependency
+
+The **coherence check** — the uCRM service's `clientId` must equal the client
+linked to that service's customer — is the single place a Domain-B write depends
+on a live uCRM read. It is an **administrative** operation, never on the
+operating path, and no FK can express it.
+
+## The onboarding spine — final design (`docs/112`)
+
+All nine operations specified. **Nothing authorized to build.**
+
+### A-1 — the audit trail is forgeable, and it extends `docs/84` F-3
+
+F-3 already records that migration 015 grants `dnb_admin`
+`SELECT, INSERT, UPDATE, DELETE` on **all tables**, with `ALTER DEFAULT
+PRIVILEGES` so new tables inherit it — but states it as a hypothetical. **Proved
+by execution as `dnb_admin` under RLS, rolled back, with a non-zero control:**
+
+| | | |
+|---|---|---|
+| **A-1a** | `INSERT INTO mt_audit_log …` | **`INSERT 0 1`** |
+| **A-1b** | `INSERT INTO mt_customers …` | **refused by RLS `WITH CHECK`** |
+| **A-1c** | `dnb_worker` `mt_audit_log` INSERT | **true** — line 73 grants **both**; F-3 names only `dnb_admin` |
+
+- **A forged audit row cannot be removed** — `mt_audit_log` is append-only by
+  trigger. That is worse than a forgeable business write, which can be reversed.
+- **RLS still bounds it to the caller's own tenant** (A-1b), so this is an
+  **attribution/integrity** problem, **not** a tenancy breach. Do not overstate
+  it.
+- **Latent**: no production route connects as `dnb_admin`, and `Database`
+  documents `adminApi()`/`adminWrite()` as *"separate from `admin()` on
+  purpose"*.
+
+> **Binding: none of the nine spine functions may be EXECUTE-able by
+> `dnb_admin`, and no new route may connect as it.** W-1's *"no HTTP role may
+> write an audit row directly"* is true of `dnb_adminwrite` and `dnb_adminapi`
+> — **not of `dnb_admin` or `dnb_worker`.** Revoking the blanket grant is F-3's
+> own remediation, out of scope here, but **A-1 raises its priority** because the
+> forgeable target is the audit trail.
+
+**Also: a security-critical comment names the wrong role.**
+`src/Api/AdminRoutes.php:103` says *"dnb_admin holds EXECUTE and no table
+privilege whatsoever"* — true of **`dnb_adminapi`**, which the route actually
+uses, and **false of the role it names**. The behaviour is correct; the comment
+is wrong.
+
+### Required vs optional — settled
+
+| Step | Required for |
+|---|---|
+| customer | everything |
+| **principal** | **a login only** — an operator managed entirely by DishNet staff needs none |
+| service | a site |
+| site | a voucher (2b) and a router's `site_id` |
+| **device** | **nothing in the commercial chain** |
+| **uCRM link** | **nothing** |
+
+### Per-writer notes that bind implementation
+
+- **`mt_customer_create` exists and is audited — what is missing is the caller.**
+  No new signature is needed; `docs/110` withdrew the link-at-creation idea.
+- **Principal creation is the highest-risk writer** — the only operation granting
+  a human a login. A duplicate phone is a **REFUSAL** (P-B); it may **store**
+  `kind` but **not branch on it** (C6); there is **no reassignment** (P-C).
+  Disable **does** close live sessions, because `p.status` is re-read on every
+  resolution.
+- **`mt_service_create` has no natural key whatsoever** — `customer_id` plus a
+  `kind` with one legal value. The worst of the nine; a caller-supplied key is
+  mandatory.
+- **`mt_site_create` takes no `p_customer`** — derive, never accept — and is
+  **blocked on O-1**.
+- **`mt_device_assign` idempotency is a domain invariant, not a table**, and it
+  returns **NULL** rather than raising for a missing device — a retry handler
+  must not read that as success.
+- **uCRM link cardinality is OPEN** — `ucrm_client_id UNIQUE` already enforces
+  1:1, so **decide C10 first**. **U-5 deferred**: no column, and the far side is
+  unevidenced.
+
+### Idempotency classes
+
+**Non-tenant table** (customer, service, site, NULL-phone principal — the four
+with no natural key) · **existing UNIQUE** (principal-by-phone, uCRM link,
+intents — stronger, because a caller cannot bypass it by omitting the key) ·
+**domain invariant** (device assign). Conflict is uniform: same key, different
+digest → **refuse**. **`session.disconnect` deliberately NOT fixed here**; it
+remains a blocker before F6-B.
+
+### Customer-facing vs staff-only
+
+**None of the nine is customer-facing.** The customer plane keeps exactly what it
+has — plans, vouchers, sessions, `/me`. **B-2** is separate work.
+
+## A-1 audit integrity — remediation designed (`docs/113`)
+
+Every login role was **execution-tested** with a connection control, so no
+refusal below is a false negative.
+
+| Role | direct INSERT | UPDATE | DELETE | Required final |
+|---|---|---|---|---|
+| `dnb_admin` | **ALLOWED** | refused | refused | **NONE** |
+| `dnb_app` | **ALLOWED** | refused | refused | **NONE**, after F-8 |
+| `dnb_worker` | **ALLOWED** | refused | refused | **NONE**, via a definer |
+| `dnb_adminapi` · `dnb_adminwrite` · `dnb_radius` | refused | refused | refused | already correct |
+| `dnb_def_audit` | owns `mt_audit_write` | no | no | **the only writer** |
+
+- **THREE roles can forge, not two.** `docs/112` named `dnb_admin` and
+  `dnb_worker`; **`dnb_app` is the third, and it is the customer-facing HTTP
+  role** — it writes six audit sites today (F-8), so it **cannot simply be
+  revoked**.
+- **UPDATE and DELETE are refused for every role, including those holding the
+  grant.** The append-only trigger holds universally, so the exposure is
+  **forgery only — never tampering or erasure**.
+
+### The diagnosis
+
+Migration 015's blanket grant rested on its own stated reasoning: *"Each is
+subject to RLS on every table; the difference between them is only which
+SECURITY DEFINER functions they may call."* That **holds for business tables**
+and **fails for `mt_audit_log`**, because **RLS constrains which tenant a row
+belongs to — not whether the row is true.** A forged row naming another actor
+satisfies `customer_id = mt_current_customer()` perfectly.
+
+> **A-1 is not an error in migration 015's logic; it is a table to which that
+> logic does not apply.**
+
+### Proven safe to remediate
+
+Run as `dnb_adminwrite`: it **cannot INSERT** `mt_audit_log` (*permission
+denied*) and **cannot even SELECT** it (no EXECUTE on `mt_current_customer`, so
+it cannot evaluate the policy) — yet `mt_customer_create(…)` **succeeds and
+writes 1 audit row**. **The eight functions depend on `dnb_def_audit`'s
+privilege, never the caller's**, so revoking direct INSERT cannot break them.
+
+### Three tiers
+
+| | Role | Action | New objects | Breaks |
+|---|---|---|---|---|
+| **T1** | `dnb_admin` | `REVOKE` | **none — no schema change** | the **simulator only** |
+| **T2** | `dnb_worker` | one definer for `intent.confirmed`/`.failed`, then revoke | one function | nothing |
+| **T3** | `dnb_app` | the **F-8 remediation**, then revoke | six sites | the customer API until done |
+
+- **`dnb_admin` has no production caller.** The only caller of
+  `Database::admin()` is **`Simulator.php`**, excluded from the package. So T1
+  breaks the simulator and nothing else — and the simulator builds its estate
+  *through the real write paths* deliberately, so **do not silently break it**:
+  point it at the owner role or give it a development-only identity.
+- **`dnb_worker` genuinely needs `mt_intents`** (the claim/lease `UPDATE`), so it
+  cannot go to zero privileges like `dnb_adminwrite`. Only its audit write moves.
+- **A revoke that leaves `ALTER DEFAULT PRIVILEGES` in place is a fix that
+  expires** — future tables would silently re-acquire the grant.
+
+### Binding on the spine
+
+**No spine function may be granted EXECUTE to `dnb_admin`, `dnb_worker` or
+`dnb_app`** while each can independently forge an audit row. An unskippable
+audit row gains nothing if a forged one can sit beside it. **T1 should precede
+the first spine writer** — it costs a `REVOKE`.
+
+**Also found: `dnb_plain`**, a role in the development cluster that **nothing in
+the repository creates**. Not one of the twelve. **The production census must
+enumerate roles**, not assume them.
+
+## A-1 and B-2 are CLOSED in development (migrations 022–025)
+
+**The first remediation shipped in code.** `migrations/022_audit_write_boundary.sql`
+plus `023_worker_audit_boundary.sql`, `024_commercial_write_boundary.sql`,
+`tests/test_audit_boundary.php` and `tests/test_commercial_boundary.php`.
+Suite: **29 suites, 1,763 assertions, 0 failed** (1,599 → 1,617 after T1 →
+1,641 after T2 → 1,740 after T3 → 1,763 after the B-2 grant closure).
+
+> **NO LOGIN ROLE CAN WRITE AN AUDIT ROW.** `dnb_admin` (022), `dnb_worker`
+> (023) and `dnb_app` (024) are all revoked, each with its matching
+> `ALTER DEFAULT PRIVILEGES`. The only writer is `mt_audit_write()`, owned by
+> `dnb_def_audit` and callable only by the definer roles that own audited
+> mutations. **Production application is still a separate gate behind the
+> census.**
+
+```sql
+REVOKE INSERT ON mt_audit_log FROM dnb_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE INSERT ON TABLES FROM dnb_admin;
+```
+
+### Scope: dnb_admin ONLY, and the reason is measured
+
+`docs/113` listed three forging roles. **Only `dnb_admin` could be revoked
+without breaking a live path**, and this was established before writing the
+migration:
+
+| Role | Direct audit writer | Revoking today |
+|---|---|---|
+| `dnb_admin` | only caller is `Simulator.php`, which **only SELECTs** `mt_audit_log` | **breaks nothing** |
+| `dnb_app` | `public/index.php` → `Database::app()`; `AuditLog::record` INSERTs at **six** `Routes.php` sites | **breaks the customer API** |
+| `dnb_worker` | `bin/worker.php` → `Database::worker()`; `IntentWorker` audits at lines 63/77 | **breaks the worker** |
+
+> **`docs/113` predicted T1 would break the simulator. It does not.** That
+> prediction was about revoking the *whole* blanket grant; a **targeted** revoke
+> of audit INSERT breaks nothing, because the simulator's own comment is
+> accurate — its audit rows are *"written by those acts, not inserted"*.
+
+**T2 is now DONE and T3 is reported blocked** — see below. The table above is
+kept because it is what was measured before 022; `dnb_worker`'s row is closed by
+023, and `dnb_app`'s row is the reason T3 stops.
+
+### T2 — migration 023, `mt_intent_audit()`
+
+`dnb_def_work` **already owns the intent lifecycle** (`mt_intent_claim`,
+`mt_intent_expire_overdue`) and its own `mt_intents` policies, so the audit
+write went where the lifecycle already lives rather than into a boundary
+invented for it. `IntentWorker`'s two sites now call
+`SELECT mt_intent_audit(intent, worker, outcome[, reason])`, then:
+
+```sql
+REVOKE INSERT ON mt_audit_log FROM dnb_worker;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE INSERT ON TABLES FROM dnb_worker;
+```
+
+**What the caller can no longer choose.** Under the direct INSERT the worker
+supplied `customer_id`, `actor_kind` and the action string itself. Through the
+function: `customer_id` is **DERIVED from the intent row**, `actor_kind` is
+**fixed to `system`**, `action` is **constrained to two values**, and the target
+is the intent by construction. Only `p_worker` remains the worker's to supply —
+which is exactly the W-1 shape, the actor as a parameter from the identity
+boundary. `dnb_worker` **keeps `mt_intents` UPDATE**: the claim/lease is not
+audit, and a test asserts it still runs.
+
+### T3 — BUILT: migration 024, six commercial boundaries
+
+The measurement that shaped it: `dnb_app` could EXECUTE exactly six
+`SECURITY DEFINER` functions and **not one performed any of the six audited
+mutations** (five `mt_auth_*`, plus `mt_voucher_redeem`, which has no caller
+and is to be deleted). There was no boundary to move the audit into, so one
+was built per mutation.
+
+| Function | Route | Audit action |
+|---|---|---|
+| `mt_plan_create` | `POST /me/plans` | `plan.created` |
+| `mt_plan_update` | `PATCH /me/plans/{id}` | `plan.updated` |
+| `mt_plan_retire` | `POST /me/plans/{id}/retire` | `plan.retired` |
+| `mt_voucher_batch_issue` | `POST /me/vouchers` | `voucher.issued` |
+| `mt_voucher_revoke` | `POST /me/vouchers/{id}/revoke` | `voucher.revoked` |
+| `mt_session_disconnect_request` | `POST /me/sessions/{id}/disconnect` | `session.disconnect_requested` |
+
+**`dnb_def_comm` is a NEW definer role, and the reason is measured.** Every
+existing definer role already carries a widening `USING (true)` policy on
+exactly the table these functions must write — `dnb_def_net` on `mt_vouchers`
+and `mt_hotspot_users`, `dnb_def_work` on `mt_intents`, `dnb_def_admin` on all
+of them. Owning the commercial writers with any of those would have **removed**
+the tenant isolation that makes them safe.
+
+> **Tenancy is NOT enforced by the function bodies.** `dnb_def_comm` was
+> created with **no policy of its own**, so it inherits
+> `<table>_isolation FOR ALL TO public` and is bound by
+> `customer_id = mt_current_customer()` exactly as `dnb_app` is. **Proved by
+> execution:** adding a widening policy for `dnb_def_comm` breaks **11**
+> assertions; removing it restores all 89.
+
+- **There is no `p_customer` parameter in any of the six.** The customer is
+  `mt_current_customer()`, so a forged one is **unrepresentable** rather than
+  rejected — the `mt_site_create` contract from `docs/105`.
+- **The actor is a parameter**, per W-1, and is verified to be a principal of
+  *this* customer by a SELECT that RLS has already scoped.
+- **`src/Audit/AuditLog.php` was DELETED.** After the revoke it could only
+  fail; `test_audit.php` now writes its row through a real boundary.
+- **Behaviour was reproduced, not redesigned.** The `mt_hotspot_users` row is
+  still written at issue with the reversible `radius_username` (the `docs/86`
+  defects, carried over verbatim — Decision 1 stays Model B and **no AAA
+  publication was reintroduced**); a NULL update field still means *unchanged*,
+  so a data cap still cannot be cleared; `plan.retire` still has no state
+  guard; an idempotency key still deduplicates only the **intent**.
+- **Voucher codes are still drawn from the injectable `CodeSource`** and passed
+  in with spares; the function skips any the unique index rejects. Eager rather
+  than lazy drawing is the one mechanical change, and the outcome is identical.
+
+> **`session.disconnect` replay is deliberately NOT fixed, and the suite
+> asserts the gap** — a replay still enqueues a second intent and writes a
+> second audit row. T3 gave it a boundary, not replay safety. It remains the
+> blocker `docs/108` records for F6-B.
+
+### B-2's other half — CLOSED: migration 025
+
+T3 closed audit **forgery**. It did not close **unaudited mutation**: migration
+006 line 47 granted `dnb_app` `SELECT, INSERT, UPDATE, DELETE` on **all
+tables**, so the application could still bypass the six functions and write a
+business table with no audit row at all.
+
+**Every `dnb_app` write path was inventoried from the code before anything was
+revoked**, and every one had already been replaced by 024:
+
+| Table | Former `dnb_app` writer | Replaced by |
+|---|---|---|
+| `mt_plans` | `PlanRepository::create/update/retire` | the three `mt_plan_*` |
+| `mt_vouchers` | `VoucherService::issueBatch/revoke` | `mt_voucher_batch_issue`, `mt_voucher_revoke` |
+| `mt_voucher_batches` | `VoucherService::issueBatch` | `mt_voucher_batch_issue` |
+| `mt_hotspot_users` | `VoucherService::issueBatch` | `mt_voucher_batch_issue` |
+| `mt_intents` | three `enqueue` call sites | all three functions |
+| `mt_profiles` | `ProfileResolver` | `mt_profile_resolve` |
+
+**`dnb_app` is now READ-ONLY on all six.** `SELECT` is deliberately kept —
+`PlanRepository::all/find`, `VoucherService::list/find` and
+`IntentQueue::forCustomer/find` are ordinary RLS-scoped reads and are not what
+B-2 is about. `dnb_worker` keeps `mt_intents` UPDATE: the claim/lease and the
+`mark*` transitions are its own, not `dnb_app`'s.
+
+- **`src/Policy/ProfileResolver.php` was DELETED**, like `AuditLog` before it —
+  the function owns profile resolution now, and two implementations of one
+  dedup rule can only drift.
+- **The default privilege was closed too.** 006 line 50 set `ALTER DEFAULT
+  PRIVILEGES` for `dnb_app`; 024 took `INSERT` out of it and 025 takes `UPDATE`
+  and `DELETE`. **`SELECT` stays** — a future table that genuinely needs a
+  `dnb_app` write must say so in its own migration, which is the point.
+- **The simulator's one `dnb_app` enqueue moved to the admin connection.** A
+  device provisioning job is a *network*-plane act; when the Admin route that
+  raises it is finally bound it will be `dnb_adminwrite`, never the customer
+  role. The row written is identical.
+
+### The tests were refactored, not the privileges preserved
+
+**No test manufactures state as `dnb_app` any more.** 32 fixture writes moved to
+`Database::inspector()` — the documented **test fixture identity** (`postgres`),
+which already exists for exactly this and is excluded from the package.
+
+> **Two traps were hit and recorded.** The read-isolation assertions in
+> `test_intents.php` were briefly moved to the fixture identity too — which is
+> `BYPASSRLS`, so they would have become **vacuous**. They are back on
+> `dnb_app`, where the isolation under test actually lives. And the
+> default-privilege probe first created its table as `postgres` and read `0`
+> for everything: `ALTER DEFAULT PRIVILEGES` is recorded **per granting role**,
+> so the probe must create the table as the **owner** that set it.
+
+The two no-delete trigger tests are now **two assertions, not one**: the
+fixture identity first, so the refusal is demonstrably the **trigger**; then
+`dnb_app`, which since 025 cannot reach the trigger at all. Neither stands in
+for the other.
+
+> **Proved substantive, not assumed.** Widening every `*_isolation` policy to
+> `USING (true)` breaks **84 assertions across five suites** —
+> `test_rls_isolation` 43, `test_commercial_boundary` 18, `test_api_me` 11,
+> `test_isolation_s1_s2` 9, `test_intents` 3. The refactor did not hollow the
+> isolation tests out.
+
+**Still open, and asserted:** `dnb_app` retains `UPDATE`/`DELETE` **grants** on
+`mt_audit_log`, both refused by the append-only trigger for every role. Left
+alone deliberately — it is the clearest demonstration in the schema that **a
+grant was never the boundary**.
+
+### The default privilege was the half that would have expired
+
+015 also set `ALTER DEFAULT PRIVILEGES`, so the **next table created** would
+have handed `dnb_admin` INSERT again — and the attempt store (`docs/89`) and the
+non-tenant idempotency store (`docs/108`) are both still to be created. A test
+creates a table and asserts `dnb_admin` gets nothing on it.
+
+### A-2 — the residue is asserted, not hidden
+
+**The residue is now empty, and that is asserted too.** The mechanism worked
+twice: the lines written in 022 to fail when T2 landed did fail, and the lines
+written in 023 to fail when T3 landed did fail. Each was rewritten to the new
+truth rather than deleted. What the suite now pins is the **closed** state —
+no login role holds audit INSERT, no `AuditLog` class exists, a newly created
+table grants `dnb_app` no INSERT — each paired with a control (`dnb_app` can
+still SELECT the audit log and the new table; `dnb_def_audit` still holds the
+INSERT that it should).
+
+### Controls
+
+Every negative is paired with a positive. `dnb_adminwrite` holds **no** audit
+privilege yet `mt_customer_create` writes exactly **one** audit row through
+`dnb_def_audit`. Append-only still refuses UPDATE and DELETE for every role.
+Roles are **enumerated from `pg_roles`**, never from a hardcoded list.
+**Control on the control, proved separately:** with the revoke in place the
+insert is *permission denied*; reverting the grant in the same transaction makes
+the identical statement return **`INSERT 0 1`**, then rolled back — so the
+assertion has real subject matter.
+
+> **A-1 and B-2 are closed IN DEVELOPMENT ONLY.** No login role can write an
+> audit row, and `dnb_app` cannot mutate a commercial table at all.
+> **Production application is a separate gate and the production census still
+> comes first.** `session.disconnect` replay remains open, and is asserted in
+> the suite rather than assumed.
+
+## O-1 acceptance — SYNTHETIC, and it overturned a documented claim
+
+`tools/audit/o1_acceptance.php` builds a throwaway `dnb_o1acc`, seeds an
+`O1FIX-` prefixed estate, runs the **exact** `production_census.sql` against
+it, and drops the database. **52 assertions, and NONE of it is production
+evidence** — production remains **CENSUS NOT OBTAINED**.
+
+### The finding: the O-1 migration does NOT fail closed
+
+> **`docs/106`'s "the migration fails closed by itself… No guard clause is
+> needed and none should be added" is WITHDRAWN.** It is true only for a role
+> that can see every row. Proved by execution against a violating estate:
+
+| Run as | Result |
+|---|---|
+| the owner `dnb`, no guard | **`ALTER TABLE` / `COMMIT`, no error** — constraint added and marked **`convalidated = true`** with the violating row still underneath |
+| a role that sees every row | **refuses**, names `mt_sites_service_customer_fkey` and the offending pair, rolls back, **0 constraints** |
+| the owner `dnb`, **with the guard** | **refuses** — *query would be affected by row-level security policy* — **0 constraints** |
+
+The cause: since migration 017 (F2) the owner is **not** a superuser and
+`mt_sites` has **FORCE RLS**, so with no tenant context it sees **zero rows**
+and the FK validation scan finds nothing to object to. The first outcome is
+the dangerous one — **the invariant is asserted but not true, and nothing
+would ever re-check it.**
+
+**The fix is one line**, now in `tools/audit/o1_composite_fk.sql`:
+`SET LOCAL row_security = off;`.
+
+> **Do not describe this as "bypassing RLS".** The property it buys is narrower
+> and is the one that matters: **the migration refuses to proceed when its own
+> validation query would be affected by row-level security**, instead of
+> validating against whatever subset happened to be visible. Under FORCE RLS
+> that setting makes such a query **error** rather than silently return fewer
+> rows. The migration fails closed; it gains sight of nothing.
+
+> **This raises the census from useful to load-bearing.** The migration cannot
+> be relied on to catch a violation, and its error names only **one** pair
+> anyway. **The census is the only thing that enumerates.**
+
+### The candidate DDL is NOT a migration
+
+`tools/audit/o1_composite_fk.sql`, deliberately **not** in `migrations/`:
+putting it there would apply it on every install, which is precisely the
+authorisation that has not been given. `tools/` is also excluded from the
+package.
+
+### Five of the fourteen anomalies CANNOT EXIST at migration level 25
+
+Measured: orphan `customer_id`, orphan `service_id`, NULL `service_id`,
+device customer/site mismatch and duplicate `tunnel_ip` are each already
+refused by an existing constraint. The harness proves the **current schema
+refuses each one first**, then drops that single guard in its own throwaway
+database to prove the census would still **detect** it at an earlier migration
+level, then restores it. That is instrument testing, not a claim that such
+rows are reachable.
+
+**What IS representable today:** the O-1 cross-customer site→service (two
+independent single-column FKs that nothing requires to agree), a service
+reached from two customers' sites, a voucher with NULL `site_id`, and a
+decommissioned device still sited.
+
+### Census corrections made by running it
+
+- **`BLOCKED(n)` counted detectors, not rows.** One bad row reported
+  `BLOCKED(3)`. `n` is now the distinct offending row count from the
+  authoritative SECTION 4 check; the other detectors stay as diagnostics.
+- A test tool must not invent configuration. `test_installability.php` sweeps
+  `tools/` and refused two undeclared env vars the harness had introduced;
+  host and port now come from the declared `DNB_DSN`. **The guard was right;
+  the tool was wrong.**
+
+Suite **29 suites / 1,763 assertions / 0 failed**, unchanged by this work.
+Acceptance harness **52 assertions**, stable over two runs, leaving **zero
+residue** — no synthetic database and no `O1FIX-` row anywhere.
+
+### Three kinds of O-1 evidence — do not let them blur
+
+| | Status | What it can and cannot support |
+|---|---|---|
+| **Synthetic validation** | **✅ obtained** | proves the census DETECTS each anomaly and the guarded migration fails closed. Proves **nothing** about the DishNet estate |
+| **Production census** | **❌ NOT OBTAINED** | the only thing that can say whether production holds zero, one or many violations, or legacy rows needing repair |
+| **Migration authorisation** | **❌ NOT GIVEN** | a separate operator decision. **A `CLEAR` census authorises nothing by itself** |
+
+```
+synthetic instrument   OK        production census       NOT OBTAINED
+synthetic detection    OK        production O-1 migration NOT APPLIED
+synthetic safety       OK
+```
+
+**The migration is a SEPARATE act from the census**, and `census → looks clean
+→ ALTER TABLE` is precisely the sequence this finding rules out. The six-step
+operator sequence is in `docs/79` §7b, and step 6 — **verify independently
+afterwards** — exists because *"the migration returned exit code 0"* is now
+known not to be evidence that the invariant holds.
+
+**`o1_composite_fk.sql` stays out of `migrations/`** until the census is
+obtained, reviewed, and the migration separately authorised.
+
+## The Admin login boundary — built; production authentication is NOT
+
+**You can open the Admin panel and sign in. Real staff cannot.** Those are two
+different things and the build keeps them apart deliberately.
+
+`src/Admin/AdminSession.php` (signed, short-lived, stateless) +
+`DevSessionIdentity` + three session routes + the panel's login gate.
+**`DenyAllIdentity` is still the production binding and W-4 is still open.**
+
+### What production does
+
+| | |
+|---|---|
+| `GET /api/v1/admin/session` | **401** with `can_authenticate: false`, `roles: []`, `provider: deny-all` |
+| `POST /api/v1/admin/session` | **501 `production_authentication_unavailable`** — *not* 401 |
+| every estate route | **401** |
+
+**501, not 401, is the point.** A deployment that authenticates nobody has a
+configuration state, not a credential problem. Answering 401 would invite staff
+to type credentials at something that will never accept them and conclude their
+own details were wrong.
+
+### There is no fallback from production to development — proved, not asserted
+
+`DevSessionIdentity` **throws** if `DN_DEV_STAFF_IDENTITY` is not the exact
+string, and throws again if the process is authorized for real bindings
+(F6-B). It never degrades to `DenyAllIdentity`, and `DenyAllIdentity` never
+upgrades to it. `$issuer` stays `null` outside the gate, so **the login route
+has nothing to mint with** in a deployment.
+
+> **A security gate asserted against a guessed environment variable proves
+> nothing.** The first version of this test set `DN_ALLOW_REAL_BINDINGS=1`; the
+> real value is `yes-f6b-authorized`, so the assertion would have passed by
+> never firing. It now reads `Bindings::REAL_GATE_ENV` and
+> `REAL_GATE_VALUE` from the constants, with a control proving the gate is
+> genuinely open before the refusal is expected.
+
+### The seven UI states
+
+login · invalid · working · authenticated · **expired** · **forbidden** ·
+**unavailable**. The last three are the ones usually collapsed into "something
+went wrong": expired says you *were* signed in; forbidden says you *are* signed
+in and lack a capability, so signing in again will not help; unavailable says
+nobody can sign in here and therefore **shows no form at all**.
+
+### What "logging in" means here, and what it does not
+
+There is **no password and no credential store**, because
+`AdminIdentityPort` exists so the provider can be chosen later and a password
+table written now is the one thing that would make that harder. **The
+environment gate is the credential**; the form only picks a role, so the
+capability boundary can be exercised.
+
+- **The signing key is DERIVED, not reused.** `DNB_SECRET_KEY` is documented as
+  the key for stored device credentials; signing sessions with the same bytes
+  would be key reuse across unrelated purposes. The session key is
+  HMAC-derived under a distinct label. No new secret to provision, none in
+  source control.
+- The cookie is **HttpOnly + SameSite=Strict**, `Secure` only over TLS — a
+  Secure cookie on plain http is dropped and the developer sees a login that
+  silently never works.
+- **Logout clears a cookie; it does not revoke.** Found by driving the real
+  HTTP server, not the router: a client still replaying the old cookie is
+  admitted until the token expires. Acceptable for a one-hour development
+  token, **not** for a production provider, which needs real revocation. The
+  suite asserts the limitation so it stays visible.
+
+### The panel carries nothing secret
+
+Asserted on the bundle with **comments stripped first** — scanning prose
+flagged the login screen's own honest copy. The credential guard checks
+credential *shapes* (`password:`, `secret=`, a quoted `token:`), not the bare
+word, because a screen that says *"nothing is asked for here"* should not fail
+a test for saying so. Two pre-existing panel guards (no `SELECT`, no
+`password`) fired on the new UI copy and **the copy was reworded — the guards
+were not weakened.**
+
+Suite **30 suites / 1,846 assertions / 0 failed**, stable over two runs.
+Proved over real HTTP in both modes as well as in-process.
+
+## The DishNet Portal direction — staff authentication PLANNED, not built (`docs/114`)
+
+**Direction corrected 2026-09-23.** The product is the **DishNet Portal**:
+DishNet Admin + the Customer PWA, both over the Domain-B API, both
+DishNet-owned, at DishNet's own URL.
+
+- **uCRM / UISP / Splynx are NOT the operating portal, NOT a login
+  dependency, and there is NO staff-auth bridge.** Do not move the Admin UI
+  into any of them and do not redesign Domain B around them. `docs/111`'s
+  staff-identity path (U-7, S-1/S-2) is **superseded**; its data-adapter half
+  is parked, not chosen. They may later be integrations for selected
+  commercial data at the one audited link point `docs/110` defines.
+- **W-4 is now authorised to be DESIGNED** — and only designed. `docs/114`
+  is the plan: `mt_staff` + `mt_staff_sessions` owned by a new NOLOGIN
+  `dnb_def_staff`; password (bcrypt) and TOTP verified **inside PostgreSQL**
+  via pgcrypto — the schema's first extension, to be proved installable by
+  the non-superuser owner; decaying lockout **inside `mt_staff_login()`**;
+  opaque 256-bit cookie, HttpOnly/Secure/SameSite=Strict, stored hashed under
+  a **label-derived** key (no new secret); resolve re-reads `status` and
+  `role` live; disable revokes sessions transactionally; actor = username,
+  a parameter from the identity boundary (W-1); `mt_current_customer()` is
+  **never set on the Admin plane** — a target customer is a validated
+  function parameter, never tenant context.
+- **Credential tables must be created under `SET LOCAL ROLE dnb_def_staff`**,
+  never as the owner: migration 015's default privileges for `dnb_admin` are
+  per granting role and 022 revoked only INSERT, so an owner-created table
+  would hand `dnb_admin` SELECT on password hashes by default. A test must
+  assert every login role holds zero privileges on them.
+- Bound writes come **after** the provider: routers first (three existing
+  W-1 functions + one new enqueue function), then Admin-plane voucher/plan
+  issuers for a **target** customer (D-AUTH-3, owner role decided by
+  measurement), idempotent through `mt_idempotency(customer_id, key)` with
+  the check before the mutation (RULE I-1). `POST /sites` waits for O-1;
+  `disconnect` waits for the replay fix.
+- **Superseded by G-B (built, see the section below):** at the time of the
+  plan nothing was implemented and migrations ended at 025. `DenyAllIdentity`
+  is still the DEFAULT binding, the preview artifact is a recording, and the
+  production census remains the handoff for O-1. Gates G-A…G-F and decisions
+  D-AUTH-1…7 are in `docs/114` §K–§L; the build is recorded in `docs/114` §O.
+
+## Multi-operator tenancy — ANALYSED, not decided (`docs/115`); D-AUTH SUSPENDED
+
+**D-AUTH-1…7 were measured and provisionally frozen (`docs/114` §M) and then
+SUSPENDED the same day, before any code.** T-1 and T-8 were then answered
+(`docs/116`) and G-B was built (migration 026) — see the G-B section below.
+
+The product is **DishNet → Operators → Operator Staff → Locations → routers /
+HotSpot / plans / vouchers / sessions → guests**. A reference ISP portal was
+supplied for its **operating model only** — nothing of its implementation is
+copied, and the personal details on its pages are reproduced nowhere.
+
+- **`mt_customers` already IS the Operator — measured, not assumed.** Nothing
+  references anything above it (`FKs FROM mt_customers: NONE`); sites (via
+  services), devices, plans, vouchers, sessions, principals and audit all key
+  on it; 19 of 21 `mt_*` tables carry FORCED RLS with 18 policies on
+  `customer_id = mt_current_customer()`; `docs/110` already calls it "the
+  Domain-B operator". The commercial customer is **external** (the nullable,
+  withheld `ucrm_client_id`).
+- **Do NOT add a tenant layer above it.** `mt_operators` above `mt_customers`
+  would make `mt_customers` mean subscriber accounts — which the product does
+  not have (**F11**) — and re-key **18 tables, 18 policies, 32 functions, 21
+  migrations, 15 PHP files, 19 test files and `mt_auth_sessions`** while
+  contradicting F4, F5 and `docs/81` §9. **Rejected on evidence.**
+- **Recommended: vocabulary at the API/UI** (Operators & locations), no
+  physical rename (same blast radius, zero security gain) — **T-1, awaiting
+  instruction.**
+- **Operator Staff = `mt_principals`** (exactly one operator, phone-OTP, PWA).
+  Their intra-operator **capability model is UNDEFINED** — `kind
+  owner|operator` is stored and never branched (C6/C16 = **T-2**). **Guests
+  have no identity** and get none (F11, `docs/89`). **DishNet Staff** stay
+  global by capability and name a **target operator** explicitly; D-AUTH-3
+  reads *target operator* from now on.
+- **Subscriber accounts are not a gap.** The reference's subscriber lifecycle
+  is a different product shape; if ever wanted it is a child of the operator
+  (T-3), never a layer above.
+- Sessions attribute to the operator (via the HotSpot user) and to the
+  location (via the voucher) — **never to a router** (unchanged).
+- Sequence: T-1 → resume `docs/114` → T-2 → O-1/spine → projections and
+  reports → G-C. Twelve open decisions in `docs/115` §N.
+
+## T-1 / T-8 CLOSED — and the Operator Staff capability model is DESIGNED (`docs/116`)
+
+- **T-1 CLOSED:** `mt_customers` **= Domain-B Operator**. UI/API/business say
+  **Operator**; the table stays `mt_customers`. **Never create `mt_operators`,
+  never physically rename.** Operator isolation through `customer_id` + RLS
+  remains authoritative.
+- **T-8 CLOSED:** `docs/114` resumes with the **dedicated `dnb_staffauth`**
+  login role (M1: `dnb_adminwrite` reaches seven write functions) and
+  **D-AUTH-3 = *target operator***. The Admin plane never sets
+  `mt_current_customer()`; a target operator is an explicit validated
+  parameter authorised by the staff capability.
+- **T-2 DESIGNED, not built (`docs/116`)** — C6/C16 answered. Four planes:
+  DishNet Staff (`mt_staff`) · Operator Owner (`kind='owner'`, every `op.*`)
+  · Operator Staff (`kind='staff'`, exactly `capabilities[]`) · Guest (none).
+  The value **`operator` is renamed to `staff`** because after T-1 "operator"
+  means the tenant. **`mt_audit_log.actor_kind = 'staff'` means DishNet staff
+  only; every operator person is `principal`** — pinned by a test; no actor
+  kind is added. Owner implies all; `op.staff.manage` is **not grantable**;
+  **at least one active owner per operator**. Location scoping is **later**
+  (T-6), nothing reserved physically.
+- **Measured, proved by execution (rolled back, residue 0): `dnb_app` can
+  `UPDATE` a principal's `kind` and `INSERT` a forged `owner` inside its own
+  tenant today.** Not a tenancy breach (RLS bounds it), but a capability
+  column would have no floor below the application until
+  `REVOKE INSERT, UPDATE, DELETE ON mt_principals FROM dnb_app` lands — so the
+  capability model ships **with** that revoke (migration 027) or not at all.
+  **B-3:** thirteen more tables still carry `dnb_app` write grants after
+  024/025 (`mt_customers`, `mt_sites`, `mt_services`, `mt_devices`,
+  `mt_auth_sessions`, `mt_sessions`, `mt_idempotency`, …) — inventory every
+  writer before revoking, as B-2 did; its own task after G-B.
+- The census (`docs/79`) gains one line: **principals by kind and status**,
+  because the `operator → staff` value rewrite touches existing rows.
+- **Sequence:** T-1 vocabulary pass → **G-B** (migration 026) → **027**
+  (this model + principal grant closure + `mt_admin_principal_create` with
+  target operator) → G-C → B-3 → O-1. G-B is BUILT (below), **027 is
+  BUILT** (the T-2 section below) and **G-C is BUILT in software** (the G-C
+  section below); G-C2 / B-3 / O-1 have NOT been started.
+
+## G-B — DishNet Staff authentication is BUILT (migration 026); NOT bound by default
+
+**W-4 is closed in code and in the development schema; the production posture
+did not move.** `DenyAllIdentity` is still the default binding. A deployment
+binds the real provider explicitly with `DN_STAFF_IDENTITY=dishnet`, and that
+also needs TLS in front of PHP and a first administrator — G-D territory, not
+authorised. **Nothing is installed anywhere; migrations end at 026; no `027*`
+file exists; 027 / T-2 / B-3 / G-C / O-1 were NOT begun.** Full record:
+`docs/114` §O.
+
+- **Migration 026:** `mt_staff` + `mt_staff_sessions` **created under
+  `SET LOCAL ROLE dnb_def_staff`** (migration 015's default ACL would
+  otherwise hand `dnb_admin` SELECT on password hashes), no RLS — isolation is
+  by privilege: **no login role holds any privilege on either table**, asserted
+  over a `pg_roles` enumeration (stray `dnb_plain` included) with the owner as
+  positive control. `pgcrypto` is the schema's first extension, created by the
+  non-superuser owner. bcrypt (cost 12) and RFC 6238 TOTP are verified
+  **inside `mt_staff_login()`**, in one transaction with the decaying lockout
+  (5 → 15 min, ×2 per lock, 24 h ceiling, never permanent) and the audit row.
+  **Every number lives in `mt_staff_policy()` and nowhere else** — a test
+  asserts no PHP file carries one. Every failing path returns the empty set
+  after spending a bcrypt → **one byte-identical 401**; the lock is audited,
+  failures are counters.
+- **Roles:** `dnb_staffauth` (LOGIN, 14th role) reaches **exactly** login /
+  resolve / logout + the constants function, zero table privileges, no write
+  function, no projection. Lifecycle and self-service → `dnb_adminwrite`
+  (**W-3's approved list updated deliberately**, still zero table
+  privileges). `mt_admin_staff()` → `dnb_adminapi`, no hash/secret/session.
+  15 roles now: 7 login + 8 definer; `Doctor::DEV_PASSWORDS` **stays at six** —
+  it is the burned list and `dnb_staffauth` never had a burned credential.
+- **Provider selection is explicit and never falls back:** unset → DenyAll;
+  `dishnet` → `DishnetStaffIdentity`; any other value → refuses to start;
+  **dev gate + dishnet → refuse to coexist**; the real provider **works under
+  the F6-B gate** that makes the dev identity throw; a provider that cannot
+  connect → **500 on every request** with one log line, never deny-all, never
+  the dev identity. `StaffIdentityFactory` is the only construction site.
+- **Sessions:** opaque 256-bit cookie, HttpOnly · Secure · SameSite=Strict,
+  stored only as `HMAC(token, K)` with `K` derived from `DNB_TOKEN_PEPPER`
+  under a label (no new secret); 8 h absolute; **revocable** — logout,
+  disable, role change, password reset and TOTP reset revoke in the same
+  transaction; resolve **re-reads status live**, proved by flipping status
+  under an unrevoked row. **Issued only over TLS**: PHP terminated it, or
+  `X-Forwarded-Proto` from an address in `DN_TRUSTED_PROXY`; otherwise **403
+  `insecure_transport`** and no row. So over an SSH tunnel to plain HTTP the
+  real provider refuses; the demonstration path stays `DN_DEV_STAFF_IDENTITY`.
+- **Second factor required by default** (`DN_STAFF_REQUIRE_TOTP=no` is
+  development-only; the doctor blocks it outside a disposable environment). A
+  pending session may only GET/DELETE `/session` and enrol/confirm; every
+  capability route answers **403 `second_factor_required`**, distinct from
+  `forbidden`. Enrolment returns the new key once; an independent RFC 6238
+  implementation in the suite computes the code the database accepts; ±1
+  window; replay of a code, and any older step, refused.
+- **CSRF:** SameSite + Origin (must equal `DN_PORTAL_ORIGIN`, or Host when
+  unset) + `Sec-Fetch-Site` + JSON only → 403 `cross_origin` / 415.
+- **Routes:** six session routes (no capability), seven `/staff` routes
+  (`staff.manage`, Admin only, **bound only under the real provider**; the dev
+  identity gets 501). The seven estate POSTs still answer 501; manifest
+  `surface` is now `estate read-only; identity read-write` and
+  `writes.bound` is still `[]`. **No role, customer or operator from the
+  browser establishes authority** — `role: admin` in the body yields the
+  row's role; the actor-taking functions are called only from `StaffAdmin`
+  with `$s->subject`.
+- **Audit:** eleven actions, `actor_kind='staff'` (no new kind), actor = the
+  immutable username, `customer_id NULL`; delta-counted exactly once per act,
+  none on any refusal; every password, key, secret, token and hash generated
+  in the suite is searched for in every detail — none.
+- **Bootstrap:** `plugin.php staff:bootstrap <username> [--display]` on the
+  server, once; prints the generated password once; refuses once any staff
+  row exists. Passwords are always **generated server-side and shown once**.
+- **Guard amendments, each with a control:** the frozen-guards column rule
+  exempts `mt_staff.totp_secret` (R-5) and proves no login role can read it,
+  and skips timestamp/boolean columns; the simulator's bare `password` needle
+  became the credential-shape pattern; `panel/staff.js` is a separate
+  identity-plane client so `api.js` stays estate read-only under its guards.
+- **Proved over real HTTP** (`php -S … plugin/bin/serve.php`): 401 → 403
+  plain → 401 wrong → 200 with `Secure; HttpOnly` → estate 200 → roster 403
+  for sales → logout 204 → **replayed cookie 401**; and dev gate + dishnet in
+  one process → 500 on every request with the reason logged.
+
+Suite **31 suites / 2,375 assertions / 0 failed**, twice (was 30 / 1,846).
+
+## T-2 — Operator Owner / Staff capabilities are BUILT (migration 027); B-3 still OPEN
+
+**Development and test schema only.** Nothing is installed anywhere; migrations
+end at **027** and no `028*` file exists; the production census is still the
+handoff. Full record: `docs/116` §J (decisions taken before code) and §K (the
+build and its proofs).
+
+- **`mt_principals.kind` is `owner | staff`.** The `operator → staff` rewrite
+  runs **as `dnb_def_auth`** with a `RAISE NOTICE` census per kind and status
+  and an assertion that none remain, *then* the CHECK tightens — because the
+  migration owner under FORCE RLS sees **0** principals (the O-1 lesson; the
+  control printed 0). Proved on a disposable level-026 database seeded with
+  two legacy rows: census 2 + 1, rewrote 2, 0 remain, dropped. **That is not
+  production evidence; census SECTION 1c is.**
+- **`capabilities text[]`, one canonical list** — `mt_op_capabilities()`
+  (17 names); `OpCapability::ALL` is asserted equal. Owner implies all and
+  stores `{}` by CHECK; **`op.staff.manage` is never grantable to staff** by
+  CHECK; an unknown name is a constraint violation. Manager / Seller / Viewer
+  are PHP presets only; the row stores the list.
+- **The last-owner invariant is checked BEFORE the self-guard** in
+  `mt_principal_set_kind` and `_disable`. Only an active owner can act, so with
+  one owner left the actor *is* that owner: checked second, the invariant
+  could never fire, and a guard that cannot fire cannot be proved.
+- **`dnb_app` holds SELECT only on `mt_principals`.** INSERT, UPDATE and
+  DELETE each proved refused by execution; `dnb_def_comm` (INSERT + UPDATE,
+  **no widening policy**, so tenant-bound *below* the function) is the
+  positive control, and is refused by the policy when it names another tenant.
+  The four writers and `mt_principal_can` → **`dnb_app` only**; the floor
+  `mt_principal_require` is granted to **nobody**; `dnb_admin` / `dnb_worker`
+  still hold migration 015's blanket grant here — **F-3, OPEN**, asserted, not
+  027's to revoke.
+- **`mt_op_capabilities()` is EXECUTE-able by exactly `dnb_def_comm`,
+  `dnb_def_prov`, `dnb_def_auth`** (a CHECK runs as the writing role; 007's
+  `last_login_at` UPDATE re-evaluates every CHECK). It was first
+  PUBLIC-executable; `test_isolation_s1_s2` refused it — **no `mt_` function
+  may be PUBLIC-executable, with no exceptions** — and the guard was right.
+- **Resolution is live.** `mt_auth_resolve_token` returns kind and
+  capabilities on every request; a removed capability or a demotion binds the
+  next request of an existing session; **disable revokes every session in the
+  same transaction** (proved by rolling one back). A kind change clears the
+  list and revokes nothing (J-7). Self-disable and self-demote are refused
+  (J-6).
+- **Every `/me` route runs through `Routes::$guard(capability, handler)`** — a
+  route cannot be added without naming a capability. 403 is
+  `{error: forbidden, capability}` and describes the caller's own role; **the
+  404 record rule is untouched** (a foreign id is still indistinguishable from
+  an absent one, capability or not). Five `/me/staff` routes, all
+  `op.staff.manage`. `Kernel` maps **only** a 42501 whose message is
+  `capability required: <op.x>` to 403; **any other 42501 stays 500**.
+- **The six commercial functions carry the floor inside**, after the actor
+  check and before any mutation: **42501, no audit row**, and the detail
+  records `principal_kind` + `capability` at act time. Proved with an
+  unguarded route through the Kernel: the floor answers 403 by itself.
+- **Admin plane:** `mt_admin_principal_create(p_operator, …, p_actor)` —
+  target explicit, `dnb_def_prov` with an INSERT-only policy, body contains no
+  `mt_current_customer` (asserted on `prosrc`), audits `actor_kind = 'staff'`
+  with `detail.operator`. `GET /api/v1/admin/principals` is bound as the
+  **fourteenth** projection (phone, email, credential unreturnable);
+  `POST /api/v1/admin/customers/{customer_id}/principals` is **declared unbound
+  and answers 501** (J-1) — binding it needs its own instruction. **Bound since
+  `docs/126`** (the section below).
+- **Fixtures and the simulator create the first owner through the Admin
+  creator**, on the Admin write connection; A's seed now carries
+  `customer.created` **and** `principal.created` (actor `test:seed` /
+  `sim:seed`, `actor_kind = 'staff'`).
+- **The naming rule is asserted:** every `mt_audit_write(` call in every
+  migration passes a literal actor kind; no PHP maps `kind` onto `actor_kind`;
+  `actor_kind` stays `principal | staff | system`.
+- **Not built, deliberately:** B-3 (the thirteen other `dnb_app` write grants
+  are asserted unchanged), G-C, G-C2, O-1, G-D, T-6, T-10, T-11, the PWA staff
+  screens (J-14), idempotency for `POST /me/staff` (J-8, I-A), F-3.
+
+Suite **32 suites / 2,769 assertions / 0 failed**, twice (was 31 / 2,375);
+`tests/test_operator_staff.php` alone 378.
+
+## G-C — the MikroTik router control-plane boundary is BUILT in software; NOTHING is HARDWARE VERIFIED
+
+**Development schema only, no migration (still 027), nothing installed, no
+physical MikroTik.** Full record: `docs/118` — §A the governing rules quoted,
+§B fifteen decisions taken before code, §C/§F the evidence register with the
+`docs/00` labels, §D–§E the build and the proofs. **Do not describe anything
+built here as hardware activation, RouterOS compatibility, WireGuard push
+viability or HotSpot operation.** The Phase-0 protocol (`docs/31`, `docs/32`)
+remains the only instrument for those, `tools/chr_harness.sh` is still unrun,
+and B1 (push vs poll) is decided nowhere.
+
+- **Names.** The instruction's *MikroTikDeliveryAdapter* is
+  `Dn\Delivery\RouterOsDelivery`; its *RouterOsClient* is
+  `Dn\Delivery\RouterOs\RestClient`. Kept, not renamed (D-1).
+- **The destination is derived, never accepted.** `Dn\Delivery\DeliveryTarget`
+  is the one resolver both adapters use: the device row read under the
+  intent's tenant context is the only source of a router's address; a payload
+  carrying `host`, `endpoint`, `address`, `tunnel_ip`, `ip`, `url`, `port`,
+  `serial`, `username`, `password`, `secret` or `wg_pubkey` is a **permanent
+  refusal before any connection**; a malformed or unknown device id fails
+  closed; another operator's device is *not found*.
+- **Lifecycle gate.** Delivery only to `connected` / `provisioned` / `active` /
+  `diverged`; `decommissioned` permanent; everything else retryable. **The
+  adapter and the worker never write `mt_devices.state`** — moving a router to
+  `connected` or `provisioned` is a staff act through `mt_device_set_state`,
+  and whether a confirmed delivery may drive it is **UNRESOLVED** (a migration
+  and a B1 question). A simulated delivery moves nothing either.
+- **Identity check (H8, VERSION/MODEL DEPENDENT).** Before its first write the
+  adapter reads `system/routerboard` and refuses permanently if the serial is
+  not the registry's, making exactly one call; a router with no serial (CHR)
+  is refused unless constructed with `requireSerial: false`, which only the
+  CHR harness may do. A consistency guard, not the trust anchor — the
+  WireGuard key at the transport layer is that, and `docs/30` §6.3 says the
+  serial may be spoofable.
+- **The F6-B gate is at the socket.** `RestClient`'s real transport calls
+  `Bindings::requireRealBindingsAllowed()` before `curl`; the injected test
+  transport never opens a socket. `DN_DELIVERY` selects the worker's binding
+  — unset/`null` → `NullDelivery`; `simulated` → `SimulatedRouterOs`, which
+  **refuses to construct inside a gated process**; `routeros` → requires the
+  gate, else throws; anything else throws. **No fallback in any direction.**
+  Every result carries `simulated`; `/health` reports `delivery_binding`,
+  `delivery_simulated`, `delivery_configured`; the worker id carries the
+  binding name into every audit row.
+- **`SimulatedRouterOs` writes nothing to the database** — not device state,
+  not `mt_device_config.actual` — and confirms from its own memory. What it
+  proves is the worker, queue, lease and confirm-is-a-read logic. What it
+  proves about RouterOS: nothing.
+- **Timeouts and malformed answers.** 5 s connect / 10 s total (H11,
+  UNRESOLVED on the tunnel); a transport failure is retryable and its message
+  names no address or credential; a 2xx with a non-JSON body is `malformed`,
+  retryable, and **never a confirmation**. The adapter scrubs the device's
+  username, password and tunnel address from anything the worker records.
+- **Admin plane: exactly two estate writes are bound** — `POST
+  /api/v1/admin/routers` (`routers.register`) and `POST
+  /api/v1/admin/routers/{device_id}/assign` (`routers.assign`) — through
+  `Dn\Admin\RouterAdmin` on `dnb_adminwrite`, the W-1 functions, **actor =
+  `StaffIdentity::$subject`**; a body carrying `staged_by`, `actor`, `state`,
+  `customer_id`/`site_id` (on register) or `id` is **400, refused rather than
+  ignored**; a tunnel address must be one address in `10.66.0.0/16`
+  (`Dn\Devices\TunnelAddress`, the one rule the client and the route share);
+  W-2 refuses a foreign site below the function. Bound under any identity
+  provider the process runs (the development identity's actor is the literal
+  `dev`, and it cannot exist in a gated process).
+- **The router ACTION route is NOT bound** and answers 501
+  `router_action_not_bound`: queuing a `device.provision` intent from the
+  Admin plane needs a SECURITY DEFINER enqueue function for `dnb_adminwrite`
+  — a migration — and G-C fixed the state at 027. **Recorded (D-2), not
+  worked around**; `docs/114` §K G-C is met for register and assign and says
+  so. Do not route the action through `dnb_admin` or `dnb_app` to close it.
+  **Superseded 2026-09-23: the action IS bound by migration 028 (`docs/121`) —
+  see the *Router lifecycle and provisioning* section below.**
+- **Manifest:** `writes.bound` = the two routes with function, role and actor
+  rule; `declared_unbound` = six (action, sites, plans, voucher-batches,
+  disconnect, principals); `surface` = *estate read + router register/assign;
+  identity read-write*; gates `admin-write` = *PARTIALLY BOUND (G-C)*,
+  `delivery` = *NULL BY DEFAULT*; `DN_DELIVERY` declared (read literally —
+  the installability sweep only sees `getenv('X')`).
+- **The evidence register** (`docs/118` §C, §F): H1 self-signed REST and H5,
+  H7 — VERSION/MODEL DEPENDENT; H6 — UNRESOLVED; H8 routerboard serial —
+  VERSION/MODEL DEPENDENT; H9 `system/resource`, H10 `system/identity` —
+  DOCUMENTED; H11 timeouts, H12 error shapes — UNRESOLVED; B1 — UNRESOLVED.
+  **Nothing became HARDWARE VERIFIED and nothing may without a physical
+  unit.**
+- **Not started, deliberately:** G-C2, B-3 (the thirteen `dnb_app` grants
+  asserted unchanged), O-1, G-D, T-6, T-10, T-11, the action route and its
+  migration, panel forms, device-state automation, any B1 decision.
+
+Suite **33 suites / 3,026 assertions / 0 failed**, twice (was 32 / 2,769);
+`tests/test_router_control_plane.php` alone 250; G-B 487 and T-2 378
+unchanged; `plugin/bin/install-test.sh` 85/85.
+
+## The physical-hardware gate — STOPPED here; `docs/119` is the handoff
+
+**The project is stopped at the physical-hardware verification gate.** G-C
+(`9a09cc7`) was accepted as the software boundary; the fourth layer —
+`physical MikroTik → WireGuard → RouterOS REST → HotSpot → RADIUS → accounting`
+— cannot be proved from a development database, and **no further simulated
+implementation is authorised**. `docs/119` is the single physical-test
+handoff: every item still *HARDWARE VERIFIED pending*, in eleven categories
+(A router identity · B WireGuard transport · C REST management · D RouterOS
+provisioning · E HotSpot · F RADIUS authentication · G accounting ·
+H disconnect/CoA · I reset/recovery · **J B1 push-vs-poll** · K state
+ownership / `last_seen_at`), each row with the exact command, expected
+observation, evidence, pass/fail, model/version dependence and the decision it
+gates; the `docs/32` §0.1 inventory and §0.4 export **and restore** test; a
+result template; and a *Physical Gate Status* table whose `HARDWARE VERIFIED`
+column is empty by construction.
+
+- **Checklist IDs are `HW-<category><n>`.** `docs/31`'s Tests A–E and
+  `docs/32`'s Step 0 / Run Sheets keep their own numbering; `docs/119` adds
+  nothing to that protocol and invents no staging command where it already
+  specifies one. Every RouterOS command is still an **UNVERIFIED proposal**
+  (`docs/32` Prime Directive) until the unit accepts it.
+- **The Domain-B software stays out of the loop at the bench.** F6-B is NOT
+  AUTHORIZED; `DN_ALLOW_REAL_BINDINGS` is never set; `DN_DELIVERY` stays
+  unset. The REST paths the adapter *would* send (`docs/119` §3) are exercised
+  by hand with `curl` from the gateway. A green session does not open F6-B.
+- **B1 is measured, not decided, and nothing is implemented either way.** The
+  result is PUSH / POLL / UNRESOLVED per `docs/32` B.idle and `docs/00` §14,
+  and only a capture that separates *direct* reachability from
+  *keepalive-refreshed* reachability counts — a WireGuard handshake alone is
+  not push evidence. **Do not write a poller because a result made it
+  convenient.**
+- **The only server-side changes the session may make** are the two
+  `docs/35`/`docs/36` already prescribe on the Phase-0 stack (one `[Peer]` via
+  `wg syncconf`, the `t1-` test voucher rows), undone afterwards; the
+  `docs/00` §10 constraints hold throughout. **Never a customer router.**
+- **Two software facts recorded for the evidence to inform, not hardware
+  findings:** the production `session.disconnect` intent carries `session_id`
+  only while the adapter needs a device and a HotSpot `.id` (a session cannot
+  yet be attributed to a router, `docs/91`); and the adapter PATCHes the
+  *collection* path `ip/hotspot/profile` — whether RouterOS accepts that is
+  `HW-D2`, a desired-state-contract question if it does not.
+- **CHR is lab evidence only** (`tools/chr_harness.sh`, still unrun); it never
+  yields `HARDWARE VERIFIED`.
+- **Not started, deliberately:** G-C2, B-3, O-1 (the census `docs/79` is still
+  that handoff), G-D, T-6/T-10/T-11, production TLS, `staff:bootstrap`,
+  migration 028, any deployment. Migrations still end at **027**.
+
+## Staging on the existing server — STAGES 1 AND 2 IN PLACE (`docs/120`); REDEPLOYED to migration 028 on 2026-09-23 17:34 UTC (`docs/121` §H); REAL STAFF LOGIN since 21:41 UTC (`docs/122`)
+
+**A read-only deployment feasibility audit, nothing more.** This session
+cannot reach the `dishnetuganda` host (no SSH client, no credential, egress
+refused, and probing is forbidden), so `docs/120` §1 is the **recorded
+19 September baseline** plus a **read-only verification script** the operator
+runs first; only the package side was measured from the repository.
+
+- **Recommended shape: the Phase-0 pattern**, not an EasyPanel service and
+  not a hand-made Traefik route — three plain `docker run` containers on a
+  dedicated bridge outside the swarm: `dnb-staging-postgres` (own instance,
+  **no published port**; the fifteen roles are cluster-wide, so no existing
+  PostgreSQL may be reused), `dnb-staging-api` on **`127.0.0.1:8099` only**,
+  `dnb-staging-worker` with `DN_DELIVERY=simulated`. Browser access over an
+  SSH tunnel. No host package: one two-line image (`php:8.3-cli-alpine` +
+  `pdo_pgsql`).
+- **Authentication for the inspection is the development identity**, on the
+  API container only. `DN_STAFF_IDENTITY` stays unset, so `DenyAllIdentity`
+  remains the default and production binding; **no `staff:bootstrap`**; the
+  doctor's WARN on `DN_DEV_STAFF_IDENTITY` under `--disposable` is the truth
+  of a demonstration install and is recorded, not silenced. **Superseded on
+  staging at 2026-09-23 21:41 UTC by the real staff login (`docs/122`).**
+- **A hostname (`portal-staging.dishnetuganda.com`) is stage 2 and its own
+  approval:** it needs a DNS record and a Traefik route, which on this host
+  belong to EasyPanel, **and** an IP allow-list plus basic auth in front,
+  because the development identity has no credential. Never expose it bare.
+- **Docker env-file quoting:** `--env-file` keeps quotes literally, so the
+  shell-quoted `DNB_DSN` of `.env.example` must be written **unquoted** for a
+  container.
+- **Nothing real:** `DN_ALLOW_REAL_BINDINGS` absent, no MikroTik, no
+  FreeRADIUS, no WireGuard peer, no Domain A, no uCRM; the worker idles
+  because the Admin plane cannot enqueue (`docs/118` D-2).
+- **Server state VERIFIED 2026-09-23 14:02 UTC** by the operator's read-only
+  run (`docs/120` §1.3): the 19 September baseline is confirmed — the same
+  20 containers Up, 5.3 GB available, 137 GB free, 8099 free, the staging
+  hostname unresolved, `postgres:16-alpine` present. Two facts amend the
+  proposal's wording, not its recommendation: **the host has PHP 8.3 CLI but
+  no `pdo_pgsql`** (containers stay the recommendation), and **Traefik 3.6.7 is
+  configured by the file provider** — a stage-2 route would be one YAML file
+  under `/etc/easypanel/traefik/config/`, as `uisp.yaml` and
+  `traefik-mail.yml` already do for non-EasyPanel services. By-product for
+  `docs/98` Q1: UISP/UNMS 3.0.159, uCRM 4.5.33.
+- **Zero server changes were made by the audit**, and none may be made until
+  the proposal is explicitly approved. `docs/00` §10's host constraints hold.
+- **Stage 1 APPROVED 2026-09-23 (`docs/120` §15).** The operator approved §4/§11
+  exactly; this session **cannot execute it** and handed over three blocks: **A**
+  read-only before-evidence with a computed `GO`/`NO-GO`, **B** the deployment
+  script (refuses to start over a partial attempt, `set -eu`, stops at the first
+  failure, then nine after-checks and before/after comparisons), **C** the SSH
+  tunnel and browser on the Mac. **Nothing was deployed at that commit; the
+  result is PENDING** the operator's pasted output, to be recorded in §15.6.
+- **Seven amendments to §11 were found before any server run** (`docs/120`
+  §15.1). The decisive one: **`install` writes its secrets file `KEY="value"`**
+  (it is meant to be sourced by a shell) **and Docker's `--env-file` keeps the
+  quotes literally** — the containers must read an unquoted `secrets.docker.env`
+  or every role password is wrong. Also: the worker's log line is
+  `"delivery_binding":"simulated-routeros"`, not `bindingName`; wait for TCP
+  `pg_isready` inside the container, not `sleep 5`; the artifact is built **on
+  the server** from the public repository and checked against the content
+  digest `4e7467ad…16c798e`; compare `docker inspect` `StartedAt`/`RestartCount`,
+  not `docker ps` status text; never store the instance superuser password.
+- **`/opt/dishnet` (uCRM plugin deploy checkout) and `/opt/dishnetuganda` (an
+  earlier disposable clone) exist on the server and are NOT touched.** The SSH
+  tunnel is `ssh -N -L 8099:127.0.0.1:8099 root@209.97.137.203` (sshd verified on
+  22; the run was root) — but the Mac's path to port 22 once timed out from one
+  network, so block C checks it first.
+- **Run record (`docs/120` §15.7):** block A → `GO`; block B attempt 1 passed
+  steps 0–3 (clone at `7848816`, digest match, image **601 MB** — the ~90 MB
+  estimate was wrong, bridge 172.22.0.0/16, PostgreSQL 16.15) and the
+  bootstrap (`owner_is_superuser f`), then **stopped at step 4 on the block's
+  own check**: `bool||text` prints `true/false`, psql `-A -t` prints `t/f`.
+  The state was correct; the check was wrong. Recovery is **block R** (remove
+  the four inert objects, prove the baseline) then **block B revision 2** as one
+  clean pass — never a resume with a password reset. **Result: see the next bullet.**
+- **STAGE 1 DEPLOYED AND VERIFIED 2026-09-23 15:41 UTC (`docs/120` §15.6).**
+  Block R returned the host to the baseline (every snapshot identical); block B
+  revision 2 ran as one clean pass and **all nine post-deployment checks hold**:
+  three `dnb-staging-*` containers Up; PostgreSQL 16.15 answers only from the
+  `dnb-staging` bridge (no response from the default bridge, none towards
+  `dn-phase0-postgres` or `unms-postgres`, no host listener on 5432);
+  `127.0.0.1:8099` is the only new listener and the nat rule carries
+  `-d 127.0.0.1/32`; 27 migrations (last 027), 16 `dnb*` roles, `mt_staff` 0;
+  the 20 production containers unchanged (`StartedAt`, `RestartCount`); iptables
+  filter +7/−0, nat +4/−0, all for the new bridge; `wg show` identical. The
+  simulated estate is 3 / 5 / 17 / 6 with 41 audit rows. **Nothing real was
+  contacted.**
+- **The panel has NOT been seen.** Block C failed on the Mac: `nc` and `ssh`
+  to port 22 **timed out** while a probe of 8099 was *refused* — the operator's
+  network drops outbound 22; the server's `sshd` is unchanged. **Zero-change
+  path: any network that allows port 22 (a phone hotspot), then block C as
+  written.**
+- **Stage 2 ("make it publicly accessible") was requested and is NOT started**
+  (`docs/120` §15.8). It needs Traefik (a file under EasyPanel's directory) and
+  DNS — production boundaries the stage-1 approval excluded — and the
+  development identity has no credential, so an IP allow-list **and** basic auth
+  in front are mandatory (§6, §10). Traefik is a swarm task and cannot reach the
+  host loopback, so the API's publish address must follow `uisp.yaml`'s
+  precedent, read only after approval. Seven itemised steps S2-1…S2-7 await
+  explicit approval plus the Traefik config paste, the address(es) to allow and
+  a basic-auth username. **Never publish 8099 on `0.0.0.0`.**
+- **Stage 2 approved by action (`docs/120` §15.8.1):** the operator created the
+  DNS record. The design follows this project's own live precedent on the same
+  host, `dishnet-mail/traefik-mail.yml`: one file in
+  `/etc/easypanel/traefik/config/` (no Traefik restart), `entryPoints: ["https"]`,
+  `certResolver: letsencrypt`, backend published on the docker bridge gateway
+  **`172.17.0.1:8099`** (loopback kept; never `0.0.0.0`); middlewares
+  `ipAllowList` + `basicAuth` (password shown once, hash in the file) + security
+  headers; `DN_PORTAL_ORIGIN` stays unset so the tunnel path still logs in;
+  block E asserts Traefik's host-mode publishing before writing anything and
+  verifies 403 from the server's own address, a Let's Encrypt certificate, two
+  8099 listeners and no Traefik restart. **Widening, accepted for staging:** a
+  `172.17.0.1` publish is reachable by every container on the host, as the mail
+  stack's are. Blocks D–G handed over; **result PENDING**.
+- **One-command form (`docs/120` §15.8.6, `scripts/dnb-staging-stage2.sh`):**
+  at the operator's request ("too technical, one command") block E became a
+  script fetched from the public branch and run with no input. Differences,
+  all deliberate: the IP allow-list is **optional** (`ALLOW_CIDR`) because the
+  operator cannot supply a stable address; a per-address **rate limit** stands
+  beside basic auth instead; `http://` redirects to `https`; re-runs are
+  idempotent (route rewritten, password rotates). Everything else is block E.
+  **Trade stated in the record:** without the allow-list the basic-auth prompt
+  is reachable from the Internet; a 20-character random password over TLS,
+  rate-limited, guards `SIM-` data with no real binding. **STAGE 2 IN PLACE
+  2026-09-23 16:32 UTC:** route active in 2 s, Let's Encrypt certificate, 401
+  without login / 200 with it, `http` → 301 → `https`, public 8099 still
+  refused, Traefik not restarted, only `dnb-staging-api` recreated. The
+  operator pasted the password back; rotation (re-run the command) was advised.
+  **Seen in the operator's browser at 16:35 UTC:** the panel on *Routers* with
+  the SIMULATED banner, 5 routers all *Never Seen* — the full path DNS →
+  Traefik → TLS → basic auth → `172.17.0.1:8099` → development identity works.
+  **Stages 1 and 2 are complete.** A blank band above the sidebar on first load
+  is noted as a possible panel layout item for a later instruction.
+- **Simulator finding, not a deployment fault:** its routers carry tunnel
+  addresses `10.99.0.10–14`, outside `10.66.0.0/16`, so its three
+  `device.provision` jobs are *retryable* under G-C's `TunnelAddress` rule and
+  reach `failed` after five attempts with no `intent.failed` audit row (the
+  retryable-exhausted path in `IntentWorker::handle` audits nothing). The three
+  `voucher.publish` intents confirm through `SimulatedRouterOs`. **Measured on
+  the staging database: 3 × `voucher.publish|confirmed|1`, 3 ×
+  `device.provision|failed|5|device has no management address recorded`.**
+  Recorded for a later instruction; unchanged. The post-deployment probe of
+  `209.97.137.203:8099` was *refused* on the server itself while
+  `127.0.0.1:8099` answered 200 there — loopback-only, proved.
+
+## Router lifecycle and provisioning from the Admin plane — BUILT (migration 028); staging REDEPLOYED (`docs/121`)
+
+**Steps 1 and 2 of the production roadmap the operator accepted after stage 2.**
+Development and test schema, plus the **staging** estate: the operator ran the
+one-command redeploy at **2026-09-23 17:34:30 UTC** (`docs/121` §H.1) —
+migration 028 is applied there and **nowhere else**; production is untouched.
+**NOTHING here is HARDWARE VERIFIED**; F6-B stays NOT AUTHORIZED; `docs/119` is
+unchanged.
+Review (§A–§C) was written before code; the build record is §D–§H.
+
+- **Migration 028** (`028_admin_router_lifecycle_and_provisioning.sql`):
+  `mt_device_provision_request(p_device, p_idempotency_key, p_actor) RETURNS
+  jsonb {replayed, intent}` — owner `dnb_def_prov`, EXECUTE **`dnb_adminwrite`
+  only** (never `dnb_admin`/`dnb_worker`/`dnb_app`, `docs/112` A-1), **no
+  `p_customer`: the operator is DERIVED from the device row**; payload
+  `{device_id}` and nothing else; refuses with `DN409` and writes **nothing**
+  for a router that is unassigned (an intent needs a tenant to run under), not
+  recorded `connected`/`provisioned`/`active`/`diverged`, decommissioned, or
+  without a `tunnel_ip` — the states are exactly
+  `DeliveryTarget::DELIVERABLE_STATES`, **asserted equal by execution over all
+  nine states**; the **`10.66/16` rule is NOT copied into SQL** (it lives once,
+  in `TunnelAddress`, and binds at registration). **RULE I-1:** the replay check
+  runs **before** the insert and the audit — same key, same router → the
+  existing intent, `replayed: true`, no audit row; same key, different request
+  → refused; the race is closed inside the function with `ON CONFLICT
+  (customer_id, idempotency_key) … DO NOTHING`. Audit `device.provision_requested`,
+  `actor_kind = 'staff'`, source `admin`.
+- **`dnb_def_prov` gains SELECT + INSERT on `mt_intents`** (policies
+  `dnb_def_prov_mt_intents_select/_insert`, 017's naming). SELECT is not
+  optional: with an INSERT-only policy the replay pre-check would silently read
+  **zero** rows (the O-1 lesson) and every replay would surface as a 23505.
+  `test_definer_roles`' matrix gained the row deliberately.
+- **`mt_device_set_state` is replaced (same signature, owner, grants): a state
+  the row already holds is a no-op — no UPDATE, no audit row, the row
+  returned** (RULE I-1, the domain-invariant class of `docs/107`/`112`); a blank
+  actor is refused on every path. Without it a browser retry would write a
+  false `device.state_changed` row that the append-only trigger makes permanent.
+  The one W-1 body this work changed.
+- **Two routes bound, four in total:** `POST /api/v1/admin/routers/{id}/state`
+  under the **new capability `routers.lifecycle`** (Admin + NOC; `routers.act`
+  means *queue an intent*, `routers.register` is the bench act) records one of
+  **seven** states a person may observe — `staged shipped connected provisioned
+  active orphaned decommissioned`; **`diverged` is never recorded by hand**
+  (012: divergence is COMPUTED; `docs/90`'s rule) and `registered` is the start
+  — legality is **migration 012's trigger's** decision, surfaced as 409 with the
+  trigger's own reason; the restriction lives in `RouterAdmin::RECORDABLE_STATES`,
+  **not** in the SQL function (the simulator and a future detector set
+  `diverged` legitimately). `POST /api/v1/admin/routers/{id}/actions` under
+  `routers.act`: `{action: push_config, idempotency_key}` → **202** new / **200**
+  replay with `{intent, replayed}` through `AdminProjection::intent()`;
+  `idempotency_key` is **required** (`[A-Za-z0-9._:-]{8,128}`) so the constraint
+  cannot be bypassed by omitting it; `reboot`/`reprovision`/`diagnostics` → 501
+  `router_action_not_available` carrying **`SignalReport::actions()`'s own
+  reason** (one source); derived fields in a body are 400. `SignalReport` marks
+  exactly `push_config` available; `summary.actions_available` = 1, derived.
+  `AdminRoutes.php` still names no SQL function; `RouterAdmin` reaches exactly
+  four functions, never a table, never a router (F2 asserted).
+- **Manifest:** `writes.bound` = four (each with function, role, gate `G-C`,
+  actor rule; the two new carry `see: docs/121`); `declared_unbound` = five
+  (sites, plans, voucher-batches, disconnect, principals); surface *estate read
+  + router register/assign/lifecycle/provision; identity read-write*; the
+  `admin-write` gate is still not OPEN and says *PARTIALLY BOUND*.
+- **The panel** gained a **third client, `panel/routers.js`** — estate WRITE for
+  routers only: `register`, `assign`, `setState`, `pushConfig`, every path
+  under `/routers`, asserted; **`api.js` is byte-identical and still read-only**
+  (one `fetch`, no POST). Forms: *Add a router* (Routers page), *Assignment*
+  (operator and site selects, sites filtered to the chosen operator), *Record
+  the next step* (buttons from **`NEXT_STATES`**, a strict-JSON literal mirroring
+  012's trigger minus `diverged`, **proved by execution: 20 offered pairs
+  accepted by the trigger, two non-offered pairs refused**), and the live *Push
+  configuration* button drawn **only where the server inventory says
+  available**, with an idempotency key minted once per rendered page
+  (`crypto.randomUUID()`) so a double click is one job. Copy says *Nothing here
+  contacts the router*. The Diagnostics page shows every action inert (no router
+  in view).
+- **Guards amended deliberately, never deleted, each with its reason and a
+  control:** `test_admin_ui` §5 (the WireGuard key may appear in `app.js` only
+  as the Add-router form's field name, counted) and §8 (estate writes only as
+  `routersApi.<four>(…)`; `app.js` opens no `fetch` carrying a URL — its `list()`
+  helper's parameter is called `fetch`); `test_plugin_boundary` (the SQL-leak
+  needle `SELECT ` is now **case-sensitive** because `<select>` and
+  `querySelector` are HTML and DOM; 4c/5b one available action, the live control
+  only where the server says so); `test_simulator` (one action available);
+  `test_router_control_plane` §12/§13, `test_operator_staff` §15,
+  `test_installability`, `test_admin_write_boundary`, `test_definer_roles`,
+  `test_admin_login`, `test_admin_api`. Two guards caught their author first
+  (the migration's own comment saying `10.66` is *not* copied; `list()`'s
+  `fetch` parameter) — resolved by narrowing to the function body from the
+  catalog and to a call carrying a URL, with controls.
+- **The simulator** queues its three provisioning jobs through the new function
+  on `dnb_adminwrite` (as 025's comment anticipated). **Its `10.99.0.x` tunnel
+  addresses are unchanged** — the `docs/120` finding is recorded, not silently
+  repaired; those jobs still queue and still fail at the worker's `10.66/16`
+  gate. A router registered through the new form with a `10.66.0.x` address,
+  assigned, recorded `connected` and pushed confirms end to end under
+  `DN_DELIVERY=simulated` — **proving the queue, not RouterOS**.
+- **Proof runs:** full suite **34 suites / 3,262 assertions / 0 failed, twice**
+  (was 33 / 3,026); `tests/test_router_lifecycle_provision.php` alone **214**;
+  `plugin/bin/install-test.sh` **85/85**; migration 028 trialled on a throwaway
+  copy of the test database first (eleven probes, all as designed), then dropped.
+- **Staging redeploy — DONE 2026-09-23 17:34:30 UTC** (`docs/121` §H.1): from
+  commit `d0fca1e`, digest matched, *applied 1 migration(s): 028*, 28 recorded,
+  doctor 20 ok / 1 warn (deny-all in the one-shot process, as in stage 1) / 0
+  blockers, panel 200, `routers.js` 200, session 401, Traefik 401, worker
+  `simulated-routeros`, exactly the two application containers changed, none
+  removed. **The new screens have not yet been seen in a browser** (PENDING).
+  The script: `scripts/dnb-staging-redeploy.sh`, one command as root, builds the artifact
+  on the server, refuses unless the content digest is
+  **`1bc95524cd36f38413b5325fe26cdf76a20cb9d67e4253051c5b0bae7a7af74b`**
+  (118 files; the name is still `0.1.0-rc1` — **compare the digest, never the
+  name**), swaps `/opt/dnb-staging/app` keeping the previous tree, applies
+  exactly the pending migration with `plugin.php install` and the
+  installation's own secrets (proved locally: a second install with the same
+  secrets is *schema already current*; one with 028 missing applies only 028),
+  restarts **only** `dnb-staging-api` and `dnb-staging-worker`, and verifies
+  (panel 200, `routers.js` 200, session 401, Traefik 401, only those two
+  containers changed). Touches no production container, Traefik file, DNS,
+  firewall or other PostgreSQL. Rollback is printed by the script.
+- **Not done, deliberately:** desired-state authoring (no screen composes
+  `mt_device_config.desired`); device secrets and the WAN fact from the panel;
+  `reboot`/`reprovision`/`diagnostics` (no delivery case); device-state
+  automation from a confirmed delivery (a B1 question); the simulator's
+  addresses; NAS/RADIUS (Decision 2a chose a mechanism, nothing is built, F6
+  NOT AUTHORIZED); G-C2, B-3, O-1, G-D, T-6/T-10/T-11, F-3; any production
+  deployment.
+
+## Real DishNet staff login on staging — roadmap step 4, SWITCHED 2026-09-23 21:41:56 UTC (`docs/122`)
+
+**Configuration only, staging only, no code change.** After steps 1 and 2 the
+operator accepted the recommendation to take **step 4 before step 3**: replace
+the credential-less development identity on the staging panel with the real
+DishNet staff login built in G-B (migration 026). `docs/122` is the review, the
+harness evidence and the handover; `scripts/dnb-staging-staff-login.sh` is the
+one command.
+
+- **RESULT (`docs/122` §E): every step passed on the first attempt.** Build
+  `1bc95524…`; all 71 logged connections came from `172.22.0.1`, the
+  `dnb-staging` bridge gateway; doctor 23 ok / 1 warn / 0 blockers; Traefik
+  took the route in 2 s; **the sign-in proof answered 401 from `172.22.0.1`,
+  no correction**; `dishnet-admin` created; only the API container changed.
+  Staging now runs the real provider; the development identity is gone from it.
+- **Measured, binding on G-E:** the widening **applies** here — every
+  connection through either publish arrives as the gateway, so a host process
+  or any container can assert `X-Forwarded-Proto` (it still needs a password
+  and a code). **In production the address in `DN_TRUSTED_PROXY` must belong to
+  the TLS proxy alone**; how is a G-E decision.
+- **A secret came back in the chat a second time.** The operator pasted the
+  terminal, which showed the one-time password (stage 2's basic-auth password
+  came back the same way). It dies at the first enrolment and password change,
+  advised at once. **Binding on every later script that shows a secret:** put
+  it where a copy of the terminal cannot carry it (a 0600 file read
+  separately), or pause and clear screen and scrollback first; ask for the
+  **log file**, not the terminal. **Never write the pasted value anywhere.**
+
+- **`DN_TRUSTED_PROXY` is PROVED, never looked up.** `TransportPolicy` matches
+  `REMOTE_ADDR` exactly, and what address Traefik's connections carry is a
+  property of the host's Docker networking. **PHP's built-in server logs no
+  request line for a request its router script handles** (only `Accepted` /
+  `Closing`), so the log cannot say which connection was the browser's. The
+  script takes a candidate from the log (preferring the `dnb-staging` bridge
+  gateway, the expected answer) and proves it with **its own wrong-password
+  sign-in through Traefik**: 401 `invalid_credentials` = proved; a 403 from
+  another address is corrected **once**; anything else rolls back. The first
+  draft read `GET /app.js` log lines that never exist and was corrected before
+  handover (`docs/122` A.2).
+- **Order and fail-closed rollbacks:** recreate `dnb-staging-api` with
+  `DN_STAFF_IDENTITY=dishnet`, `DN_PORTAL_ORIGIN` and **no** development
+  identity → loopback proofs (403 `insecure_transport` over plain HTTP) →
+  doctor in **production posture**, 0 blockers → remove the stop-gap basic
+  auth → **the proof** → only then `staff:bootstrap dishnet-admin`, so a
+  rollback never leaves a live password behind. Any failure restores the route
+  file (the step-0 copy) **and** the container (its own previous identity
+  settings) — including the real provider on a failed re-run.
+- **The password is never logged and never lost**: to `/dev/tty` (which `tee`
+  does not capture), else a 0600 file; an unparseable bootstrap output goes
+  there whole. TOTP stays required; the panel shows a setup key, no QR code.
+- **The widening is measured, not asserted:** step 6 reports whether a
+  host-local client asserting `X-Forwarded-Proto` over loopback reaches the
+  credential check. Same class as the stage-2 widening; staging data is
+  synthetic.
+- **Harness, `scripts/harness/staff-login/`:** the real script, unchanged,
+  against a fake Docker (the API is a real `php -S` of the release package at
+  `1bc95524…`), a fake Traefik proxying from a chosen source address, and a
+  real PostgreSQL with the installer and the simulated estate. **108/108,
+  twice**, including the operator's whole first sign-in through the proxy.
+  Four deliberately broken copies of the script each fail the assertions that
+  guard them. **It refuses to run where the server could be** (four guards,
+  each proved); never run it on the DishNet host.
+- **This is G-D rehearsed on staging, not production.** `DenyAllIdentity`
+  remains the package default. Step 3 (operator onboarding) still waits on the
+  O-1 census decision; the MikroTik bench (`docs/119`) still waits on a unit.
+
+## The deployment census — RESULT 2026-09-23 22:08 UTC: no Domain B outside staging; staging CLEAR (`docs/123`)
+
+- **RESULT (`docs/123` §F), measured on the server, nothing changed:** 24
+  containers (stopped ones included) and 7 swarm services searched — `DNB_DSN`
+  only in `dnb-staging-api` and `dnb-staging-worker`; 4 running PostgreSQL
+  containers, 8 databases, every one opened — the Domain-B ledger only in
+  `dnb-staging-postgres / dnb`, none in the Phase-0 RADIUS, Evolution or UISP
+  databases; run 1 as `dnb_adminapi`: 11 rows seen, nothing hidden or refused,
+  **every proposed constraint 0 blocking rows, CLEAR**; run 2 as the owner:
+  **28 migrations, last 028**. **Production Domain B is NOT DEPLOYED on this
+  host**; staging's data is synthetic. Limits: this host only; stopped database
+  containers not opened; crontab/systemd not searched.
+- **GATE 2 of O-1 — `o1_composite_fk.sql` as migration 029 — is now the
+  operator's decision.** Not taken. **Taken 2026-09-23 — see the next section:
+  029 is NOT that file, because the owner cannot run it (`docs/124` §A.1).** `mt_vouchers.site_id NOT NULL` also shows 0
+  blocking rows, but is a **separate** decision and must not be bundled.
+
+**GATE 1 of O-1, made runnable by the operator. Read only; GATE 2 (the O-1
+migration) is untouched.** Step 3 (operator onboarding) needs `mt_site_create`,
+which may not exist until O-1 is closed; `docs/79` was the census handoff and
+was never run. `scripts/dnb-staging-census.sh` is that handoff as one command.
+
+- **Running the documented procedure first found three census defects,
+  measured in the sandbox, not inferred:** (1) the `docs/79` §3 DATA run as
+  `dnb_adminapi` **could never reach a verdict** — its refusal to read the
+  migration ledger (schema evidence) counted as data blindness, so it saw a
+  planted violation and printed INDETERMINATE, and the owner's run is blind by
+  design; (2) a refused read **aborted the whole run** (psql exit 3, no
+  verdict); (3) latent: a base-table read under FORCE RLS **counted as a
+  measurement** — with one constructed grant, sites via the base table and
+  services via the projection read **CLEAR over a real violation**. The O-1
+  acceptance harness had pinned (1) as intended; its other phases ran as a
+  superuser, which is why none showed.
+- **Fixed in `tools/audit/production_census.sql`:** the ledger is reported
+  beside the verdict, not in it; sections 2–4 skip on refusal; any base-table
+  read of an RLS table by a non-bypassing role is **HIDDEN** and withholds the
+  verdict. `o1_acceptance.php`: `DNB_STAFFAUTH_PASS` added (it could no longer
+  install after 026), Phase 6 **rewritten, not deleted**, Phase 7 added —
+  **68/68** (was 52); **11 of 68 fail against the pre-fix census**.
+- **The script:** DNB_DSN searched in every container and swarm service, only
+  host/port/dbname printed; every PostgreSQL container's databases checked for
+  `public.mt_migrations` at **catalog level, read-only sessions**, anything
+  unopenable **NOT CHECKED, never "no ledger"**; the census on staging twice;
+  the SQL refused unless its sha256 is `513218…3983`. Prints no secret.
+- **Harness `scripts/harness/census/`: 27/27.** Four deliberately broken copies
+  each fail — **one only after an assertion gap was closed** (an unopenable
+  database counted as clean passed everything until scenario S5b was added).
+- **If the result is "nothing outside staging, ledger only in staging,
+  CLEAR"**, there is no production Domain B, and GATE 2 becomes the operator's
+  decision about staging and future installs. **A CLEAR authorises nothing.**
+
+## O-1 CLOSED — migration 029 (`docs/124`); REDEPLOYED on staging 2026-09-24 04:14:49 UTC
+
+**GATE 2 of `docs/107`, taken on the operator's decision after GATE 1 read
+CLEAR.** Development and test schema, and **staging since 2026-09-24 04:14:49
+UTC** (the result bullet below). Production holds
+no Domain B (`docs/123` §F), so a first production install applies 029 to empty
+tables. **Nothing here is HARDWARE VERIFIED; F6-B is still NOT AUTHORIZED.**
+
+- **The shape is exactly `docs/106`'s:** `UNIQUE (id, customer_id)` on
+  `mt_services` + `FOREIGN KEY (customer_id, service_id) REFERENCES mt_services
+  (customer_id, id)` on `mt_sites`. Both single-column keys kept; `NO ACTION`;
+  `MATCH SIMPLE`; no CHECK; no `NOT VALID`; nothing else bundled.
+- **The candidate DDL could not be the migration — measured.** The Migrator runs
+  a file as the schema OWNER, and the owner is bound by FORCE row security. With
+  the guard, `o1_composite_fk.sql` **refuses on every estate, an empty install
+  included**; without it, it validates zero visible rows. It is kept in
+  `tools/audit/`, marked **SUPERSEDED**. **Never apply it.**
+- **029 lifts FORCE on exactly the two tables inside its own transaction**,
+  validates against every row, restores FORCE and **verifies itself** before
+  committing. FORCE binds only the owner, which only the installer uses;
+  `NO FORCE` takes **ACCESS EXCLUSIVE** on each table until commit (measured), so
+  nobody else can read them meanwhile; a failure undoes all of it, FORCE
+  included. The guard `row_security = off` stays. **Cost, stated:** `mt_sites`
+  is now locked for the migration too, not only `mt_services` as `docs/106`
+  planned; duration unmeasured at scale.
+- **It enumerates before it refuses:** a count and up to five site→service
+  pairs, then *"nothing was changed"*. **Apply it only as ONE transaction** — the
+  installer, or `psql --single-transaction -v ON_ERROR_STOP=1`; plain `psql -f`
+  commits statement by statement.
+- **Proofs:** `tests/test_o1_site_service.php` **65** — the attack as `dnb_app`
+  refused by name with the same-operator control accepted, re-pointing refused,
+  refusal below row security, a referenced service's operator fixed (S-A by
+  constraint), delete unchanged, isolation unchanged, **T-9** (the key dropped in
+  a rolled-back transaction → the attack succeeds), and on a throwaway database
+  **the owner-run 029 refuses a violating estate, changes nothing, keeps FORCE**,
+  then applies after the per-row decision. **Three weakened copies of 029 fail
+  it: 7, 6 and 29 of 65.** `o1_acceptance.php` **75**, twice (O-1 now
+  constraint-suppressed like the other five; phase 4 runs 029 itself as the
+  owner). Suite **35 suites / 3,327 / 0 failed**, three runs; install-test
+  **85/85**; package digest **`780023ff…b1c46d0`**, 119 files.
+- **The staging command** (`scripts/dnb-staging-redeploy.sh`, rewritten): the
+  census as `dnb_adminapi` **must read CLEAR first** (else stop, nothing
+  changed); the new build's doctor must show no blocker; the installer applies
+  only 029 — **if it refuses, the previous tree is put back** and nothing is
+  restarted; then **independent verification** — the catalogue, the census again,
+  the projections, and an **execution test as `dnb_app` in a transaction that is
+  always rolled back** (own site accepted, cross-operator site refused by name,
+  residue 0); then only the API and worker restart. The API keeps the real staff
+  login. **It builds the reviewed commit `83edb98`, fetched by its hash — never
+  the branch tip**, so later pushes (step 3) cannot break the operator's command.
+  Rehearsed in `scripts/harness/redeploy/` with the branch moved on: **69/69**,
+  six scenarios plus three broken copies of the script, each caught.
+- **RESULT (`docs/124` §H): REDEPLOYED 2026-09-24 04:14:49 UTC, first attempt,
+  no correction.** Built `780023ff…` from `83edb98` fetched by hash **while the
+  branch already stood at `46c778e`** — the pin did its job; census **CLEAR, 11
+  rows, before and after**; doctor 23 ok / 1 warn / 0 blockers (the warning is
+  not printed — *28 of 29 applied* is expected before the installer, **an
+  expectation, not an observation**); the installer applied **exactly 029**;
+  catalogue `1|1|2|true`; projections 5 sites / 0 crossing; **as `dnb_app`, own
+  site accepted, the cross-operator site refused by
+  `mt_sites_service_customer_fkey`, residue 0**; the real staff login answers on
+  loopback and through Traefik; only the API and worker changed. **O-1 is closed
+  on staging.** Production still holds no Domain B (`docs/123` §F).
+- **A local fault, not a product one:** two sandbox processes from the `docs/122`
+  harness held ports 8099 and 443 and made the install test fail 12 of 85. The
+  redeploy harness stops both at exit. **Check for stray harness servers before
+  trusting an install-test failure.**
+- **What this unblocks:** `mt_site_create` may now be built — **derive, never
+  accept** (`docs/105`). `docs/108`'s order still holds: the non-tenant
+  idempotency store (0b) before the first spine writer. **Not decided here:**
+  `mt_vouchers.site_id NOT NULL`, U-1, U-5, B-3, F-3. `POST /sites` was still 501
+  at 029; migration 030 binds it (next section).
+
+## Operators, their HotSpot service and their locations from the Admin panel — BUILT (migration 030, `docs/125`); REDEPLOYED on staging 2026-09-24 04:47:05 UTC
+
+**Roadmap step 3, started on the operator's approval of the plan.** Development
+schema, and **staging since 2026-09-24 04:47:05 UTC** (`docs/125` §F). It came
+after the 029 result, as its own command pinned to its own commit (`46c778e`,
+digest `4a629184…`). **Not in production** — the host holds no production
+Domain B. Nothing here is HARDWARE VERIFIED.
+
+- **Migration 030:** `mt_admin_idempotency`, the **non-tenant** idempotency store
+  `docs/108` 0b required before the first spine writer. It is keyed
+  `(endpoint, key)` with a SHA-256 request digest **computed inside the
+  function**, and it is **created as `dnb_def_prov`**, so migration 015's default
+  privileges cannot hand `dnb_admin` anything. No login role holds any privilege
+  on it, enumerated from `pg_roles`. Three writers, all `SECURITY DEFINER` and
+  owned by `dnb_def_prov`, **EXECUTE `dnb_adminwrite` only**:
+  `mt_admin_operator_create` (wraps `mt_customer_create`, the one
+  implementation), `mt_admin_service_create`, and `mt_admin_site_create`, which
+  has **no operator parameter** — the operator is read from the service row.
+  Two internal helpers, replay-check and claim, run with their caller's
+  privileges and are callable by their owner only.
+- **RULE I-1 order in every writer:** validate → digest → answer a replay →
+  read-only checks (NULL, nothing claimed) → claim with `ON CONFLICT DO
+  NOTHING` → mutate → audit → store the result. **Proved by execution:** a
+  second session holding the claim makes an identical request wait about a
+  second, and the request is then answered as a replay. The result is one
+  operator and one audit row.
+- **`dnb_def_prov` gains** SELECT on `mt_customers`, and SELECT plus INSERT on
+  `mt_services` and `mt_sites`, nothing else. It is reachable only from the
+  Admin plane (measured), so no customer-plane path widens. **New capability
+  `services.write`** (Admin, Sales); operator create is `customers.write`, a
+  location is `sites.write`; NOC and Support hold none of the three.
+- **Routes:** `POST /customers`, `POST /customers/{customer_id}/services`,
+  `POST /sites`. A derived field in the body is **400, refused not ignored**
+  (on a location that includes `customer_id` and `operator`). `idempotency_key`
+  is required; **201** new, **200** replay; 404 or 409 with the reason. Seven
+  estate writes are now bound; declared-unbound are plans, voucher batches,
+  disconnect and principal creation (J-1).
+- **Panel:** a fourth client, `panel/onboarding.js`, with exactly three POSTs;
+  `api.js` is unchanged. *Operators & sites* gets *Add an operator*, even on an
+  empty estate; each row opens an operator page with *Start the HotSpot service*
+  and *Add a location*. **The location form sends no operator.** A same-name
+  operator is asked about first: nothing makes names unique, and an operator
+  cannot be deleted.
+- **Driven in headless Chromium** (`docs/125` §D.3): the whole path worked, and
+  the database held 1/1/1 with three audit rows by `dev`. **It found and fixed
+  the "blank band"**: `#gate{display:flex}` outranked the browser's `[hidden]`
+  rule, so the signed-out gate stayed **860 px** tall after sign-in; one CSS
+  rule makes it 0.
+- **The UI guard in `test_admin_ui` §8 did not see the three new calls at all** —
+  none of their names was on its verb list. It now names and bounds them, with a
+  control. **A guard that lists forbidden words only catches the words it lists.**
+- **Proofs:** `tests/test_operator_onboarding.php` **153**. **Four weakened
+  copies of 030 are each caught**: no `ON CONFLICT`, store created as the owner,
+  writers granted to `dnb_admin`, mutation before the replay check. Suite **36
+  suites / 3,500 / 0 failed**, twice; install-test **85/85**; `o1_acceptance.php`
+  **75**; package **123 files**, digest `4a629184…c5a5fd571` — pinned by the
+  staging command and deployed on staging.
+- **The staging command** (`scripts/dnb-staging-redeploy.sh`, rewritten again;
+  the 029 version as run stays at `938c002`, the 028 one at `d0fca1e`):
+  **requires 029 already applied, with its key** — it applies 030 on top of 029
+  and nothing else. It builds `46c778e` by hash, **prints the doctor's warning
+  lines**, and puts the previous tree back if 030 refuses. Then it **verifies
+  independently**:
+  - the catalogue: the store's owner; writers `3|3|0`, where an ACL at its
+    default counts as `PUBLIC`; helpers `2|0`; a location writer with no
+    operator; O-1 `1|1|2|true`;
+  - an **execution test as `dnb_adminwrite`, always rolled back**: create, the
+    replay returns the same operator, a reused key is refused, a service starts,
+    and the location's operator is derived;
+  - **every other login role, enumerated from `pg_roles`, refused each writer,
+    and every login role refused the store**; residue 0.
+
+  Only then do the API and worker restart, and each new route answers an
+  anonymous POST with 401. **No census step:** 030 validates nothing against
+  existing rows. **Measured: `CREATE POLICY` takes ACCESS EXCLUSIVE until
+  commit; `GRANT` takes no table lock.**
+- **Rehearsed** in `scripts/harness/redeploy/` from the post-029 state, built by
+  the **real 029 command** byte for byte: **98/98 on two consecutive runs**. A
+  first run passed 97/97, before a stub fix and one added assertion. Two leaks
+  are planted after the migration. **A role membership (`GRANT dnb_adminwrite
+  TO dnb_admin WITH INHERIT TRUE`) leaves the catalogue reading `3|3|0`, and only
+  the execution test finds it.** Five broken copies of the script are each
+  caught. Roles are cluster-wide, so the harness revokes the membership it
+  plants, at exit too.
+- **RESULT (`docs/125` §F): REDEPLOYED 2026-09-24 04:47:05 UTC, first attempt,
+  no correction.**
+  - Built `4a629184…` from `46c778e` by hash.
+  - Doctor 23 ok / 1 warn / 0 blockers. The warning is printed and is the
+    expected one, *29 of 30 applied*. That is consistent with the `docs/124` §H
+    expectation for the 029 run — same server, same posture — but still not an
+    observation of that run.
+  - The installer applied **exactly 030**. Catalogue `3|3|0` and `2|0`, O-1
+    `1|1|2|true` before and after.
+  - The rolled-back execution test passed. **8 login roles were refused by
+    execution, the owner `dnb` included.** Residue 0.
+  - `onboarding.js` and the gate fix are served. **The three routes answer 401
+    anonymously**, and only the API and worker changed.
+  - **Next: try the screens in a browser.** What is created there stays: an
+    operator's audit row holds it with `ON DELETE RESTRICT`.
+- **Not here, deliberately:** the operator-owner login (J-1, its own
+  instruction — now `docs/126`), the uCRM link (U-1), plans and vouchers (G-C2),
+  editing or ending anything. `mt_customer_create`'s pre-existing `dnb_admin` EXECUTE is recorded
+  and left for F-3. The fixtures still create services and sites as `dnb_app`
+  (B-3).
+
+## The operator-owner login (J-1) — the Admin route BUILT (`docs/126`); development only; NOBODY CAN SIGN IN YET
+
+**On the operator's "go-ahead"** to *"letting an operator log in themselves"*.
+`docs/116` J-1 had reserved the route for its own instruction. Development only;
+nothing deployed; nothing HARDWARE VERIFIED.
+
+- **No migration.** `POST /api/v1/admin/customers/{customer_id}/principals`
+  (`customers.write`: Admin, Sales) is bound through migration 027's
+  `mt_admin_principal_create`, unchanged, on `dnb_adminwrite`, with
+  `OnboardingAdmin::addPrincipal()` as the façade. The operator comes **from the
+  path** (D-AUTH-3). Derived fields in the body are 400. `kind` is `owner` by
+  default, or `staff` with known `op.*` capabilities and never
+  `op.staff.manage`.
+- **The phone is the sign-in key and is looked up EXACTLY**, so it has one form:
+  `Dn\Auth\Phone::canonical()` removes separators and requires E.164. A national
+  form is refused, not guessed at. The phone is **never returned**, neither in
+  the answer (the projection) nor in the audit detail.
+- **The replay guard is the phone's global unique index** (`docs/108`). A repeat,
+  another spelling of the same number, or the number under another operator is
+  **409 `phone unavailable`**, which names nobody, and writes **no second row and
+  no second audit row**.
+- **The panel:** the operator's page gains *People who can sign in* and *Add an
+  owner*. `addOwner` is the fourth onboarding call; `api.js` gains the read. The
+  copy says plainly that **nobody can sign in yet**.
+- **Proved by execution:** an owner created this way **can sign in at the API
+  level once a code reaches them** — a session for that operator, and `/me`
+  answers with its name. `test_operator_owner_login.php` **71**; five weakened
+  copies are each caught. The owner-capability copy fell to the **function's own
+  check** (409): the floor held beneath the route. Driven in headless Chromium.
+  Suite **37 / 3,577 / 0**, twice; install-test 85/85; package **124 files**,
+  `82b8f4bf…8991`.
+
+### What an operator still needs to sign in — measured, not assumed
+
+1. **The code reaches the phone — DELIVERED NOWHERE today.** `issueCode()`
+   returns it and the route answers `{status: sent}`. **No SMS or messaging
+   provider exists in this repository.** The only gateway on the server is
+   **Domain A's** WhatsApp, which may not be used without explicit authorisation.
+   **The operator chose "SMS (Recommended)"** — designed in `docs/127` §C and
+   **built in development** (§G, migration 032). Not yet on staging, and no
+   message has reached a phone.
+   - **Never** `DNB_EXPOSE_OTP` on a public host.
+   - **Never** a code shown to staff to read out.
+2. **F-J1-1 — sign-in ignored the operator's status. CLOSED in development by
+   migration 031** (`docs/127` §F). The gap assertion was rewritten to CLOSED,
+   not deleted.
+3. **D-4 — the sign-in side must apply the same canonical form. CLOSED in
+   development** by `Authenticator::keyOf()` (`docs/127` §F). The gap assertion
+   was rewritten to CLOSED.
+4. **The operator app was not served. Served in development since `docs/127`
+   phase 3** (§I): `plugin/bin/serve-app.php`, its own process, and `public/`
+   ships. F-8, the sign-in routes' audit, stays OPEN (H-10).
+
+## Operator sign-in end to end (`docs/127`) — phases 1, 2 and 3 BUILT (migrations 031, 032; the operator app served); phase 4 DEPLOYED on staging 2026-09-25 05:31 UTC
+
+The operator chose **"SMS (Recommended)"** for sign-in codes. `docs/127` designs
+all four missing pieces together, because none is useful alone, and builds them
+in order: **1** the operator's status and one phone form · **2** SMS delivery ·
+**3** serving the operator app · **4** staging. **Nothing is exposed to
+operators until phases 1–3 are all in place.** Nothing HARDWARE VERIFIED; F6-B
+NOT AUTHORIZED.
+
+### Phase 1 — BUILT (`docs/127` §F)
+
+- **Migration 031:** `mt_auth_issue_code`, `mt_auth_verify_code` and
+  `mt_auth_resolve_token` require an **active operator** as well as an active
+  person.
+  - Every status but `active` is refused: `suspended` and `closed` alike.
+  - A refused person is treated **exactly as an unknown number**. The code row
+    is still written, naming nobody, and the answer is the same `202` / `401`.
+  - A code issued before a suspension opens nothing after it.
+  - A live session stops **on the next request**.
+  - Reinstatement restores both. Suspension **revokes nothing** (F-4): the live
+    check is the enforcement.
+- **The operator checked is the one the session ACTS FOR** — the session's own
+  `customer_id`, and at verification the code row's — **never the person's
+  current row** (§F.2).
+  - They are equal while P-C holds.
+  - Proved by moving a person inside rolled-back transactions. Two weakenings
+    that read the person's operator are each caught.
+- **The only new privilege:** `dnb_def_auth` may **read** `mt_customers`, with
+  one `USING (true)` policy. EXECUTE on the three functions is still `dnb_app`
+  only. The migration verifies all of this itself before committing.
+  - **Measured:** without that policy, `dnb_def_auth` falls under the `TO public`
+    isolation policy, which it cannot evaluate. Every sign-in then fails with
+    **42501**: closed, and loudly.
+- **One phone form at sign-in:** `Authenticator::keyOf()` applies
+  `Phone::canonical()` in `issueCode()` and `verifyCode()`, where every sign-in
+  enters. Input with no canonical form passes on, matches nobody, and gets the
+  same `202`.
+- **Nothing sets `mt_customers.status`** except the fixtures. 031 makes the
+  status count at sign-in; a writer that suspends or closes an operator is its
+  own instruction.
+- **Proofs:** `tests/test_operator_sign_in.php` **37**, including the control on
+  the control (the pre-031 resolver, swapped back in a rolled-back transaction,
+  lets the suspended session through).
+  - **Twelve weakened copies are all caught:** eight by counted failures, three
+    by **the migration refusing itself**, and one by every sign-in failing
+    closed.
+  - Suite **38 / 3,614 / 0**, twice. install-test 85/85.
+  - Package **125 files**, content digest `9118f2e7…c0316e`. Not deployed.
+- **Staging:** 031 **travels with phase 2's command**. On its own it would change
+  nothing anyone on staging could see (§F.7).
+
+### Phase 2 — BUILT (migration 032, `docs/127` §G); no message has reached a phone
+
+- **The outbox.** `mt_auth_sms_outbox` is created as `dnb_def_auth`. **No login
+  role holds any privilege on it**, enumerated from `pg_roles`.
+  - `mt_auth_issue_code` gains the **sealed code** as a fourth parameter. The
+    three-argument form is **dropped**. A missing or malformed payload gets
+    `22023` for every number, before any write.
+  - **Every request writes one code row and one outbox row.** Only an active
+    person of an active operator gets `queued` with the envelope; everyone else
+    gets `no_recipient` with **no payload**. Nobody else is ever sent a code.
+- **The code never rests in clear.** `Dn\Notify\CodeEnvelope` is AES-256-GCM
+  under `HMAC(DNB_SECRET_KEY, 'dn-sms-outbox-v1')`, with the phone as
+  associated data.
+  - The raw key does not open it, and another phone does not.
+  - **Every final state erases the envelope**, and the table's own CHECKs are
+    the floor under the functions.
+- **The worker sends; the request never waits.**
+  - `mt_auth_sms_claim` (60-second lease, `SKIP LOCKED`, at most 3 attempts),
+    `_settle` (the attempt number is the claim's token) and `_expire` are
+    executable by **`dnb_worker` only**.
+  - `SmsWorker` opens envelopes only in memory. Its report is counts only, and
+    a throwing sender's message is not kept.
+  - Codes are handled every second; intents keep their five-second cadence.
+- **`DN_SMS`, in the WORKER's environment, never falls back.** *(Since `docs/128`
+  (migration 033), unset means the Admin panel's settings decide; `null` still
+  means nothing is sent. The record below is phase 2's.)* Unset → `NullSms`:
+  nothing is claimed and codes expire. `africastalking` → the adapter, which
+  refuses to start without `DNB_SMS_USERNAME` and `DNB_SMS_API_KEY`. Anything
+  else refuses to start.
+  - The **doctor constructs exactly what the worker would**: WARN when unset,
+    BLOCKER naming a missing variable, OK with *value withheld*.
+  - **`DNB_SECRET_KEY` is now required.**
+- **Africa's Talking evidence, per piece.**
+  - The endpoint, the sandbox rule, headers, form fields and **201-only
+    success** are **MEASURED** from the provider's official SDK (npm
+    `africastalking` 0.7.9).
+  - The answer's status codes are **DOCUMENTED, UNVERIFIED**: its documentation
+    host is blocked by this session's egress policy.
+  - Delivery is **UNVERIFIED** until a real message is sent.
+  - **The endpoint is not configurable from the environment.**
+- **Measured while building.** The installing owner is a member of
+  `dnb_def_auth` **without inherit**, so a `REVOKE` it issues after `RESET
+  ROLE` is a **warning that changes nothing**. **Grant inside the owner's role
+  block.** 032's own verification caught it.
+- **Proofs.**
+  - `tests/test_sms_delivery.php` **115**, including the whole chain: route →
+    worker → the real adapter against a loopback fake provider → **the code
+    received signs the owner in**.
+  - **Fourteen weakened copies, all caught.**
+  - Suite **39 / 3,730 / 0**, twice.
+  - install-test **86/86**: the refusal check was split so both guards are
+    exercised.
+  - Package **134 files**, `0b9b1a58…c4684f5`. Not deployed.
+
+### Phase 3 — BUILT (`docs/127` §H review, §I build); development only
+
+The operator approved it: *"Yes, own address (Recommended)"*.
+
+- **Two processes, not host routing in one** (H-1). `plugin/bin/serve-app.php`
+  serves the app. It holds **exactly** `DNB_DSN`, `DNB_APP_PASS`,
+  `DNB_TOKEN_PEPPER` and `DNB_SECRET_KEY`, proved from `/proc/<pid>/environ`.
+  `serve.php` stays the Admin server. **Each answers 404 for the other's
+  surface**, tested both ways, each with a positive control.
+- **What it passes:** exactly `/api/v1/me`, `/api/v1/me/…` and `/api/v1/auth/…`
+  to `public/index.php`. The manifest's `app.api` states `exact` and `prefixes`
+  apart, because a bare `/api/v1/me` prefix would let `/api/v1/meta` through.
+- **What it refuses — its own `404`:** the Admin API, **`/internal/*`**, any
+  `.php` as a file, traversal plain and encoded, a symlink out of its
+  directory, and every other path. Static files come only from `public/app` and
+  `public/pwa`, each contained by `realpath` under its **own** directory, with
+  an extension allow-list that has no `php`.
+- **Five headers on every answer** (H-3): a CSP of `script-src 'self'` with
+  nothing widening it, plus `nosniff`, `no-referrer`, COOP and
+  `Permissions-Policy`. So **the bundle carries no inline script, handler or
+  style, and no other origin**, and the suite asserts all four.
+- **Never point a web server's document root at `public/`.** That would expose
+  `/internal/radius/accounting`.
+- **The screens** (`public/app/`) are the prototype's, on the real data layer.
+  - No mock data, and one `fetch`, in `api.js`.
+  - The token lives in `sessionStorage` only.
+  - `FORBIDDEN` (403) is its own state.
+  - Codes are *"on their way"* only **if** the number can sign in.
+  - Vouchers are recorded, but **guests cannot use them yet**.
+  - Access points, billing and support are *not available*, and a 202 is
+    *queued*.
+- **No `Idempotency-Key` on voucher creation, and no POST is ever retried**
+  (H-8): today a replay makes an unpublished second batch (I-A).
+- **Not built:** J-14 staff screens, plan editing, a service worker, the guest
+  portal, billing and support. **F-8 (sign-in audit) stays OPEN.**
+- **Proofs:**
+  - `tests/test_operator_app.php` **152**, over real HTTP, including a
+    sign-in with the code the worker sent.
+  - **21 weakened copies** of the server and the bundle, plus 2 of the
+    builder, are each caught.
+  - Headless Chromium: every screen, **zero CSP violations**.
+  - Suite **40 / 3,906 / 0, twice**; install-test 86/86; package **142 files**, `2874d643…a0c4`. Not deployed.
+
+### Phase 4 — the staging command: DEPLOYED on staging 2026-09-25 05:31:55 UTC (`docs/127` §J, §K, §L.2)
+
+- **`scripts/dnb-staging-operator-app.sh`**, one command as root. It builds
+  `818d711`, **fetched by its hash**, and refuses unless the content digest is
+  `2874d643…a0c4`. It:
+  - applies **031 and 032**;
+  - optionally takes the SMS settings, **typed on the server with the key's
+    echo off**. They are never printed or logged, and are kept in `sms.env`
+    (mode 0600) only after the installer succeeds;
+  - **recreates** the worker with them, `DN_DELIVERY` still `simulated`;
+  - adds **`dnb-staging-app`**, holding exactly the four variables, on
+    `127.0.0.1:8098` and `172.17.0.1:8098`, never a wildcard;
+  - writes a **new** route file, `dnb-staging-app.yml`, for
+    `app-staging.dishnetuganda.com`. The app's allow-list is in the router
+    rules, sign-in has its own per-address limit (10 a minute, burst 10), `http`
+    redirects to `https`, and there is no basic auth. **The Admin route is not
+    touched.**
+- **It verifies independently, afterwards:**
+  - the catalogue;
+  - **rolled-back execution tests**: an unknown number gets `no_recipient`, an
+    active person `queued`, and the same person with the operator suspended
+    `no_recipient`;
+  - every login role, enumerated from `pg_roles`, is refused the outbox, the
+    claim and code issue, except each function's own role; residue 0;
+  - through Traefik: a Let's Encrypt certificate, the CSP, refusals that never
+    reach PHP, 429s counted, and Traefik not restarted.
+
+  **It never signs anyone in (J-12).**
+- **Operating rules, binding on the staging command and every later one:**
+  - The SMS API key is **typed on the server** or, since `docs/128`, **into the
+    Admin panel over HTTPS by a signed-in DishNet Admin**. It is never in chat,
+    a log or the terminal, and never shown again once typed.
+  - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
+  - Domain A's WhatsApp gateway stays unused without explicit authorisation.
+- **Binding lessons, found while building:**
+  - **Inside one transaction `now()` is constant.** A probe must never find
+    *the latest row* by time. Read the row by the id the function returned.
+  - **031 commits before 032 can refuse**, because the installer runs one
+    transaction per file. Step 0 accepts `31|031`, and a refusal prints the
+    ledger. 031 keeps the signatures the 030 build calls.
+  - **A rollback puts the tree back BEFORE any container starts**, because a
+    container keeps the directory it started on after a rename. O13 runs the
+    printed rollback verbatim and checks each tree by inode.
+  - **Every refusal, and the ending, ask for the LOG FILE**, never the
+    terminal.
+- **The rehearsal, `scripts/harness/operator-app/`:**
+  - the sandbox is rebuilt by the real 028 build, the real staff-login switch,
+    and **the real 029 and 030 commands, byte for byte**;
+  - **166/166, twice**, over fourteen scenarios;
+  - seven broken copies (X1–X7) are each caught, with a control on a control in
+    O9 and in O13.
+- **Run 1 — 2026-09-25 05:03:28 UTC (`docs/127` §L.1): stopped in step 0 at
+  the DNS check. `app-staging.dishnetuganda.com` resolved to nothing; NOTHING
+  CHANGED.** Every earlier check held on the server: the 030 build
+  (`4a629184…`), the real staff login, the worker `simulated` with no SMS
+  variable, ledger 30, O-1 `1|1|2|true`, the four variables, the portal
+  answering 200 through Traefik, Traefik in host mode, the gateway
+  `172.17.0.1`. Next: the GoDaddy record `A app-staging → 209.97.137.203`, then
+  the same command again.
+- **Run 2 — 2026-09-25 05:31:21–05:31:55 UTC (`docs/127` §L.2): DEPLOYED, first
+  attempt.**
+  - The SMS question was skipped: the operator has no Africa's Talking account
+    yet. Commit `818d711` was built, content digest `2874d643…`.
+  - The doctor reported 24 ok, 2 warn (the expected ones) and 0 blockers. The
+    installer applied exactly 031 and 032, and 32 migrations are recorded.
+  - The rolled-back probe gave `no_recipient`, then `queued`, then
+    `no_recipient`. 8 login roles were tested; residue 0.
+  - The worker reports `"sms":"null"`. The app holds its four variables on the
+    two addresses.
+  - The route was **active in 2 s, with a Let's Encrypt certificate**. Five
+    refusals were Traefik's own 404. `http` redirects 301. The sign-in limit
+    gave **10 answers of 400, then 5 of 429**. Traefik was not restarted.
+  - Only the three expected containers changed.
+
+  **`https://app-staging.dishnetuganda.com/` is live; nobody can sign in until
+  an SMS sender is configured.**
+- **Next, at the operator's instruction: SMS settings from the Admin panel**
+  (`docs/128`), so that the Africa's Talking username and key are entered
+  there, not by re-running the command. **Built — see the next section.**
+- **The operator's phase-4 actions are DONE** (DNS record, the command, the log
+  file). **Do not run the operator-app command again**: once 033 is applied it
+  stops at its first check and changes nothing (`docs/128` §G, S9).
+
+## SMS settings from the Admin panel — BUILT (migration 033, `docs/128`); DEPLOYED on staging 2026-09-25 06:38 UTC
+
+**At the operator's instruction:** *"i dont have currently keep it configuratblae
+from ui i will add later"*. The Africa's Talking account is entered in the Admin
+panel, not typed into a command. Built and proved in development, rehearsed,
+and **deployed on staging 2026-09-25 06:38:19 UTC** (the RESULT bullet below).
+Not in production. Nothing is HARDWARE VERIFIED; F6-B stays NOT AUTHORIZED.
+
+- **The binding key rule changed, deliberately:** the SMS API key may now also
+  be typed into the Admin panel, over HTTPS, by a DishNet Admin signed in with
+  a password **and** an authenticator code. The rest stands. It is never in
+  chat, a log or the terminal, never in any response, audit row or error
+  message, and never shown again once typed.
+- **Migration 033:**
+  - `mt_sms_settings` holds one row and is owned by `dnb_def_auth`. **No login
+    role holds any privilege on it**, not even the installing owner `dnb`.
+  - Four SECURITY DEFINER functions, each EXECUTE-able by exactly one role:
+    - `mt_sms_settings_set` → `dnb_adminwrite`. It writes a W-1 audit row,
+      `sms.settings_changed`, with `actor_kind = 'staff'`. **RULE I-1:** an
+      identical save is a no-op with no audit row. A new username needs its
+      key typed again.
+    - `mt_sms_settings_for_worker` and `mt_sms_worker_report` → `dnb_worker`.
+    - `mt_admin_sms_settings` → `dnb_adminapi`. It is the **16th**
+      `AdminReader` function, and returns `key_set`, never the envelope or
+      the fingerprint.
+  - The migration verifies all of this itself before committing.
+- **The key never rests in clear.** The API seals it before the database sees
+  it: `SecretBox` under `HMAC(DNB_SECRET_KEY, 'dn-sms-settings-v1')`, with
+  associated data `africastalking|<username>`. It stores a keyed fingerprint
+  only to tell a re-save from a change. **Only the worker opens it**, in
+  memory.
+- **The worker:**
+  - **`DN_SMS` unset → `PanelSms`**, which follows the panel every tick and
+    rebuilds only when the version changes. **No restart is needed.**
+  - A setting it cannot use sends nothing, keeps the worker running, and is
+    reported with a fixed reason.
+  - **`DN_SMS` set → the environment wins**, as in phase 2, and the page says
+    so.
+  - It reports one of `off · in_use · unusable · environment`. **The page
+    shows what the worker reported, never what the form hoped.**
+- **Routes:** `GET` and `POST /api/v1/admin/settings/sms`, under the new
+  capability **`sms.manage`, held by Admin only**. They are bound only under
+  the real staff identity; the development identity gets 501. A body field
+  beyond `provider`, `username`, `api_key` and `sender` is 400.
+- **Binding lesson, measured:** a migration trial run as `SET ROLE dnb` from a
+  superuser **passed a check that the real install then failed**. The
+  migration's own `RESET ROLE` returned the session to the superuser. **Trial
+  a migration as the owner itself (`psql -U dnb`), never through `SET ROLE`
+  from a superuser.**
+- **Guards rewritten, never deleted.** The simulator's `api_key` guard now
+  forbids a credential-SHAPED assignment and allows the word exactly four
+  times, each place named. Its control: a planted `api_key: '…'` fails 2 of
+  103.
+- **Proofs:**
+  - `test_sms_settings.php`: **120** assertions.
+  - **21 weakened copies, each caught.** One was first caught only by a crash;
+    it is now counted.
+  - Suite **41 / 4,037 / 0, twice**; install-test 86/86.
+  - Package **149 files**, `2af800b7…9c5a5c2d`, commit `8d40936`.
+- **The staging command, `scripts/dnb-staging-sms-settings.sh`:**
+  - It is pinned to `8d40936` by hash and digest, and applies only 033. Step 0
+    accepts `32|032`, or `33|033` on a re-run.
+  - **It asks no SMS question and handles no secret.**
+  - It refuses unless `DNB_SECRET_KEY` is the same in the API, the worker and
+    the app, compared by hash and never printed.
+  - It runs the rolled-back execution tests, then tests every login role.
+  - It **restarts the API, the worker and the app, and never recreates them**.
+  - It reads the worker's mode from its log and from its report in the
+    database.
+- **The rehearsal, `scripts/harness/sms-settings/`:**
+  - It is rebuilt through the real 028, staff-login, 029, 030 and operator-app
+    commands, byte for byte.
+  - It drives **the Admin's journey through Traefik on the deployed build**: a
+    save, then the deployed worker reports `in_use`.
+  - **152/152 on two consecutive runs.** Five broken copies are each caught,
+    with a control on the control in S8.
+- **Binding lesson, measured:** harness state from an earlier run travelled
+  into a snapshot, and restoring it started a process that did not exist at
+  that point. **A harness clears stale state before it builds its snapshots.**
+- **RESULT (`docs/128` §I): DEPLOYED on staging 2026-09-25
+  06:37:39–06:38:19 UTC, first attempt, no correction.**
+  - Built `2af800b7…` from `8d40936` by hash. The step-0 checks held: one
+    `DNB_SECRET_KEY` in all three containers, and no `DN_SMS` on the worker.
+  - Doctor 24 ok, 1 warn (*32 of 33*), 0 blockers, 1 not measured.
+  - The installer applied **exactly 033**.
+  - The catalogue matched. The rolled-back probe gave `set`, then `kept`, then
+    the refusal, with one audit row. **8 login roles were refused by execution**;
+    residue 0.
+  - The worker logs **`"sms":"panel"`**, and reports `off` at version 0 in the
+    database after the restart. Both SMS routes answer 401 anonymously, also
+    through Traefik.
+  - Only the API, the app and the worker changed. Traefik was not restarted.
+  - **No SMS sender is set yet, so no code is sent**, and no message has
+    reached a phone.
+- **The operator's actions:**
+  1. ~~Run the one command; send back the log~~ — done. The operator pasted the
+     terminal; this command prints no secret.
+  2. Sign in to the Admin panel as `dishnet-admin`. The first time, it asks for
+     an authenticator app and a new password.
+  3. When the Africa's Talking account exists, enter it under
+     **Administration → SMS for sign-in**. **Say only what the screen shows:
+     never the code, and never the key.**
 
 ## Open and parked
 

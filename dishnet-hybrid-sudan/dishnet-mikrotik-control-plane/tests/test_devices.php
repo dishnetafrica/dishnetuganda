@@ -147,11 +147,15 @@ is_(RestClient::isTunnelHost('10.66.0.11'), true, 'and accepts a tunnel address'
 
 // ===========================================================================
 t('DELIVERY — provisioning pushes desired state and confirms by reading back');
+// G-C (docs/118 D-4): delivery presumes a tunnel, and the registry records one
+// as `connected` or later. A staff act moves the row there — nothing in the
+// delivery path does, and tests/test_router_control_plane.php proves both.
+$ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'connected', 'test:staff'));
 $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->setDesired($dev['id'],
     ['ip/hotspot/profile' => ['use-radius' => 'yes']], 'test:staff'));
-$intent = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
+$intent = (new IntentQueue($owner))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']],
-    $A['principal'], 'device', $dev['id']));
+    $A['principal'], 'device', $dev['id']);
 
 $delivery = new RouterOsDelivery($clientFactory);
 $worker = new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $delivery, 'w-dev');
@@ -174,27 +178,29 @@ $diverging = new class(new RouterOsDelivery($clientFactory)) implements \Dn\Deli
     public function __construct(private RouterOsDelivery $inner) {}
     public function deliver(\Dn\Db\Database $db, array $i): \Dn\Delivery\DeliveryResult { return $this->inner->deliver($db, $i); }
     public function confirm(\Dn\Db\Database $db, array $i): bool { return false; }
+    public function bindingName(): string { return 'test-diverging'; }
+    public function isSimulated(): bool { return true; }
 };
-$i2 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
+$i2 = (new IntentQueue($owner))->enqueue(
     $A['customer'], 'device.provision', ['device_id' => $dev['id']],
-    $A['principal'], 'device', $dev['id']));
+    $A['principal'], 'device', $dev['id']);
 $out = (new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $diverging, 'w-div'))->runOnce();
 is_($out['confirmed'], 0, 'not confirmed');
 is_($owner->one('SELECT state FROM mt_intents WHERE id = ?', [$i2['id']])['state'], 'queued',
     'it goes back for another look rather than being called done');
 
 t('DELIVERY — disconnect removes the session and confirms it is gone');
-$i3 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
+$i3 = (new IntentQueue($owner))->enqueue(
     $A['customer'], 'session.disconnect',
-    ['device_id' => $dev['id'], 'nas_session_id' => '*A'], $A['principal'], 'device', $dev['id']));
+    ['device_id' => $dev['id'], 'nas_session_id' => '*A'], $A['principal'], 'device', $dev['id']);
 $out = (new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $delivery, 'w-disc'))->runOnce();
 is_($out['confirmed'], 1, 'confirmed');
 $active = $transport('GET', 'https://x/rest/ip/hotspot/active', null, 'dn-mgmt', 'correct-horse');
 is_(count($active['body']), 0, 'the session really is gone from the router');
 
 t('DELIVERY — an unknown intent kind fails permanently rather than retrying forever');
-$i4 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
-    $A['customer'], 'something.invented', ['device_id' => $dev['id']], $A['principal']));
+$i4 = (new IntentQueue($owner))->enqueue(
+    $A['customer'], 'something.invented', ['device_id' => $dev['id']], $A['principal']);
 (new IntentWorker($workDb, $ctxW, new IntentQueue($workDb), $delivery, 'w-unk'))->runOnce();
 $s4 = $owner->one('SELECT state, attempts FROM mt_intents WHERE id = ?', [$i4['id']]);
 is_($s4['state'], 'failed', 'it fails');
@@ -203,8 +209,8 @@ is_((int) $s4['attempts'] <= 1, true, 'without burning five attempts');
 t('DELIVERY — wrong credentials are a failure, not a silent success');
 $badFactory = fn(array $d) => new RestClient($d['tunnel_ip'], 'dn-mgmt', 'wrong-password', 10,
     \Closure::fromCallable($transport));
-$i5 = $ctx->run($A['customer'], fn($d) => (new IntentQueue($d))->enqueue(
-    $A['customer'], 'device.provision', ['device_id' => $dev['id']], $A['principal'], 'device', $dev['id']));
+$i5 = (new IntentQueue($owner))->enqueue(
+    $A['customer'], 'device.provision', ['device_id' => $dev['id']], $A['principal'], 'device', $dev['id']);
 (new IntentWorker($workDb, $ctxW, new IntentQueue($workDb),
     new RouterOsDelivery($badFactory), 'w-bad'))->runOnce();
 $s5 = $owner->one('SELECT state FROM mt_intents WHERE id = ?', [$i5['id']]);
@@ -244,8 +250,10 @@ throws_(fn() => $owner->exec('DELETE FROM mt_devices WHERE id = ?', [$unstaged['
     'not deleted', 'and even the owner cannot delete it');
 
 t('a legal transition is allowed');
-$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'shipped', 'test:staff'));
-is_($ok['state'], 'shipped', 'staged -> shipped is accepted');
+// The device was moved to `connected` for the delivery section above, so the
+// legal step from here is the one the trigger allows after a tunnel.
+$ok = $ctxA->runUnscoped(fn($d) => (new DeviceRegistry($d))->transition($dev['id'], 'provisioned', 'test:staff'));
+is_($ok['state'], 'provisioned', 'connected -> provisioned is accepted');
 
 t('DIVERGENCE is computed, not stored');
 $cols = array_column($owner->query(

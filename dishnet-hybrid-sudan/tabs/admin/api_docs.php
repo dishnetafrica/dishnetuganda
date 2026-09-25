@@ -1,10 +1,12 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // Tab: api_docs
 // Extracted from public.php on 2026-03-15
     $scheme     = ((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')||(!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])&&$_SERVER['HTTP_X_FORWARDED_PROTO']==='https')) ? 'https' : 'http';
-    $basePlugin = $scheme.'://'.$_SERVER['HTTP_HOST'].strtok($_SERVER['REQUEST_URI'],'?');
+    // Copied into apps and scripts: the reachable address, not uCRM's :8443.
+    $basePlugin = dn_with_override($scheme.'://'.$_SERVER['HTTP_HOST'].strtok($_SERVER['REQUEST_URI'],'?'), $config);
     $baseApi    = $basePlugin.'?page=api&action=';
-    $basePwa    = $scheme.'://'.$_SERVER['HTTP_HOST'].preg_replace('#/public\.php$#','',strtok($_SERVER['REQUEST_URI'],'?')).'/public.php?page=api&action=';
+    $basePwa    = dn_with_override($scheme.'://'.$_SERVER['HTTP_HOST'].preg_replace('#/public\.php$#','',strtok($_SERVER['REQUEST_URI'],'?')).'/public.php?page=api&action=', $config);
     $docsUrl    = $basePlugin.'?page=api_docs';
     $allRetailersFull = $store->load('retailers.json') ?? [];
 ?>

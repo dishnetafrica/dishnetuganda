@@ -98,12 +98,46 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
 .op b{font-size:22px}
 .op small{display:block;margin-top:6px;font-size:11.5px;color:var(--muted);line-height:1.4}
 .muted{color:var(--muted);font-size:14px}
+.signals.tight{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.signals.tight .signal{padding:10px 12px}
+.hint{margin:6px 20px 0;font-size:12.5px;color:var(--muted)}
+.lnk{color:var(--accent);cursor:pointer;text-decoration:underline}
+.hscard{margin:10px 20px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.hscard h3{margin:0 0 10px;font-size:15px}
+.hscard h4{margin:14px 0 6px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.hscard .tw{margin:0}
+.hsrow{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.hsrow dt{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.hsrow dd{margin:3px 0 0}
+.hsrow small{display:block;margin-top:3px;font-size:11.5px;color:var(--muted)}
+.vcount{display:flex;flex-wrap:wrap;gap:8px}
+.vc{padding:6px 11px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:var(--muted)}
+.vc b{color:var(--ink);font-size:15px;margin-right:4px}
+.vc.total{background:#11151b;color:#c9d0d8;border-color:#11151b}
+.vc.total b{color:#fff}
+.lifecycle{margin:8px 20px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.lc{display:flex;gap:10px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.lc .dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px;background:var(--green)}
+.lc.unreachable{background:#fbfbfc}
+.lc.unreachable .dot{background:transparent;border:2px solid var(--gray);width:7px;height:7px}
+.lc b{font-size:13.5px;text-transform:capitalize}
+.lc .verdict{margin-left:7px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.lc.reachable .verdict{color:var(--green)}
+.lc p{margin:5px 0 0;font-size:12.5px;color:var(--muted)}
 
-/* Actions, shown inert. Visible so an operator can see what the product will
-   do and why it cannot yet. */
+/* Actions. Unavailable ones are shown inert so DishNet staff can see what the
+   product will do and why it cannot yet; the one the server marks available
+   (push configuration, a job for the worker) is live on a router's own page. */
 .actions{margin:8px 20px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
 .action{padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.action.live{border-color:#b9c8f2}
 .action p{margin:7px 0 0;font-size:12.5px;color:var(--muted)}
+.btn.live{background:var(--accent);color:#fff;border-color:var(--accent)}
+/* Lifecycle: the next step a person may record, from the current state. */
+.steps{margin:8px 20px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.steps-head{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.steps .btn{margin:2px 6px 2px 0}
+.sform select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
 .btn{font:inherit;padding:7px 13px;border-radius:7px;border:1px solid var(--line);
   background:#fff;color:var(--ink);cursor:pointer}
 .btn[disabled]{opacity:.5;cursor:not-allowed;background:#f3f4f6;color:var(--muted)}
@@ -142,10 +176,61 @@ h2.sub{margin:22px 20px 6px;font-size:13px;text-transform:uppercase;letter-spaci
   .tiles{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
   th,td{padding:9px 10px}
 }
+/* ── the login gate ───────────────────────────────────────────────────── */
+#gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+/* An id rule with display:flex outranks the browser's own [hidden] rule, so the signed-out gate stayed
+   on the page, empty and a full screen tall, above the panel after sign-in. Hidden must mean hidden. */
+#gate[hidden],.shell[hidden]{display:none}
+.lg{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:28px 30px;max-width:520px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.lg h1{margin:0;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lg h2{margin:6px 0 4px;font-size:23px}
+.lg p{margin:8px 0;color:var(--muted)}
+.lg .lg-sub{margin-top:0}
+.lg .lg-label{color:var(--ink);font-weight:600;margin-top:18px}
+.lg-roles{display:flex;gap:8px;flex-wrap:wrap}
+.lg-btn{font:inherit;cursor:pointer;background:var(--accent);color:#fff;border:0;
+        border-radius:8px;padding:9px 16px;text-transform:capitalize}
+.lg-btn:hover{filter:brightness(1.08)}
+.lg-stop .lg-btn{background:#11151b}
+.lg-dev{border:1px solid #f0c36b;background:#fff8e8;color:#3b2a00;border-radius:8px;padding:10px 12px;font-size:12.5px}
+.lg-dev b{letter-spacing:.06em}
+.lg-stop{border-color:#e6b4b4}
+.lg-meta{font-size:12.5px}
+.lg-busy .lg-spin{color:var(--ink);font-weight:600}
+.lg-form{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.lg-form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.lg-form input{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;color:var(--ink)}
+.lg-form .lg-btn{align-self:flex-start;text-transform:none}
+.lg-key{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0;padding:12px 14px;
+        background:#f6f7f9;border:1px solid var(--line);border-radius:8px;font-size:13px}
+.lg-key span{color:var(--muted)} .lg-key b.small{font-size:11.5px;overflow-wrap:anywhere;font-weight:400}
+.lg-err{color:var(--red)}
+@media (max-width:520px){ .lg{padding:22px 18px} }
+/* ── identity plane: who is signed in, the roster, the account ─────────── */
+.who{margin:14px 16px 0;padding-top:12px;border-top:1px solid #232a33;font-size:12.5px;color:#9aa1aa}
+.who b{color:#fff;display:block} .who .lnk{display:inline-block;margin-top:6px;color:#cdd3da}
+.sform{margin:12px 20px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+       display:flex;flex-direction:column;gap:9px;max-width:560px}
+.sform h3{margin:0 0 2px;font-size:14px}
+.sform label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.sform input[type=text],.sform input:not([type]),.sform input[type=password]{font:inherit;padding:8px 10px;
+       border:1px solid var(--line);border-radius:8px;color:var(--ink)}
+.sform .btn{align-self:flex-start} .sform small{color:var(--muted)}
+.radios{display:flex;gap:12px;flex-wrap:wrap;color:var(--ink)} .radios label{flex-direction:row;align-items:center;gap:4px}
+.btn.small{padding:4px 9px;font-size:12px} .btn.ghost{background:transparent;color:var(--muted)}
+.acts{white-space:normal;min-width:320px} .acts .btn{margin:2px 4px 2px 0} .rolechange{display:inline-block}
+.once{margin:12px 20px;padding:12px 14px;border:2px solid var(--amber);background:#fff8e8;border-radius:10px;max-width:560px}
+.once code{display:block;margin-top:8px;font-size:16px;letter-spacing:.04em;user-select:all}
+.once p{margin:6px 0 0;color:var(--muted)}
+.msg{margin:12px 20px;padding:10px 14px;border-radius:8px;max-width:560px}
+.msg.ok{background:#f0fbf4;border:1px solid #a9d8b8} .msg.err{background:#fdf3f3;border:1px solid #e9b0b0;color:var(--red)}
+@media (max-width:860px){ .who{display:none} .sform,.once,.msg{margin-left:14px;margin-right:14px} }
 </style>
 </head><body>
-<div class="shell">
-  <aside><div class="brand">DishNet Admin</div><nav id="nav"></nav></aside>
+<div id="gate" hidden></div>
+<div class="shell" hidden>
+  <aside><div class="brand">DishNet Admin</div><nav id="nav"></nav><div id="who" class="who"></div></aside>
   <main>
     <div id="evidence"></div>
     <div id="main"></div>

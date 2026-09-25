@@ -8,24 +8,32 @@ declare(strict_types=1);
  * "the panel consumes the plugin through an API" an aspiration rather than a
  * boundary. This is that boundary.
  *
- * Two properties it must keep:
+ * Three properties it must keep:
  *
  *   1. **The panel gets a connection that can only read projections.**
- *      Database::adminApi() is dnb_adminapi: EXECUTE on the eleven projections
- *      of migration 019 and no privilege on any table. A bug in this file
- *      cannot widen that, because the privilege is on the connection.
+ *      Database::adminApi() is dnb_adminapi: EXECUTE on the Admin projections
+ *      and no privilege on any table. A bug in this file cannot widen that,
+ *      because the privilege is on the connection.
  *
- *   2. **The default identity admits nobody.** DenyAllIdentity is the
- *      production binding (Decision 8 / W-4). A development identity requires
- *      an explicit environment gate that DevStaffIdentity itself refuses to
- *      honour when real bindings are allowed.
+ *   2. **The default identity admits nobody.** StaffIdentityFactory binds
+ *      DenyAllIdentity unless DN_STAFF_IDENTITY=dishnet selects the real
+ *      provider (migration 026) or the development gate selects the
+ *      development one. It never falls back between them.
+ *
+ *   3. **A provider that cannot work fails LOUDLY.** If the factory throws —
+ *      a bad DN_STAFF_IDENTITY value, the development gate set beside the real
+ *      provider, or a staff-auth connection that cannot open — every request
+ *      answers 500 and one line reaches the log. It is never quietly replaced
+ *      by deny-all (which would read as a policy) or by the development
+ *      identity (which would admit an invented person).
  */
 require dirname(__DIR__, 2) . '/src/autoload.php';
 
 use Dn\Admin\AdminReader;
-use Dn\Admin\DenyAllIdentity;
-use Dn\Admin\DevStaffIdentity;
-use Dn\Admin\StaffRole;
+use Dn\Admin\OnboardingAdmin;
+use Dn\Admin\RouterAdmin;
+use Dn\Admin\SettingsAdmin;
+use Dn\Admin\StaffIdentityFactory;
 use Dn\Api\AdminRoutes;
 use Dn\Db\Database;
 use Dn\Http\Request;
@@ -35,13 +43,13 @@ use Dn\Runtime\Bindings;
 $bindings = Bindings::defaults();
 
 // ── identity ────────────────────────────────────────────────────────────────
-// A development identity is opt-in, loud, and impossible alongside F6-B.
-// DevStaffIdentity throws rather than degrading, so a misconfigured deployment
-// fails to start instead of quietly admitting a staff member who does not exist.
-$identity = new DenyAllIdentity();
-$devMode  = (getenv(DevStaffIdentity::ENV) ?: '') === DevStaffIdentity::VALUE;
-if ($devMode) {
-    $identity = new DevStaffIdentity(StaffRole::Admin);
+try {
+    [$identity, $issuer, $staff] = StaffIdentityFactory::fromEnvironment();
+} catch (\Throwable $e) {
+    // Loud, and final for this request. Nothing below runs.
+    error_log('[dnb-plugin] staff identity provider unavailable: ' . $e::class . ': ' . $e->getMessage());
+    (new Response(500, ['error' => 'identity_provider_unavailable']))->send();
+    return;
 }
 
 // ── the projection reader ───────────────────────────────────────────────────
@@ -54,7 +62,19 @@ try {
     error_log('[dnb-plugin] admin read connection unavailable: ' . $e::class);
 }
 
-$router = AdminRoutes::build($identity, $bindings, $reader);
+// ── the estate writes (G-C, docs/121, docs/125) ─────────────────────────────
+// The Admin WRITE connection is opened on first use and only for the bound
+// estate routes: the four router writes and the three onboarding writes.
+// dnb_adminwrite holds EXECUTE on those SECURITY DEFINER functions and no
+// table privilege, so this connection cannot read the estate or write past
+// those functions whatever a request asks.
+$routers    = new RouterAdmin(static fn(): Database => Database::adminWrite());
+$onboarding = new OnboardingAdmin(static fn(): Database => Database::adminWrite());
+// The SMS settings (migration 033, docs/128): the same Admin write connection,
+// one function. AdminRoutes binds it only beside the real staff provider.
+$settings   = new SettingsAdmin(static fn(): Database => Database::adminWrite());
+
+$router = AdminRoutes::build($identity, $bindings, $reader, $issuer, $staff, null, $routers, $onboarding, $settings);
 $req    = Request::fromGlobals();
 
 $match = $router->match($req->method, $req->path);

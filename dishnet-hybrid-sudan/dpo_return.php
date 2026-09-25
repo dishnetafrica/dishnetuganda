@@ -32,7 +32,8 @@ require_once __DIR__ . '/lib/DpoBootstrap.php';
 require_once __DIR__ . '/lib/crm_url.php';
 
 $root      = __DIR__;
-$dataDir   = getDataDir($root);
+// public.php has already worked out the data directory; so has a test router.
+if (!isset($dataDir) || !is_string($dataDir) || $dataDir === '') $dataDir = getDataDir($root);
 $config    = PluginConfig::load($root, $dataDir);
 $token     = trim((string)($_GET['TransactionToken'] ?? ''));
 $cancelled = !empty($_GET['cancelled']);
@@ -76,6 +77,19 @@ elseif ($status === 'CANCELLED' || ($cancelled && $status === ''))              
 
 $h  = static fn($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 $gb = static fn($n, $c): string => $c . ' ' . number_format((float)$n, 0);
+
+// DPO's reviewer paid from the test checkout (dpo_test.php). Send them back
+// there, not to a customer portal they cannot sign in to.
+$testBtns = '';
+if ($row !== null && (string)$row['environment'] === 'test') {
+    $tlCfg = DpoBootstrap::vaulted($config);
+    $tlUrl = in_array((int)$row['crm_client_id'], DpoBootstrap::testClients($tlCfg), true)
+        ? DpoBootstrap::testLinkUrl($tlCfg) : '';
+    if ($tlUrl !== '') {
+        $testBtns = '<div class="btns"><a class="btn pri" href="' . $h($tlUrl) . '">Back to the test page</a></div>'
+                  . '<p class="small">DPO test account — no real money moved.</p>';
+    }
+}
 
 header('Content-Type: text/html; charset=utf-8');
 // A payment outcome is never a cached page.
@@ -122,10 +136,12 @@ a.sec{background:var(--ground);color:var(--ink);border:1px solid var(--line);}
     <div class="r"><dt>Amount</dt><dd><?= $h($gb($row['amount'], $row['currency'])) ?></dd></div>
     <div class="r"><dt>Reference</dt><dd class="ref"><?= $h($row['reference']) ?></dd></div>
   </dl>
+  <?php if ($testBtns !== ''): echo $testBtns; else: ?>
   <div class="btns">
-    <a class="pri" href="<?= $h($portal) ?>&view=invoices">View receipt</a>
-    <a class="sec" href="<?= $h($portal) ?>">Return to dashboard</a>
+    <a class="btn pri" href="<?= $h($portal) ?>&view=invoices">View receipt</a>
+    <a class="btn sec" href="<?= $h($portal) ?>">Return to dashboard</a>
   </div>
+  <?php endif; ?>
 
 <?php elseif ($state === 'pending'): ?>
   <div class="mark wait">&hellip;</div>
@@ -141,26 +157,32 @@ a.sec{background:var(--ground);color:var(--ink);border:1px solid var(--line);}
     <div class="r"><dt>Reference</dt><dd class="ref"><?= $h($row['reference']) ?></dd></div>
   </dl>
   <?php endif; ?>
-  <div class="btns"><a class="sec" href="<?= $h($portal) ?>">Return to dashboard</a></div>
+  <?php if ($testBtns !== ''): echo $testBtns; else: ?>
+  <div class="btns"><a class="btn sec" href="<?= $h($portal) ?>">Return to dashboard</a></div>
   <p class="small">If money has left your account it is safe. Keep the reference above
     and our team can trace it.</p>
+  <?php endif; ?>
 
 <?php elseif ($state === 'cancelled'): ?>
   <div class="mark bad">&times;</div>
   <h1>Payment cancelled</h1>
   <p class="lede">Nothing has been charged. Your invoice is unchanged.</p>
+  <?php if ($testBtns !== ''): echo $testBtns; else: ?>
   <div class="btns">
-    <a class="pri" href="<?= $h($portal) ?>&view=invoices">Try again</a>
-    <a class="sec" href="<?= $h($portal) ?>">Return to dashboard</a>
+    <a class="btn pri" href="<?= $h($portal) ?>&view=invoices">Try again</a>
+    <a class="btn sec" href="<?= $h($portal) ?>">Return to dashboard</a>
   </div>
+  <?php endif; ?>
 
 <?php else: ?>
   <div class="mark bad">&times;</div>
   <h1>Payment was not completed</h1>
   <p class="lede">Nothing has been charged. Your invoice is unchanged, and you can try again.</p>
+  <?php if ($testBtns !== ''): echo $testBtns; else: ?>
   <div class="btns">
-    <a class="pri" href="<?= $h($portal) ?>&view=invoices">Try again</a>
-    <a class="sec" href="<?= $h($portal) ?>">Return to dashboard</a>
+    <a class="btn pri" href="<?= $h($portal) ?>&view=invoices">Try again</a>
+    <a class="btn sec" href="<?= $h($portal) ?>">Return to dashboard</a>
   </div>
+  <?php endif; ?>
 <?php endif; ?>
 </div></body></html>

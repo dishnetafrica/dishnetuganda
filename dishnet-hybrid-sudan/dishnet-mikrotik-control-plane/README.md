@@ -6,6 +6,8 @@ does not contain it."*
 
 Nothing here touches Domain A, the uCRM plugin, its SQLite database or its files.
 
+**Vocabulary (binding since 2026-09-23, `docs/117`).** An **Operator** is the tenant — the row in `mt_customers` that RLS keys on. **Operator Staff** are its people, `mt_principals` (`kind` is `owner` or, until migration 027 renames the value, `operator`). **DishNet Staff** are the platform's own people (`mt_audit_log.actor_kind = 'staff'` means them and nobody else). A **Guest** is a voucher and then a session, never an account. Internal identifiers keep the schema's names: `mt_customers`, `customer_id`, `mt_current_customer()`, the `/api/v1/admin/customers` routes. The user-facing word is Operator.
+
 **Status: steps 1–8 built**, with step 7's hardware half **unmet** — see below. Schema, tenancy,
 isolation, audit, idempotency, authentication, the `/me` surface, the response projection,
 the intent queue, the policy plane, vouchers, session accounting, and the device plane with

@@ -65,11 +65,15 @@ throws_(fn() => $owner->exec("INSERT INTO mt_customers (name) VALUES ('by the ow
 t('F2 — the authentication path WORKS, proven by side effect');
 $phone = '+256700001001';   // seed_two_customers gives A's principal this number
 $inspect->exec('TRUNCATE mt_auth_codes CASCADE');
-$code = $app->one('SELECT mt_auth_issue_code(?,?,?::interval) AS id',
-                  [$phone, 'hash-f2', '10 minutes'])['id'];
+// Since 032 the function takes the code SEALED for the SMS outbox as well
+// (docs/127 S-3); the three-argument form no longer exists.
+$code = $app->one('SELECT mt_auth_issue_code(?,?,?::interval,?) AS id',
+                  [$phone, 'hash-f2', '10 minutes', (new \Dn\Notify\CodeEnvelope())->seal('000000', $phone)])['id'];
 is_($code !== null, true, 'issue_code returned an id');
 is_((int) $inspect->one('SELECT count(*) AS n FROM mt_auth_codes')['n'], 1,
     'AND A ROW EXISTS — the old failure returned an id-shaped answer and wrote nothing');
+is_($inspect->one('SELECT state FROM mt_auth_sms_outbox WHERE code_id = ?', [$code])['state'] ?? null, 'queued',
+    'AND its outbox row (032) — queued, because the number is an active owner\'s');
 
 $v = $app->query('SELECT * FROM mt_auth_verify_code(?,?)', [$phone, 'hash-f2']);
 is_(count($v), 1, 'verify_code resolves the principal');
@@ -117,8 +121,10 @@ $admin->one('SELECT wan_interface FROM mt_device_set_wan(?,?,?)', [$dev, 'sfp-f2
 is_($inspect->one('SELECT wan_interface FROM mt_devices WHERE id=?', [$dev])['wan_interface'],
     'sfp-f2', 'set_wan recorded the fact');
 
-$ctx->run($A['customer'], fn($db) => $db->exec(
-    "INSERT INTO mt_intents (customer_id, kind) VALUES (?, 'f2.work')", [$A['customer']]));
+// Fixture identity: dnb_app lost mt_intents INSERT in migration 025. What F2
+// is about is whether the WORKER can claim, not who queued the row.
+$inspect->exec(
+    "INSERT INTO mt_intents (customer_id, kind) VALUES (?, 'f2.work')", [$A['customer']]);
 $claimed = $work->query("SELECT * FROM mt_intent_claim('w-f2','5 minutes'::interval,10)");
 is_(count($claimed) >= 1, true, 'the worker claims — it used to report an empty queue forever');
 is_((int) $inspect->one("SELECT count(*) AS n FROM mt_intents WHERE claimed_by='w-f2'")['n'] >= 1,
@@ -132,7 +138,10 @@ t('F2 — each definer role holds ONLY the privileges its functions need');
 $expected = [
     'dnb_def_auth' => ['mt_auth_codes'    => 'SELECT,INSERT,UPDATE',
                        'mt_principals'    => 'SELECT,UPDATE',
-                       'mt_auth_sessions' => 'SELECT,INSERT,UPDATE'],
+                       'mt_auth_sessions' => 'SELECT,INSERT,UPDATE',
+                       // 031 (docs/127 F-2): sign-in reads the OPERATOR's status —
+                       // at issue, at verification and on every request. Read only.
+                       'mt_customers'     => 'SELECT'],
     'dnb_def_net'  => ['mt_vouchers'      => 'SELECT,UPDATE',
                        'mt_hotspot_users' => 'SELECT',
                        'mt_sessions'      => 'SELECT,INSERT,UPDATE'],
@@ -143,7 +152,26 @@ $expected = [
     'dnb_def_prov' => ['mt_devices'       => 'SELECT,INSERT,UPDATE',
                        'mt_device_secrets'=> 'SELECT,INSERT,UPDATE',
                        'mt_device_config' => 'SELECT,INSERT,UPDATE',
-                       'mt_customers'     => 'INSERT'],
+                       // 030 (docs/125 D-7): the onboarding writers read an
+                       // operator's status and a service row, and insert services
+                       // and locations. SELECT is what lets the location writer
+                       // DERIVE the operator from the service (derive, never accept).
+                       'mt_customers'     => 'SELECT,INSERT',
+                       'mt_services'      => 'SELECT,INSERT',
+                       'mt_sites'         => 'SELECT,INSERT',
+                       // 027: mt_admin_principal_create — INSERT across tenants,
+                       // no SELECT: the function never reads a principal back.
+                       'mt_principals'    => 'INSERT',
+                       // 028: mt_device_provision_request — INSERT the intent
+                       // and SELECT it back for the replay check (RULE I-1).
+                       // With INSERT only, the pre-check would silently read
+                       // zero rows (docs/121 D-16).
+                       'mt_intents'       => 'SELECT,INSERT'],
+    // 024/027: the commercial and operator-identity writers are TENANT-BOUND
+    // BELOW the function — dnb_def_comm holds no policy of its own anywhere,
+    // so it inherits <table>_isolation like dnb_app. A widening policy added
+    // for it would show up here first.
+    'dnb_def_comm' => [],
 ];
 $order = ['SELECT' => 0, 'INSERT' => 1, 'UPDATE' => 2, 'DELETE' => 3];
 foreach ($expected as $role => $tables) {

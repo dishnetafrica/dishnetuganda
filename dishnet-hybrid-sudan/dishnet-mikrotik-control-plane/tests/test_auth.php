@@ -85,7 +85,7 @@ is_(array_slice($statuses, 0, 5), [202,202,202,202,202], 'the first five are ser
 is_($statuses[5], 429, 'the sixth is 429 — a rate limit, not a 500');
 is_($statuses[6], 429, 'and it stays 429');
 is_(in_array(500, $statuses, true), false,
-    'a throttled client NEVER sees a 500 (which would send an operator hunting a fault)');
+    'a throttled client NEVER sees a 500 (which would send an engineer hunting a fault)');
 
 // ---------------------------------------------------------------------------
 t('tokens: revocation, expiry, forgery');

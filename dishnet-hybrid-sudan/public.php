@@ -514,7 +514,9 @@ if (empty($config)) {
 // once, the first time this install has none. Every other entry point that
 // mints or checks a link does the same. See lib/QuotePdfToken.php.
 require_once __DIR__ . '/lib/QuotePdfToken.php';
+require_once __DIR__ . '/lib/PdfLinkToken.php';
 QuotePdfToken::ensureSecret($store, $config);
+PdfLinkToken::ensureSecret($store, $config);   // 5.18.37: the receipt/delivery link key, generated once
 // Ensure defaults for existing configs
 if (!isset($config['commission_rate']))            $config['commission_rate'] = 5;
 if (!isset($config['lte_commission_rate']))        $config['lte_commission_rate'] = 5;
@@ -823,6 +825,16 @@ if ($page === 'dpo_return') {
 if ($page === 'dpo_push') {
     while (ob_get_level() > 0) ob_end_clean();
     require __DIR__ . '/dpo_push.php';
+    exit;
+}
+
+// ── DPO Pay: the test checkout DPO's reviewer opens ──
+// URL: public.php?page=dpo_test&k=<key from the DPO Pay admin screen>
+// Test environment only, and only with the key; 404 otherwise. It starts a
+// payment through the same initiate() as Pay Now — see the file.
+if ($page === 'dpo_test') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/dpo_test.php';
     exit;
 }
 
@@ -3294,7 +3306,7 @@ setTimeout(function() {
       <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:6px;"> Share install link</div>
       <div style="font-size:12px;color:#374151;margin-bottom:10px;">Copy this link and open it in Chrome:</div>
       <div id="installUrlBox" style="background:#fff;border:1px solid #d1fae5;border-radius:8px;padding:10px;font-size:11px;color:#1565C0;word-break:break-all;font-family:monospace;margin-bottom:8px;">
-        <?= (isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?page=install' ?>
+        <?= h(dn_with_override((isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?page=install', $config)) ?>
       </div>
       <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('installUrlBox').textContent.trim()).then(function(){this.textContent=' Copied!';}.bind(this))"
         style="width:100%;padding:10px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
@@ -3302,7 +3314,7 @@ setTimeout(function() {
       </button>
     </div>
 
-    <a href="<?= (isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'] ?>?page=install" target="_blank"
+    <a href="<?= h(dn_with_override((isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?page=install', $config)) ?>" target="_blank"
       style="display:block;text-align:center;padding:13px;background:linear-gradient(135deg,#128C7E,#25D366);color:#fff;border-radius:12px;font-size:14px;font-weight:800;text-decoration:none;">
        Open Install Guide Page
     </a>

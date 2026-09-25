@@ -156,13 +156,18 @@ echo "\nThe suite cannot reach the real ConfigVault\n";
 
 $runner = (string)file_get_contents($root . '/tests/run.sh');
 is_(strpos($runner, 'DN_VAULT_FILE') !== false,
-    'the runner gives the whole run its own vault',
+    'the runner gives the tests a vault of their own',
     'without it, every tool-running test can write to the real one');
+// One per TEST since 5.18.34. A vault shared by the run carried a setting one
+// test wrote (crm_public_url, newly a vault key) into four tests after it.
+is_(preg_match('/for t in test_\\*\\.php; do[^\\n]*\\n(?:(?!done)[^\\n]*\\n)*?\\s*export DN_VAULT_FILE=/', $runner) === 1,
+    'one per test, set inside the loop — not one shared by the whole run',
+    'the vault gap-fills: what one test leaves in it, every later test inherits');
 is_(strpos($runner, 'export DN_VAULT_FILE') !== false,
     'and exports it, so child processes inherit it',
     'set but not exported reaches nothing');
-is_(strpos($runner, 'trap') !== false && strpos($runner, 'rm -f') !== false,
-    'and removes it afterwards',
+is_(strpos($runner, 'trap') !== false && preg_match('/rm -r?f/', $runner) === 1,
+    'and removes them afterwards',
     'a temp vault left behind becomes the next run stale state');
 
 foreach (glob($tmp . '/*') ?: [] as $f) @unlink($f);

@@ -2,7 +2,6 @@
 declare(strict_types=1);
 namespace Dn\Jobs;
 
-use Dn\Audit\AuditLog;
 use Dn\Db\Database;
 use Dn\Delivery\DeliveryPort;
 use Dn\Intents\IntentQueue;
@@ -41,14 +40,14 @@ final class IntentWorker
 
         foreach ($claimed as $intent) {
             $result = $this->ctx->run($intent['customer_id'], function (Database $db) use ($intent) {
-                return $this->handle($db, new IntentQueue($db), new AuditLog($db), $intent);
+                return $this->handle($db, new IntentQueue($db), $intent);
             });
             if (isset($out[$result])) { $out[$result]++; }
         }
         return $out;
     }
 
-    private function handle(Database $db, IntentQueue $q, AuditLog $audit, array $intent): string
+    private function handle(Database $db, IntentQueue $q, array $intent): string
     {
         $id = $intent['id'];
         try {
@@ -60,8 +59,12 @@ final class IntentWorker
                     // Burning five attempts on it delays everything behind it.
                     $q->recordFailure($id, $res->error ?? 'permanent failure');
                     $q->find($id) && $this->forceFail($db, $q, $id, $res->error ?? 'permanent failure');
-                    $audit->record($intent['customer_id'], $this->workerId, 'system',
-                        'intent.failed', 'intent', $id, null, ['reason' => $res->error]);
+                    // A-1/T2: through the definer, never a direct INSERT.
+                    // The customer, the actor kind and the action are all
+                    // derived or fixed inside the function; dnb_worker holds
+                    // EXECUTE on it and no INSERT on mt_audit_log.
+                    $db->one('SELECT mt_intent_audit(?,?,?,?)',
+                        [$id, $this->workerId, 'failed', $res->error]);
                     return 'failed';
                 }
                 $state = $q->recordFailure($id, $res->error ?? 'delivery not accepted');
@@ -74,8 +77,8 @@ final class IntentWorker
             // delivery call's own return value.
             if ($this->delivery->confirm($db, $intent)) {
                 $q->markConfirmed($id);
-                $audit->record($intent['customer_id'], $this->workerId, 'system',
-                    'intent.confirmed', 'intent', $id);
+                $db->one('SELECT mt_intent_audit(?,?,?)',
+                    [$id, $this->workerId, 'confirmed']);
                 return 'confirmed';
             }
 

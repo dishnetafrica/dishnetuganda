@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // ════════════════════════════════════════════════════════════════════
 // Customer Portal — Shared Data Loader
 // ════════════════════════════════════════════════════════════════════
@@ -123,12 +124,12 @@ $portalPlanName = '';
 // Display only. It decides whether a Pay Now button is drawn; it decides
 // nothing about money. The server re-checks the flag, the invoice, the
 // owner and the amount on every initiate call, so a button that should not
-// be there is a cosmetic bug, not a financial one.
+// be there is a cosmetic bug, not a financial one. In the TEST environment
+// only the test customers named on the DPO screen see it.
 $portalDpoEnabled = false;
 try {
     require_once dirname(__DIR__, 2) . '/lib/DpoBootstrap.php';
-    $_pdDpo = DpoBootstrap::readiness($config);
-    $portalDpoEnabled = $_pdDpo['enabled'] && $_pdDpo['ready'];
+    $portalDpoEnabled = DpoBootstrap::payNowFor($config, (int)$portalCustomerId);
 } catch (\Throwable $_pdE) {}
 
 $portalInvoices = [];
@@ -179,6 +180,8 @@ if ($portalCrmBaseUrl === '') {
 $portalCrmBaseUrl = preg_replace('#/api/v[0-9.]+/?$#', '', $portalCrmBaseUrl);
 $portalCrmBaseUrl = preg_replace('#/crm/?$#', '', $portalCrmBaseUrl);
 $portalCrmBaseUrl = rtrim($portalCrmBaseUrl, '/') . '/crm';
+// On the address a customer's browser can reach, not uCRM's internal :8443.
+$portalCrmBaseUrl = dn_with_override($portalCrmBaseUrl, $config);
 
 if ($portalCustomerId && !$portalAuthError) {
     // Customer from index

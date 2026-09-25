@@ -161,10 +161,27 @@ $panel = implode("\n", array_map(
 // 'RADIUS' appears as screen copy explaining why a per-router session count is
 // not derivable, which is legitimate visible text. What must not appear is a
 // credential, an AAA table, or a router endpoint.
-foreach (['password', 'secret', 'api_key', 'apikey', 'Authorization',
+foreach (['secret', 'apikey', 'Authorization',
           'radius_ref', 'radcheck', 'radreply', 'rest/', '8728', '8729'] as $leak) {
     is_(stripos($panel, $leak), false, "the panel code carries no {$leak}");
 }
+// Since migration 033 (docs/128) the SMS page has an API key FIELD, which an
+// Admin types into and the panel posts once: the bare word 'api_key' is now
+// legitimate markup, exactly as 'password' became in 026. What must not appear
+// is a credential-SHAPED thing (a quoted value assigned to it), and the word may
+// appear only where that one form puts it — counted, so a fifth use fails here.
+is_(preg_match('/api_?key\s*[:=]\s*[\'"`]/i', $panel), 0, 'the panel code assigns or stores no API key value');
+is_(preg_match('/api_?key\s*[:=]\s*[\'"`]/i', 'api_key: "atsk_0123456789abcdef"'), 1, 'CONTROL: that pattern DOES match a credential-shaped assignment');
+is_(preg_match_all('/api_key/i', $panel), 4, 'the word api_key appears exactly four times in the panel code');
+is_([substr_count($panel, 'name="api_key"'), substr_count($panel, "fd.get('api_key')"), substr_count($panel, 'body.api_key = key;')], [2, 1, 1],
+    'all four in the SMS form: its field (and the line that empties it), the read of what was typed, and the one request body that carries it');
+// Since migration 026 the login gate has a real password FIELD, so the bare
+// word is legitimate screen markup. What must not appear is a credential-
+// SHAPED thing — an assignment or a stored value — the same discriminator
+// tests/test_admin_login.php uses, with the same control.
+is_(preg_match('/password\s*[:=]/i', $panel), 0, 'the panel code assigns or stores no password');
+is_(preg_match('/password\s*[:=]/i', 'password: "hunter2"'), 1, 'CONTROL: that pattern DOES match a credential-shaped assignment');
+is_(stripos($panel, 'name="password"') !== false, true, 'CONTROL: the login gate really does carry a password field, so the scan sees markup');
 
 t('5b. the simulation banner is always rendered');
 $app = file_get_contents($root . '/panel/app.js');
@@ -180,9 +197,30 @@ t('5c. signal colour comes from the server, never from the panel');
 $code = $stripJs($app);
 is_(preg_match('/class="signal \$\{esc\(x\.status\)\}/', $code), 1,
     'the signal class is the server\'s status string');
+// A POSITIVE claim is the defect; a denial is the correct copy. The earlier
+// form matched "whether a HotSpot server is running ... is not observed",
+// which is the screen saying exactly the right thing. So the window must
+// contain no negator, and — the stronger half — the verdict word a signal
+// renders must come from the server through verdictOf(), never from a literal.
+// Judged on the WHOLE LINE: a non-greedy match stops at the verb, so the
+// negator that makes it a denial often sits just past the match.
+$negated = static fn(string $l): bool =>
+    (bool) preg_match('/\b(not|never|no|none|unavailable|unmeasured|without)\b/i', $l);
+$lines = explode("\n", $code);
 foreach (['wireguard', 'WireGuard', 'RADIUS', 'HotSpot'] as $w) {
-    is_(preg_match('/' . preg_quote($w, '/') . '[^\n]{0,40}(connected|healthy|running|up\b)/i', $code), 0,
-        "the panel still asserts nothing about {$w}");
+    $claims = [];
+    foreach ($lines as $l) {
+        if (preg_match('/' . preg_quote($w, '/') . '[^\n]{0,60}?(connected|healthy|running|up\b)/i', $l)
+            && !$negated($l)) {
+            $claims[] = trim(substr($l, 0, 70));
+        }
+    }
+    is_($claims, [], "the panel makes no positive claim about {$w}");
+}
+is_(preg_match('/\$\{esc\(verdictOf\(x\)\)\}/', $code), 1,
+    'a signal\'s verdict word is rendered from the server, never from a literal');
+foreach (['>Connected', '>Healthy', '>Running', '>Up<'] as $lit) {
+    is_(str_contains($code, $lit), false, "no hardcoded verdict {$lit} is rendered");
 }
 
 t('5d. per-router figures the system cannot derive are not shown as zero');
@@ -201,9 +239,11 @@ is_($inv['sessions']['admin_readable'], true, 'while sessions are, estate-wide')
 t('6. ALL REAL-NETWORK ACTIONS REMAIN UNAVAILABLE');
 
 foreach (SignalReport::actions() as $a) {
-    is_($a['available'], false, "{$a['key']} is unavailable");
+    // Since migration 028 (docs/121) push_config is available: it queues an
+    // intent for the worker, which the simulator's own three jobs now use.
+    is_($a['available'], $a['key'] === 'push_config', "{$a['key']} is " . ($a['key'] === 'push_config' ? 'available (an intent for the worker)' : 'unavailable'));
 }
-is_(SignalReport::summary()['actions_available'], 0, 'none of them is actionable');
+is_(SignalReport::summary()['actions_available'], 1, 'exactly one of them is actionable — push_config, and it queues, never commands');
 
 $psql("DROP DATABASE IF EXISTS {$db}");
 exit(t_summary());

@@ -71,9 +71,16 @@ foreach (['radius_ref','wg_pubkey','secret_sealed','credential_hash','token_hash
           'radius_username','"mac"','"code"','payload','last_error','"detail"'] as $f) {
     is_(str_contains($blob, $f), false, "no admin response carries {$f}");
 }
-// And the client cannot reconstruct them: it never names them either.
+// And the client cannot reconstruct them: it never names them either. One
+// deliberate exception since migration 028 (docs/121 D-12): the Add-router
+// form SENDS a WireGuard public key as the field the bench act needs. That is
+// an input, not a read-back — the response withholds the key (asserted above
+// and in test_router_control_plane), and the name may appear in app.js ONLY as
+// that form field's name.
+$inputOnly = preg_replace('/<input name="wg_pubkey"/', '<input name="WG-FORM-FIELD"', $code, -1, $formFields);
+is_($formFields, 1, 'wg_pubkey names exactly one form field in the panel (the Add-router form)');
 foreach (['payload','last_error','secret_sealed','wg_pubkey','radius_ref','radius_username'] as $f) {
-    is_(str_contains($code, $f), false, "the admin client never references {$f}");
+    is_(str_contains($inputOnly, $f), false, "the admin client never references {$f}" . ($f === 'wg_pubkey' ? ' outside that one form field' : ''));
 }
 
 // ===========================================================================
@@ -116,18 +123,51 @@ is_(str_contains(file_get_contents(__DIR__ . '/../src/Admin/DevStaffIdentity.php
     'DenyAllIdentity'), true, 'the class documents that it does not degrade');
 
 // ===========================================================================
-t('8. NO WRITE OPERATION IS CALLABLE FROM THIS UI INCREMENT');
+t('8. THE READ-ONLY CLIENT STAYS READ-ONLY; every estate write the UI makes is one of eight: four through routers.js (docs/121 D-13), four through onboarding.js (docs/125 D-11, docs/126 D-11)');
 // Checked as CALLS, not as words: "a provisioning gap" is legitimate screen
 // copy, while `provision(` would be a write. The earlier version of this
 // assertion matched the prose and was wrong about it.
+//
+// Since migration 028 app.js DOES perform estate writes — router register,
+// assign, lifecycle state and the push_config action — but only as
+// routersApi.<method>(…) calls into panel/routers.js, the router-write client.
+// Those call sites are the ONLY exemption, named here, and a bare call is
+// still caught (the control below proves the scan still fires).
+$writeCalls = [];
+preg_match_all('/\broutersApi\.(\w+)\s*\(/', $stripJs($app), $writeCalls);
+is_(array_values(array_unique($writeCalls[1])) === [] ? 'none' : implode(',', array_values(array_diff(array_unique($writeCalls[1]), ['register', 'assign', 'setState', 'pushConfig']))), '',
+    'every routersApi call in app.js is one of register, assign, setState, pushConfig' . ($writeCalls[1] ? ' (found: ' . implode(', ', array_unique($writeCalls[1])) . ')' : ''));
+is_(count(array_unique($writeCalls[1])) >= 4, true, 'CONTROL: the scan does find the four router-write call sites');
+// Since migration 030 app.js also performs the three onboarding writes — an
+// operator, its HotSpot service, a location — but only as onboardingApi.<method>(…)
+// calls into panel/onboarding.js. The guard above did not see them at all:
+// none of their names was on its verb list. They are now named and bounded
+// here, and the verb list gains the create shapes they must not take elsewhere.
+// Since docs/126 (J-1) there is a fourth: addOwner, the operator's first login.
+// Bounded here like the other three, and its create shapes join the verb list.
+$onCalls = [];
+preg_match_all('/\bonboardingApi\.(\w+)\s*\(/', $stripJs($app), $onCalls);
+$onUsed = array_values(array_unique($onCalls[1])); sort($onUsed);
+is_($onUsed, ['addLocation', 'addOwner', 'createOperator', 'startService'], 'every onboardingApi call in app.js is one of createOperator, startService, addLocation, addOwner — and all four are used');
+$codeSans = preg_replace('/\broutersApi\.(register|assign|setState|pushConfig)\s*\(/', 'ROUTER_WRITE(', $code);
+$codeSans = preg_replace('/\bonboardingApi\.(createOperator|startService|addLocation|addOwner)\s*\(/', 'ONBOARDING_WRITE(', $codeSans);
+is_(preg_match('/\bcreateOperator\s*\(/', 'x.createOperator(1)'), 1, 'CONTROL: the call scan does match a bare createOperator() call');
 foreach (['assign','provision','reprovision','reboot','reset','revoke','disconnect',
-          'createVoucher','createBatch','editPlan','delete'] as $w) {
-    is_(preg_match('/\b' . preg_quote($w, '/') . '\s*\(/i', $code), 0,
-        "the admin client makes no {$w}() call");
+          'createVoucher','createBatch','editPlan','delete',
+          'createOperator','createCustomer','startService','addLocation','createSite','createService',
+          'addOwner','addPrincipal','createPrincipal','createOwner'] as $w) {
+    is_(preg_match('/\b' . preg_quote($w, '/') . '\s*\(/i', $codeSans), 0,
+        "outside routers.js and onboarding.js the admin client makes no {$w}() call");
 }
-is_(stripos($code, 'POST') === false, true, 'and issues no POST');
-is_(str_contains($stripJs($js), "method:"), false, 'the client issues no non-GET request');
-is_(substr_count($stripJs($js), 'fetch('), 1, 'there is exactly one fetch call site');
+is_(preg_match('/\bassign\s*\(/i', 'x.assign(1)'), 1, 'CONTROL: the call scan does match a bare assign() call');
+is_(stripos($stripJs($js), 'POST') === false, true, 'the read-only client issues no POST');
+is_(stripos($stripJs($app), 'POST') === false, true, 'and app.js carries no HTTP verb of its own: its writes are the four routers.js methods, the four onboarding.js methods and the identity-plane clients');
+// app.js has a list() helper whose PARAMETER is called fetch and is called
+// with no arguments; a global fetch carries a URL. Scan for the latter.
+is_(preg_match('/\bfetch\s*\(\s*[^)\s]/', $stripJs($app)), 0, 'app.js opens no fetch of its own (no fetch call carrying a URL)');
+is_(preg_match('/\bfetch\s*\(\s*[^)\s]/', "fetch('/x')"), 1, 'CONTROL: that scan does match a real fetch call');
+is_(str_contains($stripJs($js), "method:"), false, 'the read-only client issues no non-GET request');
+is_(substr_count($stripJs($js), 'fetch('), 1, 'there is exactly one fetch call site in it');
 
 // ===========================================================================
 t('9-10. STATUS DOES NOT IMPLY HARDWARE, AND NO PUSH/POLL CLAIM APPEARS');

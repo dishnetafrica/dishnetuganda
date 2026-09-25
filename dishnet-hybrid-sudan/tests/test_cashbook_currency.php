@@ -112,7 +112,7 @@ $root = dirname(__DIR__);
 $writePaths = [
     'webhook.php', 'cron_sync.php', 'cron_crm_payment_gap.php', 'cron_quote_wa.php',
     'cron/payment_catchup_sync.php', 'cron/kyc_crm_sync.php',
-    'lib/CashbookService.php', 'lib/KycService.php', 'lib/ExpenseAdvanceService.php',
+    'lib/CashbookService.php', 'lib/KycService.php', 'lib/KycCrmSync.php', 'lib/ExpenseAdvanceService.php',
     'lib/QuotationService.php',
     'includes/routes.php',
     'includes/post/post_cashbook.php', 'includes/post/post_field.php',

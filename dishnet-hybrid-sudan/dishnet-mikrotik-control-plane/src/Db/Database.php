@@ -52,6 +52,17 @@ final class Database
     public static function adminWrite(): self { return self::connect('adminwrite'); }
 
     /**
+     * The DishNet Staff AUTHENTICATION identity (migration 026, D-AUTH-1).
+     *
+     * EXECUTE on exactly three functions — mt_staff_login, mt_staff_session_resolve,
+     * mt_staff_logout — and no table privilege at all. Separate from adminWrite()
+     * on purpose: that role can EXECUTE seven write functions (docs/114 §M.1, M1),
+     * and a code path that runs BEFORE anyone is authenticated may not connect as
+     * something that can register a router.
+     */
+    public static function staffAuth(): self { return self::connect('staffauth'); }
+
+    /**
      * RADIUS accounting ingestion. Holds EXECUTE on one function and nothing
      * else — no table privileges at all (migration 018, audit finding F1).
      *
@@ -99,16 +110,43 @@ final class Database
     private static function connect(string $role): self
     {
         $dsn = getenv('DNB_DSN') ?: 'pgsql:host=/var/tmp;port=55432;dbname=dnb';
-        [$user, $pass] = match ($role) {
-            'owner'  => [getenv('DNB_OWNER_USER')  ?: 'dnb',        getenv('DNB_OWNER_PASS')  ?: ''],
-            'inspector' => [getenv('DNB_INSPECT_USER') ?: 'postgres', getenv('DNB_INSPECT_PASS') ?: ''],
-            'worker' => [getenv('DNB_WORKER_USER') ?: 'dnb_worker', getenv('DNB_WORKER_PASS') ?: 'worker-local-dev'],
-            'admin'  => [getenv('DNB_ADMIN_USER')  ?: 'dnb_admin',  getenv('DNB_ADMIN_PASS')  ?: 'admin-local-dev'],
-            'adminapi' => [getenv('DNB_ADMINAPI_USER') ?: 'dnb_adminapi', getenv('DNB_ADMINAPI_PASS') ?: 'adminapi-local-dev'],
-            'adminwrite' => [getenv('DNB_ADMINWRITE_USER') ?: 'dnb_adminwrite', getenv('DNB_ADMINWRITE_PASS') ?: 'adminwrite-local-dev'],
-            'radius' => [getenv('DNB_RADIUS_USER') ?: 'dnb_radius', getenv('DNB_RADIUS_PASS') ?: 'radius-local-dev'],
-            default  => [getenv('DNB_APP_USER')    ?: 'dnb_app',    getenv('DNB_APP_PASS')    ?: 'app-local-dev'],
+
+        // No password default exists any more, and that is the fix for B-1.
+        //
+        // Until docs/97, each of these fell back to a literal that was also in
+        // migrations/ and therefore in this repository — so an installation
+        // that configured nothing worked, with six published credentials. The
+        // migrations now create these roles with no password at all, and an
+        // unset variable here raises instead of attempting an empty string.
+        //
+        // Two identities may still be empty, deliberately: the OWNER, because
+        // it is commonly peer- or trust-authenticated at install time and
+        // bootstrap.sql is what gives it a password; and the INSPECTOR, which
+        // is the tests-only BYPASSRLS fixture that F2 already forbids in src/.
+        $need = static function (string $env, string $role) use ($dsn): string {
+            $v = getenv($env) ?: '';
+            if ($v === '') {
+                throw new \RuntimeException(
+                    "cannot connect as {$role}: {$env} is not set. Role passwords are "
+                    . 'provisioned at install time (docs/97) and have no default — set it '
+                    . 'from the installation environment, or re-run '
+                    . '`php plugin/bin/plugin.php install` with DNB_SECRETS_OUT.');
+            }
+            return $v;
         };
+
+        [$user, $pass] = match ($role) {
+            'owner'      => [getenv('DNB_OWNER_USER')   ?: 'dnb',      getenv('DNB_OWNER_PASS')   ?: ''],
+            'inspector'  => [getenv('DNB_INSPECT_USER') ?: 'postgres', getenv('DNB_INSPECT_PASS') ?: ''],
+            'worker'     => [getenv('DNB_WORKER_USER')     ?: 'dnb_worker',     $need('DNB_WORKER_PASS', 'worker')],
+            'admin'      => [getenv('DNB_ADMIN_USER')      ?: 'dnb_admin',      $need('DNB_ADMIN_PASS', 'admin')],
+            'adminapi'   => [getenv('DNB_ADMINAPI_USER')   ?: 'dnb_adminapi',   $need('DNB_ADMINAPI_PASS', 'adminapi')],
+            'adminwrite' => [getenv('DNB_ADMINWRITE_USER') ?: 'dnb_adminwrite', $need('DNB_ADMINWRITE_PASS', 'adminwrite')],
+            'staffauth'  => [getenv('DNB_STAFFAUTH_USER')  ?: 'dnb_staffauth',  $need('DNB_STAFFAUTH_PASS', 'staffauth')],
+            'radius'     => [getenv('DNB_RADIUS_USER')     ?: 'dnb_radius',     $need('DNB_RADIUS_PASS', 'radius')],
+            default      => [getenv('DNB_APP_USER')        ?: 'dnb_app',        $need('DNB_APP_PASS', 'app')],
+        };
+
         try {
             $pdo = new PDO($dsn, $user, $pass, [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,

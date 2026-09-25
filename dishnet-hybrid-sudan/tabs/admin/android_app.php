@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // Tab: android_app
 // Extracted from public.php on 2026-03-15
     // Resolve APK using stored_filename from meta, fall back to legacy name
@@ -14,7 +15,8 @@
     $scheme     = ((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')
                || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])&&$_SERVER['HTTP_X_FORWARDED_PROTO']==='https')
                || (($_SERVER['SERVER_PORT']??80)==443)) ? 'https' : 'http';
-    $appUrl     = $scheme.'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'];
+    // Shared as a link and a QR code: the address a phone can reach.
+    $appUrl     = dn_with_override($scheme.'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'], $config);
     $apkUrl     = $appUrl.'?page=download_app';
     $installUrl = $appUrl.'?page=install';
     $qrUrl      = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data='.urlencode($installUrl);

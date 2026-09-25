@@ -806,6 +806,16 @@ class DishNetAiBrain
                       . ' EXACTLY as written above, character for character — never'
                       . ' reformat it, never add or remove spaces, never shorten it.'
                       . ' If you are not certain of a digit, do not write it: ' . $esc . '.';
+                // 5.18.31: a USSD code, as Airtel Money's *185*9#. WhatsApp
+                // pairs asterisks into bold, so a code sharing its line with
+                // any other asterisk (a bold merchant ID, say) loses one and
+                // dials something else. Only when the answer carries a code:
+                // an answer without one reads exactly as before.
+                if (preg_match_all('/\*\d+(?:\*\d+)*#/', $set, $ussd) > 0) {
+                    $out .= ' Write the USSD code ' . implode(' and ', array_values(array_unique($ussd[0])))
+                          . ' exactly as written, and never on a line that has any other asterisk:'
+                          . ' WhatsApp turns asterisks into bold, and a code that loses one cannot be dialled.';
+                }
             }
             $out .= ' If you cannot answer fully from this, ' . $esc . ".\n";
         }

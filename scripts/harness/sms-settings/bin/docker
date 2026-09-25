@@ -1,0 +1,219 @@
+#!/bin/bash
+# Fake `docker` for the sms-settings harness (scripts/harness/sms-settings),
+# copied from the operator-app harness's stub and extended: `docker restart`
+# now covers dnb-staging-app too, and records which tree each app process
+# serves, as the API's and the worker's already are. Only the calls the staging scripts
+# make are implemented; anything else fails loudly, so a new call cannot pass
+# silently. Every process is REAL:
+#   dnb-staging-api     php -S on 127.0.0.1:8099 (serve.php), with exactly the
+#                       environment the call names;
+#   dnb-staging-app     php -S on EACH address its -p flags publish (as
+#                       docker-proxy would), with exactly its environment;
+#   dnb-staging-worker  the real bin/worker.php --once, with exactly its
+#                       environment: its log is the worker's own first lines,
+#                       and a configuration it refuses leaves it not running.
+S="${HSIM:?}/state"; APPDIR=/opt/dnb-staging/app; DB="${HSIM_DB:-dnb_hsim}"; NGW="${HSIM_NGW:-127.0.0.1}"
+echo "$(date +%T) docker $*" >> "$S/calls.log"
+api_up() { [ -f "$S/api.pid" ] && kill -0 "$(cat "$S/api.pid")" 2>/dev/null; }
+app_up() { [ -f "$S/app.pids" ] && [ -s "$S/app.pids" ] && while read -r p; do kill -0 "$p" 2>/dev/null || exit 1; done < "$S/app.pids"; }
+worker_up() { [ -f "$S/worker.running" ]; }
+now() { date -u +%Y-%m-%dT%H:%M:%S.%NZ; }
+nosuch() { echo "Error: No such object: $1" >&2; exit 1; }
+stamp() {  # stamp <name>: the container's StartedAt moves (restart or recreate)
+  local t; t=$(now)
+  if grep -q "|$1|" "$S/containers"; then
+    awk -F'|' -v n="$1" -v t="$t" 'BEGIN{OFS="|"} $2==n {$4=t} {print}' "$S/containers" > "$S/containers.new" && mv "$S/containers.new" "$S/containers"
+  else
+    echo "c$RANDOM|$1|running|$t|0" >> "$S/containers"
+  fi
+}
+start_worker() {  # the real worker, one pass, with the recorded environment
+  local list; mapfile -t list < "$S/worker.env"
+  rm -f "$S/worker.running"
+  if ( cd "$1" && exec env -i "${list[@]}" php bin/worker.php --once ) > "$S/worker.log" 2>&1; then
+    touch "$S/worker.running"
+  fi
+  echo "$1" > "$S/worker.appdir"
+  # Docker mounts the directory the container starts on and keeps it after a rename:
+  # the tree this worker runs is known by its inode, not by its path.
+  stat -c %i "$1" > "$S/worker.inode"
+}
+kill_app() {
+  [ -f "$S/app.pids" ] && while read -r p; do kill "$p" 2>/dev/null; for _ in $(seq 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done; done < "$S/app.pids"
+  rm -f "$S/app.pids"
+}
+cmd=$1; shift
+case "$cmd" in
+  inspect)
+    fmt=""; names=()
+    while [ $# -gt 0 ]; do case "$1" in -f|--format) fmt=$2; shift 2;; *) names+=("$1"); shift;; esac; done
+    for n in "${names[@]}"; do
+      case "$fmt" in
+        '{{.State.Running}}')
+          case "$n" in dnb-staging-postgres) echo true;;
+            dnb-staging-worker) grep -q '|dnb-staging-worker|' "$S/containers" || nosuch "$n"; worker_up && echo true || echo false;;
+            dnb-staging-api) api_up && echo true || nosuch "$n";;
+            dnb-staging-app) grep -q '|dnb-staging-app|' "$S/containers" || nosuch "$n"; app_up && echo true || echo false;;
+            *) nosuch "$n";; esac;;
+        '{{.State.Status}}')
+          case "$n" in dnb-staging-app) grep -q '|dnb-staging-app|' "$S/containers" || nosuch "$n"; app_up && echo running || echo exited;;
+            *) line=$(grep "|$n|" "$S/containers") || nosuch "$n"; echo "$line" | cut -d'|' -f3;; esac;;
+        '{{.State.StartedAt}}')
+          line=$(grep "|$n|" "$S/containers") || nosuch "$n"; echo "$line" | cut -d'|' -f4;;
+        '{{range .Config.Env}}{{println .}}{{end}}')
+          case "$n" in
+            dnb-staging-api) api_up || nosuch "$n"; cat "$S/api.env"; echo;;
+            dnb-staging-worker) grep -q '|dnb-staging-worker|' "$S/containers" || nosuch "$n"; cat "$S/worker.env"; echo;;
+            dnb-staging-app) grep -q '|dnb-staging-app|' "$S/containers" || nosuch "$n"; cat "$S/app.env"; echo;;
+            *) nosuch "$n";;
+          esac;;
+        '{{json .HostConfig.PortBindings}}')
+          [ "$n" = dnb-staging-app ] && [ -f "$S/app.ports" ] || nosuch "$n"; cat "$S/app.ports";;
+        '{{.Name}}|{{.State.Status}}|{{.State.StartedAt}}|{{.RestartCount}}')
+          line=$(grep "^$n|" "$S/containers") || nosuch "$n"
+          IFS='|' read -r _id name st started rc <<< "$line"; echo "/$name|$st|$started|$rc";;
+        *) echo "STUB: unsupported inspect format: $fmt" >&2; exit 99;;
+      esac
+    done;;
+  image) [ "$1" = inspect ] && [ "$2" = dnb-staging-php:8.3 ] && { echo '[{}]'; exit 0; }; echo "Error: No such image" >&2; exit 1;;
+  network)
+    [ "$1" = inspect ] || { echo "STUB: network $*" >&2; exit 99; }
+    case "$2" in dnb-staging) echo "$NGW";; bridge) echo "${HSIM_BRIDGE_GW:-172.17.0.1}";; *) echo "Error: network $2 not found" >&2; exit 1;; esac;;
+  service)
+    case "$1" in
+      ls) echo "easypanel_traefik";;
+      inspect) [ "$2" = easypanel_traefik ] || { echo "Error: no such service: $2" >&2; exit 1; }
+               echo "[{\"Protocol\":\"tcp\",\"TargetPort\":443,\"PublishedPort\":443,\"PublishMode\":\"${HSIM_PUBLISH_MODE:-host}\"},{\"Protocol\":\"tcp\",\"TargetPort\":80,\"PublishedPort\":80,\"PublishMode\":\"${HSIM_PUBLISH_MODE:-host}\"}]";;
+      *) echo "STUB: service $*" >&2; exit 99;;
+    esac;;
+  ps)
+    case "$1" in -aq) cut -d'|' -f1 "$S/containers";; --format) cut -d'|' -f2 "$S/containers";; *) echo "STUB: ps $*" >&2; exit 99;; esac;;
+  logs)
+    name=""; tl=""
+    while [ $# -gt 0 ]; do case "$1" in --tail) tl=$2; shift 2;; --since) shift 2;; -*) shift;; *) name=$1; shift;; esac; done
+    case "$name" in
+      dnb-staging-api) [ -f "$S/api.log" ] || exit 0; if [ -n "$tl" ]; then tail -n "$tl" "$S/api.log"; else cat "$S/api.log"; fi;;
+      dnb-staging-app) cat "$S/app.log" 2>/dev/null || true;;
+      *traefik*) cat "$S/traefik.log" 2>/dev/null || true;;
+      dnb-staging-worker) cat "$S/worker.log" 2>/dev/null || true;;
+      *) echo "Error: No such container: $name" >&2; exit 1;;
+    esac;;
+  exec)
+    stdin=0; pgopt=""
+    while [ $# -gt 0 ]; do
+      case "$1" in -i) stdin=1; shift;; -e) case "$2" in PGOPTIONS=*) pgopt=${2#PGOPTIONS=};; *) echo "STUB: exec -e $2" >&2; exit 99;; esac; shift 2;; *) break;; esac
+    done
+    c=$1; shift; [ "$c" = dnb-staging-postgres ] && [ "$1" = psql ] || { echo "STUB: exec $c $*" >&2; exit 99; }; shift
+    role=""; d=""; args=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -U) role=$2; shift 2;; -d) d=$2; shift 2;;
+        -Atc) args+=(-A -t -c "$2"); shift 2;; -c) args+=(-c "$2"); shift 2;;
+        -v) args+=(-v "$2"); shift 2;;
+        -X|-A|-t|-q|-w) args+=("$1"); shift;;
+        *) echo "STUB: psql arg $1" >&2; exit 99;;
+      esac
+    done
+    [ "$d" = dnb ] || { echo "psql: error: FATAL:  database \"$d\" does not exist" >&2; exit 2; }
+    [ -n "$role" ] || { echo "STUB: psql without -U" >&2; exit 99; }
+    if [ "$stdin" = 0 ]; then exec < /dev/null; fi
+    PGOPTIONS="$pgopt" exec psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U "$role" -d "$DB" "${args[@]}";;
+  restart)
+    for n in "$@"; do
+      grep -q "|$n|" "$S/containers" || { echo "Error response from daemon: No such container: $n" >&2; exit 1; }
+      case "$n" in
+        dnb-staging-api)
+          api_up || { echo "Error response from daemon: container $n is not running" >&2; exit 1; }
+          p=$(cat "$S/api.pid"); kill "$p"; for _ in $(seq 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+          mapfile -t list < "$S/api.env"
+          # A restart re-resolves the bind mount: the process now serves whatever /opt/dnb-staging/app IS.
+          ( cd "$APPDIR" && exec setsid nohup env -i "${list[@]}" php -S 127.0.0.1:8099 plugin/bin/serve.php ) >> "$S/api.log" 2>&1 < /dev/null &
+          echo $! > "$S/api.pid";;
+        dnb-staging-worker) start_worker "$APPDIR";;
+        dnb-staging-app)
+          app_up || { echo "Error response from daemon: container $n is not running" >&2; exit 1; }
+          kill_app; mapfile -t list < "$S/app.env"; : > "$S/app.pids"
+          # A restart re-resolves the bind mount: each published address is served
+          # again from whatever /opt/dnb-staging/app IS now.
+          for hp in $(grep -oE '"HostIp":"[^"]*","HostPort":"[0-9]+"' "$S/app.ports" | sed -E 's/"HostIp":"([^"]*)","HostPort":"([0-9]+)"/\1:\2/'); do
+            ( cd "$APPDIR" && exec setsid nohup env -i "${list[@]}" php -S "$hp" plugin/bin/serve-app.php ) >> "$S/app.log" 2>&1 < /dev/null &
+            echo $! >> "$S/app.pids"
+          done;;
+        *) echo "STUB: restart $n" >&2; exit 99;;
+      esac
+      stamp "$n"; echo "$n"
+    done;;
+  rm)
+    [ "$1" = -f ] || { echo "STUB: rm $*" >&2; exit 99; }
+    case "$2" in
+      dnb-staging-api)
+        if api_up; then p=$(cat "$S/api.pid"); kill "$p"; for _ in $(seq 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done; fi
+        rm -f "$S/api.pid" "$S/api.env" "$S/api.log";;
+      dnb-staging-app)
+        grep -q '|dnb-staging-app|' "$S/containers" || { echo "Error response from daemon: No such container: $2" >&2; exit 1; }
+        kill_app; rm -f "$S/app.env" "$S/app.ports" "$S/app.log";;
+      dnb-staging-worker)
+        grep -q '|dnb-staging-worker|' "$S/containers" || { echo "Error response from daemon: No such container: $2" >&2; exit 1; }
+        rm -f "$S/worker.running" "$S/worker.env";;
+      *) echo "STUB: rm $*" >&2; exit 99;;
+    esac
+    sed -i "/|$2|/d" "$S/containers"; echo "$2";;
+  run)
+    detach=0; name=""; files=(); envs=(); appdir=$APPDIR; ports=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -d) detach=1; shift;; --rm) shift;; --name) name=$2; shift 2;;
+        -v) case "$2" in *:/app:ro|*:/app) appdir=${2%%:/app*};; esac; shift 2;;   # which tree is mounted at /app
+        -p) ports+=("$2"); shift 2;;
+        --network|--restart|-w) shift 2;;
+        --env-file) files+=("$2"); shift 2;; -e) envs+=("$2"); shift 2;;
+        -*) echo "STUB: unknown run flag $1" >&2; exit 99;; *) break;;
+      esac
+    done
+    img=$1; shift; [ "$img" = dnb-staging-php:8.3 ] || { echo "Unable to find image '$img'" >&2; exit 125; }
+    list=("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "PHP_INI_DIR=/usr/local/etc/php")
+    for f in "${files[@]}"; do
+      [ -f "$f" ] || { echo "docker: open $f: no such file or directory." >&2; exit 125; }
+      while IFS= read -r l || [ -n "$l" ]; do case "$l" in ''|\#*) continue;; esac; list+=("$l"); done < "$f"
+    done
+    list+=("${envs[@]}")
+    if [ "$detach" = 1 ]; then
+      grep -q "|$name|" "$S/containers" && [ "$name" != dnb-staging-api ] && { echo "docker: Error response from daemon: Conflict. The container name \"/$name\" is already in use." >&2; exit 125; }
+      case "$name" in
+        dnb-staging-api)
+          api_up && { echo "docker: Error response from daemon: Conflict. The container name \"/dnb-staging-api\" is already in use." >&2; exit 125; }
+          [ "$1 $2 $4" = "php -S plugin/bin/serve.php" ] || { echo "STUB: run -d command $*" >&2; exit 99; }
+          : > "$S/api.log"
+          ( cd "$appdir" && exec setsid nohup env -i "${list[@]}" php -S 127.0.0.1:8099 plugin/bin/serve.php ) >> "$S/api.log" 2>&1 < /dev/null &
+          echo $! > "$S/api.pid"; printf '%s\n' "${list[@]}" > "$S/api.env";;
+        dnb-staging-app)
+          [ "$1 $2 $4" = "php -S plugin/bin/serve-app.php" ] || { echo "STUB: run -d command $*" >&2; exit 99; }
+          cport=${3##*:}; : > "$S/app.log"; : > "$S/app.pids"; json=""
+          for p in "${ports[@]}"; do   # host-ip:host-port:container-port, as docker-proxy publishes it
+            hip=${p%%:*}; rest=${p#*:}; hport=${rest%%:*}
+            [ "$hport" = "$cport" ] || { echo "STUB: port mapping $p" >&2; exit 99; }
+            ( cd "$appdir" && exec setsid nohup env -i "${list[@]}" php -S "$hip:$hport" plugin/bin/serve-app.php ) >> "$S/app.log" 2>&1 < /dev/null &
+            echo $! >> "$S/app.pids"
+            json="$json${json:+,}{\"HostIp\":\"$hip\",\"HostPort\":\"$hport\"}"
+          done
+          echo "{\"$cport/tcp\":[$json]}" > "$S/app.ports"
+          printf '%s\n' "${list[@]}" > "$S/app.env";;
+        dnb-staging-worker)
+          [ "$1 $2" = "php bin/worker.php" ] || { echo "STUB: run -d command $*" >&2; exit 99; }
+          printf '%s\n' "${list[@]}" > "$S/worker.env"; start_worker "$appdir";;
+        *) echo "STUB: run -d $name" >&2; exit 99;;
+      esac
+      stamp "$name"; echo "0123456789abcdef$RANDOM"
+    else
+      if [ -n "${HSIM_PRE_INSTALL_SQL:-}" ] && [ "$3" = install ]; then
+        psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U postgres -d "$DB" -c "$HSIM_PRE_INSTALL_SQL" >> "$S/inject.log" 2>&1
+      fi
+      if [ -n "${HSIM_POST_INSTALL_SQL:-}" ] && [ "$3" = install ]; then
+        rc=0; ( cd "$appdir" && exec env -i "${list[@]}" "$@" ) || rc=$?
+        psql -h "${HSIM_PGHOST:-/var/tmp}" -p "${HSIM_PGPORT:-55432}" -U postgres -d "$DB" -c "$HSIM_POST_INSTALL_SQL" >> "$S/inject.log" 2>&1
+        exit $rc
+      fi
+      ( cd "$appdir" && exec env -i "${list[@]}" "$@" )
+    fi;;
+  *) echo "STUB: unsupported docker $cmd $*" >&2; exit 99;;
+esac

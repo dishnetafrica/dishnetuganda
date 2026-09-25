@@ -11,7 +11,7 @@ Built from the "Full Site Build v2" drop, then localised in-repo:
 | --- | --- |
 | Domain | All canonicals, OG tags, JSON-LD, sitemap and robots now `dishnetuganda.com` (the drop targeted `uganda.dishnetafrica.com`; tutorial pages pointed at `dishnetafrica.com`) |
 | WhatsApp | `wa.me/256705993348` / `+256 705 993 348` everywhere (was the `256700000000` placeholder; one stray South Sudan number in a tutorial fixed too) |
-| Customer portal | `https://crm.dishnetuganda.com/crm` (was the South Sudan plugin URL) |
+| Customer portal | `https://crm.dishnetuganda.com/crm/login` (was the South Sudan plugin URL). Never the bare `/crm`: the server in front of uCRM redirects it to `/crm/` on its own port, `:8443`, which has a self-signed certificate (25 Sep 2026) |
 | Images | The drop hotlinked one logo PNG from `portal.dishnetss.com` in 110 places, including favicon and og:image. Now local: `assets/img/favicon.svg` (header + icon), `og-dishnet.png` (social + JSON-LD), kit photos on starlink-kits.html |
 | Fonts | `Outfit` / `DM Sans` / `Barlow` woff2 now shipped and linked on every page — the drop named them with no font files, so every visitor got fallbacks |
 | 404 | Branded `404.html` added (the drop had none, so nginx would have served its default page) |
@@ -56,9 +56,9 @@ Prices and the product list live in uCRM only.
 | Item | Where |
 | --- | --- |
 | Email `info@dishnetafrica.com` | 45 files — confirm this mailbox is monitored for Uganda enquiries |
-| APK | drop the signed app at `site/dishnet-africa.apk` (get-the-app.html links it; nginx already serves `.apk` with the right MIME type) |
+| APK | not published (operator, 25 Sep 2026). `get-the-app.html` says *coming soon* with a WhatsApp "tell me" button instead of a download that 404'd. When the signed app exists: drop it at `site/dishnet-africa.apk` and put the download button back (nginx already serves `.apk` with the right MIME type) |
 | Testimonials / gallery | deliberately absent — send real Ugandan quotes and photos and the pages get built; invented ones are fake reviews |
-| Portal deep-link | once the DishNet Hybrid plugin is installed on the Uganda uCRM, point "Customer Login" at its `public.php?page=customer_portal` instead of the bare `/crm` zone |
+| Portal deep-link | once the DishNet Hybrid plugin is installed on the Uganda uCRM, point "Customer Login" at its `public.php?page=customer_portal` instead of uCRM's client zone sign-in (`/crm/login`) |
 | Website AI chat | the Sudan site's `chat.js` widget can be added once the plugin (and its `web_chat.php` + spend guard) is live on the Uganda uCRM |
 
 ## Content caveat

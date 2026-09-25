@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // Tab: settings
 // Extracted from public.php on 2026-03-15
 ?>
@@ -1564,7 +1565,7 @@ $setupLog = file_exists($setupLogFile) ? json_decode(file_get_contents($setupLog
             </button>
         </form>
         <?php if ($ourWebhook): ?>
-        <a href="<?= h(rtrim($ucrmConfig['ucrmPublicUrl'] ?? '', '/')) ?>/system/webhooks/endpoints/<?= $ourWebhook['id'] ?>" 
+        <a href="<?= h(dn_with_override(rtrim($ucrmConfig['ucrmPublicUrl'] ?? '', '/') . '/system/webhooks/endpoints/' . (int)$ourWebhook['id'], $config)) ?>"
            target="_blank" class="st-save" style="background:#6b7280;text-decoration:none;">
              View in UCRM
         </a>

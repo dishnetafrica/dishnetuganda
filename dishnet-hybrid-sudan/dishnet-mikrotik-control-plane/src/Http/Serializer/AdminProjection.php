@@ -28,6 +28,22 @@ final class AdminProjection
     private const SITE = ['id', 'customer_id', 'service_id', 'name', 'location', 'created_at'];
 
     /**
+     * The service record. `status` is what the control plane RECORDED — what it
+     * was told to set up. It is NOT a liveness signal, and no screen may read it
+     * as one: whether a HotSpot server is actually running on a router stays
+     * unmeasured until F6-B, and SignalReport keeps saying so.
+     */
+    private const SERVICE = ['id', 'customer_id', 'kind', 'status', 'started_at', 'ended_at'];
+
+    /**
+     * An operator's person, as DishNet staff see them (migration 027, docs/116
+     * D.12). `phone` is withheld — it is the authentication key (docs/100),
+     * not contact data — and so are `email` and the dead `credential_hash`.
+     */
+    private const PRINCIPAL = ['id', 'customer_id', 'kind', 'display_name', 'status',
+                               'capabilities', 'created_at', 'last_login_at'];
+
+    /**
      * The estate view of a router. Deliberately includes operational state the
      * customer projection withholds, and deliberately excludes the sealed
      * credential, which no screen renders.
@@ -115,6 +131,17 @@ final class AdminProjection
     public static function session(array $r): array  { return self::pick($r, self::SESSION); }
     public static function intent(array $r): array   { return self::pick($r, self::INTENT); }
     public static function audit(array $r): array    { return self::pick($r, self::AUDIT); }
+    public static function service(array $r): array  { return self::pick($r, self::SERVICE); }
+    public static function principal(array $r): array
+    {
+        if (array_key_exists('capabilities', $r) && !is_array($r['capabilities'])) {
+            $r['capabilities'] = \Dn\Auth\OpCapability::fromPg($r['capabilities']);
+        }
+        return self::pick($r, self::PRINCIPAL);
+    }
+    /** Detail reuses the LIST allowlist on purpose: a detail view that returned
+     *  more would be a way to reach a withheld field one row at a time. */
+    public static function voucherDetail(array $r): array { return self::pick($r, self::VOUCHER); }
 
     /** @param list<array> $rows */
     public static function many(string $kind, array $rows): array
@@ -127,6 +154,6 @@ final class AdminProjection
     {
         return array_values(array_unique(array_merge(
             self::CUSTOMER, self::SITE, self::ROUTER, self::PLAN, self::VOUCHER,
-            self::BATCH, self::SESSION, self::INTENT, self::AUDIT)));
+            self::BATCH, self::SESSION, self::INTENT, self::AUDIT, self::SERVICE, self::PRINCIPAL)));
     }
 }

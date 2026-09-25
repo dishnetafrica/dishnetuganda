@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace Dn\Auth;
 
 use Dn\Db\Database;
+use Dn\Notify\CodeEnvelope;
 
 /**
  * Turns a credential into a derived (principal, customer) pair — and nothing more.
@@ -17,17 +18,36 @@ use Dn\Db\Database;
  */
 final class Authenticator
 {
-    private const CODE_TTL  = 'PT10M';
+    /** How long a sign-in code is valid — the one number the SMS text also states. */
+    public const CODE_TTL_MINUTES = 10;
+    private const CODE_TTL  = 'PT' . self::CODE_TTL_MINUTES . 'M';
     private const TOKEN_TTL = 'P30D';
 
-    public function __construct(private Database $db) {}
+    public function __construct(private Database $db, private ?CodeEnvelope $envelope = null) {}
+
+    /**
+     * The phone as the key it is stored under. The Admin plane stores every
+     * sign-in phone in one canonical form (docs/126 D-3) and the lookup is
+     * EXACT, so the same form is applied here, where every sign-in enters
+     * (docs/127 F-5). Input with no canonical form passes on as typed, trimmed: it
+     * matches nobody, and every answer stays the same either way.
+     */
+    private static function keyOf(string $phone): string
+    {
+        return Phone::canonical($phone) ?? trim($phone);
+    }
 
     /**
      * Issue a sign-in code.
      *
-     * Returns the plaintext code for the caller to deliver by SMS. In a real
-     * deployment this goes to the SMS gateway and is never returned over HTTP;
-     * the controller decides that, not this class.
+     * The code is SEALED for the SMS outbox before the database sees it, and
+     * mt_auth_issue_code files the envelope in the same transaction as the code
+     * (migration 032); the worker sends it (docs/127 §C). Every request is
+     * sealed, registered or not, so the work — and the time — is the same.
+     *
+     * The plaintext is still returned, for the controller: it is shown only
+     * when DNB_EXPOSE_OTP is set, which the doctor blocks outside a disposable
+     * environment, and never otherwise.
      *
      * An unregistered phone gets a code row too, with no principal attached.
      * It can never verify, but it costs the same work and produces the same
@@ -35,10 +55,12 @@ final class Authenticator
      */
     public function issueCode(string $phone): string
     {
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $phone  = self::keyOf($phone);
+        $code   = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $sealed = ($this->envelope ??= new CodeEnvelope())->seal($code, $phone);
         try {
-            $this->db->one('SELECT mt_auth_issue_code(?,?,?::interval) AS id',
-                [$phone, $this->hash($code), self::CODE_TTL]);
+            $this->db->one('SELECT mt_auth_issue_code(?,?,?::interval,?) AS id',
+                [$phone, $this->hash($code), self::CODE_TTL, $sealed]);
         } catch (\PDOException $e) {
             if (($e->errorInfo[0] ?? '') === 'DN429') { throw new RateLimited('rate limited', 0, $e); }
             throw $e;
@@ -49,6 +71,7 @@ final class Authenticator
     /** @return array{token:string,principal_id:string,customer_id:string}|null */
     public function verifyCode(string $phone, string $code): ?array
     {
+        $phone = self::keyOf($phone);
         $row = $this->db->one(
             'SELECT principal_id, customer_id FROM mt_auth_verify_code(?,?)',
             [$phone, $this->hash($code)]
@@ -65,15 +88,24 @@ final class Authenticator
                 'customer_id'  => $row['customer_id']];
     }
 
-    /** @return array{principal_id:string,customer_id:string}|null */
+    /**
+     * Who this token is, RIGHT NOW. kind and capabilities come from the
+     * principal row on every call (migration 027), never from the session and
+     * never from the request: a demotion or a removed capability is enforced
+     * on the next request, exactly as a disabled status already was.
+     *
+     * @return array{principal_id:string,customer_id:string,kind:string,capabilities:list<string>}|null
+     */
     public function resolve(string $token): ?array
     {
         if ($token === '') { return null; }
         $row = $this->db->one(
-            'SELECT principal_id, customer_id FROM mt_auth_resolve_token(?)',
+            'SELECT principal_id, customer_id, kind, capabilities FROM mt_auth_resolve_token(?)',
             [$this->hash($token)]
         );
-        return $row ?: null;
+        if (!$row) { return null; }
+        $row['capabilities'] = OpCapability::fromPg($row['capabilities'] ?? null);
+        return $row;
     }
 
     public function revoke(string $token): bool

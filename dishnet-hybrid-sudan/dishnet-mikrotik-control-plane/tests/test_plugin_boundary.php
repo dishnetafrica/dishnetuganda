@@ -59,6 +59,17 @@ $routes = AdminRoutes::build(new FixedStaff(new StaffIdentity('s', StaffRole::Ad
 $declared = [];
 foreach ($m->routes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 foreach ($m->unboundWrites as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// The BOUND estate writes (G-C): router register and assign.
+foreach ($m->writeRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// The login boundary. Declared separately because it is the only part of the
+// surface with no capability — see the manifest note.
+foreach ($m->sessionRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// The DishNet staff roster (migration 026): the one capability-gated write
+// block, declared apart from estate writes because it changes identity state.
+foreach ($m->staffRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
+// SMS for sign-in codes (migration 033, docs/128): deployment configuration,
+// declared apart from both — it changes where sign-in codes go.
+foreach ($m->settingsRoutes as $r) { $declared[] = $r['method'] . ' ' . $m->apiBase . $r['path']; }
 sort($declared);
 
 $served = [];
@@ -74,13 +85,50 @@ foreach ((new ReflectionClass($routes))->getProperties() as $p) {
 sort($served);
 is_($declared, $served, 'every route the manifest declares is a route the plugin serves, and no other');
 
-is_($m->writeRoutes, [], 'the manifest declares ZERO BOUND write routes');
-is_(count($m->unboundWrites), 7, 'and seven declared-but-unbound write paths');
+// G-C (docs/118) bound the first two estate writes and 028 (docs/121) two more,
+// all router writes; 030 (docs/125) bound the three onboarding writes; docs/126
+// (J-1) bound an operator's people through migration 027's function. The
+// manifest says which function, which role, which gate and where the actor
+// comes from for each.
+is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'], $m->writeRoutes),
+    ['POST /routers', 'POST /routers/{device_id}/assign', 'POST /routers/{device_id}/state', 'POST /routers/{device_id}/actions',
+     'POST /customers', 'POST /customers/{customer_id}/services', 'POST /sites', 'POST /customers/{customer_id}/principals'],
+    'the manifest declares exactly EIGHT bound estate writes: four router writes (G-C, 028), three onboarding writes (030, docs/125) and the principals route (docs/126)');
+foreach ($m->writeRoutes as $r) {
+    $isRouter = str_starts_with($r['path'], '/routers');
+    is_([$r['role'], $r['gate'], str_contains($r['actor'] ?? '', 'authenticated staff subject')],
+        ['dnb_adminwrite', $isRouter ? 'G-C' : 'admin-write', true],
+        "{$r['path']}: dnb_adminwrite, " . ($isRouter ? 'G-C' : 'the admin-write gate') . ', actor from the identity boundary');
+    is_(in_array($r['function'], ['mt_device_register', 'mt_device_assign', 'mt_device_set_state', 'mt_device_provision_request',
+                                  'mt_admin_operator_create', 'mt_admin_service_create', 'mt_admin_site_create',
+                                  'mt_admin_principal_create'], true), true,
+        "{$r['path']} names its SECURITY DEFINER function");
+}
+is_(count($m->unboundWrites), 3, 'and three declared-but-unbound write paths (plans, voucher batches, disconnect) — /sites is bound since 030, principals since docs/126');
+is_(array_filter($m->unboundWrites, fn($w) => str_contains($w['path'], '/actions')), [], 'the router action is no longer among them');
+is_(count($m->sessionRoutes), 6,
+    'and six session paths — who am I, log in, log out, change password, enrol, confirm');
+is_(array_values(array_filter($m->sessionRoutes, fn($r) => ($r['capability'] ?? null) !== null)), [],
+    'none of the six declares a capability: a capability is what logging in GRANTS');
+// Changed DELIBERATELY with migration 026 (docs/114 §N R-7): a session is now a
+// revocable row and an audit row, written through dnb_def_staff's functions.
+// The ESTATE stays read-only, and that half is what writes.bound still asserts.
+// Since migration 033 (docs/128) the surface also carries the SMS settings,
+// Admin only — rewritten to the new truth, not deleted.
+is_($m->apiSurface, 'estate read + operator/service/location/owner create + router register/assign/lifecycle/provision; identity read-write; SMS settings read-write (Admin)',
+    'the surface says the truth: estate read, the four onboarding writes and the four router writes, identity read-write, and the SMS settings');
+is_(array_map(static fn($r) => $r['method'] . ' ' . $r['path'] . ' ' . $r['capability'], $m->settingsRoutes),
+    ['GET /settings/sms sms.manage', 'POST /settings/sms sms.manage'],
+    'the SMS settings are exactly one read and one write, both sms.manage');
+is_(count($m->writeRoutes), 8, 'and the only estate writes bound are those eight');
+is_(count($m->staffRoutes), 7, 'seven staff-roster routes are declared');
+is_(array_values(array_unique(array_column($m->staffRoutes, 'capability'))), ['staff.manage'],
+    'every one of them gated on staff.manage, which only Admin carries');
 
 // The honest part: those paths exist. Prove each answers 501 and writes nothing.
 $reqW = new Request('POST', '/', [], [], [], '127.0.0.1');
 foreach ($m->unboundWrites as $w) {
-    $path = str_replace(['{device_id}', '{session_id}'],
+    $path = str_replace(['{device_id}', '{session_id}', '{customer_id}'],
                         '00000000-0000-4000-8000-000000000000', $m->apiBase . $w['path']);
     $mm = $routes->match($w['method'], $path);
     is_($mm !== null, true, "declared write path is routed: {$w['method']} {$w['path']}");
@@ -142,8 +190,13 @@ foreach (['/api/v1/admin/routers', '/api/v1/admin/network-signals', '/api/v1/adm
 }
 
 $entry = file_get_contents($root . '/' . $m->apiEntrypoint);
-is_(str_contains($entry, 'new DenyAllIdentity()'), true,
-    'the entrypoint binds DenyAllIdentity as its default');
+$factory = file_get_contents($root . '/src/Admin/StaffIdentityFactory.php');
+is_(str_contains($entry, 'StaffIdentityFactory::fromEnvironment()'), true,
+    'the entrypoint chooses its identity through the one factory');
+is_(str_contains($factory, 'new DenyAllIdentity()'), true,
+    'and the factory binds DenyAllIdentity as its default');
+is_(preg_match('/DN_STAFF_IDENTITY[^;]*\n[^;]*DenyAllIdentity|\$mode === \'\'/', $factory) === 1, true,
+    'reached only when DN_STAFF_IDENTITY is unset — the real provider is selected, never assumed');
 is_(str_contains($entry, 'Database::adminApi()'), true,
     'and reads through dnb_adminapi, which holds no table privilege');
 is_(str_contains($entry, 'Database::owner()') || str_contains($entry, 'Database::admin()'), false,
@@ -192,7 +245,7 @@ foreach ($inv as $x) {
 }
 
 t('4b. last_seen_at is claimed unwritten — prove the claim');
-// The panel tells an operator that this column is never written. If a future
+// The panel tells DishNet staff that this column is never written. If a future
 // change starts writing it, this assertion fails and the copy gets corrected
 // rather than becoming a lie.
 $writes = [];
@@ -210,15 +263,17 @@ foreach (array_merge(glob($root . '/src/**/*.php') ?: [], glob($root . '/src/*.p
 is_($writes, [], 'nothing writes mt_devices.last_seen_at, exactly as the panel says');
 is_($byKey['last_seen']['status'], SignalReport::UNMEASURED, 'so it is declared unmeasured');
 
-t('4c. every router action is unavailable, with a reason');
+t('4c. exactly one router action is available — push_config, an intent for the worker — and every one carries a reason');
 $acts = SignalReport::actions();
 is_(count($acts), 4, 'the four actions in the brief are all represented');
 foreach ($acts as $a) {
-    is_($a['available'], false, "{$a['key']} is NOT available");
+    is_($a['available'], $a['key'] === 'push_config', "{$a['key']} is " . ($a['key'] === 'push_config' ? 'available (028, docs/121)' : 'NOT available'));
     is_(is_string($a['reason']) && strlen($a['reason']) > 20, true,
         "{$a['key']} gives a specific reason, not a shrug");
 }
-is_(SignalReport::summary()['actions_available'], 0, 'nothing is actionable in this increment');
+is_(str_contains(SignalReport::actions()[0]['reason'], 'Nothing here contacts the router'), true,
+    'and the available one says plainly that queuing it contacts no router');
+is_(SignalReport::summary()['actions_available'], 1, 'one action is actionable, derived from the inventory, not typed');
 
 // ===========================================================================
 t('5. THE PANEL TAKES THE INVENTORY FROM THE SERVER, NOT FROM A LITERAL');
@@ -233,17 +288,40 @@ is_(preg_match('/signalPanel\s*\(\s*sig/', $code), 1,
     'and the panel renders what it was given');
 
 // The decisive one: the panel must not contain its own opinion about these.
+// A POSITIVE claim is the defect; a denial is the correct copy. The earlier
+// form matched "whether a HotSpot server is running ... is not observed",
+// which is the screen saying exactly the right thing. So the window must
+// contain no negator, and — the stronger half — the verdict word a signal
+// renders must come from the server through verdictOf(), never from a literal.
+// Judged on the WHOLE LINE: a non-greedy match stops at the verb, so the
+// negator that makes it a denial often sits just past the match.
+$negated = static fn(string $l): bool =>
+    (bool) preg_match('/\b(not|never|no|none|unavailable|unmeasured|without)\b/i', $l);
+$lines = explode("\n", $code);
 foreach (['wireguard', 'WireGuard', 'RADIUS', 'HotSpot'] as $w) {
-    is_(preg_match('/' . preg_quote($w, '/') . '[^\n]{0,40}(connected|healthy|running|up\b)/i', $code), 0,
-        "the panel asserts nothing about {$w} on its own");
+    $claims = [];
+    foreach ($lines as $l) {
+        if (preg_match('/' . preg_quote($w, '/') . '[^\n]{0,60}?(connected|healthy|running|up\b)/i', $l)
+            && !$negated($l)) {
+            $claims[] = trim(substr($l, 0, 70));
+        }
+    }
+    is_($claims, [], "the panel makes no positive claim about {$w}");
+}
+is_(preg_match('/\$\{esc\(verdictOf\(x\)\)\}/', $code), 1,
+    'a signal\'s verdict word is rendered from the server, never from a literal');
+foreach (['>Connected', '>Healthy', '>Running', '>Up<'] as $lit) {
+    is_(str_contains($code, $lit), false, "no hardcoded verdict {$lit} is rendered");
 }
 is_(preg_match('/class="signal \$\{esc\(x\.status\)\}/', $code), 1,
     'the signal class comes from the server status, so the UI cannot colour it in');
 
-t('5b. the actions render inert');
-is_(preg_match('/<button[^>]*\bdisabled\b/', $code), 1, 'the action button carries disabled');
+t('5b. unavailable actions render inert; the one live control is wired only where the SERVER says available');
+is_(preg_match('/<button[^>]*\bdisabled\b/', $code), 1, 'the inert action button carries disabled');
 is_(str_contains($code, 'aria-disabled="true"'), true, 'and is disabled for assistive technology too');
-is_(preg_match('/data-action\s*=/', $code), 0, 'no action handler is wired to anything');
+is_(preg_match('/data-action\s*=/', $code), 0, 'no generic action handler is wired to anything');
+is_(preg_match_all('/data-raction=/', $code), 1, 'exactly one live action control exists (data-raction), rendered from the server inventory');
+is_(preg_match('/a\.available\s*&&\s*routerId/', $code), 1, 'and it is drawn only when the server marks the action available and a router is in view');
 
 t('5c. the navigation is two planes');
 foreach (['Network plane', 'Commercial plane'] as $sec) {
@@ -268,8 +346,13 @@ foreach (glob($root . '/panel/*') as $f) {
 $panelCode = implode("\n", array_map(
     static fn($f) => $stripJs(file_get_contents($f)),
     array_filter(glob($root . '/panel/*'), static fn($f) => str_ends_with($f, '.js'))));
+// 'SELECT ' is matched CASE-SENSITIVELY since migration 028 (docs/121 D-13):
+// the leak this guards against is SQL, which this project writes upper-case,
+// while the Assign form's <select name=…> and querySelector are HTML and DOM.
+// The control below shows the guard still catches an SQL statement.
+is_(strpos('x = "SELECT id FROM mt_devices"', 'SELECT '), 5, 'CONTROL: the case-sensitive needle does find an SQL SELECT');
 foreach (['pdo', 'pgsql', 'SELECT ', 'dnb_'] as $leak) {
-    is_(stripos($panelCode, $leak), false,
+    is_($leak === 'SELECT ' ? strpos($panelCode, $leak) : stripos($panelCode, $leak), false,
         "the panel CODE contains no {$leak} — it reaches the estate only through the API");
 }
 

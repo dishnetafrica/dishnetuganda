@@ -144,6 +144,28 @@ $FLAGS = [
         'Phone printed on quotations (unset = +211920000000, South Sudan)'],
     'quote_company_email' => ['text',
         'Reply address on quotations (unset = info@dishnetafrica.com)'],
+    // 5.18.29: the installation times in the WhatsApp a customer gets when the
+    // KYC form puts them into uCRM. Unset keeps the South Sudan lines — Fiber,
+    // Starlink and DishNet 4G, each with its days — which is what an install
+    // selling Starlink alone must not send.
+    'kyc_welcome_timeline' => ['text',
+        'Installation times in the KYC booking confirmation, sent as written ("omit" = none; '
+      . 'unset = the South Sudan Fiber, Starlink and DishNet 4G lines)'],
+    // 5.18.30: which WhatsApp messages a customer the KYC form puts into uCRM
+    // gets. Unset keeps the plugin's own — "Request Confirmed!" at once, the
+    // proforma quotation three minutes later — which is what South Sudan
+    // sends. On, exactly what a customer created in uCRM gets: "Welcome to
+    // DishNet!", then the Quotation & Order Summary with the quotation PDF.
+    'kyc_messages_like_crm' => ['bool',
+        'KYC customers get the WhatsApp a customer created in uCRM gets: "Welcome to DishNet!", then the '
+      . 'Quotation & Order Summary with its PDF (unset = the plugin\'s "Request Confirmed!" and proforma)'],
+    // 5.18.31: the Airtel Money Pay merchant ID customers pay (dial *185*9#).
+    // Printed on the WhatsApp quotation summary and in the e-mails' "How to
+    // pay"; unset prints nothing new. The assistant's answer is its own
+    // setting, ai_fact_payment, and the website has its own pay page.
+    'pay_airtel_merchant' => ['text',
+        'Airtel Money merchant ID customers pay — digits only; shown on quotations and in e-mails '
+      . 'with "dial *185*9#" (unset = not shown)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {

@@ -47,6 +47,17 @@ final class Kernel
                 fn(Database $db) => $handler($req, $db, $who));
 
         } catch (Throwable $e) {
+            // The capability floor (migration 027) refuses inside the function
+            // with SQLSTATE 42501 and a message naming the capability. That is
+            // the caller's own authorisation, so it is a 403 — the same answer
+            // the route guard gives, reached only if a guard is missing. ANY
+            // OTHER 42501 (a missing grant) stays a 500: a misconfiguration
+            // must never read as a policy refusal.
+            if ($e instanceof \PDOException
+                && (string) ($e->errorInfo[0] ?? $e->getCode()) === '42501'
+                && preg_match('/capability required: (op\.[a-z.]+)/', $e->getMessage(), $m)) {
+                return new Response(403, ['error' => 'forbidden', 'capability' => $m[1]]);
+            }
             // An internal failure must not describe itself to the caller: a
             // message like 'relation mt_devices does not exist' tells an
             // attacker the schema. Log it, return a shape that says nothing.

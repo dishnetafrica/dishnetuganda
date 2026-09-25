@@ -17,7 +17,12 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dnb_app') THEN
     -- NOBYPASSRLS is the default but is stated so the intent survives a reader
-    CREATE ROLE dnb_app LOGIN PASSWORD 'app-local-dev' NOSUPERUSER NOCREATEDB
+    -- No PASSWORD clause, deliberately (docs/97). A migration is
+    -- source-controlled and replayed identically everywhere; a credential
+    -- must be neither. rolpassword stays NULL, which under scram-sha-256
+    -- means this role cannot authenticate at all until the installer sets
+    -- a credential. Privileges are declared here; credentials are not.
+    CREATE ROLE dnb_app LOGIN NOSUPERUSER NOCREATEDB
                         NOCREATEROLE NOINHERIT NOBYPASSRLS;
   END IF;
 END $$;

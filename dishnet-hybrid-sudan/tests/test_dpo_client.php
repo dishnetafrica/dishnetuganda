@@ -61,7 +61,6 @@ function client(array $over = []): DpoClient {
         'environment'     => 'test',
         'api_create'      => $base,
         'api_verify'      => $base,
-        'pay_url'         => 'https://secure.3gdirectpay.com/payv2.php',
         'timeout'         => 5,
     ], $over));
 }
@@ -82,7 +81,7 @@ is_($r['trans_token'] !== '', 'with a transaction token');
 is_($r['trans_ref']   !== '', 'and a transaction reference to show finance');
 t('the checkout URL is DPO\'s hosted page, carrying the token',
   $c->checkoutUrl($r['trans_token']),
-  'https://secure.3gdirectpay.com/payv2.php?ID=' . $r['trans_token']);
+  'https://secure.3gdirectpay.com/payv3.php?ID=' . $r['trans_token']);
 
 echo "\nThe same reference never buys a second token\n";
 // DPO enforces CompanyRef uniqueness (code 940). A client that quietly got a
@@ -204,10 +203,14 @@ $empty = $c->verifyToken('');
 is_(!$empty['ok'] && !$empty['paid'], 'an empty token never even leaves the building');
 
 echo "\nThe wire format is DPO's, not ours\n";
+// 5.18.32: DPO's Uganda onboarding (25 Sep 2026) gives one endpoint, v6, and
+// the checkout page payv3.php. Their published common class still posts
+// verifyToken to v7 and sends customers to payv2.php; DPO's instruction for
+// this account wins, as the build spec says it must.
 $ref = new ReflectionClass('DpoClient');
 t('createToken goes to v6', $ref->getConstant('API_CREATE'), 'https://secure.3gdirectpay.com/API/v6/');
-t('verifyToken goes to v7', $ref->getConstant('API_VERIFY'), 'https://secure.3gdirectpay.com/API/v7/');
-t('checkout is the hosted page', $ref->getConstant('PAY_URL'), 'https://secure.3gdirectpay.com/payv2.php');
+t('verifyToken goes to v6 too, as DPO instructed', $ref->getConstant('API_VERIFY'), 'https://secure.3gdirectpay.com/API/v6/');
+t('checkout is the hosted page DPO named, payv3.php', $ref->getConstant('PAY_URL'), 'https://secure.3gdirectpay.com/payv3.php');
 // There is no sandbox host. A class that invented one would work in every
 // test and fail only against production.
 $src = (string)file_get_contents(dirname(__DIR__) . '/lib/DpoClient.php');

@@ -4,11 +4,36 @@
  * preserved, not redesigned. Reseller navigation and tenant management are
  * absent by decision (docs/81 §9), not by omission.
  *
- * READ ONLY. No view renders a control that changes state.
+ * Estate READS go through api.js, which stays read-only and is tested to. The
+ * estate WRITES a view renders are the four router writes of routers.js —
+ * register, assign, lifecycle state, push configuration (migration 028,
+ * docs/121) — and the three onboarding writes of onboarding.js — an operator,
+ * its HotSpot service, a location (migration 030, docs/125) — and nothing
+ * else; identity writes go through staff.js, and the SMS settings through
+ * settings.js (migration 033, docs/128). Nothing in this file contacts a
+ * router: every write is a row on the server.
  */
+import { Session, renderGate, L } from './login.js';
 import { AdminApi, S, cohort, COHORT_LABEL, contactAge, evidenceLevel } from './api.js';
+import { StaffApi, AccountApi } from './staff.js';
+import { RouterWriteApi, NEXT_STATES, STEP_MEANING, freshKey } from './routers.js';
+import { OnboardingWriteApi } from './onboarding.js';
+import { SmsSettingsApi } from './settings.js';
 
 const api = new AdminApi();
+/* The identity plane has its own client (staff.js) so that api.js stays
+ * estate read-only and a test can keep saying so. */
+const staffApi = new StaffApi();
+const accountApi = new AccountApi();
+/* The router-write client (docs/121 D-12): four operations, every one a row
+ * on the server. Kept apart from api.js so its read-only guard keeps holding. */
+const routersApi = new RouterWriteApi();
+/* The onboarding-write client (docs/125 D-11): three operations, every one a
+ * row on the server. A location is sent with its service only. */
+const onboardingApi = new OnboardingWriteApi();
+/* The SMS-settings client (docs/128): one read and one write, Admin only. The
+ * API key goes from a password field to the request body and nowhere else. */
+const smsApi = new SmsSettingsApi();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const short = id => id ? String(id).slice(0, 8) : '—';
@@ -19,17 +44,21 @@ export const NAV = [
   { sec: 'Network plane' },
   { id: 'dashboard',   label: 'Overview' },
   { id: 'routers',     label: 'Routers' },
+  { id: 'hotspot',     label: 'HotSpot' },
   { id: 'network',     label: 'Network health' },
   { id: 'intents',     label: 'Provisioning jobs' },
   { id: 'sessions',    label: 'Active sessions' },
   { id: 'diagnostics', label: 'Diagnostics' },
   { sec: 'Commercial plane' },
-  { id: 'customers',   label: 'Customers & sites' },
+  { id: 'customers',   label: 'Operators & sites' },
   { id: 'plans',       label: 'Plans' },
   { id: 'vouchers',    label: 'Vouchers' },
   { id: 'batches',     label: 'Batches' },
   { sec: 'Administration' },
   { id: 'audit',       label: 'Audit log' },
+  { id: 'staff',       label: 'DishNet staff' },
+  { id: 'sms',         label: 'SMS for sign-in' },
+  { id: 'account',     label: 'My account' },
 ];
 
 const state = { view: 'routers', arg: null, health: null, q: '', cohortFilter: null };
@@ -43,7 +72,7 @@ const state = { view: 'routers', arg: null, health: null, q: '', cohortFilter: n
 function stateBlock(res, noun) {
   const m = {
     [S.EMPTY]:        [`No ${noun} yet`, `The estate contains no ${noun}. This is a real count, not a failure.`],
-    [S.UNAUTHORIZED]: ['Not signed in',  'No staff identity was accepted. A staff identity provider has not been selected yet, so the default binding admits nobody.'],
+    [S.UNAUTHORIZED]: ['Not signed in',  'No staff identity was accepted for this request. Where no identity provider is bound the default binding admits nobody; otherwise the session has ended.'],
     [S.FORBIDDEN]:    ['Not permitted',  `Your role does not include the capability this screen needs${res.data && res.data.capability ? ' (' + esc(res.data.capability) + ')' : ''}.`],
     [S.UNAVAILABLE]:  ['Not available',  'The backend cannot answer this yet. This is not an empty estate.'],
     [S.OFFLINE]:      ['No response',    'The request did not reach the server. Nothing is known about the estate right now.'],
@@ -63,7 +92,7 @@ function table(cols, rows, rowFn) {
 
 /* ---- Routers: the fleet-centric operational view (V2's landing screen) --- */
 /* Resolve an id to the name its own projection carries. A truncated uuid in a
- * Customer column tells an operator nothing and reads like a stray identifier. */
+ * Operator column tells DishNet staff nothing and reads like a stray identifier. */
 function nameResolver(res) {
   const by = new Map(isOk(res) ? res.rows.map(x => [x.id, x.name]) : []);
   return id => by.get(id) ?? (id ? short(id) : null);
@@ -95,11 +124,11 @@ async function vRouters() {
     <button class="fl all ${state.cohortFilter ? '' : 'on'}" data-cohort="">
       <span class="fl-n">${all.length}</span><span class="fl-l">all</span></button></div>`;
 
-  return head('Routers', `${all.length} in the estate`) + cohorts + search() + (
+  return head('Routers', `${all.length} in the estate`) + takeMsg() + cohorts + search() + (
     rows.length === 0
       ? `<div class="stateblock empty"><h3>Nothing matches</h3><p>${
           esc(all.length)} routers exist; none match this filter.</p></div>`
-      : table(['Serial', 'Name', 'Model', 'State', 'Last contact', 'Customer', 'Site'], rows,
+      : table(['Serial', 'Name', 'Model', 'State', 'Last contact', 'Operator', 'Site'], rows,
           r => `<tr data-router="${esc(r.id)}">
             <td class="mono">${esc(r.serial)}</td>
             <td>${esc(r.name) || '—'}</td>
@@ -107,7 +136,8 @@ async function vRouters() {
             <td><span class="pill">${esc(r.state)}</span></td>
             <td><span class="hs ${cohort(r.last_seen_at)}"><i></i>${esc(contactAge(r.last_seen_at))}</span></td>
             <td>${esc(custName(r.customer_id)) || '—'}</td>
-            <td>${esc(siteName(r.site_id)) || '—'}</td></tr>`));
+            <td>${esc(siteName(r.site_id)) || '—'}</td></tr>`)) +
+    registerForm();
 }
 
 
@@ -136,18 +166,40 @@ function ladder(r) {
  * An unmeasured signal is drawn grey and says what would have to exist. It is
  * never drawn green and never drawn red: red would claim a fault was observed,
  * and nothing observed anything. */
-function signalPanel(sig) {
+function verdictOf(x) {
+  if (x.verdict) return x.verdict;
+  if (x.status !== 'measured') return 'not measured';
+  return x.admin_readable ? 'measured' : 'measured, not exposed';
+}
+
+/* Two audiences, one source.
+ *
+ * `concise` is the NOC view: the signal and a short verdict, nothing
+ * else. An administrator on a normal day should not have to read why a
+ * handshake timestamp is missing in order to use the screen.
+ *
+ * The full form — source, limitation, and what would be required — lives in
+ * Diagnostics, where that is exactly what someone came for. Both read the same
+ * server inventory, so the two can never disagree. */
+function signalPanel(sig, concise = false) {
   if (!sig || !sig.signals) {
     return `<div class="note">The signal inventory could not be read, so no signal is being shown.</div>`;
+  }
+  if (concise) {
+    return `<div class="signals tight">` + sig.signals.map(x => `
+      <div class="signal ${esc(x.status)}${x.status === 'measured' && !x.admin_readable ? ' unexposed' : ''}">
+        <span class="dot"></span>
+        <div><b>${esc(x.label)}</b><span class="verdict">${esc(verdictOf(x))}</span></div>
+      </div>`).join('') + `</div>
+      <div class="hint">Why a signal is unavailable, and what it would take, is in
+        <a class="lnk" data-view="diagnostics">Diagnostics</a>.</div>`;
   }
   return `<div class="signals">` + sig.signals.map(x => `
     <div class="signal ${esc(x.status)}${x.status === 'measured' && !x.admin_readable ? ' unexposed' : ''}">
       <span class="dot"></span>
       <div>
         <b>${esc(x.label)}</b>
-        <span class="verdict">${x.status === 'measured'
-          ? (x.admin_readable ? 'measured' : 'measured, not exposed')
-          : 'no signal'}</span>
+        <span class="verdict">${esc(verdictOf(x))}</span>
         ${x.reason ? `<p>${esc(x.reason)}</p>` : ''}
         ${x.source ? `<p class="src">${esc(x.source)}</p>` : ''}
         ${x.needs ? `<p class="needs">Needs: ${esc(x.needs)}</p>` : ''}
@@ -155,19 +207,80 @@ function signalPanel(sig) {
     </div>`).join('') + `</div>`;
 }
 
-/* Every action is rendered inert, with the server's reason attached.
+/* Actions, from the server inventory and nowhere else.
  *
- * They are shown rather than hidden on purpose: an operator should be able to
- * see what this product will eventually do and why it cannot do it yet. The
- * buttons carry the disabled attribute and no handler is bound to them. */
-function actionPanel(sig) {
+ * An action the SERVER marks available is live on a router's own page — and
+ * only there: the button queues a job for the worker (an intent, F2) under a
+ * key minted once per rendered page, so a double click is one job and a fresh
+ * page a fresh request. Everything else is rendered inert with the server's
+ * reason: shown rather than hidden, so DishNet staff can see what the product
+ * will eventually do and why it cannot yet. The Diagnostics page has no router
+ * in view, so every button there is inert. */
+function actionPanel(sig, routerId = null) {
   const acts = (sig && sig.actions) || [];
   if (!acts.length) return '';
-  return `<h2 class="sub">Actions</h2><div class="actions">` + acts.map(a => `
+  const key = freshKey();
+  return `<h2 class="sub">Actions</h2><div class="actions">` + acts.map(a => a.available && routerId ? `
+    <div class="action live">
+      <button class="btn live" data-raction="${esc(a.key)}" data-id="${esc(routerId)}" data-key="${esc(key)}">${esc(a.label)}</button>
+      <p>${esc(a.reason)}</p>
+    </div>` : `
     <div class="action">
       <button class="btn" disabled aria-disabled="true" title="${esc(a.reason)}">${esc(a.label)}</button>
       <p>${esc(a.reason)}</p>
     </div>`).join('') + `</div>`;
+}
+
+/* ---- Router writes (migration 028, docs/121) --------------------------- */
+/* Add a router: the bench act (docs/31 §3.1 step 11). What is typed here is the
+ * unit's IDENTITY as staged by the signed-in person — serial, model, RouterOS
+ * version, WireGuard public key, tunnel address inside 10.66.0.0/16. The server
+ * records who staged it from the session, never from this form. */
+function registerForm() {
+  return `<form class="sform" data-rform="register">
+    <h3>Add a router</h3>
+    <label>Serial <input name="serial" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{3,63}" autocapitalize="characters" spellcheck="false"></label>
+    <label>Model <input name="model" required maxlength="64" placeholder="hAP ax2"></label>
+    <label>RouterOS version <input name="ros_version" maxlength="32" placeholder="7.14.3"></label>
+    <label>WireGuard public key <input name="wg_pubkey" pattern="[A-Za-z0-9+/]{43}=" autocapitalize="none" spellcheck="false"></label>
+    <label>Tunnel address <input name="tunnel_ip" pattern="10\\.66\\.[0-9]{1,3}\\.[0-9]{1,3}" placeholder="10.66.0.21" spellcheck="false"></label>
+    <button class="btn" type="submit">Register</button>
+    <small>Recorded as staged by you and owned by nobody until it is assigned. Nothing here contacts the router.</small></form>`;
+}
+
+/* Assign to an operator: the explicit TARGET (docs/114 D-AUTH-3), chosen here by
+ * name and sent as its id. A site must belong to that operator — the server
+ * refuses any other pairing below the function (W-2). Reassignment is a
+ * legitimate act and is audited as one. */
+function assignForm(r, custs, sites) {
+  if (!isOk(custs)) return `<div class="note">Operators could not be read, so no assignment is offered.</div>`;
+  const ops = custs.rows.map(c => `<option value="${esc(c.id)}"${c.id === r.customer_id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  const sts = (isOk(sites) ? sites.rows : []).map(s =>
+    `<option value="${esc(s.id)}" data-op="${esc(s.customer_id)}"${s.id === r.site_id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  const verb = r.customer_id ? 'Reassign' : 'Assign';
+  return `<form class="sform" data-rform="assign" data-id="${esc(r.id)}">
+    <h3>${verb} to an operator</h3>
+    <label>Operator <select name="customer_id" required><option value="">— choose —</option>${ops}</select></label>
+    <label>Site <select name="site_id"><option value="">— none —</option>${sts}</select></label>
+    <label>Name shown to the operator <input name="name" maxlength="64" value="${esc(r.name ?? '')}"></label>
+    <button class="btn" type="submit">${verb}</button>
+    <small>A site must belong to the chosen operator; the server refuses any other pairing.</small></form>`;
+}
+
+/* Record the next lifecycle step a person OBSERVED (docs/121 D-3, D-10). The
+ * steps offered come from NEXT_STATES; migration 012's trigger is the authority
+ * and a refusal shows the trigger's own reason. */
+function recordPanel(r) {
+  const next = NEXT_STATES[r.state] || [];
+  if (!next.length) {
+    return `<div class="note">This router is <b>${esc(r.state)}</b>; no further step can be recorded for it.</div>`;
+  }
+  return `<div class="steps">
+    <div class="steps-head">Record the next step you observed — this router is currently <b>${esc(r.state)}</b>.
+      Nothing here contacts the router; a recorded state is what a person saw.</div>
+    ${next.map(s => `<button class="btn small${s === 'decommissioned' ? ' ghost' : ''}" data-rstate="${esc(s)}" data-id="${esc(r.id)}"
+        title="${esc(STEP_MEANING[s] || '')}">→ ${esc(s)}</button>`).join('')}
+  </div>`;
 }
 
 async function vRouter() {
@@ -194,7 +307,7 @@ async function vRouter() {
   const identity = kv([
     ['Name', r.name], ['Serial', r.serial], ['Model', r.model],
     ['RouterOS', r.ros_version], ['Lifecycle state', r.state],
-    ['Customer', custName(r.customer_id)], ['Site', siteName(r.site_id)],
+    ['Operator', custName(r.customer_id)], ['Site', siteName(r.site_id)],
   ]);
 
   /* CONNECTIVITY carries only what is recorded. The observed half of it — link
@@ -225,15 +338,130 @@ async function vRouter() {
           <td>${esc(j.attempts)}/${esc(j.max_attempts)}</td>
           <td class="mono">${esc(String(j.created_at ?? '').slice(0, 16))}</td></tr>`) : '');
 
-  return head('Router', esc(r.serial)) +
+  return head('Router', esc(r.serial)) + takeMsg() +
     `<h2 class="sub">Identity</h2>` + identity +
+    `<h2 class="sub">Assignment</h2>` + assignForm(r, custs, sites) +
     `<h2 class="sub">Connectivity</h2>` + connectivity +
     (r.wan_interface ? '' : `<div class="note">No WAN interface has been established for this
       router, so its uplink is not measurable. That is a provisioning gap, not a fault.</div>`) +
-    `<h2 class="sub">Provisioning</h2>` + ladder(r) +
+    `<h2 class="sub">Provisioning</h2>` + ladder(r) + recordPanel(r) +
     `<h2 class="sub">Operations</h2>` + operations +
-    `<h2 class="sub">Signals</h2>` + signalPanel(sig) +
-    actionPanel(sig);
+    `<h2 class="sub">Signals</h2>` + signalPanel(sig, true) +
+    actionPanel(sig, r.id);
+}
+
+/* Voucher lifecycle, as the DOMAIN currently supports it — not as the
+ * commercial model describes it. Two states are reachable; three are not, and
+ * each says what is missing. Simulating the others would make the prototype
+ * less trustworthy, not more complete. */
+function lifecyclePanel(sig) {
+  const ls = sig && sig.voucher_lifecycle;
+  if (!ls) return '';
+  const sum = sig.voucher_lifecycle_summary || {};
+  return `<div class="note">${esc(sum.note || '')}</div>
+    <div class="lifecycle">${ls.map(x => `
+      <div class="lc ${esc(x.status)}">
+        <span class="dot"></span>
+        <div><b>${esc(x.state)}</b>
+          <span class="verdict">${x.status === 'reachable' ? 'available now' : 'not reachable'}</span>
+          <p>${esc(x.via || x.blocked_by || '')}</p></div>
+      </div>`).join('')}</div>`;
+}
+
+const bytes = n => n == null ? '\u2014' :
+  n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(0) + ' MB' : n + ' B';
+
+async function vHotspot() {
+  const [svcs, plans, vous, custs, sites, sres] = await Promise.all([
+    api.services(), api.plans(), api.vouchers(), api.customers(), api.sites(), api.networkSignals()]);
+  if (!isOk(svcs)) return head('HotSpot') + stateBlock(svcs, 'service');
+  const custName = nameResolver(custs);
+  const sig = sres.status === 200 ? sres.data : null;
+  const hot = svcs.rows.filter(x => x.kind === 'mikrotik_hotspot');
+  const byState = rows => rows.reduce((a, v) => (a[v.state] = (a[v.state] || 0) + 1, a), {});
+
+  const cards = hot.map(sv => {
+    const vp = isOk(plans) ? plans.rows.filter(p => p.customer_id === sv.customer_id) : [];
+    const vv = isOk(vous) ? vous.rows.filter(v => v.customer_id === sv.customer_id) : [];
+    const c = byState(vv);
+    return `<div class="hscard">
+      <h3>${esc(custName(sv.customer_id))}</h3>
+      <div class="hsrow">
+        <div><dt>Service</dt><dd><span class="pill">${esc(sv.status)}</span>
+          <small>recorded, not observed</small></dd></div>
+        <div><dt>RADIUS</dt><dd><span class="muted">not measured</span></dd></div>
+        <div><dt>Active users</dt><dd><span class="muted">not attributable per router</span></dd></div>
+      </div>
+      <h4>Plans</h4>
+      ${vp.length ? table(['Plan', 'Duration', 'Down', 'Price', 'Active'], vp,
+        p => `<tr><td>${esc(p.name)}</td><td>${esc(Math.round(p.duration_s / 60))} min</td>
+              <td>${esc(Math.round(p.rate_down_bps / 1e6))} Mbps</td>
+              <td>${ugx(p.price_minor)}</td>
+              <td>${p.active ? 'yes' : 'retired'}</td></tr>`)
+        : `<p class="muted">No plans.</p>`}
+      <h4>Vouchers</h4>
+      <div class="vcount">${['unused', 'active', 'expired', 'revoked'].map(st =>
+        `<span class="vc"><b>${c[st] || 0}</b> ${st}</span>`).join('')}
+        <span class="vc total"><b>${vv.length}</b> total</span></div>
+    </div>`;
+  }).join('');
+
+  return head('HotSpot', `${hot.length} service${hot.length === 1 ? '' : 's'}`) +
+    `<div class="note">Service state is what the control plane <b>recorded</b>. Whether a
+      HotSpot server is running on a router is not observed by anything here, and stays
+      unavailable until the hardware gate opens.</div>` +
+    cards +
+    `<h2 class="sub">Voucher lifecycle</h2>` + lifecyclePanel(sig);
+}
+
+async function vVoucher() {
+  const [res, plans, sites, custs] = await Promise.all([
+    api.voucher(state.arg), api.plans(), api.sites(), api.customers()]);
+  if (res.state !== S.OK && !(res.data && res.data.voucher)) {
+    return head('Voucher') + stateBlock(res, 'voucher');
+  }
+  const v = res.data.voucher;
+  const planName = nameResolver(plans), siteName = nameResolver(sites),
+        custName = nameResolver(custs);
+  const f = [
+    ['Reference', short(v.id)], ['State', v.state],
+    ['Operator', custName(v.customer_id)], ['Site', siteName(v.site_id)],
+    ['Plan', planName(v.plan_id)], ['Price', ugx(v.price_minor)],
+    ['Duration', Math.round(v.duration_s / 60) + ' min'],
+    ['Issued', v.created_at], ['Activated', v.activated_at],
+    ['Expires', v.expires_at], ['Revoked', v.revoked_at],
+  ];
+  return head('Voucher', esc(short(v.id))) +
+    `<div class="kv">${f.map(([k, val]) =>
+      `<div><dt>${esc(k)}</dt><dd>${val == null || val === '' ? '\u2014' : esc(val)}</dd></div>`).join('')}</div>` +
+    `<div class="note">The voucher <b>code</b> is not shown, here or anywhere in Admin. A
+      code is a bearer credential: whoever holds it holds the access, so it stays out of
+      every path but redemption.</div>`;
+}
+
+async function vSessions() {
+  const [res, vous, sites, plans] = await Promise.all([
+    api.sessions(), api.vouchers(), api.sites(), api.plans()]);
+  if (!isOk(res)) return head('Active sessions') + stateBlock(res, 'session');
+  const vby = new Map(isOk(vous) ? vous.rows.map(v => [v.id, v]) : []);
+  const siteName = nameResolver(sites), planName = nameResolver(plans);
+  return head('Active sessions', `${res.rows.length}`) +
+    `<div class="note"><b>Router attribution unavailable.</b> RADIUS accounting carries a NAS
+      identifier, and nothing maps a NAS identifier to a device, so no session below can be
+      tied to a particular router. Site and plan are derived through the voucher.
+      Accounting source: RADIUS.</div>` +
+    table(['Session', 'Site', 'Plan', 'NAS', 'In', 'Out', 'State', 'Started'], res.rows,
+      x => {
+        const v = vby.get(x.voucher_id);
+        return `<tr>
+          <td class="mono">${esc(short(x.id))}</td>
+          <td>${esc(v ? siteName(v.site_id) : '\u2014')}</td>
+          <td>${esc(v ? planName(v.plan_id) : '\u2014')}</td>
+          <td class="mono">${esc(x.nas_identifier) || '\u2014'}</td>
+          <td>${esc(bytes(x.bytes_in))}</td><td>${esc(bytes(x.bytes_out))}</td>
+          <td><span class="pill">${esc(x.state)}</span></td>
+          <td class="mono">${esc(String(x.started_at ?? '').slice(0, 16))}</td></tr>`;
+      });
 }
 
 async function vNetwork() {
@@ -264,6 +492,8 @@ async function vDiagnostics() {
       <b>this process</b> — which adapters it loaded and which identity it accepted.</div>` +
     `<div class="kv">${rows.map(([k, v]) =>
       `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</div>` +
+    `<h2 class="sub">Why each signal is or is not available</h2>` + signalPanel(acts) +
+    `<h2 class="sub">Voucher lifecycle</h2>` + lifecyclePanel(acts) +
     actionPanel(acts);
 }
 
@@ -273,11 +503,103 @@ const list = (title, fetch, key, cols, rowFn, noun) => async () => {
   return head(title, `${res.rows.length}`) + table(cols, res.rows, rowFn);
 };
 
-const vCustomers = list('Customers & Sites', () => api.customers(), 'customer',
-  ['Name', 'Account', 'Status', 'Since'], c => `<tr>
-    <td>${esc(c.name)}</td><td class="mono">${esc(c.ucrm_client_id) || '—'}</td>
-    <td><span class="pill">${esc(c.status)}</span></td>
-    <td>${esc((c.created_at || '').slice(0, 10))}</td></tr>`, 'customers');
+/* Operators & sites (docs/125). Each row opens the operator's page. The form
+ * to add an operator is drawn on an empty estate too — the first operator has
+ * to come from somewhere — and the server's 403 is the authority on who may
+ * use it. Names already in use are remembered for the submit-time warning:
+ * nothing makes a name unique, and a duplicate operator cannot be deleted. */
+async function vCustomers() {
+  const res = await api.customers();
+  state.operatorNames = res.state === S.OK ? res.rows.map(c => String(c.name || '')) : [];
+  const msg = takeMsg();
+  if (res.state !== S.OK && res.state !== S.EMPTY) return head('Operators & Sites') + msg + stateBlock(res, 'operators');
+  const rows = res.state === S.OK
+    ? table(['Name', 'Account', 'Status', 'Since'], res.rows, c => `<tr data-operator="${esc(c.id)}">
+        <td>${esc(c.name)}</td><td class="mono">${esc(c.ucrm_client_id) || '—'}</td>
+        <td><span class="pill">${esc(c.status)}</span></td>
+        <td>${esc((c.created_at || '').slice(0, 10))}</td></tr>`)
+    : `<div class="note">No operators yet. Add the first one below.</div>`;
+  return head('Operators & Sites', `${res.rows.length}`) + msg + rows + addOperatorForm();
+}
+
+function addOperatorForm() {
+  return `<form class="sform" data-oform="operator" data-key="${esc(freshKey())}">
+    <h3>Add an operator</h3>
+    <label>Name <input name="name" required maxlength="120" placeholder="Riverside Hotel"></label>
+    <button class="btn" type="submit">Create operator</button>
+    <small>Recorded as created by you. The operator can then hold a HotSpot service and locations;
+      nobody can sign in for it yet. Nothing here contacts a router.</small></form>`;
+}
+
+/* One operator: its HotSpot service and its locations (docs/125 D-11). A
+ * location is added to a SERVICE; the server reads the operator from it, so
+ * this form sends no operator at all. */
+async function vOperator() {
+  const [op, svcs, sites, people] = await Promise.all([api.customer(state.arg), api.services(), api.sites(), api.principals()]);
+  if (!(op.data && op.data.customer)) return head('Operator') + takeMsg() + stateBlock(op, 'operator');
+  const c = op.data.customer;
+  const mine = r => r.state === S.OK ? r.rows.filter(x => x.customer_id === c.id) : [];
+  const services = mine(svcs), locations = mine(sites);
+  const active = services.filter(x => x.status === 'active');
+  const facts = `<div class="kv">${[['Status', c.status], ['Since', (c.created_at || '').slice(0, 10)],
+      ['Account', c.ucrm_client_id], ['Reference', short(c.id)]].map(([k, v]) =>
+      `<div><dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd></div>`).join('')}</div>`;
+  const svcBlock = services.length
+    ? table(['Service', 'Kind', 'Status', 'Started'], services, x => `<tr>
+        <td class="mono">${short(x.id)}</td><td>${esc(x.kind)}</td>
+        <td><span class="pill">${esc(x.status)}</span></td>
+        <td>${esc((x.started_at || '').slice(0, 10))}</td></tr>`)
+    : `<div class="note">No HotSpot service yet. A location can be added only to a service.</div>`;
+  const start = active.length || c.status !== 'active' ? '' : `<div class="actions">
+      <button class="btn live" data-oservice="start" data-id="${esc(c.id)}" data-key="${esc(freshKey())}">Start the HotSpot service</button></div>`;
+  const locBlock = locations.length
+    ? table(['Location', 'Where', 'Added'], locations, x => `<tr>
+        <td>${esc(x.name)}</td><td>${esc(x.location) || '—'}</td>
+        <td>${esc((x.created_at || '').slice(0, 10))}</td></tr>`)
+    : `<div class="note">No locations yet.</div>`;
+  const persons = mine(people);
+  const peopleBlock = people.state === S.OK || people.state === S.EMPTY
+    ? (persons.length
+        ? table(['Name', 'Role', 'Status', 'Last sign-in'], persons, x => `<tr>
+            <td>${esc(x.display_name)}</td><td>${esc(x.kind)}</td>
+            <td><span class="pill">${esc(x.status)}</span></td>
+            <td>${esc((x.last_login_at || '').slice(0, 10)) || '—'}</td></tr>`)
+        : `<div class="note">Nobody can sign in for this operator yet.</div>`)
+    : stateBlock(people, 'people');
+  return head(c.name, 'Operator') + takeMsg() + facts +
+    `<h2 class="sub">HotSpot service</h2>` + svcBlock + start +
+    `<h2 class="sub">Locations</h2>` + locBlock + addLocationForm(active) +
+    `<h2 class="sub">People who can sign in</h2>` + peopleBlock + addOwnerForm(c) +
+    `<div class="note">Routers are assigned to an operator and a location from the router's own page.</div>`;
+}
+
+/* The operator's owner (docs/126, J-1): a name and the phone number they sign
+ * in with. The copy says plainly what is still missing — nothing may imply a
+ * sign-in that cannot happen yet. */
+function addOwnerForm(c) {
+  return `<form class="sform" data-oform="owner" data-id="${esc(c.id)}">
+    <h3>Add an owner</h3>
+    <label>Name <input name="display_name" required maxlength="120" placeholder="Jane Namusoke"></label>
+    <label>Phone <input name="phone" required inputmode="tel" autocomplete="off" maxlength="32" placeholder="+256 700 123 456"></label>
+    <button class="btn" type="submit">Add owner</button>
+    <small>With the country code. This is the number they will sign in with; it is never shown again here.
+      <b>Nobody can sign in yet:</b> the operator app is not live and sign-in codes are not sent to phones
+      until a delivery channel is chosen (docs/126).</small></form>`;
+}
+
+function addLocationForm(active) {
+  if (!active.length) return '';
+  const opts = active.map(x => `<option value="${esc(x.id)}">HotSpot service ${short(x.id)}</option>`).join('');
+  return `<form class="sform" data-oform="location" data-key="${esc(freshKey())}">
+    <h3>Add a location</h3>
+    ${active.length > 1 ? `<label>Service <select name="service_id" required>${opts}</select></label>`
+                        : `<input type="hidden" name="service_id" value="${esc(active[0].id)}">`}
+    <label>Name <input name="name" required maxlength="120" placeholder="Lobby"></label>
+    <label>Where <input name="location" maxlength="200" placeholder="ground floor, main building"></label>
+    <button class="btn" type="submit">Add location</button>
+    <small>The location belongs to this service's operator; the server reads it from the service.
+      Nothing here contacts a router.</small></form>`;
+}
 
 const vPlans = list('Plans', () => api.plans(), 'plan',
   ['Name', 'Price', 'Duration', 'Down/Up', 'Devices', 'Active'], p => `<tr>
@@ -287,8 +609,8 @@ const vPlans = list('Plans', () => api.plans(), 'plan',
     <td>${esc(p.devices_per_voucher)}</td>
     <td>${p.active ? 'yes' : 'no'}</td></tr>`, 'plans');
 
-const vVouchers = list('MT Vouchers', () => api.vouchers(), 'voucher',
-  ['Reference', 'State', 'Price', 'Issued', 'Activated', 'Expires'], v => `<tr>
+const vVouchers = list('Vouchers', () => api.vouchers(), 'voucher',
+  ['Reference', 'State', 'Price', 'Issued', 'Activated', 'Expires'], v => `<tr data-voucher="${esc(v.id)}">
     <td class="mono">${short(v.id)}</td><td><span class="pill">${esc(v.state)}</span></td>
     <td>${ugx(v.price_minor)}</td><td>${esc((v.created_at||'').slice(0,16).replace('T',' '))}</td>
     <td>${esc((v.activated_at||'').slice(0,16).replace('T',' ')) || '—'}</td>
@@ -300,13 +622,6 @@ const vBatches = list('Batches', () => api.batches(), 'batch',
     <td>${esc(b.issued_count)}</td><td><span class="pill">${esc(b.state)}</span></td>
     <td>${esc((b.created_at||'').slice(0,16).replace('T',' '))}</td></tr>`, 'batches');
 
-const vSessions = list('MT Sessions', () => api.sessions(), 'session',
-  ['Reference', 'NAS', 'Address', 'In', 'Out', 'State', 'Started'], s => `<tr>
-    <td class="mono">${short(s.id)}</td><td>${esc(s.nas_identifier) || '—'}</td>
-    <td class="mono">${esc(s.ip) || '—'}</td>
-    <td>${esc(s.bytes_in)}</td><td>${esc(s.bytes_out)}</td>
-    <td><span class="pill">${esc(s.state)}</span></td>
-    <td>${esc((s.started_at||'').slice(0,16).replace('T',' '))}</td></tr>`, 'sessions');
 
 /* Intents: state, attempts and target — never payload or last_error (D-2). */
 const vIntents = list('MT Intents', () => api.intents(), 'intent',
@@ -343,10 +658,206 @@ async function vDashboard() {
      assert that any router was contacted just now.</div>`;
 }
 
-const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, plans: vPlans,
+/* -------------------------------------------------------------------------
+ * IDENTITY PLANE — DishNet staff (Admin only) and the signed-in person's own
+ * account. Everything here goes through staff.js; nothing here reads or writes
+ * the estate. A generated password is rendered ONCE from the response and is
+ * kept by nothing on this page.
+ * ---------------------------------------------------------------------- */
+const ROLES = ['admin', 'noc', 'sales', 'support'];
+const once = { text: null };   // the last one-time value to show, cleared on the next render
+
+function onceBox() {
+  if (!once.text) return '';
+  const t = once.text; once.text = null;
+  return `<div class="once"><b>Shown once — it is stored nowhere and cannot be retrieved.</b>
+    <p>${esc(t.what)}</p><code>${esc(t.value)}</code></div>`;
+}
+
+function notice(res, fallback) {
+  const d = res && res.data;
+  if (res && res.status === 409 && d) return `<div class="msg err">${esc(d.detail || 'refused')}</div>`;
+  if (res && res.status === 403 && d && d.error === 'second_factor_required')
+    return `<div class="msg err">Set up your authenticator first (My account).</div>`;
+  if (res && res.status === 403) return `<div class="msg err">Your role does not carry ${esc(d && d.capability || 'this capability')}.</div>`;
+  if (res && res.status === 501) return `<div class="msg err">${esc(d && d.detail || 'not available under this identity provider')}</div>`;
+  if (res && res.status >= 400) return `<div class="msg err">${esc(fallback || ('the server answered ' + res.status))}</div>`;
+  return '';
+}
+const pending = { msg: '' };
+/** The one message for the next render, shown once. */
+const takeMsg = () => { const m = pending.msg; pending.msg = ''; return m; };
+
+function radios(name, current) {
+  return `<span class="radios">${ROLES.map(r => `<label><input type="radio" name="${esc(name)}"
+    value="${esc(r)}" ${r === current ? 'checked' : ''}> ${esc(r)}</label>`).join('')}</span>`;
+}
+
+async function vStaff() {
+  const res = await staffApi.list();
+  if (res.state !== 'ok' && res.state !== 'empty') {
+    const map = { unauthorized: S.UNAUTHORIZED, forbidden: S.FORBIDDEN, unavailable: S.UNAVAILABLE,
+                  offline: S.OFFLINE, failed: S.FAILED };
+    return head('DishNet staff') + stateBlock({ state: map[res.state] || S.FAILED, status: res.status, data: res.data }, 'staff');
+  }
+  const me = session.identity ? session.identity.subject : '';
+  const msg = pending.msg; pending.msg = '';
+  const form = `<form class="sform" data-sform="create">
+    <h3>Add a DishNet staff member</h3>
+    <label>Username <input name="username" autocapitalize="none" pattern="[a-z0-9][a-z0-9._-]{1,62}" required></label>
+    <label>Display name <input name="display_name" required></label>
+    <label>Role ${radios('role', 'support')}</label>
+    <button class="btn" type="submit">Create</button>
+    <small>The password is generated and shown once. The new person should change it and set up an
+      authenticator on first sign-in.</small></form>`;
+  const rows = res.rows.map(x => `<tr>
+    <td class="mono">${esc(x.username)}${x.username === me ? ' <span class="pill">you</span>' : ''}</td>
+    <td>${esc(x.display_name)}</td>
+    <td><span class="pill">${esc(x.role)}</span></td>
+    <td><span class="pill ${x.status === 'disabled' ? 'failed' : ''}">${esc(x.status)}</span></td>
+    <td>${x.totp_enrolled ? 'enrolled' : '<span class="muted">not yet</span>'}</td>
+    <td class="mono">${esc(String(x.last_login_at || '').slice(0, 16).replace('T', ' ')) || '—'}</td>
+    <td class="acts">
+      ${x.status === 'active'
+        ? `<button class="btn small" data-sact="disable" data-id="${esc(x.id)}" ${x.username === me ? 'disabled aria-disabled="true" title="you cannot disable yourself"' : ''}>Disable</button>`
+        : `<button class="btn small" data-sact="enable" data-id="${esc(x.id)}">Enable</button>`}
+      <button class="btn small" data-sact="pw" data-id="${esc(x.id)}">New password</button>
+      <button class="btn small" data-sact="totp" data-id="${esc(x.id)}" ${x.totp_enrolled ? '' : 'disabled aria-disabled="true" title="no authenticator to clear"'}>Clear authenticator</button>
+      <span class="rolechange">${ROLES.filter(r => r !== x.role).map(r =>
+        `<button class="btn small ghost" data-sact="role" data-role="${esc(r)}" data-id="${esc(x.id)}">→ ${esc(r)}</button>`).join('')}</span>
+    </td></tr>`).join('');
+  return head('DishNet staff', `${res.rows.length}`) +
+    `<div class="note">DishNet's own people, who sign in here. Operators and their staff are a
+      different plane (Operators &amp; sites) and never appear in this list. Disabling a person
+      ends their live sessions at once; so does changing their role or their password.</div>` +
+    msg + onceBox() + form +
+    (res.rows.length
+      ? `<div class="tw"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th>
+          <th>Authenticator</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="stateblock empty"><h3>No staff yet</h3><p>The first administrator is created on the server with
+          <code>plugin.php staff:bootstrap</code>.</p></div>`);
+}
+
+/* SMS for sign-in codes (migration 033, docs/128). Admin only.
+ *
+ * The page says what the WORKER reported and what the outbox RECORDED — never
+ * "working" because a form was saved. The key field is a password field that
+ * is never filled in: the server does not have the key to send back, only
+ * whether one is set. */
+const SMS_SAID = {
+  set: 'Saved. The key is stored sealed and will not be shown again.',
+  replaced: 'Saved. The new key replaced the old one.',
+  removed: 'SMS is off: no sign-in code will be sent.',
+};
+async function vSms() {
+  const res = await smsApi.read();
+  if (res.state !== 'ok') {
+    const map = { unauthorized: S.UNAUTHORIZED, forbidden: S.FORBIDDEN, unavailable: S.UNAVAILABLE,
+                  offline: S.OFFLINE, failed: S.FAILED };
+    return head('SMS for sign-in') + stateBlock({ state: map[res.state] || S.FAILED, status: res.status, data: res.data }, 'settings');
+  }
+  const { sms, worker, delivery } = res.data;
+  const msg = takeMsg();
+  const on = sms.provider === 'africastalking';
+  const sandbox = on && String(sms.username || '').toLowerCase() === 'sandbox';
+  const t = v => v ? esc(String(v).slice(0, 16).replace('T', ' ')) + ' UTC' : '—';
+  // What the worker SAID it is doing, in the order that matters.
+  let wv;
+  if (worker.state === 'environment') {
+    wv = ['warn', `Set on the server (${esc(worker.detail || 'DN_SMS')}). The worker ignores this page while it is.`];
+  } else if (!worker.seen_at) {
+    wv = ['muted', 'The worker has not reported yet.'];
+  } else if (!worker.recent) {
+    wv = ['warn', `The worker last reported at ${t(worker.seen_at)}. Is it running?`];
+  } else if (worker.version !== sms.version) {
+    wv = ['warn', 'Saved. Waiting for the worker to pick it up; it checks every second.'];
+  } else if (worker.state === 'unusable') {
+    wv = ['err', 'The worker cannot use these settings: ' + esc(worker.detail || 'no reason given') + '. Nothing is sent.'];
+  } else if (worker.state === 'in_use') {
+    wv = ['ok', sandbox ? "In use by the worker. SANDBOX: codes go to the provider's simulator, not to phones."
+                        : 'In use by the worker. Whether a message arrives shows below, once one is sent.'];
+  } else {
+    wv = ['muted', 'Off: no SMS sender is set, so no sign-in code is sent and nobody can sign in to the operator app.'];
+  }
+  // Every value is escaped here, once; the markup below inserts them as they are.
+  const kv = [['SMS sender', on ? esc("Africa's Talking") : 'none'],
+              ['Username', on ? esc(sms.username) : '—'],
+              ['Sender name', on ? esc(sms.sender || '(none)') : '—'],
+              ['API key', sms.key_set ? 'set (never shown)' : 'not set'],
+              ['Last changed', sms.updated_at ? `${t(sms.updated_at)} by ${esc(sms.updated_by || '—')}` : 'never']];
+  const d = delivery;
+  const counts = [['Accepted by the provider', esc(d.sent_24h)], ['Refused or failed', esc(d.failed_24h)],
+                  ['Expired unsent', esc(d.expired_24h)], ['Numbers that cannot sign in', esc(d.no_recipient_24h)],
+                  ['Waiting now', esc(d.pending_now)],
+                  ['Last accepted', t(d.last_sent_at)],
+                  ['Last refusal', d.last_failure_at ? `${t(d.last_failure_at)}: ${esc(d.last_failure || '')}` : '—']];
+  const form = `<form class="sform" data-smsform="save">
+    <h3>Africa's Talking</h3>
+    <label>Username <input name="username" autocomplete="off" autocapitalize="none" required
+      value="${on ? esc(sms.username) : ''}"></label>
+    <label>API key <input name="api_key" type="password" autocomplete="new-password"
+      ${sms.key_set ? 'placeholder="leave empty to keep the stored key"' : 'required'}></label>
+    <label>Sender name (optional, up to 15 characters) <input name="sender" maxlength="15"
+      value="${on ? esc(sms.sender || '') : ''}"></label>
+    <button class="btn" type="submit">Save</button>
+    <small>The key is stored sealed on the server and is never shown again, here or anywhere.
+      To change it, type a new one. A new username needs its key typed again.
+      The username <b>sandbox</b> uses the provider's simulator, not phones.</small></form>`;
+  const off = on ? `<div class="note"><button class="btn small" data-smsact="off">Turn SMS off</button>
+      No sign-in code is sent while it is off.</div>` : '';
+  return head('SMS for sign-in', 'where the operator app\'s sign-in codes are sent from') + msg +
+    `<div class="msg ${wv[0]}">${wv[1]}</div>
+     <div class="kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</div>
+     <h3>Messages, last 24 hours</h3>
+     <div class="kv">${counts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</div>
+     <p class="muted">Counts only: no phone number and no code is shown here, or stored in a way this page can read.</p>` +
+    form + off;
+}
+
+async function vAccount() {
+  const id = session.identity || {};
+  const sf = id.second_factor || {};
+  const real = id.provider === 'dishnet';
+  const msg = pending.msg; pending.msg = '';
+  const kv = [['Signed in as', id.subject], ['Role', id.role], ['Identity provider', id.provider],
+              ['Authenticator', real ? (sf.enrolled ? 'enrolled' : 'not set up') : 'not applicable']];
+  let body = `<div class="kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v ?? '—')}</dd></div>`).join('')}</div>`;
+  if (!real) {
+    body += `<div class="note">This is the development identity: it has no password to change and
+      no authenticator to set up. Under the real provider this screen manages both.</div>`;
+  } else {
+    if (!sf.enrolled) {
+      body += session.enrolment
+        ? `<div class="sform"><h3>Authenticator setup</h3>${enrolMarkup(session.enrolment)}
+            <form data-sform="confirm"><label>Code from the app <input name="code" inputmode="numeric"
+              pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
+            <button class="btn" type="submit">Confirm</button></form></div>`
+        : `<div class="sform"><h3>Authenticator</h3><p>Not set up. Any time-based authenticator app works.</p>
+            <button class="btn" data-sact="enrol">Begin setup</button></div>`;
+    }
+    body += `<form class="sform" data-sform="pw"><h3>Change password</h3>
+      <label>Current <input name="current" type="password" autocomplete="current-password" required></label>
+      <label>New (12 characters or more) <input name="replacement" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button class="btn" type="submit">Change</button>
+      <small>Every other session of yours is ended when it changes; this one continues.</small></form>`;
+  }
+  return head('My account') + msg + body +
+    `<div class="note"><a class="lnk" data-act="signout">Sign out</a> — ends this session on the server, not just in this tab.</div>`;
+}
+
+function enrolMarkup(e) {
+  return `<div class="lg-key"><span>Account</span><b>${esc(e.account)}</b>
+    <span>Setup key</span><b class="mono">${esc(String(e.key).replace(/(.{4})/g, '$1 ').trim())}</b>
+    <span>Or paste</span><b class="mono small">${esc(e.uri)}</b></div>
+    <p class="muted">Shown once. An administrator can clear it later if the device is lost.</p>`;
+}
+
+const VIEWS = { routers: vRouters, router: vRouter, customers: vCustomers, operator: vOperator, plans: vPlans,
                 vouchers: vVouchers, batches: vBatches, sessions: vSessions,
                 intents: vIntents, audit: vAudit, dashboard: vDashboard,
-                network: vNetwork, diagnostics: vDiagnostics };
+                network: vNetwork, diagnostics: vDiagnostics,
+                hotspot: vHotspot, voucher: vVoucher,
+                staff: vStaff, account: vAccount, sms: vSms };
 
 function head(title, sub) {
   return `<div class="appbar"><h1>${esc(title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</h1></div>`;
@@ -368,6 +879,11 @@ export async function render() {
     : `<a class="navitem ${state.view === n.id ? 'on' : ''}" data-view="${n.id}">${esc(n.label)}</a>`
   ).join('');
   document.getElementById('evidence').innerHTML = banner();
+  const who = document.getElementById('who');
+  if (who) {
+    const id = session.identity;
+    who.innerHTML = id ? `<b>${esc(id.subject)}</b> · ${esc(id.role)}<a class="lnk" data-act="signout">Sign out</a>` : '';
+  }
   const view = VIEWS[state.view] || vRouters;
   document.getElementById('main').innerHTML = '<div class="stateblock loading"><h3>Loading…</h3></div>';
   document.getElementById('main').innerHTML = await view();
@@ -384,16 +900,282 @@ function wire() {
   document.querySelectorAll('[data-router]').forEach(tr => tr.onclick = () => {
     state.view = 'router'; state.arg = tr.dataset.router; render();
   });
+  document.querySelectorAll('[data-voucher]').forEach(tr => tr.onclick = () => {
+    state.view = 'voucher'; state.arg = tr.dataset.voucher; render();
+  });
+  document.querySelectorAll('[data-operator]').forEach(tr => tr.onclick = () => {
+    state.view = 'operator'; state.arg = tr.dataset.operator; render();
+  });
   const q = document.getElementById('q');
   if (q) {
     q.oninput = () => { state.q = q.value; };
     q.onkeyup = e => { if (e.key === 'Enter' || state.q === '') render(); };
     q.onsearch = () => render();
   }
+  document.querySelectorAll('[data-act="signout"]').forEach(a => a.onclick = async () => {
+    await session.logout(); paintGate();
+  });
+  wireIdentity();
+  wireRouters();
+  wireOnboarding();
+  wireSms();
+}
+
+/* The SMS-settings controls (docs/128). The key is read from its field once,
+ * cleared from the page before the request is sent, and never kept. */
+function wireSms() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status === 0 ? `<div class="msg err">No response from the server; nothing was saved.</div>`
+                : res.status < 300 ? (ok ? `<div class="msg ok">${esc(ok)}</div>` : '')
+                : notice(res, res.data && (res.data.detail || res.data.error));
+    render();
+  };
+  document.querySelectorAll('form[data-smsform]').forEach(f => f.onsubmit = async ev => {
+    ev.preventDefault();
+    const fd = new FormData(f);
+    const body = { provider: 'africastalking', username: String(fd.get('username') || '').trim(),
+                   sender: String(fd.get('sender') || '').trim() };
+    const key = String(fd.get('api_key') || '').trim();
+    if (key !== '') body.api_key = key;
+    f.querySelector('[name="api_key"]').value = '';
+    const btn = f.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    const r = await smsApi.save(body);
+    const said = r.data && r.status < 300
+      ? (SMS_SAID[r.data.key] || (r.data.changed ? 'Saved. The stored key is kept.' : 'Nothing changed.')) : '';
+    return after(r, said);
+  });
+  document.querySelectorAll('[data-smsact="off"]').forEach(b => b.onclick = async () => {
+    if (!confirm('Turn SMS off? No sign-in code will be sent until it is set again.')) return;
+    b.disabled = true;
+    const r = await smsApi.save({ provider: 'none' });
+    return after(r, r.data && r.data.changed ? SMS_SAID.removed : 'SMS was already off.');
+  });
+}
+
+/* The identity-plane controls. Each answer is re-rendered from the server's
+ * reply; nothing here assumes an act succeeded. */
+function wireIdentity() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status < 300 ? (ok ? `<div class="msg ok">${esc(ok)}</div>` : '') : notice(res);
+    render();
+  };
+  document.querySelectorAll('[data-sact]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.id;
+    switch (b.dataset.sact) {
+      case 'disable': return after(await staffApi.disable(id), 'Disabled; their sessions are ended.');
+      case 'enable':  return after(await staffApi.enable(id), 'Enabled.');
+      case 'role':    return after(await staffApi.setRole(id, b.dataset.role), 'Role changed; their sessions are ended.');
+      case 'totp':    return after(await staffApi.clearTotp(id), 'Authenticator cleared; they will set up a new one at next sign-in.');
+      case 'pw': {
+        const r = await staffApi.newPassword(id);
+        if (r.status === 200 && r.data) { once.text = { what: 'New password for this person:', value: r.data.password }; }
+        return after(r, '');
+      }
+      case 'enrol': {
+        await session.enrol();
+        pending.msg = session.enrolment ? '' : `<div class="msg err">${esc(session.detail || 'could not begin')}</div>`;
+        return render();
+      }
+    }
+  });
+  document.querySelectorAll('form[data-sform]').forEach(f => f.onsubmit = async ev => {
+    ev.preventDefault();
+    const fields = Object.fromEntries(new FormData(f));
+    switch (f.dataset.sform) {
+      case 'create': {
+        const r = await staffApi.create(fields);
+        if (r.status === 201 && r.data) { once.text = { what: `Password for ${r.data.staff.username}:`, value: r.data.password }; }
+        return after(r, '');
+      }
+      case 'pw':      return after(await accountApi.changePassword(fields), 'Password changed. Your other sessions are ended.');
+      case 'confirm': {
+        await session.confirm(fields.code);
+        pending.msg = session.detail ? `<div class="msg err">${esc(session.detail)}</div>` : `<div class="msg ok">Authenticator confirmed.</div>`;
+        return render();
+      }
+    }
+  });
+}
+
+/* The router-write controls (docs/121 D-12). Each answer is re-rendered from
+ * the server's reply; nothing here assumes an act succeeded. A 401 sends the
+ * whole panel back to the gate. */
+function wireRouters() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status === 0 ? `<div class="msg err">No response from the server; nothing was recorded.</div>`
+                : res.status < 300 ? (ok ? `<div class="msg ok">${esc(ok)}</div>` : '')
+                : notice(res, res.data && res.data.error);
+    render();
+  };
+  /* Empty optional fields are left out, so the server sees absence, not ''. */
+  const clean = f => Object.fromEntries([...new FormData(f)].filter(([, v]) => String(v).trim() !== ''));
+  document.querySelectorAll('form[data-rform]').forEach(f => {
+    const op = f.querySelector('select[name="customer_id"]'), site = f.querySelector('select[name="site_id"]');
+    if (op && site) {
+      const filter = () => { [...site.options].forEach(o => {
+        const mine = !o.value || o.dataset.op === op.value;
+        o.hidden = !mine; o.disabled = !mine; if (!mine && o.selected) site.value = '';
+      }); };
+      op.onchange = filter; filter();
+    }
+    f.onsubmit = async ev => {
+      ev.preventDefault();
+      const fields = clean(f);
+      switch (f.dataset.rform) {
+        case 'register': {
+          const r = await routersApi.register(fields);
+          if (r.status === 201 && r.data && r.data.router) { state.view = 'router'; state.arg = r.data.router.id; }
+          return after(r, `Registered ${fields.serial}: staged by you, owned by nobody yet.`);
+        }
+        case 'assign': return after(await routersApi.assign(f.dataset.id, fields), 'Assigned.');
+      }
+    };
+  });
+  document.querySelectorAll('[data-rstate]').forEach(b => b.onclick = async () => {
+    const s = b.dataset.rstate;
+    if (s === 'decommissioned' && !confirm('Decommission this router? No further state can be recorded for it afterwards.')) return;
+    return after(await routersApi.setState(b.dataset.id, s), `Recorded as ${s}.`);
+  });
+  document.querySelectorAll('[data-raction]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await routersApi.pushConfig(b.dataset.id, b.dataset.key);
+    return after(r, r.status === 202 ? 'Configuration job queued for the worker. It is delivered through the worker\'s binding, not from here.'
+                  : r.status === 200 ? 'That job was already queued; nothing new was added.' : '');
+  });
+}
+
+/* The onboarding-write controls (docs/125 D-11). Each answer is re-rendered
+ * from the server's reply; nothing here assumes an act succeeded. A 200 is a
+ * replay of the same form — the server recorded nothing new — and says so. */
+function wireOnboarding() {
+  const after = async (res, ok) => {
+    if (res.status === 401) { return onUnauthorized(); }
+    pending.msg = res.status === 0 ? `<div class="msg err">No response from the server; nothing was recorded.</div>`
+                : res.status < 300 ? `<div class="msg ok">${esc(ok)}</div>`
+                : notice(res, res.data && res.data.error);
+    render();
+  };
+  document.querySelectorAll('form[data-oform]').forEach(f => {
+    f.onsubmit = async ev => {
+      ev.preventDefault();
+      const val = n => { const el = f.querySelector(`[name="${n}"]`); return el ? String(el.value).trim() : ''; };
+      const btn = f.querySelector('button[type="submit"]');
+      switch (f.dataset.oform) {
+        case 'operator': {
+          const name = val('name');
+          const taken = (state.operatorNames || []).some(n => n.toLowerCase() === name.toLowerCase());
+          if (taken && !confirm(`An operator named "${name}" already exists. Create another one with the same name? An operator cannot be deleted.`)) return;
+          if (btn) btn.disabled = true;
+          const r = await onboardingApi.createOperator(name, f.dataset.key);
+          if (r.status < 300 && r.data && r.data.customer) { state.view = 'operator'; state.arg = r.data.customer.id; }
+          return after(r, r.status === 200 ? `${name} was already created from this form; nothing new was recorded.` : `Operator ${name} created.`);
+        }
+        case 'location': {
+          if (btn) btn.disabled = true;
+          const name = val('name');
+          const r = await onboardingApi.addLocation(val('service_id'), name, val('location'), f.dataset.key);
+          return after(r, r.status === 200 ? `${name} was already added from this form; nothing new was recorded.` : `Location ${name} added.`);
+        }
+        case 'owner': {
+          if (btn) btn.disabled = true;
+          const name = val('display_name');
+          const r = await onboardingApi.addOwner(f.dataset.id, name, val('phone'));
+          // A second submission of the same number is refused, never duplicated.
+          // The list re-renders from the server, so a person who WAS added shows.
+          if (r.status === 409 && r.data && r.data.detail === 'phone unavailable') {
+            pending.msg = `<div class="msg err">That phone number is already in use for a sign-in, so nothing was added.
+              If you just added this person, they are in the list below.</div>`;
+            return render();
+          }
+          return after(r, `Owner ${name} added. They cannot sign in yet: the operator app is not live and sign-in codes are not sent (docs/126).`);
+        }
+      }
+    };
+  });
+  document.querySelectorAll('[data-oservice]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await onboardingApi.startService(b.dataset.id, b.dataset.key);
+    return after(r, r.status === 200 ? 'That service was already started; nothing new was recorded.' : 'HotSpot service started.');
+  });
+}
+
+/**
+ * THE GATE RUNS FIRST, AND IT RUNS ON THE SERVER'S ANSWER.
+ *
+ * Nothing is fetched and nothing is drawn until GET /session has said who —
+ * if anyone — this browser is. The panel does not decide it is authenticated;
+ * it asks, and re-asks whenever a screen comes back 401.
+ */
+export const session = new Session();
+
+function paintGate() {
+  const html = renderGate(session);
+  const gate = document.getElementById('gate');
+  const shell = document.querySelector('.shell');
+  if (html === null) {
+    gate.innerHTML = ''; gate.hidden = true;
+    if (shell) { shell.hidden = false; }
+    return false;
+  }
+  if (shell) { shell.hidden = true; }
+  gate.hidden = false;
+  gate.innerHTML = html;
+  gate.querySelectorAll('[data-act="login"]').forEach(b => {
+    b.onclick = async () => {
+      paintGateBusy();
+      await session.login({ role: b.dataset.role });
+      if (!paintGate()) { await boot(); }
+    };
+  });
+  const creds = gate.querySelector('form[data-act="credentials"]');
+  if (creds) {
+    creds.onsubmit = async ev => {
+      ev.preventDefault();
+      const fields = Object.fromEntries(new FormData(creds));
+      paintGateBusy();
+      await session.login(fields);
+      if (!paintGate()) { await boot(); }
+    };
+  }
+  const enrol = gate.querySelector('[data-act="enrol"]');
+  if (enrol) { enrol.onclick = async () => { await session.enrol(); paintGate(); }; }
+  const confirm = gate.querySelector('form[data-act="confirm"]');
+  if (confirm) {
+    confirm.onsubmit = async ev => {
+      ev.preventDefault();
+      await session.confirm(Object.fromEntries(new FormData(confirm)).code);
+      if (!paintGate()) { await boot(); }
+    };
+  }
+  const signout = gate.querySelector('[data-act="signout"]');
+  if (signout) { signout.onclick = async () => { await session.logout(); paintGate(); }; }
+  const back = gate.querySelector('[data-act="back"]');
+  if (back) { back.onclick = async () => { await session.refresh(); if (!paintGate()) { await boot(); } }; }
+  return true;
+}
+
+function paintGateBusy() {
+  const gate = document.getElementById('gate');
+  gate.hidden = false;
+  gate.innerHTML = renderGate({ ...session, state: L.WORKING });
+}
+
+/** Any screen answering 401 sends us back to the gate rather than drawing nothing. */
+export async function onUnauthorized() {
+  await session.refresh();
+  paintGate();
 }
 
 export async function boot() {
+  await session.refresh();
+  if (paintGate()) { return; }          // not signed in: the gate is the whole UI
+
   const h = await api.health();
+  if (h.status === 401) { return onUnauthorized(); }
   state.health = h.status === 200 ? h.data : null;
   await render();
 }

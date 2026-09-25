@@ -1,0 +1,8 @@
+#!/bin/bash
+# Fake `getent` for the operator-app harness: `getent ahostsv4 <host>` answers
+# from state/dns (lines "<host> <ipv4>"), so a scenario decides whether the DNS
+# record exists. Anything else is refused loudly.
+[ "$1" = ahostsv4 ] || { echo "STUB: getent $*" >&2; exit 99; }
+f="${HSIM:?}/state/dns"
+[ -f "$f" ] || exit 2
+awk -v h="$2" '$1 == h {print $2 "     STREAM " h; print $2 "     DGRAM"; print $2 "     RAW"}' "$f" | grep . || exit 2

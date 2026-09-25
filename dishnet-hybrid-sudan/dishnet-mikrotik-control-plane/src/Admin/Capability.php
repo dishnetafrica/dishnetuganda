@@ -16,12 +16,17 @@ final class Capability
     public const CUSTOMERS_READ      = 'customers.read';
     public const CUSTOMERS_WRITE     = 'customers.write';
 
+    public const SERVICES_READ       = 'services.read';
+    /** Start an operator's HotSpot service (migration 030, docs/125 D-8). */
+    public const SERVICES_WRITE      = 'services.write';
     public const SITES_READ          = 'sites.read';
     public const SITES_WRITE         = 'sites.write';
 
     public const ROUTERS_READ        = 'routers.read';
     public const ROUTERS_REGISTER    = 'routers.register';
     public const ROUTERS_ASSIGN      = 'routers.assign';
+    /** Record where a router is in its lifecycle: a registry row a person observed, never a command (docs/121 D-2). */
+    public const ROUTERS_LIFECYCLE   = 'routers.lifecycle';
     /** Queue an intent against a router. Never a direct command — F2. */
     public const ROUTERS_ACT         = 'routers.act';
 
@@ -39,16 +44,22 @@ final class Capability
 
     public const INTENTS_READ        = 'intents.read';
     public const AUDIT_READ          = 'audit.read';
+    /** Create, disable, re-enable, re-role or reset a DishNet staff member. Admin only (docs/114 D-AUTH-7). */
+    public const STAFF_MANAGE        = 'staff.manage';
+    /** Choose where every sign-in code goes and whose SMS credit it spends (migration 033, docs/128 SS-5). Admin only. */
+    public const SMS_MANAGE          = 'sms.manage';
 
     /** @var list<string> */
     public const ALL = [
         self::HEALTH_READ,
         self::CUSTOMERS_READ, self::CUSTOMERS_WRITE,
+        self::SERVICES_READ, self::SERVICES_WRITE,
         self::SITES_READ, self::SITES_WRITE,
-        self::ROUTERS_READ, self::ROUTERS_REGISTER, self::ROUTERS_ASSIGN, self::ROUTERS_ACT,
+        self::ROUTERS_READ, self::ROUTERS_REGISTER, self::ROUTERS_ASSIGN, self::ROUTERS_LIFECYCLE, self::ROUTERS_ACT,
         self::PLANS_READ, self::PLANS_WRITE, self::PROFILES_READ, self::PROFILES_WRITE,
         self::VOUCHERS_READ, self::VOUCHERS_GENERATE, self::VOUCHERS_REVOKE,
         self::SESSIONS_READ, self::SESSIONS_DISCONNECT,
         self::INTENTS_READ, self::AUDIT_READ,
+        self::STAFF_MANAGE, self::SMS_MANAGE,
     ];
 }

@@ -293,7 +293,12 @@ ALTER TABLE mt_devices ADD CONSTRAINT mt_devices_site_needs_customer
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dnb_adminwrite') THEN
-    CREATE ROLE dnb_adminwrite LOGIN PASSWORD 'adminwrite-local-dev'
+    -- No PASSWORD clause, deliberately (docs/97). A migration is
+    -- source-controlled and replayed identically everywhere; a credential
+    -- must be neither. rolpassword stays NULL, which under scram-sha-256
+    -- means this role cannot authenticate at all until the installer sets
+    -- a credential. Privileges are declared here; credentials are not.
+    CREATE ROLE dnb_adminwrite LOGIN
                                NOSUPERUSER NOCREATEDB NOCREATEROLE
                                NOINHERIT NOBYPASSRLS;
   END IF;

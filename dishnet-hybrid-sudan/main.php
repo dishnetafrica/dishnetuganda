@@ -556,9 +556,13 @@ if (!$autoPullEnabled) {
         $regDate = substr($c['registrationDate'] ?? $c['createdAt'] ?? '', 0, 10);
         $username = trim($c['username'] ?? '');
 
-        // Extract custom attributes
+        // Extract custom attributes. A tax field is never a sales attribution:
+        // on the Uganda uCRM field 1 is "EFRIS TIN", and indexing it would list
+        // customers' tax numbers as sales people.
+        require_once __DIR__ . '/lib/EfrisClientField.php';
         $attrs   = [];
         foreach ($c['attributes'] ?? ($c['customAttributes'] ?? []) as $attr) {
+            if (EfrisClientField::of((string)($attr['key'] ?? $attr['name'] ?? '')) !== null) continue;
             $attrs[(int)($attr['customAttributeId'] ?? 0)] = trim($attr['value'] ?? '');
         }
         $salesPerson = $attrs[$ATTR_SALES_PERSON] ?? '';

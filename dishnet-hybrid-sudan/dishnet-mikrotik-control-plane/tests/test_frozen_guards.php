@@ -133,9 +133,25 @@ $cols = $owner->query(
     "SELECT table_name, column_name FROM information_schema.columns
       WHERE table_schema = 'public'
         AND column_name ~* '(password|passwd|secret|credential)'
-        AND column_name !~* 'sealed|hash'");
-is_(array_map(fn($c) => $c['table_name'] . '.' . $c['column_name'], $cols), [],
-    'no column names a password, secret or credential outside a sealed or hashed one');
+        AND column_name !~* 'sealed|hash'
+        -- a timestamp or a boolean cannot hold a credential (mt_staff.password_set_at is WHEN, not WHAT)
+        AND data_type NOT LIKE 'timestamp%' AND data_type <> 'boolean'");
+// ONE exemption, documented and controlled: mt_staff.totp_secret (migration
+// 026). A TOTP shared secret is raw bytes by construction — the HMAC needs the
+// key, and pgcrypto verifies it in place — and docs/114 §N R-5 records at-rest
+// sealing as a hardening option deliberately not built. What makes the
+// exemption safe is asserted right here: no login role can read the column.
+$named  = array_map(fn($c) => $c['table_name'] . '.' . $c['column_name'], $cols);
+$exempt = ['mt_staff.totp_secret'];
+is_(array_values(array_diff($named, $exempt)), [],
+    'no column names a password, secret or credential outside a sealed or hashed one (R-5 exemption aside)');
+is_(in_array('mt_staff.totp_secret', $named, true), true,
+    'CONTROL: the exempted column exists, so the guard is still looking at real columns');
+foreach ($owner->query("SELECT rolname FROM pg_roles WHERE rolcanlogin AND rolname LIKE 'dnb\\_%'") as $lr) {
+    is_($owner->one('SELECT has_column_privilege(?, ?, ?, ?) AS p',
+        [$lr['rolname'], 'mt_staff', 'totp_secret', 'SELECT'])['p'], false,
+        "{$lr['rolname']} cannot read mt_staff.totp_secret — the exemption rests on privilege, not on trust");
+}
 
 $plain = [];
 foreach ($src() as $f) {
