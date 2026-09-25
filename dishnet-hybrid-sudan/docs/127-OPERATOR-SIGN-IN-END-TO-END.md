@@ -5,9 +5,10 @@ the same day (§F: migration 031 and one phone form at sign-in). **Phase 2 BUILT
 the same day (§G: migration 032, sign-in codes by SMS through the worker).
 **Phase 3 approved by the operator** (*"Yes, own address (Recommended)"*),
 reviewed before code in §H and **BUILT** the same day (§I: the operator app,
-served by its own process). **Development only; nothing deployed.** Phase 4, the
-staging command, is next. Nothing here is HARDWARE VERIFIED; F6-B stays NOT
-AUTHORIZED.
+served by its own process). **Development only; nothing deployed.** **Phase 4,
+the staging command, is BUILT and rehearsed** (§J review, §K build record and
+handover); **its server run is PENDING.** Nothing here is HARDWARE VERIFIED;
+F6-B stays NOT AUTHORIZED.
 
 **Why now.** `docs/126` bound the owner login and found that an operator still
 cannot sign in: the code is delivered nowhere (§B.1 there), sign-in ignores the
@@ -807,3 +808,275 @@ part of the suite.
   creation's idempotency — stays open. The app sends no key and never retries.
 - **Vouchers are still NON-CONFORMING** (`docs/86`). The app records codes and
   says plainly that guests cannot use them yet.
+
+---
+
+## J. Phase 4 — the staging command: review before code (2026-09-24)
+
+**What it does:** one command, run as root on the server. It takes staging from
+migration 030 to 032 and puts the operator app on its own host name:
+
+- 031 and 032 are applied;
+- the SMS key is set on the worker, if the operator gives one;
+- a `dnb-staging-app` container is added;
+- a new Traefik route is written for `app-staging.dishnetuganda.com`.
+
+It is H-13 made concrete, and rehearsed before handover.
+
+### J.1 Measured before designing
+
+- **Staging already holds all four of the app's variables.** Stage 1 wrote
+  `DNB_DSN`, `DNB_TOKEN_PEPPER` and `DNB_SECRET_KEY` into `runtime.env`
+  (`docs/120` §15). The installer wrote `DNB_APP_PASS` into
+  `secrets.docker.env`. So phase 2's rule, that the installer requires
+  `DNB_SECRET_KEY`, is already met on staging, and the app needs no new secret.
+- **The worker must be recreated, not restarted, to gain the SMS settings.**
+  Docker fixes a container's environment when it is created. Stage 1 created
+  the worker with `runtime.env`, `secrets.docker.env` and
+  `DN_DELIVERY=simulated`.
+- **The worker announces its SMS binding** in its first log line, as
+  `"sms":"null"` or `"sms":"africastalking"`. It refuses to start on an
+  incomplete configuration. So the command can read the outcome off the log
+  instead of assuming it.
+- **The rehearsal cannot use `traefik-mail.yml` as the precedent.** Its sandbox
+  guard refuses to run wherever that file exists. The command therefore takes
+  its precedent from this project's own live route, `dnb-staging.yml`: an
+  `https` entrypoint, `letsencrypt`, and a backend on `172.17.0.1`. That is
+  stronger evidence than a neighbour's file.
+
+### J.2 Decisions
+
+| # | Decision | Reason |
+|---|---|---|
+| J-1 | `scripts/dnb-staging-operator-app.sh`. It builds commit `818d711`, fetched **by its hash**, and refuses unless the content digest is `2874d643…a0c4` | the 029 and 030 commands' rule: the branch moves on, the build does not |
+| J-2 | **Step 0 is read-only, and every refusal changes nothing.** It requires: the stage-1 containers; the API on the real DishNet staff login (the development posture is refused); ledger 30, last 030 (or 32, last 032, on a re-run); O-1's key; the four values in the two env files; no `DN_ALLOW_REAL_BINDINGS` and no `DNB_EXPOSE_OTP` on any staging container; our own route file live; Traefik publishing in host mode; the bridge gateway `172.17.0.1`; **`app-staging.dishnetuganda.com` resolving to `209.97.137.203`**; port 8098 free, unless `dnb-staging-app` already holds it | the operator creates the DNS record first (H-13) |
+| J-3 | **SMS is asked first, and is optional.** The username is typed visibly; **the key is typed with echo off**; the sender name is optional. The settings are held in memory and written to `env/sms.env.new` (mode 0600) only for the doctor; that file becomes `sms.env` only after the installer succeeds. **They are never printed or logged.** `SMS=skip` skips the question; with no terminal the question is skipped. A key from an earlier run is kept unless `SMS=replace`. The username `sandbox` is allowed, and reported as the provider's simulator | §E: the key is typed on the server, never in chat, a log or the terminal |
+| J-4 | The doctor runs in **production posture**, with the SMS settings: 0 blockers, and its warnings are printed | as the 030 command did |
+| J-5 | The installer applies **exactly 031 and 032**. On a refusal, the previous tree is put back, nothing is restarted, and `sms.env.new` is removed | as the 030 command did |
+| J-6 | **The command verifies independently, afterwards.** Execution tests run in transactions that are **always rolled back**, so no row survives, the worker never sees one, and nothing is sent. The checks: the catalogue; an unknown number gets `no_recipient` and no payload; an active person of an active operator gets `queued` with the payload; the same person, with the operator suspended in the same transaction, gets `no_recipient` (031); every login role, enumerated, is refused the outbox, the worker's claim and code issue, except each function's own role; residue 0. **No phone number is printed** | measured on the server, not assumed from the migration |
+| J-7 | The worker is **recreated** with stage 1's flags, plus `sms.env` when present. `DN_DELIVERY` stays `simulated`. The API is restarted on the new build | J.1 |
+| J-8 | A **new container, `dnb-staging-app`**. Its env file (mode 0600) holds exactly the four variables. It is published on `127.0.0.1:8098` and `172.17.0.1:8098` only, never a wildcard. It is verified on loopback: the headers, the 404s, a 401, and a 400 for an empty request | H-1, H-13 |
+| J-9 | A **new route file, `dnb-staging-app.yml`**; the Admin route file is not touched. **The router rules carry the app's allow-list**, so any other path is Traefik's own 404 before it reaches PHP — a second layer. `/api/v1/auth/` has its own router with a **stricter per-address rate limit**, 10 a minute with a burst of 10. `http` redirects to `https`. **No basic auth:** the app has its own sign-in, and nobody can sign in without a code sent by SMS | the stage-2 route's shape, narrowed to the app's surface |
+| J-10 | **Verification through Traefik:** a Let's Encrypt certificate for the host; the page with its CSP; the refusals **not reaching the app** (no app CSP on the answer); `http` redirected; **the sign-in rate limit measured** with empty requests, which the app answers 400 and which send nothing; Traefik not restarted | a claimed limit is not a measured one |
+| J-11 | **Exactly these containers change:** the API (restarted), the worker (recreated) and the app (new). None is removed | the stage-1 invariant |
+| J-12 | **The command never signs anyone in.** That would need a real phone and would spend SMS credit. The operator's first sign-in is the proof, and it is recorded | nothing real is contacted by the command |
+| J-13 | **Rollback is printed:** delete the route file, remove `dnb-staging-app`, recreate the worker without `sms.env`, and the usual code rollback. **031 and 032 stay**: the Admin plane never calls the sign-in functions | as before |
+
+## K. Phase 4 — the staging command: build record and handover (2026-09-25)
+
+**Nothing has run on the server.** The command is written and rehearsed in a
+sandbox. **The result is PENDING the operator's run**, and will be recorded as
+§L. Production still holds no Domain B (`docs/123` §F), and nothing here touches
+it.
+
+### K.1 What was built
+
+- **`scripts/dnb-staging-operator-app.sh`** — J-1…J-13 as one POSIX `sh`
+  command, run as root. It builds commit `818d711`, **fetched by its hash**, and
+  refuses unless the content digest is `2874d643…a0c4`. Ten steps:
+  - **0** read-only checks, in which every refusal changes nothing;
+  - **1** the SMS settings, optional, typed on the server with the key's echo
+    off;
+  - **2** the build, and its digest;
+  - **3** the new build's doctor in production posture, with the SMS settings:
+    no blocker, and its key-leak check;
+  - **4** the tree swapped and **031 and 032** applied by the installer;
+  - **5** independent verification: the catalogue, then execution tests in
+    transactions that are always rolled back;
+  - **6** the API restarted, and the worker **recreated** with the SMS settings;
+  - **7** `dnb-staging-app`, holding exactly four variables, on
+    `127.0.0.1:8098` and `172.17.0.1:8098`;
+  - **8** the route `dnb-staging-app.yml`, then verification through Traefik;
+  - **9** the result, the next steps and the rollback.
+- **`scripts/harness/operator-app/`** — the rehearsal. Only `docker`, `getent`
+  and Traefik are faked, and every process behind them is real:
+  - the Admin API is a real `php -S` of `serve.php`;
+  - the app is a real `php -S` of `serve-app.php` **on each address its `-p`
+    flags publish**;
+  - the worker is the real `bin/worker.php --once`, with exactly the
+    environment the command gave it;
+  - every database is real PostgreSQL.
+
+  `traefik.py` re-reads the route directory on every request, as the file
+  provider does after a reload. It implements the rules, the priorities and the
+  four middlewares the route uses, over TLS with a certificate issued to both
+  host names. `drive.py` runs the command on a **real pseudo-terminal** and types
+  each answer only after its prompt has appeared.
+- **The sandbox is rebuilt from nothing into today's staging state by the real
+  earlier commands**, byte for byte:
+  1. the 028 build (`1bc95524…`) and the simulated estate;
+  2. the worker as stage 1 created it;
+  3. `docs/122`'s real staff-login switch;
+  4. the 029 command as the operator ran it (`938c002`, sha256 `c558e26a…`);
+  5. the 030 command as the operator ran it (`b9aa7da`, sha256 `0000f758…`).
+
+  Snapshots are taken after 029 and after 030, and each scenario starts from
+  one. The branch is moved on in a bare clone first, so the command must build
+  the pinned commit, not the tip.
+
+### K.2 Found while building — refinements to §J
+
+1. **The probe could not tell two rows apart.** Inside one transaction `now()`
+   is constant. The first draft read *the latest outbox row for this phone* by
+   `created_at`. After the in-transaction suspension it therefore read the
+   earlier `queued` row, `suspended|queued|false`, and **stopped a correct
+   schema**. A reproduction on the development database with a single issue
+   read `suspended|no_recipient`. **The migration was right; the instrument was
+   wrong.** Each issue's own code id is now captured with `\gset`, and the
+   outbox row is read by `code_id`.
+2. **031 commits before 032 can refuse.** The installer runs each migration file
+   as its own transaction. When 032's own check refused in O8, the ledger read
+   **31**, not 30. J-2 and J-5 are refined:
+   - step 0 accepts `31|031` (*an earlier run stopped at 032*) and continues;
+   - an installer refusal now prints the ledger as it stands, and says that 031
+     stays applied.
+
+   **That is safe:** 031 replaces three sign-in functions with `CREATE OR
+   REPLACE`, under the argument lists the 030 build calls. It is 032 that drops
+   the three-argument issue function. O8 asserts that the three-argument form
+   still exists after the refusal. O8b proves that the same command, run again,
+   continues from 31 and applies only 032.
+3. **The printed rollback was in the wrong order.** The first draft recreated
+   the worker **before** putting the previous tree back.
+   - A container mounts the directory it is started on, and keeps it after a
+     rename. So the rolled-back worker would have kept running the new build.
+   - The rollback now puts the tree back first, then recreates the worker, then
+     restarts the API.
+   - **O13 runs the printed rollback exactly as printed.** It checks, **by
+     inode**, which tree the worker and the API run.
+   - **The old order**, reassembled from the same five lines, **is caught by the
+     same check.**
+4. **Ask for the log file, not the terminal** — the rule `docs/122` made binding.
+   Every refusal, and the closing lines, print the one command that shows the
+   log file. The next steps now match what was configured:
+
+   | SMS state | Step 2 of the next steps |
+   |---|---|
+   | no key | *nobody can sign in yet* |
+   | the `sandbox` username | *the code does not reach a phone* |
+   | a live key | *the code arrives by SMS* |
+
+   When a key is set, the rollback also says where it stays, and how to remove
+   it.
+5. **Harness faults, found and fixed** — these were faults in the rehearsal,
+   not in the command:
+   - **A database restored from a template must be created `OWNER dnb`.** Since
+     PostgreSQL 15, schema `public` belongs to the database owner. A copy owned
+     by `postgres` denied the installing role `CREATE`, and the installer
+     refused.
+   - **`reset.sh` drops its database as `dnb`, with the error hidden.** A
+     database left behind by an interrupted run, and owned by another role,
+     stopped the setup without a word. The superuser now removes it first.
+   - **A check called one of the harness's own shell functions inside
+     `bash -c`.** It read an empty string there, and failed a correct run.
+   - **`sed -n '1p;2p;4p;3p;5p'` prints in input order**, whatever the order of
+     its commands. It was noticed on reading, before any run. The old rollback
+     order is now assembled line by line, and its own CONTROL check requires the
+     worker's line to come third, which the `sed` form would not have produced.
+   - **Never stop a harness with a `pkill -f` pattern.** One matched the
+     launcher's own shell and ended the run silently. Runs are now stopped by
+     their recorded PID.
+
+### K.3 Evidence, per piece
+
+| Piece | Label | How |
+|---|---|---|
+| The command's control flow: refusals, the file modes, the SMS prompt with its echo off, what it prints and writes | **MEASURED in the sandbox** | a real `sh` on a real pseudo-terminal; real PostgreSQL, PHP servers and worker |
+| 031 and 032 applied by the real installer, on a database built by the real earlier commands | **MEASURED in the sandbox** | the installer's own output; the ledger; the catalogue; the execution tests |
+| The rolled-back probe: an unknown number, an active person, and a suspended operator | **MEASURED in the sandbox, and on the development database** | each outbox row read by its code id |
+| Traefik: rules, priorities, the rate limit, headers, the file reload, the certificate | **NOT MEASURED here** | the fake implements only what the route uses. **On the server the command verifies the real Traefik 3.6.7 itself:** the route active, a Let's Encrypt certificate naming the host, refusals that never reach PHP, 429s counted, no restart |
+| A container keeps the directory it was started on after a rename; a restart or a new container mounts the path afresh | **DOCUMENTED** (Linux bind mounts), emulated in the fake by inode | the restart half is corroborated on staging: after the 029 and 030 runs, `docker restart` served the new build |
+| A code reaching a phone | **UNVERIFIED** | the command never sends one (J-12). The operator's first sign-in is the proof |
+
+### K.4 The rehearsal
+
+Fourteen scenarios. Each starts from a snapshot and runs the real command.
+
+| # | The state | What it proves |
+|---|---|---|
+| O1 | today's staging state, no terminal | **the whole command:**<br>• exactly 031 and 032 applied; the catalogue;<br>• the probe: an unknown number `no_recipient`, an active person `queued`, the operator suspended `no_recipient`;<br>• **every login role in the cluster** refused, each function's own role allowed; residue 0;<br>• the worker recreated, `"sms":"null"`;<br>• the app with exactly four variables, on exactly two addresses;<br>• a certificate naming the host;<br>• through Traefik, 200 / 200 / 401 with HSTS, and five refusals that are Traefik's own 404;<br>• `http` → `https`;<br>• **15 empty sign-in requests: 10 answered 400 by the app, 5 refused 429 by Traefik**;<br>• exactly three containers new or changed, none removed;<br>• no phone number printed; the SMS question skipped, and said so |
+| O2 | a terminal, the key typed | • `sms.env` at mode 0600, with its four lines;<br>• the worker `"sms":"africastalking"`, gaining exactly the four SMS variables;<br>• the doctor's *value withheld*;<br>• **the key in no log, no screen and no evidence file**;<br>• the app holds no SMS variable |
+| O3 | the same command again | every step re-verified; the key kept; the installer applies nothing |
+| O4 | `SMS=replace`, username `sandbox` | the settings replaced; SANDBOX said at the prompt, in the result and in the next steps |
+| O5 | no DNS record | step 0 refuses and asks for the log file; nothing is built or started |
+| O6 | the post-029 state | step 0 refuses: 031 and 032 go on top of 030 only |
+| O7 | a wrong digest | refused before anything changes |
+| O8 | a default privilege planted before the installer | • 032's own check refuses;<br>• the previous tree is back, and **the ledger reads 31**;<br>• the three-argument issue function still exists;<br>• the typed key is not kept, and nothing is restarted |
+| O8b | the same command again | continues from 31, applies only 032, completes |
+| O9 | a role membership planted after the installer | • the catalogue reads clean;<br>• **only the execution test** names `dnb_app`;<br>• nothing restarted; no probe row left;<br>• the membership revoked again, because roles are cluster-wide |
+| O10 | port 8098 taken | step 0 refuses |
+| O11 | the API in the development posture | step 0 refuses |
+| O12 | Traefik publishing in ingress mode | step 0 refuses: a per-address limit would be meaningless |
+| O13 | the printed rollback, run verbatim | • the hostname withdrawn;<br>• the app gone from both addresses;<br>• the previous build back **under the worker and the API, by inode**;<br>• the staff login still answering;<br>• 031 and 032 stay.<br>The old order is caught by the same check |
+
+### K.5 Weakened copies — each caught
+
+Seven broken copies of the command, each made by exact edits whose anchors are
+asserted:
+
+| # | The breakage | Caught by |
+|---|---|---|
+| X1 | every role password handed to the app, and the command's own two checks of that removed | O1's *the app holds the four* |
+| X2 | the key read with echo on | *THE KEY: nowhere* — the screen carries it |
+| X3 | the route without its allow-list, and the command's own through-Traefik check removed | `/internal/…` reaches the app through Traefik |
+| X4 | the execution tests **commit** | the command's own residue check stops it |
+| X5 | the app published on `0.0.0.0` | the command's own publish check stops it |
+| X6 | `DNB_EXPOSE_OTP` given to the app, and the command's own variable check removed | O1's *the app holds the four* |
+| X7 | the typed SMS settings not removed when the installer refuses | O8's *no `sms.env.new`* |
+
+Two scenarios carry a control on a control of their own. In O9 the planted role
+membership leaves the catalogue reading clean, and only the execution test finds
+it. In O13 the old rollback order is caught by the inode check.
+
+### K.6 Proof runs
+
+- **The harness: 166 of 166, on two consecutive runs**, after the K.2 fixes.
+- **The runs before them, recorded rather than hidden:**
+  - one run was ended silently by a `pkill` pattern;
+  - one was stopped silently by `reset.sh`;
+  - one passed 88 and failed 42. The probe fault stopped every full run at step
+    5, so the later steps, and four of the broken copies, never ran;
+  - one passed 143 and failed 1: the harness's own role-count check.
+- **The command passes `sh -n` and `dash -n`.**
+- **No product file has changed since `818d711`.** The suite, the install test
+  and the package digest `2874d643…a0c4` are therefore §I.7's.
+
+### K.7 Handover — what the operator does
+
+1. **First, create the DNS record:** `app-staging.dishnetuganda.com` →
+   `209.97.137.203` (an A record, like the one for `portal-staging`). Until it
+   resolves, the command stops in step 0 and changes nothing.
+2. **The SMS key is optional:**
+   - if you have an Africa's Talking account, have the username and API key
+     ready;
+   - the command asks for them on the server, and the key is typed with nothing
+     shown;
+   - **never paste it into a chat**;
+   - without a key the app goes live, but nobody can sign in. Run the same
+     command again later to add it.
+3. **Run the one command as root:**
+
+   ```sh
+   curl -fsSL -o /root/dnb-operator-app.sh https://raw.githubusercontent.com/dishnetafrica/dishnetuganda/claude/study-this-jhe2eg/scripts/dnb-staging-operator-app.sh \
+     && sh /root/dnb-operator-app.sh 2>&1 | tee /root/dnb-staging-evidence/operator-app-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+
+4. **Send back the log file, not the terminal.** The command prints this line,
+   which shows it:
+   `cat "$(ls -t /root/dnb-staging-evidence/operator-app-*.log | head -1)"`.
+5. **Then the first real proof (J-12)**, only when a key is set:
+   - in the Admin panel, use *Add an owner* with your own mobile number;
+   - open `https://app-staging.dishnetuganda.com/` on that phone and ask for a
+     code;
+   - **say only what the screen shows — never the code.**
+
+### K.8 Not done here
+
+- **Nothing has run on the server.** The result is PENDING.
+- **F-8 stays OPEN:** the sign-in routes still write no audit row.
+- Not done: the J-14 staff screens, plan editing, a service worker, the guest
+  portal, billing and support.
+- **`DNB_EXPOSE_OTP` is never set**, and no code is shown to staff. Domain A's
+  WhatsApp gateway is not used.
+- F6-B is still NOT AUTHORIZED. Router delivery stays simulated. Nothing is
+  HARDWARE VERIFIED.

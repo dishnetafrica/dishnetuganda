@@ -3023,7 +3023,7 @@ nothing deployed; nothing HARDWARE VERIFIED.
    phase 3** (§I): `plugin/bin/serve-app.php`, its own process, and `public/`
    ships. F-8, the sign-in routes' audit, stays OPEN (H-10).
 
-## Operator sign-in end to end (`docs/127`) — phases 1, 2 and 3 BUILT (migrations 031, 032; the operator app served); development only
+## Operator sign-in end to end (`docs/127`) — phases 1, 2 and 3 BUILT (migrations 031, 032; the operator app served); phase 4 the staging command BUILT and rehearsed, its run PENDING
 
 The operator chose **"SMS (Recommended)"** for sign-in codes. `docs/127` designs
 all four missing pieces together, because none is useful alone, and builds them
@@ -3169,27 +3169,63 @@ The operator approved it: *"Yes, own address (Recommended)"*.
   - Headless Chromium: every screen, **zero CSP violations**.
   - Suite **40 / 3,906 / 0, twice**; install-test 86/86; package **142 files**, `2874d643…a0c4`. Not deployed.
 
-### Phase 4 — the staging command (next)
+### Phase 4 — the staging command: BUILT and rehearsed (`docs/127` §J, §K); the server run is PENDING
 
-- **Shape (H-13):**
-  - one command applies 031 and 032;
-  - it adds a `dnb-staging-app` container with only the four variables,
-    published on port **8098** (loopback and the bridge gateway, the 8099
-    precedent);
-  - it adds a Traefik route for **`app-staging.dishnetuganda.com`** with a
-    per-address rate limit;
-  - it is rehearsed in the harness with weakened copies first.
-- **Operating rules, binding on the staging command.**
+- **`scripts/dnb-staging-operator-app.sh`**, one command as root. It builds
+  `818d711`, **fetched by its hash**, and refuses unless the content digest is
+  `2874d643…a0c4`. It:
+  - applies **031 and 032**;
+  - optionally takes the SMS settings, **typed on the server with the key's
+    echo off**. They are never printed or logged, and are kept in `sms.env`
+    (mode 0600) only after the installer succeeds;
+  - **recreates** the worker with them, `DN_DELIVERY` still `simulated`;
+  - adds **`dnb-staging-app`**, holding exactly the four variables, on
+    `127.0.0.1:8098` and `172.17.0.1:8098`, never a wildcard;
+  - writes a **new** route file, `dnb-staging-app.yml`, for
+    `app-staging.dishnetuganda.com`. The app's allow-list is in the router
+    rules, sign-in has its own per-address limit (10 a minute, burst 10), `http`
+    redirects to `https`, and there is no basic auth. **The Admin route is not
+    touched.**
+- **It verifies independently, afterwards:**
+  - the catalogue;
+  - **rolled-back execution tests**: an unknown number gets `no_recipient`, an
+    active person `queued`, and the same person with the operator suspended
+    `no_recipient`;
+  - every login role, enumerated from `pg_roles`, is refused the outbox, the
+    claim and code issue, except each function's own role; residue 0;
+  - through Traefik: a Let's Encrypt certificate, the CSP, refusals that never
+    reach PHP, 429s counted, and Traefik not restarted.
+
+  **It never signs anyone in (J-12).**
+- **Operating rules, binding on the staging command and every later one:**
   - The SMS API key is **typed on the server**, never in chat, a log or the
     terminal.
   - **Never `DNB_EXPOSE_OTP` on a public host. Never show a code to staff.**
   - Domain A's WhatsApp gateway stays unused without explicit authorisation.
-- **The operator's actions:**
-  - create the DNS record for `app-staging.dishnetuganda.com` **before** the
-    command;
-  - open an SMS provider account (Africa's Talking was suggested; say first if
-    you prefer another) and request a sender name. Without a key, the app
-    signs in nobody: `DN_SMS` stays unset and no code is sent.
+- **Binding lessons, found while building:**
+  - **Inside one transaction `now()` is constant.** A probe must never find
+    *the latest row* by time. Read the row by the id the function returned.
+  - **031 commits before 032 can refuse**, because the installer runs one
+    transaction per file. Step 0 accepts `31|031`, and a refusal prints the
+    ledger. 031 keeps the signatures the 030 build calls.
+  - **A rollback puts the tree back BEFORE any container starts**, because a
+    container keeps the directory it started on after a rename. O13 runs the
+    printed rollback verbatim and checks each tree by inode.
+  - **Every refusal, and the ending, ask for the LOG FILE**, never the
+    terminal.
+- **The rehearsal, `scripts/harness/operator-app/`:**
+  - the sandbox is rebuilt by the real 028 build, the real staff-login switch,
+    and **the real 029 and 030 commands, byte for byte**;
+  - **166/166, twice**, over fourteen scenarios;
+  - seven broken copies (X1–X7) are each caught, with a control on a control in
+    O9 and in O13.
+- **The operator's actions, in order:**
+  1. create the DNS record first;
+  2. have the SMS key ready if you have one (it is optional);
+  3. run the one command;
+  4. send back the **log file**;
+  5. then *Add an owner* with your own number and sign in on the phone. **Say
+     only what the screen shows, never the code.**
 
 ## Open and parked
 
