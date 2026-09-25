@@ -806,3 +806,126 @@ so the tick's crash predates 5.18.37; other plugins logged 27 fatal lines in
 24 h. **Phase 1 is CLOSED** on this evidence; the uCRM webhook-screen reading
 stays outstanding and `crm_webhook_key` stays unset. **Phase 2 (authentication)
 was approved by the operator on 25 Sep 2026** after this run.
+
+## 5.18.38 — the customer signs in on the tenant's own terms, and stays signed in only where the server says so (audit Phase 2)
+
+**25 September 2026** · `lib/TenantProfile.php` (new), `profiles/south-sudan.json` (new),
+`profiles/uganda.json` (new), `lib/PhoneNumber.php` (new), `lib/CustomerJwtKeys.php` (new),
+`lib/CustomerSession.php` (new), `lib/ClientSearchIndex.php` (new), `lib/JwtAuth.php`,
+`lib/NotificationService.php`, `lib/ConfigVault.php`, `lib/PluginConfig.php`,
+`lib/CustomerContact.php`, `lib/EmailTemplate.php`, `lib/OverdueDunningHelpers.php`,
+`lib/timezone.php`, `lib/PortalLocale.php`, `includes/api/api_customer_app.php`,
+`includes/api/api_customer_support.php`, `tabs/customer_app/login_web.php`,
+`tabs/customer_app/portal_data.php`, `tabs/customer_app/portal.php`,
+`tabs/admin/app_logins.php`, `webhook.php`, `cron_sync.php`, `public.php`, `manifest.json`,
+`tools/set_config.php`, `tools/customer_jwt_key.php` (new),
+`migrations/073_customer_sessions.sql` (new), `migrations/074_client_search_index_flags.sql`
+(new), `tests/fixtures/fake_evo_server.php`, six new test suites and four updated ones.
+Record: the private Phase 2 report handed to the operator; decisions D-1…D-17 taken before
+code are in it.
+
+Phase 2 of the customer-login / portal / payments audit — **authentication**, scope
+§A.2 row 2 of the approved remediation plan, approved by the operator on 25 September
+2026 after the Phase 1 closure.
+
+**1. What was configured (observed on the Uganda install, closure run 25 Sep 2026):**
+the three WASender keys empty and Evolution set, so `app_send_otp` refused every number
+with 500 *WhatsApp sender is not configured*; `ca_phone_intl()` completing every number
+with `+211`, so a Uganda customer's code would have been addressed to South Sudan; the
+customer token signed with `sha256(webhook_secret | crm_auth_token | constant)` where both
+inputs are empty — a key anyone can read in the source; the token carried in the URL
+(`&token=`), in a JavaScript-set cookie and in the page's own script; the portal never
+consulting the logout blacklist; the e-mail identifier matching nothing (the structured
+index had no e-mail column); a uCRM lead able to sign in. `login_success` has never been
+written on this install: no customer has ever held a token there.
+
+**2. Why:** none of those is a configuration matter. A code that cannot leave, a key that
+can be computed, a session that outlives its logout and leaks into referrers and another
+plugin's URL, and a country written into the code are the four defects the plan's §D–§E
+exist to remove.
+
+**3. Exactly what changes** (no stored row is changed; two additive migrations):
+- **Transport.** `app_send_otp` asks `NotificationService::phoneTransport()` — Evolution
+  where an instance is mapped, else WASender where its three keys are set — and refuses only
+  when there is none; the WASender-only gate is gone. The result is read through a public
+  getter, not reflection. A login code is never written to the conversation store nor to
+  the retry queue; `app_otp_pending` stores an HMAC of the code, not the code.
+- **The number.** `lib/PhoneNumber.php` is the one rule (00/+/eleven digits kept as typed;
+  a trunk 0 dropped and the tenant's dial code put in front; anything else null, never a
+  guess). It carries no dial code; the tenant profile supplies it. `ca_phone_intl()`
+  delegates to it and returns `''` for a number it cannot canonicalise, which then matches
+  nobody. The identifier a sign-in is recorded under is the canonical `+E.164` number.
+- **The tenant profile.** `lib/TenantProfile.php` + `profiles/*.json`, selector
+  `tenant_profile` (else derived from the currency exactly as the login hint always was,
+  else south-sudan). Resolution per field: explicit key → profile → the reader's literal.
+  `profiles/south-sudan.json` is exactly the literals the readers carried, so an install
+  that configures nothing is byte-identical (pinned by `test_tenant_profile.php` against
+  the constants it replaced and by every existing South Sudan pin); `profiles/uganda.json`
+  holds only values already in the repository (`CustomerContact::UGANDA`,
+  `set_email_brand --uganda`, the Uganda PDF templates, the knowledge seed) and leaves
+  office hours, courts, legal texts and payment instructions null (plan §D.6). Re-pointed
+  readers: `CustomerContact`, `EmailTemplate::brand()`, the dunning footer defaults,
+  `dn_tz()`, `PortalLocale::dialHint()` (selector only; the currency rule is unchanged),
+  and the login page's title and footer.
+- **The key.** `customer_jwt_keys` (kid → 64-hex) + `customer_jwt_active_kid` +
+  `customer_jwt_key_dates`, generated once at the first request (`CustomerJwtKeys::ensure`
+  in `public.php`), vaulted, never printed; `tools/customer_jwt_key.php` shows, rotates
+  and prunes without ever printing a secret. `JwtAuth::forCustomers()` signs with the
+  active key and puts `kid` in the header and `iss`/`aud` in the claims; `verify()` in
+  customer mode requires all three, checks `alg`, and refuses an unknown kid — **so a
+  token signed the pre-Phase-2 way is refused from the deploy (E3-a; nobody on Uganda is
+  signed out, because nobody ever signed in).** `fromConfig()` stays for the unrouted
+  `api/v2/router.php` and for one hand-off (below).
+- **The session.** `app_verify_otp` records a `customer_sessions` row (migration 073)
+  and sets `dn_customer_session`: HttpOnly, SameSite=Lax, Secure when the request is
+  HTTPS (incl. `X-Forwarded-Proto`), Path = the plugin's own path, Max-Age = the token
+  lifetime (`app_jwt_ttl_days`, default 30). The JSON carries the token only to a client
+  that sends `X-DishNet-Client`; a browser never sees it. The API accepts Bearer (native
+  WebView, tests) or the cookie; a cookie may authenticate a non-GET only with
+  `X-Requested-With: DishNet` from a same-site request (403 `Cross-site request refused.`
+  otherwise). `?token=` is accepted nowhere. Every token must have a live session row:
+  logout revokes it (portal and API alike), `staff_revoke_customer_sessions` (admin) ends
+  every session of one client, with a control on the Customer App Logins tab.
+- **The pages.** The login page completes without writing a cookie and without a token in
+  the redirect; a live session that still owes consent lands on the consent step, and the
+  portal sends such a session back there; "go back" on consent ends the session. The portal
+  embeds no token, appends none to any URL, sends `Referrer-Policy: same-origin` and
+  `Cache-Control: no-store`, and downloads PDFs on the cookie (a same-origin GET carries a
+  Lax cookie, so the plan's one-time download ticket is not needed). The data-report
+  hand-off (another plugin, not in this repository) gets a purpose-bound ten-minute token
+  minted on click (`app_data_report_token`, legacy signing, `aud=data-report`) — never the
+  session token.
+- **The index and the gates.** Migration 074 adds `email`, `is_lead`, `is_archived`,
+  `is_active`, `client_type`, `has_service`, `has_invoice`; `lib/ClientSearchIndex.php` is
+  the one row builder, used by `cron_sync.php` (the only effective writer) and by the
+  webhook's `client.add`/`client.edit` for the verified client. The e-mail identifier
+  matches again. `app_send_otp` refuses — with the uniform answer, audited
+  `otp_ineligible` — an archived client, a lead unless `portal_login_allow_leads=yes`, and,
+  only when `portal_login_require_service=yes`, a client with no service; a NULL flag
+  (not yet synced) never refuses. The final business rule is Phase 3's.
+- **Declared:** `tenant_profile`, `portal_login_allow_leads`, `portal_login_require_service`,
+  `app_jwt_ttl_days` in `manifest.json` and in `tools/set_config.php` (which refuses a
+  selector that names no shipped profile). Vault keys gained the three key values and the
+  selector; `customer_jwt_keys` is a redacted secret.
+
+**4. Effect on UISP/uCRM:** none on uCRM's side. No uCRM API call is added; the webhook
+handlers gain a local index upsert of the entity they already re-read. uCRM will show the
+four new optional keys on the plugin's configuration screen and writes `""` for an unset
+one, which the code treats as unset. The data-report plugin keeps receiving a token of the
+shape it has always been given, ten minutes long.
+
+**5. Rollback:** `git checkout 68f4eeb -- dishnet-hybrid-sudan && bash scripts/deploy-hybrid.sh`
+(then return the checkout to the branch). No data step: migrations 073 and 074 are
+additive and the older code ignores them; the generated `customer_jwt_keys` stay in the
+vault for the next attempt; a Phase-2 cookie is ignored by the older code, so a customer
+signs in again — on Uganda there is nobody to affect.
+
+**Applied by:** nobody yet. Built and proved on 25 September 2026; deployment is its own
+approval and its own command.
+
+**Status:** **built, NOT deployed** (plugin commit `fa2d463`). Suite 202 suites / 8002 passed / 0 failed on the second run (`phase2-suite-B`; the first run read 8001 / 1, the one failure being `test_links_without_port` flagging the new same-origin check — an allow-list entry, not a weakened guard, then 47/47); weakened copies 19 of 19 caught (M01–M19: legacy-token grace, iss/aud unchecked, session row unchecked, cookie POST without the marker, URL token accepted by the API, token in the body for browsers, consent not enforced on the portal, WASender-only gate restored, +211 hard-coded again, eligibility gates inert, code stored in clear, code into the conversation store, code into the retry queue, token back in the login redirect, default profile uganda ×2, portal accepts a URL token, lead flag inverted, phone helper with a built-in code); migrations rehearsed on a data directory built by 68f4eeb (5.18.37), opened by the 5.18.38 code: `_migrations` 72 → 74 (`073_customer_sessions.sql` 3 statements, `074_client_search_index_flags.sql` 8 statements, 0 errors in `migration.log`); `customer_sessions` created; `client_search_index` 6 → 13 columns; every pre-existing table's row count unchanged (the three `ucrm_*_cache` tables and one index row were added by the rehearsal's own sync); the key set `customer_jwt_keys` / `customer_jwt_active_kid` / `customer_jwt_key_dates` provisioned in the store; the 5.18.37 code still opens the directory.
+Production stays on 5.18.37 (`68f4eeb`). Operator decisions taken by default and flagged in
+the report: E3-a immediate cut-over; body token only for a self-announcing native client;
+30-day lifetime; sessions table; eligibility defaults (leads no, archived no, service not
+required). Not done here, by scope: Phase 3 lifecycle, Phase 4 portal content and the
+website, Phase 5 payments, the `main.php:456` tick crash.
