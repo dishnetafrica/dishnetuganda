@@ -13,6 +13,8 @@
 # Options
 #   --after-only         the deploy already happened: run only the smoke tests
 #   --webhook-only       the read-only webhook inspection alone (stage D), nothing else
+#   --login-only         with --login: the customer sign-in flow alone (page, code, consent,
+#                        portal, logout, no code in any log), then stage D; no other smoke test
 #   --login <+2567…>     also sign in as a customer with a number YOU control
 #                        (it receives one WhatsApp code; the code is typed here
 #                        and never printed). Never a customer's number.
@@ -41,11 +43,12 @@ OUT="/root/dnb-phase1"; mkdir -p "$OUT"; chmod 700 "$OUT"
 SNIP="$OUT/.snippets-$$"; mkdir -p "$SNIP"; chmod 700 "$SNIP"
 trap 'rm -rf "$SNIP"' EXIT
 
-AFTER_ONLY=0; WEBHOOK_ONLY=0; LOGIN_PHONE=""; PLUGIN_BASE="${PLUGIN_BASE:-}"
+AFTER_ONLY=0; WEBHOOK_ONLY=0; LOGIN_ONLY=0; LOGIN_PHONE=""; PLUGIN_BASE="${PLUGIN_BASE:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --after-only) AFTER_ONLY=1 ;;
     --webhook-only) AFTER_ONLY=1; WEBHOOK_ONLY=1 ;;
+    --login-only) AFTER_ONLY=1; LOGIN_ONLY=1 ;;
     --login) LOGIN_PHONE="${2:-}"; shift ;;
     --plugin-base) PLUGIN_BASE="${2:-}"; shift ;;
     *) echo "unknown option: $1" >&2; exit 64 ;;
@@ -205,6 +208,30 @@ if [ "$HTTP_CODE" = "000" ]; then CURL_EXTRA=(--insecure); note "TLS verificatio
 # C1 the customer portal opens
 if [ "$HTTP_CODE" = "200" ] && printf '%s' "$HTTP_BODY" | grep -q 'step-phone' && printf '%s' "$HTTP_BODY" | grep -q 'DishNet'; then ok "C1 customer_login page: 200 with the sign-in form"; else bad "C1 customer_login page: $HTTP_CODE"; fi
 
+# The staff tokens, read from a COPY of the store and never printed (used by C4 and by the sign-in flow's lookup).
+if docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO' && cp '$DB_IN' '$RO/db.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/db.sqlite3-wal' || true )"; then
+  ok "C4 read-only copy of the store taken inside the container"
+else bad "C4 could not copy the store"; fi
+cat > "$SNIP/tokens.php" <<'PHP'
+<?php
+// Prints "<admin token or -> <non-admin token or ->" — consumed by the shell, never echoed.
+$db = new PDO('sqlite:' . getenv('RO_DB'), null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$admin = ''; $staff = ''; $now = time();
+foreach ($db->query("SELECT data FROM retailers") as $row) {
+    $r = json_decode((string)$row['data'], true); if (!is_array($r)) continue;
+    if (empty($r['is_active']) || empty($r['api_token'])) continue;
+    $issued = (int)($r['token_issued_at'] ?? 0);
+    if ($issued > 0 && ($now - $issued) > 90 * 86400) continue;          // expired: tokenAuth would refuse (and rewrite) it
+    if (!empty($r['is_admin'])) { if ($admin === '') $admin = (string)$r['api_token']; }
+    elseif ($staff === '')       { $staff = (string)$r['api_token']; }
+}
+echo ($admin === '' ? '-' : $admin), ' ', ($staff === '' ? '-' : $staff), "\n";
+PHP
+TOKENS="$(CPHP < "$SNIP/tokens.php" 2>/dev/null || echo '- -')"
+read -r ADMIN_TOKEN STAFF_TOKEN <<< "$TOKENS"; unset TOKENS
+[ "${ADMIN_TOKEN:-}" = "-" ] && ADMIN_TOKEN=""; [ "${STAFF_TOKEN:-}" = "-" ] && STAFF_TOKEN=""
+
+if [ "$LOGIN_ONLY" = "0" ]; then
 # C2 anonymous access to the moved and removed staff/debug actions
 MOVED=(data_dir_info crm_debug handover_audit payment_key_log check_retailer_key payment_push_log payment_catchup_log
        staff_login_lookup staff_otp_log app_debug_list
@@ -238,28 +265,8 @@ http POST "$PLUGIN_BASE?page=api&action=app_send_otp" '{"phone":""}'
 http GET "$PLUGIN_BASE?page=api&action=no_such_action_phase1" ''
 [ "$HTTP_CODE" = "401" ] && ok "C3 an unknown action is stopped by the guard (401, no enumeration)" || bad "C3 unknown action → $HTTP_CODE"
 
-# C4 administrator positive controls — the token is read from a COPY of the store and never printed
-if docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO' && cp '$DB_IN' '$RO/db.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/db.sqlite3-wal' || true )"; then
-  ok "C4 read-only copy of the store taken inside the container"
-else bad "C4 could not copy the store"; fi
-cat > "$SNIP/tokens.php" <<'PHP'
-<?php
-// Prints "<admin token or -> <non-admin token or ->" — consumed by the shell, never echoed.
-$db = new PDO('sqlite:' . getenv('RO_DB'), null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-$admin = ''; $staff = ''; $now = time();
-foreach ($db->query("SELECT data FROM retailers") as $row) {
-    $r = json_decode((string)$row['data'], true); if (!is_array($r)) continue;
-    if (empty($r['is_active']) || empty($r['api_token'])) continue;
-    $issued = (int)($r['token_issued_at'] ?? 0);
-    if ($issued > 0 && ($now - $issued) > 90 * 86400) continue;          // expired: tokenAuth would refuse (and rewrite) it
-    if (!empty($r['is_admin'])) { if ($admin === '') $admin = (string)$r['api_token']; }
-    elseif ($staff === '')       { $staff = (string)$r['api_token']; }
-}
-echo ($admin === '' ? '-' : $admin), ' ', ($staff === '' ? '-' : $staff), "\n";
-PHP
-TOKENS="$(CPHP < "$SNIP/tokens.php" 2>/dev/null || echo '- -')"
-read -r ADMIN_TOKEN STAFF_TOKEN <<< "$TOKENS"; unset TOKENS
-if [ -n "${ADMIN_TOKEN:-}" ] && [ "$ADMIN_TOKEN" != "-" ]; then
+# C4 administrator positive controls
+if [ -n "$ADMIN_TOKEN" ]; then
   ok "C4 an administrator token is on file (length ${#ADMIN_TOKEN}, not printed)"
   A="Authorization: Bearer $ADMIN_TOKEN"
   http GET "$PLUGIN_BASE?page=api&action=data_dir_info" '' "$A";  [ "$HTTP_CODE" = "200" ] && ok "C4 admin data_dir_info: 200" || bad "C4 admin data_dir_info → $HTTP_CODE"
@@ -275,14 +282,13 @@ if [ -n "${ADMIN_TOKEN:-}" ] && [ "$ADMIN_TOKEN" != "-" ]; then
   [ "$HTTP_CODE" = "404" ] && ok "C4 even an administrator finds no app_debug_lookup (404)" || bad "C4 admin app_debug_lookup → $HTTP_CODE"
   unset A
 else note "C4 no live administrator token on file — run the positive controls signed in from a browser (URLs at the end)"; fi
-if [ -n "${STAFF_TOKEN:-}" ] && [ "$STAFF_TOKEN" != "-" ]; then
+if [ -n "$STAFF_TOKEN" ]; then
   S="Authorization: Bearer $STAFF_TOKEN"
   http GET "$PLUGIN_BASE?page=api&action=data_dir_info" '' "$S";   [ "$HTTP_CODE" = "403" ] && ok "C4 non-admin data_dir_info: 403 Admin only" || bad "C4 non-admin data_dir_info → $HTTP_CODE"
   http GET "$PLUGIN_BASE?page=api&action=backup_download" '' "$S"; [ "$HTTP_CODE" = "403" ] && ok "C4 non-admin backup_download: 403" || bad "C4 non-admin backup_download → $HTTP_CODE"
   http GET "$PLUGIN_BASE?page=api&action=cron_status" '' "$S";     [ "$HTTP_CODE" = "200" ] && ok "C4 non-admin cron_status: 200 (any staff, as before)" || bad "C4 non-admin cron_status → $HTTP_CODE"
   unset S
 else note "C4 no non-admin token on file — the 403 gate is proved by the test suite, not live"; fi
-unset ADMIN_TOKEN STAFF_TOKEN
 
 # C5 the sign-in door: uniform answer, without touching any customer (an invented e-mail sends nothing anywhere)
 INV="nobody-phase1-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')@example.invalid"
@@ -290,31 +296,122 @@ http POST "$PLUGIN_BASE?page=api&action=app_send_otp" "{\"email\":\"$INV\"}"
 if [ "$HTTP_CODE" = "200" ] && [ "$(jfield "$HTTP_BODY" message)" = "Code sent via Email." ] && ! printf '%s' "$HTTP_BODY" | grep -qE '"(client_id|debug|found|exists|code)"'; then
   ok "C5 an unknown e-mail gets the uniform 'Code sent via Email.' and no telling field"
 else bad "C5 unknown e-mail → $HTTP_CODE $(jfield "$HTTP_BODY" message)"; fi
+fi   # LOGIN_ONLY (C2–C5)
+
+# ── The customer sign-in flow with a number the OPERATOR controls ─────────────
+# One WhatsApp code goes to that number; the code is typed here (or supplied by
+# DN_TEST_CODE in a test harness) and is never printed. Nine points, in order.
 if [ -n "$LOGIN_PHONE" ]; then
-  echo "  C5 customer sign-in with YOUR number $LOGIN_PHONE (one WhatsApp code goes to it)"
+  echo "  C5 customer sign-in with YOUR number $LOGIN_PHONE (one code goes to it through the configured transport)"
+  LOGIN_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ENC_PHONE="$(printf '%s' "$LOGIN_PHONE" | sed 's/+/%2B/g')"
+  if [ -n "$ADMIN_TOKEN" ]; then
+    http GET "$PLUGIN_BASE?page=api&action=staff_login_lookup&phone=$ENC_PHONE" '' "Authorization: Bearer $ADMIN_TOKEN"
+    if [ "$HTTP_CODE" = "200" ]; then
+      NACC="$(printf '%s' "$HTTP_BODY" | grep -o '"accounts":\[[^]]*\]' | grep -o '"id":' | wc -l | tr -d ' ')"
+      # the flags are JSON booleans, not strings — read them positionally
+      WAS="$(printf '%s' "$HTTP_BODY" | grep -o '"wasender_configured":[a-z]*' | cut -d: -f2)"
+      EVO="$(printf '%s' "$HTTP_BODY" | grep -o '"evolution_configured":[a-z]*' | cut -d: -f2)"
+      DRY="$(printf '%s' "$HTTP_BODY" | grep -o '"dry_run_mode":[a-z]*' | cut -d: -f2)"
+      [ "${NACC:-0}" -ge 1 ] && ok "L1 the number matches ${NACC} customer account(s) (the operator's own)" || bad "L1 the number matches no customer account — the sign-in cannot succeed for it"
+      echo "  transport       wasender_configured=${WAS:-?}  evolution_configured=${EVO:-?}  dry_run_mode=${DRY:-?}  (the plugin prefers Evolution when configured)"
+      [ "${DRY:-false}" = "true" ] && bad "L1 dry_run_mode is ON in production — no message would leave"
+    else note "L1 staff_login_lookup → $HTTP_CODE (continuing)"; fi
+  else note "L1 no administrator token: transport flags not read"; fi
   http POST "$PLUGIN_BASE?page=api&action=app_send_otp" "{\"phone\":\"$LOGIN_PHONE\"}"
-  if [ "$HTTP_CODE" = "200" ] && [ "$(jfield "$HTTP_BODY" message)" = "Code sent via WhatsApp." ]; then ok "C5 app_send_otp: 200 'Code sent via WhatsApp.'"; else bad "C5 app_send_otp → $HTTP_CODE $(jfield "$HTTP_BODY" message)"; fi
-  printf '  Type the 6-digit code you received (not shown), or press Enter to skip: '; read -rs CODE </dev/tty || CODE=""; echo
-  if [ -n "$CODE" ]; then
+  SENT=0; L2MSG="$(jfield "$HTTP_BODY" message)"
+  if [ "$HTTP_CODE" = "200" ] && [ "$L2MSG" = "Code sent via WhatsApp." ]; then ok "L2 app_send_otp: 200 'Code sent via WhatsApp.' (the number was accepted)"; SENT=1
+  else
+    bad "L2 app_send_otp → $HTTP_CODE $L2MSG"
+    case "$L2MSG" in
+      *"sender is not configured"*)
+        echo "  diagnosis       app_send_otp requires the three WASender keys (wa_plugin_url, wa_app_key, wa_auth_key) to be non-empty before it"
+        echo "                  chooses a transport, even when Evolution is the one configured. That check is unchanged from 5.18.36 (git show"
+        echo "                  c82e0b9): a configuration finding, not a Phase-1 change; its redesign belongs to Phase 2. Nothing is changed by this run.";;
+      *"Too many requests"*)
+        echo "  diagnosis       a rate limit answered (per identifier 10/h, per address 30/h; both count in app_otp_rate) — wait an hour and run again";;
+    esac
+  fi
+  # The code is asked for only when the request was accepted; it must be digits (it goes into a JSON body and a grep).
+  if [ "$SENT" = "0" ]; then CODE=""; echo "  (no code was sent, so none is asked for)"
+  elif [ -n "${DN_TEST_CODE:-}" ]; then CODE="$DN_TEST_CODE"
+  else printf '  Type the 6-digit code you received (not shown), or press Enter if none arrived: '; read -rs CODE </dev/tty || CODE=""; echo; fi
+  case "$CODE" in *[!0-9]*) echo "  (what was typed is not a numeric code — treated as no code)"; CODE="";; esac
+  if [ -z "$CODE" ]; then
+    if [ "$SENT" = "0" ]; then bad "L3 no code could have been sent (L2 refused) — nothing further in this flow"
+    else bad "L3 the request was accepted but no code arrived — delivery through the configured transport FAILED; read the send record in L8 and the transport's own log; change nothing"; fi
+  else
+    ok "L3 a code arrived on the phone"
     http POST "$PLUGIN_BASE?page=api&action=app_verify_otp" "{\"phone\":\"$LOGIN_PHONE\",\"code\":\"$CODE\"}"
     CTOK="$(jfield "$HTTP_BODY" token)"
     if [ "$HTTP_CODE" = "200" ] && [ -n "$CTOK" ]; then
-      ok "C5 app_verify_otp: 200, a customer token was issued (not printed)"
-      http GET "$PLUGIN_BASE?page=api&action=app_me" '' "Authorization: Bearer $CTOK"; [ "$HTTP_CODE" = "200" ] && ok "C5 app_me with the token: 200 (the portal's data layer answers)" || bad "C5 app_me → $HTTP_CODE"
-      http POST "$PLUGIN_BASE?page=api&action=app_logout" '{}' "Authorization: Bearer $CTOK"; [ "$HTTP_CODE" = "200" ] && ok "C5 app_logout: 200" || note "C5 app_logout → $HTTP_CODE"
-    else bad "C5 app_verify_otp → $HTTP_CODE $(jfield "$HTTP_BODY" message)"; fi
+      ok "L4 app_verify_otp: 200, a customer token was issued (not printed)"
+      C="Authorization: Bearer $CTOK"
+      http GET "$PLUGIN_BASE?page=api&action=app_legal_version" ''
+      TOS="$(jfield "$HTTP_BODY" tos_version)"; PRIV="$(jfield "$HTTP_BODY" privacy_version)"
+      http POST "$PLUGIN_BASE?page=api&action=app_record_consent" "{\"tos_version\":\"$TOS\",\"privacy_version\":\"$PRIV\"}" "$C"
+      if [ "$HTTP_CODE" = "200" ] && printf '%s' "$HTTP_BODY" | grep -q '"accepted":true'; then ok "L5 app_record_consent with the token: 200 accepted (versions $TOS / $PRIV)"; else bad "L5 app_record_consent → $HTTP_CODE $(jfield "$HTTP_BODY" message)"; fi
+      # The login page itself sends the browser to ?page=customer_portal&view=home&token=<jwt>
+      # (a URL token — the current, pre-Phase-2 behaviour, exercised as is, not changed).
+      ENC_TOK="$(printf '%s' "$CTOK" | sed 's/+/%2B/g; s|/|%2F|g; s/=/%3D/g')"
+      http GET "$PLUGIN_BASE?page=customer_portal&view=home&token=$ENC_TOK" ''
+      if [ "$HTTP_CODE" = "200" ] && printf '%s' "$HTTP_BODY" | grep -qi 'DishNet'; then ok "L6 the customer portal page with the token: 200"; else bad "L6 customer_portal page → $HTTP_CODE"; fi
+      http GET "$PLUGIN_BASE?page=customer_portal&view=home" ''
+      [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "200" ] && ok "L6 the portal without a token: $HTTP_CODE (sent back to sign in, as today)" || bad "L6 the portal without a token → $HTTP_CODE"
+      unset ENC_TOK
+      http GET "$PLUGIN_BASE?page=api&action=app_me" '' "$C"
+      if [ "$HTTP_CODE" = "200" ] && printf '%s' "$HTTP_BODY" | grep -q '"status":"success"'; then ok "L6 app_me with the token: 200 (the portal's data layer answers)"; else bad "L6 app_me → $HTTP_CODE"; fi
+      http POST "$PLUGIN_BASE?page=api&action=app_logout" '{}' "$C"
+      [ "$HTTP_CODE" = "200" ] && ok "L7 app_logout: 200 'Logged out.'" || bad "L7 app_logout → $HTTP_CODE"
+      http GET "$PLUGIN_BASE?page=api&action=app_me" '' "$C"
+      if [ "$HTTP_CODE" = "401" ] && [ "$(jfield "$HTTP_BODY" message)" = "Token revoked." ]; then ok "L7 the same token after logout: 401 Token revoked (the current, pre-Phase-2 behaviour: the token is blacklisted server-side)"; else bad "L7 the token after logout → $HTTP_CODE $(jfield "$HTTP_BODY" message)"; fi
+      unset C
+    else bad "L4 app_verify_otp → $HTTP_CODE $(jfield "$HTTP_BODY" message)"; fi
+    # L8 the code appears in no log. The code is passed to the container's PHP in the
+    # environment for the comparison and is never written anywhere.
+    NCL="$(docker logs "$CONTAINER" --since "$LOGIN_STARTED" 2>&1 | grep -c -F -- "$CODE" || true)"
+    if [ "${NCL:-0}" = "0" ]; then ok "L8 the code appears nowhere in the container log since $LOGIN_STARTED"
+    else bad "L8 the code's digits appear in $NCL container-log line(s) — shown masked below: a six-digit coincidence (an id, a timestamp) is not a leak; a plugin line carrying the code is"
+      docker logs "$CONTAINER" --since "$LOGIN_STARTED" 2>&1 | grep -F -- "$CODE" | sed "s/$CODE/******/g" | cut -c1-160 | head -5 | sed "s/^/     /"; fi
+    NWL="$(docker exec "$CONTAINER" grep -c -F -- "$CODE" "$PDD_IN/webhook_log.json" 2>/dev/null || true)"
+    [ "${NWL:-0}" = "0" ] && ok "L8 the code appears nowhere in webhook_log.json" || bad "L8 the code appears in webhook_log.json"
+    docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO' && cp '$DB_IN' '$RO/db3.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/db3.sqlite3-wal' || true )" 2>/dev/null || true
+    cat > "$SNIP/otplog.php" <<'PHP'
+<?php
+// Prints "<latest app_otp preview> | <rows containing the code in the audit and login logs>"; the code itself is never printed.
+$db = new PDO('sqlite:' . getenv('RO_DB3'), null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$code = (string)getenv('OTP_CODE'); $ident = (string)getenv('OTP_IDENT');
+$prev = '(no app_otp row)'; $hits = 0; $sender = '-'; $success = '-'; $http = '-';
+try {
+    $st = $db->query("SELECT sender, preview, success, http_code FROM notification_audit_log WHERE event = 'app_otp' ORDER BY id DESC LIMIT 1");
+    if ($r = $st->fetch(PDO::FETCH_ASSOC)) { $prev = (string)$r['preview']; $sender = (string)$r['sender']; $success = (string)$r['success']; $http = (string)$r['http_code']; }
+    $st = $db->prepare("SELECT COUNT(*) FROM notification_audit_log WHERE preview LIKE ? OR error LIKE ?"); $st->execute(["%{$code}%", "%{$code}%"]); $hits += (int)$st->fetchColumn();
+} catch (Throwable $e) { $prev = '(notification log unavailable)'; }
+try { $st = $db->prepare("SELECT COUNT(*) FROM app_audit_log WHERE details LIKE ?"); $st->execute(["%{$code}%"]); $hits += (int)$st->fetchColumn(); } catch (Throwable $e) {}
+try { $st = $db->prepare("SELECT COUNT(*) FROM notification_queue WHERE message LIKE ?"); $st->execute(["%{$code}%"]); $hits += (int)$st->fetchColumn(); } catch (Throwable $e) {}
+echo $prev, " | sender={$sender} success={$success} http_code={$http} | hits={$hits}\n";
+PHP
+    OTPL="$(docker exec -i -u "$DB_OWNER" -w "$IN_CONTAINER" -e "RO_DB3=$RO/db3.sqlite3" -e "OTP_CODE=$CODE" -e "OTP_IDENT=$LOGIN_PHONE" "$CONTAINER" php < "$SNIP/otplog.php" 2>/dev/null || echo '(read failed) | - | hits=?')"
+    PREV="${OTPL%% | *}"; REST="${OTPL#* | }"; HITS="${REST##*hits=}"
+    [ "$PREV" = "[one-time login code — text withheld]" ] && ok "L8 the notification log's newest app_otp row withholds the text (preview: '$PREV')" || bad "L8 the newest app_otp preview is '$PREV'"
+    echo "  send record     ${REST%% | *}"
+    [ "${HITS:-?}" = "0" ] && ok "L8 the code appears in no notification, queue or audit row" || bad "L8 the code appears in ${HITS} stored row(s)"
     unset CODE CTOK
-  else note "C5 sign-in not completed (no code typed)"; fi
+  fi
+  # L9 no unexpected webhook errors — stage D below counts entries since the snapshot.
 else note "C5 no --login number given: delivery of the code was not exercised live (the door and its uniform answer were)"; fi
 
+if [ "$LOGIN_ONLY" = "0" ]; then
 # C6 the CLI that replaces ?page=crm_debug
 if CPHP tools/crm_debug.php --status 2>/dev/null | grep -q '"retry_queue"'; then ok "C6 tools/crm_debug.php --status answers (CRM retry queue readable)"; else bad "C6 tools/crm_debug.php --status did not answer"; fi
 if docker exec "$CONTAINER" test -f "$IN_CONTAINER/tools/crm_webhook_key.php"; then ok "C6 tools/crm_webhook_key.php is deployed (NOT run — the key stays unset by decision)"; else bad "C6 tools/crm_webhook_key.php missing"; fi
+fi   # LOGIN_ONLY (C6)
 
-# C7 PHP fatals since the deploy
+# C7 PHP fatals since the deploy (or since this run, in the after-only modes)
 FATALS="$(docker logs "$CONTAINER" --since "$DEPLOY_STARTED" 2>&1 | grep -ciE 'DishNet FATAL|DishNet UNCAUGHT|PHP Fatal|PHP Parse error' || true)"
 if [ "${FATALS:-0}" = "0" ]; then ok "C7 no PHP fatal/uncaught in the container log since $DEPLOY_STARTED"
-else bad "C7 $FATALS fatal/uncaught lines since the deploy:"; docker logs "$CONTAINER" --since "$DEPLOY_STARTED" 2>&1 | grep -iE 'DishNet FATAL|DishNet UNCAUGHT|PHP Fatal|PHP Parse error' | cut -c1-200 | head -10 | sed 's/^/     /'; fi
+else bad "C7 $FATALS fatal/uncaught lines since $DEPLOY_STARTED:"; docker logs "$CONTAINER" --since "$DEPLOY_STARTED" 2>&1 | grep -iE 'DishNet FATAL|DishNet UNCAUGHT|PHP Fatal|PHP Parse error' | cut -c1-200 | head -10 | sed 's/^/     /'; fi
+unset ADMIN_TOKEN STAFF_TOKEN
 fi   # WEBHOOK_ONLY
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -387,7 +484,7 @@ echo "  Report the field NAME only. If there is none, crm_webhook_key cannot be 
 echo "  If uCRM later proves it sends X-Crm-Key with a configured secret, the key can be set in a separate window with tools/crm_webhook_key.php."
 
 # ═════════════════════════════════════════════════════════════════════════════
-if [ "$WEBHOOK_ONLY" = "0" ]; then
+if [ "$WEBHOOK_ONLY" = "0" ] && [ "$LOGIN_ONLY" = "0" ]; then
 hdr "E. Receipt / delivery links — the old 'dishnet' scheme is dead, PdfLinkToken lives"
 # ═════════════════════════════════════════════════════════════════════════════
 docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO' && cp '$DB_IN' '$RO/db2.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/db2.sqlite3-wal' || true )" 2>/dev/null || true
