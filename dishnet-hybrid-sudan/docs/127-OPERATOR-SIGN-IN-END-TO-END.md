@@ -1120,3 +1120,40 @@ The new record is **`A app-staging → 209.97.137.203`**. Check it on the server
 with `getent ahostsv4 app-staging.dishnetuganda.com`: it must print
 `209.97.137.203`. Then run the same command again. It starts from the same
 state, because nothing changed.
+
+### L.2 Run 2 — 2026-09-25 05:31:21–05:31:55 UTC: DEPLOYED, first attempt after the DNS record
+
+The DNS record was created at the operator's DNS provider. The server resolved
+`app-staging.dishnetuganda.com` to `209.97.137.203` before the run. The operator
+**skipped the SMS question** (no Africa's Talking account yet). Every step
+passed:
+
+| Step | Measured on the server |
+|---|---|
+| 0 | the 030 build `4a629184…`; the real staff login (trusted proxy `172.22.0.1`); the worker `simulated`, no SMS variable; ledger 30; O-1 `1|1|2|true`; the four variables; DNS → `209.97.137.203`; port 8098 free |
+| 1 | **skipped: no username typed** |
+| 2 | commit `818d711` fetched by hash; 142 files; content digest **`2874d643…a0c4`**, the reviewed build |
+| 3 | doctor in production posture: **26 checks, 24 ok, 2 warn, 0 blockers**. The two warnings are the expected ones: *30 of 32 migration(s) applied*, and *DN_SMS unset* |
+| 4 | the installer applied **exactly 031 and 032**; 32 recorded, 32 files in the build |
+| 5 | the outbox is `dnb_def_auth`'s; `mt_auth_issue_code` has only the four-argument form; 6 of 6 functions are SECURITY DEFINER and `dnb_def_auth`'s; the EXECUTE grants are exactly as 031 and 032 promise; 031's read policy is present; O-1 holds after. **Rolled-back execution test:** an unknown number `no_recipient`, an active person `queued`, the same person with the operator suspended `no_recipient`. **8 login roles**, each refused the outbox, and each refused the claim and code issue except each function's own role. **Residue 0**; no operator left inactive |
+| 6 | the API: panel 200; `GET /session` 401 `provider: dishnet`, second factor required. The worker was recreated: `"sms":"null"`, delivery `simulated-routeros`, no variable added |
+| 7 | `dnb-staging-app` answered at once on `127.0.0.1:8098` and `172.17.0.1:8098`, holding exactly the four variables and published on exactly those two addresses. On loopback: `/` 200 with the reviewed CSP; `/app/app.js` 200; `/api/v1/me` 401; an empty sign-in request 400; the app's own 404 for the Admin API, RADIUS accounting, `index.php` and the manifest |
+| 8 | the route file written, **active after 2 s**. A **Let's Encrypt certificate** (issuer `C = US, O = Let's Encrypt, CN = YR2`) names the host. Through Traefik: 200 / 200 / 401, with HSTS `max-age=15552000`. **Five refusals were Traefik's own 404 and never reached the app.** `http` redirected 301 to `https`. **The sign-in rate limit, measured:** 15 empty requests gave 10 answers of 400 from the app, 5 refusals of 429 from Traefik, and 0 other. Traefik was not restarted (started 2026-09-15 21:09:50 UTC) |
+| 9 | exactly `dnb-staging-api`, `dnb-staging-app` and `dnb-staging-worker` were new or changed; **none removed** |
+
+**The operator app is on staging at `https://app-staging.dishnetuganda.com/`.**
+The real Traefik behaved as the rehearsal's fake did, on each point the command
+measured: the route, the certificate, the allow-list refusals, the redirect and
+the 10-then-429 limit.
+
+**Nobody can sign in yet.** No SMS sender is configured, so every code expires
+unsent. That is the truth, and the result line says so.
+
+**The output came back as a copy of the terminal, not the log file.** Nothing
+secret was on it: the SMS question was skipped, so no key was typed.
+
+**Next, at the operator's instruction:** the SMS settings are to be
+**configurable from the Admin panel**, so that the Africa's Talking username and
+key can be entered there later instead of by re-running this command. That is
+its own review and build (`docs/128`). Until it is deployed, re-running this
+command is the one way to add the key.

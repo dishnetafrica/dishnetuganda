@@ -3023,7 +3023,7 @@ nothing deployed; nothing HARDWARE VERIFIED.
    phase 3** (§I): `plugin/bin/serve-app.php`, its own process, and `public/`
    ships. F-8, the sign-in routes' audit, stays OPEN (H-10).
 
-## Operator sign-in end to end (`docs/127`) — phases 1, 2 and 3 BUILT (migrations 031, 032; the operator app served); phase 4 the staging command BUILT and rehearsed, its run PENDING
+## Operator sign-in end to end (`docs/127`) — phases 1, 2 and 3 BUILT (migrations 031, 032; the operator app served); phase 4 DEPLOYED on staging 2026-09-25 05:31 UTC
 
 The operator chose **"SMS (Recommended)"** for sign-in codes. `docs/127` designs
 all four missing pieces together, because none is useful alone, and builds them
@@ -3169,7 +3169,7 @@ The operator approved it: *"Yes, own address (Recommended)"*.
   - Headless Chromium: every screen, **zero CSP violations**.
   - Suite **40 / 3,906 / 0, twice**; install-test 86/86; package **142 files**, `2874d643…a0c4`. Not deployed.
 
-### Phase 4 — the staging command: BUILT and rehearsed (`docs/127` §J, §K); the server run is PENDING
+### Phase 4 — the staging command: DEPLOYED on staging 2026-09-25 05:31:55 UTC (`docs/127` §J, §K, §L.2)
 
 - **`scripts/dnb-staging-operator-app.sh`**, one command as root. It builds
   `818d711`, **fetched by its hash**, and refuses unless the content digest is
@@ -3227,6 +3227,26 @@ The operator approved it: *"Yes, own address (Recommended)"*.
   answering 200 through Traefik, Traefik in host mode, the gateway
   `172.17.0.1`. Next: the GoDaddy record `A app-staging → 209.97.137.203`, then
   the same command again.
+- **Run 2 — 2026-09-25 05:31:21–05:31:55 UTC (`docs/127` §L.2): DEPLOYED, first
+  attempt.**
+  - The SMS question was skipped: the operator has no Africa's Talking account
+    yet. Commit `818d711` was built, content digest `2874d643…`.
+  - The doctor reported 24 ok, 2 warn (the expected ones) and 0 blockers. The
+    installer applied exactly 031 and 032, and 32 migrations are recorded.
+  - The rolled-back probe gave `no_recipient`, then `queued`, then
+    `no_recipient`. 8 login roles were tested; residue 0.
+  - The worker reports `"sms":"null"`. The app holds its four variables on the
+    two addresses.
+  - The route was **active in 2 s, with a Let's Encrypt certificate**. Five
+    refusals were Traefik's own 404. `http` redirects 301. The sign-in limit
+    gave **10 answers of 400, then 5 of 429**. Traefik was not restarted.
+  - Only the three expected containers changed.
+
+  **`https://app-staging.dishnetuganda.com/` is live; nobody can sign in until
+  an SMS sender is configured.**
+- **Next, at the operator's instruction: SMS settings from the Admin panel**
+  (`docs/128`), so that the Africa's Talking username and key are entered
+  there, not by re-running the command.
 - **The operator's actions, in order:**
   1. create the DNS record first;
   2. have the SMS key ready if you have one (it is optional);
