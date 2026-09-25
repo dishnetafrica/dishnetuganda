@@ -15,6 +15,9 @@
 #   --webhook-only       the read-only webhook inspection alone (stage D), nothing else
 #   --login-only         with --login: the customer sign-in flow alone (page, code, consent,
 #                        portal, logout, no code in any log), then stage D; no other smoke test
+#   --otp-history        read-only COUNTS of the customer sign-in history (audit actions by day,
+#                        codes that left, transport keys present or empty, the tick's crash line)
+#                        — no number, code or value is printed; then exit
 #   --login <+2567…>     also sign in as a customer with a number YOU control
 #                        (it receives one WhatsApp code; the code is typed here
 #                        and never printed). Never a customer's number.
@@ -43,12 +46,13 @@ OUT="/root/dnb-phase1"; mkdir -p "$OUT"; chmod 700 "$OUT"
 SNIP="$OUT/.snippets-$$"; mkdir -p "$SNIP"; chmod 700 "$SNIP"
 trap 'rm -rf "$SNIP"' EXIT
 
-AFTER_ONLY=0; WEBHOOK_ONLY=0; LOGIN_ONLY=0; LOGIN_PHONE=""; PLUGIN_BASE="${PLUGIN_BASE:-}"
+AFTER_ONLY=0; WEBHOOK_ONLY=0; LOGIN_ONLY=0; OTP_HISTORY=0; LOGIN_PHONE=""; PLUGIN_BASE="${PLUGIN_BASE:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --after-only) AFTER_ONLY=1 ;;
     --webhook-only) AFTER_ONLY=1; WEBHOOK_ONLY=1 ;;
     --login-only) AFTER_ONLY=1; LOGIN_ONLY=1 ;;
+    --otp-history) AFTER_ONLY=1; OTP_HISTORY=1 ;;
     --login) LOGIN_PHONE="${2:-}"; shift ;;
     --plugin-base) PLUGIN_BASE="${2:-}"; shift ;;
     *) echo "unknown option: $1" >&2; exit 64 ;;
@@ -186,6 +190,70 @@ else
   [ "$LIVE_AFTER" = "$EXPECTED_PLUGIN_COMMIT" ] && ok "live commit is $LIVE_AFTER" || stop "the container serves ${LIVE_AFTER:-?}, not $EXPECTED_PLUGIN_COMMIT"
 fi
 
+# ═════════════════════════════════════════════════════════════════════════════
+if [ "$OTP_HISTORY" = "1" ]; then
+hdr "H. Customer sign-in history — read-only counts (no number, code or value is printed)"
+# ═════════════════════════════════════════════════════════════════════════════
+DEPLOYED_AT="2026-09-25T20:07:00Z"   # when 5.18.37 went live; the question is what happened BEFORE it
+docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO' && cp '$DB_IN' '$RO/db4.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/db4.sqlite3-wal' || true )" 2>/dev/null || stop "could not copy the database for reading"
+cat > "$SNIP/otphist.php" <<'PHP'
+<?php
+// Counts only. No phone, code, token, key or preview is read into the output.
+$db = new PDO('sqlite:' . getenv('RO_DB4'), null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$days = 30; $since = time() - $days * 86400;
+// 1. the transport keys — presence only — from the store table public.php loads as $config
+//    (what app_send_otp actually reads), and from the settings files + vault that the link
+//    builders read (PluginConfig::read), so a difference between the two is visible.
+$cfg = json_decode((string)$db->query("SELECT data FROM kyc_config LIMIT 1")->fetchColumn(), true) ?: [];
+$p = function ($k) use ($cfg) { return !empty($cfg[$k]) ? 'set' : 'EMPTY'; };
+$inst = 0; foreach ($cfg as $k => $v) { if (strpos((string)$k, 'evo_instance_') === 0 && !empty($v)) $inst++; }
+echo "transport keys  (kyc_config store — the \$config app_send_otp reads)\n";
+echo "  WASender   wa_plugin_url={$p('wa_plugin_url')}  wa_app_key={$p('wa_app_key')}  wa_auth_key={$p('wa_auth_key')}   ← app_send_otp needs all three non-empty\n";
+echo "  Evolution  evo_api_url={$p('evo_api_url')}  evo_api_key={$p('evo_api_key')}  evo_instance_* set: {$inst}\n";
+echo "  dry_run_mode " . (!empty($cfg['dry_run_mode']) ? 'ON' : 'off') . "\n";
+try {
+    require_once getcwd() . '/lib/PluginConfig.php'; $fc = PluginConfig::read(getcwd(), (string)getenv('PDD_IN'));
+    $q = function ($k) use ($fc) { return !empty($fc[$k]) ? 'set' : 'EMPTY'; };
+    echo "  (settings files + vault, PluginConfig::read: wa_plugin_url={$q('wa_plugin_url')} wa_app_key={$q('wa_app_key')} wa_auth_key={$q('wa_auth_key')} evo_api_url={$q('evo_api_url')} evo_api_key={$q('evo_api_key')})\n";
+} catch (Throwable $e) { echo "  (settings files + vault: not readable here)\n"; }
+// 2. sign-in audit rows by action: total ever, last 30 days, first and last (UTC)
+echo "\napp_audit_log — sign-in actions, counts only\n";
+$st = $db->prepare("SELECT action, COUNT(*) n, SUM(at > ?) recent, MIN(at) first_at, MAX(at) last_at FROM app_audit_log WHERE action LIKE 'otp_%' OR action IN ('login_success','logout','consent_recorded') GROUP BY action ORDER BY action");
+$st->execute([$since]); $any = false;
+foreach ($st as $r) { $any = true; printf("  %-24s total %6d   last %dd %5d   first %s   last %s\n", $r['action'], $r['n'], $days, $r['recent'], gmdate('Y-m-d H:i', (int)$r['first_at']), gmdate('Y-m-d H:i', (int)$r['last_at'])); }
+if (!$any) echo "  (no sign-in audit row at all)\n";
+// 3. by day, last 30 days
+echo "\napp_audit_log — by day (UTC), last {$days} days\n";
+$st = $db->prepare("SELECT strftime('%Y-%m-%d', at, 'unixepoch') d, SUM(action='otp_wa_not_configured') nc, SUM(action='otp_sent') s, SUM(action='otp_send_failed') f, SUM(action='otp_rate_limit') rl, SUM(action='login_success') l FROM app_audit_log WHERE at > ? AND (action LIKE 'otp_%' OR action='login_success') GROUP BY d ORDER BY d");
+$st->execute([$since]); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+if (!$rows) echo "  (no sign-in audit row in the last {$days} days)\n";
+foreach ($rows as $r) printf("  %s   not_configured %4d   sent %4d   send_failed %4d   rate_limited %4d   login_success %4d\n", $r['d'], $r['nc'], $r['s'], $r['f'], $r['rl'], $r['l']);
+// 4. the notification log's app_otp rows: what actually left, by day
+echo "\nnotification_audit_log — event app_otp (a code that was handed to a transport)\n";
+try {
+    $tot = $db->query("SELECT COUNT(*), COALESCE(SUM(success),0), MIN(sent_at), MAX(sent_at) FROM notification_audit_log WHERE event='app_otp'")->fetch(PDO::FETCH_NUM);
+    printf("  all time: %d rows, %d successful, first %s, last %s (server local time, as stored)\n", (int)$tot[0], (int)$tot[1], $tot[2] ?? '-', $tot[3] ?? '-');
+    $st = $db->prepare("SELECT substr(sent_at,1,10) d, COUNT(*) n, SUM(success) s, GROUP_CONCAT(DISTINCT sender) senders FROM notification_audit_log WHERE event='app_otp' AND sent_at > datetime(?, 'unixepoch') GROUP BY d ORDER BY d");
+    $st->execute([$since]); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) echo "  (no app_otp row in the last {$days} days)\n";
+    foreach ($rows as $r) printf("  %s   rows %4d   successes %4d   sender(s) %s\n", $r['d'], $r['n'], $r['s'], $r['senders']);
+} catch (Throwable $e) { echo "  (notification log unavailable)\n"; }
+PHP
+docker exec -i -u "$DB_OWNER" -w "$IN_CONTAINER" -e "RO_DB4=$RO/db4.sqlite3" -e "PDD_IN=$PDD_IN" "$CONTAINER" php < "$SNIP/otphist.php" 2>&1 | sed 's/^/  /'
+docker exec -u "$DB_OWNER" "$CONTAINER" rm -rf "$RO" 2>/dev/null || true
+# 5. the tick's crash line (main.php:456, str_pad on an int under strict_types): how regular, and did it predate the deploy
+echo
+N24="$(docker logs "$CONTAINER" --since 24h 2>&1 | grep -c 'dishnet-hybrid-sudan/main.php:456' || true)"
+NBEFORE="$(docker logs "$CONTAINER" --since "${DEPLOYED_AT%T*}T00:00:00Z" --until "$DEPLOYED_AT" 2>&1 | grep -c 'dishnet-hybrid-sudan/main.php:456' || true)"
+OLDEST="$(docker logs "$CONTAINER" --timestamps 2>&1 | head -1 | cut -c1-20)"
+OTHERS="$(docker logs "$CONTAINER" --since 24h 2>&1 | grep -E 'PHP Fatal|UNCAUGHT' | grep -vc 'dishnet-hybrid-sudan' || true)"
+echo "  container log   main.php:456 uncaught lines — last 24 h: ${N24:-0}; on ${DEPLOYED_AT%T*} before the deploy (00:00 → ${DEPLOYED_AT#*T}): ${NBEFORE:-0}; oldest log line kept: ${OLDEST:-?}"
+echo "  container log   fatal/uncaught lines of OTHER plugins, last 24 h: ${OTHERS:-0}"
+echo "  (a count before the deploy above 0 proves the tick's crash predates 5.18.37; if the oldest kept line is after the deploy, the log cannot say)"
+hdr "F. Summary"
+echo "  read-only; nothing was changed. Send this LOG FILE back (not a copy of the terminal)."
+exit 0
+fi   # OTP_HISTORY
 # ═════════════════════════════════════════════════════════════════════════════
 if [ "$WEBHOOK_ONLY" = "0" ]; then
 hdr "C. Smoke tests over HTTP (no customer is contacted, nothing is posted)"

@@ -758,3 +758,36 @@ key mechanism exists, `client.message` (uCRM "message to client" → WhatsApp
 forward) is ignored by 5.18.37. The checks ran against the `:8443` address with certificate
 verification off because the public address was read from the wrong file;
 also fixed. Code delivery to a phone was not exercised live (no `--login`).
+
+**Closure run, 25 Sep 2026 20:38 UTC (`80f66fa`, `--login-only --login` with the
+operator's own registered number):** the data-directory backup the deploy run
+lost was re-taken by hand at 20:12 UTC and verified read-only — 95,171,116
+bytes, mode 600, gzip integrity ok, 701 archive entries against 701 entries in
+the live directory, one top-level directory; the corrected backup naming was
+exercised against the original collision (distinct names, a repeat gets a time
+suffix). The controlled sign-in passed points 1–2 (the page renders; the number
+resolves to exactly one account) and **stopped at point 3: no code was sent.**
+`app_send_otp` answered 500 *WhatsApp sender is not configured on server*
+because the three WASender keys (`wa_plugin_url`, `wa_app_key`, `wa_auth_key`)
+are empty on the Uganda install, whose transport is Evolution
+(`wasender_configured=false`, `evolution_configured=true`,
+`dry_run_mode=false`). **Pre-existing, not Phase 1's:** 5.18.36 (`c82e0b9`)
+refused a matched number with the same three-key check, the same 500 and the
+same `otp_wa_not_configured` audit row; 5.18.37 only moved the check before the
+lookup so every number gets one answer. Points 4–9 were not reached; nothing
+was changed; the prerequisite's redesign (accept any configured transport)
+belongs to Phase 2. **Consequence recorded:** with the e-mail lookup inert (the
+structured index has no e-mail column — pinned by test in this release), the
+Uganda customer portal has no working sign-in path today and, as far as the
+code shows, had none before 5.18.37; `scripts/phase1-deploy.sh --otp-history`
+(read-only counts, no identifier or code) was added to show that from the
+production records. The uCRM UI reading (System → Webhooks) is still pending;
+`crm_webhook_key` stays unset. **Two container-log findings, neither Phase
+1's:** `dishnet-hybrid-sudan/main.php:456` throws `str_pad(): Argument #1
+($string) must be of type string, int given` on every five-minute tick except
+the daily pull tick — `declare(strict_types=1)` plus an `(int)` hour, unchanged
+since the plugin's first import into this repository (2 Sep 2026); it costs the
+*scheduled for* and *total execution* log lines only, the pull and the index
+rebuild run on the pull tick, and the one-line fix (`(string)$autoPullHour`) is
+proposed for its own window, not applied; and `dishnet-data-report/main.php:105`
+(a different plugin, not in this repository) throws a `flock()` TypeError.
