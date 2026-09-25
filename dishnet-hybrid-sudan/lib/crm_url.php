@@ -11,10 +11,11 @@ declare(strict_types=1);
  *   dn_crm_link()       https://host/crm/<path>   (a page inside the CRM UI)
  *   dn_plugin_public()  this plugin's public.php  (webhooks, public pages)
  *
- * Resolution order: config crm_public_url (an override, normally unset),
- * then ucrm.json (ucrmPublicUrl / pluginPublicUrl), then config
- * crm_base_url with any /crm and /api/vX.Y suffix stripped. Empty string
- * when none exists.
+ * Resolution order: config crm_public_url (an override, normally unset;
+ * read from the install's settings when the caller's array lacks it), then
+ * ucrm.json (ucrmPublicUrl / pluginPublicUrl), then config crm_base_url
+ * with any /crm and /api/vX.Y suffix stripped. Empty string when none
+ * exists.
  *
  * The override exists because ucrm.json is not always externally correct.
  * uCRM writes the address it was CONFIGURED with, and behind a reverse
@@ -46,15 +47,62 @@ if (!function_exists('dn_crm_web')) {
     }
 
     /**
+     * crm_public_url as this INSTALL is configured, whatever array a caller
+     * happens to hold.
+     *
+     * The value lives in the data directory's config.json -- where
+     * tools/crm_url_check.php --set writes it -- with the vault as its
+     * backup. Only PluginConfig::load() merges that file. public.php (every
+     * admin screen, the customer portal, the API) and about a hundred other
+     * readers take the settings store's copy of kyc_config.json instead, so
+     * for them the override did not exist: the links they built kept :8443
+     * while the override sat correctly set. This reads it for all of them.
+     *
+     * The data directory is the one the running entry point chose -- its
+     * $dataDir, as CustomerContact reads it -- so a tool aimed at another
+     * directory, or a test's own, is read and not the live one.
+     *
+     * Read-only, and once per process per data directory, because one admin
+     * page can build hundreds of links. $forget drops what was read.
+     */
+    function dn_install_public_url(bool $forget = false): string
+    {
+        static $cache = [];
+        if ($forget) $cache = [];
+        $root = dirname(__DIR__);
+        $dir  = is_string($GLOBALS['dataDir'] ?? null) ? $GLOBALS['dataDir'] : '';
+        if ($dir === '') $dir = (string)getenv('DN_DATA_DIR');
+        if ($dir === '') {
+            require_once __DIR__ . '/bootstrap_data.php';
+            $dir = getDataDir($root);
+        }
+        if (array_key_exists($dir, $cache)) return $cache[$dir];
+        $value = '';
+        try {
+            require_once __DIR__ . '/PluginConfig.php';
+            $value = trim((string)(PluginConfig::read($root, $dir)['crm_public_url'] ?? ''));
+        } catch (\Throwable $e) {
+            error_log('[crm_url] crm_public_url could not be read: ' . $e->getMessage());
+        }
+        return $cache[$dir] = $value;
+    }
+
+    /**
      * The operator's override, as scheme://host[:port], or '' when unset or
      * unusable. Never guessed: a value that is not an absolute http(s) URL
      * with a host is ignored, so a typo falls back to the old behaviour
      * rather than producing links to nowhere.
+     *
+     * A value in $config wins. A $config without one -- the settings store's
+     * copy, which is what most callers hold -- gets the install's value. No
+     * $config at all gets none: the two callers that pass nothing make
+     * server-side calls to a sibling plugin, not links anyone opens.
      */
     function dn_public_override(?array $config): string
     {
         if (!$config) return '';
         $raw = trim((string)($config['crm_public_url'] ?? ''));
+        if ($raw === '') $raw = dn_install_public_url();
         if ($raw === '') return '';
         $u = parse_url($raw);
         if (!is_array($u) || empty($u['host'])) return '';

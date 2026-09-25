@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 require_once dirname(__DIR__, 2) . '/lib/timezone.php';
 // ═══════════════════════════════════════════════════════════════
 // CRM SYNC / SURVEYS / SIGNATURES
@@ -4184,6 +4185,9 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
         }
         $invoiceId = (int)($inv['id'] ?? 0);
         $invoiceUrl = $portalBase && $invoiceId ? "{$portalBase}/client-zone/invoices/{$invoiceId}/pay" : '';
+        // A customer opens this: on the address their browser can reach, not
+        // uCRM's internal :8443. Unchanged where no crm_public_url is set.
+        $invoiceUrl = dn_with_override($invoiceUrl, $cfg);
         $payUrl = $invoiceUrl;
 
         // ── EMAIL SEND ─────────────────────────────────────────────────

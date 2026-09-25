@@ -97,6 +97,10 @@ class ConfigVault
         // closed (nobody can pay in test); losing the second closes the link.
         'dpo_test_clients',
         'dpo_test_link_key',
+        // The address customers' browsers use (tools/crm_url_check.php).
+        // Lost in a re-install, every link the plugin sends -- portal, PDF,
+        // payment return -- would go back to uCRM's internal :8443.
+        'crm_public_url',
     ];
 
     public static function path(string $pluginRoot, string $dataDir): string

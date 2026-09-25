@@ -1,5 +1,6 @@
 
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // What each tile counts. A KYC application is saved with status 'new' whether
 // or not uCRM accepted it: the uCRM result is crm_client_id and crm_sync_status.
 // So "In CRM" counts applications that have a uCRM client id, never 'new'.
@@ -281,7 +282,7 @@ $totalC  = count($myApps);
             💳✗ Not in CRM — add manually
         </span>
         <?php if (!empty($a['crm_client_id'])): ?>
-        <a href="https://<?= $_SERVER['HTTP_HOST'] ?>/crm/billing/invoices/new?clientId=<?= h($a['crm_client_id']) ?>"
+        <a href="<?= h(dn_with_override('https://' . ($_SERVER['HTTP_HOST'] ?? '') . '/crm/billing/invoices/new?clientId=' . rawurlencode((string)$a['crm_client_id']), $config)) ?>"
            target="_blank"
            style="background:#1565C0;color:#fff;padding:2px 10px;border-radius:8px;font-size:10px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:3px;">
             ➕ Add in UCRM
@@ -307,7 +308,7 @@ $totalC  = count($myApps);
         <?php if ($crmSameIds): ?>
         <div style="margin-top:3px;">In uCRM:
             <?php foreach ($crmSameIds as $sameId): ?>
-            <a href="https://<?= h($_SERVER['HTTP_HOST'] ?? '') ?>/crm/client/<?= (int)$sameId ?>" target="_blank" rel="noopener">client #<?= (int)$sameId ?></a>
+            <a href="<?= h(dn_with_override('https://' . ($_SERVER['HTTP_HOST'] ?? '') . '/crm/client/' . (int)$sameId, $config)) ?>" target="_blank" rel="noopener">client #<?= (int)$sameId ?></a>
             <?php endforeach; ?>
         </div>
         <?php endif; ?>

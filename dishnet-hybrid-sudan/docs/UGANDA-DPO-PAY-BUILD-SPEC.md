@@ -482,3 +482,13 @@ currency are accepted — `createToken`, then `verifyToken` expecting `900` — 
 anyone is sent the link. It runs only in the test environment and never prints
 the token. The record for the operator is `docs/32-dpo-pay-review.md` at the
 repository root.
+
+**5.18.34 — the addresses DPO is given had uCRM's internal port.** The return,
+back and push addresses, and the test link, are built by `dn_plugin_public()`
+from whatever settings the caller holds. The admin screen and the portal hold
+the settings store's copy of `kyc_config.json`, which does not carry
+`crm_public_url`, so all four came out on `https://crm.dishnetuganda.com:8443/…`
+— UISP's self-signed port, which a reviewer's browser warns about and DPO's
+server may refuse. `dn_public_override()` now reads the install's value when the
+caller's copy lacks it. Copy the addresses for DPO only after 5.18.34 is
+deployed. Record: `docs/33-links-without-port.md`.

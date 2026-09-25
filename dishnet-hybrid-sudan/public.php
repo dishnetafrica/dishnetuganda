@@ -3304,7 +3304,7 @@ setTimeout(function() {
       <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:6px;"> Share install link</div>
       <div style="font-size:12px;color:#374151;margin-bottom:10px;">Copy this link and open it in Chrome:</div>
       <div id="installUrlBox" style="background:#fff;border:1px solid #d1fae5;border-radius:8px;padding:10px;font-size:11px;color:#1565C0;word-break:break-all;font-family:monospace;margin-bottom:8px;">
-        <?= (isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?page=install' ?>
+        <?= h(dn_with_override((isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?page=install', $config)) ?>
       </div>
       <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('installUrlBox').textContent.trim()).then(function(){this.textContent=' Copied!';}.bind(this))"
         style="width:100%;padding:10px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
@@ -3312,7 +3312,7 @@ setTimeout(function() {
       </button>
     </div>
 
-    <a href="<?= (isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'] ?>?page=install" target="_blank"
+    <a href="<?= h(dn_with_override((isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off'?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'].'?page=install', $config)) ?>" target="_blank"
       style="display:block;text-align:center;padding:13px;background:linear-gradient(135deg,#128C7E,#25D366);color:#fff;border-radius:12px;font-size:14px;font-weight:800;text-decoration:none;">
        Open Install Guide Page
     </a>

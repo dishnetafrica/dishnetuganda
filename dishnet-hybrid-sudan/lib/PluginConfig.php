@@ -50,26 +50,53 @@ class PluginConfig
 
     public static function load(string $pluginRoot, string $dataDir): array
     {
-        $config = [];
-
-        foreach ([$pluginRoot . '/data/config.json', $dataDir . '/config.json',
-                  $dataDir . '/kyc_config.json'] as $path) {
-            $decoded = self::readJsonFile($path);
-            if ($decoded !== null) $config = array_merge($config, $decoded);
-        }
+        $config = self::files($pluginRoot, $dataDir);
 
         // The vault fills anything a re-install wiped; a value that is present
         // -- including deliberately off -- is never overridden. See ConfigVault.
         require_once __DIR__ . '/ConfigVault.php';
         $config = ConfigVault::apply($pluginRoot, $dataDir, $config);
 
+        return self::normalise($config);
+    }
+
+    /**
+     * The same configuration load() returns, without load()'s side effects.
+     *
+     * load() is the boot path: ConfigVault::apply() also refreshes the vault
+     * and can restore the webhook secret file. That is right once per process
+     * and wrong for code that only wants to know a value -- crm_url.php asks
+     * for crm_public_url while it builds a link, and one admin page can build
+     * hundreds. This reads the same files in the same order, fills from the
+     * vault without writing it, and changes nothing on disk.
+     */
+    public static function read(string $pluginRoot, string $dataDir): array
+    {
+        require_once __DIR__ . '/ConfigVault.php';
+        return self::normalise(ConfigVault::fill($pluginRoot, $dataDir, self::files($pluginRoot, $dataDir)));
+    }
+
+    /** The three settings files, merged in order: a later file wins a key. */
+    private static function files(string $pluginRoot, string $dataDir): array
+    {
+        $config = [];
+        foreach ([$pluginRoot . '/data/config.json', $dataDir . '/config.json',
+                  $dataDir . '/kyc_config.json'] as $path) {
+            $decoded = self::readJsonFile($path);
+            if ($decoded !== null) $config = array_merge($config, $decoded);
+        }
+        return $config;
+    }
+
+    /** Checkboxes to real booleans, strings trimmed. */
+    private static function normalise(array $config): array
+    {
         foreach (self::BOOL_KEYS as $k) {
             if (array_key_exists($k, $config)) $config[$k] = self::toBool($config[$k]);
         }
         foreach ($config as $k => $v) {
             if (is_string($v)) $config[$k] = trim($v);
         }
-
         return $config;
     }
 

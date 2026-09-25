@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // ═══════════════════════════════════════════════════════════════
 // AUTHENTICATION
 // ═══════════════════════════════════════════════════════════════
@@ -129,7 +130,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='forgot_pass
         $fpBaseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']==='on' ? 'https' : 'http')
                    . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
                    . strtok($_SERVER['REQUEST_URI'] ?? '/public.php', '?');
-        $fpLink    = $fpBaseUrl . '?page=reset_password&token=' . urlencode($fpToken);
+        // Sent by WhatsApp and opened on a phone: the reachable address, not
+        // whichever port this request happened to arrive on.
+        $fpLink    = dn_with_override($fpBaseUrl . '?page=reset_password&token=' . urlencode($fpToken), $config);
         $fpMsg     = "\xF0\x9F\x94\x90 *DishNet Password Reset*\n\nHi {$fpRetailer['name']},\n\nTap the link below to set a new password. Valid for *30 minutes*.\n\n{$fpLink}\n\n_If you did not request this, ignore this message._";
         $notify->sendVia('support', $fpRetailer['phone'], $fpMsg, 'pwd_reset_request', [
             'name' => $fpRetailer['name'],

@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // Tab: customer_lookup — Customer 360° (UCRM Replica)
 // Background-synced data → instant table load → click for 360° profile
 // PHP 7.4 compatible
@@ -11,6 +12,13 @@
             }
         }
         $crmBase = $crmBase ? rtrim($crmBase, '/') : '';
+        // The script below appends /crm/... itself, so this is scheme and host
+        // only: ucrmPublicUrl ends in /crm, and an API base in /crm/api/vX.Y,
+        // and either one doubled the path. Then the address a browser can
+        // reach instead of uCRM's internal :8443, where crm_public_url is set.
+        $crmBase = preg_replace('#/api/v[\d.]+$#', '', $crmBase);
+        if (substr($crmBase, -4) === '/crm') $crmBase = substr($crmBase, 0, -4);
+        $crmBase = dn_with_override(rtrim($crmBase, '/'), $config);
 
         // ── Build enriched index ──
         $uIdx = $store->load('client_search_index.json') ?? [];

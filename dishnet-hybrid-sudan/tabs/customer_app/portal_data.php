@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // ════════════════════════════════════════════════════════════════════
 // Customer Portal — Shared Data Loader
 // ════════════════════════════════════════════════════════════════════
@@ -179,6 +180,8 @@ if ($portalCrmBaseUrl === '') {
 $portalCrmBaseUrl = preg_replace('#/api/v[0-9.]+/?$#', '', $portalCrmBaseUrl);
 $portalCrmBaseUrl = preg_replace('#/crm/?$#', '', $portalCrmBaseUrl);
 $portalCrmBaseUrl = rtrim($portalCrmBaseUrl, '/') . '/crm';
+// On the address a customer's browser can reach, not uCRM's internal :8443.
+$portalCrmBaseUrl = dn_with_override($portalCrmBaseUrl, $config);
 
 if ($portalCustomerId && !$portalAuthError) {
     // Customer from index

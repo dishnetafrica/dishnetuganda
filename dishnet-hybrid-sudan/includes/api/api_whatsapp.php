@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // ═══════════════════════════════════════════════════════════════
 // WHATSAPP UNIFIED INBOX — API Endpoints
 // Uses ConversationService (SQLite) for all conversation data.
@@ -949,6 +950,8 @@
             . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
             . strtok($_SERVER['REQUEST_URI'] ?? '/public.php', '?'), '/');
         $publicUrl = $baseUrl . '/public.php?page=wa_media&f=' . urlencode($filename);
+        // Evolution fetches this, and refuses UISP's self-signed :8443.
+        $publicUrl = dn_with_override($publicUrl, $config);
 
         $ok2(['url' => $publicUrl, 'filename' => $filename, 'ext' => $ext, 'size' => $file['size']]);
     }

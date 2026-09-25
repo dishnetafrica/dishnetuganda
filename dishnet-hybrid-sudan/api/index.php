@@ -129,8 +129,8 @@ if ($action === 'app_version') {
         'latest_version'    => isset($apkMeta['version']) ? $apkMeta['version'] : '2.4',
         'version_code'      => isset($apkMeta['version_code']) ? (int)$apkMeta['version_code'] : 5,
         'required_features' => isset($apkMeta['required_features']) ? $apkMeta['required_features'] : ['barcode_scanner'],
-        'update_url'        => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
-            . '://' . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?') . '?page=install',
+        'update_url'        => dn_with_override((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+            . '://' . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?') . '?page=install', $config ?: null),
     ]);
 }
 if ($action === 'login') {

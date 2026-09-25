@@ -474,3 +474,55 @@ the fake DPO are all this touches: the seven tests that use them passed twice.
 works when only the DPO token is pasted.
 **Rollback:** `git checkout 1fd1478` and deploy again.
 **Status:** built and tested; not deployed.
+
+## 5.18.34 + website — links without `:8443`
+
+**25 September 2026** · Plugin: `lib/crm_url.php`, `lib/PluginConfig.php`,
+`lib/ConfigVault.php`, `tools/crm_url_check.php`, twelve files that built an
+address themselves, `tests/test_links_without_port.php`, `tests/run.sh`,
+`tests/test_tools_smoke.php`. Website: 57 pages, `verify-site.sh`,
+`README-DEPLOY.md`. Record: [33](33-links-without-port.md).
+
+The operator asked why links carry `:8443`, and said the customer login does not
+work. Three sources, measured in the code:
+
+- **The website's Customer Login** linked the bare `https://crm.dishnetuganda.com/crm`
+  on every page. UISP's web server redirects that to `/crm/` and adds its own
+  port, which is the address in the question. All 176 links now open
+  `/crm/login`. `verify-site.sh` fails on any bare `/crm`, shown by planting one.
+- **The plugin's own setting reached only half the plugin.** `crm_public_url`
+  (set in September, [09](09-mail-and-pdf-delivery.md)) is in the data
+  directory's `config.json`, and only `PluginConfig::load()` merges that file.
+  The admin screens, the customer portal, the API and about a hundred other
+  readers hold the settings store's copy, so their links kept `:8443`. That
+  includes the DPO return, push and test addresses shown to be sent to DPO.
+  - `dn_public_override()` now reads the install's value, read-only, when the
+    caller's copy lacks it. A caller with no config at all still gets none: the
+    two such callers talk to a sibling plugin.
+  - `crm_public_url` is now a vault key.
+  - `--set` and `--clear` write both the file and the vault, and remove a second
+    copy anywhere else.
+- **Twelve files built addresses themselves**, from uCRM's raw address or the
+  request's host. Each now goes through `dn_with_override()`, which changes
+  nothing where the setting is absent. A scan in the new test fails on any new
+  one; every exception is named with its reason.
+
+**Not the plugin's:** uCRM's own e-mails and redirects (the client zone
+invitation, uCRM's invoice e-mails). Routers stay on `:8443`
+([05](05-domain-and-tls-plan.md)). **Found and left:** the overdue ladder links
+customers to uCRM's staff page, and the workbench's pay link looks in the wrong
+folder. The ladder is off on Uganda (prepaid), so these reach Sudan only.
+
+Tests: `test_links_without_port.php` 47 checks; 11 weakened copies each caught.
+Plugin suite: **190 files, 8,454 checks, 0 failed, twice.** The runner now gives
+each test its own vault: a vault shared by the run carried the new key from one
+test into four others. Its guard was rewritten to say so, and fails on the old
+runner. Sudan: no `crm_public_url`, so its links keep their host and port. The
+one change there is the customer lookup's uCRM links, which doubled `/crm` in the
+path and now do not.
+
+**Applied by:** the operator: `deploy-hybrid.sh`, then `tools/crm_url_check.php`
+(and `--set https://crm.dishnetuganda.com` if it shows none). Then, after
+opening `/crm/login` once, the website redeploy in EasyPanel.
+**Rollback:** `git checkout b4cc109` and deploy again; the website's previous build.
+**Status:** built and tested; not deployed.

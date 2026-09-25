@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 // ══════ PWA + API ROUTES (before any HTML output) ══════
 if (!function_exists('str_contains')) { function str_contains(string $h, string $n): bool { return $n===''||strpos($h,$n)!==false; } }
 if (!function_exists('str_starts_with')) { function str_starts_with(string $h, string $n): bool { return $n===''||strncmp($h,$n,strlen($n))===0; } }
@@ -878,7 +879,7 @@ if ($page === 'install') {
     $scheme = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
             || (($_SERVER['SERVER_PORT'] ?? 80) == 443)) ? 'https' : 'http';
-    $appUrl   = $scheme . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['SCRIPT_NAME'];
+    $appUrl   = dn_with_override($scheme . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['SCRIPT_NAME'], $config);
     $apkUrl   = $appUrl . '?page=download_app';
     $supUrl   = $appUrl . '?page=pwa';
     $_apkMeta  = $store->load('android_app_meta.json') ?? [];

@@ -140,7 +140,11 @@ PDF, using your own name. Expect:
 - *Payment successful*;
 - a payment on the test client in uCRM.
 
-**6. Reply to DPO** with:
+**6. Reply to DPO** with the items below. **Deploy 5.18.34 first** and copy the
+addresses after it: until then they came out as
+`https://crm.dishnetuganda.com:8443/…`, UISP's port with a self-signed
+certificate. Neither may contain `:8443` ([33](33-links-without-port.md)).
+
 
 - the test link;
 - the **Push / notify URL** from the admin screen's *Give these to DPO* box —
@@ -223,3 +227,7 @@ again later:
     should be changed.
 - **5.18.33:** the tool now refuses anything that is not shaped like a DPO token
   or service type, before sending it anywhere.
+- **5.18.34:** the return, push and test addresses on the DPO screen, and the
+  addresses Pay Now gives DPO, carried `:8443`. The screen read a copy of the
+  settings without the setting that removes the port. Fixed; see
+  [33](33-links-without-port.md).

@@ -13,13 +13,18 @@ cd "$(dirname "$0")"
 # later tests. Results depended on run order and on what a previous run had
 # left behind. Fourteen tests had this exposure; fixing it here fixes all of
 # them, and no test can reach the real vault at all.
-DN_VAULT_FILE="$(mktemp -t dn-test-vault.XXXXXX)"
-export DN_VAULT_FILE
-trap 'rm -f "$DN_VAULT_FILE"' EXIT INT TERM
+#
+# And one per TEST, not per run. A setting one test writes into its own
+# config is copied into the vault by the next config load, and the vault then
+# gap-fills it into every test after: crm_public_url did exactly that the day
+# it became a vault key (5.18.34), and failed four later tests.
+VAULTS="$(mktemp -d -t dn-test-vaults.XXXXXX)"
+trap 'rm -rf "$VAULTS"' EXIT INT TERM
 
 fail=0
 for t in test_*.php; do
   printf '\n=== %s ===\n' "$t"
+  export DN_VAULT_FILE="$VAULTS/${t%.php}.json"
   php "$t" || fail=1
 done
 exit "$fail"

@@ -140,7 +140,12 @@ portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --includ
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=web_chat$' \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=shop&amp;format=json$' \
          | grep -v '^https://crm\.dishnetuganda\.com$')
-[ "$portal" = "https://crm.dishnetuganda.com/crm" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
+[ "$portal" = "https://crm.dishnetuganda.com/crm/login" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
+# Never the bare /crm. The server in front of uCRM answers it with a permanent
+# redirect to /crm/ that carries its own port, :8443 — self-signed, so a
+# customer's browser shows a security warning instead of the sign-in page.
+n=$(grep -rF 'https://crm.dishnetuganda.com/crm"' "$HERE/site" --include='*.html' -l | wc -l)
+[ "$n" = 0 ] || { echo "  $n pages still link the bare /crm, which redirects to :8443"; fail=1; }
 [ $fail -eq 0 ] && echo "  no foreign-country remnants; one WhatsApp number; one portal URL"
 
 echo "== commercial rules =="
