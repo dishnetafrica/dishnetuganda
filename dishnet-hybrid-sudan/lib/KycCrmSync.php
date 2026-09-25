@@ -47,28 +47,39 @@ final class KycCrmSync
     /** Statuses that mean "saved here, not in uCRM". */
     const WAITING = ['pending', 'review', 'failed'];
 
+    /**
+     * Seconds a cron pass may spend starting uCRM creates. master.php gives
+     * each job 60 seconds and a job over it kills the whole scheduler run, so
+     * a backlog is worked through over several runs instead. At least one
+     * application is always attempted, so a slow uCRM still makes progress.
+     */
+    const BUDGET_SECONDS = 40.0;
+
     private $store;
     private $crm;
     private array $config;
+    private float $budget;
     private ?UcrmClientTarget $target = null;
 
-    public function __construct($store, $crm, array $config = [])
+    public function __construct($store, $crm, array $config = [], float $budgetSeconds = self::BUDGET_SECONDS)
     {
         $this->store  = $store;
         $this->crm    = $crm;
         $this->config = $config;
+        $this->budget = $budgetSeconds;
     }
 
     /**
      * The cron pass: every 'pending' application that is due. 'review' and
      * 'failed' wait for a person.
      *
-     * @return array{due:int,synced:int,failed:int,review:int,gave_up:int,busy:int}
+     * @return array{due:int,synced:int,failed:int,review:int,gave_up:int,busy:int,deferred:int}
      */
     public function runDue(): array
     {
-        $out = ['due' => 0, 'synced' => 0, 'failed' => 0, 'review' => 0, 'gave_up' => 0, 'busy' => 0];
+        $out = ['due' => 0, 'synced' => 0, 'failed' => 0, 'review' => 0, 'gave_up' => 0, 'busy' => 0, 'deferred' => 0];
         $now = time();
+        $started = microtime(true);
         foreach (($this->store->load('kyc_applications.json') ?? []) as $app) {
             if (!empty($app['crm_client_id'])) continue;
             if (($app['crm_sync_status'] ?? '') !== 'pending') continue;
@@ -103,6 +114,11 @@ final class KycCrmSync
                 continue;
             }
 
+            // Out of time: the next run takes it (see BUDGET_SECONDS).
+            if ($out['due'] > 0 && microtime(true) - $started > $this->budget) {
+                $out['deferred']++;
+                continue;
+            }
             $out['due']++;
             $r = $this->attempt($app, false, 'cron');
             if     ($r['status'] === 'synced') $out['synced']++;
@@ -251,27 +267,23 @@ final class KycCrmSync
             }
         }
 
-        // The quote, where this install has the admin token quotes need.
-        $token = trim((string)($this->config['crm_auth_token'] ?? ''));
-        $auto  = ($this->config['kyc_auto_quote_enabled'] ?? true) !== false;
-        if ($auto && $token !== '' && empty($app['quote_created'])) {
-            $price = (float)($app['offer_price'] ?? 0);
-            if ($price > 0) {
-                $quoteCrm = new CrmApiClient(rtrim($this->crm->getBaseUrl(), '/'), $token, 'x-auth-token');
-                $q = $quoteCrm->post("clients/{$crmId}/quotes", [
-                    'notes'      => 'Auto-generated on KYC registration (CRM retry). Sales: ' . ($app['retailer_name'] ?? ''),
-                    'adminNotes' => 'CRM retry for App #' . $id,
-                    'items'      => [['label' => (string)($app['offer_name'] ?? 'Service Plan'), 'price' => $price,
-                                      'quantity' => 1, 'unit' => 'Service']],
-                ]);
-                if (!empty($q['id'])) {
-                    $this->store->updateOne('kyc_applications.json', 'id', $id, [
-                        'quote_id' => $q['id'], 'quote_created' => true, 'quote_ref' => $q['number'] ?? '',
-                        'wa_quote_pending' => true, 'wa_quote_phone' => $app['mobile'] ?? '',
-                        'wa_quote_deferred_at' => date('Y-m-d H:i:s'),
-                    ]);
-                    $quoteCrm->patch("billing/quotes/{$q['id']}/send");
-                }
+        // The quote, as the form makes it: the lines the form built (kept on
+        // the application), the same switch and limit, and the same client —
+        // the admin token when one is set, else the plugin's own key.
+        $autoQuote = ($this->config['kyc_auto_quote_enabled'] ?? true) !== false;
+        if ($autoQuote && empty($app['quote_created'])) {
+            $items = $this->quoteItemsFor($app);
+            if ($items !== [] && !KycService::quoteOverAutoMax($items, $this->config)) {
+                $ref    = trim((string)($app['quote_ref'] ?? ''));
+                $prefix = trim((string)($this->config['kyc_quote_notes_prefix'] ?? ''));
+                $notes  = ($prefix !== '' ? $prefix . "\n" : '')
+                        . ($ref !== '' ? $ref . ' | ' : '')
+                        . 'Auto-generated on KYC registration, sent when the customer reached uCRM. Sales: '
+                        . (string)($app['sales_person'] ?? $app['retailer_name'] ?? '')
+                        . ' | Connection: ' . (string)($app['connectivity_type'] ?? '')
+                        . ' | Priority: ' . (string)($app['priority'] ?? 'Medium');
+                KycService::postQuote($this->crm, $this->store, $id, (int)$crmId, $items, $notes,
+                    'Plugin ref: ' . ($ref !== '' ? $ref : 'KYC-' . $id), (string)($app['mobile'] ?? ''));
             }
         }
 
@@ -281,6 +293,100 @@ final class KycCrmSync
                 $this->store->updateOne('payment_collections.json', 'id', $col['id'], ['crm_customer_id' => $crmId]);
             }
         }
+    }
+
+    /**
+     * The quote lines for an application: the ones the form built and kept
+     * (5.18.29 on), or — for an application saved before that — rebuilt with
+     * the form's own builder from what the application recorded, priced as it
+     * was offered then. Product links come from today's plan and device list.
+     */
+    private function quoteItemsFor(array $app): array
+    {
+        if (isset($app['quote_items']) && is_array($app['quote_items'])) return $app['quote_items'];
+
+        $offer = null;
+        if (($app['offer_name'] ?? null) !== null || ($app['offer_price'] ?? null) !== null) {
+            $offer = ['name' => $app['offer_name'] ?? 'Service Package', 'customer_price' => $app['offer_price'] ?? 0];
+            $packageId = (int)($app['package_choice'] ?? 0);
+            $plan = $this->store->findOne('subscription_plans.json', 'id', $packageId)
+                 ?? $this->store->findOne('kyc_packages.json', 'id', $packageId);
+            if (!empty($plan['ucrm_product_id'])) $offer['ucrm_product_id'] = $plan['ucrm_product_id'];
+        }
+        $device = null;
+        if (!empty($app['device_price'])) {
+            $device = ['title' => $app['device_title'] ?? 'Hardware / Kit', 'price' => $app['device_price']];
+            $known  = $this->store->findOne('kyc_devices.json', 'id', (int)($app['device_id'] ?? 0));
+            if (!empty($known['ucrm_product_id'])) $device['ucrm_product_id'] = $known['ucrm_product_id'];
+        }
+        $cart = json_decode((string)($app['hw_cart_json'] ?? ''), true);
+        return KycService::quoteItems($offer, is_array($cart) ? $cart : [], $device,
+            (int)($app['kitQty'] ?? 1), (string)($app['customer_type'] ?? ''), $this->config);
+    }
+
+    /**
+     * "This is client #N": an application the phone check stopped, which a
+     * person has matched to the uCRM client it found. Records that client's id
+     * and creates nothing in uCRM — no client, payment, quote, work order or
+     * tag: the customer was already there, and whatever was done by hand
+     * stands.
+     *
+     * Only a client the phone check itself found can be chosen, and only
+     * while the application is waiting for that check; uCRM must still have
+     * the client.
+     *
+     * @return array{ok:bool,status:string,crm_client_id:?string,message:string}
+     */
+    public function link(int $appId, int $clientId, string $by): array
+    {
+        $app = $this->store->findOne('kyc_applications.json', 'id', $appId);
+        if ($app === null) return $this->result(false, 'missing', null, "Application #{$appId} does not exist.");
+        if (!empty($app['crm_client_id'])) {
+            return $this->result(false, 'synced', (string)$app['crm_client_id'],
+                "Application #{$appId} is already in the CRM as client #{$app['crm_client_id']}.");
+        }
+        if (($app['crm_sync_status'] ?? '') !== 'review') {
+            return $this->result(false, 'refused', null,
+                "Application #{$appId} is not waiting for a check, so it cannot be linked to an existing client.");
+        }
+        $found = array_map('intval', is_array($app['crm_review_client_ids'] ?? null) ? $app['crm_review_client_ids'] : []);
+        if ($clientId <= 0 || !in_array($clientId, $found, true)) {
+            return $this->result(false, 'refused', null,
+                "Client #{$clientId} is not one the phone check found for application #{$appId}.");
+        }
+        $client = $this->crm->get("clients/{$clientId}");
+        if (!is_array($client) || (int)($client['id'] ?? 0) !== $clientId) {
+            return $this->result(false, 'refused', null, "uCRM has no client #{$clientId} ("
+                . UcrmClientTarget::describe($this->crm->getLastError()) . '). Nothing was changed.');
+        }
+        if (!$this->claim($appId)) {
+            return $this->result(false, 'busy', null,
+                "Application #{$appId} is being sent to the CRM right now; look again in a minute.");
+        }
+        try {
+            $now = date('Y-m-d H:i:s');
+            $this->store->updateOne('kyc_applications.json', 'id', $appId, [
+                'crm_client_id'         => (string)$clientId,
+                'crm_sync_status'       => 'synced',
+                'crm_linked_existing'   => true,
+                'crm_sync_payload'      => null,
+                'crm_sync_error'        => null,
+                'crm_review_client_ids' => null,
+                'crm_synced_at'         => $now,
+                'crm_sync_last_attempt' => $now,
+                'crm_sync_by'           => $by,
+            ]);
+            foreach (($this->store->load('payment_collections.json') ?? []) as $col) {
+                if ((int)($col['kyc_app_id'] ?? 0) === $appId && empty($col['crm_customer_id']) && !empty($col['id'])) {
+                    $this->store->updateOne('payment_collections.json', 'id', $col['id'], ['crm_customer_id' => (string)$clientId]);
+                }
+            }
+        } finally {
+            $this->store->updateOne('kyc_applications.json', 'id', $appId, ['crm_sync_claim' => null]);
+        }
+        error_log("[kyc_crm_sync] App #{$appId} linked to existing uCRM client #{$clientId} ({$by})");
+        return $this->result(true, 'synced', (string)$clientId,
+            "Application #{$appId} is now linked to uCRM client #{$clientId}. Nothing was created in uCRM.");
     }
 
     private function failed(array $app, string $reason, string $by): array

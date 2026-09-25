@@ -35,9 +35,10 @@ if (!$crm->isConfigured()) {
 }
 
 $kycSync = (new KycCrmSync($store, $crm, $config))->runDue();
-if ($kycSync['due'] + $kycSync['gave_up'] + $kycSync['review'] > 0) {
+if ($kycSync['due'] + $kycSync['gave_up'] + $kycSync['review'] + $kycSync['deferred'] > 0) {
     echo '[kyc_crm_sync] due ' . $kycSync['due'] . ', created ' . $kycSync['synced']
        . ', still failing ' . $kycSync['failed'] . ', for a person to check ' . $kycSync['review']
-       . ', gave up ' . $kycSync['gave_up'] . ', busy ' . $kycSync['busy'] . "\n";
+       . ', gave up ' . $kycSync['gave_up'] . ', busy ' . $kycSync['busy']
+       . ', left for the next run ' . $kycSync['deferred'] . "\n";
 }
 return;

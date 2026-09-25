@@ -321,6 +321,17 @@ $totalC  = count($myApps);
                 ↻ <?= $crmSameIds ? 'Create in CRM anyway' : 'Retry now' ?>
             </button>
         </form>
+        <?php if ($crmSt === 'review'): foreach ($crmSameIds as $sameId): ?>
+        <form method="POST" style="margin-top:6px;" onsubmit="return confirm('Attach application #<?= (int)$a['id'] ?> to uCRM client #<?= (int)$sameId ?>? Nothing will be created in uCRM.')">
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="kyc_crm_link">
+            <input type="hidden" name="app_id" value="<?= (int)$a['id'] ?>">
+            <input type="hidden" name="client_id" value="<?= (int)$sameId ?>">
+            <button type="submit" style="background:#2E7D32;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+                ✓ This is uCRM client #<?= (int)$sameId ?>
+            </button>
+        </form>
+        <?php endforeach; endif; ?>
         <?php endif; ?>
     </div>
     <?php endif; ?>

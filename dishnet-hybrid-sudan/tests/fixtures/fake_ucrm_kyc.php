@@ -28,7 +28,8 @@ declare(strict_types=1);
 $port      = (string)($_SERVER['SERVER_PORT'] ?? '0');
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_kyc_' . $port . '.json';
 $state     = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state    += ['scenario' => 'uganda', 'seq' => 900, 'log' => [], 'clients' => [], 'taken' => [], 'payments' => []];
+$state    += ['scenario' => 'uganda', 'seq' => 900, 'log' => [], 'clients' => [], 'taken' => [], 'payments' => [],
+               'refuse_quotes' => false];
 
 $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $uri    = (string)($_SERVER['REQUEST_URI'] ?? '/');
@@ -54,7 +55,7 @@ function kyc_out($data, int $code = 200): void
 if ($path === '/__test/ping')  kyc_out(['marker' => 'FAKE-UCRM-KYC', 'token' => (string)getenv('FAKE_UCRM_KYC_TOKEN')]);
 if ($path === '/__test/reset') {
     kyc_save(['scenario' => (string)($q['scenario'] ?? 'uganda'), 'seq' => 900, 'log' => [], 'clients' => [],
-              'taken' => [], 'payments' => []], $stateFile);
+              'taken' => [], 'payments' => [], 'refuse_quotes' => false], $stateFile);
     kyc_out(['ok' => true]);
 }
 if ($path === '/__test/set') { kyc_save(array_merge($state, $body), $stateFile); kyc_out(['ok' => true]); }
@@ -88,7 +89,9 @@ $fields  = $isSudan ? $ssFields : $ugFields;
 
 // ── every request is logged; only paths under the API are served ──────────
 $auth = $_SERVER['HTTP_X_AUTH_APP_KEY'] ?? ($_SERVER['HTTP_X_AUTH_TOKEN'] ?? '');
-$entry = ['method' => $method, 'path' => $path, 'query' => $q];
+// Which credential came: the plugin's app key, or an admin token (quotes).
+$entry = ['method' => $method, 'path' => $path, 'query' => $q,
+          'auth' => isset($_SERVER['HTTP_X_AUTH_APP_KEY']) ? 'app-key' : (isset($_SERVER['HTTP_X_AUTH_TOKEN']) ? 'token' : 'none')];
 if ($method !== 'GET') $entry['body'] = $body;
 $state['log'][] = $entry;
 kyc_save($state, $stateFile);
@@ -146,7 +149,10 @@ if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'GET') {
 if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'PATCH') kyc_out(['id' => (int)$m[1]] + $body);
 if (preg_match('#^/clients/(\d+)/add-tag/(\d+)$#', $p) && $method === 'PATCH') kyc_out(['ok' => true]);
 if ($p === '/documents' && $method === 'POST') kyc_out(['id' => 1], 201);
-if (preg_match('#^/clients/(\d+)/quotes$#', $p) && $method === 'POST') kyc_out(['id' => 77, 'number' => 'Q-77'], 201);
+if (preg_match('#^/clients/(\d+)/quotes$#', $p) && $method === 'POST') {
+    if (!empty($state['refuse_quotes'])) kyc_out(['code' => 403, 'message' => 'Forbidden'], 403);
+    kyc_out(['id' => 77, 'number' => 'Q-77'], 201);
+}
 if (preg_match('#^/billing/quotes/(\d+)(/send)?$#', $p)) kyc_out(['id' => 77, 'number' => 'Q-77']);
 if ($p === '/payments' && $method === 'GET') kyc_out((array)$state['payments']);
 if ($p === '/payments' && $method === 'POST') {

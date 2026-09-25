@@ -188,3 +188,84 @@ disk, unused by the older code. Clients already created in uCRM stay created.
 - `crm_dishnet_org_id` defaults to 2 in `public.php` and nothing reads it.
 - A legacy `plugin.sqlite3` still sits inside the plugin directory on the
   server. The plugin uses the sibling data directory; the old file is unread.
+
+## 7. The 5.18.28 deploy — 25 September 2026
+
+- Deployed with `deploy-hybrid.sh`; the container served `0d20e05`. It had
+  been running **5.18.27** (`90cf102`, a ZIP built on 19 September from this
+  branch; the plugin's `build.json` says so), so the deploy changed only this
+  fix. `90cf102` is the rollback point.
+- The retry's first run, 11:55:07, took 2,415 ms:
+  - **applications 1 and 3 were created in uCRM**, as leads;
+  - **application 2 stopped for a check**: uCRM client #10 has the same phone
+    number.
+- Nothing was sent to anyone. The 5.18.28 retry made a quote only with an
+  admin token, and none is set; it sends no WhatsApp.
+- Measured the same day, read-only:
+  - automatic quote: **on**; admin token: **not set**;
+  - support-channel WhatsApp goes out through Evolution, `dishnet_ug`;
+  - the support number printed in messages is +256 705 993 348.
+
+## 8. What 5.18.29 changes
+
+Until 25 September no KYC customer had ever reached uCRM on this install, so
+the steps the form takes **after** a create had never run here. From the next
+registration they do: the booking confirmation WhatsApp, the automatic quote
+(e-mailed by uCRM, and its PDF on WhatsApp), and for Cash sales the payment.
+Checking them found four things.
+
+1. **The retry quoted differently from the form.** The form quotes the
+   package, then the hardware (the cart, or the single kit), then for Fiber
+   the installation fee, each linked to its uCRM product. The 5.18.28 retry
+   quoted the package alone, and only with an admin token. Now:
+   - one builder, `KycService::quoteItems()`, and one sender,
+     `KycService::postQuote()`, serve both;
+   - a refused create keeps the lines the form built (`quote_items`), and the
+     retry quotes exactly those;
+   - an application saved before 5.18.29 is rebuilt the form's way, at the
+     price it was offered;
+   - the same switch (`kyc_auto_quote_enabled`, on the Settings screen), the
+     same limit (`kyc_auto_quote_max_amount`), the same credential (the admin
+     token when set, else the plugin's key);
+   - a refused quote is recorded as `quote_error` on the application, as the
+     form records it.
+2. **The booking confirmation lists Fiber and "DishNet 4G".** It offers every
+   service the South Sudan install sells, with installation times, and says
+   Starlink takes 1–2 working days. Uganda sells Starlink only, and its own
+   FAQ says *"In Kampala and major cities, usually 1–3 working days after
+   payment"*. New setting **`kyc_welcome_timeline`**:
+   - unset: the South Sudan lines, byte for byte (tested);
+   - text: printed as written, instead of those lines;
+   - `omit`: no timeline at all.
+3. **Nothing resolved a stopped application.** When the phone check finds the
+   customer already in uCRM, Orders now offers **"✓ This is uCRM client
+   #N"**:
+   - admins only;
+   - only a client the phone check itself found, only while the application
+     waits for that check, and only if uCRM still has the client;
+   - it records the id and creates nothing in uCRM: no client, payment,
+     quote, work order or tag.
+4. **The retry had no time budget.** `master.php` gives each job 60 seconds,
+   and a job over it ends the whole scheduler run. The retry now stops
+   starting creates after 40 seconds and leaves the rest for the next run,
+   always attempting at least one.
+
+**Tests:** `tests/test_kyc_crm_create.php`, 147 assertions: the shared builder
+on its own, then the form and the retry through the fake uCRM (lines, product
+links, credential used, limit, switch, refused quote), the time budget, the
+link (each refusal, and that it writes nothing to uCRM), and the confirmation
+unset, set and `omit`. The weakened copies and the full suite are recorded in
+the commit.
+
+**Deploy, then set the Uganda text** (as the plugin folder's owner, like the
+earlier `set_config.php` notes):
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/deploy-hybrid.sh
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key kyc_welcome_timeline --value "🛰 Starlink: usually 1–3 working days after payment (Kampala and major cities)"
+```
+
+The text is the FAQ's; customers read it exactly as written, so change it
+first if it should say something else. For application 2: open uCRM client
+#10 from its Orders card. Press **This is uCRM client #10** if it is the same
+customer, or **Create in CRM anyway** if it is someone else.

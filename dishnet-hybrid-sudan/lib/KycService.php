@@ -858,80 +858,11 @@ class KycService
         $autoQuoteEnabled  = ($cfg['kyc_auto_quote_enabled'] ?? true) !== false;
         $quoteValidityDays = max(1, (int)($cfg['kyc_quote_validity_days'] ?? self::QUOTE_MATURITY_DAYS));
         // ── Build quote items with UCRM productId when available ──
-        // If package/device has ucrm_product_id, link to UCRM product for inventory tracking
-        $quoteItems = [];
-        if ($offer) {
-            $item = [
-                'label'    => $offer['name'] ?? 'Service Package',
-                'quantity' => 1,
-                'price'    => (float)($offer['customer_price'] ?? $offer['amount'] ?? 0),
-                'unit'     => 'month',
-            ];
-            // Link to UCRM product if mapped
-            if (!empty($offer['ucrm_product_id'])) {
-                $item['productId'] = (int)$offer['ucrm_product_id'];
-            }
-            $quoteItems[] = $item;
-        }
-        
-        // Multi-item cart (hw_cart_json) takes priority over single device_id
-        $hwCart = [];
-        if (!empty($post['hw_cart_json'])) {
-            $hwCart = json_decode($post['hw_cart_json'], true) ?? [];
-        }
-        if (!empty($hwCart)) {
-            foreach ($hwCart as $hwItem) {
-                $hwPrice = (float)preg_replace('/[^0-9.]/', '', (string)($hwItem['price'] ?? '0'));
-                if ($hwPrice > 0) {
-                    $item = [
-                        'label'    => $hwItem['title'] ?? 'Hardware',
-                        'quantity' => max(1, (int)($hwItem['qty'] ?? 1)),
-                        'price'    => $hwPrice,
-                        'unit'     => 'piece',
-                    ];
-                    // Link to UCRM product if mapped
-                    if (!empty($hwItem['ucrm_product_id'])) {
-                        $item['productId'] = (int)$hwItem['ucrm_product_id'];
-                    }
-                    $quoteItems[] = $item;
-                }
-            }
-        } elseif (!empty($device) && !empty($device['price'])) {
-            // Fallback: single device
-            $devPrice = (float)preg_replace('/[^0-9.]/', '', $device['price'] ?? '0');
-            if ($devPrice > 0) {
-                $item = [
-                    'label'    => $device['title'] ?? 'Hardware / Kit',
-                    'quantity' => max(1, (int)($post['kitQty'] ?? 1)),
-                    'price'    => $devPrice,
-                    'unit'     => 'piece',
-                ];
-                // Link to UCRM product if mapped
-                if (!empty($device['ucrm_product_id'])) {
-                    $item['productId'] = (int)$device['ucrm_product_id'];
-                }
-                $quoteItems[] = $item;
-            }
-        }
-        
-        // Fiber: add installation fee as separate line
-        // Try to use UCRM product ID if configured
-        if (($post['customer_type'] ?? '') === 'Fiber') {
-            $installFee     = (float)($cfg['fiber_install_fee'] ?? 100);
-            $installProduct = (int)($cfg['fiber_install_product_id'] ?? 244); // Default UCRM product ID
-            if ($installFee > 0) {
-                $item = [
-                    'label'    => 'Installation Fee',
-                    'quantity' => 1,
-                    'price'    => $installFee,
-                    'unit'     => 'amount',
-                ];
-                if ($installProduct > 0) {
-                    $item['productId'] = $installProduct;
-                }
-                $quoteItems[] = $item;
-            }
-        }
+        // One builder for the form and the uCRM retry (KycCrmSync), so a
+        // customer whose create had to be retried is quoted the same lines.
+        $hwCart = !empty($post['hw_cart_json']) ? json_decode($post['hw_cart_json'], true) : [];
+        $quoteItems = self::quoteItems($offer ?: null, is_array($hwCart) ? $hwCart : [], $device ?: null,
+            (int)($post['kitQty'] ?? 1), (string)($post['customer_type'] ?? ''), $cfg);
         $quoteCreated = false;
         $quoteId      = null;
         $qSeq         = null;
@@ -941,16 +872,9 @@ class KycService
         $qNotesPrefix = '';
         // Max-amount guard: if cart total exceeds threshold, skip auto-quote
         // (agent will generate the quotation manually for non-standard hardware bundles)
-        $maxAutoQuoteAmount = (float)($cfg['kyc_auto_quote_max_amount'] ?? 0);
-        if ($autoQuoteEnabled && $maxAutoQuoteAmount > 0) {
-            $cartTotal = array_sum(array_map(
-                fn($item) => (float)($item['price'] ?? 0) * max(1, (int)($item['quantity'] ?? 1)),
-                $quoteItems
-            ));
-            if ($cartTotal > $maxAutoQuoteAmount) {
-                $autoQuoteEnabled = false; // suppress — too complex for auto-quote
-                error_log("KycService: auto-quote suppressed for CRM #{$crmClientId} — cart \${$cartTotal} exceeds max \${$maxAutoQuoteAmount}");
-            }
+        if ($autoQuoteEnabled && self::quoteOverAutoMax($quoteItems, $cfg)) {
+            $autoQuoteEnabled = false; // suppress — too complex for auto-quote
+            error_log("KycService: auto-quote suppressed for CRM #{$crmClientId} — the quote is over kyc_auto_quote_max_amount");
         }
         if ($autoQuoteEnabled && !empty($quoteItems)) {
             // ── B-03 FIX: quote_seq is now computed atomically inside saveApplication()'s
@@ -1043,6 +967,7 @@ class KycService
             'crm_sync_status'   => $crmFailed ? 'pending' : 'synced',
             'crm_sync_payload'  => $crmFailed ? json_encode($crmPayload) : null,
             'crm_sync_error'    => $crmFailed ? ($crmSyncError !== '' ? $crmSyncError : 'uCRM gave no answer') : null,
+            'quote_items'       => $crmFailed ? $quoteItems : null,   // what the retry quotes (KycCrmSync)
             'firstname'         => $post['firstname'] ?? '',
             'lastname'          => $post['lastname'] ?? '',
             'mobile'            => $post['mobile'] ?? '',
@@ -1100,78 +1025,19 @@ class KycService
 
             // v4.9.18 FIX #3: gate on qRef instead of qSeq (quote_seq is always 0 now)
             if ($qRef !== '' && $qRef !== null) {
-
-                // Try the main plugin CRM client first (works on UCRM 4.x+)
-                // Falls back to dedicated admin token if configured
-                $_quoteCfg   = $this->store->load('kyc_config.json') ?? [];
-                $_quoteToken = trim($_quoteCfg['crm_auth_token'] ?? '');
-                $_quoteUrl   = trim($_quoteCfg['crm_base_url'] ?? '');
-
-                $quoteCrm = ($_quoteToken !== '')
-                    ? new CrmApiClient(
-                        $_quoteUrl !== '' ? $_quoteUrl : rtrim($this->crm->getBaseUrl(), '/'),
-                        $_quoteToken,
-                        'x-auth-token'
-                      )
-                    : $this->crm;  // No admin token → plugin key (quotes will fail)
-
-                    $autoNotes    = $qRef . ' | Auto-generated on KYC registration. Sales: ' . $salesPerson
-                                   . ' | Connection: ' . $connectivity
-                                   . ' | Priority: ' . ($post['priority'] ?? 'Medium');
-                    $quotePayload = [
-                        // v4.11.3 FIX: removed 'maturityDays' — UISP 4.5.33 rejects it with 422
-                        'notes'               => ($qNotesPrefix ? $qNotesPrefix . "\n" : '') . $autoNotes,
-                        'adminNotes'          => 'Plugin ref: ' . $qRef,
-                        'items'               => $quoteItems,
-                    ];
-                    // Use client-specific endpoint: POST /clients/{id}/quotes
-                    error_log("[KycService] Attempting quote POST for CRM #{$crmClientId} with " . count($quoteItems) . " items, total: $" . array_sum(array_map(fn($i) => (float)($i['price'] ?? 0) * (int)($i['quantity'] ?? 1), $quoteItems)));
-                    $quoteResponse = $quoteCrm->post("clients/{$crmClientId}/quotes", $quotePayload);
-                    error_log("[KycService] Quote POST response: " . json_encode($quoteResponse));
-                    if (!empty($quoteResponse['id'])) {
-                        $quoteId      = $quoteResponse['id'];
-                        $quoteCreated = true;
-
-                        // ── Use UCRM's own quote number as the reference ──────────
-                        // UCRM auto-increments its own sequence (e.g. PF003847).
-                        // If not in POST response, fetch the quote to get the number.
-                        $ucrmQuoteNumber = $quoteResponse['number'] ?? null;
-                        if (!$ucrmQuoteNumber) {
-                            $fetchedQuote    = $quoteCrm->get("billing/quotes/{$quoteId}");
-                            $ucrmQuoteNumber = $fetchedQuote['number'] ?? null;
-                        }
-                        if ($ucrmQuoteNumber) {
-                            $qRef = $ucrmQuoteNumber;
-                            $this->store->updateOne('kyc_applications.json', 'id', $appId, [
-                                'quote_ref' => $ucrmQuoteNumber,
-                            ]);
-                        }
-
-                        $quoteCrm->patch("billing/quotes/{$quoteId}/send");
-                        // Write the UCRM quote_id back to the local record
-                        $this->store->updateOne('kyc_applications.json', 'id', $appId, [
-                            'quote_id'      => $quoteId,
-                            'quote_created' => true,
-                        ]);
-
-                        // ── Defer WA to cron_quote_wa — it will fetch PDF + send text + PDF ──
-                        // Store the phone directly so cron doesn't need another UCRM API call.
-                        // Cron waits 3 min to ensure UCRM has generated the PDF before fetching.
-                        $this->store->updateOne('kyc_applications.json', 'id', $appId, [
-                            'wa_quote_pending'     => true,
-                            'wa_quote_phone'       => preg_replace('/[^0-9+]/', '', $post['mobile'] ?? ''),
-                            'wa_quote_deferred_at' => date('Y-m-d H:i:s'),
-                        ]);
-                        error_log("[KycService] Quote #{$quoteId} ({$qRef}) deferred to cron_quote_wa with PDF");
-                    } else {
-                        // Quote POST failed - log for debugging
-                        $quoteError = $quoteCrm->getLastError();
-                        error_log("[KycService] Quote POST failed for CRM #{$crmClientId}: " . json_encode($quoteError));
-                        // Save failure info to application
-                        $this->store->updateOne('kyc_applications.json', 'id', $appId, [
-                            'quote_error' => json_encode($quoteError),
-                        ]);
-                    }
+                // Made, sent and handed to WhatsApp by postQuote(), which the
+                // uCRM retry (KycCrmSync) calls too: one way to quote.
+                $autoNotes = $qRef . ' | Auto-generated on KYC registration. Sales: ' . $salesPerson
+                           . ' | Connection: ' . $connectivity
+                           . ' | Priority: ' . ($post['priority'] ?? 'Medium');
+                $posted = self::postQuote($this->crm, $this->store, (int)$appId, (int)$crmClientId, $quoteItems,
+                    ($qNotesPrefix ? $qNotesPrefix . "\n" : '') . $autoNotes, 'Plugin ref: ' . $qRef,
+                    (string)($post['mobile'] ?? ''));
+                if ($posted['created']) {
+                    $quoteId      = $posted['id'];
+                    $quoteCreated = true;
+                    if ($posted['ref'] !== '') $qRef = $posted['ref'];
+                }
             } else {
                 error_log("[KycService] Quote BLOCKED — quote_ref is empty for app #{$appId}. savedApp keys: " . implode(',', array_keys($savedApp ?? [])));
                 $this->store->updateOne('kyc_applications.json', 'id', $appId, [
@@ -1593,6 +1459,159 @@ class KycService
         $seq    = max($maxSeq, $seqStart) + 1;
         $prefix = $isFiber ? 'FTTH' : 'STAR';
         return $prefix . str_pad((string)$seq, 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * The lines of a KYC quote: the package, then the hardware (the cart, or
+     * else the single device), then — for Fiber — the installation fee.
+     *
+     * The form and the uCRM retry (KycCrmSync) both build quotes here, so a
+     * customer whose uCRM create had to be retried is quoted exactly what the
+     * form would have quoted. Until 5.18.29 the retry quoted the package alone.
+     */
+    public static function quoteItems(?array $offer, array $hwCart, ?array $device, int $kitQty,
+                                      string $customerType, array $cfg): array
+    {
+        $items = [];
+        if ($offer) {
+            $item = [
+                'label'    => $offer['name'] ?? 'Service Package',
+                'quantity' => 1,
+                'price'    => (float)($offer['customer_price'] ?? $offer['amount'] ?? 0),
+                'unit'     => 'month',
+            ];
+            // Link to UCRM product if mapped
+            if (!empty($offer['ucrm_product_id'])) {
+                $item['productId'] = (int)$offer['ucrm_product_id'];
+            }
+            $items[] = $item;
+        }
+
+        // Multi-item cart (hw_cart_json) takes priority over single device_id
+        if (!empty($hwCart)) {
+            foreach ($hwCart as $hwItem) {
+                if (!is_array($hwItem)) continue;
+                $hwPrice = (float)preg_replace('/[^0-9.]/', '', (string)($hwItem['price'] ?? '0'));
+                if ($hwPrice > 0) {
+                    $item = [
+                        'label'    => $hwItem['title'] ?? 'Hardware',
+                        'quantity' => max(1, (int)($hwItem['qty'] ?? 1)),
+                        'price'    => $hwPrice,
+                        'unit'     => 'piece',
+                    ];
+                    if (!empty($hwItem['ucrm_product_id'])) {
+                        $item['productId'] = (int)$hwItem['ucrm_product_id'];
+                    }
+                    $items[] = $item;
+                }
+            }
+        } elseif (!empty($device) && !empty($device['price'])) {
+            // Fallback: single device
+            $devPrice = (float)preg_replace('/[^0-9.]/', '', (string)($device['price'] ?? '0'));
+            if ($devPrice > 0) {
+                $item = [
+                    'label'    => $device['title'] ?? 'Hardware / Kit',
+                    'quantity' => max(1, $kitQty),
+                    'price'    => $devPrice,
+                    'unit'     => 'piece',
+                ];
+                if (!empty($device['ucrm_product_id'])) {
+                    $item['productId'] = (int)$device['ucrm_product_id'];
+                }
+                $items[] = $item;
+            }
+        }
+
+        // Fiber: add installation fee as separate line
+        if ($customerType === 'Fiber') {
+            $installFee     = (float)($cfg['fiber_install_fee'] ?? 100);
+            $installProduct = (int)($cfg['fiber_install_product_id'] ?? 244); // Default UCRM product ID
+            if ($installFee > 0) {
+                $item = [
+                    'label'    => 'Installation Fee',
+                    'quantity' => 1,
+                    'price'    => $installFee,
+                    'unit'     => 'amount',
+                ];
+                if ($installProduct > 0) {
+                    $item['productId'] = $installProduct;
+                }
+                $items[] = $item;
+            }
+        }
+        return $items;
+    }
+
+    /** kyc_auto_quote_max_amount: a quote over it is left for the agent to make by hand. */
+    public static function quoteOverAutoMax(array $items, array $cfg): bool
+    {
+        $max = (float)($cfg['kyc_auto_quote_max_amount'] ?? 0);
+        if ($max <= 0) return false;
+        $total = array_sum(array_map(
+            fn($i) => (float)($i['price'] ?? 0) * max(1, (int)($i['quantity'] ?? 1)),
+            $items
+        ));
+        return $total > $max;
+    }
+
+    /**
+     * Create the quote in uCRM, have uCRM send it, and leave the WhatsApp copy
+     * to cron_quote_wa — for the form and the uCRM retry alike.
+     *
+     * Made with the admin token when one is set (crm_auth_token, and
+     * crm_base_url if given), otherwise with the plugin's own key: the rule
+     * the form has always used.
+     *
+     * @return array{created:bool,id:mixed,ref:string}
+     */
+    public static function postQuote($pluginCrm, $store, int $appId, int $crmClientId, array $items,
+                                     string $notes, string $adminNotes, string $phone): array
+    {
+        $cfg   = $store->load('kyc_config.json') ?? [];
+        $token = trim((string)($cfg['crm_auth_token'] ?? ''));
+        $url   = trim((string)($cfg['crm_base_url'] ?? ''));
+        $quoteCrm = ($token !== '')
+            ? new CrmApiClient($url !== '' ? $url : rtrim($pluginCrm->getBaseUrl(), '/'), $token, 'x-auth-token')
+            : $pluginCrm;
+
+        error_log("[KycService] Attempting quote POST for CRM #{$crmClientId} with " . count($items) . " items");
+        $resp = $quoteCrm->post("clients/{$crmClientId}/quotes", [
+            // v4.11.3 FIX: no 'maturityDays' — UISP 4.5.33 rejects it with 422
+            'notes'      => $notes,
+            'adminNotes' => $adminNotes,
+            'items'      => $items,
+        ]);
+        error_log("[KycService] Quote POST response: " . json_encode($resp));
+        if (empty($resp['id'])) {
+            $err = $quoteCrm->getLastError();
+            error_log("[KycService] Quote POST failed for CRM #{$crmClientId}: " . json_encode($err));
+            $store->updateOne('kyc_applications.json', 'id', $appId, ['quote_error' => json_encode($err)]);
+            return ['created' => false, 'id' => null, 'ref' => ''];
+        }
+
+        $quoteId = $resp['id'];
+        // uCRM's own quote number is the reference; fetch it if the POST did not say.
+        $number = $resp['number'] ?? null;
+        if (!$number) {
+            $fetched = $quoteCrm->get("billing/quotes/{$quoteId}");
+            $number  = $fetched['number'] ?? null;
+        }
+        if ($number) {
+            $store->updateOne('kyc_applications.json', 'id', $appId, ['quote_ref' => $number]);
+        }
+        $quoteCrm->patch("billing/quotes/{$quoteId}/send");
+        $store->updateOne('kyc_applications.json', 'id', $appId, [
+            'quote_id'      => $quoteId,
+            'quote_created' => true,
+        ]);
+        // WhatsApp is deferred to cron_quote_wa: it waits for uCRM's PDF.
+        $store->updateOne('kyc_applications.json', 'id', $appId, [
+            'wa_quote_pending'     => true,
+            'wa_quote_phone'       => preg_replace('/[^0-9+]/', '', $phone),
+            'wa_quote_deferred_at' => date('Y-m-d H:i:s'),
+        ]);
+        error_log("[KycService] Quote #{$quoteId} (" . (string)($number ?? '') . ") deferred to cron_quote_wa with PDF");
+        return ['created' => true, 'id' => $quoteId, 'ref' => (string)($number ?? '')];
     }
 
     /**

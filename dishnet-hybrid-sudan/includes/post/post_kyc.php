@@ -111,6 +111,20 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_crm_retry'
         : (in_array($retry['status'], ['review', 'busy'], true) ? 'warning' : 'danger'));
     redirect('?page=dashboard&tab=applications');
 }
+// ── "This is client #N": attach a stopped application to the uCRM client ──
+// The phone check found that client; a person compared the two and says it is
+// the same customer. KycCrmSync::link() records the id and creates nothing.
+if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_crm_link'){
+    $admin = $auth->requireAdmin();
+    require_once __DIR__ . '/../../lib/KycCrmSync.php';
+    $linked = (new KycCrmSync($store, $crm, is_array($config ?? null) ? $config : []))->link(
+        (int)($_POST['app_id'] ?? 0),
+        (int)($_POST['client_id'] ?? 0),
+        'admin:' . (string)($admin['name'] ?? $admin['email'] ?? $admin['id'] ?? 'unknown') . ' (linked)'
+    );
+    flash($linked['message'], $linked['ok'] ? 'success' : ($linked['status'] === 'busy' ? 'warning' : 'danger'));
+    redirect('?page=dashboard&tab=applications');
+}
 // ── Re-upload failed KYC photos directly to an existing CRM client ───────────
 if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_reupload_docs'){
     // Session-based auth — works reliably with multipart/form-data (no Bearer header needed)

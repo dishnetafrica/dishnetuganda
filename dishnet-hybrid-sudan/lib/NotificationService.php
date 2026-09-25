@@ -455,14 +455,21 @@ class NotificationService
 
             $timelineLines = "{$fiberLine}\n{$starlinkLine}\n{$lteLine}";
             if ($simLine) $timelineLines .= "\n{$simLine}";
+            // kyc_welcome_timeline (5.18.29). The lines above list every service
+            // the South Sudan install sells, and remain what an install that
+            // sets nothing sends. An install that sells less — Uganda sells
+            // Starlink only — writes its own lines here, as customers should
+            // read them; "omit" leaves the timeline out altogether.
+            $timelineSet   = trim((string)($this->cfgForContacts['kyc_welcome_timeline'] ?? ''));
+            $timelineBlock = $timelineSet === '' ? "⏱ *Installation Timeline:*\n{$timelineLines}\n\n"
+                           : (strtolower($timelineSet) === 'omit' ? '' : "⏱ *Installation Timeline:*\n{$timelineSet}\n\n");
 
             $msg = "🌟 *DishNet Africa – Request Confirmed!*\n\n"
                  . "Dear {$salutation},\n\n"
                  . "Your request for DishNet services has been successfully booked ✅\n\n"
                  . "🔄 *Next Steps:*\n"
                  . "📞 Our support team will call you shortly to schedule installation.\n\n"
-                 . "⏱ *Installation Timeline:*\n"
-                 . "{$timelineLines}\n\n"
+                 . $timelineBlock
                  . "📲 Sales: " . 'wa.me/' . CustomerContact::salesWa($this->cfgForContacts) . "\n"
                  . "🛠 Support: " . 'wa.me/' . CustomerContact::supportWa($this->cfgForContacts) . "\n\n"
                  . "Thank you for choosing DishNet Africa 🚀";

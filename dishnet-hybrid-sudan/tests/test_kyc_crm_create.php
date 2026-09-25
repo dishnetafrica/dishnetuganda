@@ -466,7 +466,10 @@ is_(substr_count($html, 'value="kyc_crm_retry"') === 3, 'an admin gets a retry o
 is_(substr_count($html, 'name="force" value="1"') === 1 && strpos($html, 'Create in CRM anyway') !== false,
     'only the one with a possible duplicate is forced, behind a confirmation');
 is_(strpos($html, '/crm/client/555') !== false, 'with a link to the uCRM client to check');
+is_(substr_count($html, 'value="kyc_crm_link"') === 1 && strpos($html, 'This is uCRM client #555') !== false,
+    'and a "This is uCRM client #555" button for when it is the same customer');
 $html = render_orders($apps, false);
+is_(strpos($html, 'kyc_crm_link') === false, 'an agent is not offered the link either');
 is_(strpos($html, 'kyc_crm_retry') === false && strpos($html, 'Not in the CRM yet') !== false,
     'an agent sees the state and the reason, not the button');
 
@@ -556,6 +559,216 @@ is_(($r['flash']['type'] ?? '') === 'warning' && calls('POST', '/clients') === [
 $r = run_post(['action' => 'kyc_crm_retry', 'app_id' => '2', 'force' => '1'], ['admin' => true, 'dir' => $kdir]);
 is_(($r['flash']['type'] ?? '') === 'success' && count(calls('POST', '/clients')) === 1,
     "'Create in CRM anyway' creates it", $r['_out']);
+
+// ── L. 5.18.29: the retry quotes what the form quotes ─────────────────────
+echo "\nL. Quotes — the form and the retry send the same lines, the same way\n";
+function quote_store(string $name): SqliteStore {
+    $s = fresh_store($name);
+    $s->save('subscription_plans.json', [['id' => 1, 'name' => 'Residential Standard (TEST)', 'customer_price' => 100,
+        'ucrm_product_id' => 12]]);
+    $s->save('kyc_devices.json', [['id' => 3, 'title' => 'Standard Kit (TEST)', 'price' => '1500', 'ucrm_product_id' => 55]]);
+    return $s;
+}
+function quote_post(string $phone, string $last): array {
+    return array_merge(kyc_post($phone, $last), ['device_id' => '3', 'kitQty' => '1']);
+}
+// Written out, not computed: a broken builder must not also break the expectation.
+$EXPECTED = [
+    ['label' => 'Residential Standard (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month', 'productId' => 12],
+    ['label' => 'Standard Kit (TEST)',         'quantity' => 1, 'price' => 1500.0, 'unit' => 'piece', 'productId' => 55],
+];
+
+// The builder both paths share, on its own.
+$plan = ['name' => 'Plan (TEST)', 'customer_price' => 100, 'ucrm_product_id' => 12];
+$kit  = ['title' => 'Kit (TEST)', 'price' => '1500', 'ucrm_product_id' => 55];
+is_(KycService::quoteItems($plan, [], $kit, 3, 'StarLink', []) == [
+        ['label' => 'Plan (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month', 'productId' => 12],
+        ['label' => 'Kit (TEST)', 'quantity' => 3, 'price' => 1500.0, 'unit' => 'piece', 'productId' => 55]],
+    'builder: the package, then the kit in the quantity sold');
+is_(KycService::quoteItems($plan, [['title' => 'Mount (TEST)', 'price' => 'UGX 1,200', 'qty' => 2, 'ucrm_product_id' => 9], 'junk'], $kit, 1, 'StarLink', []) == [
+        ['label' => 'Plan (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month', 'productId' => 12],
+        ['label' => 'Mount (TEST)', 'quantity' => 2, 'price' => 1200.0, 'unit' => 'piece', 'productId' => 9]],
+    'builder: a cart replaces the single device, prices read from their text, malformed entries skipped');
+is_(KycService::quoteItems(null, [], null, 1, 'Fiber', ['fiber_install_fee' => 50]) == [
+        ['label' => 'Installation Fee', 'quantity' => 1, 'price' => 50.0, 'unit' => 'amount', 'productId' => 244]],
+    'builder: Fiber adds the installation fee line');
+is_(!KycService::quoteOverAutoMax([['price' => 600, 'quantity' => 2]], [])
+    && KycService::quoteOverAutoMax([['price' => 600, 'quantity' => 2]], ['kyc_auto_quote_max_amount' => 1000])
+    && !KycService::quoteOverAutoMax([['price' => 500, 'quantity' => 2]], ['kyc_auto_quote_max_amount' => 1000]),
+    'the automatic-quote limit: off unless set, and only a total over it counts');
+
+scenario('uganda');
+$s = quote_store('l1');
+$r = kyc($s, $tmp . '/l1')->process(quote_post('+256 700 000 501', 'Quote-L1'), [], $AGENT);
+$q = calls('POST', '/clients/\d+/quotes');
+is_(count($q) === 1 && ($q[0]['body']['items'] ?? null) == $EXPECTED,
+    'the form quotes the package and the kit, each with its uCRM product', json_encode($q[0]['body']['items'] ?? null));
+is_(($q[0]['auth'] ?? '') === 'app-key', 'with no admin token set, the form quotes with the plugin key');
+$app = app_of($s, (int)($r['data']['application_id'] ?? 0));
+is_(!empty($app['quote_created']) && ($app['quote_ref'] ?? '') === 'Q-77' && !empty($app['wa_quote_pending'])
+    && ($app['wa_quote_phone'] ?? '') === '+256700000501' && count(calls('PATCH', '/billing/quotes/77/send')) === 1,
+    'it is sent by uCRM and handed to the WhatsApp job, as before');
+
+scenario('refuse');
+$s = quote_store('l2');
+$r = kyc($s, $tmp . '/l2')->process(quote_post('+256 700 000 502', 'Quote-L2'), [], $AGENT);
+$appId = (int)($r['data']['application_id'] ?? 0);
+is_((app_of($s, $appId)['quote_items'] ?? null) == $EXPECTED, 'a refused create keeps the lines the form would have quoted');
+scenario('uganda');
+(new KycCrmSync($s, crm(), $s->load('kyc_config.json') ?? []))->runDue();
+$q = calls('POST', '/clients/\d+/quotes');
+is_(count($q) === 1 && ($q[0]['body']['items'] ?? null) == $EXPECTED,
+    'the retry quotes exactly those lines — until 5.18.29 it sent the package alone', json_encode($q[0]['body']['items'] ?? null));
+is_(($q[0]['auth'] ?? '') === 'app-key', 'with the plugin key, as the form would, when no admin token is set');
+is_(strpos((string)($q[0]['body']['notes'] ?? ''), 'reached uCRM') !== false, 'its notes say it was made when the customer reached uCRM');
+$app = app_of($s, $appId);
+is_(!empty($app['quote_created']) && !empty($app['wa_quote_pending']) && count(calls('PATCH', '/billing/quotes/77/send')) === 1,
+    'and it is sent and handed to WhatsApp like the form\'s');
+
+scenario('uganda');
+$s = quote_store('l3');
+$s->save('kyc_config.json', ['crm_auth_token' => 'ADMIN-TEST-TOKEN']);
+$s->save('kyc_applications.json', [pending(20, '+256700000520', ['quote_items' => $EXPECTED, 'quote_ref' => 'PENDING'])]);
+(new KycCrmSync($s, crm(), $s->load('kyc_config.json') ?? []))->runDue();
+$q = calls('POST', '/clients/\d+/quotes');
+is_(count($q) === 1 && ($q[0]['auth'] ?? '') === 'token', 'with an admin token set, the quote is made with it, as the form does');
+
+scenario('uganda');
+$s = quote_store('l4');
+$s->save('kyc_applications.json', [pending(21, '+256700000521', ['offer_name' => 'Residential Standard (TEST)',
+    'offer_price' => 100, 'package_choice' => '1', 'device_id' => '3', 'device_title' => 'Standard Kit (TEST)',
+    'device_price' => '1500', 'kitQty' => '1', 'customer_type' => 'StarLink'])]);
+(new KycCrmSync($s, crm(), []))->runDue();
+$q = calls('POST', '/clients/\d+/quotes');
+is_(count($q) === 1 && ($q[0]['body']['items'] ?? null) == $EXPECTED,
+    'saved before 5.18.29 (no lines kept): rebuilt the form\'s way, products included', json_encode($q[0]['body']['items'] ?? null));
+
+scenario('uganda');
+$s = quote_store('l5');
+$offered = [['label' => 'Residential Standard (TEST)', 'quantity' => 1, 'price' => 90.0, 'unit' => 'month', 'productId' => 12]];
+$s->save('kyc_applications.json', [pending(22, '+256700000522', ['quote_items' => $offered,
+    'offer_name' => 'Residential Standard (TEST)', 'offer_price' => 100, 'package_choice' => '1'])]);
+(new KycCrmSync($s, crm(), []))->runDue();
+$q = calls('POST', '/clients/\d+/quotes');
+is_(($q[0]['body']['items'] ?? null) == $offered, 'the lines the customer was offered win over a rebuild at today\'s prices');
+
+scenario('uganda');
+$s = quote_store('l6');
+$s->save('kyc_applications.json', [pending(23, '+256700000523', ['quote_items' => $EXPECTED]),
+                                   pending(24, '+256700000524', ['quote_items' => $EXPECTED])]);
+(new KycCrmSync($s, crm(), ['kyc_auto_quote_max_amount' => 1000]))->syncOne(23, false, 'admin:Tester');
+is_(calls('POST', '/clients/\d+/quotes') === [] && (app_of($s, 23)['crm_sync_status'] ?? '') === 'synced',
+    'over kyc_auto_quote_max_amount: created, and the quote left to the agent, as the form does');
+(new KycCrmSync($s, crm(), ['kyc_auto_quote_enabled' => false]))->syncOne(24, false, 'admin:Tester');
+is_(calls('POST', '/clients/\d+/quotes') === [] && (app_of($s, 24)['crm_sync_status'] ?? '') === 'synced',
+    'automatic quotes switched off in Settings: no quote from the retry either');
+
+scenario('uganda');
+ctl($port, '/__test/set', ['refuse_quotes' => true]);
+$s = quote_store('l7');
+$s->save('kyc_applications.json', [pending(25, '+256700000525', ['quote_items' => $EXPECTED])]);
+(new KycCrmSync($s, crm(), []))->runDue();
+$app = app_of($s, 25);
+is_(($app['crm_sync_status'] ?? '') === 'synced' && empty($app['quote_created']) && empty($app['wa_quote_pending'])
+    && strpos((string)($app['quote_error'] ?? ''), '403') !== false && calls('PATCH', '/billing/quotes/\d+/send') === [],
+    'uCRM refusing the quote: the customer is still created, the error is kept, nothing is sent', (string)($app['quote_error'] ?? ''));
+
+// ── M. the retry's time budget ──────────────────────────────────────────────
+echo "\nM. The retry stops starting creates when its time is up\n";
+scenario('uganda');
+$s = fresh_store('m');
+$s->save('kyc_applications.json', [pending(30, '+256700000530'), pending(31, '+256700000531'), pending(32, '+256700000532')]);
+$sum = (new KycCrmSync($s, crm(), [], 0.0))->runDue();
+is_($sum['due'] === 1 && $sum['synced'] === 1 && $sum['deferred'] === 2,
+    'out of time: one is always attempted, the others wait for the next run', json_encode($sum));
+$sum = (new KycCrmSync($s, crm(), []))->runDue();
+is_($sum['synced'] === 2 && $sum['deferred'] === 0, 'and the next run takes them', json_encode($sum));
+is_(KycCrmSync::BUDGET_SECONDS < 60.0, 'the default budget is inside the scheduler\'s 60 seconds per job');
+
+// ── N. "This is client #N" ─────────────────────────────────────────────────
+echo "\nN. Linking an application the phone check stopped to the client it found\n";
+scenario('uganda');
+ctl($port, '/__test/set', ['clients' => [['id' => 555, 'contacts' => [['phone' => '+256 700 000 540']]]], 'seq' => 900]);
+$s = fresh_store('n');
+$s->save('kyc_applications.json', [
+    // Quote lines on it, so a link that went on to do what a create does would post a quote.
+    pending(40, '0700000540', ['crm_sync_status' => 'review', 'crm_review_client_ids' => [555],
+        'crm_sync_error' => 'uCRM already has a client with this phone number (#555).', 'quote_items' => $EXPECTED]),
+    pending(41, '0700000541', ['crm_sync_status' => 'review', 'crm_review_client_ids' => [556]]),
+    // Found #555 once, then an admin pressed "Create in CRM anyway" and it failed: pending, ids still set.
+    pending(42, '0700000542', ['crm_review_client_ids' => [555]]),
+]);
+$ks = new KycCrmSync($s, crm(), []);
+$r = $ks->link(40, 999, 'admin:Tester (linked)');
+is_(!$r['ok'] && fake_log() === [] && empty(app_of($s, 40)['crm_client_id']),
+    'a client the phone check did not find cannot be chosen; uCRM is not even asked', $r['message']);
+$r = $ks->link(41, 556, 'admin:Tester (linked)');
+is_(!$r['ok'] && strpos($r['message'], 'uCRM has no client #556') !== false && empty(app_of($s, 41)['crm_client_id']),
+    'a client uCRM no longer has cannot be linked', $r['message']);
+$r = $ks->link(42, 555, 'admin:Tester (linked)');
+is_(!$r['ok'] && empty(app_of($s, 42)['crm_client_id']), 'an application that is not waiting for a check cannot be linked', $r['message']);
+ctl($port, '/__test/set', ['log' => []]);
+$r = $ks->link(40, 555, 'admin:Tester (linked)');
+$app = app_of($s, 40);
+is_($r['ok'] && ($app['crm_client_id'] ?? null) === '555' && ($app['crm_sync_status'] ?? '') === 'synced'
+    && !empty($app['crm_linked_existing']) && !isset($app['crm_review_client_ids']) && !isset($app['crm_sync_error'])
+    && ($app['crm_sync_by'] ?? '') === 'admin:Tester (linked)' && !isset($app['crm_sync_claim']),
+    'the person\'s match is recorded: in the CRM as client #555', $r['message']);
+$writes = array_values(array_filter(fake_log(), fn($e) => $e['method'] !== 'GET'));
+is_($writes === [] && count(calls('GET', '/clients/555')) === 1,
+    'and nothing is created or changed in uCRM — no client, payment, quote, work order or tag', json_encode($writes));
+
+scenario('uganda');
+ctl($port, '/__test/set', ['clients' => [['id' => 555, 'contacts' => [['phone' => '+256 700 000 550']]]], 'seq' => 900]);
+$ndir = $tmp . '/n2';
+exec('rm -rf ' . escapeshellarg($ndir));
+$ns = SqliteStore::create($ndir);
+$ns->save('kyc_applications.json', [pending(50, '0700000550', ['crm_sync_status' => 'review', 'crm_review_client_ids' => [555]])]);
+$link = ['action' => 'kyc_crm_link', 'app_id' => '50', 'client_id' => '555'];
+$r = run_post($link, ['admin' => false, 'dir' => $ndir]);
+is_(!empty($r['denied']) && empty(app_of($ns, 50)['crm_client_id']), 'an agent cannot link: refused before anything happens', $r['_out']);
+$r = run_post($link, ['admin' => true, 'dir' => $ndir]);
+is_(($r['flash']['type'] ?? '') === 'success' && (app_of($ns, 50)['crm_client_id'] ?? null) === '555'
+    && ($r['to'] ?? '') === '?page=dashboard&tab=applications', 'an admin links it from Orders', $r['_out']);
+
+// ── O. the booking confirmation ────────────────────────────────────────────
+echo "\nO. The booking confirmation says only what this install sells\n";
+require_once $root . '/lib/NotificationService.php';
+final class CapturingNotify extends NotificationService {
+    public array $sent = [];
+    public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = [],
+                            string $class = ContactOptOut::CLASS_TRANSACTIONAL): void {
+        $this->sent[] = ['to' => $toPhone, 'message' => $message, 'event' => $event];
+    }
+}
+function welcome_to_customer(array $cfg, string $name): string {
+    global $tmp;
+    $n = new CapturingNotify(fresh_store('o_' . $name), $cfg + ['data_dir' => $tmp]);
+    $n->kycCrmCreated(['name' => 'Test Agent', 'phone' => '+256700000009'],
+        ['id' => 7, 'firstname' => 'Test', 'lastname' => 'Customer', 'mobile' => '+256 700 000 777',
+         'customer_type' => 'StarLink', 'username' => 'STAR000777'], '901');
+    foreach ($n->sent as $m) if (preg_replace('/\D/', '', $m['to']) === '256700000777') return $m['message'];
+    return '';
+}
+$wa = ['contact_sales_wa' => '256700000001', 'contact_support_wa' => '256700000002'];
+$sudanTimeline = "⏱ *Installation Timeline:*\n🔴 Fiber: 3–5 working days\n🛰 *Starlink: 1–2 working days* ← Your service\n"
+               . "📶 DishNet 4G: 2–4 working days\n\n";
+$before = "🌟 *DishNet Africa – Request Confirmed!*\n\nDear Test Customer,\n\n"
+        . "Your request for DishNet services has been successfully booked ✅\n\n🔄 *Next Steps:*\n"
+        . "📞 Our support team will call you shortly to schedule installation.\n\n"
+        . $sudanTimeline
+        . "📲 Sales: wa.me/256700000001\n🛠 Support: wa.me/256700000002\n\nThank you for choosing DishNet Africa 🚀";
+$msg = welcome_to_customer($wa, 'unset');
+is_($msg === $before, 'unset: the message South Sudan sends today, byte for byte', $msg);
+$ug = "🛰 Starlink: usually 1–3 working days after payment";
+$msg = welcome_to_customer($wa + ['kyc_welcome_timeline' => $ug], 'set');
+is_($msg === str_replace($sudanTimeline, "⏱ *Installation Timeline:*\n{$ug}\n\n", $before),
+    'set: this install\'s own lines, as written, and nothing else changed', $msg);
+is_(strpos($msg, 'Fiber') === false && strpos($msg, '4G') === false, 'so no service it does not sell is offered');
+$msg = welcome_to_customer($wa + ['kyc_welcome_timeline' => 'omit'], 'omit');
+is_($msg === str_replace($sudanTimeline, '', $before), '"omit": no timeline at all, the rest unchanged', $msg);
+$sc = (string)file_get_contents($root . '/tools/set_config.php');
+is_(strpos($sc, "'kyc_welcome_timeline' => ['text',") !== false, 'the setting can be set with tools/set_config.php');
 
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail ? 1 : 0);

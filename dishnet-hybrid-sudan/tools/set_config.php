@@ -144,6 +144,13 @@ $FLAGS = [
         'Phone printed on quotations (unset = +211920000000, South Sudan)'],
     'quote_company_email' => ['text',
         'Reply address on quotations (unset = info@dishnetafrica.com)'],
+    // 5.18.29: the installation times in the WhatsApp a customer gets when the
+    // KYC form puts them into uCRM. Unset keeps the South Sudan lines — Fiber,
+    // Starlink and DishNet 4G, each with its days — which is what an install
+    // selling Starlink alone must not send.
+    'kyc_welcome_timeline' => ['text',
+        'Installation times in the KYC booking confirmation, sent as written ("omit" = none; '
+      . 'unset = the South Sudan Fiber, Starlink and DishNet 4G lines)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {

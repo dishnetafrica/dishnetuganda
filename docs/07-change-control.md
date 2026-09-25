@@ -250,6 +250,36 @@ counted failures; full suite 186 files green twice.
 **Applied by:** the operator, with `deploy-hybrid.sh`.
 **Rollback:** `git checkout <the commit --check reported>` and deploy again;
 clients already created in uCRM stay.
-**Status:** pending deploy. Before deploying, check the three waiting customers
-were not typed into uCRM by hand. After it, they arrive under Leads within ten
-minutes, or stop on Orders for a person to check.
+**Status:** deployed 25 September 2026 (`0d20e05`, over 5.18.27 `90cf102`).
+The retry's first run created applications 1 and 3 as leads and stopped
+application 2 for a check: uCRM client #10 has the same phone number. Record:
+[30](30-kyc-customers-not-reaching-ucrm.md) §7.
+
+## 5.18.29 — the steps after the create, checked before they run
+
+**25 September 2026** · `lib/KycService.php`, `lib/KycCrmSync.php`,
+`lib/NotificationService.php`, `cron/kyc_crm_sync.php`,
+`includes/post/post_kyc.php`, `tabs/sales/applications.php`,
+`tools/set_config.php`, `tests/test_kyc_crm_create.php`,
+`tests/fixtures/fake_ucrm_kyc.php`. Record:
+[30](30-kyc-customers-not-reaching-ucrm.md) §8.
+
+No KYC customer had reached uCRM on this install before 5.18.28, so the form's
+steps after a create had never run here. Before the next registration runs
+them:
+
+- the retry quotes what the form quotes: one shared builder and sender, the
+  lines the form built are kept on a refused application, and the same switch,
+  limit and credential apply;
+- the booking confirmation's installation times come from
+  `kyc_welcome_timeline` (unset keeps the South Sudan Fiber, Starlink and
+  DishNet 4G lines; `omit` drops them);
+- Orders offers "This is uCRM client #N" for an application the phone check
+  stopped (admins only; it creates nothing in uCRM);
+- the retry stops starting creates after 40 seconds a run.
+
+**Applied by:** the operator: `deploy-hybrid.sh`, then one `set_config.php`
+line for `kyc_welcome_timeline`.
+**Rollback:** `git checkout 0d20e05` and deploy again; clear the setting with
+`--clear`.
+**Status:** pending deploy.
