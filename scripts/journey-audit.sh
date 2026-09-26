@@ -27,6 +27,11 @@
 #                           source each reads; branding; an identity fingerprint saved for --compare;
 #                           logout and revocation; the code and cookie searched for in the container log.
 #   --compare               phone login = e-mail login = the same customer? (from the two fingerprints)
+#   --chain <clientId>      the kit chain for one client: the Starlink attribute on its uCRM service, the serial the
+#                           intake extracts, and whether the hybrid's stock/assignments, Finance's register and Data
+#                           Report's registry, service lines, routers and usage hold it; Finance's uCRM write helper and
+#                           kit-writing actions; Data Report's registry generator and its "Needs Sync" rule; where the
+#                           chain breaks. Serials masked; no name, phone or e-mail; store copy and GET only.
 #   --client-flags [id]     what uCRM's client `isActive` correlates with on this install: every client's flag
 #                           against its services' statuses, outstanding balance, lead/archived, with a per-rule
 #                           agreement table; counts and ids only. The one client id given (default 1) is shown
@@ -54,8 +59,8 @@ MODE=""; ARG=""
 case "${1:-}" in
   --siblings|--compare|--urls) MODE="${1#--}" ;;
   --client-flags) MODE="client-flags"; ARG="${2:-1}" ;;
-  --identity|--login-phone|--login-email) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; } ;;
-  *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls | --client-flags [clientId]" >&2; exit 64 ;;
+  --identity|--login-phone|--login-email|--chain) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; } ;;
+  *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls | --client-flags [clientId] | --chain <clientId>" >&2; exit 64 ;;
 esac
 
 PASS=0; FAIL=0; NOTE=0
@@ -483,6 +488,21 @@ if [ -n "$INV" ] && [ "$INV" != "0" ]; then
   fi
   printf '  %-15s %-12s   ← %s\n' '' '' "app_invoice_pdf_download: cookie session → account allow-list → the invoice must be this account's (ucrm_invoices_cache) → uCRM invoices/{id}/pdf fetched server-side with the app key → bytes streamed, private/no-store"
   echo "  the link the portal builds: <the page's own path>?page=api&action=app_invoice_pdf_download&inv_id=…&account_id=… — origin-relative, no token; this run's origin $(printf '%s' "$P_ORIGIN" | mask) ($P_PORT)"
+  # Inside the document itself: does the PDF carry a link, and on which host? URLs only — never the content.
+  cat > "$SNIP/pdfscan.php" <<'PHP'
+$d=stream_get_contents(STDIN); $t=[$d];
+if(preg_match_all("/stream\r?\n(.*?)\r?\nendstream/s",$d,$m)) foreach($m[1] as $s){ $u=@gzuncompress($s); if($u===false) $u=@gzinflate($s); if($u===false && strlen($s)>2) $u=@gzinflate(substr($s,2)); if($u!==false) $t[]=$u; }
+$h=[]; $n=0; foreach($t as $x){ if(preg_match_all("#https?://([A-Za-z0-9.-]+(?::[0-9]+)?)[^\s)>\]\"'<]*#",$x,$mm)) foreach($mm[1] as $hh){ $h[$hh]=($h[$hh]??0)+1; $n++; } }
+$o=[]; foreach($h as $k=>$v) $o[]="$k x$v";
+echo "streams ", count($t)-1, " · URLs inside the PDF ", $n, $o ? " · hosts: ".implode(", ",$o) : " · no URL inside the PDF (text split across drawing operators would not be seen)", "\n";
+PHP
+  curl -sS --max-time 30 -o "$SNIP/pdf.bin" -H "$C" "$PDF_URL" 2>/dev/null || true
+  if [ -s "$SNIP/pdf.bin" ]; then
+    PDFSCAN="$(docker exec -i "$CONTAINER" php -d display_errors=0 -r "$(cat "$SNIP/pdfscan.php")" < "$SNIP/pdf.bin" 2>/dev/null | head -1)"
+    echo "  inside the PDF document: ${PDFSCAN:-the scan produced nothing}"
+    case "$PDFSCAN" in *:8443*) note "L11 the PDF document itself carries a link on :8443 — uCRM's own address inside the document, not the plugin's link";; *"URLs inside the PDF 0"*) ok "L11 the PDF document carries no link";; "") note "L11 the PDF document could not be scanned";; *) note "L11 the PDF document carries link(s) — hosts above";; esac
+  fi
+  rm -f "$SNIP/pdf.bin" "$SNIP/pdfscan.php"
 fi
 walk "Payments"    "app_payments"              "CustomerAccountService: ucrm_invoice_payments_cache after a live refresh"
 walk "Equipment"   "app_equipment"             "CustomerAccountService: stock_units + equipment_assignments (the hybrid's OWN kit register, not Finance's)"
@@ -678,6 +698,107 @@ docker exec -i -u "$DB_OWNER" -w "$IN_CONTAINER" -e "FOCUS_ID=$FOCUS" -e "RO_DIR
 docker exec -u "$DB_OWNER" "$CONTAINER" rm -rf "$RO" 2>/dev/null
 ok "F6 the store copy was removed; uCRM was read with GET only"
 # --- FLAGS END ---
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+if [ "$MODE" = "chain" ]; then
+# --- CHAIN BEGIN ---
+CID="$ARG"; case "$CID" in ''|*[!0-9]*) stop "the client id must be a number";; esac
+hdr "K. The kit chain for CRM #$CID — uCRM attribute → hybrid register → Finance → Data Report → usage (read-only; serials masked)"
+maskurl() { sed -E 's/((token|key|secret|password|sig|hash)=)[^&[:space:]]+/\1<redacted>/gI; s/[A-Za-z0-9+=_-]{40,}/<redacted>/g'; }
+docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO/ch' && chmod 755 '$RO' '$RO/ch' && cp '$DB_IN' '$RO/ch/plugin.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/ch/plugin.sqlite3-wal' || true ) && chmod 644 '$RO/ch/'*" 2>/dev/null || stop "could not copy the store"
+cat > "$SNIP/chain.php" <<'PHP'
+<?php
+// READ-ONLY. One client's kit chain: uCRM service attribute → the hybrid's stock and assignments → Finance's register
+// → Data Report's registry, service lines, routers and usage → the portal. The store is a COPY; uCRM is read with GET
+// only; sibling files are read; every kit serial is masked; no name, phone or e-mail is printed.
+$cid = (int)getenv('FOCUS_ID'); $PL = rtrim((string)getenv('PLUGINS'), '/'); $RO = rtrim((string)getenv('RO_DIR'), '/'); $HD = rtrim((string)getenv('HYB_DATA'), '/'); $root = getcwd();
+function idm(string $v): string { $v = trim($v); if ($v === '') return '—'; if (strlen($v) <= 6) return str_repeat('*', strlen($v)); return substr($v, 0, 3) . '…' . substr($v, -3); }
+function jl(string $p) { $d = @json_decode((string)@file_get_contents($p), true); return is_array($d) ? $d : null; }
+function lines(string $p): array { return is_file($p) ? preg_split('/\r?\n/', (string)file_get_contents($p)) : []; }
+function kitOf($r): string { if (!is_array($r)) return ''; foreach (['kit_number', 'kit', 'serial', 'kit_serial'] as $k) if (isset($r[$k]) && trim((string)$r[$k]) !== '') return strtoupper(trim((string)$r[$k])); return ''; }
+function crmOf($r) { if (!is_array($r)) return null; foreach (['crm_client_id', 'assigned_client_id', 'crm_id', 'client_id', 'clientId'] as $k) if (isset($r[$k]) && (string)$r[$k] !== '') return (int)$r[$k]; return null; }
+function withKit(array $rows, string $serial): array { $o = []; foreach ($rows as $r) if (kitOf($r) === $serial) $o[] = $r; return $o; }
+function aslist($x): array { if (!is_array($x)) return []; if (isset($x['kits']) && is_array($x['kits'])) $x = $x['kits']; if (isset($x['lines']) && is_array($x['lines'])) $x = $x['lines']; return array_values(array_filter($x, 'is_array')); }
+require_once 'lib/StoreInterface.php'; require_once 'lib/SqliteStore.php'; require_once 'lib/CrmApiClient.php'; require_once 'lib/EquipmentAssignment.php'; require_once 'lib/KitAttributeIntake.php';
+$store = SqliteStore::create($RO); $pdo = $store->getPdo(); $cfg = $store->load('kyc_config.json') ?: [];
+$chain = [];
+echo "── C-1 uCRM: the client's services, the Starlink attribute, invoices and payments (GET only) ──\n";
+$crm = CrmApiClient::fromUcrm($root, $cfg);
+$svcs = $crm->get("clients/services?clientId=$cid"); $invs = $crm->get("invoices?clientId=$cid&limit=50"); $pays = $crm->get("payments?clientId=$cid&limit=50");
+if (!is_array($svcs)) { echo "  services: NOT READABLE\n"; $svcs = []; }
+$serials = [];
+foreach ($svcs as $s) { if (!is_array($s)) continue; $attrs = [];
+    foreach ((array)($s['attributes'] ?? []) as $a) { if (!is_array($a)) continue; $k = (string)($a['key'] ?? $a['name'] ?? '?'); $v = trim((string)($a['value'] ?? '')); $attrs[] = $k . '=' . ($v === '' ? '(empty)' : idm($v) . ' [' . strlen($v) . ' chars]'); }
+    $kits = KitAttributeIntake::kitsFromService($s); foreach ($kits as $k) $serials[$k] = true;
+    echo "  service #", $s['id'] ?? '?', " · plan ", $s['servicePlanId'] ?? '?', " · status ", $s['status'] ?? '?', " · attributes: ", $attrs ? implode(', ', $attrs) : 'none', "\n";
+    echo "    kit serials the hybrid's intake extracts from it (the same rule Data Report uses): ", $kits ? implode(', ', array_map('idm', $kits)) : 'NONE — no attribute value matches the KIT pattern', "\n"; }
+$serials = array_keys($serials); $chain['uCRM attribute names a kit'] = count($serials) > 0;
+echo "  invoices: "; if (is_array($invs)) { $ids = []; foreach ($invs as $i) if (is_array($i)) $ids[] = 'id ' . ($i['id'] ?? '?') . ' ' . (string)($i['number'] ?? '') . ' status ' . ($i['status'] ?? '?') . ' total ' . number_format((float)($i['total'] ?? 0), 0) . ' paid ' . number_format((float)($i['amountPaid'] ?? 0), 0); echo count($invs), $ids ? ' — ' . implode(' · ', $ids) : ''; } else echo 'NOT READABLE'; echo "\n";
+echo "  payments: ", is_array($pays) ? count($pays) : 'NOT READABLE', "\n";
+echo "── C-2 the hybrid's register (store copy) and its own Starlink data ──\n";
+$ea = new EquipmentAssignment($pdo);
+try { $units = (int)$pdo->query("SELECT COUNT(*) FROM stock_units")->fetchColumn(); } catch (Throwable $e) { $units = -1; }
+$mineA = $ea->forClient($cid);
+echo "  stock_units total: ", $units < 0 ? 'table unreadable' : $units, " · live assignments total: ", count($ea->liveAssignments()), " · live assignments for client #$cid: ", count($mineA), "\n";
+$inStock = false;
+foreach ($serials as $k) { $st = $pdo->prepare('SELECT id, status, crm_client_id FROM stock_units WHERE UPPER(serial_number) = ?'); $st->execute([EquipmentAssignment::clean($k)]); $u = $st->fetch(PDO::FETCH_ASSOC);
+    if ($u) $inStock = true;
+    echo "  kit ", idm($k), ": stock_units → ", $u ? ('unit #' . $u['id'] . ' status ' . $u['status'] . ' client ' . ($u['crm_client_id'] ?? '—')) : 'ABSENT (the intake would refuse it: not_in_stock — "assigning it would invent inventory")', "\n"; }
+$chain["the hybrid's stock holds the kit"] = $inStock; $chain["the hybrid's register assigns it to client #$cid"] = count($mineA) > 0;
+$map = jl("$HD/kit_sl_map.json"); echo "  kit_sl_map.json (typed kit ↔ service line pairs): ", $map === null ? 'absent' : count(aslist($map['pairs'] ?? $map)) . ' pair(s)', "\n";
+$mine = jl("$HD/sl_usage.json"); echo "  the hybrid's own sl_usage.json: ", $mine === null ? 'absent' : count($mine) . ' row(s)', "\n";
+require_once 'lib/StarlinkSessionStore.php';
+try { $ss = new StarlinkSessionStore($root, $HD); $stt = $ss->status(); echo "  the hybrid's Starlink session: state ", $stt['state'] ?? '?', " · imported_at ", ($stt['imported_at'] ?? '') !== '' ? $stt['imported_at'] : '—', " · last_checked_at ", ($stt['last_checked_at'] ?? '') !== '' ? $stt['last_checked_at'] : '—', " · failures ", $stt['failures'] ?? '?', " · account ", idm((string)($stt['account_number'] ?? '')), "\n"; } catch (Throwable $e) { echo "  the hybrid's Starlink session: not readable (", get_class($e), ")\n"; }
+echo "── C-3 Starlink Finance (files) ──\n";
+$FIN = "$PL/dishnet-starlink-finance"; $kits = aslist(jl("$FIN/data/sl_kits.json")); $accs = aslist(jl("$FIN/data/sl_accounts.json")); $ref = aslist(jl("$FIN/data/crm_starlink_reference.json"));
+$mineF = array_values(array_filter($kits, function ($k) use ($cid) { return crmOf($k) === $cid; }));
+echo "  sl_kits.json: ", count($kits), " kit(s) · for client #$cid: ", count($mineF), "\n";
+$inFin = false; foreach ($serials as $k) { $h = withKit($kits, $k); if ($h) $inFin = true; echo "  kit ", idm($k), ": ", $h ? 'PRESENT in sl_kits.json (crm ' . (crmOf($h[0]) ?? '—') . ')' : 'ABSENT from sl_kits.json', "\n"; }
+$chain["Finance's register holds the kit"] = $inFin || count($mineF) > 0;
+$fields = []; foreach ($kits as $k) foreach ($k as $f => $v) if (is_scalar($v) && trim((string)$v) !== '') $fields[$f] = ($fields[$f] ?? 0) + 1; ksort($fields);
+echo "  kit fields carrying a value on at least one kit: ", $fields ? implode(', ', array_map(function ($f, $c) { return $f . '×' . $c; }, array_keys($fields), $fields)) : 'none', "\n";
+echo "  sl_accounts.json: ", count($accs), " account(s) · kit rows naming a Starlink account: ", count(array_filter($kits, function ($k) { return trim((string)($k['starlink_account'] ?? '')) !== '' || trim((string)($k['account_number'] ?? '')) !== ''; })), " · naming a service line: ", count(array_filter($kits, function ($k) { return trim((string)($k['service_line'] ?? '')) !== ''; })), "\n";
+echo "  crm_starlink_reference.json: ", count($ref), " row(s) · for client #$cid: ", count(array_filter($ref, function ($r) use ($cid) { return crmOf($r) === $cid; })), "\n";
+$fl = lines("$FIN/public.php"); $defs = []; for ($i = 39; $i < min(115, count($fl)); $i++) if (preg_match('/function\s+(\w+)\s*\(/', $fl[$i], $m)) $defs[] = $m[1] . ' @' . ($i + 1);
+echo "  uCRM helpers defined in public.php lines 40–115: ", $defs ? implode(', ', $defs) : 'none found', "\n";
+$patchFn = null; for ($i = 90; $i < min(115, count($fl)); $i++) { if (strpos($fl[$i], "'PATCH'") !== false) { for ($j = $i; $j >= max(0, $i - 14); $j--) if (preg_match('/function\s+(\w+)\s*\(/', $fl[$j], $m)) { $patchFn = $m[1]; break; } break; } }
+$finFiles = array_merge(glob("$FIN/*.php") ?: [], glob("$FIN/*/*.php") ?: []);
+if ($patchFn) { $calls = 0; $where = []; foreach ($finFiles as $f) foreach (lines($f) as $no => $ln) if (preg_match('/\b' . preg_quote($patchFn, '/') . '\s*\(/', $ln) && strpos($ln, 'function ') === false) { $calls++; if (count($where) < 12) $where[] = str_replace("$FIN/", '', $f) . ':' . ($no + 1) . ' ' . trim(preg_replace('/\s+/', ' ', substr($ln, 0, 120))); }
+    echo "  the helper that PATCHes uCRM is '", $patchFn, "' · call sites: ", $calls, "\n"; foreach ($where as $w) echo "    · ", $w, "\n"; } else echo "  the PATCH helper's name could not be located\n";
+$forms = []; foreach ($finFiles as $f) foreach (lines($f) as $no => $ln) if (preg_match('/\$action\s*===?\s*[\'"](deploy_to_customer|sell_kit|add_purchase|return_kit|fix_kit_links|unassign_kit|assign_kit|edit_kit|delete_kit|import_kits|add_kit|update_kit|kit_[a-z_]+)[\'"]/', $ln, $m)) $forms[] = $m[1] . ' (' . str_replace("$FIN/", '', $f) . ':' . ($no + 1) . ')';
+echo "  kit-writing actions handled by name: ", $forms ? implode(', ', array_unique($forms)) : 'none found by these names', "\n";
+echo "── C-4 Data Report (files and code) ──\n";
+$DR = "$PL/dishnet-data-report"; $regRaw = jl("$DR/data/dr_kit_registry.json"); $reg = aslist($regRaw); $svc = aslist(jl("$DR/data/sl_svc_cache.json")); $rmap = aslist(jl("$DR/data/wifi_router_map.json")); $usage = aslist(jl("$DR/data/sl_usage.json"));
+echo "  dr_kit_registry.json: ", count($reg), " kit(s)"; if ($reg) echo " · fields: ", implode(', ', array_keys($reg[0])); if (is_array($regRaw)) echo " · generated_at ", $regRaw['generated_at'] ?? '—', " · generator ", $regRaw['generator'] ?? '—'; echo "\n";
+$regFor = array_values(array_filter($reg, function ($r) use ($cid) { return crmOf($r) === $cid; }));
+$inDR = false; foreach ($serials as $k) { $h = withKit($reg, $k); if ($h) $inDR = true;
+    echo "  kit ", idm($k), ": ", $h ? 'PRESENT in the registry (crm ' . (crmOf($h[0]) ?? '—') . ')' : 'ABSENT from the registry', " · sl_svc_cache lines ", count(withKit($svc, $k)), " · routers ", count(withKit($rmap, $k)), " · usage rows ", count(withKit($usage, $k)), "\n"; }
+$chain["Data Report's registry holds the kit"] = $inDR || count($regFor) > 0;
+echo "  registry kits for client #$cid: ", count($regFor), " · registry kits carrying a service line: ", count(array_filter($reg, function ($r) { return trim((string)($r['service_line'] ?? $r['sl'] ?? '')) !== ''; })), " · carrying an account: ", count(array_filter($reg, function ($r) { return trim((string)($r['account_number'] ?? $r['starlink_account'] ?? '')) !== ''; })), "\n";
+$svcWithKit = count(array_filter($svc, function ($r) { return kitOf($r) !== ''; })); $svcWithCrm = count(array_filter($svc, function ($r) { return crmOf($r) !== null; }));
+echo "  sl_svc_cache.json: ", count($svc), " service line(s) · with a kit number ", $svcWithKit, " · with a CRM id ", $svcWithCrm, "\n";
+$drFiles = array_merge(glob("$DR/*.php") ?: [], glob("$DR/*/*.php") ?: []); $gen = [];
+foreach ($drFiles as $f) foreach (lines($f) as $no => $ln) if (preg_match('/KitRegistryWriter|->regenerate\s*\(|::regenerate\s*\(/', $ln)) $gen[] = str_replace("$DR/", '', $f) . ':' . ($no + 1) . ' ' . trim(preg_replace('/\s+/', ' ', substr($ln, 0, 120)));
+echo "  registry generator references: ", count($gen), "\n"; foreach (array_slice($gen, 0, 12) as $g) echo "    · ", $g, "\n";
+$src = []; foreach (lines("$DR/lib/KitRegistryWriter.php") as $no => $ln) if (preg_match('/sl_kits|starlink-finance|sl_svc_cache|wifi_router_map|starlinkDetails|clients\/services|kitnumber/i', $ln)) $src[] = ($no + 1) . ': ' . trim(preg_replace('/\s+/', ' ', substr($ln, 0, 130)));
+echo "  what KitRegistryWriter reads (lines naming a source): ", count($src), "\n"; foreach (array_slice($src, 0, 14) as $x) echo "    · ", $x, "\n";
+echo "  ── the 'Needs Sync' rule — broad search in templates, public.php and client.php (±6 lines, first 4 hits) ──\n";
+$shown = 0; foreach (array_merge(glob("$DR/templates/*.php") ?: [], ["$DR/public.php", "$DR/client.php"]) as $f) { $L = lines($f); foreach ($L as $no => $ln) { if (preg_match('/needs?[\s_\-]*sync|sync[\s_\-]*(need|required|pending)|needsSync|needs_sync|NEEDS/i', $ln)) { if ($shown++ >= 4) break 2; echo "    · ", str_replace("$DR/", '', $f), ":", $no + 1, "\n"; for ($i = max(0, $no - 6); $i <= min(count($L) - 1, $no + 6); $i++) echo "      ", str_pad((string)($i + 1), 5, ' ', STR_PAD_LEFT), "| ", rtrim(substr($L[$i], 0, 170)), "\n"; } } }
+if (!$shown) echo "    (no line matched; the label may be assembled from parts)\n";
+$noUse = []; foreach ($reg as $r) { $kn = kitOf($r); if ($kn === '') continue; if (!withKit($usage, $kn)) $noUse[] = idm($kn) . ' (crm ' . (crmOf($r) ?? '—') . ')'; }
+echo "  registry kits with NO usage rows: ", count($noUse), $noUse ? ' — ' . implode(', ', $noUse) : '', " · client #$cid affected: ", count($regFor) ? 'yes, see above' : 'NO — no registry kit belongs to this client', "\n";
+$acc = false; foreach ($mineA as $a) if (trim((string)($a['starlink_account'] ?? '')) !== '' || trim((string)($a['starlink_service_line'] ?? '')) !== '') $acc = true; foreach ($mineF as $k) if (trim((string)($k['starlink_account'] ?? $k['account_number'] ?? '')) !== '' || trim((string)($k['service_line'] ?? '')) !== '') $acc = true; foreach ($regFor as $r) if (trim((string)($r['service_line'] ?? $r['sl'] ?? '')) !== '' || trim((string)($r['account_number'] ?? '')) !== '') $acc = true;
+$chain['a Starlink account / service line is recorded for it'] = $acc;
+$anyUse = false; foreach ($serials as $k) if (withKit($usage, $k) || ($mine && withKit($mine, $k))) $anyUse = true; $chain['usage rows exist for it'] = $anyUse;
+echo "── C-5 the chain for client #$cid ──\n"; $broken = null; foreach ($chain as $step => $okv) { echo "  ", $okv ? '✓' : '✗', " ", $step, "\n"; if (!$okv && $broken === null) $broken = $step; }
+echo "  first break: ", $broken ?? 'none — the chain is complete', "\n";
+echo "  C6 read-only run complete\n";
+PHP
+docker exec -i -w "$IN_CONTAINER" -e "FOCUS_ID=$CID" -e "PLUGINS=$PLUGINS_IN" -e "RO_DIR=$RO/ch" -e "HYB_DATA=$PDD_IN" "$CONTAINER" php < "$SNIP/chain.php" 2>&1 | maskurl
+docker exec "$CONTAINER" rm -rf "$RO" 2>/dev/null
+ok "C6 the store copy was removed; uCRM was read with GET only; nothing was assigned or written"
+# --- CHAIN END ---
 fi
 
 hdr "Summary"
