@@ -148,6 +148,11 @@ if ($org === null) {
     out('', 'website ' . (c2_mask_text((string)($org['website'] ?? '')) ?: 'not set')
         . ' · TIN ' . (preg_replace('/[^0-9A-Za-z-]/', '', (string)($org['taxId'] ?? '')) ?: 'not set in uCRM')
         . ' · Reg. No ' . (preg_replace('/[^0-9A-Za-z-]/', '', (string)($org['registrationNumber'] ?? '')) ?: 'not set in uCRM'));
+    // Which template the organization gives NEW invoices — after an uploaded template is chosen, this is the proof.
+    $def = null;
+    foreach (['invoiceTemplateId', 'defaultInvoiceTemplateId'] as $k) if (array_key_exists($k, $org)) { $def = $org[$k]; break; }
+    if ($def === null) out('new invoices use', "uCRM's API does not say");
+    else out('new invoices use', 'template #' . (int)$def . (isset($tplName[(int)$def]) ? ' "' . $tplName[(int)$def] . '"' : ''));
 }
 
 $raw = $crm->getRawContent('invoices/' . (int)$inv['id'] . '/pdf');

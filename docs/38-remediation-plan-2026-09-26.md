@@ -682,6 +682,16 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    digits and the e-mail to its domain. **If it still holds Juba or +211, correct it in uCRM before the paste
    counts as done.** Rehearsal 101, two more weakened copies caught.
 
+   **22:00 — the operator asked for a ZIP to upload.** `template-invoice-uganda-v2.zip` is built like uCRM's own
+   exports (both measured): `template.html.twig` then `template.css` at the top level, deflated, `rw-rw-rw-`.
+   - **Its contents.** Both entries are byte-identical to the repository: `template.html.twig` sha256
+     `5e83d875…cbf6afa9`, `template.css` `ef18d1f2…1dde8b`. The CSS is also identical to the CSS uCRM holds. The
+     ZIP itself is sha256 `df2cc831…fdff8a52`, built with Python's `zipfile` at a fixed timestamp.
+   - **After the upload.** An upload most likely creates a new template, and invoices keep #1000 until the
+     organization is given the new one in its settings (invoice template). `--links` now shows which template
+     the organization gives new invoices, when uCRM's API names it (rehearsal 102, one more weakened copy caught).
+   - **Existing invoices** keep the template they were made with, so the next invoice is the test.
+
    **What C-2b does not change:** uCRM's own e-mails, if uCRM sends any (Uganda's invoice e-mails are the
    plugin's, built without `:8443`), and where uCRM sends a member of staff after sign-in. Those still carry
    `:8443`, and only the installer route or a trusted certificate on 8443 (C-3) would change them.

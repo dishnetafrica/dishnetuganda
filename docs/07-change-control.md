@@ -1456,5 +1456,8 @@ docs/39 said it printed no link; both are corrected. **C-2b:**
   sandbox limited to what V1 uses: 21/21 each, and two weakened copies are caught.
 - **The organization record.** `--links` now also shows the organization, phone and e-mail masked, because v2
   prints its address. The plugin test pins the digit rule (21).
-- **Not changed.** No release and no server change; the paste is the operator's act (docs/38 §7.2). uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+- **Not changed.** No release and no server change; the paste is the operator's act (docs/38 §7.2).
+- **22:00, the ZIP.** The operator asked for a ZIP to upload. `template-invoice-uganda-v2.zip` (sha256
+  `df2cc831…fdff8a52`) is built like uCRM's own exports, and both entries are byte-identical to the repository.
+  `--links` now also shows which template the organization gives new invoices (rehearsal 102). uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
   keeps the version from the last ZIP upload through that screen.

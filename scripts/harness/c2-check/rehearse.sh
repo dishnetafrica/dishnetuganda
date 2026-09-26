@@ -108,7 +108,7 @@ mkpdf() {  # $1 the link the PAY NOW box carries: once as a link annotation, onc
          "2 0 obj << /Length ".strlen($s)." /Filter /FlateDecode >>\nstream\n".$s."\nendstream\nendobj\n%%EOF\n";' "$1" > "$F/invoice.pdf"
 }
 printf '%s' '[{"id":3,"name":"Invoice Ugadna"},{"id":1,"name":"Official — billing@dishnet.example"}]' > "$F/templates.json"
-printf '%s' '[{"id":2,"name":"Other Org","city":"Elsewhere","selected":false},{"id":1,"name":"DishNet Africa Ltd.","street1":"Acacia Mall","city":"Kampala","phone":"+256 705 993 348","email":"billing@dishnet.example","website":"www.dishnetuganda.com","taxId":"1059140632","registrationNumber":"","selected":true}]' > "$F/organizations.json"
+printf '%s' '[{"id":2,"name":"Other Org","city":"Elsewhere","selected":false},{"id":1,"name":"DishNet Africa Ltd.","street1":"Acacia Mall","city":"Kampala","phone":"+256 705 993 348","email":"billing@dishnet.example","website":"www.dishnetuganda.com","taxId":"1059140632","registrationNumber":"","invoiceTemplateId":1,"selected":true}]' > "$F/organizations.json"
 printf '%s' '[{"id":41,"number":"000003","status":1,"createdDate":"2026-09-20T10:00:00+0000","invoiceTemplateId":3},{"id":57,"number":"000005","status":1,"createdDate":"2026-09-25T08:00:00+0000","invoiceTemplateId":3}]' > "$F/invoices.json"
 printf '%s\n' 'UNMS_HTTP_PORT="8080"' 'UNMS_HTTPS_PORT=8443' 'UNMS_WS_PORT=' 'UNMS_PUBLIC_HTTPS_PORT=' \
   'UNMS_SECURE_LINK_SECRET=LINKSECRET-XYZ-987' 'UNMS_SUPPORT="hunter2secret"' 'UNMS_TOKEN=TOKSECRET-555' > "$F/unms.conf"
@@ -257,6 +257,7 @@ has "$out" "TIN 1059140632 · Reg. No not set in uCRM" "L1 shows which registrat
 hasnt "$out" "705 993" "L1 never prints the organization's phone number in full"
 hasnt "$out" "billing@" "L1 never prints the organization's e-mail address in full"
 hasnt "$out" "Other Org" "L1 picks the client's organization, not another one"
+has "$out" 'new invoices use           template #1 "Official — {e-mail}"' "L1 shows which template the organization gives new invoices"
 check "$(cat "$SB/state/state.env" 2>/dev/null | md5sum)" "$sum_before" "L1 --links leaves the before-state untouched"
 
 printf "%s\n" "$out" > "${L1_DUMP:-/dev/null}"   # L1_DUMP=<file> keeps L1's whole output, to read it
