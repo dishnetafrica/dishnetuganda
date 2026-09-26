@@ -140,7 +140,7 @@ portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --includ
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=web_chat$' \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=shop&amp;format=json$' \
          | grep -v '^https://crm\.dishnetuganda\.com$')
-[ "$portal" = "https://crm.dishnetuganda.com/crm/login" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
+[ "$portal" = "https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
 # Never the bare /crm. The server in front of uCRM answers it with a permanent
 # redirect to /crm/ that carries its own port, :8443 — self-signed, so a
 # customer's browser shows a security warning instead of the sign-in page.
