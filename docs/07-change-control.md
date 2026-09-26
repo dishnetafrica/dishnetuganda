@@ -1466,5 +1466,8 @@ docs/39 said it printed no link; both are corrected. **C-2b:**
   links. `--links` no longer prints the fix for an invoice whose template is gone, and it flags invalid templates
   (rehearsal 109).
 - **22:01, confirmed on the server.** The new verdict prints for 000003 and no fix is printed; no template is
-  flagged invalid. Waiting on the screenshot of the organization's invoice template and on the next invoice. uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+  flagged invalid. Waiting on the screenshot of the organization's invoice template and on the next invoice.
+- **After 22:01, the operator confirms** that the organization's invoice template is now "v2" (their statement;
+  no screenshot). The one proof still to come is `--links` on the next invoice for client #1, which should end
+  "C-2 is done for this invoice". uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
   keeps the version from the last ZIP upload through that screen.
