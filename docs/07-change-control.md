@@ -923,7 +923,37 @@ signs in again — on Uganda there is nobody to affect.
 **Applied by:** nobody yet. Built and proved on 25 September 2026; deployment is its own
 approval and its own command.
 
-**Status:** **built, NOT deployed** (plugin commit `fa2d463`). Suite 202 suites / 8002 passed / 0 failed on the second run (`phase2-suite-B`; the first run read 8001 / 1, the one failure being `test_links_without_port` flagging the new same-origin check — an allow-list entry, not a weakened guard, then 47/47); weakened copies 19 of 19 caught (M01–M19: legacy-token grace, iss/aud unchecked, session row unchecked, cookie POST without the marker, URL token accepted by the API, token in the body for browsers, consent not enforced on the portal, WASender-only gate restored, +211 hard-coded again, eligibility gates inert, code stored in clear, code into the conversation store, code into the retry queue, token back in the login redirect, default profile uganda ×2, portal accepts a URL token, lead flag inverted, phone helper with a built-in code); migrations rehearsed on a data directory built by 68f4eeb (5.18.37), opened by the 5.18.38 code: `_migrations` 72 → 74 (`073_customer_sessions.sql` 3 statements, `074_client_search_index_flags.sql` 8 statements, 0 errors in `migration.log`); `customer_sessions` created; `client_search_index` 6 → 13 columns; every pre-existing table's row count unchanged (the three `ucrm_*_cache` tables and one index row were added by the rehearsal's own sync); the key set `customer_jwt_keys` / `customer_jwt_active_kid` / `customer_jwt_key_dates` provisioned in the store; the 5.18.37 code still opens the directory.
+**Status:** **deployed 26 September 2026 02:59 UTC** (`fa2d463`, "✓ container now
+serves fa2d463", over live `68f4eeb`) by the one command above, first attempt; backup
+`/root/dnb-phase2/backup-20260926T025934Z` (93 MB data directory + 116 KB `data/`). Checks
+**63 ok, 1 failed, 0 notes.** The failure is **C7**: one `[DishNet UNCAUGHT] str_pad() …
+main.php:456` line in the window — the pre-existing tick crash recorded at the Phase 1
+closure (`--otp-history`: 230 lines on 25 September before that deploy), not a 5.18.38 path.
+Read off the code after the run: the line sits in the *"auto-pull scheduled for …"* log
+branch that every tick takes except the pull hour; the master cron dispatcher (and with it
+`cron_sync`) has already run by then, the pull hour does not take that branch, and the only
+work after it on an ordinary tick is the final *total execution* log line. Cosmetic, a
+one-line cast; its own change, not bundled here. **Posture P:** migrations 073 and 074
+recorded; `customer_sessions` present; the index carries the new columns (90 rows, flags
+still empty at deploy time — `cron_sync` fills them); the signing key set provisioned (`k1`)
+and the three values in the vault; the tenant profile resolves to **uganda / +256** derived
+from the vaulted currency (no selector, no currency in the store), so **the one configuration
+step was not needed and was not run**; 0 live sessions. **Sign-in L1–L8 with the operator's
+own number:** 1 account matched; transport in use `evolution` (WASender unconfigured); the
+account passes the gates; `app_send_otp` 200; the code arrived; `app_verify_otp` **200** —
+the code typed on the server was accepted (a wrong code fails here with 401); the cookie is
+`HttpOnly; SameSite=Lax; Secure`; consent 200; the portal answers **200 on the cookie**, **302**
+with a URL token and no cookie, 302 without a session; `app_me` with `?token=` **401**, with the
+Bearer token 200; logout 200; the same token afterwards **401 Token revoked**; the old cookie
+**401**; the code appears in no container log line, no `webhook_log.json`, no notification,
+queue, conversation, pending or audit row, and the newest `app_otp` notification row withholds
+the text. **D:** 0 new webhook entries during the run, 0 `entity_unverified` overall; the
+endpoint objects are not readable over API v2.1 or v1.0 (404); the uCRM UI reading (System →
+Webhooks → the plugin endpoint: is there a Secret / Signature field, name only) is **still
+outstanding**; `crm_webhook_key` stays unset. **E:** `pdf_link_secret` in store and vault; the
+pre-5.18.37 link 403, a `PdfLinkToken` link 200, a random token 403.
+
+Before deployment the entry read: built, NOT deployed (plugin commit `fa2d463`). Suite 202 suites / 8002 passed / 0 failed on the second run (`phase2-suite-B`; the first run read 8001 / 1, the one failure being `test_links_without_port` flagging the new same-origin check — an allow-list entry, not a weakened guard, then 47/47); weakened copies 19 of 19 caught (M01–M19: legacy-token grace, iss/aud unchecked, session row unchecked, cookie POST without the marker, URL token accepted by the API, token in the body for browsers, consent not enforced on the portal, WASender-only gate restored, +211 hard-coded again, eligibility gates inert, code stored in clear, code into the conversation store, code into the retry queue, token back in the login redirect, default profile uganda ×2, portal accepts a URL token, lead flag inverted, phone helper with a built-in code); migrations rehearsed on a data directory built by 68f4eeb (5.18.37), opened by the 5.18.38 code: `_migrations` 72 → 74 (`073_customer_sessions.sql` 3 statements, `074_client_search_index_flags.sql` 8 statements, 0 errors in `migration.log`); `customer_sessions` created; `client_search_index` 6 → 13 columns; every pre-existing table's row count unchanged (the three `ucrm_*_cache` tables and one index row were added by the rehearsal's own sync); the key set `customer_jwt_keys` / `customer_jwt_active_kid` / `customer_jwt_key_dates` provisioned in the store; the 5.18.37 code still opens the directory.
 Production stays on 5.18.37 (`68f4eeb`). Operator decisions taken by default and flagged in
 the report: E3-a immediate cut-over; body token only for a self-announcing native client;
 30-day lifetime; sessions table; eligibility defaults (leads no, archived no, service not
