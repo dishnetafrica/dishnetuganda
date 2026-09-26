@@ -494,7 +494,7 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 ### 7.2 The server commands (operator acts; each sends back its log file)
 
 0. **Deploy 5.18.42 (A2 + the invoice's tax lines)** — `scripts/deploy-5.18.42.sh`, pinned to the reviewed
-   plugin commit, the same machinery as 5.18.41; stage **V** additionally checks the Uganda wording on the
+   plugin commit `d857ec8`, the same machinery as 5.18.41; stage **V** additionally checks the Uganda wording on the
    Terms and Privacy pages (South Sudan ×0, Juba ×0, the approved identity, law, forum and regulator
    sentences, no `USD 25` / `USD 150` / fibre / LTE) and that `app_legal_version` answers **1.1**. Then the
    read-only audit — `bash scripts/journey-audit.sh --login-phone` **asks for the number on the terminal**

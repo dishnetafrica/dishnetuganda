@@ -1314,6 +1314,6 @@ default version; the forum naming Juba; the regulator reverting; one word change
 `totalTaxes` read again; one lumped "Tax" line; the API dropping `taxes`; the lines losing their names).
 Suite: **207 suites, exit 0, twice**; the 186 suites that print totals report **8,241 passed / 0 failed** on both runs. The deploy command's stage V2 was rehearsed against a local Uganda sandbox (12 ok) and a South Sudan one (10 of the 12 fail — the checks discriminate).
 
-**Deploy.** `scripts/deploy-5.18.42.sh`, pinned to the plugin commit; stage V checks the Uganda wording and the
+**Deploy.** `scripts/deploy-5.18.42.sh`, pinned to the plugin commit `d857ec8`; stage V checks the Uganda wording and the
 1.1 version on the public pages. **Not deployed by this session** — the operator runs it and sends the log
 file (docs/38 §7.2 item 0).
