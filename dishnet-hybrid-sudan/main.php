@@ -453,8 +453,8 @@ $shouldAutoPull  = $autoPullEnabled
 if (!$autoPullEnabled) {
     mainLog('UCRM auto-pull: disabled in config.');
 } elseif (!$shouldAutoPull) {
-    $nextPull = date('Y-m-d') . ' ' . str_pad($autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';
-    if ($currentHour >= $autoPullHour) $nextPull = date('Y-m-d', strtotime('+1 day')) . ' ' . str_pad($autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';
+    $nextPull = date('Y-m-d') . ' ' . str_pad((string)$autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';
+    if ($currentHour >= $autoPullHour) $nextPull = date('Y-m-d', strtotime('+1 day')) . ' ' . str_pad((string)$autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';
     mainLog("UCRM auto-pull: scheduled for {$nextPull}.");
 } elseif ($crmBase === '' || $crmToken === '') {
     mainLog('UCRM auto-pull: CRM not configured — skipping.');
