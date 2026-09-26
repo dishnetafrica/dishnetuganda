@@ -1076,7 +1076,7 @@ type, every field, start_url inside scope, both icons answering as images, no
 credential-shaped word), the sign-in page's link, the portal's link and Install row, no
 service worker on either page, the portal still refusing without a session, the staff
 manifest unchanged — and the control: with the link removed from the copy, the served page no
-longer carries it. Suite two full runs are in progress at the time of this commit; both results are recorded in the follow-up commit that closes this entry.
+longer carries it. Suite: run A 204 suites / 8049 passed / 1 failed — the one failure was the new test's own first version, whose HTTP client followed the portal's redirect and so read a 200 where a 302 was the answer; corrected (`follow_location` off, the 302 and its Location asserted) before run B; run B 204 suites / 8051 passed / 0 failed.
 
 **Deployment (NOT done).** `scripts/deploy-5.18.40.sh`, pinned to plugin commit
 `4a2f41c`: the Phase 1/2 machinery, then **M** the manifest over the public address
