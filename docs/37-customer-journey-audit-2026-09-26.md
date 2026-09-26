@@ -57,7 +57,7 @@ not arrived yet, §H). Nothing PENDING is asserted.
 | System | Presence | Evidence |
 |---|---|---|
 | uCRM | client #1, "Residential (up to 400 Mbps)", UGX 329,000/month, e-mail and phone on the record | operator's screenshot (REPOSITORY-external) |
-| Hybrid | in `client_search_index`: the 05:40 e-mail sign-in matched exactly one account, eligible, and resolved to it | docs/35 §2 |
+| Hybrid | in `client_search_index`: the 05:40 e-mail sign-in matched exactly one account, eligible, and resolved to it. **MEASURED 08:41: the phone route and the e-mail route both resolve to CRM #1 with one account and an identical fingerprint (§I.3)** | docs/35 §2; §I.3 |
 | Starlink Finance | **not among the three kits/customers it shows** (CRM #7, #47, #69) | operator's screenshot; **MEASURED** by `--siblings`: `sl_kits.json` holds exactly #7, #47, #69 (§I.1.1) |
 | Data Report | **not among its clients** (the same three, plus one kit with no client at all) | operator's screenshot; **MEASURED** by `--siblings`: `dr_kit_registry.json` = #7, #47, #69 and one unassigned kit (§I.1.1) |
 | Kit / Starlink account / usage | **none in either sibling register (MEASURED)**; the hybrid's own `equipment_assignments` for #1: PENDING (`--identity 1`) | §I.1.1 |
@@ -141,7 +141,9 @@ not possible here).
     credential, so it inherits the origin the customer is on; a customer who arrived through uCRM's own
     links, the cached `301` of the bare `/crm`, or an old bookmark is on `:8443` and the browser warns.
     The plugin's *generated* links have been on the standard port since 5.18.34; the origin of the *page*
-    is not corrected anywhere. Live measurement: PENDING (`--urls` U3–U5, the operator's address bar).
+    is not corrected anywhere. **MEASURED (§I.2): 443 = Let's Encrypt for `crm.dishnetuganda.com`, verify 0;
+    8443 = self-signed `CN=localhost`, verify 18; the bare `/crm` still answers 301 to `:8443/crm/`; the
+    website links the 443 sign-in.** Still open: which door the operator came through (address bar).
 
 **Cosmetic**
 15. The Data Report heads every page *"DISHNET AFRICA · JUBA, SOUTH SUDAN"* on the Uganda install; its
@@ -400,8 +402,52 @@ the sibling, only on the operator's go-ahead.
 - `dr_kit_registry.json`'s envelope names its generator "dishnet-data-report 2.8.73" on the 2.8.80 build — a
   stale version constant, cosmetic.
 
-**Still PENDING:** `--identity 1`, `--login-phone`, `--login-email`, `--compare` (§H). §B's hybrid-side
-row, §C's hybrid columns, §E's live scorecard and the final identity verdict wait for them.
+**Still PENDING:** the contents of `--identity 1`, `--login-phone` and `--login-email` (run at 08:40–08:41,
+files on the server). §B's field comparison, §C's hybrid columns and §E's live scorecard wait for them.
+
+### I.2 `--urls` — 08:40:39 UTC, 26 September (pasted in full)
+
+- **U1 — the plugin's own link builder.** uCRM reports itself as `https://crm.dishnetuganda.com:8443/crm/`
+  and the plugin's address as `https://crm.dishnetuganda.com:8443/crm/_plugins/…/public.php`. The override
+  `crm_public_url = https://crm.dishnetuganda.com` sits in `config.json` and in the vault, with no stray copy
+  in `kyc_config.json` or the settings store. **Both readers — crons/webhook and screens/portal/API — build
+  every link on `https://crm.dishnetuganda.com`, without `:8443`**: the 5.18.34 fix holds. The tool's one
+  "needs fixing" item is UISP's, not the plugin's: the bare `/crm` answers `301 → https://crm.dishnetuganda.com:8443/crm/`.
+  The tool also logged `[ConfigVault] restored after re-install:` naming ten keys. That is `PluginConfig::load()`
+  filling, in memory, keys the file copy lacks from the vault and then refreshing the vault file
+  (`ConfigVault.php:228–232`) — the routine every cron tick and webhook call performs; no setting changed
+  value. Recorded because the audit promised no writes: this one is the plugin's own, on every load.
+- **U2** — `?page=customer_manifest` 200; `start_url` is the path
+  `/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login`, resolved by the browser against
+  whatever origin it is on.
+- **U3 — the certificates (MEASURED, `openssl` from the server to its own public name):**
+
+  | port | issuer · subject | valid to | verify |
+  |---|---|---|---|
+  | 443 | Let's Encrypt (YR2) · CN `crm.dishnetuganda.com`, SAN `crm.dishnetuganda.com` | 2 Dec 2026 | **0 (ok)** |
+  | 8443 | self-signed · CN `localhost`, SAN `localhost` | 26 Nov 2028 | **18 (self-signed certificate)** |
+
+  A browser on `:8443` therefore objects twice: an untrusted issuer and a name that is not the site's.
+- **U4 — where a browser lands** (one request each, redirects not followed, TLS verified):
+  `https://…/crm` → **301 → `https://crm.dishnetuganda.com:8443/crm/`** (UISP's nginx, even through Traefik);
+  `https://…/crm/` → 302 → `/nms/login?returnurl=/crm/` (UISP's sign-in, same origin); `http://…/` → 301 →
+  `https://…/`; `http://…:8080/` → 301 → `https://…:8443/`. The customer sign-in page answers **200 on 443**;
+  on **8443 curl refused the certificate**, as a browser would warn.
+- **U5** — the live website's home page links the portal sign-in **3** times and uCRM's own `/crm/login`
+  **0** times: **the decision-8 website is deployed.**
+- Summary: 5 ok, 1 failed (U3 on 8443 — the finding, not a fault of the run), 1 note.
+
+**Consequence for §J.2.** Question 7 is answered by measurement: the warning is the self-signed `localhost`
+certificate on 8443. Two doors still lead there — typing or bookmarking the bare `/crm` (UISP's cached
+301), and uCRM's own e-mails and redirects built on `…:8443`. The plugin's links and the website do not.
+
+### I.3 `--compare` — 08:41:30 UTC, 26 September (pasted in full)
+
+Phone sign-in → **CRM #1**, 1 account (08:40:50). E-mail sign-in → **CRM #1**, 1 account (08:41:06).
+Fingerprints equal: **C1 SAME customer identity and the same account scope by both routes.** This is
+Part 9's answer for the controlled customer: the WhatsApp/phone route and the e-mail route resolve to the
+same uCRM client and the same account set. (The operator ran the whole set twice, at 06:25–06:26 on the
+previous build of the command and at 08:40–08:41 on the extended walk; the 08:4x logs are the ones to read.)
 
 ## J. Two post-login findings from the operator's own test (added 26 September)
 
@@ -520,7 +566,7 @@ carry the address uCRM was configured with, `crm.dishnetuganda.com:8443` (docs/3
 plugin's to change"); the bare `/crm` is answered by UISP with a **301** to `…:8443/crm/`, which browsers
 cache (docs/33 §5); an old bookmark. The plugin's own *generated* links have been on the standard port since
 5.18.34 (`crm_public_url`, docs/33), and the website's Customer Login opens the portal sign-in on 443
-(decision 8; whether the redeployed site is live is what `--urls` U5 measures).
+(decision 8; **U5 measured the live site linking it, §I.2**).
 
 **The ten questions.**
 1. URL format: `https://<the origin the customer is on>/crm/_plugins/dishnet-hybrid-sudan/public.php?page=api&action=app_invoice_pdf_download&inv_id=<n>&account_id=<n>`; the viewer shows `blob:https://<origin>/<uuid>`. Numeric ids only; no token.
@@ -529,7 +575,7 @@ cache (docs/33 §5); an old bookmark. The plugin's own *generated* links have be
 4. Host `crm.dishnetuganda.com`. Port 443 = Traefik / Let's Encrypt, the intended public address. Port 8443 = UISP's own HTTPS listener, public (open for routers), self-signed. Live: `--urls` U3.
 5. Path on 443: browser → Traefik (file-provider route) → UISP's nginx → uCRM's PHP → the plugin's `public.php`. Path on 8443: browser → UISP's nginx directly. The plugin runs identically on both.
 6. `CustomerSession::isHttps()` honours `X-Forwarded-Proto`, `X-Forwarded-Ssl`, `HTTPS` and port 443, so the `Secure` cookie flag is set on both paths. **There is no canonical or base-URL rule for the customer pages**: the plugin answers on whatever host and port the request arrived on, and its relative links keep the customer there. `crm_public_url` corrects only the absolute links the plugin generates (e-mails, WhatsApp, DPO, "View in CRM").
-7. The warning is **the certificate on 8443** — not HTTP, not mixed content (page and API share the origin), not a redirect. By design (docs/05 "UISP serves its UI on 8443 with a self-signed certificate. Browsers warn."; docs/09: `:8443 HTTP 000 (TLS rejected)`, `443 HTTP 200 application/pdf`). Live: U3 / U4. **PENDING: the operator's address bar at the time.** If it showed `:8443`, this is the whole explanation. If it showed no port, the warning has another cause and the live U3 result for 443 decides.
+7. The warning is **the certificate on 8443** — not HTTP, not mixed content (page and API share the origin), not a redirect. **MEASURED (§I.2): 443 presents a trusted Let's Encrypt certificate for `crm.dishnetuganda.com` (verify 0); 8443 presents a self-signed certificate for `localhost` (verify 18), so the browser objects to the issuer and to the name.** The 443 certificate is sound, so the warning can only have come from `:8443`. Still useful: the operator's address bar at the time, to name the door that led there (the bare `/crm`, a uCRM e-mail, a bookmark).
 8. No JWT, session cookie, bearer token or other credential in the invoice URL; the session is the HttpOnly cookie. (The WhatsApp "send me this invoice" path is different by design: `serve_temp_pdf&file=…&token=…`, a random token compared with `hash_equals`, ten minutes, the file deleted after its first serve — sent to the customer's own number only.)
 9. Yes. Authentication is checked on every request (`ca_require_auth`); the account must be in the session's allow-list (403 otherwise); the invoice must belong to that account (404 otherwise). The ownership check is cache-based: an invoice absent from `ucrm_invoices_cache` is a 404 even for its owner — a completeness gap, not an exposure.
 10. The URL never expires by itself; access ends with the session. Logout revokes the session (`customer_sessions.revoked_at`); **SANDBOX: the same PDF link answers 401 after logout**; sessions also expire by `expires_at`. Live: the walk's L7.
@@ -568,11 +614,10 @@ docs/33 §3).
 
 ### J.3 What the live runs add (PENDING)
 
-`--login-phone` / `--login-email`: the `Invoice PDF` classification and the link's shape; `L7` the PDF link
-after logout; `L9` the Support tab's contact literals (the operator's record has consent on record, so the
-tab renders); `L10` the public Terms page. `--urls`: U1 the plugin's own link-builder report; U2 the
-manifest; U3 the certificate on 443 and on 8443; U4 where `/crm`, `/crm/`, `http://` and `:8080` land and
-the sign-in page on both ports; U5 whether the live website links the portal sign-in.
+`--login-phone` / `--login-email` (run 08:40–08:41, logs not yet received): the `Invoice PDF` classification
+and the link's shape; `L7` the PDF link after logout; `L9` the Support tab's contact literals (the operator's
+record has consent on record, so the tab renders); `L10` the public Terms page. `--urls`: **DONE, §I.2.**
+`--compare`: **DONE, §I.3.**
 
 Rehearsed against the real portal code in the sandbox: **60 of 60 checks, two consecutive runs**, with
 L5, L9 and L10 pinned as the expected failures (they flip when the fix lands), the PDF streamed and refused
