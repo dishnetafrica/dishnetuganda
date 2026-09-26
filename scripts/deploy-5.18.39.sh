@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+#
+# deploy-5.18.39.sh — deploy plugin 5.18.39: the five-minute tick no longer dies on its
+# own log line (main.php:456 — str_pad() given an int under strict types). Same machinery
+# as phase1/phase2-deploy.sh: before-evidence, a backup, the documented deploy — and then
+# it WAITS for the next tick and proves the tick ran to its last line.
+#
+# Run as root on the server, in one sitting (it waits up to ~13 minutes for the tick),
+# and send back THE LOG FILE (never a copy of the terminal):
+#
+#   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+#     && mkdir -p /root/dnb-5.18.39 \
+#     && bash scripts/deploy-5.18.39.sh 2>&1 | tee /root/dnb-5.18.39/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+#
+# Options
+#   --after-only   the deploy already happened: only watch the tick and count crashes
+#
+# What it never does: touch the data directory, a configuration value, a customer, or the
+# webhook key. The only writes are the documented deploy (scripts/deploy-hybrid.sh) and a
+# backup under /root/dnb-5.18.39/.
+#
+# Stages:  A before-evidence + backup → GO/NO-GO   B the documented deploy
+#          T the tick after the deploy (waits for it)   F summary
+set -uo pipefail
+umask 077
+
+PLUGIN="dishnet-hybrid-sudan"
+CONTAINER="${UCRM_CONTAINER:-ucrm}"
+EXPECTED_PLUGIN_COMMIT="e333261"   # 5.18.39 — the plugin-scoped commit deploy-hybrid.sh records
+EXPECTED_VERSION="5.18.39"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="$REPO/$PLUGIN"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="/root/dnb-5.18.39"; mkdir -p "$OUT"; chmod 700 "$OUT"
+# Rehearsal knobs — never needed on the server: how often to look, how long to wait, the grace window
+TICK_POLL_SECONDS="${TICK_POLL_SECONDS:-15}"
+TICK_MAX_SECONDS="${TICK_MAX_SECONDS:-780}"
+TICK_GUARD_SECONDS="${TICK_GUARD_SECONDS:-90}"
+TICK_PERIOD_SECONDS="${TICK_PERIOD_SECONDS:-330}"
+
+AFTER_ONLY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --after-only) AFTER_ONLY=1 ;;
+    *) echo "unknown option: $1" >&2; exit 64 ;;
+  esac; shift
+done
+
+PASS=0; FAIL=0; NOTE=0
+ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$*"; }
+bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$*"; }
+note() { NOTE=$((NOTE+1)); printf '  note  %s\n' "$*"; }
+hdr()  { printf '\n== %s ==\n' "$*"; }
+stop() { printf '\n  STOP: %s\n  Nothing further was done. Send the log file.\n' "$*"; exit 1; }
+
+hdr "5.18.39 — $TS — $(hostname)"
+
+# ════════════════════════════════════════════════════════
+hdr "A. Before-evidence (read-only) and backup"
+# ════════════════════════════════════════════════════════
+HEAD_REPO="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+HEAD_PLUGIN="$(git -C "$REPO" log -1 --format=%h -- "$PLUGIN" 2>/dev/null || echo unknown)"
+DIRTY="$(git -C "$REPO" status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')"
+VERSION_SRC="$(grep -o '"version": *"5[^"]*"' "$SRC/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
+echo "  checkout        $REPO"
+echo "  repo HEAD       $HEAD_REPO"
+echo "  plugin commit   $HEAD_PLUGIN   (expected $EXPECTED_PLUGIN_COMMIT)"
+echo "  plugin version  ${VERSION_SRC:-?}   (expected $EXPECTED_VERSION)"
+echo "  tracked edits   $DIRTY"
+[ "$HEAD_PLUGIN" = "$EXPECTED_PLUGIN_COMMIT" ] || stop "the checkout's plugin commit is $HEAD_PLUGIN, not $EXPECTED_PLUGIN_COMMIT — pull the branch, or this script is for another build"
+[ "$VERSION_SRC" = "$EXPECTED_VERSION" ]        || stop "manifest.json says ${VERSION_SRC:-?}, expected $EXPECTED_VERSION"
+[ "$DIRTY" = "0" ]                              || stop "the checkout has $DIRTY locally edited tracked files — deploying would ship edits nobody reviewed"
+
+MOUNT="$(docker inspect "$CONTAINER" --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
+[ -n "$MOUNT" ] || stop "container '$CONTAINER' has no /data mount"
+DEST="$MOUNT/ucrm/data/plugins/$PLUGIN"
+IN_CONTAINER="/data/ucrm/data/plugins/$PLUGIN"
+[ -f "$DEST/manifest.json" ] || stop "no installed plugin at $DEST"
+LIVE_BEFORE="$(docker exec "$CONTAINER" cat "$IN_CONTAINER/.deployed-commit" 2>/dev/null | tail -n1 | tr -cd '0-9a-f')"
+LIVE_VERSION="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
+echo "  serves          $DEST"
+echo "  live commit     ${LIVE_BEFORE:-unknown}   (this is the rollback commit)"
+echo "  live version    ${LIVE_VERSION:-?}"
+echo "  --check says:"; bash "$REPO/scripts/deploy-hybrid.sh" --check 2>&1 | sed 's/^/     /'
+docker exec "$CONTAINER" php -v >/dev/null 2>&1 || stop "no php inside the container — the data directory is resolved with it"
+
+# The data directory, resolved the way the plugin resolves it (ucrm.json first).
+PDD_IN="$(docker exec "$CONTAINER" php -r '$u=@json_decode((string)@file_get_contents($argv[1]),true); echo rtrim((string)($u["pluginDataDir"]??""),"/");' "$IN_CONTAINER/ucrm.json" 2>/dev/null || true)"
+if [ -z "$PDD_IN" ]; then
+  if docker exec "$CONTAINER" test -f "/data/ucrm/data/plugins/.$PLUGIN-data/plugin.sqlite3"; then PDD_IN="/data/ucrm/data/plugins/.$PLUGIN-data";
+  else PDD_IN="$IN_CONTAINER/data"; fi
+fi
+DATA_HOST="$MOUNT${PDD_IN#/data}"
+HB_IN="$PDD_IN/heartbeat.log"
+docker exec "$CONTAINER" test -f "$HB_IN" || stop "no heartbeat log at $HB_IN (container path) — the data directory was not resolved"
+echo "  data dir        $PDD_IN (container)  =  $DATA_HOST (host)"
+
+# The defect, measured before anything changes.
+N456_1H="$(docker logs "$CONTAINER" --since 1h 2>&1 | grep -c "$PLUGIN/main.php:456" || true)"
+N456_24H="$(docker logs "$CONTAINER" --since 24h 2>&1 | grep -c "$PLUGIN/main.php:456" || true)"
+echo "  main.php:456    ${N456_1H:-0} crash lines in the last hour, ${N456_24H:-0} in 24 h — the defect this deploy fixes"
+HB_LAST_BEFORE="$(docker exec "$CONTAINER" tail -n 1 "$HB_IN" 2>/dev/null | cut -c2-20)"
+echo "  heartbeat.log   last line at ${HB_LAST_BEFORE:-?} (the tick's own clock); its last three lines:"
+docker exec "$CONTAINER" tail -n 3 "$HB_IN" 2>/dev/null | cut -c1-140 | sed 's/^/     /'
+N_DONE_TAIL="$(docker exec "$CONTAINER" tail -n 200 "$HB_IN" 2>/dev/null | grep -c 'main.php total execution' || true)"
+echo "  completed ticks ${N_DONE_TAIL:-0} 'total execution' lines among the last 200 heartbeat lines (0 is the defect: the tick never reached its last line)"
+
+if [ "$AFTER_ONLY" = "0" ] && [ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ]; then
+  note "the container already serves $EXPECTED_PLUGIN_COMMIT — skipping the deploy, watching the tick"
+  AFTER_ONLY=1
+fi
+
+BK=""
+if [ "$AFTER_ONLY" = "0" ]; then
+  BK="$OUT/backup-$TS"; mkdir -p "$BK"; chmod 700 "$BK"
+  DONE_DIRS=""
+  for d in "$DATA_HOST" "$DEST/data" "$MOUNT/ucrm/data/plugins/.$PLUGIN-data"; do
+    [ -d "$d" ] || continue
+    case " $DONE_DIRS " in *" $d "*) continue;; esac; DONE_DIRS="$DONE_DIRS $d"
+    n="$(basename "$d" | tr -c 'A-Za-z0-9._\n-' '_')"; [ -n "$n" ] || n="data-$(date -u +%s)"
+    [ -e "$BK/$n.tar.gz" ] && n="$n-$(date -u +%H%M%S)"
+    if tar -C "$(dirname "$d")" -czf "$BK/$n.tar.gz" "$(basename "$d")" 2>/dev/null; then
+      ok "backed up $d → $BK/$n.tar.gz ($(du -h "$BK/$n.tar.gz" | cut -f1))"
+    else bad "backup of $d failed"; fi
+  done
+  cp "$DEST/.deployed-commit" "$BK/deployed-commit.before" 2>/dev/null || true
+  chmod -R go-rwx "$BK"
+  if [ -x "$REPO/scripts/verify-uisp-health.sh" ]; then
+    if timeout 120 bash "$REPO/scripts/verify-uisp-health.sh" > "$BK/health-before.txt" 2>&1; then ok "UISP health recorded → $BK/health-before.txt"; else note "verify-uisp-health.sh did not pass — recorded in $BK/health-before.txt"; fi
+  fi
+  [ "$FAIL" = "0" ] || stop "NO-GO: the backup did not complete"
+  echo; echo "  GO — evidence recorded, backup in $BK"
+  echo "  Rollback at any time:  cd $REPO && git checkout ${LIVE_BEFORE:-<live commit>} && bash scripts/deploy-hybrid.sh"
+
+  # ════════════════════════════════════════════════════════
+  hdr "B. The documented deploy (scripts/deploy-hybrid.sh)"
+  # ════════════════════════════════════════════════════════
+  printf '  Type DEPLOY to deploy %s (%s) over live %s, anything else to stop: ' "$EXPECTED_VERSION" "$EXPECTED_PLUGIN_COMMIT" "${LIVE_BEFORE:-?}"
+  read -r ANSWER </dev/tty || ANSWER=""
+  [ "$ANSWER" = "DEPLOY" ] || stop "not confirmed"
+  DEPLOY_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  bash "$REPO/scripts/deploy-hybrid.sh" 2>&1 | sed 's/^/     /'; RC=${PIPESTATUS[0]}
+  if [ "$RC" = "2" ]; then
+    note "the container was still restarting; waiting for it"
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+      sleep 10
+      if bash "$REPO/scripts/deploy-hybrid.sh" --check 2>&1 | grep -q 'Up to date'; then RC=0; break; fi
+    done
+  fi
+  LIVE_AFTER="$(docker exec "$CONTAINER" cat "$IN_CONTAINER/.deployed-commit" 2>/dev/null | tail -n1 | tr -cd '0-9a-f')"
+  if [ "$RC" = "0" ] && [ "$LIVE_AFTER" = "$EXPECTED_PLUGIN_COMMIT" ]; then ok "container serves $LIVE_AFTER"
+  else stop "deploy did not verify (rc=$RC, live=${LIVE_AFTER:-?}). Roll back: cd $REPO && git checkout ${LIVE_BEFORE:-<commit>} && bash scripts/deploy-hybrid.sh"; fi
+else
+  DEPLOY_STARTED="$(date -u -d '-10 minutes' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+  LIVE_AFTER="$LIVE_BEFORE"
+  [ "$LIVE_AFTER" = "$EXPECTED_PLUGIN_COMMIT" ] && ok "live commit is $LIVE_AFTER" || stop "the container serves ${LIVE_AFTER:-?}, not $EXPECTED_PLUGIN_COMMIT"
+fi
+
+# --- T BEGIN ---
+# ════════════════════════════════════════════════════════
+hdr "T. The tick after the deploy (uCRM runs main.php about every five minutes — this waits for it)"
+# ════════════════════════════════════════════════════════
+# Heartbeat lines newer than $1, on the tick's own clock ('[Y-m-d H:i:s] …', compared as text).
+hb_since() { docker exec "$CONTAINER" tail -n 200 "$HB_IN" 2>/dev/null | awk -v s="$1" 'substr($0,2,19) > s'; }
+T0="$(date -u +%s)"; FIRST_DONE=""; SCHED_LINE=""
+while :; do
+  NEW="$(hb_since "${HB_LAST_BEFORE:-}")"
+  FIRST_DONE="$(printf '%s\n' "$NEW" | grep -m1 'main.php total execution' || true)"
+  if [ -n "$FIRST_DONE" ]; then SCHED_LINE="$(printf '%s\n' "$NEW" | grep -m1 'UCRM auto-pull' || true)"; break; fi
+  ELAPSED=$(( $(date -u +%s) - T0 ))
+  [ "$ELAPSED" -lt "$TICK_MAX_SECONDS" ] || break
+  printf '  …     %ss — no completed tick yet; last heartbeat line: %s\n' "$ELAPSED" "$(docker exec "$CONTAINER" tail -n 1 "$HB_IN" 2>/dev/null | cut -c1-90)"
+  sleep "$TICK_POLL_SECONDS"
+done
+if [ -n "$FIRST_DONE" ]; then
+  ok "T1 a tick completed after the deploy: $(printf '%s' "$FIRST_DONE" | cut -c1-120)"
+  if printf '%s' "$SCHED_LINE" | grep -qE 'auto-pull: scheduled for [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:00\.'; then
+    ok "T2 the line that used to kill the tick is written, with a two-digit hour: ${SCHED_LINE#*] }"
+  elif [ -n "$SCHED_LINE" ]; then
+    note "T2 this tick's auto-pull line: ${SCHED_LINE#*] } — the pull hour itself or auto-pull disabled; the padded branch was not the one taken this tick"
+  else bad "T2 the completed tick wrote no 'UCRM auto-pull' line"; fi
+else
+  bad "T1 no tick completed within ${TICK_MAX_SECONDS}s — the heartbeat's last lines:"
+  docker exec "$CONTAINER" tail -n 8 "$HB_IN" 2>/dev/null | cut -c1-140 | sed 's/^/     /'
+fi
+# Crashes are counted from a little after the deploy: a tick already running the old code
+# when the deploy landed may still die in the first seconds, and that is not this build's.
+DEPLOY_EPOCH="$(date -u -d "$DEPLOY_STARTED" +%s)"
+GUARD_FROM="$(date -u -d "@$(( DEPLOY_EPOCH + TICK_GUARD_SECONDS ))" +%Y-%m-%dT%H:%M:%SZ)"
+WAIT_UNTIL=$(( DEPLOY_EPOCH + TICK_GUARD_SECONDS + TICK_PERIOD_SECONDS ))
+if [ "$(date -u +%s)" -lt "$WAIT_UNTIL" ]; then
+  printf '  …     waiting %ss more, so that a whole tick period falls inside the counting window\n' "$(( WAIT_UNTIL - $(date -u +%s) ))"
+  sleep "$(( WAIT_UNTIL - $(date -u +%s) ))"
+fi
+N_AFTER="$(docker logs "$CONTAINER" --since "$GUARD_FROM" 2>&1 | grep -E 'UNCAUGHT|FATAL|Fatal' | grep -c "$PLUGIN/main.php" || true)"
+if [ "${N_AFTER:-0}" = "0" ]; then ok "T3 no crash of $PLUGIN/main.php in the container log since $GUARD_FROM (deploy + ${TICK_GUARD_SECONDS}s)"
+else
+  bad "T3 ${N_AFTER} crash line(s) of $PLUGIN/main.php since $GUARD_FROM:"
+  docker logs "$CONTAINER" --timestamps --since "$GUARD_FROM" 2>&1 | grep -E 'UNCAUGHT|FATAL|Fatal' | grep "$PLUGIN/main.php" | cut -c1-200 | head -5 | sed 's/^/     /'
+fi
+N_IN_GUARD="$(docker logs "$CONTAINER" --since "$DEPLOY_STARTED" --until "$GUARD_FROM" 2>&1 | grep -E 'UNCAUGHT|FATAL|Fatal' | grep -c "$PLUGIN/main.php" || true)"
+[ "${N_IN_GUARD:-0}" = "0" ] || note "T3 ${N_IN_GUARD} crash line(s) in the first ${TICK_GUARD_SECONDS}s after the deploy started — a tick that was already running the old code"
+N_OTHERS="$(docker logs "$CONTAINER" --since "$DEPLOY_STARTED" 2>&1 | grep -E 'UNCAUGHT|FATAL|Fatal|PHP Fatal|PHP Parse error' | grep -vc "$PLUGIN/main.php" || true)"
+if [ "${N_OTHERS:-0}" = "0" ]; then ok "T4 no other PHP fatal/uncaught line since the deploy"
+else
+  note "T4 ${N_OTHERS} fatal/uncaught line(s) since the deploy that are not the tick's — other plugins, recorded, not this build's:"
+  docker logs "$CONTAINER" --timestamps --since "$DEPLOY_STARTED" 2>&1 | grep -E 'UNCAUGHT|FATAL|Fatal|PHP Fatal|PHP Parse error' | grep -v "$PLUGIN/main.php" | cut -c1-160 | head -3 | sed 's/^/     /'
+fi
+# --- T END ---
+
+# ════════════════════════════════════════════════════════
+hdr "F. Summary"
+# ════════════════════════════════════════════════════════
+echo "  deployed commit   $LIVE_AFTER  (plugin $EXPECTED_VERSION)"
+if [ "$AFTER_ONLY" = "0" ]; then echo "  rollback commit   ${LIVE_BEFORE:-unknown}   →  cd $REPO && git checkout ${LIVE_BEFORE:-<commit>} && bash scripts/deploy-hybrid.sh"
+else echo "  rollback commit   (this run deployed nothing — see the deployment run's log)"; fi
+[ -n "$BK" ] && echo "  backup            $BK"
+echo "  main.php:456      before: ${N456_1H:-0} crash lines in the hour before the run   after: ${N_AFTER:-?} since $GUARD_FROM"
+echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"
+if [ "$FAIL" = "0" ]; then echo; echo "  5.18.39: PASSED. Send this LOG FILE back (not a copy of the terminal)."
+else echo; echo "  5.18.39: $FAIL FAILED — send the log file; do not roll back on your own unless customers are affected."; fi
+[ "$FAIL" = "0" ]

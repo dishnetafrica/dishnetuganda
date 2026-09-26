@@ -978,3 +978,45 @@ the report: E3-a immediate cut-over; body token only for a self-announcing nativ
 30-day lifetime; sessions table; eligibility defaults (leads no, archived no, service not
 required). Not done here, by scope: Phase 3 lifecycle, Phase 4 portal content and the
 website, Phase 5 payments, the `main.php:456` tick crash.
+
+## 5.18.39 — the five-minute tick no longer dies on its own log line
+
+**What was wrong.** uCRM runs `main.php` about every five minutes. Its auto-pull block decides
+whether the daily uCRM client pull is due and, when it is not, logs *"UCRM auto-pull:
+scheduled for …"* with the hour padded to two digits by `str_pad($autoPullHour, 2, '0',
+STR_PAD_LEFT)`. `$autoPullHour` is an `int` and `main.php` declares `strict_types=1`, so under
+PHP 8 the call throws `TypeError: str_pad(): Argument #1 ($string) must be of type string, int
+given` — the `[DishNet UNCAUGHT] … main.php:456` line the container log carried on every tick
+except the pull hour: 230 on 25 September before the 5.18.37 deploy and 276 in 24 h (Phase 1
+closure), and the one line the 5.18.38 deploy's C7 check caught. **Measured consequence:** by
+that line the heartbeat, the data-integrity check, the daily-report and backup gates and the
+master cron dispatcher — `cron_sync` and every other job — had already run; the pull hour does
+not take the branch; the only work lost on an ordinary tick was the final *"main.php total
+execution"* line, and the process still exited 0 because the plugin's exception handler
+swallows the failure. Cosmetic in effect, but a crash on every tick buries a real one, and the
+tick could never report that it had finished.
+
+**The change.** `(string)$autoPullHour` on both lines (456 and 457). Nothing else in
+`main.php` changed; manifest 5.18.39.
+
+**Proof.** `tests/test_tick_auto_pull_log.php` (18) runs the REAL `main.php` in a throwaway
+copy — `cron/master.php` removed so only the tail of the tick runs and nothing needs a network,
+the child's clock set (`php -d date.timezone`) to an hour that takes the "scheduled for" branch
+— and asserts: nothing uncaught, exit 0, the branch line written with a two-digit hour
+(`03:00`), the tick reaching its last line. Then the control: the pre-5.18.39 expression put
+back in the copy dies with exactly the production message at `main.php:456`, exits 0 all the
+same, and writes neither line. Then the repository pin: two casts, no bare call. Suite
+203 suites / 8020 passed / 0 failed, one run (a one-line change with its own suite; the Phase 2 build was proved twice the day before).
+
+**Deployment (NOT done).** `scripts/deploy-5.18.39.sh`, pinned to plugin commit
+`e333261`: the Phase 1/2 machinery (before-evidence, now with the crash rate of the
+last hour and 24 h and the count of completed ticks in the heartbeat; backup; the `DEPLOY`
+prompt; the documented deploy), then **stage T waits for the next tick**, up to thirteen
+minutes, and proves it: a completed tick after the deploy (a "total execution" line newer than
+the heartbeat's last line before it), the auto-pull line with a two-digit hour, zero crash
+lines of the tick in the container log from 90 s after the deploy (a tick already running the
+old code may still die in the first seconds; that is reported as a note), other plugins' fatals
+noted and never counted against this build. Rehearsed against a fake docker in four scenarios
+(a completing tick, none, a crash after the guard, the pull hour): 7/7.
+
+**Status:** **built, NOT deployed.** Production stays on 5.18.38 (`fa2d463`).
