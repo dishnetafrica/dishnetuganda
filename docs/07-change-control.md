@@ -1138,3 +1138,71 @@ later-looking clock, nothing new → T1 fails): 8/8. Two cosmetic warnings ("ign
 from the icon bodies read into a shell variable; binary bodies are now stripped of NULs. **The
 run's T3, W and summary were still pending when this was written**; they are recorded from the log
 file when it arrives. The website was not yet redeployed at the time of the run.
+
+## 5.18.41 — the portal speaks the tenant's identity; consent belongs to the customer; one public address (docs/38 change set A1)
+
+**Why.** The read-only customer-journey audit (docs/37, docs/39) measured, on the Uganda install, a Support
+tab with 23 South Sudan literals and no Uganda contact, `+211` in every page's script, a Juba default, a
+South Sudan bank and " USD" on the invoice screen, Juba in the legal pages' footer; the same customer asked
+for consent again on the e-mail route after accepting by phone; and the same plugin answering on
+`:8443`, where UISP's certificate is self-signed for `localhost`. The operator adopted the remediation plan
+(docs/38): *"i will go with your recommendation"*.
+
+**What.**
+- **A1.1** `tabs/customer_app/portal_data.php` loads `TenantProfile` once and exposes what the views need;
+  every view reads variables, never the profile. `portal.php`: the Support tab's WhatsApp card, "Call us"
+  (**shows and dials the same number**, the profile's support phone — docs/38 decision A-1), the e-mail
+  row; the 16 WhatsApp sites dial one emitted constant `DishNet.supportWa`; the status view's locality; the
+  **Fiber** and **4G LTE** cards render only where the profile's `products` lists them; the invoice screen's
+  bank-transfer block prints only the profile's own `payment_instructions` (South Sudan's, made explicit in
+  its profile; **none for Uganda**, never the other tenant's bank) and repeats the currency code only when
+  the symbol does not already carry it; the payment notification the same. `legal_page.php` footer, WhatsApp
+  and e-mail from the profile; `lib/LegalContent.php`'s **contact lines** read the profile — its identity,
+  jurisdiction and regulator sentences are **still South Sudan's on every install** (change set A2, gated
+  on approved wording, docs/38 §7.3). `TenantProfile` gains `contact()`, `products()`, `sells()`,
+  `formatWa()`. South Sudan renders what it rendered, except the one difference above.
+- **A1.2** `CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId = 0)`: a row at the current
+  versions for the identifier **or** for the customer (`crm_client_id`, written only by `app_record_consent`
+  under a session the OTP proved for that customer). The login response, the portal and the login page pass
+  the session's `sub`. Recording unchanged; a row for another customer never admits; a version bump re-asks.
+- **A1.3** `lib/CanonicalHost.php`, called once in `public.php` before the routes: with `crm_public_url` set,
+  a GET/HEAD for a customer page (`customer_login`, `customer_portal`, `terms`, `privacy`,
+  `customer_manifest`) whose `Host` names the public host **with an explicit, different port** answers
+  **302** to the public address, same path and query. Never `page=api`, never a POST, never the native
+  wrapper (`X-DishNet-Client`), never another host name, never a `Host` without a port — so the public
+  origin can never match and a loop is impossible by construction. No override (South Sudan): nothing.
+
+**Found while building** (docs/38 §7.1): a closing PHP tag inside a `//` comment ended PHP mode and printed
+the rest of `portal_data.php` into the home page (caught by the rendered-page test; now a tokenizer-based
+guard with its own control); PDO binds an int as TEXT and SQLite orders TEXT above INTEGER, so a `? > 0`
+guard was true for `'0'` (the lookup now branches in PHP and binds an integer); a customer token's issuer is
+the plugin's directory name; opcache serves an edited copy up to two seconds late, so every control that
+edits a served copy polls.
+
+**Proof.** New suites, each rendering the real pages under `php -S`: `tests/test_portal_tenant.php` (88:
+Uganda pages carry nothing of South Sudan and carry the Uganda contacts; the south-sudan control; a scan of
+the sources for any literal that is not a fallback argument or a named A2 exception; the planted-literal
+control; the closing-tag guard), `tests/test_consent_identity.php` (28: the rule on the function, then over
+HTTP — the phone route consents, the e-mail route of the same customer passes, another customer does not, a
+version bump re-asks both), `tests/test_canonical_host.php` (49: the rule on arrays, then over HTTP with and
+without the override, the loop check, the wrapper, the API, a POST, the control that the redirect comes from
+CanonicalHost alone). **Eleven weakened copies, each caught** (a literal number back in one button, Juba
+back, the footer back, the bank block for every tenant, the fibre card for every tenant, the Terms contact
+literal back, consent ignoring the customer, the entry point not calling CanonicalHost, CanonicalHost
+redirecting `page=api` / a Host without a port / POSTs). Journey rehearsal against the sandbox: **77/77**,
+with L10 (the A2 wording) the only tenant finding still expected to fail. Suite run A: **207 suites /
+8,216 passed / 0 failed**; run B: still running when this entry was committed (126 of 207 suites, 0 failed at that point); its total is appended below when it finishes.
+
+**Deployment (NOT done).** `scripts/deploy-5.18.41.sh`, pinned to plugin commit `a2ea19f`: the
+5.18.40 machinery, then stage **V** over the public address and the `:8443` door — the public address must
+answer with **zero redirects** (else the script rolls back by itself), the sign-in / Terms / Privacy pages
+carry no South Sudan contact, `:8443` answers 302 to the public address for the customer pages and never for
+`page=api`, a POST or the wrapper, no fatal since the deploy. The signed-in screens are then proved by the
+operator's own `journey-audit.sh --login-phone` (L5 and L9 pass; L10 fails until A2). Rollback: redeploy the
+previous commit; consent rows written meanwhile stay valid.
+
+**Also handed over, not run:** change set **C-1** as `scripts/dnb-crm-root-redirect.sh` (one Traefik file for
+the bare `/crm`, read-first, verified, rehearsed 17/17 in `scripts/harness/crm-root/`), the **C-2**
+checklist and the **A2** wording proposal (docs/38 §7.2–7.3). **B-1 decided: O3** (docs/39 §13–14).
+
+**Status:** built and proved; **not deployed**; the operator's command is in the header of the deploy script.
