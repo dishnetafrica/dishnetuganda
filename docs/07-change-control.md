@@ -951,7 +951,18 @@ the text. **D:** 0 new webhook entries during the run, 0 `entity_unverified` ove
 endpoint objects are not readable over API v2.1 or v1.0 (404); the uCRM UI reading (System →
 Webhooks → the plugin endpoint: is there a Secret / Signature field, name only) is **still
 outstanding**; `crm_webhook_key` stays unset. **E:** `pdf_link_secret` in store and vault; the
-pre-5.18.37 link 403, a `PdfLinkToken` link 200, a random token 403.
+pre-5.18.37 link 403, a `PdfLinkToken` link 200, a random token 403. **After the deploy,
+from uCRM's own request log (System → Webhooks → Request log, read by the operator at 06:11
+EAT):** a client created in uCRM at 06:06 produced `insert`, `invitation` and `edit` events,
+each answered **OK (200)**; the edit answered *"No local record for this client (cache
+refreshed)"*, which is the branch `webhook.php` reaches **after** the Phase 2 index upsert
+(`ClientSearchIndex::upsertClient`, line 2152, before the answer at line 2171), so a client
+born in uCRM enters the sign-in index with its e-mail and flags without waiting for
+`cron_sync`. The log's request detail shows URL, *Verify SSL certificate*, response code and
+phrase, start time, duration, request and response bodies — it is the log view, not the
+endpoint form; the endpoint form (Endpoints tab) is still to be read. The endpoint objects
+answer 404 to `webhooks/endpoints` on this uCRM for the plugin's own client too
+(`tools/quote_email_doctor.php` records it), so that form is the only view.
 
 Before deployment the entry read: built, NOT deployed (plugin commit `fa2d463`). Suite 202 suites / 8002 passed / 0 failed on the second run (`phase2-suite-B`; the first run read 8001 / 1, the one failure being `test_links_without_port` flagging the new same-origin check — an allow-list entry, not a weakened guard, then 47/47); weakened copies 19 of 19 caught (M01–M19: legacy-token grace, iss/aud unchecked, session row unchecked, cookie POST without the marker, URL token accepted by the API, token in the body for browsers, consent not enforced on the portal, WASender-only gate restored, +211 hard-coded again, eligibility gates inert, code stored in clear, code into the conversation store, code into the retry queue, token back in the login redirect, default profile uganda ×2, portal accepts a URL token, lead flag inverted, phone helper with a built-in code); migrations rehearsed on a data directory built by 68f4eeb (5.18.37), opened by the 5.18.38 code: `_migrations` 72 → 74 (`073_customer_sessions.sql` 3 statements, `074_client_search_index_flags.sql` 8 statements, 0 errors in `migration.log`); `customer_sessions` created; `client_search_index` 6 → 13 columns; every pre-existing table's row count unchanged (the three `ucrm_*_cache` tables and one index row were added by the rehearsal's own sync); the key set `customer_jwt_keys` / `customer_jwt_active_kid` / `customer_jwt_key_dates` provisioned in the store; the 5.18.37 code still opens the directory.
 Production stays on 5.18.37 (`68f4eeb`). Operator decisions taken by default and flagged in
