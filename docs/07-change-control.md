@@ -1072,7 +1072,14 @@ rollback decision), a wrong Location (exactly one failure): **REHEARSAL: 12 ok, 
 run read 11 ok / 1 failed because one assertion counted the word *priority* in the file's own
 comment lines; the assertion was corrected, the command was not. That first run had already been
 committed as `4fd6b30`, whose message says 11/11 — that figure was written before the run finished
-and is wrong; this paragraph is the record. The command has NOT been run on the server.
+and is wrong; this paragraph is the record. **RUN on the server 26 September 2026 04:30:40 UTC by the
+operator, first attempt, 7 ok / 0 failed / 0 notes:** `uisp.yaml` carries priority 10 and resolver
+`letsencrypt`, so the new routers took priority 20; before the file, `https://…/customer-login` answered
+404 and the `http://` form 301; two seconds after the file was written both forms answered **302 with
+exactly the canonical sign-in as Location**, the canonical page and uCRM's own login still 200,
+Traefik not restarted. **The short address `https://crm.dishnetuganda.com/customer-login` is live.**
+Rollback remains `rm /etc/easypanel/traefik/config/dnb-customer-login.yml`. The website still links
+the canonical long URL (plan §G step 5, switching it to the short one, is optional and not done).
 
 ## 5.18.40 — the customer portal can be installed on a phone
 
