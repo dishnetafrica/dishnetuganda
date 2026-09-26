@@ -1464,5 +1464,7 @@ docs/39 said it printed no link; both are corrected. **C-2b:**
   organization record is Ugandan (Kampala, +256, dishnetuganda.com, TIN, Reg. No), so v2 prints Uganda details.
   The API does not say which template new invoices use. Invoice 000003 keeps its 21 Sep PDF with the `:8443`
   links. `--links` no longer prints the fix for an invoice whose template is gone, and it flags invalid templates
-  (rehearsal 109). uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+  (rehearsal 109).
+- **22:01, confirmed on the server.** The new verdict prints for 000003 and no fix is printed; no template is
+  flagged invalid. Waiting on the screenshot of the organization's invoice template and on the next invoice. uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
   keeps the version from the last ZIP upload through that screen.

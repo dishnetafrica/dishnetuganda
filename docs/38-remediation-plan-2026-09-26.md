@@ -706,6 +706,10 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    - **The check.** It printed the fix again for that old invoice. It now recognises an invoice whose template
      has left uCRM's list, says its PDF cannot show a new template, and prints no fix. It also flags any template
      uCRM marks invalid, when the API says so (rehearsal 109, a weakened copy caught).
+   - **22:01, the new verdict on the server.** It reads "template #1000, no longer in uCRM's list" and prints no
+     fix; no template is flagged invalid. **Still to see:** the operator's screenshot of the organization's
+     invoice template (the API is silent), and the next invoice for client #1, where `--links` should end with
+     "C-2 is done for this invoice".
 
    **What C-2b does not change:** uCRM's own e-mails, if uCRM sends any (Uganda's invoice e-mails are the
    plugin's, built without `:8443`), and where uCRM sends a member of staff after sign-in. Those still carry
