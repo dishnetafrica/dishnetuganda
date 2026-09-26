@@ -1046,7 +1046,19 @@ reports whether the live home page already links the portal. The short address
 `crm.dishnetuganda.com/customer-login` (plan §G step 4) is **optional and separate**:
 `scripts/customer-login-clean-url.sh` places one Traefik file from
 `scripts/traefik/dnb-customer-login.yml.template`, verifies the 302, and is undone by deleting
-the file. Not run; the website does not depend on it.
+the file. Not run; the website does not depend on it. **Approved by the operator on 26 Sep 2026 and handed over** (commit `4fd6b30`): the file
+carries an `https` router and an `http` router for `Host(crm.dishnetuganda.com) && Path(/customer-login)`
+sharing one `redirectRegex` middleware that matches both schemes, in the shape of `traefik-mail.yml`
+and the staging routes (explicit priority read from `uisp.yaml` plus 10, or none when it sets none;
+`tls.certResolver` on the https router only); the redirect is a 302 until the address is stable.
+Rehearsed with `docker` and `curl` as exported bash functions and a fake `uisp.yaml`, four
+scenarios — a completing route (priority 10 → 20, resolver read, valid YAML), no priority in
+`uisp.yaml`, a route Traefik never takes (both checks fail, the file is kept for the operator's
+rollback decision), a wrong Location (exactly one failure): **REHEARSAL: 12 ok, 0 failed**. The first rehearsal
+run read 11 ok / 1 failed because one assertion counted the word *priority* in the file's own
+comment lines; the assertion was corrected, the command was not. That first run had already been
+committed as `4fd6b30`, whose message says 11/11 — that figure was written before the run finished
+and is wrong; this paragraph is the record. The command has NOT been run on the server.
 
 ## 5.18.40 — the customer portal can be installed on a phone
 
