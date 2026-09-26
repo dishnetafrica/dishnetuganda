@@ -167,8 +167,8 @@ if [ "$MODE" = "--links" ]; then
   OUT="$(links_report)"
   [ -n "$OUT" ] || stop "the invoice-links report produced nothing (docker exec of scripts/lib/c2_invoice_links.php)"
   printf '%s\n' "$OUT" | grep -v '^@@'
-  read -r _ L8443 LOTHER LSTATE <<<"$(printf '%s\n' "$OUT" | grep '^@@ ' | tail -1)"
-  L8443="${L8443:-0}"; LOTHER="${LOTHER:-0}"; LSTATE="${LSTATE:-unread}"
+  read -r _ L8443 LOTHER LSTATE LTPL <<<"$(printf '%s\n' "$OUT" | grep '^@@ ' | tail -1)"
+  L8443="${L8443:-0}"; LOTHER="${LOTHER:-0}"; LSTATE="${LSTATE:-unread}"; LTPL="${LTPL:-unknown}"
   FETCH="$(printf '%s\n' "$OUT" | sed -n 's/^@@FETCH //p' | head -1)"; LNAMES="-"; LCODE="-"
   if [ -n "$FETCH" ]; then
     hdr "uCRM's own payment page, opened on the public address without :8443 (read-only)"
@@ -205,6 +205,13 @@ if [ "$MODE" = "--links" ]; then
       noconfig)  echo "  RESULT   the plugin has no uCRM connection here, so nothing could be read." ;;
       *)         echo "  RESULT   the report ended early (${LSTATE}); nothing can be concluded from this run." ;;
     esac
+  elif [ "$L8443" -gt 0 ] && [ "$LTPL" = "gone" ]; then
+    # The template this invoice was made with has been removed or replaced (26 Sep 21:57: "Invoice Ugadna" #1000
+    # left uCRM's list after the Uganda template was uploaded). Editing it is no fix, and this PDF cannot change.
+    echo "  RESULT   the $L8443 link(s) on :8443 inside this invoice come from the template it was made with, which is no"
+    echo "           longer in uCRM's list. uCRM keeps the PDF it made for an invoice, so this one cannot show a new"
+    echo "           template. Nothing to change here: make sure the new template is the one new invoices use, look"
+    echo "           at it in uCRM's preview, and run --links again after the next invoice for this client."
   elif [ "$L8443" -gt 0 ]; then
     echo "  RESULT   the $L8443 link(s) on :8443 inside this invoice are uCRM's own online payment page, drawn by the"
     echo "           invoice template's PAY NOW box. uCRM builds that link on the port UISP was installed with."

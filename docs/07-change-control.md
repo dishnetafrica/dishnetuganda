@@ -1459,5 +1459,10 @@ docs/39 said it printed no link; both are corrected. **C-2b:**
 - **Not changed.** No release and no server change; the paste is the operator's act (docs/38 §7.2).
 - **22:00, the ZIP.** The operator asked for a ZIP to upload. `template-invoice-uganda-v2.zip` (sha256
   `df2cc831…fdff8a52`) is built like uCRM's own exports, and both entries are byte-identical to the repository.
-  `--links` now also shows which template the organization gives new invoices (rehearsal 102). uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+  `--links` now also shows which template the organization gives new invoices (rehearsal 102).
+- **21:57, after the upload.** uCRM lists #1002 "v2", and #1000 "Invoice Ugadna" is gone from the list. The
+  organization record is Ugandan (Kampala, +256, dishnetuganda.com, TIN, Reg. No), so v2 prints Uganda details.
+  The API does not say which template new invoices use. Invoice 000003 keeps its 21 Sep PDF with the `:8443`
+  links. `--links` no longer prints the fix for an invoice whose template is gone, and it flags invalid templates
+  (rehearsal 109). uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
   keeps the version from the last ZIP upload through that screen.

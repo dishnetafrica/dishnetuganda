@@ -14,7 +14,8 @@
 // Lines starting "@@" are for the calling script, which never prints them:
 //   "@@FETCH <url>"  uCRM's own payment page with :8443 removed — the calling script opens it on the HOST, through
 //                    the public address a customer uses, and prints only each hop's status and the options it names;
-//   "@@ <links on :8443> <other links> <ok|noinvoice|nopdf|noconfig>"  — always the last line.
+//   "@@ <links on :8443> <other links> <ok|noinvoice|nopdf|noconfig> [present|gone|unknown]"  — always the last
+//                    line; the last word says whether the invoice's template is still in uCRM's list.
 declare(strict_types=1);
 error_reporting(0);
 
@@ -113,18 +114,26 @@ $state = ((int)($inv['status'] ?? 0) === 2) ? 'partly paid' : 'unpaid';
 $made  = substr((string)($inv['createdDate'] ?? ''), 0, 10);
 
 // The template uCRM names for it, and the ones it has.
-$tplName = [];
+$tplName = []; $tplBad = [];
 $tpls = $crm->get('invoice-templates');
 foreach (is_array($tpls) ? $tpls : [] as $tp) {
-    if (is_array($tp) && isset($tp['id'])) $tplName[(int)$tp['id']] = c2_mask_text((string)($tp['name'] ?? ''));
+    if (!is_array($tp) || !isset($tp['id'])) continue;
+    $tplName[(int)$tp['id']] = c2_mask_text((string)($tp['name'] ?? ''));
+    // uCRM flags a template it cannot render; its PDFs would fail or fall back. Shown only when the API says so.
+    if (array_key_exists('isValid', $tp) && $tp['isValid'] === false) $tplBad[(int)$tp['id']] = true;
 }
 $tplId = array_key_exists('invoiceTemplateId', $inv) ? $inv['invoiceTemplateId'] : 'absent';
 if ($tplId === 'absent')  $tplSays = 'uCRM does not say which template';
 elseif ($tplId === null)  $tplSays = "uCRM's default template (the invoice names none)";
-else                      $tplSays = 'template #' . (int)$tplId . (isset($tplName[(int)$tplId]) ? ' "' . $tplName[(int)$tplId] . '"' : '');
+elseif (isset($tplName[(int)$tplId])) $tplSays = 'template #' . (int)$tplId . ' "' . $tplName[(int)$tplId] . '"';
+elseif ($tplName)         $tplSays = 'template #' . (int)$tplId . ', no longer in uCRM\'s list';
+else                      $tplSays = 'template #' . (int)$tplId;
+// Whether the template this invoice was made with is still one uCRM lists: if it is gone, editing it is no fix.
+$tplState = 'unknown';
+if ($tplName && $tplId !== 'absent' && $tplId !== null) $tplState = isset($tplName[(int)$tplId]) ? 'present' : 'gone';
 out('invoice', "{$num} · {$state} · created {$made} · {$tplSays}");
 if ($tplName) {
-    $l = []; foreach ($tplName as $id => $nm) $l[] = "#{$id} \"{$nm}\"";
+    $l = []; foreach ($tplName as $id => $nm) $l[] = "#{$id} \"{$nm}\"" . (isset($tplBad[$id]) ? ' (uCRM marks it INVALID)' : '');
     out("uCRM's invoice templates", implode(', ', $l));
 } else {
     out("uCRM's invoice templates", 'not served by the API');
@@ -170,4 +179,4 @@ echo "  (a PDF is made when uCRM renders the invoice; one made before a template
 
 // uCRM's own payment page, as a customer would reach it on the public address: the same page without the port.
 if ($own !== '') echo '@@FETCH ' . preg_replace('#^(https?://[^/:]+):8443(?=/|$)#i', '$1', $own) . "\n";
-echo "@@ {$on8443} {$other} ok\n";
+echo "@@ {$on8443} {$other} ok {$tplState}\n";

@@ -692,6 +692,21 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
      the organization gives new invoices, when uCRM's API names it (rehearsal 102, one more weakened copy caught).
    - **Existing invoices** keep the template they were made with, so the next invoice is the test.
 
+   **21:57 — after the upload.**
+   - **The templates.** uCRM now lists **#1002 "v2"** beside #1, #2 and #1001. **#1000 "Invoice Ugadna" is no
+     longer in the list**; the operator's export of it is the backup.
+   - **The organization record is Ugandan:** DishNet Africa Limited, "The Accacia Mall Office No TT06", Kampala,
+     +256 … 348, …@dishnetuganda.com, https://dishnetuganda.com/, TIN 1059140632, Reg. No 80046255496181. v2's ISSUED
+     BY block therefore prints Uganda details, and the condition above is met. One spelling is the operator's to
+     correct if they wish: the website writes *Acacia*.
+   - **Which template new invoices use.** uCRM's API does not say, so the operator confirms it and the next
+     invoice proves it.
+   - **Invoice 000003 is unchanged.** It still carries the two `:8443` links: its PDF was made on 21 Sep with
+     #1000, and uCRM keeps it.
+   - **The check.** It printed the fix again for that old invoice. It now recognises an invoice whose template
+     has left uCRM's list, says its PDF cannot show a new template, and prints no fix. It also flags any template
+     uCRM marks invalid, when the API says so (rehearsal 109, a weakened copy caught).
+
    **What C-2b does not change:** uCRM's own e-mails, if uCRM sends any (Uganda's invoice e-mails are the
    plugin's, built without `:8443`), and where uCRM sends a member of staff after sign-in. Those still carry
    `:8443`, and only the installer route or a trusted certificate on 8443 (C-3) would change them.

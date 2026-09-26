@@ -304,6 +304,19 @@ has "$out" "uCRM's payment page could not be read (status 301)" "L7 verdict: not
 hasnt "$out" "THE FIX — BY HAND" "L7 prints no fix while uCRM's page is unread"
 echo 200 > "$F/page_code"; rm -f "$F/page_loc"
 
+echo "L10 the invoice's template has left uCRM's list (26 Sep 21:57): no fix to a template that is gone; a broken one is flagged"
+mkpdf "$UCRM_PAY"; rm -f "$F/fetched.log"; cp "$F/templates.json" "$F/templates.keep"
+printf '%s' '[{"id":1,"name":"Template 1"},{"id":1002,"name":"v2","isValid":true},{"id":1003,"name":"broken","isValid":false}]' > "$F/templates.json"
+out="$(run --links)"; rc=$?
+check "$rc" "0" "L10 exits 0"
+has "$out" "template #3, no longer in uCRM's list" "L10 says the invoice's template is gone"
+has "$out" "come from the template it was made with, which is no" "L10 verdict: this PDF cannot show a new template"
+has "$out" "run --links again after the next invoice for this client" "L10 says when the check can see the change"
+hasnt "$out" "THE FIX — BY HAND" "L10 prints no fix for a template that is gone"
+has "$out" '#1003 "broken" (uCRM marks it INVALID)' "L10 flags a template uCRM marks invalid"
+hasnt "$out" '#1002 "v2" (uCRM marks it INVALID)' "L10 does not flag a valid one"
+mv "$F/templates.keep" "$F/templates.json"
+
 echo "L6 the controls: copies that stop masking are caught by the assertions above"
 mkdir -p "$SB/broken/scripts/lib" "$SB/broken/dishnet-hybrid-sudan/profiles"
 cp "$SCRIPT" "$SB/broken/scripts/dnb-c2-check.sh"; cp "$R/dishnet-hybrid-sudan/profiles/uganda.json" "$SB/broken/dishnet-hybrid-sudan/profiles/"
