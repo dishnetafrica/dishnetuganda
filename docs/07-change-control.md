@@ -1368,6 +1368,6 @@ zero `tax`), and a synthetic invoice with a discount **and** a tax pinning the o
 line, Total. **Four weakened copies each fail it:** the label back to "Before tax", the discount after the tax
 lines, one lumped "Tax" line, and the explanation back in an HTML comment. Suite: **207 suites, exit 0, twice; the 186 suites that print totals report 8,246 passed / 0 failed on both runs.** The deploy command's stage V2 was rehearsed against a local Uganda sandbox (12 ok) and a South Sudan one (10 of 12 fail, the control).
 
-**Deploy.** `scripts/deploy-5.18.43.sh`, pinned to the plugin commit __COMMIT43__; stage V re-checks everything
+**Deploy.** `scripts/deploy-5.18.43.sh`, pinned to the plugin commit `04155df`; stage V re-checks everything
 5.18.42 checked. The label itself is seen only by a signed-in customer with a discounted invoice, so the test
 suite is its proof. **Not deployed by this session.**
