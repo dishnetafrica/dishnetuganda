@@ -90,4 +90,15 @@ check "$rc" "1" "S5 exit 1"
 check "$(printf '%s\n' "$out" | grep -c 'Error while parsing file')" "1" "S5 Traefik's own error line is shown"
 check "$(printf '%s\n' "$out" | grep -c "error/warning line(s) naming the file")" "1" "S5 the error naming the file is counted as a failure"
 
+echo "-- S6 the route is taken AND Traefik warns about the file: the warning is printed and counted (the second re-run's gap)"
+rm -f "$SB/conf/dnb-crm-root.yml"
+FAKE_TRAEFIK_LOG="$SB/traefik2.log"; export FAKE_TRAEFIK_LOG
+printf '%s\n' 'time="2026-09-26T15:21:08Z" level=warn msg="something about dnb-crm-root worth reading"' > "$FAKE_TRAEFIK_LOG"
+out="$(PATH="$SB/bin:$PATH" CONF_DIR="$SB/conf" HOST="127.0.0.1:$PORT" SCHEME=http bash "$REPO/scripts/dnb-crm-root-redirect.sh" 2>&1)"; rc=$?
+unset FAKE_TRAEFIK_LOG
+check "$rc" "1" "S6 exit 1 (a warning naming the file is not silently accepted)"
+check "$(printf '%s\n' "$out" | grep -c 'GET /crm → 302 →')" "1" "S6 the route itself is verified as taken"
+check "$(printf '%s\n' "$out" | grep -c 'something about dnb-crm-root worth reading')" "1" "S6 the warning line is PRINTED"
+check "$(printf '%s\n' "$out" | grep -c 'read them before calling this done')" "1" "S6 …and counted as a failure to read"
+
 echo; echo "REHEARSAL: $OKS ok, $BADS failed"; [ "$BADS" = "0" ]

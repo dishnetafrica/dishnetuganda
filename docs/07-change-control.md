@@ -1230,3 +1230,14 @@ lone backslash or a parse failure removes the temporary file and stops), and Tra
 counted when the route is not taken. The rehearsal now parses the YAML, carries the broken-copy control (the
 26 September defect is refused before placement) and a Traefik-rejection scenario. **The re-run of the same
 command rewrites the file** — the rejected copy in the config directory is replaced, not left beside.
+
+**C-1, attempt 2 at 15:21:06 UTC — THE ROUTE IS IN PLACE.** The generated file parsed as YAML, Traefik took
+it within 2 s without a restart, and the bare `/crm` now answers **302 → `https://crm.dishnetuganda.com/crm/`**
+on both the https and the http form; `/crm/` answers exactly as before, the portal sign-in and uCRM's login
+still 200. One check failed: the script counted **two Traefik log lines naming the file** since it was written
+and — a second defect of the script — printed them only in the branch where the route is NOT taken, so
+nothing was shown. Fixed the same hour: every line naming the file is printed whatever the route did, and the
+rehearsal carries that scenario (33 checks). **The two lines are still to be read** (a re-run prints them, or
+the read-only command in docs/38 §7.2); until then the door is closed but the file's standing in Traefik's
+eyes is not fully known. Also that afternoon: the operator typed the example shape `+2567XXXXXXXX` into the
+sign-in walk and the script refused it as designed; the walk is still to be run with the real number.

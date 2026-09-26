@@ -439,7 +439,7 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A1.4** `isActive` | unchanged (decided §4) | — |
 | **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — South Sudan `+211 921 443 006`, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
 | **A2** legal wording | **PROPOSAL for approval — §7.3**; nothing changed in the documents' identity, jurisdiction or regulator sentences | the CONTACT lines inside the documents already read the profile (A1.1) |
-| **C-1** Traefik absorbs the bare `/crm` | **attempt 1 (15:05 UTC) FAILED on the script's own defect** — an invalid YAML escape in the generated regex; Traefik rejected the file, nothing else changed. **Fixed; re-run the same command** (it rewrites the file); details docs/07 | run it again, send the log file |
+| **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. **Open:** two Traefik log lines naming the file were counted and not printed (script fixed) — read them with the command in §7.2 | run the read-only log command, or re-run the script, and send the output |
 | **C-2** uCRM's own address | **CHECKLIST — §7.2**; an operator act in uCRM's settings | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7) |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
 | **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
@@ -487,7 +487,12 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
    proves the signed-in screens: **L5 and L9 pass; L10 still fails until A2.**
 2. **C-1** — `scripts/dnb-crm-root-redirect.sh`: reads `uisp.yaml`, writes one Traefik file for the exact path
    `/crm`, verifies `302 → https://crm.dishnetuganda.com/crm/`, `/crm/` unchanged, the portal and uCRM's
-   login still 200, Traefik not restarted. Rollback: delete the file.
+   login still 200, Traefik not restarted. Rollback: delete the file. **Done 26 Sep 15:21 UTC.** The two
+   Traefik log lines that name the file are read with this read-only command (nothing is changed by it):
+
+   ```
+   docker logs "$(docker ps --filter name=traefik -q | head -1)" --since 2026-09-26T15:20:00Z 2>&1 | grep -i dnb-crm-root | cut -c1-300
+   ```
 3. **C-2 checklist** (uCRM → Settings → System → Application), by hand: (a) the fields *Server domain name*
    and *Server port* are editable, not greyed out as managed by UISP; (b) UISP → Settings → Devices shows the
    device connection hostname/port as a **separate** setting that stays `:8443`; (c) note the current values;

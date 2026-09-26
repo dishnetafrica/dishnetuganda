@@ -87,11 +87,16 @@ for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; c="$(code "$SCHEME://$HOST/crm")"; L=
 if [ "$c" = "302" ] && [ "$L" = "$WANT" ]; then ok "GET /crm → 302 → $WANT (after ${i}×2 s)"
 else
   bad "GET /crm → $c ${L:+→ $L} — expected 302 → $WANT. Traefik did not take the route, or another router outranks it. Rollback: rm $TARGET"
-  echo "  Traefik's log since the file was written (lines naming the file, or errors):"
-  docker logs "$TRAEFIK_ID" --since "$WRITTEN_AT" 2>&1 | grep -iE 'dnb-crm-root|error|level=warn' | tail -8 | cut -c1-220 | sed 's/^/     /'
+  echo "  Traefik's log since the file was written (errors and warnings not naming the file; those naming it follow):"
+  docker logs "$TRAEFIK_ID" --since "$WRITTEN_AT" 2>&1 | grep -iE 'error|level=warn' | grep -vi 'dnb-crm-root' | tail -8 | cut -c1-220 | sed 's/^/     /'
 fi
-N_TLOG="$(docker logs "$TRAEFIK_ID" --since "$WRITTEN_AT" 2>&1 | grep -i 'dnb-crm-root' | grep -ciE 'error|warn' || true)"
-[ "${N_TLOG:-0}" = "0" ] && ok "Traefik's log has no error or warning naming the file" || bad "Traefik's log has ${N_TLOG} error/warning line(s) naming the file (shown above)"
+# Every Traefik log line that names the file is PRINTED, whatever the route did — the first re-run counted
+# two and showed none, which left nothing to read. An error or warning is a failure to look at, not a verdict.
+TLOG="$(docker logs "$TRAEFIK_ID" --since "$WRITTEN_AT" 2>&1 | grep -i 'dnb-crm-root' | tail -8 | cut -c1-240 || true)"
+if [ -n "$TLOG" ]; then echo "  Traefik's log lines naming the file since it was written:"; printf '%s\n' "$TLOG" | sed 's/^/     /'; fi
+N_TLOG="$(printf '%s\n' "$TLOG" | grep -ciE 'level=error|level=warn|"level":"(error|warn)"|error|warn' || true)"
+[ -z "$TLOG" ] && N_TLOG=0
+[ "${N_TLOG:-0}" = "0" ] && ok "Traefik's log has no error or warning naming the file" || bad "Traefik's log has ${N_TLOG} error/warning line(s) naming the file (shown above) — read them before calling this done"
 case "$L" in *:8443*) bad "the Location still carries :8443";; *) ok "the Location carries no :8443";; esac
 c2="$(code "http://$HOST/crm")"; L2="$(loc "http://$HOST/crm")"
 if [ "$c2" = "301" ] || [ "$c2" = "302" ]; then case "$L2" in https://$HOST/*) ok "the http:// form answers $c2 → $L2 (https, no :8443)";; *) note "the http:// form answers $c2 → ${L2:-<none>}";; esac
