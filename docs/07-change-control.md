@@ -748,7 +748,8 @@ not evidence. **Re-run 20:15 UTC with the plugin's own client:** base
 v1.0** (20:17 UTC) — this uCRM's API does not serve the webhook-endpoint objects, so they cannot be
 read (nor a secret field seen) over the API; the uCRM UI (System → Webhooks) is
 the only view, and the operator's reading of that form decides whether
-`crm_webhook_key` can ever be configured here. **Pre-existing finding recorded
+`crm_webhook_key` can ever be configured here. *(Resolved 26 Sep 2026: the form was read and has
+no such field — see the 5.18.38 record. "uCRM cannot supply the Phase-1 optional webhook key through the available interface.")* **Pre-existing finding recorded
 by this run:** the plugin's own `CrmApiClient::getWebhooks()` — behind the
 Settings tab's webhook tile, the *Setup Webhook* button and `WebhookRegistrar`
 — asks that same v2.1 route and therefore sees no endpoint on this uCRM;
@@ -782,7 +783,8 @@ Uganda customer portal has no working sign-in path today and, as far as the
 code shows, had none before 5.18.37; `scripts/phase1-deploy.sh --otp-history`
 (read-only counts, no identifier or code) was added to show that from the
 production records. The uCRM UI reading (System → Webhooks) is still pending;
-`crm_webhook_key` stays unset. **Two container-log findings, neither Phase
+`crm_webhook_key` stays unset. *(Resolved 26 Sep 2026: read, no secret field; the key stays unset
+by evidence — 5.18.38 record.)* **Two container-log findings, neither Phase
 1's:** `dishnet-hybrid-sudan/main.php:456` throws `str_pad(): Argument #1
 ($string) must be of type string, int given` on every five-minute tick except
 the daily pull tick — `declare(strict_types=1)` plus an `(int)` hour, unchanged
@@ -804,7 +806,7 @@ than causing it. The `main.php:456` line appears 276 times in the last 24 h and
 **230 times on 25 Sep before the 20:07 deploy** (oldest log line kept: 13 Sep),
 so the tick's crash predates 5.18.37; other plugins logged 27 fatal lines in
 24 h. **Phase 1 is CLOSED** on this evidence; the uCRM webhook-screen reading
-stays outstanding and `crm_webhook_key` stays unset. **Phase 2 (authentication)
+stays outstanding and `crm_webhook_key` stays unset. *(Item B resolved 26 Sep 2026 — 5.18.38 record.)* **Phase 2 (authentication)
 was approved by the operator on 25 Sep 2026** after this run.
 
 ## 5.18.38 — the customer signs in on the tenant's own terms, and stays signed in only where the server says so (audit Phase 2)
@@ -949,8 +951,8 @@ Bearer token 200; logout 200; the same token afterwards **401 Token revoked**; t
 queue, conversation, pending or audit row, and the newest `app_otp` notification row withholds
 the text. **D:** 0 new webhook entries during the run, 0 `entity_unverified` overall; the
 endpoint objects are not readable over API v2.1 or v1.0 (404); the uCRM UI reading (System →
-Webhooks → the plugin endpoint: is there a Secret / Signature field, name only) is **still
-outstanding**; `crm_webhook_key` stays unset. **E:** `pdf_link_secret` in store and vault; the
+Webhooks → the plugin endpoint) was completed the same morning — the closing paragraph of this
+record; `crm_webhook_key` stays unset. **E:** `pdf_link_secret` in store and vault; the
 pre-5.18.37 link 403, a `PdfLinkToken` link 200, a random token 403. **After the deploy,
 from uCRM's own request log (System → Webhooks → Request log, read by the operator at 06:11
 EAT):** a client created in uCRM at 06:06 produced `insert`, `invitation` and `edit` events,
@@ -960,9 +962,15 @@ refreshed)"*, which is the branch `webhook.php` reaches **after** the Phase 2 in
 born in uCRM enters the sign-in index with its e-mail and flags without waiting for
 `cron_sync`. The log's request detail shows URL, *Verify SSL certificate*, response code and
 phrase, start time, duration, request and response bodies — it is the log view, not the
-endpoint form; the endpoint form (Endpoints tab) is still to be read. The endpoint objects
-answer 404 to `webhooks/endpoints` on this uCRM for the plugin's own client too
-(`tools/quote_email_doctor.php` records it), so that form is the only view.
+endpoint form. The endpoint objects answer 404 to `webhooks/endpoints` on this uCRM for the
+plugin's own client too (`tools/quote_email_doctor.php` records it), so that form is the only
+view. **The endpoint page was then read by the operator (Webhooks → the plugin endpoint, shortly
+after the 06:16 EAT test event). It shows exactly five fields — URL · Active (Yes) · Event
+types (Any event) · Verify SSL certificate (Yes) · Use delivery window (No) — and no Secret,
+Signature, key or authentication-header field. Recorded verbatim, as agreed at the Phase 1
+closure: "uCRM cannot supply the Phase-1 optional webhook key through the available interface." `crm_webhook_key` stays unset — by evidence now, not by default — and
+the webhook keeps trusting nothing in the posted body: every entity is re-read from uCRM
+(5.18.37). Item B of the Phase 1 closure is CLOSED.**
 
 Before deployment the entry read: built, NOT deployed (plugin commit `fa2d463`). Suite 202 suites / 8002 passed / 0 failed on the second run (`phase2-suite-B`; the first run read 8001 / 1, the one failure being `test_links_without_port` flagging the new same-origin check — an allow-list entry, not a weakened guard, then 47/47); weakened copies 19 of 19 caught (M01–M19: legacy-token grace, iss/aud unchecked, session row unchecked, cookie POST without the marker, URL token accepted by the API, token in the body for browsers, consent not enforced on the portal, WASender-only gate restored, +211 hard-coded again, eligibility gates inert, code stored in clear, code into the conversation store, code into the retry queue, token back in the login redirect, default profile uganda ×2, portal accepts a URL token, lead flag inverted, phone helper with a built-in code); migrations rehearsed on a data directory built by 68f4eeb (5.18.37), opened by the 5.18.38 code: `_migrations` 72 → 74 (`073_customer_sessions.sql` 3 statements, `074_client_search_index_flags.sql` 8 statements, 0 errors in `migration.log`); `customer_sessions` created; `client_search_index` 6 → 13 columns; every pre-existing table's row count unchanged (the three `ucrm_*_cache` tables and one index row were added by the rehearsal's own sync); the key set `customer_jwt_keys` / `customer_jwt_active_kid` / `customer_jwt_key_dates` provisioned in the store; the 5.18.37 code still opens the directory.
 Production stays on 5.18.37 (`68f4eeb`). Operator decisions taken by default and flagged in
