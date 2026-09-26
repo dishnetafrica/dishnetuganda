@@ -72,6 +72,7 @@ if (isset($_COOKIE[CustomerSession::COOKIE]) || isset($_COOKIE[CustomerSession::
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#141414">
+<link rel="manifest" href="?page=customer_manifest">
 <link rel="icon" type="image/png" sizes="192x192" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23D41C1C'/><text x='50' y='72' font-family='Arial Black' font-size='50' font-weight='900' fill='white' text-anchor='middle'>DN</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">

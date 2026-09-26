@@ -114,6 +114,7 @@ if ($portalRenderDesktop) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#141414">
+<link rel="manifest" href="?page=customer_manifest">
 <title>DishNet · <?= pe(ucfirst($view)) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1252,6 +1253,34 @@ elseif ($view === 'account'):
     </div>
   </div>
 
+  <div class="sec-lbl" style="margin-top:18px" id="pwa-install-lbl" hidden>App</div>
+  <div class="list-card" id="pwa-install-card" hidden>
+    <div class="list-row" onclick="DishNet.installApp()">
+      <div class="list-ic"><svg class="ic"><use href="#i-phone"/></svg></div>
+      <div class="list-t">
+        <div class="list-tt">Install the DishNet app</div>
+        <div class="list-ts" id="pwa-install-sub">Adds DishNet to your home screen</div>
+      </div>
+    </div>
+  </div>
+  <script>
+  // 5.18.40: the portal is installable from the browser (manifest + meta tags; no
+  // service worker on purpose). The row appears only where installing is possible
+  // and not already done: never inside the Android wrapper or a standalone window.
+  (function(){
+    window.__dnInstall = { prompt: null, hint: '' };
+    if (window.Android || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true) return;
+    var card = document.getElementById('pwa-install-card'), lbl = document.getElementById('pwa-install-lbl'), sub = document.getElementById('pwa-install-sub');
+    var show = function(){ if (card) card.hidden = false; if (lbl) lbl.hidden = false; };
+    window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window.__dnInstall.prompt = e; show(); });
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/i.test(ua) && /Safari/i.test(ua) && !/CriOS|FxiOS/i.test(ua)) {
+      window.__dnInstall.hint = 'ios';
+      if (sub) sub.textContent = 'In Safari: tap Share, then "Add to Home Screen"';
+      show();
+    }
+  })();
+  </script>
   <div class="sec-lbl" style="margin-top:18px"></div>
   <div class="list-card">
     <div class="list-row" onclick="DishNet.confirmLogout()">
@@ -7576,6 +7605,16 @@ window.DishNet = {
       errDiv.textContent = 'Network error: ' + (err.message || 'Try again');
       
     });
+  },
+  installApp() {
+    // 5.18.40: Chrome/Edge hand us the deferred prompt; iOS and others get the words.
+    var st = window.__dnInstall || {}; var p = st.prompt;
+    if (p && typeof p.prompt === 'function') {
+      p.prompt();
+      (p.userChoice || Promise.resolve()).then(function(){ st.prompt = null; var c = document.getElementById('pwa-install-card'); if (c) c.hidden = true; var l = document.getElementById('pwa-install-lbl'); if (l) l.hidden = true; }).catch(function(){});
+      return;
+    }
+    alert(st.hint === 'ios' ? 'In Safari, tap Share, then "Add to Home Screen".' : 'Open the browser menu and choose "Install app" or "Add to Home screen".');
   },
   confirmLogout() {
     if (window.Android && window.Android.confirmLogout) {
