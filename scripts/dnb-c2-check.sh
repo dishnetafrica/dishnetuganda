@@ -21,11 +21,23 @@
 #
 # Written: /root/dnb-c2/state.env (counts, URLs, hosts; no secret). The app key in ucrm.json is used inside the
 # container to fetch the PDF and is never printed or written.
+#
+# FOUND 26 Sep 21:01 (docs/38 §7.2): on UISP 3.0.159 the address uCRM uses is UISP's own — Settings → General holds
+# the hostname, already crm.dishnetuganda.com, and no port. The port is the one UISP was installed with. So the
+# setting route above is not available here, and the two :8443 links in the invoice PDF turned out to be the PAY NOW
+# box of the Uganda invoice template, which prints uCRM's online-payment link. The fix moved to that template:
+#
+#   bash scripts/dnb-c2-check.sh --links 2>&1 | tee /root/dnb-c2/links-$(date -u +%Y%m%dT%H%M%SZ).log
+#
+# --links is READ-ONLY too. For the controlled customer's newest unpaid invoice (CLIENT_ID, default 1) it shows the
+# links inside its PDF with every token masked, the template uCRM used, what uCRM's own payment page answers on the
+# public address and which payment options it names, the ports UISP was installed with (numeric values only; the
+# settings file also holds secrets, never read out), and whether DishNet's own pay page answers. It writes nothing.
 set -uo pipefail
 umask 077
 
 MODE="${1:-}"
-case "$MODE" in --before|--after) ;; *) echo "usage: $0 --before | --after" >&2; exit 64 ;; esac
+case "$MODE" in --before|--after|--links) ;; *) echo "usage: $0 --before | --after | --links" >&2; exit 64 ;; esac
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
 PLUGIN="dishnet-hybrid-sudan"
 IN_CONTAINER="/data/ucrm/data/plugins/$PLUGIN"
@@ -34,6 +46,11 @@ POLL_SECONDS="${POLL_SECONDS:-20}"; POLLS="${POLLS:-18}"
 PUBLIC_HOST="${PUBLIC_HOST:-crm.dishnetuganda.com}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HEALTH_SCRIPT="${HEALTH_SCRIPT:-$REPO/scripts/verify-uisp-health.sh}"
+CLIENT_ID="${CLIENT_ID:-1}"
+UNMS_CONF="${UNMS_CONF:-/home/unms/app/unms.conf}"
+# DishNet's own pay page, where the template's PAY NOW is to lead: the Uganda profile's pay_url.
+PAY_PAGE="${PAY_PAGE:-$(sed -nE 's/^[[:space:]]*"pay_url":[[:space:]]*"([^"]+)".*/\1/p' "$REPO/dishnet-hybrid-sudan/profiles/uganda.json" 2>/dev/null | head -1)}"
+PAY_PAGE="${PAY_PAGE:-https://dishnetuganda.com/pay}"
 
 PASS=0; FAIL=0; NOTE=0
 ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$*"; }
@@ -42,7 +59,7 @@ note() { NOTE=$((NOTE+1)); printf '  note  %s\n' "$*"; }
 hdr()  { printf '\n== %s ==\n' "$*"; }
 stop() { printf '\n  STOP: %s\n  Nothing was changed. Send the log file.\n' "$*"; exit 1; }
 
-mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR" || stop "cannot create $STATE_DIR"
+[ "$MODE" = "--links" ] || { mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"; } || stop "cannot create $STATE_DIR"
 
 # 1 — the address uCRM gives plugins. URLs only: the app key in the same file is never read out.
 ucrm_urls() {
@@ -70,6 +87,18 @@ pdf_hosts() {
     ksort($h); $o = []; foreach ($h as $k => $v) $o[] = "$k x$v";
     echo "$name · ", ($o ? implode(", ", $o) : "no link inside the PDF"), "\n";' 2>/dev/null | head -1
 }
+
+# 2b — --links: the READ-ONLY report in scripts/lib/c2_invoice_links.php, piped into the container and run there with
+# the plugin's directory as the working directory. It masks every token itself. Its "@@" lines are for this script
+# and are never printed: "@@FETCH <url>" is uCRM's payment page without the port, opened below from THIS host, the
+# way a customer reaches it (the container may resolve the public name to UISP's own nginx); "@@ …" is the summary.
+links_report() {
+  docker exec -i -w "$IN_CONTAINER" "$CONTAINER" php -d display_errors=0 -- "$CLIENT_ID" \
+    < "$REPO/scripts/lib/c2_invoice_links.php" 2>/dev/null
+}
+# Payment options a page might name, matched as whole words ("endpoint" is not DPO, "table-striped" is not Stripe).
+C2_OPTIONS='PayPal|Stripe|Authorize\.Net|IPpay|MercadoPago|Braintree|PayU|Paystack|Flutterwave|Pesapal|DPO|Airtel Money|MTN MoMo|Mobile Money'
+hostport() { printf '%s' "$1" | sed -nE 's#^(https?)://([^/:?]+)(:([0-9]+))?.*#\2 \1 \4#p' | awk '{ p = $3; if (p == "") p = ($2 == "https") ? 443 : 80; print $1 ":" p }'; }
 
 # 3 — routers on :8443: established TCP connections to UISP's port from PUBLIC addresses (a browser through Traefik
 # arrives from a private docker address and is not counted). Counted on the host and inside the network namespace of
@@ -124,6 +153,96 @@ hdr "C-2 guard $MODE — $(date -u +%Y-%m-%dT%H:%M:%SZ) — $(hostname)"
 docker exec "$CONTAINER" true 2>/dev/null || stop "container '$CONTAINER' is not reachable with docker exec"
 URLS="$(ucrm_urls)"; U_CRM="${URLS%%|*}"; U_PLUGIN="${URLS#*|}"
 [ -n "$U_CRM" ] || stop "could not read the address uCRM gives plugins (ucrm.json)"
+
+if [ "$MODE" = "--links" ]; then
+  hdr "Where uCRM's :8443 comes from (read-only)"
+  echo "  uCRM's address, as it tells plugins   $U_CRM"
+  if [ -r "$UNMS_CONF" ]; then
+    # Keys ending in PORT with a number for a value, nothing else: the same file holds secrets.
+    P="$(grep -E '^[A-Z0-9_]*PORT="?[0-9]*"?$' "$UNMS_CONF" 2>/dev/null | tr -d '"' | tr '\n' ' ')"
+    echo "  the ports UISP was installed with     ${P:-none recorded in $UNMS_CONF}"
+  else
+    note "UISP's settings file $UNMS_CONF could not be read — the ports it was installed with are not shown"
+  fi
+  OUT="$(links_report)"
+  [ -n "$OUT" ] || stop "the invoice-links report produced nothing (docker exec of scripts/lib/c2_invoice_links.php)"
+  printf '%s\n' "$OUT" | grep -v '^@@'
+  read -r _ L8443 LOTHER LSTATE <<<"$(printf '%s\n' "$OUT" | grep '^@@ ' | tail -1)"
+  L8443="${L8443:-0}"; LOTHER="${LOTHER:-0}"; LSTATE="${LSTATE:-unread}"
+  FETCH="$(printf '%s\n' "$OUT" | sed -n 's/^@@FETCH //p' | head -1)"; LNAMES="-"; LCODE="-"
+  if [ -n "$FETCH" ]; then
+    hdr "uCRM's own payment page, opened on the public address without :8443 (read-only)"
+    u="$FETCH"; hop=0; body=""
+    while [ "$hop" -lt 4 ]; do
+      hop=$((hop+1))
+      r="$(curl -s --max-time 20 -w '\n@@%{http_code} %{redirect_url}' "$u" 2>/dev/null)"; st="${r##*@@}"; b="${r%@@*}"
+      LCODE="${st%% *}"; loc="${st#* }"; [ "$loc" = "$st" ] && loc=""
+      printf '  %-26s %s → %s\n' "hop $hop" "$(hostport "$u")" "${LCODE:-000}"
+      case "$LCODE" in 30[1278]) [ -n "$loc" ] && { u="$loc"; continue; } ;; esac
+      body="$b"; break
+    done
+    if [ "$LCODE" = "200" ]; then
+      LNAMES="$(printf '%s' "$body" | grep -oiwE "$C2_OPTIONS" | sort -fu | paste -sd, - | sed 's/,/, /g')"
+      if [ -n "$LNAMES" ]; then printf '  %-26s %s\n' "payment options it names" "$LNAMES"
+      else LNAMES="none"; printf '  %-26s %s\n' "payment options it names" "none of ${C2_OPTIONS//\\/}" | sed 's/|/, /g'; fi
+      printf '  %-26s %s form(s) · %s reference(s) to :8443 · %s bytes\n' "the page, in figures" \
+        "$(printf '%s' "$body" | grep -oi '<form' | wc -l | tr -d ' ')" "$(printf '%s' "$body" | grep -o ':8443' | wc -l | tr -d ' ')" "${#body}"
+    fi
+  fi
+
+  hdr "DishNet's own pay page, where PAY NOW is to lead (read-only)"
+  PB="$(curl -sL --max-time 20 -w '\n@@%{http_code}' "$PAY_PAGE" 2>/dev/null)"; PCODE="${PB##*@@}"; PB="${PB%@@*}"
+  PAIRTEL="$(printf '%s' "$PB" | grep -c 'Airtel Money' || true)"
+  if [ "$PCODE" = "200" ] && [ "${PAIRTEL:-0}" -gt 0 ]; then ok "$PAY_PAGE answers 200 and tells the customer how to pay with Airtel Money"
+  else bad "$PAY_PAGE → ${PCODE:-000}$([ "$PCODE" = "200" ] && echo ", without the Airtel Money instructions") — do not point PAY NOW at it until it answers"; fi
+
+  echo
+  if [ "$LSTATE" != "ok" ]; then
+    case "$LSTATE" in
+      noinvoice) echo "  RESULT   nothing to read: client #$CLIENT_ID has no unpaid invoice, and the PAY NOW box is drawn on unpaid" ;
+                 echo "           invoices only. Run again with CLIENT_ID=<a client with an unpaid invoice>." ;;
+      nopdf)     echo "  RESULT   uCRM served no PDF for the invoice, so its links could not be read." ;;
+      noconfig)  echo "  RESULT   the plugin has no uCRM connection here, so nothing could be read." ;;
+      *)         echo "  RESULT   the report ended early (${LSTATE}); nothing can be concluded from this run." ;;
+    esac
+  elif [ "$L8443" -gt 0 ]; then
+    echo "  RESULT   the $L8443 link(s) on :8443 inside this invoice are uCRM's own online payment page, drawn by the"
+    echo "           invoice template's PAY NOW box. uCRM builds that link on the port UISP was installed with."
+    case "$LNAMES" in
+      none)
+        echo "           uCRM's payment page names none of those payment options. Unless customers pay there some"
+        echo "           other way, pointing PAY NOW at DishNet's pay page takes nothing away from them."
+        if [ "$FAIL" = "0" ]; then cat <<FIX
+
+  THE FIX — BY HAND, IN uCRM'S TEMPLATE EDITOR. THIS SCRIPT CHANGES NOTHING.
+   1. uCRM → System → Customization → Invoice templates. Open the template named above for this invoice.
+   2. Clone it first. The copy is the rollback: if anything looks wrong, make the copy the default again.
+   3. In the original, find  invoice.onlinePaymentLink  — it appears three times. Change them:
+        {% if invoice.onlinePaymentLink and not is_paid %}   becomes   {% if not is_paid %}
+        href="{{ invoice.onlinePaymentLink }}"               becomes   href="$PAY_PAGE"
+        the other {{ invoice.onlinePaymentLink }}            becomes   ${PAY_PAGE#https://}
+   4. Save. uCRM checks the template when it saves; if it refuses, change nothing else and send this log.
+   5. Run --links again and send both logs. An invoice uCRM rendered before the change may keep its old PDF.
+FIX
+        fi ;;
+      -)
+        echo "           uCRM's payment page could not be read (status $LCODE). DishNet's pay page is still the place for"
+        echo "           PAY NOW to lead; send this log before changing the template." ;;
+      *)
+        echo "           uCRM's payment page names: $LNAMES. Customers may be able to pay there — send this log and"
+        echo "           decide before changing the template (docs/38 §7.2)." ;;
+    esac
+  elif printf '%s\n' "$OUT" | grep -qF "× $PAY_PAGE"; then
+    echo "  RESULT   C-2 is done for this invoice: PAY NOW leads to DishNet's pay page and no link carries :8443."
+  elif [ "$LOTHER" -gt 0 ]; then
+    echo "  RESULT   no link on :8443 inside this invoice's PDF; its links are listed above."
+  else
+    echo "  RESULT   this invoice's PDF carries no link at all — nothing on :8443, and no PAY NOW link either."
+  fi
+  echo "  Nothing was changed. Send this LOG FILE back (not a copy of the terminal)."
+  [ "$FAIL" = "0" ] && exit 0 || exit 1
+fi
+
 PDF="$(pdf_hosts)"; [ -n "$PDF" ] || PDF="the PDF could not be read"
 read -r DEV_N DEV_M DEV_T <<<"$(count_devices)"; DEV_N="${DEV_N:-0}"; DEV_M="${DEV_M:-0}"; DEV_T="${DEV_T:-0}"
 
@@ -134,6 +253,7 @@ if [ "$MODE" = "--before" ]; then
   echo "  the latest invoice's PDF              $PDF"
   echo "  routers connected on :8443            $DEV_N connection(s) from $DEV_M address(es) · $DEV_T connection(s) seen on the port in all"
   case "$U_CRM" in *:8443*) note "uCRM's own address carries :8443 — this is what C-2 changes" ;; *) note "uCRM's own address already carries no :8443 — C-2 may be unnecessary; send this log before changing anything" ;; esac
+  note "found 26 Sep 21:01: on UISP 3.0.159 the fields below do not exist (hostname only, no port). The invoice links are fixed in the invoice template instead: run --links (docs/38 §7.2)"
   if [ "$DEV_N" -gt 0 ]; then :
   elif [ "$DEV_T" -gt 0 ]; then ok "no router is connected to UISP on :8443 right now — measured: the count sees this port ($DEV_T connection(s) from this server itself, its own test connection included), so C-2 has no connected router to disturb"
   else note "nothing at all was seen on :8443, not even this script's own test connection — the count is blind on this server; after the change, check UISP's own device list"; fi

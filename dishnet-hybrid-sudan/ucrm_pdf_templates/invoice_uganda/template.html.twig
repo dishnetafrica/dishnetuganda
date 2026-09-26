@@ -190,13 +190,17 @@
   </table>
 
   <!-- ONLINE PAYMENT -->
-  {% if invoice.onlinePaymentLink and not is_paid %}
+  {# PAY NOW leads to DishNet's own pay page, the Uganda profile's pay_url. Never to uCRM's own online-payment
+     link: uCRM builds it on the port UISP was installed with, :8443, whose certificate a browser refuses; UISP
+     3.0.159 shows no setting for that port (docs/38 section 7.2, C-2). Staff make the same three edits in uCRM's
+     template editor. #}
+  {% if not is_paid %}
   <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
     <tr>
       <td style="border:1px solid #BBF7D0;padding:12px 14px;text-align:center;background:#F0FDF4;">
         <div style="font-size:9px;color:#065f46;margin-bottom:8px;">Pay this invoice securely online</div>
-        <a href="{{ invoice.onlinePaymentLink }}" style="display:inline-block;background:#059669;color:#ffffff;font-size:12px;font-weight:700;padding:10px 32px;border-radius:6px;text-decoration:none;letter-spacing:0.5px;">PAY NOW &mdash; {{ totals.amountDue }}</a>
-        <div style="font-size:7px;color:#999;margin-top:6px;">{{ invoice.onlinePaymentLink }}</div>
+        <a href="https://dishnetuganda.com/pay" style="display:inline-block;background:#059669;color:#ffffff;font-size:12px;font-weight:700;padding:10px 32px;border-radius:6px;text-decoration:none;letter-spacing:0.5px;">PAY NOW &mdash; {{ totals.amountDue }}</a>
+        <div style="font-size:7px;color:#999;margin-top:6px;">dishnetuganda.com/pay</div>
       </td>
     </tr>
   </table>

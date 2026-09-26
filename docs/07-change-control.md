@@ -1422,3 +1422,23 @@ change; the two fields are edited by hand in uCRM's web page between the two com
 top of its steps. An `--after` that finds the address exactly as recorded under three minutes earlier says it
 changes nothing and names both cases, not yet changed or saved and not yet rewritten (docs/38 §7.2 item 3;
 rehearsal 48 checks, two weakened copies caught).
+
+**21:01 UTC: C-2 as planned is not available; C-2b replaces it.** The operator's `--before` at 21:01 again
+measured no public connection on `:8443`. Their screenshots show UISP 3.0.159's Settings → General with the
+hostname (`crm.dishnetuganda.com`, already right) and **no port field**. uCRM's `:8443` is the port UISP was
+installed with; Ubiquiti documents `--public-https-port` for this case (read through a search engine; the page is
+blocked from this session). That means re-running UISP's installer: **not recommended, not approved, and not
+needed.** The two `:8443` links inside Uganda invoice PDFs turned out to be **the plugin's own Uganda invoice
+template**, which prints uCRM's `invoice.onlinePaymentLink` as its PAY NOW button and again as text. docs/37 and
+docs/39 said it printed no link; both are corrected. **C-2b:**
+- **The fix.** PAY NOW → `https://dishnetuganda.com/pay` (the profile's `pay_url`: Airtel Money and the portal).
+  That is three edits in uCRM's template editor, cloned first for rollback, after one READ-ONLY run of the new
+  `scripts/dnb-c2-check.sh --links`. That run shows the masked links, the template in use, which payment
+  options uCRM's own page names, UISP's installed ports and the pay page's answer.
+- **The repository.** Its template carries the same edits, pinned by `tests/test_invoice_template_links.php`
+  (17, with a control).
+- **The rehearsal.** 94 checks, twice; six weakened copies caught; one vacuous assertion found by its control
+  and rewritten. uCRM's payment page is opened from the host, the way a customer reaches it. The plugin suite passes: 8,263 assertions, 0 failed.
+- **Not changed.** No plugin release, no deployment and no server change; the uCRM template edit is the
+  operator's act. uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+  keeps the version from the last ZIP upload through that screen.

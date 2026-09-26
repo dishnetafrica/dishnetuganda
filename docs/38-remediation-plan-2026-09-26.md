@@ -441,7 +441,7 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A2** legal wording | **BUILT — 5.18.42, LIVE since 26 Sep 19:56 UTC (verified 25/25: South Sudan ×0, Juba ×0 on the Terms page, `app_legal_version` 1.1).** The operator approved the §7.3 proposal (*"i will go with your recommendation"*, 26 Sep). Points 1, 2, 4, 6, 8, 9, 10 are the proposal's words; points **3, 5, 7** took the conservative form and are **flagged in §7.3 (as built)** for a later edit. Uganda 1.1 / South Sudan 1.0 — every Uganda customer accepts once on the next sign-in; South Sudan renders byte for byte (golden) and asks nobody | `tests/test_portal_tenant.php` (107), `test_consent_identity.php` (34); deploy with `scripts/deploy-5.18.42.sh` |
 | **INVOICE TAXES** (new, 26 Sep: *"separate the UCC tax and other details so customer can understand properly"*) | **The plugin half LIVE in 5.18.42; the uCRM half DECIDED AGAINST for now: *"ok keep price as it is"* / *"its ohk the way it is"* (§7.5). A label fix, 5.18.43, LIVE since 26 Sep 20:27 UTC (25 ok / 0 failed).** The invoice screen and the app API print the totals block as uCRM states it: before tax, **each tax or levy on its own line under uCRM's own name**, any discount, the total. Measured cause: the plugin read `totalTaxes`, a field a uCRM invoice does not have, so **no tax line ever rendered**. **The other half is an operator act in uCRM — §7.5** | `lib/InvoiceTotals.php`; `tools/tax_probe.php` section 5 shows the lines the latest invoices carry (read-only) |
 | **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC, and HEALTHY** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. The two Traefik log lines the operator read are **the attempt-1 file being re-parsed at 15:21:07Z**, the moment the re-run staged its temporary file inside the watched directory — one step before the old file was replaced. The attempt-2 file parses and its router exists (the 302). Script fixed a third time: staging outside the watched directory (§7.1) | **nothing** — done |
-| **C-2** uCRM's own address | **APPROVED 26 Sep** (*"i will go with your recommadation"*); an operator act in uCRM's settings, **guarded** by `scripts/dnb-c2-check.sh --before` / `--after` (§7.2 item 3) | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7); the walk at 20:33 UTC still found `crm.dishnetuganda.com:8443` ×2 inside the PDF; the guard at 20:54 **measured no router connected** on `:8443` (control in place), and the two fields are **not yet changed** in uCRM |
+| **C-2** uCRM's own address | **APPROVED 26 Sep** (*"i will go with your recommadation"*); an operator act in uCRM's settings, **guarded** by `scripts/dnb-c2-check.sh --before` / `--after` (§7.2 item 3) | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7); the walk at 20:33 UTC still found `crm.dishnetuganda.com:8443` ×2 inside the PDF; the guard at 20:54 **measured no router connected** on `:8443` (control in place). **21:01: the setting does not exist on UISP 3.0.159** (hostname only, already right; the port is UISP's install parameter). **The two links are the Uganda invoice template's PAY NOW box** → **C-2b**: PAY NOW → `https://dishnetuganda.com/pay`, three edits in uCRM's template editor, after one read-only `--links` run (§7.2 item 3) |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
 | **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
 | deployment / configuration / customer data | **5.18.41, 5.18.42 and 5.18.43 deployed by the operator; one Traefik file placed by C-1 attempt 1 and ignored by Traefik, rewritten by attempt 2 and taken; no configuration value, customer record or other service changed** | — |
@@ -583,6 +583,75 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    gives both honest cases: the change is not made yet, or it is saved and uCRM has not rewritten its file.
    It no longer answers "run `--after` again in a few minutes" alone. Rehearsal **48 checks** (scenario S11);
    two weakened copies of the new branch are each caught (6 and 1 failures).
+
+   **Third run, 21:01, and the finding: the setting does not exist here.** `--before` at 21:01:06 saw 6
+   connections on `:8443`, none from a public address (a measured zero again), and every other check held. The
+   operator then looked for the fields and sent two screenshots instead of changing anything, which is what the
+   stop rule asks. **UISP 3.0.159 → Settings → General holds *UISP Hostname/IP* = `crm.dishnetuganda.com`, already
+   right, and no port field.** uCRM's plugin page shows the public URL as
+   `https://crm.dishnetuganda.com:8443/crm/_plugins/…`, the address the guard reads from `ucrm.json`. The port
+   is the one UISP was installed with. DOCUMENTED, not measured: Ubiquiti's help page *UISP – Reverse Proxy*,
+   read through a search engine because the page itself is blocked from this session, says a UISP behind a
+   reverse proxy is installed with `--public-https-port 443 --http-port 8080 --https-port 8443`. It adds that
+   this hands certificate management to the proxy (UISP's Let's Encrypt stops), and that `--public-ws-port` is
+   needed only with a separate `--ws-port`. **Taking that route means re-running UISP's installer**: UISP
+   restarts, and the address it builds changes, possibly the device connection key's port with it (docs/05:
+   the device port must not change). **Not recommended, not approved, and not needed**, because of the next
+   finding.
+
+   **The two `:8443` links are our own template's PAY NOW box.** `ucrm_pdf_templates/invoice_uganda` prints
+   uCRM's `invoice.onlinePaymentLink` twice on an unpaid invoice: as the green button's `href`, and again as the
+   small address under it. Two links, both on uCRM's own address, is exactly what the scans measured. **docs/37
+   §H and docs/39 §7 said the shipped template "prints no link". That was wrong, and both now say so.** uCRM's
+   own e-mail templates in `ucrm_email_templates/` guard the same link with `organization.hasPaymentGateway`;
+   the invoice template never did. Uganda's payments go through the plugin (DPO) and Airtel Money, and uCRM
+   holds no mobile-money method (`lib/PaymentUuids.php`). So the button most likely leads to a uCRM page on
+   `:8443`, behind a certificate warning, that offers nothing to pay with. `--links` measures which.
+
+   **C-2b — the template, not the port.** PAY NOW leads to DishNet's own pay page, the Uganda profile's
+   `pay_url`, `https://dishnetuganda.com/pay`. It gives Airtel Money Merchant ID 4428146 and links to the
+   customer portal, and it is the same page the website uses. In uCRM's template editor that is three edits:
+   the condition `invoice.onlinePaymentLink and not is_paid` becomes `not is_paid`, the button's `href` becomes
+   the pay page, and the printed address becomes `dishnetuganda.com/pay`. Clone the template first; the clone
+   is the rollback. No server, UISP or router is touched. The repository's copy carries the same three edits,
+   pinned by `tests/test_invoice_template_links.php` (17). Its control rebuilds the old template and shows
+   every check rejects it. The whole plugin suite passes: 8,263 assertions, 0 failed.
+
+   **Before the edit, one read-only run:**
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+     && bash scripts/dnb-c2-check.sh --links 2>&1 | tee /root/dnb-c2/links-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   For client #1's newest unpaid invoice (`CLIENT_ID` to choose another), `--links` shows:
+   - the links inside its PDF, every token masked;
+   - the template uCRM used, and the templates it has;
+   - uCRM's payment page, opened from the server itself on the public address without the port, the way a
+     customer reaches it: each hop's host, port and status, and which payment options it names, never its
+     content. It is opened from the host, not the container, because the container may resolve the public name
+     to UISP's own nginx;
+   - the ports UISP was installed with (keys ending in `PORT` with a numeric value only, since the same file
+     holds secrets);
+   - whether DishNet's pay page answers with the Airtel Money instructions.
+
+   It prints the three edits only when uCRM's page names none of the options it looks for and the pay page
+   answers. **If uCRM's page does name one, such as PayPal, customers may be paying there, and that is the
+   operator's decision before any edit.** After the edit, the same command confirms it on the next PDF uCRM
+   renders; a PDF rendered before the change may keep the old links. The PHP runs inside the container from
+   `scripts/lib/c2_invoice_links.php`, so there is nothing to deploy. Rehearsal `scripts/harness/c2-check`:
+   **94 checks, twice**. A redirect back to `:8443` is followed, shown as host and port only, and leaves no
+   verdict (scenario L7). Six weakened copies are each caught: the page opened on `:8443`, the oldest invoice
+   instead of the newest, "no unpaid invoice" read as "no links", a substring match that read "endpoint" as DPO,
+   the fix printed while the pay page is down, and a hop line that prints the whole address. Two controls inside the rehearsal show a copy that stops
+   masking prints the token, and one that reads any `PORT` key prints a secret. **Found by those controls:**
+   the first word-boundary assertion looked for text the script never prints, and passed against the broken
+   copy. It was rewritten to count the "none of" line, and the copy now fails it.
+
+   **What C-2b does not change:** uCRM's own e-mails, if uCRM sends any (Uganda's invoice e-mails are the
+   plugin's, built without `:8443`), and where uCRM sends a member of staff after sign-in. Those still carry
+   `:8443`, and only the installer route or a trusted certificate on 8443 (C-3) would change them.
+   **Also in the screenshot:** uCRM's plugin page says *Version 5.18.27*. The deploys since 5.18.37 replace the
+   files directly and verified 5.18.43 on disk and by behaviour (Terms v1.1). The page most likely shows what
+   uCRM recorded at the last ZIP upload through that screen. **Do not upload an older ZIP there.**
 
 ### 7.3 A2 — the wording: proposed 26 Sep, APPROVED the same day ("go with your recommendation"), BUILT as 5.18.42
 

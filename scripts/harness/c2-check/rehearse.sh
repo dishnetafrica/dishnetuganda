@@ -19,9 +19,13 @@ cat > "$SB/bin/docker" <<'STUB'
 F="$FAKE"
 case "$1" in
   exec)
-    shift; [ "$1" = "-w" ] && { shift 2; W=1; } || W=0
+    shift; W=0; I=0
+    while [ $# -gt 0 ]; do case "$1" in -w) W=1; shift 2;; -i) I=1; shift;; *) break;; esac; done
     shift   # the container
     if [ "$1" = "true" ]; then exit 0; fi
+    # --links: the REAL scripts/lib/c2_invoice_links.php arrives on stdin; it runs against the fake plugin directory,
+    # whose lib/CrmApiClient.php is a fake uCRM. It opens no page itself.
+    if [ "$I" = "1" ]; then shift; cd "$F/plugin" && exec php "$@"; fi
     if [ "$W" = "1" ]; then cat "$F/pdf_line"; exit 0; fi       # the PDF scan needs uCRM: its answer is canned
     # the URL reader: the REAL php code, against the fake plugin directory
     shift; code=""; args=()
@@ -42,6 +46,14 @@ STUB
 cat > "$SB/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 u="${@: -1}"
+case "$*" in *'@@%{http_code}'*)
+  case "$u" in
+    */crm/online-payment/*)   # uCRM's own payment page: every URL the guard opens is logged, to be asserted on
+      echo "$u" >> "$FAKE/fetched.log"
+      cat "$FAKE/page_body" 2>/dev/null; printf '\n@@%s %s' "$(cat "$FAKE/page_code" 2>/dev/null || echo 000)" "$(cat "$FAKE/page_loc" 2>/dev/null)";;
+    *) echo "$u" >> "$FAKE/curl_pay.log"
+       cat "$FAKE/pay_body" 2>/dev/null; printf '\n@@%s' "$(cat "$FAKE/pay_code" 2>/dev/null || echo 000)";;
+  esac; exit 0;; esac
 case "$u" in */crm) echo "302 https://crm.dishnetuganda.com/crm/";; *) echo "200 ";; esac
 STUB
 cat > "$SB/health.sh" <<'STUB'
@@ -62,7 +74,45 @@ routers() {  # $1 = on|off : 6 public on the host (docker proxy), 3 public in th
   else : > "$F/ss_host"; : > "$F/ss_ns"; fi
 }
 echo 'unms-nginx|0.0.0.0:8080->80/tcp, 0.0.0.0:8443->443/tcp' > "$F/ps"
-run() { PATH="$SB/bin:$PATH" FAKE="$F" STATE_DIR="$SB/state" HEALTH_SCRIPT="$SB/health.sh" POLL_SECONDS=0 POLLS=3 bash "$SCRIPT" "$@" 2>&1; }
+run() { PATH="$SB/bin:$PATH" FAKE="$F" STATE_DIR="$SB/state" HEALTH_SCRIPT="$SB/health.sh" UNMS_CONF="$F/unms.conf" POLL_SECONDS=0 POLLS=3 bash "$SCRIPT" "$@" 2>&1; }
+
+# ── --links fixtures: a fake uCRM client (invoices, templates, one PDF) and a fake web (uCRM's payment page) ──
+mkdir -p "$F/plugin/lib"
+cat > "$F/plugin/lib/CrmApiClient.php" <<'PHP'
+<?php
+class CrmApiClient {
+  public static function fromUcrm(string $r, array $c = []): self { return new self(); }
+  public function isConfigured(): bool { return !file_exists(getenv('FAKE') . '/noconfig'); }
+  public function get(string $p): ?array {
+    $f = getenv('FAKE');
+    if (strpos($p, 'invoice-templates') === 0) return json_decode((string)@file_get_contents("$f/templates.json"), true);
+    if (strpos($p, 'invoices?clientId=') === 0) {
+      file_put_contents("$f/api.log", $p . "\n", FILE_APPEND);
+      return json_decode((string)@file_get_contents("$f/invoices.json"), true);
+    }
+    return null;
+  }
+  public function getRawContent(string $p): ?string {
+    $b = @file_get_contents(getenv('FAKE') . '/invoice.pdf');
+    return ($b === false || $b === '') ? null : base64_encode($b);
+  }
+}
+PHP
+TOK="9f8e7d6c5b4a39281706f5e4d3c2b1a0"                     # the payment token: no run may print it
+UCRM_PAY="https://crm.dishnetuganda.com:8443/crm/online-payment/pay/$TOK"
+mkpdf() {  # $1 the link the PAY NOW box carries: once as a link annotation, once as text in a compressed stream
+  php -r '$u=$argv[1]; $s=gzcompress("BT /F1 7 Tf (".$u.") Tj ET");
+    echo "%PDF-1.4\n1 0 obj << /Type /Annot /Subtype /Link /A << /S /URI /URI (".$u.") >> >> endobj\n",
+         "2 0 obj << /Length ".strlen($s)." /Filter /FlateDecode >>\nstream\n".$s."\nendstream\nendobj\n%%EOF\n";' "$1" > "$F/invoice.pdf"
+}
+printf '%s' '[{"id":3,"name":"Invoice Ugadna"},{"id":1,"name":"Official — billing@dishnet.example"}]' > "$F/templates.json"
+printf '%s' '[{"id":41,"number":"000003","status":1,"createdDate":"2026-09-20T10:00:00+0000","invoiceTemplateId":3},{"id":57,"number":"000005","status":1,"createdDate":"2026-09-25T08:00:00+0000","invoiceTemplateId":3}]' > "$F/invoices.json"
+printf '%s\n' 'UNMS_HTTP_PORT="8080"' 'UNMS_HTTPS_PORT=8443' 'UNMS_WS_PORT=' 'UNMS_PUBLIC_HTTPS_PORT=' \
+  'UNMS_SECURE_LINK_SECRET=LINKSECRET-XYZ-987' 'UNMS_SUPPORT="hunter2secret"' 'UNMS_TOKEN=TOKSECRET-555' > "$F/unms.conf"
+printf '%s' '<html><h1>Pay invoice</h1><form action="/crm/online-payment/pay/x"></form><p>endpoint table-striped</p></html>' > "$F/page_body"
+echo 200 > "$F/page_code"
+printf '%s' '<html><h1>Pay your bill</h1><p>Airtel Money · Merchant ID 4428146</p></html>' > "$F/pay_body"
+echo 200 > "$F/pay_code"
 
 echo "S1 --before: the address with :8443, a PDF with :8443, routers connected"
 setfake "https://crm.dishnetuganda.com:8443/crm/" "invoice 000005 · crm.dishnetuganda.com:8443 x2"; routers on
@@ -73,6 +123,7 @@ has "$out" "14 connection(s) seen on the port in all" "S1 reports everything it 
 has "$out" "uCRM's address, as it tells plugins   https://crm.dishnetuganda.com:8443/crm/" "S1 prints uCRM's own address"
 has "$out" "the latest invoice's PDF              invoice 000005 · crm.dishnetuganda.com:8443 x2" "S1 prints the PDF's link hosts"
 has "$out" "THIS SCRIPT CHANGES NOTHING. Between --before and --after, YOU make the change, by hand" "S1 prints the manual steps, and says the script makes no change"
+has "$out" "note  found 26 Sep 21:01: on UISP 3.0.159 the fields below do not exist" "S1 says the fields were not found on this server, and points to --links"
 has "$out" "If those fields are greyed out" "S1 tells the operator when to stop"
 hasnt "$out" "APPKEY-SECRET-123" "S1 never prints the app key"
 check "$(grep -c 'APPKEY' "$SB/state/state.env")" "0" "S1 the state file holds no app key"
@@ -166,6 +217,100 @@ has "$out2" "Not changed in uCRM yet? Make the change by hand" "S11 --after name
 has "$out2" "Already saved it there? Wait a few minutes" "S11 --after keeps the honest second case"
 hasnt "$out2" "RESULT   nothing broke, but uCRM has not taken the new address yet" "S11 --after does not give the generic verdict"
 hasnt "$out2" "uCRM rewrites that file itself" "S11 --after does not give the generic note"
+
+echo "L1 --links before the template fix: the two :8443 links are uCRM's pay link; uCRM's page names nothing"
+mkpdf "$UCRM_PAY"; rm -f "$F/fetched.log" "$F/api.log"
+sum_before="$(cat "$SB/state/state.env" 2>/dev/null | md5sum)"
+out="$(run --links)"; rc=$?
+check "$rc" "0" "L1 exits 0"
+has "$out" "2 × https://crm.dishnetuganda.com:8443/crm/online-payment/pay/{token}" "L1 shows the two links, token masked"
+hasnt "$out" "$TOK" "L1 never prints the payment token"
+hasnt "$out" "APPKEY-SECRET-123" "L1 never prints the app key"
+has "$out" 'template #3 "Invoice Ugadna"' "L1 names the template uCRM used for the invoice"
+has "$out" "000005 · unpaid · created 2026-09-25" "L1 reads the newest unpaid invoice (000005, not 000003)"
+has "$out" '#1 "Official — {e-mail}"' "L1 masks an e-mail address inside a template name"
+hasnt "$out" "billing@dishnet.example" "L1 never prints that e-mail address"
+check "$(grep -c 'clientId=1&' "$F/api.log")" "1" "L1 asks uCRM for client #1's unpaid invoices"
+check "$(grep -c ':8443' "$F/fetched.log")" "0" "L1 opens uCRM's payment page on the public address, never on :8443"
+check "$(grep -c "/crm/online-payment/pay/$TOK" "$F/fetched.log")" "1" "L1 opens exactly that page, once"
+has "$out" "crm.dishnetuganda.com:443 → 200" "L1 reports the page's status on the public address"
+has "$out" "payment options it names   none of PayPal" "L1 reports that the page names no payment option"
+# The page L1 serves carries "endpoint" and "table-striped": a substring match would name DPO and Stripe.
+check "$(printf '%s\n' "$out" | grep -c '^  payment options it names   none of ')" "1" "L1 does not read 'endpoint' as DPO, nor 'table-striped' as Stripe"
+has "$out" "UNMS_HTTPS_PORT=8443" "L1 shows the port UISP was installed with"
+has "$out" "UNMS_PUBLIC_HTTPS_PORT=" "L1 shows the public-port key, empty"
+hasnt "$out" "LINKSECRET-XYZ-987" "L1 never prints a secret from UISP's settings file"
+hasnt "$out" "hunter2secret" "L1 never prints a non-numeric value, even under a key ending in PORT"
+hasnt "$out" "TOKSECRET-555" "L1 never prints UISP's token"
+has "$out" "ok    https://dishnetuganda.com/pay answers 200 and tells the customer how to pay with Airtel Money" "L1 checks DishNet's pay page"
+has "$out" "RESULT   the 2 link(s) on :8443 inside this invoice are uCRM's own online payment page" "L1 verdict names the source"
+has "$out" "THE FIX — BY HAND, IN uCRM'S TEMPLATE EDITOR. THIS SCRIPT CHANGES NOTHING." "L1 prints the manual fix"
+has "$out" 'href="https://dishnetuganda.com/pay"' "L1 the fix points the button at the Uganda profile's pay_url"
+has "$out" "becomes   dishnetuganda.com/pay" "L1 the fix prints the short address under the button"
+check "$(cat "$SB/state/state.env" 2>/dev/null | md5sum)" "$sum_before" "L1 --links leaves the before-state untouched"
+
+printf "%s\n" "$out" > "${L1_DUMP:-/dev/null}"   # L1_DUMP=<file> keeps L1's whole output, to read it
+echo "L2 uCRM's payment page names PayPal: no fix printed, the decision goes to the operator"
+printf '%s' '<html><h1>Pay invoice</h1><button>Pay with PayPal</button></html>' > "$F/page_body"
+out="$(run --links)"
+has "$out" "payment options it names   PayPal" "L2 reports PayPal"
+has "$out" "uCRM's payment page names: PayPal. Customers may be able to pay there" "L2 verdict: decide first"
+hasnt "$out" "THE FIX — BY HAND" "L2 prints no fix"
+printf '%s' '<html><h1>Pay invoice</h1><form action="/x"></form></html>' > "$F/page_body"
+
+echo "L3 after the template fix: PAY NOW leads to DishNet's pay page"
+mkpdf "https://dishnetuganda.com/pay"; rm -f "$F/fetched.log"
+out="$(run --links)"
+has "$out" "2 × https://dishnetuganda.com/pay" "L3 shows the new links"
+has "$out" "RESULT   C-2 is done for this invoice: PAY NOW leads to DishNet's pay page and no link carries :8443." "L3 verdict: done"
+check "$(test -f "$F/fetched.log" && echo opened || echo untouched)" "untouched" "L3 opens no uCRM payment page when there is no :8443 link"
+
+echo "L4 no unpaid invoice: nothing to read, said as such"
+echo '[]' > "$F/invoices.json"
+out="$(run --links)"
+has "$out" "RESULT   nothing to read: client #1 has no unpaid invoice" "L4 verdict: nothing to read"
+hasnt "$out" "carries no link at all" "L4 never reads 'no invoice' as 'no links'"
+out="$(CLIENT_ID=7 run --links)"
+check "$(grep -c 'clientId=7&' "$F/api.log")" "1" "L4 CLIENT_ID chooses the client"
+printf '%s' '[{"id":57,"number":"000005","status":1,"createdDate":"2026-09-25T08:00:00+0000","invoiceTemplateId":3}]' > "$F/invoices.json"
+
+echo "L5 DishNet's pay page does not answer: a failure, and no fix printed"
+mkpdf "$UCRM_PAY"; echo 404 > "$F/pay_code"
+out="$(run --links)"; rc=$?
+check "$rc" "1" "L5 exits 1"
+has "$out" "FAIL  https://dishnetuganda.com/pay → 404 — do not point PAY NOW at it until it answers" "L5 says the pay page is down"
+hasnt "$out" "THE FIX — BY HAND" "L5 prints no fix"
+echo 200 > "$F/pay_code"
+
+echo "L7 uCRM's page on the public address redirects back to :8443: hops shown as host:port only, and no verdict"
+mkpdf "$UCRM_PAY"; rm -f "$F/fetched.log"; echo 301 > "$F/page_code"; printf '%s' "$UCRM_PAY" > "$F/page_loc"
+out="$(run --links)"
+has "$out" "hop 1                      crm.dishnetuganda.com:443 → 301" "L7 the first hop, on the public address"
+has "$out" "hop 2                      crm.dishnetuganda.com:8443 → 301" "L7 the redirect is followed, shown as host:port"
+check "$(grep -c . "$F/fetched.log")" "4" "L7 stops after four hops"
+hasnt "$out" "$TOK" "L7 never prints the token inside a redirect"
+has "$out" "uCRM's payment page could not be read (status 301)" "L7 verdict: nothing concluded about uCRM's page"
+hasnt "$out" "THE FIX — BY HAND" "L7 prints no fix while uCRM's page is unread"
+echo 200 > "$F/page_code"; rm -f "$F/page_loc"
+
+echo "L6 the controls: copies that stop masking are caught by the assertions above"
+mkdir -p "$SB/broken/scripts/lib" "$SB/broken/dishnet-hybrid-sudan/profiles"
+cp "$SCRIPT" "$SB/broken/scripts/dnb-c2-check.sh"; cp "$R/dishnet-hybrid-sudan/profiles/uganda.json" "$SB/broken/dishnet-hybrid-sudan/profiles/"
+python3 - "$R/scripts/lib/c2_invoice_links.php" "$SB/broken/scripts/lib/c2_invoice_links.php" <<'PY'
+import sys; t = open(sys.argv[1]).read()
+a = "function c2_mask_url(string $u): string\n{\n"; assert t.count(a) == 1
+open(sys.argv[2], "w").write(t.replace(a, a + "    return $u;\n"))
+PY
+out="$(PATH="$SB/bin:$PATH" FAKE="$F" STATE_DIR="$SB/state" HEALTH_SCRIPT="$SB/health.sh" UNMS_CONF="$F/unms.conf" bash "$SB/broken/scripts/dnb-c2-check.sh" --links 2>&1)"
+has "$out" "$TOK" "L6 a copy that does not mask links prints the token — so L1's assertion discriminates"
+cp "$R/scripts/lib/c2_invoice_links.php" "$SB/broken/scripts/lib/c2_invoice_links.php"
+python3 - "$SB/broken/scripts/dnb-c2-check.sh" <<'PY'
+import sys; p = sys.argv[1]; t = open(p).read()
+a = """grep -E '^[A-Z0-9_]*PORT="?[0-9]*"?$'"""; assert t.count(a) == 1
+open(p, "w").write(t.replace(a, "grep -E 'PORT'"))
+PY
+out="$(PATH="$SB/bin:$PATH" FAKE="$F" STATE_DIR="$SB/state" HEALTH_SCRIPT="$SB/health.sh" UNMS_CONF="$F/unms.conf" bash "$SB/broken/scripts/dnb-c2-check.sh" --links 2>&1)"
+has "$out" "hunter2secret" "L6 a copy that reads any PORT key prints a secret — so L1's assertion discriminates"
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"
 [ "$FAILN" = "0" ]

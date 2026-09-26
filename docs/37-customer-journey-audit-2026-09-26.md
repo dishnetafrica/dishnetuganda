@@ -686,7 +686,11 @@ cache (docs/33 §5); an old bookmark. The plugin's own *generated* links have be
 2 URLs, both on uCRM's own address. uCRM's renderer writes them — the plugin streams the bytes unchanged, and
 its shipped `invoice_uganda` template prints no link — so a customer who opens the invoice on 443 and follows a
 link inside it lands on `:8443`. That is the likeliest explanation of the operator's own warning, since the
-portal page was on 443. Only C-2 in docs/38 (the address uCRM believes it has) changes what uCRM writes into
+portal page was on 443. **Corrected 26 Sep 21:30 (docs/38 §7.2 item 3):** "its shipped `invoice_uganda`
+template prints no link" was wrong. The template prints uCRM's `invoice.onlinePaymentLink` twice in its PAY NOW
+box, and those are the two URLs. The fix moved to that template (C-2b), because UISP 3.0.159 has no setting for
+uCRM's port. The next sentence is withdrawn with it, since the template changes what uCRM writes into the
+document too. Only C-2 in docs/38 (the address uCRM believes it has) changes what uCRM writes into
 the document; the canonical-host redirect and the Traefik rule cannot reach a link inside a PDF. After C-2,
 download one already-issued invoice to learn whether uCRM re-renders it with the new address.
 
