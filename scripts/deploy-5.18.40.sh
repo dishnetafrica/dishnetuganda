@@ -72,7 +72,7 @@ http() {
   [ -n "$b" ] && args+=(-H 'Content-Type: application/json' --data "$b")
   local r
   r="$(curl "${args[@]}" ${hdrs[@]+"${hdrs[@]}"} "$u" 2>/dev/null)" || r="000"
-  HTTP_CODE="$r"; HTTP_BODY="$(head -c 200000 "/tmp/dnb_body.$$" 2>/dev/null || true)"
+  HTTP_CODE="$r"; HTTP_BODY="$(head -c 200000 "/tmp/dnb_body.$$" 2>/dev/null | tr -d '\000' || true)"   # binary bodies (icons) carry NULs bash cannot hold
   HTTP_HEADERS="$(head -c 8000 "/tmp/dnb_hdr.$$" 2>/dev/null || true)"
   rm -f "/tmp/dnb_body.$$" "/tmp/dnb_hdr.$$"
 }
@@ -136,13 +136,17 @@ echo "  plugin URL      $PLUGIN_BASE"
 N456_1H="$(docker logs "$CONTAINER" --since 1h 2>&1 | grep -c "$PLUGIN/main.php:456" || true)"
 N456_24H="$(docker logs "$CONTAINER" --since 24h 2>&1 | grep -c "$PLUGIN/main.php:456" || true)"
 echo "  main.php:456    ${N456_1H:-0} crash lines in the last hour, ${N456_24H:-0} in 24 h — the tick defect this deploy carries the fix for"
-HB_LAST_BEFORE="$(docker exec "$CONTAINER" tail -n 1 "$HB_IN" 2>/dev/null | cut -c2-20)"
-echo "  heartbeat.log   last line at ${HB_LAST_BEFORE:-?} (the tick's own clock); its last three lines:"
+HB_TAIL_BEFORE="$(docker exec "$CONTAINER" tail -n 200 "$HB_IN" 2>/dev/null || true)"
+HB_LAST_BEFORE="$(printf '%s\n' "$HB_TAIL_BEFORE" | tail -n 1 | cut -c2-20)"
+# The heartbeat's clock is NOT one clock: a master-cron job sets the default timezone mid-tick, so
+# the early lines are stamped UTC and the closing ones Kampala time (+03:00). Stage T therefore
+# never compares timestamps; it looks for closing lines that were not in this snapshot.
+echo "  heartbeat.log   last line at ${HB_LAST_BEFORE:-?} (the tick's own clock, which changes mid-tick); its last three lines:"
 docker exec "$CONTAINER" tail -n 3 "$HB_IN" 2>/dev/null | cut -c1-140 | sed 's/^/     /'
 N_DONE_TAIL="$(docker exec "$CONTAINER" tail -n 200 "$HB_IN" 2>/dev/null | grep -c 'main.php total execution' || true)"
 echo "  completed ticks ${N_DONE_TAIL:-0} 'total execution' lines among the last 200 heartbeat lines (0 is the defect)"
 http GET "$PLUGIN_BASE?page=customer_manifest" ''
-echo "  manifest before $HTTP_CODE for ?page=customer_manifest (404 expected before 5.18.40)"
+echo "  manifest before $HTTP_CODE for ?page=customer_manifest (the answer before this deploy, whatever it is)"
 
 if [ "$AFTER_ONLY" = "0" ] && [ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ]; then
   note "the container already serves $EXPECTED_PLUGIN_COMMIT — skipping the deploy, running the checks"
@@ -224,13 +228,14 @@ case "$HTTP_CODE" in 302|401) ok "M5 the portal without a session still refuses 
 # ════════════════════════════════════════════════════════
 hdr "T. The tick after the deploy (uCRM runs main.php about every five minutes — this waits for it)"
 # ════════════════════════════════════════════════════════
-# Heartbeat lines newer than $1, on the tick's own clock ('[Y-m-d H:i:s] …', compared as text).
-hb_since() { docker exec "$CONTAINER" tail -n 200 "$HB_IN" 2>/dev/null | awk -v s="$1" 'substr($0,2,19) > s'; }
+# Heartbeat lines matching $1 that were NOT in the pre-deploy snapshot. Never by timestamp: the
+# tick's clock changes mid-run (UTC first, Kampala time after a master-cron job sets the zone), so a
+# closing line from BEFORE the deploy reads as 'later' than the opening line written after it.
+hb_new() { docker exec "$CONTAINER" tail -n 200 "$HB_IN" 2>/dev/null | grep -F "$1" | grep -vxF -f <(printf '%s\n' "$HB_TAIL_BEFORE" | grep -F "$1" || true) || true; }
 T0="$(date -u +%s)"; FIRST_DONE=""; SCHED_LINE=""
 while :; do
-  NEW="$(hb_since "${HB_LAST_BEFORE:-}")"
-  FIRST_DONE="$(printf '%s\n' "$NEW" | grep -m1 'main.php total execution' || true)"
-  if [ -n "$FIRST_DONE" ]; then SCHED_LINE="$(printf '%s\n' "$NEW" | grep -m1 'UCRM auto-pull' || true)"; break; fi
+  FIRST_DONE="$(hb_new 'main.php total execution' | head -n 1)"
+  if [ -n "$FIRST_DONE" ]; then SCHED_LINE="$(hb_new 'UCRM auto-pull' | head -n 1)"; break; fi
   ELAPSED=$(( $(date -u +%s) - T0 ))
   [ "$ELAPSED" -lt "$TICK_MAX_SECONDS" ] || break
   printf '  …     %ss — no completed tick yet; last heartbeat line: %s\n' "$ELAPSED" "$(docker exec "$CONTAINER" tail -n 1 "$HB_IN" 2>/dev/null | cut -c1-90)"

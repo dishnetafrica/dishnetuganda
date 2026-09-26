@@ -1019,7 +1019,21 @@ old code may still die in the first seconds; that is reported as a note), other 
 noted and never counted against this build. Rehearsed against a fake docker in four scenarios
 (a completing tick, none, a crash after the guard, the pull hour): 7/7.
 
-**Status:** **built, NOT deployed.** Production stays on 5.18.38 (`fa2d463`).
+**Status:** **deployed 26 September 2026 03:58 UTC** (`e333261`, "✓ container now serves e333261",
+over live `fa2d463`) by the operator with the one command above, first attempt, **7 ok / 0 failed /
+1 note**. Before: 12 crash lines in the previous hour, 276 in 24 h, 0 completed ticks among the last
+200 heartbeat lines. After: the first tick to run the new code completed at 04:05 UTC (stamped
+`07:05:03` in the heartbeat — see the clock note below), wrote *"UCRM auto-pull: scheduled for
+2026-09-27 03:00."* with the two-digit hour, and the container log holds **no crash of
+`main.php` from 90 s after the deploy**. The note is the other plugin's pre-existing
+`dishnet-data-report/main.php:105` flock TypeError. The superseded guard later added to this
+command did not exist when it ran and changed nothing about the run.
+
+**Recorded, not fixed — the heartbeat has two clocks.** Its opening lines are stamped UTC and its
+closing lines Kampala time (+03:00): a master-cron job sets PHP's default timezone midway through
+the tick, so *"[04:00:11] Heartbeat complete."* is followed by *"[07:05:03] main.php total
+execution"* for the same tick. Cosmetic in the log; it matters to anything that compares those
+timestamps, which is exactly what the 5.18.40 command did — see that entry.
 
 ## Website — Customer Login opens the DishNet portal (26 Sep 2026)
 
@@ -1079,8 +1093,9 @@ the test. (The staff app's service worker is unchanged. Its scope is the plugin 
 on a staff member's own browser it also fronts the customer pages — pre-existing, staff
 devices only, recorded here, not changed.)
 
-**Also carries 5.18.39** (the tick fix), which never went live on its own; its command
-`scripts/deploy-5.18.39.sh` now stops with a pointer to the 5.18.40 command.
+**Also carries 5.18.39** (the tick fix). 5.18.39 did go live on its own at 03:58 UTC (its entry);
+its command now stops with a pointer to the 5.18.40 command, so it cannot be run against a later
+build.
 
 **Proof.** `tests/test_customer_pwa.php` (31) serves the plugin the way uCRM does, under
 `/crm/_plugins/dishnet-hybrid-sudan/`, and asserts the manifest (200 without a login, the
@@ -1097,4 +1112,22 @@ worker, the portal still refusing), **T** the wait for the next tick (5.18.39's 
 whether the live website already links the portal (report only). Tick stage rehearsed against a
 fake docker: 7/7.
 
-**Status:** **built, NOT deployed.** Production stays on 5.18.38 (`fa2d463`).
+**Status:** **deployed 26 September 2026 04:21 UTC** (`4a2f41c`, "✓ container now serves 4a2f41c",
+over live `e333261`) by the operator with the one command above, first attempt. **Stage M, all
+eleven checks passed over the public address:** the manifest 200 without a login as
+`application/manifest+json`, standalone, start_url the sign-in page inside the scope
+`/crm/_plugins/dishnet-hybrid-sudan/`, icons 192 and 512 declared and answering as PNG, the sign-in
+page linking the manifest, no service worker, the portal answering 302 without a session. (Before
+the deploy `?page=customer_manifest` answered 302, not 404; the wording that expected 404 was a
+guess and is corrected.) **Stage T in this run: T1 and T2 are NOT evidence.** They accepted the
+tick from the 5.18.39 run (`07:05:03`, before this deploy) because the comparison was by timestamp
+and the heartbeat's clock changes mid-tick (the 5.18.39 entry's clock note): `07:05:03` reads later
+than the UTC-stamped `04:20:03` snapshot line although it is earlier. T3 (crashes since deploy +
+90 s, from the container log's own UTC clock) and the 5.18.39 run's whole stage T remain valid,
+and 5.18.40 carries the same `main.php`. **Corrected in the command the same hour:** stage T now
+looks for closing lines that were absent from a pre-deploy snapshot of the heartbeat, never at
+timestamps; rehearsed in five scenarios including this exact case (an old closing line in a
+later-looking clock, nothing new → T1 fails): 8/8. Two cosmetic warnings ("ignored null byte") came
+from the icon bodies read into a shell variable; binary bodies are now stripped of NULs. **The
+run's T3, W and summary were still pending when this was written**; they are recorded from the log
+file when it arrives. The website was not yet redeployed at the time of the run.
