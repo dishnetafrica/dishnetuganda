@@ -26,6 +26,11 @@
 #                          the script checks that first and stops if it is not — so no customer is
 #                          ever contacted. A lead gets no message: the gate refuses before sending.
 #   --website              Reports whether the live site already links the portal (report only).
+#   --sibling-id           READ-ONLY, short. Which dishnet-data-report build is installed (name,
+#                          version, file hashes and modification times, the manifest's settings
+#                          keys), every line in it that names another DishNet plugin's directory,
+#                          which installation its code talks about, and which hybrid directories
+#                          exist on this host — so the build can be matched to this install.
 #
 # What it never does: print a token, code, key, secret or password; send anything to a customer;
 # change a record; deploy; roll back.
@@ -43,9 +48,9 @@ SNIP="$(mktemp -d)"; trap 'rm -rf "$SNIP"' EXIT
 
 MODE=""; ARG=""
 case "${1:-}" in
-  --data-report|--website) MODE="${1#--}" ;;
+  --data-report|--website|--sibling-id) MODE="${1#--}" ;;
   --email|--lead) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; } ;;
-  *) echo "usage: $0 --data-report | --email <address> | --lead <+2567…> | --website" >&2; exit 64 ;;
+  *) echo "usage: $0 --sibling-id | --data-report | --email <address> | --lead <+2567…> | --website" >&2; exit 64 ;;
 esac
 
 PASS=0; FAIL=0; NOTE=0
@@ -134,6 +139,109 @@ PHP
   [ -n "$ADMIN_TOKEN" ]
 }
 # --- ADMIN END ---
+
+# ═════════════════════════════════════════════════════════════════════════════
+if [ "$MODE" = "sibling-id" ]; then
+# --- SIBID BEGIN ---
+hdr "S. Which dishnet-data-report build is installed here, and which hybrid plugin it is written for (read-only)"
+SIB_IN="$PLUGINS_IN/$SIBLING"
+docker exec "$CONTAINER" test -d "$SIB_IN" || stop "$SIBLING is not installed at $SIB_IN"
+ok "S0 $SIBLING is installed at $SIB_IN"
+cat > "$SNIP/sibid.php" <<'PHP'
+<?php
+// READ-ONLY. Which dishnet-data-report build is installed, and which hybrid plugin it is written for.
+// Names, versions, hashes, line numbers and counts only. Every excerpt is masked; no data file is opened.
+$sib = rtrim((string)getenv('SIB'), '/');
+$PREV_PUBLIC_SHA = '5d10b30ae54a';   // public.php as read on 26 Sep 2026 05:28 and 05:40 UTC (2.8.80)
+function m(string $s): string {
+    $s = str_replace('DishNet-Hybrid-JWT-v2-2026', '<the shared constant>', $s);
+    $s = preg_replace('/((?:password|passwd|secret|api_?key|app_?key|token|bearer|pepper|private_?key)\s*(?:=>|=|:)\s*[\'"])([^\'"]{6,})([\'"])/i', '$1<redacted>$3', $s);
+    $s = preg_replace_callback('/[A-Za-z0-9+\/=_-]{24,}/', function ($mm) { $r = $mm[0]; if (strlen($r) >= 40) return '<redacted>'; return (preg_match('/\d/', $r) && preg_match('/[A-Za-z]/', $r)) ? '<redacted>' : $r; }, $s);
+    $s = preg_replace('/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/', '<email>', $s);
+    $s = preg_replace('/(?<![\w.])\d{7,}(?![\w.])/', '<digits>', $s);
+    return rtrim($s);
+}
+function rel(string $p): string { global $sib; return ltrim(substr($p, strlen($sib)), '/'); }
+function phpFiles(string $dir): array {
+    $out = []; $skip = ['data', 'vendor', 'node_modules', '.git', 'backups', 'backup', 'logs', 'cache', 'tmp', 'sessions'];
+    $walk = function (string $d, int $depth) use (&$walk, &$out, $skip) {
+        $h = @scandir($d); if ($h === false) return;
+        foreach ($h as $n) { if ($n === '.' || $n === '..') continue; $p = "$d/$n";
+            if (is_dir($p)) { if ($depth < 3 && !in_array($n, $skip, true)) $walk($p, $depth + 1); } elseif (substr($n, -4) === '.php') $out[] = $p; }
+    };
+    $walk($dir, 0); sort($out); return $out;
+}
+// 1. the build
+$man = @json_decode((string)@file_get_contents("$sib/manifest.json"), true) ?: [];
+$info = $man['information'] ?? [];
+echo "── S-I the installed build ──\n";
+printf("  manifest name/version   %s %s\n", m((string)($info['name'] ?? '?')), m((string)($info['version'] ?? '?')));
+printf("  display name            %s\n", m((string)($info['displayName'] ?? '—')));
+printf("  description             %s\n", m(mb_substr((string)($info['description'] ?? '—'), 0, 140)));
+printf("  author / url            %s / %s\n", m((string)($info['author'] ?? '—')), m((string)($info['url'] ?? '—')));
+$cfgKeys = array_map(function ($c) { return (string)($c['key'] ?? '?'); }, (array)($man['configuration'] ?? []));
+printf("  manifest settings keys  %s\n", $cfgKeys ? m(implode(', ', $cfgKeys)) : '(none declared)');
+$uj = @json_decode((string)@file_get_contents("$sib/ucrm.json"), true) ?: [];
+$host = function (string $u): string { $h = parse_url($u, PHP_URL_HOST); return $h ? $h : ($u === '' ? '—' : '?'); };
+printf("  ucrm.json               ucrmPublicUrl host %s · pluginPublicUrl host %s · pluginAppKey %s\n", $host((string)($uj['ucrmPublicUrl'] ?? '')), $host((string)($uj['pluginPublicUrl'] ?? '')), trim((string)($uj['pluginAppKey'] ?? '')) === '' ? 'EMPTY/absent' : 'set');
+$files = phpFiles($sib);
+$newest = 0; $newestF = ''; foreach ($files as $f) { $t = (int)@filemtime($f); if ($t > $newest) { $newest = $t; $newestF = rel($f); } }
+printf("  PHP files               %d · newest modified %s (%s)\n", count($files), $newest ? gmdate('Y-m-d H:i:s', $newest) . ' UTC' : '?', $newestF);
+foreach (['public.php', 'client.php', 'dr_wifi_change.php', 'manifest.json'] as $n) {
+    $f = "$sib/$n"; if (!is_file($f)) { printf("  %-22s  absent\n", $n); continue; }
+    printf("  %-22s  sha256[0:12] %s · %d B · modified %s UTC\n", $n, substr(hash_file('sha256', $f), 0, 12), filesize($f), gmdate('Y-m-d H:i:s', (int)filemtime($f)));
+}
+$pubSha = is_file("$sib/public.php") ? substr(hash_file('sha256', "$sib/public.php"), 0, 12) : '';
+echo "@@NOTE S1 build " . m((string)($info['name'] ?? '?')) . " " . m((string)($info['version'] ?? '?')) . "; public.php " . ($pubSha === $PREV_PUBLIC_SHA ? "UNCHANGED since the 26 Sep 05:28/05:40 reads ({$pubSha})" : "CHANGED since the 26 Sep reads (now {$pubSha}, was {$PREV_PUBLIC_SHA}) — the earlier line numbers may no longer apply") . "\n";
+// 2. every cross-plugin reference, by file and line
+echo "\n── S-II every reference to another DishNet plugin's directory (file:line, masked) ──\n";
+$refs = []; $tel = []; $sud = []; $shared = []; $fin = [];
+foreach ($files as $f) {
+    $L = file($f, FILE_IGNORE_NEW_LINES) ?: [];
+    foreach ($L as $i => $ln) {
+        if (preg_match('/dishnet-hybrid-|_dishnet_shared|dishnet-starlink-finance|dishnet-data-report-data|dishnet-hybrid-sudan-data|dishnet-hybrid-telecom-data/', $ln)) {
+            $r = rel($f); $refs[] = sprintf("  %-28s %5d: %s", $r, $i + 1, m($ln));
+            if (strpos($ln, 'dishnet-hybrid-telecom') !== false) $tel[] = "$r:" . ($i + 1);
+            if (strpos($ln, 'dishnet-hybrid-sudan') !== false)   $sud[] = "$r:" . ($i + 1);
+            if (strpos($ln, '_dishnet_shared') !== false)         $shared[] = "$r:" . ($i + 1);
+            if (strpos($ln, 'dishnet-starlink-finance') !== false) $fin[] = "$r:" . ($i + 1);
+        }
+    }
+}
+if ($refs === []) echo "  (none)\n"; else foreach (array_slice($refs, 0, 80) as $r) echo $r, "\n";
+if (count($refs) > 80) echo "  … (", count($refs) - 80, " more)\n";
+echo "@@NOTE S2 dishnet-hybrid-telecom referenced at: " . ($tel ? implode(' ', $tel) : 'none') . " · dishnet-hybrid-sudan referenced at: " . ($sud ? implode(' ', $sud) : 'NONE') . " · _dishnet_shared at: " . ($shared ? implode(' ', $shared) : 'none') . " · starlink-finance at: " . ($fin ? count($fin) . ' line(s)' : 'none') . "\n";
+// 3. which country the build talks about
+echo "\n── S-III installation words in the code (case-insensitive counts; comments included) ──\n";
+$words = ['uganda', 'sudan', 'telecom', 'kampala', 'juba', 'dishnetuganda', 'dishnetafrica'];
+$tot = array_fill_keys($words, 0); $where = array_fill_keys($words, []);
+foreach ($files as $f) { $c = strtolower((string)@file_get_contents($f)); foreach ($words as $w) { $n = substr_count($c, $w); if ($n) { $tot[$w] += $n; $where[$w][] = rel($f) . "×$n"; } } }
+foreach ($words as $w) printf("  %-14s %4d   %s\n", $w, $tot[$w], $where[$w] ? implode(', ', array_slice($where[$w], 0, 8)) . (count($where[$w]) > 8 ? ' …' : '') : '—');
+// 4. which hybrid directories exist here
+echo "\n── S-IV the hybrid plugin directories on this host (presence only) ──\n";
+$pd = dirname($sib); $present = [];
+foreach (['dishnet-hybrid-telecom', '.dishnet-hybrid-telecom-data', 'dishnet-hybrid-sudan', '.dishnet-hybrid-sudan-data'] as $d) {
+    $dir = "$pd/$d"; $ok = is_dir($dir); if ($ok) $present[] = $d;
+    $db = $ok ? (is_file("$dir/data/plugin.sqlite3") ? 'data/plugin.sqlite3 present' : (is_file("$dir/plugin.sqlite3") ? 'plugin.sqlite3 present' : 'no plugin.sqlite3')) : '';
+    printf("  <plugins dir>/%-30s %s%s\n", $d, $ok ? 'present' : 'ABSENT', $ok ? " — $db" : '');
+}
+$telHere = in_array('dishnet-hybrid-telecom', $present, true); $sudHere = in_array('dishnet-hybrid-sudan', $present, true);
+if ($tel && !$sud) $verdict = "this build is written for the South Sudan hybrid (dishnet-hybrid-telecom) and never names the Uganda hybrid (dishnet-hybrid-sudan)" . ($telHere ? "; the telecom directory IS present here, so its path resolves" : "; that directory is ABSENT here, so its JWT verifier can never find a store");
+elseif ($tel && $sud) $verdict = "this build names BOTH hybrids — read S-II to see which paths the verifier uses";
+elseif (!$tel && $sud) $verdict = "this build names only the Uganda hybrid (dishnet-hybrid-sudan)" . ($sudHere ? " and that directory is present here" : " but that directory is ABSENT here");
+else $verdict = "this build names no hybrid plugin directory at all";
+echo "@@NOTE S3 {$verdict}\n";
+PHP
+while IFS= read -r line; do
+  case "$line" in
+    "@@OK "*)   ok   "${line#@@OK }";;
+    "@@NOTE "*) note "${line#@@NOTE }";;
+    "@@BAD "*)  bad  "${line#@@BAD }";;
+    *)          printf '%s\n' "$line";;
+  esac
+done < <(docker exec -i -w "$IN_CONTAINER" -e "SIB=$SIB_IN" "$CONTAINER" php < "$SNIP/sibid.php" 2>&1)
+# --- SIBID END ---
+fi
 
 # ═════════════════════════════════════════════════════════════════════════════
 if [ "$MODE" = "data-report" ]; then

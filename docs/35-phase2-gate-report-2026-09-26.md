@@ -206,6 +206,16 @@ separately. Lead-refusal path pending a real lead's number (the guard is proven)
 complete, 2 partial, 0 code defects.
 ## 7. Exact next action required from the operator
 
+0. **Identify the installed data-report build first** (the operator reports a build installed *for
+   Uganda*; the 26 Sep reads found a `public.php` whose verifier names the South Sudan hybrid). One
+   read-only command, short output, nothing changed:
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-verify
+   bash scripts/phase2-verify.sh --sibling-id 2>&1 | tee /root/dnb-verify/verify-sibling-id-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   It prints the build's name and version, the hashes and modification times of its main files (and
+   whether `public.php` still matches the 26 Sep reads), every line that names another DishNet plugin's
+   directory, which installation its code talks about, and which hybrid directories exist on the host.
 1. **The extended source read** — read-only, one command; the log file is written to
    `/root/dnb-verify/` (the path is the `tee` target; pasting the terminal is acceptable for this mode,
    its output is masked):
