@@ -27,6 +27,10 @@
 #                           source each reads; branding; an identity fingerprint saved for --compare;
 #                           logout and revocation; the code and cookie searched for in the container log.
 #   --compare               phone login = e-mail login = the same customer? (from the two fingerprints)
+#   --client-flags [id]     what uCRM's client `isActive` correlates with on this install: every client's flag
+#                           against its services' statuses, outstanding balance, lead/archived, with a per-rule
+#                           agreement table; counts and ids only. The one client id given (default 1) is shown
+#                           on its own line. Read-only: a store copy and GET requests to uCRM.
 #   --urls                  the public addresses: what the plugin's link builder produces (its own check
 #                           tool, report only), the customer manifest, the certificate on :443 and on
 #                           :8443, where the bare /crm and plain http land, whether the website links the
@@ -49,8 +53,9 @@ SNIP="$(mktemp -d)"; trap 'rm -rf "$SNIP"' EXIT
 MODE=""; ARG=""
 case "${1:-}" in
   --siblings|--compare|--urls) MODE="${1#--}" ;;
+  --client-flags) MODE="client-flags"; ARG="${2:-1}" ;;
   --identity|--login-phone|--login-email) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; } ;;
-  *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls" >&2; exit 64 ;;
+  *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls | --client-flags [clientId]" >&2; exit 64 ;;
 esac
 
 PASS=0; FAIL=0; NOTE=0
@@ -605,6 +610,74 @@ else
   note "U3–U5 not measured: the plugin base is plain http (a sandbox), so there is no certificate or public port to inspect"
 fi
 # --- URLS END ---
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+if [ "$MODE" = "client-flags" ]; then
+# --- FLAGS BEGIN ---
+FOCUS="${ARG:-1}"; case "$FOCUS" in ''|*[!0-9]*) stop "the client id must be a number";; esac
+hdr "F. What uCRM's client isActive correlates with on this installation (read-only; counts and ids only)"
+docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "mkdir -p '$RO/fl' && cp '$DB_IN' '$RO/fl/plugin.sqlite3' && ( [ -f '$DB_IN-wal' ] && cp '$DB_IN-wal' '$RO/fl/plugin.sqlite3-wal' || true )" 2>/dev/null || stop "could not copy the store"
+cat > "$SNIP/flags.php" <<'PHP'
+<?php
+// READ-ONLY. What uCRM's client `isActive` correlates with on THIS installation. Counts and ids only —
+// no name, phone or e-mail is read into the output. The store is a COPY; uCRM is read with GET only.
+$RO = rtrim((string)getenv('RO_DIR'), '/'); $root = getcwd(); $focus = (int)getenv('FOCUS_ID');
+require_once 'lib/StoreInterface.php'; require_once 'lib/SqliteStore.php'; require_once 'lib/CrmApiClient.php';
+$store = SqliteStore::create($RO); $pdo = $store->getPdo(); $cfg = $store->load('kyc_config.json') ?: [];
+echo "── F-1 the hybrid's sign-in index (copy): is_active as stored ──\n";
+try { foreach ($pdo->query("SELECT COALESCE(is_active,'null') k, COUNT(*) c FROM client_search_index GROUP BY k") as $r) echo "  is_active=", $r['k'], " → ", $r['c'], " row(s)\n"; } catch (Throwable $e) { echo "  index unreadable: ", $e->getMessage(), "\n"; }
+echo "  sign-in eligibility consults is_archived, is_lead and has_service — never is_active (ca_login_eligibility)\n";
+echo "── F-2 uCRM live: every client and every service (GET through the plugin's own client; nothing written) ──\n";
+$crm = CrmApiClient::fromUcrm($root, $cfg);
+$clients = $crm->get('clients?limit=5000'); $services = $crm->get('clients/services?limit=5000');
+if (!is_array($clients)) { echo "  clients: NOT READABLE\n"; echo "  F6 read-only run complete\n"; exit; }
+if (!is_array($services)) { echo "  services: NOT READABLE\n"; $services = []; }
+$names = [0 => 'prepared', 1 => 'active', 2 => 'ended', 3 => 'suspended', 4 => 'blocked', 5 => 'obsolete', 6 => 'deferred', 7 => 'quoted', 8 => 'inactive'];
+$svcBy = []; foreach ($services as $s) { if (is_array($s)) $svcBy[(int)($s['clientId'] ?? 0)][] = (int)($s['status'] ?? -1); }
+$rows = [];
+foreach ($clients as $c) { if (!is_array($c)) continue; $id = (int)($c['id'] ?? 0); $st = $svcBy[$id] ?? [];
+    $rows[] = ['id' => $id, 'isActive' => array_key_exists('isActive', $c) ? (bool)$c['isActive'] : null, 'isLead' => !empty($c['isLead']), 'isArchived' => !empty($c['isArchived']),
+        'svc_n' => count($st), 'svc_active' => count(array_filter($st, function ($x) { return $x === 1; })), 'svc_statuses' => $st,
+        'outstanding' => (float)($c['accountOutstanding'] ?? 0), 'balance' => (float)($c['accountBalance'] ?? 0),
+        'has_overdue' => !empty($c['hasOverdueInvoice']), 'has_suspended' => !empty($c['hasSuspendedService'])]; }
+echo "  clients read: ", count($rows), " · services read: ", count($services), "\n";
+$cnt = function (callable $p) use ($rows) { $n = 0; foreach ($rows as $r) if ($p($r)) $n++; return $n; };
+echo "  isActive: true ", $cnt(function ($r) { return $r['isActive'] === true; }), " · false ", $cnt(function ($r) { return $r['isActive'] === false; }), " · absent ", $cnt(function ($r) { return $r['isActive'] === null; }), "\n";
+echo "── F-3 cross-tabulation (clients, by uCRM isActive) ──\n";
+printf("  %-46s %8s %8s\n", 'group', 'active', 'inactive');
+$tab = function (string $label, callable $p) use ($rows) { $a = 0; $i = 0; foreach ($rows as $r) if ($p($r)) { if ($r['isActive'] === true) $a++; elseif ($r['isActive'] === false) $i++; } printf("  %-46s %8d %8d\n", $label, $a, $i); };
+$tab('has ≥1 service with status 1 (active)', function ($r) { return $r['svc_active'] > 0; });
+$tab('has services, none with status 1', function ($r) { return $r['svc_n'] > 0 && $r['svc_active'] === 0; });
+$tab('has no service at all', function ($r) { return $r['svc_n'] === 0; });
+$tab('is a lead', function ($r) { return $r['isLead']; });
+$tab('is archived', function ($r) { return $r['isArchived']; });
+$tab('accountOutstanding > 0 (unpaid)', function ($r) { return $r['outstanding'] > 0; });
+$tab('accountOutstanding = 0', function ($r) { return $r['outstanding'] <= 0; });
+$tab('hasOverdueInvoice', function ($r) { return $r['has_overdue']; });
+$tab('hasSuspendedService', function ($r) { return $r['has_suspended']; });
+echo "── F-4 which rule reproduces isActive? (agreement over the clients where uCRM sets it) ──\n";
+$set = array_filter($rows, function ($r) { return $r['isActive'] !== null; }); $tot = count($set);
+$hyp = ['has ≥1 active service' => function ($r) { return $r['svc_active'] > 0; },
+    'has ≥1 active service AND nothing outstanding' => function ($r) { return $r['svc_active'] > 0 && $r['outstanding'] <= 0; },
+    'has ≥1 active service AND not a lead' => function ($r) { return $r['svc_active'] > 0 && !$r['isLead']; },
+    'not a lead AND not archived' => function ($r) { return !$r['isLead'] && !$r['isArchived']; },
+    'has any service (any status)' => function ($r) { return $r['svc_n'] > 0; },
+    'nothing outstanding' => function ($r) { return $r['outstanding'] <= 0; }];
+foreach ($hyp as $name => $p) { $m = 0; foreach ($set as $r) if ((bool)$p($r) === ($r['isActive'] === true)) $m++; printf("  %-50s %3d of %3d agree (%s%%)\n", $name, $m, $tot, $tot ? round(100 * $m / $tot) : 0); }
+$seen = []; foreach ($rows as $r) foreach ($r['svc_statuses'] as $x) $seen[$x] = ($seen[$x] ?? 0) + 1; ksort($seen);
+echo "  service statuses seen:"; foreach ($seen as $k => $v) echo " ", $k, " (", $names[$k] ?? '?', ") ×", $v; echo $seen ? "\n" : " none\n";
+foreach ($rows as $r) if ($r['id'] === $focus) { echo "── F-5 client #$focus ──\n  isActive ", var_export($r['isActive'], true), " · lead ", var_export($r['isLead'], true), " · archived ", var_export($r['isArchived'], true), " · services ", $r['svc_n'], " (statuses ", json_encode($r['svc_statuses']), ") · outstanding ", number_format($r['outstanding'], 0), " · balance ", number_format($r['balance'], 0), " · hasOverdueInvoice ", var_export($r['has_overdue'], true), " · hasSuspendedService ", var_export($r['has_suspended'], true), "\n"; }
+$odd = array_values(array_filter($rows, function ($r) { return $r['isActive'] === false && $r['svc_active'] > 0; }));
+echo "  clients inactive in uCRM yet holding an active service: ", count($odd), $odd ? ' (ids ' . implode(', ', array_map(function ($r) { return $r['id']; }, array_slice($odd, 0, 25))) . ')' : '', "\n";
+$odd2 = array_values(array_filter($rows, function ($r) { return $r['isActive'] === true && $r['svc_active'] === 0; }));
+echo "  clients active in uCRM with no active service: ", count($odd2), $odd2 ? ' (ids ' . implode(', ', array_map(function ($r) { return $r['id']; }, array_slice($odd2, 0, 25))) . ')' : '', "\n";
+echo "  F6 read-only run complete\n";
+PHP
+docker exec -i -u "$DB_OWNER" -w "$IN_CONTAINER" -e "FOCUS_ID=$FOCUS" -e "RO_DIR=$RO/fl" "$CONTAINER" php < "$SNIP/flags.php" 2>&1 | mask
+docker exec -u "$DB_OWNER" "$CONTAINER" rm -rf "$RO" 2>/dev/null
+ok "F6 the store copy was removed; uCRM was read with GET only"
+# --- FLAGS END ---
 fi
 
 hdr "Summary"
