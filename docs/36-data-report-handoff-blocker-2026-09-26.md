@@ -262,6 +262,130 @@ admin session, without breaking the bridge).
 and 3 are the sibling's own pre-existing access control, surfaced by this read, and are recorded for the
 operator to weigh separately from the hand-off remediation. None of the three is authorised to build.
 
+## I. The installed build — 26 Sep 05:53 UTC (`--sibling-id`, masked) — it is the South Sudan build
+
+| | |
+|---|---|
+| build | `dishnet-data-report` **2.8.80** — "DishNet Starlink Data Report", author DishNet Africa; **no manifest settings keys** (nothing configurable points it at a hybrid plugin) |
+| installed under | `crm.dishnetuganda.com` (its `ucrm.json`); its own uCRM app key is set |
+| files | 24 PHP files; newest modified **2 July 2026 10:04 UTC**; `public.php` sha `5d10b30ae54a`, **unchanged** since the 05:28 and 05:40 reads |
+| hybrid directories it names | **`dishnet-hybrid-telecom` at 4 lines · `dishnet-hybrid-sudan` at NONE** |
+| words in its code | uganda 0 · sudan 1 · telecom 4 · juba 3 (`fleet_home.php` heads the page *"DISHNET AFRICA · JUBA, SOUTH SUDAN"*, as the operator's screenshot shows) |
+| on this host | `dishnet-hybrid-telecom` and its data dir **ABSENT**; `dishnet-hybrid-sudan` and `.dishnet-hybrid-sudan-data` present |
+
+**The four `dishnet-hybrid-telecom` references, and what each breaks on Uganda:**
+
+1. `public.php:798` — the JWT verifier's store path → **the customer usage-report hand-off has never worked here** (§0, §H.1).
+2. `public.php:779` — the same, in the header comment.
+3. `client.php:410` — the report page's **"Back to Portal"** link is built by replacing `/dishnet-data-report/…` with `/dishnet-hybrid-telecom/public.php` → **a dead link on Uganda** even once the report opens.
+4. `cron_auto_block.php:366` — the auto-block cron posts its **admin WhatsApp alerts** to
+   `…/dishnet-hybrid-telecom/public.php?page=api&action=wa_admin_alert` → on Uganda that path does not
+   exist, so **those alerts are lost silently** (whether that cron is in use here is the operator's to
+   confirm; the plugin's own banner today reads *"Auto-sync alert: main.lock is stuck … Auto-sync is
+   blocked"*, its Sync Status tab carries its own unstick action — the sibling's operational state, not
+   ours, recorded only).
+
+**Conclusion.** One codebase is deployed to both installations with installation A's plugin directory
+written into it. On Uganda the dependency is not obsolete, it is **mis-targeted**: every one of those
+four lines must resolve to `dishnet-hybrid-sudan` here and to `dishnet-hybrid-telecom` there. That
+decides one design point below: the sibling must **discover** the hybrid's directory, never hard-code it.
+
+## J. Design note — the hand-off redesign (documentation only; no code; for approval)
+
+**1. Current flow.** Customer signs in at our portal (OTP → HttpOnly cookie session,
+`customer_sessions` row). On "usage report", `portal.php:7437–7447` calls `app_data_report_token`
+(cookie-authenticated) → `api_customer_app.php:921–940` mints a 600 s JWT under the **legacy
+derivation** with `sub`, `kind=app`, `phone`, `name`, `accounts`, `aud=data-report` → the browser is sent
+to `/_plugins/dishnet-data-report/public.php?clientId=<sub>[&kit=…]&token=<jwt>`. The sibling, MODE 1
+(`public.php:622–766`): share-link `report_token` first (628), then `drVerifyHybridJwt()` (641); on claims
+it requires `clientId == sub` (649), loads that client's kits from Finance's `sl_kits.json` (676–682),
+usage and the uCRM plan map, and renders `client.php` (759), whose "Back to Portal" link is
+`client.php:410`. If neither token kind matches: `drNotFound()` (765).
+
+**2. Why "Report not found" on Uganda.** `drVerifyHybridJwt()` opens
+`<plugins>/dishnet-hybrid-telecom/data/plugin.sqlite3` (798), absent here (§I) → `null` (799) → 765.
+Independently, its empty-input guard (832) would refuse to derive a key from this install's EMPTY
+`webhook_secret`/`crm_auth_token` (K) even if the path resolved. Either block alone is sufficient.
+
+**3. What the sibling expects from `dishnet-hybrid-telecom`.** (a) a SQLite store at
+`<dir>/data/plugin.sqlite3` whose `kyc_config` row 0 holds **non-empty** `webhook_secret` and
+`crm_app_key`/`crm_auth_token`, from which it re-derives our legacy signing key (796–834); (b) a public
+API for admin alerts, `…/public.php?page=api&action=wa_admin_alert` (`cron_auto_block.php:366`); (c) a
+portal URL for "Back to Portal" (`client.php:410`). Nothing else (S-II lists every cross-plugin line).
+
+**4. Is `dishnet-hybrid-telecom` supposed to exist on Uganda?** No. It is installation A's plugin
+(docs/00 §2.1); Uganda's is `dishnet-hybrid-sudan`. The dependency is real on both installations and
+mis-targeted on this one (§I). It cannot be satisfied by configuration: the manifest declares no
+settings, and the three expectations are literal strings in code.
+
+**5. The cleanest replacement architecture for Uganda** (§D, plus discovery):
+
+- **Discovery record.** The hybrid writes `_dishnet_shared/hybrid.json` =
+  `{"plugin_dir": "dishnet-hybrid-sudan", "public_url": "<its public.php>", "tenant": "uganda",
+  "updated_at": …}` at boot, idempotently, in the exact file pattern of `lib/InternalAuth.php`. The
+  sibling reads it wherever it needs the hybrid's location: the "Back to Portal" link (`client.php:410`),
+  the alert URL (`cron_auto_block.php:366`), and the token's expected issuer. The same code on Sudan
+  reads `dishnet-hybrid-telecom` from the file that hybrid writes. **Zero hard-coded plugin names remain.**
+- **Hand-off key.** `_dishnet_shared/handoff_jwt.json` = `{"keys": {"h1": "<32 random bytes, hex>"},
+  "active": "h1", "created_at": …}`, 0640, created by the hybrid on first mint; the sibling only reads it
+  and refuses when it is absent. Separate from `internal_auth.json`, which must never gate anything a
+  customer can reach (`InternalAuth.php:11–13`).
+- **Token** (hybrid mints, per click, **120 s**): header `{alg: HS256, typ: JWT, kid: h1}`; claims `iss =
+  dishnet-hybrid:<plugin_dir>`, `aud = data-report`, `kind = app`, `sub`, `accounts`, `iat`, `exp`, `jti`.
+  `phone` and `name` are **dropped** from the token: the sibling needs neither (it names the client from
+  Finance's register, 750–753), and a URL should carry no personal data.
+- **Sibling verifier** (replaces 796–834; keeps 837–842, 852; extends 647–652): three segments; `kid` must
+  name a key in the file — **no `kid` is the legacy token and is refused**; HMAC-SHA256 with
+  `hash_equals`, the header's `alg` never trusted; `iss` must equal `dishnet-hybrid:` + the discovery
+  record's `plugin_dir`; `aud = data-report`; `kind = app`; `exp` with ≤5 s leeway; then `clientId` ∈
+  {`sub`} ∪ `accounts`, else its existing uniform `drNotFound()`.
+
+**6. The guarantees, and where each is enforced.**
+
+| guarantee | enforced by |
+|---|---|
+| customer identity | `sub`/`accounts` are copied from **our verified session** at mint time (`ca_require_auth` → cookie + live `customer_sessions` row); the browser never supplies them |
+| clientId binding | the sibling refuses any URL `clientId` outside {`sub`} ∪ `accounts`; the report is built from the **token's** identity, the URL value is only a hint that must agree |
+| audience | `aud = data-report` required by the sibling; our own verifier requires `aud = customer-portal` and a customer `kid`, so neither token opens the other side (pinned by `tests/test_customer_session.php`) |
+| expiry | 120 s from mint, checked by the sibling with ≤5 s leeway; a token minted for one click cannot be kept |
+| signature | HS256 under a 256-bit random key that exists only in `_dishnet_shared/` (0640, the plugins' shared PHP user); `alg` header never trusted; `kid` unknown or absent → refused, which also closes the constant-key path permanently |
+| no arbitrary clientId | see binding; and an attacker cannot mint: the key is never in source, never in a URL, never derived from settings |
+
+**7. Two plugins only?** Yes. No new service, no new plugin, no runtime call between the two at page
+load. The shared directory already exists and is already used by both codebases
+(`internal_auth.json`: ours `lib/InternalAuth.php`, theirs `public.php:1002–1016`). uCRM is used by the
+sibling exactly as today, with its own app key.
+
+**8. Existing customer sessions.** Unaffected. Sessions are the Phase 2 cookie under the customer key
+set; the hand-off is a separate short token minted per click. No re-login; no stored hand-off tokens exist.
+
+**9. Migration and rollback.** On Uganda there is no working state to preserve (the link 404s today).
+Order, minutes apart in one window: (1) the sibling change, accepting the new key **only**; (2) the hybrid
+change, which writes `hybrid.json` at boot and the key on first mint; (3) the deploy command's proofs
+(§G 6–8). A token minted before (1) and used after is refused (no `kid`) — correct. Rollback: the previous
+sibling files and the previous hybrid build; the two shared files are inert. **Installation A:** do not
+deploy this sibling build there until its own hybrid mints the new token; the legacy acceptance is
+removed, not kept as a fallback, so the two must move together there — a deployment constraint.
+
+**10. Tests required** (hybrid side in the suite against a fake sibling implementing §5; sibling side
+proven on the server by the deploy command with synthetic values, never printing a token):
+
+| proves | test |
+|---|---|
+| A cannot read B's report | A's valid token + `clientId=B` → 404; `clientId=A` → 200 with A's kits only; `clientId=` A's second account → 200 |
+| expired fails | `exp` in the past → refused |
+| wrong audience fails | a genuine customer-portal session token (aud `customer-portal`) → refused; and the hand-off token → 401 on our API (existing pin) |
+| modified token fails | one byte changed in the payload, or in the signature → refused; `alg=none`/`HS512` → refused |
+| valid token works | minted by the live hybrid for the operator's own test account → 200 |
+| legacy is dead | no-`kid` token → refused; a token forged under the constant key → refused |
+| nothing leaks | the token string, and the customer's phone and name, appear in **no** container-log line, no sibling `data/` log, no hybrid audit row (count 0); the token carries no `phone`/`name` claim |
+| the dependency is gone | `dishnet-hybrid-telecom`, `kyc_config`, `webhook_secret`, `crm_auth_token` occur **zero** times in the patched sibling; `hybrid.json` is read at the three sites |
+| controls | sibling with the `kid` check removed → the no-`kid` test fails; hybrid minting with `legacySecret()` → the legacy test fails |
+
+**Not in this design, deliberately:** §H.2 (MODE 2 "View as Client") and §H.3 (`dr_wifi_*` reachability)
+are the sibling's own pre-existing access control; they are recorded as separate sibling findings and are
+**not** touched here, because the Starlink block bridge depends on those paths.
+
 ---
 
 *Nothing here is authorised to build. Sequence: the operator's decision on §D (the hand-off fix) →

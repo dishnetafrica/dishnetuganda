@@ -144,6 +144,17 @@ The full analysis is **docs/36**.
 §7 says what to type. The lead mode printed a `sed` error (a look-ahead in a POSIX expression, on an
 unused variable) — fixed.
 
+### 1c. Which build is installed — 26 Sep 05:53 UTC (`--sibling-id`)
+
+**The South Sudan build.** `dishnet-data-report` 2.8.80, installed 2 July 2026, unchanged since the
+reads; no manifest settings; `dishnet-hybrid-telecom` at four lines (the JWT verifier's store path, its
+comment, the report page's "Back to Portal" link at `client.php:410`, the auto-block cron's admin-alert URL
+at `cron_auto_block.php:366`), `dishnet-hybrid-sudan` **nowhere**; the page heading itself reads *"JUBA,
+SOUTH SUDAN"*. On Uganda that means: the hand-off never worked, the Back-to-Portal link is dead, and the
+auto-block cron's admin alerts go to a path that does not exist. Full record and the design note that
+follows from it: **docs/36 §I and §J**. The data-report redesign is **separate remediation**, outside the
+Phase 2 gate, awaiting the operator's approval of docs/36 §J.
+
 ## 2. Production e-mail sign-in — PASSED (26 Sep 05:40 UTC)
 
 `--email` on `bhavin.madlani@outlook.com` (an address on a customer record): **16 ok, 0 failed.**
@@ -192,31 +203,32 @@ the DishNet portal sign-in and 0 to uCRM's login; last website commit `466e4fc`.
   session (consistent with SAFETY.md; load-bearing for the Starlink block feature). Neither is fixed by,
   nor blocks, the hand-off remediation.
 
-## 6. Final Phase 2 status
+## 6. Final Phase 2 status — EXCLUDING the data-report redesign
 
-**Updated 26 Sep 05:50 UTC.** Authentication: green (5.18.38–5.18.40 live; phone L1–L8 passed 02:59;
-**e-mail 16/0 passed 05:40**). Website: green (LIVE 05:02 UTC). Test suite: green (204 suites /
-8,051 checks / 0 failed, two runs). Data-report hand-off: the named exploit is **not possible on this
-host** — confirmed from the sibling's source and the absence of the directory its verifier hard-codes
-(§1b, docs/36 §H.1); the feature is dead here; the design fix (docs/36 §D) awaits decision. The extended
-read also surfaced two **pre-existing** access-control facts in the sibling (a "view as client"
-`?clientId=` override trusted from any session holder, and `dr_wifi_*` actions reachable without a
-session) — the sibling's own, unrelated to Phase 2, recorded in docs/36 §H for the operator to weigh
-separately. Lead-refusal path pending a real lead's number (the guard is proven). 17 of 19 items
-complete, 2 partial, 0 code defects.
-## 7. Exact next action required from the operator
+| Area | Status |
+|---|---|
+| Test suite | **green** — 204 suites / 8,051 checks / 0 failed, two complete runs |
+| Uganda phone OTP sign-in | **production-tested** 26 Sep 02:59 UTC (L1–L8) |
+| Uganda e-mail OTP sign-in | **production-tested** 26 Sep 05:40 UTC (16/16) |
+| JWT key set, cookie session, logout revocation, no token in URL or body | **production-tested** (both runs) |
+| Website customer-login repoint | **live** (05:02 UTC) |
+| Sudan regression | **green** (golden tests, empty config byte-identical) |
+| Phase 2 code defects | **0** |
+| Lead refusal (the uniform answer to a lead, nothing sent) | **PENDING — the one remaining production test**; the guard is proven (it refused a customer's number and sent nothing); needs a real lead's number |
+| Data-report hand-off | **not exploitable here; non-functional here** (the installed build is the South Sudan build) — **separate remediation**, docs/36 §J, awaiting approval; not a Phase 2 item |
+| Sibling-plugin findings (View as Client, `dr_wifi_*`) | **separate security work** on `dishnet-data-report`, outside Phase 2; not touched |
+| Phase 4 content readers | deferred by instruction, not Phase 2 |
 
-0. **Identify the installed data-report build first** (the operator reports a build installed *for
-   Uganda*; the 26 Sep reads found a `public.php` whose verifier names the South Sudan hybrid). One
-   read-only command, short output, nothing changed:
-   ```
-   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-verify
-   bash scripts/phase2-verify.sh --sibling-id 2>&1 | tee /root/dnb-verify/verify-sibling-id-$(date -u +%Y%m%dT%H%M%SZ).log
-   ```
-   It prints the build's name and version, the hashes and modification times of its main files (and
-   whether `public.php` still matches the 26 Sep reads), every line that names another DishNet plugin's
-   directory, which installation its code talks about, and which hybrid directories exist on the host.
-1. **The extended source read** — read-only, one command; the log file is written to
+**Phase 2 authentication is complete.** The gate closes on the lead-refusal run; the data-report work and
+the sibling findings proceed on their own tracks.
+
+
+**Record of the earlier status lines (superseded by the table above):** authentication green (phone
+02:59, e-mail 05:40), website live 05:02, suite green twice, data-report hand-off not exploitable here
+and non-functional here, two pre-existing sibling findings recorded separately, lead refusal pending.
+
+0. ~~Identify the installed data-report build~~ — **done 05:53 UTC** (§1c): the South Sudan build.
+1. ~~The extended source read~~ — **done 05:40 UTC** (§1b, docs/36 §H). The remaining items: — read-only, one command; the log file is written to
    `/root/dnb-verify/` (the path is the `tee` target; pasting the terminal is acceptable for this mode,
    its output is masked):
    ```
