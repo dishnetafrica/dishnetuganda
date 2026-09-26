@@ -104,6 +104,46 @@ pasted with the placeholders literally; bash reads `<` and `>` as redirections a
 `syntax error near unexpected token '2'`. Nothing was sent to anyone. Re-issued in §7 with the
 substitution spelled out.
 
+### 1b. The source reading — 26 Sep 05:28 UTC (`verify-data-report-20260926T052852Z.log`, masked)
+
+**The forgery is NOT exploitable on this host — confirmed from the sibling's code.** Its verifier
+`drVerifyHybridJwt()` (`public.php:792–855`, file sha256 `5d10b30ae54a…`) opens
+**`<plugins dir>/dishnet-hybrid-telecom/data/plugin.sqlite3`** — the South Sudan plugin's directory
+and the pre-upgrade data location — and returns `null` when that file is absent (798–799); on this host
+the hybrid is `dishnet-hybrid-sudan` with its store in `.dishnet-hybrid-sudan-data` (K). And even at a
+store it can open, it **refuses to derive a key when either input is empty** (830–832: *"Guard: if
+either is empty, don't attempt — would collapse to attacker-predictable constant secret"*). The
+"JWT is valid" block (642–713) is live code, executed only when the verifier returns claims — which on
+this install it never does. So a forged token is refused, **and so is our legitimate hand-off token**:
+the portal's usage-report link answers "Report not found" for every Uganda customer (its own comment
+614–615: *"If neither works, only THEN do we drNotFound()"*).
+
+What the verifier does check: three segments; HMAC-SHA256 always (the header's `alg` is never trusted);
+`hash_equals`; `exp` with 5 s leeway; the caller requires `sub` and `kind = app` (642) and binds the
+URL's `clientId` to `sub` (647–652 — the first run's mechanical D5 "none" was a heuristic miss). **No
+`aud`, `iss`, `kid` or `jti`.** The token is read once (622). `dr_raw_services` is inside
+`drFetchClientServices()` behind `clientId == sub` on the token path (245–246) and in the admin
+whitelist (1101). The sibling already reads a shared secret from `_dishnet_shared/internal_auth.json`
+with `hash_equals` (1002–1010), so a hand-off key file under `_dishnet_shared/` is a pattern its own
+code already has. Installation A (South Sudan) is described by the sibling's comment (771–777) as
+holding a 32-character `webhook_secret` and a 64-character `crm_auth_token`: entropy there, no forgery;
+a replayed legacy `kind = app` JWT within its `exp` is accepted there. Not audited.
+
+**Reclassification, for the operator to confirm:** the exploit as named — a forged token opening another
+customer's report — does not exist on Uganda. What stands: the usage-report feature is **non-functional
+here** (404 for everyone), the cross-plugin design keys trust on our live credentials and another
+installation's directory, and two of the sibling's *other* paths still need reading (docs/36 §H):
+whether a customer with a uCRM client-zone session can use the MODE 2 `?clientId=` override, and whether
+an anonymous `?action=dr_wifi_…` request is refused before `dr_wifi_change.php` (which contains no gate
+word at all) runs. The command gained those regions (D-VI-b/c/d, the dispatch of `dr_wifi_change.php`,
+and D-XII-b: which hybrid directories exist on this host); rehearsed **41/41 in two consecutive runs**.
+The full analysis is **docs/36**.
+
+**The e-mail and lead runs (05:29 UTC) used the example values literally** (`you@yourdomain.com`,
+`+2567XXXXXXXX`) and stopped correctly at E1/L1 — *matches no record, nothing was sent*. Still pending;
+§7 says what to type. The lead mode printed a `sed` error (a look-ahead in a POSIX expression, on an
+unused variable) — fixed.
+
 ## 2. Production e-mail sign-in — PENDING
 
 Code path proved end to end in a sandbox with a real SMTP dialogue (the checkpoint, §8). The
@@ -134,42 +174,45 @@ the DishNet portal sign-in and 0 to uCRM's login; last website commit `466e4fc`.
 
 ## 5. Remaining security issues
 
-- The data-report hand-off token (§1, §1a) — **SECURITY BLOCKER** (the operator's classification): the
-  key is a public constant on this install (measured); whether a forgery opens another customer's report
-  awaits the source reading; the analysis is docs/36. No change until the remediation is approved.
+- The data-report hand-off token (§1, §1a, §1b) — classified a **security blocker**; the source reading
+  shows the forgery is **not exploitable on this host** (the sibling refuses to verify under a constant
+  key and looks for another installation's store). Open: the feature is dead here; the design (docs/36
+  §D) awaits approval; two other sibling paths await the extended read (docs/36 §H). No change until
+  approved.
 - Recorded, not Phase 2: the staff app's service worker is scoped to the plugin directory, so on a
   staff member's own browser it also fronts the customer pages. Staff devices only.
 - Nothing else: the checkpoint's fourteen other security checks are green and live.
 
 ## 6. Final Phase 2 status
 
-**BLOCKED on §1a (updated 26 Sep).** Authentication: green (5.18.38–5.18.40 live, L1–L8 passed).
-Website: green (LIVE 05:02 UTC). Test suite: green (204 suites / 8,051 checks / 0 failed, two complete
-runs). Data-report trust boundary: **security blocker** — the hand-off key is a public constant here;
-the sibling's handling of it is read next. Production e-mail sign-in and lead refusal: **pending — the
-commands did not run** (§1a). 16 of 19 items complete, 3 partial, 0 code defects. Verification command
-rehearsed 15/15 across seven scenarios before the first run; the rewritten data-report mode 35/35 in
-two consecutive runs.
+**Updated 26 Sep 05:45 UTC.** Authentication: green (5.18.38–5.18.40 live, L1–L8 passed). Website:
+green (LIVE 05:02 UTC). Test suite: green (204 suites / 8,051 checks / 0 failed, two complete runs).
+Data-report trust boundary: the named exploit is **not possible on this host** (§1b, from source); the
+feature is non-functional here; the design fix (docs/36 §D) awaits the operator's decision; two other
+sibling paths await the extended read (docs/36 §H). Production e-mail sign-in and lead refusal:
+**pending — both runs used the example values** (§1b). 16 of 19 items complete, 3 partial, 0 code
+defects. Data-report mode rehearsed 41/41 in two consecutive runs.
 
 ## 7. Exact next action required from the operator
 
-1. **The source reading** — read-only, one command; send back **the log file**, not a copy of the
-   terminal (it prints code, masked: no key, code, token, e-mail or long number can appear):
+1. **The extended source read** — read-only, one command; the log file is written to
+   `/root/dnb-verify/` (the path is the `tee` target; pasting the terminal is acceptable for this mode,
+   its output is masked):
    ```
    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-verify
    bash scripts/phase2-verify.sh --data-report 2>&1 | tee /root/dnb-verify/verify-data-report-$(date -u +%Y%m%dT%H%M%SZ).log
    ```
-2. **The two production sign-in tests**, each with a REAL value typed in place of the example — no
-   angle brackets anywhere on the line:
+2. **The two production sign-in tests, with YOUR values** — not the examples. Replace the whole word
+   after `--email` with an e-mail address that is on one of your customer records in uCRM (the record you
+   used for the 26 Sep 02:59 WhatsApp sign-in test will do, if it has an e-mail), and the whole word after
+   `--lead` with the phone number of a record that is a **lead** in uCRM (Clients → filter Leads), in
+   international form:
    ```
-   bash scripts/phase2-verify.sh --email you@yourdomain.com 2>&1 | tee /root/dnb-verify/verify-email-$(date -u +%Y%m%dT%H%M%SZ).log
-   bash scripts/phase2-verify.sh --lead +2567XXXXXXXX      2>&1 | tee /root/dnb-verify/verify-lead-$(date -u +%Y%m%dT%H%M%SZ).log
+   bash scripts/phase2-verify.sh --email <your address here>   2>&1 | tee /root/dnb-verify/verify-email-$(date -u +%Y%m%dT%H%M%SZ).log
+   bash scripts/phase2-verify.sh --lead  <the lead's +256… number>  2>&1 | tee /root/dnb-verify/verify-lead-$(date -u +%Y%m%dT%H%M%SZ).log
    ```
-   `you@yourdomain.com` is an e-mail address on a customer record you control: one e-mail goes to it,
-   you type the code when asked, it is never printed. `+2567XXXXXXXX` is the phone number of a **lead**:
-   the command checks that first and refuses to send if it is not one. (The pasted `<address>` and
-   `<+2567…>` caused the `syntax error near unexpected token '2'`: bash treats `<` and `>` as
-   redirections.)
-3. **The decision on the remediation** (docs/36 §D) after the reading. **Nothing is deployed or
+   Type the value itself, with no `<` `>` around it. One e-mail goes to the address; you type the code
+   when asked; it is never printed. The lead command refuses to send unless the record is a lead.
+3. **The decision on the remediation** (docs/36 §D) after the extended read. **Nothing is deployed or
    changed until it is approved.**
 4. Website: done (§4).
