@@ -1371,3 +1371,10 @@ lines, one lumped "Tax" line, and the explanation back in an HTML comment. Suite
 **Deploy.** `scripts/deploy-5.18.43.sh`, pinned to the plugin commit `04155df`; stage V re-checks everything
 5.18.42 checked. The label itself is seen only by a signed-in customer with a discounted invoice, so the test
 suite is its proof. **Not deployed by this session.**
+
+**Status: LIVE on the Uganda install, 26 September 2026, deployed 20:27:30 UTC by the operator.** The run found
+5.18.42 (`d857ec8`) live and took a backup (`/root/dnb-5.18.43/backup-20260926T202714Z`: the data directory
+95 MB, the plugin's `data/` 120 KB, UISP health recorded). It then deployed `04155df`: **25 ok, 0 failed,
+0 notes.** The before-evidence already read the A2 state: on the Terms page `South Sudan` ×0, `Juba` ×0 and the
+Uganda identity ×1, and `app_legal_version` 1.1. Every stage-V check held afterwards, so nobody was asked to
+accept anything again. The log's last line now reads *"5.18.43: PASSED"*, the version the script deployed.
