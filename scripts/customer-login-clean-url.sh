@@ -18,7 +18,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="$REPO/scripts/traefik/dnb-customer-login.yml.template"
-CONF_DIR="/etc/easypanel/traefik/config"
+CONF_DIR="${CONF_DIR:-/etc/easypanel/traefik/config}"   # overridable only for the rehearsal
 TARGET="$CONF_DIR/dnb-customer-login.yml"
 HOST="crm.dishnetuganda.com"
 CANON="https://$HOST/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login"
@@ -44,7 +44,7 @@ if [ -n "$UISP_PRIO" ]; then PRIO_LINE="priority: $((UISP_PRIO + 10))"; echo "  
 else PRIO_LINE=""; echo "  uisp.yaml sets no priority → Traefik ranks by rule length, and Host && Path outranks Host alone"; fi
 echo "  certResolver    $RESOLVER"
 
-echo "  before:  /customer-login → $(code "https://$HOST/customer-login")   canonical → $(code "$CANON")   uCRM login → $(code "https://$HOST/crm/login")"
+echo "  before:  https /customer-login → $(code "https://$HOST/customer-login")   http → $(code "http://$HOST/customer-login")   canonical → $(code "$CANON")   uCRM login → $(code "https://$HOST/crm/login")"
 [ -f "$TARGET" ] && note "$TARGET exists — it will be rewritten (a re-run)"
 sed -e "s|__RESOLVER__|$RESOLVER|" -e "s|__PRIORITY_LINE__|$PRIO_LINE|" "$TEMPLATE" | sed '/^\s*$/d' > "$TARGET.tmp" && mv "$TARGET.tmp" "$TARGET" || stop "could not write $TARGET"
 chmod 644 "$TARGET"; ok "wrote $TARGET"
@@ -52,6 +52,7 @@ chmod 644 "$TARGET"; ok "wrote $TARGET"
 for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; c="$(code "https://$HOST/customer-login")"; [ "$c" = "302" ] && break; done
 [ "$c" = "302" ] && ok "GET /customer-login → 302 (after ${i}×2 s)" || bad "GET /customer-login → $c, not 302 — Traefik did not take the route (file kept; rollback: rm $TARGET)"
 L="$(loc "https://$HOST/customer-login")"; [ "$L" = "$CANON" ] && ok "Location is exactly the canonical portal sign-in" || bad "Location is '$L'"
+c2="$(code "http://$HOST/customer-login")"; L2="$(loc "http://$HOST/customer-login")"; [ "$c2" = "302" ] && [ "$L2" = "$CANON" ] && ok "the http:// form also answers 302 to the canonical sign-in" || note "http:// form → $c2 (Location '$L2') — the https address is the one that matters"
 [ "$(code "$CANON")" = "200" ] && ok "the canonical sign-in page still answers 200" || bad "canonical page → $(code "$CANON")"
 [ "$(code "https://$HOST/crm/login")" = "200" ] && ok "uCRM's own login still answers 200 (unchanged)" || note "uCRM login → $(code "https://$HOST/crm/login")"
 [ "$(docker inspect "$TRAEFIK_ID" --format '{{.State.StartedAt}}')" = "$STARTED_BEFORE" ] && ok "Traefik was not restarted" || bad "Traefik restarted"
