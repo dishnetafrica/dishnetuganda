@@ -430,13 +430,14 @@ switch ($act) {
         $out('WORKING', "plan '" . ($d['name'] ?? $d['plan_name'] ?? '') . "' price " . ($d['price'] ?? '—') . " " . ($d['currency'] ?? '') . " status " . ($d['status'] ?? '—'));
     case 'app_invoices':
         if ($code !== 200 || !is_array($d)) $out('BROKEN', "$code $msg"); $list = $d['invoices'] ?? (isset($d[0]) ? $d : []); $byS = []; $first = 0; foreach ((array)$list as $i) { $byS[(string)($i['status'] ?? $i['state'] ?? '?')] = ($byS[(string)($i['status'] ?? $i['state'] ?? '?')] ?? 0) + 1; if (!$first) $first = (int)($i['ucrm_id'] ?? preg_replace('/\D/', '', (string)($i['id'] ?? '0'))); }
-        $out('WORKING', count((array)$list) . " invoice(s); by status " . json_encode($byS) . " · unpaid_total " . ($d['unpaid_total'] ?? '—'), ['first_inv' => $first]);
-    case 'app_invoice': if ($code !== 200) $out($code === 404 ? 'PARTIAL' : 'BROKEN', "$code $msg"); $out('WORKING', "invoice detail: number " . (isset($d['number']) ? 'set' : '—') . " · total " . ($d['total'] ?? '—') . " · status " . ($d['status'] ?? '—') . " · items " . count((array)($d['items'] ?? [])));
+        $due = 0.0; foreach ((array)$list as $i) $due += (float)($i['amount_due'] ?? 0);
+        $out('WORKING', count((array)$list) . " invoice(s); by status " . json_encode($byS) . " · amount due across them " . $due, ['first_inv' => $first]);
+    case 'app_invoice': if ($code !== 200) $out($code === 404 ? 'PARTIAL' : 'BROKEN', "$code $msg"); $out('WORKING', "invoice detail: number " . (!empty($d['invoice_number']) ? 'set' : '—') . " · total " . ($d['amount'] ?? '—') . " · due " . ($d['amount_due'] ?? '—') . " · status " . ($d['status'] ?? '—') . " · items " . count((array)($d['items'] ?? [])) . " · subtotal " . ($d['subtotal'] ?? '—') . " · discount " . ($d['discount'] ?? '—') . " · tax lines " . count((array)($d['taxes'] ?? [])));
     case 'app_invoice_receipts_list': if ($code !== 200) $out($code >= 500 ? 'BROKEN' : 'PARTIAL', "$code $msg"); $out('WORKING', count((array)($d['receipts'] ?? $d['payments'] ?? $d)) . " receipt row(s) (uCRM live)");
     case 'app_payments': if ($code !== 200 || !is_array($d)) $out('BROKEN', "$code $msg"); $out('WORKING', count((array)($d['payments'] ?? [])) . " payment(s) · billing keys " . implode(',', array_keys((array)($d['billing'] ?? []))));
     case 'app_equipment': if ($code !== 200 || !is_array($d)) $out('BROKEN', "$code $msg"); $n = count((array)($d['equipment'] ?? [])); $out($n ? 'WORKING' : 'PARTIAL', $n ? "$n item(s) from equipment_assignments/stock_units" : "0 items — no kit is assigned to this customer in the hybrid's equipment register");
     case 'app_usage': if ($code !== 200 || !is_array($d)) $out('BROKEN', "$code $msg"); $out(!empty($d['unavailable']) ? 'NOT IMPLEMENTED' : 'WORKING', !empty($d['unavailable']) ? "answers unavailable:true by design (api_customer_app.php: 'TODO: query dishnet-data-report … For now return unavailable')" : "used " . ($d['used_gb'] ?? '—') . " GB");
-    case 'app_legal_version': if ($code !== 200) $out('BROKEN', "$code $msg"); $out('WORKING', "tos " . ($d['tos_version'] ?? '—') . " · privacy " . ($d['privacy_version'] ?? '—') . " · accepted " . var_export($d['accepted'] ?? $d['consented'] ?? null, true));
+    case 'app_legal_version': if ($code !== 200) $out('BROKEN', "$code $msg"); $out('WORKING', "the tenant's current versions: tos " . ($d['tos_version'] ?? '—') . " · privacy " . ($d['privacy_version'] ?? '—') . " · dated " . ($d['dated'] ?? '—') . " (whether THIS customer accepted them is L4)");
     case 'app_wifi_get': if ($code === 200 && is_array($d) && (string)($d['ssid'] ?? '') === '') $out('PARTIAL', "200 but no router resolved for this customer (empty ssid; a _diag payload explains)"); if ($code === 400) $out('N/A', "400 " . $msg . " — needs a router"); if ($code !== 200) $out('BROKEN', "$code $msg"); $out('WORKING', "200 · ssid set");
     case 'app_site_diagnostics': if ($code === 400) $out('N/A', "400 " . $msg . " — needs a kit/router; this customer has none bound"); if ($code === 503) $out('BROKEN', "503 " . $msg); if ($code === 404) $out('PARTIAL', "404 " . $msg); if ($code !== 200) $out('BROKEN', "$code $msg"); $out('WORKING', "200 · keys " . implode(',', array_slice(array_keys((array)$d), 0, 8)));
     case 'app_data_report_token': if ($code !== 200 || empty($d['token'])) $out('BROKEN', "$code $msg"); $out('WORKING', "hand-off token minted (600 s; not printed)", ['token' => (string)$d['token']]);
@@ -465,6 +466,12 @@ SC="$(printf '%s' "$HTTP_HEADERS" | grep -i '^set-cookie: dn_customer_session=' 
 CVAL="$(printf '%s' "$SC" | sed -E 's/^[Ss]et-[Cc]ookie: dn_customer_session=([^;]*).*/\1/')"
 [ -n "$CVAL" ] && ok "L3 verified; the server set the session cookie ($(printf '%s' "$SC" | grep -qi httponly && printf HttpOnly) $(printf '%s' "$SC" | grep -qi 'samesite=lax' && printf SameSite=Lax) $(printf '%s' "$SC" | grep -qi secure && printf Secure))" || stop "L3 no session cookie in the answer"
 printf '%s' "$HTTP_BODY" | grep -q '"token":"' && bad "L3 the JSON body carries a token" || ok "L3 the JSON body carries no token"
+# L4 — has this customer accepted the tenant's CURRENT Terms and Privacy? The verify answer carries the server's own verdict
+# (needs_consent) and the versions it compared against. The audit never accepts on anyone's behalf.
+L_TOS="$(jfield "$HTTP_BODY" tos_version)"; L_PRIV="$(jfield "$HTTP_BODY" privacy_version)"
+if printf '%s' "$HTTP_BODY" | grep -q '"needs_consent":false'; then ok "L4 consent: this customer has already accepted the tenant's current Terms v${L_TOS:-?} and Privacy v${L_PRIV:-?}, so the portal opens without asking"
+elif printf '%s' "$HTTP_BODY" | grep -q '"needs_consent":true'; then note "L4 consent: the tenant's current Terms v${L_TOS:-?} / Privacy v${L_PRIV:-?} are NOT yet accepted by this customer; the portal asks once (this audit does not accept on anyone's behalf)"
+else note "L4 consent: the verify answer carries no needs_consent field"; fi
 C="Cookie: dn_customer_session=$CVAL"
 WALK_KV=""
 walk() {  # $1 screen  $2 action[&params]  $3 data source (from the code)
@@ -527,7 +534,7 @@ fi
 walk "Payments"    "app_payments"              "CustomerAccountService: ucrm_invoice_payments_cache after a live refresh"
 walk "Equipment"   "app_equipment"             "CustomerAccountService: stock_units + equipment_assignments (the hybrid's OWN kit register, not Finance's)"
 walk "Usage"       "app_usage"                 "hard-coded unavailable in api_customer_app.php (the portal's usage view instead joins KitUsage: our own collection, else Data Report sl_usage.json, on equipment_assignments)"
-walk "Legal"       "app_legal_version"         "customer_consents (terms/privacy versions)"
+walk "Legal"       "app_legal_version"         "the tenant profile's legal.version (since 5.18.42); acceptances are rows of app_tos_consent, written only by app_record_consent"
 if [ -n "$KIT" ]; then walk "Starlink" "app_site_diagnostics&kit=$(printf '%s' "$KIT" | sed 's/[^A-Za-z0-9-]//g')" "Finance sl_kits.json (kit) + Data Report wifi_router_map + sl_svc_cache · dr_wifi_* over HTTP"; else walk "Starlink" "app_site_diagnostics" "Finance sl_kits.json + Data Report files — needs a kit bound to the customer"; fi
 walk "WiFi"        "app_wifi_get"              "Data Report wifi_router_map.json + app_wifi_cache · dr_wifi_get_config over HTTP — needs a router"
 walk "Data Report" "app_data_report_token"     "the hand-off token (docs/36): minted here, verified by dishnet-data-report"

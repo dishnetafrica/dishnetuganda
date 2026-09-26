@@ -1378,3 +1378,28 @@ suite is its proof. **Not deployed by this session.**
 0 notes.** The before-evidence already read the A2 state: on the Terms page `South Sudan` ×0, `Juba` ×0 and the
 Uganda identity ×1, and `app_legal_version` 1.1. Every stage-V check held afterwards, so nobody was asked to
 accept anything again. The log's last line now reads *"5.18.43: PASSED"*, the version the script deployed.
+
+**The signed-in walk on 5.18.43 (operator, 20:33 UTC, `journey-audit.sh --login-phone`): 33 ok, 0 failed, 6
+notes.** L5 (no South Sudan branding), L9 (the Support tab) and **L10 (the Terms page)** all pass; every portal
+page rendered 200 with the session; logout revoked the cookie and the PDF link; the code and the cookie are
+absent from the container log. Notes, all known: L11 the invoice PDF still carries `crm.dishnetuganda.com:8443`
+×2 inside the document (C-2); Usage not implemented (B-4); no kit bound to this customer, so Equipment,
+Starlink and WiFi are partial (B-1/B-5); the Data Report hand-off link answers 404 (docs/36 §0).
+
+**Two audit-tool defects the walk exposed, fixed in `scripts/journey-audit.sh`, no plugin change:**
+- **The Legal line printed "accepted NULL"** from a field `app_legal_version` never returns. It could never
+  have printed anything else. It now prints the tenant's current versions and date. A new check, **L4**,
+  reports the server's own verdict from the verify answer (`needs_consent`): *"this customer has already
+  accepted the tenant's current Terms v1.1 and Privacy v1.1"*, or a note that the portal will ask. The
+  audit still never accepts on anyone's behalf. On this walk every page rendered, and the portal renders
+  only after a v1.1 acceptance, so this customer accepted v1.1 on the web after 19:56 UTC.
+- **The invoice lines printed "—"** for fields the API returns under other names. They now read
+  `invoice_number`, `amount`, `amount_due`, `subtotal`, `discount` and the tax lines. The list line sums
+  `amount_due`, because the list never had an `unpaid_total` key. Both were checked against the API's
+  real answer shapes here.
+
+**C-2 approved by the operator** (*"i will go with your recommadation"*). It is made by hand in uCRM's
+settings. `scripts/dnb-c2-check.sh` is a new READ-ONLY guard that runs before and after the change, and
+counts the routers on `:8443` so a mistake shows within minutes (docs/38 §7.2 item 3; rehearsal
+`scripts/harness/c2-check/rehearse.sh`, 29 checks). **The kit question was answered *"yes correct"*, read as
+"both"**, to be confirmed by the read-only `--chain 7/47/69` runs before any B code (docs/38 §7.4).

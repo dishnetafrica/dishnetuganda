@@ -441,7 +441,7 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A2** legal wording | **BUILT — 5.18.42, LIVE since 26 Sep 19:56 UTC (verified 25/25: South Sudan ×0, Juba ×0 on the Terms page, `app_legal_version` 1.1).** The operator approved the §7.3 proposal (*"i will go with your recommendation"*, 26 Sep). Points 1, 2, 4, 6, 8, 9, 10 are the proposal's words; points **3, 5, 7** took the conservative form and are **flagged in §7.3 (as built)** for a later edit. Uganda 1.1 / South Sudan 1.0 — every Uganda customer accepts once on the next sign-in; South Sudan renders byte for byte (golden) and asks nobody | `tests/test_portal_tenant.php` (107), `test_consent_identity.php` (34); deploy with `scripts/deploy-5.18.42.sh` |
 | **INVOICE TAXES** (new, 26 Sep: *"separate the UCC tax and other details so customer can understand properly"*) | **The plugin half LIVE in 5.18.42; the uCRM half DECIDED AGAINST for now: *"ok keep price as it is"* / *"its ohk the way it is"* (§7.5). A label fix, 5.18.43, LIVE since 26 Sep 20:27 UTC (25 ok / 0 failed).** The invoice screen and the app API print the totals block as uCRM states it: before tax, **each tax or levy on its own line under uCRM's own name**, any discount, the total. Measured cause: the plugin read `totalTaxes`, a field a uCRM invoice does not have, so **no tax line ever rendered**. **The other half is an operator act in uCRM — §7.5** | `lib/InvoiceTotals.php`; `tools/tax_probe.php` section 5 shows the lines the latest invoices carry (read-only) |
 | **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC, and HEALTHY** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. The two Traefik log lines the operator read are **the attempt-1 file being re-parsed at 15:21:07Z**, the moment the re-run staged its temporary file inside the watched directory — one step before the old file was replaced. The attempt-2 file parses and its router exists (the 302). Script fixed a third time: staging outside the watched directory (§7.1) | **nothing** — done |
-| **C-2** uCRM's own address | **CHECKLIST — §7.2**; an operator act in uCRM's settings | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7) |
+| **C-2** uCRM's own address | **APPROVED 26 Sep** (*"i will go with your recommadation"*); an operator act in uCRM's settings, **guarded** by `scripts/dnb-c2-check.sh --before` / `--after` (§7.2 item 3) | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7); the walk at 20:33 UTC still found `crm.dishnetuganda.com:8443` ×2 inside the PDF |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
 | **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
 | deployment / configuration / customer data | **5.18.41, 5.18.42 and 5.18.43 deployed by the operator; one Traefik file placed by C-1 attempt 1 and ignored by Traefik, rewritten by attempt 2 and taken; no configuration value, customer record or other service changed** | — |
@@ -538,12 +538,28 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    ```
    docker logs "$(docker ps --filter name=traefik -q | head -1)" --since 2026-09-26T15:22:00Z 2>&1 | grep -i dnb-crm-root | cut -c1-300
    ```
-3. **C-2 checklist** (uCRM → Settings → System → Application), by hand: (a) the fields *Server domain name*
-   and *Server port* are editable, not greyed out as managed by UISP; (b) UISP → Settings → Devices shows the
-   device connection hostname/port as a **separate** setting that stays `:8443`; (c) note the current values;
-   then set `crm.dishnetuganda.com` / `443`; (d) afterwards download **one already-issued invoice** from the
-   portal and run `journey-audit.sh --login-phone`: the in-PDF scan (L11) shows whether uCRM re-rendered the
-   document without `:8443`. Rollback: the two fields back to their noted values.
+3. **C-2 — approved 26 Sep, guarded.** The change is made by hand in uCRM's settings. A READ-ONLY guard,
+   `scripts/dnb-c2-check.sh`, runs before and after it. It measures the address uCRM gives plugins
+   (`ucrm.json`), the link hosts inside the latest invoice's PDF, **the routers connected on `:8443`** (the one
+   thing that must not change: devices keep `:8443`, docs/05, docs/06), UISP's health, C-1 and the portal.
+   `--before` prints the manual steps. `--after` watches the routers for up to six minutes, and if they stay
+   below 80 % of the before-count it says to put the two noted values back. Rehearsed against stubs
+   (`scripts/harness/c2-check/rehearse.sh`, 29 checks, with a control proving the router count discriminates).
+
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-c2 \
+     && bash scripts/dnb-c2-check.sh --before 2>&1 | tee /root/dnb-c2/before-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   Then, by hand, as `--before` prints: (a) in uCRM's settings screen, *Server domain name* and *Server port*
+   must be editable, and **if they are greyed out, managed by UISP or absent, stop** and send the log; (b) note
+   both values, which are the rollback; (c) copy UISP's device connection string ("UISP key"), which carries
+   `:8443` and must stay identical; (d) set `crm.dishnetuganda.com` / `443`, save; (e) within two minutes:
+   ```
+   bash scripts/dnb-c2-check.sh --after 2>&1 | tee /root/dnb-c2/after-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   (f) confirm the device connection string is unchanged. A PDF generated before the change may keep the old
+   address; the next invoice issued shows whether new PDFs carry the new one. **Rollback:** the two fields
+   back to their noted values.
 
 ### 7.3 A2 — the wording: proposed 26 Sep, APPROVED the same day ("go with your recommendation"), BUILT as 5.18.42
 
@@ -616,6 +632,20 @@ attribute, or both?** Two other customers' kits are already received and bound i
 (docs/39 §4), so that workflow exists; whether those two are Finance's #7 / #47 / #69 is what a read-only
 `--chain 7`, `--chain 47`, `--chain 69` would show. B-5 (confirm each Finance kit's owner) and B-6
 (re-authenticate Data Report's five Starlink accounts) remain operator acts.
+
+**Answered 26 Sep, 20:35 UTC: *"yes correct"*. Read as BOTH** (the question's last option): a deployment is
+typed in Finance's "Deploy to customer" **and** on the uCRM service. That is the case O3 was chosen for: the
+uCRM attribute is the entry the hybrid binds from, and Finance keeps its finance fields. **The reading is
+confirmed by data, not assumed,** with the read-only runs this section already names, one command:
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-verify \
+  && for c in 7 47 69; do bash scripts/journey-audit.sh --chain "$c"; done 2>&1 | tee /root/dnb-verify/journey-chain-7-47-69-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+If Finance's three customers carry the kit on their uCRM services too, "both" holds and the B build starts
+(B.3's hybrid half: the published register and `app_usage`), with the three kits received and bound by staff
+(B-5). If they carry it in Finance only, staff live in Finance, and O2 is weighed again as docs/39 §13 says.
 
 ### 7.5 The invoice's taxes — *"separate the UCC tax and other details so customer can understand properly"* (26 Sep)
 
