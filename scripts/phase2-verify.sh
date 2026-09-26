@@ -11,10 +11,14 @@
 #     && bash scripts/phase2-verify.sh <mode> 2>&1 | tee /root/dnb-verify/verify-<mode>-$(date -u +%Y%m%dT%H%M%SZ).log
 #
 # Modes (exactly one):
-#   --data-report          READ-ONLY. Inspects the installed dishnet-data-report plugin: does it
-#                          verify the hand-off token, with what key, does it check clientId, aud,
-#                          exp — and whether crm_auth_token / webhook_secret / crm_app_key are SET
-#                          or EMPTY on this install (presence only; no value is ever printed).
+#   --data-report          READ-ONLY. Prints the installed dishnet-data-report plugin's token-handling
+#                          SOURCE, masked: what reads the token, the function that verifies it and
+#                          with which key, the region around its "JWT is valid" check, every line
+#                          reading clientId, the actions it dispatches, its gates — plus whether
+#                          crm_auth_token / webhook_secret / crm_app_key are SET or EMPTY on this
+#                          install (presence only; no value, key, hash or e-mail is ever printed).
+#                          Computed in PHP inside the container: this container's grep has no
+#                          --include, which silently emptied the first version's mechanical lines.
 #   --email <address>      One controlled e-mail sign-in with an address on a customer record YOU
 #                          control. One e-mail is sent to it; the code is typed here and never
 #                          printed; the session is logged out at the end.
@@ -134,38 +138,211 @@ PHP
 # ═════════════════════════════════════════════════════════════════════════════
 if [ "$MODE" = "data-report" ]; then
 # --- DR BEGIN ---
-hdr "D. The data-report hand-off token — read-only inspection of the installed sibling plugin"
+hdr "D. The data-report hand-off token — read-only SOURCE inspection of the installed sibling plugin"
 SIB_IN="$PLUGINS_IN/$SIBLING"
 if docker exec "$CONTAINER" test -d "$SIB_IN"; then
   ok "D1 $SIBLING is installed at $SIB_IN"
   echo "  version         $(docker exec "$CONTAINER" php -r '$m=@json_decode((string)@file_get_contents($argv[1]),true); echo (string)($m["information"]["version"]??"?");' "$SIB_IN/manifest.json" 2>/dev/null)"
-  echo "  files           $(docker exec "$CONTAINER" sh -c "ls '$SIB_IN' | tr '\n' ' '" 2>/dev/null | cut -c1-200)"
-  echo "  lib/            $(docker exec "$CONTAINER" sh -c "ls '$SIB_IN/lib' 2>/dev/null | tr '\n' ' '" | cut -c1-300)"
-  # What its code does with a token. Excerpts are masked: no key or hash literal can reach this log.
-  echo "  ── occurrences (file:line: excerpt, masked) ──"
-  for pat in 'token' 'JwtAuth' 'hash_hmac' 'DishNet-Hybrid-JWT' 'webhook_secret' 'crm_auth_token' 'crm_app_key' 'kyc_config' 'clientId' "'aud'" "'exp'" "'sub'" 'accounts'; do
-    n="$(docker exec "$CONTAINER" sh -c "grep -rn -F -- \"$pat\" '$SIB_IN' --include='*.php' 2>/dev/null | wc -l" | tr -d ' ')"
-    printf '  %-22s %s occurrence(s)\n' "$pat" "${n:-0}"
-  done
-  echo "  ── the token-handling lines themselves (public.php and lib/, masked, first 60) ──"
-  docker exec "$CONTAINER" sh -c "grep -rn -i -E 'token|JwtAuth|hash_hmac|hash_equals|base64_decode|clientId.*sub|sub.*clientId|\"exp\"|'\''exp'\''|\"aud\"|'\''aud'\''' '$SIB_IN' --include='*.php' 2>/dev/null" \
-    | sed "s|$SIB_IN/||" | mask | cut -c1-200 | head -60 | sed 's/^/     /'
-  # The answers, mechanically: verifies a signature? reads the hybrid plugin's config? checks clientId against the token? exp? aud?
-  V_SIG="$(docker exec "$CONTAINER" sh -c "grep -rn -E 'hash_hmac|hash_equals|JwtAuth' '$SIB_IN' --include='*.php' 2>/dev/null | wc -l" | tr -d ' ')"
-  V_CFG="$(docker exec "$CONTAINER" sh -c "grep -rn -E 'webhook_secret|crm_auth_token|crm_app_key|DishNet-Hybrid-JWT|dishnet-hybrid' '$SIB_IN' --include='*.php' 2>/dev/null | wc -l" | tr -d ' ')"
-  V_SUB="$(docker exec "$CONTAINER" sh -c "grep -rn -E \"['\\\"]sub['\\\"]|accounts\" '$SIB_IN' --include='*.php' 2>/dev/null | wc -l" | tr -d ' ')"
-  V_EXP="$(docker exec "$CONTAINER" sh -c "grep -rn -E \"['\\\"]exp['\\\"]\" '$SIB_IN' --include='*.php' 2>/dev/null | wc -l" | tr -d ' ')"
-  V_AUD="$(docker exec "$CONTAINER" sh -c "grep -rn -E \"['\\\"]aud['\\\"]\" '$SIB_IN' --include='*.php' 2>/dev/null | wc -l" | tr -d ' ')"
-  V_TOK="$(docker exec "$CONTAINER" sh -c "grep -rn -F 'token' '$SIB_IN/public.php' 2>/dev/null | wc -l" | tr -d ' ')"
-  echo "  ── mechanical reading ──"
-  [ "${V_TOK:-0}" != "0" ] && note "D2 public.php mentions 'token' ${V_TOK} time(s)" || note "D2 public.php does not mention 'token' at all — the hand-off token may be ignored entirely"
-  [ "${V_SIG:-0}" != "0" ] && note "D3 a signature check exists (hash_hmac/hash_equals/JwtAuth: ${V_SIG})" || note "D3 NO signature verification found — if the token is used, it is used unverified"
-  [ "${V_CFG:-0}" != "0" ] && note "D4 it reads the hybrid plugin's key inputs or constant (${V_CFG} reference(s)) — the legacy derivation is shared" || note "D4 no reference to the hybrid plugin's key inputs — its key source is its own, or there is none"
-  [ "${V_SUB:-0}" != "0" ] && note "D5 it reads 'sub'/'accounts' from the token (${V_SUB}) — clientId may be checked against it" || note "D5 it never reads 'sub'/'accounts' — clientId is NOT checked against the token"
-  [ "${V_EXP:-0}" != "0" ] && note "D6 'exp' referenced (${V_EXP})" || note "D6 'exp' never referenced — no expiry check"
-  [ "${V_AUD:-0}" != "0" ] && note "D7 'aud' referenced (${V_AUD})" || note "D7 'aud' never referenced — no audience check"
-  echo "  ── does the customer page serve data on clientId alone? (the lines that read clientId, masked, first 20) ──"
-  docker exec "$CONTAINER" sh -c "grep -n -E 'clientId' '$SIB_IN/public.php' 2>/dev/null" | mask | cut -c1-200 | head -20 | sed 's/^/     /'
+  echo "  The first run's D2–D7 lines and its occurrence counts were INVALID: this container's grep has no --include, so every"
+  echo "  such command printed nothing and the counts covered every file, data included. Everything below is computed in PHP,"
+  echo "  over PHP files only, and masked before it is printed (the shared constant → a placeholder; a credential-shaped value,"
+  echo "  any long letters+digits run, any e-mail, any long number → <redacted>). No data file is opened."
+  cat > "$SNIP/drsrc.php" <<'PHP'
+<?php
+// READ-ONLY source inspection of the installed dishnet-data-report plugin. Nothing here writes.
+// Every excerpt is masked before it is printed: the shared constant becomes a placeholder, a
+// credential-shaped assignment loses its value, any long letters+digits run (a key, a token, a
+// hash), any e-mail address and any long number are replaced. Data files are never opened.
+$sib = rtrim((string)getenv('SIB'), '/'); $hyb = rtrim((string)getenv('HYB'), '/');
+$CONST = 'DishNet-Hybrid-JWT-v2-2026';   // our own JwtAuth::legacySecret constant — public in our repository
+$LINES_OUT = 0; $CAP = 1400;
+function out(string $s): void { global $LINES_OUT, $CAP; if ($LINES_OUT === $CAP) { echo "  … output capped at {$CAP} lines\n"; } if ($LINES_OUT >= $CAP) { $LINES_OUT++; return; } $LINES_OUT++; echo $s, "\n"; }
+function m(string $s): string {
+    global $CONST;
+    $s = str_replace($CONST, '<the shared constant>', $s);
+    $s = preg_replace('/((?:password|passwd|secret|api_?key|app_?key|token|bearer|pepper|private_?key)\s*(?:=>|=|:)\s*[\'"])([^\'"]{6,})([\'"])/i', '$1<redacted>$3', $s);
+    $s = preg_replace_callback('/[A-Za-z0-9+\/=_-]{24,}/', function ($mm) {
+        $r = $mm[0]; if (strlen($r) >= 40) return '<redacted>';
+        return (preg_match('/\d/', $r) && preg_match('/[A-Za-z]/', $r)) ? '<redacted>' : $r;   // a name has no digits; a key or hash has both
+    }, $s);
+    $s = preg_replace('/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/', '<email>', $s);
+    $s = preg_replace('/(?<![\w.])\d{7,}(?![\w.])/', '<digits>', $s);
+    return rtrim($s);
+}
+function rel(string $p): string { global $sib; return ltrim(substr($p, strlen($sib)), '/'); }
+function phpFiles(string $dir): array {
+    $out = []; $skip = ['data', 'vendor', 'node_modules', '.git', 'backups', 'backup', 'logs', 'cache', 'tmp', 'sessions'];
+    $walk = function (string $d, int $depth) use (&$walk, &$out, $skip) {
+        $h = @scandir($d); if ($h === false) return;
+        foreach ($h as $n) {
+            if ($n === '.' || $n === '..') continue; $p = "$d/$n";
+            if (is_dir($p)) { if ($depth < 3 && !in_array($n, $skip, true)) $walk($p, $depth + 1); }
+            elseif (substr($n, -4) === '.php') $out[] = $p;
+        }
+    };
+    $walk($dir, 0); sort($out); return $out;
+}
+$P = [
+    'token param'      => '/\$_(GET|POST|REQUEST|COOKIE)\s*\[\s*[\'"]token[\'"]\s*\]/',
+    'clientId param'   => '/\$_(GET|POST|REQUEST)\s*\[\s*[\'"](clientId|client_id)[\'"]\s*\]/',
+    'clientId'         => '/clientId/',
+    'hash_hmac'        => '/hash_hmac\s*\(/',
+    'hash_equals'      => '/hash_equals\s*\(/',
+    'JwtAuth'          => '/JwtAuth|legacySecret|fromConfig\s*\(/',
+    'the constant'     => '/DishNet-Hybrid-JWT/',
+    'webhook_secret'   => '/webhook_secret/',
+    'crm_auth_token'   => '/crm_auth_token/',
+    'crm_app_key'      => '/crm_app_key/',
+    'kyc_config'       => '/kyc_config/',
+    'sqlite'           => '/sqlite|SqliteStore|new\s+PDO\s*\(/i',
+    'hybrid path'      => '/dishnet-hybrid/',
+    "'sub'"            => '/[\'"]sub[\'"]/',
+    "'exp'"            => '/[\'"]exp[\'"]/',
+    "'aud'"            => '/[\'"]aud[\'"]/',
+    "'kid'"            => '/[\'"]kid[\'"]/',
+    'alg / HS256'      => '/[\'"]alg[\'"]|HS256/',
+    "'accounts'"       => '/[\'"]accounts[\'"]/',
+    'internal auth'    => '/Internal-Auth|INTERNAL_AUTH|internal_auth/',
+    'ucrm session'     => '/PHPSESSID|nms-session|nms-crm|current-user|currentUser/i',
+    'X-Auth-App-Key'   => '/X-Auth-App-Key|pluginAppKey/i',
+];
+$files = phpFiles($sib);
+if ($files === []) { out("@@BAD D1 no PHP file is readable under {$sib}"); exit; }
+$SRC = []; $unreadable = [];
+foreach ($files as $f) { if (!is_readable($f)) { $unreadable[] = rel($f); continue; } $SRC[$f] = file($f, FILE_IGNORE_NEW_LINES) ?: []; }
+$pub = "$sib/public.php";
+if (!isset($SRC[$pub])) { out("@@BAD D1 public.php is not readable — nothing below can be trusted"); }
+
+// ── 1. Inventory: PHP files only, this time (the earlier counts covered every file, data included) ──
+out(""); out("── D-I inventory of PHP files (bytes · lines · sha256[0:12]) and where the load-bearing words occur ──");
+$tot = [];
+foreach ($SRC as $f => $L) {
+    $c = []; foreach ($P as $k => $re) { $n = 0; foreach ($L as $ln) if (preg_match($re, $ln)) $n++; if ($n) { $c[] = $k . "×" . $n; $tot[$k] = ($tot[$k] ?? 0) + $n; } }
+    out(sprintf("  %-34s %7d B %5d lines  %s  %s", rel($f), filesize($f), count($L), substr(hash_file('sha256', $f), 0, 12), $c ? implode(', ', $c) : '—'));
+}
+foreach ($unreadable as $u) out("  $u  UNREADABLE by this user");
+out("  totals over PHP files: " . ($tot ? implode(', ', array_map(function ($k, $v) { return $k . "×" . $v; }, array_keys($tot), $tot)) : 'none of the words occurs'));
+
+// helpers over a file's lines
+function grepL(array $L, string $re, int $cap = 120): array { $o = []; foreach ($L as $i => $ln) { if (preg_match($re, $ln)) { $o[] = [$i + 1, $ln]; if (count($o) >= $cap) break; } } return $o; }
+function printLines(array $hits, int $cap = 120): void { $n = 0; foreach ($hits as [$no, $ln]) { out(sprintf("  %5d: %s", $no, m($ln))); if (++$n >= $cap) { out("  … (more, capped)"); break; } } if ($hits === []) out("  (none)"); }
+function region(array $L, int $from, int $to): void { $from = max(1, $from); $to = min(count($L), $to); for ($i = $from; $i <= $to; $i++) out(sprintf("  %5d| %s", $i, m($L[$i - 1]))); }
+function funcAround(array $L, int $at): array {   // [start,end] of the function that contains line $at (1-based), or a window
+    $start = null; for ($i = $at; $i >= max(1, $at - 120); $i--) { if (preg_match('/^\s*(?:(?:public|private|protected|static|final)\s+)*function\s+\w+/', $L[$i - 1])) { $start = $i; break; } }
+    if ($start === null) return [max(1, $at - 30), min(count($L), $at + 40)];
+    $depth = 0; $seen = false; $end = min(count($L), $start + 160);
+    for ($i = $start; $i <= min(count($L), $start + 160); $i++) { $ln = preg_replace('/\/\/.*$|#.*$/', '', $L[$i - 1]); $o = substr_count($ln, '{'); $c = substr_count($ln, '}'); if ($o) $seen = true; $depth += $o - $c; if ($seen && $depth <= 0) { $end = $i; break; } }
+    return [$start, $end];
+}
+function actions(array $L): array {
+    $names = [];
+    foreach ($L as $ln) {
+        if (preg_match_all('/(?:\$\w*(?:action|act|page|view|mode)\w*|\$_(?:GET|POST|REQUEST)\s*\[\s*[\'"](?:action|page)[\'"]\s*\])\s*[!=]==?\s*[\'"]([A-Za-z0-9_\-]+)[\'"]/', $ln, $mm)) foreach ($mm[1] as $x) $names[$x] = true;
+        if (preg_match_all('/^\s*case\s+[\'"]([A-Za-z0-9_\-]+)[\'"]\s*:/', $ln, $mm)) foreach ($mm[1] as $x) $names[$x] = true;
+        if (preg_match_all('/[\'"]([A-Za-z0-9_\-]+)[\'"]\s*[!=]==?\s*\$\w*(?:action|act)\w*/', $ln, $mm)) foreach ($mm[1] as $x) $names[$x] = true;
+        if (preg_match('/in_array\s*\(\s*\$\w*(?:action|act)\w*\s*,\s*\[([^\]]*)\]/', $ln, $mm)) { if (preg_match_all('/[\'"]([A-Za-z0-9_\-]+)[\'"]/', $mm[1], $m2)) foreach ($m2[1] as $x) $names[$x] = true; }
+    }
+    $names = array_keys($names); sort($names); return $names;
+}
+
+if (isset($SRC[$pub])) {
+    $L = $SRC[$pub]; $N = count($L);
+    out(""); out("── D-II public.php ({$N} lines): what it includes ──");
+    printLines(grepL($L, '/^\s*(require|include)(_once)?\b/', 60), 60);
+
+    out(""); out("── D-III public.php: every request parameter it reads (GET/POST/REQUEST/COOKIE, and identity headers) ──");
+    printLines(grepL($L, '/\$_(GET|POST|REQUEST|COOKIE)\s*\[|\$_SERVER\s*\[\s*[\'"]HTTP_(X_|AUTHORIZATION|COOKIE)/', 90), 90);
+
+    $acts = actions($L);
+    out(""); out("── D-IV public.php: action / page names it dispatches on (" . count($acts) . ") ──");
+    if ($acts) { $row = ''; foreach ($acts as $a) { if (strlen($row) + strlen($a) > 150) { out("  $row"); $row = ''; } $row .= ($row === '' ? '' : ' ') . $a; } if ($row !== '') out("  $row"); } else out("  (no literal dispatch found)");
+    out("  lines naming dr_raw_services:"); printLines(grepL($L, '/dr_raw_services/', 10), 10);
+
+    out(""); out("── D-V public.php: every function that computes an HMAC (the token verifier), in full ──");
+    $hm = grepL($L, '/hash_hmac\s*\(/', 6); $printed = [];
+    if ($hm === []) out("  (no hash_hmac in public.php — it verifies no signature itself; see D-I for other files)");
+    foreach ($hm as [$no, $ln]) { [$a, $b] = funcAround($L, $no); $key = "$a-$b"; if (isset($printed[$key])) continue; $printed[$key] = true; out("  · lines {$a}–{$b}:"); region($L, $a, $b); }
+
+    $ja = grepL($L, '/JwtAuth|legacySecret|fromConfig\s*\(|->verify\s*\(/', 4);
+    if ($ja) { out(""); out("── D-V-b public.php: ±15 lines around every JwtAuth / verify( mention (the verifier may be our own class, included from the hybrid plugin) ──"); $last = 0; foreach ($ja as [$no, $ln]) { if ($no <= $last) continue; out("  · around line {$no}:"); region($L, $no - 15, $no + 15); $last = $no + 15; } }
+    $tp = grepL($L, '/\$_(GET|POST|REQUEST|COOKIE)\s*\[\s*[\'"]token[\'"]\s*\]/', 3);
+    if ($tp) { out(""); out("── D-V-c public.php: ±12 lines around every read of the token parameter ──"); $last = 0; foreach ($tp as [$no, $ln]) { if ($no <= $last) continue; out("  · around line {$no}:"); region($L, $no - 12, $no + 12); $last = $no + 12; } }
+    out(""); out("── D-VI public.php: the region around 'JWT is valid' (±70 lines) — the customer page's authorisation ──");
+    $jv = grepL($L, '/JWT is valid|jwt.{0,20}valid|valid.{0,20}jwt/i', 1);
+    if ($jv === []) { out("  (no such comment; printing where the token parameter is read instead)"); $tp = grepL($L, '/\$_(GET|POST|REQUEST|COOKIE)\s*\[\s*[\'"]token[\'"]\s*\]/', 1); if ($tp) region($L, $tp[0][0] - 40, $tp[0][0] + 80); else out("  (the token parameter is never read in public.php)"); }
+    else region($L, $jv[0][0] - 70, $jv[0][0] + 70);
+
+    out(""); out("── D-VII public.php: every line mentioning clientId ──");
+    printLines(grepL($L, '/clientId/', 140), 140);
+
+    out(""); out("── D-VIII public.php: where the key inputs come from (webhook_secret / crm_auth_token / crm_app_key / kyc_config / the constant / the hybrid plugin's path / sqlite), ±2 lines ──");
+    $ki = grepL($L, '/webhook_secret|crm_auth_token|crm_app_key|kyc_config|DishNet-Hybrid-JWT|dishnet-hybrid|SqliteStore|sqlite3|plugin\.sqlite/', 40);
+    if ($ki === []) out("  (none — the key source is not any of these)");
+    $want = []; foreach ($ki as [$no, $ln]) for ($i = $no - 2; $i <= $no + 2; $i++) if ($i >= 1 && $i <= $N) $want[$i] = true;
+    $prev = 0; $n = 0; foreach (array_keys($want) as $i) { if ($prev && $i > $prev + 1) out("       …"); out(sprintf("  %5d| %s", $i, m($L[$i - 1]))); $prev = $i; if (++$n >= 140) { out("  … (capped)"); break; } }
+
+    out(""); out("── D-IX public.php: claim keys it reads (sub/exp/aud/iss/kid/kind/accounts/alg/jti) ──");
+    printLines(grepL($L, '/[\'"](sub|exp|aud|iss|kid|kind|accounts|alg|jti)[\'"]/', 60), 60);
+
+    out(""); out("── D-X public.php: its gates (uCRM session, internal-auth header, hash_equals, 401/403 answers) ──");
+    printLines(grepL($L, '/session_start|PHPSESSID|nms-session|nms-crm|current-user|currentUser|Internal-Auth|INTERNAL_AUTH|internal_auth|hash_equals|isAdmin|is_admin|requireAuth|require_auth|Unauthori[sz]ed|Forbidden|http_response_code\s*\(\s*(401|403)|\b40[13]\b/', 80), 80);
+}
+
+// ── other PHP files: parameters, gates, and any HMAC function ──
+foreach ($SRC as $f => $L) {
+    if ($f === $pub) continue;
+    $params = grepL($L, '/\$_(GET|POST|REQUEST|COOKIE)\s*\[\s*[\'"](token|clientId|client_id|action|kit|router_id)[\'"]\s*\]/', 30);
+    $gates  = grepL($L, '/PHPSESSID|nms-session|nms-crm|current-user|currentUser|Internal-Auth|INTERNAL_AUTH|internal_auth|hash_equals|hash_hmac|JwtAuth|DishNet-Hybrid-JWT|webhook_secret|crm_auth_token|kyc_config|Unauthori[sz]ed|Forbidden|http_response_code\s*\(\s*(401|403)/', 40);
+    if ($params === [] && $gates === []) continue;
+    out(""); out("── D-XI " . rel($f) . " (" . count($L) . " lines): parameters it reads / its gates ──");
+    if ($params) { out("  parameters:"); printLines($params, 30); }
+    if ($gates)  { out("  gates and key words:"); printLines($gates, 40); }
+    $hm = grepL($L, '/hash_hmac\s*\(/', 3); $printed = [];
+    foreach ($hm as [$no, $ln]) { [$a, $b] = funcAround($L, $no); $key = "$a-$b"; if (isset($printed[$key])) continue; $printed[$key] = true; out("  · HMAC function, lines {$a}–{$b}:"); region($L, $a, $b); }
+}
+
+// ── the sibling's own credential and data directory: presence and names only ──
+out(""); out("── D-XII the sibling's own uCRM credential and data directory (presence and names only; no file is opened) ──");
+$uj = @json_decode((string)@file_get_contents("$sib/ucrm.json"), true) ?: [];
+out("  ucrm.json pluginAppKey: " . (trim((string)($uj['pluginAppKey'] ?? '')) === '' ? 'EMPTY/absent' : 'set') . " — the sibling's own uCRM API credential; with it the sibling can read ANY client from uCRM, so which client it shows is its own authorisation decision");
+foreach (["$sib/data" => '<plugin dir>/data', dirname($sib) . '/.' . basename($sib) . '-data' => '<plugins dir>/.' . basename($sib) . '-data'] as $dd => $label) {
+    if (!is_dir($dd)) { out("  {$label}: absent"); continue; }
+    $names = array_values(array_diff(@scandir($dd) ?: [], ['.', '..'])); $ext = [];
+    foreach ($names as $n) { $e = is_dir("$dd/$n") ? '<dir>' : (pathinfo($n, PATHINFO_EXTENSION) ?: '(none)'); $ext[$e] = ($ext[$e] ?? 0) + 1; }
+    out("  {$label}: " . count($names) . " entries — " . implode(', ', array_map(function ($k, $v) { return $k . "×" . $v; }, array_keys($ext), $ext)));
+    $sus = array_values(array_filter($names, function ($n) { return preg_match('/secret|key|token|auth|jwt|session|cred|pass/i', $n); }));
+    out("  names suggesting a credential store: " . ($sus ? m(implode(', ', $sus)) : 'none'));
+}
+
+// ── machine summary, computed here (no shell grep): the answers to items 1–7 as far as text can give them ──
+out(""); out("── D-XIII mechanical reading (PHP-computed over PHP files only) ──");
+$all = function (string $re, int $cap = 12) use ($SRC) { $o = []; foreach ($SRC as $f => $L) foreach ($L as $i => $ln) { if (preg_match($re, $ln)) { $o[] = rel($f) . ':' . ($i + 1); if (count($o) >= $cap) return $o; } } return $o; };
+$fmt = function (array $a): string { return $a ? implode(' ', $a) : 'none'; };
+$tokRead = $all('/\$_(GET|POST|REQUEST|COOKIE)\s*\[\s*[\'"]token[\'"]\s*\]/');
+out("@@NOTE D2 the token parameter is read at: " . $fmt($tokRead) . ($tokRead ? '' : ' — the hand-off token is DECORATIVE; the exposure is the sibling\'s own access control'));
+$sig = $all('/hash_hmac\s*\(/'); $heq = $all('/hash_equals\s*\(/'); $alg = $all('/HS256|[\'"]alg[\'"]/');
+out("@@NOTE D3 signature computed at: " . $fmt($sig) . "; constant-time compare at: " . $fmt($heq) . "; algorithm pinned/read at: " . $fmt($alg) . ($sig ? '' : ' — NO signature verification in any PHP file'));
+$cst = $all('/DishNet-Hybrid-JWT/'); $inp = $all('/webhook_secret|crm_auth_token|crm_app_key/'); $kc = $all('/kyc_config/');
+out("@@NOTE D4 the shared constant at: " . $fmt($cst) . "; the hybrid plugin's key inputs at: " . $fmt($inp) . "; kyc_config at: " . $fmt($kc) . (($cst || $inp) ? ' — it re-derives the SAME legacy key from the hybrid plugin\'s settings' : ' — its key source, if any, is its own'));
+$cmp = $all('/(urlClientId|clientId|client_id)[^;]*(\[[\'"](sub|accounts)[\'"]\]|->sub|\$sub\b|\$own\b|\$allowed\b)|(\[[\'"](sub|accounts)[\'"]\]|\$sub\b|\$own\b|\$allowed\b)[^;]*(urlClientId|clientId|client_id)/');
+out("@@NOTE D5 lines comparing clientId with the token's identity (sub/accounts): " . $fmt($cmp) . ($cmp ? '' : ' — NO line binds clientId to the token'));
+$exp = $all('/[\'"]exp[\'"][^;]*time\s*\(|time\s*\(\s*\)[^;]*[\'"]exp[\'"]/'); $aud = $all('/[\'"]aud[\'"]/'); $kid = $all('/[\'"]kid[\'"]/'); $kind = $all('/[\'"]kind[\'"]/');
+out("@@NOTE D6 expiry checked against the clock at: " . $fmt($exp) . "; 'aud' read at: " . $fmt($aud) . "; 'kid' read at: " . $fmt($kid) . "; 'kind' read at: " . $fmt($kind));
+$noTok = $all('/\$token\s*(===?|!==?)\s*[\'"][\'"]|empty\s*\(\s*\$token\s*\)|!\s*\$token\b|\$token\s*\?\s*:/');
+out("@@NOTE D7 what happens with NO token — the branch lines: " . $fmt($noTok) . " (read them in D-VI: a fallback to a uCRM staff session is one thing; serving the page on clientId alone is another)");
+$raw = $all('/dr_raw_services/');
+out("@@NOTE D8 dr_raw_services (raw uCRM dump for a clientId) at: " . $fmt($raw));
+PHP
+  # Source files only, never the store, so this runs as the container's default user: a source file the store's owner
+  # cannot read must be printed as unreadable, not silently skipped. Output lines tagged @@OK/@@NOTE/@@BAD become checks.
+  while IFS= read -r line; do
+    case "$line" in
+      "@@OK "*)   ok   "${line#@@OK }";;
+      "@@NOTE "*) note "${line#@@NOTE }";;
+      "@@BAD "*)  bad  "${line#@@BAD }";;
+      *)          printf '%s\n' "$line";;
+    esac
+  done < <(docker exec -i -w "$IN_CONTAINER" -e "SIB=$SIB_IN" -e "HYB=$IN_CONTAINER" "$CONTAINER" php < "$SNIP/drsrc.php" 2>&1)
 else
   bad "D1 $SIBLING is not installed at $SIB_IN — nothing verifies the hand-off token, and nothing consumes it"
 fi
@@ -173,15 +350,25 @@ hdr "K. The hand-off key's inputs on THIS install — presence only, never a val
 ro_copy key || stop "could not copy the store"
 cat > "$SNIP/keys.php" <<'PHP'
 <?php
-// Presence only. The three inputs of the legacy derivation, from the store copy that public.php loads
-// as $config (what app_data_report_token actually hashes), and from PluginConfig::read() (files + vault).
+// Presence only, never a value. (1) The store copy public.php loads as $config — exactly what app_data_report_token
+// hashes. (2) PluginConfig::read(): the three settings files + the vault, changing nothing on disk. (3) Whether a
+// PLAIN kyc_config.json (or its .migrated backup) still exists where the sibling could read it: the sibling may
+// derive its key from such a file rather than from our store, and then the two keys agree only if the values agree.
 $db = new PDO('sqlite:' . getenv('RO_DB'), null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $cfg = json_decode((string)$db->query("SELECT data FROM kyc_config LIMIT 1")->fetchColumn(), true) ?: [];
 $p = function (array $c, string $k): string { $v = trim((string)($c[$k] ?? '')); return $v === '' ? 'EMPTY' : 'set (' . strlen($v) . ' chars)'; };
-echo "store copy (what the hand-off hashes):  webhook_secret=", $p($cfg, 'webhook_secret'), "  crm_auth_token=", $p($cfg, 'crm_auth_token'), "  crm_app_key=", $p($cfg, 'crm_app_key'), "\n";
-$merged = [];
-try { require_once 'lib/PluginConfig.php'; $merged = PluginConfig::read(getenv('PDD_IN') ?: null) ?: []; } catch (Throwable $e) { echo "PluginConfig::read unavailable: ", get_class($e), "\n"; }
-if ($merged) echo "PluginConfig::read (files + vault):     webhook_secret=", $p($merged, 'webhook_secret'), "  crm_auth_token=", $p($merged, 'crm_auth_token'), "  crm_app_key=", $p($merged, 'crm_app_key'), "\n";
+$three = function (array $c) use ($p): string { return 'webhook_secret=' . $p($c, 'webhook_secret') . '  crm_auth_token=' . $p($c, 'crm_auth_token') . '  crm_app_key=' . $p($c, 'crm_app_key'); };
+echo "store copy (what the hand-off hashes):  ", $three($cfg), "\n";
+try { require_once 'lib/PluginConfig.php'; $merged = PluginConfig::read(getcwd(), (string)getenv('PDD_IN')); echo "PluginConfig::read (files + vault):     ", $three($merged), "\n"; }
+catch (Throwable $e) { echo "PluginConfig::read unavailable: ", get_class($e), ' — ', $e->getMessage(), "\n"; }
+$pdd = (string)getenv('PDD_IN');
+foreach (['<data dir>/kyc_config.json' => $pdd . '/kyc_config.json', '<data dir>/kyc_config.json.migrated' => $pdd . '/kyc_config.json.migrated',
+          '<plugin dir>/data/kyc_config.json' => getcwd() . '/data/kyc_config.json', '<plugin dir>/data/kyc_config.json.migrated' => getcwd() . '/data/kyc_config.json.migrated'] as $label => $f) {
+    if (!is_file($f)) { echo "plain file {$label}: absent\n"; continue; }
+    if (!is_readable($f)) { echo "plain file {$label}: present, NOT readable by this user\n"; continue; }
+    $c = json_decode((string)file_get_contents($f), true);
+    echo "plain file {$label}: present — ", is_array($c) ? $three($c) : 'not JSON', "\n";
+}
 $ws = trim((string)($cfg['webhook_secret'] ?? '')); $ct = trim((string)($cfg['crm_app_key'] ?? $cfg['crm_auth_token'] ?? ''));
 echo "verdict: ", ($ws === '' && $ct === '') ? "BOTH EMPTY in the store copy → the legacy key is sha256('||constant'), a constant anyone can read in the source: a hand-off token is FORGEABLE for any sub" : "at least one input is set → the legacy key has entropy the public does not have (the derivation itself is still shared with whoever verifies it)", "\n";
 PHP
