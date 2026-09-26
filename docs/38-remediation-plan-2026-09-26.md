@@ -561,6 +561,15 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    address; the next invoice issued shows whether new PDFs carry the new one. **Rollback:** the two fields
    back to their noted values.
 
+   **First run, 26 Sep:** `--before` at 20:45:57, `--after` at 20:46:14, 17 seconds later. uCRM still
+   reported `:8443`, so the setting had not been changed yet, or had not taken. Everything else held: UISP's
+   health, `:8443` answering, C-1, the portal and uCRM's sign-in. **The router count read 0 with no control.**
+   A zero is a negative result, and without a positive control it cannot tell "no router is connected" from
+   "the count cannot see this port". The guard now holds one test connection of its own to `127.0.0.1:8443`
+   while it counts. If it sees that connection but no public one, the zero is **measured**: no router is
+   connected, and C-2 has none to disturb. If it sees nothing at all, it says the count is **blind** and sends
+   the operator to UISP's device list. Rehearsal 40 checks, with scenarios for both.
+
 ### 7.3 A2 — the wording: proposed 26 Sep, APPROVED the same day ("go with your recommendation"), BUILT as 5.18.42
 
 The proposal below is kept as it was put. **How each point was built** (`profiles/uganda.json` → `legal`;
@@ -646,6 +655,39 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dn
 If Finance's three customers carry the kit on their uCRM services too, "both" holds and the B build starts
 (B.3's hybrid half: the published register and `app_usage`), with the three kits received and bound by staff
 (B-5). If they carry it in Finance only, staff live in Finance, and O2 is weighed again as docs/39 §13 says.
+
+**Confirmed by data — 26 Sep, 20:45 UTC (`--chain 7`, `--chain 47`, `--chain 69`, read-only, nothing written):**
+
+| client | kit on the uCRM service | the hybrid's stock and register | Finance | Data Report | service line / account in the hybrid | usage | first break |
+|---|---|---|---|---|---|---|---|
+| #7 | KIT…BX6 | unit #2, **installed**, assigned to #7 | ✓ | ✓ (1 router) | ✓ | ✓ (the hybrid's own row) | **none: the chain is complete** |
+| #47 | KIT…KFR | unit #1, **in_stock**, assigned to #47 | ✓ | ✓ (1 router) | ✗ | ✗ | no service line |
+| #69 | KIT…5DH | **absent**: the intake would refuse it (not in stock) | ✓ | ✓ (1 line, 2 routers, 7 usage rows) | ✗ | Data Report only | not in the hybrid's stock |
+
+- **"Both" holds.** Every Finance kit is also typed on its uCRM service, and uCRM, Finance and Data Report name
+  the same customer for each. That answers B-5, confirming each Finance kit's owner, for #7, #47 and #69.
+  O3 stands.
+- **The hybrid's two assignments are #7 and #47.** The receive-and-bind workflow is in use, and #7's chain is
+  complete end to end.
+- **#47's unit is assigned but still `in_stock`.** Assigning records ownership. `EquipmentAssignment::assign()`
+  never touches the stock status, which changes only when an installation is recorded. So an installation for
+  #47 has not been recorded.
+- **Finance now holds 4 kits (3 at 09:44).** The fourth belongs to a customer not walked here.
+- **The hybrid's Starlink session expired** (imported 13 Sep). Its usage collector and line discovery have
+  stopped until a person imports a fresh one.
+
+**Order revised by this evidence: the DATA first, the B.3 code after.** The published register has no reader
+until Finance and Data Report switch to it, and each sibling needs its own owner's approval. `app_usage` serves
+only the native wrapper, because the portal already reads the register directly. What customers see changes
+the moment a kit is in the register. So the next steps are staff acts, in the plugin's admin menu:
+1. **#69 and #1:** Stock Admin → *Receive New Stock* with the kit's serial, then **Kit Number Review** to bind it
+   to the customer. The screen reads the kit typed on the uCRM service and binds only a kit that is in stock.
+2. **#47:** pair the kit with its Starlink service line on **Starlink Sessions**, which gap-fills and never
+   overwrites. When the dish is installed, record the installation on the **Stock Hub** (*Deploy→Client*).
+3. **Starlink Sessions:** import a fresh session, which restarts usage collection and line discovery.
+
+The B.3 code (the published register and `app_usage`) is built when a sibling owner approves consuming the
+file, so it is not built ahead of a reader.
 
 ### 7.5 The invoice's taxes — *"separate the UCC tax and other details so customer can understand properly"* (26 Sep)
 

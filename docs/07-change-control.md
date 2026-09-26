@@ -1403,3 +1403,12 @@ settings. `scripts/dnb-c2-check.sh` is a new READ-ONLY guard that runs before an
 counts the routers on `:8443` so a mistake shows within minutes (docs/38 §7.2 item 3; rehearsal
 `scripts/harness/c2-check/rehearse.sh`, 29 checks). **The kit question was answered *"yes correct"*, read as
 "both"**, to be confirmed by the read-only `--chain 7/47/69` runs before any B code (docs/38 §7.4).
+
+**20:45 UTC, the operator's runs.** The **chains for #7, #47 and #69 confirm "both"**. Each kit is typed on the
+customer's uCRM service and held in Finance, and uCRM, Finance and Data Report name the same customer for each.
+#7's chain is complete, #47 lacks a service line, and #69's kit is not in the hybrid's stock. The order is
+revised: staff put the kits into the register first, and the B.3 code waits for a sibling to consume it
+(docs/38 §7.4). **The C-2 guard's first run** found uCRM still on `:8443` 17 seconds after `--before`, so the
+setting had not been changed yet. Its router count read 0 **with no positive control**. The guard now holds its
+own test connection to `:8443` while counting, so a zero is either *measured*, with no router connected, or
+*blind*, with the count unable to see the port. It never reports a bare zero again (rehearsal 40 checks).

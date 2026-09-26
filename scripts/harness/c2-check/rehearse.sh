@@ -69,6 +69,7 @@ setfake "https://crm.dishnetuganda.com:8443/crm/" "invoice 000005 · crm.dishnet
 out="$(run --before)"; rc=$?
 check "$rc" "0" "S1 exits 0"
 has "$out" "routers connected on :8443            9 connection(s) from 8 address(es)" "S1 counts 9 public connections from 8 addresses (host + namespace; private and loopback peers excluded)"
+has "$out" "14 connection(s) seen on the port in all" "S1 reports everything it saw on the port (the control's basis: 9 public + 5 private/loopback)"
 has "$out" "uCRM's address, as it tells plugins   https://crm.dishnetuganda.com:8443/crm/" "S1 prints uCRM's own address"
 has "$out" "the latest invoice's PDF              invoice 000005 · crm.dishnetuganda.com:8443 x2" "S1 prints the PDF's link hosts"
 has "$out" "NOW, BY HAND IN uCRM" "S1 prints the manual steps"
@@ -128,6 +129,29 @@ PY
 out="$(PATH="$SB/bin:$PATH" FAKE="$F" STATE_DIR="$SB/state" HEALTH_SCRIPT="$SB/health.sh" POLL_SECONDS=0 POLLS=3 bash "$SB/broken.sh" --before 2>&1)"
 hasnt "$out" "9 connection(s) from 8 address(es)" "S8 the broken copy does not produce the count S1 asserts"
 has "$out" "14 connection(s)" "S8 the broken copy counts the private and loopback peers (14)"
+
+echo "S9 no router connected, but the port is visible (only this server's own connections): a measured zero"
+printf '0 0 172.18.0.5:8443 %s\n' 172.17.0.1:40000 127.0.0.1:40003 > "$F/ss_host"; : > "$F/ss_ns"
+setfake "https://crm.dishnetuganda.com:8443/crm/" "invoice 000005 · crm.dishnetuganda.com:8443 x2"
+out="$(run --before)"; rc=$?
+check "$rc" "0" "S9 --before exits 0"
+has "$out" "ok    no router is connected to UISP on :8443 right now — measured" "S9 --before calls the zero measured, because the count saw the port"
+check "$(grep -c '^BEFORE_DEV_T=2$' "$SB/state/state.env")" "1" "S9 the state file records what was seen in all"
+setfake "https://crm.dishnetuganda.com/crm/" "invoice 000006 · crm.dishnetuganda.com x2"
+out="$(run --after)"; rc=$?
+check "$rc" "0" "S9 --after exits 0"
+has "$out" "ok    no router was connected on :8443 before the change either" "S9 --after: nothing to lose, said as a measurement"
+has "$out" "RESULT   C-2 is done" "S9 verdict: done"
+
+echo "S10 nothing at all visible on the port: the zero is INDETERMINATE, never 'no routers'"
+: > "$F/ss_host"; : > "$F/ss_ns"
+setfake "https://crm.dishnetuganda.com:8443/crm/" "invoice 000005 · crm.dishnetuganda.com:8443 x2"
+out="$(run --before)"; rc=$?
+check "$rc" "0" "S10 --before exits 0"
+has "$out" "note  nothing at all was seen on :8443, not even this script's own test connection — the count is blind on this server" "S10 --before says the count is blind"
+hasnt "$out" "no router is connected to UISP on :8443 right now" "S10 --before never claims a measured zero"
+out="$(run --after)"; rc=$?
+has "$out" "note  the router count was blind on this server before the change" "S10 --after sends the operator to UISP's device list"
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"
 [ "$FAILN" = "0" ]

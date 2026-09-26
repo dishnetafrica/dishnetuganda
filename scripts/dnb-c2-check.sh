@@ -73,10 +73,16 @@ pdf_hosts() {
 
 # 3 — routers on :8443: established TCP connections to UISP's port from PUBLIC addresses (a browser through Traefik
 # arrives from a private docker address and is not counted). Counted on the host and inside the network namespace of
-# the container that publishes 8443, so the count holds whether Docker forwards with its proxy or with NAT. Prints
-# "<connections> <distinct addresses>"; addresses are counted, never printed.
-count_devices() {
+# the container that publishes 8443, so the count holds whether Docker forwards with its proxy or with NAT.
+# A zero is a negative result, so it carries a positive control: the script holds ONE test connection of its own to
+# 127.0.0.1:8443 open while it counts. If the count sees that (or any) connection on the port but no public one, no
+# router is connected — measured. If it sees nothing at all, the count is blind on this server and says so.
+# Prints "<public connections> <distinct public addresses> <all connections seen>"; addresses are never printed.
+count_devices() (
   local peers="" line name ports inner pid
+  exec 2>/dev/null                                          # this subshell only: a refused probe must not print
+  exec 3<>/dev/tcp/127.0.0.1/8443 || true                   # the control: held open until this subshell ends
+  sleep 0.2
   if command -v ss >/dev/null 2>&1; then peers="$(ss -Htn state established '( sport = :8443 )' 2>/dev/null | awk '{print $4}')"; fi
   line="$(docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null | grep -E ':8443->' | head -1)"
   if [ -n "$line" ] && command -v nsenter >/dev/null 2>&1; then
@@ -88,11 +94,12 @@ count_devices() {
 $(nsenter -t "$pid" -n ss -Htn state established "( sport = :$inner )" 2>/dev/null | awk '{print $4}')"
     fi
   fi
+  local all; all="$(printf '%s\n' "$peers" | grep -c -v -E '^[[:space:]]*$')"
   printf '%s\n' "$peers" \
     | sed -E 's/^\[(.*)\]:[0-9]+$/\1/; s/^([0-9.]+):[0-9]+$/\1/; s/^::ffff://' \
     | grep -v -E '^$|^127\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\.|^192\.168\.|^169\.254\.|^::1$|^f[cd][0-9a-f]*:|^fe80:' \
-    | awk '{ n++; s[$1] = 1 } END { m = 0; for (k in s) m++; printf "%d %d\n", n + 0, m }'
-}
+    | awk -v all="$all" '{ n++; s[$1] = 1 } END { m = 0; for (k in s) m++; printf "%d %d %d\n", n + 0, m, all + 0 }'
+)
 
 # 4 — UISP's health, :8443, C-1 and the portal
 http_code() { curl -s -o /dev/null --max-time 20 -w '%{http_code} %{redirect_url}' "$@" 2>/dev/null || echo "000 "; }
@@ -118,21 +125,23 @@ docker exec "$CONTAINER" true 2>/dev/null || stop "container '$CONTAINER' is not
 URLS="$(ucrm_urls)"; U_CRM="${URLS%%|*}"; U_PLUGIN="${URLS#*|}"
 [ -n "$U_CRM" ] || stop "could not read the address uCRM gives plugins (ucrm.json)"
 PDF="$(pdf_hosts)"; [ -n "$PDF" ] || PDF="the PDF could not be read"
-read -r DEV_N DEV_M <<<"$(count_devices)"; DEV_N="${DEV_N:-0}"; DEV_M="${DEV_M:-0}"
+read -r DEV_N DEV_M DEV_T <<<"$(count_devices)"; DEV_N="${DEV_N:-0}"; DEV_M="${DEV_M:-0}"; DEV_T="${DEV_T:-0}"
 
 if [ "$MODE" = "--before" ]; then
   hdr "Before the change (read-only)"
   echo "  uCRM's address, as it tells plugins   $U_CRM"
   echo "  the plugin's address, as uCRM says    $U_PLUGIN"
   echo "  the latest invoice's PDF              $PDF"
-  echo "  routers connected on :8443            $DEV_N connection(s) from $DEV_M address(es)"
+  echo "  routers connected on :8443            $DEV_N connection(s) from $DEV_M address(es) · $DEV_T connection(s) seen on the port in all"
   case "$U_CRM" in *:8443*) note "uCRM's own address carries :8443 — this is what C-2 changes" ;; *) note "uCRM's own address already carries no :8443 — C-2 may be unnecessary; send this log before changing anything" ;; esac
-  [ "$DEV_N" -gt 0 ] || note "no router connection was counted on :8443 — after the change, check UISP's own device list instead of relying on this count"
+  if [ "$DEV_N" -gt 0 ]; then :
+  elif [ "$DEV_T" -gt 0 ]; then ok "no router is connected to UISP on :8443 right now — measured: the count sees this port ($DEV_T connection(s) from this server itself, its own test connection included), so C-2 has no connected router to disturb"
+  else note "nothing at all was seen on :8443, not even this script's own test connection — the count is blind on this server; after the change, check UISP's own device list"; fi
   checks_around
   {
     printf 'BEFORE_TS=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'BEFORE_UCRM=%q\nBEFORE_PLUGIN=%q\nBEFORE_PDF=%q\n' "$U_CRM" "$U_PLUGIN" "$PDF"
-    printf 'BEFORE_DEV_N=%q\nBEFORE_DEV_M=%q\n' "$DEV_N" "$DEV_M"
+    printf 'BEFORE_DEV_N=%q\nBEFORE_DEV_M=%q\nBEFORE_DEV_T=%q\n' "$DEV_N" "$DEV_M" "$DEV_T"
   } > "$STATE"
   chmod 600 "$STATE"
   ok "before-state recorded in $STATE (counts, addresses, hosts; no secret)"
@@ -186,15 +195,17 @@ if [ "${BEFORE_DEV_N:-0}" -gt 0 ]; then
   echo "  routers connected on :8443            before: $BEFORE_DEV_N connection(s) from $BEFORE_DEV_M address(es); the floor is $FLOOR"
   DEV_OK=0; i=0; START=$(date +%s)
   while [ "$i" -lt "$POLLS" ]; do
-    read -r N M <<<"$(count_devices)"; N="${N:-0}"; M="${M:-0}"
+    read -r N M T <<<"$(count_devices)"; N="${N:-0}"; M="${M:-0}"
     printf '  …     %s  %s connection(s) from %s address(es)\n' "$(date -u +%H:%M:%S)" "$N" "$M"
     if [ "$N" -ge "$FLOOR" ] && [ $(( $(date +%s) - START )) -ge "$(( POLL_SECONDS * 3 ))" ]; then DEV_OK=1; break; fi
     i=$((i+1)); [ "$i" -lt "$POLLS" ] && sleep "$POLL_SECONDS"
   done
   if [ "$DEV_OK" = "1" ]; then ok "the routers are still connected on :8443 ($N connection(s), floor $FLOOR)"
   else bad "the routers did NOT come back on :8443 (last count $N, floor $FLOOR) — PUT THE TWO VALUES BACK NOW, in the same uCRM screen, then run --after again"; fi
+elif [ "${BEFORE_DEV_T:-0}" -gt 0 ]; then
+  ok "no router was connected on :8443 before the change either (measured, with the script's own test connection as control) — there is none to lose; UISP's answer on :8443 is checked below"
 else
-  note "no router connection was counted before the change, so this script cannot judge the routers — open UISP's device list and confirm they are still connected"
+  note "the router count was blind on this server before the change, so this script cannot judge the routers — open UISP's device list and confirm they are still connected"
 fi
 checks_around
 
