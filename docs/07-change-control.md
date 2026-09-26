@@ -1191,7 +1191,7 @@ back, the footer back, the bank block for every tenant, the fibre card for every
 literal back, consent ignoring the customer, the entry point not calling CanonicalHost, CanonicalHost
 redirecting `page=api` / a Host without a port / POSTs). Journey rehearsal against the sandbox: **77/77**,
 with L10 (the A2 wording) the only tenant finding still expected to fail. Suite run A: **207 suites /
-8,216 passed / 0 failed**; run B: still running when this entry was committed (126 of 207 suites, 0 failed at that point); its total is appended below when it finishes.
+8,216 passed / 0 failed**; run B: **207 suites / 8,216 passed / 0 failed** — identical.
 
 **Deployment (NOT done).** `scripts/deploy-5.18.41.sh`, pinned to plugin commit `a2ea19f`: the
 5.18.40 machinery, then stage **V** over the public address and the `:8443` door — the public address must
