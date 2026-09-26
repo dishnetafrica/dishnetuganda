@@ -47,7 +47,7 @@ not arrived yet, §H). Nothing PENDING is asserted.
 | Invoice / payment | uCRM | uCRM | invoice id, payment id | webhook `invoice.add`/`payment.add` → surgical cache refresh (`ClientInvoiceCacheRefresher`), else on-demand when stale; `app_account` asks uCRM live | a missed webhook shows a paid invoice as due until the next app open |
 | Starlink kit | **DISPUTED** — Finance `sl_kits.json` (typed) *and* hybrid `equipment_assignments` (validated, DB-enforced) | two owners | kit number/serial, crm id, service line, account | Data Report reads `sl_kits.json`; hybrid reads both; nothing reconciles them | a kit in one register and not the other: authorisation and usage disagree |
 | Starlink account / session | Data Report `dr_accounts.json` (+ `sl_sync_settings.json` cookie) | Data Report | account number | its crons; Finance `sl_accounts.json` (billing days) | sync stops when the account sessions die — **MEASURED: all five are dead or cookie-less (§I.1.1)**; the "stuck lock" banner is a false alarm |
-| Usage | Starlink API via Data Report cron → `sl_usage.json` (**empty on Uganda**, docs/39) or hybrid's own hourly collector (`cron/starlink_usage.php`) | Data Report / hybrid | kit number, service line | portal `KitUsage` joins on `equipment_assignments`; the API `app_usage` is **hard-coded unavailable** | no usage shown; "0" never shown by design |
+| Usage | Starlink API via Data Report cron → `sl_usage.json` (14 historical rows for two kits, nothing since the sessions died — §I.1.1) or hybrid's own hourly collector (`cron/starlink_usage.php`; its one Uganda session, imported 13 Sep, is expired — §I.6) | Data Report / hybrid | kit number, service line | portal `KitUsage` joins on `equipment_assignments`; the API `app_usage` is **hard-coded unavailable** | no usage shown; "0" never shown by design |
 | Customer login | hybrid (`client_search_index`, OTP, `customer_sessions`) | hybrid | phone (last 9 digits) / e-mail → uCRM client id (`sub`) + `accounts` | uCRM contacts are the only source of the identifiers | a contact edit in uCRM reaches the index by webhook/delta |
 | Suspension / block | uCRM service status → webhook → `StarlinkBlockService` / `StarlinkBlockBridge` → Data Report `dr_wifi_test_block` | uCRM (state), Data Report (execution) | client id → kits → router id | HTTP with `X-DishNet-Internal-Auth` | silent (caught) — SAFETY.md |
 | Support | none in the plugin — static contacts, **hard-coded to South Sudan in `portal.php` (§J.1), not read from the tenant profile** | — | — | — | tickets are uCRM-only and not shown; a Uganda customer is handed a South Sudan number |
@@ -66,7 +66,7 @@ not arrived yet, §H). Nothing PENDING is asserted.
 Finance's own copy of the uCRM client list — and every shared field agrees between them (id, name, e-mail,
 phone, service, plan, price, invoice, payment status, state). Data Report holds nothing for #1 because it keys
 on kits, and **no kit is registered for #1 anywhere: not in the hybrid's `equipment_assignments` (its
-`stock_units` table is empty on Uganda), not in Finance's `sl_kits.json`, not in Data Report's registry —
+`stock_units` holds 2 units, both other customers', none carrying #1's serial — §I.6), not in Finance's `sl_kits.json`, not in Data Report's registry —
 although uCRM's service carries a `starlinkDetails` attribute and the portal classifies the service as
 Starlink.** That is a defect of the kit chain, not a property of the customer.
 
@@ -80,7 +80,7 @@ Starlink.** That is a defect of the kit chain, not a property of the customer.
 | Invoice / payment status | native | cache + on-demand refresh; `app_account` live | — | invoice export (its own) | uCRM | webhook → surgical refresh |
 | Kit / serial | attribute "Kit Number" on the service (typed) | `equipment_assignments` (validated) | `dr_kit_registry` (generated from Finance) | `sl_kits.json` (typed) | **two registers, none authoritative for both readers** | `KitAttributeIntake` reads the attribute → assignment; Data Report regenerates its registry from Finance. **MEASURED: no kit in either register carries a service line or a Starlink account (§I.1.2)** |
 | Starlink account | — | assignment column | `dr_accounts.json` | `sl_accounts.json` | Data Report (session) | its crons — **MEASURED: 4 of 5 accounts dead, 1 without a cookie, nothing fetched in the log window (§I.1.1)** |
-| Usage | — | own collector (hourly) | `sl_usage.json` (empty on Uganda) | `sl_usage.json` (Finance copy, docs/38) | Starlink API | crons; the API endpoint never answers |
+| Usage | — | own collector (hourly) | `sl_usage.json` (14 historical rows, two kits) | `sl_usage.json` (Finance copy, docs/38) | Starlink API | crons; the API endpoint never answers |
 | Active / suspended | native (service status) | webhook-driven block | pause state (`wifi_test_block_state`, absent on Uganda per docs/39) | — | uCRM (state) / Data Report (execution) | webhook → bridge → `dr_wifi_test_block` |
 
 ## D. Current failures (MEASURED unless marked otherwise)
@@ -106,7 +106,7 @@ the link answers 401 after logout).
    help, and one of them forces a sync.
 4. **Three kit registers, and the source feeds none of them on this install.** uCRM's service for #1 carries a
    `starlinkDetails` attribute (§I.4) — the key the hybrid's own `CrmKitAttribute` prefers. Yet the hybrid's
-   `equipment_assignments` holds no kit for #1 because its `stock_units` table is **empty on Uganda**, and
+   `equipment_assignments` holds no kit for #1 because no stock unit carries its serial (**2 units are in stock, both other customers' — §I.6**), and
    `KitAttributeIntake` refuses to assign a serial that no stock unit carries ("assigning it would invent"
    stock); Finance's typed `sl_kits.json` has no kit for #1 either; Data Report's registry is generated from
    Finance. So a Starlink customer has a kit in uCRM and nowhere else, and the portal's Starlink screens are
@@ -144,7 +144,10 @@ the link answers 401 after logout).
     self-signed certificate (§J.2; MEASURED §I.2).** 443 = Let's Encrypt for `crm.dishnetuganda.com`, verify 0;
     8443 = self-signed `CN=localhost`, verify 18; the bare `/crm` still answers 301 to `:8443/crm/`; uCRM's own
     address is `…:8443`. The plugin's invoice-PDF link is origin-relative and carries no credential, so it
-    inherits the origin the customer is on. The plugin's generated links and the website are on 443.
+    inherits the origin the customer is on. The plugin's generated links and the website are on 443. **The
+    invoice PDF document itself carries 2 links to `crm.dishnetuganda.com:8443` (MEASURED 09:44, §I.6)** —
+    uCRM's own address, written by its renderer — the likeliest door for the operator's own warning; only C-2
+    in docs/38 changes what uCRM writes there.
 15. **Consent is keyed by the sign-in identifier, not by the customer (§I.5).** The phone route had accepted
     the terms, so every portal page rendered; the e-mail route — the same customer, CRM #1 — was sent to the
     consent step on every page. `app_tos_consent` stores `crm_client_id` but `hasCurrentConsent()` looks up the
@@ -171,9 +174,9 @@ the link answers 401 after logout).
 | Account | **WORKING** | id 1, service type `starlink`, 1 service, 1 account, not paused, unpaid 329,000; uCRM live and the caches agree (§I.4) |
 | Services / plan | **WORKING** | "Residential (up to 400 Mbps)", UGX 329,000, active — UGX shown, the USD fallback not hit |
 | Invoices / invoice detail | **WORKING** | 1 pending invoice, detail with 1 item |
-| Invoice PDF | **WORKING on the standard port** | 200, `application/pdf`, 5,976 bytes, `private, no-store`, no redirect; origin `https://crm.dishnetuganda.com` with no port; **401 after logout**. A browser on `:8443` warns (§I.2, §J.2) |
+| Invoice PDF | **WORKING on the standard port** | 200, `application/pdf`, 5,976 bytes, `private, no-store`, no redirect; origin `https://crm.dishnetuganda.com` with no port; **401 after logout**. A browser on `:8443` warns (§I.2, §J.2); **the PDF document itself contains 2 links to `crm.dishnetuganda.com:8443` (§I.6, §J.2)** |
 | Receipts / payments | **WORKING** | 0 payments (none made), live from uCRM |
-| Equipment | **PARTIAL** | 0 items: no kit in the hybrid's register — `stock_units` is empty on Uganda (§D.4) |
+| Equipment | **PARTIAL** | 0 items: no kit bound to #1 in the hybrid's register; its 2 units are other customers' (§D.4, §I.6) |
 | Starlink diagnostics / sites | **N/A** | 400 "kit or router_id required": no kit bound |
 | WiFi | **PARTIAL** | 200 but no router resolved, empty SSID, a diagnostic payload explains |
 | Usage | **NOT IMPLEMENTED** | `unavailable: true` by design (a TODO in the API) |
@@ -233,8 +236,8 @@ Phone walk: 29 ok, 3 failed (L5, L9, L10 — the tenant findings), 6 notes. E-ma
 cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-verify
 bash scripts/journey-audit.sh --siblings                        2>&1 | tee /root/dnb-verify/journey-siblings-$(date -u +%Y%m%dT%H%M%SZ).log
 bash scripts/journey-audit.sh --identity 1                      2>&1 | tee /root/dnb-verify/journey-identity-$(date -u +%Y%m%dT%H%M%SZ).log
-bash scripts/journey-audit.sh --login-phone +211927797217       2>&1 | tee /root/dnb-verify/journey-login-phone-$(date -u +%Y%m%dT%H%M%SZ).log
-bash scripts/journey-audit.sh --login-email bhavin.madlani@outlook.com 2>&1 | tee /root/dnb-verify/journey-login-email-$(date -u +%Y%m%dT%H%M%SZ).log
+bash scripts/journey-audit.sh --login-phone '<the customer phone, international form>'       2>&1 | tee /root/dnb-verify/journey-login-phone-$(date -u +%Y%m%dT%H%M%SZ).log
+bash scripts/journey-audit.sh --login-email '<the customer e-mail>' 2>&1 | tee /root/dnb-verify/journey-login-email-$(date -u +%Y%m%dT%H%M%SZ).log
 bash scripts/journey-audit.sh --compare                         2>&1 | tee /root/dnb-verify/journey-compare-$(date -u +%Y%m%dT%H%M%SZ).log
 bash scripts/journey-audit.sh --urls                            2>&1 | tee /root/dnb-verify/journey-urls-$(date -u +%Y%m%dT%H%M%SZ).log
 ```
@@ -474,7 +477,7 @@ previous build of the command and at 08:40–08:41 on the extended walk; the 08:
 "Residential (up to 400 Mbps)", not a lead, not archived, has a service and an invoice, **updated 08:40:06** —
 the 60-second delta keeps it fresh. `ucrm_clients_cache` present with 1 contact; `ucrm_services_cache` 1 service
 (id 6, price 329,000, status 1, plan 3); `ucrm_invoices_cache` 1 invoice, unpaid, outstanding 329,000; 0
-payments; **`equipment_assignments` 0 and `stock_units` 0**; `customer_identities` and `kyc_applications`
+payments; **`equipment_assignments` 0 and `stock_units` 0 for this customer** (the tables hold 2 units and 2 live assignments for other customers — §I.6); `customer_identities` and `kyc_applications`
 tables absent; `customer_sessions` 5 rows, 0 live. Audit rows for this customer: consent 1, DPO initiate 1,
 **invoice PDF download 2** (the operator's own two opens — the reported issue), login 5, logout 4, code sent 5,
 one "WhatsApp not configured" from before the transport was set.
@@ -525,6 +528,39 @@ their result. Points worth stating on their own:
   in the container log.
 - Phone walk 29 ok / 3 failed / 6 notes; e-mail walk 22 ok / 1 failed / 14 notes. The four failures are the
   tenant findings (L5, L9, L10), pinned as expected by the rehearsal.
+
+### I.6 `--chain 1` (09:44:02) and both walks re-run with the in-PDF scan (09:44:03, 09:44:26) — pasted in full
+
+The kit chain for CRM #1, read only, serials masked (full record: docs/39 §2, §4, §8, §9, §13):
+
+- **uCRM:** service 6 carries `starlinkdetails` = **KIT…KWW** (16 characters, a KIT-pattern serial), and the
+  hybrid's intake extracts exactly that serial. Invoice **id 4, number 000003**, status 1, total 329,000, paid
+  0; payments 0.
+- **The hybrid's register — a correction to §B, §C, §D.4, §E and §I.4 above:** `stock_units` holds **2 units**
+  and `equipment_assignments` **2 live rows**, both for other customers; **0 for #1**, and KIT…KWW is in no
+  stock row, so the intake's verdict is `not_in_stock` ("assigning it would invent inventory"). The earlier
+  "empty" wording read the customer's own rows, not the tables. `kit_sl_map.json` absent; the hybrid's own
+  `sl_usage.json` 1 row; its Starlink session store: **one account (ACC…-43), state `expired`, imported
+  2026-09-13 06:18:12, last checked 2026-09-26 09:40:04, 0 failures.**
+- **Finance:** `sl_kits.json` 3 kits, 0 for #1, KIT…KWW absent; 0 kit rows naming a Starlink account or a
+  service line; `crm_starlink_reference.json` 3 rows, 0 for #1; its uCRM PATCH helper `apiPatch` has **0 call
+  sites** — Finance never writes to uCRM; kit-writing actions `fix_kit_links`, `add_purchase`, `sell_kit`,
+  `deploy_to_customer`, `add_kit`.
+- **Data Report:** registry 4 kits (regenerated 08:00:27 by "2.8.73"), KIT…KWW absent, 0 for #1; `sl_svc_cache`
+  19 lines (2 with a kit number, 0 with a CRM id), the serial on none; **`wifi_router_map.json` names KIT…KWW on
+  2 routers**; usage rows for it 0. `KitRegistryWriter` reads Finance's `sl_kits.json` as "the single source of
+  truth for what KITs exist" and marks `_metadata.in_finance_sl_kits`. The "Needs Sync" rule is
+  `templates/fleet_home.php:624–630` (KPI "Needs Sync · Active · no data" when `$activeNoData > 0`) and
+  1026–1032 ("Sync needed — Active KIT — no usage data yet"); the two kits are KIT…BX6 (CRM #7) and KIT…KFR
+  (CRM #47); **client #1 affected: NO**.
+- **Chain verdict:** uCRM attribute ✓ · hybrid stock ✗ · hybrid assignment ✗ · Finance ✗ · Data Report registry
+  ✗ · account / service line ✗ · usage ✗ — **first break: the hybrid's stock holds the kit.** 1 ok, 0 failed;
+  the store copy removed, uCRM read with GET only, nothing assigned or written.
+- **Both walks re-run:** identical to 08:40 in every line (phone 29 ok / 3 failed / 7 notes; e-mail 22 ok /
+  1 failed / 15 notes; the failures are L5, L9, L10), plus the new scan: **inside the invoice PDF, 2 content
+  streams, 2 URLs, hosts `crm.dishnetuganda.com:8443` ×2** (note L11) — in both walks, on the 443 origin. The
+  PDF link itself is still origin-relative and token-free, 401 after logout, and neither code nor cookie
+  appears in the container log.
 
 ## J. Two post-login findings from the operator's own test (added 26 September)
 
@@ -645,6 +681,15 @@ cache (docs/33 §5); an old bookmark. The plugin's own *generated* links have be
 5.18.34 (`crm_public_url`, docs/33), and the website's Customer Login opens the portal sign-in on 443
 (decision 8; **U5 measured the live site linking it, §I.2**).
 
+**Added 09:44 (both walks re-run, note L11): the invoice document itself carries two links to
+`crm.dishnetuganda.com:8443`.** The scan reads only the hosts inside the PDF's content streams: 2 streams,
+2 URLs, both on uCRM's own address. uCRM's renderer writes them — the plugin streams the bytes unchanged, and
+its shipped `invoice_uganda` template prints no link — so a customer who opens the invoice on 443 and follows a
+link inside it lands on `:8443`. That is the likeliest explanation of the operator's own warning, since the
+portal page was on 443. Only C-2 in docs/38 (the address uCRM believes it has) changes what uCRM writes into
+the document; the canonical-host redirect and the Traefik rule cannot reach a link inside a PDF. After C-2,
+download one already-issued invoice to learn whether uCRM re-renders it with the new address.
+
 **The ten questions.**
 1. URL format: `https://<the origin the customer is on>/crm/_plugins/dishnet-hybrid-sudan/public.php?page=api&action=app_invoice_pdf_download&inv_id=<n>&account_id=<n>`; the viewer shows `blob:https://<origin>/<uuid>`. Numeric ids only; no token.
 2. `portal.php:1418` (button), `6810–6890` (viewer), `6727` (fetch); `api_customer_app.php:4200–4247` (endpoint).
@@ -689,12 +734,14 @@ independent of any release. The plugin change ships in one release with the Issu
 mobile data; rollback: redeploy the previous commit. Nothing changes for Sudan (no override set there,
 docs/33 §3).
 
-### J.3 What the live runs add (PENDING)
+### J.3 What the live runs add
 
 All received: `--login-phone` / `--login-email` (§I.5), `--urls` (§I.2), `--compare` (§I.3), `--identity 1`
-(§I.4). Nothing in §J is pending except the fixes, which wait for approval.
+(§I.4), and at 09:44 `--chain 1` with both walks re-run and the in-PDF link scan (§I.6). Nothing in §J is
+pending except the fixes, which wait for approval.
 
-Rehearsed against the real portal code in the sandbox: **60 of 60 checks, two consecutive runs**, with
+Rehearsed against the real portal code in the sandbox: **75 of 75 checks, two consecutive runs** (60 when §J
+was first written; the `--client-flags`, `--chain` and in-PDF checks were added since), with
 L5, L9 and L10 pinned as the expected failures (they flip when the fix lands), the PDF streamed and refused
 after logout, and the `--urls` mode on plain http declaring the TLS checks not measured.
 
@@ -713,8 +760,8 @@ that.**
 - **Billing:** consistent and live (uCRM live on account open; caches within a minute; PDF served from uCRM
   through the plugin with the session as the only credential).
 - **Starlink / equipment / WiFi:** empty for this customer in every system, although uCRM's service carries a
-  `starlinkDetails` attribute — the hybrid's stock register is empty on Uganda, Finance was never told, Data
-  Report follows Finance (§D.4). No customer can see a kit the estate has not registered.
+  `starlinkDetails` attribute — the hybrid's stock holds two other customers' units and not this serial, Finance was never told, Data
+  Report follows Finance although its router map names the serial on two routers (§D.4, §I.6). No customer can see a kit the estate has not registered.
 - **Usage:** not implemented in the API, and Data Report — the only Starlink client — has had no working
   Starlink session in the whole log window (§D.2, §D.8).
 - **Help and legal:** the Support tab and the Terms are South Sudan's (§D.7, §J.1).

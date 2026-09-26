@@ -200,9 +200,11 @@ consent rows for version `1.1` remain and are harmless under `1.0`.
   Report = Starlink operational data). The intake reproduces Data Report's extraction exactly (the same accepted
   keys — `starlinkdetails`, `kitnumber`, `starlinkkit`, `kitno`, `kit` — a test pins the agreement) and
   refuses to assign a serial that is not in stock ("assigning it would invent inventory").
-- **Measured on Uganda (docs/37 §I.4, §I.1.2):** `stock_units` 0 rows, `equipment_assignments` 0 rows; client
-  #1's service carries `starlinkDetails`; Finance's `sl_kits.json` holds 3 kits (CRM #7, #47, #69) with no
-  service line, router or account; Data Report's registry = those 3 + one unassigned kit; its 19 service
+- **Measured on Uganda (docs/37 §I.4, §I.1.2, §I.6):** `stock_units` 2 rows and `equipment_assignments` 2 live
+  rows, both other customers', none for client #1; client #1's service carries `starlinkDetails` = KIT…KWW,
+  which is in no register but is named by 2 routers in Data Report's `wifi_router_map.json`; Finance's
+  `sl_kits.json` holds 3 kits (CRM #7, #47, #69) with no service line, router or account, and Finance's uCRM
+  PATCH helper has 0 callers; Data Report's registry = those 3 + one unassigned kit; its 19 service
   lines have 17 empty kit numbers and 0 CRM ids; its 5 Starlink sessions are dead or cookie-less.
 - **Two usage collectors exist.** The hybrid's own (`cron/starlink_usage.php` on `StarlinkSessionStore`, a
   Uganda-only imported session, `KitSlMap` for typed kit↔service-line pairings, `KitUsage` joining on the
@@ -257,8 +259,10 @@ fields only. **Nothing writes into Domain-B PostgreSQL, no second inventory, no 
 accounting time.**
 
 **Usage (DECISION B-4).** The portal's usage path is the hybrid's own collector: (1) an administrator imports
-the Uganda Starlink session once on `tabs/admin/starlink_session.php` (POST-only form, never printed;
-`StarlinkSessionStore`, isolated from Sudan's by construction); (2) kits are paired to service lines
+the Uganda Starlink session on `tabs/admin/starlink_session.php` (POST-only form, never printed;
+`StarlinkSessionStore`, isolated from Sudan's by construction) — one was imported on 13 September and is now
+**expired** (`--chain 1`), so the import recurs whenever Starlink ends the session, and B-4 needs an owner for
+that chore exactly as Data Report's Sessions tab does; (2) kits are paired to service lines
 (`starlink_service_line` on the assignment, or `KitSlMap`); (3) `cron/starlink_usage.php` writes the hybrid's
 `sl_usage.json`; (4) `app_usage` returns `KitUsage::forClient()` instead of `unavailable` — the portal's usage
 view already joins the same class. Data Report keeps collecting for its own fleet screens and stays the
@@ -308,6 +312,9 @@ screens and the router map the block workflow needs).
   `https://crm.dishnetuganda.com:8443/crm/`**, even through Traefik; browsers cache a 301.
   `http://crm.dishnetuganda.com:8080/` → 301 → `:8443/`.
 - The plugin's generated links and the website are already on 443 (5.18.34; decision 8 deployed).
+- **The invoice PDF document itself carries two links to `crm.dishnetuganda.com:8443`** (MEASURED 09:44, both
+  walks, docs/39 §7): uCRM writes its own address into every PDF it renders; the plugin streams the bytes
+  unchanged. This is the likeliest door for the operator's own warning.
 
 ### C.2 Where the fix belongs — three places, in this order
 
@@ -326,7 +333,9 @@ uCRM → Settings → System → Application → *Server domain name* `crm.dishn
 Before touching it: (a) confirm the fields are editable and not greyed out as managed by UISP (docs/33 §6);
 (b) confirm in UISP → Settings → Devices that the **device connection hostname/port is a separate setting**
 and stays `:8443` — routers connect there and it must never change (docs/05); (c) note the current values
-for rollback. Effect on the plugin: none — `ucrm.json` will then say 443 and the override agrees. **Rollback:**
+for rollback. Effect on the plugin: none — `ucrm.json` will then say 443 and the override agrees. **C-2 is also the only fix
+for the links inside the invoice PDFs**; after the change, download one already-issued invoice to learn whether
+uCRM re-renders it with the new address or keeps the old document, before telling customers. **Rollback:**
 set the two fields back. Evidence to collect first: a screenshot of that settings page, and
 `grep -riE 'port|host' /home/unms/app/unms.conf` (read-only) for UISP's own ports.
 
@@ -338,7 +347,8 @@ the device port; not for a browser address. Not recommended now.
 door (docs/06: low risk, test device adoption afterwards). Not required if C-1 and C-2 are done.
 
 **Dependencies.** C-1 none. C-2 the two confirmations above. Both independent of A and B; the plugin-side
-canonical redirect (A1.3) covers whatever still reaches `:8443` after them (old bookmarks, cached 301s).
+canonical redirect (A1.3) covers whatever still reaches `:8443` after them (old bookmarks, cached 301s) — but
+not a link inside a PDF, which points at uCRM's own pages, not the plugin's.
 
 **Verification:** `journey-audit.sh --urls` before and after (U4's `/crm` line changes from 301→`:8443` to
 302→`/crm/` on 443; U1 stays clean; U3 unchanged until C-3 ever happens), plus opening the sign-in from a
