@@ -144,22 +144,24 @@ The full analysis is **docs/36**.
 §7 says what to type. The lead mode printed a `sed` error (a look-ahead in a POSIX expression, on an
 unused variable) — fixed.
 
-## 2. Production e-mail sign-in — PENDING
+## 2. Production e-mail sign-in — PASSED (26 Sep 05:40 UTC)
 
-Code path proved end to end in a sandbox with a real SMTP dialogue (the checkpoint, §8). The
-production test is prepared: `bash scripts/phase2-verify.sh --email <address>`, where the address is
-on a customer record the operator controls. It sends one e-mail, the code is typed on the server and
-never printed, and it asserts the cookie flags, the portal (or its consent step), logout revocation,
-and the code's absence from every log and row. It stops before sending if the address matches no
-eligible record. Rehearsed.
+`--email` on `bhavin.madlani@outlook.com` (an address on a customer record): **16 ok, 0 failed.**
+E1 matched one account, eligible; E2 `app_send_otp` → 200 "Code sent via Email."; E3 the code arrived;
+E4 verify → 200, cookie **HttpOnly · SameSite=Lax · Secure**, JSON body carried no token; E5 `app_me`
+on the cookie → 200 (login_mode e-mail), the portal recognised the session and asked for consent first;
+E6 logout → 200 and the cookie was 401 afterwards (revoked); E7 the code appeared in no container-log
+line, and in no notification, queue, conversation, pending or audit row. Audit for the address:
+`otp_sent×1 login_success×1 logout×1`. **E-mail sign-in works end to end in production.**
 
-## 3. Production eligibility refusal — PENDING
+## 3. Production eligibility refusal — the GUARD is proven; the refusal path still PENDING
 
-Prepared: `bash scripts/phase2-verify.sh --lead <phone of a LEAD>`. It first asks the staff lookup
-whether the record is a lead the gate would refuse and **stops if it is not**, so no customer can be
-contacted. Then it knocks on the door once, expects the uniform answer, and proves in a store copy:
-one `otp_ineligible` audit row, no `otp_sent`, no pending code, no notification, nothing queued.
-Rehearsed, including the guard.
+`--lead +211927797217` (Bhavin's own number) read `eligible=true, is_lead=0` and the command
+**STOPPED at L1** — *"this number is NOT a refused lead … a code would reach a real customer; nothing
+was sent."* That is the guard doing its job: it refuses to run the test against a real customer. To
+exercise the *refusal* path (a lead is offered the door and the gate turns it away with the uniform
+answer while nothing is sent), the number must belong to a record that is a **lead** in uCRM
+(Clients → filter Leads, or a test lead created for it). Nothing was sent to anyone in either run.
 
 ## 4. Website deployment status
 
@@ -181,18 +183,27 @@ the DishNet portal sign-in and 0 to uCRM's login; last website commit `466e4fc`.
   approved.
 - Recorded, not Phase 2: the staff app's service worker is scoped to the plugin directory, so on a
   staff member's own browser it also fronts the customer pages. Staff devices only.
-- Nothing else: the checkpoint's fourteen other security checks are green and live.
+- Nothing else in Phase 2: the checkpoint's fourteen other security checks are green and live.
+- Pre-existing, in the SIBLING plugin (not Phase 2, not our code) — surfaced by the extended read and
+  recorded in docs/36 §H for a separate decision: (a) MODE 2 "View as Client" builds a synthetic
+  authenticated user from the URL's `?clientId=` for any holder of a uCRM session cookie, with no check
+  that it is the session's own client (matters only if non-admin client-zone logins exist for these
+  customers — operator to confirm); (b) the `dr_wifi_*` action handlers appear reachable without a
+  session (consistent with SAFETY.md; load-bearing for the Starlink block feature). Neither is fixed by,
+  nor blocks, the hand-off remediation.
 
 ## 6. Final Phase 2 status
 
-**Updated 26 Sep 05:45 UTC.** Authentication: green (5.18.38–5.18.40 live, L1–L8 passed). Website:
-green (LIVE 05:02 UTC). Test suite: green (204 suites / 8,051 checks / 0 failed, two complete runs).
-Data-report trust boundary: the named exploit is **not possible on this host** (§1b, from source); the
-feature is non-functional here; the design fix (docs/36 §D) awaits the operator's decision; two other
-sibling paths await the extended read (docs/36 §H). Production e-mail sign-in and lead refusal:
-**pending — both runs used the example values** (§1b). 16 of 19 items complete, 3 partial, 0 code
-defects. Data-report mode rehearsed 41/41 in two consecutive runs.
-
+**Updated 26 Sep 05:50 UTC.** Authentication: green (5.18.38–5.18.40 live; phone L1–L8 passed 02:59;
+**e-mail 16/0 passed 05:40**). Website: green (LIVE 05:02 UTC). Test suite: green (204 suites /
+8,051 checks / 0 failed, two runs). Data-report hand-off: the named exploit is **not possible on this
+host** — confirmed from the sibling's source and the absence of the directory its verifier hard-codes
+(§1b, docs/36 §H.1); the feature is dead here; the design fix (docs/36 §D) awaits decision. The extended
+read also surfaced two **pre-existing** access-control facts in the sibling (a "view as client"
+`?clientId=` override trusted from any session holder, and `dr_wifi_*` actions reachable without a
+session) — the sibling's own, unrelated to Phase 2, recorded in docs/36 §H for the operator to weigh
+separately. Lead-refusal path pending a real lead's number (the guard is proven). 17 of 19 items
+complete, 2 partial, 0 code defects.
 ## 7. Exact next action required from the operator
 
 1. **The extended source read** — read-only, one command; the log file is written to

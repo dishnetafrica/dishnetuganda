@@ -210,27 +210,61 @@ command):**
 9. Weakened copies, each caught: (a) the sibling's verifier with the `kid` check removed → 6's no-`kid`
    case fails; (b) the hybrid minting with `legacySecret()` → 2 fails.
 
-## H. Still to read — the sibling's other two access paths (PENDING; not the hand-off)
+## H. The extended read — 26 Sep 05:40 UTC — now READ (`verify-data-report-…T054045Z`, masked)
 
-The first source read printed pattern-matched lines from these regions, not the regions:
+**1. The hard-coded path is absent here — the JWT verify path is confirmed dead (D-XII-b).** On this
+host: `dishnet-hybrid-telecom` **ABSENT**, `.dishnet-hybrid-telecom-data` **ABSENT**;
+`dishnet-hybrid-sudan` and `.dishnet-hybrid-sudan-data` present (owner `1000:1000`, mode 0775). The
+verifier opens `<plugins>/dishnet-hybrid-telecom/data/plugin.sqlite3` (798) and returns `null` at 799
+when that file is absent — which it is. So §0 is confirmed by execution of the path logic, not only by
+reading it: **no hand-off token, forged or genuine, can verify here; the usage-report link 404s for
+every Uganda customer.**
 
-1. **MODE 2, the uCRM-session path** (`public.php:984–1260`): `?clientId=XXX` is read at 1143 as
-   "view as client" inside the block that runs for **any** request carrying a `PHPSESSID` or
-   `nms-session` cookie (1018). Whether that override is gated on the `/current-user` probe returning an
-   **admin** (isClient = false), or is available to a customer logged into uCRM's client zone, decides
-   whether a *logged-in customer* can read another customer's report. The extended command prints
-   978–1063 and 1083–1260.
-2. **Anonymous reachability of actions**: `dr_wifi_change.php` (4,551 lines; pause/unpause a dish,
-   change a WiFi password) contains **no** session, internal-auth, 401 or 403 word at all; it is
-   included at `public.php:5329` and `6101`. Whether an anonymous `?action=dr_wifi_…` request is
-   refused before those includes, or "falls through to the action handlers" (SAFETY.md's own note on an
-   earlier version), is the sibling's most consequential access-control question and is unrelated to
-   the hand-off token. The extended command prints the last 40 lines of `public.php`, ±12 lines around
-   each include, and ±30 lines around `dr_wifi_change.php`'s dispatch.
-3. **D-XII-b** prints which hybrid directories exist on this host, which settles whether
-   `dishnet-hybrid-telecom/data/plugin.sqlite3` can resolve here at all.
+**2. MODE 2 "View as Client" trusts `?clientId=` from any session holder (NEW — the sibling's own, not
+the hand-off).** Read at `public.php:1018–1153`. The client-portal block runs for **any** request
+carrying a `PHPSESSID` or `nms-session` cookie (1018) that is not an admin action or admin tab (1135).
+Inside it (1143–1152):
+
+    $drViewAsClientId = trim($_GET['clientId'] ?? '');
+    if ($drViewAsClientId !== '' && ctype_digit($drViewAsClientId)) {
+        $pUser = ['clientId' => $drViewAsClientId, 'crmClientId' => $drViewAsClientId,
+                  'isClient' => true, '_view_as_client' => true, ...];
+    }
+
+The requested `clientId` is taken from the URL and turned into a synthetic authenticated user **with no
+check that it is the session's own client.** The comment (1137–1142) frames it as an admin "View as
+Client" feature, but the code gates only on *having a session cookie*, not on being an admin. So the
+report a session holder is shown is **whatever `clientId` they put in the URL.** For DishNet staff this
+is expected (they may see every client anyway). It becomes a horizontal disclosure only **if a
+non-admin uCRM client-zone login exists for these customers** — a session that is `isClient = true` but
+should see only its own record. **Whether such logins exist is the operator's to confirm**: DishNet's
+customers sign in through our own OTP portal, not necessarily through uCRM's client zone. This is
+pre-existing in the sibling, unrelated to Phase 2 and to the hand-off token, and is **not** fixed by
+§D/§E; it is the sibling's MODE 2 and would need its own change (bind the "view as client" override to
+an admin session, or to `clientId == the session's own client`).
+
+**3. The `dr_wifi_*` action handlers appear reachable without a session (consistent with SAFETY.md;
+the sibling's own).** `dr_wifi_change.php` is `require`d at `public.php:6101` at top level, after the
+session-gated MODE 2 block, and its handlers (e.g. `dr_wifi_get_config` at 973, `dr_wifi_change_password`,
+`dr_wifi_test_block`) run at require-time when `$action` matches; the file itself carries **no** session,
+401 or 403 check. A request with no session cookie skips the 1018 block and reaches 6101, so the
+handlers run for it — exactly what `SAFETY.md:380–383` records for this plugin ("session-less calls fall
+through to the action handlers"), and what our own `StarlinkBlockBridge` depends on (it sends the
+internal-auth header, but the header is one of two accepted paths, not required). **Full confirmation
+needs the control flow between 1260 and 6100, which this read did not print**, so this is stated as
+strongly indicated, not proven to the last line. It is pre-existing, load-bearing for the Starlink
+block/unblock feature, and entirely the sibling's — **not** the hand-off token, and **not** changed by
+§D/§E. It is the sibling's most consequential access-control question and, if the operator wants it
+closed, is its own separate piece of work (gate the WiFi actions on the internal-auth header or a real
+admin session, without breaking the bridge).
+
+**Net:** the hand-off blocker is answered (not exploitable here; the feature is simply dead). Findings 2
+and 3 are the sibling's own pre-existing access control, surfaced by this read, and are recorded for the
+operator to weigh separately from the hand-off remediation. None of the three is authorised to build.
 
 ---
 
-*Nothing here is authorised to build. Sequence: the extended read (§H) → the operator's decision on
-§D → the two changes built with §G.*
+*Nothing here is authorised to build. Sequence: the operator's decision on §D (the hand-off fix) →
+separately, whether to raise findings §H.2 and §H.3 with the sibling's owner → the changes built with
+§G. Findings §H.2/§H.3 are pre-existing and independent; they neither block nor are fixed by the
+hand-off change.*
