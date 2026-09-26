@@ -27,6 +27,10 @@
 #                           source each reads; branding; an identity fingerprint saved for --compare;
 #                           logout and revocation; the code and cookie searched for in the container log.
 #   --compare               phone login = e-mail login = the same customer? (from the two fingerprints)
+#   --urls                  the public addresses: what the plugin's link builder produces (its own check
+#                           tool, report only), the customer manifest, the certificate on :443 and on
+#                           :8443, where the bare /crm and plain http land, whether the website links the
+#                           portal sign-in. No login, no cookie: HEAD/GET requests and TLS handshakes only.
 #
 # What it never does: print a token, code, key, secret, password or cookie; send anything to anyone
 # but the record named; accept terms on a customer's behalf; sync, unstick, delete, rebuild, deploy.
@@ -44,9 +48,9 @@ SNIP="$(mktemp -d)"; trap 'rm -rf "$SNIP"' EXIT
 
 MODE=""; ARG=""
 case "${1:-}" in
-  --siblings|--compare) MODE="${1#--}" ;;
+  --siblings|--compare|--urls) MODE="${1#--}" ;;
   --identity|--login-phone|--login-email) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; } ;;
-  *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare" >&2; exit 64 ;;
+  *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls" >&2; exit 64 ;;
 esac
 
 PASS=0; FAIL=0; NOTE=0
@@ -443,6 +447,7 @@ walk() {  # $1 screen  $2 action[&params]  $3 data source (from the code)
   case "$st" in WORKING) PASS=$((PASS+1));; BROKEN) FAIL=$((FAIL+1));; *) NOTE=$((NOTE+1));; esac
 }
 kv() { printf '%s' "$WALK_KV" | tr ';' '\n' | sed -n "s/^$1=//p" | head -1; }
+hdrv() { printf '%s' "$HTTP_HEADERS" | tr -d '\r' | grep -i "^$1:" | head -1 | sed -E 's/^[^:]*: *//'; }
 echo; echo "  ── the screens, through the customer API (WORKING / PARTIAL / BROKEN / NOT IMPLEMENTED / N-A) ──"
 walk "Account"     "app_me"                    "client_search_index + ucrm_clients_cache (name/phone/email) · ucrm_services_cache (services) · Finance sl_kits.json (kits) · Data Report wifi_router_map + wifi_test_block_state (paused) · ucrm_invoices_cache (unpaid)"
 ID="$(kv id)"; ACCS="$(kv accounts)"; FP="$(kv fp)"; STYPE="$(kv service_type)"
@@ -453,6 +458,27 @@ walk "Services"    "app_plan"                  "ucrm_services_cache (active serv
 walk "Invoices"    "app_invoices"              "ucrm_invoices_cache, refreshed from uCRM by webhook (invoice/payment) and on demand when stale"
 INV="$(kv first_inv)"
 if [ -n "$INV" ] && [ "$INV" != "0" ]; then walk "Invoice" "app_invoice&id=$INV" "ucrm_invoices_cache (one invoice)"; walk "Receipts" "app_invoice_receipts_list&inv_id=$INV" "uCRM LIVE payments for the invoice (+ ucrm_invoice_payments_cache)"; else note "Invoice/Receipts: no invoice to open (the list was empty)"; fi
+# The invoice PDF exactly as the portal's button requests it (portal.php:1418): an origin-relative path, the session in the
+# HttpOnly cookie, no token in the URL. The body is never printed — only the answer's shape.
+PDF_URL=""
+if [ -n "$INV" ] && [ "$INV" != "0" ]; then
+  PDF_URL="$PLUGIN_BASE?page=api&action=app_invoice_pdf_download&inv_id=$INV"
+  http GET "$PDF_URL" '' "$C"
+  P_CT="$(hdrv content-type)"; P_CC="$(hdrv cache-control)"; P_LOC="$(hdrv location)"; P_LEN="$(hdrv content-length)"; P_MAGIC="$(printf '%s' "$HTTP_BODY" | head -c 4)"
+  P_ORIGIN="$(printf '%s' "$PLUGIN_BASE" | sed -E 's#^(https?://[^/]+).*#\1#')"; P_HP="${P_ORIGIN#*://}"
+  case "$P_HP" in *:*) P_PORT="explicit port ${P_HP##*:} in the address";; *) P_PORT="no port in the address";; esac
+  if [ "$HTTP_CODE" = "200" ] && printf '%s' "$P_CT" | grep -qi 'application/pdf' && [ "$P_MAGIC" = "%PDF" ]; then
+    printf '  %-15s %-12s %s\n' "WORKING" "Invoice PDF" "streamed inline as application/pdf (${P_LEN:-?} bytes) · Cache-Control: ${P_CC:-—} · no redirect"; PASS=$((PASS+1))
+  elif [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+    printf '  %-15s %-12s %s\n' "PARTIAL" "Invoice PDF" "the plugin answered $HTTP_CODE — uCRM did not serve the PDF ($(printf '%s' "$HTTP_BODY" | tr -d '\n' | cut -c1-90 | mask))"; NOTE=$((NOTE+1))
+  elif printf '%s' "$HTTP_CODE" | grep -q '^3'; then
+    printf '  %-15s %-12s %s\n' "BROKEN" "Invoice PDF" "HTTP $HTTP_CODE redirect → $(printf '%s' "$P_LOC" | sed -E 's#^(https?://[^/]+).*#\1/…#' | mask)"; FAIL=$((FAIL+1))
+  else
+    printf '  %-15s %-12s %s\n' "BROKEN" "Invoice PDF" "HTTP $HTTP_CODE, content-type ${P_CT:-—}"; FAIL=$((FAIL+1))
+  fi
+  printf '  %-15s %-12s   ← %s\n' '' '' "app_invoice_pdf_download: cookie session → account allow-list → the invoice must be this account's (ucrm_invoices_cache) → uCRM invoices/{id}/pdf fetched server-side with the app key → bytes streamed, private/no-store"
+  echo "  the link the portal builds: <the page's own path>?page=api&action=app_invoice_pdf_download&inv_id=…&account_id=… — origin-relative, no token; this run's origin $(printf '%s' "$P_ORIGIN" | mask) ($P_PORT)"
+fi
 walk "Payments"    "app_payments"              "CustomerAccountService: ucrm_invoice_payments_cache after a live refresh"
 walk "Equipment"   "app_equipment"             "CustomerAccountService: stock_units + equipment_assignments (the hybrid's OWN kit register, not Finance's)"
 walk "Usage"       "app_usage"                 "hard-coded unavailable in api_customer_app.php (the portal's usage view instead joins KitUsage: our own collection, else Data Report sl_usage.json, on equipment_assignments)"
@@ -470,11 +496,11 @@ if [ -n "$TOK" ]; then
 fi
 unset TOK
 echo; echo "  ── the portal pages, with the cookie (200 = rendered; 302 = sent to the sign-in or consent step) ──"
-BRAND_HTML=""
+BRAND_HTML=""; SUPPORT_HTML=""
 for V in home account plans invoices usage sites support devices; do
   http GET "$PLUGIN_BASE?page=customer_portal&view=$V" '' "$C"
   LOC="$(printf '%s' "$HTTP_HEADERS" | grep -i '^location:' | head -1 | tr -d '\r' | sed -E 's/^[Ll]ocation: *//')"
-  if [ "$HTTP_CODE" = "200" ]; then printf '  %-15s %-12s 200 rendered (%s bytes)\n' "PAGE OK" "view=$V" "$(printf '%s' "$HTTP_BODY" | wc -c | tr -d ' ')"; [ -z "$BRAND_HTML" ] && BRAND_HTML="$HTTP_BODY"; PASS=$((PASS+1))
+  if [ "$HTTP_CODE" = "200" ]; then printf '  %-15s %-12s 200 rendered (%s bytes)\n' "PAGE OK" "view=$V" "$(printf '%s' "$HTTP_BODY" | wc -c | tr -d ' ')"; [ -z "$BRAND_HTML" ] && BRAND_HTML="$HTTP_BODY"; [ "$V" = "support" ] && SUPPORT_HTML="$HTTP_BODY"; PASS=$((PASS+1))
   elif [ "$HTTP_CODE" = "302" ]; then case "$LOC" in *step=consent*) printf '  %-15s %-12s 302 → the consent step (terms not yet accepted on the web; NOT accepted by this audit)\n' "CONSENT FIRST" "view=$V";; *customer_login*) printf '  %-15s %-12s 302 → sign-in (the page did not recognise the session)\n' "BROKEN" "view=$V"; FAIL=$((FAIL+1));; *) printf '  %-15s %-12s 302 → %s\n' "REDIRECT" "view=$V" "$(printf '%s' "$LOC" | mask | cut -c1-80)";; esac; NOTE=$((NOTE+1))
   else printf '  %-15s %-12s HTTP %s\n' "BROKEN" "view=$V" "$HTTP_CODE"; FAIL=$((FAIL+1)); fi
 done
@@ -484,6 +510,22 @@ b() { printf '%s' "$BRAND_HTML" | grep -o -F -- "$1" | wc -l | tr -d ' '; }
 echo "  UGX $(b 'UGX') · SSP $(b 'SSP') · 'DishNet Africa' $(b 'DishNet Africa') · Kampala $(b 'Kampala') · Uganda $(b 'Uganda') · '+256 705 993 348' $(b '+256 705 993 348') · 256705993348 $(b '256705993348') · Juba $(b 'Juba') · 'South Sudan' $(b 'South Sudan') · '+211' $(b '+211')"
 [ "$(b 'SSP')" = "0" ] && [ "$(b 'Juba')" = "0" ] && [ "$(b 'South Sudan')" = "0" ] && ok "L5 no South Sudan branding, currency or city on the rendered page" || bad "L5 South Sudan wording or currency on the rendered page"
 [ "$(b 'UGX')" != "0" ] || [ "$(b 'DishNet Africa')" != "0" ] && ok "L5 Uganda tenant wording present (UGX/DishNet Africa)" || note "L5 neither UGX nor the trading name appears on the rendered page"
+echo; echo "  ── the Support tab (the portal's 'Help' screen) — contact literals on the rendered page ──"
+if [ -n "$SUPPORT_HTML" ]; then
+  sc() { printf '%s' "$SUPPORT_HTML" | grep -o -F -- "$1" | wc -l | tr -d ' '; }
+  SS=$(( $(sc '+211') + $(sc '211921443002') + $(sc 'dishnetafrica.com') + $(sc 'Juba') )); UG=$(( $(sc '+256') + $(sc '256705993348') + $(sc 'dishnetuganda.com') + $(sc 'Kampala') ))
+  echo "  '+211' $(sc '+211') · 211921443002 $(sc '211921443002') · dishnetafrica.com $(sc 'dishnetafrica.com') · Juba $(sc 'Juba')   |   '+256' $(sc '+256') · 256705993348 $(sc '256705993348') · dishnetuganda.com $(sc 'dishnetuganda.com') · Kampala $(sc 'Kampala')"
+  if [ "$SS" != "0" ]; then bad "L9 the Support tab shows South Sudan contacts ($SS literal(s)) — the support view is hard-coded in portal.php (docs/37 §J.1)"; else ok "L9 the Support tab shows no South Sudan contact"; fi
+  if [ "$UG" = "0" ]; then note "L9 the Support tab shows no Uganda contact either"; else ok "L9 a Uganda contact is present on the Support tab"; fi
+else
+  note "L9 the Support tab was not rendered in this run (the consent step came first), so its contacts were not measured; the code reads +211 921 443 002 / 005 and the South Sudan e-mail (portal.php 1073–1096, docs/37 §J.1)"
+fi
+http GET "$PLUGIN_BASE?page=terms" ''
+if [ "$HTTP_CODE" = "200" ]; then
+  tc() { printf '%s' "$HTTP_BODY" | grep -o -F -- "$1" | wc -l | tr -d ' '; }
+  echo "  the public Terms page (?page=terms): 'South Sudan' $(tc 'South Sudan') · Juba $(tc 'Juba') · '+211' $(tc '+211') · dishnetafrica.com $(tc 'dishnetafrica.com')   |   Uganda $(tc 'Uganda') · Kampala $(tc 'Kampala')"
+  if [ "$(( $(tc 'South Sudan') + $(tc 'Juba') + $(tc '+211') + $(tc 'dishnetafrica.com') ))" = "0" ]; then ok "L10 the Terms page carries no South Sudan wording"; else bad "L10 the Terms page names South Sudan / Juba — the jurisdiction and the footer are hard-coded (LegalContent.php, legal_page.php; docs/37 §J.1)"; fi
+else note "L10 the Terms page answered HTTP $HTTP_CODE"; fi
 echo; echo "  ── identity fingerprint (sha256 of the customer id + account ids; no identity in the log) ──"
 printf 'kind=%s\nid=%s\naccounts=%s\nfp=%s\nat=%s\n' "$KIND" "$ID" "$(printf '%s' "$ACCS" | tr ',' '\n' | grep -c . )" "$FP" "$TS" > "$JOURNEY_OUT/journey-fp-$KIND.txt"
 ok "L6 $KIND sign-in resolved to CRM #$ID with $(printf '%s' "$ACCS" | tr ',' '\n' | grep -c .) account(s); fingerprint saved to $JOURNEY_OUT/journey-fp-$KIND.txt (run --compare after both logins)"
@@ -491,9 +533,10 @@ http POST "$PLUGIN_BASE?page=api&action=app_logout" '{}' "$C" "X-Requested-With:
 [ "$HTTP_CODE" = "200" ] && ok "L7 app_logout: 200" || bad "L7 app_logout → $HTTP_CODE"
 http GET "$PLUGIN_BASE?page=api&action=app_me" '' "$C"
 [ "$HTTP_CODE" = "401" ] && ok "L7 the cookie after logout: 401 (revoked)" || bad "L7 the cookie still works after logout → $HTTP_CODE"
+if [ -n "$PDF_URL" ]; then http GET "$PDF_URL" '' "$C"; [ "$HTTP_CODE" = "401" ] && ok "L7 the invoice PDF link after logout: 401 (the link carries no credential; access ended with the session)" || bad "L7 the invoice PDF link still answers after logout → $HTTP_CODE"; fi
 NCL="$(docker logs "$CONTAINER" --since "$STARTED" 2>&1 | grep -c -F -- "$CODE" || true)"; NCK="$(docker logs "$CONTAINER" --since "$STARTED" 2>&1 | grep -c -F -- "$CVAL" || true)"
 [ "${NCL:-0}" = "0" ] && [ "${NCK:-0}" = "0" ] && ok "L8 neither the code nor the session cookie appears in the container log since $STARTED" || bad "L8 the code appears $NCL time(s) and the cookie $NCK time(s) in the container log"
-unset CODE CVAL C
+unset CODE CVAL C PDF_URL
 # --- LOGIN END ---
 fi
 
@@ -509,6 +552,59 @@ echo "  phone  → CRM #$(rd "$FP_P" id) · $(rd "$FP_P" accounts) account(s) ·
 echo "  e-mail → CRM #$(rd "$FP_E" id) · $(rd "$FP_E" accounts) account(s) · at $(rd "$FP_E" at)"
 if [ "$(rd "$FP_P" fp)" = "$(rd "$FP_E" fp)" ] && [ -n "$(rd "$FP_P" fp)" ]; then ok "C1 SAME customer identity and the same account scope by both routes (fingerprints equal)"; else bad "C1 the two routes resolved DIFFERENTLY (fingerprints differ) — see the ids above"; fi
 # --- COMPARE END ---
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+if [ "$MODE" = "urls" ]; then
+# --- URLS BEGIN ---
+hdr "U. Public addresses — what the plugin builds, where a browser lands, which certificate answers (read-only)"
+PLUGIN="${PLUGIN:-dishnet-hybrid-sudan}"
+# A long path is not a secret; a credential-shaped query value is. Narrower than mask(), for lines that are URLs.
+maskurl() { sed -E 's/((token|key|secret|password|sig|hash)=)[^&[:space:]]+/\1<redacted>/gI; s/[A-Za-z0-9+=_-]{40,}/<redacted>/g'; }
+echo; echo "  ── U1 what the plugin itself builds — tools/crm_url_check.php, report only, as the store's owner ──"
+UREP="$(docker exec -u "$DB_OWNER" -w "$IN_CONTAINER" "$CONTAINER" php tools/crm_url_check.php 2>&1 || true)"
+printf '%s\n' "$UREP" | maskurl | sed 's/^/    /' | head -90
+SCR="$(printf '%s\n' "$UREP" | sed -n '/screens, portal, API/,/^$/p')"
+if [ -n "$SCR" ]; then case "$SCR" in *:8443*) bad "U1 the screens / portal / API build their links on :8443";; *) ok "U1 the screens / portal / API build their links without :8443";; esac; else note "U1 the report has no 'screens, portal, API' block (no settings-store copy where the tool looked)"; fi
+if printf '%s\n' "$UREP" | grep -q 'Every generated link uses a standard port'; then ok "U1 the tool's verdict: every generated link is on a standard port and the CRM answers on it"; else note "U1 the tool lists items under NEEDS FIXING (above)"; fi
+ORIGIN="$(printf '%s' "$PLUGIN_BASE" | sed -E 's#^(https?://[^/]+).*#\1#')"; SCHEME="${ORIGIN%%://*}"; HOSTPORT="${ORIGIN#*://}"; BARE="${HOSTPORT%%:*}"
+echo; echo "  plugin base origin (what this audit's own requests use): $ORIGIN"
+echo; echo "  ── U2 the customer manifest (public) ──"
+http GET "$PLUGIN_BASE?page=customer_manifest" ''
+SU="$(printf '%s' "$HTTP_BODY" | grep -o '"start_url": *"[^"]*"' | head -1 | sed -E 's/^"start_url": *"//; s/"$//')"
+if [ "$HTTP_CODE" = "200" ]; then ok "U2 customer_manifest 200 · start_url $(printf '%s' "$SU" | maskurl) — a path, resolved by the browser against whatever origin it is on"; else note "U2 customer_manifest → HTTP $HTTP_CODE"; fi
+if [ "$SCHEME" = "https" ]; then
+  echo; echo "  ── U3 the certificate each port presents (openssl from this server to its own public name; system trust store) ──"
+  for PORT in 443 8443; do
+    OUT="$(echo | timeout 25 openssl s_client -connect "$BARE:$PORT" -servername "$BARE" 2>/dev/null || true)"
+    if [ -z "$OUT" ]; then note "U3 $BARE:$PORT — no TLS answer"; continue; fi
+    VERIFY="$(printf '%s' "$OUT" | grep -m1 'Verify return code' | sed -E 's/^ *//')"
+    CERT="$(printf '%s' "$OUT" | openssl x509 -noout -issuer -subject -enddate -ext subjectAltName 2>/dev/null | tr '\n' ' ' | sed -E 's/  +/ /g')"
+    echo "    :$PORT  ${VERIFY:-no verify line}"
+    echo "           $(printf '%s' "$CERT" | cut -c1-240)"
+    if printf '%s' "$VERIFY" | grep -q 'code: 0 '; then ok "U3 port $PORT presents a certificate this system trusts"; else bad "U3 port $PORT presents a certificate this system does NOT trust (${VERIFY:-no verify line}) — a browser shows a security warning on this port"; fi
+  done
+  echo; echo "  ── U4 where a browser lands (one request each, redirects not followed, TLS verified) ──"
+  for U in "https://$BARE/crm" "https://$BARE/crm/" "http://$BARE/" "http://$BARE:8080/"; do
+    R="$(curl -sS -o /dev/null -D - --max-time 20 "$U" 2>&1 || true)"; RC="$(printf '%s' "$R" | grep -m1 -E '^HTTP/' | awk '{print $2}')"; RL="$(printf '%s' "$R" | tr -d '\r' | grep -i -m1 '^location:' | sed -E 's/^[^:]*: *//')"
+    printf '    %-30s %s %s\n' "$U" "${RC:-no answer: $(printf '%s' "$R" | head -1 | cut -c1-70)}" "${RL:+→ $RL}"
+  done
+  http GET "https://$BARE:8443/crm/_plugins/$PLUGIN/public.php?page=customer_login" ''; C8443="$HTTP_CODE"
+  http GET "https://$BARE/crm/_plugins/$PLUGIN/public.php?page=customer_login" ''; C443="$HTTP_CODE"
+  if [ "$C8443" = "000" ]; then E8443="curl refused its certificate (a browser warns here)"; else E8443="HTTP $C8443 with a certificate curl accepted"; fi
+  echo "    the customer sign-in page: on :443 → HTTP $C443 · on :8443 → $E8443"
+  if [ "$C443" = "200" ]; then ok "U4 the customer sign-in page answers 200 on the standard port"; else bad "U4 the customer sign-in page on :443 → HTTP $C443"; fi
+  echo; echo "  ── U5 the website's door (https://dishnetuganda.com/) ──"
+  http GET "https://dishnetuganda.com/" ''
+  if [ "$HTTP_CODE" = "200" ]; then
+    N="$(printf '%s' "$HTTP_BODY" | grep -o -F 'public.php?page=customer_login' | wc -l | tr -d ' ')"; M="$(printf '%s' "$HTTP_BODY" | grep -o -F '/crm/login' | wc -l | tr -d ' ')"
+    echo "    home page: links to the portal sign-in $N · links to uCRM's own /crm/login $M"
+    if [ "$N" != "0" ]; then ok "U5 the live website links the portal sign-in (the decision-8 website is deployed)"; else note "U5 the live website does not link the portal sign-in yet (the website redeploy is pending)"; fi
+  else note "U5 the website answered HTTP $HTTP_CODE"; fi
+else
+  note "U3–U5 not measured: the plugin base is plain http (a sandbox), so there is no certificate or public port to inspect"
+fi
+# --- URLS END ---
 fi
 
 hdr "Summary"

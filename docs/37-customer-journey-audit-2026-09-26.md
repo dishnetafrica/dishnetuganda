@@ -50,7 +50,7 @@ not arrived yet, §H). Nothing PENDING is asserted.
 | Usage | Starlink API via Data Report cron → `sl_usage.json` (**empty on Uganda**, docs/39) or hybrid's own hourly collector (`cron/starlink_usage.php`) | Data Report / hybrid | kit number, service line | portal `KitUsage` joins on `equipment_assignments`; the API `app_usage` is **hard-coded unavailable** | no usage shown; "0" never shown by design |
 | Customer login | hybrid (`client_search_index`, OTP, `customer_sessions`) | hybrid | phone (last 9 digits) / e-mail → uCRM client id (`sub`) + `accounts` | uCRM contacts are the only source of the identifiers | a contact edit in uCRM reaches the index by webhook/delta |
 | Suspension / block | uCRM service status → webhook → `StarlinkBlockService` / `StarlinkBlockBridge` → Data Report `dr_wifi_test_block` | uCRM (state), Data Report (execution) | client id → kits → router id | HTTP with `X-DishNet-Internal-Auth` | silent (caught) — SAFETY.md |
-| Support | none in the plugin — static contacts (WhatsApp, phone, e-mail from the tenant profile) | — | — | — | tickets are uCRM-only and not shown |
+| Support | none in the plugin — static contacts, **hard-coded to South Sudan in `portal.php` (§J.1), not read from the tenant profile** | — | — | — | tickets are uCRM-only and not shown; a Uganda customer is handed a South Sudan number |
 
 ## B. Identity map — Family Shoppers, CRM #1
 
@@ -111,28 +111,42 @@ not possible here).
 6. **Both siblings keep their live data in the directory uCRM deletes on upgrade** (docs/40 Q2). **MEASURED:
    `.dishnet-data-report-data` and `.dishnet-starlink-finance-data` are both absent**; the kit register, the
    router map, the Starlink session material and every cache live in `data/` (§I.1.2–3).
+7. **The post-login portal ignores the tenant profile (§J.1; REPOSITORY + SANDBOX).** `portal.php` and
+   `portal_data.php` never read `TenantProfile`: the Support tab (the "Help" screen), all sixteen WhatsApp
+   buttons, the displayed phone, the e-mail, the location default, the service-status view and the legal
+   pages carry South Sudan values on the Uganda install, while the sign-in page is tenant-aware — so the
+   customer sees Uganda before signing in and South Sudan after. Rendered in the sandbox with the real
+   portal code: **23 South Sudan literals and 0 Uganda contacts on the Support tab; `+211` ×6 in every
+   page's script; the Terms bind the customer to South Sudan law and the courts of Juba.** Live counts:
+   PENDING (`--login-*` L5/L9/L10).
 
 **Medium**
-7. `app_usage` is hard-coded `unavailable: true` (a TODO); the portal's usage view has a source only through
+8. `app_usage` is hard-coded `unavailable: true` (a TODO); the portal's usage view has a source only through
    the hybrid's own collector, because Data Report's `sl_usage.json` holds 14 historical rows for two kits and
    cannot grow while every account is dead (§I.1.1; docs/39).
-8. `app_plan` and `app_invoices` fall back to **`USD`** when a uCRM record carries no `currencyCode`
-   (`api_customer_app.php`: `?? 'USD'`) — a South Sudan-era default; the tenant's currency should be the
+9. `app_plan`, `app_invoices` **and `portal_data.php:1031`** fall back to **`USD`** when a uCRM record
+   carries no `currencyCode` (`?? 'USD'`) — a South Sudan-era default; the tenant's currency should be the
    fallback. Whether any live record hits the fallback: PENDING (the walk prints the currency shown).
-9. Sibling access control, pre-existing, separate track (docs/36 §H.2–H.3): "View as Client" trusts the URL
-   for any session holder; `dr_wifi_*` handlers appear reachable without a session; the Sync Status page
-   offers one-click destructive recovery (`dr_cron_nuclear_reset` forces a sync, §I.1.1).
-10. Data Report's `dr_accounts.json` holds Starlink session material in the upgrade-deleted directory
+10. Sibling access control, pre-existing, separate track (docs/36 §H.2–H.3): "View as Client" trusts the URL
+    for any session holder; `dr_wifi_*` handlers appear reachable without a session; the Sync Status page
+    offers one-click destructive recovery (`dr_cron_nuclear_reset` forces a sync, §I.1.1).
+11. Data Report's `dr_accounts.json` holds Starlink session material in the upgrade-deleted directory
     (docs/38; MEASURED present, 5 accounts, never opened beyond the count).
-11. `sl_account_cycles.json` / `accounts.json` read by the hybrid do not exist on Uganda (docs/39).
-12. Finance's `config.json` is empty (2 bytes) and `crm_invoice_export.json` is 141 days old (MEASURED,
+12. `sl_account_cycles.json` / `accounts.json` read by the hybrid do not exist on Uganda (docs/39).
+13. Finance's `config.json` is empty (2 bytes) and `crm_invoice_export.json` is 141 days old (MEASURED,
     §I.1.2); Finance has **one PATCH helper towards uCRM** (`public.php:101–106`) whose callers were not
     captured — to be read before Finance is called read-only towards uCRM.
+14. **The customer pages answer on whatever host and port a request arrives on, and on `:8443` UISP presents
+    a self-signed certificate (§J.2).** The plugin's invoice-PDF link is origin-relative and carries no
+    credential, so it inherits the origin the customer is on; a customer who arrived through uCRM's own
+    links, the cached `301` of the bare `/crm`, or an old bookmark is on `:8443` and the browser warns.
+    The plugin's *generated* links have been on the standard port since 5.18.34; the origin of the *page*
+    is not corrected anywhere. Live measurement: PENDING (`--urls` U3–U5, the operator's address bar).
 
 **Cosmetic**
-13. The Data Report heads every page *"DISHNET AFRICA · JUBA, SOUTH SUDAN"* on the Uganda install; its
+15. The Data Report heads every page *"DISHNET AFRICA · JUBA, SOUTH SUDAN"* on the Uganda install; its
     generated registry names generator "2.8.73" on the 2.8.80 build.
-14. Existing customers meet the consent step once on the web before the portal renders (by design; the
+16. Existing customers meet the consent step once on the web before the portal renders (by design; the
     audit does not accept it on their behalf).
 
 ## E. Customer-experience scorecard — expected from the code for a customer WITHOUT a Starlink kit; the live values come from `--login-phone` and `--login-email` (PENDING)
@@ -146,12 +160,13 @@ not possible here).
 | Usage | NOT IMPLEMENTED (API) / no source (portal) | hard-coded unavailable; no kit |
 | Invoices | WORKING | cache + refresh |
 | Payments / receipts | WORKING (statement) / PARTIAL (receipt list needs uCRM live) | `CustomerAccountService`, live payments |
-| Documents (invoice PDF) | WORKING if uCRM serves the PDF (live), else 502/503 | `app_invoice_pdf_download` |
-| Support | WORKING as static contacts; **no tickets** | the view is contact tiles from the tenant profile |
+| Documents (invoice PDF) | WORKING on the standard port — SANDBOX: streamed inline as `application/pdf`, `private, no-store`, no redirect, **401 after logout**; **a browser on `:8443` warns about UISP's self-signed certificate** (§J.2) | origin-relative link, cookie session, ownership check, server-side fetch from uCRM |
+| Legal / consent | **WRONG TENANT** — the Terms and Privacy every customer must accept name South Sudan law and the courts of Juba; the legal page's footer is South Sudan (§J.1) | `lib/LegalContent.php`, `legal_page.php` |
+| Support ("Help") | **WRONG TENANT** — renders, but with South Sudan contacts: SANDBOX 23 literals, 0 Uganda (§J.1); no tickets | the support view is hard-coded in `portal.php`, not read from the tenant profile |
 | Logout | WORKING (revocation proven) | docs/35 §2 |
-| Branding | UGX · DishNet Africa Limited · Kampala · +256 705 993 348; no SSP/Juba | `profiles/uganda.json`; the walk counts the words on the rendered page |
+| Branding | sign-in page: UGX · DishNet Africa · Kampala · +256 (tenant-aware). Portal pages: **`+211` ×6 in every page's script and `Juba` as the location default** (SANDBOX, §J.1) | `login_web.php` reads the profile; `portal.php` does not; the walk counts the words on the rendered pages |
 
-## F. Architecture recommendations — the top ten
+## F. Architecture recommendations — the top twelve
 
 1. **One customer identity = the uCRM client id, everywhere.** Finance and Data Report must reference it,
    never a typed name; retire Finance's own client cache as a *master* (keep it as a cache with a refresh time).
@@ -172,13 +187,22 @@ not possible here).
 9. **Sibling access control** (docs/36 §H): gate "View as Client" on an admin session; gate `dr_wifi_*` on the
    internal-auth header or a real admin session without breaking the block bridge.
 10. **Uganda branding in the Data Report** from the same tenant record the hybrid uses.
+11. **The tenant profile through the whole customer portal and the legal pages** (§J.1): one
+    `TenantProfile` load in `portal_data.php`, every contact, location, currency and legal footer from it;
+    the Terms/Privacy wording parameterised by entity, jurisdiction and regulator — after the business
+    decides Uganda's courts and clauses, which the repository does not hold.
+12. **One public origin for customers** (§J.2): keep customers off `:8443` (uCRM's configured address or a
+    real certificate on 8443, the website's 443 sign-in link) and a canonical-host redirect for the customer
+    pages when `crm_public_url` is set, so a stale bookmark or a uCRM e-mail link lands on the trusted
+    address. The PDF endpoint itself stays as it is.
 
 ## G. Phases
 
 - **Now (read-only):** run the four modes of `scripts/journey-audit.sh` (§H); record the results here.
 - **Phase 1:** data-report redesign (docs/36 §J) including discovery, the hand-off key, Back-to-Portal, alert
   URL, branding; move sibling data to persistent directories; the false stale-lock alert replaced by a real
-  one for dead Starlink sessions.
+  one for dead Starlink sessions; **the portal tenant pass and the canonical-host redirect (§J), with the
+  legal wording after the business decision on Uganda's courts.**
 - **Phase 2:** one kit register; `app_usage` on the real source; tenant-currency fallback.
 - **Phase 3:** sibling access-control hardening (View as Client, `dr_wifi_*`); Finance client cache demoted.
 
@@ -191,6 +215,7 @@ bash scripts/journey-audit.sh --identity 1                      2>&1 | tee /root
 bash scripts/journey-audit.sh --login-phone +211927797217       2>&1 | tee /root/dnb-verify/journey-login-phone-$(date -u +%Y%m%dT%H%M%SZ).log
 bash scripts/journey-audit.sh --login-email bhavin.madlani@outlook.com 2>&1 | tee /root/dnb-verify/journey-login-email-$(date -u +%Y%m%dT%H%M%SZ).log
 bash scripts/journey-audit.sh --compare                         2>&1 | tee /root/dnb-verify/journey-compare-$(date -u +%Y%m%dT%H%M%SZ).log
+bash scripts/journey-audit.sh --urls                            2>&1 | tee /root/dnb-verify/journey-urls-$(date -u +%Y%m%dT%H%M%SZ).log
 ```
 
 - `--siblings` and `--identity` read files and a copy of the store; the identity mode also issues **GET**
@@ -203,6 +228,13 @@ bash scripts/journey-audit.sh --compare                         2>&1 | tee /root
   and a crash log): **48 of 48 checks, two consecutive runs**, including the leak checks (planted keys,
   cookies, kit numbers, the address, the phone number and the OTP code never appear) and a control that a
   differing fingerprint is reported as DIFFERENT.
+- `--urls` (added 26 Sep for §J.2) runs the plugin's own link-builder report (`tools/crm_url_check.php`,
+  report mode), reads the customer manifest, inspects the certificate on 443 and on 8443 with `openssl`,
+  records where `/crm`, `/crm/`, `http://` and `:8080` send a browser, and whether the live website links
+  the portal sign-in. HEAD/GET requests and TLS handshakes to the server's own public name; no login.
+- The login walks (extended 26 Sep for §J) also fetch the first invoice's PDF with the cookie exactly as
+  the portal does (the answer's shape only, never the bytes), fetch the same link after logout, count the
+  contact literals on the Support tab and on the public Terms page.
 - Never: sync, unstick, delete, rebuild, deploy, modify a customer, change any plugin.
 
 ## I. Results from the server (MEASURED; appended as the log files arrive)
@@ -370,3 +402,178 @@ the sibling, only on the operator's go-ahead.
 
 **Still PENDING:** `--identity 1`, `--login-phone`, `--login-email`, `--compare` (§H). §B's hybrid-side
 row, §C's hybrid columns, §E's live scorecard and the final identity verdict wait for them.
+
+## J. Two post-login findings from the operator's own test (added 26 September)
+
+Both were traced in the repository (REPOSITORY) and then exercised against the **real portal code** in the
+sandbox (SANDBOX: the uganda profile, a customer with consent on record, a fake uCRM serving one invoice
+PDF). The live values come from the extended `--login-*` walks and the new `--urls` mode (PENDING).
+Nothing was changed; no fix is built.
+
+### J.1 Issue 1 — "Help" shows South Sudan after login
+
+**What the customer sees.** The portal's bottom navigation has a **Support** tab (`portal.php:7734`,
+`7744`; the operator calls it Help). Its screen (`tabs/customer_app/portal.php:1062–1135`) is hard-coded:
+a WhatsApp card to `+211 921 443 002`; a "Call us" row that **displays `+211 921 443 005` and dials
+`+211 921 443 002`**; an e-mail row to the South Sudan address; two more WhatsApp rows to `+211 921 443 002`
+("Internet slow or down", "Help paying invoice").
+
+**Root cause.** The post-login portal never consults the tenant profile. `tabs/customer_app/portal.php`
+(7,772 lines) and `portal_data.php` (1,049 lines) contain **zero** references to `TenantProfile` or
+`CustomerContact`. The sign-in page does (`login_web.php:44–45`; footer `271–278`; the dial hint through
+`PortalLocale`), which is why a Uganda customer sees Uganda before signing in and South Sudan after. One
+plugin serves both countries with two profiles (`profiles/south-sudan.json`, `profiles/uganda.json`;
+selector `tenant_profile`, else the currency: UGX → uganda; the Uganda install's `currency_code` is UGX).
+The Phase 2 work (docs/07, 5.18.38) re-pointed the readers it listed; the portal was not among them.
+
+**Every South Sudan literal in the customer app** (REPOSITORY):
+
+| File | Literal | Where |
+|---|---|---|
+| `portal.php` | `+211921443002` ×16 (WhatsApp) | support view 1073, 1104, 1119; plans 978; WiFi 1587, 5180; hotspot 3310; service status 5010; the generic helper and error paths 4200, 6805, 6947, 7228, 7282, 7296 |
+| `portal.php` | `+211 921 443 005` (displayed) | 1088 — in neither profile and not in `CustomerContact::DEFAULTS` |
+| `portal.php` | the South Sudan e-mail ×2 | 1092, 1096 |
+| `portal.php` | `Juba` ×4: "Juba, South Sudan · Updated just now", "Juba metro areas", "Juba, Yei, Wau", "Location: Juba" | service-status view 4885, 4966, 4991, 5010 |
+| `portal_data.php` | `$portalLocation = 'Juba'`; city default `'Juba'` | 1020, 1024 |
+| `portal_data.php` | currency fallback `?? 'USD'` | 1031 (§D.9) |
+| `legal_page.php` | footer "DishNet Africa Ltd. · Juba, South Sudan"; WhatsApp `+211 921 443 002`; the South Sudan e-mail | 307, 334, 335 |
+| `lib/LegalContent.php` | Terms: "registered in South Sudan… customers in Juba" (37–38); "governed by the laws of the Republic of South Sudan… the courts of Juba" (116–118). Privacy: "South Sudan regulatory authorities" (174–175) | the consent step every customer must accept |
+
+**Measured in the sandbox against the real portal code:** the Support tab renders **23** South Sudan
+literals and **0** Uganda contacts; every portal page embeds `+211` **6 times** (the WhatsApp helper's
+number in the page's script) and the home page shows `Juba` for a client without a city; the public Terms
+page names South Sudan and Juba. The live walk prints the same counts for the operator's record (L5, L9,
+L10).
+
+**The six questions.**
+1. The link and destination: the Support tab, `?page=customer_portal&view=support`, rendered with the
+   contacts above; WhatsApp opens `wa.me/211921443002`; "Call us" dials `+211921443002`.
+2. Generated by `tabs/customer_app/portal.php` (the support view and the `openWhatsApp` helper); the legal
+   pages by `tabs/customer_app/legal_page.php` and `lib/LegalContent.php`.
+3. Hard-coded. Not generated through `TenantProfile` or any configuration key.
+4. Yes: every WhatsApp button in the portal (16), the displayed phone, the e-mail, the location default,
+   the service-status view, the legal pages' footer, and the Terms/Privacy wording (registration,
+   jurisdiction, regulator). Company details on the sign-in page and in every customer e-mail are already
+   tenant-aware (`login_web.php`, `EmailTemplate`, `CustomerEmails`, `CustomerContact` for WhatsApp copy).
+5. Yes: one plugin, two profiles; Uganda selects `uganda` through UGX. Sudan is unaffected by the literals
+   only because they happen to be its values — except the displayed 005 number, which is in no profile.
+6. The correct destinations, changing neither:
+   - **Uganda** (`profiles/uganda.json`): WhatsApp `256705993348`; phone `+256 705 993 348`; e-mail
+     `accounts@dishnetuganda.com`; DishNet Africa Limited, Acacia Mall, Kampala; law: the Republic of
+     Uganda; regulator: Uganda Communications Commission. **Courts: not in the repository**
+     (`jurisdiction.courts` is null) and **no Uganda legal text exists** (`legal_texts` is null).
+   - **South Sudan** (`profiles/south-sudan.json`): WhatsApp `211921443002`; support phone
+     `+211 921 443 006` (the portal shows 005); e-mail `info@dishnetafrica.com`; DishNet Africa Ltd.,
+     Airport Road, Juba; law: the Republic of South Sudan; courts: Juba.
+
+**Recommendation.** Every customer-facing help and support value resolves from the tenant profile, in
+one place: `portal_data.php` loads `TenantProfile::current($config, $dataDir)` once and hands it to every
+view; the support view, the plans / WiFi / hotspot / status buttons and the `openWhatsApp` helper take
+`contacts.support_wa`, `contacts.support_phone` and `email`; the location default takes `office.city`;
+the currency fallback takes `currency.code`; `legal_page.php`'s footer takes the profile's entity, locality
+and contacts; `LegalContent` is parameterised by entity, registration country, jurisdiction and regulator.
+**The legal wording needs a business decision first:** Uganda's courts and any Uganda-specific clauses are
+not in the repository; the Terms must not silently become "the laws of Uganda, the courts of null".
+Severity: **High** for the customer experience (a Uganda customer messages a South Sudan number; the
+consent binds to the wrong jurisdiction); not a security defect.
+
+**Regression tests, to write with the fix.** (a) Render the support, home and service-status views and
+both legal pages under each profile through the real router and assert no cross-tenant literal, as
+`tests/test_email_no_sudan.php` does for e-mails; (b) a scan that `tabs/customer_app/*.php` and
+`lib/LegalContent.php` carry no `+211`, `Juba`, the South Sudan domain or "South Sudan" outside a
+`TenantProfile` fallback argument, every exception named; (c) the sandbox rehearsal's L5 / L9 / L10 flip
+from pinned failures to passes — the harness names them one by one, so it fails until the fix lands and
+fails again if a literal returns.
+
+**Rollout / rollback.** One plugin release (version, docs/07 entry), deployed with `scripts/deploy-hybrid.sh`
+as before; verified by `journey-audit.sh --login-*` (L5 / L9 / L10 pass) and by opening Support on a phone.
+Rollback: redeploy the previous plugin commit with the same script; no data migration. Sudan: identical
+code path, profile `south-sudan`, values unchanged except that "Call us" shows the profile's support phone.
+
+### J.2 Issue 2 — the invoice PDF URL carries a port and the browser warns
+
+**The flow, from the code** (REPOSITORY):
+1. The invoices screen's button (`portal.php:1418`) builds
+   `<the page's own path>?page=api&action=app_invoice_pdf_download&inv_id=<id>&account_id=<id>` — the path
+   from `$_SERVER['REQUEST_URI']` without its query. **No scheme, host, port or token.**
+2. `DishNet.viewPdf()` (`portal.php:6810–6890`) fetches it with `DishNet.apiFetch()` (`6727`: plain
+   `fetch(url, {credentials: 'same-origin'})` plus `X-Requested-With`, no base-URL prefix), turns the answer
+   into a `blob:` URL shown in an iframe; the "↗" button opens that blob URL; the fallback "Open PDF" link is
+   the same relative URL.
+3. `app_invoice_pdf_download` (`api_customer_app.php:4200–4247`): `ca_require_auth` — the HttpOnly cookie
+   or a Bearer header, **never a URL parameter** (`CustomerSession::fromRequest`); `ca_resolve_active_client_id`
+   — `account_id` must be the session's `sub` or in its `accounts` allow-list, else 403;
+   `ca_require_invoice_for_account` — the invoice must be in `ucrm_invoices_cache` with this client's id, else
+   404; then uCRM's `invoices/{id}/pdf` is fetched **server-side with the plugin's app key**, the bytes are
+   streamed `inline` with `Cache-Control: private, no-store`, and an audit row (invoice id and number only)
+   is written. No redirect, no `Location`.
+
+**Root cause of the port.** The plugin cannot put a port in this URL: it is origin-relative. The port the
+operator saw is the origin their browser was already on. On this host the same plugin answers on two
+origins: `https://crm.dishnetuganda.com` — port 443, Traefik, a Let's Encrypt certificate — and
+`https://crm.dishnetuganda.com:8443` — UISP's own web server with **a self-signed certificate** (docs/01,
+docs/05, docs/09, docs/33 §1). 8443 is a public port, open in the firewall because routers connect on it
+(docs/06); it is not an internal one. A browser on `:8443` shows a certificate warning, and every relative
+link, the PDF and even the `blob:` URL inherit `:8443` from the page. **How a customer lands there:** uCRM's
+own e-mails and redirects (the client-zone invitation, uCRM's invoice e-mails, its post-login redirect)
+carry the address uCRM was configured with, `crm.dishnetuganda.com:8443` (docs/33 §2, §6 — "not the
+plugin's to change"); the bare `/crm` is answered by UISP with a **301** to `…:8443/crm/`, which browsers
+cache (docs/33 §5); an old bookmark. The plugin's own *generated* links have been on the standard port since
+5.18.34 (`crm_public_url`, docs/33), and the website's Customer Login opens the portal sign-in on 443
+(decision 8; whether the redeployed site is live is what `--urls` U5 measures).
+
+**The ten questions.**
+1. URL format: `https://<the origin the customer is on>/crm/_plugins/dishnet-hybrid-sudan/public.php?page=api&action=app_invoice_pdf_download&inv_id=<n>&account_id=<n>`; the viewer shows `blob:https://<origin>/<uuid>`. Numeric ids only; no token.
+2. `portal.php:1418` (button), `6810–6890` (viewer), `6727` (fetch); `api_customer_app.php:4200–4247` (endpoint).
+3. HTTPS on both origins. Plain `http://…` → Traefik 301 to https; `http://…:8080` → UISP 301 to `:8443` (docs/01). Live: `--urls` U4.
+4. Host `crm.dishnetuganda.com`. Port 443 = Traefik / Let's Encrypt, the intended public address. Port 8443 = UISP's own HTTPS listener, public (open for routers), self-signed. Live: `--urls` U3.
+5. Path on 443: browser → Traefik (file-provider route) → UISP's nginx → uCRM's PHP → the plugin's `public.php`. Path on 8443: browser → UISP's nginx directly. The plugin runs identically on both.
+6. `CustomerSession::isHttps()` honours `X-Forwarded-Proto`, `X-Forwarded-Ssl`, `HTTPS` and port 443, so the `Secure` cookie flag is set on both paths. **There is no canonical or base-URL rule for the customer pages**: the plugin answers on whatever host and port the request arrived on, and its relative links keep the customer there. `crm_public_url` corrects only the absolute links the plugin generates (e-mails, WhatsApp, DPO, "View in CRM").
+7. The warning is **the certificate on 8443** — not HTTP, not mixed content (page and API share the origin), not a redirect. By design (docs/05 "UISP serves its UI on 8443 with a self-signed certificate. Browsers warn."; docs/09: `:8443 HTTP 000 (TLS rejected)`, `443 HTTP 200 application/pdf`). Live: U3 / U4. **PENDING: the operator's address bar at the time.** If it showed `:8443`, this is the whole explanation. If it showed no port, the warning has another cause and the live U3 result for 443 decides.
+8. No JWT, session cookie, bearer token or other credential in the invoice URL; the session is the HttpOnly cookie. (The WhatsApp "send me this invoice" path is different by design: `serve_temp_pdf&file=…&token=…`, a random token compared with `hash_equals`, ten minutes, the file deleted after its first serve — sent to the customer's own number only.)
+9. Yes. Authentication is checked on every request (`ca_require_auth`); the account must be in the session's allow-list (403 otherwise); the invoice must belong to that account (404 otherwise). The ownership check is cache-based: an invoice absent from `ucrm_invoices_cache` is a 404 even for its owner — a completeness gap, not an exposure.
+10. The URL never expires by itself; access ends with the session. Logout revokes the session (`customer_sessions.revoked_at`); **SANDBOX: the same PDF link answers 401 after logout**; sessions also expire by `expires_at`. Live: the walk's L7.
+
+**SANDBOX proof of the endpoint:** with the cookie, `200`, `application/pdf`, 1,069 bytes, `Cache-Control:
+private, no-store`, no redirect; after logout, `401`.
+
+**Recommendation — fix the origin, not the endpoint, which is sound.**
+1. **Keep customers off `:8443`.** (a) uCRM: Settings → System → Application → server domain and port 443,
+   if editable (docs/33 §6: if greyed out as managed by UISP, stop — UISP's own port must not change,
+   routers depend on it); or (b) a real certificate on 8443 (docs/05 Option B), so uCRM's own links open
+   without a warning; and (c) the website redeploy, so every public door is the 443 sign-in link.
+2. **Plugin-side, small and testable: a canonical-host redirect for the customer pages.** When
+   `crm_public_url` is set and a `customer_login` / `customer_portal` GET arrives on a different host:port,
+   answer 301 to the same path and query on the public address. Sudan: no override, no redirect — exactly
+   as `dn_with_override()` behaves today. This closes the cached-301 and the uCRM-e-mail cases for the portal
+   without touching UISP.
+3. **Do not** move the session into the URL, sign the PDF URL, or change the endpoint's checks: cookie +
+   allow-list + ownership + server-side fetch is the design this audit found correct.
+
+Severity: **Medium** — a customer-facing certificate warning that stops some customers; no exposure.
+(High only if U3 shows the 443 certificate itself untrusted, which nothing so far suggests.)
+
+**Regression tests.** (a) `portal.php`'s invoice and receipt links carry no scheme, host, port or `token=`
+(a rendered-page test under `/crm/_plugins/…`, as `test_customer_pwa.php` already serves the plugin);
+(b) the canonical redirect: with `crm_public_url` set and a request on `crm.example:8443`,
+`?page=customer_portal` answers 301 to the public address with the same path and query; without the
+override, no redirect; POSTs never redirected; (c) `test_links_without_port.php` still passes; (d) the
+walk's "Invoice PDF WORKING" and "401 after logout" lines stay green.
+
+**Rollout / rollback.** The uCRM / certificate change is an operator action on UISP (docs/33 §6, docs/05),
+independent of any release. The plugin change ships in one release with the Issue-1 fix, deployed with
+`scripts/deploy-hybrid.sh`; verified by `--urls` (U1–U5) and by opening an invoice PDF from a phone on
+mobile data; rollback: redeploy the previous commit. Nothing changes for Sudan (no override set there,
+docs/33 §3).
+
+### J.3 What the live runs add (PENDING)
+
+`--login-phone` / `--login-email`: the `Invoice PDF` classification and the link's shape; `L7` the PDF link
+after logout; `L9` the Support tab's contact literals (the operator's record has consent on record, so the
+tab renders); `L10` the public Terms page. `--urls`: U1 the plugin's own link-builder report; U2 the
+manifest; U3 the certificate on 443 and on 8443; U4 where `/crm`, `/crm/`, `http://` and `:8080` land and
+the sign-in page on both ports; U5 whether the live website links the portal sign-in.
+
+Rehearsed against the real portal code in the sandbox: **60 of 60 checks, two consecutive runs**, with
+L5, L9 and L10 pinned as the expected failures (they flip when the fix lands), the PDF streamed and refused
+after logout, and the `--urls` mode on plain http declaring the TLS checks not measured.
