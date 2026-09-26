@@ -227,25 +227,20 @@ the sibling findings proceed on their own tracks.
 02:59, e-mail 05:40), website live 05:02, suite green twice, data-report hand-off not exploitable here
 and non-functional here, two pre-existing sibling findings recorded separately, lead refusal pending.
 
+## 7. Exact next action required from the operator
+
 0. ~~Identify the installed data-report build~~ — **done 05:53 UTC** (§1c): the South Sudan build.
-1. ~~The extended source read~~ — **done 05:40 UTC** (§1b, docs/36 §H). The remaining items: — read-only, one command; the log file is written to
-   `/root/dnb-verify/` (the path is the `tee` target; pasting the terminal is acceptable for this mode,
-   its output is masked):
+1. ~~The extended source read~~ — **done 05:40 UTC** (§1b; docs/36 §H).
+2. ~~E-mail sign-in~~ — **done 05:40 UTC**, 16/16 (§2).
+3. **The lead-refusal run — the one production test left.** The number must belong to a record that is a
+   **lead** in uCRM (Clients → filter Leads, or a test lead created for it), in international form. The
+   command checks that first and refuses to send unless it is a lead; a lead receives nothing either way,
+   because the gate refuses before sending:
    ```
-   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-verify
-   bash scripts/phase2-verify.sh --data-report 2>&1 | tee /root/dnb-verify/verify-data-report-$(date -u +%Y%m%dT%H%M%SZ).log
+   cd /opt/dishnet && bash scripts/phase2-verify.sh --lead +256XXXXXXXXX 2>&1 | tee /root/dnb-verify/verify-lead-$(date -u +%Y%m%dT%H%M%SZ).log
    ```
-2. **The two production sign-in tests, with YOUR values** — not the examples. Replace the whole word
-   after `--email` with an e-mail address that is on one of your customer records in uCRM (the record you
-   used for the 26 Sep 02:59 WhatsApp sign-in test will do, if it has an e-mail), and the whole word after
-   `--lead` with the phone number of a record that is a **lead** in uCRM (Clients → filter Leads), in
-   international form:
-   ```
-   bash scripts/phase2-verify.sh --email <your address here>   2>&1 | tee /root/dnb-verify/verify-email-$(date -u +%Y%m%dT%H%M%SZ).log
-   bash scripts/phase2-verify.sh --lead  <the lead's +256… number>  2>&1 | tee /root/dnb-verify/verify-lead-$(date -u +%Y%m%dT%H%M%SZ).log
-   ```
-   Type the value itself, with no `<` `>` around it. One e-mail goes to the address; you type the code
-   when asked; it is never printed. The lead command refuses to send unless the record is a lead.
-3. **The decision on the remediation** (docs/36 §D) after the extended read. **Nothing is deployed or
-   changed until it is approved.**
-4. Website: done (§4).
+   Type the lead's number in place of `+256XXXXXXXXX`, nothing around it.
+4. **The decision on the data-report redesign** — docs/36 §J, documentation only. **Nothing is deployed
+   or changed until it is approved.** Separate from the Phase 2 gate.
+5. **The two sibling findings** (docs/36 §H.2, §H.3) — a separate decision on whether to audit and fix
+   `dishnet-data-report`'s own access control; not Phase 2; not touched.
