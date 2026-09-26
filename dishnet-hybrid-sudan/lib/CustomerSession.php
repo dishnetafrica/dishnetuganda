@@ -185,15 +185,37 @@ final class CustomerSession
      * token names) accepted the current terms and privacy versions? One
      * implementation for the API, the login page and the portal.
      */
-    public static function hasCurrentConsent(\PDO $pdo, string $identifier): bool
+    /**
+     * Has this customer accepted the CURRENT terms and privacy versions?
+     *
+     * 5.18.41 (docs/38 A1.2): a consent row counts when it names this sign-in
+     * identifier (the phone or the e-mail the OTP went to — the `phone` column
+     * holds either) OR when it names this customer (`crm_client_id`). Rows are
+     * written only by app_record_consent, which needs a session the OTP just
+     * proved for that very customer, so sharing by customer id shares consent
+     * only between identities that have each proved they are that customer. The
+     * e-mail route of a customer who accepted by phone is therefore not asked
+     * again; a row for another customer never admits this one; and with
+     * $clientId = 0 the rule is exactly the pre-5.18.41 one (by identifier).
+     */
+    public static function hasCurrentConsent(\PDO $pdo, string $identifier, int $clientId = 0): bool
     {
         $identifier = trim($identifier);
-        if ($identifier === '') return false;
+        if ($identifier === '' && $clientId <= 0) return false;
         require_once dirname(__DIR__) . '/lib/LegalContent.php';
         $ver = dnLegalVersion();
         try {
-            $st = $pdo->prepare("SELECT 1 FROM app_tos_consent WHERE phone = ? AND tos_version = ? AND privacy_version = ? LIMIT 1");
-            $st->execute([$identifier, $ver['tos'], $ver['privacy']]);
+            // Two statements rather than one with a "? > 0" clause: PDO binds an int as TEXT unless told,
+            // and SQLite orders TEXT above INTEGER, so '0' > 0 is true — the guard would have matched a
+            // row holding 0. The client id is bound as an integer and only when there is one.
+            if ($clientId > 0) {
+                $st = $pdo->prepare("SELECT 1 FROM app_tos_consent WHERE tos_version = ? AND privacy_version = ? AND (phone = ? OR crm_client_id = ?) LIMIT 1");
+                $st->bindValue(1, $ver['tos']); $st->bindValue(2, $ver['privacy']); $st->bindValue(3, $identifier); $st->bindValue(4, $clientId, \PDO::PARAM_INT);
+                $st->execute();
+            } else {
+                $st = $pdo->prepare("SELECT 1 FROM app_tos_consent WHERE tos_version = ? AND privacy_version = ? AND phone = ? LIMIT 1");
+                $st->execute([$ver['tos'], $ver['privacy'], $identifier]);
+            }
             return (bool)$st->fetchColumn();
         } catch (\Throwable $e) {
             return false;

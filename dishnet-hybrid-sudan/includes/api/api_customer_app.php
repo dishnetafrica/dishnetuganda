@@ -872,7 +872,7 @@ if ($act === 'app_verify_otp') {
     // Returns false for returning customers who have already accepted; true for
     // first-time users or when we've bumped a version. The login UI shows a
     // consent step before redirecting to the portal if needs_consent=true.
-    $needsConsent = !ca_has_current_consent($pdo, $identifier);
+    $needsConsent = !ca_has_current_consent($pdo, $identifier, (int)($clientId ?? 0));   // 5.18.41: by identifier OR by customer (docs/38 A1.2)
     $legalVer = (function() {
         require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
         return dnLegalVersion();
@@ -4549,14 +4549,16 @@ if ($act === 'app_payment_receipt_pdf' && $met === 'GET') {
  * PHP fatally errored with "Call to undefined function". Unwrapping makes
  * PHP hoist the function at file parse time, available everywhere.
  */
-function ca_has_current_consent($pdo, string $identifier): bool {
+function ca_has_current_consent($pdo, string $identifier, int $clientId = 0): bool {
     // Phase 2: one implementation, shared with the login page and the portal.
     // The identifier is already canonical — the international number or the
     // lower-cased e-mail the token names. (Re-deriving it through the phone
     // rule turned every e-mail into a bare dial code, so an e-mail login was
     // asked for consent every time.)
+    // 5.18.41 (docs/38 A1.2): the customer id the session proves is passed too,
+    // so consent given on one verified route counts on the other.
     try {
-        return CustomerSession::hasCurrentConsent($pdo, $identifier);
+        return CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId);
     } catch (\Throwable $e) {
         return false;
     }

@@ -53,7 +53,7 @@ $lwStartStep = 'phone';
 if (isset($_COOKIE[CustomerSession::COOKIE]) || isset($_COOKIE[CustomerSession::LEGACY_COOKIE])) {
     $_lwClaims = CustomerSession::liveClaimsFromCookie(is_array($config ?? null) ? $config : [], $store->getPdo());
     if ($_lwClaims !== null) {
-        if (CustomerSession::hasCurrentConsent($store->getPdo(), (string)($_lwClaims['phone'] ?? ''))) {
+        if (CustomerSession::hasCurrentConsent($store->getPdo(), (string)($_lwClaims['phone'] ?? ''), (int)($_lwClaims['sub'] ?? 0))) {   // 5.18.41: by identifier OR by customer (docs/38 A1.2)
             header('Location: ' . $baseUrl . '?page=customer_portal&view=home');
             exit;
         }

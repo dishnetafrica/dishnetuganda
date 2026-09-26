@@ -727,6 +727,15 @@ function logActivity(string $dataDir, string $action, string $title, string $det
 $page  = $_GET['page']  ?? 'login';
 $tab   = $_GET['tab']   ?? '';
 
+// 5.18.41 (docs/38 A1.3): the customer pages answer on ONE public address. With
+// crm_public_url set (Uganda), a GET for a customer page that arrives on the
+// same host but an explicit other port (UISP's :8443, whose certificate is
+// self-signed) is sent to the public origin with the same path and query. No
+// override (South Sudan): nothing happens. Never page=api, never a POST, never
+// the native wrapper. See lib/CanonicalHost.php for the loop-proof rule.
+require_once __DIR__ . '/lib/CanonicalHost.php';
+CanonicalHost::enforce(is_array($config) ? $config : [], (string)$page);
+
 include __DIR__ . '/includes/routes.php';
 
 //  WhatsApp Webhook (WASender incoming messages) 

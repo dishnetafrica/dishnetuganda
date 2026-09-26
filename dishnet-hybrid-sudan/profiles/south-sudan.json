@@ -45,5 +45,5 @@
   "regulators": [],
   "legal_texts": null,
   "products": ["starlink", "fibre", "lte"],
-  "payment_instructions": null
+  "payment_instructions": { "account_name": "DishNet Africa Ltd", "bank": "Stanbic Bank / Equity Bank" }
 }

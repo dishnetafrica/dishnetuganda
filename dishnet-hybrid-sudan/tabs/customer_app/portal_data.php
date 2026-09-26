@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
+require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';   // 5.18.41 (docs/38 A1.1): the tenant answers every country-dependent string the portal prints
 // ════════════════════════════════════════════════════════════════════
 // Customer Portal — Shared Data Loader
 // ════════════════════════════════════════════════════════════════════
@@ -15,7 +16,10 @@ require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): 
 //   $portalSites, $portalActiveCount, $portalTotalUsageGb,
 //   $portalCustomerId, $portalClaims, $portalCustomerName, $portalFirstName,
 //   $portalServiceType, $portalLocation, $portalPrice, $portalCurrency,
-//   $portalNextBill, $portalDaysLeft, $portalDpoEnabled
+//   $portalNextBill, $portalDaysLeft, $portalDpoEnabled,
+//   $portalTenant, $portalSupportWa, $portalSupportWaPlus, $portalSupportPhone, $portalSupportPhoneDial,
+//   $portalSupportEmail, $portalCity, $portalLocality, $portalAreaFibre, $portalAreaLte,
+//   $portalBankAccount, $portalBankName, $portalSells (5.18.41)
 //
 // Sets on failure:
 //   $portalAuthError (string)  — templates should check this first
@@ -45,6 +49,34 @@ function portalJsonLoad(string $path): array {
     if (!is_string($raw) || $raw === '') return [];
     return json_decode($raw, true) ?: [];
 }
+
+// ── The tenant (5.18.41, docs/38 A1.1) ─────────────────────────────────────
+// Loaded ONCE here. Every view reads these variables and never calls
+// TenantProfile itself. Resolution per value: an explicit configuration key →
+// the profile → the literal the view printed before the profile existed, so an
+// install that configures nothing (South Sudan) renders what it rendered. The
+// one deliberate difference: "Call us" now shows and dials the SAME number,
+// the profile's support phone (it displayed 005 and dialled 002 — decision A-1).
+$portalTenant = TenantProfile::current(is_array($config ?? null) ? $config : [], (isset($dataDir) && is_string($dataDir)) ? $dataDir : null);
+$_ptCfg       = is_array($config ?? null) ? $config : [];
+$_ptExplicit  = function (string $key) use ($_ptCfg): string {
+    $v = $_ptCfg[$key] ?? null;
+    return (is_string($v) || is_numeric($v)) ? trim((string)$v) : '';
+};
+$portalSupportWa        = (string)preg_replace('/\D+/', '', $_ptExplicit('contact_support_wa') ?: $portalTenant->contact('support_wa', '211921443002'));
+$portalSupportWaPlus    = '+' . $portalSupportWa;                                                       // what DishNet.openWhatsApp() takes
+$portalSupportPhone     = $_ptExplicit('contact_support_phone') ?: $portalTenant->contact('support_phone', '+211 921 443 006');
+$portalSupportPhoneDial = '+' . preg_replace('/\D+/', '', $portalSupportPhone);                        // dialled: the number that is shown
+$portalSupportEmail     = $portalTenant->email() ?: 'info@dishnetafrica.com';
+$portalCity             = $portalTenant->text('office.city', 'Juba');
+$portalLocality         = $portalTenant->locality() ?: 'Juba, South Sudan';
+$portalAreaFibre        = $portalTenant->text('service_areas.fibre', 'Juba metro areas');               // shown only where the tenant sells fibre
+$portalAreaLte          = $portalTenant->text('service_areas.lte', 'Juba, Yei, Wau');                   // …and LTE
+// Bank-transfer instructions: only what the profile answers. A tenant whose profile holds none
+// gets NO bank line rather than the other tenant's bank (TenantProfile's rule for a null value).
+$portalBankAccount      = $portalTenant->text('payment_instructions.account_name', '');
+$portalBankName         = $portalTenant->text('payment_instructions.bank', '');
+$portalSells            = function (string $product) use ($portalTenant): bool { return $portalTenant->sells($product); };
 //   Native exposes window.DishNet.* for: biometric, logout, openWhatsApp,
 //   openWifi, share, shake (haptic).
 //
@@ -77,7 +109,7 @@ if ($token === '') {
 } else {
     try {
         $portalClaims = CustomerSession::authenticate($config, $store->getPdo())['claims'];
-        if (!CustomerSession::hasCurrentConsent($store->getPdo(), (string)($portalClaims['phone'] ?? ''))) {
+        if (!CustomerSession::hasCurrentConsent($store->getPdo(), (string)($portalClaims['phone'] ?? ''), (int)($portalClaims['sub'] ?? 0))) {   // 5.18.41: by identifier OR by customer (docs/38 A1.2)
             header('Location: ' . $loginUrl . '&step=consent');
             exit;
         }
@@ -1017,17 +1049,17 @@ if ($portalIsHybrid) {
 //    "right" card without modification.
 $portalServiceType = $portalSelectedSvc;
 
-$portalLocation = 'Juba';
+$portalLocation = $portalCity;
 if ($portalFullClient) {
     $parts = array_filter([
         trim($portalFullClient['street1'] ?? ''),
-        trim($portalFullClient['city'] ?? 'Juba'),
+        trim($portalFullClient['city'] ?? $portalCity),
     ]);
     if ($parts) $portalLocation = implode(', ', $parts);
 }
 
 $portalPrice = $portalService ? (float)($portalService['price'] ?? 0) : 0;
-$portalCurrency = $portalService['currencyCode'] ?? 'USD';
+$portalCurrency = $portalService['currencyCode'] ?? $portalTenant->text('currency.code', 'USD');
 $portalNextBill = $portalService['nextInvoicingDayAdjustment']
                 ?? $portalService['activeTo'] ?? null;
 $portalDaysLeft = null;
@@ -1038,6 +1070,17 @@ if ($portalNextBill) {
 
 // HTML escape helper
 function pe($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+// A value inside a single-quoted JavaScript string that sits inside a double-quoted HTML attribute,
+// i.e. onclick="…('…')" with pjs() between the quotes: the JS string is escaped first, then the attribute.
+// (Never write a closing PHP tag inside a comment here: it ends PHP mode and prints the rest of the file.)
+function pjs($s) { return pe(str_replace(['\\', "'"], ['\\\\', "\\'"], (string)$s)); }
+// The currency code to print after an amount that dn_cur() already prefixed with the symbol:
+// "$ 50 USD" keeps its code (a sigil says nothing), "UGX 329,000" does not repeat it.
+function portalCurrencySuffix($invoiceCode, ?array $config): string {
+    $code = strtoupper(trim((string)($invoiceCode ?: dn_code($config))));
+    if ($code === '') return '';
+    return stripos(dn_cur($config), $code) !== false ? '' : ' ' . $code;
+}
 // Money fmt
 function pm($v, $cur = '') {
     global $config;

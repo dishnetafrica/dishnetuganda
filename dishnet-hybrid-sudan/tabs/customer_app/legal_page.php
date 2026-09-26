@@ -6,6 +6,18 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
+require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
+
+// 5.18.41 (docs/38 A1.1): the page's entity, locality and contacts come from the tenant profile,
+// and the documents take the same profile for their contact lines. The identity, jurisdiction
+// and regulator sentences INSIDE the documents are change set A2's — gated on approved wording —
+// and are still South Sudan's on every install.
+$lpProfile  = TenantProfile::current(is_array($config ?? null) ? $config : [], (isset($dataDir) && is_string($dataDir)) ? $dataDir : null);
+$lpEntity   = $lpProfile->login('footer_entity', 'DishNet Africa Ltd.');
+$lpLocality = $lpProfile->login('footer_locality', 'Juba, South Sudan');
+$lpWaDigits = (string)preg_replace('/\D+/', '', $lpProfile->contact('support_wa', '211921443002'));
+$lpWaShown  = TenantProfile::formatWa($lpWaDigits);
+$lpEmail    = $lpProfile->email() ?: 'info@dishnetafrica.com';
 
 $legalKind = $_GET['page'] === 'terms' ? 'terms' : 'privacy';
 $docVer = dnLegalVersion();
@@ -13,12 +25,12 @@ $docVer = dnLegalVersion();
 if ($legalKind === 'terms') {
     $docTitle = 'Terms of Service';
     $docSub   = 'The agreement between you and DishNet Africa.';
-    $docBody  = dnTermsContent();
+    $docBody  = dnTermsContent($lpProfile);
     $docVersionLabel = 'v' . $docVer['tos'];
 } else {
     $docTitle = 'Privacy Policy';
     $docSub   = 'What information we collect, how we use it, who we share it with.';
-    $docBody  = dnPrivacyContent();
+    $docBody  = dnPrivacyContent($lpProfile);
     $docVersionLabel = 'v' . $docVer['privacy'];
 }
 
@@ -304,7 +316,7 @@ footer {
     <div class="hero-meta">
       <span>Version &nbsp;<strong><?= pEsc($docVersionLabel) ?></strong></span>
       <span>Effective &nbsp;<strong><?= pEsc($docVer['dated']) ?></strong></span>
-      <span>DishNet Africa Ltd. &middot; Juba, South Sudan</span>
+      <span><?= pEsc($lpEntity) ?> &middot; <?= pEsc($lpLocality) ?></span>
     </div>
   </div>
 </section>
@@ -331,15 +343,15 @@ footer {
   <h3>Questions?</h3>
   <p>Our team replies fastest on WhatsApp.</p>
   <div class="cta-bar-links">
-    <a class="cta-bar-link red" href="https://wa.me/211921443002" rel="noopener">💬 &nbsp;WhatsApp +211 921 443 002</a>
-    <a class="cta-bar-link ghost" href="mailto:info@dishnetafrica.com">info@dishnetafrica.com</a>
+    <a class="cta-bar-link red" href="https://wa.me/<?= pEsc($lpWaDigits) ?>" rel="noopener">💬 &nbsp;WhatsApp <?= pEsc($lpWaShown) ?></a>
+    <a class="cta-bar-link ghost" href="mailto:<?= pEsc($lpEmail) ?>"><?= pEsc($lpEmail) ?></a>
   </div>
 </div>
 
 <div class="red-bar"></div>
 
 <footer>
-  DishNet Africa Ltd. &nbsp;&middot;&nbsp; <?= pEsc($docTitle) ?> <?= pEsc($docVersionLabel) ?>
+  <?= pEsc($lpEntity) ?> &nbsp;&middot;&nbsp; <?= pEsc($docTitle) ?> <?= pEsc($docVersionLabel) ?>
   &nbsp;&middot;&nbsp; <?= pEsc($docVer['dated']) ?>
 </footer>
 

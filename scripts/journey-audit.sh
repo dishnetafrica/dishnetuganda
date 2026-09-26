@@ -543,7 +543,7 @@ if [ -n "$SUPPORT_HTML" ]; then
   if [ "$SS" != "0" ]; then bad "L9 the Support tab shows South Sudan contacts ($SS literal(s)) — the support view is hard-coded in portal.php (docs/37 §J.1)"; else ok "L9 the Support tab shows no South Sudan contact"; fi
   if [ "$UG" = "0" ]; then note "L9 the Support tab shows no Uganda contact either"; else ok "L9 a Uganda contact is present on the Support tab"; fi
 else
-  note "L9 the Support tab was not rendered in this run (the consent step came first), so its contacts were not measured; the code reads +211 921 443 002 / 005 and the South Sudan e-mail (portal.php 1073–1096, docs/37 §J.1)"
+  note "L9 the Support tab was not rendered in this run (the consent step came first), so its contacts were not measured — accept the terms once by this route, or read the phone walk (since 5.18.41 the tab reads the tenant profile, docs/38 A1.1)"
 fi
 http GET "$PLUGIN_BASE?page=terms" ''
 if [ "$HTTP_CODE" = "200" ]; then

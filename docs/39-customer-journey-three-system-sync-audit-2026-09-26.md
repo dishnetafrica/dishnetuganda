@@ -367,6 +367,19 @@ shows staff live in Finance and will not move, O2 is the honest alternative and 
 be re-pointed at Finance's file with a validation layer — a larger and weaker change, stated so you can weigh
 it.
 
+## 14. Status after the operator's decision (26 September, evening)
+
+The operator adopted the recommended path (*"i will go with your recommendation"*). Recorded in docs/38 §7:
+**A1 is built as plugin 5.18.41 and awaits its deployment command** (Help/Support, the WhatsApp buttons, the
+locality, the invoice screen's payee/bank/currency, the legal pages' footer and contact lines all read the
+tenant; consent given on one verified route counts on the other; a customer page reached on `:8443` is sent
+to the public address). **C-1 is handed over as a read-first script; C-2 is a checklist** for the uCRM
+settings screen — the only fix for the `:8443` links inside every invoice PDF (§7). **A2 is a wording
+proposal awaiting approval** (docs/38 §7.3). **B-1 is decided: O3** — the uCRM attribute as the entry
+point, the hybrid's register as the store, Finance and Data Report consuming a published register; the one
+question before the B build is where the person who deploys kits records a deployment today (docs/38
+§7.4). Nothing on the server changed.
+
 ---
 
 *All runs asked for by this document were received on 26 September: `--chain 1` (09:44:02; 1 ok, 0 failed —

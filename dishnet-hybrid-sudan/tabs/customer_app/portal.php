@@ -975,7 +975,7 @@ elseif ($view === 'plans'): ?>
     To change your plan, contact DishNet support. We'll help you pick the right fit for your needs.
   </p>
 
-  <button class="cta-red" onclick="DishNet.openWhatsApp('+211921443002', 'Hi DishNet, I want to change my plan.')">
+  <button class="cta-red" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'Hi DishNet, I want to change my plan.')">
     <svg class="ic" style="width:16px;height:16px"><use href="#i-wa"/></svg>
     Chat with support on WhatsApp
   </button>
@@ -1070,7 +1070,7 @@ elseif ($view === 'support'): ?>
 </div>
 
 <div class="scr-body">
-  <div class="wa-card" onclick="DishNet.openWhatsApp('+211921443002', 'Hi DishNet, I need help with my service.')">
+  <div class="wa-card" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'Hi DishNet, I need help with my service.')">
     <div class="wa-card-ic"><svg class="ic" style="width:22px;height:22px"><use href="#i-wa"/></svg></div>
     <div class="wa-card-t">
       <div class="wa-card-tt">WhatsApp Support</div>
@@ -1081,19 +1081,19 @@ elseif ($view === 'support'): ?>
 
   <div class="sec-lbl" style="margin-top:18px">Other ways to reach us</div>
   <div class="list-card">
-    <div class="list-row" onclick="DishNet.openPhone('+211921443002')">
+    <div class="list-row" onclick="DishNet.openPhone('<?= pe($portalSupportPhoneDial) ?>')">
       <div class="list-ic" style="background:var(--blue-light);color:var(--blue)"><svg class="ic"><use href="#i-phone"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Call us</div>
-        <div class="list-ts">+211 921 443 005</div>
+        <div class="list-ts"><?= pe($portalSupportPhone) ?></div>
       </div>
       <span class="chev">›</span>
     </div>
-    <div class="list-row" onclick="DishNet.openEmail('info@dishnetafrica.com')">
+    <div class="list-row" onclick="DishNet.openEmail('<?= pe($portalSupportEmail) ?>')">
       <div class="list-ic"><svg class="ic"><use href="#i-mail"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Email</div>
-        <div class="list-ts">info@dishnetafrica.com</div>
+        <div class="list-ts"><?= pe($portalSupportEmail) ?></div>
       </div>
       <span class="chev">›</span>
     </div>
@@ -1101,7 +1101,7 @@ elseif ($view === 'support'): ?>
 
   <div class="sec-lbl" style="margin-top:18px">Common issues</div>
   <div class="list-card">
-    <div class="list-row" onclick="DishNet.openWhatsApp('+211921443002', 'My internet is slow or disconnected.')">
+    <div class="list-row" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'My internet is slow or disconnected.')">
       <div class="list-ic" style="background:var(--amber-light);color:var(--amber-dark)"><svg class="ic"><use href="#i-warn"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Internet slow or down</div>
@@ -1116,7 +1116,7 @@ elseif ($view === 'support'): ?>
       </div>
       <span class="chev">›</span>
     </div>
-    <div class="list-row" onclick="DishNet.openWhatsApp('+211921443002', 'I want to pay my invoice.')">
+    <div class="list-row" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'I want to pay my invoice.')">
       <div class="list-ic"><svg class="ic"><use href="#i-receipt"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Help paying invoice</div>
@@ -1489,13 +1489,21 @@ elseif ($view === 'invoice_detail'):
   <div class="sec-lbl" style="margin-top:18px">Payment</div>
   <div class="list-card">
     <div style="padding:16px">
+      <?php if ($portalBankAccount !== '' && $portalBankName !== ''): // 5.18.41: only the tenant's own bank details, never the other tenant's ?>
       <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">Bank transfer</div>
       <div style="font-size:12px;color:var(--gray);line-height:1.6">
-        Account: <b>DishNet Africa Ltd</b><br>
-        Bank: <b>Stanbic Bank / Equity Bank</b><br>
+        Account: <b><?= pe($portalBankAccount) ?></b><br>
+        Bank: <b><?= pe($portalBankName) ?></b><br>
         Reference: <b><?= pe($inv['number']) ?></b><br>
-        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?> USD</b>
+        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?><?= pe(portalCurrencySuffix($inv['currencyCode'] ?? null, $config)) ?></b>
       </div>
+      <?php else: ?>
+      <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">Payment reference</div>
+      <div style="font-size:12px;color:var(--gray);line-height:1.6">
+        Reference: <b><?= pe($inv['number']) ?></b><br>
+        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?><?= pe(portalCurrencySuffix($inv['currencyCode'] ?? null, $config)) ?></b>
+      </div>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -1584,7 +1592,7 @@ elseif ($view === 'wifi_change'):
     <div class="empty" style="margin-top:20px">
       <h3>No routers found</h3>
       <p>We couldn't find any Starlink routers for your account. Contact support to set up remote WiFi management.</p>
-      <button class="cta-alt" onclick="DishNet.openWhatsApp('+211921443002', 'I want to change my WiFi password but the app says no routers found.')" style="margin-top:16px">Contact support</button>
+      <button class="cta-alt" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'I want to change my WiFi password but the app says no routers found.')" style="margin-top:16px">Contact support</button>
     </div>
   <?php else: ?>
     <?php if ($hasMultipleRouters && !$specificRouter): ?>
@@ -3307,7 +3315,7 @@ elseif ($view === 's_hotspot_picker'):
     <div class="empty" style="margin-top:20px">
       <h3>No routers found</h3>
       <p>We couldn't find any Starlink routers on your account. Contact support if you think this is wrong.</p>
-      <button class="cta-alt" onclick="DishNet.openWhatsApp('+211921443002', 'Hotspot mode says no routers found.')" style="margin-top:16px">Contact support</button>
+      <button class="cta-alt" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'Hotspot mode says no routers found.')" style="margin-top:16px">Contact support</button>
     </div>
   <?php else: ?>
     <div class="sec-lbl" style="margin-top:4px"><?= count($hpRouters) === 1 ? 'Your site' : 'Your sites' ?></div>
@@ -4197,7 +4205,7 @@ elseif ($view === 's_hotspot'):
               '. Please check if DishNet Fiber is available at this location \u2014 ' +
               'I\'d like per-device speed caps and voucher access for my hotspot.';
     if (window.DishNet && typeof DishNet.openWhatsApp === 'function') {
-      DishNet.openWhatsApp('+211921443002', msg);
+      DishNet.openWhatsApp(DishNet.supportWa, msg);
     } else {
       // Fallback: route to internal support tab
       DishNet.go('support');
@@ -4882,7 +4890,7 @@ elseif ($view === 'service_status'):
     <div style="width:32px"></div>
   </div>
   <div style="font-size:12px;color:rgba(255,255,255,.55);position:relative;z-index:2">
-    Juba, South Sudan · Updated just now
+    <?= pe($portalLocality) ?> · Updated just now
   </div>
 </div>
 <div class="scr-body" style="padding-top:0">
@@ -4954,7 +4962,8 @@ elseif ($view === 'service_status'):
     </div>
   </div>
 
-  <!-- Fiber -->
+  <!-- Fiber — shown only where the tenant sells it (5.18.41, docs/38 A1.1) -->
+  <?php if ($portalSells('fibre')): ?>
   <div class="list-card" style="margin-top:10px">
     <div style="padding:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -4963,7 +4972,7 @@ elseif ($view === 'service_status'):
         </div>
         <div style="flex:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:var(--dark)">Fiber</div>
-          <div style="font-size:11px;color:var(--gray)">Juba metro areas</div>
+          <div style="font-size:11px;color:var(--gray)"><?= pe($portalAreaFibre) ?></div>
         </div>
         <span class="pill green">Operational</span>
       </div>
@@ -4978,8 +4987,10 @@ elseif ($view === 'service_status'):
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
-  <!-- LTE -->
+  <!-- LTE — shown only where the tenant sells it -->
+  <?php if ($portalSells('lte')): ?>
   <div class="list-card" style="margin-top:10px">
     <div style="padding:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -4988,7 +4999,7 @@ elseif ($view === 'service_status'):
         </div>
         <div style="flex:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:var(--dark)">4G LTE</div>
-          <div style="font-size:11px;color:var(--gray)">Juba, Yei, Wau</div>
+          <div style="font-size:11px;color:var(--gray)"><?= pe($portalAreaLte) ?></div>
         </div>
         <span class="pill green">Operational</span>
       </div>
@@ -5003,11 +5014,12 @@ elseif ($view === 'service_status'):
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- Report issue -->
   <div class="sec-lbl" style="margin-top:20px">Experiencing issues?</div>
   <div class="list-card">
-    <div class="list-row" onclick="DishNet.openWhatsApp('+211921443002', 'My internet is down. Service: Starlink. Location: Juba.')">
+    <div class="list-row" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'My internet is down. Service: Starlink. Location: <?= pjs($portalLocation) ?>.')">
       <div class="list-ic" style="background:var(--danger-light);color:var(--danger-text)"><svg class="ic"><use href="#i-warn"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Report an outage</div>
@@ -5177,7 +5189,7 @@ elseif ($view === 'wifi_site'):
   </div>
 
   <!-- Support fallback -->
-  <button class="cta-alt" style="margin-top:12px" onclick="DishNet.openWhatsApp('+211921443002','I need help changing my WiFi password for <?= pe($wsLocation) ?> (<?= pe($wsKit) ?>)')">
+  <button class="cta-alt" style="margin-top:12px" onclick="DishNet.openWhatsApp(DishNet.supportWa,'I need help changing my WiFi password for <?= pe($wsLocation) ?> (<?= pe($wsKit) ?>)')">
     <svg class="ic" style="width:14px;height:14px"><use href="#i-support"/></svg>
     Need help? Contact support
   </button>
@@ -6626,6 +6638,9 @@ _startPolling();
 window.DishNet = {
   // JWT token for in-page navigation (WebView only sends Authorization header on initial load)
   _token: '',   // Phase 2: never embedded in the page — the session is the HttpOnly cookie; a native shell may set this
+  // 5.18.41 (docs/38 A1.1): the tenant's support WhatsApp number, from the profile — the one
+  // number every "contact support" button on this page opens. Emitted once, here.
+  supportWa: <?= json_encode($portalSupportWaPlus) ?>,
 
   // v4.12.20 — Multi-account state.
   // _accounts: full list from JWT accounts claim (may have 1 or many)
@@ -6799,10 +6814,10 @@ window.DishNet = {
     var msg = '✅ *Payment Notification*\n\n'
       + 'Customer: *' + name + '* (#' + clientId + ')\n'
       + 'Invoice: *' + number + '*\n'
-      + 'Amount: *' + <?= json_encode(dn_cur($config)) ?> + Math.round(amount) + ' USD*\n\n'
+      + 'Amount: *' + <?= json_encode(dn_cur($config)) ?> + Math.round(amount) + <?= json_encode(portalCurrencySuffix($portalCurrency, $config) . "*\n\n") ?>
       + 'The customer says they have paid. Please verify and confirm.';
-    // Send to Bidal's number
-    DishNet.openWhatsApp('+211921443002', msg);
+    // Send to the tenant's support WhatsApp (5.18.41, docs/38 A1.1)
+    DishNet.openWhatsApp(DishNet.supportWa, msg);
   },
   // v4.12.20 — In-app PDF viewer. Fetches the PDF with auth, displays in a
   // full-screen modal with an explicit close button. Avoids the iOS WebView
@@ -6944,7 +6959,7 @@ window.DishNet = {
     });
   },
   openNotifications() {
-    DishNet.openWhatsApp('+211921443002', 'Hi, I want to check my DishNet notifications and updates.');
+    DishNet.openWhatsApp(DishNet.supportWa, 'Hi, I want to check my DishNet notifications and updates.');
   },
   // ── Live WiFi Config fetch ─────────────────────────────────────────────
   fetchLiveWifi() {
@@ -7225,7 +7240,7 @@ window.DishNet = {
     } else if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(function() { alert('Speed test result copied!'); });
     } else {
-      DishNet.openWhatsApp('+211921443002', text);
+      DishNet.openWhatsApp(DishNet.supportWa, text);
     }
   },
 
@@ -7279,7 +7294,7 @@ window.DishNet = {
 
     // Open WhatsApp with the report
     if (btn) { btn.disabled = false; btn.textContent = 'Send debug report to DishNet'; }
-    DishNet.openWhatsApp('+211921443002', text);
+    DishNet.openWhatsApp(DishNet.supportWa, text);
 
     if (res) {
       res.style.display = 'block';
@@ -7291,9 +7306,9 @@ window.DishNet = {
 
   _wifiErrorMsg(rawErr, errDiv) {
     if (rawErr.indexOf('TARGETID_NOT_FOUND') !== -1) {
-      errDiv.innerHTML = '<b>Router not reachable</b><br>Starlink cannot find your router right now. This usually means the dish is powered off or the router was recently replaced.<br><br>Try again in a few minutes or <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(\'+211921443002\',\'WiFi change failed — router not found\')">contact support</span>.';
+      errDiv.innerHTML = '<b>Router not reachable</b><br>Starlink cannot find your router right now. This usually means the dish is powered off or the router was recently replaced.<br><br>Try again in a few minutes or <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(DishNet.supportWa,\'WiFi change failed — router not found\')">contact support</span>.';
     } else if (rawErr.indexOf('PERMISSION_DENIED') !== -1) {
-      errDiv.innerHTML = '<b>Permission denied</b><br>Our system does not have permission to change this router\'s settings. <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(\'+211921443002\',\'WiFi change permission denied\')">Contact support</span>.';
+      errDiv.innerHTML = '<b>Permission denied</b><br>Our system does not have permission to change this router\'s settings. <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(DishNet.supportWa,\'WiFi change permission denied\')">Contact support</span>.';
     } else if (rawErr.indexOf('UNAVAILABLE') !== -1 || rawErr.indexOf('DEADLINE_EXCEEDED') !== -1) {
       errDiv.innerHTML = '<b>Router is offline</b><br>Your Starlink router is not responding. Make sure the dish is powered on and connected.';
     } else {

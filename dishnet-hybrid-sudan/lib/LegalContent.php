@@ -10,9 +10,15 @@
  *
  * Pages are public (no auth) so any customer can review them before signing up.
  * Accessible at ?page=terms and ?page=privacy.
+ *
+ * 5.18.41 (docs/38 A1.1): the CONTACT lines read the tenant profile (WhatsApp, e-mail).
+ * The identity, jurisdiction and regulator sentences are still South Sudan's on every
+ * install: change set A2 replaces them once the Uganda wording is approved (docs/38 A2).
  */
 
 declare(strict_types=1);
+
+require_once __DIR__ . '/TenantProfile.php';
 
 /** Bump when wording changes. Stored with every consent record. */
 function dnLegalVersion(): array {
@@ -28,7 +34,9 @@ function dnLegalVersion(): array {
  * Returns an array of sections: [['heading' => ..., 'body' => ...], ...]
  * so the render layer can style them without editing HTML here.
  */
-function dnTermsContent(): array {
+function dnTermsContent(TenantProfile $tp): array {
+    $wa    = TenantProfile::formatWa($tp->contact('support_wa', '211921443002'));
+    $email = $tp->email() ?: 'info@dishnetafrica.com';
     return [
         [
             'heading' => 'About these Terms',
@@ -120,8 +128,8 @@ function dnTermsContent(): array {
         [
             'heading' => 'Contact',
             'body'    =>
-                "Questions about these Terms? Reach us on WhatsApp at +211 921 443 002 or email " .
-                "info@dishnetafrica.com. We reply fastest on WhatsApp.",
+                "Questions about these Terms? Reach us on WhatsApp at {$wa} or email " .
+                "{$email}. We reply fastest on WhatsApp.",
         ],
     ];
 }
@@ -129,7 +137,9 @@ function dnTermsContent(): array {
 /**
  * Privacy Policy — what we collect, why, who we share with.
  */
-function dnPrivacyContent(): array {
+function dnPrivacyContent(TenantProfile $tp): array {
+    $wa    = TenantProfile::formatWa($tp->contact('support_wa', '211921443002'));
+    $email = $tp->email() ?: 'info@dishnetafrica.com';
     return [
         [
             'heading' => 'Who this applies to',
@@ -190,7 +200,7 @@ function dnPrivacyContent(): array {
                 "You can request a copy of the information we hold about you. You can ask us to " .
                 "correct information that is wrong. You can ask us to delete your information when " .
                 "you leave DishNet, subject to the financial record-keeping obligation above. " .
-                "To exercise any of these rights, contact info@dishnetafrica.com with your " .
+                "To exercise any of these rights, contact {$email} with your " .
                 "DishNet account number.",
         ],
         [
@@ -219,8 +229,8 @@ function dnPrivacyContent(): array {
         [
             'heading' => 'Contact',
             'body'    =>
-                "Questions about your privacy? WhatsApp +211 921 443 002 or email " .
-                "info@dishnetafrica.com — we'll respond within a few business days.",
+                "Questions about your privacy? WhatsApp {$wa} or email " .
+                "{$email} — we'll respond within a few business days.",
         ],
     ];
 }

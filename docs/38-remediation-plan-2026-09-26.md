@@ -425,3 +425,116 @@ restoring two fields (uCRM).
 No code, configuration, customer record, sync state, lock, inventory or production service is changed by this
 plan. The only new thing that exists is the read-only `--client-flags` probe in `scripts/journey-audit.sh`,
 rehearsed in the sandbox against a fake uCRM. Approval of one change set authorises that set only.
+
+## 7. Decisions and status — 26 September 2026, after the operator's approval
+
+The operator's instruction, verbatim: *"i will go with your recommendation"*. Read as adoption of the recommended
+path (§5): **A1 first, then C, then A2, then the B decisions and build.** What that changed, and what it did not:
+
+| Set | Status | Notes |
+|---|---|---|
+| **A1.1** contacts, company information, currency through `TenantProfile` | **BUILT — 5.18.41, awaiting the deployment command** | the plan's sites plus three found while building (§7.1): the invoice screen's payee, bank line and " USD"; the payment-notification currency; the fibre and LTE status cards. Rendered proof: `tests/test_portal_tenant.php` (88) |
+| **A1.2** consent shared across verified routes of one customer | **BUILT — 5.18.41** | `tests/test_consent_identity.php` (28); the type-affinity trap it found is in §7.1 |
+| **A1.3** canonical host for the customer pages | **BUILT — 5.18.41** | `tests/test_canonical_host.php` (49); the rule is narrower than planned and loop-proof by construction (§7.1) |
+| **A1.4** `isActive` | unchanged (decided §4) | — |
+| **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — South Sudan `+211 921 443 006`, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
+| **A2** legal wording | **PROPOSAL for approval — §7.3**; nothing changed in the documents' identity, jurisdiction or regulator sentences | the CONTACT lines inside the documents already read the profile (A1.1) |
+| **C-1** Traefik absorbs the bare `/crm` | **HANDED OVER**: `scripts/dnb-crm-root-redirect.sh` (read-first, verified, one-line rollback), rehearsed 17/17 | run it once, send the log file |
+| **C-2** uCRM's own address | **CHECKLIST — §7.2**; an operator act in uCRM's settings | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7) |
+| **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
+| **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
+| deployment / configuration / customer data | **NOTHING CHANGED on the server** | the server changes are the two commands in §7.2, each run by the operator |
+
+### 7.1 Found while building A1 (recorded, each pinned by a test)
+
+- **Three more South Sudan literals than the plan listed**, all in the invoice screen and the status view:
+  the bank-transfer block (`DishNet Africa Ltd` / `Stanbic Bank / Equity Bank` / a literal ` USD` after an
+  amount `dn_cur()` had already prefixed with `UGX `), the WhatsApp payment notification (` USD*`), and the
+  **Fiber** and **4G LTE** status cards with `Juba metro areas` / `Juba, Yei, Wau`. Resolution: the bank
+  details are `payment_instructions` in the profile — **added to `profiles/south-sudan.json` as the literals
+  the code carried** (its charter), **null for Uganda**, and a tenant whose profile holds none gets **no bank
+  line**, never the other tenant's (TenantProfile's rule for a null); the currency code is printed only when
+  the symbol does not already carry it (`$ 50 USD` stays, `UGX 50,000` does not repeat itself); the fibre
+  and LTE cards render only where the profile's `products` lists them (Uganda: `starlink` only).
+  **New operator input A-3:** Uganda's own bank-transfer details for the invoice screen, if wanted — until
+  then the screen shows the payment reference and the amount, and the Pay Now / Airtel routes.
+- **A closing PHP tag inside a `//` comment ends PHP mode and prints the rest of the file.** The first build
+  did exactly that in `portal_data.php`; the portal's own source appeared on the home page and the currency
+  helper was never defined. Caught by the rendered-page test, then pinned by a tokenizer-based guard in
+  `test_portal_tenant.php` — with the control that the guard's own first wording tripped it too.
+- **PDO binds an integer as TEXT and SQLite orders TEXT above INTEGER**, so a `? > 0` guard bound from PHP is
+  true for `'0'`. The consent lookup now branches in PHP and binds the client id as an integer. Found by the
+  unit part of `test_consent_identity.php` before any HTTP.
+- **A customer token's issuer is derived from the plugin's directory name.** A test that mints a session in
+  process must run the copy under the plugin's own directory name, or every token it issues is `invalid`.
+- **The canonical-host rule is narrower than the plan's, deliberately:** it redirects only a request whose
+  `Host` names the public host **with an explicit port that differs** from the public one — the shape `:8443`
+  (and `:8080`) has and the public origin never has, since a browser omits `:443` and the proxies present the
+  bare host (measured: the cookie POSTs' same-origin check on `HTTP_HOST` passed on 443, docs/37 §I.5). A
+  request without an explicit port is therefore never redirected under any scheme hint, and a loop is
+  impossible by construction; the deployment command still checks and rolls back by itself if the public
+  address ever redirected.
+- **opcache serves an edited copy up to two seconds late** (`revalidate_freq=2`), so every control that
+  edits the sandbox copy and re-requests polls for the change instead of asserting at once.
+
+### 7.2 The two server commands (operator acts; each sends back its log file)
+
+1. **Deploy 5.18.41** — `scripts/deploy-5.18.41.sh`, pinned to the reviewed plugin commit; before-evidence,
+   backup, the documented deploy, then stage **V**: the public address answers with **zero redirects** (else
+   it rolls back by itself), the sign-in, Terms and Privacy pages carry no South Sudan contact, the `:8443`
+   door answers 302 to the public address for the customer pages and **never** for `page=api`, a POST or
+   the native wrapper, and no fatal since the deploy. Then the operator's own `journey-audit.sh --login-phone`
+   proves the signed-in screens: **L5 and L9 pass; L10 still fails until A2.**
+2. **C-1** — `scripts/dnb-crm-root-redirect.sh`: reads `uisp.yaml`, writes one Traefik file for the exact path
+   `/crm`, verifies `302 → https://crm.dishnetuganda.com/crm/`, `/crm/` unchanged, the portal and uCRM's
+   login still 200, Traefik not restarted. Rollback: delete the file.
+3. **C-2 checklist** (uCRM → Settings → System → Application), by hand: (a) the fields *Server domain name*
+   and *Server port* are editable, not greyed out as managed by UISP; (b) UISP → Settings → Devices shows the
+   device connection hostname/port as a **separate** setting that stays `:8443`; (c) note the current values;
+   then set `crm.dishnetuganda.com` / `443`; (d) afterwards download **one already-issued invoice** from the
+   portal and run `journey-audit.sh --login-phone`: the in-PDF scan (L11) shows whether uCRM re-rendered the
+   document without `:8443`. Rollback: the two fields back to their noted values.
+
+### 7.3 A2 — the wording that needs your approval (proposal; nothing is final until you say so)
+
+Drawn only from `profiles/uganda.json` and the repository. Each line: **APPROVE** as written, or **EDIT**.
+Points 3, 5 and 7–10 cannot be answered from the repository and are questions.
+
+1. Identity: *"DishNet Africa Limited ("DishNet", "we", "us") is an IT solutions provider and UCC-authorised
+   Starlink installer registered in Uganda (Reg. No. 80046255496181), providing Starlink internet services to
+   customers in Kampala and across Uganda."* — entity, positioning, registration number and product from the
+   profile.
+2. Governing law: *"These Terms are governed by the laws of the Republic of Uganda."* — `jurisdiction.law`.
+3. **Courts — a question:** *"the courts of Uganda"* or a named court (for example the High Court of Uganda at
+   Kampala)? The profile holds `courts: null`.
+4. Regulator (Privacy, "Who we share with"): *"the Uganda Communications Commission and other Ugandan
+   authorities, if required by law"* — `regulators[0]`.
+5. **Data protection — a question for your lawyer:** whether to name Uganda's data-protection law (the Data
+   Protection and Privacy Act, 2019 is the likely reference; not asserted) and whether a Ugandan customer must
+   be told where the data is held.
+6. Re-acceptance: the version becomes tenant-scoped — **Uganda 1.1, South Sudan stays 1.0** — so every Uganda
+   customer accepts the new wording once on their next sign-in and no Sudan customer is asked. Recommended.
+7. **Fees and currency in the Terms — a question:** the Sudan text says a 5 % late fee after 7 days,
+   **USD 25** reconnection, **USD 150** Starlink transfer fee after 6 months with a 120-day lead time, cheques
+   payable to "DishNet Africa Limited". Which of these apply in Uganda, and in which currency?
+8. **Products — a question:** the Sudan text names "Starlink, fibre, and LTE" and "fibre partners, LTE
+   carriers" throughout. The Uganda profile sells Starlink only; the proposal drops fibre and LTE from the
+   Uganda text.
+9. **Sign-in wording:** the Privacy Policy's "WhatsApp and login codes" section describes WhatsApp only; Uganda
+   also signs in by e-mail. Proposal: *"…by sending a six-digit code to your WhatsApp number or your e-mail
+   address."*
+10. **Sharing clause:** "Fibre and LTE partners (e.g. Splynx-managed operators)" does not apply to Uganda;
+    proposal: drop it from the Uganda text.
+
+Once approved, A2 ships as 5.18.42: `dnTermsContent()` / `dnPrivacyContent()` become templates over the
+profile, the profile gains `legal.*` (Uganda 1.1; South Sudan 1.0 made explicit), and
+`test_portal_tenant.php`'s pinned "STILL South Sudan's" assertions flip.
+
+### 7.4 B — the one question before the build
+
+O3 is adopted as the direction. Before the first B build step, one answer from the person who deploys kits:
+**where do you record a Starlink kit deployment today — Finance's "Deploy to customer", the uCRM service
+attribute, or both?** Two other customers' kits are already received and bound in the hybrid's register
+(docs/39 §4), so that workflow exists; whether those two are Finance's #7 / #47 / #69 is what a read-only
+`--chain 7`, `--chain 47`, `--chain 69` would show. B-5 (confirm each Finance kit's owner) and B-6
+(re-authenticate Data Report's five Starlink accounts) remain operator acts.

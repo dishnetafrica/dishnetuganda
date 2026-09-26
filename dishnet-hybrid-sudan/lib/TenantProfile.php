@@ -190,6 +190,39 @@ final class TenantProfile
     /** The login page's own strings. */
     public function login(string $field, string $literal = ''): string { return $this->text('login.' . $field, $literal); }
 
+    /** A value of the profile's `contacts` block, as stored (digits for *_wa, formatted for *_phone), or the reader's literal. */
+    public function contact(string $name, string $literal = ''): string { return $this->text('contacts.' . $name, $literal); }
+
+    /** The products this tenant sells, lower-cased; [] when the profile does not say. */
+    public function products(): array
+    {
+        $list = $this->get('products');
+        if (!is_array($list)) return [];
+        $out = [];
+        foreach ($list as $p) { $p = strtolower(trim((string)$p)); if ($p !== '') $out[] = $p; }
+        return $out;
+    }
+
+    /** Does this tenant sell $product? A profile that lists nothing restricts nothing (the pre-profile behaviour). */
+    public function sells(string $product): bool
+    {
+        $list = $this->products();
+        return $list === [] || in_array(strtolower(trim($product)), $list, true);
+    }
+
+    /**
+     * A WhatsApp number as a customer reads it: the dial code and three groups
+     * ("+256 705 993 348", "+211 921 443 002"). Twelve digits is the shape both
+     * tenants' numbers have; anything else is shown as "+" and the digits.
+     */
+    public static function formatWa(string $digits): string
+    {
+        $d = (string)preg_replace('/\D+/', '', $digits);
+        if ($d === '') return '';
+        if (strlen($d) === 12) return '+' . substr($d, 0, 3) . ' ' . substr($d, 3, 3) . ' ' . substr($d, 6, 3) . ' ' . substr($d, 9, 3);
+        return '+' . $d;
+    }
+
     /** Every value a diagnostic may print: no key here is secret. */
     public function describe(): array
     {
