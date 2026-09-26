@@ -35,7 +35,7 @@
 #          V the tenant on the public pages, the :8443 door, the API and the loop check   F summary
 #
 # Afterwards, the read-only audit proves the signed-in screens (they need your code):
-#   bash scripts/journey-audit.sh --login-phone '<the customer phone, international form>'
+#   bash scripts/journey-audit.sh --login-phone +2567XXXXXXXX      (your OWN number — replace the Xs)
 # expected: L5 and L9 pass; L10 (the Terms wording) still fails until change set A2.
 set -uo pipefail
 umask 077
@@ -258,7 +258,7 @@ echo "  deployed commit   $LIVE_AFTER  (plugin $EXPECTED_VERSION)"
 if [ "$AFTER_ONLY" = "0" ]; then echo "  rollback commit   ${LIVE_BEFORE:-unknown}   →  cd $REPO && git checkout ${LIVE_BEFORE:-<commit>} && bash scripts/deploy-hybrid.sh"
 else echo "  rollback commit   (this run deployed nothing — see the deployment run's log)"; fi
 [ -n "$BK" ] && echo "  backup            $BK"
-echo "  next (your code)  bash scripts/journey-audit.sh --login-phone '<the customer phone, international form>'   → L5 and L9 pass; L10 fails until A2"
+echo "  next (your code)  bash scripts/journey-audit.sh --login-phone +2567XXXXXXXX   (your OWN number, replace the Xs)   → L5 and L9 pass; L10 fails until A2"
 echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"
 if [ "$FAIL" = "0" ]; then echo; echo "  5.18.41: PASSED. Send this LOG FILE back (not a copy of the terminal)."
 else echo; echo "  5.18.41: $FAIL FAILED — send the log file; do not roll back on your own unless customers are affected."; fi

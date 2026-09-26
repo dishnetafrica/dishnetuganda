@@ -1205,4 +1205,28 @@ previous commit; consent rows written meanwhile stay valid.
 the bare `/crm`, read-first, verified, rehearsed 17/17 in `scripts/harness/crm-root/`), the **C-2**
 checklist and the **A2** wording proposal (docs/38 §7.2–7.3). **B-1 decided: O3** (docs/39 §13–14).
 
-**Status:** built and proved; **not deployed**; the operator's command is in the header of the deploy script.
+**Status: LIVE on the Uganda install, 26 September 2026.** The operator's run of the pinned command at
+15:04:39 UTC found the container already serving `a2ea19f` (deployed by the operator shortly before; that
+run's log is in `/root/dnb-5.18.41/` if the script was used) and ran the verification alone: **16 ok, 0
+failed, 2 notes** — the public address answers 200 with zero redirects; the portal without a session still
+302s to a Location without `:8443`; the sign-in, Terms and Privacy pages carry no South Sudan contact and the
+Terms page carries the Uganda WhatsApp link and locality; `:8443` answers 302 to the public address for the
+sign-in page and the manifest, 200 for `page=api` and for the wrapper's request, 401 (never 302) for a POST;
+no fatal since the deploy. The two notes are the expected ones: the Terms page still names South Sudan ×2 and
+Juba ×2 (change set A2). **The signed-in walk was not run yet:** the operator passed the placeholder text of
+my message as the number, and the script tried it (`STOP: staff_login_lookup → 000`). The audit script now
+refuses a non-number argument up front, and every command text shows `+2567XXXXXXXX`.
+
+**C-1, attempt 1 at 15:05:08 UTC — FAILED on the script's own defect; nothing else changed.** The
+generated Traefik file carried the hostname's dots escaped with a single backslash inside the YAML
+double-quoted regex (the script produced a backslash pair, and sed's replacement halves a pair); that is
+not a valid YAML escape, so Traefik rejected the whole file and the bare `/crm` kept answering
+`301 → …:8443/crm/`. Everything around it held (`/crm/` unchanged, the portal and uCRM's login 200, Traefik
+not restarted), and the run also recorded that `uisp.yaml`'s host router carries both
+`crm.dishnetsudan.com` and `crm.dishnetuganda.com` at priority 10 (the new router sits at 20 and names the
+Uganda host only). Reproduced here by parsing the file exactly as written. Fixed the same hour: the dots are
+written as `[.]` (no backslash at all), the file is parsed as YAML with python3 **before** it is placed (a
+lone backslash or a parse failure removes the temporary file and stops), and Traefik's own log is shown and
+counted when the route is not taken. The rehearsal now parses the YAML, carries the broken-copy control (the
+26 September defect is refused before placement) and a Traefik-rejection scenario. **The re-run of the same
+command rewrites the file** — the rejected copy in the config directory is replaced, not left beside.

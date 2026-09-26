@@ -433,17 +433,17 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 
 | Set | Status | Notes |
 |---|---|---|
-| **A1.1** contacts, company information, currency through `TenantProfile` | **BUILT — 5.18.41, awaiting the deployment command** | the plan's sites plus three found while building (§7.1): the invoice screen's payee, bank line and " USD"; the payment-notification currency; the fibre and LTE status cards. Rendered proof: `tests/test_portal_tenant.php` (88) |
-| **A1.2** consent shared across verified routes of one customer | **BUILT — 5.18.41** | `tests/test_consent_identity.php` (28); the type-affinity trap it found is in §7.1 |
-| **A1.3** canonical host for the customer pages | **BUILT — 5.18.41** | `tests/test_canonical_host.php` (49); the rule is narrower than planned and loop-proof by construction (§7.1) |
+| **A1.1** contacts, company information, currency through `TenantProfile` | **BUILT — 5.18.41, LIVE 26 Sep (verified 16/16 at 15:04 UTC)** | the plan's sites plus three found while building (§7.1): the invoice screen's payee, bank line and " USD"; the payment-notification currency; the fibre and LTE status cards. Rendered proof: `tests/test_portal_tenant.php` (88) |
+| **A1.2** consent shared across verified routes of one customer | **BUILT — 5.18.41, LIVE** | `tests/test_consent_identity.php` (28); the type-affinity trap it found is in §7.1 |
+| **A1.3** canonical host for the customer pages | **BUILT — 5.18.41, LIVE: `:8443` answers 302 to the public address (measured 15:04 UTC)** | `tests/test_canonical_host.php` (49); the rule is narrower than planned and loop-proof by construction (§7.1) |
 | **A1.4** `isActive` | unchanged (decided §4) | — |
 | **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — South Sudan `+211 921 443 006`, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
 | **A2** legal wording | **PROPOSAL for approval — §7.3**; nothing changed in the documents' identity, jurisdiction or regulator sentences | the CONTACT lines inside the documents already read the profile (A1.1) |
-| **C-1** Traefik absorbs the bare `/crm` | **HANDED OVER**: `scripts/dnb-crm-root-redirect.sh` (read-first, verified, one-line rollback), rehearsed 17/17 | run it once, send the log file |
+| **C-1** Traefik absorbs the bare `/crm` | **attempt 1 (15:05 UTC) FAILED on the script's own defect** — an invalid YAML escape in the generated regex; Traefik rejected the file, nothing else changed. **Fixed; re-run the same command** (it rewrites the file); details docs/07 | run it again, send the log file |
 | **C-2** uCRM's own address | **CHECKLIST — §7.2**; an operator act in uCRM's settings | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7) |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
 | **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
-| deployment / configuration / customer data | **NOTHING CHANGED on the server** | the server changes are the two commands in §7.2, each run by the operator |
+| deployment / configuration / customer data | **5.18.41 deployed by the operator; one Traefik file placed by C-1 attempt 1 and ignored by Traefik (rewritten by the re-run); no configuration value, customer record or other service changed** | — |
 
 ### 7.1 Found while building A1 (recorded, each pinned by a test)
 

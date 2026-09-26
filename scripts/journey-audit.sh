@@ -59,7 +59,12 @@ MODE=""; ARG=""
 case "${1:-}" in
   --siblings|--compare|--urls) MODE="${1#--}" ;;
   --client-flags) MODE="client-flags"; ARG="${2:-1}" ;;
-  --identity|--login-phone|--login-email|--chain) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; } ;;
+  --identity|--login-phone|--login-email|--chain) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; }
+    case "$MODE" in
+      login-phone) printf '%s' "$ARG" | grep -qE '^\+[0-9][0-9 ()-]{6,}$' || { echo "usage: $0 --login-phone +2567XXXXXXXX   — the customer's own number in international form, starting with + and the country code (a placeholder is not a number)" >&2; exit 64; } ;;
+      login-email) printf '%s' "$ARG" | grep -qE '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' || { echo "usage: $0 --login-email name@example.com   — the customer's own e-mail address" >&2; exit 64; } ;;
+      identity|chain) printf '%s' "$ARG" | grep -qE '^[0-9]+$' || { echo "usage: $0 --$MODE <clientId>   — a uCRM client id (digits)" >&2; exit 64; } ;;
+    esac ;;
   *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls | --client-flags [clientId] | --chain <clientId>" >&2; exit 64 ;;
 esac
 

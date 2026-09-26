@@ -29,7 +29,7 @@
 # rehearsal (scripts/harness/crm-root/) only.
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEMPLATE="$REPO/scripts/traefik/dnb-crm-root.yml.template"
+TEMPLATE="${TEMPLATE:-$REPO/scripts/traefik/dnb-crm-root.yml.template}"   # overridable only for the rehearsal
 CONF_DIR="${CONF_DIR:-/etc/easypanel/traefik/config}"
 TARGET="$CONF_DIR/dnb-crm-root.yml"
 HOST="${HOST:-crm.dishnetuganda.com}"
@@ -66,14 +66,32 @@ echo "           /crm/ → $S_CODE ${S_LOC:+→ $S_LOC}"
 echo "           portal sign-in → $(code "$PORTAL")   uCRM login → $(code "$SCHEME://$HOST/crm/login")"
 case "$B_LOC" in *:8443*) note "the bare /crm currently leads to :8443 — the door this file closes";; esac
 [ -f "$TARGET" ] && note "$TARGET exists — it will be rewritten (a re-run)"
-HOST_RE="$(printf '%s' "$HOST" | sed -E 's/[.]/\\\\./g')"
-sed -e "s|__RESOLVER__|$RESOLVER|" -e "s|__PRIORITY_LINE__|$PRIO_LINE|" -e "s|__HOST_RE__|$HOST_RE|g" -e "s|__HOST__|$HOST|g" "$TEMPLATE" | sed '/^\s*$/d' > "$TARGET.tmp" && mv "$TARGET.tmp" "$TARGET" || stop "could not write $TARGET"
+# The host inside the regex: dots as [.] — NO backslash. Inside a YAML double-quoted string a lone
+# backslash is an invalid escape, Traefik rejects the whole file and keeps its own answer. The first
+# run on 26 September did exactly that (docs/07, 5.18.41), which is why the file is checked before it
+# is placed and Traefik's log is read if the route is not taken.
+HOST_RE="$(printf '%s' "$HOST" | sed -E 's/[.]/[.]/g')"
+sed -e "s|__RESOLVER__|$RESOLVER|" -e "s|__PRIORITY_LINE__|$PRIO_LINE|" -e "s|__HOST_RE__|$HOST_RE|g" -e "s|__HOST__|$HOST|g" "$TEMPLATE" | sed '/^\s*$/d' > "$TARGET.tmp" || stop "could not write $TARGET.tmp"
+if grep -qE '(^|[^\\])\\([^\\]|$)' "$TARGET.tmp"; then rm -f "$TARGET.tmp"; stop "the generated file carries a lone backslash — invalid inside a YAML double-quoted string; nothing was placed"; fi
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
+  if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert set(d["http"]["routers"]) == {"dnb-crm-root", "dnb-crm-root-http"}' "$TARGET.tmp" 2>/dev/null; then ok "the generated file parses as YAML with the two routers (python3)"
+  else rm -f "$TARGET.tmp"; stop "the generated file does not parse as YAML; nothing was placed"; fi
+else note "python3 yaml is not available on this host; the file's escapes were checked by pattern instead"; fi
+grep -q '\[\.\]' "$TARGET.tmp" || { rm -f "$TARGET.tmp"; stop "the regex does not carry the host with [.] dots; nothing was placed"; }
+mv "$TARGET.tmp" "$TARGET" || stop "could not place $TARGET"
 chmod 644 "$TARGET"; ok "wrote $TARGET"
+WRITTEN_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 WANT="https://$HOST/crm/"
 for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; c="$(code "$SCHEME://$HOST/crm")"; L="$(loc "$SCHEME://$HOST/crm")"; [ "$c" = "302" ] && [ "$L" = "$WANT" ] && break; done
 if [ "$c" = "302" ] && [ "$L" = "$WANT" ]; then ok "GET /crm → 302 → $WANT (after ${i}×2 s)"
-else bad "GET /crm → $c ${L:+→ $L} — expected 302 → $WANT. Traefik did not take the route, or another router outranks it. Rollback: rm $TARGET"; fi
+else
+  bad "GET /crm → $c ${L:+→ $L} — expected 302 → $WANT. Traefik did not take the route, or another router outranks it. Rollback: rm $TARGET"
+  echo "  Traefik's log since the file was written (lines naming the file, or errors):"
+  docker logs "$TRAEFIK_ID" --since "$WRITTEN_AT" 2>&1 | grep -iE 'dnb-crm-root|error|level=warn' | tail -8 | cut -c1-220 | sed 's/^/     /'
+fi
+N_TLOG="$(docker logs "$TRAEFIK_ID" --since "$WRITTEN_AT" 2>&1 | grep -i 'dnb-crm-root' | grep -ciE 'error|warn' || true)"
+[ "${N_TLOG:-0}" = "0" ] && ok "Traefik's log has no error or warning naming the file" || bad "Traefik's log has ${N_TLOG} error/warning line(s) naming the file (shown above)"
 case "$L" in *:8443*) bad "the Location still carries :8443";; *) ok "the Location carries no :8443";; esac
 c2="$(code "http://$HOST/crm")"; L2="$(loc "http://$HOST/crm")"
 if [ "$c2" = "301" ] || [ "$c2" = "302" ]; then case "$L2" in https://$HOST/*) ok "the http:// form answers $c2 → $L2 (https, no :8443)";; *) note "the http:// form answers $c2 → ${L2:-<none>}";; esac
