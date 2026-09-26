@@ -1020,3 +1020,69 @@ noted and never counted against this build. Rehearsed against a fake docker in f
 (a completing tick, none, a crash after the guard, the pull hour): 7/7.
 
 **Status:** **built, NOT deployed.** Production stays on 5.18.38 (`fa2d463`).
+
+## Website — Customer Login opens the DishNet portal (26 Sep 2026)
+
+**Decision 8 of the customer-login remediation plan, executed (Phase 4, website half).**
+Every "Customer Login" on `dishnetuganda.com` — header, mobile menu and footer of all 57
+pages, plus "Open Portal" on the pay page, "customer portal" on the app page and "the customer
+login page" in a tutorial: **176 links** — now opens the DishNet portal sign-in,
+`https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login`,
+instead of uCRM's own client-zone login `/crm/login`. The sign-in page sends a customer who
+already has a live session straight to the portal, so the link is right for first-time and
+returning customers alike. The replacement was scripted with the counts asserted (176 in 57,
+exactly the audit's numbers; anything else would have changed nothing). `verify-site.sh`
+now allows exactly that one portal URL; `README-DEPLOY.md` records the change and closes the
+"portal deep-link" placeholder. The site's own checks pass: `verify-site.sh` (404, SEO,
+content integrity, commercial rules), `verify-address.py`, `stamp-assets.sh --check`.
+
+**Why now.** The plan gated this on Phase 2 being proved on Uganda, which the 5.18.38 deploy
+did at 02:59 UTC. Pay Now exists only in the portal (`docs/32` §7), and the website was the
+one door still pointing customers away from it.
+
+**Status: committed, NOT deployed.** The website goes live only when the operator redeploys
+it in EasyPanel (project `web`, app `web-uganda`). The 5.18.40 deployment command's stage W
+reports whether the live home page already links the portal. The short address
+`crm.dishnetuganda.com/customer-login` (plan §G step 4) is **optional and separate**:
+`scripts/customer-login-clean-url.sh` places one Traefik file from
+`scripts/traefik/dnb-customer-login.yml.template`, verifies the 302, and is undone by deleting
+the file. Not run; the website does not depend on it.
+
+## 5.18.40 — the customer portal can be installed on a phone
+
+**What.** The customer portal gets its own web-app manifest, `?page=customer_manifest`
+(`includes/routes.php`, beside the staff app's): name DishNet, start at the sign-in page,
+scope the plugin directory, standalone display, the portal's colours, the icon the staff app
+already generates at 192 and 512 px. Both customer pages link it (`login_web.php`,
+`portal.php`), which with the iOS meta tags they already carried makes "Install app" / "Add to
+Home Screen" appear in Chrome, Edge, Samsung Internet, Firefox and Safari. The portal's
+settings view gains an **Install the DishNet app** row that shows only where installing is
+possible and not already done: it appears when the browser hands over its install prompt
+(`beforeinstallprompt`) or on iOS Safari with the Share-menu words, and never inside the
+Android wrapper or a window already running standalone.
+
+**Deliberately no service worker for customers.** A cache of signed-in pages on a shared phone
+is a data exposure; modern browsers install from the manifest and meta tags alone. Pinned by
+the test. (The staff app's service worker is unchanged. Its scope is the plugin directory, so
+on a staff member's own browser it also fronts the customer pages — pre-existing, staff
+devices only, recorded here, not changed.)
+
+**Also carries 5.18.39** (the tick fix), which never went live on its own; its command
+`scripts/deploy-5.18.39.sh` now stops with a pointer to the 5.18.40 command.
+
+**Proof.** `tests/test_customer_pwa.php` (31) serves the plugin the way uCRM does, under
+`/crm/_plugins/dishnet-hybrid-sudan/`, and asserts the manifest (200 without a login, the
+type, every field, start_url inside scope, both icons answering as images, no
+credential-shaped word), the sign-in page's link, the portal's link and Install row, no
+service worker on either page, the portal still refusing without a session, the staff
+manifest unchanged — and the control: with the link removed from the copy, the served page no
+longer carries it. Suite two full runs are in progress at the time of this commit; both results are recorded in the follow-up commit that closes this entry.
+
+**Deployment (NOT done).** `scripts/deploy-5.18.40.sh`, pinned to plugin commit
+`4a2f41c`: the Phase 1/2 machinery, then **M** the manifest over the public address
+(200, the type, standalone, start_url, scope, icons as PNG, the sign-in page's link, no service
+worker, the portal still refusing), **T** the wait for the next tick (5.18.39's proof), **W**
+whether the live website already links the portal (report only). Tick stage rehearsed against a
+fake docker: 7/7.
+
+**Status:** **built, NOT deployed.** Production stays on 5.18.38 (`fa2d463`).

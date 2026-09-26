@@ -1,0 +1,31 @@
+# /etc/easypanel/traefik/config/dnb-customer-login.yml
+#
+# The clean customer-login address — optional, cosmetic, and separate from the
+# website change (the website links the canonical portal URL directly):
+#
+#   https://crm.dishnetuganda.com/customer-login
+#     → 302 → https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login
+#
+# One new file for Traefik's file provider, exactly as docs/05 and the staging
+# routes are done on this host. It never edits main.yaml or uisp.yaml, it adds
+# a router for one path on a host whose certificate already exists, and it is
+# removed by deleting the file. `permanent: false` (302) for the first weeks;
+# change to true (301) once the address is stable. Placed and verified by
+# scripts/customer-login-clean-url.sh, which fills the two placeholders from
+# uisp.yaml (the certificate resolver, and a priority above its host router).
+http:
+  routers:
+    dnb-customer-login:
+      rule: "Host(`crm.dishnetuganda.com`) && Path(`/customer-login`)"
+      entryPoints: ["https"]
+      __PRIORITY_LINE__
+      service: noop@internal
+      middlewares: ["dnb-customer-login-redirect"]
+      tls:
+        certResolver: __RESOLVER__
+  middlewares:
+    dnb-customer-login-redirect:
+      redirectRegex:
+        regex: "^https://crm\\.dishnetuganda\\.com/customer-login/?(\\?.*)?$"
+        replacement: "https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login"
+        permanent: false
