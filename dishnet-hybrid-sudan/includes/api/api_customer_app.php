@@ -29,6 +29,7 @@ require_once dirname(__DIR__, 2) . '/lib/CustomerJwtKeys.php';   // Phase 2: the
 require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';   // Phase 2: HttpOnly cookie session + customer_sessions
 require_once dirname(__DIR__, 2) . '/lib/PhoneNumber.php';       // Phase 2: the tenant's phone rule
 require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
+require_once dirname(__DIR__, 2) . '/lib/InvoiceTotals.php';   // 5.18.42: the invoice's totals as uCRM states them
 
 // ── Helpers (scoped with ca_ prefix to avoid collisions) ────────────
 
@@ -62,6 +63,21 @@ if (!function_exists('ca_phone_intl')) {
             $dataDir = function_exists('getDataDir') ? (string)getDataDir(dirname(__DIR__, 2)) : null;
         }
         return PhoneNumber::international($raw, TenantProfile::current($config, $dataDir)) ?? '';
+    }
+}
+
+/**
+ * 5.18.42 (docs/38 A2): the tenant this request is served under — the same
+ * resolution ca_phone_intl() uses. The legal documents' versions are the
+ * tenant's, so every site that reads or compares them goes through this.
+ */
+if (!function_exists('ca_tenant')) {
+    function ca_tenant(array $config = []): TenantProfile {
+        $dataDir = $GLOBALS['dataDir'] ?? null;
+        if (!is_string($dataDir) || $dataDir === '') {
+            $dataDir = function_exists('getDataDir') ? (string)getDataDir(dirname(__DIR__, 2)) : null;
+        }
+        return TenantProfile::current($config, $dataDir);
     }
 }
 
@@ -872,10 +888,11 @@ if ($act === 'app_verify_otp') {
     // Returns false for returning customers who have already accepted; true for
     // first-time users or when we've bumped a version. The login UI shows a
     // consent step before redirecting to the portal if needs_consent=true.
-    $needsConsent = !ca_has_current_consent($pdo, $identifier, (int)($clientId ?? 0));   // 5.18.41: by identifier OR by customer (docs/38 A1.2)
-    $legalVer = (function() {
+    $tenant = ca_tenant(is_array($config ?? null) ? $config : []);
+    $needsConsent = !ca_has_current_consent($pdo, $identifier, (int)($clientId ?? 0), $tenant);   // 5.18.41: by identifier OR by customer (docs/38 A1.2); 5.18.42: the tenant's versions (A2)
+    $legalVer = (function() use ($tenant) {
         require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
-        return dnLegalVersion();
+        return dnLegalVersion($tenant);
     })();
 
     $ok2([
@@ -1496,8 +1513,12 @@ if ($act === 'app_invoice' && $met === 'GET') {
         'due_at' => $inv['dueDate'] ?? null,
         'paid_at' => ($paid >= $total) ? ($inv['paidDate'] ?? null) : null,
         'items' => $items,
-        'subtotal' => (float)($inv['subtotal'] ?? 0),
-        'tax' => (float)($inv['totalTaxes'] ?? 0),
+        // 5.18.42 (docs/38 §7.5): as uCRM states it — `totalTaxes` never existed, so `tax` was always 0;
+        // `taxes` lists each tax or levy by uCRM's own name, so a VAT line and a UCC levy line read apart.
+        'subtotal' => InvoiceTotals::subtotal($inv),
+        'tax' => InvoiceTotals::taxTotal($inv),
+        'taxes' => InvoiceTotals::taxLines($inv),
+        'discount' => InvoiceTotals::discount($inv),
         'invoice_number' => $inv['number'] ?? null,
     ]);
 }
@@ -4549,7 +4570,7 @@ if ($act === 'app_payment_receipt_pdf' && $met === 'GET') {
  * PHP fatally errored with "Call to undefined function". Unwrapping makes
  * PHP hoist the function at file parse time, available everywhere.
  */
-function ca_has_current_consent($pdo, string $identifier, int $clientId = 0): bool {
+function ca_has_current_consent($pdo, string $identifier, int $clientId, TenantProfile $tp): bool {
     // Phase 2: one implementation, shared with the login page and the portal.
     // The identifier is already canonical — the international number or the
     // lower-cased e-mail the token names. (Re-deriving it through the phone
@@ -4558,7 +4579,7 @@ function ca_has_current_consent($pdo, string $identifier, int $clientId = 0): bo
     // 5.18.41 (docs/38 A1.2): the customer id the session proves is passed too,
     // so consent given on one verified route counts on the other.
     try {
-        return CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId);
+        return CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId, $tp);
     } catch (\Throwable $e) {
         return false;
     }
@@ -4572,7 +4593,7 @@ function ca_has_current_consent($pdo, string $identifier, int $clientId = 0): bo
 // ═══════════════════════════════════════════════════════════════════
 if ($act === 'app_legal_version' && $met === 'GET') {
     require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
-    $ver = dnLegalVersion();
+    $ver = dnLegalVersion(ca_tenant(is_array($config ?? null) ? $config : []));   // 5.18.42: the tenant's versions
     $ok2([
         'tos_version'     => $ver['tos'],
         'privacy_version' => $ver['privacy'],
@@ -4593,7 +4614,7 @@ if ($act === 'app_record_consent' && $met === 'POST') {
     $pdo = $store->getPdo();
 
     require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
-    $currentVer = dnLegalVersion();
+    $currentVer = dnLegalVersion(ca_tenant(is_array($config ?? null) ? $config : []));   // 5.18.42: the tenant's versions
 
     // 5.18.37: consent is recorded for the identity the OTP just proved — the
     // Bearer token app_verify_otp issued — never for an identifier typed into

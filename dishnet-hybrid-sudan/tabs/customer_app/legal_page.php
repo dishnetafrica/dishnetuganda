@@ -9,9 +9,8 @@ require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
 require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
 
 // 5.18.41 (docs/38 A1.1): the page's entity, locality and contacts come from the tenant profile,
-// and the documents take the same profile for their contact lines. The identity, jurisdiction
-// and regulator sentences INSIDE the documents are change set A2's — gated on approved wording —
-// and are still South Sudan's on every install.
+// and the documents take the same profile for their contact lines. 5.18.42 (A2): the documents
+// themselves are templates over the profile, and so are their version and date.
 $lpProfile  = TenantProfile::current(is_array($config ?? null) ? $config : [], (isset($dataDir) && is_string($dataDir)) ? $dataDir : null);
 $lpEntity   = $lpProfile->login('footer_entity', 'DishNet Africa Ltd.');
 $lpLocality = $lpProfile->login('footer_locality', 'Juba, South Sudan');
@@ -20,7 +19,7 @@ $lpWaShown  = TenantProfile::formatWa($lpWaDigits);
 $lpEmail    = $lpProfile->email() ?: 'info@dishnetafrica.com';
 
 $legalKind = $_GET['page'] === 'terms' ? 'terms' : 'privacy';
-$docVer = dnLegalVersion();
+$docVer = dnLegalVersion($lpProfile);
 
 if ($legalKind === 'terms') {
     $docTitle = 'Terms of Service';

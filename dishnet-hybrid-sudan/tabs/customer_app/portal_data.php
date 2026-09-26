@@ -1,6 +1,7 @@
 <?php
 require_once dirname(__DIR__, 2) . '/lib/crm_url.php';   // dn_with_override(): links on the reachable address
 require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';   // 5.18.41 (docs/38 A1.1): the tenant answers every country-dependent string the portal prints
+require_once dirname(__DIR__, 2) . '/lib/InvoiceTotals.php';   // 5.18.42 (docs/38 §7.5): the invoice's totals block as uCRM states it
 // ════════════════════════════════════════════════════════════════════
 // Customer Portal — Shared Data Loader
 // ════════════════════════════════════════════════════════════════════
@@ -109,7 +110,7 @@ if ($token === '') {
 } else {
     try {
         $portalClaims = CustomerSession::authenticate($config, $store->getPdo())['claims'];
-        if (!CustomerSession::hasCurrentConsent($store->getPdo(), (string)($portalClaims['phone'] ?? ''), (int)($portalClaims['sub'] ?? 0))) {   // 5.18.41: by identifier OR by customer (docs/38 A1.2)
+        if (!CustomerSession::hasCurrentConsent($store->getPdo(), (string)($portalClaims['phone'] ?? ''), (int)($portalClaims['sub'] ?? 0), $portalTenant)) {   // 5.18.41: by identifier OR by customer (docs/38 A1.2); 5.18.42: the tenant's versions (A2)
             header('Location: ' . $loginUrl . '&step=consent');
             exit;
         }
@@ -886,8 +887,13 @@ if ($view === 'invoice_detail' && !$portalAuthError) {
                     'status' => $st,
                     'created' => $inv['createdDate'] ?? null,
                     'due_date' => $inv['dueDate'] ?? null,
-                    'subtotal' => (float)($inv['subtotal'] ?? 0),
-                    'tax' => (float)($inv['totalTaxes'] ?? 0),
+                    // 5.18.42 (docs/38 §7.5): the totals block as uCRM states it. `totalTaxes` never existed on a
+                    // uCRM invoice, so no tax line ever rendered; each tax or levy is now its own line, by name.
+                    'subtotal' => InvoiceTotals::subtotal($inv),
+                    'tax' => InvoiceTotals::taxTotal($inv),
+                    'taxes' => InvoiceTotals::taxLines($inv),
+                    'discount' => InvoiceTotals::discount($inv),
+                    'has_breakdown' => InvoiceTotals::hasBreakdown($inv),
                 ];
                 foreach ($inv['items'] ?? [] as $it) {
                     $portalInvoiceItems[] = [

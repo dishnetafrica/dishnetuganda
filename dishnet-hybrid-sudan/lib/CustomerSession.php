@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+
+require_once __DIR__ . '/TenantProfile.php';
 /**
  * CustomerSession — how a signed-in customer is recognised (Phase 2 of the
  * customer-login audit, plan §E.4–E.5).
@@ -197,13 +199,18 @@ final class CustomerSession
      * e-mail route of a customer who accepted by phone is therefore not asked
      * again; a row for another customer never admits this one; and with
      * $clientId = 0 the rule is exactly the pre-5.18.41 one (by identifier).
+     *
+     * 5.18.42 (docs/38 A2): "current" means the TENANT's versions — the profile
+     * the request is served under is a required parameter, so a caller cannot
+     * compare a Uganda customer's row against another tenant's version by
+     * leaving it out (that would ask them again on every sign-in, forever).
      */
-    public static function hasCurrentConsent(\PDO $pdo, string $identifier, int $clientId = 0): bool
+    public static function hasCurrentConsent(\PDO $pdo, string $identifier, int $clientId, TenantProfile $tp): bool
     {
         $identifier = trim($identifier);
         if ($identifier === '' && $clientId <= 0) return false;
         require_once dirname(__DIR__) . '/lib/LegalContent.php';
-        $ver = dnLegalVersion();
+        $ver = dnLegalVersion($tp);
         try {
             // Two statements rather than one with a "? > 0" clause: PDO binds an int as TEXT unless told,
             // and SQLite orders TEXT above INTEGER, so '0' > 0 is true — the guard would have matched a

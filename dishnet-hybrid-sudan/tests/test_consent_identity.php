@@ -9,7 +9,7 @@ declare(strict_types=1);
  * e-mail route, because app_tos_consent was looked up by identifier only
  * although every row already carries crm_client_id.
  *
- * Now CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId) is true
+ * Now CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId, $UG) is true
  * for a row at the current versions that names the identifier OR the customer.
  * Why that is not a bypass: a row is written only by app_record_consent, which
  * needs a session the OTP just proved for that very customer (5.18.37), so
@@ -38,7 +38,11 @@ require_once $root . '/lib/CustomerJwtKeys.php';
 require_once $root . '/lib/CustomerSession.php';
 require_once $root . '/lib/LegalContent.php';
 require_once $root . '/lib/ClientSearchIndex.php';
-$ver = dnLegalVersion();
+require_once $root . '/lib/TenantProfile.php';
+// 5.18.42 (docs/38 A2): the versions are the TENANT's, so the check takes the profile. The HTTP sandbox below is
+// the uganda profile; part 1 judges the same rows under both profiles.
+$UG = TenantProfile::load('uganda'); $SS = TenantProfile::load('south-sudan');
+$ver = dnLegalVersion($UG);
 /** The served copy is read through opcache (revalidated every 2 s): poll a condition for up to 5 s. */
 function untilServed(callable $cond): bool { for ($i = 0; $i < 25; $i++) { if ($cond()) return true; usleep(200000); } return (bool)$cond(); }
 
@@ -49,18 +53,27 @@ $ins = $pdo->prepare("INSERT INTO app_tos_consent VALUES (?,?,?,?,?,?)");
 $ins->execute(['+256772123456', $ver['tos'], $ver['privacy'], time(), '127.0.0.1', 7]);   // customer 7 accepted by phone
 $ins->execute(['old.customer@example.test', '0.9', '0.9', time() - 86400, '127.0.0.1', 8]); // customer 8 accepted an OLD version
 $ins->execute(['legacy@example.test', $ver['tos'], $ver['privacy'], time(), '127.0.0.1', null]); // a pre-5.18.37 row with no client id
-t('the phone identifier that accepted → true (no client id given: the old rule)', CustomerSession::hasCurrentConsent($pdo, '+256772123456'), true);
-t('the e-mail identifier of the SAME customer → true by client id', CustomerSession::hasCurrentConsent($pdo, 'mail.customer@example.test', 7), true);
-t('…and false without the client id (the old rule, unchanged)', CustomerSession::hasCurrentConsent($pdo, 'mail.customer@example.test'), false);
-t('another customer\'s identifier with ITS id → false: customer 7\'s row does not admit customer 8', CustomerSession::hasCurrentConsent($pdo, 'other@example.test', 8), false);
-t('customer 8 accepted an old version → false (a version bump re-asks)', CustomerSession::hasCurrentConsent($pdo, 'old.customer@example.test', 8), false);
-t('a row without a client id still counts for its identifier', CustomerSession::hasCurrentConsent($pdo, 'legacy@example.test', 9), true);
-t('…and never for a customer id alone', CustomerSession::hasCurrentConsent($pdo, 'nobody@example.test', 9), false);
-t('an empty identifier and no client id → false', CustomerSession::hasCurrentConsent($pdo, ''), false);
-t('an empty identifier with a client id that accepted → true', CustomerSession::hasCurrentConsent($pdo, '', 7), true);
-t('a zero client id is never matched (rows without a client id hold NULL, not 0)', CustomerSession::hasCurrentConsent($pdo, 'x', 0), false);
+t('the phone identifier that accepted → true (no client id given: the old rule)', CustomerSession::hasCurrentConsent($pdo, '+256772123456', 0, $UG), true);
+t('the e-mail identifier of the SAME customer → true by client id', CustomerSession::hasCurrentConsent($pdo, 'mail.customer@example.test', 7, $UG), true);
+t('…and false without the client id (the old rule, unchanged)', CustomerSession::hasCurrentConsent($pdo, 'mail.customer@example.test', 0, $UG), false);
+t('another customer\'s identifier with ITS id → false: customer 7\'s row does not admit customer 8', CustomerSession::hasCurrentConsent($pdo, 'other@example.test', 8, $UG), false);
+t('customer 8 accepted an old version → false (a version bump re-asks)', CustomerSession::hasCurrentConsent($pdo, 'old.customer@example.test', 8, $UG), false);
+t('a row without a client id still counts for its identifier', CustomerSession::hasCurrentConsent($pdo, 'legacy@example.test', 9, $UG), true);
+t('…and never for a customer id alone', CustomerSession::hasCurrentConsent($pdo, 'nobody@example.test', 9, $UG), false);
+t('an empty identifier and no client id → false', CustomerSession::hasCurrentConsent($pdo, '', 0, $UG), false);
+t('an empty identifier with a client id that accepted → true', CustomerSession::hasCurrentConsent($pdo, '', 7, $UG), true);
+t('a zero client id is never matched (rows without a client id hold NULL, not 0)', CustomerSession::hasCurrentConsent($pdo, 'x', 0, $UG), false);
 $pdo->exec("UPDATE app_tos_consent SET crm_client_id = 0 WHERE phone = 'legacy@example.test'");
-t('…even if a row held 0', CustomerSession::hasCurrentConsent($pdo, 'x', 0), false);
+t('…even if a row held 0', CustomerSession::hasCurrentConsent($pdo, 'x', 0, $UG), false);
+
+echo "\n1b. The versions are the tenant's (5.18.42, docs/38 A2): the same rows, judged under each profile\n";
+$vSS = dnLegalVersion($SS);
+t('the profiles carry different versions (uganda 1.1, south-sudan 1.0)', [$ver['tos'], $ver['privacy'], $vSS['tos'], $vSS['privacy']], ['1.1', '1.1', '1.0', '1.0']);
+t('customer 7 accepted uganda\'s current version → true under the uganda profile', CustomerSession::hasCurrentConsent($pdo, '+256772123456', 7, $UG), true);
+t('…the same row judged under south-sudan (1.0) → false: a row never satisfies another tenant\'s version', CustomerSession::hasCurrentConsent($pdo, '+256772123456', 7, $SS), false);
+$ins->execute(['+211927000555', $vSS['tos'], $vSS['privacy'], time(), '127.0.0.1', 11]);   // a South Sudan customer at 1.0
+t('a 1.0 row → true under south-sudan (nobody there is asked again)', CustomerSession::hasCurrentConsent($pdo, '+211927000555', 11, $SS), true);
+t('…and false under uganda (1.1): every Uganda customer is asked once more', CustomerSession::hasCurrentConsent($pdo, '+211927000555', 11, $UG), false);
 
 echo "\n2. Over HTTP: the phone route consents, the e-mail route of the same customer passes, another customer does not\n";
 // The copy keeps the plugin's directory NAME: a customer token's issuer is derived from it, and the test
@@ -162,12 +175,16 @@ $in8 = $signInByPhone($PHONE8);
 t('…and a real sign-in for customer 8 reports needs_consent true', $in8['verify']['json']['data']['needs_consent'] ?? null, true);
 
 echo "\n4. A version bump re-asks every route (the control: the shared row is version-bound)\n";
-$lc = $tmp . '/lib/LegalContent.php'; $src = (string)file_get_contents($lc);
-t('the sandbox copy carries the current version once', substr_count($src, "'tos'     => '" . $ver['tos'] . "',"), 1);
-file_put_contents($lc, str_replace("'tos'     => '" . $ver['tos'] . "',", "'tos'     => '9.9',", $src));
+// 5.18.42 (docs/38 A2): the version is the TENANT's, in its profile — bumping the served copy's uganda profile
+// is what a wording change does in production, and it must re-ask both routes of this Uganda customer.
+$lc = $tmp . '/profiles/uganda.json'; $src = (string)file_get_contents($lc);
+t('the sandbox copy\'s uganda profile carries the current Terms version once', substr_count($src, '"tos": "' . $ver['tos'] . '"'), 1);
+file_put_contents($lc, str_replace('"tos": "' . $ver['tos'] . '"', '"tos": "9.9"', $src));
 untilServed(function () use ($toConsent, $portal, $jwtPhone): bool { return $toConsent($portal($jwtPhone)); });
 $bp = $portal($jwtPhone); $bm = $portal($jwtMail);
-is_($toConsent($bp) && $toConsent($bm), 'with the Terms version bumped in the copy, both routes are asked again', "phone {$bp['code']} " . ($bp['headers']['location'][0] ?? '') . " | mail {$bm['code']} " . ($bm['headers']['location'][0] ?? ''));
+is_($toConsent($bp) && $toConsent($bm), 'with the Terms version bumped in the tenant\'s profile, both routes are asked again', "phone {$bp['code']} " . ($bp['headers']['location'][0] ?? '') . " | mail {$bm['code']} " . ($bm['headers']['location'][0] ?? ''));
+$lv = $api('GET', 'app_legal_version', null);
+t('…and app_legal_version reports the bumped tenant version to the login page', $lv['json']['data']['tos_version'] ?? null, '9.9');
 file_put_contents($lc, $src);
 untilServed(function () use ($portal, $jwtMail): bool { return $portal($jwtMail)['code'] === 200; });
 t('restored: the e-mail route passes again', $portal($jwtMail)['code'], 200);

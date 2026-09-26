@@ -12,20 +12,60 @@
  * Accessible at ?page=terms and ?page=privacy.
  *
  * 5.18.41 (docs/38 A1.1): the CONTACT lines read the tenant profile (WhatsApp, e-mail).
- * The identity, jurisdiction and regulator sentences are still South Sudan's on every
- * install: change set A2 replaces them once the Uganda wording is approved (docs/38 A2).
+ *
+ * 5.18.42 (docs/38 change set A2): the documents are TEMPLATES over the tenant profile.
+ * Every sentence that names a country, a company, a product line, a fee, a court or a
+ * regulator is composed from the profile's `legal` block and its other facts; this file
+ * carries no tenant's wording of its own. The version and date are the tenant's too
+ * (`legal.version`, `legal.dated`), so a wording change for one tenant re-asks only that
+ * tenant's customers. South Sudan's profile holds exactly the text this file carried
+ * before, and tests/test_portal_tenant.php pins the rendering byte for byte. Where a
+ * profile does not answer, the sentence falls back to a NEUTRAL fact-derived form
+ * (the country's name, "internet services") — never to another tenant's wording.
  */
 
 declare(strict_types=1);
 
 require_once __DIR__ . '/TenantProfile.php';
 
-/** Bump when wording changes. Stored with every consent record. */
-function dnLegalVersion(): array {
+/**
+ * The tenant's document versions and effective date. Stored with every consent
+ * record and compared on every sign-in — so the profile the caller passes must be
+ * the one the request is served under (the parameter is deliberately required).
+ */
+function dnLegalVersion(TenantProfile $tp): array {
     return [
-        'tos'     => '1.0',
-        'privacy' => '1.0',
-        'dated'   => '18 April 2026',
+        'tos'     => $tp->text('legal.version.tos', '1.0'),
+        'privacy' => $tp->text('legal.version.privacy', '1.0'),
+        'dated'   => $tp->text('legal.dated', '18 April 2026'),
+    ];
+}
+
+/** The profile's `legal` facts, each with its neutral fallback. @internal */
+function dnLegalFacts(TenantProfile $tp): array {
+    $country = $tp->countryName() !== '' ? $tp->countryName() : 'the country of registration';
+    $city    = $tp->text('office.city', '');
+    $courts  = $tp->text('jurisdiction.courts', '');
+    return [
+        'entity'     => $tp->legalEntity() !== '' ? $tp->legalEntity() : 'DishNet Africa',
+        'identity'   => $tp->text('legal.identity', 'a company registered in ' . $country),
+        'services'   => $tp->text('legal.services', 'internet services'),
+        'area'       => $tp->text('legal.service_area', 'customers in ' . ($city !== '' ? $city . ' and across ' : '') . $country),
+        'upstreams'  => $tp->text('legal.upstreams', 'SpaceX/Starlink and other upstream providers'),
+        'aup'        => $tp->text('legal.acceptable_use_policies', "our upstream providers' acceptable use policies"),
+        'equipment'  => $tp->text('legal.equipment', 'Starlink dishes, routers and other terminals'),
+        'fees'       => is_array($tp->get('legal.fees')) ? $tp->get('legal.fees') : null,
+        'transfer'   => is_array($tp->get('legal.transfer')) ? $tp->get('legal.transfer') : null,
+        'law'        => $tp->text('jurisdiction.law', $country),
+        'forum'      => $tp->text('legal.forum', 'the courts of ' . ($courts !== '' ? $courts : $country)),
+        'partners'   => (string)$tp->get('legal.sharing_partners', ''),
+        'regulators' => $tp->text('legal.regulators_phrase', $country . ' regulatory authorities'),
+        'sign_in_heading' => $tp->text('legal.sign_in_heading', 'WhatsApp and login codes'),
+        'sign_in'    => $tp->text('legal.sign_in',
+            "We sign you into the DishNet app by sending a six-digit code to your WhatsApp " .
+            "number. That means your phone number travels through Meta's WhatsApp Business " .
+            "infrastructure, subject to Meta's own privacy terms. We never ask for your " .
+            "WhatsApp password — only your phone number so we can route the code to you."),
     ];
 }
 
@@ -37,13 +77,35 @@ function dnLegalVersion(): array {
 function dnTermsContent(TenantProfile $tp): array {
     $wa    = TenantProfile::formatWa($tp->contact('support_wa', '211921443002'));
     $email = $tp->email() ?: 'info@dishnetafrica.com';
+    $f     = dnLegalFacts($tp);
+    $fees  = $f['fees'];
+    $tr    = $f['transfer'];
+    $billing = $fees !== null
+        ? "Service is billed monthly and due on the invoice date shown on each bill. " .
+          "If payment is not received within " . (string)($fees['late_days'] ?? '7') . " days of the due date, a late fee of " . (string)($fees['late_fee'] ?? '5%') . " of " .
+          "the outstanding balance will be added. Continued non-payment may result in " .
+          "suspension without further notice. Reconnection after suspension costs " . (string)($fees['reconnection'] ?? 'the reconnection charge on your invoice') . ". " .
+          "Cheques should be made payable to \"" . (string)($fees['cheque_payee'] ?? $f['entity']) . "\". We accept " . (string)($fees['methods'] ?? 'bank transfers and mobile money') . "."
+        // No confirmed figures for this tenant (docs/38 §7.3 point 7): state none, point to the invoice.
+        : "Service is billed as shown on each invoice and is due on the due date it states. " .
+          "Late-payment and reconnection charges, where they apply, are those stated on your " .
+          "quotation or invoice. Continued non-payment may result in suspension without further " .
+          "notice. We accept the payment methods shown in the app and on your invoice.";
+    $transfers = $tr !== null
+        ? "Starlink accounts managed on your behalf by DishNet may be transferred to you " .
+          "after a minimum " . (string)($tr['min_period'] ?? '6-month') . " service period, subject to a " . (string)($tr['fee'] ?? 'transfer') . " transfer fee and a " .
+          (string)($tr['lead_time'] ?? '120-day') . " lead time for administrative processing. Transfer terms are governed by " .
+          "SpaceX/Starlink policy and may change without notice."
+        : "Starlink accounts managed on your behalf by DishNet may be transferred to you on " .
+          "request. Any minimum service period, transfer fee and processing time are confirmed " .
+          "to you in writing before a transfer. Transfer terms are governed by SpaceX/Starlink " .
+          "policy and may change without notice.";
     return [
         [
             'heading' => 'About these Terms',
             'body'    =>
-                "DishNet Africa Ltd. (\"DishNet\", \"we\", \"us\") is a telecommunications company " .
-                "registered in South Sudan, providing Starlink, fibre, and LTE internet services to " .
-                "customers in Juba and across the region. These Terms of Service govern your use of " .
+                "{$f['entity']} (\"DishNet\", \"we\", \"us\") is {$f['identity']}, " .
+                "providing {$f['services']} to {$f['area']}. These Terms of Service govern your use of " .
                 "our internet services, customer portal, mobile app, and related tools. By signing in " .
                 "to the DishNet app or using any DishNet service, you agree to these Terms.",
         ],
@@ -51,35 +113,28 @@ function dnTermsContent(TenantProfile $tp): array {
             'heading' => 'Our service',
             'body'    =>
                 "We provide internet connectivity on a best-effort basis. Speeds, latency, and " .
-                "uptime depend on upstream providers (SpaceX/Starlink, fibre partners, LTE carriers) " .
+                "uptime depend on upstream providers ({$f['upstreams']}) " .
                 "and on conditions we do not fully control — including weather, cable cuts, regulatory " .
                 "actions, and power availability. We commit to restoring service as quickly as " .
                 "reasonably possible when it is disrupted.",
         ],
         [
             'heading' => 'Billing and payment',
-            'body'    =>
-                "Service is billed monthly and due on the invoice date shown on each bill. " .
-                "If payment is not received within 7 days of the due date, a late fee of 5% of " .
-                "the outstanding balance will be added. Continued non-payment may result in " .
-                "suspension without further notice. Reconnection after suspension costs USD 25. " .
-                "Cheques should be made payable to \"DishNet Africa Limited\". We accept bank " .
-                "transfers, mobile money, and cash.",
+            'body'    => $billing,
         ],
         [
             'heading' => 'Acceptable use',
             'body'    =>
                 "You agree not to use DishNet service for illegal activity, to send unsolicited " .
                 "bulk communication (spam), to attack or probe other networks without authorisation, " .
-                "or to host commercial services that violate Starlink's, our fibre partners', or our " .
-                "carriers' acceptable use policies. You agree not to resell DishNet connectivity " .
+                "or to host commercial services that violate {$f['aup']}. You agree not to resell DishNet connectivity " .
                 "without a written commercial agreement with us. We reserve the right to suspend " .
                 "service for abuse that threatens the network or other customers.",
         ],
         [
             'heading' => 'Equipment',
             'body'    =>
-                "On leased-kit plans, hardware (Starlink dishes, routers, ONTs, LTE terminals) " .
+                "On leased-kit plans, hardware ({$f['equipment']}) " .
                 "remains the property of DishNet throughout the life of the service. You must not " .
                 "sell, lend, transfer, or modify the equipment. If equipment is lost, stolen, or " .
                 "damaged through misuse, you are responsible for replacement costs. On purchase " .
@@ -87,11 +142,7 @@ function dnTermsContent(TenantProfile $tp): array {
         ],
         [
             'heading' => 'Starlink transfers',
-            'body'    =>
-                "Starlink accounts managed on your behalf by DishNet may be transferred to you " .
-                "after a minimum 6-month service period, subject to a USD 150 transfer fee and a " .
-                "120-day lead time for administrative processing. Transfer terms are governed by " .
-                "SpaceX/Starlink policy and may change without notice.",
+            'body'    => $transfers,
         ],
         [
             'heading' => 'Termination',
@@ -121,9 +172,9 @@ function dnTermsContent(TenantProfile $tp): array {
         [
             'heading' => 'Jurisdiction',
             'body'    =>
-                "These Terms are governed by the laws of the Republic of South Sudan. " .
+                "These Terms are governed by the laws of {$f['law']}. " .
                 "Any dispute that cannot be resolved between you and DishNet will be submitted " .
-                "to the courts of Juba.",
+                "to {$f['forum']}.",
         ],
         [
             'heading' => 'Contact',
@@ -140,11 +191,13 @@ function dnTermsContent(TenantProfile $tp): array {
 function dnPrivacyContent(TenantProfile $tp): array {
     $wa    = TenantProfile::formatWa($tp->contact('support_wa', '211921443002'));
     $email = $tp->email() ?: 'info@dishnetafrica.com';
+    $f     = dnLegalFacts($tp);
+    $partners = $f['partners'] !== '' ? rtrim($f['partners']) . ' ' : '';
     return [
         [
             'heading' => 'Who this applies to',
             'body'    =>
-                "This Privacy Policy explains how DishNet Africa Ltd. handles information about " .
+                "This Privacy Policy explains how {$f['entity']} handles information about " .
                 "you when you use our internet services, customer portal, or mobile app. It applies " .
                 "to every DishNet customer and anyone who contacts us about becoming a customer.",
         ],
@@ -168,21 +221,15 @@ function dnPrivacyContent(TenantProfile $tp): array {
                 "third-party advertising. We do not sell your information.",
         ],
         [
-            'heading' => 'WhatsApp and login codes',
-            'body'    =>
-                "We sign you into the DishNet app by sending a six-digit code to your WhatsApp " .
-                "number. That means your phone number travels through Meta's WhatsApp Business " .
-                "infrastructure, subject to Meta's own privacy terms. We never ask for your " .
-                "WhatsApp password — only your phone number so we can route the code to you.",
+            'heading' => $f['sign_in_heading'],
+            'body'    => $f['sign_in'],
         ],
         [
             'heading' => 'Who we share with',
             'body'    =>
                 "Starlink (SpaceX) — for Starlink service customers, we share account and kit " .
-                "information required to provision service on their network. Fibre and LTE partners " .
-                "(e.g. Splynx-managed operators) — for service activation and support. Payment " .
-                "processors and our accountants — for invoicing and tax records. South Sudan " .
-                "regulatory authorities — if required by law, such as for tax audits or lawful " .
+                "information required to provision service on their network. {$partners}" .
+                "Payment processors and our accountants — for invoicing and tax records. {$f['regulators']} — if required by law, such as for tax audits or lawful " .
                 "investigation. We do not share your data with advertisers, data brokers, or " .
                 "anyone else without your permission.",
         ],

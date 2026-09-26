@@ -229,7 +229,8 @@ is_(strpos($web, 'Dry run — OTP logged') === false && strpos($web, 'Dry run') 
 // ═════════════════════════════════════════════════
 echo "\n4. P-8 — consent is recorded for the identity the token proves, never a typed one\n";
 // ═════════════════════════════════════════════════
-$ver = dnLegalVersion();
+require_once $root . '/lib/TenantProfile.php';
+$ver = dnLegalVersion(TenantProfile::load('south-sudan'));   // the sandbox configures no tenant → south-sudan (5.18.42: versions are the tenant's)
 $r = $call('POST', 'app_record_consent', ['phone' => $KNOWN_PHONE, 'tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']]);
 t('no token: 401', [$r['code'], $r['json']['message'] ?? null], [401, 'Not signed in.']);
 $r = $call('POST', 'app_record_consent', ['phone' => $KNOWN_PHONE, 'tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']],

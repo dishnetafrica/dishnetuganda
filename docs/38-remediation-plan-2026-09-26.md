@@ -438,7 +438,8 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A1.3** canonical host for the customer pages | **BUILT — 5.18.41, LIVE: `:8443` answers 302 to the public address (measured 15:04 UTC)** | `tests/test_canonical_host.php` (49); the rule is narrower than planned and loop-proof by construction (§7.1) |
 | **A1.4** `isActive` | unchanged (decided §4) | — |
 | **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — South Sudan `+211 921 443 006`, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
-| **A2** legal wording | **PROPOSAL for approval — §7.3**; nothing changed in the documents' identity, jurisdiction or regulator sentences | the CONTACT lines inside the documents already read the profile (A1.1) |
+| **A2** legal wording | **BUILT — 5.18.42, NOT YET DEPLOYED.** The operator approved the §7.3 proposal (*"i will go with your recommendation"*, 26 Sep). Points 1, 2, 4, 6, 8, 9, 10 are the proposal's words; points **3, 5, 7** took the conservative form and are **flagged in §7.3 (as built)** for a later edit. Uganda 1.1 / South Sudan 1.0 — every Uganda customer accepts once on the next sign-in; South Sudan renders byte for byte (golden) and asks nobody | `tests/test_portal_tenant.php` (107), `test_consent_identity.php` (34); deploy with `scripts/deploy-5.18.42.sh` |
+| **INVOICE TAXES** (new, 26 Sep: *"separate the UCC tax and other details so customer can understand properly"*) | **BUILT — 5.18.42, NOT YET DEPLOYED — the plugin half.** The invoice screen and the app API print the totals block as uCRM states it: before tax, **each tax or levy on its own line under uCRM's own name**, any discount, the total. Measured cause: the plugin read `totalTaxes`, a field a uCRM invoice does not have, so **no tax line ever rendered**. **The other half is an operator act in uCRM — §7.5** | `lib/InvoiceTotals.php`; `tools/tax_probe.php` section 5 shows the lines the latest invoices carry (read-only) |
 | **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC, and HEALTHY** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. The two Traefik log lines the operator read are **the attempt-1 file being re-parsed at 15:21:07Z**, the moment the re-run staged its temporary file inside the watched directory — one step before the old file was replaced. The attempt-2 file parses and its router exists (the 302). Script fixed a third time: staging outside the watched directory (§7.1) | **nothing** — done |
 | **C-2** uCRM's own address | **CHECKLIST — §7.2**; an operator act in uCRM's settings | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7) |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
@@ -490,7 +491,27 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 - **opcache serves an edited copy up to two seconds late** (`revalidate_freq=2`), so every control that
   edits the sandbox copy and re-requests polls for the change instead of asserting at once.
 
-### 7.2 The two server commands (operator acts; each sends back its log file)
+### 7.2 The server commands (operator acts; each sends back its log file)
+
+0. **Deploy 5.18.42 (A2 + the invoice's tax lines)** — `scripts/deploy-5.18.42.sh`, pinned to the reviewed
+   plugin commit, the same machinery as 5.18.41; stage **V** additionally checks the Uganda wording on the
+   Terms and Privacy pages (South Sudan ×0, Juba ×0, the approved identity, law, forum and regulator
+   sentences, no `USD 25` / `USD 150` / fibre / LTE) and that `app_legal_version` answers **1.1**. Then the
+   read-only audit — `bash scripts/journey-audit.sh --login-phone` **asks for the number on the terminal**
+   (type it; never paste it into a chat) — should pass **L5, L9 and L10**. And the read-only tax probe (§7.5)
+   shows the lines the invoice screen prints for the latest invoices:
+
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+     && mkdir -p /root/dnb-5.18.42 \
+     && bash scripts/deploy-5.18.42.sh 2>&1 | tee /root/dnb-5.18.42/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   ```
+   docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/tax_probe.php 2>&1 | tee /root/dnb-5.18.42/tax-probe-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   **What changes for customers on deploy:** every Uganda customer is asked once to accept the new Terms and
+   Privacy Policy on their next sign-in (version 1.1); nothing else asks anything, and no South Sudan
+   customer is affected.
 
 1. **Deploy 5.18.41** — `scripts/deploy-5.18.41.sh`, pinned to the reviewed plugin commit; before-evidence,
    backup, the documented deploy, then stage **V**: the public address answers with **zero redirects** (else
@@ -514,7 +535,37 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
    portal and run `journey-audit.sh --login-phone`: the in-PDF scan (L11) shows whether uCRM re-rendered the
    document without `:8443`. Rollback: the two fields back to their noted values.
 
-### 7.3 A2 — the wording that needs your approval (proposal; nothing is final until you say so)
+### 7.3 A2 — the wording: proposed 26 Sep, APPROVED the same day ("go with your recommendation"), BUILT as 5.18.42
+
+The proposal below is kept as it was put. **How each point was built** (`profiles/uganda.json` → `legal`;
+`lib/LegalContent.php` is a template and carries no tenant's wording — a test scans it for both tenants'):
+
+| Point | Built as | Status |
+|---|---|---|
+| 1 identity | the proposal's sentence, word for word | **approved** |
+| 2 governing law | *"the laws of the Republic of Uganda"* | **approved** |
+| **3 forum** | ***"the courts of Uganda"*** — the conservative form; no court named; `jurisdiction.courts` stays `null` | **conservative — EDIT when a court is chosen** (one value in the profile, then bump `legal.version`) |
+| 4 regulator | *"The Uganda Communications Commission and other Ugandan authorities — if required by law, such as for tax audits or lawful investigation."* | **approved** |
+| **5 data-protection law** | **none named**; the Privacy Policy's rights section stays generic; `legal.data_protection_law` is `null` | **conservative — for your lawyer** (whether to name the Data Protection and Privacy Act, 2019, and whether to state where data is held) |
+| 6 re-acceptance | Uganda **1.1 / 1.1, dated 26 September 2026**; South Sudan **1.0**. The version is read from the tenant's profile everywhere it is shown, recorded or compared, so a Uganda customer's 1.0 row re-asks once and a South Sudan row never does (proved both ways) | **approved** |
+| **7 fees and currency** | **no Uganda figure is confirmed, so none is stated**: *Billing and payment* reads *"Service is billed as shown on each invoice and is due on the due date it states. Late-payment and reconnection charges, where they apply, are those stated on your quotation or invoice. Continued non-payment may result in suspension without further notice. We accept the payment methods shown in the app and on your invoice."*; *Starlink transfers* reads *"…may be transferred to you on request. Any minimum service period, transfer fee and processing time are confirmed to you in writing before a transfer…"*. South Sudan keeps 7 days / 5 % / USD 25 / cheques / USD 150 / 6 months / 120 days, now as `legal.fees` and `legal.transfer` in its profile | **conservative — EDIT when the Uganda figures exist** (fill `legal.fees` / `legal.transfer`; the sentences with figures return by themselves) |
+| 8 products | Starlink only: *"Starlink internet services"*, upstream *"SpaceX/Starlink"*, equipment *"Starlink dishes and routers"*, *"Starlink's acceptable use policy"* | **approved** |
+| 9 sign-in | *"…by sending a six-digit code to your WhatsApp number or your e-mail address. When the code goes to WhatsApp, your phone number travels through Meta's WhatsApp Business infrastructure…"*, heading *"Login codes by WhatsApp or e-mail"* | **approved** |
+| 10 sharing clause | the fibre/LTE partners sentence is absent from the Uganda text | **approved** |
+
+**How it is proved** (`tests/test_portal_tenant.php`, 107): the Uganda pages carry each approved sentence and
+none of the other tenant's law, fee, court, product or regulator; the South Sudan documents hash to the
+**same sha256 as the pre-A2 rendering** (`b2f4ff3b…ead4637`, computed from commit `a2ea19f`), so not one
+byte moved there; `app_legal_version` answers 1.1 / 26 September 2026 on Uganda and 1.0 / 18 April 2026 on
+South Sudan; the sign-in page's consent step shows the tenant's version. `test_consent_identity.php` (34):
+the same consent rows judged under both profiles; a version bump **in the tenant's profile** re-asks both
+sign-in routes. Twelve weakened copies (the version back to 1.0, the check ignoring the profile, an identity
+falling back to South Sudan, the forum naming Juba, the regulator reverting, one word changed in the South
+Sudan profile, …) each fail their test.
+
+---
+
+*The proposal as put on 26 September, kept for the record:*
 
 Drawn only from `profiles/uganda.json` and the repository. Each line: **APPROVE** as written, or **EDIT**.
 Points 3, 5 and 7–10 cannot be answered from the repository and are questions.
@@ -545,9 +596,7 @@ Points 3, 5 and 7–10 cannot be answered from the repository and are questions.
 10. **Sharing clause:** "Fibre and LTE partners (e.g. Splynx-managed operators)" does not apply to Uganda;
     proposal: drop it from the Uganda text.
 
-Once approved, A2 ships as 5.18.42: `dnTermsContent()` / `dnPrivacyContent()` become templates over the
-profile, the profile gains `legal.*` (Uganda 1.1; South Sudan 1.0 made explicit), and
-`test_portal_tenant.php`'s pinned "STILL South Sudan's" assertions flip.
+~~Once approved, A2 ships as 5.18.42…~~ **Shipped as 5.18.42 (above).**
 
 ### 7.4 B — the one question before the build
 
@@ -557,3 +606,43 @@ attribute, or both?** Two other customers' kits are already received and bound i
 (docs/39 §4), so that workflow exists; whether those two are Finance's #7 / #47 / #69 is what a read-only
 `--chain 7`, `--chain 47`, `--chain 69` would show. B-5 (confirm each Finance kit's owner) and B-6
 (re-authenticate Data Report's five Starlink accounts) remain operator acts.
+
+### 7.5 The invoice's taxes — *"separate the UCC tax and other details so customer can understand properly"* (26 Sep)
+
+**What was measured.** The invoice screen (`portal_data.php`) and the app API (`app_invoice`) read the tax
+from `$inv['totalTaxes']`. A uCRM invoice has **no such field**: the probe-confirmed shape (the live install's
+invoice #1, verbatim in `tests/test_efris_mapper.php`) carries `subtotal`, `taxes[] = [{name, totalValue}]`,
+`totalTaxAmount` and `totalDiscount`. So the "Tax" row was never rendered, and a VAT line and a UCC-levy line
+could not have been told apart even if uCRM carried them. Invoice #1 (5 September) carried **no tax at all**
+(`taxes: []`, `totalTaxAmount: 0`, `tax1Id: null`), consistent with `docs/UGANDA-VAT-CONFIGURATION.md`: at that
+date uCRM had **no tax rate defined, nothing marked taxable, and no UCC product**. Whether that has changed
+since is **NOT ESTABLISHED** from here — the read-only probe below answers it.
+
+**The plugin half — BUILT (5.18.42).** `lib/InvoiceTotals.php` reads the totals block *as uCRM states it*; the
+portal's invoice screen and the app API print: **Before tax** · **one line per tax or levy, under uCRM's own
+name** (e.g. `VAT 18%`, `UCC levy 2%`) · **Discount** when there is one · **Total** · Paid · Amount due, plus one
+sentence: *"Each tax or levy is listed on its own line, exactly as it appears on your invoice document. The
+total is what you pay."* An invoice with no tax line shows the total only (the control). **Nothing is
+computed by the plugin**: no rate is applied and no amount derived, so the screen can never disagree with the
+invoice document uCRM issued — the same rule the AI already has (*never state a VAT rate, a UCC charge or a
+levy unless it appears in the live data*).
+
+**The other half is an operator act in uCRM** — the plugin can only show a line uCRM carries:
+
+1. **uCRM → Billing → Taxes:** create each tax or levy to be shown to customers as its **own** tax, with the
+   name the customer should read — e.g. `VAT 18%` and `UCC levy 2%`. **The rates and whether the levy is
+   passed on to customers are your accountant's call**; the repository asserts neither. (uCRM allows up to
+   three taxes per item.)
+2. **uCRM → Billing settings → prices include tax:** set it to match how the catalogue prices are written
+   (`docs/UGANDA-VAT-CONFIGURATION.md` §"What to configure": the two errors are equal and opposite — one
+   overcharges every customer, the other has DishNet absorb the tax).
+3. **Mark every service plan and product taxable** with those taxes.
+4. **uCRM → Invoice template:** check the PDF shows each tax as its own row (uCRM's default template does;
+   a customised one may not). The PDF is uCRM's document; the plugin does not write it.
+5. Then run the read-only probe (§7.2) and send the log: **section 5** prints, for the latest invoices,
+   exactly the lines the invoice screen shows. It applies to invoices **issued after** the change, never
+   retroactively.
+
+**Not done, deliberately:** no tax or levy is named or given a rate anywhere in the plugin's text or the AI's
+knowledge (the AI rule stands), the WhatsApp/e-mail invoice messages keep stating the total only (the PDF is
+attached), and the EFRIS fiscal PDF is unchanged.

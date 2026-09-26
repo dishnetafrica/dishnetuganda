@@ -145,4 +145,45 @@ if ($hits) {
     echo "     leaves out a charge reads as complete and is not.\n";
 }
 echo "\n";
+
+// 5.18.42 (docs/38 §7.5): the customer's invoice screen prints the totals block AS uCRM
+// states it — the amount before tax, then each tax or levy on its own line under uCRM's
+// own name (taxes[] = [{name, totalValue}]), any discount, and the total. This section
+// shows those exact lines for the latest invoices, so what a customer will see can be
+// read here before anyone opens the portal. Read-only; client ids only, no names.
+echo "  5. WHAT THE LATEST INVOICES CARRY (the lines the customer's invoice screen prints)\n\n";
+require_once $root . '/lib/InvoiceTotals.php';
+$latest = $get('invoices?limit=5&order=createdDate&direction=DESC');
+if (!is_array($latest) || isset($latest['__error'])) $latest = $get('invoices?limit=5');
+if (!is_array($latest) || isset($latest['__error'])) {
+    echo "     could not read: " . (string)($latest['__error'] ?? 'no answer') . "\n";
+} elseif (!$latest) {
+    echo "     no invoices yet\n";
+} else {
+    $anyTax = false;
+    foreach ($latest as $inv) {
+        if (!is_array($inv)) continue;
+        $cur = (string)($inv['currencyCode'] ?? '');
+        printf("     invoice %-12s client #%-5s %s\n", (string)($inv['number'] ?? $inv['id'] ?? '?'), (string)($inv['clientId'] ?? '?'), $cur);
+        printf("       %-34s %s\n", 'before tax (subtotal)', number_format(InvoiceTotals::subtotal($inv), 2));
+        $lines = InvoiceTotals::taxLines($inv);
+        if ($lines === []) {
+            echo "       (no tax or levy line on this invoice)\n";
+        } else {
+            $anyTax = true;
+            foreach ($lines as $l) printf("       %-34s %s\n", $l['name'], number_format($l['amount'], 2));
+        }
+        if (InvoiceTotals::discount($inv) > 0) printf("       %-34s -%s\n", 'discount', number_format(InvoiceTotals::discount($inv), 2));
+        printf("       %-34s %s\n\n", 'TOTAL', number_format((float)($inv['total'] ?? 0), 2));
+    }
+    if (!$anyTax) {
+        echo "     None of these invoices carries a tax or levy line, so the invoice screen shows\n";
+        echo "     the total only. A separate VAT line and a separate UCC-levy line appear once\n";
+        echo "     uCRM carries those taxes (section 1) and the items are marked taxable with\n";
+        echo "     them (section 3) — on invoices issued after that, never retroactively.\n";
+    } else {
+        echo "     These are the lines the invoice screen prints, under exactly these names.\n";
+    }
+}
+echo "\n";
 exit(0);

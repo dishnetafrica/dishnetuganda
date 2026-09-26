@@ -1359,17 +1359,26 @@ elseif ($view === 'invoice_detail'):
     <?php endif; ?>
   </div>
 
-  <!-- Totals -->
+  <!-- Totals. 5.18.42 (docs/38 §7.5): what is before tax, then EACH tax or levy on its own line named as
+       uCRM names it, then any discount, then the total — read from the invoice, never computed here. -->
   <div class="list-card" style="margin-top:12px">
-    <?php if ($inv['subtotal'] != $inv['total']): ?>
+    <?php if (!empty($inv['has_breakdown'])): ?>
+    <?php if ($inv['subtotal'] > 0): ?>
     <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
-      <span style="font-size:13px;color:var(--gray)">Subtotal</span>
+      <span style="font-size:13px;color:var(--gray)">Before tax</span>
       <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['subtotal'], 2) ?></span>
     </div>
-    <?php if ($inv['tax'] > 0): ?>
+    <?php endif; ?>
+    <?php foreach ($inv['taxes'] as $taxLine): ?>
+    <div class="inv-tax-line" style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
+      <span style="font-size:13px;color:var(--gray)"><?= pe($taxLine['name']) ?></span>
+      <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($taxLine['amount'], 2) ?></span>
+    </div>
+    <?php endforeach; ?>
+    <?php if ($inv['discount'] > 0): ?>
     <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
-      <span style="font-size:13px;color:var(--gray)">Tax</span>
-      <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['tax'], 2) ?></span>
+      <span style="font-size:13px;color:var(--green-mid)">Discount</span>
+      <span style="font-size:13px;font-weight:600;color:var(--green-mid)">-<?= dn_cur($config) ?><?= number_format($inv['discount'], 2) ?></span>
     </div>
     <?php endif; ?>
     <?php endif; ?>
@@ -1388,6 +1397,9 @@ elseif ($view === 'invoice_detail'):
     </div>
     <?php endif; ?>
   </div>
+  <?php if (!empty($inv['taxes'])): ?>
+  <p style="font-size:11px;color:var(--gray);margin:8px 4px 0;line-height:1.5">Each tax or levy is listed on its own line, exactly as it appears on your invoice document. The total is what you pay.</p>
+  <?php endif; ?>
 
   <?php if (!empty($portalDpoEnabled) && $inv['status'] !== 'paid' && $inv['due'] > 0): ?>
   <!-- Pay Now. The amount shown is the cached outstanding; the SERVER re-reads

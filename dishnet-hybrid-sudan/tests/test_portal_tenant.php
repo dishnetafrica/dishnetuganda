@@ -19,9 +19,13 @@ declare(strict_types=1);
  * literal that is not a fallback argument; and the control on the control — a
  * literal planted into the sandbox copy IS seen on the served page.
  *
- * The identity, jurisdiction and regulator sentences INSIDE the legal documents
- * are change set A2's (approved wording pending). They are pinned here as still
- * South Sudan's on every install, so that A2 flips them deliberately.
+ * 5.18.42 (docs/38 A2, approved 26 September 2026): the legal documents are
+ * templates over the profile — identity, products, fees, forum and regulator per
+ * tenant, and the version too (Uganda 1.1, South Sudan 1.0). Pinned here: the
+ * approved Uganda sentences, the South Sudan documents byte for byte against the
+ * pre-A2 rendering (a golden hash), and that lib/LegalContent.php carries no
+ * tenant's wording of its own. Also 5.18.42 (docs/38 §7.5): the invoice screen
+ * prints each tax or levy on its own line, under uCRM's own name.
  */
 $pass = 0; $fail = 0;
 function is_(bool $c, string $m, string $d = ''): void { global $pass, $fail;
@@ -43,7 +47,7 @@ require_once $root . '/lib/LegalContent.php';
 require_once $root . '/lib/TenantProfile.php';
 
 /** A copy of the plugin under php -S with one customer, one service, one unpaid invoice, the given profile. */
-function sandbox(string $profile, string $phone, string $currency, string $symbol): array {
+function sandbox(string $profile, string $phone, string $currency, string $symbol, array $invoiceExtra = []): array {
     global $root;
     $sb = sys_get_temp_dir() . '/dn_pt_' . $profile . '_' . getmypid(); $tmp = "$sb/plugin"; $data = "$tmp/data";
     exec('rm -rf ' . escapeshellarg($sb)); @mkdir($data, 0700, true);
@@ -58,8 +62,8 @@ function sandbox(string $profile, string $phone, string $currency, string $symbo
     $store->save('ucrm_clients_cache.json', [['id' => 7, 'firstName' => 'Test', 'lastName' => 'Customer', 'clientType' => 1, 'isLead' => false, 'isArchived' => false, 'contacts' => [['phone' => $phone]]]]);
     $store->save('ucrm_services_cache.json', [['id' => 41, 'clientId' => 7, 'name' => 'Starlink Standard', 'servicePlanId' => 3, 'price' => 50000, 'status' => 1, 'currencyCode' => $currency]]);
     $store->save('ucrm_plans_cache.json', [['id' => 3, 'name' => 'Starlink Standard']]);
-    $store->save('ucrm_invoices_cache.json', [['id' => 301, 'clientId' => 7, 'number' => 'INV-0301', 'status' => 1, 'total' => 50000, 'amountPaid' => 0, 'amountToPay' => 50000,
-        'currencyCode' => $currency, 'dueDate' => '2026-09-15', 'createdDate' => '2026-09-01', 'items' => [['label' => 'Starlink Standard', 'total' => 50000]]]]);
+    $store->save('ucrm_invoices_cache.json', [array_merge(['id' => 301, 'clientId' => 7, 'number' => 'INV-0301', 'status' => 1, 'total' => 50000, 'amountPaid' => 0, 'amountToPay' => 50000,
+        'currencyCode' => $currency, 'dueDate' => '2026-09-15', 'createdDate' => '2026-09-01', 'items' => [['label' => 'Starlink Standard', 'total' => 50000]]], $invoiceExtra)]);
     unset($store);
     $nonce = bin2hex(random_bytes(8)); file_put_contents($tmp . '/__nonce.txt', $nonce);
     $probe = function (string $url): ?string { $ch = curl_init($url); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 2, CURLOPT_PROXY => '']);
@@ -105,7 +109,7 @@ function signInWithConsent(array $s, string $phone): string {
     $sc = null; foreach ($v['headers']['set-cookie'] ?? [] as $c) if (strpos($c, CustomerSession::COOKIE . '=') === 0) $sc = $c;
     $jwt = $sc === null ? '' : (string)preg_replace('/^[^=]+=([^;]*).*$/', '$1', $sc);
     $C = 'Cookie: ' . CustomerSession::COOKIE . '=' . $jwt;
-    $ver = dnLegalVersion();
+    $ver = dnLegalVersion(TenantProfile::load($s['profile']));   // 5.18.42: the tenant's versions
     $r = http($base, 'POST', '?page=api&action=app_record_consent', ['tos_version' => $ver['tos'], 'privacy_version' => $ver['privacy']], [$C, 'X-Requested-With: DishNet', "Origin: http://127.0.0.1:{$s['port']}"]);
     is_($r['code'] === 200, "[{$s['profile']}] consent recorded (200)", "got {$r['code']} " . substr($r['body'], 0, 160));
     return $C;
@@ -127,7 +131,11 @@ $VIEWS = ['home', 'account', 'support', 'service_status', 'invoices', 'invoice_d
 
 // ─────────────────────────────────────────────────────────────────────────────
 echo "\n1. The uganda profile: nothing of South Sudan on any signed-in page; the Uganda contacts present\n";
-$ug = sandbox('uganda', '+256772123456', 'UGX', 'UGX'); $ug['profile'] = 'uganda'; $procs[] = $ug;
+// The invoice carries the totals block in uCRM's own shape (tests/test_efris_mapper.php, the live install verbatim):
+// subtotal, taxes[] = [{name, totalValue}], totalTaxAmount, totalDiscount — two taxes, named as an operator would name them.
+$UG_TAXES = ['subtotal' => 41666.67, 'totalTaxAmount' => 8333.33, 'totalDiscount' => -0.0,
+    'taxes' => [['id' => 1, 'name' => 'VAT 18%', 'totalValue' => 7500.00], ['id' => 2, 'name' => 'UCC levy 2%', 'totalValue' => 833.33]]];
+$ug = sandbox('uganda', '+256772123456', 'UGX', 'UGX', $UG_TAXES); $ug['profile'] = 'uganda'; $procs[] = $ug;
 is_($ug['port'] > 0, 'uganda sandbox up');
 $base = "http://127.0.0.1:{$ug['port']}/public.php";
 $C = signInWithConsent($ug, '+256772123456');
@@ -151,6 +159,19 @@ has('[uganda] the status page keeps the Starlink card', $pages['service_status']
 has('[uganda] the home page defaults the location to the tenant\'s city', $pages['home'], ['Kampala']);
 has('[uganda] the invoice screen: a payment reference, no other tenant\'s bank', $pages['invoice_detail&inv_id=301'], ['Payment reference', 'INV-0301', 'UGX 50,000']);
 none('[uganda] the invoice screen', $pages['invoice_detail&inv_id=301'], ['Bank transfer', '<b>DishNet Africa Ltd</b>', 'Equity Bank']);
+echo "\n1b. The invoice screen prints each tax or levy on its own line, under uCRM's own name (5.18.42, docs/38 §7.5)\n";
+$invPage = $pages['invoice_detail&inv_id=301'];
+has('[uganda] the totals block: before tax, VAT and the UCC levy as separate lines, the total', $invPage,
+    ['>Before tax<', 'UGX 41,666.67', '>VAT 18%<', 'UGX 7,500.00', '>UCC levy 2%<', 'UGX 833.33', '>Total<', 'UGX 50,000.00', 'Each tax or levy is listed on its own line']);
+is_(substr_count($invPage, 'class="inv-tax-line"') === 2, '[uganda] exactly two tax lines — one per tax uCRM stated', 'lines: ' . substr_count($invPage, 'class="inv-tax-line"'));
+is_(strpos($invPage, '>Tax<') === false && strpos($invPage, '>Subtotal<') === false, '[uganda] no lumped "Tax" line and no bare "Subtotal" label');
+is_(strpos($invPage, '>Discount<') === false, '[uganda] a -0.0 discount (the live shape) prints no discount line');
+$apiInv = http($base, 'GET', '?page=api&action=app_invoice&id=301', null, [$C]);
+$apiTaxes = $apiInv['json']['data']['taxes'] ?? null;
+is_($apiInv['code'] === 200 && is_array($apiTaxes) && count($apiTaxes) === 2 && $apiTaxes[0]['name'] === 'VAT 18%' && (float)$apiTaxes[0]['amount'] === 7500.0
+    && $apiTaxes[1]['name'] === 'UCC levy 2%' && (float)$apiTaxes[1]['amount'] === 833.33 && (float)($apiInv['json']['data']['tax'] ?? -1) === 8333.33
+    && (float)($apiInv['json']['data']['subtotal'] ?? -1) === 41666.67 && (float)($apiInv['json']['data']['discount'] ?? -1) === 0.0,
+    '[uganda] the app API (app_invoice) returns the same lines: taxes[] by name, tax = uCRM\'s total, subtotal, discount 0', substr($apiInv['body'], 0, 300));
 is_(strpos($pages['invoice_detail&inv_id=301'], 'notifyPayment(') !== false && strpos($pages['home'], '+ "UGX " + Math.round(amount) + "*\\n\\n"') !== false,
     '[uganda] the payment notification prefixes UGX and adds no currency code after the amount', substr((string)strstr($pages['home'], 'Math.round(amount)'), 0, 80));
 
@@ -163,8 +184,21 @@ foreach (['terms' => $terms['body'], 'privacy' => $priv['body']] as $k => $b) {
     none("[uganda] $k: the contact lines and the footer", $b, ['+211', '211921443', 'dishnetafrica.com', 'Juba, South Sudan', 'wa.me/211']);
     has("[uganda] $k: the tenant's entity, locality and contacts", $b, ['DishNet Africa Limited &middot; Kampala, Uganda', 'wa.me/256705993348', 'WhatsApp +256 705 993 348', 'mailto:accounts@dishnetuganda.com', 'accounts@dishnetuganda.com']);
 }
-has('[uganda] terms: the A2-pending sentences are STILL South Sudan\'s (pinned, so A2 flips them deliberately)', $terms['body'], ['registered in South Sudan', 'laws of the Republic of South Sudan', 'courts of Juba']);
-has('[uganda] privacy: the A2-pending regulator sentence is STILL South Sudan\'s (pinned)', $priv['body'], ['South Sudan regulatory authorities']);
+echo "\n2b. Change set A2 (docs/38 §7.3, approved): the Uganda documents say Uganda — and nothing of the other tenant's law, fees or products\n";
+has('[uganda] terms: identity (point 1), governing law (2), the forum (3, conservative), products (8)', $terms['body'], [
+    'DishNet Africa Limited (&quot;DishNet&quot;, &quot;we&quot;, &quot;us&quot;) is an IT solutions provider and UCC-authorised Starlink installer registered in Uganda (Reg. No. 80046255496181), providing Starlink internet services to customers in Kampala and across Uganda.',
+    'These Terms are governed by the laws of the Republic of Uganda.', 'submitted to the courts of Uganda.', 'upstream providers (SpaceX/Starlink)', 'hardware (Starlink dishes and routers)', 'violate Starlink&#039;s acceptable use policy']);
+none('[uganda] terms: no South Sudan fee, court, product or regulator (points 3, 7, 8)', $terms['body'], ['USD 25', 'USD 150', '5% of', '6-month', '120-day', 'Cheques', 'fibre', 'LTE', 'courts of Juba', 'registered in South Sudan', 'Republic of South Sudan']);
+has('[uganda] terms: with no confirmed Uganda figure the Billing and Transfer sections state none and point to the invoice (point 7, conservative)', $terms['body'],
+    ['Late-payment and reconnection charges, where they apply, are those stated on your quotation or invoice.', 'Any minimum service period, transfer fee and processing time are confirmed to you in writing before a transfer.']);
+has('[uganda] privacy: the regulator sentence (point 4), both sign-in channels (9), the entity', $priv['body'],
+    ['The Uganda Communications Commission and other Ugandan authorities — if required by law', 'six-digit code to your WhatsApp number or your e-mail address', 'Login codes by WhatsApp or e-mail', 'how DishNet Africa Limited handles information']);
+none('[uganda] privacy: no fibre/LTE sharing clause (point 10), no South Sudan regulator', $priv['body'], ['Splynx', 'Fibre and LTE partners', 'South Sudan regulatory authorities', 'DishNet Africa Ltd.']);
+has('[uganda] the documents carry version 1.1 (point 6: Uganda customers accept once more; South Sudan is not asked)', $terms['body'] . $priv['body'], ['v1.1']);
+$lv = http($base, 'GET', '?page=api&action=app_legal_version');
+is_(($lv['json']['data']['tos_version'] ?? '') === '1.1' && ($lv['json']['data']['privacy_version'] ?? '') === '1.1' && ($lv['json']['data']['dated'] ?? '') === '26 September 2026',
+    '[uganda] app_legal_version answers the tenant\'s versions and date (1.1 / 1.1 / 26 September 2026)', substr($lv['body'], 0, 200));
+has('[uganda] the sign-in page\'s consent step shows the tenant\'s version and date', $login['body'], ['v1.1', 'Effective <strong>26 September 2026']);
 has('[uganda] terms: the contact section reads the tenant', $terms['body'], ['Reach us on WhatsApp at +256 705 993 348 or email accounts@dishnetuganda.com']);
 has('[uganda] privacy: the rights and contact sections read the tenant', $priv['body'], ['contact accounts@dishnetuganda.com with your', 'WhatsApp +256 705 993 348 or email accounts@dishnetuganda.com']);
 
@@ -198,21 +232,31 @@ $t2 = http($base2, 'GET', '?page=terms');
 has('[south-sudan] terms: the footer and contacts exactly as before', $t2['body'], ['DishNet Africa Ltd. &middot; Juba, South Sudan', 'wa.me/211921443002', 'WhatsApp +211 921 443 002', 'mailto:info@dishnetafrica.com',
     'Reach us on WhatsApp at +211 921 443 002 or email info@dishnetafrica.com', 'laws of the Republic of South Sudan']);
 none('[south-sudan] terms: nothing of Uganda', $t2['body'], ['+256', 'dishnetuganda.com', 'Kampala']);
+echo "\n4b. South Sudan renders its documents BYTE FOR BYTE as before A2, at version 1.0 (nobody there is asked again)\n";
+// The golden is the sha256 of [dnTermsContent, dnPrivacyContent] for the south-sudan profile as the pre-5.18.42 code rendered
+// them (computed from commit a2ea19f before the template was written). A changed word anywhere changes the hash.
+$ssTp = TenantProfile::load('south-sudan');
+$golden = hash('sha256', json_encode([dnTermsContent($ssTp), dnPrivacyContent($ssTp)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+is_($golden === 'b2f4ff3b34bb1fcabc11bc87beb9f66cbafee22605c3a9e69d42ebcb1ead4637', '[south-sudan] the Terms and Privacy documents are byte-identical to the pre-A2 rendering (golden sha256)', $golden);
+has('[south-sudan] terms: the sentences A2 templated read exactly as before', $t2['body'], ['is a telecommunications company registered in South Sudan, providing Starlink, fibre, and LTE internet services to customers in Juba and across the region.',
+    'submitted to the courts of Juba.', 'Reconnection after suspension costs USD 25.', 'subject to a USD 150 transfer fee and a 120-day lead time', 'v1.0']);
+$p2 = http($base2, 'GET', '?page=privacy');
+has('[south-sudan] privacy: the sharing and sign-in sentences exactly as before', $p2['body'], ['Fibre and LTE partners (e.g. Splynx-managed operators) — for service activation and support. Payment processors', 'South Sudan regulatory authorities — if required by law', 'WhatsApp and login codes', 'only your phone number so we can route the code to you.']);
+$lv2 = http($base2, 'GET', '?page=api&action=app_legal_version');
+is_(($lv2['json']['data']['tos_version'] ?? '') === '1.0' && ($lv2['json']['data']['dated'] ?? '') === '18 April 2026', '[south-sudan] app_legal_version still answers 1.0 / 18 April 2026', substr($lv2['body'], 0, 200));
+has('[south-sudan] the invoice screen without a tax line: the total only, no "Before tax" row and no tax note (the control)', $sp['invoice_detail&inv_id=301'], ['>Total<', '$ 50,000.00']);
+none('[south-sudan] the invoice screen without a tax line', $sp['invoice_detail&inv_id=301'], ['>Before tax<', 'inv-tax-line', 'Each tax or levy']);
 
 // ─────────────────────────────────────────────────────────────────────────────
-echo "\n5. The sources: every remaining South Sudan literal is a fallback argument, or a named A2 exception\n";
+echo "\n5. The sources: every remaining South Sudan literal is a fallback argument; lib/LegalContent.php carries none at all\n";
 $FILES = ['tabs/customer_app/portal.php', 'tabs/customer_app/portal_data.php', 'tabs/customer_app/legal_page.php', 'tabs/customer_app/login_web.php', 'lib/LegalContent.php'];
 $NEEDLES = ['+211', '211921443', '211923400', 'dishnetafrica.com', 'Juba', 'South Sudan', 'Stanbic'];
 // A line is a fallback when the literal is the second argument of a profile read, or the ?: literal after an accessor.
 $FALLBACK = '/->(text|login|contact)\(\s*\'[^\']*\'\s*,\s*\'[^\']*\'\s*\)|->(email|locality)\(\)\s*\?:\s*\'[^\']*\'/';
-// Change set A2 (docs/38): the identity, jurisdiction and regulator sentences — approved Uganda wording pending.
-$A2 = [
-    'registered in South Sudan, providing Starlink, fibre, and LTE internet services to' => 'A2: the identity sentence',
-    'customers in Juba and across the region.'                                          => 'A2: the identity sentence (service area)',
-    'These Terms are governed by the laws of the Republic of South Sudan.'             => 'A2: governing law',
-    'to the courts of Juba.'                                                            => 'A2: the forum',
-    'processors and our accountants — for invoicing and tax records. South Sudan'      => 'A2: the regulator sentence',
-];
+// 5.18.42: change set A2 is built — the legal documents are templates over the profile, and the exception list
+// that once named their South Sudan sentences is empty. LegalContent.php is scanned with NO fallback allowance
+// either: its sentences fall back to neutral, fact-derived forms, never to a tenant's wording.
+$A2 = [];
 function scanLiterals(string $code, array $needles, string $fallback, array $exceptions): array {
     $hits = [];
     foreach (explode("\n", $code) as $i => $line) {
@@ -225,14 +269,19 @@ function scanLiterals(string $code, array $needles, string $fallback, array $exc
     }
     return $hits;
 }
-$seenExc = [];
 foreach ($FILES as $rel) {
     $code = codeNC("$root/$rel");
-    foreach (array_keys($A2) as $k) if (strpos($code, $k) !== false) $seenExc[$k] = true;
     $hits = scanLiterals($code, $NEEDLES, $FALLBACK, $A2);
-    is_($hits === [], "$rel: no South Sudan literal outside a fallback argument" . ($rel === 'lib/LegalContent.php' ? ' or an A2 exception' : ''), implode("\n       ", array_slice($hits, 0, 8)));
+    is_($hits === [], "$rel: no South Sudan literal outside a fallback argument", implode("\n       ", array_slice($hits, 0, 8)));
 }
-is_(count($seenExc) === count($A2), 'every A2 exception still exists in the sources (the list cannot rot)', 'missing: ' . implode(' | ', array_diff(array_keys($A2), array_keys($seenExc))));
+// The contact fallbacks (A1.1: the WhatsApp number, the e-mail) stay fallback arguments; the WORDING needles may not
+// appear in LegalContent.php in any form — the documents' sentences come from the profile or fall back to neutral forms.
+$wordingHits = scanLiterals(codeNC("$root/lib/LegalContent.php"), ['Juba', 'South Sudan', 'Stanbic', 'Splynx', 'USD 25', 'USD 150'], '/(?!)/', []);
+is_($wordingHits === [], 'lib/LegalContent.php carries no South Sudan wording at all (not even as a fallback argument)', implode("\n       ", array_slice($wordingHits, 0, 8)));
+// The Uganda wording lives in the profile, so the code must not carry it either: a Uganda sentence in
+// LegalContent.php would be the same defect with the tenants swapped.
+is_(scanLiterals(codeNC("$root/lib/LegalContent.php"), ['Uganda', 'Kampala', '80046255496181', 'UCC'], '/(?!)/', []) === [], 'lib/LegalContent.php carries no Uganda wording either');
+is_(scanLiterals("\$x = 'registered in Uganda';\n", ['Uganda'], '/(?!)/', []) !== [], 'control: a planted Uganda literal would be a hit');
 is_(count(scanLiterals("\$x = 'call +211 921 443 002 now';\n", $NEEDLES, $FALLBACK, $A2)) === 1, 'control: a planted literal is a hit');
 is_(count(scanLiterals("\$x = \$tp->text('office.city', 'Juba');\n", $NEEDLES, $FALLBACK, $A2)) === 0, 'control: a fallback argument is not');
 is_(count(scanLiterals("\$x = \$tp->email() ?: 'info@dishnetafrica.com';\n", $NEEDLES, $FALLBACK, $A2)) === 0, 'control: an accessor with a literal after ?: is not');

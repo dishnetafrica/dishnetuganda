@@ -1,13 +1,27 @@
 {
   "id": "south-sudan",
   "_readme": "Exactly the literals the code carried before the tenant profile existed (Phase 2 of the customer-login audit, plan §D.3). Changing a value here changes what an install that configures nothing shows; tests/test_tenant_profile.php pins this file against the constants it replaced.",
-  "country": { "code": "SS", "name": "South Sudan", "dial_code": "211", "nsn_length": 9, "example": "+211 9XX XXX XXX" },
-  "currency": { "code": "USD", "symbol": "$" },
+  "country": {
+    "code": "SS",
+    "name": "South Sudan",
+    "dial_code": "211",
+    "nsn_length": 9,
+    "example": "+211 9XX XXX XXX"
+  },
+  "currency": {
+    "code": "USD",
+    "symbol": "$"
+  },
   "timezone": "Africa/Juba",
   "legal_entity": "DishNet Africa Ltd.",
   "trading_name": "DishNet Africa",
   "positioning": "Internet Service Provider",
-  "office": { "street": "Airport Road", "city": "Juba", "country": "South Sudan", "hours": null },
+  "office": {
+    "street": "Airport Road",
+    "city": "Juba",
+    "country": "South Sudan",
+    "hours": null
+  },
   "locality": "Juba, South Sudan",
   "website": "dishnetafrica.com",
   "email": "info@dishnetafrica.com",
@@ -40,10 +54,55 @@
     "company_line": "DishNet Africa Ltd · Airport Road, Juba, South Sudan",
     "website": "www.dishnetafrica.com"
   },
-  "login": { "title": "DishNet Africa", "footer_wa": "211921443002", "footer_entity": "DishNet Africa Ltd.", "footer_locality": "Juba, South Sudan" },
-  "jurisdiction": { "law": "the Republic of South Sudan", "courts": "Juba" },
+  "login": {
+    "title": "DishNet Africa",
+    "footer_wa": "211921443002",
+    "footer_entity": "DishNet Africa Ltd.",
+    "footer_locality": "Juba, South Sudan"
+  },
+  "jurisdiction": {
+    "law": "the Republic of South Sudan",
+    "courts": "Juba"
+  },
   "regulators": [],
-  "legal_texts": null,
-  "products": ["starlink", "fibre", "lte"],
-  "payment_instructions": { "account_name": "DishNet Africa Ltd", "bank": "Stanbic Bank / Equity Bank" }
+  "legal": {
+    "_readme": "Exactly the sentences lib/LegalContent.php printed before 5.18.42, so an install that configures nothing renders its Terms and Privacy byte for byte (pinned by tests/test_portal_tenant.php). Version 1.0 stays: no South Sudan customer is asked to accept again.",
+    "version": {
+      "tos": "1.0",
+      "privacy": "1.0"
+    },
+    "dated": "18 April 2026",
+    "identity": "a telecommunications company registered in South Sudan",
+    "services": "Starlink, fibre, and LTE internet services",
+    "service_area": "customers in Juba and across the region",
+    "upstreams": "SpaceX/Starlink, fibre partners, LTE carriers",
+    "acceptable_use_policies": "Starlink's, our fibre partners', or our carriers' acceptable use policies",
+    "equipment": "Starlink dishes, routers, ONTs, LTE terminals",
+    "fees": {
+      "late_days": "7",
+      "late_fee": "5%",
+      "reconnection": "USD 25",
+      "cheque_payee": "DishNet Africa Limited",
+      "methods": "bank transfers, mobile money, and cash"
+    },
+    "transfer": {
+      "min_period": "6-month",
+      "fee": "USD 150",
+      "lead_time": "120-day"
+    },
+    "sharing_partners": "Fibre and LTE partners (e.g. Splynx-managed operators) — for service activation and support.",
+    "regulators_phrase": "South Sudan regulatory authorities",
+    "sign_in_heading": "WhatsApp and login codes",
+    "sign_in": "We sign you into the DishNet app by sending a six-digit code to your WhatsApp number. That means your phone number travels through Meta's WhatsApp Business infrastructure, subject to Meta's own privacy terms. We never ask for your WhatsApp password — only your phone number so we can route the code to you.",
+    "data_protection_law": null
+  },
+  "products": [
+    "starlink",
+    "fibre",
+    "lte"
+  ],
+  "payment_instructions": {
+    "account_name": "DishNet Africa Ltd",
+    "bank": "Stanbic Bank / Equity Bank"
+  }
 }

@@ -103,7 +103,8 @@ $signIn = function (array $extraHeaders = []) use ($api, $dryCode, $PHONE, $setC
     $v = $api('POST', 'app_verify_otp', ['phone' => $PHONE, 'code' => $code], $extraHeaders);
     return ['send' => $s, 'verify' => $v, 'code' => $code, 'pending' => $pending, 'cookie' => $setCookie($v, CustomerSession::COOKIE)];
 };
-$ver = dnLegalVersion();
+require_once $root . '/lib/TenantProfile.php';
+$ver = dnLegalVersion(TenantProfile::load('uganda'));   // the sandbox's profile (5.18.42: versions are the tenant's)
 
 echo "\n1. Signing in from a browser: the server sets the session cookie; the JSON carries no token\n";
 $in = $signIn();

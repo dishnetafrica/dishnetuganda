@@ -1,13 +1,27 @@
 {
   "id": "uganda",
-  "_readme": "Populated only from values already in the repository (plan §D.3): CustomerContact::UGANDA, tools/set_email_brand.php --uganda, PortalLocale::BY_CURRENCY['UGX'], FollowUpPolicy::TZ, tools/knowledge_seed.json, the Uganda PDF templates. Everything the repository cannot answer is null and listed in plan §D.6 for the operator: office hours, the published e-mail address, bank details, fees, the regulator to name, the legal text, whether an app URL is advertised before the APK exists.",
-  "country": { "code": "UG", "name": "Uganda", "dial_code": "256", "nsn_length": 9, "example": "+256 7XX XXX XXX" },
-  "currency": { "code": "UGX", "symbol": "UGX" },
+  "_readme": "Populated only from values already in the repository (plan §D.3): CustomerContact::UGANDA, tools/set_email_brand.php --uganda, PortalLocale::BY_CURRENCY['UGX'], FollowUpPolicy::TZ, tools/knowledge_seed.json, the Uganda PDF templates. Everything the repository cannot answer is null and listed in plan §D.6 for the operator: office hours, the published e-mail address, bank details, fees, the regulator to name, whether an app URL is advertised before the APK exists. The legal wording lives in `legal` since 5.18.42 (docs/38 A2).",
+  "country": {
+    "code": "UG",
+    "name": "Uganda",
+    "dial_code": "256",
+    "nsn_length": 9,
+    "example": "+256 7XX XXX XXX"
+  },
+  "currency": {
+    "code": "UGX",
+    "symbol": "UGX"
+  },
   "timezone": "Africa/Kampala",
   "legal_entity": "DishNet Africa Limited",
   "trading_name": "DishNet Africa",
   "positioning": "IT Solutions Provider · UCC Authorised Starlink Installer",
-  "office": { "street": "4th floor, Acacia Mall, 14-18 Cooper Road (office TT06)", "city": "Kampala", "country": "Uganda", "hours": null },
+  "office": {
+    "street": "4th floor, Acacia Mall, 14-18 Cooper Road (office TT06)",
+    "city": "Kampala",
+    "country": "Uganda",
+    "hours": null
+  },
   "locality": "Kampala, Uganda",
   "website": "dishnetuganda.com",
   "email": "accounts@dishnetuganda.com",
@@ -40,10 +54,43 @@
     "company_line": "DishNet Africa Limited · Kampala, Uganda",
     "website": "www.dishnetuganda.com"
   },
-  "login": { "title": "DishNet Africa", "footer_wa": "256705993348", "footer_entity": "DishNet Africa Limited", "footer_locality": "Kampala, Uganda" },
-  "jurisdiction": { "law": "the Republic of Uganda", "courts": null },
-  "regulators": ["Uganda Communications Commission"],
-  "legal_texts": null,
-  "products": ["starlink"],
+  "login": {
+    "title": "DishNet Africa",
+    "footer_wa": "256705993348",
+    "footer_entity": "DishNet Africa Limited",
+    "footer_locality": "Kampala, Uganda"
+  },
+  "jurisdiction": {
+    "law": "the Republic of Uganda",
+    "courts": null
+  },
+  "regulators": [
+    "Uganda Communications Commission"
+  ],
+  "legal": {
+    "_readme": "Change set A2 (docs/38 §7.3), approved by the operator on 26 September 2026 ('go with your recommendation'). Points 1, 2, 4, 6, 8, 9 and 10 are the proposal's words. Point 3 (forum): 'the courts of Uganda' — the conservative form, no court named; jurisdiction.courts stays null until one is. Point 5 (data-protection law): none named; data_protection_law is null until a lawyer confirms the reference. Point 7 (fees): no Uganda figure is confirmed, so fees and transfer are null and the Terms state none — the Billing and Starlink-transfer sections point to the quotation and the invoice. Edit here, bump version, and every Uganda customer is asked once on the next sign-in.",
+    "version": {
+      "tos": "1.1",
+      "privacy": "1.1"
+    },
+    "dated": "26 September 2026",
+    "identity": "an IT solutions provider and UCC-authorised Starlink installer registered in Uganda (Reg. No. 80046255496181)",
+    "services": "Starlink internet services",
+    "service_area": "customers in Kampala and across Uganda",
+    "upstreams": "SpaceX/Starlink",
+    "acceptable_use_policies": "Starlink's acceptable use policy",
+    "equipment": "Starlink dishes and routers",
+    "fees": null,
+    "transfer": null,
+    "forum": "the courts of Uganda",
+    "sharing_partners": "",
+    "regulators_phrase": "The Uganda Communications Commission and other Ugandan authorities",
+    "sign_in_heading": "Login codes by WhatsApp or e-mail",
+    "sign_in": "We sign you into the DishNet app by sending a six-digit code to your WhatsApp number or your e-mail address. When the code goes to WhatsApp, your phone number travels through Meta's WhatsApp Business infrastructure, subject to Meta's own privacy terms. We never ask for your WhatsApp password — only your phone number or e-mail address, so we can route the code to you.",
+    "data_protection_law": null
+  },
+  "products": [
+    "starlink"
+  ],
   "payment_instructions": null
 }

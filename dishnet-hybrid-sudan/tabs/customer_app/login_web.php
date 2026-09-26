@@ -21,9 +21,8 @@ if (file_exists($_manifestFile)) {
     }
 }
 
-// Pull current legal versions (safe to include, pure functions)
+// The legal documents' versions are the TENANT's (5.18.42, docs/38 A2): read below, once the profile exists.
 require_once dirname(__DIR__, 2) . '/lib/LegalContent.php';
-$legalVer = dnLegalVersion();
 
 // The country hint. This page used to tell every customer "South Sudan: +211"
 // wherever it ran, which on the Uganda install is an instruction to type the
@@ -43,6 +42,7 @@ $dial = PortalLocale::dialHint(ConfigVault::fill(
 // (explicit configuration → profile → the literal that was here before).
 require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
 $lwProfile = TenantProfile::current(is_array($config ?? null) ? $config : [], getDataDir($_lwRoot));
+$legalVer  = dnLegalVersion($lwProfile);   // 5.18.42: Uganda 1.1 / South Sudan 1.0 — the consent step shows and records the tenant's
 
 // Already signed in? Phase 2: the HttpOnly session cookie, verified under the
 // customer key set and against the session table — a decoded-but-unchecked
@@ -53,7 +53,7 @@ $lwStartStep = 'phone';
 if (isset($_COOKIE[CustomerSession::COOKIE]) || isset($_COOKIE[CustomerSession::LEGACY_COOKIE])) {
     $_lwClaims = CustomerSession::liveClaimsFromCookie(is_array($config ?? null) ? $config : [], $store->getPdo());
     if ($_lwClaims !== null) {
-        if (CustomerSession::hasCurrentConsent($store->getPdo(), (string)($_lwClaims['phone'] ?? ''), (int)($_lwClaims['sub'] ?? 0))) {   // 5.18.41: by identifier OR by customer (docs/38 A1.2)
+        if (CustomerSession::hasCurrentConsent($store->getPdo(), (string)($_lwClaims['phone'] ?? ''), (int)($_lwClaims['sub'] ?? 0), $lwProfile)) {   // 5.18.41: by identifier OR by customer (docs/38 A1.2); 5.18.42: the tenant's versions
             header('Location: ' . $baseUrl . '?page=customer_portal&view=home');
             exit;
         }

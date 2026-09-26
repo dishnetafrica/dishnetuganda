@@ -1257,3 +1257,63 @@ after the operator pasted three different placeholders as the number, `journey-a
 `--login-email` now **ask for the value on the terminal** when it is missing or is not one — typed without
 echo, so a copy of the terminal cannot carry it, confirmed back masked (`+…217`, `b***@…`), never printed;
 without a terminal the usage message and exit 64 as before.
+
+## 5.18.42 — the legal documents say the tenant's country; each tax on the invoice has its own line (docs/38 change set A2, §7.5)
+
+**Why.** The operator approved the A2 wording proposal of docs/38 §7.3 (*"i will go with your recommendation"*,
+26 September 2026) and asked, the same day, to *"separate the UCC tax and other details so customer can
+understand properly"*. 5.18.41 had left the Terms and Privacy Policy's identity, jurisdiction, product, fee
+and regulator sentences as South Sudan's on every install (pinned, deliberately, until wording was approved);
+and the invoice screen's "Tax" row read a field a uCRM invoice does not have.
+
+**What.**
+- **A2 — `lib/LegalContent.php` is a TEMPLATE over the tenant profile.** Every sentence that names a company,
+  a country, a product line, a fee, a court or a regulator is composed from the profile's new `legal` block
+  and its other facts (`legal_entity`, `country.name`, `jurisdiction.law`, `jurisdiction.courts`); the file
+  carries **no tenant's wording of its own** — a test scans it for South Sudan's and for Uganda's. Where a
+  profile does not answer, the sentence falls back to a **neutral, fact-derived** form (the country's name,
+  "internet services"), never to another tenant's wording. `profiles/uganda.json` carries the approved text
+  (points 1, 2, 4, 6, 8, 9, 10 as proposed; **3, 5, 7 in the conservative form and flagged** in docs/38 §7.3:
+  *"the courts of Uganda"* with no court named; no data-protection law named; **no fee stated** because no
+  Uganda figure is confirmed — the Billing and Starlink-transfer sections point to the quotation and the
+  invoice). `profiles/south-sudan.json` carries exactly the sentences the code printed before, so the install
+  that configures nothing renders **byte for byte** what it rendered (golden sha256 `b2f4ff3b…ead4637`,
+  computed from `a2ea19f` before the template was written).
+- **The version and date are the tenant's.** `dnLegalVersion(TenantProfile $tp)` — the parameter is
+  **required**, so no caller can compare a Uganda row against another tenant's version by leaving it out
+  (that would re-ask on every sign-in, forever). Threaded through the sign-in page, the legal pages, the API's
+  login response, `app_legal_version`, `app_record_consent`, the portal and
+  `CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId, $tp)`. **Uganda 1.1 / 1.1, dated
+  26 September 2026; South Sudan 1.0 / 18 April 2026.** Consequence on deploy: every Uganda customer is asked
+  once to accept the new documents on the next sign-in; no South Sudan customer is asked.
+- **The invoice's taxes — `lib/InvoiceTotals.php`.** Measured: `portal_data.php` and `app_invoice` read
+  `totalTaxes`; a uCRM invoice carries `subtotal`, `taxes[] = [{name, totalValue}]`, `totalTaxAmount`,
+  `totalDiscount` (probe-confirmed shape, the live install's invoice #1 verbatim in `test_efris_mapper.php`).
+  So **no tax line ever rendered**. Now the totals block prints, as uCRM states it: *Before tax*, **each tax
+  or levy on its own line under uCRM's own name** (`VAT 18%`, `UCC levy 2%`), *Discount* when there is one,
+  *Total*, Paid, Amount due, and one sentence saying so. The app API returns `taxes[] {name, amount}`, the
+  corrected `tax` total, `subtotal` and `discount`. **Nothing is computed by the plugin** — no rate, no
+  derived amount — so the screen cannot disagree with the invoice document uCRM issued. An invoice with no
+  tax line shows the total only. **The other half is an operator act in uCRM (docs/38 §7.5):** create the
+  taxes, set inclusive/exclusive pricing, mark the items taxable, check the PDF template — the rates and
+  whether the UCC levy is passed on are the accountant's call; the repository asserts neither.
+- `tools/tax_probe.php` gains **section 5** (read-only): for the latest invoices, exactly the tax lines the
+  invoice screen prints — so what a customer will see can be read before anyone opens the portal.
+
+**Proof.** `tests/test_portal_tenant.php` **107** (the approved Uganda sentences present; none of the other
+tenant's law, fee, court, product or regulator; the South Sudan golden; `app_legal_version` per tenant; the
+consent step's version; the invoice screen's two tax lines by name and the API's `taxes[]`; the South Sudan
+invoice without a tax line as the control; the source scan with **no exceptions left** — LegalContent.php
+carries neither tenant's wording). `tests/test_consent_identity.php` **34** (the same rows judged under both
+profiles; a version bump **in the tenant's profile** re-asks both routes; `app_legal_version` reports it).
+`tests/test_tenant_profile.php` **108** (the open questions are `legal.fees`, `legal.transfer`,
+`legal.data_protection_law`, `jurisdiction.courts`, `office.hours`, `payment_instructions`). **Twelve weakened
+copies each fail their test** (the Uganda version back to 1.0; the check ignoring the passed profile; the
+identity falling back to South Sudan; the version not read from the profile; the sign-in page showing the
+default version; the forum naming Juba; the regulator reverting; one word changed in the South Sudan profile;
+`totalTaxes` read again; one lumped "Tax" line; the API dropping `taxes`; the lines losing their names).
+Suite: **207 suites, exit 0, twice**; the 186 suites that print totals report **8,241 passed / 0 failed** on both runs. The deploy command's stage V2 was rehearsed against a local Uganda sandbox (12 ok) and a South Sudan one (10 of the 12 fail — the checks discriminate).
+
+**Deploy.** `scripts/deploy-5.18.42.sh`, pinned to the plugin commit; stage V checks the Uganda wording and the
+1.1 version on the public pages. **Not deployed by this session** — the operator runs it and sends the log
+file (docs/38 §7.2 item 0).

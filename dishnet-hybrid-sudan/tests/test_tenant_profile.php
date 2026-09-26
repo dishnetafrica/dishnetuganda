@@ -92,7 +92,9 @@ t('uganda timezone = FollowUpPolicy::TZ', $ug->timezone(), 'Africa/Kampala');
 t('uganda login hint = PortalLocale::BY_CURRENCY[UGX]', ['+' . $ug->dialCode(), $ug->countryName(), $ug->phoneExample()], PortalLocale::BY_CURRENCY['UGX']);
 is_(strpos((string)file_get_contents($root . '/tools/knowledge_seed.json'), 'Acacia Mall') !== false, 'the Kampala office comes from the knowledge seed');
 t('uganda legal entity = the Uganda invoice template\'s', $ug->legalEntity(), 'DishNet Africa Limited');
-t('the unanswered questions are null (plan §D.6)', $ug->nulls(), ['office.hours', 'jurisdiction.courts', 'legal_texts', 'payment_instructions']);
+// 5.18.42 (docs/38 A2): `legal_texts` became the `legal` block; what stays open there is what the operator has not
+// confirmed — the fees and transfer figures (§7.3 point 7) and the data-protection law to name (point 5).
+t('the unanswered questions are null (plan §D.6; docs/38 §7.3 points 3, 5 and 7)', $ug->nulls(), ['office.hours', 'jurisdiction.courts', 'legal.fees', 'legal.transfer', 'legal.data_protection_law', 'payment_instructions']);
 t('a null field renders "not configured"', $ug->text('office.hours', TenantProfile::notConfigured()), 'not configured');
 is_($ug->text('office.hours', TenantProfile::notConfigured()) !== $ss->text('office.hours', 'x'), '…never the other tenant\'s value (which is null too)');
 is_(strpos(json_encode($ug->describe()), '211') === false, 'nothing in the uganda profile mentions South Sudan\'s dial code');
