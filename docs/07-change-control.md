@@ -1412,3 +1412,13 @@ revised: staff put the kits into the register first, and the B.3 code waits for 
 setting had not been changed yet. Its router count read 0 **with no positive control**. The guard now holds its
 own test connection to `:8443` while counting, so a zero is either *measured*, with no router connected, or
 *blind*, with the count unable to see the port. It never reports a bare zero again (rehearsal 40 checks).
+
+**20:54 UTC, the C-2 guard's second run.** With the control in place, `--before` saw 8 connections on `:8443`,
+all from the server's own or private addresses, and **none from a public address**. That is a **measured
+zero**: no router is connected to UISP over the Internet, so C-2 has none to disturb. A device on a private
+network or VPN would be among the 8; that limit is recorded. `--after` ran 17 seconds later, as the first run
+did, and uCRM was still on `:8443`. Nothing broke, and **the setting has not been changed**. The guard makes no
+change; the two fields are edited by hand in uCRM's web page between the two commands. It now says so at the
+top of its steps. An `--after` that finds the address exactly as recorded under three minutes earlier says it
+changes nothing and names both cases, not yet changed or saved and not yet rewritten (docs/38 §7.2 item 3;
+rehearsal 48 checks, two weakened copies caught).

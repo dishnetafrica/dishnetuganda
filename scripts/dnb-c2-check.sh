@@ -147,7 +147,7 @@ if [ "$MODE" = "--before" ]; then
   ok "before-state recorded in $STATE (counts, addresses, hosts; no secret)"
   cat <<EOF
 
-  NOW, BY HAND IN uCRM — this script changes nothing:
+  THIS SCRIPT CHANGES NOTHING. Between --before and --after, YOU make the change, by hand, in uCRM's web page:
    1. Open uCRM's settings screen that holds "Server domain name" and "Server port" (Settings → System →
       Application). If those fields are greyed out, say they are managed by UISP, or are not there: STOP.
       Change nothing and send this log, with a sentence on what the screen shows.
@@ -172,13 +172,21 @@ fi
 # shellcheck disable=SC1090
 . "$STATE"
 hdr "After the change — compared with the before-state of ${BEFORE_TS:-?}"
+# A --after moments after --before, with uCRM's address exactly as recorded, is most likely a run made before
+# anyone changed anything (seen twice on 26 Sep, 17 seconds apart both times) — or uCRM has not rewritten its
+# file yet. The script cannot tell which, so it says both, and never implies that it made the change itself.
+SINCE=""; B_EPOCH="$(date -u -d "${BEFORE_TS:-}" +%s 2>/dev/null || true)"
+[ -n "$B_EPOCH" ] && SINCE=$(( $(date -u +%s) - B_EPOCH ))
+SOON_UNCHANGED=0
+[ "$U_CRM" = "${BEFORE_UCRM:-}" ] && [ -n "$SINCE" ] && [ "$SINCE" -lt 180 ] && SOON_UNCHANGED=1
 echo "  uCRM's address, as it tells plugins   before: $BEFORE_UCRM"
 echo "                                        now:    $U_CRM"
 echo "  the latest invoice's PDF              before: $BEFORE_PDF"
 echo "                                        now:    $PDF"
 ADDR_DONE=0; PDF_DONE=0
 case "$U_CRM" in
-  *:8443*) note "uCRM still tells plugins an address with :8443 — uCRM rewrites that file itself; run --after again in a few minutes. If it never changes, the setting did not take" ;;
+  *:8443*) if [ "$SOON_UNCHANGED" = "1" ]; then note "uCRM still tells plugins an address with :8443 — exactly what --before recorded ${SINCE} seconds ago (see RESULT)"
+           else note "uCRM still tells plugins an address with :8443 — uCRM rewrites that file itself; run --after again in a few minutes. If it never changes, the setting did not take"; fi ;;
   *) ok "uCRM now tells plugins its address without :8443 ($U_CRM)"; ADDR_DONE=1 ;;
 esac
 case "$PDF" in
@@ -217,6 +225,12 @@ if [ "$FAIL" != "0" ]; then
 fi
 if [ "$ADDR_DONE" = "1" ] && [ "$PDF_DONE" = "1" ]; then echo "  RESULT   C-2 is done: uCRM's own address and the latest invoice's PDF carry no :8443, and the routers stayed connected."
 elif [ "$ADDR_DONE" = "1" ]; then echo "  RESULT   uCRM's address changed and the routers stayed connected; the latest PDF still shows the old address (see the note)."
+elif [ "$SOON_UNCHANGED" = "1" ]; then
+  echo "  RESULT   nothing broke. uCRM's address is still exactly what --before recorded ${SINCE} seconds ago."
+  echo "           This script only CHECKS — it changes nothing."
+  echo "           · Not changed in uCRM yet? Make the change by hand in uCRM's settings page (steps 1–4 that --before"
+  echo "             printed), then run --after."
+  echo "           · Already saved it there? Wait a few minutes, then run --after again."
 else echo "  RESULT   nothing broke, but uCRM has not taken the new address yet — run --after again in a few minutes."; fi
 echo "  Then check the device connection string you copied is unchanged. Send this LOG FILE back (not a copy of the terminal)."
 exit 0

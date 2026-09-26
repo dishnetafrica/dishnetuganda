@@ -72,7 +72,7 @@ has "$out" "routers connected on :8443            9 connection(s) from 8 address
 has "$out" "14 connection(s) seen on the port in all" "S1 reports everything it saw on the port (the control's basis: 9 public + 5 private/loopback)"
 has "$out" "uCRM's address, as it tells plugins   https://crm.dishnetuganda.com:8443/crm/" "S1 prints uCRM's own address"
 has "$out" "the latest invoice's PDF              invoice 000005 · crm.dishnetuganda.com:8443 x2" "S1 prints the PDF's link hosts"
-has "$out" "NOW, BY HAND IN uCRM" "S1 prints the manual steps"
+has "$out" "THIS SCRIPT CHANGES NOTHING. Between --before and --after, YOU make the change, by hand" "S1 prints the manual steps, and says the script makes no change"
 has "$out" "If those fields are greyed out" "S1 tells the operator when to stop"
 hasnt "$out" "APPKEY-SECRET-123" "S1 never prints the app key"
 check "$(grep -c 'APPKEY' "$SB/state/state.env")" "0" "S1 the state file holds no app key"
@@ -98,6 +98,7 @@ check "$(printf '%s\n' "$out" | grep -c '^  …  ')" "3" "S3 polled the configur
 
 echo "S4 --after: routers fine, uCRM has not rewritten its address yet — a note, never a failure"
 routers on; setfake "https://crm.dishnetuganda.com:8443/crm/" "invoice 000005 · crm.dishnetuganda.com:8443 x2"
+sed -i "s/^BEFORE_TS=.*/BEFORE_TS=$(date -u -d '-10 min' +%Y-%m-%dT%H:%M:%SZ)/" "$SB/state/state.env"
 out="$(run --after)"; rc=$?
 check "$rc" "0" "S4 exits 0"
 has "$out" "note  uCRM still tells plugins an address with :8443" "S4 notes the address not yet rewritten"
@@ -152,6 +153,19 @@ has "$out" "note  nothing at all was seen on :8443, not even this script's own t
 hasnt "$out" "no router is connected to UISP on :8443 right now" "S10 --before never claims a measured zero"
 out="$(run --after)"; rc=$?
 has "$out" "note  the router count was blind on this server before the change" "S10 --after sends the operator to UISP's device list"
+
+echo "S11 --after run straight after --before, with nothing changed: the guard says the change is the operator's, by hand"
+printf '0 0 172.18.0.5:8443 %s\n' 172.17.0.1:40000 > "$F/ss_host"; : > "$F/ss_ns"
+setfake "https://crm.dishnetuganda.com:8443/crm/" "invoice 000005 · crm.dishnetuganda.com:8443 x2"
+out="$(run --before)"; out2="$(run --after)"; rc=$?
+has "$out" "THIS SCRIPT CHANGES NOTHING. Between --before and --after, YOU make the change" "S11 --before says the change is manual, in uCRM's web page"
+check "$rc" "0" "S11 --after exits 0 (nothing is broken)"
+has "$out2" "RESULT   nothing broke. uCRM's address is still exactly what --before recorded" "S11 --after recognises the address is unchanged, moments later"
+has "$out2" "This script only CHECKS — it changes nothing." "S11 --after says it only checks"
+has "$out2" "Not changed in uCRM yet? Make the change by hand" "S11 --after names the manual step"
+has "$out2" "Already saved it there? Wait a few minutes" "S11 --after keeps the honest second case"
+hasnt "$out2" "RESULT   nothing broke, but uCRM has not taken the new address yet" "S11 --after does not give the generic verdict"
+hasnt "$out2" "uCRM rewrites that file itself" "S11 --after does not give the generic note"
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"
 [ "$FAILN" = "0" ]

@@ -441,7 +441,7 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A2** legal wording | **BUILT — 5.18.42, LIVE since 26 Sep 19:56 UTC (verified 25/25: South Sudan ×0, Juba ×0 on the Terms page, `app_legal_version` 1.1).** The operator approved the §7.3 proposal (*"i will go with your recommendation"*, 26 Sep). Points 1, 2, 4, 6, 8, 9, 10 are the proposal's words; points **3, 5, 7** took the conservative form and are **flagged in §7.3 (as built)** for a later edit. Uganda 1.1 / South Sudan 1.0 — every Uganda customer accepts once on the next sign-in; South Sudan renders byte for byte (golden) and asks nobody | `tests/test_portal_tenant.php` (107), `test_consent_identity.php` (34); deploy with `scripts/deploy-5.18.42.sh` |
 | **INVOICE TAXES** (new, 26 Sep: *"separate the UCC tax and other details so customer can understand properly"*) | **The plugin half LIVE in 5.18.42; the uCRM half DECIDED AGAINST for now: *"ok keep price as it is"* / *"its ohk the way it is"* (§7.5). A label fix, 5.18.43, LIVE since 26 Sep 20:27 UTC (25 ok / 0 failed).** The invoice screen and the app API print the totals block as uCRM states it: before tax, **each tax or levy on its own line under uCRM's own name**, any discount, the total. Measured cause: the plugin read `totalTaxes`, a field a uCRM invoice does not have, so **no tax line ever rendered**. **The other half is an operator act in uCRM — §7.5** | `lib/InvoiceTotals.php`; `tools/tax_probe.php` section 5 shows the lines the latest invoices carry (read-only) |
 | **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC, and HEALTHY** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. The two Traefik log lines the operator read are **the attempt-1 file being re-parsed at 15:21:07Z**, the moment the re-run staged its temporary file inside the watched directory — one step before the old file was replaced. The attempt-2 file parses and its router exists (the 302). Script fixed a third time: staging outside the watched directory (§7.1) | **nothing** — done |
-| **C-2** uCRM's own address | **APPROVED 26 Sep** (*"i will go with your recommadation"*); an operator act in uCRM's settings, **guarded** by `scripts/dnb-c2-check.sh --before` / `--after` (§7.2 item 3) | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7); the walk at 20:33 UTC still found `crm.dishnetuganda.com:8443` ×2 inside the PDF |
+| **C-2** uCRM's own address | **APPROVED 26 Sep** (*"i will go with your recommadation"*); an operator act in uCRM's settings, **guarded** by `scripts/dnb-c2-check.sh --before` / `--after` (§7.2 item 3) | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7); the walk at 20:33 UTC still found `crm.dishnetuganda.com:8443` ×2 inside the PDF; the guard at 20:54 **measured no router connected** on `:8443` (control in place), and the two fields are **not yet changed** in uCRM |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
 | **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
 | deployment / configuration / customer data | **5.18.41, 5.18.42 and 5.18.43 deployed by the operator; one Traefik file placed by C-1 attempt 1 and ignored by Traefik, rewritten by attempt 2 and taken; no configuration value, customer record or other service changed** | — |
@@ -569,6 +569,20 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    while it counts. If it sees that connection but no public one, the zero is **measured**: no router is
    connected, and C-2 has none to disturb. If it sees nothing at all, it says the count is **blind** and sends
    the operator to UISP's device list. Rehearsal 40 checks, with scenarios for both.
+
+   **Second run, 26 Sep:** `--before` at 20:54:16, with the control in place. It saw **8 connections on
+   `:8443`, every one from this server's own or a private address, its own test connection among them, and
+   none from a public address**. That is a **measured zero**: no router is connected to UISP over the Internet,
+   so C-2 has no connected device to disturb. The limit is stated, not hidden: a device reaching UISP over a
+   private network or VPN would be counted among the 8, not as a router. `--after` followed at 20:54:33,
+   **17 seconds later again**, with uCRM still on `https://crm.dishnetuganda.com:8443/crm/` and the PDF still
+   carrying `:8443` ×2. Nothing broke. Two runs 17 seconds apart suggest that the pair of commands was read as
+   the change itself. **The guard makes no change: the two fields are changed by hand in uCRM's web page,
+   between the commands.** The guard now says so in capitals at the top of the steps, and an `--after` that
+   finds uCRM's address exactly as recorded less than three minutes earlier now says it changes nothing and
+   gives both honest cases: the change is not made yet, or it is saved and uCRM has not rewritten its file.
+   It no longer answers "run `--after` again in a few minutes" alone. Rehearsal **48 checks** (scenario S11);
+   two weakened copies of the new branch are each caught (6 and 1 failures).
 
 ### 7.3 A2 — the wording: proposed 26 Sep, APPROVED the same day ("go with your recommendation"), BUILT as 5.18.42
 
