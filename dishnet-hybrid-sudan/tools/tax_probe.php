@@ -147,8 +147,8 @@ if ($hits) {
 echo "\n";
 
 // 5.18.42 (docs/38 §7.5): the customer's invoice screen prints the totals block AS uCRM
-// states it — the amount before tax, then each tax or levy on its own line under uCRM's
-// own name (taxes[] = [{name, totalValue}]), any discount, and the total. This section
+// states it — the subtotal, any discount, then each tax or levy on its own line under
+// uCRM's own name (taxes[] = [{name, totalValue}]), and the total (5.18.43 order). This section
 // shows those exact lines for the latest invoices, so what a customer will see can be
 // read here before anyone opens the portal. Read-only; client ids only, no names.
 echo "  5. WHAT THE LATEST INVOICES CARRY (the lines the customer's invoice screen prints)\n\n";
@@ -165,7 +165,8 @@ if (!is_array($latest) || isset($latest['__error'])) {
         if (!is_array($inv)) continue;
         $cur = (string)($inv['currencyCode'] ?? '');
         printf("     invoice %-12s client #%-5s %s\n", (string)($inv['number'] ?? $inv['id'] ?? '?'), (string)($inv['clientId'] ?? '?'), $cur);
-        printf("       %-34s %s\n", 'before tax (subtotal)', number_format(InvoiceTotals::subtotal($inv), 2));
+        printf("       %-34s %s\n", 'subtotal', number_format(InvoiceTotals::subtotal($inv), 2));
+        if (InvoiceTotals::discount($inv) > 0) printf("       %-34s -%s\n", 'discount', number_format(InvoiceTotals::discount($inv), 2));
         $lines = InvoiceTotals::taxLines($inv);
         if ($lines === []) {
             echo "       (no tax or levy line on this invoice)\n";
@@ -173,7 +174,6 @@ if (!is_array($latest) || isset($latest['__error'])) {
             $anyTax = true;
             foreach ($lines as $l) printf("       %-34s %s\n", $l['name'], number_format($l['amount'], 2));
         }
-        if (InvoiceTotals::discount($inv) > 0) printf("       %-34s -%s\n", 'discount', number_format(InvoiceTotals::discount($inv), 2));
         printf("       %-34s %s\n\n", 'TOTAL', number_format((float)($inv['total'] ?? 0), 2));
     }
     if (!$anyTax) {

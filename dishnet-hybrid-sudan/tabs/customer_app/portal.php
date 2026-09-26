@@ -1359,14 +1359,25 @@ elseif ($view === 'invoice_detail'):
     <?php endif; ?>
   </div>
 
-  <!-- Totals. 5.18.42 (docs/38 §7.5): what is before tax, then EACH tax or levy on its own line named as
-       uCRM names it, then any discount, then the total — read from the invoice, never computed here. -->
+  <!-- Totals -->
+  <?php /* 5.18.42 (docs/38 §7.5): EACH tax or levy on its own line, named as uCRM names it — read from the
+     invoice, never computed here. 5.18.43: the first row is "Subtotal" and the discount follows it directly.
+     Measured on the live install (26 Sep): invoice 000005 carries a 30 % discount and no tax at all, and the
+     operator decided to keep prices as they are ("keep price as it is"), so the earlier label read as a tax
+     still to come. Subtotal, then the discount, then any tax line, then the total. A PHP comment, not an
+     HTML one: an HTML comment is sent to the customer's browser. */ ?>
   <div class="list-card" style="margin-top:12px">
     <?php if (!empty($inv['has_breakdown'])): ?>
     <?php if ($inv['subtotal'] > 0): ?>
-    <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
-      <span style="font-size:13px;color:var(--gray)">Before tax</span>
+    <div class="inv-subtotal" style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
+      <span style="font-size:13px;color:var(--gray)">Subtotal</span>
       <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['subtotal'], 2) ?></span>
+    </div>
+    <?php endif; ?>
+    <?php if ($inv['discount'] > 0): ?>
+    <div class="inv-discount" style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
+      <span style="font-size:13px;color:var(--green-mid)">Discount</span>
+      <span style="font-size:13px;font-weight:600;color:var(--green-mid)">-<?= dn_cur($config) ?><?= number_format($inv['discount'], 2) ?></span>
     </div>
     <?php endif; ?>
     <?php foreach ($inv['taxes'] as $taxLine): ?>
@@ -1375,12 +1386,6 @@ elseif ($view === 'invoice_detail'):
       <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($taxLine['amount'], 2) ?></span>
     </div>
     <?php endforeach; ?>
-    <?php if ($inv['discount'] > 0): ?>
-    <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
-      <span style="font-size:13px;color:var(--green-mid)">Discount</span>
-      <span style="font-size:13px;font-weight:600;color:var(--green-mid)">-<?= dn_cur($config) ?><?= number_format($inv['discount'], 2) ?></span>
-    </div>
-    <?php endif; ?>
     <?php endif; ?>
     <div style="padding:12px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:14px;font-weight:700;color:var(--dark)">Total</span>

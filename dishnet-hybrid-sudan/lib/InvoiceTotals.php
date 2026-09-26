@@ -13,7 +13,7 @@ declare(strict_types=1);
  */
 final class InvoiceTotals
 {
-    /** The amount before tax, as uCRM states it (0 when the invoice does not carry one). */
+    /** The invoice's subtotal — the items before any discount or tax — as uCRM states it (0 when the invoice does not carry one). */
     public static function subtotal(array $inv): float
     {
         return round((float)($inv['subtotal'] ?? 0), 2);

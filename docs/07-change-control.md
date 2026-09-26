@@ -1317,3 +1317,57 @@ Suite: **207 suites, exit 0, twice**; the 186 suites that print totals report **
 **Deploy.** `scripts/deploy-5.18.42.sh`, pinned to the plugin commit `d857ec8`; stage V checks the Uganda wording and the
 1.1 version on the public pages. **Not deployed by this session** — the operator runs it and sends the log
 file (docs/38 §7.2 item 0).
+
+**Status: LIVE on the Uganda install, 26 September 2026, deployed 19:56:26 UTC by the operator.** The run found
+the container on `a2ea19f` (5.18.41), took a backup (`/root/dnb-5.18.42/backup-20260926T195609Z`: the data
+directory 94 MB, the plugin's `data/` 116 KB, UISP health recorded) and deployed `d857ec8`: **25 ok, 0 failed,
+0 notes.** Before and after, measured by the same checks:
+
+| | before (5.18.41) | after (5.18.42) |
+|---|---|---|
+| the Terms page: `South Sudan` · `Juba` | 2 · 2 | **0 · 0** |
+| the approved Uganda identity, governing law, forum | absent | **present** |
+| `USD 25` · `USD 150` · fibre · LTE on the Terms page | present | **0** |
+| the Privacy page: the UCC sentence, both sign-in channels, no Splynx | — | **present / absent as approved** |
+| `app_legal_version` | 1.0 | **1.1 / 1.1** |
+
+The public address answered with zero redirects, the `:8443` door behaved exactly as under 5.18.41, and the
+container logged no fatal. **The log's last line reads "5.18.41: PASSED"** — a literal left in the script's
+closing lines; the header, every check and the summary above it are 5.18.42's (`d857ec8`). Fixed in
+`deploy-5.18.43.sh`, which prints the version it deploys.
+
+**The tax probe, read-only, the same evening** (`tools/tax_probe.php`): uCRM defines **no tax rate**; the
+pricing-mode setting is not on the settings endpoint; `taxable` is empty on all 30 products and all 5 plans;
+**no product is a UCC or regulatory charge**; the five latest invoices (000001–000005) carry **no tax or levy
+line**, and 000005 carries a 30 % discount (2,498,000 − 749,400 = 1,748,600). **The operator's decision,
+verbatim: *"ok keep price as it is"* and *"its ohk the way it is"*.** Prices stay as they are and uCRM gets no
+tax configuration. The invoice screen therefore shows the total, and the discount where there is one. The
+per-tax lines 5.18.42 built stay dormant until uCRM carries a tax, and the AI's rule is unchanged. The
+`[ConfigVault] restored after re-install: dpo_…, pdf_link_secret` line the probe printed is the in-memory
+gap-fill every command-line load performs (docs/37 §I). The vault file is rewritten only when its content
+changes, so nothing was written.
+
+## 5.18.43 — an invoice's first total row reads "Subtotal" (docs/38 §7.5)
+
+**Why.** 5.18.42 labelled the first row of an invoice's totals "Before tax". Measured on the live install the
+same evening, invoice 000005 carries a 30 % discount and **no tax**, and the operator decided to keep prices as
+they are. On that invoice, and on every discounted invoice from now on, "Before tax" read as a tax still to
+come. 5.18.42 also printed the discount after the tax lines.
+
+**What.** `tabs/customer_app/portal.php`: the first row reads **Subtotal**, and the **discount follows it
+directly**, before any tax line, then the total. For invoice 000005 the column now reads Subtotal
+2,498,000.00 · Discount −749,400.00 · Total 1,748,600.00, the invoice's own arithmetic. The explanation moved
+from an HTML comment into a PHP comment: an HTML comment is sent to the customer's browser, and the first draft's
+comment put the words "Before tax" back into the page, which the new test caught. `tools/tax_probe.php` section 5
+prints the same order. Nothing else changes: no tax is computed, the app API's fields are the same, A2 is
+untouched, and the legal version stays 1.1, so no customer is asked to accept anything again.
+
+**Proof.** `tests/test_portal_tenant.php` **112**: the live shape of invoice 000005 (Subtotal, Discount, Total,
+in that order; no "Before tax", no tax line, no tax note; the app API's subtotal, discount, empty `taxes` and
+zero `tax`), and a synthetic invoice with a discount **and** a tax pinning the order Subtotal, Discount, tax
+line, Total. **Four weakened copies each fail it:** the label back to "Before tax", the discount after the tax
+lines, one lumped "Tax" line, and the explanation back in an HTML comment. Suite: **207 suites, exit 0, twice; the 186 suites that print totals report 8,246 passed / 0 failed on both runs.** The deploy command's stage V2 was rehearsed against a local Uganda sandbox (12 ok) and a South Sudan one (10 of 12 fail, the control).
+
+**Deploy.** `scripts/deploy-5.18.43.sh`, pinned to the plugin commit __COMMIT43__; stage V re-checks everything
+5.18.42 checked. The label itself is seen only by a signed-in customer with a discounted invoice, so the test
+suite is its proof. **Not deployed by this session.**

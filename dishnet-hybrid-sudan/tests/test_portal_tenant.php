@@ -161,10 +161,10 @@ has('[uganda] the invoice screen: a payment reference, no other tenant\'s bank',
 none('[uganda] the invoice screen', $pages['invoice_detail&inv_id=301'], ['Bank transfer', '<b>DishNet Africa Ltd</b>', 'Equity Bank']);
 echo "\n1b. The invoice screen prints each tax or levy on its own line, under uCRM's own name (5.18.42, docs/38 §7.5)\n";
 $invPage = $pages['invoice_detail&inv_id=301'];
-has('[uganda] the totals block: before tax, VAT and the UCC levy as separate lines, the total', $invPage,
-    ['>Before tax<', 'UGX 41,666.67', '>VAT 18%<', 'UGX 7,500.00', '>UCC levy 2%<', 'UGX 833.33', '>Total<', 'UGX 50,000.00', 'Each tax or levy is listed on its own line']);
+has('[uganda] the totals block: the subtotal, VAT and the UCC levy as separate lines, the total', $invPage,
+    ['>Subtotal<', 'UGX 41,666.67', '>VAT 18%<', 'UGX 7,500.00', '>UCC levy 2%<', 'UGX 833.33', '>Total<', 'UGX 50,000.00', 'Each tax or levy is listed on its own line']);
 is_(substr_count($invPage, 'class="inv-tax-line"') === 2, '[uganda] exactly two tax lines — one per tax uCRM stated', 'lines: ' . substr_count($invPage, 'class="inv-tax-line"'));
-is_(strpos($invPage, '>Tax<') === false && strpos($invPage, '>Subtotal<') === false, '[uganda] no lumped "Tax" line and no bare "Subtotal" label');
+is_(strpos($invPage, '>Tax<') === false && strpos($invPage, 'Before tax') === false, '[uganda] no lumped "Tax" line and no "Before tax" label (5.18.43)');
 is_(strpos($invPage, '>Discount<') === false, '[uganda] a -0.0 discount (the live shape) prints no discount line');
 $apiInv = http($base, 'GET', '?page=api&action=app_invoice&id=301', null, [$C]);
 $apiTaxes = $apiInv['json']['data']['taxes'] ?? null;
@@ -172,6 +172,33 @@ is_($apiInv['code'] === 200 && is_array($apiTaxes) && count($apiTaxes) === 2 && 
     && $apiTaxes[1]['name'] === 'UCC levy 2%' && (float)$apiTaxes[1]['amount'] === 833.33 && (float)($apiInv['json']['data']['tax'] ?? -1) === 8333.33
     && (float)($apiInv['json']['data']['subtotal'] ?? -1) === 41666.67 && (float)($apiInv['json']['data']['discount'] ?? -1) === 0.0,
     '[uganda] the app API (app_invoice) returns the same lines: taxes[] by name, tax = uCRM\'s total, subtotal, discount 0', substr($apiInv['body'], 0, 300));
+
+echo "\n1c. The live shape (5.18.43): invoice 000005 on the Uganda install, 26 Sep — a 30 % discount and NO tax\n";
+// Measured by tools/tax_probe.php section 5 on the live install: subtotal 2,498,000, discount 749,400, total
+// 1,748,600, taxes [] — and the operator decided to keep prices as they are (no tax). 5.18.42 labelled that
+// subtotal "Before tax", which read as a tax still to come. And a synthetic invoice with BOTH a discount and a
+// tax pins the order: subtotal, discount, each tax line, total.
+$ugStore = SqliteStore::create($ug['data']);
+$cache = $ugStore->load('ucrm_invoices_cache.json') ?? [];
+$cache[] = ['id' => 302, 'clientId' => 7, 'number' => 'INV-0302', 'status' => 1, 'currencyCode' => 'UGX', 'dueDate' => '2026-10-01', 'createdDate' => '2026-09-20',
+    'subtotal' => 2498000, 'taxes' => [], 'totalTaxAmount' => 0, 'totalDiscount' => -749400.0, 'total' => 1748600, 'amountPaid' => 0, 'amountToPay' => 1748600,
+    'items' => [['label' => 'Starlink Standard Kit', 'quantity' => 1, 'price' => 2649000, 'total' => 2649000]]];
+$cache[] = ['id' => 303, 'clientId' => 7, 'number' => 'INV-0303', 'status' => 1, 'currencyCode' => 'UGX', 'dueDate' => '2026-10-01', 'createdDate' => '2026-09-21',
+    'subtotal' => 100000, 'taxes' => [['id' => 1, 'name' => 'VAT 18%', 'totalValue' => 16200.0]], 'totalTaxAmount' => 16200, 'totalDiscount' => -10000.0, 'total' => 106200,
+    'amountPaid' => 0, 'amountToPay' => 106200, 'items' => [['label' => 'Professional Installation', 'quantity' => 1, 'price' => 100000, 'total' => 100000]]];
+$ugStore->save('ucrm_invoices_cache.json', $cache); unset($ugStore);
+$d302 = http($base, 'GET', '?page=customer_portal&view=invoice_detail&inv_id=302', null, [$C])['body'];
+has('[uganda] invoice with a discount and no tax: Subtotal, Discount, Total', $d302, ['>Subtotal<', 'UGX 2,498,000.00', '>Discount<', '-UGX 749,400.00', '>Total<', 'UGX 1,748,600.00']);
+none('[uganda] invoice with a discount and no tax: no "Before tax", no tax line, no tax note', $d302, ['Before tax', 'inv-tax-line', 'Each tax or levy']);
+$pos = function (string $body, string $needle): int { $p = strpos($body, $needle); return $p === false ? -1 : $p; };
+$o = [$pos($d302, 'class="inv-subtotal"'), $pos($d302, 'class="inv-discount"'), $pos($d302, '>Total<')];
+is_($o[0] >= 0 && $o[0] < $o[1] && $o[1] < $o[2], '[uganda] …in that order: subtotal, discount, total (the column reads as 2,498,000 − 749,400 = 1,748,600)', json_encode($o));
+$d303 = http($base, 'GET', '?page=customer_portal&view=invoice_detail&inv_id=303', null, [$C])['body'];
+$o = [$pos($d303, 'class="inv-subtotal"'), $pos($d303, 'class="inv-discount"'), $pos($d303, 'class="inv-tax-line"'), $pos($d303, '>Total<')];
+is_($o[0] >= 0 && $o[0] < $o[1] && $o[1] < $o[2] && $o[2] < $o[3], '[uganda] with a discount AND a tax: subtotal, discount, the tax line, total — in that order', json_encode($o));
+$a302 = http($base, 'GET', '?page=api&action=app_invoice&id=302', null, [$C])['json']['data'] ?? [];
+is_((float)($a302['subtotal'] ?? -1) === 2498000.0 && (float)($a302['discount'] ?? -1) === 749400.0 && ($a302['taxes'] ?? null) === [] && (float)($a302['tax'] ?? -1) === 0.0,
+    '[uganda] the app API for the live shape: subtotal 2,498,000, discount 749,400, taxes [], tax 0', json_encode($a302));
 is_(strpos($pages['invoice_detail&inv_id=301'], 'notifyPayment(') !== false && strpos($pages['home'], '+ "UGX " + Math.round(amount) + "*\\n\\n"') !== false,
     '[uganda] the payment notification prefixes UGX and adds no currency code after the amount', substr((string)strstr($pages['home'], 'Math.round(amount)'), 0, 80));
 
