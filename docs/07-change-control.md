@@ -1471,3 +1471,36 @@ docs/39 said it printed no link; both are corrected. **C-2b:**
   no screenshot). The one proof still to come is `--links` on the next invoice for client #1, which should end
   "C-2 is done for this invoice". uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
   keeps the version from the last ZIP upload through that screen.
+
+## 26 Sep 2026 — the WhatsApp AI on unlimited data for a business, and on covering another area (docs/40)
+
+**A check, not a change.** The operator asked how the AI answers two things: a business that needs unlimited data
+(a Residential plan, not a Business plan with a GB block), and a customer who wants another area covered (uCRM
+now prices an outdoor access point and a MikroTik).
+- **Measured from the live code (5.18.43).** The prompt was rendered through `getProducts` → `BrainContext` →
+  the brain, with a sample price list. No model call was made; this session has no AI key.
+- **What works.** Business plans are held back unless the customer needs a public IP or names one. The
+  qualification rules make the higher-capacity Residential plan the default. The priority-data note is appended
+  in code.
+- **A-1, A-2 — "unlimited".** The AI is never told that the Residential plans are unlimited. Its four uses of the
+  word are rule 2 ("do not describe a null field as unlimited"), two about Business standard data, and one that
+  names no plan. The two knowledge sentences that say it (`BUSINESS_PLANS`, `MANY_USERS_HOTSPOT`) fall beyond
+  `KnowledgeBase::promptBlock`'s 600-character cut. Six seeded facts are cut in all.
+- **B-1 … B-5 — coverage.**
+  - B-1: the access point and MikroTik land in HARDWARE, and no rule links "cover another area" to them.
+  - B-2: the price check refuses a total that multiplies a quantity; the customer gets the fallback.
+  - B-3: nothing keeps them out of a home total.
+  - B-4: the sales number never sees ACCESSORIES, because `BrainContext` drops them; the support number does.
+  - B-5: a total may combine only the first six HARDWARE items.
+- **The documented live test does not test Uganda.** `tests/conversation-suite.php` builds the brain without the
+  knowledge base, so it runs the South Sudan coverage block. It also skips `BrainContext` and both reply checks.
+- **The check.** `scripts/dnb-ai-check.sh` with `scripts/lib/ai_check.php`, READ-ONLY. It reports which AI answers,
+  the price list as the AI sees it, the knowledge rows and their cut parts, and recent real conversations with
+  their replies, masked. `--ask` puts nine questions to the installed AI through the live path.
+- **It reads a copy of the database, made as its owner.** The first draft opened the live file read-only, and the
+  rehearsal showed SQLite leaving `-wal`/`-shm` behind, which would be root's on the server.
+- **Rehearsal.** `scripts/harness/ai-check/rehearse.sh`, 63/63 twice. Eight weakened copies are caught. Canaries
+  for every kind of personal or secret value stay out of the output.
+- **Not changed.** No plugin release, no setting, no knowledge-base row, no uCRM record and no server change.
+  Proposals P1–P7 (docs/40 §8) wait for the operator: the P1 wording (are both Residential plans unlimited?) and
+  the P3 decision (should the AI quote the access point and MikroTik prices or keep handing over?).

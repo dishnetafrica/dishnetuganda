@@ -1,0 +1,11 @@
+[
+ {"id":11,"name":"Starlink Mini Kit","price":2249000},
+ {"id":12,"name":"Starlink Standard Kit","price":2649000},
+ {"id":13,"name":"Professional Installation","price":150000},
+ {"id":14,"name":"Residential Lite (up to 100 Mbps)","price":249000},
+ {"id":15,"name":"Residential (up to 400 Mbps)","price":329000},
+ {"id":21,"name":"Router Mini","price":435000},
+ {"id":22,"name":"Wall Mount | Mini","price":301000},
+ {"id":31,"name":"Outdoor Access Point","price":450000},
+ {"id":32,"name":"MikroTik Router","price":380000}
+]

@@ -1,0 +1,8 @@
+[
+ {"id":1,"name":"Residential Lite (up to 100 Mbps)","isActive":true,"periods":[{"period":1,"price":249000,"enabled":true}],"dataUsageLimit":null},
+ {"id":2,"name":"Residential (up to 400 Mbps)","isActive":true,"periods":[{"period":1,"price":329000,"enabled":true}],"dataUsageLimit":null},
+ {"id":3,"name":"Business 50GB","isActive":true,"periods":[{"period":1,"price":175000,"enabled":true}],"dataUsageLimit":null},
+ {"id":4,"name":"Business 500GB","isActive":true,"periods":[{"period":1,"price":285000,"enabled":true}],"dataUsageLimit":null},
+ {"id":5,"name":"Business 1TB","isActive":true,"periods":[{"period":1,"price":469000,"enabled":true}],"dataUsageLimit":null},
+ {"id":6,"name":"Old retired plan","isActive":false,"periods":[{"period":1,"price":99000,"enabled":true}]}
+]
