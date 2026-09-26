@@ -439,13 +439,26 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A1.4** `isActive` | unchanged (decided §4) | — |
 | **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — South Sudan `+211 921 443 006`, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
 | **A2** legal wording | **PROPOSAL for approval — §7.3**; nothing changed in the documents' identity, jurisdiction or regulator sentences | the CONTACT lines inside the documents already read the profile (A1.1) |
-| **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. **Open:** two Traefik log lines naming the file were counted and not printed (script fixed) — read them with the command in §7.2 | run the read-only log command, or re-run the script, and send the output |
+| **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC, and HEALTHY** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. The two Traefik log lines the operator read are **the attempt-1 file being re-parsed at 15:21:07Z**, the moment the re-run staged its temporary file inside the watched directory — one step before the old file was replaced. The attempt-2 file parses and its router exists (the 302). Script fixed a third time: staging outside the watched directory (§7.1) | **nothing** — done |
 | **C-2** uCRM's own address | **CHECKLIST — §7.2**; an operator act in uCRM's settings | the only fix for the `:8443` links inside every invoice PDF (docs/39 §7) |
 | **B-1** the authoritative kit register | **DECIDED: O3** (docs/39 §13) — the uCRM attribute as the human entry point, the hybrid's `stock_units` + `equipment_assignments` as the store, Finance and Data Report consume a published register | validation (b) done by `--chain 1`; (a) is one question to the person who deploys kits (§7.4) |
 | **B-2…B-6** | recommended values adopted as the direction; **nothing built** | B-5 and B-6 are operator acts (confirm the three Finance kits' owners; re-authenticate Data Report's Starlink sessions) |
-| deployment / configuration / customer data | **5.18.41 deployed by the operator; one Traefik file placed by C-1 attempt 1 and ignored by Traefik (rewritten by the re-run); no configuration value, customer record or other service changed** | — |
+| deployment / configuration / customer data | **5.18.41 deployed by the operator; one Traefik file placed by C-1 attempt 1 and ignored by Traefik, rewritten by attempt 2 and taken; no configuration value, customer record or other service changed** | — |
 
 ### 7.1 Found while building A1 (recorded, each pinned by a test)
+
+- **A watched directory is not a place to stage a file.** Traefik's file provider re-parses **every** file in
+  the directory on **any** event in it. C-1's re-run wrote `dnb-crm-root.yml.tmp` beside the target, and at
+  that instant Traefik re-read the attempt-1 file still lying there and logged its invalid escape twice
+  (`15:21:07Z`, `yaml: line 38: found unknown escape character`) — the two lines the operator read. The new
+  file, moved in the next step, parses and serves the 302. The script now stages in the parent directory and
+  moves once; the rehearsal asserts the wording and that no temporary file is ever seen in the watched
+  directory. **A log line at the moment of a change may describe the state being replaced, not the change.**
+- **A value that must not be pasted is asked for, not documented.** Three commands in a row were run with the
+  example shape (`<the customer phone…>`, `+2567XXXXXXXX`, `+YOUR_NUMBER`) as the number. The audit script
+  now asks on the terminal when the number or address is missing or is not one, reads it without echo, and
+  confirms it masked (`+…217`) — a copy of the terminal carries no number, and nothing I write can be pasted
+  in its place.
 
 - **Three more South Sudan literals than the plan listed**, all in the invoice screen and the status view:
   the bank-transfer block (`DishNet Africa Ltd` / `Stanbic Bank / Equity Bank` / a literal ` USD` after an
@@ -487,11 +500,12 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
    proves the signed-in screens: **L5 and L9 pass; L10 still fails until A2.**
 2. **C-1** — `scripts/dnb-crm-root-redirect.sh`: reads `uisp.yaml`, writes one Traefik file for the exact path
    `/crm`, verifies `302 → https://crm.dishnetuganda.com/crm/`, `/crm/` unchanged, the portal and uCRM's
-   login still 200, Traefik not restarted. Rollback: delete the file. **Done 26 Sep 15:21 UTC.** The two
-   Traefik log lines that name the file are read with this read-only command (nothing is changed by it):
+   login still 200, Traefik not restarted. Rollback: delete the file. **Done 26 Sep 15:21 UTC; the two
+   Traefik log lines were read and are the old file's error at the moment the new one was staged (§7.1).**
+   A later health check is this read-only command (nothing is changed by it); it should print nothing new:
 
    ```
-   docker logs "$(docker ps --filter name=traefik -q | head -1)" --since 2026-09-26T15:20:00Z 2>&1 | grep -i dnb-crm-root | cut -c1-300
+   docker logs "$(docker ps --filter name=traefik -q | head -1)" --since 2026-09-26T15:22:00Z 2>&1 | grep -i dnb-crm-root | cut -c1-300
    ```
 3. **C-2 checklist** (uCRM → Settings → System → Application), by hand: (a) the fields *Server domain name*
    and *Server port* are editable, not greyed out as managed by UISP; (b) UISP → Settings → Devices shows the

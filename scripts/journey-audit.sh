@@ -59,10 +59,25 @@ MODE=""; ARG=""
 case "${1:-}" in
   --siblings|--compare|--urls) MODE="${1#--}" ;;
   --client-flags) MODE="client-flags"; ARG="${2:-1}" ;;
-  --identity|--login-phone|--login-email|--chain) MODE="${1#--}"; ARG="${2:-}"; [ -n "$ARG" ] || { echo "usage: $0 $1 <value>" >&2; exit 64; }
+  --identity|--login-phone|--login-email|--chain) MODE="${1#--}"; ARG="${2:-}"
     case "$MODE" in
-      login-phone) printf '%s' "$ARG" | grep -qE '^\+[0-9][0-9 ()-]{6,}$' || { echo "usage: $0 --login-phone +2567XXXXXXXX   — the customer's own number in international form, starting with + and the country code (a placeholder is not a number)" >&2; exit 64; } ;;
-      login-email) printf '%s' "$ARG" | grep -qE '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' || { echo "usage: $0 --login-email name@example.com   — the customer's own e-mail address" >&2; exit 64; } ;;
+      login-phone|login-email)
+        # The number or address may be left off the command line: the script then asks for it on the terminal,
+        # so nothing real has to be typed into a chat or copied from one (the 26 September runs pasted the
+        # example shape three times). Whatever is typed is never printed; the run shows it masked.
+        if [ "$MODE" = "login-phone" ]; then RE='^\+[0-9][0-9 ()-]{6,}$'; WHAT="the customer's phone number in international form, starting with + and the country code"
+        else RE='^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'; WHAT="the customer's e-mail address"; fi
+        until printf '%s' "$ARG" | grep -qE "$RE"; do
+          [ -z "$ARG" ] || echo "  That is not $WHAT (an example shape or a placeholder is not a value)." >&2
+          { : </dev/tty; } 2>/dev/null || { echo "usage: $0 --$MODE <value>   — $WHAT (no terminal to ask on)" >&2; exit 64; }
+          printf 'Type %s, then Enter (the keys are not shown, and a copy of this terminal will not carry it): ' "$WHAT" >&2
+          read -rs ARG </dev/tty || exit 64; echo >&2
+          if printf '%s' "$ARG" | grep -qE "$RE"; then
+            if [ "$MODE" = "login-phone" ]; then M="$(printf '%s' "$ARG" | tr -cd '0-9')"; M="+…${M#"${M%???}"}"
+            else M="$(printf '%s' "$ARG" | sed -E 's/^(.).*(@.*)$/\1***\2/')"; fi
+            echo "  Using $M" >&2
+          fi
+        done ;;
       identity|chain) printf '%s' "$ARG" | grep -qE '^[0-9]+$' || { echo "usage: $0 --$MODE <clientId>   — a uCRM client id (digits)" >&2; exit 64; } ;;
     esac ;;
   *) echo "usage: $0 --siblings | --identity <clientId> | --login-phone <+2567…> | --login-email <address> | --compare | --urls | --client-flags [clientId] | --chain <clientId>" >&2; exit 64 ;;

@@ -1237,7 +1237,23 @@ on both the https and the http form; `/crm/` answers exactly as before, the port
 still 200. One check failed: the script counted **two Traefik log lines naming the file** since it was written
 and — a second defect of the script — printed them only in the branch where the route is NOT taken, so
 nothing was shown. Fixed the same hour: every line naming the file is printed whatever the route did, and the
-rehearsal carries that scenario (33 checks). **The two lines are still to be read** (a re-run prints them, or
-the read-only command in docs/38 §7.2); until then the door is closed but the file's standing in Traefik's
-eyes is not fully known. Also that afternoon: the operator typed the example shape `+2567XXXXXXXX` into the
-sign-in walk and the script refused it as designed; the walk is still to be run with the real number.
+rehearsal carries that scenario (33 checks). Also that afternoon: the operator typed the example shape
+`+2567XXXXXXXX` into the sign-in walk and the script refused it as designed; the walk is still to be run with
+the real number.
+
+**C-1 — the two Traefik lines READ (15:21:07Z) and explained; the route is healthy.** The operator ran the
+read-only log command: both lines are `ERR … /data/config/dnb-crm-root.yml: yaml: line 38: found unknown
+escape character providerName=file`, both stamped **15:21:07Z** — the second the re-run **staged its
+temporary file** (`dnb-crm-root.yml.tmp`) inside Traefik's watched directory, one step before the `mv`.
+Traefik re-parses every file in that directory on any event, so what it parsed at that moment was the
+**attempt-1 file still lying there** (the one with the invalid escape, line 38 being its `regex:` line);
+the error is the old file's, logged once per event. The attempt-2 file parses (reproduced here with PyYAML,
+line 38 `regex: "^https?://crm[.]dishnetuganda[.]com/crm/?(\\?.*)?$"`), and the router it declares exists —
+the 302 was measured on both the https and the http form. Nothing is wrong on the server. Script fix, the
+third: the temporary file is staged in the **parent** directory (same filesystem, one atomic move, one event
+carrying the final content) and the timestamp the log is read from is taken before the move; the rehearsal
+asserts both (35 checks) and that no temporary file is ever left in the watched directory. The sign-in walk:
+after the operator pasted three different placeholders as the number, `journey-audit.sh --login-phone` and
+`--login-email` now **ask for the value on the terminal** when it is missing or is not one — typed without
+echo, so a copy of the terminal cannot carry it, confirmed back masked (`+…217`, `b***@…`), never printed;
+without a terminal the usage message and exit 64 as before.

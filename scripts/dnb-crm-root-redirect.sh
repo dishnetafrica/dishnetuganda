@@ -71,16 +71,22 @@ case "$B_LOC" in *:8443*) note "the bare /crm currently leads to :8443 — the d
 # run on 26 September did exactly that (docs/07, 5.18.41), which is why the file is checked before it
 # is placed and Traefik's log is read if the route is not taken.
 HOST_RE="$(printf '%s' "$HOST" | sed -E 's/[.]/[.]/g')"
-sed -e "s|__RESOLVER__|$RESOLVER|" -e "s|__PRIORITY_LINE__|$PRIO_LINE|" -e "s|__HOST_RE__|$HOST_RE|g" -e "s|__HOST__|$HOST|g" "$TEMPLATE" | sed '/^\s*$/d' > "$TARGET.tmp" || stop "could not write $TARGET.tmp"
-if grep -qE '(^|[^\\])\\([^\\]|$)' "$TARGET.tmp"; then rm -f "$TARGET.tmp"; stop "the generated file carries a lone backslash — invalid inside a YAML double-quoted string; nothing was placed"; fi
+# The temporary file is staged in the PARENT directory, not beside the target: Traefik watches the config
+# directory and re-parses every file in it on any event, so a temporary file appearing there re-read the
+# previous copy (the 26 September re-run logged the old file's error twice at the moment the new one was
+# staged). Same filesystem, so the move is atomic and Traefik sees exactly one event with the final content.
+STAGE="$(dirname "$CONF_DIR")/.dnb-crm-root.yml.tmp"
+sed -e "s|__RESOLVER__|$RESOLVER|" -e "s|__PRIORITY_LINE__|$PRIO_LINE|" -e "s|__HOST_RE__|$HOST_RE|g" -e "s|__HOST__|$HOST|g" "$TEMPLATE" | sed '/^\s*$/d' > "$STAGE" || stop "could not write $STAGE"
+if grep -qE '(^|[^\\])\\([^\\]|$)' "$STAGE"; then rm -f "$STAGE"; stop "the generated file carries a lone backslash — invalid inside a YAML double-quoted string; nothing was placed"; fi
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
-  if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert set(d["http"]["routers"]) == {"dnb-crm-root", "dnb-crm-root-http"}' "$TARGET.tmp" 2>/dev/null; then ok "the generated file parses as YAML with the two routers (python3)"
-  else rm -f "$TARGET.tmp"; stop "the generated file does not parse as YAML; nothing was placed"; fi
+  if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert set(d["http"]["routers"]) == {"dnb-crm-root", "dnb-crm-root-http"}' "$STAGE" 2>/dev/null; then ok "the generated file parses as YAML with the two routers (python3)"
+  else rm -f "$STAGE"; stop "the generated file does not parse as YAML; nothing was placed"; fi
 else note "python3 yaml is not available on this host; the file's escapes were checked by pattern instead"; fi
-grep -q '\[\.\]' "$TARGET.tmp" || { rm -f "$TARGET.tmp"; stop "the regex does not carry the host with [.] dots; nothing was placed"; }
-mv "$TARGET.tmp" "$TARGET" || stop "could not place $TARGET"
-chmod 644 "$TARGET"; ok "wrote $TARGET"
+grep -q '\[\.\]' "$STAGE" || { rm -f "$STAGE"; stop "the regex does not carry the host with [.] dots; nothing was placed"; }
+chmod 644 "$STAGE"
 WRITTEN_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+mv "$STAGE" "$TARGET" || { rm -f "$STAGE"; stop "could not place $TARGET"; }
+ok "wrote $TARGET (staged outside the watched directory, moved in one step)"
 
 WANT="https://$HOST/crm/"
 for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; c="$(code "$SCHEME://$HOST/crm")"; L="$(loc "$SCHEME://$HOST/crm")"; [ "$c" = "302" ] && [ "$L" = "$WANT" ] && break; done
