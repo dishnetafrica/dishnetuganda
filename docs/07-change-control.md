@@ -1440,5 +1440,21 @@ docs/39 said it printed no link; both are corrected. **C-2b:**
 - **The rehearsal.** 94 checks, twice; six weakened copies caught; one vacuous assertion found by its control
   and rewritten. uCRM's payment page is opened from the host, the way a customer reaches it. The plugin suite passes: 8,263 assertions, 0 failed.
 - **Not changed.** No plugin release, no deployment and no server change; the uCRM template edit is the
-  operator's act. uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+  operator's act.
+
+**21:35–21:40 UTC: `--links` on the server, and the two exported templates change the fix.**
+- **What `--links` found.** The two `:8443` links in invoice 000003 are uCRM's online-payment link. uCRM's page
+  offers none of the 14 payment options. UISP's public port is unset (`HTTPS_PORT=8443`, `PROXY_HTTPS_PORT`
+  empty). The pay page answers.
+- **#1000 "Invoice Ugadna" is the South Sudan invoice.** The template Uganda invoices use prints Juba, +211,
+  dishnetafrica.com, "Amount Due (USD)" and the USD late-payment terms. Its PAID check (`== '$0.00'`) never matches
+  UGX, so paid invoices read UNPAID.
+- **#1001 "V1 invoice" is the Uganda template, unused.** It is byte-identical to the repository's of 8 Sep.
+- **The fix, v2.** The repository's Uganda template, now v2, is to be pasted over #1000 with the CSS unchanged.
+  v2 sends PAY NOW to the pay page and decides PAID from the digits.
+- **The proof.** `scripts/harness/invoice-template/rehearse.sh` renders it with real Twig 3.30 and 2.16 under a
+  sandbox limited to what V1 uses: 21/21 each, and two weakened copies are caught.
+- **The organization record.** `--links` now also shows the organization, phone and e-mail masked, because v2
+  prints its address. The plugin test pins the digit rule (21).
+- **Not changed.** No release and no server change; the paste is the operator's act (docs/38 §7.2). uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
   keeps the version from the last ZIP upload through that screen.

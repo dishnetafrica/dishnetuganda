@@ -11,6 +11,10 @@ declare(strict_types=1);
  * paste from.
  *
  * The control rebuilds the template as it was (the three edits reversed) and shows every check rejects it.
+ *
+ * Also pinned here: PAID is decided by the amount due holding no digit 1–9, so it holds however uCRM writes a zero
+ * (a list of spellings missed "UGX 0" with a non-breaking space). scripts/harness/invoice-template renders the
+ * template with real Twig 2 and 3 under a sandbox limited to what uCRM already accepted in this template.
  */
 $pass = 0; $fail = 0;
 function t(string $n, $got, $want): void { global $pass, $fail;
@@ -72,6 +76,15 @@ $guard = (string)file_get_contents(dirname($root) . '/scripts/dnb-c2-check.sh');
 t('the guard tells staff to replace the condition', strpos($guard, '{% if invoice.onlinePaymentLink and not is_paid %}   becomes   {% if not is_paid %}') !== false, true);
 t('the guard points the button at the profile\'s pay_url', strpos($guard, 'becomes   href="$PAY_PAGE"') !== false, true);
 t('the guard reads PAY_PAGE from profiles/uganda.json', strpos($guard, '"pay_url"') !== false && strpos($guard, 'profiles/uganda.json') !== false, true);
+
+echo "5) PAID is decided by the digits, not by a list of spellings (rendered with Twig 2 and 3 by scripts/harness/invoice-template)\n";
+$paidRule = "{% set is_paid = totals.amountDue is not empty %}\n"
+          . "{% for d in ['1', '2', '3', '4', '5', '6', '7', '8', '9'] %}{% if d in totals.amountDue %}{% set is_paid = false %}{% endif %}{% endfor %}";
+t('the template carries the digit rule', strpos(code($tpl), $paidRule) !== false, true);
+t('and no list of spellings for a zero amount', preg_match('/totals\.amountDue\s+in\s+\[/', code($tpl)), 0);
+t('PAY NOW and the status both follow is_paid', substr_count(code($tpl), 'is_paid') >= 4, true);
+$listCopy = str_replace($paidRule, "{% set is_paid = totals.amountDue in ['UGX 0.00', 'UGX 0', 'USh 0.00', '0.00', '$0.00'] %}", $tpl);
+t('control: a copy with the old list is told apart', [strpos(code($listCopy), $paidRule) !== false, preg_match('/totals\.amountDue\s+in\s+\[/', code($listCopy))], [false, 1]);
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -86,6 +86,8 @@ class CrmApiClient {
   public function get(string $p): ?array {
     $f = getenv('FAKE');
     if (strpos($p, 'invoice-templates') === 0) return json_decode((string)@file_get_contents("$f/templates.json"), true);
+    if ($p === 'organizations') return json_decode((string)@file_get_contents("$f/organizations.json"), true);
+    if (strpos($p, 'clients/') === 0) return ['id' => 1, 'organizationId' => 1];
     if (strpos($p, 'invoices?clientId=') === 0) {
       file_put_contents("$f/api.log", $p . "\n", FILE_APPEND);
       return json_decode((string)@file_get_contents("$f/invoices.json"), true);
@@ -106,6 +108,7 @@ mkpdf() {  # $1 the link the PAY NOW box carries: once as a link annotation, onc
          "2 0 obj << /Length ".strlen($s)." /Filter /FlateDecode >>\nstream\n".$s."\nendstream\nendobj\n%%EOF\n";' "$1" > "$F/invoice.pdf"
 }
 printf '%s' '[{"id":3,"name":"Invoice Ugadna"},{"id":1,"name":"Official — billing@dishnet.example"}]' > "$F/templates.json"
+printf '%s' '[{"id":2,"name":"Other Org","city":"Elsewhere","selected":false},{"id":1,"name":"DishNet Africa Ltd.","street1":"Acacia Mall","city":"Kampala","phone":"+256 705 993 348","email":"billing@dishnet.example","website":"www.dishnetuganda.com","taxId":"1059140632","registrationNumber":"","selected":true}]' > "$F/organizations.json"
 printf '%s' '[{"id":41,"number":"000003","status":1,"createdDate":"2026-09-20T10:00:00+0000","invoiceTemplateId":3},{"id":57,"number":"000005","status":1,"createdDate":"2026-09-25T08:00:00+0000","invoiceTemplateId":3}]' > "$F/invoices.json"
 printf '%s\n' 'UNMS_HTTP_PORT="8080"' 'UNMS_HTTPS_PORT=8443' 'UNMS_WS_PORT=' 'UNMS_PUBLIC_HTTPS_PORT=' \
   'UNMS_SECURE_LINK_SECRET=LINKSECRET-XYZ-987' 'UNMS_SUPPORT="hunter2secret"' 'UNMS_TOKEN=TOKSECRET-555' > "$F/unms.conf"
@@ -247,6 +250,13 @@ has "$out" "RESULT   the 2 link(s) on :8443 inside this invoice are uCRM's own o
 has "$out" "THE FIX — BY HAND, IN uCRM'S TEMPLATE EDITOR. THIS SCRIPT CHANGES NOTHING." "L1 prints the manual fix"
 has "$out" 'href="https://dishnetuganda.com/pay"' "L1 the fix points the button at the Uganda profile's pay_url"
 has "$out" "becomes   dishnetuganda.com/pay" "L1 the fix prints the short address under the button"
+has "$out" "replace its whole text" "L1 the fix offers the whole Uganda template for a template with another country's details"
+has "$out" "dishnet-hybrid-sudan/ucrm_pdf_templates/invoice_uganda/template.html.twig" "L1 the fix names the Uganda template's file"
+has "$out" "its organization           DishNet Africa Ltd. · Acacia Mall, Kampala · phone +256 … 348 · e-mail …@dishnet.example" "L1 shows the invoice's organization, the one the Uganda template prints"
+has "$out" "TIN 1059140632 · Reg. No not set in uCRM" "L1 shows which registration facts uCRM holds"
+hasnt "$out" "705 993" "L1 never prints the organization's phone number in full"
+hasnt "$out" "billing@" "L1 never prints the organization's e-mail address in full"
+hasnt "$out" "Other Org" "L1 picks the client's organization, not another one"
 check "$(cat "$SB/state/state.env" 2>/dev/null | md5sum)" "$sum_before" "L1 --links leaves the before-state untouched"
 
 printf "%s\n" "$out" > "${L1_DUMP:-/dev/null}"   # L1_DUMP=<file> keeps L1's whole output, to read it

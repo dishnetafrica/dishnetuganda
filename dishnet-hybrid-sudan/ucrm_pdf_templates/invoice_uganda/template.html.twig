@@ -1,4 +1,5 @@
-<!-- ═══ DishNet Branded Invoice — UGANDA EDITION v1 (derived from SS v3) ═══ -->
+<!-- ═══ DishNet Branded Invoice — UGANDA EDITION v2 (derived from SS v3) ═══ -->
+{# v2, 26 Sep 2026: PAY NOW leads to dishnetuganda.com/pay; PAID is read from the digits of the amount due. #}
 <!-- IT solutions company & UCC Authorised Starlink Installer. Prices UGX.     -->
 <!-- Title reads TAX INVOICE only when the document carries VAT lines, so it   -->
 <!-- stays correct before and after VAT registration.                          -->
@@ -9,8 +10,12 @@
 {% set org_reg = '80046255496181' %}
 {% if organization.registrationNumber is defined and organization.registrationNumber %}{% set org_reg = organization.registrationNumber %}{% endif %}
 
-{# ── Paid check must match however the amount is formatted ── #}
-{% set is_paid = totals.amountDue in ['UGX 0.00', 'UGX 0', 'USh 0.00', '0.00', '$0.00'] %}
+{# ── PAID is decided by the amount due holding no digit from 1 to 9, so it holds however uCRM formats it:
+      UGX or USh, with or without decimals, with a plain or a non-breaking space. The list of spellings this
+      replaces missed "UGX 0" written with a non-breaking space, "USh0" and "0 UGX"; an empty amount is unpaid.
+      Only set, for, if and in: nothing uCRM's template sandbox had not already accepted in this template. ── #}
+{% set is_paid = totals.amountDue is not empty %}
+{% for d in ['1', '2', '3', '4', '5', '6', '7', '8', '9'] %}{% if d in totals.amountDue %}{% set is_paid = false %}{% endif %}{% endfor %}
 
 <div class="invoice-wrapper">
 
@@ -192,8 +197,8 @@
   <!-- ONLINE PAYMENT -->
   {# PAY NOW leads to DishNet's own pay page, the Uganda profile's pay_url. Never to uCRM's own online-payment
      link: uCRM builds it on the port UISP was installed with, :8443, whose certificate a browser refuses; UISP
-     3.0.159 shows no setting for that port (docs/38 section 7.2, C-2). Staff make the same three edits in uCRM's
-     template editor. #}
+     3.0.159 shows no setting for that port (docs/38 section 7.2, C-2). Staff paste this whole template over the one
+     uCRM's invoices use; the CSS stays as it is. #}
   {% if not is_paid %}
   <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
     <tr>

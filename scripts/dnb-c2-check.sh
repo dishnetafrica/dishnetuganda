@@ -217,12 +217,16 @@ if [ "$MODE" = "--links" ]; then
   THE FIX — BY HAND, IN uCRM'S TEMPLATE EDITOR. THIS SCRIPT CHANGES NOTHING.
    1. uCRM → System → Customization → Invoice templates. Open the template named above for this invoice.
    2. Clone it first. The copy is the rollback: if anything looks wrong, make the copy the default again.
-   3. In the original, find  invoice.onlinePaymentLink  — it appears three times. Change them:
+   3. If that template prints another country's details (Juba, +211, "Amount Due (USD)"), replace its whole text
+      with the Uganda template, which already carries this fix — the CSS stays as it is:
+        dishnet-hybrid-sudan/ucrm_pdf_templates/invoice_uganda/template.html.twig   (docs/38 §7.2)
+      Otherwise find  invoice.onlinePaymentLink  — it appears three times — and change only those:
         {% if invoice.onlinePaymentLink and not is_paid %}   becomes   {% if not is_paid %}
         href="{{ invoice.onlinePaymentLink }}"               becomes   href="$PAY_PAGE"
         the other {{ invoice.onlinePaymentLink }}            becomes   ${PAY_PAGE#https://}
    4. Save. uCRM checks the template when it saves; if it refuses, change nothing else and send this log.
-   5. Run --links again and send both logs. An invoice uCRM rendered before the change may keep its old PDF.
+   5. Run --links again and send both logs. uCRM keeps the PDF it made for an invoice, so one made before the
+      change may still show the old link; the next invoice uCRM makes shows the new one.
 FIX
         fi ;;
       -)

@@ -608,7 +608,9 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    holds no mobile-money method (`lib/PaymentUuids.php`). So the button most likely leads to a uCRM page on
    `:8443`, behind a certificate warning, that offers nothing to pay with. `--links` measures which.
 
-   **C-2b — the template, not the port.** PAY NOW leads to DishNet's own pay page, the Uganda profile's
+   **C-2b — the template, not the port.** *(Its "three edits" were superseded at 21:40 by the operator's exports,
+   below: the template invoices use is the South Sudan one, so the Uganda template is pasted in whole.)* PAY NOW
+   leads to DishNet's own pay page, the Uganda profile's
    `pay_url`, `https://dishnetuganda.com/pay`. It gives Airtel Money Merchant ID 4428146 and links to the
    customer portal, and it is the same page the website uses. In uCRM's template editor that is three edits:
    the condition `invoice.onlinePaymentLink and not is_paid` becomes `not is_paid`, the button's `href` becomes
@@ -645,6 +647,40 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    masking prints the token, and one that reads any `PORT` key prints a secret. **Found by those controls:**
    the first word-boundary assertion looked for text the script never prints, and passed against the broken
    copy. It was rewritten to count the "none of" line, and the copy now fails it.
+
+   **21:35 — `--links` on the server, then the two templates exported (the fix changes shape).** `--links` found
+   client #1's newest unpaid invoice, 000003 (21 Sep), rendered with template **#1000 "Invoice Ugadna"**. Its PDF
+   holds **2 × `https://crm.dishnetuganda.com:8443/crm/online-payment/pay/{token}`**, which confirms that both links
+   are uCRM's online-payment link. uCRM's page on the public address answered 302 → 302 → 200, stayed on :443 and
+   named none of the 14 payment options (1 form, 10,362 bytes). UISP's settings file holds `HTTPS_PORT=8443` with
+   `PROXY_HTTPS_PORT`, `WS_PORT` and `PROXY_WS_PORT` empty, so no public port is set. DishNet's pay page answered
+   200 with the Airtel Money instructions. The verdict printed the fix. The operator then exported the templates:
+   - **#1000 "Invoice Ugadna" is the South Sudan invoice, "DishNet Branded Invoice v3".** It prints "Juba, South
+     Sudan", the Kololo address, +211 921 443 002, dishnetafrica.com, **"Amount Due (USD)"** and the South Sudan
+     late-payment terms (5 %, USD 25 reconnection). It decides PAID with `totals.amountDue == '$0.00'`, which a UGX
+     amount never equals, so **every Uganda invoice reads UNPAID and shows PAY NOW, paid or not. Uganda customers'
+     invoices have carried South Sudan details.** Earlier audits read only the link hosts inside the PDF (docs/39
+     §7), which is why nobody saw it.
+   - **#1001 "V1 invoice" is byte-identical to the repository's Uganda template of 8 Sep (`acb51d0`)**, with the
+     same CSS: Kampala, UGX, the Ecobank details, the TIN. It is installed in uCRM and used by nothing.
+
+   **The fix: paste the repository's Uganda template, now v2, over #1000, the template invoices use**, with the CSS
+   left as it is (identical). v2 differs from V1 in two places:
+   - PAY NOW leads to the pay page;
+   - PAID is decided by the amount due holding no digit 1–9. V1's list of spellings misses a zero written with a
+     non-breaking space, "USh0" and "0 UGX"; an empty amount reads UNPAID.
+
+   **Rendered with real Twig 3.30 and 2.16** (`scripts/harness/invoice-template/rehearse.sh`, 21/21 on each) under
+   a sandbox that permits only what "V1 invoice" uses: `for`, `if`, `set`, `escape`, `length`. uCRM has already
+   accepted all of them, so v2 needs nothing new. The same run on the #1000 export reports Juba, +211 and "USD", and
+   UNPAID for a paid invoice. Two weakened copies are each caught: the old list rule and a filter V1 never used. A
+   version note written as an HTML comment reached the rendered page and was changed to a Twig comment, the same
+   lesson as the portal's.
+
+   **One condition stays open.** v2 prints the ISSUED BY address, phone, e-mail and website from uCRM's
+   organization record. `--links` now shows that record, with the phone reduced to its country code and last three
+   digits and the e-mail to its domain. **If it still holds Juba or +211, correct it in uCRM before the paste
+   counts as done.** Rehearsal 101, two more weakened copies caught.
 
    **What C-2b does not change:** uCRM's own e-mails, if uCRM sends any (Uganda's invoice e-mails are the
    plugin's, built without `:8443`), and where uCRM sends a member of staff after sign-in. Those still carry

@@ -53,6 +53,21 @@ function c2_mask_text(string $s): string
     return strlen($s) > 60 ? substr($s, 0, 57) . '...' : $s;
 }
 
+/** A phone number shown only as its country code and last three digits: enough to tell +256 from +211. */
+function c2_mask_phone(string $p): string
+{
+    $d = (string)preg_replace('/\D/', '', $p);
+    if ($d === '') return 'not set';
+    return ((strpos(trim($p), '+') === 0 || strlen($d) > 10) ? '+' . substr($d, 0, 3) . ' ' : '') . '… ' . substr($d, -3);
+}
+
+/** An e-mail address shown only as its domain. */
+function c2_mask_email(string $e): string
+{
+    $at = strrchr($e, '@');
+    return ($at === false || strlen($at) < 2) ? 'not set' : '…' . $at;
+}
+
 /** Every http(s) URL inside a PDF: the raw bytes and each stream uCRM's renderer compressed. */
 function c2_pdf_urls(string $pdf): array
 {
@@ -113,6 +128,26 @@ if ($tplName) {
     out("uCRM's invoice templates", implode(', ', $l));
 } else {
     out("uCRM's invoice templates", 'not served by the API');
+}
+
+// The organization the invoice belongs to: a Uganda template prints its address, phone, e-mail and website, so a
+// record still carrying another country's details would reappear there. Phone and e-mail are masked.
+$orgId = (int)($inv['organizationId'] ?? 0);
+if ($orgId === 0) { $cl = $crm->get("clients/{$clientId}"); $orgId = is_array($cl) ? (int)($cl['organizationId'] ?? 0) : 0; }
+$orgs = $crm->get('organizations'); $org = null;
+foreach (is_array($orgs) ? $orgs : [] as $o) {
+    if (is_array($o) && ($orgId > 0 ? (int)($o['id'] ?? 0) === $orgId : !empty($o['selected']))) { $org = $o; break; }
+}
+if ($org === null && is_array($orgs) && count($orgs) === 1 && is_array(reset($orgs))) $org = reset($orgs);
+if ($org === null) {
+    out('its organization', 'not served by the API');
+} else {
+    $where = array_filter([c2_mask_text((string)($org['street1'] ?? '')), c2_mask_text((string)($org['city'] ?? ''))], 'strlen');
+    out('its organization', c2_mask_text((string)($org['name'] ?? '')) . ' · ' . ($where ? implode(', ', $where) : 'no address')
+        . ' · phone ' . c2_mask_phone((string)($org['phone'] ?? '')) . ' · e-mail ' . c2_mask_email((string)($org['email'] ?? '')));
+    out('', 'website ' . (c2_mask_text((string)($org['website'] ?? '')) ?: 'not set')
+        . ' · TIN ' . (preg_replace('/[^0-9A-Za-z-]/', '', (string)($org['taxId'] ?? '')) ?: 'not set in uCRM')
+        . ' · Reg. No ' . (preg_replace('/[^0-9A-Za-z-]/', '', (string)($org['registrationNumber'] ?? '')) ?: 'not set in uCRM'));
 }
 
 $raw = $crm->getRawContent('invoices/' . (int)$inv['id'] . '/pdf');
