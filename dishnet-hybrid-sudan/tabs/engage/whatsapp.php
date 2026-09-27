@@ -1275,6 +1275,15 @@ REPLY STYLE
      SUBTAB: Message Log
      ════════════════════════════════════════════════════ -->
 <?php elseif($waSubtab === 'log'): ?>
+<?php
+// 5.18.50 (docs/44 J7): on Uganda the log says what "sent" means — handed to WhatsApp, delivery not measured — and a
+// message stopped by an opt-out reads "suppressed", not "fail". Every other install renders the page as before.
+require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+$_wlJ7 = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
+$_wlSuppressed = function (array $l): bool {
+    return empty($l['success']) && substr((string)($l['event'] ?? ''), -strlen('_suppressed_optout')) === '_suppressed_optout';
+};
+?>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div style="font-size:13px;font-weight:800;color:#1e293b;">📊 Last <?= count($waNotifLog) ?> messages sent by this plugin</div>
@@ -1282,12 +1291,20 @@ REPLY STYLE
     $totalSent = count($waNotifLog);
     $totalOk   = count(array_filter($waNotifLog, fn($l)=>!empty($l['success'])));
     $totalFail = $totalSent - $totalOk;
+    $_wlSupp   = $_wlJ7 ? count(array_filter($waNotifLog, $_wlSuppressed)) : 0;
+    $totalFail -= $_wlSupp;
     ?>
     <div style="display:flex;gap:8px;font-size:11px;">
         <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:8px;font-weight:700;">✓ <?= $totalOk ?> sent</span>
         <?php if($totalFail>0): ?><span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:8px;font-weight:700;">✗ <?= $totalFail ?> failed</span><?php endif; ?>
+<?php if ($_wlSupp > 0): ?>
+        <span style="background:#f1f5f9;color:#475569;padding:3px 10px;border-radius:8px;font-weight:700;">— <?= $_wlSupp ?> suppressed (opted out)</span>
+<?php endif; ?>
     </div>
 </div>
+<?php if ($_wlJ7): ?>
+<div style="font-size:11px;color:#64748b;margin:-6px 0 10px;">Sent = handed to WhatsApp. Whether it reached the phone is not measured.</div>
+<?php endif; ?>
 
 <?php if(empty($waNotifLog)): ?>
 <div style="text-align:center;padding:40px;color:#9ca3af;font-size:13px;background:#fff;border-radius:16px;border:1px dashed #e2e8f0;">
@@ -1312,7 +1329,7 @@ REPLY STYLE
     ?>
     <tr style="background:<?= $i%2===0?'#fff':'#fafafa' ?>;border-bottom:1px solid #f1f5f9;">
         <td style="padding:8px 12px;color:#9ca3af;white-space:nowrap;"><?= h(substr($nl['sent_at']??'',0,16)) ?></td>
-        <td style="padding:8px 12px;"><span class="<?= $ok?'wa2-log-ok':'wa2-log-fail' ?>"><?= $ok?'✓ sent':'✗ fail' ?></span></td>
+        <td style="padding:8px 12px;"><?php if ($_wlJ7 && $_wlSuppressed($nl)): ?><span style="color:#475569;font-weight:700;">— suppressed (opted out)</span><?php else: ?><span class="<?= $ok?'wa2-log-ok':'wa2-log-fail' ?>"><?= $ok?'✓ sent':'✗ fail' ?></span><?php endif; ?></td>
         <td style="padding:8px 12px;">
             <?php if($snd==='accounts'): ?>
             <span class="wa2-badge wa2-acct">💼</span>

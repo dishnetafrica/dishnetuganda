@@ -388,8 +388,14 @@ final class FollowUpPolicy
      * What does not count is a conversation where nobody has said anything for
      * a month — that is not a live enquiry, it is history.
      */
-    public static function isFollowable(array $conv, string $now, float $maxAgeHours = 336.0): array
+    public static function isFollowable(array $conv, string $now, float $maxAgeHours = 336.0,
+                                        bool $colleaguesExcluded = false): array
     {
+        // 5.18.50 (docs/44 J8): on Uganda the scan passes true, and a conversation filed 'staff' is a colleague's,
+        // never a customer to follow up. Every other caller passes nothing and is answered as before.
+        if ($colleaguesExcluded && strtolower(trim((string)($conv['category'] ?? ''))) === 'staff') {
+            return ['ok' => false, 'reason' => "a colleague's conversation"];
+        }
         $lastCust = (string)($conv['last_customer_at'] ?? '');
         if ($lastCust === '') {
             return ['ok' => false, 'reason' => 'the customer has never written'];

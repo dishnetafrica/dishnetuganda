@@ -223,6 +223,12 @@ function fq_classify_webhook(array $entry): string {
 <?php elseif ($fqSub === 'crm_events'): ?>
 <!-- ═══════════════════ CRM EVENTS ═══════════════════ -->
 <?php
+    // 5.18.50 (docs/44 J7): on Uganda a log line that says "sent" means handed to WhatsApp, which is all the plugin
+    // knows; whether it reached the phone is not measured. So the screen says "Sent (handed to WhatsApp)" there, not
+    // "Delivered". Every other install keeps its wording.
+    require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+    $_fqJ7   = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
+    $_fqSent = $_fqJ7 ? 'Sent (handed to WhatsApp)' : 'Delivered';
     $whLogFile = $dataDir . '/webhook_log.json';
     $whLog = []; if (file_exists($whLogFile)) { $r = json_decode(file_get_contents($whLogFile), true); $whLog = is_array($r) ? $r : []; }
 
@@ -241,16 +247,16 @@ function fq_classify_webhook(array $entry): string {
 ?>
 
 <div class="fq-stats">
-    <div class="fq-stat fq-stat-sent"><div class="fq-stat-num"><?=$sc['sent']?></div><div class="fq-stat-label">Delivered</div></div>
+    <div class="fq-stat fq-stat-sent"><div class="fq-stat-num"><?=$sc['sent']?></div><div class="fq-stat-label"><?=$_fqSent?></div></div>
     <div class="fq-stat fq-stat-skipped"><div class="fq-stat-num"><?=$sc['skipped']?></div><div class="fq-stat-label">Skipped</div></div>
     <div class="fq-stat fq-stat-failed"><div class="fq-stat-num"><?=$sc['failed']?></div><div class="fq-stat-label">Failed</div></div>
     <div class="fq-stat fq-stat-info"><div class="fq-stat-num"><?=$sc['info']?></div><div class="fq-stat-label">Info</div></div>
 </div>
 
-<p style="font-size:12px;color:#64748b;margin-bottom:12px;">Last <?=count($whLog)?> CRM webhook events — shows what UCRM/UISP sent and whether the WhatsApp notification was delivered, skipped (no phone / already sent / dedup), or failed.</p>
+<p style="font-size:12px;color:#64748b;margin-bottom:12px;">Last <?=count($whLog)?> CRM webhook events — shows what UCRM/UISP sent and whether the WhatsApp notification was <?=$_fqJ7 ? 'sent (handed to WhatsApp; whether it reached the phone is not measured)' : 'delivered'?>, skipped (no phone / already sent / dedup), or failed.</p>
 
 <div class="fq-filters">
-    <?php foreach(['all'=>'All ('.count($whLog).')','sent'=>'✅ Delivered ('.$sc['sent'].')','skipped'=>'⚠️ Skipped ('.$sc['skipped'].')','failed'=>'❌ Failed ('.$sc['failed'].')'] as $fk=>$fl): ?>
+    <?php foreach(['all'=>'All ('.count($whLog).')','sent'=>'✅ '.$_fqSent.' ('.$sc['sent'].')','skipped'=>'⚠️ Skipped ('.$sc['skipped'].')','failed'=>'❌ Failed ('.$sc['failed'].')'] as $fk=>$fl): ?>
     <a href="?page=dashboard&tab=engage_failed_queue&fqsub=crm_events&ce_filter=<?=$fk?><?=$ceSearch?'&ce_search='.urlencode($ceSearch):''?>" class="fq-filter-btn <?=$ceFilter===$fk?'active':''?>"><?=$fl?></a>
     <?php endforeach; ?>
     <form method="get" style="display:flex;gap:4px;margin-left:auto;">
@@ -269,7 +275,7 @@ function fq_classify_webhook(array $entry): string {
 <table class="fq-table"><thead><tr><th>WA Status</th><th>CRM Event</th><th>Details</th><th>Data</th><th>When</th></tr></thead><tbody>
 <?php foreach($ceItems as $e):
     $ws = $e['_ws'];
-    $wsL = ['sent'=>'✅ Delivered','skipped'=>'⚠️ Skipped','failed'=>'❌ Failed','info'=>'ℹ️ Info'][$ws] ?? $ws;
+    $wsL = ['sent'=>'✅ '.$_fqSent,'skipped'=>'⚠️ Skipped','failed'=>'❌ Failed','info'=>'ℹ️ Info'][$ws] ?? $ws;
 ?>
 <tr>
 <td><span class="fq-status fq-status-<?=$ws?>"><?=$wsL?></span></td>

@@ -1,0 +1,126 @@
+<?php
+declare(strict_types=1);
+/**
+ * ████ FAKE uCRM — staff users and scheduling jobs — TEST ONLY ████
+ *
+ * For the 5.18.50 staff and job tests (docs/44, release A). Serves the endpoints the plugin's staff and job code
+ * calls, records every request, and keeps its state in the file named by FAKE_UCRM_STATE. Every person, e-mail, phone
+ * and job here is fictitious.
+ *
+ *   users/admins, users/admins/{id}, users/{id}          — staff users (isActive, e-mail), 404 for an unknown id
+ *   scheduling/jobs (GET, POST), scheduling/jobs/{id}    — jobs (GET, PATCH)
+ *   scheduling/jobs/{id}/job-tasks (GET, POST), scheduling/job-tasks/{id} (PATCH), scheduling/jobs/{id}/job-comments
+ *   clients/{id}, clients/{id}/client-logs, clients/{id} (PATCH)
+ *
+ * Test controls: /__test/state (marker), /__test/dump, /__test/seed (POST, merges keys), /__test/users_down (POST
+ * {"down":true}) makes every users endpoint answer 502 — "uCRM could not be reached".
+ */
+$stateFile = (string)getenv('FAKE_UCRM_STATE');
+$state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
+$state += ['jobs' => [], 'users' => [], 'clients' => [], 'tasks' => [], 'comments' => [], 'logs' => [],
+           'requests' => [], 'next_job' => 950, 'next_task' => 7000, 'users_down' => false];
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$uri    = (string)($_SERVER['REQUEST_URI'] ?? '');
+$path   = parse_url($uri, PHP_URL_PATH) ?: '';
+$path   = (string)preg_replace('#^/api/v[0-9.]+#', '', $path);
+$raw    = (string)file_get_contents('php://input');
+$body   = json_decode($raw, true) ?: [];
+
+function fu_out($data, int $code = 200): void
+{
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    file_put_contents($GLOBALS['stateFile'], json_encode($GLOBALS['state']));
+    exit;
+}
+
+if ($path === '/__test/state') { echo 'FAKE-UCRM-STAFF-JOBS'; exit; }
+if ($path === '/__test/dump')  { header('Content-Type: application/json'); echo json_encode($state); exit; }
+if ($path === '/__test/seed' && $method === 'POST') { $state = array_merge($state, $body); fu_out(['seeded' => true]); }
+if ($path === '/__test/users_down' && $method === 'POST') { $state['users_down'] = !empty($body['down']); fu_out(['ok' => true]); }
+
+$state['requests'][] = ['method' => $method, 'path' => $path, 'query' => (string)parse_url($uri, PHP_URL_QUERY), 'body' => $body];
+
+// ── Staff users ──────────────────────────────────────────────────────────────
+if ($method === 'GET' && ($path === '/users/admins' || preg_match('#^/users/(?:admins/)?\d+$#', $path))) {
+    if (!empty($state['users_down'])) fu_out(['code' => 502, 'message' => 'Bad gateway (test control)'], 502);
+    if ($path === '/users/admins') fu_out(array_values($state['users']));
+    preg_match('#(\d+)$#', $path, $m);
+    $u = $state['users'][$m[1]] ?? null;
+    fu_out($u ?? ['code' => 404, 'message' => 'Not found'], $u ? 200 : 404);
+}
+
+// ── Scheduling ───────────────────────────────────────────────────────────────
+if ($method === 'GET' && preg_match('#^/scheduling/jobs/(\d+)/job-tasks$#', $path, $m)) {
+    fu_out(array_values(array_filter($state['tasks'], function ($t) use ($m) { return (int)$t['jobId'] === (int)$m[1]; })));
+}
+if ($method === 'POST' && preg_match('#^/scheduling/jobs/(\d+)/job-tasks$#', $path, $m)) {
+    $t = ['id' => $state['next_task']++, 'jobId' => (int)$m[1], 'label' => (string)($body['name'] ?? $body['label'] ?? ''), 'closed' => false];
+    $state['tasks'][] = $t;
+    fu_out($t, 201);
+}
+if ($method === 'PATCH' && preg_match('#^/scheduling/job-tasks/(\d+)$#', $path, $m)) {
+    $r = null;
+    foreach ($state['tasks'] as &$t) {
+        if ((int)$t['id'] === (int)$m[1]) { $t['closed'] = (bool)($body['closed'] ?? false); $r = $t; }
+    }
+    unset($t);
+    fu_out($r ?? ['code' => 404], $r ? 200 : 404);
+}
+if ($method === 'GET' && preg_match('#^/scheduling/jobs/(\d+)/job-comments$#', $path, $m)) {
+    fu_out(array_values(array_filter($state['comments'], function ($c) use ($m) { return (int)$c['jobId'] === (int)$m[1]; })));
+}
+if ($method === 'POST' && preg_match('#^/scheduling/jobs/(\d+)/job-comments$#', $path, $m)) {
+    $c = ['id' => count($state['comments']) + 1, 'jobId' => (int)$m[1], 'message' => (string)($body['message'] ?? '')];
+    $state['comments'][] = $c;
+    fu_out($c, 201);
+}
+if ($method === 'GET' && preg_match('#^/scheduling/jobs/(\d+)$#', $path, $m)) {
+    $j = $state['jobs'][$m[1]] ?? null;
+    fu_out($j ?? ['code' => 404, 'message' => 'Not found'], $j ? 200 : 404);
+}
+if ($method === 'PATCH' && preg_match('#^/scheduling/jobs/(\d+)$#', $path, $m)) {
+    if (!isset($state['jobs'][$m[1]])) fu_out(['code' => 404], 404);
+    $state['jobs'][$m[1]] = array_merge($state['jobs'][$m[1]], $body);
+    fu_out($state['jobs'][$m[1]]);
+}
+if ($method === 'GET' && $path === '/scheduling/jobs') {
+    // Like uCRM, an assignee filter is honoured when asked for; everything else is returned as is.
+    parse_str((string)parse_url($uri, PHP_URL_QUERY), $qs);
+    $jobs = array_values($state['jobs']);
+    if (isset($qs['assignedUserId'])) {
+        $want = (int)$qs['assignedUserId'];
+        $jobs = array_values(array_filter($jobs, function ($j) use ($want) { return (int)($j['assignedUserId'] ?? 0) === $want; }));
+    }
+    fu_out($jobs);
+}
+if ($method === 'POST' && $path === '/scheduling/jobs') {
+    $id = $state['next_job']++;
+    $j  = ['id' => $id, 'title' => '', 'description' => '', 'clientId' => null, 'assignedUserId' => null,
+           'date' => null, 'duration' => 60, 'status' => 0, 'address' => null, 'gpsLat' => null, 'gpsLon' => null];
+    $j = array_merge($j, array_intersect_key($body, $j));
+    $state['jobs'][(string)$id] = $j;
+    fu_out($j, 201);
+}
+
+// ── Clients ──────────────────────────────────────────────────────────────────
+if ($method === 'GET' && preg_match('#^/clients/(\d+)$#', $path, $m)) {
+    $c = $state['clients'][$m[1]] ?? null;
+    fu_out($c ?? ['code' => 404], $c ? 200 : 404);
+}
+if ($method === 'PATCH' && preg_match('#^/clients/(\d+)$#', $path, $m)) {
+    if (!isset($state['clients'][$m[1]])) fu_out(['code' => 404], 404);
+    $state['clients'][$m[1]] = array_merge($state['clients'][$m[1]], $body);
+    fu_out($state['clients'][$m[1]]);
+}
+if ($method === 'POST' && preg_match('#^/clients/(\d+)/client-logs$#', $path, $m)) {
+    $l = ['id' => count($state['logs']) + 1, 'clientId' => (int)$m[1], 'message' => (string)($body['message'] ?? '')];
+    $state['logs'][] = $l;
+    fu_out($l, 201);
+}
+if ($method === 'GET' && preg_match('#^/clients/(\d+)/services$#', $path)) fu_out([]);
+if ($method === 'GET' && $path === '/clients') fu_out(array_values($state['clients']));
+if ($method === 'GET' && $path === '/invoices') fu_out([]);
+fu_out(['code' => 404, 'message' => 'FAKE-UCRM-STAFF-JOBS: not simulated: ' . $method . ' ' . $path], 404);

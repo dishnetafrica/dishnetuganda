@@ -2371,6 +2371,11 @@ switch ($changeType) {
     case 'job.add':
     case 'JOB_ADD': {
         $jobId = $entityId ?: (int)($entity['id'] ?? 0);
+        // 5.18.50 (docs/44 M6, release A): on Uganda the technician is not sent a WhatsApp for a job created in uCRM
+        // until job notifications are switched on. Everything else here — the lookups, the log lines, the customer's
+        // e-mail — runs exactly as before, on every install.
+        require_once __DIR__ . '/lib/StaffJobsGate.php';
+        $_whNoJobWa = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
         
         // Get full job details from UCRM
         $job = whVerified('job', $jobId, whFetchFirst($crm, ["scheduling/jobs/{$jobId}"]));
@@ -2428,7 +2433,11 @@ switch ($changeType) {
                 }
             }
             
-            if ($techPhone) {
+            if ($_whNoJobWa) {
+                whLog($changeType, "Job #{$jobId} — WhatsApp skipped: job notifications are not switched on yet", [
+                    'assigned_user_id' => $assignedUserId,
+                ]);
+            } elseif ($techPhone) {
                 $message = "🔧 *New Job Assigned*\n\n"
                     . "Hi {$techName},\n\n"
                     . "A new job has been assigned to you:\n\n"

@@ -126,9 +126,13 @@ if ($_waNavShow):
         if (file_exists($_whLogFile)) {
             $_whLog = json_decode(file_get_contents($_whLogFile), true) ?? [];
             $today = date('Y-m-d');
+            // 5.18.50 (docs/44 J7): the webhook log writes received_at, so on Uganda that is the time read; the badge
+            // never counted anything before. Every other install reads the same keys as before.
+            require_once dirname(__DIR__) . '/lib/StaffJobsGate.php';
+            $_navJ7 = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
             foreach ($_whLog as $_e) {
                 // Only count today's events
-                if (substr($_e['timestamp'] ?? $_e['created_at'] ?? '', 0, 10) !== $today) continue;
+                if (substr(($_navJ7 ? ($_e['received_at'] ?? null) : null) ?? $_e['timestamp'] ?? $_e['created_at'] ?? '', 0, 10) !== $today) continue;
                 $_msg = strtolower($_e['message'] ?? '');
                 if (str_contains($_msg,'sent ') || str_contains($_msg,'sent to') || str_contains($_msg,'notification ')) $_waCrmDelivered++;
                 elseif (str_contains($_msg,'failed') || str_contains($_msg,'error')) $_waCrmFailed++;

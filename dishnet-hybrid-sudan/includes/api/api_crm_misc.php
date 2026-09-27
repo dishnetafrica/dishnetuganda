@@ -11,6 +11,27 @@ require_once dirname(__DIR__, 2) . '/lib/timezone.php';
 // them pointed at <plugin>/data, the directory uCRM deletes on upgrade.
 require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
 
+// ── 5.18.50 (docs/44 J6, release A) ───────────────────────────────────────────
+// On Uganda a job's signature and survey belong to its assignee, a support leader or an admin — checked against the
+// account as stored now and the job as uCRM holds it, before anything is saved or written. What they write, and where,
+// is unchanged. Every other install passes straight through.
+require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+$_cmUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
+if ($_cmUganda) {
+    require_once dirname(__DIR__, 2) . '/lib/StaffDirectory.php';
+    require_once dirname(__DIR__, 2) . '/lib/JobAccess.php';
+}
+$_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2): void {
+    if (!$_cmUganda) return;
+    $caller = JobAccess::caller($me2, $store);
+    if ($caller === null) $er2(JobAccess::INACTIVE, 403);
+    if (!$crm || !$crm->isConfigured()) $er2('uCRM is not configured, so the job cannot be checked.', 503);
+    $job = $crm->get("scheduling/jobs/{$jobId}");
+    if (!is_array($job) || !$job) $er2('Job not found.', 404);
+    $assignee = JobAccess::assigneeOf($job);
+    if (!JobAccess::canActOn($caller, $assignee)) $er2(JobAccess::refusal($assignee), 403);
+};
+
 
     // ── Save customer signature for a job ────────────────────────────────────
 
@@ -19,6 +40,7 @@ require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
         $sigData  = trim($body['signature']   ?? ''); // base64 PNG data URL
         $sigName  = trim($body['signer_name'] ?? '');
         if (!$jobId || !$sigData) $er2('job_id and signature required.', 422);
+        $_cmJobGuard($jobId);   // J6 on Uganda
 
         $signatures = $store->load('job_signatures.json') ?? [];
         $idx = array_search($jobId, array_column($signatures, 'job_id'));
@@ -59,6 +81,7 @@ require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
         $jobId    = (int)($body['job_id']    ?? 0);
         $clientId = (int)($body['client_id'] ?? 0);
         if (!$jobId) $er2('job_id required.', 422);
+        $_cmJobGuard($jobId);   // J6 on Uganda
 
         $survey = [
             'job_id'           => $jobId,
@@ -154,6 +177,7 @@ require_once dirname(__DIR__, 2) . '/lib/SiblingPlugin.php';
     if ($act === 'get_survey') {
         $jobId = (int)($_GET['job_id'] ?? 0);
         if (!$jobId) $er2('job_id required.', 422);
+        $_cmJobGuard($jobId);   // J6 on Uganda
         $surveys = $store->load('site_surveys.json') ?? [];
         $found   = null;
         foreach ($surveys as $s) { if ((int)($s['job_id'] ?? 0) === $jobId) { $found = $s; break; } }

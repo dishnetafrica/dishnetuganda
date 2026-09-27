@@ -349,6 +349,26 @@
     }
 
     // ── GET support_engineers — list support-role retailers for engineer picker ─
+    // Uganda (5.18.50, docs/44 J2, J6, M7, D9): only for callers who may create a job; only the engineers a job may
+    // be assigned to (a verified link to a live, active uCRM user with the account's own e-mail); never a phone.
+    if ($act === 'support_engineers' && $met === 'GET') {
+        require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+        if (StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+            foreach (['StaffDirectory', 'UcrmUsers', 'JobAccess'] as $_seLib) {
+                require_once dirname(__DIR__, 2) . '/lib/' . $_seLib . '.php';
+            }
+            $_seMe = JobAccess::caller($me2, $store);
+            if ($_seMe === null) $er2(JobAccess::INACTIVE, 403);
+            if (!JobAccess::canCreate($_seMe)) $er2('Your role cannot create jobs.', 403);
+            $_seUsers = ($crm && $crm->isConfigured()) ? UcrmUsers::all($crm) : null;
+            if ($_seUsers === null) $er2('uCRM could not be reached to check the engineers.', 503);
+            $_seOut = [];
+            foreach (JobAccess::assignableByUcrmUser($store->load('retailers.json') ?? [], $_seUsers) as $_seUid => $r) {
+                $_seOut[] = ['id' => $r['id'] ?? 0, 'name' => $r['name'] ?? '', 'role' => $r['role'] ?? '', 'ucrm_user_id' => (int)$_seUid];
+            }
+            $ok2(['agents' => $_seOut]);
+        }
+    }
     if ($act === 'support_engineers' && $met === 'GET') {
         // All authenticated users can fetch engineer list (needed for job creation)
         $all = $store->load('retailers.json') ?? [];

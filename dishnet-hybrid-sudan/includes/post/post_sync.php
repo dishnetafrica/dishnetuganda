@@ -710,8 +710,60 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='edit_retailer'
         $admins=array_filter($store->load('retailers.json'),fn($r)=>($r['is_admin']??false));
         if(count($admins)<=1){flash('Cannot remove the last admin.','danger');redirect('?page=dashboard&tab=retailers');}
     }
+    // ── 5.18.50 (docs/44 J2, J3, D9, M7, release A): Uganda only ─────────────────────────────────────────────────
+    // J3: a job-taking account's number is saved in the international form, or kept as typed with a warning.
+    // J2/D9/M7: the picker posts "keep" for the link as saved and a number for a choice. Only a choice changes the
+    // link, and only when uCRM confirms it: a refusal, or a uCRM that does not answer, leaves the link as it was while
+    // the other fields save. A link kept as saved is never re-verified behind the administrator's back, so an old
+    // unverified id stays unverified — and still matches nobody. Every other install saves exactly as before:
+    // $_erNotes stays empty.
+    $_erNotes=[];
+    require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+    if (StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+        foreach (['StaffDirectory', 'UcrmUsers', 'StaffLink', 'TenantProfile', 'PhoneNumber'] as $_erLib) {
+            require_once dirname(__DIR__, 2) . '/lib/' . $_erLib . '.php';
+        }
+        $_erCand = array_merge($target, $updates);   // the account as it will be saved
+        if (StaffDirectory::takesJobs($_erCand) && $updates['phone'] !== '') {
+            $_erIntl = null;
+            try {
+                $_erIntl = PhoneNumber::international($updates['phone'], TenantProfile::current(is_array($config ?? null) ? $config : [], $dataDir ?? null));
+            } catch (\Throwable $e) { $_erIntl = null; }
+            if ($_erIntl !== null) { $updates['phone'] = $_erIntl; $_erCand['phone'] = $_erIntl; }
+            else $_erNotes[] = 'This number cannot receive WhatsApp. Write it as +256 7XX XXX XXX.';
+        }
+        $_erOldId  = (int)($target['ucrm_user_id'] ?? 0);
+        $_erOldVer = StaffDirectory::linkedUcrmUser($target);
+        $_erPosted = array_key_exists('ucrm_user_id', $_POST) ? trim((string)$_POST['ucrm_user_id']) : 'keep';
+        if ($_erPosted === 'keep' || !ctype_digit($_erPosted)) {
+            unset($updates['ucrm_user_id']);            // the link as saved, a form without the field, or no number: not touched
+            // What the note says is judged on the account as it will be saved: its e-mail may have just changed.
+            $_erKept = array_merge($_erCand, ['ucrm_user_id' => $target['ucrm_user_id'] ?? null,
+                                              StaffDirectory::LINK_KEY => $target[StaffDirectory::LINK_KEY] ?? null]);
+            $_erCounts = $_erOldId > 0 && StaffDirectory::linkedUcrmUser($_erKept) === $_erOldId;
+            if ($_erOldId > 0 && !$_erCounts && $_erOldVer === $_erOldId) {
+                $_erNotes[] = "The e-mail changed, so the link to uCRM user #{$_erOldId} no longer counts and is not used for jobs: choose the uCRM user again to check it.";
+            } elseif ($_erOldId > 0 && !$_erCounts && array_key_exists('ucrm_user_id', $_POST)) {
+                $_erNotes[] = "uCRM user #{$_erOldId} was left as it was. It is not verified, so it is not used for jobs: choose the uCRM user in the list to check it, or choose \"not linked\".";
+            }
+        } else {
+            $_erWanted = (int)$_erPosted;              // a choice — the same user as before included — is checked
+            $_erMe = $auth->currentRetailer();
+            $_erV  = StaffLink::verify($crm, $_erCand, $_erWanted, $store->load('retailers.json') ?? [], (int)(is_array($_erMe) ? ($_erMe['id'] ?? 0) : 0));
+            if (!$_erV['ok']) {
+                unset($updates['ucrm_user_id']);
+                $_erNotes[] = 'The uCRM link was not changed: ' . $_erV['reason'] . '.';
+            } elseif ($_erV['action'] === 'link') {
+                $updates['ucrm_user_id'] = $_erWanted;
+                $updates[StaffDirectory::LINK_KEY] = $_erV['link'];
+            } else {
+                $updates['ucrm_user_id'] = null;
+                $updates[StaffDirectory::LINK_KEY] = null;
+            }
+        }
+    }
     $store->updateOne('retailers.json','id',$rId,$updates);
-    flash('Retailer <strong>'.htmlspecialchars($updates['name']).'</strong> updated.','success');
+    flash('Retailer <strong>'.htmlspecialchars($updates['name']).'</strong> updated.'.($_erNotes ? ' '.htmlspecialchars(implode(' ', $_erNotes)) : ''), $_erNotes ? 'warning' : 'success');
     redirect('?page=dashboard&tab=retailers');
 }
 

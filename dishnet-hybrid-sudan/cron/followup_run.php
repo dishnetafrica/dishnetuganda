@@ -59,6 +59,11 @@ if ($sel['client'] === null) {
 }
 $evaluator = new FollowUpEvaluator($sel['client'], $config);
 
+// 5.18.50 (docs/44 J8, M1): on Uganda a follow-up opened for a colleague's conversation — before the deploy, or
+// before the number was a staff account's — is closed here, never drafted. Elsewhere $colleagues is null.
+require_once $pluginRoot . '/lib/ColleagueNumbers.php';
+$colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
+
 $cap      = (int)($config['followup_daily_cap'] ?? 30);
 $perRun   = (int)($config['followup_run_limit'] ?? 5);   // model calls cost money
 $drafted  = 0; $closed = 0; $deferred = 0; $skipped = 0; $autoSent = 0;
@@ -67,6 +72,12 @@ foreach ($svc->due($now, $perRun) as $fu) {
     $conv = $convSvc->getConversation((int)$fu['conversation_id']);
     if ($conv === null) {
         $svc->close((int)$fu['id'], 'cancelled', 'the conversation no longer exists');
+        $closed++;
+        continue;
+    }
+    if ($colleagues !== null
+        && ($colleagues->isColleague((string)$fu['phone']) || $colleagues->isColleagueConversation($conv))) {
+        $svc->close((int)$fu['id'], 'staff', "a colleague's number");
         $closed++;
         continue;
     }

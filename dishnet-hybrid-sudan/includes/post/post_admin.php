@@ -9,6 +9,20 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='update_crm_use
     flash($result['message'],$result['success']?'success':'danger');
     redirect('?page=dashboard&tab=all_apps');
 }
+// 5.18.50 (docs/44 J3, release A): on Uganda a job-taking account's number is saved in the international form, or kept
+// as typed with a warning when it has none. Returns [number to save, warning or '']; every other install gets its
+// number back unchanged and no warning.
+$_j3Phone = function (array $row) use ($config, $dataDir): array {
+    $phone = (string)($row['phone'] ?? '');
+    require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+    if (!StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)) return [$phone, ''];
+    foreach (['StaffDirectory', 'TenantProfile', 'PhoneNumber'] as $lib) require_once dirname(__DIR__, 2) . '/lib/' . $lib . '.php';
+    if (!StaffDirectory::takesJobs($row) || trim($phone) === '') return [$phone, ''];
+    $intl = null;
+    try { $intl = PhoneNumber::international($phone, TenantProfile::current(is_array($config ?? null) ? $config : [], $dataDir ?? null)); }
+    catch (\Throwable $e) { $intl = null; }
+    return $intl !== null ? [$intl, ''] : [$phone, ' This number cannot receive WhatsApp. Write it as +256 7XX XXX XXX.'];
+};
 if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='create_retailer'){
     $admin=$auth->requireAdmin();
     if($store->findOne('retailers.json','email',strtolower($_POST['email']??''))){
@@ -28,11 +42,12 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='create_retaile
             'commission_rate' => ($_POST['is_employee']??'1')==='0' ? (float)($_POST['commission_rate']??0) : 0,
             'must_change_pwd' => true,
         ];
+        [$newRetailerData['phone'], $_j3Note] = $_j3Phone($newRetailerData);   // J3, Uganda only
         $auth->createRetailer($newRetailerData);
         // Auto-create or link the retailer in Org 7 (FTTH Project)
         $newRetailer = $store->findOne('retailers.json','email',strtolower($newRetailerData['email']));
         if($newRetailer) $ftthCrm->ensureRetailerClient($newRetailer);
-        flash('Retailer created and synced to FTTH CRM (Org 7).','success');
+        flash('Retailer created and synced to FTTH CRM (Org 7).'.$_j3Note, $_j3Note === '' ? 'success' : 'warning');
     }
     redirect('?page=dashboard&tab=retailers');
 }
@@ -50,6 +65,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='import_crm_sta
         flash('Staff with email '.$crmEmail.' already exists.','warning');
     } else {
         $tempPw = 'DishNet' . $crmId . '!';
+        [$crmPhone, $_j3Note] = $_j3Phone(['phone' => $crmPhone, 'role' => $importRole, 'is_admin' => ($importRole === 'admin')]);   // J3, Uganda only
         $auth->createRetailer([
             'name'     => $crmName,
             'email'    => $crmEmail,
@@ -60,7 +76,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='import_crm_sta
             'role'     => $importRole,
             'crm_id'   => $crmId,
         ]);
-        flash("Imported {$crmName} as {$importRole}. Temp password: {$tempPw}",'success');
+        flash("Imported {$crmName} as {$importRole}. Temp password: {$tempPw}".$_j3Note, $_j3Note === '' ? 'success' : 'warning');
     }
     redirect('?page=dashboard&tab=retailers');
 }
