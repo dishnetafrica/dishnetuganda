@@ -1816,3 +1816,67 @@ rm -rf /root/dnb-5.18.50/backup-20260927T200947Z /root/dnb-5.18.50/backup-202609
 
 **Release B stays BLOCKED** (§15.8). It needs D5 (your approval of the five messages in §16.7), the users check
 showing the links, S1's number, M4, and its own tests.
+
+### 16.10 The links, and the users check — 27 September 2026, 20:31 UTC
+
+The operator saved two links through the new picker, then ran the users check and sent a screenshot of the Staff page.
+
+**Right:**
+- **S1 → 1000** and **S4 → 1099**. Both stored ids are real uCRM users with the account's own e-mail (the users check,
+  §3). Both links are verified: the picker shows S4's as *"#1099 — as saved (verified)"*, and it lists #1000 as
+  *"linked to"* S1 and refuses it. It lists a user that way only when another active account holds a verified link to
+  it (`StaffDirectory::byUcrmUser`).
+
+**Not done yet:**
+- **M5.** S3 still holds id 4 and S5 id 1581, and uCRM has neither user. Neither id counts for jobs (M7), and S3's
+  card says so: *"uCRM #4 is not a uCRM user"*. Clearing them: Staff → Edit → CRM → *"— not linked —"* → Save
+  Changes. That choice clears the id and the link, and asks uCRM nothing (`StaffLink::verify`: action `clear`).
+- **S1's number.** S1's card reads *"No number: job messages cannot reach this person"*.
+
+**The rest of the check, as expected:**
+- No uCRM user record holds a phone number, so a job message's number comes from the Staff page.
+- 2 of the 5 staff accounts have a uCRM user (S1, S4). S2, S3 and S5 need a uCRM user with their own e-mail before
+  they can be given a job.
+- uCRM writes its own timestamps at +03:00. That is not V3: whether uCRM accepts `+0300` when the plugin sends it is
+  measured by M4.
+- Delivery receipts are subscribed on all 3 WhatsApp numbers.
+
+**One line of the check was wrong for 5.18.50, and is corrected.** Section 5 printed *"follow-ups can be drafted for
+any conversation, a staff member's included"* whenever follow-ups are on. That was 5.18.49's behaviour, written into
+the check before release A. On 5.18.50 the scan, the run and the send each skip a number held by an active staff
+account on Uganda (J8, M1).
+- The check now reads the installed crons themselves, never whether `lib/ColleagueNumbers.php` is on disk: a
+  rollback leaves that file behind while the crons stop using it.
+- On this install it will print: *"on — never for a number held by an active staff account (5.18.50, J8); an
+  account with no number is not recognised"*.
+- **Rehearsed: 413 of 413 checks on two runs** (394 before). It covers:
+  - 5.18.50's crons;
+  - the crons after a rollback, with the file left on disk;
+  - a mixed install;
+  - South Sudan.
+- **14 weakened copies, each caught** (11 before). The three new ones key on the file instead of the crons, keep
+  5.18.49's wording, or ignore the tenant.
+
+**Next, each step yours:**
+1. M5: S3 and S5 → *"— not linked —"* → Save Changes. Then add **S1's phone number**.
+2. The users check again, with `git pull`, because the corrected check is on the branch. Send its log file:
+
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-jobs && bash scripts/dnb-ucrm-users-facts.sh 2>&1 | tee /root/dnb-jobs/ucrm-users-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   Expected:
+   - S3 and S5 read *"stored uCRM id not set"*;
+   - *"stored uCRM ids that are real uCRM users: 2 of 2"*;
+   - section 5 prints the line above.
+3. `--after-only` now too (read-only; the pull changes no plugin file, so it still finds `125fa0c`), and send its
+   log file:
+
+   ```
+   cd /opt/dishnet && bash scripts/deploy-5.18.50.sh --after-only 2>&1 | tee /root/dnb-5.18.50/after-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   Expected:
+   - R7: *"2 of 4 active accounts that take jobs have a verified uCRM link"*, with 0 holding an id stored the old
+     way;
+   - R3: a note naming the four accounts changed since the deploy;
+   - R4: 0 job-assignment messages.
+4. M4, as in §16.9; then `--after-only` again about a day later.

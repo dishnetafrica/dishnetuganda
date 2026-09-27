@@ -2039,4 +2039,8 @@ for approval.
   in one copyable block. Both stopped at the typed question and changed nothing. From now on a rollback command
   always stands in a block of its own.
 
+**20:31 UTC — the links** (docs/44 §16.10). S1 → 1000 and S4 → 1099 saved through the picker, both verified. M5 (S3's
+and S5's old ids) and S1's number are still to do. The users check's follow-up line described 5.18.49 ("a staff
+member's included"). It now reads the installed crons: 413/413 on two runs, 14 weakened copies caught.
+
 **Release B stays BLOCKED.**

@@ -19,6 +19,9 @@ PASS=0; FAILN=0
 check() { if [ "$1" = "$2" ]; then PASS=$((PASS+1)); echo "  ok   $3"; else FAILN=$((FAILN+1)); echo "  FAIL $3 (got '$1', want '$2')"; fi; }
 has()   { if printf '%s' "$1" | grep -qF -- "$2"; then PASS=$((PASS+1)); echo "  ok   $3"; else FAILN=$((FAILN+1)); echo "  FAIL $3 (missing '$2')"; fi; }
 hasnt() { if printf '%s' "$1" | grep -qiF -- "$2"; then FAILN=$((FAILN+1)); echo "  FAIL $3 (found '$2')"; else PASS=$((PASS+1)); echo "  ok   $3"; fi; }
+# Section 5's two readings (docs/44 J8, M1): what 5.18.50's crons do on Uganda, and what 5.18.49's do anywhere.
+FU_NEW="followup_enabled: on — never for a number held by an active staff account (5.18.50, J8); an account with no number is not recognised"
+FU_OLD="followup_enabled: on — follow-ups can be drafted for any conversation, a staff member's included"
 
 # ── the fake docker ────────────────────────────────────────────────────────
 mkdir -p "$SB/bin"
@@ -138,8 +141,43 @@ has "$OUT" "1 user(s) · active 1 · with a phone-like field 0 · with a number 
 has "$OUT" "note  no uCRM user record holds a phone number (0 carry a phone-like field)" "summary: the number must come from the staff account"
 has "$OUT" "note  1 of 5 staff account(s) share an e-mail with a uCRM user" "summary: only the admin account matches"
 has "$OUT" "setting bidal_ucrm_user_id (second-site KYC jobs): not set" "an unset setting"
+has "$OUT" "$FU_NEW" "follow-ups: this plugin's three crons skip a staff number on Uganda (5.18.50, J8)"
 canaries "$OUT"
 readonly_proof
+
+# 5.18.49's follow-up crons put back over the fake install, as a rollback does. lib/ColleagueNumbers.php stays on
+# disk, exactly as after a real rollback (deploy-hybrid.sh never deletes), so the report cannot key on it.
+rollback_crons() {  # $1 how many of the three crons to put back (default 3)
+  local n="${1:-3}" c i=0
+  for c in followup_scan followup_run followup_send; do
+    [ "$i" -lt "$n" ] || break
+    git -C "$R" show "e076632:dishnet-hybrid-sudan/cron/$c.php" > "$F/plugins/dishnet-hybrid-sudan/cron/$c.php" \
+      || { echo "FAIL no 5.18.49 copy of cron/$c.php"; exit 1; }
+    i=$((i+1))
+  done
+}
+echo; echo "S2b production's shape after a rollback to 5.18.49: its three follow-up crons back"
+build prod "http://127.0.0.1:$UCRM_PORT"
+rollback_crons
+check "$(cat "$F/plugins/dishnet-hybrid-sudan/cron/followup_"{scan,run,send}.php | grep -c ColleagueNumbers | tr -d ' ')" "0" "control: the three crons now are 5.18.49's, which never mention ColleagueNumbers"
+check "$([ -f "$F/plugins/dishnet-hybrid-sudan/lib/ColleagueNumbers.php" ] && echo on-disk)" "on-disk" "control: lib/ColleagueNumbers.php is still on disk, as after a real rollback"
+OUT="$(run)"; RC=$?
+check "$RC" "0" "exit 0"
+has "$OUT" "$FU_OLD" "follow-ups: 5.18.49's crons follow up every number"
+hasnt "$OUT" "never for a number held by an active staff account" "the file left on disk is not taken for what the crons do"
+
+echo; echo "S2c a mixed install: one of the three follow-up crons is 5.18.49's"
+build prod "http://127.0.0.1:$UCRM_PORT"
+rollback_crons 1
+OUT="$(run)"; RC=$?
+check "$RC" "0" "exit 0"
+has "$OUT" "followup_enabled: on — only 2 of the 3 installed follow-up crons skip staff numbers: the installed files are mixed" "a mixed install is named, never taken for either version"
+
+echo; echo "S2d production's shape on South Sudan's currency: 5.18.50's crons skip nobody there"
+build prod-ss "http://127.0.0.1:$UCRM_PORT"
+OUT="$(run)"; RC=$?
+has "$OUT" "tenant profile south-sudan" "control: the report reads South Sudan's profile"
+has "$OUT" "$FU_OLD" "follow-ups: on South Sudan every number is followed up, as before"
 
 echo; echo "S3  uCRM unreachable"
 build normal "http://127.0.0.1:1"
@@ -212,6 +250,35 @@ assert s.count(a) == 1; s = s.replace(a, \"        \$em = trim((string)(\$u['ema
 mutant "the copy is never removed" script "
 a = 'trap cleanup EXIT'
 assert s.count(a) == 1; s = s.replace(a, ': no cleanup')"
+
+# Section 5's weakened copies, each run against 5.18.50's crons, a rollback's, and South Sudan's.
+fu_mutant() {  # $1 name  $2 python transformation of the report
+  local name="$1" py="$2" before o1 o2 o3 m="$SB/m/scripts/dnb-ucrm-users-facts.sh"
+  rm -rf "$SB/m"; mkdir -p "$SB/m/scripts/lib"
+  cp "$SCRIPT" "$m"; cp "$R/scripts/lib/ucrm_users_facts.php" "$SB/m/scripts/lib/ucrm_users_facts.php"
+  python3 - "$SB/m/scripts/lib/ucrm_users_facts.php" <<PY || { FAILN=$((FAILN+1)); echo "  FAIL mutant $name: anchor not found"; return; }
+import sys
+p = sys.argv[1]; s = open(p).read()
+$py
+open(p, 'w').write(s)
+PY
+  before=$FAILN
+  build prod "http://127.0.0.1:$UCRM_PORT";                 o1="$(PATH="$SB/bin:$PATH" FAKE="$F" bash "$m" 2>&1)"
+  build prod "http://127.0.0.1:$UCRM_PORT"; rollback_crons; o2="$(PATH="$SB/bin:$PATH" FAKE="$F" bash "$m" 2>&1)"
+  build prod-ss "http://127.0.0.1:$UCRM_PORT";              o3="$(PATH="$SB/bin:$PATH" FAKE="$F" bash "$m" 2>&1)"
+  { has "$o1" "$FU_NEW" x; has "$o2" "$FU_OLD" x; has "$o3" "$FU_OLD" x; } >/dev/null
+  if [ "$FAILN" -gt "$before" ]; then FAILN=$before; PASS=$((PASS+1)); echo "  ok   weakened copy caught: $name"
+  else FAILN=$((before+1)); echo "  FAIL weakened copy NOT caught: $name"; fi
+}
+fu_mutant "the report keys on lib/ColleagueNumbers.php being on disk" "
+a = \"    if (strpos((string)@file_get_contents(\$root . '/cron/' . \$fuCron . '.php'), 'ColleagueNumbers') !== false) \$fuSkip++;\"
+assert s.count(a) == 1; s = s.replace(a, \"    if (is_file(\$root . '/lib/ColleagueNumbers.php')) \$fuSkip++;\")"
+fu_mutant "the report prints 5.18.49's wording whatever is installed" "
+a = \"} elseif (\$profileId === 'uganda' && \$fuSkip === 3) {\"
+assert s.count(a) == 1; s = s.replace(a, \"} elseif (false) {\")"
+fu_mutant "the report ignores the tenant" "
+a = \"} elseif (\$profileId === 'uganda' && \$fuSkip === 3) {\"
+assert s.count(a) == 1; s = s.replace(a, \"} elseif (\$fuSkip === 3) {\")"
 
 # The mask is the backstop: with it in place, a number, an e-mail and an address the report wrongly prints are still
 # masked (the control), and without the mask the same leak shows (the control on the control).
