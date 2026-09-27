@@ -64,7 +64,8 @@ write_config() {   # $1 the API key ('' for none)
  "ai_qualification":"1","ai_hardware_expert":"1","ai_sales_on_all_numbers":"1","ai_lead_capture":"1","ai_currency":"UGX"}
 JSON
 }
-# The rows as 5.18.43 left them: $1 = who last wrote MANY_USERS_HOTSPOT ('seed' or a person).
+# The rows as 5.18.43 left them: $1 = who last wrote MANY_USERS_HOTSPOT ('seed' or a person); $2 = 'noperson'
+# leaves out the row a person wrote (the tool's "Edited by hand" list would otherwise stop a run it lists).
 seed_db() {
   rm -f "$DATA"/plugin.sqlite3*
   php -r '
@@ -73,8 +74,8 @@ seed_db() {
     KnowledgeSeeder::apply($pdo, json_decode(file_get_contents($argv[3]), true)["items"], false);
     $pdo->prepare("UPDATE knowledge_items SET updated_by = ? WHERE item_key = \x27MANY_USERS_HOTSPOT\x27")->execute([$argv[4]]);
     $pdo->exec("UPDATE knowledge_items SET answer = \x27DRIFTED, still as seeded\x27 WHERE item_key = \x27BUSINESS_PLANS\x27");
-    $pdo->exec("UPDATE knowledge_items SET answer = \x27Written by a person\x27, updated_by = \x27admin\x27 WHERE item_key = \x27PUBLIC_IP\x27");
-  ' "$PD" "$DATA" "$SB/seed-5.18.43.json" "$1" >/dev/null
+    if ($argv[5] !== "noperson") $pdo->exec("UPDATE knowledge_items SET answer = \x27Written by a person\x27, updated_by = \x27admin\x27 WHERE item_key = \x27PUBLIC_IP\x27");
+  ' "$PD" "$DATA" "$SB/seed-5.18.43.json" "$1" "${2:-}" >/dev/null
 }
 row() { php -r '$p=new PDO("sqlite:".$argv[1]); $q=$p->prepare("SELECT answer FROM knowledge_items WHERE item_key=?"); $q->execute([$argv[2]]); echo sha1((string)$q->fetchColumn());' "$DATA/plugin.sqlite3" "$1"; }
 rows() { php -r '$p=new PDO("sqlite:".$argv[1]); echo sha1(json_encode($p->query("SELECT item_key, answer, updated_by FROM knowledge_items ORDER BY item_key")->fetchAll(PDO::FETCH_NUM)));' "$DATA/plugin.sqlite3"; }
@@ -126,7 +127,14 @@ for l in 'ok    AI the check reads plugin 5.18.44' 'ok    AI network equipment i
 done
 check "$(ls "$SB/ai" 2>/dev/null | wc -l | tr -d ' ')" "10" "ten model calls, on the fake provider"
 check "$(fails_outside_v "$OUT")" "0" "no FAIL outside stage V (V answers a stand-in here)"
-check "$(has "$OUT" 'the container already serves')" "yes" "the live commit is the pin, so nothing is deployed"
+check "$(has "$OUT" "ok    live commit is $PIN")" "yes" "--after-only confirms the container serves the pin before anything else"
+
+echo "== 1b. with no row a person wrote (the control for the first weakened copy): still that one row only =="
+write_config "sk-test"; seed_db seed noperson; OUT="$(run)"
+check "$(has "$OUT" 'ok    K MANY_USERS_HOTSPOT now reads the 5.18.44 wording')" "yes" "K: the row is corrected"
+check "$(row MANY_USERS_HOTSPOT)" "$SEED_NEW" "to the 5.18.44 seed text"
+check "$(row BUSINESS_PLANS)" "$DRIFT" "and the drifted row, still as seeded, is untouched — only --only kept it so"
+check "$(fails_outside_v "$OUT")" "0" "no FAIL outside stage V"
 
 echo "== 2. run again: nothing left to do, nothing written =="
 B="$(rows)"; OUT="$(run)"
@@ -152,15 +160,23 @@ check "$(has "$OUT" 'FAIL  AI the questions were not asked')" "yes" "AI: reporte
 check "$(ls "$SB/ai" 2>/dev/null | wc -l | tr -d ' ')" "0" "no model call"
 write_config "sk-test"
 
-echo "== 6. weakened copies of the script must each fail =="
-mutant() {   # $1 label · $2 old · $3 new · $4 scenario: fresh | oldtool | nokey · $5 what must be seen broken
+echo "== 6. the container serves another commit: --after-only stops before anything is written or asked =="
+seed_db seed; printf '%s\n' 04155df > "$PD/.deployed-commit"; B="$(rows)"; OUT="$(run)"
+check "$(has "$OUT" "STOP: the container serves 04155df, not $PIN")" "yes" "stops, and names both commits"
+check "$(rows)" "$B" "nothing written"
+check "$(grep -c 'seed_knowledge.php' "$SB/docker.log")" "0" "the knowledge tool never ran"
+check "$(ls "$SB/ai" 2>/dev/null | wc -l | tr -d ' ')" "0" "and no model call"
+printf '%s\n' "$PIN" > "$PD/.deployed-commit"
+
+echo "== 7. weakened copies of the script must each fail =="
+mutant() {   # $1 label · $2 old · $3 new · $4 scenario: fresh | freshclean | oldtool | nokey · $5 what must be seen broken
   local m="$R/scripts/.deploy-5.18.44.mutant-$$-${#MUTS[@]}.sh"; MUTS+=("$m")
   python3 - "$DEPLOY" "$m" "$2" "$3" <<'PY' || { echo "  FAIL mutant edit did not apply: $1"; FAILN=$((FAILN+1)); return; }
 import sys; src, dst, old, new = sys.argv[1:5]; s = open(src).read()
 assert s.count(old) == 1, 'anchor not unique: ' + old
 open(dst, 'w').write(s.replace(old, new))
 PY
-  seed_db seed; write_config "sk-test"
+  if [ "$4" = freshclean ]; then seed_db seed noperson; else seed_db seed; fi; write_config "sk-test"
   [ "$4" = oldtool ] && cp "$SB/seed_knowledge-5.18.43.php" "$PD/tools/seed_knowledge.php"
   [ "$4" = nokey ] && write_config ""
   local o; o="$(SCRIPT="$m" run)"; local caught=no
@@ -173,7 +189,7 @@ PY
   check "$caught" "yes" "caught: $1"
   cp "$SB/seed_knowledge-5.18.44.php" "$PD/tools/seed_knowledge.php"; write_config "sk-test"; rm -f "$m"
 }
-mutant "the refresh not limited to the one row" '--refresh-seeded --only="$K_ROW" "$@"' '--refresh-seeded "$@"' fresh drift
+mutant "the refresh not limited to the one row" '--refresh-seeded --only="$K_ROW" "$@"' '--refresh-seeded "$@"' freshclean drift
 mutant "an older tool run anyway" "elif ! docker exec \"\$CONTAINER\" grep -q -- '--only=' \"\$IN_CONTAINER/tools/seed_knowledge.php\" 2>/dev/null; then" 'elif false; then' oldtool drift
 mutant "the tool run as root, not as the database's owner" 'docker exec -u "$DB_OWNER" "$CONTAINER" php "$IN_CONTAINER/tools/seed_knowledge.php"' 'docker exec "$CONTAINER" php "$IN_CONTAINER/tools/seed_knowledge.php"' fresh owner
 mutant "questions not asked, reported as asked" "aihas 'Asked: 10 model call'" "aihas '.'" nokey askok
