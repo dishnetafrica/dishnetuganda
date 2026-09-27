@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Rehearse scripts/dnb-ai-check.sh before anyone runs it on the server (docs/40).
 #
-# It runs twice: against the plugin the server runs today (5.18.43, commit 04155df, the commit deploy-5.18.43.sh
-# pinned) and against this checkout (5.18.44). The operator runs the check before the deploy and after it, and the two
+# It runs twice: against the plugin the server runs today (5.18.44, commit a4abe5e, the commit deploy-5.18.44.sh
+# pinned, deployed 27 Sep 2026) and against this checkout (5.18.45). 5.18.43 was rehearsed beside 5.18.44 (docs/40 §11.6). The operator runs the check before the deploy and after it, and the two
 # logs are compared — so the check must read each version correctly, and say which it is reading.
 #
 # Each run: a sandbox plugin directory holds a COPY of that version's lib/ and workers/ — the brain's OpenAI address
@@ -14,15 +14,15 @@
 # was seeded and against what that version does. Then weakened copies of the check must each fail.
 set -u
 R="$(cd "$(dirname "$0")/../../.." && pwd)"; H="$R/scripts/harness/ai-check"
-LIVE_COMMIT="04155df"   # 5.18.43, what the server runs (scripts/deploy-5.18.43.sh)
+LIVE_COMMIT="a4abe5e"   # 5.18.44, what the server runs (scripts/deploy-5.18.44.sh, 27 Sep 2026)
 
 # ── The parent: one run per plugin version ──────────────────────────────────
 if [ -z "${EXPECT:-}" ]; then
   OLD="$(mktemp -d)"; trap 'rm -rf "$OLD"' EXIT
   git -C "$R" archive "$LIVE_COMMIT" dishnet-hybrid-sudan | tar -x -C "$OLD" || { echo "could not extract $LIVE_COMMIT"; exit 2; }
   ALL_OK=0; ALL_FAIL=0
-  for v in 43 44; do
-    if [ "$v" = 43 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
+  for v in 44 45; do
+    if [ "$v" = 44 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
     else src="$R/dishnet-hybrid-sudan"; what="this checkout"; fi
     echo; echo "######## plugin 5.18.$v — $what ########"
     EXPECT="$v" PLUGIN_SRC="$src" bash "$0" | tee "$OLD/out-$v"
@@ -36,9 +36,9 @@ if [ -z "${EXPECT:-}" ]; then
 fi
 
 # ── A child: one version ────────────────────────────────────────────────────
-case "$EXPECT" in 43|44) ;; *) echo "EXPECT must be 43 or 44"; exit 2 ;; esac
+case "$EXPECT" in 44|45) ;; *) echo "EXPECT must be 44 or 45"; exit 2 ;; esac
 P="${PLUGIN_SRC:?PLUGIN_SRC names the plugin directory under test}"
-v44() { [ "$EXPECT" = 44 ]; }
+v45() { [ "$EXPECT" = 45 ]; }
 SB="$(mktemp -d)"; PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; rm -rf "$SB"; }
 trap cleanup EXIT
@@ -114,7 +114,6 @@ check "$(printf '%s' "$OUT" | grep -cE '^    ★ ')" "2" "a customer saying \"bu
 check "$(printf '%s' "$OUT" | grep -E '^    ★ ' | grep -c 'Residential')" "2" "…and they are the two Residential plans"
 check "$(has "$OUT" 'Old retired plan')" "no" "a plan uCRM marks inactive is not in the list"
 check "$(printf '%s' "$OUT" | grep -cE 'plan copies dropped +2 product')" "1" "the two products named like a plan are reported as dropped"
-if v44; then
   check "$(printf '%s' "$OUT" | grep -cE 'HARDWARE \(one-time\) +3 — the kit, the installation and other one-time items')" "1" \
     "HARDWARE is reported as the two kits and the installation"
   check "$(printf '%s' "$OUT" | grep -cE 'NETWORK EQUIPMENT \(one-time\) +2 — what the assistant designs a bigger-area setup from')" "1" \
@@ -126,26 +125,27 @@ if v44; then
   check "$(has "$OUT" 'any combination of the first 10 one-time items, and 2 to 5 of one access point with any of the others')" "yes" \
     "the totals the price check allows are stated"
   check "$(count "$OUT" '← network equipment')" "0" "nothing is guessed to be network equipment by its name any more"
-  check "$(printf '%s' "$OUT" | grep -cE 'ACCESSORIES \(optional extras\) +2 — every number sees these')" "1" "the accessories are counted, seen on every number"
+  check "$(printf '%s' "$OUT" | grep -cE 'ACCESSORIES \(optional extras\) +3 — every number sees these')" "1" "the accessories are counted, seen on every number"
   check "$(count "$OUT" 'CUT at')" "0" "no knowledge row is reported cut"
   check "$(printf '%s' "$OUT" | grep -cE 'each answer reaches it up to +1000 characters$')" "1" "the knowledge limit in use is stated: 1,000"
   check "$(printf '%s' "$OUT" | grep -A3 '^  MANY_USERS_HOTSPOT ' | grep -c '"unlimited" reaches the assistant here: yes')" "1" \
     "MANY_USERS_HOTSPOT's \"unlimited\" is reported as reaching the assistant"
   check "$(printf '%s' "$OUT" | grep -cE '"unlimited" fact +the default wording: Both Residential plans \(Residential Lite and Residential\) are unlimited')" "1" \
     "the \"unlimited\" fact is shown in its default wording"
+if v45; then
+  check "$(printf '%s' "$OUT" | grep -cE 'STARLINK ROUTERS \(indoor\) +2 — among the accessories')" "1" "the Starlink routers are counted: two"
+  check "$(printf '%s' "$OUT" | grep -cE '^ +Router Mini +435,000  ← Starlink router · fits Standard 4, Standard 4 X, Mini, Gen 2 kits \(not Gen 1\)$')" "1" \
+    "…Router Mini, with what it fits"
+  check "$(printf '%s' "$OUT" | grep -cE '^ +Router 3 \| Starlink V4 or V5, Mini +827,000  ← Starlink router · fits Standard 4, Standard 4 X, Mini, Gen 2 and Gen 3 kits$')" "1" \
+    "…and Router 3, with what it fits"
+  check "$(printf '%s' "$OUT" | grep 'Wall Mount' | grep -c 'Starlink router')" "0" "a mount is not a Starlink router"
+  check "$(has "$OUT" '; 1 to 5 of one Starlink router with any of the kit and the installation')" "yes" "the totals a router design produces are stated"
+  check "$(printf '%s' "$OUT" | grep -A4 '^  BUSINESS_PLANS ' | grep -c 'after the priority block it says: about 1 Mbps until more is bought — the approved fact')" "1" \
+    "BUSINESS_PLANS is reported saying the approved fact"
 else
-  check "$(printf '%s' "$OUT" | grep -E 'Outdoor Access Point|MikroTik Router' | grep -c '← network equipment')" "2" \
-    "the outdoor access point and the MikroTik are in HARDWARE, marked"
-  check "$(count "$OUT" 'NETWORK EQUIPMENT')" "0" "no NETWORK EQUIPMENT list: this version has none"
-  check "$(printf '%s' "$OUT" | grep -cE 'ACCESSORIES \(optional extras\) +2 — shown on the support and accounts numbers only; the sales number never sees them')" "1" \
-    "the accessories are counted, with the sales-number gap stated"
-  check "$(printf '%s' "$OUT" | grep -A1 '^  BUSINESS_PLANS ' | grep -c 'CUT at 600')" "1" "BUSINESS_PLANS is reported cut at 600 characters"
-  check "$(printf '%s' "$OUT" | grep -cE 'each answer reaches it up to +600 characters \(1,000 from 5\.18\.44, where ai_qualification is on\)$')" "1" \
-    "the knowledge limit in use is stated: 600, and where 1,000 comes from"
-  check "$(printf '%s' "$OUT" | grep -A3 '^  MANY_USERS_HOTSPOT ' | grep -c '"unlimited" reaches the assistant here: NO — only in the cut part')" "1" \
-    "MANY_USERS_HOTSPOT's \"unlimited\" is reported as lost in the cut"
-  check "$(printf '%s' "$OUT" | grep -cE '"unlimited" fact +none — this version does not state it \(5\.18\.44 does\)')" "1" \
-    "the \"unlimited\" fact is reported absent, and where it comes from"
+  check "$(count "$OUT" 'STARLINK ROUTERS')" "0" "no Starlink-router list: this version has none"
+  check "$(printf '%s' "$OUT" | grep -A4 '^  BUSINESS_PLANS ' | grep -c 'after the priority block it says: unlimited standard data continues — NOT the approved fact')" "1" \
+    "BUSINESS_PLANS is reported contradicting the approved fact"
 fi
 check "$(has "$OUT" 'customer     Hi, I want to start a wifi business, do you have unlimited internet? my number is {phone}')" "yes" \
   "c1's question is shown, the phone masked"
@@ -163,7 +163,6 @@ check "$(grep -c -- '-u .* sh -c mkdir -p .*/tmp/dnb-ai-ro-.* cp ' "$SB/docker.l
 check "$(grep -c -- "exec -i -u $(stat -c '%u:%g' "$DATA/plugin.sqlite3") -w .* -e AI_CHECK_DB=/tmp/dnb-ai-ro-" "$SB/docker.log")" "1" "the report runs as the database's owner, on the copy"
 check "$(ls -d /tmp/dnb-ai-ro-* 2>/dev/null | wc -l | tr -d ' ')" "0" "the temporary copy is removed afterwards"
 
-if v44; then
   echo "== 1c. the \"unlimited\" fact as the operator sets it =="
   write_config "$KEY" 1 ',"ai_fact_unlimited":"Unlimited on both Residential plans. Questions: +256 700 111 222."'
   OUT="$(run_check)"
@@ -173,7 +172,6 @@ if v44; then
   OUT="$(run_check)"
   check "$(printf '%s' "$OUT" | grep -cE '"unlimited" fact +OFF \(omit\)')" "1" "\"omit\" is shown as off"
   write_config "$KEY"
-fi
 
 echo "== 1b. it reads the copy it is given, and never the live file =="
 cp "$DATA/plugin.sqlite3" "$SB/copy.sqlite3"
@@ -186,13 +184,13 @@ check "$(has "$O" 'STOP: no copy of the database was given (AI_CHECK_DB)')" "yes
 O="$(direct AI_CHECK_DB="$DATA/plugin.sqlite3")"
 check "$(has "$O" 'STOP: AI_CHECK_DB names the live database; this check reads a copy only')" "yes" "handed the live file, it refuses"
 
-echo "== 2. --ask: ten questions through the live path, against a fake provider =="
+echo "== 2. --ask: eleven questions through the live path, against a fake provider =="
 BEFORE="$(dbsum)"; rm -rf "$SB/ai"
 OUT="$(run_check --ask)"; rc=$?; keep ask "$OUT"
 check "$rc" "0" "--ask exits 0"
 check "$(dbsum)" "$BEFORE" "the plugin database is byte-identical afterwards"
-check "$(ls "$SB/ai" | wc -l | tr -d ' ')" "10" "exactly ten model calls"
-check "$(has "$OUT" '10 model call(s)')" "yes" "…and the report says ten"
+check "$(ls "$SB/ai" | wc -l | tr -d ' ')" "11" "exactly eleven model calls"
+check "$(has "$OUT" '11 model call(s)')" "yes" "…and the report says eleven"
 check "$(grep -L 'APPROVED KNOWLEDGE' "$SB"/ai/prompt-*.txt | wc -l | tr -d ' ')" "0" "every prompt carries the knowledge base, as the worker's does"
 Q="$(prompt_for 'Do you have unlimited business plans?')"
 check "$(grep -cE '^- Business .* — price ' "$Q")" "0" "\"unlimited business plans?\" is answered with no Business plan in PLANS"
@@ -212,14 +210,13 @@ S="$(section "$OUT" 'How much will I pay to get Starlink installed at my home?')
 check "$(count "$S" 'REFUSED')" "0" "a home total that adds up is sent"
 check "$(count "$S" 'TOTAL TO GET CONNECTED: UGX 2,799,000')" "1" "…as the customer would receive it"
 S="$(section "$OUT" 'What would two outdoor access points and the MikroTik cost together?')"
-if v44; then
-  check "$(prompts_with 'ACCESSORIES \(optional extras')" "10" "every sales prompt carries ACCESSORIES, as the sales number now does"
-  check "$(prompts_with '^NETWORK EQUIPMENT \(one-time, live from our system')" "10" "every prompt has a NETWORK EQUIPMENT list"
-  check "$(prompts_with '^- Outdoor Access Point — price 450000 one-time — outdoor Wi-Fi access point, mounted on a pole or a wall')" "10" \
+  check "$(prompts_with 'ACCESSORIES \(optional extras')" "11" "every sales prompt carries ACCESSORIES, as the sales number now does"
+  check "$(prompts_with '^NETWORK EQUIPMENT \(one-time, live from our system')" "11" "every prompt has a NETWORK EQUIPMENT list"
+  check "$(prompts_with '^- Outdoor Access Point — price 450000 one-time — outdoor Wi-Fi access point, mounted on a pole or a wall')" "11" \
     "…with the outdoor access point in it, saying what it is for"
-  check "$(prompts_with '^- MikroTik Router — price 380000 one-time — MikroTik router: runs the local network')" "10" "…and the MikroTik"
+  check "$(prompts_with '^- MikroTik Router — price 380000 one-time — MikroTik router: runs the local network')" "11" "…and the MikroTik"
   check "$(prompts_with '^- Outdoor Access Point — price 450000 one-time$')" "0" "the outdoor access point is no longer a bare HARDWARE line"
-  check "$(for f in "$SB"/ai/prompt-*.txt; do awk '/^NETWORK EQUIPMENT \(one-time/{h=NR} /^HARDWARE \(one-time/{w=NR} /^- Outdoor Access Point — price/{a=NR} END{print (w && h>w && a>h) ? "ok" : "bad"}' "$f"; done | grep -c ok)" "10" \
+  check "$(for f in "$SB"/ai/prompt-*.txt; do awk '/^NETWORK EQUIPMENT \(one-time/{h=NR} /^HARDWARE \(one-time/{w=NR} /^- Outdoor Access Point — price/{a=NR} END{print (w && h>w && a>h) ? "ok" : "bad"}' "$f"; done | grep -c ok)" "11" \
     "…in every prompt it sits after HARDWARE, under NETWORK EQUIPMENT"
   Q="$(prompt_for 'Do you have unlimited business plans?')"
   check "$(grep -c '^DATA ALLOWANCE (a stated fact' "$Q")" "1" "\"unlimited business plans?\" is given the data-allowance fact"
@@ -229,14 +226,25 @@ if v44; then
     "someone who wants to sell internet is given the rule for it"
   check "$(count "$S" 'REFUSED')" "0" "\"two access points and the MikroTik\" is a permitted total now"
   check "$(count "$S" 'UGX 1,280,000')" "1" "…and the customer receives it"
+
+check "$(count "$(section "$OUT" 'How much is an outdoor access point and a MikroTik router?')" 'refused      amounts it could not match to the price list: 1,234,000')" "1" \
+  "a refused reply names the amount it could not match: the invented price"
+check "$(count "$(section "$OUT" 'How much is an outdoor access point and a MikroTik router?')" 'the draft    The outdoor access point is UGX 1,234,000')" "1" \
+  "…and shows the draft that was refused"
+S="$(section "$OUT" 'The WiFi does not reach the upper floors of my house.')"
+if v45; then
+  check "$(prompts_with '^MORE FLOORS OR ROOMS INSIDE ONE BUILDING — STARLINK ROUTERS\.$')" "11" "every sales prompt carries the rule for more floors"
+  check "$(prompts_with '^- This is for OUTDOORS and other buildings\.')" "11" "…and says the network equipment is for outdoors"
+  check "$(grep -c -- '— Starlink router: Wi-Fi inside the building' "$(prompt_for 'The WiFi does not reach the upper floors of my house.')")" "2" \
+    "the floors question is given both Starlink routers, marked"
+  check "$(count "$S" 'REFUSED')" "0" "two of one Starlink router is a permitted total now"
+  check "$(count "$S" 'TOTAL: UGX 870,000')" "1" "…and the customer receives it"
+  check "$(count "$S" 'Starlink router')" "1" "…read as naming a Starlink router"
   check "$(has "$OUT" '1 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
 else
-  check "$(prompts_with 'ACCESSORIES \(optional extras')" "0" "no sales prompt carries ACCESSORIES: the sales number's own context contract was used"
-  check "$(prompts_with 'NETWORK EQUIPMENT|DATA ALLOWANCE|A CUSTOMER WHO IS A BUSINESS|SOMEONE WHO WANTS TO SELL INTERNET')" "0" \
-    "no prompt has anything 5.18.44 adds"
-  check "$(prompts_with '^- Outdoor Access Point — price 450000 one-time$')" "10" "every prompt lists the outdoor access point under HARDWARE"
-  check "$(count "$S" 'the price check REFUSED the reply')" "1" "a multiplied total is refused by the price check, as on the live path"
-  check "$(count "$S" "AI replies   I'm not able to complete that one automatically")" "1" "…and the customer would get the fallback"
+  check "$(prompts_with 'MORE FLOORS OR ROOMS|This is for OUTDOORS|— Starlink router:')" "0" "no prompt has anything 5.18.45 adds"
+  check "$(count "$S" 'the price check REFUSED the reply')" "1" "two of one Starlink router is refused, as on the live path today"
+  check "$(count "$S" 'refused      amounts it could not match to the price list: 870,000')" "1" "…and the check names the amount"
   check "$(has "$OUT" '2 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
 fi
 check "$(printf '%s' "$OUT" | grep -cE "$CANARIES")" "0" "nothing secret or personal is printed in --ask either"
@@ -245,20 +253,21 @@ echo "== 2b. --ask with the hardware advice module off: the price list and the p
 write_config "$KEY" 0; rm -rf "$SB/ai"
 OUT="$(run_check --ask)"; rc=$?; keep ask-module-off "$OUT"
 check "$rc" "0" "--ask exits 0"
-check "$(ls "$SB/ai" | wc -l | tr -d ' ')" "10" "ten model calls"
+check "$(ls "$SB/ai" | wc -l | tr -d ' ')" "11" "eleven model calls"
 check "$(prompts_with 'ACCESSORIES \(optional extras|^NETWORK EQUIPMENT')" "0" "no prompt carries ACCESSORIES or NETWORK EQUIPMENT"
-check "$(prompts_with '^- Outdoor Access Point — price 450000 one-time$')" "10" "the outdoor access point is a HARDWARE line again"
+check "$(prompts_with '^- Outdoor Access Point — price 450000 one-time$')" "11" "the outdoor access point is a HARDWARE line again"
 check "$(printf '%s' "$OUT" | grep -E 'Outdoor Access Point|MikroTik Router' | grep -c '← network equipment')" "2" "the report lists them in HARDWARE, marked"
 check "$(printf '%s' "$OUT" | grep -c 'the sales number never sees them')" "1" "…and says the sales number does not see the accessories"
 check "$(count "$(section "$OUT" 'What would two outdoor access points and the MikroTik cost together?')" 'the price check REFUSED the reply')" "1" \
   "a multiplied total is refused again"
 check "$(count "$(section "$OUT" 'How much will I pay to get Starlink installed at my home?')" 'TOTAL TO GET CONNECTED: UGX 2,799,000')" "1" \
   "a home total that adds up is still sent"
-check "$(has "$OUT" '2 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
-if v44; then
-  check "$(grep -c '^DATA ALLOWANCE (a stated fact' "$(prompt_for 'Do you have unlimited business plans?')")" "1" \
-    "the data-allowance fact follows the qualification switch, not this one"
-fi
+check "$(count "$(section "$OUT" 'The WiFi does not reach the upper floors of my house.')" 'the price check REFUSED the reply')" "1" \
+  "two of one Starlink router is refused with the module off"
+check "$(has "$OUT" '3 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
+check "$(prompts_with 'MORE FLOORS OR ROOMS|— Starlink router:')" "0" "no prompt carries the rule for more floors"
+check "$(grep -c '^DATA ALLOWANCE (a stated fact' "$(prompt_for 'Do you have unlimited business plans?')")" "1" \
+  "the data-allowance fact follows the qualification switch, not this one"
 write_config "$KEY"
 
 echo "== 3. --ask without a key: stops, asks nothing, says so =="
@@ -298,6 +307,11 @@ PY
     window)  [ "$(printf '%s' "$o" | grep -c 'unlimited business plan?')" != "0" ] && caught=yes ;;
     seen)    s="$(section "$o" 'Do you have unlimited business plans?')"
              [ "$(count "$s" 'it was shown ')" = "1" ] && [ "$(count "$s" 'it was shown 2 plan(s), no Business plan')" = "0" ] && caught=yes ;;
+    amounts) s="$(section "$o" 'How much is an outdoor access point and a MikroTik router?')"
+             [ "$(count "$s" 'the price check REFUSED the reply')" = "1" ] && [ "$(count "$s" 'refused      amounts')" = "0" ] && caught=yes ;;
+    routers) [ "$(count "$o" 'ACCESSORIES (optional extras)')" = "1" ] && [ "$(count "$o" '← Starlink router')" = "0" ] && caught=yes ;;
+    bizok)   [ "$(printf '%s' "$o" | grep -c '^  BUSINESS_PLANS ')" = "1" ] && [ "$(count "$o" 'the approved fact')" = "0" ] && caught=yes ;;
+    biznot)  [ "$(printf '%s' "$o" | grep -c '^  BUSINESS_PLANS ')" = "1" ] && [ "$(count "$o" 'NOT the approved fact')" = "0" ] && caught=yes ;;
   esac
   check "$caught" "yes" "caught: $1"
   rm -rf "$SB/m"; rm -rf "$DATA"; cp -a "$SB/data.pristine" "$DATA"
@@ -310,13 +324,16 @@ mutant "the price check skipped" "if (empty(\$g['safe'])) {=>if (false) {" "--as
 mutant "the knowledge base not loaded" "\$config['knowledge_block'] = class_exists('KnowledgeBase')=>\$config['knowledge_block'] = '' ?: '';\$_x = class_exists('KnowledgeBase')" "--ask" kb
 mutant "the plans reported before the Business filter" "\$seen = class_exists('PlanCatalogue') ? (array)PlanCatalogue::forConversation(\$all, \$ctx)['products'] : \$all;=>\$seen = \$all;" "--ask" seen
 mutant "the time window ignored" "AND m.sent_at >= datetime('now', ?) ORDER BY=>AND m.sent_at >= datetime('now', ?, '-1000 days') ORDER BY" "" window
-if v44; then
   mutant "the worker's catalogue preparation bypassed" "if (method_exists('AiReplyWorker', 'salesCatalogue')) {=>if (false) {" "--ask" access hwoff
   mutant "the worker's price check reached without its settings" "if (method_exists('AiReplyWorker', 'permittedAmounts')) {=>if (false) {" "--ask" total
   mutant "the worker's price check replaced by an empty list" "AiReplyWorker::permittedAmounts(\$ctx, \$prompt, \$config);=>array_slice(AiReplyWorker::permittedAmounts(\$ctx, \$prompt, \$config), 0, 0);" "--ask" home
   mutant "the report's network list not split out" "[\$kit, \$netRows] = NetworkEquipment::split(\$root, \$hw);=>[\$kit, \$netRows] = [\$hw, []];" "" netlist
+mutant "a refused reply's amounts not shown" "if ((array)\$g['categories'] === ['foreign:amount']) \$refused = =>if (false) \$refused = " "--ask" amounts
+if v45; then
+  mutant "the Starlink routers not listed" "\$routers = NetworkEquipment::starlinkRouters(\$root, \$acc);=>\$routers = [];" "" routers
+  mutant "the approved Business fact not recognised" "} elseif (preg_match('/priority/i', \$both) && preg_match('/\\b1\\s*Mbps/i', \$both)) {=>} elseif (false) {" "" bizok
 else
-  mutant "the worker's price check replaced by an empty list" "\$m->invoke(\$w, \$ctx, \$prompt);=>array_slice(\$m->invoke(\$w, \$ctx, \$prompt), 0, 0);" "--ask" home
+  mutant "the contradicting Business claim not reported" "if (preg_match('/standard data continues|behaves like standard data|then unlimited standard data/i', \$both)) {=>if (false) {" "" biznot
 fi
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"

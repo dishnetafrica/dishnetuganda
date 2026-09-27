@@ -1268,7 +1268,7 @@ class DishNetAiBrain
      * and prices it from what uCRM holds, one access point unless the customer names a number, and
      * the survey confirms the rest. It is given no coverage figure and is told it has none.
      */
-    private function networkBlock(array $network): string
+    private function networkBlock(array $network, bool $indoorRouters = false): string
     {
         $esc = $this->markerHint(self::MARKER_ESCALATE);
         $d = "\nNETWORK EQUIPMENT (one-time, live from our system — quote these exactly; for Wi-Fi over a "
@@ -1284,8 +1284,14 @@ class DishNetAiBrain
             . "- When a customer wants the Wi-Fi to reach further — a compound, another building, a "
             . "shop front, a trading centre, a Wi-Fi hotspot business — the dish is not the answer; the "
             . "network is. Design a starting setup from NETWORK EQUIPMENT and price it in the same "
-            . "reply. Do not only say that it needs a site assessment.\n"
-            . "- The usual setup: the router to run the network, outdoor access point(s) to carry the "
+            . "reply. Do not only say that it needs a site assessment.\n";
+        // 5.18.45: the operator — the access point is OUTDOOR; more floors inside are Starlink routers.
+        if ($indoorRouters) {
+            $d .= "- This is for OUTDOORS and other buildings. More floors or rooms inside one building are "
+                . "covered with Starlink routers (MORE FLOORS OR ROOMS, below), never with the outdoor "
+                . "access point.\n";
+        }
+        $d .= "- The usual setup: the router to run the network, outdoor access point(s) to carry the "
             . "Wi-Fi to the area, the outdoor cable and connectors to join them, and the ICT "
             . "consultancy where it is listed. Add the Starlink kit and the installation from HARDWARE "
             . "if they do not have Starlink yet.\n"
@@ -1307,6 +1313,38 @@ class DishNetAiBrain
             . "- When they want to go ahead or ask for the survey, take the location and " . $esc
             . " so the team books it.\n";
         return $d . $this->currencyRule();
+    }
+
+    /**
+     * More floors or rooms inside one building (5.18.45, docs/40 §14).
+     *
+     * The operator, 27 Sep 2026, on the design 5.18.44 gave: the Ruijie is an OUTDOOR access point;
+     * "for indoor if some one want to cover more floor we have to suggest starlink routers". The
+     * routers are accessories, marked in the ACCESSORIES list from the shop catalogue with what each
+     * fits. They are priced the way the access points are — one per floor the customer names beyond
+     * the main router's, otherwise one and the price of each more — and the survey confirms. No
+     * coverage figure is given: the maker's area is not a promise about a building.
+     */
+    private function moreFloorsBlock(): string
+    {
+        $esc = $this->markerHint(self::MARKER_ESCALATE);
+        return "MORE FLOORS OR ROOMS INSIDE ONE BUILDING — STARLINK ROUTERS.\n"
+            . "- When the Wi-Fi does not reach other floors or rooms of the same building, the answer is "
+            . "more Starlink routers working together as a mesh: the items marked Starlink router in "
+            . "ACCESSORIES. Not the outdoor access point and not the MikroTik: those carry the Wi-Fi "
+            . "outdoors and to other buildings.\n"
+            . "- Offer the Starlink routers that fit their kit, each with its price; each line says what "
+            . "it fits. If you do not know their kit, name the routers with what each fits and, in the "
+            . "same reply, ask which kit they have.\n"
+            . "- If the customer says how many floors, price one Starlink router for each floor beyond "
+            . "the one their main router is on, written as quantity × price = amount, then a clearly "
+            . "labelled TOTAL. Otherwise price ONE and say what each additional one costs. Always say "
+            . "that the site survey confirms how many routers are needed and where they go.\n"
+            . "- Never state an area, a distance or a number of users that a router covers.\n"
+            . "- If they do not have Starlink yet, the kit and the installation from HARDWARE come "
+            . "first, and each Starlink router is its own named line.\n"
+            . "- When they want to go ahead or ask for the survey, take the location and " . $esc
+            . " so the team books it.\n";
     }
 
     /**
@@ -1544,7 +1582,14 @@ class DishNetAiBrain
             $d .= "\nHARDWARE: no kit or installation prices are in your data. If asked what "
                 . "equipment costs, say you will confirm and take their details.\n";
         }
-        if ($network) $d .= $this->networkBlock($network);
+        // The Starlink routers among the accessories (5.18.45, docs/40 §14): what covers more floors
+        // inside one building, where the outdoor access point is for outside. Same gate, same reason.
+        $routers = [];
+        if (is_array($ctx['products']['accessories'] ?? null) && $this->networkDesign()) {
+            if (!class_exists('NetworkEquipment')) require_once __DIR__ . '/NetworkEquipment.php';
+            $routers = \NetworkEquipment::starlinkRouters(dirname(__DIR__), $ctx['products']['accessories']);
+        }
+        if ($network) $d .= $this->networkBlock($network, $routers !== []);
 
         // Optional extras, apart from the kit. Twenty mounts, routers and
         // cables arrived in uCRM Products with the accessories shop; listed
@@ -1552,12 +1597,20 @@ class DishNetAiBrain
         $accessories = $ctx['products']['accessories'] ?? null;
         if (is_array($accessories) && $accessories) {
             $d .= "\nACCESSORIES (optional extras, one-time, live from our system — quote these exactly):\n";
+            $routerFits = [];
+            foreach ($routers as $r) $routerFits[\ShopCatalogue::nameKey((string)$r['name'])] = (string)$r['fits'];
             foreach ($accessories as $a) {
                 $d .= '- ' . ($a['name'] ?? 'Unnamed');
                 $d .= isset($a['price']) && $a['price'] !== null
                     ? ' — price ' . rtrim(rtrim(number_format((float)$a['price'], 2, '.', ''), '0'), '.')
                     : ' — price not listed (say you will confirm)';
-                $d .= " one-time\n";
+                $d .= " one-time";
+                $k = $routerFits ? \ShopCatalogue::nameKey((string)($a['name'] ?? '')) : '';
+                if ($k !== '' && isset($routerFits[$k])) {
+                    $d .= ' — Starlink router: Wi-Fi inside the building, working with the other Starlink '
+                        . 'routers as a mesh' . ($routerFits[$k] !== '' ? '; fits ' . $routerFits[$k] : '');
+                }
+                $d .= "\n";
             }
             $d .= "Offer an accessory only when the customer asks for one or describes the need it "
                 . "meets — a wall or pole to mount on, a vehicle, a house too large for one router. "
@@ -1565,6 +1618,7 @@ class DishNetAiBrain
                 . "then it is its own named line. Fit matters: an item marked Mini fits the Mini, one "
                 . "marked Standard 4 or 4 X fits the Standard dish — say which before quoting.\n";
             $d .= $this->currencyRule();
+            if ($routers) $d .= $this->moreFloorsBlock();
         }
 
         // Support

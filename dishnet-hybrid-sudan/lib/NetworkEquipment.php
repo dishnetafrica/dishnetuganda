@@ -105,6 +105,39 @@ final class NetworkEquipment
     /** How a setup is listed. A role not named here comes after these. */
     const DISPLAY_ORDER = ['router', 'access_point', 'cable', 'connectors', 'consultancy'];
 
+    /**
+     * The Starlink routers among the accessories (5.18.45, docs/40 §14).
+     *
+     * The operator, 27 Sep 2026: the Ruijie is an outdoor access point; "for indoor if some one
+     * want to cover more floor we have to suggest starlink routers". Those routers are in uCRM as
+     * accessories, not network equipment, and the shop catalogue already says which accessories
+     * are routers (category "Router") and what each one fits — so that is where this reads it,
+     * matched on the exact product name as the shop and the hardware/accessory split are. No price
+     * lives there: the price is the live row's. Order is kept; each row gains 'fits'.
+     *
+     * Used by DishNetAiBrain (which accessories are Starlink routers, and the rule for more floors)
+     * and by AiReplyWorker (the totals a design with several routers produces), so the two agree.
+     *
+     * @param  array $accessories rows with at least 'name' and 'price'
+     * @return array<int,array>
+     */
+    public static function starlinkRouters(string $pluginRoot, array $accessories): array
+    {
+        if (!class_exists('ShopCatalogue')) require_once __DIR__ . '/ShopCatalogue.php';
+        $fits = [];
+        foreach (\ShopCatalogue::load($pluginRoot)['items'] as $it) {
+            if ($it['kind'] !== 'accessory' || strcasecmp($it['category'], 'Router') !== 0) continue;
+            foreach ($it['match'] as $m) $fits[\ShopCatalogue::nameKey($m)] = $it['fits'];
+        }
+        $out = [];
+        foreach ($accessories as $a) {
+            if (!is_array($a)) continue;
+            $k = \ShopCatalogue::nameKey((string)($a['name'] ?? ''));
+            if ($k !== '' && isset($fits[$k])) $out[] = $a + ['fits' => $fits[$k]];
+        }
+        return $out;
+    }
+
     /** Test seam: forget what was loaded. */
     public static function reset(): void { self::$cache = []; }
 }

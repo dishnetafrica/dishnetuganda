@@ -54,6 +54,8 @@ function traits(string $r): string {
     if (preg_match('/priority data|\b1\s*mbps/i', $r))              $t[] = 'explains the priority-data cap';
     if (preg_match('/access ?points?/i', $r))                       $t[] = 'access point';
     if (preg_match('/mikro ?tik/i', $r))                            $t[] = 'MikroTik';
+    if (preg_match('/\brouter\s*(?:mini|3)\b|starlink routers?\b/i', $r)) $t[] = 'Starlink router';
+    if (preg_match('/ruijie|rg-rap|outdoor (?:wi-?fi )?access points?/i', $r)) $t[] = 'the outdoor access point';
     if (preg_match('/survey|site (visit|assessment)|assess/i', $r)) $t[] = 'site survey';
     if (preg_match_all('/(?<![\d.,])\d{1,3}(?:,\d{3})+(?![\d,])/', $r, $m)) $t[] = 'amounts ' . implode(' · ', array_slice(array_unique($m[0]), 0, 6));
     if (class_exists('ReplyPrivacyGuard') && trim($r) === ReplyPrivacyGuard::SAFE_FALLBACK) $t[] = 'THE FALLBACK (a reply was refused)';
@@ -73,6 +75,8 @@ foreach (['workers/WorkerBase.php', 'workers/AiReplyWorker.php'] as $f) {
 }
 // 5.18.44 and later prepare the sales catalogue and the price check in one public place each.
 $since44 = method_exists('AiReplyWorker', 'salesCatalogue') && method_exists('AiReplyWorker', 'permittedAmounts');
+// 5.18.45 and later: the Starlink routers among the accessories, for more floors inside one building.
+$since45 = $since44 && class_exists('NetworkEquipment') && method_exists('NetworkEquipment', 'starlinkRouters');
 $man = json_decode((string)@file_get_contents("{$root}/manifest.json"), true) ?: [];
 $version = (string)($man['information']['version'] ?? '?');
 if (!function_exists('getDataDir') || !class_exists('PluginConfig') || !class_exists('DishNetAiBrain')) {
@@ -208,7 +212,8 @@ if ($mode === 'report') {
                 printf("    %2d. %-60s %12s  ← %s\n", $i + 1, clip((string)($h['name'] ?? '?'), 60), isset($h['price']) && $h['price'] !== null ? money($h['price']) : 'no price',
                     str_replace('_', ' ', (string)$h['role_key']));
             }
-            out('totals the price check allows', 'any combination of the first 10 one-time items, and 2 to 5 of one access point with any of the others');
+            out('totals the price check allows', 'any combination of the first 10 one-time items, and 2 to 5 of one access point with any of the others'
+                . ($since45 ? '; 1 to 5 of one Starlink router with any of the kit and the installation' : ''));
         } else {
             out('HARDWARE (one-time)', count($hw) . ' — both numbers see these; a total may combine only the first 6');
             foreach ($hw as $i => $h) {
@@ -231,6 +236,16 @@ if ($mode === 'report') {
             } elseif (preg_match('/access ?point|outdoor|mikro ?tik|router|mesh/i', $n)) {
                 printf("        %-44s %12s  ← network equipment\n", clip($n, 44), isset($a['price']) ? money($a['price']) : 'no price');
             }
+        }
+        if ($since45 && $hwOn) {
+            // 5.18.45: the Starlink routers — what the assistant suggests for more floors inside one building.
+            $routers = NetworkEquipment::starlinkRouters($root, $acc);
+            out('STARLINK ROUTERS (indoor)', count($routers) . ' — among the accessories: what the assistant suggests for more floors inside one building');
+            foreach ($routers as $r) {
+                printf("        %-44s %12s  ← Starlink router · fits %s\n", clip((string)($r['name'] ?? '?'), 44),
+                    isset($r['price']) ? money($r['price']) : 'no price', clip((string)($r['fits'] ?? ''), 70));
+            }
+            if (!$routers) note('no accessory is a Starlink router in the shop catalogue — the assistant has none to suggest for more floors');
         }
         out('plan copies dropped', (string)(int)($data['hardware_plan_mirrors'] ?? 0) . ' product(s) named like a plan');
         if (!empty($data['hardware_error'])) note('the one-time products could not be read: ' . clip(mask((string)$data['hardware_error']), 120));
@@ -259,6 +274,13 @@ if ($mode === 'report') {
         if (preg_match('/unlimited/i', $a)) {
             $vis = $r['kind'] === 'fact' ? mb_substr($a, 0, $cut) : $a;
             echo '      "unlimited" reaches the assistant here: ' . (preg_match('/unlimited/i', $vis) ? 'yes' : 'NO — only in the cut part') . "\n";
+        }
+        // The operator, 27 Sep: when a Business plan's priority block is used up, about 1 Mbps until more is bought.
+        $both = $a . ' ' . (string)$r['wa_answer'];
+        if (preg_match('/standard data continues|behaves like standard data|then unlimited standard data/i', $both)) {
+            echo "      after the priority block it says: unlimited standard data continues — NOT the approved fact (about 1 Mbps until more is bought)\n";
+        } elseif (preg_match('/priority/i', $both) && preg_match('/\b1\s*Mbps/i', $both)) {
+            echo "      after the priority block it says: about 1 Mbps until more is bought — the approved fact\n";
         }
     }
     if ($shown === 0) note('no approved row mentions these topics');
@@ -354,8 +376,22 @@ if ($mode === 'ask') {
                                                                 'OK. What would two outdoor access points and the MikroTik cost together?']],
         'B2  WiFi to another building'             => ['sales', ['I already have Starlink at home. How do I get the WiFi to my other building across the compound?']],
         'B3  the price of the two items'           => ['sales', ['How much is an outdoor access point and a MikroTik router?']],
+        'B4  more floors inside one house'         => ['sales', ['The WiFi does not reach the upper floors of my house. It has 3 floors. What do I need and how much?']],
         'C1  a home total (nothing extra added?)'  => ['sales', ['How much will I pay to get Starlink installed at my home?']],
     ];
+    // The amounts in a refused draft that the price check cannot match, each checked alone exactly as the reply was —
+    // so a refusal can be read (docs/40 §13: two replies were refused on 27 Sep and the log could not say why).
+    $foreignAmounts = function (string $raw, array $vals, string $prompt) use ($config): array {
+        $out = [];
+        if (preg_match_all('/(?<![\d.,])\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?(?![\d])/', $raw, $m)) {
+            foreach (array_unique($m[0]) as $amt) {
+                $one = ReplyPrivacyGuard::check('TOTAL ' . trim($amt), ['values' => $vals, 'prompt' => $prompt,
+                                                                      'public' => DishNetAiBrain::operatorText($config)]);
+                if (in_array('foreign:amount', (array)$one['categories'], true)) $out[] = trim((string)preg_replace('/\s+/', ' ', $amt));
+            }
+        }
+        return $out;
+    };
     $calls = 0; $blocked = 0; $fenced = 0; $tokIn = 0; $tokOut = 0;
     hdr('The questions, asked of the installed assistant on the sales number — nothing is sent to anyone');
     foreach ($SCENARIOS as $name => [$channel, $turns]) {
@@ -367,13 +403,16 @@ if ($mode === 'ask') {
             $u = $brain->getLastUsage() ?: []; $tokIn += (int)($u['input_tokens'] ?? 0); $tokOut += (int)($u['output_tokens'] ?? 0);
             $prompt = $brain->lastSystemPrompt();
             $raw = trim((string)($res['reply'] ?? ''));
-            $final = $raw; $how = [];
+            $final = $raw; $how = []; $refused = null;
             if ($raw !== '') {
-                $g = ReplyPrivacyGuard::check($raw, ['values' => $permitted($ctx, $prompt), 'prompt' => $prompt,
+                $vals = $permitted($ctx, $prompt);
+                $g = ReplyPrivacyGuard::check($raw, ['values' => $vals, 'prompt' => $prompt,
                                                      'public' => DishNetAiBrain::operatorText($config)]);
                 if (empty($g['safe'])) {
                     $final = ReplyPrivacyGuard::SAFE_FALLBACK; $blocked++;
                     $how[] = 'the price check REFUSED the reply (' . implode(',', (array)$g['categories']) . ') — the customer gets the fallback and staff are alerted';
+                    // Only for an amount: the model's own text for a made-up question, masked like every reply here.
+                    if ((array)$g['categories'] === ['foreign:amount']) $refused = ['amounts' => $foreignAmounts($raw, $vals, $prompt), 'draft' => $raw];
                 } else {
                     $f = PlanFenceGuard::apply($raw, $config);
                     if (!empty($f['appended'])) { $final = $f['reply']; $fenced++; $how[] = 'the Business-plan note was added'; }
@@ -389,6 +428,12 @@ if ($mode === 'ask') {
             echo '    AI replies   ' . ($final === '' ? '(nothing — handed over)' : (string)preg_replace('/\n(?=[^\n])/', "\n                 ", mask($final))) . "\n";
             echo '    what it did  ' . traits($final) . "\n";
             if ($how) echo '    on the way   ' . implode(' · ', $how) . "\n";
+            if ($refused !== null) {
+                echo '    refused      ' . ($refused['amounts'] ? 'amounts it could not match to the price list: ' . implode(' · ', $refused['amounts'])
+                                                              : 'no single amount — only together') . "\n";
+                $dr = mb_strlen($refused['draft']) > 900 ? mb_substr($refused['draft'], 0, 899) . '…' : $refused['draft'];
+                echo '    the draft    ' . (string)preg_replace('/\n(?=[^\n])/', "\n                 ", mask($dr)) . "\n";
+            }
             echo '    it was shown ' . count($plans) . ' plan(s), ' . ($shownBiz > 0 ? "including {$shownBiz} Business" : 'no Business plan') . "\n";
             $history[] = ['role' => 'customer', 'text' => $say];
             $history[] = ['role' => 'dishnet',  'text' => $final];

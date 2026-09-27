@@ -18,6 +18,8 @@ if (stripos($last, 'unlimited business plans') !== false) {
     $reply = 'Two Outdoor Access Points at UGX 450,000 each come to UGX 900,000, plus the MikroTik Router at UGX 380,000 — UGX 1,280,000.';  // a multiplied total: refused by 5.18.43, a permitted total since 5.18.44
 } elseif (stripos($last, 'How much is an outdoor access point and a MikroTik') !== false) {
     $reply = 'The outdoor access point is UGX 1,234,000 and the MikroTik Router is UGX 380,000.';    // an invented price → refused
+} elseif (stripos($last, 'upper floors') !== false) {
+    $reply = "For the two upper floors: 2 × Router Mini — UGX 435,000 each = UGX 870,000\nTOTAL: UGX 870,000\nThe site survey confirms how many routers are needed and where they go.";   // two of one Starlink router: refused by 5.18.44, a permitted total since 5.18.45
 } elseif (stripos($last, 'installed at my home') !== false) {
     $reply = "Starlink Standard Kit — UGX 2,649,000\nProfessional Installation — UGX 150,000\nTOTAL TO GET CONNECTED: UGX 2,799,000\nThen Residential (up to 400 Mbps) at UGX 329,000 a month.";   // a total the price check allows
 } elseif (stripos($last, 'Business 500') !== false) {

@@ -7,6 +7,10 @@ changed. The fixes in §8 are proposals that wait for the operator's approval.
 from those decisions (§11). §1–§9 are the record as it stood before; where the build departs from them, §11.3
 says so. The deploy command and what to send back are in §12.
 
+**27 September, 06:14 UTC:** 5.18.44 was deployed and PASSED (§13). The same morning the operator added a rule for
+indoor coverage, and settled which of two approved texts was right about Business data. **5.18.45** was built from
+both (§14); its deploy is §15.
+
 ## 1. The request
 
 > "Also some customer asked about buisness they want to run in that case they need unlimited data plans not
@@ -415,3 +419,203 @@ is not in uCRM. **Whether it follows is measured by `--ask` after the deploy, no
    - **F:** `5.18.44: PASSED`.
 5. **Running it again is safe.** Once the container serves `a4abe5e` the script skips the deploy. Stage K then
    finds nothing left to do, and stage AI asks the ten questions again — ten more model calls.
+
+## 13. The 5.18.44 deploy — 27 September 2026, 06:14 UTC
+
+**PASSED: 34 ok, 0 failed, 1 note.** The operator ran the pinned command: `a4abe5e` over `04155df`.
+
+- **A.** The backup was taken (101 MB and 92 KB) and UISP health was recorded.
+- **B.** The container serves `a4abe5e`.
+- **K.** MANY_USERS_HOTSPOT was corrected, as the database's owner (`1000:1000`), with a dry run before and after.
+- **V.** Twenty `ok`, and no fatal error in the container log.
+- **AI.**
+  - The check read 5.18.44.
+  - NETWORK EQUIPMENT lists five items: the MikroTik ← router, the Ruijie ← access point, the cable, the
+    connectors and the consultancy.
+  - Knowledge reaches the assistant up to 1,000 characters; the data-allowance fact is stated; MANY_USERS_HOTSPOT
+    reads whole at 994 characters.
+  - The ten questions were asked.
+
+The operator pasted the terminal rather than sending the log file. Nothing this command prints is secret: the key
+reads "set (not shown)", and conversations are masked.
+
+### 13.1 The one note was the deploy script's fault, not the plugin's
+
+The note said *"no access point is recognised among the network equipment"*. Yet the listing a few lines above it
+showed `Ruijie Reyee RG-RAP6262(G) 1,100,000 ← access point`.
+
+**Cause, measured:**
+
+- `aihas` ran `printf "$AIOUT" | grep -q` under `set -o pipefail`.
+- `grep -q` leaves at its first match. If `printf` is still writing, it dies of SIGPIPE, and `pipefail` then
+  reports the whole pipeline as failed.
+- It is a race. On a 33 KB copy of the output, 2 of 2,000 early matches were lost here.
+- At 1 MB the pipe form loses 20 of 20. A here-string loses 0 of 2,000 at either size.
+
+`deploy-5.18.45.sh` uses a here-string. Its rehearsal tries the matcher 20 times on 1 MB of output, and runs the
+same test on the pipe form as the control. `deploy-5.18.44.sh` is left exactly as it ran.
+
+### 13.2 What the assistant said: ten questions, 5.18.44 live
+
+| Question | Reply |
+|---|---|
+| A1 "a WiFi business in my trading centre" | **refused by the price check** — the fallback, staff alerted |
+| A1 "50 people, unlimited, which package?" | the higher-capacity Residential plan, 329,000, unlimited data; offers the network design; hands over |
+| A2 "unlimited business plans?" | "…then switch to unlimited standard data once that block is used up" — **wrong** (§13.3) |
+| A3 "How much is Business 500?" | 285,000, and the Business-plan note appended |
+| A4 "sell internet around my shop" | Residential, 329,000, "no data cap"; no mention of a reseller programme |
+| B1 "cover 200 m around my hotspot" | **refused by the price check** |
+| B1 "two access points and the MikroTik" | 700,000 + 2 × 1,100,000 = **2,900,000** — right |
+| B2 "WiFi to my other building" | MikroTik, Ruijie, cable, connectors, consultancy = **2,297,500** — right; the site survey; hands over |
+| B3 "price of the access point and MikroTik" | 1,100,000 and 700,000 — right (5.18.43 could not quote the MikroTik) |
+| C1 "installed at my home" | Mini Kit 2,249,000 + installation 150,000 = **2,399,000**; no network equipment added — right |
+
+**The two refusals are the two open design questions.** The price check found an amount it could not match, but
+this log could not say which. The check tool now prints the amounts it could not match, with the draft (§14.3).
+The 5.18.43 answers from the morning check, the baseline, never arrived, so this comparison is with the live
+conversations of §10.
+
+### 13.3 Two approved texts contradicted each other, and the operator decided
+
+- **BUSINESS_PLANS** said *"after that block is used, unlimited standard data continues"* and *"then it behaves
+  like standard data"*.
+- **The note appended to Business replies** (`PlanFenceGuard::DEFAULT_NOTE`) said *"the connection drops to about
+  1 Mbps until more is bought"*.
+
+In A2 the assistant repeated the first. The contradiction was older than 5.18.44: that sentence was always inside
+the old 600-character cut.
+
+**The operator, 27 Sep: "Drops to ~1 Mbps".** BUSINESS_PLANS is corrected in 5.18.45 (§14.2).
+
+The only other text in this repository with the same claim is `dishnet-web/site/guide-how-much-data.html`. That
+page is the **Sudan** website, about Sudan's Priority plans, a different market, and it was left alone.
+
+### 13.4 Two hand-overs gave the word "reason" as their reason
+
+In A1's second turn and in B2, the hand-over reason was literally *"reason"*. The prompt's marker legend has read
+`<<ESCALATE reason>>` since 2 September, and the model sometimes copies it word for word. Staff are still alerted,
+but the reason tells them nothing.
+
+The legend is in South Sudan's prompt too, so a clearer one would change both installs. That makes it **proposal
+P9, for approval**. It was not changed.
+
+### 13.5 The operator's rule for indoor coverage
+
+> "Ruijie Reyee RG-RAP6262(G) … this is out door and for indoor if some one want to cover more floor we have to
+> suggest starlink routers"
+
+This is built in 5.18.45 (§14.1).
+
+## 14. 5.18.45 — as built, 27 September 2026
+
+### 14.1 More floors inside one building: Starlink routers
+
+- **Which products are Starlink routers.** The shop catalogue already records it: category *Router*, matched on
+  the exact product name, as the shop does. Two of the twenty live accessories qualify:
+  - **Router Mini**, 301,000 — fits Standard 4, Standard 4 X, Mini and Gen 2 kits (not Gen 1);
+  - **Router 3 | Starlink V4 or V5, Mini**, 827,000 — fits Standard 4, Standard 4 X, Mini, Gen 2 and Gen 3 kits.
+
+  Nothing is guessed from a name: *Router 3 Mount* is a mount. This is `NetworkEquipment::starlinkRouters`, and
+  the prompt and the price check both use it.
+- **The prompt.**
+  - Those two lines in ACCESSORIES are marked *"Starlink router: Wi-Fi inside the building, working with the other
+    Starlink routers as a mesh; fits …"*.
+  - A new rule, **MORE FLOORS OR ROOMS INSIDE ONE BUILDING — STARLINK ROUTERS**:
+    - more Starlink routers as a mesh, never the outdoor access point or the MikroTik;
+    - offer the routers that fit their kit, each with its price;
+    - if the kit is unknown, name the routers and what each fits, and ask which kit they have **in the same reply**
+      (both routers fit every kit DishNet sells);
+    - one router for each floor beyond the one the main router is on, as quantity × price = amount, then a TOTAL;
+      otherwise one router, and the price of each more;
+    - the site survey confirms the number;
+    - never a coverage figure;
+    - a hand-over to book the survey.
+  - NETWORK EQUIPMENT gains *"This is for OUTDOORS and other buildings…"*.
+- **The price check** allows 1 to 5 of one Starlink router, alone or with any combination of the kit and the
+  installation. That adds 160 permitted totals, and **not one round figure that 5.18.44 refused**:
+  - with the test's inputs, 78 of the 199 round amounts pass, the same list in both versions;
+  - with the three router-related accessories alone, 73 of 199, again the same list.
+
+  With both kits in one total, Mini + Standard + 2 × Router Mini = 5,500,000 is round, but 5.18.44 already let
+  that figure through another way.
+- **Where it applies.** Only where the hardware module is on **and** a Starlink router is listed.
+  - South Sudan is byte-identical: all 50 fingerprints match.
+  - Uganda with no router listed is byte-identical to 5.18.44: 26 fingerprints, fixed from `a4abe5e` — 24 prompts
+    on three paths, and 2 price-check lists.
+- **Why one per floor beyond the main router's:** it mirrors the access-point rule the operator approved. The
+  survey decides.
+
+### 14.2 BUSINESS_PLANS: about 1 Mbps, as the operator answered
+
+- *"when that block is used up, the connection drops to about 1 Mbps until more is bought"* replaces *"unlimited
+  standard data continues"*.
+- *"and then the connection drops to about 1 Mbps"* replaces *"then it behaves like standard data"*.
+- The short form now reads *"after it, about 1 Mbps until more is bought"*.
+- **981 characters** (the limit is 1,000) and **296** (the limit is 300), so both reach the assistant whole.
+- The row agrees with the note appended to Business replies now. Every phrase the existing tests pin was kept.
+- Stage K corrects that one row, exactly as in 5.18.44.
+
+### 14.3 The check tool
+
+- It lists the Starlink routers, with what each fits.
+- For each knowledge row it says what the row claims happens after the priority block: *"the approved fact"*, or
+  *"NOT the approved fact"*.
+- It asks **eleven** questions. The new one is **B4**: *"The WiFi does not reach the upper floors of my house. It
+  has 3 floors. What do I need and how much?"*.
+- For a reply the price check refuses, it prints the **amounts it could not match** and **the draft**, masked like
+  every reply.
+- `scripts/harness/ai-check/rehearse.sh` now runs against 5.18.44, what the server runs, and 5.18.45: **230/230,
+  twice**. Four new weakened copies are each caught.
+
+### 14.4 Proofs
+
+- `tests/test_ai_indoor_routers.php`: **84 assertions**. **Twelve weakened copies each fail it**, each at the
+  assertion written for it:
+  - every accessory taken for a router, and none ever a router;
+  - the routers on every install;
+  - the outdoor line where no router is listed;
+  - no floors rule, and no marking;
+  - the main router's floor priced too;
+  - no router totals, more than five, and never with the kit;
+  - BUSINESS_PLANS reverted, and its short form reverted.
+- The 5.18.44 suite is unchanged: 159.
+- The full suite: SUITE45.
+- `scripts/harness/deploy-5.18.45/rehearse.sh` runs the pinned deploy script against a sandbox container: HARNESS45.
+  Its new matcher test tries the check 20 times on 1 MB of output: the here-string finds it 20 times out of 20,
+  while the 5.18.44 pipe form, as the control, finds it 0 times.
+- `tests/conversation-suite.php` has two new live scenarios for the server: `ug_more_floors` must name a Starlink
+  router and never the Ruijie, and `ug_business_after_priority` must never say standard data continues.
+
+### 14.5 Recorded, not changed
+
+- **P8:** the price check's prompt-digits rule.
+- **P9:** the `<<ESCALATE reason>>` legend (§13.4).
+- **F-1 still holds.** A wrong figure that happens to equal a real combination passes.
+- **What the model does is still measured, not assumed.** The replies in stage AI are the measurement.
+
+## 15. Deploy, and what to send back
+
+1. **The deploy:**
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+     && mkdir -p /root/dnb-5.18.45 \
+     && bash scripts/deploy-5.18.45.sh 2>&1 | tee /root/dnb-5.18.45/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   It takes a backup, then asks you to type `DEPLOY`. It then:
+   - deploys;
+   - corrects BUSINESS_PLANS (stage K: a dry run first, that row only, only while still as seeded);
+   - re-checks the public pages (stage V);
+   - asks the assistant the eleven questions (stage AI).
+
+   Send back **the log file**.
+2. **What the log should show:**
+   - **A:** the pinned plugin commit, and the live commit `a4abe5e`, which is the rollback commit.
+   - **K:** `ok K BUSINESS_PLANS now reads the 5.18.45 wording…`, then `ok K a second dry run has nothing left to do`.
+   - **V:** as on 27 Sep, all `ok`.
+   - **AI:**
+     - the Starlink routers are listed;
+     - BUSINESS_PLANS reads 981 characters;
+     - no row says standard data continues;
+     - the eleven replies, for reading. **B4** is the new one.
+   - **F:** `5.18.45: PASSED`.
+3. **Running it again is safe.** Once the container serves the pinned commit, the deploy is skipped.

@@ -14,9 +14,9 @@
 # never sees; and recent real conversations on these topics (DAYS, default 60) — each customer message with the reply
 # it got. Phone numbers, e-mail addresses and kit numbers are masked; staff are shown as "staff", never by name.
 #
-# --ask also puts ten questions, in eight short conversations, to the INSTALLED assistant on the sales number — the
+# --ask also puts eleven questions, in nine short conversations, to the INSTALLED assistant on the sales number — the
 # same path a customer's message takes (knowledge base, context contract, price check, Business-plan note) — and prints
-# each reply as the customer would receive it. That is ten model calls on the configured provider, a few cents.
+# each reply as the customer would receive it. That is eleven model calls on the configured provider, a few cents.
 #
 # Nothing is changed and nothing is sent. The plugin database is COPIED, as its owner, to a temporary folder inside the
 # container and the copy is read (the journey audit's rule: even a read-only open of the live file can leave SQLite's

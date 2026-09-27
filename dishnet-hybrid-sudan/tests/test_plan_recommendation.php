@@ -53,7 +53,7 @@ is_(stripos($p, 'BEFORE any price') !== false,
 echo "\n2. In terms a customer can act on\n";
 is_(stripos($p, '1 Mbps') !== false,
     'the actual speed after the block is stated',
-    'the knowledge base says "behaves like standard data", which persuades nobody');
+    'the knowledge base said "behaves like standard data" until 5.18.45, which persuades nobody');
 is_(stripos($p, 'until more data is bought') !== false, 'and that buying data restores it');
 is_(stripos($p, 'PRIORITY DATA') !== false, 'the tier numbers are named as data, not speed');
 is_(stripos($p, 'not speeds') !== false, 'explicitly not speeds');

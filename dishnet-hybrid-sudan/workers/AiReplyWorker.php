@@ -861,6 +861,20 @@ class AiReplyWorker extends WorkerBase
                     for ($q = 2; $q <= 5; $q++) $values[] = self::money($sum + $q * (float)$row['price']);
                 }
             }
+            // More floors inside one building (5.18.45, docs/40 §14): one Starlink router per extra
+            // floor, priced as quantity × price — 1 to 5 of one router, alone or with any combination
+            // of the kit and the installation. The routers are accessories; the shop catalogue says
+            // which, exactly as the prompt reads it.
+            $kits = array_slice($kitRows, 0, 6);                            // at most 63 non-empty subsets
+            $nk = count($kits);
+            foreach (\NetworkEquipment::starlinkRouters(dirname(__DIR__), (array)($ctx['products']['accessories'] ?? [])) as $r) {
+                if (!isset($r['price']) || !is_numeric($r['price'])) continue;
+                for ($mask = 0; $mask < (1 << $nk); $mask++) {
+                    $sum = 0.0;
+                    for ($i = 0; $i < $nk; $i++) if ($mask & (1 << $i)) $sum += (float)$kits[$i]['price'];
+                    for ($q = 1; $q <= 5; $q++) $values[] = self::money($sum + $q * (float)$r['price']);
+                }
+            }
         }
         foreach ((array)($ctx['products']['products'] ?? []) as $p) {
             if (!isset($p['price']) || !is_numeric($p['price'])) continue;

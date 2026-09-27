@@ -1552,3 +1552,59 @@ container. It gave **46/46 on three consecutive runs**, over seven scenarios, an
 never prints. The other was a weakened copy without `--only` that was masked by the sandbox's person-edited row:
 the tool's *"Edited by hand"* stopped it before it wrote. That copy is now run on an estate with no person's
 row, beside a control. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 06:14 UTC by the operator: PASSED, 34 ok / 0 failed / 1 note** (docs/40 §13). The note was
+the deploy script's own race and not the plugin's. `aihas` piped `printf` into `grep -q` under `pipefail`, and it
+missed an access point that its own listing showed. Fixed in deploy-5.18.45.sh.
+
+## 5.18.45 — more floors are Starlink routers; a Business priority block ends at about 1 Mbps (docs/40 §14)
+
+**Why.** Two things came up on 27 Sep, once 5.18.44 was live.
+
+- **Indoor coverage.** The operator: *"Ruijie Reyee RG-RAP6262(G) … this is out door and for indoor if some one
+  want to cover more floor we have to suggest starlink routers"*.
+- **Business data.** The live check showed the assistant telling a customer that a Business plan's priority block
+  is followed by "unlimited standard data". That came from the BUSINESS_PLANS knowledge row. The note appended to
+  Business replies says the opposite: about 1 Mbps until more is bought. Asked which was right, the operator
+  answered: *"Drops to ~1 Mbps"*.
+
+**What.** Uganda only: where the hardware module is on and a Starlink router is listed.
+
+- **The Starlink routers.** Router Mini and Router 3 are taken from the shop catalogue's category *Router*, by exact
+  name (`NetworkEquipment::starlinkRouters`). Nothing is guessed from a name: *Router 3 Mount* is a mount.
+- **The prompt.** Both routers are marked in ACCESSORIES with what each fits. A new rule, **MORE FLOORS OR ROOMS
+  INSIDE ONE BUILDING**:
+  - Starlink routers as a mesh, never the outdoor access point or the MikroTik;
+  - one router per floor beyond the main router's, as quantity × price;
+  - the kit asked about in the same reply;
+  - the survey confirms the number.
+
+  NETWORK EQUIPMENT is marked *for outdoors*.
+- **The price check** allows 1 to 5 of one router, with any of the kit and the installation. That is 160 more
+  permitted totals, and not one round figure 5.18.44 refused.
+- **BUSINESS_PLANS** now says *"the connection drops to about 1 Mbps until more is bought"*. It is 981 characters,
+  and its short form 296, so both reach the assistant whole. Stage K corrects that row only.
+- **The check tool.**
+  - It lists the Starlink routers.
+  - It says what each knowledge row claims happens after the priority block.
+  - It asks eleven questions; the new one is about floors.
+  - For a refused reply, it prints the **amounts it could not match and the draft**. Two replies were refused
+    live on 27 Sep and the log could not say why.
+
+**Recorded, not changed.**
+
+- **P9:** the marker legend `<<ESCALATE reason>>` is sometimes copied word for word, so a hand-over's reason reads
+  "reason". The legend is in South Sudan's prompt too, so this needs approval.
+- **P8** is still open.
+
+**Proof.**
+
+- `tests/test_ai_indoor_routers.php` **84**; twelve weakened copies each fail it.
+- South Sudan: all 50 fingerprints unchanged. Uganda with no Starlink router listed: 26 fingerprints byte-identical
+  to 5.18.44 (a new golden from `a4abe5e`).
+- The check's rehearsal against 5.18.44 and 5.18.45: **230/230, twice**.
+- Suite: SUITE45.
+
+**Deploy.** `scripts/deploy-5.18.45.sh`, pinned to the plugin commit. Stage K corrects BUSINESS_PLANS, stage V as
+5.18.44, and stage AI asks the eleven questions with the race-free matcher. Rehearsed in
+`scripts/harness/deploy-5.18.45/rehearse.sh`: HARNESS45. **Not deployed by this session.**

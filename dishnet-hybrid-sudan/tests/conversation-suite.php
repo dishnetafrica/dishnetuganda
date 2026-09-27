@@ -500,6 +500,20 @@ $SCENARIOS = [
      'must_not' => ['mikrotik', 'access point', 'ruijie', 'rg-rap']],
   ],
 
+  // 5.18.45 (docs/40 §14): more floors inside one building are Starlink routers; the Ruijie is for outdoors.
+  'ug_more_floors' => [
+    ['say' => 'The WiFi does not reach the upper floors of my house. It has 3 floors. What do I need and how much?',
+     'any'      => ['router mini', 'router 3'],
+     'must'     => ['ugx'],
+     'must_not' => ['ruijie', 'rg-rap', 'not able to complete that one automatically']],
+  ],
+
+  // 5.18.45: a Business plan's priority block ends at about 1 Mbps (the operator, 27 Sep) — never "standard data continues".
+  'ug_business_after_priority' => [
+    ['say' => 'Do you have unlimited business plans?',
+     'must_not' => ['switch to unlimited standard data', 'standard data continues', 'then unlimited standard data']],
+  ],
+
   'ug_site_coverage' => [
     ['say' => 'will Starlink work at my place in Luuka District?',
      'any'      => ['clear view', 'sky', 'survey', 'technician', 'check'],
