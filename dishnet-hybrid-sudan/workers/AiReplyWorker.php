@@ -59,7 +59,7 @@ class AiReplyWorker extends WorkerBase
         // One brain, one knowledge base: the same approved answers the website
         // chat uses ride into the shared system prompt. Empty (legacy) when
         // migration 064 has not been seeded.
-        $config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
+        $config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo(), KnowledgeBase::answerLimit($config));
         // Only when an image actually exists is the model offered <<FLYER>> —
         // otherwise the prompt is unchanged and the AI cannot promise an
         // attachment nothing would send.
@@ -444,8 +444,7 @@ class AiReplyWorker extends WorkerBase
         // accounts last, after B3.4 has shown the tool answers match.
         if ($channel === EvolutionApiService::CHANNEL_SALES) {
             require_once dirname(__DIR__) . '/lib/BrainContext.php';
-            $products = $ctx['products'] ?? [];
-            $products['stock'] = (string)($this->config['stock_statement'] ?? '');
+            $products = self::salesCatalogue((array)($ctx['products'] ?? []), (array)$this->config);
             return \BrainContext::build(
                 \ConversationService::identityState($identityKey),
                 [
@@ -765,6 +764,39 @@ class AiReplyWorker extends WorkerBase
 
     private function permittedValues(array $ctx, string $prompt): array
     {
+        // `?? []`: a worker built without its constructor (the tests, the AI check) has no config yet.
+        return self::permittedAmounts($ctx, $prompt, (array)($this->config ?? []));
+    }
+
+    /**
+     * The price list as the sales number hands it to BrainContext: BrainContext::catalogue(), the
+     * one rule the website chat follows too — the stock statement, and the accessories only where
+     * the hardware advice module is on (docs/40, B-4). Public so scripts/lib/ai_check.php asks the
+     * way this does.
+     */
+    public static function salesCatalogue(array $products, array $config): array
+    {
+        require_once dirname(__DIR__) . '/lib/BrainContext.php';
+        return \BrainContext::catalogue($products, $config);
+    }
+
+    /**
+     * permittedValues() for a given configuration. Public so the AI check applies the same price
+     * check a customer's reply goes through.
+     *
+     * With the hardware advice module on (5.18.44, docs/40) the totals cover what the assistant is
+     * now asked to design: a setup from NETWORK EQUIPMENT. Measured on 27 Sep 2026: the MikroTik was
+     * the SEVENTH one-time product, and only the first six could be part of a total — so every
+     * quote with the MikroTik in it was refused, and "two access points = …" was refused too.
+     * Now every combination of up to ten one-time items is a permitted total, and so is 2 to 5 of
+     * one access point, alone or with any of the others — added to the totals allowed before, never
+     * instead of them. Nothing wider: only an access point is multiplied, and each value is still an
+     * exact sum of listed prices, so an invented figure is refused as before.
+     *
+     * @return string[]
+     */
+    public static function permittedAmounts(array $ctx, string $prompt, array $config): array
+    {
         $values = [];
         $walk = function ($node) use (&$walk, &$values): void {
             if (is_array($node)) { foreach ($node as $v) $walk($v); return; }
@@ -775,10 +807,12 @@ class AiReplyWorker extends WorkerBase
             if (isset($ctx[$k])) $walk($ctx[$k]);
         }
 
-        $hw = [];
+        $hwRows = [];
         foreach ((array)($ctx['products']['hardware'] ?? []) as $h) {
-            if (isset($h['price']) && is_numeric($h['price'])) $hw[] = (float)$h['price'];
+            if (is_array($h) && isset($h['price']) && is_numeric($h['price'])) $hwRows[] = $h;
         }
+        $hw = [];
+        foreach ($hwRows as $h) $hw[] = (float)$h['price'];
         $hw = array_slice($hw, 0, 6);                  // at most 63 non-empty subsets
         // Accessories (5.18.11): a customer may take the kit, the
         // installation and a wall mount. Every hardware subset, alone and
@@ -800,6 +834,33 @@ class AiReplyWorker extends WorkerBase
             for ($i = 0; $i < $n; $i++) if ($mask & (1 << $i)) $sum += $hw[$i];
             if ($mask > 0) $values[] = self::money($sum);
             foreach ($accSums as $extra) $values[] = self::money($sum + $extra);
+        }
+        if (filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            // Added to the totals above, never instead of them: every total allowed before 5.18.44
+            // is allowed still. The kit and the installation first, then the network equipment, as
+            // the prompt lists them.
+            if (!class_exists('NetworkEquipment')) require_once dirname(__DIR__) . '/lib/NetworkEquipment.php';
+            [$kitRows, $netRows] = \NetworkEquipment::split(dirname(__DIR__), $hwRows);
+            $pool = array_slice(array_merge($kitRows, $netRows), 0, 10);   // at most 1,023 non-empty subsets
+            $np = count($pool);
+            for ($mask = 1; $mask < (1 << $np); $mask++) {
+                $sum = 0.0;
+                for ($i = 0; $i < $np; $i++) if ($mask & (1 << $i)) $sum += (float)$pool[$i]['price'];
+                $values[] = self::money($sum);
+            }
+            foreach ($pool as $a => $row) {
+                // Only an access point is priced by the number the customer asks for (the design rule:
+                // "quantity × price = amount"); every other item is one of each, the survey confirming it.
+                if (($row['role_key'] ?? null) !== 'access_point') continue;
+                // 2 to 5 of this access point, alone or with any combination of the others.
+                $others = array_values(array_filter($pool, fn($k) => $k !== $a, ARRAY_FILTER_USE_KEY));
+                $no = count($others);
+                for ($mask = 0; $mask < (1 << $no); $mask++) {
+                    $sum = 0.0;
+                    for ($i = 0; $i < $no; $i++) if ($mask & (1 << $i)) $sum += (float)$others[$i]['price'];
+                    for ($q = 2; $q <= 5; $q++) $values[] = self::money($sum + $q * (float)$row['price']);
+                }
+            }
         }
         foreach ((array)($ctx['products']['products'] ?? []) as $p) {
             if (!isset($p['price']) || !is_numeric($p['price'])) continue;

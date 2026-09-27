@@ -66,7 +66,8 @@ final class BrainContext
         'medium'         => ['*'],
         'products'       => ['products.name', 'products.price', 'products.period_months',
                              'products.download_speed', 'products.upload_speed',
-                             'products.data_limit', 'hardware.name', 'hardware.price', 'stock'],
+                             'products.data_limit', 'hardware.name', 'hardware.price',
+                             'accessories.name', 'accessories.price', 'stock'],
         'message'        => ['*'],
         'history'        => ['role', 'text'],
         'thread'         => ['*'],
@@ -172,9 +173,19 @@ final class BrainContext
                 $hw[] = ['name' => self::str($row['name'] ?? ''),
                          'price' => self::num($row['price'] ?? null)];
             }
+            // The optional extras (5.18.11), name and price only, like hardware. Absent until
+            // 5.18.44: the sales number — where most customers write — never showed the assistant
+            // the accessories the support number did (docs/40, B-4). Only when the caller passes
+            // them, and the callers pass them only through catalogue(), where the module is on.
+            $acc = [];
+            foreach (self::rows($p['accessories'] ?? null) as $row) {
+                $acc[] = ['name' => self::str($row['name'] ?? ''),
+                          'price' => self::num($row['price'] ?? null)];
+            }
             $stock = self::str($p['stock'] ?? '');
-            if ($plans || $hw || $stock !== '') {
+            if ($plans || $hw || $acc || $stock !== '') {
                 $out['products'] = ['products' => $plans, 'hardware' => $hw, 'stock' => $stock];
+                if ($acc) $out['products']['accessories'] = $acc;
             }
         }
 
@@ -207,6 +218,26 @@ final class BrainContext
         if ($sig !== '') $out['signature'] = $sig;
 
         return $out;
+    }
+
+    /**
+     * The price list a selling channel hands to build() (5.18.44, docs/40 B-4).
+     *
+     * The stock statement is added, and the accessories travel only where the hardware advice
+     * module is on (Uganda). build() keeps accessories whenever a caller passes them; until
+     * 5.18.44 the contract dropped them everywhere, so neither the sales number nor the website
+     * chat ever showed the assistant the extras the support number did. Both callers that hand
+     * build() a catalogue — the WhatsApp worker (AiReplyWorker::salesCatalogue) and the website
+     * chat — come through here, so an install that has not switched the module on keeps exactly
+     * the prompt it had.
+     */
+    public static function catalogue(array $products, array $config): array
+    {
+        $products['stock'] = (string)($config['stock_statement'] ?? '');
+        if (!filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            unset($products['accessories']);
+        }
+        return $products;
     }
 
     /**

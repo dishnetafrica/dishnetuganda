@@ -1,0 +1,36 @@
+{
+  "_note": "Network equipment the assistant designs with when a customer wants Wi-Fi over a bigger area or in another building (docs/40; the operator's decision of 27 Sep 2026: 'lets ai to design and give price of accespoint if avaible in system'). A uCRM product whose name CONTAINS one of a role's match strings (case-insensitive) is listed to the assistant under NETWORK EQUIPMENT with that role's label, instead of under HARDWARE. The first role that matches wins, so the connectors come before the cable ('RJ45 Cat6 ... Connector' also contains 'cat6'). NO PRICE LIVES HERE: every price comes from uCRM at request time, and a role with no matching product simply does not appear. Checked against the live product names on 27 Sep 2026: 'Ruijie Reyee RG-RAP6262(G)', 'MikroTik L009 Series', 'D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CAB...', 'RJ45 Cat6 Pass-Through Connector (PACK OF 1...', 'ICT Consultancy Charges'. A label says what the item is FOR, never how far it reaches: there is no coverage figure for any of them.",
+  "version": 1,
+  "roles": [
+    {
+      "key": "connectors",
+      "label": "RJ45 connectors for the network cable",
+      "match": ["rj45", "connector"]
+    },
+    {
+      "key": "access_point",
+      "label": "outdoor Wi-Fi access point, mounted on a pole or a wall: carries the Wi-Fi across an outdoor area or to another building",
+      "match": ["rg-rap62", "outdoor access point", "outdoor omni"]
+    },
+    {
+      "key": "access_point",
+      "label": "Wi-Fi access point: extends the Wi-Fi to a further room or area",
+      "match": ["access point", "rg-rap", "rg-eap"]
+    },
+    {
+      "key": "router",
+      "label": "MikroTik router: runs the local network and manages the access points",
+      "match": ["mikrotik"]
+    },
+    {
+      "key": "cable",
+      "label": "outdoor network cable joining the router to the access points; the site survey confirms the length",
+      "match": ["cat 6", "cat6", "network cable", "lan cable"]
+    },
+    {
+      "key": "consultancy",
+      "label": "ICT consultancy: designing and setting up the network",
+      "match": ["consultancy"]
+    }
+  ]
+}

@@ -138,6 +138,12 @@ $FLAGS = [
     'ai_fact_business_cap' => ['text',
         'Appended when the AI quotes a Business plan without offering Residential — the priority-data '
       . 'cap and the 1 Mbps drop ("omit" = never append; unset = the built-in wording)'],
+    // 5.18.44 (docs/40): the data allowance, stated beside the plans where the install qualifies.
+    // Unset uses DishNetAiBrain::UNLIMITED_FACT, the wording the operator approved on 27 Sep 2026
+    // ("keep as it is"); "omit" switches it off.
+    'ai_fact_unlimited' => ['text',
+        'What the AI says about data allowances, word for word ("omit" = say nothing; unset = both '
+      . 'Residential plans are unlimited, only the Business plans carry a block of priority data)'],
     // The three business facts that shipped with South Sudan wording and had
     // no way to change them: not on the uCRM Configuration screen, not in the
     // Engage tab, not here. Unset, a Ugandan customer is told the office is

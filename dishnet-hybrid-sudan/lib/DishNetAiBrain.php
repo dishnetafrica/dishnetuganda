@@ -398,6 +398,16 @@ class DishNetAiBrain
         $esc  = $this->markerHint(self::MARKER_ESCALATE);
         $lead = filter_var($this->config['ai_lead_capture'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $inLead = $lead ? ' Put it in the LEAD line.' : '';
+        // Business pricing asked for and not in PLANS. It sent every such prospect to a colleague
+        // (docs/40 A-3); where the install qualifies, the Residential prices come first and the one
+        // question that decides it follows. Word for word as before everywhere else.
+        $biz = $this->qualifies()
+            ? "prices. Where they asked for business pricing and it is not in PLANS, give the "
+              . "Residential prices, say the Business plans are for a public IP, and ask whether they "
+              . "need one (their cameras, a VPN or a server reached from outside); only if they do, say "
+              . "the team confirms the Business price and " . $esc . "."
+            : "prices, both residential and business when they asked for both; where Business "
+              . "pricing is not in PLANS, say the team confirms that one and " . $esc . ".";
 
         return "\nNOBODY IN OUR BILLING SYSTEM MATCHES THIS CONVERSATION — treat them as a "
              . "prospective customer, and sell the way a good salesperson would.\n"
@@ -409,8 +419,7 @@ class DishNetAiBrain
              . "email address answered with \"how can I assist you?\" is a customer ignored.\n"
              . "- WHEN THEY ASK WHAT IT COSTS — a quote, a \"basic quote\", prices, packages, "
              . "\"send me the options\" — ANSWER FIRST. Give the plans from PLANS with their "
-             . "prices, both residential and business when they asked for both; where Business "
-             . "pricing is not in PLANS, say the team confirms that one and " . $esc . ". Then ask "
+             . $biz . " Then ask "
              . "ONE qualifying question after the list, never instead of it. A prospect who asks "
              . "for prices twice and gets two questions back has been told nothing.\n"
              . "- WHEN THEY ADDRESS A COLLEAGUE BY NAME, or say they just spoke, met or emailed "
@@ -661,7 +670,10 @@ class DishNetAiBrain
      * Only what the operator actually set. A built-in default is not returned:
      * the South Sudan defaults carry instructions ("Say exactly that", "Do NOT
      * promise a number of days") that no customer should be shown, and a
-     * default is nobody's deliberate choice.
+     * default is nobody's deliberate choice. One exception, and only where the
+     * prompt states it (unlimitedFact): the data-allowance fact's default, which
+     * is customer-facing wording with no instruction in it and which the
+     * operator approved as written on 27 Sep 2026 ("keep as it is", docs/40).
      *
      * @param  array<string,mixed> $config
      * @return array<int,string>
@@ -685,6 +697,14 @@ class DishNetAiBrain
             $v = trim((string)($config[$k] ?? ''));
             if ($v === '' || strtolower($v) === 'omit') continue;
             $out[] = $v;
+        }
+        // The data-allowance fact (5.18.44), under the same gate as unlimitedFact(): the model is
+        // told to repeat it word for word, so a reply that does must not read as a quote of the
+        // prompt. Where the prompt does not state it, the list is what it was.
+        if (filter_var($config['ai_qualification'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            && trim((string)($config['knowledge_block'] ?? '')) !== '') {
+            $u = trim((string)($config['ai_fact_unlimited'] ?? ''));
+            if (strtolower($u) !== 'omit') $out[] = $u !== '' ? $u : self::UNLIMITED_FACT;
         }
         return $out;
     }
@@ -1084,10 +1104,23 @@ class DishNetAiBrain
              . "question. A trading centre, hotspot, school hall, church, hotel or anywhere "
              . "the public connects needs a dish, a router, access points and someone to size "
              . "it — one kit alone does not serve fifty or a hundred people however good the "
-             . "plan is. Say that plainly, take the site details, and " . $esc . " for a site "
+             . "plan is. Say that plainly and recommend the higher-capacity Residential plan "
+             . "(unlimited data). Where NETWORK EQUIPMENT is in your data, design and price a "
+             . "starting setup from it in the same reply, as COVERING A BIGGER AREA says, then "
+             . "take the site details for the survey and " . $esc . " once they want to go "
+             . "ahead; where it is not, take the site details and " . $esc . " for a site "
              . "assessment. Where HARDWARE gives a device limit you may state it, as the "
              . "maker's figure for how many things may attach — never as how many people "
              . "will get usable service, which it is not. Never invent a number.\n"
+             . "- SOMEONE WHO WANTS TO SELL INTERNET — a Wi-Fi hotspot, a Wi-Fi zone, sharing "
+             . "with neighbours or customers — is buying a connection and equipment like anyone "
+             . "else. The higher-capacity Residential plan (unlimited data) is the plan; a "
+             . "Business plan's block of priority data would run out. Where NETWORK EQUIPMENT "
+             . "is in your data, design and price the setup as COVERING A BIGGER AREA says; where "
+             . "it is not, take the site details for a site assessment. Never tell them we have "
+             . "no reseller or partner "
+             . "programme: you do not know that. If they ask about partner, reseller or "
+             . "commission terms, take their details and " . $esc . ".\n"
              . "- Anything large, multi-site, or asking for a contract or guaranteed uptime: "
              . "take the details and " . $esc . " rather than designing it yourself.\n"
              . $this->leadCapture();
@@ -1180,6 +1213,100 @@ class DishNetAiBrain
             require_once $lib;
         }
         return HardwareKnowledge::promptBlock($file);
+    }
+
+    /**
+     * The data allowance, stated (5.18.44, docs/40 A-1).
+     *
+     * uCRM's plans carry no data limit, and absolute rule 2 forbids calling a missing field
+     * unlimited — so the only "unlimited" the assistant could attach to a product was the Business
+     * plans' standard data after their block. Measured on 25 Sep: "Is it unlimited?" was answered
+     * "The plans we offer are not unlimited". The operator's answer on 27 Sep, asked whether both
+     * Residential plans may be called unlimited with no cap: "keep as it is" — the wording put to
+     * them, below. ai_fact_unlimited replaces it; "omit" switches it off.
+     *
+     * Only where the install qualifies and runs a knowledge base (Uganda), and only when a
+     * Residential plan is in the list the customer is shown.
+     */
+    public const UNLIMITED_FACT =
+        'Both Residential plans (Residential Lite and Residential) are unlimited, with no data cap. '
+      . 'Only the Business plans come with a block of priority data (50 GB, 500 GB or 1 TB).';
+
+    private function unlimitedFact(array $plans): string
+    {
+        if (!$this->qualifies()) return '';
+        if (trim((string)($this->config['knowledge_block'] ?? '')) === '') return '';
+        $v = trim((string)($this->config['ai_fact_unlimited'] ?? ''));
+        if (strtolower($v) === 'omit') return '';
+        $residential = false;
+        foreach ($plans as $p) {
+            if (is_array($p) && preg_match('/\bresidential\b/i', (string)($p['name'] ?? ''))) { $residential = true; break; }
+        }
+        if (!$residential) return '';
+        return 'DATA ALLOWANCE (a stated fact — repeat it word for word when asked): '
+             . ($v !== '' ? $v : self::UNLIMITED_FACT) . "\n";
+    }
+
+    /** The install qualifies before recommending (Uganda). */
+    private function qualifies(): bool
+    {
+        return filter_var($this->config['ai_qualification'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /** Network equipment is its own block, with a design rule, where the hardware advice module is on. */
+    private function networkDesign(): bool
+    {
+        return filter_var($this->config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * NETWORK EQUIPMENT and how to design with it (5.18.44, docs/40).
+     *
+     * The operator priced an outdoor access point and a MikroTik so the assistant could quote a
+     * bigger area; measured on 23-26 Sep, it never did. Their decision on 27 Sep: "lets ai to desing
+     * and give price of accespoint if avaible in system". So the assistant designs a starting setup
+     * and prices it from what uCRM holds, one access point unless the customer names a number, and
+     * the survey confirms the rest. It is given no coverage figure and is told it has none.
+     */
+    private function networkBlock(array $network): string
+    {
+        $esc = $this->markerHint(self::MARKER_ESCALATE);
+        $d = "\nNETWORK EQUIPMENT (one-time, live from our system — quote these exactly; for Wi-Fi over a "
+           . "bigger area or in another building):\n";
+        foreach ($network as $n) {
+            $d .= '- ' . ($n['name'] ?? 'Unnamed');
+            $d .= isset($n['price']) && $n['price'] !== null
+                ? ' — price ' . rtrim(rtrim(number_format((float)$n['price'], 2, '.', ''), '0'), '.')
+                : ' — price not listed (say you will confirm)';
+            $d .= ' one-time — ' . ($n['role'] ?? '') . "\n";
+        }
+        $d .= "COVERING A BIGGER AREA OR ANOTHER BUILDING — DESIGN IT AND PRICE IT.\n"
+            . "- When a customer wants the Wi-Fi to reach further — a compound, another building, a "
+            . "shop front, a trading centre, a Wi-Fi hotspot business — the dish is not the answer; the "
+            . "network is. Design a starting setup from NETWORK EQUIPMENT and price it in the same "
+            . "reply. Do not only say that it needs a site assessment.\n"
+            . "- The usual setup: the router to run the network, outdoor access point(s) to carry the "
+            . "Wi-Fi to the area, the outdoor cable and connectors to join them, and the ICT "
+            . "consultancy where it is listed. Add the Starlink kit and the installation from HARDWARE "
+            . "if they do not have Starlink yet.\n"
+            . "- One line per item, named exactly as in NETWORK EQUIPMENT, with its price; then a clearly "
+            . "labelled TOTAL for that setup. If they need a plan, the higher-capacity Residential plan "
+            . "(unlimited data) goes on its own line after the total, never inside it.\n"
+            . "- How many access points depends on the size of the area, walls, trees and the ground. If "
+            . "the customer says how many they want, use that number and write the line as quantity × "
+            . "price = amount. Otherwise price ONE access point and say what each additional one costs. "
+            . "Always say that the site survey confirms the number of access points, the cable length "
+            . "and the installation.\n"
+            . "- Never state a distance, an area or a number of users that an access point or a router "
+            . "covers: you have no figure for any of them. For kilometres, or across a valley or a hill, "
+            . "say it needs a survey and a point-to-point design, and " . $esc . ".\n"
+            . "- If they ask for an item that is not in NETWORK EQUIPMENT, say you will confirm it. Never "
+            . "ask the customer what we charge.\n"
+            . "- NETWORK EQUIPMENT is never part of an ordinary TOTAL TO GET CONNECTED: add it only when "
+            . "they want a bigger area or another building covered, or ask for an item.\n"
+            . "- When they want to go ahead or ask for the survey, take the location and " . $esc
+            . " so the team books it.\n";
+        return $d . $this->currencyRule();
     }
 
     /**
@@ -1351,8 +1478,9 @@ class DishNetAiBrain
                 if (!empty($p['data_limit']))     $d .= ', data limit ' . $p['data_limit'];
                 $d .= "\n";
             }
+            $d .= $this->unlimitedFact($products);
             if (!empty($planCut['filtered'])) {
-                $d .= \PlanCatalogue::ASK_RULE;
+                $d .= \PlanCatalogue::askRule($this->qualifies());
             }
             // uCRM's plan and product responses carry no currency, so the brain was
             // told to stay silent rather than guess one. That was right while
@@ -1377,6 +1505,15 @@ class DishNetAiBrain
         }
 
         $hardware = $ctx['products']['hardware'] ?? null;
+        // Network equipment, apart from the kit (5.18.44, docs/40): the access points, the MikroTik,
+        // the cable. In HARDWARE they read as parts of getting connected and said nothing about what
+        // they were for. Only where the hardware advice module is on, so another install's prompt is
+        // byte-identical.
+        $network = [];
+        if (is_array($hardware) && $hardware && $this->networkDesign()) {
+            if (!class_exists('NetworkEquipment')) require_once __DIR__ . '/NetworkEquipment.php';
+            [$hardware, $network] = \NetworkEquipment::split(dirname(__DIR__), $hardware);
+        }
         if (is_array($hardware) && $hardware) {
             $d .= "\nHARDWARE (one-time items, live from our system — quote these exactly):\n";
             foreach ($hardware as $h) {
@@ -1407,6 +1544,7 @@ class DishNetAiBrain
             $d .= "\nHARDWARE: no kit or installation prices are in your data. If asked what "
                 . "equipment costs, say you will confirm and take their details.\n";
         }
+        if ($network) $d .= $this->networkBlock($network);
 
         // Optional extras, apart from the kit. Twenty mounts, routers and
         // cables arrived in uCRM Products with the accessories shop; listed

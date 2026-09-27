@@ -64,9 +64,15 @@ function traits(string $r): string {
 // ── The installed plugin ────────────────────────────────────────────────────
 foreach (['bootstrap_data', 'PluginConfig', 'KnowledgeBase', 'CrmApiClient', 'ShopCatalogue', 'DishNetTools',
           'PlanCatalogue', 'PlanFenceGuard', 'ReplyPrivacyGuard', 'BrainContext', 'DishNetAiBrain',
-          'EvolutionApiService', 'FlyerAsset', 'MediaLibrary'] as $lib) {
+          'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus'] as $lib) {
     if (is_file("{$root}/lib/{$lib}.php")) require_once "{$root}/lib/{$lib}.php";
 }
+// The worker's class, for its own catalogue preparation and price check (never constructed).
+foreach (['workers/WorkerBase.php', 'workers/AiReplyWorker.php'] as $f) {
+    if (is_file("{$root}/{$f}") && class_exists('EventBus')) require_once "{$root}/{$f}";
+}
+// 5.18.44 and later prepare the sales catalogue and the price check in one public place each.
+$since44 = method_exists('AiReplyWorker', 'salesCatalogue') && method_exists('AiReplyWorker', 'permittedAmounts');
 $man = json_decode((string)@file_get_contents("{$root}/manifest.json"), true) ?: [];
 $version = (string)($man['information']['version'] ?? '?');
 if (!function_exists('getDataDir') || !class_exists('PluginConfig') || !class_exists('DishNetAiBrain')) {
@@ -93,7 +99,10 @@ try {
 }
 
 // The assistant's settings exactly as the live worker builds them (AiReplyWorker::__construct).
-$config['knowledge_block'] = class_exists('KnowledgeBase') ? KnowledgeBase::promptBlock($pdo) : '';
+// 5.18.44 and later cut each approved answer at the limit the configuration sets (KnowledgeBase::answerLimit).
+$kbLimit = method_exists('KnowledgeBase', 'answerLimit') ? KnowledgeBase::answerLimit($config) : 600;
+$config['knowledge_block'] = class_exists('KnowledgeBase')
+    ? (method_exists('KnowledgeBase', 'answerLimit') ? KnowledgeBase::promptBlock($pdo, $kbLimit) : KnowledgeBase::promptBlock($pdo)) : '';
 if (class_exists('FlyerAsset') && FlyerAsset::find($config, $dataDir) !== null) $config['flyer_available'] = '1';
 if (class_exists('MediaLibrary')) $config['photo_block'] = MediaLibrary::promptBlock($dataDir);
 
@@ -106,8 +115,12 @@ $data  = !empty($cat['ok']) && is_array($cat['data']) ? $cat['data'] : null;
 /** The context the live worker gives the brain: the sales number goes through BrainContext. */
 $contextFor = function (string $channel, string $message, array $history) use ($data, $config): array {
     if ($channel === 'sales' && class_exists('BrainContext')) {
-        $products = $data ?? [];
-        $products['stock'] = (string)($config['stock_statement'] ?? '');
+        if (method_exists('AiReplyWorker', 'salesCatalogue')) {
+            $products = AiReplyWorker::salesCatalogue($data ?? [], $config);
+        } else {
+            $products = $data ?? [];
+            $products['stock'] = (string)($config['stock_statement'] ?? '');
+        }
         return BrainContext::build('unknown', ['customer' => null, 'channel' => 'sales', 'transport' => 'whatsapp',
             'medium' => '', 'products' => $products, 'message' => $message, 'history' => $history]);
     }
@@ -134,6 +147,13 @@ if ($mode === 'report') {
     }
     $cap = trim((string)($config['ai_fact_business_cap'] ?? ''));
     out('Business-plan note', $cap === '' ? 'the default (PlanFenceGuard::DEFAULT_NOTE)' : (strtolower($cap) === 'omit' ? 'OFF (omit)' : 'your own wording: ' . clip(mask($cap), 160)));
+    if (defined('DishNetAiBrain::UNLIMITED_FACT')) {
+        $uf = trim((string)($config['ai_fact_unlimited'] ?? ''));
+        out('"unlimited" fact', $uf === '' ? 'the default wording: ' . clip(DishNetAiBrain::UNLIMITED_FACT, 110)
+            : (strtolower($uf) === 'omit' ? 'OFF (omit)' : 'your own wording: ' . clip(mask($uf), 110)));
+    } else {
+        out('"unlimited" fact', 'none — this version does not state it (5.18.44 does)');
+    }
     $custom = trim((string)($config['bot_custom_instructions'] ?? ''));
     if ($custom === '') {
         out('extra instructions', 'none');
@@ -175,18 +195,40 @@ if ($mode === 'report') {
                 !empty($p['data_limit']) ? '  · data limit ' . clip((string)$p['data_limit'], 20) : '  · no data limit in uCRM');
         }
         $hw = (array)($data['hardware'] ?? []);
-        out('HARDWARE (one-time)', count($hw) . ' — both numbers see these; a total may combine only the first 6');
-        foreach ($hw as $i => $h) {
-            $n = (string)($h['name'] ?? '?');
-            $tag = preg_match('/access ?point|outdoor|mikro ?tik|\bap\b|router|mesh|switch/i', $n) ? '  ← network equipment' : '';
-            printf("    %2d. %-44s %12s%s%s\n", $i + 1, clip($n, 44), isset($h['price']) && $h['price'] !== null ? money($h['price']) : 'no price',
-                $i >= 6 ? '  · beyond the 6th: a total including it is REFUSED by the price check' : '', $tag);
+        $hwOn = filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if ($since44 && $hwOn && class_exists('NetworkEquipment')) {
+            // 5.18.44: network equipment is its own block, with its role, and totals cover up to ten items.
+            [$kit, $netRows] = NetworkEquipment::split($root, $hw);
+            out('HARDWARE (one-time)', count($kit) . ' — the kit, the installation and other one-time items');
+            foreach ($kit as $i => $h) {
+                printf("    %2d. %-60s %12s\n", $i + 1, clip((string)($h['name'] ?? '?'), 60), isset($h['price']) && $h['price'] !== null ? money($h['price']) : 'no price');
+            }
+            out('NETWORK EQUIPMENT (one-time)', count($netRows) . ' — what the assistant designs a bigger-area setup from');
+            foreach ($netRows as $i => $h) {
+                printf("    %2d. %-60s %12s  ← %s\n", $i + 1, clip((string)($h['name'] ?? '?'), 60), isset($h['price']) && $h['price'] !== null ? money($h['price']) : 'no price',
+                    str_replace('_', ' ', (string)$h['role_key']));
+            }
+            out('totals the price check allows', 'any combination of the first 10 one-time items, and 2 to 5 of one access point with any of the others');
+        } else {
+            out('HARDWARE (one-time)', count($hw) . ' — both numbers see these; a total may combine only the first 6');
+            foreach ($hw as $i => $h) {
+                $n = (string)($h['name'] ?? '?');
+                $tag = preg_match('/access ?point|outdoor|mikro ?tik|\bap\b|router|mesh|switch/i', $n) ? '  ← network equipment' : '';
+                printf("    %2d. %-60s %12s%s%s\n", $i + 1, clip($n, 60), isset($h['price']) && $h['price'] !== null ? money($h['price']) : 'no price',
+                    $i >= 6 ? '  · beyond the 6th: a total including it is REFUSED by the price check' : '', $tag);
+            }
         }
         $acc = (array)($data['accessories'] ?? []);
-        out('ACCESSORIES (optional extras)', count($acc) . ' — shown on the support and accounts numbers only; the sales number never sees them (BrainContext)');
+        out('ACCESSORIES (optional extras)', count($acc) . (($since44 && $hwOn) ? ' — every number sees these'
+            : ' — shown on the support and accounts numbers only; the sales number never sees them (BrainContext)'));
         foreach ($acc as $a) {
             $n = (string)($a['name'] ?? '?');
-            if (preg_match('/access ?point|outdoor|mikro ?tik|router|mesh/i', $n)) {
+            if ($since44 && $hwOn && class_exists('NetworkEquipment')) {
+                // The shop catalogue claims its own names first, so network equipment named there stays an accessory.
+                $r = NetworkEquipment::roleFor($root, $n);
+                if ($r !== null) printf("        %-44s %12s  ← named like a %s, but the shop lists it: an ACCESSORY, not in NETWORK EQUIPMENT\n",
+                    clip($n, 44), isset($a['price']) ? money($a['price']) : 'no price', str_replace('_', ' ', $r['key']));
+            } elseif (preg_match('/access ?point|outdoor|mikro ?tik|router|mesh/i', $n)) {
                 printf("        %-44s %12s  ← network equipment\n", clip($n, 44), isset($a['price']) ? money($a['price']) : 'no price');
             }
         }
@@ -200,20 +242,22 @@ if ($mode === 'report') {
     try {
         $rows = $pdo->query("SELECT item_key, kind, status, updated_by, answer, wa_answer FROM knowledge_items ORDER BY kind, id")->fetchAll(PDO::FETCH_ASSOC) ?: [];
     } catch (\Throwable $e) { $rows = []; note('the knowledge base could not be read (' . get_class($e) . ')'); }
+    out('each answer reaches it up to', $kbLimit . ' characters' . ($kbLimit > 600 ? '' : ' (1,000 from 5.18.44, where ai_qualification is on)'));
     $shown = 0;
     foreach ($rows as $r) {
         $all = $r['answer'] . ' ' . $r['wa_answer'];
         if (!preg_match('/unlimited|business|access ?point|outdoor|mikro ?tik|hot ?spot|many users|cover/i', $all)) continue;
         $shown++;
         $a = trim((string)$r['answer']); $len = mb_strlen($a);
+        $cut = $kbLimit;
         $by = (string)$r['updated_by'] === 'seed' ? 'as seeded' : 'edited';
         printf("  %-30s %s · %s · %s · %d chars%s\n", $r['item_key'], $r['kind'], $r['status'], $by, $len,
-            ($r['kind'] === 'fact' && $len > 600) ? ' — CUT at 600' : '');
-        if ($r['kind'] === 'fact' && $len > 600) {
-            echo '      the assistant never sees: “…' . clip(mask(mb_substr($a, 600)), 360) . "”\n";
+            ($r['kind'] === 'fact' && $len > $cut) ? " — CUT at {$cut}" : '');
+        if ($r['kind'] === 'fact' && $len > $cut) {
+            echo '      the assistant never sees: “…' . clip(mask(mb_substr($a, $cut)), 360) . "”\n";
         }
         if (preg_match('/unlimited/i', $a)) {
-            $vis = $r['kind'] === 'fact' ? mb_substr($a, 0, 600) : $a;
+            $vis = $r['kind'] === 'fact' ? mb_substr($a, 0, $cut) : $a;
             echo '      "unlimited" reaches the assistant here: ' . (preg_match('/unlimited/i', $vis) ? 'yes' : 'NO — only in the cut part') . "\n";
         }
     }
@@ -289,8 +333,9 @@ if ($mode === 'ask') {
 
     // The worker's own permitted-amounts list, so the price check here is the one customers go through.
     $permitted = null;
-    if (is_file("{$root}/workers/AiReplyWorker.php")) {
-        foreach (['lib/EventBus.php', 'workers/WorkerBase.php', 'workers/AiReplyWorker.php'] as $f) require_once "{$root}/{$f}";
+    if (method_exists('AiReplyWorker', 'permittedAmounts')) {
+        $permitted = fn(array $ctx, string $prompt): array => AiReplyWorker::permittedAmounts($ctx, $prompt, $config);
+    } elseif (class_exists('AiReplyWorker')) {
         if (method_exists('AiReplyWorker', 'permittedValues')) {
             $w = (new ReflectionClass('AiReplyWorker'))->newInstanceWithoutConstructor();
             $m = new ReflectionMethod('AiReplyWorker', 'permittedValues'); $m->setAccessible(true);
@@ -304,6 +349,7 @@ if ($mode === 'ask') {
                                                                 'About 50 people at a time. I need unlimited internet, which package do I take?']],
         'A2  "unlimited business plans?"'          => ['sales', ['Do you have unlimited business plans?']],
         'A3  names a Business plan'                => ['sales', ['How much is Business 500?']],
+        'A4  wants to sell internet'               => ['sales', ['I want to sell internet to the people around my shop. Which package do I need?']],
         'B1  cover the area around a hotspot'      => ['sales', ['I have a wifi hotspot business and I want to cover other areas around my place, about 200 metres. What equipment do I need and how much?',
                                                                 'OK. What would two outdoor access points and the MikroTik cost together?']],
         'B2  WiFi to another building'             => ['sales', ['I already have Starlink at home. How do I get the WiFi to my other building across the compound?']],

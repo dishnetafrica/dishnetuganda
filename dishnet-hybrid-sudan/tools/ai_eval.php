@@ -33,7 +33,7 @@ foreach ($argv as $a) if (preg_match('/^--limit=(\d+)$/', $a, $m)) $limit = (int
 $dataDir = getDataDir($root);
 $store   = SqliteStore::create($dataDir);
 $config  = PluginConfig::load($root, $dataDir);
-$config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
+$config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo(), KnowledgeBase::answerLimit($config));
 
 $brain = new DishNetAiBrain($config);
 if (!$brain->isConfigured()) exit("AI provider key not configured — set claude_api_key or openai_api_key.\n");

@@ -3,6 +3,10 @@
 26 September 2026. **A check, not a change.** No plugin code, setting, knowledge-base row or uCRM record was
 changed. The fixes in §8 are proposals that wait for the operator's approval.
 
+**27 September:** the check ran on the server (§10), the operator decided both questions, and **5.18.44 was built**
+from those decisions (§11). §1–§9 are the record as it stood before; where the build departs from them, §11.3
+says so. The deploy command and what to send back are in §12.
+
 ## 1. The request
 
 > "Also some customer asked about buisness they want to run in that case they need unlimited data plans not
@@ -142,9 +146,11 @@ Send back the **log file**.
 4. Recent real conversations on these topics: the last 60 days, `DAYS=` to change, at most 12 per topic and two
    per conversation. Each shows the customer's message and the reply they got, and what that reply did.
 
-**`--ask`** then puts nine questions, in seven conversations, to the installed AI on the sales number, through the
+**`--ask`** then puts ten questions, in eight conversations, to the installed AI on the sales number, through the
 same path a customer's message takes. It prints each reply as the customer would receive it, what it did, and
-which plans the AI was shown. That is nine model calls on the configured provider.
+which plans the AI was shown. That is ten model calls on the configured provider. *(As first committed, and as run
+on 27 Sep, it asked nine in seven; A4, "I want to sell internet to the people around my shop", was added the same
+day — §11.6.)*
 
 **What it does not do:**
 - It writes and sends nothing. It reads a copy of the database, made as its owner in a temporary folder that is
@@ -156,7 +162,8 @@ which plans the AI was shown. That is nine model calls on the configured provide
 `-shm` files behind. On the server those files would belong to root, and the plugin could lose write access to
 its own database. The journey audit's copy-as-owner rule avoids that; the rehearsal now checks it.
 
-**Rehearsed** in `scripts/harness/ai-check/rehearse.sh`: **63/63, twice**.
+**Rehearsed** in `scripts/harness/ai-check/rehearse.sh`: **63/63, twice** as first committed. Since 27 Sep it
+runs against both 5.18.43 and 5.18.44: **183/183, twice** (§11.6).
 - **What it runs against.** A fake uCRM, a fake AI provider and a fake `docker exec`, over a database built by
   the real migrations and knowledge seed.
 - **Planted details.** The database carries a phone, an e-mail, a kit number, a staff name, an event's phone, the
@@ -196,3 +203,169 @@ customers, so the wording of P1 and the decision in P3 come first.
 3. The P1 wording: are both Residential plans unlimited?
 4. The P3 decision: when a customer wants another area covered, should the AI quote the access point and MikroTik
    prices, or keep handing over for a survey?
+
+## 10. The check on the server — 27 September 2026, 04:53 UTC
+
+The operator ran §7's command on the server, at repository commit `b32199a`, against the live plugin 5.18.43.
+**The report part came back; the `--ask` part did not** — the paste ends after the report. It is in the log file,
+`/root/dnb-ai/check-20260927T0453*.log` (§12).
+
+**Which AI answers.** The plugin's own assistant: OpenAI `gpt-4o-mini`, all four switches on, **1,795 replies on
+the sales number and 365 on support in the last 7 days**. No extra instructions.
+
+**The price list, live from uCRM.**
+- Plans: Residential Lite 249,000, Residential 329,000, Business 50 GB 175,000, 500 GB 285,000, 1 TB 469,000. **No
+  plan carries a data limit in uCRM.**
+- One-time items, in uCRM's order: Mini Kit + Mini Router 2,249,000 · Standard Kit 2,649,000 · Professional
+  Installation 150,000 · **ICT Consultancy Charges 100,000 · Ruijie Reyee RG-RAP6262(G) 1,100,000 · D-Link CAT 6
+  outdoor cable 378,000 · MikroTik L009 Series 700,000 · RJ45 Cat6 connectors (pack) 19,500**.
+- **The MikroTik and the connectors were the 7th and 8th items**, so every total with either was refused by the
+  price check (B-5, now measured).
+- 20 accessories, **none shown on the sales number** (B-4).
+- The check's own name-guessing marked the Mini kit "network equipment" (its name contains "Router") and missed the
+  access point (its name does not say so). 5.18.44 reads roles from the same list the assistant uses (§11.2).
+
+**Knowledge.** Every row on these topics is **as seeded** — nobody has edited one. Six facts were cut at 600
+characters. BUSINESS_PLANS lost its sentence on a trading centre selling Wi-Fi belonging on Residential, and
+MANY_USERS_HOTSPOT lost its only "unlimited" (A-2, now measured).
+
+**What customers were told** (12 + 12 messages shown; phones, e-mails and kit numbers masked by the check).
+- **Every "business" message was framed as a Business plan.** *"It sounds like you might need a Business plan"*,
+  *"For business needs, we can offer you a Business plan"*, *"Since you're looking to supply internet for a
+  business, I can check the Business plan options"*, *"For a business connection, you'll need a plan that offers a
+  public IP"*. None led with the Residential plan that was in front of it.
+- **A customer with cloud software was recommended all three Business tiers** (c1363); a colleague then sent the
+  Residential plans.
+- **"Is it unlimited?" was answered "The plans we offer are not unlimited … After reaching their data limits, you
+  will still have access but at reduced speeds"** (c1332). For the Residential plans that is false.
+- **A would-be reseller was told "we don't have a reselling program"** (c1322) — a fact nobody gave it — and then
+  "I don't have specific information about reselling".
+- **Not once was the access point or the MikroTik priced.** A support customer named the product — *"Ruijie reyee
+  outdoor omnidirectional access point mounted on a pole 2pcs"* — and was told *"I don't have specific information
+  about those access points in our system. Could you please confirm the price"* (c1068). It was in uCRM at
+  1,100,000 and in the prompt. Elsewhere: *"add additional routers and access points"* with no price (c1377).
+- Asked for 2 to 3 km, it said a custom design and a site assessment were needed (c1114) — the right answer for
+  kilometres.
+
+**The decisions, the same morning, verbatim.**
+- *Can the AI say both Residential plans are unlimited, with no cap?* → **"keep as it is"**.
+- *Should the AI quote the outdoor access point and MikroTik prices?* → **"yes lets ai to desing and give price of
+  accespoint if avaible in system"**.
+
+## 11. 5.18.44 — as built, 27 September 2026
+
+### 11.1 How the decisions were read
+
+- **"keep as it is"** is read as approval of the wording put to the operator: *"Both Residential plans (Residential
+  Lite and Residential) are unlimited, with no data cap. Only the Business plans come with a block of priority
+  data (50 GB, 500 GB or 1 TB)."* It is `DishNetAiBrain::UNLIMITED_FACT`. `ai_fact_unlimited` replaces it and
+  `omit` switches it off — **if "keep as it is" meant "leave the AI as it is", that is one command** (§12).
+- **"design and give price"** is read as: design a starting setup from the network equipment uCRM prices, and
+  price it in the same reply — one access point unless the customer names a number, the survey confirming the rest.
+
+### 11.2 What changed — Uganda only
+
+Every change sits behind a switch the South Sudan install does not set (`ai_qualification`, `ai_hardware_expert`,
+and a knowledge base). §11.5 is the proof that South Sudan is unchanged.
+
+| | Change | Behind | Where |
+|---|---|---|---|
+| 1 | **The data-allowance fact**, stated beside the plans, to be repeated word for word; the reply check treats it as the operator's own text, not a quote of the prompt | `ai_qualification`, a knowledge base, a Residential plan listed | `DishNetAiBrain::unlimitedFact`, `operatorText` |
+| 2 | **A business gets the Residential plans.** The rule shown while Business is held back: *"A CUSTOMER WHO IS A BUSINESS … is answered with the Residential plans … Never tell a business it needs a Business plan because it is a business. A Business plan is for one thing, a PUBLIC IP"*. The prospect rule gives the Residential prices first and asks the public-IP question once | `ai_qualification` | `PlanCatalogue::askRule`, `DishNetAiBrain` |
+| 3 | **Someone who wants to sell internet** is buying a connection and equipment: the higher-capacity Residential plan; *"Never tell them we have no reseller or partner programme: you do not know that"*; partner terms go to a person | `ai_qualification` | `DishNetAiBrain::qualification` |
+| 4 | **Approved knowledge up to 1,000 characters** (was 600). No seeded answer is longer | `ai_qualification` | `KnowledgeBase::answerLimit` |
+| 5 | **NETWORK EQUIPMENT**, its own list: the router, the access point, the cable, the connectors, the consultancy, each named by what it is for (`assets/shop/network.json`; no price or coverage figure there), with the rule to design and price: one line per item and a TOTAL; one access point, or the customer's number as quantity × price; the survey confirms the count, the cable and the installation; never a distance, area or user count; kilometres go to a person; never inside a home total | `ai_hardware_expert` | `NetworkEquipment`, `DishNetAiBrain::networkBlock` |
+| 6 | **The price check** allows any combination of up to ten one-time items, and 2 to 5 of one access point with any of the others — **added to** the totals it allowed before, never instead of them | `ai_hardware_expert` | `AiReplyWorker::permittedAmounts` |
+| 7 | **The accessories reach the sales number and the website chat**, name and price only | `ai_hardware_expert` | `BrainContext::catalogue` |
+| 8 | **MANY_USERS_HOTSPOT**, the approved row for a site with many users, now says to design and price where the equipment is listed, then hand over to book the survey (994 characters, all of it reaching the assistant) | the knowledge seed; applied by the deploy's stage K | `tools/knowledge_seed.json` |
+| 9 | `seed_knowledge.php --dry-run` (a transaction always rolled back) and `--only=KEY` (that row and no other); `ai_fact_unlimited` in `set_config.php` | — | `tools/` |
+| 10 | The check reads either version and says which; `tests/conversation-suite.php` asks the way the worker does (P7) | — | `scripts/`, `tests/` |
+
+### 11.3 Where the build departs from §8, and why
+
+- **P3/P4 — quantities.** §8 proposed one of each and never a multiplication, with the price check unchanged.
+  Built: one access point unless the customer names a number, then *quantity × price*, and the price check allows
+  2 to 5 of an access point. The operator's word was "design", and c1068 asked for two by name. **Only access points
+  are multiplied** (§11.4 F-1 says why).
+- **P2 — the limit is gated.** 1,000 characters only where the install qualifies, so an install with its own long
+  approved answers reads them exactly as before.
+- **P6 — the website chat too.** Found while testing: `web_chat.php` passes the whole catalogue to `BrainContext`,
+  so the contract change alone would have shown **every** install's website chat the accessories, South Sudan's
+  included. The South Sudan fingerprints (§11.5) caught it before anything shipped; both callers now go through one
+  rule, `BrainContext::catalogue`.
+- **The reply check's copy of the fact is gated like the prompt**, so South Sudan's reply check is unchanged too.
+- **MANY_USERS_HOTSPOT (new).** It told the assistant to *"hand over for a site assessment"* — the opposite of the
+  decision — and approved knowledge outranks a prompt rule (*"answer these topics from here, exactly and only"*).
+  The live row is as seeded (§10), so the release corrects it through the tool's own mechanism, `--refresh-seeded`,
+  limited to that row (`--only`), after a dry run. The 5.18.4 correction of PLAN_SERVICE_MAP is the precedent.
+- **The SELL INTERNET rule is conditional.** Its first draft pointed at the design rule unconditionally; where no
+  network equipment is listed it now says to take the site details for an assessment instead.
+- **P7** is built: knowledge base at the worker's limit, the worker's own context, both reply checks on WhatsApp,
+  every reply printed, and six scenarios: `ug_unlimited`, `ug_business_unlimited`, `ug_sell_internet`,
+  `ug_cover_other_building`, `ug_two_access_points`, `ug_home_total_no_network`.
+
+### 11.4 Findings from the build, measured
+
+- **F-1. The wider price check lets more round figures through — the cost of allowing designs.** Measured on the
+  live catalogue, round amounts from 100,000 to 10,000,000 in steps of 50,000 (199 of them): **5.18.43 permits 14;
+  5.18.44 permits 67**, because every combination of ten listed prices is now a legitimate total and those prices
+  are round. A wrong figure that happens to equal a real combination passes; the check cannot tell which item a
+  figure belongs to. The first draft multiplied every network item and permitted 81 — ten "ICT consultancy" charges
+  made every 100,000 up to a million legal — so **only access points are multiplied**. An invented access-point
+  price (1,234,000 in the tests) is still refused.
+- **F-2. Pre-existing, not changed: the prompt-digits rule.** `ReplyPrivacyGuard` also accepts an amount whose
+  digits occur anywhere in the prompt's digits run together. On the same 199 round amounts, **5 pass only that way
+  in 5.18.43 (800,000 · 1,950,000 · 7,800,000 · 9,700,000 · 10,000,000) and 5 in 5.18.44 (500,000 · 1,500,000 ·
+  5,000,000 · 9,700,000 · 10,000,000)**. The fix — whole numbers only — changes the reply check on both installs,
+  so it is **proposal P8, for approval**, not part of this release. The test suite records it as a gap, so the
+  day it is fixed that assertion has to be rewritten on purpose.
+- **F-3. The check's old name-guessing was wrong both ways** (§10); 5.18.44 mode uses the assistant's own roles.
+- **F-4. `seed_knowledge.php` ignores `DN_DATA_DIR`** and finds its database from its own path. Measured when a dry
+  run in a test sandbox, invoked through a linked `tools/`, seeded this workspace's development database; the rows
+  were removed and nothing else was touched. On the server there is one plugin, so it is harmless there; the
+  suite now copies `tools/` for real and checks the development database afterwards.
+
+### 11.5 South Sudan: unchanged, measured
+
+- **All 50 prompts byte-identical to 5.18.43** — two South Sudan-shaped configurations × five messages × (sales,
+  support and account in the legacy shape; the sales number's contract; the website chat), against fingerprints
+  taken from commit `04155df` (`tests/fixtures/ai_prompt_golden_south_sudan.json`). A control: the website chat
+  without the catalogue rule moves the fingerprint.
+- **The price check's list, value for value and in order**, identical to 5.18.43's for fixed inputs with the
+  hardware module off (a sha1 golden).
+- The reply check's operator text unchanged (empty for those configurations); approved knowledge cut at 600.
+
+### 11.6 Proofs
+
+- `tests/test_ai_unlimited_and_network.php` — **159 assertions**, including the tool executed against a throwaway
+  database (dry run writes nothing; `--only` touches one row; a person's row is never touched). **Nineteen weakened
+  copies of the code each fail it**, from "the network list on every install" and "the website chat skipping the
+  catalogue rule" to "a dry run that writes".
+- No existing suite needed changing — every change is behind a switch those suites leave off.
+- `scripts/harness/ai-check/rehearse.sh` runs the check against **both 5.18.43 and 5.18.44**: **183/183, twice**,
+  with thirteen weakened copies of the check (eight on both versions, four more on 5.18.44, one more on 5.18.43).
+- The full suite, twice: **209 suites, exit 0; the 188 that print totals report 8,426 passed, 0 failed, on both runs.**
+
+### 11.7 What a prompt cannot promise
+
+`gpt-4o-mini` follows long rule sets loosely: §10 shows it framing every business as Business with the Residential
+plans in front of it. The prompt now says the right thing, and the price check keeps it from quoting a price that
+is not in uCRM. **Whether it follows is measured by `--ask` after the deploy, not assumed.**
+
+## 12. Deploy, and what to send back
+
+1. **The baseline:** the `--ask` part of `/root/dnb-ai/check-20260927T0453*.log` — the ten answers from 5.18.43.
+2. **The deploy:**
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+     && mkdir -p /root/dnb-5.18.44 \
+     && bash scripts/deploy-5.18.44.sh 2>&1 | tee /root/dnb-5.18.44/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   It takes a backup, asks for `DEPLOY`, deploys, corrects MANY_USERS_HOTSPOT (stage K: a dry run first, that row
+   only, only while still as seeded), re-checks the public pages (stage V), then asks the assistant the ten
+   questions (stage AI) and prints the replies. Send back **the log file**.
+3. **To switch the data-allowance fact off**, as the plugin's owner (the docs/20 form):
+   ```
+   docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_unlimited --value omit
+   ```
+   `--clear` in place of `--value omit` goes back to the approved wording.

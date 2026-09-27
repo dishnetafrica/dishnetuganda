@@ -25,6 +25,27 @@ declare(strict_types=1);
  */
 class KnowledgeBase
 {
+    /**
+     * How much of one approved answer reaches the prompt. It was 600, and six seeded answers are
+     * longer: the two that tell the assistant a shop, a trading centre selling Wi-Fi or a busy public
+     * site belongs on the Residential plan with unlimited data lost exactly that sentence
+     * (BUSINESS_PLANS 948 characters, MANY_USERS_HOTSPOT 837; docs/40 A-2). tests/test_ai_unlimited_and_network
+     * asserts that no seeded answer is longer than this.
+     *
+     * Only where the install qualifies (ai_qualification, Uganda) — the switch the rest of that
+     * Residential-first answer rides on. Everywhere else the limit stays LEGACY_ANSWER_LIMIT, so an
+     * install that switched nothing on reads its own knowledge exactly as before.
+     */
+    public const ANSWER_LIMIT = 1000;
+    public const LEGACY_ANSWER_LIMIT = 600;
+
+    /** How much of one approved answer reaches the prompt under this configuration. */
+    public static function answerLimit(array $config): int
+    {
+        return filter_var($config['ai_qualification'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            ? self::ANSWER_LIMIT : self::LEGACY_ANSWER_LIMIT;
+    }
+
     public const HOLDING_LINE =
         "I don't want to give you incorrect information. Let me confirm with our team and come back to you today.";
 
@@ -48,7 +69,7 @@ class KnowledgeBase
     }
 
     /** The prompt block injected into the shared system prompt. */
-    public static function promptBlock(\PDO $pdo): string
+    public static function promptBlock(\PDO $pdo, int $answerLimit = self::LEGACY_ANSWER_LIMIT): string
     {
         $kb = self::load($pdo);
         if (!$kb['fact'] && !$kb['rule'] && !$kb['tbc']) return '';
@@ -61,7 +82,7 @@ class KnowledgeBase
             $p .= "\nAPPROVED KNOWLEDGE — answer these topics from here, exactly and only:\n";
             foreach ($kb['fact'] as $f) {
                 $ans = trim($f['answer']);
-                $p .= "- [" . $f['item_key'] . "] " . $f['title'] . ": " . mb_substr($ans, 0, 600) . "\n";
+                $p .= "- [" . $f['item_key'] . "] " . $f['title'] . ": " . mb_substr($ans, 0, max(1, $answerLimit)) . "\n";
                 $short = trim($f['wa_answer']);
                 if ($short !== '') $p .= "  (short form for chat: " . mb_substr($short, 0, 300) . ")\n";
             }

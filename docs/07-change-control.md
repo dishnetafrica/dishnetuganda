@@ -1504,3 +1504,46 @@ now prices an outdoor access point and a MikroTik).
 - **Not changed.** No plugin release, no setting, no knowledge-base row, no uCRM record and no server change.
   Proposals P1–P7 (docs/40 §8) wait for the operator: the P1 wording (are both Residential plans unlimited?) and
   the P3 decision (should the AI quote the access point and MikroTik prices or keep handing over?).
+
+## 5.18.44 — a business is sold the Residential plan; another area gets a design and a price (docs/40 §11)
+
+**Why.** The check of 26 Sep ran on the server on 27 Sep (docs/40 §10). In the live conversations the assistant
+framed every "business" as a Business plan, told a customer *"The plans we offer are not unlimited"*, told a
+would-be reseller *"we don't have a reselling program"*, and never once priced the outdoor access point or the
+MikroTik that were in uCRM — one customer who named the access point was asked to confirm its price. The MikroTik
+was the seventh one-time item, and the price check refused any total with it. **The operator's decisions,
+verbatim:** the data-allowance wording — *"keep as it is"*; covering another area — *"yes lets ai to desing and
+give price of accespoint if avaible in system"*.
+
+**What.** Only where the install runs the qualification and hardware modules (Uganda); South Sudan is
+byte-identical (below).
+- **Unlimited, stated.** Beside the plans, to be repeated word for word: *"Both Residential plans (Residential Lite
+  and Residential) are unlimited, with no data cap. Only the Business plans come with a block of priority data
+  (50 GB, 500 GB or 1 TB)."* `ai_fact_unlimited` replaces it (now in `set_config.php`); `omit` switches it off.
+- **A business gets the Residential plans;** a Business plan is for a public IP, asked about once. Someone who wants
+  to sell internet gets the higher-capacity Residential plan, and is never told there is no reseller programme.
+- **NETWORK EQUIPMENT**, out of HARDWARE, each item named by what it is for (`assets/shop/network.json`), with the
+  rule to design and price it: one access point unless the customer names a number, the survey confirming the
+  rest; never a distance, area or user count; never inside a home total.
+- **The price check** allows every combination of up to ten one-time items and 2 to 5 of an access point, on top
+  of every total it allowed before. Only access points are multiplied.
+- **The accessories reach the sales number and the website chat** (one rule, `BrainContext::catalogue`).
+- **Approved knowledge up to 1,000 characters** (was 600). **MANY_USERS_HOTSPOT** said to hand over for a site
+  assessment, the opposite of the decision; its seeded text now says to design and price, then book the survey.
+- **Tools:** `seed_knowledge.php --dry-run` (rolled back) and `--only=KEY` (that row, no other).
+- The check reads either version; `tests/conversation-suite.php` now asks the way the worker does (docs/40 P7).
+
+**Found and fixed while building** (docs/40 §11.3–§11.4): the website chat would have shown every install the
+accessories — caught by the South Sudan fingerprints; the first price-check draft multiplied every network item
+and made every round 100,000 up to a million a legal total; the SELL INTERNET rule pointed at a design rule that
+is absent where no equipment is listed. **Recorded, not changed:** the reply check also accepts an amount whose
+digits occur anywhere in the prompt run together — pre-existing on both installs, **proposal P8 for approval**.
+
+**Proof.** `tests/test_ai_unlimited_and_network.php` **159**, and **nineteen weakened copies each fail it**. South
+Sudan: all 50 prompt fingerprints and the price-check list byte-identical to 5.18.43. No existing suite needed a
+change. The check's rehearsal runs against 5.18.43 and 5.18.44: **183/183, twice**. Suite: **209 suites, exit 0, twice; the 188 suites that print totals report 8,426 passed / 0 failed on both runs.**
+
+**Deploy.** `scripts/deploy-5.18.44.sh`, pinned to the plugin commit. After the documented deploy, stage K
+corrects MANY_USERS_HOTSPOT — a dry run first, that row only, only while still as seeded, as the database's owner
+— stage V re-checks everything 5.18.43 checked, and stage AI asks the assistant the ten questions and prints the
+replies. **Not deployed by this session.**
