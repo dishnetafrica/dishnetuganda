@@ -1880,3 +1880,53 @@ account on Uganda (J8, M1).
    - R3: a note naming the four accounts changed since the deploy;
    - R4: 0 job-assignment messages.
 4. M4, as in §16.9; then `--after-only` again about a day later.
+
+### 16.11 The later check at 20:42 UTC — and an old fatal error it found
+
+The operator ran both commands **before** M5, so S3 and S5 still hold 4 and 1581.
+
+**The users check (20:42:00 UTC)** reads as at 20:31. Its section 5 now prints the corrected line: *"on — never for
+a number held by an active staff account (5.18.50, J8); an account with no number is not recognised"*.
+
+**`--after-only` (20:42:17 UTC): 32 ok, 1 failed, 2 notes.**
+- **Unchanged since the deploy:** the files, the switch, the pages and the `:8443` door.
+- **R3, a note:** accounts 1 and 4 changed since the deploy — the two links, as expected.
+- **R4:** no job-assignment message. The Message Log holds no new row of any kind since #374.
+- **R7, a note:** 2 of the 4 accounts that take jobs hold a verified link. The other 2 still hold an id stored the
+  old way: M5 is not yet done.
+- **V4 FAILED:** *"4 fatal line(s) of dishnet-hybrid-sudan since 2026-09-27T20:08:44Z"*, at 20:15:00, 20:15:02,
+  20:30:06 and 20:36:41. Each one reads *"Uncaught TypeError: flock(): supplied resource is not a valid stream
+  resource in …/cron/master.php:83"*.
+
+**What it is — measured in the repository, reproduced locally.**
+- `cron/master.php` takes a lock, runs its jobs, then **closes the lock at its normal end** (lines 362–363).
+- Its shutdown handler (lines 82–86) then unlocks the **same, already closed** handle.
+- Since PHP 8.0 that is a `TypeError`, which `@` does not silence. On PHP 8.1.34 it is fatal at shutdown, every time
+  a master run completes normally.
+- It does not stop the work. By then every job of that run has finished, and `master_schedule.json` has been saved
+  after each one.
+- What the fatal skips: the shutdown functions registered after the master's handler. Measured with a second handler
+  locally: it did not run. Here those are passive SQLite WAL checkpoints for stores opened later, which SQLite
+  catches up on by itself; the process exit releases every lock.
+- The `fpm` lines are the admin page's "piggyback" cron (`public.php`, at most once per 5 minutes), which runs the
+  master **after** the page has been sent. The operator was on the Staff page at those times. No page is affected.
+
+**It is not Release A's.**
+- `cron/master.php` and `main.php` are byte-identical in `e076632` and `125fa0c`.
+- The lock code dates from at least 2 September (`09b4072`), and `master.php` last changed on 13 September
+  (`e7cb79f`).
+- Release A adds or removes no `exit` or `die` anywhere outside the tests, so the ways a master run ends are
+  unchanged.
+- The deploy's own V4 saw none, because no master run finished in its 60 seconds.
+- **A rollback would not remove it.** Whether it also fired before 20:08 is one read-only line to measure. It prints
+  only a count per hour, no message text:
+
+  ```
+  docker logs ucrm --timestamps --since 2026-09-26T00:00:00Z 2>&1 | grep -F 'flock(): supplied resource is not a valid stream resource' | cut -c1-13 | sort | uniq -c
+  ```
+
+**Proposed fix, as its own small release (5.18.51, not built, awaiting approval).** Guard the release in the
+shutdown handler with `is_resource($lockFp)`, which is false for a closed handle. The pattern is in `master.php`
+alone: `dishnet_wa_pusher.php` closes its lock only in its handler. Until the fix is deployed, every later
+`--after-only` run will show this same V4 failure. That failure is this issue as long as every fatal line it lists
+is `master.php:83` with `flock()`.

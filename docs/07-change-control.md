@@ -2043,4 +2043,11 @@ for approval.
 and S5's old ids) and S1's number are still to do. The users check's follow-up line described 5.18.49 ("a staff
 member's included"). It now reads the installed crons: 413/413 on two runs, 14 weakened copies caught.
 
+**20:42 UTC — `--after-only`: 32 ok, 1 failed, 2 notes** (docs/44 §16.11). R4 still 0 and no Message Log row since
+#374. V4 found 4 fatal lines, all `cron/master.php:83`: the master closes its lock at its normal end, and its shutdown
+handler then unlocks the closed handle, which is fatal on PHP 8.
+- **Not Release A's:** `master.php` and `main.php` are unchanged since 13 Sep, and Release A changes no `exit`.
+- The work of each run is done and saved before it.
+- A one-line fix (`is_resource()`) is proposed as 5.18.51, awaiting approval.
+
 **Release B stays BLOCKED.**
