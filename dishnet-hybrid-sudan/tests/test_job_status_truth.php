@@ -7,10 +7,14 @@ declare(strict_types=1);
  * release the WA Events screen called every "sent" line "Delivered", its navigation badge read timestamp keys the
  * webhook log has never written — so it never counted anything — and the Message Log called a message the opt-out
  * rule stopped a "fail". Proved here, on the real pages of a sandboxed plugin:
- *   1. WA Events: "Sent (handed to WhatsApp)", never "Delivered"; the job line release A writes, "WhatsApp skipped",
- *      is filed Skipped by the existing rule — release A's only new job line;
+ *   1. WA Events: "Sent (handed to WhatsApp)", never "Delivered"; the job lines release B writes (5.18.52, docs/44 J4) —
+ *      "WhatsApp sent to", "WhatsApp failed for", "WhatsApp skipped:" — are filed Sent, Failed and Skipped by the
+ *      existing rule;
  *   2. the navigation badge counts today's events by received_at, the key the log writes, and does not count
- *      "WhatsApp skipped" as sent;
+ *      "WhatsApp skipped" as sent. "Today" is the install's own: public.php sets the tenant's zone before it hands an
+ *      event to webhook.php, so received_at is Kampala's clock on Uganda — proved below with a real event. This test's
+ *      own log writer used to write UTC, and so failed between 21:00 and 24:00 UTC (docs/44 §16.12); it now writes the
+ *      tenant's zone, as public.php does;
  *   3. the Message Log says what "sent" means, and an opted-out message reads "suppressed", not "fail" — and is not
  *      counted as a failure;
  *   4. South Sudan: all three exactly as in 5.18.49;
@@ -30,12 +34,15 @@ function is_(bool $c, string $m, string $d = ''): void {
     else    { $fail++; echo "  FAIL {$m}" . ($d !== '' ? "\n       {$d}" : '') . "\n"; }
 }
 
-$now = date('Y-m-d H:i:s');
-/** The webhook log as whLog() writes it: newest first, received_at. */
-$whLog = function (SjSandbox $s, array $lines): void {
+/**
+ * The webhook log as whLog() writes it: newest first, received_at — on the install's clock, because public.php applies
+ * the tenant's zone before the crm_webhook route (section 2b proves it with a real event).
+ */
+$whLog = function (SjSandbox $s, array $lines, string $zone): void {
     $out = []; $id = count($lines);
+    $at = (new DateTime('now', new DateTimeZone($zone)))->format('Y-m-d H:i:s');
     foreach ($lines as [$event, $message]) {
-        $out[] = ['id' => $id--, 'event' => $event, 'message' => $message, 'data' => [], 'received_at' => date('Y-m-d H:i:s'), 'ip' => '127.0.0.1'];
+        $out[] = ['id' => $id--, 'event' => $event, 'message' => $message, 'data' => [], 'received_at' => $at, 'ip' => '127.0.0.1'];
     }
     file_put_contents($s->data . '/webhook_log.json', json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 };
@@ -59,29 +66,34 @@ $row = function (string $html, string $needle): string {   // the table row that
     return '';
 };
 
-$run = function (array $cfg, string $tag) use ($root, $whLog, $sends, $badge): array {
+$SKIP_LINE = 'Job #911 (assigned) — WhatsApp skipped: no staff account is linked to uCRM user #1099';
+$SENT_LINE = 'Job #912 (assigned) — WhatsApp sent to staff account #3';
+$FAIL_LINE = 'Job #913 (reassigned: new engineer) — WhatsApp failed for staff account #3';
+$run = function (array $cfg, string $tag, string $zone) use ($root, $whLog, $sends, $badge, $SKIP_LINE, $SENT_LINE, $FAIL_LINE): array {
     $s = SjSandbox::start($root, $cfg, $tag);
     $s->staff('admin', ['name' => 'Sandbox Admin', 'email' => 'admin@example.test', 'role' => 'admin', 'is_admin' => true]);
     $s->login('admin', 'admin@example.test', 'sj-password-1');
     $out = [];
-    $whLog($s, [['job.add', 'Job #911 — WhatsApp skipped: job notifications are not switched on yet']]);
+    $whLog($s, [['job.add', $SKIP_LINE]], $zone);
     $out['badge_skipped_only'] = $badge($s->page('admin', 'page=dashboard&tab=dashboard'));
-    $whLog($s, [['job.add', 'Job #911 — WhatsApp skipped: job notifications are not switched on yet'],
-                ['invoice.add', 'Invoice #77 notification sent to Sandbox Customer']]);
+    $whLog($s, [['job.add', $SKIP_LINE], ['job.add', $SENT_LINE]], $zone);
     $out['badge_sent'] = $badge($s->page('admin', 'page=dashboard&tab=dashboard'));
-    $whLog($s, [['job.add', 'Job #911 — WhatsApp skipped: job notifications are not switched on yet'],
-                ['invoice.add', 'Invoice #77 notification sent to Sandbox Customer'],
-                ['payment.add', 'Payment #5 WhatsApp failed: HTTP 500']]);
+    $whLog($s, [['job.add', $SKIP_LINE], ['job.add', $SENT_LINE], ['job.edit', $FAIL_LINE]], $zone);
     $out['badge_failed'] = $badge($s->page('admin', 'page=dashboard&tab=dashboard'));
     $out['events'] = $s->page('admin', 'page=dashboard&tab=engage_failed_queue&fqsub=crm_events');
     $sends($s);
     $out['log'] = $s->page('admin', 'page=dashboard&tab=whatsapp&subtab=log');
+    // A real event through public.php, as uCRM delivers it: the clock its log line carries.
+    @unlink($s->data . '/webhook_log.json');
+    $s->fire('job.edit', 'job', 999999, 'sjtruth-clock');
+    $first = array_reverse(json_decode($s->webhookLog(), true) ?: [])[0] ?? [];
+    $out['clock'] = (string)($first['received_at'] ?? '');
     $s->stop();
     return $out;
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-$ug = $run(['tenant_profile' => 'uganda'], 'sjtruth');
+$ug = $run(['tenant_profile' => 'uganda'], 'sjtruth', 'Africa/Kampala');
 
 echo "\n1. WA Events says \"sent\", because that is what the plugin knows\n";
 $ev = $ug['events'];
@@ -90,15 +102,31 @@ is_(strpos($ev, '✅ Sent (handed to WhatsApp) (1)') !== false, 'so is its filte
 is_(strpos($ev, 'Delivered') === false, 'and "Delivered" appears nowhere on the screen');
 is_(strpos($ev, 'whether the WhatsApp notification was sent (handed to WhatsApp; whether it reached the phone is not measured)') !== false,
     'the explanation says delivery is not measured');
-$r = $row($ev, 'Invoice #77 notification sent');
-is_(strpos($r, '✅ Sent (handed to WhatsApp)') !== false, 'the "notification sent" line reads "Sent (handed to WhatsApp)"', $r);
-$r = $row($ev, 'WhatsApp skipped');
-is_(strpos($r, '⚠️ Skipped') !== false, 'release A\'s job line, "WhatsApp skipped", is filed Skipped by the existing rule', $r);
+$r = $row($ev, $SENT_LINE);
+is_(strpos($r, '✅ Sent (handed to WhatsApp)') !== false, 'release B\'s "WhatsApp sent to staff account" line reads "Sent (handed to WhatsApp)"', $r);
+$r = $row($ev, $FAIL_LINE);
+is_(strpos($r, '❌ Failed') !== false, 'its "WhatsApp failed for" line reads "Failed"', $r);
+$r = $row($ev, $SKIP_LINE);
+is_(strpos($r, '⚠️ Skipped') !== false, 'and its "WhatsApp skipped:" line is filed Skipped by the existing rule', $r);
 
 echo "\n2. The navigation badge counts today's events\n";
-is_($ug['badge_sent'] === '1', 'one "notification sent" today: the badge shows 1', json_encode($ug['badge_sent']));
-is_($ug['badge_failed'] === '1 fail', 'with a failure too, it shows "1 fail"', json_encode($ug['badge_failed']));
+is_($ug['badge_sent'] === '1', 'one job message sent today: the badge shows 1', json_encode($ug['badge_sent']));
+is_($ug['badge_failed'] === '1 fail', 'with a failed one too, it shows "1 fail"', json_encode($ug['badge_failed']));
 is_($ug['badge_skipped_only'] === '', '"WhatsApp skipped" alone is not counted as sent: no badge', json_encode($ug['badge_skipped_only']));
+
+echo "\n2b. \"Today\" is the install's own day\n";
+$pub = (string)file_get_contents($root . '/public.php');
+$zoneAt  = strpos($pub, "require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();");
+$routeAt = strpos($pub, "if (\$page === 'crm_webhook') {");
+is_($zoneAt !== false && $routeAt !== false && $zoneAt < $routeAt, 'public.php sets the tenant\'s zone before it hands an event to webhook.php',
+    json_encode([$zoneAt, $routeAt]));
+$clock = DateTime::createFromFormat('Y-m-d H:i:s', $ug['clock'], new DateTimeZone('UTC'));
+$gap = function (string $zone) use ($clock): int {
+    $now = DateTime::createFromFormat('Y-m-d H:i:s', (new DateTime('now', new DateTimeZone($zone)))->format('Y-m-d H:i:s'), new DateTimeZone('UTC'));
+    return $clock ? abs($now->getTimestamp() - $clock->getTimestamp()) : PHP_INT_MAX;
+};
+is_($clock !== false && $gap('Africa/Kampala') <= 120 && $gap('UTC') >= 3 * 3600 - 120,
+    'a real event through public.php is logged on Kampala\'s clock, not UTC\'s — the badge\'s "today" is Kampala\'s at any hour', json_encode([$ug['clock'], $gap('Africa/Kampala'), $gap('UTC')]));
 
 echo "\n3. The Message Log\n";
 $lg = $ug['log'];
@@ -112,7 +140,7 @@ is_(strpos($row($lg, 'Job Accepted'), '✓ sent') !== false, 'and a sent one "�
 
 // ── 4. South Sudan ───────────────────────────────────────────────────────────
 echo "\n4. South Sudan: all three as in 5.18.49\n";
-$ss = $run([], 'sjtruth-ss');
+$ss = $run([], 'sjtruth-ss', 'Africa/Juba');
 is_(strpos($ss['events'], '<div class="fq-stat-label">Delivered</div>') !== false && strpos($ss['events'], 'handed to WhatsApp') === false,
     'WA Events still says "Delivered"');
 is_($ss['badge_sent'] === '' && $ss['badge_failed'] === '', 'its badge still reads keys the log never writes, and shows nothing', json_encode([$ss['badge_sent'], $ss['badge_failed']]));
@@ -131,6 +159,8 @@ if ($withMutants) {
         ['tabs/engage/whatsapp.php', "<?php if (\$_wlJ7 && \$_wlSuppressed(\$nl)): ?>", "<?php if (false): ?>", 'an opted-out row shown as "fail"'],
         ['tabs/engage/whatsapp.php', "\$_wlJ7 = StaffJobsGate::applies(is_array(\$config ?? null) ? \$config : [], \$dataDir ?? null);", "\$_wlJ7 = true;",
          'the Message Log changed on South Sudan too'],
+        ['public.php', "require_once __DIR__ . '/lib/timezone.php'; dn_tz_apply();", "require_once __DIR__ . '/lib/timezone.php';",
+         'the tenant\'s zone no longer set before the webhook route (the log would be UTC)'],
     ];
     foreach ($MUTANTS as [$rel, $old, $new, $label]) {
         [$tmp, $n] = sj_weakened_copy($root, $rel, $old, $new);

@@ -2,8 +2,9 @@
 // Tab: scheduling
 // Extracted from public.php on 2026-03-15
         $myUcrmId   = (int)($retailer['ucrm_user_id'] ?? 0);
-        // 5.18.50 (docs/44 J1, M7, M6): on Uganda My Jobs knows a person only by a link saved through the verified
-        // picker — never an id typed before, forced by a list, or ftth_crm_client_id — and no job WhatsApp is sent.
+        // 5.18.50 (docs/44 J1, M7): on Uganda My Jobs knows a person only by a link saved through the verified
+        // picker — never an id typed before, forced by a list, or ftth_crm_client_id. Since 5.18.52 (J4, §16.12) the
+        // job WhatsApp comes from JobNotifier, and the New Job form says so.
         require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
         $_sjUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir);
         if ($_sjUganda) {
@@ -1667,10 +1668,10 @@ schLoadJobs(_urlRefresh);
 <?php if ($_sjUganda): ?>
     <input type="checkbox" id="njNotifyWa" style="display:none;" disabled>
     <div style="display:flex;align-items:center;gap:12px;background:#1e293b;border-radius:12px;padding:14px;">
-      <div style="font-size:20px;flex-shrink:0;">📵</div>
+      <div style="font-size:20px;flex-shrink:0;">📱</div>
       <div>
-        <div style="font-size:14px;font-weight:700;color:#e2e8f0;">No WhatsApp message is sent for jobs yet</div>
-        <div style="font-size:12px;color:#64748b;">The engineer sees the job in My Jobs. Job messages are switched on in a later release.</div>
+        <div style="font-size:14px;font-weight:700;color:#e2e8f0;">The engineer gets a WhatsApp message</div>
+        <div style="font-size:12px;color:#64748b;">It carries a link to accept the job. After they accept, a second message brings the completion link. You see here whether it was sent.</div>
       </div>
     </div>
 <?php else: ?>
@@ -1963,7 +1964,8 @@ function njSubmit() {
       });
 <?php if ($_sjUganda): ?>
       if (data.whatsapp_note) {
-        html += '<div style="font-size:12px;color:#fde68a;padding:6px 0 0;">📵 ' + data.whatsapp_note + '</div>';
+        html += '<div style="font-size:12px;color:' + (data.whatsapp === 'sent' ? '#a7f3d0' : '#fde68a') + ';padding:6px 0 0;">'
+          + (data.whatsapp === 'sent' ? '📱 ' : '📵 ') + escHtml(data.whatsapp_note) + '</div>';
       }
 <?php endif; ?>
       if (data.errors && data.errors.length) {

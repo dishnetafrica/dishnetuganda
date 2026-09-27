@@ -14,11 +14,17 @@ declare(strict_types=1);
  *
  * Test controls: /__test/state (marker), /__test/dump, /__test/seed (POST, merges keys), /__test/users_down (POST
  * {"down":true}) makes every users endpoint answer 502 — "uCRM could not be reached".
+ *
+ * 5.18.52 (docs/44 J4), each off unless set: /__test/jobs_down {"down":true} — GET and PATCH of one job answer 502;
+ * /__test/jobs_partial {"partial":true} — a job read answers without assignedUserId (V4); /__test/post_override
+ * {"fields":{…}} — uCRM stores these values on the next jobs it creates, whatever was posted (T4.13);
+ * /__test/delete_job {"id":N} — the job is gone, as if deleted in uCRM's own screen.
  */
 $stateFile = (string)getenv('FAKE_UCRM_STATE');
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
 $state += ['jobs' => [], 'users' => [], 'clients' => [], 'tasks' => [], 'comments' => [], 'logs' => [],
-           'requests' => [], 'next_job' => 950, 'next_task' => 7000, 'users_down' => false];
+           'requests' => [], 'next_job' => 950, 'next_task' => 7000, 'users_down' => false,
+           'jobs_down' => false, 'jobs_partial' => false, 'post_override' => []];
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $uri    = (string)($_SERVER['REQUEST_URI'] ?? '');
@@ -40,6 +46,10 @@ if ($path === '/__test/state') { echo 'FAKE-UCRM-STAFF-JOBS'; exit; }
 if ($path === '/__test/dump')  { header('Content-Type: application/json'); echo json_encode($state); exit; }
 if ($path === '/__test/seed' && $method === 'POST') { $state = array_merge($state, $body); fu_out(['seeded' => true]); }
 if ($path === '/__test/users_down' && $method === 'POST') { $state['users_down'] = !empty($body['down']); fu_out(['ok' => true]); }
+if ($path === '/__test/jobs_down' && $method === 'POST') { $state['jobs_down'] = !empty($body['down']); fu_out(['ok' => true]); }
+if ($path === '/__test/jobs_partial' && $method === 'POST') { $state['jobs_partial'] = !empty($body['partial']); fu_out(['ok' => true]); }
+if ($path === '/__test/post_override' && $method === 'POST') { $state['post_override'] = (array)($body['fields'] ?? []); fu_out(['ok' => true]); }
+if ($path === '/__test/delete_job' && $method === 'POST') { unset($state['jobs'][(string)(int)($body['id'] ?? 0)]); fu_out(['ok' => true]); }
 
 $state['requests'][] = ['method' => $method, 'path' => $path, 'query' => (string)parse_url($uri, PHP_URL_QUERY), 'body' => $body];
 
@@ -78,10 +88,13 @@ if ($method === 'POST' && preg_match('#^/scheduling/jobs/(\d+)/job-comments$#', 
     fu_out($c, 201);
 }
 if ($method === 'GET' && preg_match('#^/scheduling/jobs/(\d+)$#', $path, $m)) {
+    if (!empty($state['jobs_down'])) fu_out(['code' => 502, 'message' => 'Bad gateway (test control)'], 502);
     $j = $state['jobs'][$m[1]] ?? null;
+    if ($j && !empty($state['jobs_partial'])) unset($j['assignedUserId']);
     fu_out($j ?? ['code' => 404, 'message' => 'Not found'], $j ? 200 : 404);
 }
 if ($method === 'PATCH' && preg_match('#^/scheduling/jobs/(\d+)$#', $path, $m)) {
+    if (!empty($state['jobs_down'])) fu_out(['code' => 502, 'message' => 'Bad gateway (test control)'], 502);
     if (!isset($state['jobs'][$m[1]])) fu_out(['code' => 404], 404);
     $state['jobs'][$m[1]] = array_merge($state['jobs'][$m[1]], $body);
     fu_out($state['jobs'][$m[1]]);
@@ -100,7 +113,7 @@ if ($method === 'POST' && $path === '/scheduling/jobs') {
     $id = $state['next_job']++;
     $j  = ['id' => $id, 'title' => '', 'description' => '', 'clientId' => null, 'assignedUserId' => null,
            'date' => null, 'duration' => 60, 'status' => 0, 'address' => null, 'gpsLat' => null, 'gpsLon' => null];
-    $j = array_merge($j, array_intersect_key($body, $j));
+    $j = array_merge($j, array_intersect_key($body, $j), (array)($state['post_override'] ?? []));
     $state['jobs'][(string)$id] = $j;
     fu_out($j, 201);
 }

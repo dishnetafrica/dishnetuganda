@@ -7,15 +7,33 @@
 // On Uganda only: the South Sudan staff lists never write (J1), a staff member's uCRM user is the link saved through
 // the verified picker and nothing else (J2, M7), jobs are created and acted on only by those allowed, checked here on
 // the server against the account as stored now and the job as uCRM holds it (J6, D7), times go to uCRM with Kampala's
-// offset (J5), and no job-assignment WhatsApp is sent from any path (M6). Every other install takes the 5.18.49 code
-// below unchanged: each Uganda line is a separate branch or a condition that is false there.
+// offset (J5). Since 5.18.52 (docs/44 J4, §16.12) every job message comes from JobNotifier: one per change, whichever
+// path sees it first, to the engineer uCRM has on the job. Every other install takes the 5.18.49 code below
+// unchanged: each Uganda line is a separate branch or a condition that is false there.
 require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
 $_sjUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
-$_sjNoWa   = 'No WhatsApp was sent: job notifications are not switched on yet. The engineer sees the job in My Jobs.';
 if ($_sjUganda) {
-    foreach (['StaffDirectory', 'UcrmUsers', 'StaffLink', 'JobAccess', 'JobTime'] as $_sjLib) {
+    foreach (['StaffDirectory', 'UcrmUsers', 'StaffLink', 'JobAccess', 'JobTime', 'JobNotifier'] as $_sjLib) {
         require_once dirname(__DIR__, 2) . '/lib/' . $_sjLib . '.php';
     }
+    // The job notifier, built once per request (J4).
+    $_sjNotifierObj = null;
+    $sjNotifier = function () use (&$_sjNotifierObj, $crm, $store, $notify, $config, $dataDir): JobNotifier {
+        if ($_sjNotifierObj === null) {
+            $_sjNotifierObj = new JobNotifier($crm, $store, $notify, is_array($config ?? null) ? $config : [], $dataDir ?? null);
+        }
+        return $_sjNotifierObj;
+    };
+    // When observe() found nothing new because uCRM's own notice claimed the change first: what that notice recorded
+    // since $mark, or "sending" while it is still at work.
+    $sjExplain = function (int $jobId, array $r, array $messages, int $mark) use ($sjNotifier): array {
+        if (($r['outcome'] ?? '') !== 'no_change' || ($r['assignee'] ?? null) === null) return $r;
+        foreach ($messages as $m) {
+            $seen = $sjNotifier()->recordedSince($jobId, $m, $mark);
+            if ($seen !== null) return $seen;
+        }
+        return ['outcome' => 'sending'] + $r;
+    };
     // The caller as stored now, refused when no longer active (J6).
     $sjCaller = function () use ($me2, $store, $er2): array {
         $row = JobAccess::caller($me2, $store);
@@ -323,8 +341,11 @@ if ($_sjUganda) {
             $engName   = $me2['name'] ?? 'Engineer';
             $engPhone  = preg_replace('/[^0-9+]/', '', $me2['phone'] ?? '');
 
-            // 1. Confirm to the engineer themselves
-            if ($engPhone) {
+            // 1. Confirm to the engineer themselves. Uganda (5.18.52, docs/44 §16.12): message 2 — the completion link —
+            // to the job's engineer, once per assignment, when Accept moves the job from Open into progress.
+            if ($_sjUganda) {
+                $_sjAccepted = $sjNotifier()->accepted($jobId, is_array($job) ? $job : [], is_array($result) ? $result : null);
+            } elseif ($engPhone) {
                 $msgEng  = "✅ *Job Accepted*\n\n";
                 $msgEng .= "Hi *{$engName}*, you've accepted:\n";
                 $msgEng .= "*{$jobTitle}*\n";
@@ -350,7 +371,8 @@ if ($_sjUganda) {
             }
         }
 
-        $ok2(['updated' => true, 'status' => $statusInt]);
+        $ok2(array_merge(['updated' => true, 'status' => $statusInt], isset($_sjAccepted)
+            ? ['whatsapp' => $_sjAccepted['outcome'], 'whatsapp_note' => JobNotifier::note($_sjAccepted)] : []));
     }
 
     // ── Scheduling: toggle task done/undone ───────────────────────────────────
@@ -691,7 +713,8 @@ if ($_sjUganda) {
                 'date'           => $_sjUganda ? $_sjWhen : ($date . 'T' . $time . ':00.000Z'),
                 'duration'       => $duration,
                 'description'    => $description,
-                'status'         => 1, // Open
+                // Uganda (5.18.52): 0, Open — the engineer's Accept button shows for it (docs/43 J10, docs/44 §16.14).
+                'status'         => $_sjUganda ? 0 : 1, // Open
                 'assignedUserId' => $ucrmUserId,
             ];
             if ($crmClientId) $jobPayload['clientId'] = $crmClientId;
@@ -711,8 +734,11 @@ if ($_sjUganda) {
                 $crm->post("scheduling/jobs/{$newJobId}/job-tasks", ['name' => $taskName]);
             }
 
-            // WhatsApp notification (never on Uganda until job notifications are switched on — M6)
+            // WhatsApp notification. Uganda (5.18.52): the job notifier, from uCRM's answer (J4); the block below is not reached.
             $eng = $engByUcrm[$ucrmUserId] ?? null;
+            if ($_sjUganda) {
+                $_sjByJob[$newJobId] = $sjExplain($newJobId, $sjNotifier()->observe($newJobId, 'my_jobs', $newJob), ['assigned'], 0);
+            }
             if (!$_sjUganda && $notifyWa && $eng && !empty($eng['phone'])) {
                 $engPhone     = preg_replace('/[^0-9+]/', '', $eng['phone']);
                 $engFirstName = explode(' ', $eng['name'] ?? 'Engineer')[0];
@@ -735,8 +761,9 @@ if ($_sjUganda) {
                 'job_id'       => $newJobId,
                 'engineer_id'  => $ucrmUserId,
                 'engineer_name'=> $eng['name'] ?? "ID:{$ucrmUserId}",
-                'notified'     => (!$_sjUganda && $notifyWa && $eng && !empty($eng['phone'])),
-            ];
+                'notified'     => $_sjUganda ? in_array($_sjByJob[$newJobId]['outcome'] ?? '', ['sent', 'sending'], true)
+                                             : ($notifyWa && $eng && !empty($eng['phone'])),
+            ] + ($_sjUganda ? ['whatsapp' => $_sjByJob[$newJobId]['outcome'] ?? 'unverified'] : []);
         }
 
         $ok2(array_merge([
@@ -745,7 +772,7 @@ if ($_sjUganda) {
             'jobs'        => $created,
             'errors'      => $failed,
             'client_name' => $clientName,
-        ], $_sjUganda ? ['whatsapp' => 'not_sent', 'whatsapp_note' => $_sjNoWa] : []));
+        ], $_sjUganda ? ['whatsapp' => JobNotifier::summary($_sjByJob ?? []), 'whatsapp_note' => JobNotifier::notes($_sjByJob ?? [])] : []));
     }
 
     // ── Scheduling: reschedule job ────────────────────────────────────────────
@@ -771,6 +798,8 @@ if ($_sjUganda) {
 // Access verified via assigneeId query filter
         }
 
+        if ($_sjUganda) $_sjMark = $sjNotifier()->lastEventId($jobId);   // before the change, for $sjExplain
+
         // PATCH new date in UCRM
         $patchResult = $crm->patch("scheduling/jobs/{$jobId}", ['date' => $_sjUganda ? $_sjWhen : $newDate]);
         if ($patchResult === null) $er2('CRM update failed: ' . json_encode($crm->getLastError()), 502);
@@ -779,7 +808,15 @@ if ($_sjUganda) {
         $fullComment = "Rescheduled to {$newDate}" . ($comment ? ": {$comment}" : '');
         $crm->post("scheduling/jobs/{$jobId}/job-comments", ['message' => $fullComment]);
 
-        // WhatsApp to technician (never on Uganda until job notifications are switched on — M6)
+        // Uganda (5.18.52, J4): the new time goes to the engineer uCRM has on the job, not to whoever pressed the button.
+        if ($_sjUganda) {
+            $_sjR = $sjNotifier()->observe($jobId, 'reschedule', is_array($patchResult) ? $patchResult : null);
+            if (JobNotifier::utc($job['date'] ?? null) !== JobNotifier::utc($_sjWhen)) {
+                $_sjR = $sjExplain($jobId, $_sjR, ['new_time', 'assigned'], $_sjMark);
+            }
+        }
+
+        // WhatsApp to technician (never on Uganda: the job notifier above sends it)
         $techPhone = preg_replace('/[^0-9]/', '', $me2['phone'] ?? '');
         $techName  = $me2['name'] ?? 'Technician';
         if (!$_sjUganda && !empty($techPhone)) {
@@ -793,7 +830,7 @@ if ($_sjUganda) {
         }
 
         $ok2(array_merge(['rescheduled' => true, 'job_id' => $jobId, 'new_date' => $newDate],
-            $_sjUganda ? ['whatsapp' => 'not_sent', 'whatsapp_note' => $_sjNoWa] : []));
+            $_sjUganda ? ['whatsapp' => $_sjR['outcome'], 'whatsapp_note' => JobNotifier::note($_sjR)] : []));
     }
 
     // ── Scheduling: add comment to UCRM job ──────────────────────────────────
@@ -1140,7 +1177,8 @@ if ($_sjUganda) {
                 'description'    => trim($desc),
                 'clientId'       => $crmClientId,
                 'address'        => $address,
-                'status'         => 1, // 1 = Open (integer required by UCRM API)
+                // Uganda (5.18.52): 0, Open — the engineer's Accept button shows for it (docs/43 J10, docs/44 §16.14).
+                'status'         => $_sjUganda ? 0 : 1, // 1 = Open (integer required by UCRM API)
             ];
             // GPS if available
             if (!empty($clientData['gpsLat'])) {
@@ -1176,8 +1214,12 @@ if ($_sjUganda) {
                 'job_time'      => $custTime,
                 'status'        => 'created',
             ];
+            if ($_sjUganda) {   // 5.18.52 (J4): the job notifier, from uCRM's answer
+                $_sjByJob[$newJobId] = $sjExplain($newJobId, $sjNotifier()->observe($newJobId, 'bulk', $created_job), ['assigned'], 0);
+                $results[count($results) - 1]['whatsapp'] = $_sjByJob[$newJobId]['outcome'];
+            }
 
-            // WhatsApp notification to assigned engineer (never on Uganda until job notifications are switched on — M6)
+            // WhatsApp notification to assigned engineer (never on Uganda: the job notifier above sends it)
             if ($custAssignee && !$_sjUganda) {
                 // Look up engineer phone from retailers.json
                 $allR = $store->load('retailers.json') ?? [];
@@ -1248,5 +1290,5 @@ if ($_sjUganda) {
             'total'    => count($customers),
             'results'  => $results,
             'job_date' => $jobDate,
-        ], $_sjUganda ? ['whatsapp' => 'not_sent', 'whatsapp_note' => $_sjNoWa] : []));
+        ], $_sjUganda ? ['whatsapp' => JobNotifier::summary($_sjByJob ?? []), 'whatsapp_note' => JobNotifier::notes($_sjByJob ?? [])] : []));
     }

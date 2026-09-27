@@ -566,6 +566,20 @@ function whFetchFirst($crm, array $paths): ?array {
     }
     return null;
 }
+/**
+ * 5.18.52 (docs/44 J4, §16.12): Uganda — the job notifier observes uCRM's job and sends what its change calls for; the
+ * webhook log says what happened, one line per message, in WA Events' words (J7). $job is uCRM's verified answer when
+ * the caller holds one; never the posted body (R3).
+ */
+function whJobNotify(int $jobId, ?array $job, array $config, string $dataDir, $crm, $store, $notify, string $event): array {
+    require_once __DIR__ . '/lib/JobNotifier.php';
+    $r = (new JobNotifier($crm, $store, $notify, $config, $dataDir))->observe($jobId, 'ucrm_webhook', $job);
+    foreach (JobNotifier::logLines($jobId, $r) as $line) {
+        whLog($event, $line, ['job_event' => $r['event'], 'outcome' => $r['outcome']]);
+    }
+    return $r;
+}
+
 /** The verified entity, or a 200 "skipped" — never the posted copy. */
 function whVerified(string $label, int $id, ?array $row): array {
     if ($row === null) {
@@ -2371,11 +2385,11 @@ switch ($changeType) {
     case 'job.add':
     case 'JOB_ADD': {
         $jobId = $entityId ?: (int)($entity['id'] ?? 0);
-        // 5.18.50 (docs/44 M6, release A): on Uganda the technician is not sent a WhatsApp for a job created in uCRM
-        // until job notifications are switched on. Everything else here — the lookups, the log lines, the customer's
-        // e-mail — runs exactly as before, on every install.
+        // 5.18.52 (docs/44 J4, §16.12): on Uganda the technician's WhatsApp comes from the job notifier, from uCRM's
+        // job and the verified staff link — one message per change, whichever path sees it first. Everything else
+        // here — the lookups, the log lines, the customer's e-mail — runs exactly as before, on every install.
         require_once __DIR__ . '/lib/StaffJobsGate.php';
-        $_whNoJobWa = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
+        $_whJobNotifier = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
         
         // Get full job details from UCRM
         $job = whVerified('job', $jobId, whFetchFirst($crm, ["scheduling/jobs/{$jobId}"]));
@@ -2433,10 +2447,8 @@ switch ($changeType) {
                 }
             }
             
-            if ($_whNoJobWa) {
-                whLog($changeType, "Job #{$jobId} — WhatsApp skipped: job notifications are not switched on yet", [
-                    'assigned_user_id' => $assignedUserId,
-                ]);
+            if ($_whJobNotifier) {
+                whJobNotify($jobId, $job, is_array($config ?? null) ? $config : [], (string)$dataDir, $crm, $store, $notify, $changeType);
             } elseif ($techPhone) {
                 $message = "🔧 *New Job Assigned*\n\n"
                     . "Hi {$techName},\n\n"
@@ -2463,6 +2475,8 @@ switch ($changeType) {
             }
         } else {
             whLog($changeType, "Job #{$jobId} — No user assigned", ['job_title' => $title]);
+            // Uganda: the notifier still records the job, so a later assignment is one message (J4).
+            if ($_whJobNotifier) whJobNotify($jobId, $job, is_array($config ?? null) ? $config : [], (string)$dataDir, $crm, $store, $notify, $changeType);
         }
         
         // The customer's copy: only for an installation, only once it has a
@@ -3523,6 +3537,24 @@ switch ($changeType) {
     case 'credit_card.add': {
         whLog($changeType, "Known event — no action configured", ['entity_id' => $entityId]);
         whResp(200, "{$changeType} acknowledged.");
+    }
+
+    // ── A job changed or was deleted in uCRM ─────────────────────────────────
+    // 5.18.52 (docs/44 J4 §5.7): on Uganda the job notifier compares uCRM's job NOW with what it last told — a new
+    // engineer, a new time, a removal, a deletion — whatever the posted body says (R3). Every other install: exactly the
+    // default's line and answer below, as before.
+    case 'job.edit':
+    case 'JOB_EDIT':
+    case 'job.delete':
+    case 'JOB_DELETE': {
+        require_once __DIR__ . '/lib/StaffJobsGate.php';
+        if (!StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+            whLog($changeType, "Unhandled event type — logged only", ['entity_id' => $entityId]);
+            whResp(200, "Event '{$changeType}' received and logged (no action configured).");
+        }
+        $jobId = $entityId ?: (int)($entity['id'] ?? 0);
+        whJobNotify($jobId, null, is_array($config ?? null) ? $config : [], (string)$dataDir, $crm, $store, $notify, $changeType);
+        whResp(200, "{$changeType} processed.");
     }
 
     default:
