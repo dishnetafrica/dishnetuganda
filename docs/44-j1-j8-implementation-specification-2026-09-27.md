@@ -1918,12 +1918,21 @@ a number held by an active staff account (5.18.50, J8); an account with no numbe
 - Release A adds or removes no `exit` or `die` anywhere outside the tests, so the ways a master run ends are
   unchanged.
 - The deploy's own V4 saw none, because no master run finished in its 60 seconds.
-- **A rollback would not remove it.** Whether it also fired before 20:08 is one read-only line to measure. It prints
-  only a count per hour, no message text:
+- **A rollback would not remove it.**
+- **Measured on the server, 27 Sep about 20:55 UTC:** it has fired **every hour since at least 26 Sep 00:00 UTC**.
+  - 4 to 9 times an hour: at least 4 in every one of the 45 hours in the window;
+  - that includes 13:00–20:00 on the 27th, when 5.18.49 was live (4–7 an hour);
+  - the steady 4 an hour are the master's own runs, about one every 15 minutes;
+  - the extra ones are admin page loads.
+
+  It prints only a count per hour, no message text:
 
   ```
   docker logs ucrm --timestamps --since 2026-09-26T00:00:00Z 2>&1 | grep -F 'flock(): supplied resource is not a valid stream resource' | cut -c1-13 | sort | uniq -c
   ```
+- **What else it could skip was checked.** The only other lock released by a shutdown function is
+  `cron_wa_bot.php`'s, and that job is switched off in the master's list; `dishnet_wa_pusher.php` is not one of the
+  master's jobs. So inside a master run the skipped functions are SQLite's passive checkpoints only.
 
 **Proposed fix, as its own small release (5.18.51, not built, awaiting approval).** Guard the release in the
 shutdown handler with `is_resource($lockFp)`, which is false for a closed handle. The pattern is in `master.php`

@@ -2047,6 +2047,7 @@ member's included"). It now reads the installed crons: 413/413 on two runs, 14 w
 #374. V4 found 4 fatal lines, all `cron/master.php:83`: the master closes its lock at its normal end, and its shutdown
 handler then unlocks the closed handle, which is fatal on PHP 8.
 - **Not Release A's:** `master.php` and `main.php` are unchanged since 13 Sep, and Release A changes no `exit`.
+  **Measured:** it has fired 4–9 times an hour, every hour, since at least 26 Sep 00:00 UTC — 5.18.49 included.
 - The work of each run is done and saved before it.
 - A one-line fix (`is_resource()`) is proposed as 5.18.51, awaiting approval.
 
