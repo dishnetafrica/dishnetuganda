@@ -96,12 +96,12 @@ W=""; while [ \$# -gt 0 ]; do case "\$1" in -i) shift ;; -u) shift 2 ;; -w) W="\
 shift; [ -n "\$W" ] && cd "\$W"; exec "\$@"
 SH
 chmod +x "$SB/bin/docker"
-RUNS=0
 run() {   # the pinned script, or a weakened copy of it ($SCRIPT), in --after-only mode; REHEARSE_KEEP=<dir> keeps each output
-  rm -rf "$SB/ai"; : > "$SB/docker.log"; RUNS=$((RUNS+1))
+  rm -rf "$SB/ai"; : > "$SB/docker.log"
+  local n; n=$(( $(cat "$SB/runs" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$SB/runs"   # $(run) is a subshell
   local o; o="$(PATH="$SB/bin:$PATH" IN_CONTAINER="$PD" DNB_OUT="$SB/out" GUARD_SECONDS=0 \
     bash "${SCRIPT:-$DEPLOY}" --after-only --plugin-base "http://127.0.0.1:$WPORT/public.php" 2>&1 </dev/null)"
-  [ -n "${REHEARSE_KEEP:-}" ] && printf '%s\n' "$o" > "$REHEARSE_KEEP/run-$(printf '%02d' "$RUNS")${SCRIPT:+-mutant}.txt"
+  [ -n "${REHEARSE_KEEP:-}" ] && printf '%s\n' "$o" > "$REHEARSE_KEEP/run-$(printf '%02d' "$n")${SCRIPT:+-mutant}.txt"
   printf '%s' "$o"
 }
 fails_outside_v() { printf '%s' "$1" | grep -E '^  FAIL  ' | grep -vcE '^  FAIL  V[0-9]'; }
