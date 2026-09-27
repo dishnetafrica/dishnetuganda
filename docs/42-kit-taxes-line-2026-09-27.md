@@ -7,6 +7,9 @@
   wrong total the model wrote.
 - **The quotation PDF** says the same once staff load the new Uganda quotation template into uCRM (§4). The deploy
   cannot do that part.
+- **Plugin 5.18.49** — every Uganda quotation, with a kit or without, says *"All prices include all taxes — URA taxes
+  and UCC charges are already in them. Nothing is added on top."*: on WhatsApp under the Total, and in the PDF's
+  clause 2 (§9). **Built and rehearsed; not yet deployed** (§10). Its template ZIP replaces §4's.
 
 **Uganda only.** Where the hardware module is off — South Sudan — nothing changes, and that is measured (§2.4).
 
@@ -136,6 +139,10 @@ baseline never used.
 
 ## 4. Loading it into uCRM (staff, in the browser)
 
+> **Superseded on 27 Sep by §10.2.** Upload `template-quotation-uganda-all-taxes.zip` instead of the ZIP named
+> below; the steps are the same. The ZIP below still says "No VAT is charged" on a quote with no kit, which the
+> operator has since ruled out (§9).
+
 The template lives inside uCRM, so the plugin deploy does not change it. It goes in by the same route as the
 invoice template did on 26 Sep (docs/38 §7.2).
 
@@ -241,6 +248,8 @@ Then send back **the log file** from `/root/dnb-5.18.48/`, not a copy of the ter
 
 ## 7. Not changed, and open
 
+> **The first two points were answered on 27 Sep, and 5.18.49 builds the answer (§9).**
+
 - **GAP 4, for quotes with no kit.** Clause 2 still says "No VAT is charged on this quotation" there. The assistant's
   tax fact (`ai_fact_prices`, docs/27 GAP 4) says listed prices include VAT. Which is right for plans and
   accessories is yours to say; nothing has been written for you.
@@ -311,5 +320,189 @@ names Residential as unlimited.
 ### 8.2 Still to do
 
 - **The quotation template in uCRM** (§4): not yet loaded. Step 1 first — look at the newest quotation's PDF.
+  **Load 5.18.49's ZIP, not this one (§10.2).**
 - **The quotation summary of 5.18.46 and the new clause 2** are both proved by the next real quotation with a kit.
 - **P9** — a hand-over whose reason reads "reason" — was seen again on B1. P8 and P9 still await approval.
+
+## 9. 5.18.49 — every quotation says what its prices include
+
+### 9.1 What the operator decided (27 Sep 2026)
+
+§7 left two points open. The operator answered both:
+
+- **Plans and accessories:** *"we are giving quote including all the taxes"*. So "No VAT is charged on this
+  quotation" was wrong for them too.
+- **The WhatsApp quotation summary:** *"add it we are providing quote including UCC and URA charges"*.
+
+Then two choices:
+
+- **"One sentence (Recommended)."** Every quotation, with a kit or without, says:
+  > All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.
+- **"Yes, same sentence (Recommended)."** The assistant's price fact (`ai_fact_prices`) becomes the same sentence.
+  Your own command sets it (§10.1); the deploy never touches a setting.
+
+A chat reply that quotes a kit price keeps 5.18.48's line (§2), which names the UCC registration fee.
+
+### 9.2 Where it appears
+
+| Where | Before | 5.18.49 |
+|---|---|---|
+| WhatsApp summary of a quote made in uCRM (`webhook.php`, `quote.add`) | nothing about tax | the sentence, on the line under the Total |
+| WhatsApp message for a quote from the app or KYC (`QuotationService`) | nothing about tax | the sentence, on the line under the TOTAL |
+| Quotation PDF, clause 2, a quote with no tax lines | "No VAT is charged on this quotation." (with a kit: §3's kit sentence) | the sentence, on every quote |
+| Quotation PDF, a quote with tax lines | "VAT is itemised in the totals on page 1." | unchanged |
+| The assistant's price fact | "listed prices include VAT" (docs/27 GAP 4) | the sentence, once §10.1 is run |
+
+A quote made in uCRM, as the customer receives it on WhatsApp (the test's order 000114; no customer's details):
+
+```
+🏷️ *Total: UGX 2,648,000*
+✅ All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.
+
+💳 Cash / Transfer / Card
+✅ Reply *YES* to proceed.
+```
+
+Clause 2 of the PDF, on a quote with no tax lines:
+
+> **2. Currency & Pricing:** All prices in Ugandan Shillings (UGX). All prices include all taxes — URA taxes and UCC
+> charges are already in them. Nothing is added on top. Prices may change with 30 days' notice. Any new or increased
+> government tax, levy or regulatory fee introduced after acceptance may be passed on at cost.
+
+- **One sentence, in one place.** `lib/QuoteTaxLine.php` holds the words. Both WhatsApp builders use it, and the check
+  tool compares the price fact with it. The PDF template cannot read PHP, so its clause carries the same words; a
+  test decodes the clause and compares it with the class.
+- **Uganda only**, by the tenant profile. South Sudan's messages are byte-identical to what they were:
+  - the webhook's four South Sudan summaries match goldens taken before 5.18.46;
+  - `QuotationService` is run beside its own `4c01d1c` copy, and the two agree byte for byte.
+- **The sentence names no amount and no rate.** Prices still come from uCRM only.
+- **The PDF no longer looks for a kit.** One sentence for every quote needs no such test, so 5.18.48's "Starlink" and
+  "Kit" condition is gone.
+- **Read clause 2 whole once**, as §3 asked. Its last sentence — a new or increased tax after acceptance may be passed
+  on — now follows "Nothing is added on top". That is legal wording, and yours to judge.
+- **Unchanged:** the plugin's own quotation PDF, drawn only when uCRM gives none, says "taxes included where
+  applicable". That agrees.
+
+### 9.3 The price fact, and a kit quote that says it itself
+
+With the price fact set, the assistant's prompt carries:
+
+```
+- PRICES: All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top. This is a stated fact you may repeat; it does not permit you to calculate a tax amount or rate.
+```
+
+So the model may repeat it under a kit price. The plugin then adds no second line, because 5.18.48's rule (§2.1)
+skips a reply that already names UCC and tax. The customer is told once.
+
+**Found while building, fixed before shipping.** The check tool counted only the replies the plugin added the line
+to. With the price fact set, a kit quote that said it in the model's own words counted as nothing, and the deploy log
+would have read *"no reply quoted a Starlink kit price"* about a reply that did. The check now counts those replies
+too, on the Asked line: *"… N already saying the taxes are included"*. The rehearsal's fake model repeats the fact
+when its prompt carries one, so the case is proved end to end.
+
+**Also corrected before shipping:** the check's first wording for an unset price fact was *"the assistant is told
+nothing about tax"*. That was false. The prompt's TAX rule tells it never to assume prices include tax or exclude
+it, and to say the quotation confirms it. The report now says that.
+
+### 9.4 Proofs
+
+- **`tests/test_quote_tax_line.php` — 31 assertions**, new:
+  - the sentence against the approved text: no digit, names URA and UCC;
+  - Uganda yes, South Sudan no, unknown no;
+  - `QuotationService` on Uganda and South Sudan: the line under the TOTAL, on a paid document too, and South Sudan
+    byte-identical to `4c01d1c`;
+  - the template read statically: one clause, the exact if/else, the same words;
+  - the price fact through the prompt, `operatorText` and the kit line's rule;
+  - five weakened copies, each caught: every install taken for Uganda, one word changed, the line removed, the PDF
+    back to "No VAT is charged", the tax-lines branch dropped.
+- **`tests/test_quote_summary.php` — 45**, a new section K, through the real `webhook.php`: the line once, right
+  under the Total, on three quotes, and on none of South Sudan's. Two more weakened copies are caught.
+- **Two existing tests changed on purpose**, each saying why:
+  - `test_kit_tax_note.php` (68): its PDF section now expects the one sentence, not the kit sentence. The check
+    tool's count gains its fifth field, tied to the reasons `KitTaxNote` actually gives.
+  - `test_airtel_money.php` (58): the payment lines now follow the taxes line under the Total, unchanged.
+- **The quotation template, rendered with real Twig 3 and 2.16:** 27/27 on each, eight quotes, the rest of every
+  page byte-identical to the baseline's. Three controls fail as they should: the sentence replaced by the old one,
+  the tax-lines branch dropped, a filter the baseline never used.
+- **The check tool** (`scripts/harness/ai-check/rehearse.sh`), against 5.18.48 (the server's) and 5.18.49:
+  **325/325, twice**. New: the price fact reported when set (named as the quotations' sentence on 5.18.49; read as
+  your own wording on 5.18.48, which has no such class), switched off, and not set; and `--ask` with it set.
+  Three more weakened copies of the tool are caught.
+- **The full plugin suite:** 215 files, exit 0, twice.
+- **The deploy script:** 187/187 on two consecutive runs (§10.3).
+
+## 10. Deploy 5.18.49, and what to send back
+
+### 10.1 First: tell the assistant (your choice, recommended)
+
+Run as root on the server, **before** the deploy. It sets the price fact to the quotations' sentence and changes
+nothing else:
+
+```
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_prices --value "All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top."
+```
+
+It takes effect on the assistant's next reply. Skipped, the deploy still passes; stage AI notes that the price fact
+is not set.
+
+### 10.2 The quotation PDF: load the new template in uCRM
+
+**Do not upload `template-quotation-uganda-2026-09-27.zip`** (§4's). It still says "No VAT is charged" on a quote
+with no kit. Upload **`template-quotation-uganda-all-taxes.zip`** instead, by §4's steps:
+
+1. Look first at the newest quotation's PDF (§4 step 1).
+2. Upload the new ZIP in uCRM's quote templates. If asked for a name: "Quotation Uganda all taxes".
+3. Give it to the organization as its quote template.
+4. The proof is the next real quotation: its clause 2 carries the sentence. **Do not make a test quote for a real
+   customer**; every new quotation goes to the client on WhatsApp.
+
+Built like uCRM's own exports — `template.html.twig` then `template.css`, deflated, at a fixed timestamp — and both
+entries are byte-identical to the repository:
+
+| File | sha256 |
+|---|---|
+| `template.html.twig` | `33e1e6a85c24078a6e85ef20679f3f92ee2ea9c919f22dcedfa10f3a8907e1e6` |
+| `template.css` | `654e406a5ebccb0fe44b059bf45170890b69f3e8190e1fbb7aedf825748c846e` |
+| the ZIP | `16acf0b1efbf9a31158c2c32488eedb2d6cce2a72adeb20ea75f4f2bf502e400` |
+
+### 10.3 The deploy script
+
+`scripts/deploy-5.18.49.sh`, pinned to the plugin commit `e076632`. Same stages as 5.18.48's (§5.1). New:
+
+- **Q** reads the **installed** files, never the checkout's: the sentence (`lib/QuoteTaxLine.php`), the webhook and
+  `QuotationService`. Each missing one is a failure. The summary's `quotations` line repeats what Q found.
+- **AI** reports the price fact. The quotations' sentence is ok. Not set, switched off or in your own words is a
+  note, because it is your choice. A kit quote that says it itself counts as having said it; it is never reported as
+  "no kit price quoted".
+- **F** names the new template ZIP, and the price fact as the report found it.
+
+Rehearsed in `scripts/harness/deploy-5.18.49/rehearse.sh`: **187/187 on two consecutive runs**. Its scenarios
+include the price fact set (the run you will make), not set, in other words and switched off, and the server's
+5.18.48 files installed (three Q failures). Weakened copies each caught:
+
+- Q reading the checkout's files;
+- the summary claiming the line whatever Q found;
+- the price fact taken as set regardless, or an unset one failed;
+- the summary naming the sentence whatever the report said;
+- a reply that said it itself never counted.
+
+### 10.4 The command
+
+Run as root on the server, after §10.1:
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-5.18.49 && bash scripts/deploy-5.18.49.sh 2>&1 | tee /root/dnb-5.18.49/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+Then send back **the log file** from `/root/dnb-5.18.49/`, not a copy of the terminal.
+
+### 10.5 What the log should show
+
+- stage A: `GO`;
+- stage Q: three new `ok` lines — the sentence, the webhook, `QuotationService`;
+- stage AI:
+  - `ok AI the assistant is told what the quotations say …` (a note instead if §10.1 was skipped);
+  - the Asked line ending `; N with the kit tax note added; N already saying the taxes are included`;
+  - a kit quote counted under one of those two, or the note that none quoted a kit price this time;
+- the summary: `quotations` quoting the sentence, `quotation PDF` naming the new ZIP, `price fact`;
+- the last line: `5.18.49: PASSED.`

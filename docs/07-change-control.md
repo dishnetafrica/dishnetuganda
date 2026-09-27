@@ -1772,3 +1772,40 @@ live with it. Stage AI saw both:
 
 The notes: tar read a changing log file (the databases are copied separately), and that one refusal.
 **The quotation template is not yet loaded in uCRM** (docs/42 §4).
+
+## 5.18.49 — every Uganda quotation says what its prices include (docs/42 §9)
+
+**Why.** 5.18.48 left two points open (docs/42 §7). The operator answered on 27 Sep: *"we are giving quote including
+all the taxes"*, and for the WhatsApp quotation summary, *"add it we are providing quote including UCC and URA
+charges"*. They then chose **"One sentence (Recommended)"** for every quotation, and **"Yes, same sentence
+(Recommended)"** for the assistant's price fact:
+
+> All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.
+
+**What.** Uganda only, by the tenant profile; South Sudan byte-identical.
+- **`lib/QuoteTaxLine.php`** holds the sentence once.
+- **The WhatsApp quotation summary** carries it on the line under the Total, from both builders: a quote made in uCRM
+  (`webhook.php`, `quote.add`) and a quote from the app or KYC (`QuotationService`).
+- **Quotation template, clause 2.** Every quote with no tax lines says the sentence, with a kit or without. It
+  replaces "No VAT is charged on this quotation" and 5.18.48's kit sentence; quotes with tax lines are unchanged. The
+  template lives inside uCRM, so staff load it there: **`template-quotation-uganda-all-taxes.zip`**, sha256
+  `16acf0b1…f502e400`, both entries byte-identical to the repository. **The 27 Sep ZIP of 5.18.48 is superseded and
+  must not be uploaded.**
+- **The price fact** (`ai_fact_prices`) is not set by the deploy. The operator's own command sets it
+  (docs/42 §10.1); `set_config.php`'s help now shows the sentence.
+- **The check tool** reports the price fact, and counts a kit quote that already says the taxes are included, so a
+  log never reads "no kit price quoted" about one that did. Its wording for an unset fact was corrected before
+  shipping: the prompt's TAX rule does tell the assistant something.
+
+**Proof.**
+- `tests/test_quote_tax_line.php` **31**, new, including five weakened copies. `QuotationService` for South Sudan is
+  byte-identical to its `4c01d1c` copy; Uganda's gains exactly one line.
+- `tests/test_quote_summary.php` **45**: section K through the real webhook, and two more weakened copies.
+- `test_kit_tax_note.php` (68) and `test_airtel_money.php` (58) changed on purpose, each saying why.
+- The quotation template with real Twig 3 and 2.16: **27/27 on each**, three controls failing as they should.
+- The check's rehearsal against 5.18.48 and 5.18.49: **325/325, twice**.
+- Suite: **215 files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.49.sh`, pinned to `e076632`. Stage Q reads the three installed files; stage AI
+reports the price fact (ok when it is the quotations' sentence, a note otherwise); the summary names the new ZIP.
+Rehearsed in `scripts/harness/deploy-5.18.49/rehearse.sh`: **187/187 on two consecutive runs**. **Not deployed by this session.**
