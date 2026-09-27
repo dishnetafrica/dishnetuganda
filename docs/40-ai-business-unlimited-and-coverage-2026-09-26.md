@@ -345,6 +345,40 @@ and a knowledge base). §11.5 is the proof that South Sudan is unchanged.
 - `scripts/harness/ai-check/rehearse.sh` runs the check against **both 5.18.43 and 5.18.44**: **183/183, twice**,
   with thirteen weakened copies of the check (eight on both versions, four more on 5.18.44, one more on 5.18.43).
 - The full suite, twice: **209 suites, exit 0; the 188 that print totals report 8,426 passed, 0 failed, on both runs.**
+- `scripts/harness/deploy-5.18.44/rehearse.sh` runs **the pinned `deploy-5.18.44.sh` itself** (`--after-only`) against
+  a sandbox container: a fake `docker`, this checkout's plugin at the container's path with its brain pointed at a
+  fake AI provider, a fake uCRM, and a plugin database built by the real migrations with the knowledge rows as
+  5.18.43 shipped them. **46/46 on three consecutive runs**, no residue. Seven scenarios, labelled as the harness
+  prints them:
+  - **1 — 5.18.43's rows.** K dry-runs, corrects MANY_USERS_HOTSPOT to the 5.18.44 seed text word for word, then
+     dry-runs again and finds nothing. A drifted row that is still as seeded is untouched, and so is a person's
+     row. The tool runs as the database's owner, twice as a dry run and once for real. All eight AI checks pass,
+     and the ten questions are ten calls on the fake provider.
+  - **1b — the same with no person's row** — the case the server will meet, since every row there is as seeded
+     (§10). Only the one row changes.
+  - **2 — run again.** Nothing is written.
+  - **3 — MANY_USERS_HOTSPOT edited by a person.** Reported, and left as it is; AI says whose wording it reads.
+  - **4 — an older tool in the container.** Refused, nothing written. That tool would ignore `--only` and
+     `--dry-run` and refresh every seeded row.
+  - **5 — no AI key.** The questions are not asked, and that is a FAIL.
+  - **6 — the container serves another commit.** `--after-only` stops before anything is written or asked.
+
+  Five weakened copies of the script (section 7) each fail:
+  - the refresh not limited to the one row;
+  - an older tool run anyway;
+  - the tool run as root;
+  - the questions not asked, but reported as asked;
+  - no dry run before the correction.
+
+  Stage V is `deploy-5.18.43.sh`'s, unchanged (25 ok live on 26 Sep). Here a stand-in answers it, and its lines
+  are not judged: every FAIL in these runs is a V line.
+- **What the first run of that rehearsal found — in the harness, not the script.** It expected the deploy-mode
+  line *"the container already serves"*, which `--after-only` never prints; it now expects `ok live commit is
+  a4abe5e`. More telling: the copy with `--only` removed **was not caught**. The sandbox always held a person's
+  row, the tool then printed *"Edited by hand"*, and the script stopped at that branch and wrote nothing. The
+  weakened copy was safe there by accident, so the rehearsal could not show that `--only` did any work. It now
+  runs that copy on an estate with no person's row, beside the control (scenario 1b), where the copy rewrites the
+  drifted row and is caught.
 
 ### 11.7 What a prompt cannot promise
 
@@ -369,3 +403,15 @@ is not in uCRM. **Whether it follows is measured by `--ask` after the deploy, no
    docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_unlimited --value omit
    ```
    `--clear` in place of `--value omit` goes back to the approved wording.
+4. **What the log should show**, stage by stage (rehearsed, §11.6):
+   - **A:** `plugin commit a4abe5e (expected a4abe5e)`, and the live commit, which is the rollback commit.
+   - **K:** `ok K MANY_USERS_HOTSPOT now reads the 5.18.44 wording…`, then `ok K a second dry run has nothing left
+     to do`. The dry run before it names that one row and no other. A `note K … was edited by a person` means
+     somebody changed the row in the knowledge screen. It is then left as it is and the assistant reads that wording: send the
+     log, and change nothing.
+   - **V:** the same lines as the 5.18.43 deploy, all `ok`.
+   - **AI:** eight `ok` lines, the network equipment listed with a router and an access point, and the ten replies
+     to read. **The replies are the measurement** (§11.7): they are read against the baseline, not passed or failed.
+   - **F:** `5.18.44: PASSED`.
+5. **Running it again is safe.** Once the container serves `a4abe5e` the script skips the deploy. Stage K then
+   finds nothing left to do, and stage AI asks the ten questions again — ten more model calls.

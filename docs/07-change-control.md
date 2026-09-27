@@ -1546,4 +1546,9 @@ change. The check's rehearsal runs against 5.18.43 and 5.18.44: **183/183, twice
 **Deploy.** `scripts/deploy-5.18.44.sh`, pinned to the plugin commit. After the documented deploy, stage K
 corrects MANY_USERS_HOTSPOT — a dry run first, that row only, only while still as seeded, as the database's owner
 — stage V re-checks everything 5.18.43 checked, and stage AI asks the assistant the ten questions and prints the
-replies. **Not deployed by this session.**
+replies. **Rehearsed:** `scripts/harness/deploy-5.18.44/rehearse.sh` runs the pinned script against a sandbox
+container. It gave **46/46 on three consecutive runs**, over seven scenarios, and five weakened copies each fail
+(docs/40 §11.6). Its first run found two faults, both in the harness. One was a check for a line `--after-only`
+never prints. The other was a weakened copy without `--only` that was masked by the sandbox's person-edited row:
+the tool's *"Edited by hand"* stopped it before it wrote. That copy is now run on an estate with no person's
+row, beside a control. **Not deployed by this session.**
