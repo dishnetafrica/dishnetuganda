@@ -2,6 +2,9 @@
 
 27 September 2026. **Plugin 5.18.46: built, rehearsed, not yet deployed.** The deploy command is in §7.
 
+**27 September, 08:59 UTC:** deployed by the operator and **PASSED** (§8). Two of the eleven live replies should
+have been refused and were not; why, and proposal P11, are in §8.2–§8.3.
+
 **Uganda only.** South Sudan's quotation summary and price check are unchanged, and that is measured (§2.5, §3.4).
 
 ## 1. What the operator saw
@@ -267,3 +270,76 @@ There is **no stage K**, because no knowledge row changes.
 3. **After the deploy, the next quotation made in uCRM** shows One-time / First month (then … per month) / Total.
    That is the live measurement of §2.4. Quotations already sent are not changed.
 4. **Running it again is safe.** Once the container serves `131712a`, the deploy is skipped.
+
+## 8. The 5.18.46 deploy — 27 September 2026, 08:59 UTC
+
+**PASSED: 40 ok, 0 failed, 0 notes.** `131712a` over `0850e59`.
+
+- **A.** The backup, as at 07:54:
+  - `plugin.sqlite3`, 22 MB: `VACUUM INTO` as `1000:1000`, integrity ok, 224 tables, the same sha256 on both sides;
+  - no `dishnet.sqlite` on this install;
+  - the data directory without the live databases, 98 MB, and the plugin's `data` folder, 100 KB;
+  - tar exited 0; UISP health recorded; `GO`.
+- **B.** The container serves `131712a`.
+- **V.** All `ok`, and no fatal error in the container log since 08:59:08 UTC.
+- **Q.** The installed webhook carries the new quotation summary.
+- **AI.** Every line `ok`, the new price-check line and the plan copies (2) among them. Eleven model calls:
+  *"0 refused by the price check · 1 with the Business-plan note added"*.
+
+The operator pasted the terminal again. This command prints no secret; the log file is still the thing to send.
+
+**The quotation summary has not yet been seen live.** The next quotation made in uCRM is that measurement (§2.4).
+
+### 8.1 The eleven replies
+
+| Question | Reply |
+|---|---|
+| A1 "a WiFi business in my trading centre" | Residential, unlimited; the Standard Kit, MikroTik, access point, cable and consultancy, then **"Total: UGX 4,627,000"** — **wrong: those five add up to 4,527,000**; the survey |
+| A1 "50 people, unlimited, which package?" | Residential; the kit, installation, MikroTik, access point and cable (no price), then **"TOTAL TO GET CONNECTED: (Add total of kit, installation, router, access point, and cable)"** — **an unfilled slot, sent**; handed over with the reason "reason" (P9) |
+| A2 "unlimited business plans?" | none; a Business plan is a block of priority data, then about 1 Mbps until more is bought — the approved fact |
+| A3 "How much is Business 500?" | 285,000, and the Business-plan note appended |
+| A4 "sell internet around my shop" | the higher-capacity Residential plan; a kit and network equipment; asks where the shop is and the area |
+| B1 "cover 200 m around my hotspot" | the five items, **TOTAL: 1,897,500** — right; handed over with the reason "reason" (P9) |
+| B1 "two access points and the MikroTik" | **2,100,000** — right |
+| B2 "WiFi to my other building" | the five items, **1,897,500** — right; the survey |
+| B3 "price of the access point and MikroTik" | 700,000 and 700,000 — right |
+| B4 "3 floors; the upper floors have no WiFi" | Router 3 for each extra floor, 2 × 827000 = **1654000** — adds up, read without commas and passed; it did not ask which kit, offered only Router 3, and did not mention the survey |
+| C1 "installed at my home" | Mini Kit + installation = **2,399,000**, then Residential Lite at 249,000 a month — right |
+
+The model writes differently each run. B1 and B2 were wrong at 07:55 and right at 09:00; A1 was the other way
+round. **One run is a sample, not a rate.**
+
+### 8.2 Why two wrong replies were not refused — measured offline
+
+Reproduced with the real check, the real prompt builder and the price list this log printed. The other accessories
+are at their docs/19 shelf prices: the log prints only the two Starlink routers, and both match.
+
+- **A1's "4,627,000" is a permitted total.** The check asks only whether a figure is some sum of listed prices, and
+  4,627,000 is one. The Standard Kit, the installation and the MikroTik, with Router 3 and Router Mini, come to
+  exactly that: one of 17 such sums.
+  - It passes in 24 of the 28 orders uCRM could list the one-time items in.
+  - It passes without the prompt too, so it is not the prompt-digits rule (P8).
+- **This is the check's known limit (docs/40 §11.4, F-1), and it is wide.** With this price list:
+  - about 4 in 10 round amounts between 1 and 6 million are permitted totals (41.6% in steps of 50,000);
+  - around the right 4,527,000, every total off by 50,000, 100,000 or 200,000 either way passes.
+- **A1's second reply wrote its slot in round brackets**, and stated no total at all. The slot rule of 5.18.46 reads
+  square brackets only.
+
+### 8.3 What would catch both — proposal P11, for approval
+
+**A stated total must equal the lines listed with it, and a "TOTAL" with no figure is refused.** That is arithmetic
+on the reply itself, so a coincidence with the price list cannot fool it.
+
+It changes what the check refuses, and a model writes a list in more than one way:
+- a unit price, then "2 × 827000 = 1654000";
+- a list repeated just before its total;
+- the monthly plan listed beside the one-time items.
+
+So it needs every reply seen live so far (32, over three runs) as its test set, and approval. P10 (prices printed
+with commas, and totals given to the assistant) would make these mistakes rarer; P11 would refuse the ones that
+still happen.
+
+### 8.4 Noted, not changed
+
+- **P9:** two hand-overs again gave "reason" as their reason.
+- **B4** did not ask which kit the customer has, and offered only Router 3.

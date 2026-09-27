@@ -1674,3 +1674,11 @@ before. There is no stage K. Q checks that the installed webhook carries the new
 price-check line, and reports a refused reply as a note, never a failure. Rehearsed in
 `scripts/harness/deploy-5.18.46/rehearse.sh`: **117/117 on two consecutive runs**. Seven weakened copies of the new
 checks and seven of the backup each fail. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 08:59 UTC by the operator: PASSED, 40 ok / 0 failed / 0 notes** (docs/41 §8). The backup,
+V, Q and AI were all `ok`. Two A1 replies should have been refused and were not:
+- "Total: UGX 4,627,000", where the lines add up to 4,527,000. It equals a real sum of listed prices, the check's known
+  limit: about 4 in 10 round amounts between 1 and 6 million are permitted totals.
+- "(Add total of …)", a slot in round brackets.
+
+**Proposal P11, for approval:** a stated total must add up to its lines, and a "TOTAL" with no figure is refused.
