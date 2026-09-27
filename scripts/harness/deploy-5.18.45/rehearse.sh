@@ -205,7 +205,7 @@ PY
   case "$5" in
     drift)   [ "$(row MANY_USERS_HOTSPOT)" != "$DRIFT" ] && caught=yes ;;
     owner)   [ "$(grep -c -- "exec -u $OWNER .*seed_knowledge.php" "$SB/docker.log")" = "0" ] && [ "$(grep -c 'seed_knowledge.php' "$SB/docker.log")" != "0" ] && caught=yes ;;
-    askok)   [ "$(has "$o" 'ok    AI the ten questions were asked')" = "yes" ] && caught=yes ;;
+    askok)   [ "$(has "$o" 'ok    AI the eleven questions were asked')" = "yes" ] && caught=yes ;;
     nodry)   [ "$(grep -c -- 'seed_knowledge.php .*--dry-run' "$SB/docker.log")" = "0" ] && [ "$(grep -c 'seed_knowledge.php' "$SB/docker.log")" != "0" ] && caught=yes ;;
     pipe)    [ "$(race "$m")" != "20" ] && caught=yes ;;
   esac
