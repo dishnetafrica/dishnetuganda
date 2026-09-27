@@ -1915,3 +1915,18 @@ for S4. Measured:
   and neither has a phone.
 - A verified picker would propose **S1 → 1000** and **S4 → 1099**. S4 still holds 81 until it is linked.
 - Nothing was changed.
+
+**Decisions and readiness, 27 Sep** (docs/44 §15), asked for before any approval. Documentation only; nothing
+changed on the server.
+- **P1 first**, as the operator's advisor asked: who will be assigned jobs. S4 has uCRM user 1099 and S1 has 1000;
+  S3 and S5 are undecided.
+- **D9 (new):** link only to the uCRM user with the same e-mail. As written, J2 let an admin pick another user, and
+  UISP holds no names for these users.
+- **M1:** J8 must also stop follow-ups by the number, at the scan, the run and the send. As written, the category
+  is set only at a staff member's next message, and a follow-up opened earlier would continue.
+- **M2:** a message-content test (T4.13). **M3:** a title-only edit in the live test must send nothing.
+- **M4 (optional):** one silent internal test job after the links, to prove V2–V4 before release B can send.
+- **M5:** clear S3's and S5's stale ids unless they take jobs. 1581 is above uCRM's user numbers so far, so it
+  could one day name a real user.
+- Readiness: release A can be built once P1, D1, D2, D6, D7, D9, M1 and M5 are answered; nothing may send until
+  release B.

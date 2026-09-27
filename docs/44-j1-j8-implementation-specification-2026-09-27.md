@@ -48,6 +48,8 @@ account to it** with the J2 picker.
 Everything else in this document follows from your instruction. These eight points need your answer. The
 recommendation is first.
 
+**§15 adds D9, P1 (who takes jobs) and five amendments, M1–M5, with the readiness assessment.**
+
 | # | Question | Recommended | Why |
 |---|---|---|---|
 | **D1** | One release or two? | **Two.** Release A: J1, J2, J3, J5, J6, J7 (display), J8. Release B: J4, and J7's webhook lines | A sends nothing new. B starts sending only after you have created the uCRM users and linked them (§12) |
@@ -1138,5 +1140,121 @@ A new UISP user is **active in uCRM at once**, as J2's "active" rule requires. I
 
 ---
 
-**Nothing will be coded until you approve this specification and answer D1–D8.** The §13 check has run; its
-result is in §13.1.
+## 15. Decisions and readiness, before approval — 27 September
+
+You asked for the decisions and a readiness assessment before approving anything. Your advisor's point is taken as
+the first step: **decide who takes jobs, then decide the rest.** Nothing here changes the server. Three things are
+new since §0:
+
+- **D9**, a choice J2 had made for you;
+- **P1**, who takes jobs;
+- **five amendments, M1–M5**, found while mapping your acceptance tests to this specification.
+
+### 15.1 The decisions
+
+| # | Decision | Recommended | Why | What it changes for the business | Needed before |
+|---|---|---|---|---|---|
+| **P1** | Who will be assigned jobs? | S4: yes (uCRM user 1099 exists). S1: for the live test, and if you take jobs yourself (1000 exists). **S3 and S5: yours to decide.** S2 and retailers: no | Only people with a uCRM user can hold a uCRM job | Each "yes" needs a UISP user with the same e-mail (§15.3) | step 4, the links. It does not block release A |
+| **D1** | One release or two? | **Two** (§0) | A adds no message. B starts sending only once the right people are linked | Between A and B, job messages behave as today. **No real jobs until the live test after B** | release A |
+| **D2** | South Sudan byte-identical? | **Yes** | Your rule | South Sudan keeps today's holes until you decide otherwise: any signed-in account can act on any job, Clear Cache rewrites staff rows, and the engineer list returns phone numbers. Release B leaves two empty tables there | release A |
+| **D3** | Tell a technician when a job is taken away or deleted? | **Yes, one short message** | Otherwise someone told "tomorrow 09:00" may still go | One extra message per reassignment or deletion. With a single technician it rarely happens | release B |
+| **D4** | Remove "Notify via WhatsApp" from ＋ New Job on Uganda? | **Yes** | uCRM's `job.add` is a second route that knows nothing of the box | Every assignment is announced. No silent jobs | release B |
+| **D5** | The wording (§5.6) | **Approve, or edit** | Every technician reads it | The title, address and time are uCRM's. The customer's name appears because My Jobs writes it into the title. A job typed in uCRM's screen shows what was typed there. The address is the one on the job, which My Jobs copies from the customer's street address, not from a service's installation address | release B |
+| **D6** | Hide "CRM LINKED" and "⚠ No CRM link" on Uganda? | **Yes** | They count organisation 7, which does not exist here | The Staff page shows the J2 uCRM badges instead | release A |
+| **D7** | May `support_engineer` create jobs? | **Yes** | The third technician role | None today: no Uganda account holds it | release A |
+| **D8** | Set `tenant_profile = uganda` explicitly? | **Optional** | It keeps the switch independent of the currency setting | **None visible.** The profile already resolves to uganda by UGX (measured), and the sign-in page's phone example is the same string either way (`+256 7XX XXX XXX`, checked in the code) | no release |
+| **D9** (new) | Link only to the uCRM user with the **same e-mail**? | **Yes, on Uganda** | As written, J2 proposes the same-e-mail user but lets an admin choose another. The UISP users carry no first or last name, so a manual choice is made by number and username alone. Your J2 said "match by e-mail" | Each technician's UISP e-mail must equal their staff e-mail. S1 and S4 already do (measured) | release A |
+
+If you choose **one** release (D1), every decision except D8 is needed before it.
+
+**Business decisions**, yours alone because they change what people receive, see or may do: P1, D2, D3, D4, D5,
+D6, D7 and D9.
+
+**Technical decisions**, which you can approve as a set:
+
+- D1 and D8.
+- The choices this specification already makes:
+  - one Uganda switch;
+  - migration 075, with the claim written before the send in one transaction;
+  - the number taken only from the staff account;
+  - class `staff` on the support number;
+  - `+0300` to uCRM;
+  - the caller and the job re-read on every job action;
+  - staff recognised by the whole number;
+  - delivery receipts marked unavailable.
+- **One of them has an operational consequence: a failed job message is not retried automatically.** It stands in
+  the Message Log, the failure queue (retry by hand) and WA Events.
+
+### 15.2 Amendments found while mapping the acceptance tests
+
+| # | What | Why | Where |
+|---|---|---|---|
+| **M1** | **J8 must also stop follow-ups by the number, and at the run and send steps** | As written, only the scan checks the category. The six staff conversations become `staff` only at their next message, and a follow-up opened before the deploy continues: the run's gate (`cron/followup_run.php:79`) and the send (`cron/followup_send.php:76, 82`) re-check the opt-out and "a colleague took over", but not the category. The fix: the scan (`followup_scan.php:86`), the run and the send each also check the number against active staff accounts, and a follow-up already opened for such a number is closed as "a colleague's number". No schema | release A. New test **T8.8**: an uncategorised staff conversation is not opened; an open follow-up is closed, never sent; a customer's follow-up is unchanged |
+| **M2** | **A test of the message's content** | Your acceptance test 3 had none. **T4.13**: the title and address equal uCRM's job exactly; no address gives no address line; no value comes from the browser | release B |
+| **M3** | **Live test step 2a**: change only the title in uCRM | It proves an edit that is neither the person nor the time sends nothing | the live test |
+| **M4** (optional) | **A silent test job after the links** | It gathers V2, V3 and V4 before release B can send anything (§15.5, stage 5) | stage 5 |
+| **M5** | **Clear the stale ids of people who will not take jobs** (S3's 4, S5's 1581) at step 4 | §3.2 says J4 cannot message anyone through them. That is true today, not for ever: **1581 is above every uCRM user number so far (1000, 1099)**, so uCRM could one day give it to a new user. S5 would then receive that person's job messages and could act on their jobs | step 4, by an admin, with the picker's "— not linked —" |
+
+### 15.3 Accounts, matching and correction
+
+- **Minimum accounts.**
+  - One UISP/uCRM user for each person who will be assigned jobs, with the **same e-mail** as their staff account,
+    active.
+  - The technician never signs in to UISP; they work in My Jobs.
+  - **Not measured: the narrowest rights a user may have and still be assignable.** S4's user was created with
+    Read-only unticked, which is more than a technician needs.
+  - A zero-change check: uCRM → Scheduling → new job. See whether the user is in the assignee list, then cancel
+    without saving. Narrow S4's rights and look again.
+- **Matching** (J2 with D9): the e-mail trimmed and lower-cased, and exactly one match. The server then checks, at
+  every save:
+  - the user exists (`users/admins/{id}` answers 200, measured for 1000 and 1099);
+  - active;
+  - not linked to another active account;
+  - a job-taking role;
+  - with D9, the same e-mail.
+
+  A refusal gives the reason and keeps the old value.
+- **Correcting the wrong ids.**
+  - Only an admin's verified save changes a link, and only after release A. Before it, the South Sudan lists force
+    S1 and S5 back.
+  - S1: 1 → 1000. S4: 81 → 1099.
+  - S3 and S5: their own uCRM user, or "— not linked —" (M5).
+  - Until then the badge says "not a uCRM user", and New Job does not offer them.
+  - The users check, run again, proves every stored id is real.
+
+### 15.4 Readiness
+
+| Area | State |
+|---|---|
+| Specification | Complete for J1–J8. Every line checked against the installed 5.18.49 (`e076632`). Plus M1–M5 |
+| Evidence | V1 done. **V2, V3 and V4 wait for the first job** (M4 gets them before B). V5 is outside J1–J8 |
+| People | uCRM users exist for S1 (1000) and S4 (1099). **S3 and S5 undecided. S1 has no number** |
+| Code | None written |
+| Server | Unchanged: 5.18.49 |
+
+**Verdict.**
+
+- **Release A** can be built once P1 is known and D1, D2, D6, D7, D9 and M1 and M5 are answered.
+- **Nothing may send** until release B, which also needs D3–D5, the links, and preferably M4's evidence.
+
+### 15.5 Stages, and the evidence each needs
+
+| Stage | What | Who | Sends | Evidence before moving on | Rollback |
+|---|---|---|---|---|---|
+| 0 | read-only checks | you | no | **done**: 15:54, 16:37, 16:47 | — |
+| 1 | decisions | you | no | your answers to P1, D1–D9 and M1–M5 | — |
+| 2 | build release A (5.18.50) | me | no | full suite twice, 0 failed; each weakened copy caught; South Sudan golden byte-identical; the deploy command rehearsed twice, 0 failed; the pinned commit and ZIP digest | — |
+| 3 | deploy A | you | no | log file: backup taken; the switch reads uganda on the live install; gates present; staff links identical before and after; Message Log count unchanged by the deploy | the previous plugin from the backup. **The South Sudan lists re-arm** |
+| 4 | accounts and links | you | no | UISP users (same e-mail, narrow rights, in the assignee list); links via the picker; S1's number. Then the users check: every stored id real. A day later the facts command: the links survive; the last AI reply queued for a staff number is older than the deploy; no follow-up for a staff number (one read-only line the command gains) | re-link with the picker |
+| 5 | (M4, optional) one internal job: no customer, box unticked, assigned to 1000. Change its time in uCRM, then delete it | you, after approval | **nothing from this plugin**: the box is unticked, path B's lookup answers 404 (measured) and no customer is on it | the facts command: the job's detail carries `assignedUserId` (V4); uCRM showed the typed hour (V3); the webhook log shows `job.add`, `job.edit` and `job.delete` (V2) | the deletion is part of the stage |
+| 6 | build release B (5.18.51) | me | no | D3–D5 answered; suite twice; T4.1–T4.13; the trace's B1, A6 and A7 prevented; rehearsed twice | — |
+| 7 | deploy B | you | no | log file: 075 applied, both tables empty, Message Log unchanged by the deploy | the previous plugin; the tables stay, ignored; path B never sends, so no duplicates |
+| 8 | the live test (§12.3 + M3) | you, after approval | 2–3 messages, to you | log file: exactly the expected rows and events, nothing else | the previous release |
+
+**Not known, for any stage:** whether uCRM itself e-mails the assigned user, and whether another system subscribed
+to uCRM's webhooks reacts to a job. The stages prove this plugin's own sends.
+
+---
+
+**Nothing will be coded until you approve this specification and answer P1, D1–D9 and M1–M5 (§15).** The §13
+check has run; its result is in §13.1.
