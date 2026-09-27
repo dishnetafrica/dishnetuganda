@@ -1816,3 +1816,29 @@ sentence in all three installed files. The note: B1 wrote a total 199,000 over i
 quote with the Mini Kit, ends with the kit line. Seen, not changed: B1's second reply still defers tax to the
 quotation (P12, proposed for approval), and B4 quoted three routers for three floors.
 **The quotation template is not yet loaded in uCRM** (docs/42 §10.2).
+
+## 27 Sep — staff job assignment, uCRM and WhatsApp: a read-only audit (docs/43)
+
+**What.** An audit, at the operator's request, of how a job reaches a technician or retailer and how they answer.
+**No plugin change.** Nothing was deployed, no job created, no record changed and no message sent.
+
+**Found.**
+- Jobs are uCRM Scheduling jobs. My Jobs → ＋ New Job assigns and messages support staff; the time lands 3 hours
+  late in uCRM.
+- Hard-coded South Sudan lists overwrite each staff member's uCRM user id on every deploy and page load.
+- A job made in uCRM reaches the technician only if uCRM's user record carries a phone; the fallback is broken.
+  Reassignment sends nothing, and B + C send duplicates.
+- A technician's WhatsApp reply goes to the AI as a customer message.
+- Any signed-in account can read, close or complete any job.
+- A failed message can show as "Delivered".
+- "0/5 CRM linked" counts the organisation-7 reseller link, not the job link.
+
+The smallest set of changes is J1–J8 (required) and J9–J16 (optional), in docs/43 §9. **None is authorised yet.**
+
+**New read-only tools, no plugin change:**
+- `scripts/dnb-jobs-facts.sh` with `scripts/lib/jobs_facts.php`, for the operator to run: 277/277 on two runs in
+  `scripts/harness/jobs-facts/rehearse.sh`, seven weakened copies caught.
+- `scripts/harness/jobs-trace/trace.php`, the sandbox trace behind the audit: 46/46 on two runs.
+
+**Next.** The operator runs the facts command and sends back its log file (docs/43 §10.4), then chooses which
+changes to build. The controlled live test (§10.5) waits for that approval.
