@@ -1,12 +1,13 @@
 <?php
-// render.php — render the Uganda quotation template with real Twig under a sandbox and check clause 2 (docs/42 §3).
+// render.php — render the Uganda quotation template with real Twig under a sandbox and check clause 2 (docs/42 §3, §9).
 //   php render.php <twig vendor dir> <template under test> <baseline>
 // The sandbox allows exactly the tags, filters and functions the baseline uses. The baseline is the template as the
 // repository gave it to uCRM before 5.18.48 (commit 2bfad82), so a template that renders here uses nothing that
 // template did not already use. Output is a list of checks; exit 1 on any failure.
 require $argv[1] . '/vendor/autoload.php';
 
-const KIT_SENTENCE = 'The kit price includes all taxes &mdash; URA taxes and the UCC registration fee are already in it. '
+// 5.18.49: every quotation without uCRM tax lines says this — the operator's sentence of 27 Sep 2026 (docs/42 §9).
+const ALL_TAXES    = 'All prices include all taxes &mdash; URA taxes and UCC charges are already in them. '
                    . 'Nothing is added on top.';
 const NO_VAT       = 'No VAT is charged on this quotation.';
 const VAT_ITEMISED = 'VAT is itemised in the totals on page 1.';
@@ -90,27 +91,23 @@ $old = $render($argv[3]);
 if ($new === null || $old === null) { printf("\n%d passed, %d failed\n", $pass, $fail + 1); exit(1); }
 t('the template renders under the baseline\'s sandbox', true, true);
 
+// Every quote without tax lines — with a kit or without, however it is spelled — says what all its prices include.
 foreach (['kit' => 'a Starlink kit', 'kit_last' => 'a Starlink kit listed last', 'kit_lower' => 'a kit named in lower case',
-          'kit_upper' => 'a kit named in capitals'] as $k => $what) {
+          'kit_upper' => 'a kit named in capitals', 'no_kit' => 'no kit on the quote',
+          'starlink_svc' => 'a Starlink service alone', 'travel_kit' => 'the Travel Kit case alone'] as $k => $what) {
     $c = clause2($new[$k]);
-    t("{$what}: clause 2 says what the kit price includes", substr_count($c, KIT_SENTENCE), 1);
+    t("{$what}: clause 2 says all prices include all taxes", substr_count($c, ALL_TAXES), 1);
     t("{$what}: …and not that no VAT is charged", substr_count($c, NO_VAT), 0);
 }
-foreach (['no_kit' => 'no kit on the quote', 'starlink_svc' => 'a Starlink service but no kit',
-          'travel_kit' => 'the Travel Kit case, which is not a Starlink kit'] as $k => $what) {
-    $c = clause2($new[$k]);
-    t("{$what}: clause 2 is unchanged", $c, clause2($old[$k]));
-    t("{$what}: …\"No VAT is charged on this quotation.\"", substr_count($c, NO_VAT), 1);
-}
 $c = clause2($new['kit_taxed']);
-t('a kit with uCRM tax lines: VAT is itemised, as before', substr_count($c, VAT_ITEMISED), 1);
-t('…and the kit sentence is not printed beside it', substr_count($c, KIT_SENTENCE), 0);
+t('a quote with uCRM tax lines: VAT is itemised, as before', substr_count($c, VAT_ITEMISED), 1);
+t('…and the all-taxes sentence is not printed beside it', substr_count($c, ALL_TAXES), 0);
 t('…clause 2 unchanged there', $c, clause2($old['kit_taxed']));
-t('the baseline, on the kit quote, says no VAT is charged (the contradiction 5.18.48 ends)', substr_count(clause2($old['kit']), NO_VAT), 1);
+t('the baseline said no VAT is charged on a quote without tax lines (the contradiction 5.18.49 ends)', substr_count(clause2($old['no_kit']), NO_VAT), 1);
 
 // Nothing else on the page moves: every quote renders as before once clause 2's sentence is set back.
 foreach ($QUOTES as $k => $_) {
-    $n = str_replace(KIT_SENTENCE, NO_VAT, page($new[$k]));
+    $n = str_replace(ALL_TAXES, NO_VAT, page($new[$k]));
     t("{$k}: the rest of the page is byte-identical to the baseline's", $n === page($old[$k]), true);
 }
 

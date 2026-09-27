@@ -129,8 +129,11 @@ $FLAGS = [
     // it the assistant hedges ("the quotation confirms the tax treatment") on
     // every price; with it, it says what the operator says, and still may
     // not calculate a tax amount or rate.
+    // 5.18.49 (docs/42 §9): on Uganda the operator chose the quotations' sentence (QuoteTaxLine::TEXT), so the
+    // assistant answers a tax question in the words every quotation uses.
     'ai_fact_prices' => ['text',
-        'What to say about tax on listed prices, e.g. "All our listed prices include VAT." (unset = the AI hedges)'],
+        'What to say about tax on listed prices — Uganda uses the quotations\' sentence: "All prices include all taxes — '
+      . 'URA taxes and UCC charges are already in them. Nothing is added on top." (unset = the AI hedges)'],
     // Appended by PlanFenceGuard to any reply that names a Business plan
     // without naming Residential. It is here, and not in the prompt, because
     // the prompt version was measured: 18 of 21 replies ignored it. "omit"

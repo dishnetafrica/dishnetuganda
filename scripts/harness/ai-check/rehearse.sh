@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Rehearse scripts/dnb-ai-check.sh before anyone runs it on the server (docs/40).
 #
-# It runs twice: against the plugin the server runs today (5.18.46, commit 131712a, the commit deploy-5.18.46.sh
-# pinned, deployed 27 Sep 2026 08:59) and against this checkout (5.18.48, which carries 5.18.47's totals rule too).
+# It runs twice: against the plugin the server runs today (5.18.48, commit 65b1ace, the commit deploy-5.18.48.sh
+# pinned, deployed 27 Sep 2026 11:49) and against this checkout (5.18.49, the quotations' tax sentence, docs/42 §9).
 # 5.18.43 was rehearsed beside 5.18.44 (docs/40 §11.6), 5.18.44 beside 5.18.45 (docs/40 §14.4), 5.18.45 beside 5.18.46
-# (docs/41 §5), and 5.18.46 beside 5.18.47 (docs/41 §9.8). The operator runs the check before the deploy and after it, and the two
+# (docs/41 §5), 5.18.46 beside 5.18.47 (docs/41 §9.8) and beside 5.18.48 (docs/42 §6). The operator runs the check before the deploy and after it, and the two
 # logs are compared — so the check must read each version correctly, and say which it is reading.
 #
 # Each run: a sandbox plugin directory holds a COPY of that version's lib/ and workers/ — the brain's OpenAI address
@@ -16,15 +16,15 @@
 # was seeded and against what that version does. Then weakened copies of the check must each fail.
 set -u
 R="$(cd "$(dirname "$0")/../../.." && pwd)"; H="$R/scripts/harness/ai-check"
-LIVE_COMMIT="131712a"   # 5.18.46, what the server runs (scripts/deploy-5.18.46.sh, 27 Sep 2026 08:59)
+LIVE_COMMIT="65b1ace"   # 5.18.48, what the server runs (scripts/deploy-5.18.48.sh, 27 Sep 2026 11:49, PASSED)
 
 # ── The parent: one run per plugin version ──────────────────────────────────
 if [ -z "${EXPECT:-}" ]; then
   OLD="$(mktemp -d)"; trap 'rm -rf "$OLD"' EXIT
   git -C "$R" archive "$LIVE_COMMIT" dishnet-hybrid-sudan | tar -x -C "$OLD" || { echo "could not extract $LIVE_COMMIT"; exit 2; }
   ALL_OK=0; ALL_FAIL=0
-  for v in 46 48; do
-    if [ "$v" = 46 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
+  for v in 48 49; do
+    if [ "$v" = 48 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
     else src="$R/dishnet-hybrid-sudan"; what="this checkout"; fi
     echo; echo "######## plugin 5.18.$v — $what ########"
     EXPECT="$v" PLUGIN_SRC="$src" bash "$0" | tee "$OLD/out-$v"
@@ -38,11 +38,13 @@ if [ -z "${EXPECT:-}" ]; then
 fi
 
 # ── A child: one version ────────────────────────────────────────────────────
-case "$EXPECT" in 46|48) ;; *) echo "EXPECT must be 46 or 48"; exit 2 ;; esac
+case "$EXPECT" in 48|49) ;; *) echo "EXPECT must be 48 or 49"; exit 2 ;; esac
 P="${PLUGIN_SRC:?PLUGIN_SRC names the plugin directory under test}"
 v46() { [ "$EXPECT" -ge 46 ]; }   # 5.18.46's checks: both versions rehearsed now have them (the else branches are 5.18.45's record)
 v47() { [ "$EXPECT" -ge 47 ]; }   # 5.18.47's totals rule: this checkout carries it
-v48() { [ "$EXPECT" -ge 48 ]; }   # 5.18.48's taxes line under a kit price (docs/42)
+v48() { [ "$EXPECT" -ge 48 ]; }   # 5.18.48's taxes line under a kit price (docs/42): both versions rehearsed now have it
+v49() { [ "$EXPECT" -ge 49 ]; }   # 5.18.49's quotations' sentence, which the price fact is set to (docs/42 §9)
+PFTEXT='All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.'
 SB="$(mktemp -d)"; PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; rm -rf "$SB"; }
 trap cleanup EXIT
@@ -165,6 +167,8 @@ else
   check "$(printf '%s' "$OUT" | grep -cE 'kit tax note +none — this version adds no taxes line under a kit price')" "1" \
     "5.18.46's report says it adds no taxes line"
 fi
+check "$(printf '%s' "$OUT" | grep -cE 'price fact +not set — the assistant may not say whether prices include tax; it says the quotation confirms it$')" "1" \
+  "the report says the price fact is not set, and what the assistant does then (the tool reads the setting for any plugin)"
 check "$(has "$OUT" 'customer     Hi, I want to start a wifi business, do you have unlimited internet? my number is {phone}')" "yes" \
   "c1's question is shown, the phone masked"
 check "$(printf '%s' "$OUT" | grep -A2 'my number is {phone}' | grep -c 'names a Business plan')" "1" "…and its AI reply is read as naming a Business plan"
@@ -189,6 +193,21 @@ check "$(ls -d /tmp/dnb-ai-ro-* 2>/dev/null | wc -l | tr -d ' ')" "0" "the tempo
   write_config "$KEY" 1 ',"ai_fact_unlimited":"omit"'
   OUT="$(run_check)"
   check "$(printf '%s' "$OUT" | grep -cE '"unlimited" fact +OFF \(omit\)')" "1" "\"omit\" is shown as off"
+  write_config "$KEY"
+
+  echo "== 1d. the price fact as the operator sets it (5.18.49, docs/42 §10) =="
+  write_config "$KEY" 1 ",\"ai_fact_prices\":\"$PFTEXT\""
+  OUT="$(run_check)"
+  if v49; then
+    check "$(printf '%s' "$OUT" | grep -cE "price fact +the quotations' sentence: All prices include all taxes — URA taxes and UCC charges are already in them\\. Nothing is added on top\\.")" "1" \
+      "the quotations' sentence is named as such, whole (5.18.49)"
+  else
+    check "$(printf '%s' "$OUT" | grep -cE 'price fact +your own wording: All prices include all taxes')" "1" \
+      "5.18.48 has no quotations' sentence to name, so the same words read as the operator's own"
+  fi
+  write_config "$KEY" 1 ',"ai_fact_prices":"omit"'
+  OUT="$(run_check)"
+  check "$(printf '%s' "$OUT" | grep -cE 'price fact +OFF \(omit\)')" "1" "\"omit\" is shown as off"
   write_config "$KEY"
 
 echo "== 1b. it reads the copy it is given, and never the live file =="
@@ -290,7 +309,7 @@ if v47; then
   check "$(count "$S" 'refused      its total says 881,500; the lines listed with it add up to 830,000')" "1" "…the total's too"
   check "$(count "$S2" 'the price check REFUSED the reply (placeholder,total:missing)')" "1" "the unfilled slot: both reasons named"
   check "$(count "$S2" 'refused      it gives a TOTAL with no figure')" "1" "…and the check says the TOTAL has no figure"
-  check "$(has "$OUT" '4 refused by the price check; 1 with the Business-plan note added; 1 with the kit tax note added')" "yes" \
+  check "$(has "$OUT" '4 refused by the price check; 1 with the Business-plan note added; 1 with the kit tax note added; 0 already saying the taxes are included')" "yes" \
     "the closing tally matches, the taxes line counted"
 else
   check "$(count "$S3" 'REFUSED')" "0" "control: 5.18.46 sends a total that does not add up when the figure is itself a sum of our prices — the hole"
@@ -315,7 +334,7 @@ check "$(count "$(section "$OUT" 'How much will I pay to get Starlink installed 
   "a home total that adds up is still sent"
 check "$(count "$(section "$OUT" 'The WiFi does not reach the upper floors of my house.')" 'the price check REFUSED the reply')" "1" \
   "two of one Starlink router is refused with the module off"
-check "$(has "$OUT" '3 refused by the price check; 1 with the Business-plan note added; 0 with the kit tax note added')" "yes" \
+check "$(has "$OUT" '3 refused by the price check; 1 with the Business-plan note added; 0 with the kit tax note added; 0 already saying the taxes are included')" "yes" \
   "the closing tally matches: no taxes line with the module off"
 check "$(count "$(section "$OUT" 'How much will I pay to get Starlink installed at my home?')" 'The kit price includes all taxes')" "0" \
   "…the kit price is sent as before"
@@ -325,6 +344,22 @@ fi
 check "$(prompts_with 'MORE FLOORS OR ROOMS|— Starlink router:')" "0" "no prompt carries the rule for more floors"
 check "$(grep -c '^DATA ALLOWANCE (a stated fact' "$(prompt_for 'Do you have unlimited business plans?')")" "1" \
   "the data-allowance fact follows the qualification switch, not this one"
+write_config "$KEY"
+
+echo "== 2c. --ask with the price fact set (5.18.49): a kit quote that says it already gets no second line, and is counted =="
+write_config "$KEY" 1 ",\"ai_fact_prices\":\"$PFTEXT\""; rm -rf "$SB/ai"
+OUT="$(run_check --ask)"; rc=$?; keep ask-price-fact "$OUT"
+check "$rc" "0" "--ask exits 0"
+check "$(prompts_with "^- PRICES: $PFTEXT This is a stated fact you may repeat")" "11" "every prompt carries the price fact, whole"
+S="$(section "$OUT" 'How much will I pay to get Starlink installed at my home?')"
+check "$(count "$S" "$PFTEXT")" "1" "the home-installation reply repeats it, as the fake model does when given it — once"
+check "$(count "$S" 'The kit price includes all taxes')" "0" "…and is given no second taxes line under the kit price"
+check "$(count "$S" 'it quotes a kit price and already says the taxes are included, so no second line was added')" "1" \
+  "…and the check says why, rather than nothing"
+check "$(has "$OUT" '1 with the Business-plan note added; 0 with the kit tax note added; 1 already saying the taxes are included')" "yes" \
+  "the closing tally counts it as already saying it, not as a reply with no kit price"
+check "$(count "$(section "$OUT" 'Do you have unlimited business plans?')" "$PFTEXT")" "0" "control: a reply that quotes no kit price is left as the model wrote it"
+check "$(printf '%s' "$OUT" | grep -cE "$CANARIES")" "0" "nothing secret or personal is printed"
 write_config "$KEY"
 
 echo "== 3. --ask without a key: stops, asks nothing, says so =="
@@ -346,6 +381,7 @@ assert s.count(old) == 1, 'anchor not unique: ' + old
 open(p, 'w').write(s.replace(old, new))
 PY
   [ "${5:-}" = hwoff ] && write_config "$KEY" 0
+  [ "${5:-}" = pfset ] && write_config "$KEY" 1 ",\"ai_fact_prices\":\"$PFTEXT\""
   rm -rf "$SB/ai"; local before; before="$(dbsum)"
   local o; o="$(SCRIPT="$SB/m/scripts/dnb-ai-check.sh" run_check $3)"
   local caught=no s   # an absence counts only where the part it is absent from still ran (a crash is not a catch)
@@ -381,6 +417,10 @@ PY
              [ "$(count "$s" 'AI replies')" = "1" ] && [ "$(count "$s" 'The kit price includes all taxes')" = "0" ] && caught=yes ;;
     kittally) [ "$(count "$o" '1 with the Business-plan note added; 1 with the kit tax note added')" = "0" ] \
              && [ "$(count "$(section "$o" 'How much will I pay to get Starlink installed at my home?')" 'the kit tax note was added')" = "1" ] && caught=yes ;;
+    pfline)  [ "$(count "$o" 'HARDWARE (one-time)')" = "1" ] && [ "$(count "$o" 'price fact')" = "0" ] && caught=yes ;;
+    kitsaid) s="$(section "$o" 'How much will I pay to get Starlink installed at my home?')"
+             [ "$(count "$s" "$PFTEXT")" = "1" ] && [ "$(count "$o" '0 with the kit tax note added; 0 already saying the taxes are included')" = "1" ] && caught=yes ;;
+    pfnamed) [ "$(printf '%s' "$o" | grep -cE 'price fact +your own wording: All prices include all taxes')" = "1" ] && caught=yes ;;
     totwhy)  s="$(section "$o" 'I want to start a WiFi business in my trading centre')"
              [ "$(count "$s" 'REFUSED the reply (total:mismatch)')" = "1" ] && [ "$(count "$s" 'its total says')" = "0" ] && caught=yes ;;
   esac
@@ -417,6 +457,11 @@ if v48; then
   mutant "the report silent about the taxes line" "out('kit tax note', !filter_var(=>if (false) out('kit tax note', !filter_var(" "" kitline
   mutant "the taxes line not added where the worker adds it" "if (!empty(\$k['appended'])) { \$final = \$k['reply'];=>if (false) { \$final = \$k['reply'];" "--ask" kitadd
   mutant "the taxes line added but not counted" "\$kitted++; \$how[] = 'the kit tax note was added';=>\$how[] = 'the kit tax note was added';" "--ask" kittally
+fi
+mutant "a kit quote that already says it not counted" "elseif (in_array((string)(\$k['reason'] ?? ''), ['the reply already says it in its own words', 'the note is already present'], true)) {=>elseif (false) {" "--ask" kitsaid pfset
+mutant "the report silent about the price fact" "out('price fact', \$pf === ''=>if (false) out('price fact', \$pf === ''" "" pfline
+if v49; then   # 5.18.48 has no QuoteTaxLine, so there the report reads "your own wording" whatever the check does
+  mutant "the quotations' sentence not recognised" "(class_exists('QuoteTaxLine') && \$pf === QuoteTaxLine::TEXT)=>(false)" "" pfnamed pfset
 fi
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"

@@ -13,8 +13,8 @@
  *   3. the real worker: added after the price check, never to a refused reply; South Sudan unchanged
  *   4. listed as the operator's own text where it can be added
  *   5. the setting, ai_fact_kit_taxes
- *   6. the quotation template: clause 2, one line, the same words (rendered with real Twig in
- *      scripts/harness/quotation-template)
+ *   6. the quotation template: since 5.18.49 clause 2 says every quotation's sentence instead of this one
+ *      (tests/test_quote_tax_line.php; rendered with real Twig in scripts/harness/quotation-template)
  *   7. the AI check tool reports it and counts it
  *   8. weakened copies must each fail
  *
@@ -173,26 +173,14 @@ is_(strpos($sc, "in_array(\$key, ['ai_fact_prices', 'ai_fact_kit_taxes'], true) 
     '…and warns when a figure is typed into it, as for the tax fact');
 
 // ════════════════════════════════════════════════════════════════════════════
-echo "\n6. The quotation template: clause 2 says the same, in one line staff can paste\n";
+echo "\n6. The quotation template: since 5.18.49 every quotation says what all its prices include\n";
 $tpl = (string)file_get_contents("{$root}/ucrm_pdf_templates/quotation_uganda/template.html.twig");
-$lines = array_values(array_filter(explode("\n", $tpl), fn($l) => strpos($l, '2. Currency &amp; Pricing:') !== false));
-$line = $lines[0] ?? '';
-is_(count($lines) === 1, 'clause 2 is one line');
-$sentence = 'The kit price includes all taxes &mdash; URA taxes and the UCC registration fee are already in it. Nothing is added on top.';
-is_(substr_count($tpl, $sentence) === 1 && strpos($line, $sentence) !== false, 'the sentence is in clause 2, once');
-is_(html_entity_decode($sentence, ENT_QUOTES | ENT_HTML5, 'UTF-8') === KitTaxNote::DEFAULT_NOTE, '…in the same words as the WhatsApp line');
-$order = ['{% set has_kit = false %}', '{% for item in items %}', "('Starlink' in item.label", "('Kit' in item.label",
-          '{% set has_kit = true %}', '{% endfor %}', '{% if totals.taxes|length > 0 %}VAT is itemised in the totals on page 1.',
-          '{% elseif has_kit %}' . $sentence, '{% else %}No VAT is charged on this quotation.{% endif %}'];
-$at = -1; $inOrder = true;
-foreach ($order as $piece) { $p = strpos($line, $piece); if ($p === false || $p < $at) { $inOrder = false; echo "       out of place: {$piece}\n"; } else $at = $p; }
-is_($inOrder, 'self-contained, in order: the kit test, then tax lines itemised, then the kit sentence, then "No VAT is charged"');
-is_(strpos($line, "('Kit' in item.label or 'kit' in item.label or 'KIT' in item.label)") !== false
-    && strpos($line, "('Starlink' in item.label or 'starlink' in item.label or 'STARLINK' in item.label) and") !== false,
-    'a kit on a quote needs both "Starlink" and "Kit" in one item, as on WhatsApp');
-is_(preg_match('/\|(?!length)[a-z_]+/', $line) === 0, 'no filter but length, which the template already uses');
-is_(is_file($repo . '/scripts/harness/quotation-template/render.php') || !is_dir($repo . '/scripts'),
-    'the rendering proof, real Twig 2 and 3, is scripts/harness/quotation-template');
+// 5.18.48 put the kit sentence on a quote with a kit. The operator then chose one sentence for every quotation
+// (docs/42 §9), proved in tests/test_quote_tax_line.php; the kit sentence stays where it is: under a kit price in chat.
+is_(strpos($tpl, 'The kit price includes all taxes') === false && strpos($tpl, 'has_kit') === false,
+    'the PDF no longer carries the kit sentence or looks for a kit: every quotation says the same (5.18.49)');
+is_(strpos($tpl, 'All prices include all taxes &mdash; URA taxes and UCC charges are already in them.') !== false,
+    '…it says what all the prices include instead');
 
 // ════════════════════════════════════════════════════════════════════════════
 echo "\n7. The AI check tool reports it and counts it\n";
@@ -205,9 +193,18 @@ if ($chk !== '' && $wrap !== '') {
     is_(strpos($chk, "\$k = KitTaxNote::apply(\$final, \$config, KitTaxNote::kitPrices((array)(\$ctx['products'] ?? [])));") !== false
         && strpos($chk, "\$kitted++; \$how[] = 'the kit tax note was added';") !== false,
         '…adds it where the worker does, after the fence, and counts it');
-    is_(strpos($chk, 'echo "@@ ask ok {$calls} {$blocked} {$fenced} {$kitted}\n";') !== false
-        && strpos($wrap, 'read -r _ P STATE A B C D <<<"$LAST"') !== false && strpos($wrap, '%s with the kit tax note added') !== false,
+    // 5.18.49: a fifth field, the replies that quoted a kit price and already said it themselves (the price fact set).
+    is_(strpos($chk, 'echo "@@ ask ok {$calls} {$blocked} {$fenced} {$kitted} {$kitsaid}\n";') !== false
+        && strpos($wrap, 'read -r _ P STATE A B C D E <<<"$LAST"') !== false
+        && strpos($wrap, '%s with the kit tax note added; %s already saying the taxes are included') !== false,
         'the count reaches the wrapper as its own field, not folded into the Business-plan count');
+    $src = (string)file_get_contents($root . '/lib/KitTaxNote.php');
+    $said = true;
+    foreach (['the reply already says it in its own words', 'the note is already present'] as $why) {
+        $said = $said && strpos($chk, "'{$why}'") !== false && strpos($src, "\$keep('{$why}')") !== false;
+    }
+    is_($said && strpos($chk, '$kitsaid++;') !== false,
+        'a reply that already says it is counted by the reasons KitTaxNote actually gives (5.18.49), so a log never reads "no kit price quoted"');
 } else {
     echo "  --   the scripts are not beside this copy of the plugin (a sandbox): skipped\n";
 }
@@ -245,8 +242,6 @@ if ($withMutants) {
          'the note put before the reply'],
         ['workers/AiReplyWorker.php', "if (\$kit['appended']) {", 'if (false) {', 'the worker never adds it'],
         ['lib/DishNetAiBrain.php', "        if (\$kit !== '') \$out[] = \$kit;\n", '', 'not listed as the operator\'s text'],
-        ['ucrm_pdf_templates/quotation_uganda/template.html.twig', '{% elseif has_kit %}', '{% elseif false %}{# #}',
-         'the quotation never says it'],
     ];
     foreach ($MUTANTS as [$rel, $old, $new, $label]) {
         $tmp  = $sandbox();

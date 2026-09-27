@@ -65,7 +65,8 @@ function traits(string $r): string {
 
 // ── The installed plugin ────────────────────────────────────────────────────
 foreach (['bootstrap_data', 'PluginConfig', 'KnowledgeBase', 'CrmApiClient', 'ShopCatalogue', 'DishNetTools',
-          'PlanCatalogue', 'PlanFenceGuard', 'KitTaxNote', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext', 'DishNetAiBrain',
+          'PlanCatalogue', 'PlanFenceGuard', 'KitTaxNote', 'QuoteTaxLine', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext',
+          'DishNetAiBrain',
           'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus'] as $lib) {
     if (is_file("{$root}/lib/{$lib}.php")) require_once "{$root}/lib/{$lib}.php";
 }
@@ -161,6 +162,12 @@ if ($mode === 'report') {
     } else {
         out('kit tax note', 'none — this version adds no taxes line under a kit price (5.18.48 does)');
     }
+    // 5.18.49 (docs/42 §9): the price fact, which the operator chose to make the quotations' sentence.
+    $pf = trim((string)($config['ai_fact_prices'] ?? ''));
+    out('price fact', $pf === '' ? 'not set — the assistant may not say whether prices include tax; it says the quotation confirms it'
+        : (strtolower($pf) === 'omit' ? 'OFF (omit)'
+        : ((class_exists('QuoteTaxLine') && $pf === QuoteTaxLine::TEXT) ? "the quotations' sentence: " . clip($pf, 160)
+        : 'your own wording: ' . clip(mask($pf), 160))));
     if (defined('DishNetAiBrain::UNLIMITED_FACT')) {
         $uf = trim((string)($config['ai_fact_unlimited'] ?? ''));
         out('"unlimited" fact', $uf === '' ? 'the default wording: ' . clip(DishNetAiBrain::UNLIMITED_FACT, 110)
@@ -416,7 +423,7 @@ if ($mode === 'ask') {
         }
         return $out;
     };
-    $calls = 0; $blocked = 0; $fenced = 0; $kitted = 0; $tokIn = 0; $tokOut = 0;
+    $calls = 0; $blocked = 0; $fenced = 0; $kitted = 0; $kitsaid = 0; $tokIn = 0; $tokOut = 0;
     hdr('The questions, asked of the installed assistant on the sales number — nothing is sent to anyone');
     foreach ($SCENARIOS as $name => [$channel, $turns]) {
         echo "\n  ── {$name}\n";
@@ -452,6 +459,11 @@ if ($mode === 'ask') {
                     if (class_exists('KitTaxNote')) {
                         $k = KitTaxNote::apply($final, $config, KitTaxNote::kitPrices((array)($ctx['products'] ?? [])));
                         if (!empty($k['appended'])) { $final = $k['reply']; $kitted++; $how[] = 'the kit tax note was added'; }
+                        // 5.18.49 (docs/42 §9): with the price fact set, the model may say it itself; the worker then adds no
+                        // second line, and the reply still told the customer. Counted, so a log never reads "no kit price quoted".
+                        elseif (in_array((string)($k['reason'] ?? ''), ['the reply already says it in its own words', 'the note is already present'], true)) {
+                            $kitsaid++; $how[] = 'it quotes a kit price and already says the taxes are included, so no second line was added';
+                        }
                     }
                 }
             }
@@ -485,8 +497,8 @@ if ($mode === 'ask') {
         }
     }
     printf("\n  %d model call(s) · tokens in %d, out %d · %d refused by the price check · %d with the Business-plan note added"
-         . " · %d with the kit tax note added\n", $calls, $tokIn, $tokOut, $blocked, $fenced, $kitted);
-    echo "@@ ask ok {$calls} {$blocked} {$fenced} {$kitted}\n";
+         . " · %d with the kit tax note added · %d already saying the taxes are included\n", $calls, $tokIn, $tokOut, $blocked, $fenced, $kitted, $kitsaid);
+    echo "@@ ask ok {$calls} {$blocked} {$fenced} {$kitted} {$kitsaid}\n";
     exit(0);
 }
 

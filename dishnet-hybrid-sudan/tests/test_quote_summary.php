@@ -22,6 +22,9 @@
  * South Sudan: byte for byte the summary it sent before (goldens taken from the code before this change), and not one
  * request more to its uCRM.
  *
+ * 5.18.49 (docs/42 §9): under the Total, every Uganda quotation says what its prices include, in the operator's words
+ * of 27 Sep 2026 (section K). South Sudan: still byte for byte the summary it sent before.
+ *
  * Everything runs through the REAL webhook.php under php -S, with a fake uCRM and a fake Evolution API that keeps
  * every message whole. QUOTE_GOLDEN_WRITE=1 (re)writes the South Sudan goldens — only ever from the code before.
  */
@@ -229,8 +232,8 @@ $want = "📦 Starlink Mini Kit — UGX 2,249,000\n"
 is_($count === 1 && money_lines($t) === $want, 'the items, then One-time 2,399,000, First month 249,000 — then 249,000 per month — and the Total',
     "got:\n" . money_lines($t));
 is_(strpos($t, 'Hardware:') === false && strpos($t, 'Monthly:') === false, 'no "Hardware" and no "Monthly" line');
-is_(strpos($t, "*Total: UGX 2,648,000*\n\n💳 Cash / Transfer / Card\n✅ Reply *YES* to proceed.") !== false,
-    'the Total and the payment lines exactly as before', $t);
+is_(strpos($t, "*Total: UGX 2,648,000*\n✅ All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.\n\n💳 Cash / Transfer / Card\n✅ Reply *YES* to proceed.") !== false,
+    'the Total, the line saying what the prices include (5.18.49), then the payment lines exactly as before', $t);
 is_($plans === 1, 'the webhook asked uCRM for its service plans once', "asked {$plans} time(s)");
 
 // Order 000117, the one the operator confirmed on 27 Sep ("its provided correct working"): the same numbers, said plainly.
@@ -293,6 +296,21 @@ is_(strpos($t, '💰') === false && strpos($t, "🏷️ *Total: UGX 2,399,000*")
 [$t, , ] = summary($UG, [['label' => 'Residential Lite (up to 100 Mbps)', 'quantity' => 1, 'price' => 249000]], 27);
 is_(strpos($t, '💰') === false && strpos($t, "🏷️ *Total: UGX 249,000*") !== false, 'the plan only: the item and the Total', money_lines($t));
 
+// ── K. 5.18.49: every Uganda quotation says what its prices include ──────────
+echo "\nK. 5.18.49 — under the Total, every Uganda quotation says its prices include all taxes\n";
+// The operator's words, 27 Sep 2026 (docs/42 §9), pinned here as written — not read from the code under test.
+$TAXLINE = '✅ All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.';
+[$t, $count, ] = summary($UG, $Q_ORDER, 40);
+is_($count === 1 && substr_count($t, $TAXLINE) === 1 && strpos($t, "🏷️ *Total: UGX 2,648,000*\n" . $TAXLINE . "\n\n") !== false,
+    'order 000114: the approved sentence, once, right under the Total', $t);
+[$t, , ] = summary($UG, $Q_AREA, 41);
+is_(strpos($t, "🏷️ *Total: UGX 5,725,500*\n" . $TAXLINE . "\n") !== false, 'a bigger-area setup: the same line under its Total', $t);
+[$t, , ] = summary($UG, $Q_ORDER, 42, ['plans_down' => true]);
+is_(strpos($t, "🏷️ *Total: UGX 2,648,000*\n" . $TAXLINE . "\n") !== false,
+    'uCRM cannot list its plans: no split, and still the line — the quotation is Uganda\'s either way', $t);
+$ssHas = array_keys(array_filter($ss, fn($x) => strpos($x, 'All prices include all taxes') !== false));
+is_($ssHas === [], 'South Sudan: none of its four summaries carries it (section A proves them byte for byte)', implode(', ', $ssHas));
+
 // ── J. weakened copies of webhook.php must each fail ──────────────────────
 echo "\nJ. Weakened copies of webhook.php — each must be caught\n";
 $MUTS = [];
@@ -349,6 +367,18 @@ $weakened("South Sudan's uCRM asked for its plans",
     function () use (&$n, $SS_USD, $Q_ORDER): bool {
         [, , $plans] = summary($SS_USD, $Q_ORDER, $n++);
         return $plans !== 0;
+    });
+$weakened('the tax line sent to South Sudan too',
+    '. ($ugPlans !== false ? \'✅ \' . QuoteTaxLine::TEXT . "\n" : \'\')', '. (\'✅ \' . QuoteTaxLine::TEXT . "\n")',
+    function () use (&$n, $SS_USD, $Q_ORDER, $gold): bool {
+        [$t, , ] = summary($SS_USD, $Q_ORDER, $n++);
+        return $t !== (string)$gold['summaries']['usd-order'];
+    });
+$weakened('the tax line never sent',
+    '. ($ugPlans !== false ? \'✅ \' . QuoteTaxLine::TEXT . "\n" : \'\')', '. \'\'',
+    function () use (&$n, $UG, $Q_ORDER, $TAXLINE): bool {
+        [$t, , ] = summary($UG, $Q_ORDER, $n++);
+        return strpos($t, $TAXLINE) === false;
     });
 is_(glob($root . '/webhook.qsmut-*.php') === [], 'no weakened copy is left beside webhook.php');
 

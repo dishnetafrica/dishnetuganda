@@ -5,6 +5,7 @@ require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/PdfLinkToken.php';
 require_once __DIR__ . '/lib/QuoteWaLedger.php';
 require_once __DIR__ . '/lib/PaymentOptions.php';
+require_once __DIR__ . '/lib/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -2811,7 +2812,11 @@ switch ($changeType) {
                 $msg .= "💰 Monthly: " . dn_code($config) . " " . number_format($monthlyTotal, 0) . "\n";
             }
 
-            $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n\n"
+            $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n"
+                 // 5.18.49 (docs/42 §9): every Uganda quotation says what its prices include, in the operator's words.
+                 // South Sudan ($ugPlans false) gets the same bytes as before.
+                 . ($ugPlans !== false ? '✅ ' . QuoteTaxLine::TEXT . "\n" : '')
+                 . "\n"
                  . PaymentOptions::quoteLines($config)   // 5.18.31: Airtel Money when pay_airtel_merchant is set
                  . "✅ Reply *YES* to proceed.\n\n";
 

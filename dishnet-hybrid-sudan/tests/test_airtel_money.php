@@ -180,14 +180,16 @@ function quotation(array $extra, string $phone, int $n): array {
 $sum = $texts[0] ?? '';
 is_(count($texts) === 1 && strpos($sum, "📄 *Quotation & Order Summary*") === 0,
     'unset: the customer gets the Quotation & Order Summary, sent whole', json_encode($texts));
-is_(strpos($sum, "*\n\n💳 Cash / Transfer / Card\n✅ Reply *YES* to proceed.") !== false,
-    '…with the payment line exactly as before', $sum);
+// 5.18.49 (docs/42 §9): a Uganda quotation says what its prices include, on the line under the Total; the payment
+// lines follow it unchanged.
+is_(strpos($sum, "*\n✅ All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.\n\n💳 Cash / Transfer / Card\n✅ Reply *YES* to proceed.") !== false,
+    '…with the payment line exactly as before, under the taxes line (5.18.49)', $sum);
 is_(strpos($sum, 'Airtel') === false && count($media) === 1, '…no Airtel Money, and the PDF follows as before');
 
 [$texts, $media] = quotation(['pay_airtel_merchant' => $M], '+256 700 000 702', 2);
 $sum = $texts[0] ?? '';
 is_(strpos($sum, "📄 *Quotation & Order Summary*") === 0, 'set: the same summary goes out');
-is_(strpos($sum, "*\n\n💳 Airtel Money: Merchant ID {$M}, dial *185*9#\n💵 Or Cash / Transfer / Card\n✅ Reply *YES* to proceed.") !== false,
+is_(strpos($sum, "*\n✅ All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.\n\n💳 Airtel Money: Merchant ID {$M}, dial *185*9#\n💵 Or Cash / Transfer / Card\n✅ Reply *YES* to proceed.") !== false,
     '…telling the customer to pay Merchant ID ' . $M . ' by dialling *185*9#, then the old choices', $sum);
 $airtelLine = '';
 foreach (explode("\n", $sum) as $l) if (strpos($l, '*185*9#') !== false) $airtelLine = $l;
