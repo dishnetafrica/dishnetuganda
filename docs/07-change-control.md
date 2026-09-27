@@ -2087,3 +2087,23 @@ process's own clock. 5.18.52 corrects the test, not the badge.
 - **`scripts/deploy-5.18.51.sh` (`1517dc8`).** It installs `240f2f9` by its hash, also after later pushes. Rehearsed
   131/131 twice; 23 weakened copies caught. The rollback is a separate command.
 - **Not deployed by this session.**
+
+## 5.18.52 — release B: job messages the South Sudan way; built and rehearsed, not deployed (docs/44 §16.14)
+
+- **The change, plugin commit `fc5c3b7`, Uganda only.** One component, `lib/JobNotifier.php`, sends every job WhatsApp
+  message, once per change, to the engineer uCRM has on the job. It finds that engineer through a verified link only
+  (M7). The messages:
+  - message 1, with an ACCEPT JOB link;
+  - after Accept, message 2 with the completion link, in place of the engineer's "Job Accepted";
+  - a new time; "no longer assigned"; "cancelled".
+- **The link survives the staff sign-in.** Jobs made in My Jobs and Bulk Dispatch are created Open, so the Accept
+  button shows.
+- **Migration 075** adds the notifier's two tables. South Sudan is byte-identical, apart from those two empty tables.
+- **Tests.** Two new suites (107 and 97 assertions), the day scenario rewritten against 5.18.51 (46), and the badge
+  test's clock corrected (27, no failure). Weakened copies caught: 16 by the notifier suite, 6 by the day scenario and
+  one more by the badge test.
+- **The suite, twice on `fc5c3b7`:** 226 files, 10,656 passed, 0 failed, identical file by file. Both runs fell inside
+  the 21:00–24:00 UTC window in which 5.18.51's badge test failed; it passes there now.
+- **`scripts/deploy-5.18.52.sh` (`9e1740d`).** It goes over 5.18.51 only, and installs `fc5c3b7` by its hash.
+  Rehearsed 159/159 twice; 28 weakened copies caught. The rollback is a separate command, printed on its own.
+- **Not deployed.** It waits for 5.18.51, then M5, S1's number and M4, then a separate approval.

@@ -2076,6 +2076,8 @@ Press Complete there when the work is finished. The same page lets you reschedul
   - §15.6 requirement 7 allows messages only to your number. So this step runs only once a read-only check shows no
     active support leader, or with those people told first and counted as expected recipients.
 
+**Built since:** §16.14 — 5.18.52, plugin commit `fc5c3b7`, not deployed.
+
 ### 16.13 5.18.51 — the master's lock fix, built and rehearsed, not deployed — 27 September 2026
 
 **Approved** by the operator (*"i will go with your recommandation"*), before the D5 approval: the one-line fix of
@@ -2133,3 +2135,225 @@ and a fake container. Its section 7b puts a later release on the branch first.
 
 **Not deployed.** It changes nothing about jobs or messages, so it can go in at any time. Before M4 is best: later
 `--after-only` checks then stop showing V4. An hour after the deploy, `--after-only` judges R8.
+
+### 16.14 5.18.52 — release B, built and rehearsed, not deployed — 27 September 2026
+
+**Built on the D5 approval (§16.12). Uganda only; plugin commit `fc5c3b7`.** On South Sudan every answer, message and
+log line is byte-identical to 5.18.51. Its only change is two empty tables.
+
+**One component sends every job message: `lib/JobNotifier.php`.**
+- **Five places call it:** ＋ New Job, Bulk Dispatch, Reschedule, Accept, and uCRM's `job.add`, `job.edit` and
+  `job.delete`.
+- **Exactly one message per change.**
+  - It reads uCRM's job. Then, under `BEGIN IMMEDIATE`, it compares the job with the last state it told anyone about
+    (`job_notify_state`), writes the new state and commits.
+  - It sends only after the commit, and records each outcome in `job_notify_events`.
+  - A second process, or uCRM sending an event twice, finds the state already moved and sends nothing.
+  - It compares with what it last told, not with the event, so a missed event is made good at the next one.
+- **What it sends** (§5.2 as built):
+
+| Change, compared with the last state told | Message |
+|---|---|
+| A job it has told nobody about, with an assignee | message 1 to the assignee |
+| An assignee where there was none | message 1 |
+| Another assignee | message 1 to the new one; "no longer assigned" to the previous one (D3) |
+| The assignee removed | "no longer assigned" to the previous one (D3) |
+| The same assignee, another time | "new time" |
+| Deleted in uCRM (404) | "cancelled" to the last assignee, unless the job was closed (D3) |
+| Closed (status 2) | none; recorded once |
+| Anything else (title, Open ↔ In progress) | none; the record is brought up to date |
+
+- **Who receives it (M7):** the one staff account whose uCRM user was saved through the verified picker.
+  - No such account, two of them, or no usable number (J3): nothing is sent, and WA Events says why.
+  - Opt-outs never block it (`CLASS_STAFF`).
+  - **A failed send is not retried automatically** (§5, §15). It stands in the Message Log, the failure queue (retry
+    by hand) and WA Events.
+- **A partial uCRM answer is never used (V4).** The answer must carry the assignee, the time and the status. If it
+  does not, the job is read again. If that answer is partial too, nothing is decided or sent: a missing field must
+  never read as "unassigned".
+
+**Message 2, after Accept.** On Uganda it replaces the engineer's "✅ Job Accepted".
+- It is sent only when the job was Open (status 0) before the Accept, to the job's assignee, once per assignment. A
+  claim on the record (`accepted_by`, under `BEGIN IMMEDIATE`) stops a second press or a race from sending it twice.
+- A job accepted before the notifier ever saw it gets message 2 and a record, so no message 1 follows later.
+- **The leaders' "🔔 Job Accepted" is unchanged.**
+
+**Jobs are created Open on Uganda** (the Accept half of J10). ＋ New Job and Bulk Dispatch create jobs at status 0, so
+the job page shows Accept. South Sudan still creates them In progress (1).
+
+**The link survives the sign-in (`lib/JobReturn.php`).**
+- Messages 1 and 2 link to `?page=dashboard&tab=scheduling&job=<id>`: the staff job page, behind the staff sign-in
+  and J6.
+- Opened signed out, the page keeps only the job's number (digits only) in the session and asks for the sign-in.
+- After a successful sign-in the engineer lands on that job: once, within 30 minutes, at a fixed address. Nothing else
+  from the link is kept, so the link cannot send anyone elsewhere.
+
+**uCRM's own screens.** On Uganda `job.add`, `job.edit` and `job.delete` reach the notifier; the customer's
+installation e-mail on `job.add` is unchanged. On South Sudan `job.edit` and `job.delete` get the answer and log line
+they got before.
+
+**The screens.** ＋ New Job says *"The engineer gets a WhatsApp message"* and explains the ACCEPT JOB link. ＋ New Job,
+Reschedule and Bulk Dispatch report per job whether the message was sent, and why not when it was not. For each job
+event uCRM sends, WA Events shows whether its message was sent, failed or skipped, and why (J7).
+
+**Migration 075** adds `job_notify_state` and `job_notify_events`. It has three columns §5.4 does not:
+- `title`, so the "cancelled" notice can name the job;
+- `accepted_by`, message 2's claim;
+- `message`, which message an event row sent.
+
+The plugin applies it itself, at the first request the new code serves.
+
+**The messages as built.** Messages 1 and 2 are §16.12's approved text, byte for byte; the test compares them with that
+section's own code blocks. The four others, with the same made-up job:
+
+```
+Hi Grace. This is DishNet Africa.
+
+📅 Job #950 has a new time
+
+Starlink installation
+Now: 07.10.2026 02:00 pm
+Was: 06.10.2026 09:00 am
+
+For any questions, just reach out here.
+📞 <Uganda support number>
+🌐 dishnetuganda.com
+```
+
+```
+Hi Grace. This is DishNet Africa.
+
+↩️ Job #950 is no longer assigned to you
+
+Starlink installation
+📅 Date: 06.10.2026 09:00 am
+It has been given to a colleague. Please do not go.
+
+For any questions, just reach out here.
+📞 <Uganda support number>
+🌐 dishnetuganda.com
+```
+
+The notice for a removed assignee is the same without *"It has been given to a colleague."*
+
+```
+Hi Grace. This is DishNet Africa.
+
+❌ Job #950 has been cancelled
+
+Starlink installation
+📅 Was: 06.10.2026 09:00 am
+Please do not go.
+
+For any questions, just reach out here.
+📞 <Uganda support number>
+🌐 dishnetuganda.com
+```
+
+**What this means in use:**
+- **A job that existed before the deploy gets its first message at its next change**, and that message is message 1,
+  because the notifier has told nobody about it yet. That includes a reschedule: message 1 with the new time, not
+  "new time".
+- **A job already In progress shows no Accept.** That covers every job ＋ New Job or Bulk Dispatch created before the
+  deploy (they were created In progress), and a job reassigned after it was accepted. Its engineer gets message 1, but
+  no Accept and so no message 2. A leader can set the job back to Open in uCRM first.
+
+**The tests — new and changed:**
+- **`test_job_messages.php`** (new, 107, pure):
+  - the six bodies, byte for byte;
+  - the rules;
+  - the decision table in 22 cases;
+  - the log lines against WA Events' own rule;
+  - the sign-in return, including crafted links;
+  - migration 075 on an empty database.
+- **`test_job_notifier.php`** (new, 97). It runs the real `public.php` under `php -S`, a fake uCRM and a fake
+  Evolution, and covers:
+  - ＋ New Job and uCRM's `job.add` in both orders, with the event delivered three times: one message (T4.1, T4.2);
+  - two processes on one change: a held lock as the control, and a real race over 8 jobs (T4.3);
+  - a new engineer and a new time (T4.4, T4.5);
+  - removed, deleted and closed jobs; nobody to tell (T4.7); a forged event (T4.8); uCRM unreachable, then the next
+    event catching up (T4.9); a failed send; a partial answer;
+  - message 2 and its claim;
+  - the sign-in return, end to end;
+  - Bulk Dispatch, the screens, WA Events (J7) and the history table;
+  - South Sudan, where none of this happens.
+
+  16 weakened copies are each caught.
+- **`test_job_notifications_day.php`** (renamed from `_off`, 46). It plays one day of job traffic on 5.18.51
+  (`240f2f9`) and on this tree.
+  - **The control:** 5.18.51 sends no assignment message.
+  - This tree sends message 1 four times and message 2 once. The Reschedule of a job the plugin was never told about
+    is one of the four: its first message is message 1, at the new time.
+  - Every other message is the same text to the same number, in the same order. The Message Log's other rows and the
+    customer's e-mail are the same, and so is the webhook log but for the one job line.
+  - The writes to uCRM differ only in status 0 for 1.
+  - South Sudan is identical: messages, Message Log, webhook log, e-mail, every request to uCRM and every answer.
+
+  6 weakened copies are each caught.
+- **`test_job_status_truth.php`** (27; it was 21 passing and 2 failing). Its fake webhook log is now written in the
+  tenant's zone, and it asserts that `public.php` applies the zone before the `crm_webhook` route. A copy without that
+  line is caught (6 weakened copies in all).
+
+**The suite** (PHP 8.4.19, in the main checkout):
+- **Twice on `fc5c3b7`: 226 files, 10,656 assertions passed, 0 failed, identical file by file** (1,206 s and
+  1,206 s). A run just before the commit, on the identical files, gave the same counts.
+- **All three runs fell between 22:42 and 23:42 UTC**, inside the 21:00–24:00 window in which 5.18.51's badge test
+  failed twice. It passes 27 of 27 there now.
+- **Compared with 5.18.51's runs (§16.13), file by file,** 221 files have the same counts. The others:
+  - `test_job_notifications_off.php` (47) is now `test_job_notifications_day.php` (46);
+  - `test_job_status_truth.php` passes 27 of 27, where 5.18.51 passed 21 and failed 2;
+  - `test_job_messages.php` (107) and `test_job_notifier.php` (97) are new;
+  - `test_quote_tax_line.php` passes 31, not 29: these runs are in the main checkout, where its comparison with
+    `4c01d1c` runs (§16.13).
+
+**The deploy script — `scripts/deploy-5.18.52.sh`, commit `9e1740d`:**
+- **Over 5.18.51 only.** Any other live commit is a NO-GO that says *"deploy 5.18.51 first"*. It installs `fc5c3b7` by
+  its hash, also after later pushes.
+- **The same stages as 5.18.51:** before-evidence and GO/NO-GO, the backup, the documented deploy on a typed DEPLOY,
+  stage V and stage R.
+- **The rollback to 5.18.51** asks for a typed ROLLBACK. Its command is printed once, at the end of the log, on its own.
+- **Stage R for release B:**
+  - **R1:** every changed file is installed as the commit has it. A renamed file counts as removed and added, as
+    `deploy-hybrid.sh` makes it: the old `test_job_notifications_off.php` stays on the server, inert. **Found while
+    writing:** the first draft compared that old name with the new commit, and would have failed a good deploy.
+  - **R4:** the old New Job, Bulk Dispatch and Reschedule messages must stay at 0. Release B's own messages are
+    counted as notes.
+  - **R6:** every caller of the notifier is in the installed files.
+  - **R7:** how many job-taking accounts have a verified link. Only they receive messages.
+  - **R8:** 5.18.51's lock guard is kept. V4 now counts the master's lock line like any other fatal.
+  - **R9:** migration 075 is applied, with both tables.
+  - **R10:** a job link opened signed out answers 302 to the staff sign-in and shows nothing.
+- **Rehearsed** in `scripts/harness/deploy-5.18.52/rehearse.sh`:
+  - **159/159 on two consecutive runs of the committed script**, each running it 61 times;
+  - **28 weakened copies, each caught;**
+  - its stand-in public address opens the installed plugin's own store, so migration 075 arrives through the plugin's
+    own migration runner, as it will on the server.
+
+**The live test (§12.3), as built.** On your own number, with no customer on the job and a neutral title:
+1. **Create it in My Jobs**, assigned to yourself. Expect message 1, once.
+2. **Open its link on the phone**, signing in if asked. Expect that job's page.
+3. **Press Accept.** Expect message 2.
+   - Accept also sends the leaders' "🔔 Job Accepted".
+   - So this step runs only if a read-only check shows no active support leader, or with those people told first
+     (§15.6 requirement 7).
+4. **Change its time in uCRM's own screen.** Expect exactly one "new time" message. This proves `job.edit` reaches the
+   plugin (V2).
+5. **Delete it in uCRM.** Expect exactly one "cancelled" notice (D3). This replaces §12.3 step 3's "no message".
+6. **Send back the log file of `--after-only`.** Its R4 and R9 count what was sent.
+
+**The jobs-trace harness** (`scripts/harness/jobs-trace/trace.php`, docs/43 §6) describes 5.18.49. Run against this tree
+it stops at its first Message Log query (*"no such table"*): since M6 and M7 (5.18.50) its sandbox sends no message
+before that query, so the table is never created. It is not updated. `test_job_notifier.php` and
+`test_job_notifications_day.php` now trace the same paths end to end.
+
+**Found on the way, not changed:** `test_customer_pwa.php` (5.18.40) leaves its `php -S` server running after every run.
+`proc_terminate()` stops the `sh` that `proc_open()` started, not the server under it; measured, the server outlives the
+test. It is tests only and changes no result. Starting the server with `exec php -S …`, as `trace.php` does, fixes it.
+
+**Evidence:** `docs/evidence/5.18.52/`.
+
+**Not deployed.** The order is:
+1. 5.18.51;
+2. §15.8 items 3–5: M5, S1's number and M4;
+3. a separate approval of 5.18.52;
+4. the live test.
