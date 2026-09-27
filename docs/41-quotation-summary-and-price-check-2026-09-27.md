@@ -1,9 +1,11 @@
 # 41 — A quotation summary a customer can read, and a price check the model cannot walk past
 
-27 September 2026. **Plugin 5.18.46: built, rehearsed, not yet deployed.** The deploy command is in §7.
+27 September 2026.
 
-**27 September, 08:59 UTC:** deployed by the operator and **PASSED** (§8). Two of the eleven live replies should
-have been refused and were not; why, and proposal P11, are in §8.2–§8.3.
+- **Plugin 5.18.46** — deployed by the operator at 08:59 UTC and **PASSED** (§8). Two of the eleven live replies
+  should have been refused and were not; why, and proposal P11, are in §8.2–§8.3.
+- **Plugin 5.18.47** — P11 as the operator chose it: **the price check adds each total up.** Built and rehearsed,
+  **not yet deployed** (§9). The deploy command is in §10.
 
 **Uganda only.** South Sudan's quotation summary and price check are unchanged, and that is measured (§2.5, §3.4).
 
@@ -343,3 +345,180 @@ still happen.
 
 - **P9:** two hand-overs again gave "reason" as their reason.
 - **B4** did not ask which kit the customer has, and offered only Router 3.
+
+## 9. 5.18.47 — the price check adds each total up (P11, as built)
+
+The operator, asked how to stop wrong totals like 4,627,000 reaching customers, chose **"Build the total check
+(Recommended)"**: add up the lines in each reply; refuse it if the stated total does not match, or if a "TOTAL" has
+no figure; the customer gets the safe message and a person takes over; and test it first against every live reply,
+so that no correct reply is refused.
+
+**Uganda only.** It is switched by the hardware module (`ai_hardware_expert`), as 5.18.46's checks are.
+
+### 9.1 The rule (`lib/ReplyTotals.php`)
+
+A reply is refused for its total when:
+- **a money TOTAL has no figure** — "TOTAL TO GET CONNECTED: (Add total of kit, …)", "TOTAL FOR SETUP: [Sum of
+  setup costs]", or the label and then nothing (`total:missing`);
+- **the total it states is not what the lines above it add up to** (`total:mismatch`). It is compared with:
+  - the list lines directly above it, with and without the lines priced per month;
+  - the same, plus a subtotal stated earlier;
+  - and any total the reply already stated, so a summary that repeats its total is not checked against a part list;
+- **a sum it writes out is wrong** — "2 × 700,000 = 1,500,000", wherever it stands (also `total:mismatch`).
+
+A refused reply becomes the safe fallback and the conversation is handed to a person, as for every refusal.
+Amounts are read exactly as the price check reads them: there is one definition (`ReplyPrivacyGuard::amountSpans`).
+
+The price-list rule of 5.18.44–5.18.46 is unchanged and still applies to every amount. The totals rule is a second
+question, asked of the reply itself, so a total that happens to equal some sum of our prices cannot pass it.
+
+### 9.2 Read both ways, or left alone
+
+A reply is refused only if **no reading** of it makes the total right.
+
+**A count that is not beside its price is read both ways.** In "2 × Router 3 — 827,000", "For the two upper floors:
+2 × Router Mini — 435,000" or "Router Mini x2 — 435,000", the price may be for one or for all. So the line counts as
+827,000 or as 1,654,000, and a total that matches either is sent. Two exceptions:
+- a count beside the price is arithmetic: "2 × 827,000" is 1,654,000;
+- "each" with a count before the item says the price is for one: "2 × Router 3 — 827,000 each" is 1,654,000.
+
+Beside a price, only "×" and a lower-case "x" mean "times". A capital X does not: in "Standard 4 or 4 X 377,000" it
+is part of a product name.
+
+**Left to the price-list rule**, because there is no total to check, or no sure way to read one:
+- a line with two prices: "2,649,000 (or 2,249,000 for the Mini)";
+- a price "each" or "per floor" with no count anywhere;
+- two counts on one line;
+- a list that could be read more than 64 ways;
+- a total with no priced list above it;
+- a total said in running prose: "That brings everything to 2,499,000 UGX in total";
+- a label that is not money: "Total users: 50", "Total coverage: …";
+- a sentence that says "total …:": "The total will depend on the cable length: …".
+
+### 9.3 The live replies are the test set
+
+`tests/fixtures/live_replies_2026-09-27.json` holds the 32 replies the live assistant wrote on 27 Sep (06:1x, 07:55
+and 09:00 UTC). 30 have text; the two 06:1x fallbacks have no draft. It holds no personal data. Each reply is judged
+against the price list of its own run: the Ruijie access point was 1,100,000 at 06:1x and 700,000 afterwards.
+
+**Result: 5 refused, 25 sent exactly as written.**
+
+| Run | What the reply said | 5.18.46 | 5.18.47 |
+|---|---|---|---|
+| 5.18.45, B1 | "TOTAL for the setup: 1993500 UGX" — the lines add up to 1,897,500 | refused: an amount | refused: an amount and its total |
+| 5.18.45, B2 | "TOTAL: 1999500 UGX" — the lines add up to 1,897,500 | refused: an amount | refused: an amount and its total |
+| 5.18.45, A1, second turn | "TOTAL FOR SETUP: [Sum of setup costs]" | refused: a slot | refused: a slot and a TOTAL with no figure |
+| 5.18.46, A1 | "Total: UGX 4,627,000" — the lines add up to 4,527,000 | **sent** | **refused: its total** |
+| 5.18.46, A1, second turn | "TOTAL TO GET CONNECTED: (Add total of …)" | **sent** | **refused: a TOTAL with no figure** |
+
+The 25 sent include the shapes that made this hard: a total restated in a summary (5.18.44 B2), "1,100,000 UGX each
+= 2,200,000 UGX", "2 x 827000 = 1654000", a list repeated just before its total, and the monthly plan listed beside
+the one-time items.
+
+### 9.4 Found before anything shipped
+
+The check tool's rehearsal found one false refusal in the first build. Its floors reply, "For the two upper floors:
+2 × Router Mini — UGX 435,000 each = UGX 870,000", was read as 435,000 = 870,000, because the count was not at the
+start of the line. The reply is right, and it would have gone to a person.
+
+Looking for the same mistake elsewhere found two more shapes. "Router Mini x2 — 435,000" and "2 × Router 3 —
+1,654,000" (the line's own total) would both have been refused under a correct total. Neither appears in the live
+replies, but both are ordinary ways to write a quote. That is why a count not beside its price is now read both
+ways (§9.2). Nine shapes and six weakened copies hold it.
+
+### 9.5 South Sudan: unchanged, measured
+
+The rule runs only where the hardware module is on. With the module off, all 30 verdicts are identical to those of
+the check with no options, which is what South Sudan ran under 5.18.46.
+
+### 9.6 The check tool
+
+`scripts/dnb-ai-check.sh` now reports:
+
+```
+  the price check adds up        each total: one that does not match the lines listed with it, or a TOTAL with no figure, is refused
+```
+
+A refused total is explained in the tool's output:
+- "its total says 4,627,000; the lines listed with it add up to 4,527,000";
+- "it gives a TOTAL with no figure";
+- "a sum it wrote is wrong: it says 1,500,000, the figures come to 1,400,000".
+
+### 9.7 Not changed, and open
+
+- **The price-list rule still has its limit (F-1)** for an amount that is not a total. A wrong single price that
+  equals a real sum of our prices still passes.
+- **The price of reading a count both ways.** "2 × Router 3 — 827,000" followed by a total that forgot to multiply
+  (827,000) is sent, because that total is right if 827,000 was the price for both. With "each" on the line it is
+  refused.
+- **P10**, for approval: print the prompt's prices with commas, and give the assistant the totals. It would make
+  these mistakes rarer; 5.18.47 refuses the ones that still happen.
+- **P8** and **P9** are still open (docs/40).
+
+### 9.8 Proofs
+
+- **`tests/test_price_check_totals.php`: 111.**
+  - The 30 live replies, each against its own price list.
+  - 20 shapes that add up, 13 that are wrong, and 11 that are left alone.
+  - Where the option comes from, and who passes it. The real worker hands a refused total over, and its security
+    event does not print the amount.
+  - South Sudan's 30 verdicts are identical.
+  - **Eighteen weakened copies are each caught.**
+- **`tests/test_price_check_plain.php`: 68.** Its pinned options now include the totals rule, deliberately.
+- **`scripts/harness/ai-check/rehearse.sh`: 273/273, twice**, against 5.18.46 and 5.18.47.
+  - The fake provider writes a total that does not add up, though every figure in it is one of ours.
+  - 5.18.46 sends it (the control). 5.18.47 refuses it and says by how much.
+- **Full plugin suite, twice:** 213 test files, 0 failed.
+- **`scripts/harness/deploy-5.18.47/rehearse.sh`: 125/125 on two consecutive runs** (§10.1).
+
+## 10. Deploy 5.18.47, and what to send back
+
+### 10.1 The deploy script
+
+`scripts/deploy-5.18.47.sh`, pinned to `a9b46fb`. It is deploy-5.18.46.sh with three changes:
+- stage AI has one new line, `the price check adds each total up … (5.18.47)`;
+- the note that counts refused replies also names a total that does not add up;
+- stage F says what changed for customers.
+
+The backup, the documented deploy, stage V and stage Q are unchanged. There is no stage K.
+
+**The rehearsal** runs the real script against a sandbox container, as for 5.18.46:
+- The first run passes every check outside V. It shows the fake model's four refusals, counted in one note, and
+  writes no knowledge row.
+- With the hardware module off, the new line is a failure that names the module.
+- **Eight weakened copies of the checks are each caught**: 5.18.46's seven, and the totals line never required.
+- **The backup under live writes**, as before: the pre-fix script as the control, four real failures, and **seven
+  weakened copies caught**.
+
+### 10.2 The command
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+  && mkdir -p /root/dnb-5.18.47 \
+  && bash scripts/deploy-5.18.47.sh 2>&1 | tee /root/dnb-5.18.47/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+It takes a backup and asks you to type `DEPLOY`. It then deploys, re-checks the public pages and asks the assistant
+the eleven questions. Send back **the log file**.
+
+### 10.3 What the log should show
+
+- **A:**
+  - `plugin commit a9b46fb (expected a9b46fb)`;
+  - the live commit `131712a`, which is the rollback commit;
+  - the backup `ok`;
+  - `GO`.
+- **B:** `ok container serves a9b46fb`.
+- **V:** all `ok`, as on 27 Sep.
+- **Q:** `ok Q the installed webhook carries the 5.18.46 quotation summary`. 5.18.47 keeps it.
+- **AI:**
+  - `ok AI the price check adds each total up: … (5.18.47)`, beside 5.18.46's line;
+  - the eleven replies. If the model writes a total that does not add up, or a TOTAL with no figure, that reply
+    shows **refused** with the reason, and one `note` counts the refusals. That is the check working: the customer
+    would have had the fallback and a person.
+- **F:** `5.18.47: PASSED`.
+
+**Running it again is safe.** Once the container serves `a9b46fb`, the deploy is skipped.
+
+**Still wanted:** the next quotation made in uCRM, which shows One-time / First month (then … per month) / Total.
+That is the live measurement of §2.4.

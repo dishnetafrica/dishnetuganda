@@ -1682,3 +1682,43 @@ V, Q and AI were all `ok`. Two A1 replies should have been refused and were not:
 - "(Add total of …)", a slot in round brackets.
 
 **Proposal P11, for approval:** a stated total must add up to its lines, and a "TOTAL" with no figure is refused.
+
+## 5.18.47 — the price check adds each total up (docs/41 §9)
+
+**Why.** Stage AI of the 5.18.46 deploy (docs/41 §8) saw two A1 replies the check should have refused:
+- "Total: UGX 4,627,000", where the lines add up to 4,527,000. The figure is itself a sum of listed prices, so the
+  price-list rule could not tell (F-1).
+- "TOTAL TO GET CONNECTED: (Add total of …)", a slot in round brackets.
+
+The operator chose **"Build the total check (Recommended)"**.
+
+**What.** Uganda only, switched by the hardware module; South Sudan unchanged.
+- **`lib/ReplyTotals.php`** refuses a reply when:
+  - its stated total is not the sum of the list lines above it — with or without the monthly lines, plus an earlier
+    subtotal — nor a total it already stated;
+  - a sum it writes out is wrong;
+  - a money TOTAL carries no figure.
+
+  The categories are `total:mismatch` and `total:missing`. A refused reply becomes the fallback and a hand-over, as
+  for every refusal.
+- **A reply is refused only if no reading of it makes the total right.** A count not beside its price ("2 × Router 3
+  — 827,000", "Router Mini x2 — 435,000") is read both ways, as the price for one or for all; "each" says for one.
+  Left to the price-list rule: two prices on a line, a price "each" with no count, a total with no list above it, a
+  total in prose, and a label that is not money.
+- **`ReplyPrivacyGuard::optionsFor`** gains `totals`. The check tool says so, and explains a refused total.
+
+**Proof.**
+- `tests/test_price_check_totals.php` **111**.
+  - The 30 live replies of 27 Sep: exactly 5 refused (the 3 already refused, and the two A1 replies) and 25 sent as
+    written.
+  - Eighteen weakened copies each fail it.
+- `tests/test_price_check_plain.php` **68**. Its pinned options now include the totals rule, deliberately.
+- The check's rehearsal against 5.18.46 and 5.18.47: **273/273, twice**. Its first run found one false refusal —
+  a count mid-line, "For the two upper floors: 2 × Router Mini — 435,000 each = 870,000". That, and two shapes like
+  it, were fixed before anything shipped.
+- Suite: **213 test files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.47.sh`, pinned to `a9b46fb`. It is deploy-5.18.46.sh with one new line in stage AI;
+the note that counts refused replies now also names a total that does not add up. Rehearsed in
+`scripts/harness/deploy-5.18.47/rehearse.sh`: **125/125 on two consecutive runs**. Eight weakened copies of the checks
+and seven of the backup each fail. **Not deployed by this session.**
