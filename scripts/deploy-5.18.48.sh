@@ -402,7 +402,15 @@ else echo "  rollback commit   (this run deployed nothing — see the deployment
 [ -n "$BK" ] && echo "  backup            $BK"
 echo "  the assistant     its replies are in stage AI above; compare them with stage AI of the last deploy log (/root/dnb-5.18.46/, or /root/dnb-5.18.47/ if that ran)"
 echo "  totals            a reply whose total does not add up to its lines, or a TOTAL with no figure, now goes to a person"
-echo "  taxes line        a reply that quotes a Starlink kit price now ends: \"The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing is added on top.\""
+# The line in force as the report named it, never assumed: with the line switched off, a summary quoting the sentence
+# would say something no customer receives (caught by the rehearsal, docs/42 §6).
+KITREP="$(grep -m1 -E '^ *kit tax note +' <<<"$AIOUT" | sed -E 's/^ *kit tax note +//')"
+case "$KITREP" in
+  "the approved wording:"*) echo "  taxes line        a reply that quotes a Starlink kit price now ends: \"The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing is added on top.\"" ;;
+  "your own wording:"*)     echo "  taxes line        a reply that quotes a Starlink kit price now ends with your own wording (ai_fact_kit_taxes) — stage AI shows it" ;;
+  "OFF (omit)"*)            echo "  taxes line        switched off (ai_fact_kit_taxes = omit): no reply carries it" ;;
+  *)                        echo "  taxes line        ${KITREP:-not reported by the check} — see stage AI" ;;
+esac
 echo "  quotation PDF     clause 2 says the same once the Uganda quotation template is uploaded in uCRM and given to the organization, as the invoice's v2 was on 26 Sep — docs/42 §4 (this script cannot check it)"
 echo "  quotations        the next quotation made in uCRM shows One-time / First month (then … per month) / Total"
 echo "  switch off        the \"unlimited\" fact: docs/40 §12 item 3 (set_config.php --key ai_fact_unlimited --value omit, as the plugin's owner)"

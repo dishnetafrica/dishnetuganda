@@ -5,7 +5,8 @@
 #   AI  the assistant, asked (scripts/dnb-ai-check.sh --ask, eleven questions), and what it is given judged — now also
 #       that a Starlink kit price carries the approved taxes line (the hardware module on): the report names the
 #       wording in force, the home-installation reply ends with it, and the count of replies that carried it is an ok;
-#       switched off ("omit") it is a note, the module off a failure. 5.18.47's totals rule and 5.18.46's lines as
+#       switched off ("omit") it is a note, the module off a failure; the summary states the line the report found,
+#       never the approved sentence by default. 5.18.47's totals rule and 5.18.46's lines as
 #       before, the four refusals a note, never a failure;
 #   A   the backup, as deploy-5.18.46.sh ran it live at 08:59 UTC on 27 Sep (PASSED): under live writes each database
 #       is copied as of one moment and the rest archived, GO, then stage B stops with no terminal to type DEPLOY on;
@@ -37,6 +38,11 @@ PASS=0; FAILN=0
 check() { if [ "$1" = "$2" ]; then PASS=$((PASS+1)); echo "  ok   $3"; else FAILN=$((FAILN+1)); echo "  FAIL $3 (got '$1', want '$2')"; fi; }
 has()   { printf '%s' "$1" | grep -qF -- "$2" && echo yes || echo no; }
 count() { printf '%s' "$1" | grep -cF -- "$2"; }
+# The approved sentence as a customer receives it: on a reply line of stage AI. The report's "kit tax note" line and the
+# summary print it too, and the first run of this rehearsal read the summary's copy as a reply (docs/42 §6).
+SENTENCE='The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing is added on top.'
+replies_with_note() { printf '%s\n' "$1" | awk '/^== AI\. /{on=1; next} /^== F\. Summary ==/{on=0} on' \
+  | grep -F -- "$SENTENCE" | grep -vc 'kit tax note'; }
 
 PIN="$(sed -n 's/^EXPECTED_PLUGIN_COMMIT="\([^"]*\)".*/\1/p' "$DEPLOY")"
 HEAD_PLUGIN="$(git -C "$R" log -1 --format=%h -- dishnet-hybrid-sudan)"
@@ -163,7 +169,9 @@ check "$(has "$OUT" 'refused      its total says 3,629,000; the lines listed wit
 check "$(has "$OUT" 'refused      its total says 881,500; the lines listed with it add up to 830,000')" "yes" "the wrong total without commas: its total named too"
 check "$(has "$OUT" 'Asked: 11 model call(s); 4 refused by the price check')" "yes" "the check's own tally agrees"
 check "$(has "$OUT" '1 with the Business-plan note added; 1 with the kit tax note added')" "yes" "…and counts the taxes line (5.18.48)"
-check "$(has "$OUT" 'The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing is added on top.')" "yes" "the log shows the home-installation reply as the customer receives it, taxes line included"
+check "$(replies_with_note "$OUT")" "1" "the log shows the home-installation reply as the customer receives it, taxes line included"
+check "$(count "$OUT" "$SENTENCE")" "3" "control: the sentence is printed three times (the report, that reply, the summary) and only the reply is counted"
+check "$(has "$OUT" "  taxes line        a reply that quotes a Starlink kit price now ends: \"$SENTENCE\"")" "yes" "the summary states the line in force"
 check "$(ls "$SB/ai" 2>/dev/null | wc -l | tr -d ' ')" "11" "eleven model calls, on the fake provider"
 check "$(fails_outside_v "$OUT")" "0" "no FAIL outside stage V (V answers a stand-in here)"
 check "$(printf '%s' "$OUT" | grep -cE '^  note  ')" "1" "and no other note"
@@ -193,6 +201,9 @@ check "$(has "$OUT" 'FAIL  AI no taxes line under a kit price — 5.18.48 adds o
   "AI: the taxes line is a failure too, and names the module"
 check "$(has "$OUT" 'the taxes line was added under')$(has "$OUT" 'no reply quoted a Starlink kit price')" "nono" \
   "…and no count of it is made, since nothing can carry it"
+check "$(has "$OUT" '  taxes line        off — it goes with the hardware module (ai_hardware_expert) — see stage AI')" "yes" \
+  "the summary says the line is off, and why"
+check "$(replies_with_note "$OUT")" "0" "…and no reply carries it"
 check "$(has "$OUT" 'FAIL  AI no product is listed as network equipment')" "yes" "as the module's other lines are"
 check "$(ls "$SB/ai" 2>/dev/null | wc -l | tr -d ' ')" "11" "the questions are still asked"
 write_config "sk-test"
@@ -201,7 +212,9 @@ echo "== 3b. the taxes line switched off (ai_fact_kit_taxes = omit): the operato
 seed_db; write_config "sk-test" 1 "$UPORT" ',"ai_fact_kit_taxes":"omit"'; OUT="$(run)"
 check "$(has "$OUT" 'note  AI the taxes line under a kit price is switched off (ai_fact_kit_taxes = omit)')" "yes" "AI: noted"
 check "$(has "$OUT" 'ok    AI a Starlink kit price carries')$(has "$OUT" 'FAIL  AI no taxes line')" "nono" "…neither an ok nor a failure"
-check "$(has "$OUT" 'The kit price includes all taxes')" "no" "no reply carries it"
+check "$(replies_with_note "$OUT")" "0" "no reply carries it"
+check "$(has "$OUT" '  taxes line        switched off (ai_fact_kit_taxes = omit): no reply carries it')" "yes" "the summary says it is switched off"
+check "$(has "$OUT" "$SENTENCE")" "no" "…and the sentence is printed nowhere, the summary included"
 check "$(has "$OUT" 'the taxes line was added under')$(has "$OUT" 'no reply quoted a Starlink kit price')" "nono" "…and it is not counted"
 check "$(printf '%s' "$OUT" | grep -cE 'kit tax note +OFF \(omit\)')" "1" "control: the check tool read the setting"
 write_config "sk-test"
@@ -274,6 +287,7 @@ PY
     kitcount) [ "$(has "$o" 'ok    AI the taxes line was added under 1 of the replies')" = "no" ] \
                 && [ "$(has "$o" '1 with the kit tax note added')" = "yes" ] && caught=yes ;;
     kitomitfail) [ "$(printf '%s' "$o" | grep -E '^  FAIL  ' | grep -c 'taxes line under a kit price is switched off')" != "0" ] && caught=yes ;;
+    kitsum)   [ "$(has "$o" 'now ends: "The kit price includes all taxes')" = "yes" ] && caught=yes ;;
     nreffail) [ "$(printf '%s' "$o" | grep -E '^  FAIL  ' | grep -c 'of the replies were refused')" != "0" ] && caught=yes ;;
     nrefgone) [ "$(has "$o" 'of the replies were refused by the price check')" = "no" ] \
                 && [ "$(has "$o" 'Asked: 11 model call(s); 4 refused by the price check')" = "yes" ] && caught=yes ;;
@@ -294,6 +308,8 @@ mutant "the replies carrying the taxes line never counted" \
   "NKIT=\"\$(printf '%s' \"\$AIOUT\" | grep -oE '[0-9]+ with the kit tax note added' | head -1 | grep -oE '^[0-9]+')\"" 'NKIT=0' fresh kitcount
 mutant "a taxes line the operator switched off reported as a failure" \
   "elif aihas 'kit tax note +OFF \\(omit\\)'; then note" "elif aihas 'kit tax note +OFF \\(omit\\)'; then bad" kitomit kitomitfail
+mutant "the summary quoting the taxes line whatever the report says" \
+  '  "the approved wording:"*) echo "  taxes line' '  *) echo "  taxes line' kitomit kitsum
 mutant "a refused reply counted as a failure of the deploy" 'note "AI ${NREF} of the replies were refused' 'bad "AI ${NREF} of the replies were refused' fresh nreffail
 mutant "the refusals never reported" \
   "NREF=\"\$(printf '%s' \"\$AIOUT\" | grep -oE 'Asked: 11 model call\\(s\\); [0-9]+ refused by the price check' | grep -oE '[0-9]+ refused' | grep -oE '^[0-9]+')\"" \
