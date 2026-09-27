@@ -141,7 +141,9 @@ $C1 = "Here's what it takes to get connected:\n\n"
     . "- Starlink Residential (up to 400 Mbps) — 329,000 UGX per month\n\n"
     . "Your quotation confirms any regulatory charge and the tax treatment. Would you like to proceed with this?";
 
-$ON  = ReplyPrivacyGuard::optionsFor($UG);
+// The 5.18.46 checks, as this install turns them on. The totals rule optionsFor() adds since 5.18.47 is proved in
+// tests/test_price_check_totals.php; here each reply is judged by the two checks this file is about.
+$ON  = array_intersect_key(ReplyPrivacyGuard::optionsFor($UG), ['plain_amounts' => 1, 'placeholders' => 1]);
 $OFF = ReplyPrivacyGuard::optionsFor($SS);
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -212,9 +214,10 @@ is_(!in_array('placeholder', (array)ReplyPrivacyGuard::check('TOTAL: [Sum of set
 
 // ════════════════════════════════════════════════════════════════════════════
 echo "\n4. Where the options come from, and who passes them\n";
-is_($ON === ['plain_amounts' => true, 'placeholders' => true], 'the hardware module on (Uganda): both');
+is_(ReplyPrivacyGuard::optionsFor($UG) === ['plain_amounts' => true, 'placeholders' => true, 'totals' => true],
+    'the hardware module on (Uganda): all three — 5.18.47 added the totals rule (docs/41 §9)');
 foreach ([['South Sudan', $SS], ['the module off', ['ai_hardware_expert' => '0'] + $UG], ['no configuration', []]] as [$l, $c]) {
-    is_(ReplyPrivacyGuard::optionsFor($c) === ['plain_amounts' => false, 'placeholders' => false], "{$l}: neither");
+    is_(ReplyPrivacyGuard::optionsFor($c) === ['plain_amounts' => false, 'placeholders' => false, 'totals' => false], "{$l}: none");
 }
 // South Sudan's check, byte for byte what it was: the same verdict on every reply above, options or none.
 $same = true;

@@ -1,0 +1,274 @@
+{
+ "note": "Every reply the live assistant wrote to the AI check's eleven questions on 27 Sep 2026, in the three deploy logs the operator sent (docs/40 §13 and §16, docs/41 §8): the questions are the check tool's own, the replies exactly as printed (the check masks phones, e-mails and kit numbers; none occurs). Two replies of the 06:1x run were refused then and the check of that version printed only the fallback, not the draft: kept, marked, not judged. tests/test_price_check_totals.php judges the other 30 with the price list of their run.",
+ "price_lists": {
+  "note": "As each log printed it. The Ruijie access point was 1,100,000 at 06:1x and 700,000 at 07:55 and 09:00. The logs print only two of the twenty accessories (Router Mini 301,000, Router 3 827,000); the other eighteen are taken at their docs/19 shelf prices, which those two still match.",
+  "ruijie": {
+   "5.18.44": 1100000,
+   "5.18.45": 700000,
+   "5.18.46": 700000
+  }
+ },
+ "runs": {
+  "5.18.44": "2026-09-27 06:1x UTC (deploy-5.18.44.sh, stage AI)",
+  "5.18.45": "2026-09-27 07:55 UTC (deploy-5.18.45.sh, stage AI)",
+  "5.18.46": "2026-09-27 09:00 UTC (deploy-5.18.46.sh, stage AI)"
+ },
+ "replies": [
+  {
+   "run": "5.18.44",
+   "question": "A1",
+   "turn": 1,
+   "customer": "I want to start a WiFi business in my trading centre",
+   "reply": "I'm not able to complete that one automatically. I've passed it to our team and someone will get back to you shortly.",
+   "draft_not_printed": true
+  },
+  {
+   "run": "5.18.44",
+   "question": "A1",
+   "turn": 2,
+   "customer": "About 50 people at a time. I need unlimited internet, which package do I take?",
+   "reply": "For a WiFi business in your trading center with around 50 users, you'll want the higher-capacity Residential plan, which has unlimited data. This plan is perfect for heavy usage and allows multiple connections without worry.\n\nThe plan is priced at UGX 329,000 per month. Since you'll need a setup for that many users, a network design will be essential. Would you like to discuss the equipment needed for that?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "A2",
+   "turn": 1,
+   "customer": "Do you have unlimited business plans?",
+   "reply": "We don't have unlimited business plans. Our Business plans come with a block of priority data (50 GB, 500 GB, or 1 TB) and then switch to unlimited standard data once that block is used up. Would you like to know about a specific Business plan, or are you interested in something else?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "A3",
+   "turn": 1,
+   "customer": "How much is Business 500?",
+   "reply": "The Starlink Business 500 GB plan costs 285,000 UGX per month. Would you like to know more about other plans or any details?\n\nThe Business tier numbers — 50 GB, 500 GB and 1 TB — are amounts of priority data, not speeds. When that data is used up the connection drops to about 1 Mbps until more is bought. Starlink Residential has unlimited standard data at the same 400 Mbps download.",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "A4",
+   "turn": 1,
+   "customer": "I want to sell internet to the people around my shop. Which package do I need?",
+   "reply": "For selling internet to others, you'll want a connection with unlimited data. The best fit is the Residential plan with unlimited standard data.\n\nI recommend the **Starlink Residential plan** for **329,000 UGX per month**. This plan has no data cap, which is ideal for multiple users. Are you interested in getting started with that?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "B1",
+   "turn": 1,
+   "customer": "I have a wifi hotspot business and I want to cover other areas around my place, about 200 metres. What equipment do I need and how much?",
+   "reply": "I'm not able to complete that one automatically. I've passed it to our team and someone will get back to you shortly.",
+   "draft_not_printed": true
+  },
+  {
+   "run": "5.18.44",
+   "question": "B1",
+   "turn": 2,
+   "customer": "OK. What would two outdoor access points and the MikroTik cost together?",
+   "reply": "Here's the pricing for the equipment you need:\n\n- MikroTik L009 Series — price 700,000 UGX\n- 2 × Ruijie Reyee RG-RAP6262(G) — price 1,100,000 UGX each = 2,200,000 UGX\n\nTOTAL: 2,900,000 UGX\n\nThis setup will help cover your hotspot business over a larger area. If you need a Starlink kit and installation, let me know.",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "B2",
+   "turn": 1,
+   "customer": "I already have Starlink at home. How do I get the WiFi to my other building across the compound?",
+   "reply": "To extend the WiFi to your other building, you'll need a network setup that includes a router and outdoor access points. This setup will effectively carry the signal across the compound.\n\nHere’s a starting configuration:\n- **MikroTik L009 Series** (Router) — 700,000 UGX\n- **Ruijie Reyee RG-RAP6262(G)** (Outdoor Access Point) — 1,100,000 UGX\n- **D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE** — 378,000 UGX\n- **RJ45 Cat6 Pass-Through Connector (PACK OF 10)** — 19,500 UGX\n- **ICT Consultancy Charges** — 100,000 UGX\n\nLet's calculate the total for that setup:\n- Total = 700,000 + 1,100,000 + 378,000 + 19,500 + 100,000 = 2,297,500 UGX\n\nFor your monthly plan, I recommend the **Residential plan** (up to 400 Mbps) for 329,000 UGX, as it offers unlimited data, which is ideal for multiple devices.\n\nSo, the breakdown is:\n- **Total Setup Cost**: 2,297,500 UGX\n- **Monthly Plan**: 329,000 UGX\n\nThe exact number of access points required will depend on the size and layout of your compound, which can be confirmed during a site survey. Would you like to arrange a survey or proceed with any details?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "B3",
+   "turn": 1,
+   "customer": "How much is an outdoor access point and a MikroTik router?",
+   "reply": "The prices are as follows:\n\n- Ruijie Reyee RG-RAP6262(G) outdoor Wi-Fi access point — UGX 1,100,000 one-time\n- MikroTik L009 Series router — UGX 700,000 one-time\n\nLet me know if you need anything else! 😊",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.44",
+   "question": "C1",
+   "turn": 1,
+   "customer": "How much will I pay to get Starlink installed at my home?",
+   "reply": "Here’s what it takes to get connected:\n\n• Starlink Mini Kit — 2,249,000 UGX (one-time)\n• Professional installation — 150,000 UGX (one-time)\nTOTAL TO GET CONNECTED: 2,399,000 UGX\nThen the Residential plan at 329,000 UGX per month, which includes unlimited data.\n\nYour quotation confirms any regulatory charge and the tax treatment. Would you like to proceed with this plan?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "A1",
+   "turn": 1,
+   "customer": "I want to start a WiFi business in my trading centre",
+   "reply": "That sounds great! For a Wi-Fi business in a trading centre, you'll need a connection plan that offers unlimited data rather than a priority data block. The higher-capacity **Residential** plan is the best fit, as it provides unlimited data for your users.\n\nSince you'll need to cover a larger area, a proper network setup with routers and access points will be necessary.\n\nWould you like me to design a setup for you? If so, could you share how many users you expect to connect at once or the size of the area you want to cover?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "A1",
+   "turn": 2,
+   "customer": "About 50 people at a time. I need unlimited internet, which package do I take?",
+   "reply": "For around 50 people at a time, the higher-capacity **Residential** plan is the ideal choice since it offers unlimited data. You will also need to set up a sufficient network to handle that many users.\n\nHere's a starting setup for your Wi-Fi business:\n\n- **Starlink Standard Kit** — 2,649,000 UGX (one-time)\n- **Professional Installation** — 150,000 UGX (one-time)\n- **MikroTik L009 Series** (router for managing the local network) — 700,000 UGX (one-time)\n- **Ruijie Reyee RG-RAP6262(G)** (outdoor access point) — 700,000 UGX (one-time)\n- **D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE** — 378,000 UGX (one-time)\n- **ICT Consultancy Charges** — 100,000 UGX (one-time)\n\nThe total for this setup will be provided below, and then the monthly plan:\n\nTOTAL FOR SETUP: [Sum of setup costs]\n**Monthly Plan**: Residential (unlimited data) — 329,000 UGX\n\nLet me know if you'd like to finalize anything or if you need a site survey to confirm the best setup!",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "A2",
+   "turn": 1,
+   "customer": "Do you have unlimited business plans?",
+   "reply": "We don't have unlimited business plans. Our Business plans offer a block of priority data (50 GB, 500 GB, or 1 TB). Once that is used, the speed drops significantly. For consistent usage, I recommend our higher-capacity Residential plan, which offers unlimited standard data. Would you like more details on that?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "A3",
+   "turn": 1,
+   "customer": "How much is Business 500?",
+   "reply": "The Starlink Business 500 GB plan is priced at 285,000 UGX per month. Would you like more information about the Business plans or how they work?\n\nThe Business tier numbers — 50 GB, 500 GB and 1 TB — are amounts of priority data, not speeds. When that data is used up the connection drops to about 1 Mbps until more is bought. Starlink Residential has unlimited standard data at the same 400 Mbps download.",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "A4",
+   "turn": 1,
+   "customer": "I want to sell internet to the people around my shop. Which package do I need?",
+   "reply": "To sell internet, you'll want the higher-capacity Residential plan which features unlimited standard data. This plan is best suited for hotspots or when multiple users connect. I can help you with the details of setting this up, including the necessary equipment and installation.\n\nCould you share the location of your shop to help me assist you better?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "B1",
+   "turn": 1,
+   "customer": "I have a wifi hotspot business and I want to cover other areas around my place, about 200 metres. What equipment do I need and how much?",
+   "reply": "To cover a larger area like that, you'll need a setup that includes a router and outdoor access points, as one kit alone won't be sufficient. Here's a suggested starting setup:\n\n- MikroTik L009 Series — price 700000 UGX (this will run your local network)\n- Ruijie Reyee RG-RAP6262(G) — price 700000 UGX (one outdoor Wi-Fi access point to carry the Wi-Fi)\n- D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE — price 378000 UGX (to connect the router to the access point)\n- RJ45 Cat6 Pass-Through Connector (PACK OF 10) — price 19500 UGX (for the cable connections)\n- ICT Consultancy Charges — price 100000 UGX (for designing and setting up the network)\n\n**TOTAL for the setup:** 1993500 UGX\n\nYou will need to confirm the number of access points during a site survey, as this setup is just a starting point. It's also important to mention that for your hotspot business, the higher-capacity Residential plan would suit you best since it comes with unlimited data.\n\nWould you like to proceed with arranging a site survey?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "B1",
+   "turn": 2,
+   "customer": "OK. What would two outdoor access points and the MikroTik cost together?",
+   "reply": "Here's the breakdown for two outdoor access points along with the MikroTik:\n\n- MikroTik L009 Series — price 700000 UGX\n- 2 × Ruijie Reyee RG-RAP6262(G) — 2 × 700000 UGX = 1400000 UGX\n\nTOTAL: 700000 UGX + 1400000 UGX = 2100000 UGX\n\nThis setup will enable you to cover your desired area effectively. Would you like to proceed with this setup?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "B2",
+   "turn": 1,
+   "customer": "I already have Starlink at home. How do I get the WiFi to my other building across the compound?",
+   "reply": "To get Wi-Fi to another building across your compound, you'll need a starting setup that includes:\n\n- MikroTik L009 Series — price 700000 UGX (router to run the local network)\n- Ruijie Reyee RG-RAP6262(G) — price 700000 UGX (outdoor access point to carry Wi-Fi to the other building)\n- D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE — price 378000 UGX (cable to connect the router and access point)\n- RJ45 Cat6 Pass-Through Connector (PACK OF 10) — price 19500 UGX (connectors for the network cable)\n- ICT Consultancy Charges — price 100000 UGX (to design and set up the network)\n\nTOTAL: 1999500 UGX\n\nYou’ll still need to confirm the number of access points, cable length, and installation through a site survey. Would you like to proceed with that?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "B3",
+   "turn": 1,
+   "customer": "How much is an outdoor access point and a MikroTik router?",
+   "reply": "The prices are as follows:\n\n- Ruijie Reyee RG-RAP6262(G) outdoor access point — 700,000 UGX (one-time)\n- MikroTik L009 Series router — 700,000 UGX (one-time)\n\nWould you like to know more about using them or how they fit your needs?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "B4",
+   "turn": 1,
+   "customer": "The WiFi does not reach the upper floors of my house. It has 3 floors. What do I need and how much?",
+   "reply": "To extend the Wi-Fi coverage to the upper floors of your house, you will need additional Starlink routers to create a mesh network. Each router fits your existing kit and helps distribute the signal more effectively.\n\nHere's the cost breakdown for your setup:\n\n- Starlink Router Mini (works with Mini kit) — 301000 UGX one-time\n- Starlink Router 3 (works with Standard kit) — 827000 UGX one-time\n\nPlease let me know which kit you currently have (Mini or Standard), and I'll provide the total cost based on your choice!",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.45",
+   "question": "C1",
+   "turn": 1,
+   "customer": "How much will I pay to get Starlink installed at my home?",
+   "reply": "Here's what it takes to get connected:\n\n- Starlink Mini Kit — 2,249,000 UGX\n- Professional Installation — 150,000 UGX\n\n**TOTAL TO GET CONNECTED:** 2,399,000 UGX\nThen choose the Residential plan:\n- Starlink Residential (up to 400 Mbps) — 329,000 UGX per month\n\nYour quotation confirms any regulatory charge and the tax treatment. Would you like to proceed with this?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "A1",
+   "turn": 1,
+   "customer": "I want to start a WiFi business in my trading centre",
+   "reply": "That's great to hear! For a Wi-Fi business in a trading centre, you’ll need a reliable connection that can support multiple users. I recommend the higher-capacity Residential plan (unlimited data) because it’s suited for heavy usage.\n\nTo extend the Wi-Fi coverage, I'll also suggest a setup that includes:\n\n- **Starlink Standard Kit** — UGX 2,649,000 one-time\n- **MikroTik L009 Series** (router) — UGX 700,000 one-time\n- **Ruijie Reyee RG-RAP6262(G)** (outdoor access point) — UGX 700,000 one-time\n- **D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE** — UGX 378,000 one-time\n- **ICT Consultancy Charges** — UGX 100,000 one-time\n\nYour total for this setup would be:\n\n- **Total**: UGX 4,627,000\n\nAnd the plan is:\n- **Higher-Capacity Residential Plan** at UGX 329,000 per month.\n\nThe site survey will confirm how many access points you might need for optimal coverage. Would you like to proceed with arranging a site survey?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "A1",
+   "turn": 2,
+   "customer": "About 50 people at a time. I need unlimited internet, which package do I take?",
+   "reply": "With around 50 people connecting at once, the higher-capacity Residential plan (unlimited data) is definitely the right choice.\n\nHere's what you'll need to set up the service:\n\n- **Starlink Standard Kit** — UGX 2,649,000 one-time\n- **Professional Installation** — UGX 150,000 one-time\n- **MikroTik L009 Series** (router) — UGX 700,000 one-time\n- **Outdoor Wi-Fi access point** (for better coverage) — UGX 700,000 one-time\n- **Outdoor network cable** (length to be confirmed during the site assessment)\n\nLet me know if you'd like to proceed or if you have any questions!\n\nTOTAL TO GET CONNECTED: (Add total of kit, installation, router, access point, and cable). The monthly plan is UGX 329,000.\n\nI can assist with the next steps if you want!",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "A2",
+   "turn": 1,
+   "customer": "Do you have unlimited business plans?",
+   "reply": "We don't have unlimited business plans available. Our Business plans come with a block of priority data (either 50GB, 500GB, or 1TB), and once that data is used, the connection speed drops to around 1 Mbps until more data is purchased. If you're looking for a plan with unlimited data, I'd recommend our higher-capacity Residential plan instead. Would you like to know more about that?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "A3",
+   "turn": 1,
+   "customer": "How much is Business 500?",
+   "reply": "The Starlink Business 500 GB plan is priced at 285,000 UGX per month. Would you like more information on what this plan includes? 😊\n\nThe Business tier numbers — 50 GB, 500 GB and 1 TB — are amounts of priority data, not speeds. When that data is used up the connection drops to about 1 Mbps until more is bought. Starlink Residential has unlimited standard data at the same 400 Mbps download.",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "A4",
+   "turn": 1,
+   "customer": "I want to sell internet to the people around my shop. Which package do I need?",
+   "reply": "For selling internet, you'll want to go with the higher-capacity Residential plan for unlimited standard data. It provides the best value for a hotspot setup, as a Business plan's priority data block could run out quickly.\n\nYou would need a Starlink kit for the connection, plus additional network equipment such as routers and access points to cover the area effectively.\n\nCan you share more about your shop's location and the size of the area you want to cover? That way, I can help design a suitable setup for you!",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "B1",
+   "turn": 1,
+   "customer": "I have a wifi hotspot business and I want to cover other areas around my place, about 200 metres. What equipment do I need and how much?",
+   "reply": "To cover an area of about 200 metres for a Wi-Fi hotspot business, you'll need to set up a network to distribute the signal effectively. Here's a basic starting setup:\n\n1. **MikroTik L009 Series** — price 700,000 UGX: This router runs your local network and manages the access points.\n2. **Ruijie Reyee RG-RAP6262(G)** — price 700,000 UGX: This outdoor access point will help carry the Wi-Fi across the area.\n3. **D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE** — price 378,000 UGX: This outdoor network cable will connect the router to the access point.\n4. **RJ45 Cat6 Pass-Through Connector (PACK OF 10)** — price 19,500 UGX: Connectors for the network cable.\n5. **ICT Consultancy Charges** — price 100,000 UGX: For designing and setting up your network.\n\nHere's the total for this setup:\n\n- MikroTik L009 Series: 700,000 UGX\n- Ruijie Reyee RG-RAP6262(G): 700,000 UGX\n- D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE: 378,000 UGX\n- RJ45 Cat6 Pass-Through Connector (PACK OF 10): 19,500 UGX\n- ICT Consultancy Charges: 100,000 UGX\n\n**TOTAL: 1,897,500 UGX**\n\nFor the Wi-Fi plan, I recommend the higher-capacity Residential plan for unlimited data at 329,000 UGX per month. Would you like to proceed w…",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "B1",
+   "turn": 2,
+   "customer": "OK. What would two outdoor access points and the MikroTik cost together?",
+   "reply": "Here’s the cost breakdown for two outdoor access points along with the MikroTik router:\n\n1. **MikroTik L009 Series** — price 700,000 UGX\n2. **Ruijie Reyee RG-RAP6262(G)** (2 × 700,000 UGX) = 1,400,000 UGX\n\n**TOTAL:** 2,100,000 UGX\n\nThis setup will help you effectively cover your desired area. Would you like to proceed or need more information?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "B2",
+   "turn": 1,
+   "customer": "I already have Starlink at home. How do I get the WiFi to my other building across the compound?",
+   "reply": "To extend the Wi-Fi to another building, you'll need a network setup that typically includes a router and possibly an outdoor access point. Here's a starting setup:\n\n1. MikroTik L009 Series — price 700,000 UGX\n2. Ruijie Reyee RG-RAP6262(G) (outdoor access point) — price 700,000 UGX\n3. D-Link D.LINK CAT 6, OUTDOOR WATERPROOF CABLE — price 378,000 UGX\n4. RJ45 Cat6 Pass-Through Connector (PACK OF 10) — price 19,500 UGX\n5. ICT Consultancy Charges — price 100,000 UGX\n\nTOTAL: 1,897,500 UGX\n\nYou will need a site survey to confirm the exact number of access points and the cable lengths. Would you like me to arrange that for you?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "B3",
+   "turn": 1,
+   "customer": "How much is an outdoor access point and a MikroTik router?",
+   "reply": "The outdoor access point, Ruijie Reyee RG-RAP6262(G), is priced at 700,000 UGX. The MikroTik L009 Series router also costs 700,000 UGX.\n\nWould you like to know anything else? 😊",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "B4",
+   "turn": 1,
+   "customer": "The WiFi does not reach the upper floors of my house. It has 3 floors. What do I need and how much?",
+   "reply": "To improve Wi-Fi coverage to the upper floors of your three-story house, you'll need additional Starlink routers working together as a mesh.\n\nHere’s a breakdown of the costs:\n\n1. Starlink Router (fits Standard 4, Standard 4 X, Mini, Gen 2 and Gen 3 kits) — price 827000 UGX (for each additional floor).\n\nYou’ll need two additional routers for the two upper floors:\n2 x 827000 = 1654000 UGX\n\n### TOTAL: 1654000 UGX\n\nIf you do not have Starlink yet, we can add the kit and the installation costs as well. Would you like to go ahead with the order or get more details?",
+   "draft_not_printed": false
+  },
+  {
+   "run": "5.18.46",
+   "question": "C1",
+   "turn": 1,
+   "customer": "How much will I pay to get Starlink installed at my home?",
+   "reply": "Here's what you will pay to get Starlink installed:\n\n• Starlink Mini Kit — 2,249,000 UGX (one-time)\n• Professional Installation — 150,000 UGX (one-time)\n\n**TOTAL TO GET CONNECTED: 2,399,000 UGX**\nThen the monthly plan is:\n• Starlink Residential Lite — 249,000 UGX per month\n\nYour quotation will confirm any other charges and the tax treatment. Would you like to proceed with the installation?",
+   "draft_not_printed": false
+  }
+ ]
+}

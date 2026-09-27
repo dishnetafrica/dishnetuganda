@@ -120,15 +120,16 @@ final class ReplyPrivacyGuard
     /**
      * The checks a caller adds for this install (5.18.46, docs/41). Where the hardware module is on, the assistant
      * designs and prices whole setups and writes their totals, so amounts written without separators are read too,
-     * and a reply with an unfilled template slot is refused. Elsewhere — South Sudan — the check is exactly as it
-     * was: the same keys, both false.
+     * and a reply with an unfilled template slot is refused. Since 5.18.47 (docs/41 §9) a total must also add up to
+     * the lines listed with it, and a TOTAL must carry a figure (ReplyTotals). Elsewhere — South Sudan — the check
+     * is exactly as it was: the same keys, all false.
      *
-     * @return array{plain_amounts:bool, placeholders:bool}
+     * @return array{plain_amounts:bool, placeholders:bool, totals:bool}
      */
     public static function optionsFor(array $config): array
     {
         $on = filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        return ['plain_amounts' => $on, 'placeholders' => $on];
+        return ['plain_amounts' => $on, 'placeholders' => $on, 'totals' => $on];
     }
 
     /**
@@ -141,6 +142,27 @@ final class ReplyPrivacyGuard
     {
         $out = preg_match_all(self::SEPARATED_AMOUNT, $text, $m) > 0 ? $m[0] : [];
         if ($plain && preg_match_all(self::PLAIN_AMOUNT, $text, $m2) > 0) $out = array_merge($out, $m2[0]);
+        return $out;
+    }
+
+    /**
+     * The same amounts as amountsIn(), in the order they are written, each with its byte offset — for the totals
+     * rule (ReplyTotals, 5.18.47), which needs to know which amount follows "=" or a TOTAL label.
+     *
+     * @return array<int,array{0:string,1:int}>
+     */
+    public static function amountSpans(string $text, bool $plain = false): array
+    {
+        $at = [];
+        if (preg_match_all(self::SEPARATED_AMOUNT, $text, $m, PREG_OFFSET_CAPTURE) > 0) {
+            foreach ($m[0] as [$s, $o]) $at[$o] = $s;
+        }
+        if ($plain && preg_match_all(self::PLAIN_AMOUNT, $text, $m2, PREG_OFFSET_CAPTURE) > 0) {
+            foreach ($m2[0] as [$s, $o]) $at[$o] = $at[$o] ?? $s;
+        }
+        ksort($at);
+        $out = [];
+        foreach ($at as $o => $s) $out[] = [$s, (int)$o];
         return $out;
     }
 
@@ -159,8 +181,9 @@ final class ReplyPrivacyGuard
      *                          facts typed into the settings. Without it the
      *                          leak rule below refuses the payment fact the
      *                          prompt orders the model to repeat verbatim.
-     *                          plain_amounts, placeholders: optionsFor() —
-     *                          off unless the caller passes them.
+     *                          plain_amounts, placeholders, totals:
+     *                          optionsFor() — off unless the caller
+     *                          passes them.
      * @return array{safe:bool, reply:string, categories:array<int,string>}
      */
     public static function check(string $reply, array $permitted = []): array
@@ -217,6 +240,16 @@ final class ReplyPrivacyGuard
 
         // A template slot the model left unfilled, where the caller asks for it (5.18.46).
         if (!empty($permitted['placeholders']) && preg_match(self::PLACEHOLDER, $text) === 1) $cats[] = 'placeholder';
+
+        // A total that does not add up to the lines listed with it, or a TOTAL with no figure (5.18.47, docs/41 §9).
+        // On 27 Sep 2026 "Total: UGX 4,627,000" under five lines adding up to 4,527,000 passed the amount rule above:
+        // 4,627,000 is itself a sum of listed prices. Arithmetic on the reply itself cannot be fooled that way.
+        if (!empty($permitted['totals'])) {
+            if (!class_exists('ReplyTotals')) require_once __DIR__ . '/ReplyTotals.php';
+            foreach (ReplyTotals::findings($text, !empty($permitted['plain_amounts'])) as $f) {
+                $cats[] = $f['kind'] === 'missing' ? 'total:missing' : 'total:mismatch';
+            }
+        }
 
         // A verbatim run out of our own instructions — except the parts an
         // operator wrote for customers to read.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Rehearse scripts/dnb-ai-check.sh before anyone runs it on the server (docs/40).
 #
-# It runs twice: against the plugin the server runs today (5.18.45, commit 0850e59, the commit deploy-5.18.45.sh
-# pinned, deployed 27 Sep 2026 07:54) and against this checkout (5.18.46). 5.18.43 was rehearsed beside 5.18.44
-# (docs/40 §11.6), and 5.18.44 beside 5.18.45 (docs/40 §14.4). The operator runs the check before the deploy and after it, and the two
+# It runs twice: against the plugin the server runs today (5.18.46, commit 131712a, the commit deploy-5.18.46.sh
+# pinned, deployed 27 Sep 2026 08:59) and against this checkout (5.18.47). 5.18.43 was rehearsed beside 5.18.44
+# (docs/40 §11.6), 5.18.44 beside 5.18.45 (docs/40 §14.4), and 5.18.45 beside 5.18.46 (docs/41 §5). The operator runs the check before the deploy and after it, and the two
 # logs are compared — so the check must read each version correctly, and say which it is reading.
 #
 # Each run: a sandbox plugin directory holds a COPY of that version's lib/ and workers/ — the brain's OpenAI address
@@ -15,15 +15,15 @@
 # was seeded and against what that version does. Then weakened copies of the check must each fail.
 set -u
 R="$(cd "$(dirname "$0")/../../.." && pwd)"; H="$R/scripts/harness/ai-check"
-LIVE_COMMIT="0850e59"   # 5.18.45, what the server runs (scripts/deploy-5.18.45.sh, 27 Sep 2026 07:54)
+LIVE_COMMIT="131712a"   # 5.18.46, what the server runs (scripts/deploy-5.18.46.sh, 27 Sep 2026 08:59)
 
 # ── The parent: one run per plugin version ──────────────────────────────────
 if [ -z "${EXPECT:-}" ]; then
   OLD="$(mktemp -d)"; trap 'rm -rf "$OLD"' EXIT
   git -C "$R" archive "$LIVE_COMMIT" dishnet-hybrid-sudan | tar -x -C "$OLD" || { echo "could not extract $LIVE_COMMIT"; exit 2; }
   ALL_OK=0; ALL_FAIL=0
-  for v in 45 46; do
-    if [ "$v" = 45 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
+  for v in 46 47; do
+    if [ "$v" = 46 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
     else src="$R/dishnet-hybrid-sudan"; what="this checkout"; fi
     echo; echo "######## plugin 5.18.$v — $what ########"
     EXPECT="$v" PLUGIN_SRC="$src" bash "$0" | tee "$OLD/out-$v"
@@ -37,9 +37,10 @@ if [ -z "${EXPECT:-}" ]; then
 fi
 
 # ── A child: one version ────────────────────────────────────────────────────
-case "$EXPECT" in 45|46) ;; *) echo "EXPECT must be 45 or 46"; exit 2 ;; esac
+case "$EXPECT" in 46|47) ;; *) echo "EXPECT must be 46 or 47"; exit 2 ;; esac
 P="${PLUGIN_SRC:?PLUGIN_SRC names the plugin directory under test}"
-v46() { [ "$EXPECT" = 46 ]; }
+v46() { [ "$EXPECT" -ge 46 ]; }   # 5.18.46's checks: both versions rehearsed now have them (the else branches are 5.18.45's record)
+v47() { [ "$EXPECT" = 47 ]; }
 SB="$(mktemp -d)"; PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; rm -rf "$SB"; }
 trap cleanup EXIT
@@ -51,6 +52,7 @@ count() { printf '%s' "$1" | grep -cF -- "$2"; }
 prompts_with()    { grep -lE -- "$1" "$SB"/ai/prompt-*.txt 2>/dev/null | wc -l | tr -d ' '; }   # how many prompts match
 prompt_for()      { grep -lF -- "LAST: $1" "$SB"/ai/prompt-*.txt 2>/dev/null | head -1; }           # the prompt a question got
 section()         { printf '%s' "$1" | awk -v q="$2" 'index($0, q) {on=1} on && /^  ── / && !index($0, q) && seen {exit} on {print; seen=1}'; }
+turn()            { printf '%s' "$1" | awk -v q="$2" 'index($0, q) {on=1; print; next} on && (/^    customer / || /^  ── /) {exit} on {print}'; }   # one question and its answer, not the turns after it
 
 check "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["information"]["version"])' "$P/manifest.json")" "5.18.$EXPECT" \
   "the plugin under test is 5.18.$EXPECT"
@@ -148,6 +150,12 @@ if v46; then
 else
   check "$(count "$OUT" 'the price check also')" "0" "an older plugin's report claims nothing it does not do"
 fi
+if v47; then
+  check "$(printf '%s' "$OUT" | grep -cE 'the price check adds up +each total: one that does not match the lines listed with it, or a TOTAL with no figure, is refused')" "1" \
+    "the report says the price check adds each total up (5.18.47)"
+else
+  check "$(count "$OUT" 'the price check adds up')" "0" "5.18.46's report claims no totals rule"
+fi
 check "$(has "$OUT" 'customer     Hi, I want to start a wifi business, do you have unlimited internet? my number is {phone}')" "yes" \
   "c1's question is shown, the phone masked"
 check "$(printf '%s' "$OUT" | grep -A2 'my number is {phone}' | grep -c 'names a Business plan')" "1" "…and its AI reply is read as naming a Business plan"
@@ -244,17 +252,34 @@ S="$(section "$OUT" 'The WiFi does not reach the upper floors of my house.')"
 S="$(section "$OUT" 'How do I get the WiFi to my other building')"
 S2="$(section "$OUT" 'About 50 people at a time')"
 if v46; then
-  check "$(count "$S" 'the price check REFUSED the reply (foreign:amount)')" "1" "a wrong total written without commas is refused, as the live guard now does"
+  check "$(count "$S" 'the price check REFUSED the reply (foreign:amount')" "1" "a wrong total written without commas is refused, as the live guard now does"
   check "$(count "$S" 'refused      amounts it could not match to the price list: 881500')" "1" "…and the check names it as it was written"
-  check "$(count "$S2" 'the price check REFUSED the reply (placeholder)')" "1" "a reply with an unfilled slot is refused"
+  check "$(count "$S2" 'the price check REFUSED the reply (placeholder')" "1" "a reply with an unfilled slot is refused"
   check "$(count "$S2" 'refused      it left a template slot unfilled, such as [total]')" "1" "…and the check says why"
   check "$(count "$S2" 'the draft    Here is your setup:')" "1" "…and shows the draft"
-  check "$(has "$OUT" '3 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
 else
   check "$(count "$S" 'REFUSED')" "0" "control: 5.18.45 lets a wrong total written without commas through — the hole"
   check "$(count "$S" 'TOTAL: 881500 UGX')" "1" "…and the customer would receive it"
   check "$(count "$S2" '[Sum of setup costs]')" "1" "control: 5.18.45 sends the unfilled slot"
   check "$(has "$OUT" '1 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
+fi
+# 5.18.47: a total that does not add up, though every figure in it is ours or a sum of ours — as the live model wrote A1 at
+# 09:00 on 27 Sep ("Total: UGX 4,627,000" under lines adding up to 4,527,000)
+S3="$(turn "$OUT" 'I want to start a WiFi business in my trading centre')"   # this answer only: the next turn ("50 people") is refused for its slot
+if v47; then
+  check "$(count "$S3" 'the price check REFUSED the reply (total:mismatch)')" "1" "a total that does not add up to its lines is refused (5.18.47)"
+  check "$(count "$S3" 'refused      its total says 3,629,000; the lines listed with it add up to 3,479,000')" "1" "…and the check says by how much"
+  check "$(count "$S3" 'the draft    For a WiFi business')" "1" "…and shows the draft"
+  check "$(count "$S3" 'no single amount')" "0" "…not as an amount it could not match: every figure in it is one"
+  check "$(count "$S" 'the price check REFUSED the reply (foreign:amount,total:mismatch)')" "1" "the wrong total without commas: both reasons named"
+  check "$(count "$S" 'refused      its total says 881,500; the lines listed with it add up to 830,000')" "1" "…the total's too"
+  check "$(count "$S2" 'the price check REFUSED the reply (placeholder,total:missing)')" "1" "the unfilled slot: both reasons named"
+  check "$(count "$S2" 'refused      it gives a TOTAL with no figure')" "1" "…and the check says the TOTAL has no figure"
+  check "$(has "$OUT" '4 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
+else
+  check "$(count "$S3" 'REFUSED')" "0" "control: 5.18.46 sends a total that does not add up when the figure is itself a sum of our prices — the hole"
+  check "$(count "$S3" 'Total: UGX 3,629,000')" "1" "…and the customer would receive it"
+  check "$(has "$OUT" '3 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
 fi
 check "$(printf '%s' "$OUT" | grep -cE "$CANARIES")" "0" "nothing secret or personal is printed in --ask either"
 
@@ -323,10 +348,13 @@ PY
     plainref) s="$(section "$o" 'How do I get the WiFi to my other building')"
              [ "$(count "$s" 'AI replies')" = "1" ] && [ "$(count "$s" 'REFUSED')" = "0" ] && caught=yes ;;
     slotwhy) s="$(section "$o" 'About 50 people at a time')"
-             [ "$(count "$s" 'REFUSED the reply (placeholder)')" = "1" ] && [ "$(count "$s" 'template slot')" = "0" ] && caught=yes ;;
+             [ "$(count "$s" 'REFUSED the reply (placeholder')" = "1" ] && [ "$(count "$s" 'template slot')" = "0" ] && caught=yes ;;
     plainamt) s="$(section "$o" 'How do I get the WiFi to my other building')"
-             [ "$(count "$s" 'REFUSED the reply (foreign:amount)')" = "1" ] && [ "$(count "$s" 'could not match to the price list: 881500')" = "0" ] && caught=yes ;;
+             [ "$(count "$s" 'REFUSED the reply (foreign:amount')" = "1" ] && [ "$(count "$s" 'could not match to the price list: 881500')" = "0" ] && caught=yes ;;
     poline)  [ "$(count "$o" 'HARDWARE (one-time)')" = "1" ] && [ "$(count "$o" 'the price check also')" = "0" ] && caught=yes ;;
+    totline) [ "$(count "$o" 'HARDWARE (one-time)')" = "1" ] && [ "$(count "$o" 'the price check adds up')" = "0" ] && caught=yes ;;
+    totwhy)  s="$(section "$o" 'I want to start a WiFi business in my trading centre')"
+             [ "$(count "$s" 'REFUSED the reply (total:mismatch)')" = "1" ] && [ "$(count "$s" 'its total says')" = "0" ] && caught=yes ;;
   esac
   check "$caught" "yes" "caught: $1"
   rm -rf "$SB/m"; rm -rf "$DATA"; cp -a "$SB/data.pristine" "$DATA"
@@ -343,7 +371,7 @@ mutant "the time window ignored" "AND m.sent_at >= datetime('now', ?) ORDER BY=>
   mutant "the worker's price check reached without its settings" "if (method_exists('AiReplyWorker', 'permittedAmounts')) {=>if (false) {" "--ask" total
   mutant "the worker's price check replaced by an empty list" "AiReplyWorker::permittedAmounts(\$ctx, \$prompt, \$config);=>array_slice(AiReplyWorker::permittedAmounts(\$ctx, \$prompt, \$config), 0, 0);" "--ask" home
   mutant "the report's network list not split out" "[\$kit, \$netRows] = NetworkEquipment::split(\$root, \$hw);=>[\$kit, \$netRows] = [\$hw, []];" "" netlist
-mutant "a refused reply's amounts not shown" "if (\$gc !== [] && array_diff(\$gc, ['foreign:amount', 'placeholder']) === []) {=>if (false) {" "--ask" amounts
+mutant "a refused reply's amounts not shown" "if (\$gc !== [] && array_diff(\$gc, ['foreign:amount', 'placeholder', 'total:missing', 'total:mismatch']) === []) {=>if (false) {" "--ask" amounts
 mutant "the Starlink routers not listed" "\$routers = NetworkEquipment::starlinkRouters(\$root, \$acc);=>\$routers = [];" "" routers
 mutant "the approved Business fact not recognised" "} elseif (preg_match('/priority/i', \$both) && preg_match('/\\b1\\s*Mbps/i', \$both)) {=>} elseif (false) {" "" bizok
 if v46; then
@@ -351,6 +379,11 @@ if v46; then
   mutant "a refused slot not explained" "if (!empty(\$refused['placeholder'])) echo=>if (false) echo" "--ask" slotwhy
   mutant "an amount written without commas not named" "? ReplyPrivacyGuard::amountsIn(\$raw, !empty(\$guardOpts['plain_amounts']))=>? ReplyPrivacyGuard::amountsIn(\$raw, false)" "--ask" plainamt
   mutant "the report silent about the added checks" "if (!empty(\$po['plain_amounts'])) {=>if (false) {" "" poline
+fi
+if v47; then
+  mutant "the report silent about the totals rule" "if (!empty(\$po['totals'])) {=>if (false) {" "" totline
+  mutant "a refused total not explained" "foreach ((array)(\$refused['totals'] ?? []) as \$t) {=>foreach ([] as \$t) {" "--ask" totwhy
+  mutant "a refusal for its total alone given no explanation" "array_diff(\$gc, ['foreign:amount', 'placeholder', 'total:missing', 'total:mismatch'])=>array_diff(\$gc, ['foreign:amount', 'placeholder'])" "--ask" totwhy
 fi
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"

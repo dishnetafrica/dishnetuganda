@@ -65,7 +65,7 @@ function traits(string $r): string {
 
 // ── The installed plugin ────────────────────────────────────────────────────
 foreach (['bootstrap_data', 'PluginConfig', 'KnowledgeBase', 'CrmApiClient', 'ShopCatalogue', 'DishNetTools',
-          'PlanCatalogue', 'PlanFenceGuard', 'ReplyPrivacyGuard', 'BrainContext', 'DishNetAiBrain',
+          'PlanCatalogue', 'PlanFenceGuard', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext', 'DishNetAiBrain',
           'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus'] as $lib) {
     if (is_file("{$root}/lib/{$lib}.php")) require_once "{$root}/lib/{$lib}.php";
 }
@@ -218,6 +218,10 @@ if ($mode === 'report') {
             $po = class_exists('ReplyPrivacyGuard') && method_exists('ReplyPrivacyGuard', 'optionsFor') ? ReplyPrivacyGuard::optionsFor($config) : [];
             if (!empty($po['plain_amounts'])) {
                 out('the price check also', 'reads amounts written without commas (700000 as well as 700,000), and refuses a reply with an unfilled slot such as [total]');
+            }
+            // 5.18.47 (docs/41 §9): the totals rule, where the installed plugin has it.
+            if (!empty($po['totals'])) {
+                out('the price check adds up', 'each total: one that does not match the lines listed with it, or a TOTAL with no figure, is refused');
             }
         } else {
             out('HARDWARE (one-time)', count($hw) . ' — both numbers see these; a total may combine only the first 6');
@@ -421,11 +425,15 @@ if ($mode === 'ask') {
                 if (empty($g['safe'])) {
                     $final = ReplyPrivacyGuard::SAFE_FALLBACK; $blocked++;
                     $how[] = 'the price check REFUSED the reply (' . implode(',', (array)$g['categories']) . ') — the customer gets the fallback and staff are alerted';
-                    // Only for an amount or an unfilled slot: the model's own text for a made-up question, masked like every reply here.
+                    // Only for an amount, an unfilled slot or a total: the model's own text for a made-up question, masked like
+                    // every reply here.
                     $gc = (array)$g['categories'];
-                    if ($gc !== [] && array_diff($gc, ['foreign:amount', 'placeholder']) === []) {
+                    if ($gc !== [] && array_diff($gc, ['foreign:amount', 'placeholder', 'total:missing', 'total:mismatch']) === []) {
                         $refused = ['amounts' => in_array('foreign:amount', $gc, true) ? $foreignAmounts($raw, $vals, $prompt) : [],
-                                    'placeholder' => in_array('placeholder', $gc, true), 'draft' => $raw];
+                                    'placeholder' => in_array('placeholder', $gc, true),
+                                    'totals' => (array_intersect($gc, ['total:missing', 'total:mismatch']) !== [] && class_exists('ReplyTotals'))
+                                        ? ReplyTotals::findings($raw, !empty($guardOpts['plain_amounts'])) : [],
+                                    'draft' => $raw];
                     }
                 } else {
                     $f = PlanFenceGuard::apply($raw, $config);
@@ -444,7 +452,12 @@ if ($mode === 'ask') {
             if ($how) echo '    on the way   ' . implode(' · ', $how) . "\n";
             if ($refused !== null) {
                 if (!empty($refused['placeholder'])) echo "    refused      it left a template slot unfilled, such as [total]\n";
-                if ($refused['amounts'] || empty($refused['placeholder'])) {
+                foreach ((array)($refused['totals'] ?? []) as $t) {
+                    if ($t['kind'] === 'missing') echo "    refused      it gives a TOTAL with no figure\n";
+                    elseif ($t['kind'] === 'equation') echo '    refused      a sum it wrote is wrong: it says ' . number_format((float)$t['stated']) . ', the figures come to ' . number_format((float)$t['sum']) . "\n";
+                    else echo '    refused      its total says ' . number_format((float)$t['stated']) . '; the lines listed with it add up to ' . number_format((float)$t['sum']) . "\n";
+                }
+                if ($refused['amounts'] || (empty($refused['placeholder']) && empty($refused['totals']))) {
                     echo '    refused      ' . ($refused['amounts'] ? 'amounts it could not match to the price list: ' . implode(' · ', $refused['amounts'])
                                                                   : 'no single amount — only together') . "\n";
                 }
