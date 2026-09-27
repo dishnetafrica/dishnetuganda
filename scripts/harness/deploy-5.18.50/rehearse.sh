@@ -20,6 +20,8 @@ for f in /data/ucrm /opt/dishnet /var/run/docker.sock; do
   [ -e "$f" ] && { echo "refusing: $f exists — this looks like the server, and this rehearsal must never run there"; exit 2; }
 done
 BASE=e076632; BRANCH_FILE=scripts/deploy-5.18.50.sh
+checkout_state() { { git -C "$R" rev-parse HEAD; git -C "$R" status --porcelain --untracked-files=no; git -C "$R" diff HEAD; } | sha256sum | cut -c1-16; }
+CHECKOUT0="$(checkout_state)"   # this checkout as the rehearsal found it (edited or not): it must be the same at the end
 SB="$(mktemp -d)"; PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; rm -rf "$SB"; }
 trap cleanup EXIT
@@ -420,7 +422,7 @@ SRC="$SB/broken-pin.sh" mutant "the syntax NO-GO removed" \
 check "$(git -C "$REPO" rev-parse HEAD)$(clone_ref)" "$ORIG_HEAD$BRANCH" "control: the clone is back on $BRANCH at its commit"
 
 echo; echo "== 9. what the rehearsal left behind =="
-check "$(git -C "$R" status --porcelain --untracked-files=no | wc -l | tr -d ' ')" "0" "this checkout was never touched"
+check "$(checkout_state)" "$CHECKOUT0" "this checkout is as the rehearsal found it: same commit, same tracked files"
 check "$(ls "$REPO/scripts"/.mutant-* "$REPO/scripts"/.broken-pin.sh 2>/dev/null | wc -l | tr -d ' ')" "0" "no weakened copy is left in the clone"
 
 echo; echo "rehearsal: $PASS passed, $FAILN failed ($(cat "$SB/runs") runs of the script)"
