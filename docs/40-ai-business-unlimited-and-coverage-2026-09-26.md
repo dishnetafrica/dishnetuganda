@@ -14,6 +14,10 @@ both (§14); its deploy is §15.
 **27 September, 07:00 UTC:** the 5.18.45 deploy stopped at its own backup, before changing anything, and
 5.18.44 stays live. The deploy script was fixed and rehearsed (§15.1); the command is the same.
 
+**27 September, 07:54 UTC:** the same command, run again, deployed 5.18.45 and PASSED (§16). Three of its eleven
+replies should have been refused and were not. They, and the operator's report on the quotation summary, are
+**5.18.46** (docs/41).
+
 ## 1. The request
 
 > "Also some customer asked about buisness they want to run in that case they need unlimited data plans not
@@ -696,3 +700,65 @@ It runs in deploy mode while both databases get a row every 2 ms and a log gets 
 kept or deleted; nothing reads it.
 
 **Next:** the same command as in item 1, run again.
+
+## 16. The 5.18.45 deploy — 27 September 2026, 07:54 UTC
+
+**PASSED: 39 ok, 0 failed, 0 notes.** The operator ran the same command again after the fix of §15.1 (the pull
+brought `9ed6dce`): `0850e59` over `a4abe5e`.
+
+- **A. The backup worked live, as rehearsed.**
+  - `plugin.sqlite3`: one consistent copy (`VACUUM INTO` as `1000:1000`, SQLite 3.48.0), integrity ok, 224 tables,
+    the same sha256 on both sides; 22 MB.
+  - `dishnet.sqlite` is not in this install's data directory: *"nothing to copy"*. That is this install, not a fault.
+  - The data directory was archived without the live databases (97 MB), and the plugin's `data` folder too (92 KB).
+  - tar exited 0 both times, so there was no note.
+  - UISP health was recorded, then `GO`.
+- **B.** The container serves `0850e59`.
+- **K.** BUSINESS_PLANS reads the 5.18.45 wording; a second dry run has nothing left to do.
+- **V.** All `ok`, and no fatal error in the container log.
+- **AI.** Every line `ok`:
+  - the check read 5.18.45;
+  - NETWORK EQUIPMENT lists 5: the MikroTik ← router, the Ruijie ← access point, cable, connectors, consultancy;
+  - knowledge reaches the assistant up to 1,000 characters;
+  - STARLINK ROUTERS lists 2;
+  - the data-allowance fact is stated;
+  - BUSINESS_PLANS reads 981 characters, whole, and no row says standard data continues;
+  - MANY_USERS_HOTSPOT reads 994 characters;
+  - the eleven questions were asked: *"0 refused by the price check · 1 with the Business-plan note added"*.
+
+The operator pasted the terminal again. This command prints no secret; the log file is still the thing to send.
+
+### 16.1 What the assistant said: eleven questions, 5.18.45 live
+
+| Question | Reply |
+|---|---|
+| A1 "a WiFi business in my trading centre" | the higher-capacity Residential plan, unlimited; offers to design the network and asks for the users or the area |
+| A1 "50 people, unlimited, which package?" | Residential, 329,000; lists the kit, installation, MikroTik, one access point, cable and consultancy, then **"TOTAL FOR SETUP: [Sum of setup costs]"** — **an unfilled slot, sent** |
+| A2 "unlimited business plans?" | no; Business plans are blocks of priority data, and the speed drops once one is used; recommends Residential — as the corrected row says |
+| A3 "How much is Business 500?" | 285,000, and the Business-plan note appended |
+| A4 "sell internet around my shop" | the higher-capacity Residential plan, unlimited standard data; asks where the shop is |
+| B1 "cover 200 m around my hotspot" | MikroTik, access point, cable, connectors, consultancy, then **"1993500 UGX"** — **wrong: 1,897,500**; the survey |
+| B1 "two access points and the MikroTik" | 700000 + 2 × 700000 = **2100000** — right |
+| B2 "WiFi to my other building" | the same five items, then **"1999500 UGX"** — **wrong: 1,897,500**; the survey |
+| B3 "price of the access point and MikroTik" | 700,000 and 700,000 — right |
+| B4 "3 floors; the upper floors have no WiFi" (new) | the two Starlink routers, 301,000 and 827,000, and which kit the customer has; no outdoor equipment — the rule held |
+| C1 "installed at my home" | Mini Kit 2,249,000 + installation 150,000 = **2,399,000**, then Residential at 329,000 a month; nothing extra added |
+
+### 16.2 Three replies the price check should have stopped
+
+B1 and B2 wrote a wrong total without commas, and A1 left a template slot. **None was refused.** The check read
+only amounts written with separators, the prompt gives every price without them, and a slot holds no amount at
+all. The fix is **5.18.46** (docs/41 §3).
+
+### 16.3 Noted, not changed
+
+- **B4** did not say the survey confirms the number of routers. It also said the Router Mini "works with Mini kit"
+  and Router 3 "with Standard kit", which is narrower than the catalogue (docs/41 §4).
+- **C1** priced a home with the higher-capacity plan, not Residential Lite.
+- **uCRM changed a price between the runs.** The Ruijie access point was 1,100,000 at 06:14 and 700,000 at 07:55,
+  so B1's second turn is now 2,100,000 (2,900,000 in §13.2).
+
+### 16.4 The quotation summary
+
+The same day the operator reported the quotation summary's "Monthly" line on order 000114, and chose a clearer
+message. It is built in 5.18.46, with the price check (docs/41 §1–§2).

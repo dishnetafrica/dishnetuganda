@@ -1621,3 +1621,56 @@ The script now:
 
 Same pin, same command. Rehearsal **108/108 on two consecutive runs**: the old script as the control, four real
 failures, and seven weakened copies caught (docs/40 §15.1).
+
+**Second run — 27 Sep 2026 07:54 UTC: PASSED, 39 ok / 0 failed / 0 notes** (docs/40 §16). The backup worked live:
+`plugin.sqlite3` copied with `VACUUM INTO` as `1000:1000`, integrity ok, the same sha256 on both sides. There is no
+`dishnet.sqlite` on this install, and tar exited 0. BUSINESS_PLANS is corrected, and V and AI are all `ok`. Three
+of the eleven replies should have been refused and were not: two wrong setup totals written without commas
+(1993500 and 1999500 for 1,897,500), and "[Sum of setup costs]". That is 5.18.46.
+
+## 5.18.46 — a quotation summary a customer can read; the price check reads amounts without commas (docs/41)
+
+**Why.**
+- **The quotation summary.** The operator, on order 000114: *"here Monthly give wrong in message"*. It said
+  "Hardware" for a total that included the installation, and "Monthly" beside a Total that already included the
+  first month. The split guessed from words in each line: whatever lacked `kit`, `router`, `cable`,
+  `installation`… was "Monthly". So on a bigger-area quote the access points, connectors and consultancy
+  (1,519,500) were "Monthly", and a plan named "Monthly" was hardware ("ont"). The operator chose **"Use the
+  clearer message (Recommended)"**.
+- **The price check.** Stage AI of 5.18.45 (docs/40 §16) saw three replies the check should have refused: two
+  wrong totals without commas, and an unfilled template slot.
+
+**What.** Uganda only; South Sudan unchanged (below).
+- **The quotation summary** now says:
+  `💰 One-time: UGX 2,399,000` / `💰 First month: UGX 249,000 (then UGX 249,000 per month)` / `🏷️ Total: …`.
+  - The plan is the line spelled like one of uCRM's service plans (`PublicPriceFeed::planKey`, the rule the price
+    feed and the assistant already use). Every other line is one-time.
+  - "Then … per month" is uCRM's plan price, so a discounted first month still shows the real monthly price.
+  - Three months up front reads "First 3 months".
+  - Where uCRM cannot list its plans, there is no split, and the log says why.
+- **The price check** (`ReplyPrivacyGuard`), where the hardware module is on:
+  - it also reads plain amounts of five digits or more, alone or straight after a currency;
+  - it refuses a reply with an unfilled slot such as `[total]`;
+  - it leaves out serials, invoice numbers, links, dates, speeds and Markdown links.
+  - A refused reply becomes the safe fallback and a hand-over, as before.
+- **The check tool** judges with the same options, and says which checks judged.
+
+**South Sudan:** the quotation summary is byte-identical, with goldens taken from `webhook.php` at `fa2d463`, and
+its uCRM is asked nothing more. With the module off, every price-check verdict is identical.
+
+**Recorded, not changed.**
+- **P10:** print the prompt's prices with commas, and give the assistant the totals. It changes the Uganda prompt,
+  so it needs approval.
+- **P8** and **P9** are still open.
+
+**Proof.**
+- `tests/test_quote_summary.php` **39**; six weakened copies of `webhook.php` each fail it.
+- `tests/test_price_check_plain.php` **68**; eight weakened copies each fail it.
+- The check's rehearsal against 5.18.45 and 5.18.46: **252/252**.
+- Suite: **212 test files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.46.sh`, pinned to `131712a`. It has the backup as fixed on 27 Sep, and stage V as
+before. There is no stage K. Q checks that the installed webhook carries the new summary. Stage AI checks the new
+price-check line, and reports a refused reply as a note, never a failure. Rehearsed in
+`scripts/harness/deploy-5.18.46/rehearse.sh`: **117/117 on two consecutive runs**. Seven weakened copies of the new
+checks and seven of the backup each fail. **Not deployed by this session.**
