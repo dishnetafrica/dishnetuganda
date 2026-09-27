@@ -236,13 +236,13 @@ cat > "$SB/bin/tar" <<SH
 mode="\$(cat "$SB/tarmode" 2>/dev/null)"; arch=""; prev=""
 for a in "\$@"; do [ "\$prev" = "-czf" ] && arch="\$a"; prev="\$a"; done
 if [ -n "\$mode" ] && [ "\${arch##*/}" = ".dishnet-hybrid-sudan-data.tar.gz" ]; then
-  "$REAL_TAR" "\$@" 2>/dev/null
+  ( exec -a tar "$REAL_TAR" "\$@" ) 2>/dev/null
   case "\$mode" in
     fatal)   echo "tar: .dishnet-hybrid-sudan-data/uploads: Cannot open: Input/output error" >&2; exit 2 ;;
     corrupt) printf 'not a gzip archive' > "\$arch"; echo "tar: .dishnet-hybrid-sudan-data/logs/x.log: file changed as we read it" >&2; exit 1 ;;
   esac
 fi
-exec "$REAL_TAR" "\$@"
+exec -a tar "$REAL_TAR" "\$@"   # named tar, so it speaks as on the server ("tar: …")
 SH
 chmod +x "$SB/bin/tar"
 DD=".dishnet-hybrid-sudan-data"
