@@ -1722,3 +1722,44 @@ The operator chose **"Build the total check (Recommended)"**.
 the note that counts refused replies now also names a total that does not add up. Rehearsed in
 `scripts/harness/deploy-5.18.47/rehearse.sh`: **125/125 on two consecutive runs**. Eight weakened copies of the checks
 and seven of the backup each fail. **Not deployed by this session.**
+
+## 5.18.48 — a Starlink kit price says what it includes (docs/42)
+
+**Why.** On 27 Sep the live assistant quoted the Starlink Standard Kit at 2,649,000 with nothing about tax. The
+operator asked for kits to say clearly that all taxes are included, URA taxes and the UCC registration fee among
+them, and chose **"All taxes included (Recommended)"** and, for the quotation PDF, **"Yes, match it
+(Recommended)"**.
+
+**What.** Uganda only, switched by the hardware module; South Sudan unchanged.
+- **`lib/KitTaxNote.php`.** After a reply passes the price check, a reply that states the price of a Starlink kit
+  ends with: *"The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing
+  is added on top."*
+  - A kit is a HARDWARE item whose name holds "Starlink" and "Kit". Accessories are never read, so the Travel Kit
+    case never counts.
+  - Nothing is added to a refused reply, to a reply that already says it, or to one with no kit price.
+  - Added by code, as the Business-plan note is: that rule, stated in the prompt, was ignored by 18 of 21 replies.
+- **`ai_fact_kit_taxes`.** Unset means the approved wording, `omit` switches it off, and any other text is used as
+  written. `set_config.php` manages it and warns when the text holds a digit.
+- **Quotation template, clause 2.** On a quote with a Starlink kit and no tax lines, "No VAT is charged on this
+  quotation." becomes the same sentence. Quotes with tax lines, or with no kit, are unchanged. The template lives
+  inside uCRM, so staff load it there (docs/42 §4): `template-quotation-uganda-2026-09-27.zip`, sha256
+  `2a01039d…7994de3`, both entries byte-identical to the repository.
+- **The check tool** reports the line in force and counts the replies that carried it.
+- **Carries 5.18.47** (the total check, above), which was never deployed on its own. The 5.18.47 command now stops
+  at stage A and changes nothing.
+
+**Proof.**
+- `tests/test_kit_tax_note.php` **73**, including eleven weakened copies. Through the real worker:
+  - the live reply of 27 Sep passes the price check and carries the sentence;
+  - South Sudan sends it exactly as written;
+  - a refused reply gets the fallback and no line.
+- The quotation template, rendered with real Twig 3 and 2.16 under the `2bfad82` template's own sandbox: **27/27 on
+  each**. The rest of every page is byte-identical to the baseline's. Three weakened copies each fail.
+- The check's rehearsal against 5.18.46 and 5.18.48: **284/284, twice**.
+- Suite: **214 test files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.48.sh`, pinned to `65b1ace`. Stage AI gains the line's report (ok, or a note when it
+is your own wording or switched off; a failure with the hardware module off) and the count of replies that carried
+it. Rehearsed in `scripts/harness/deploy-5.18.48/rehearse.sh`: **146/146 on two consecutive runs**. Its first run
+caught the summary claiming the sentence while the line was switched off; the summary now states what the report
+found, and a weakened copy that quotes it regardless is caught. **Not deployed by this session.**

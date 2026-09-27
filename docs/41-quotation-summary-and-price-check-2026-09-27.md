@@ -6,6 +6,8 @@
   should have been refused and were not; why, and proposal P11, are in §8.2–§8.3.
 - **Plugin 5.18.47** — P11 as the operator chose it: **the price check adds each total up.** Built and rehearsed,
   **not yet deployed** (§9). The deploy command is in §10.
+- **Plugin 5.18.48** (docs/42) carries 5.18.47 with the taxes line under a kit price. **Deploy that one
+  instead** (docs/42 §5): the 5.18.47 command now stops at stage A and changes nothing.
 
 **Uganda only.** South Sudan's quotation summary and price check are unchanged, and that is measured (§2.5, §3.4).
 
