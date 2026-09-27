@@ -78,7 +78,7 @@ for part in report $([ "$MODE" = ask ] && echo ask); do
   [ -n "$OUT" ] || stop "the $part part produced nothing (docker exec of scripts/lib/ai_check.php)"
   printf '%s\n' "$OUT" | grep -v '^@@'
   LAST="$(printf '%s\n' "$OUT" | grep '^@@ ' | tail -1)"
-  read -r _ P STATE A B C <<<"$LAST"
+  read -r _ P STATE A B C D <<<"$LAST"
   if [ "${STATE:-}" != "ok" ]; then
     printf '\n  The %s part stopped (see above).\n' "$part"; RC=1; continue
   fi
@@ -87,7 +87,8 @@ for part in report $([ "$MODE" = ask ] && echo ask); do
     printf '\n  Past conversations: business/unlimited %s shown (%s answered, %s replies by the AI) · covering another area %s shown (%s answered, %s by the AI)\n' \
       "$bn" "$ba" "$bi" "$cn" "$ca" "$ci"
   else
-    printf '\n  Asked: %s model call(s); %s refused by the price check; %s with the Business-plan note added\n' "${A:-0}" "${B:-0}" "${C:-0}"
+    printf '\n  Asked: %s model call(s); %s refused by the price check; %s with the Business-plan note added; %s with the kit tax note added\n' \
+      "${A:-0}" "${B:-0}" "${C:-0}" "${D:-0}"
   fi
 done
 printf '\n  Nothing was changed and nothing was sent. Send the log file.\n'

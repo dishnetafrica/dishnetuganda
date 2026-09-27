@@ -65,7 +65,7 @@ function traits(string $r): string {
 
 // ── The installed plugin ────────────────────────────────────────────────────
 foreach (['bootstrap_data', 'PluginConfig', 'KnowledgeBase', 'CrmApiClient', 'ShopCatalogue', 'DishNetTools',
-          'PlanCatalogue', 'PlanFenceGuard', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext', 'DishNetAiBrain',
+          'PlanCatalogue', 'PlanFenceGuard', 'KitTaxNote', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext', 'DishNetAiBrain',
           'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus'] as $lib) {
     if (is_file("{$root}/lib/{$lib}.php")) require_once "{$root}/lib/{$lib}.php";
 }
@@ -151,6 +151,16 @@ if ($mode === 'report') {
     }
     $cap = trim((string)($config['ai_fact_business_cap'] ?? ''));
     out('Business-plan note', $cap === '' ? 'the default (PlanFenceGuard::DEFAULT_NOTE)' : (strtolower($cap) === 'omit' ? 'OFF (omit)' : 'your own wording: ' . clip(mask($cap), 160)));
+    // 5.18.48 (docs/42): the taxes line under a Starlink kit price, where the hardware module is on.
+    if (class_exists('KitTaxNote')) {
+        $kv = trim((string)($config['ai_fact_kit_taxes'] ?? ''));
+        out('kit tax note', !filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            ? 'off — it goes with the hardware module (ai_hardware_expert)'
+            : (strtolower($kv) === 'omit' ? 'OFF (omit)'
+            : ($kv === '' ? 'the approved wording: ' . clip(KitTaxNote::DEFAULT_NOTE, 160) : 'your own wording: ' . clip(mask($kv), 160))));
+    } else {
+        out('kit tax note', 'none — this version adds no taxes line under a kit price (5.18.48 does)');
+    }
     if (defined('DishNetAiBrain::UNLIMITED_FACT')) {
         $uf = trim((string)($config['ai_fact_unlimited'] ?? ''));
         out('"unlimited" fact', $uf === '' ? 'the default wording: ' . clip(DishNetAiBrain::UNLIMITED_FACT, 110)
@@ -406,7 +416,7 @@ if ($mode === 'ask') {
         }
         return $out;
     };
-    $calls = 0; $blocked = 0; $fenced = 0; $tokIn = 0; $tokOut = 0;
+    $calls = 0; $blocked = 0; $fenced = 0; $kitted = 0; $tokIn = 0; $tokOut = 0;
     hdr('The questions, asked of the installed assistant on the sales number — nothing is sent to anyone');
     foreach ($SCENARIOS as $name => [$channel, $turns]) {
         echo "\n  ── {$name}\n";
@@ -438,6 +448,11 @@ if ($mode === 'ask') {
                 } else {
                     $f = PlanFenceGuard::apply($raw, $config);
                     if (!empty($f['appended'])) { $final = $f['reply']; $fenced++; $how[] = 'the Business-plan note was added'; }
+                    // After the fence, as the worker does (5.18.48).
+                    if (class_exists('KitTaxNote')) {
+                        $k = KitTaxNote::apply($final, $config, KitTaxNote::kitPrices((array)($ctx['products'] ?? [])));
+                        if (!empty($k['appended'])) { $final = $k['reply']; $kitted++; $how[] = 'the kit tax note was added'; }
+                    }
                 }
             }
             if (!empty($res['escalate'])) $how[] = 'hands over to staff: ' . clip(mask((string)($res['escalate_reason'] ?? '')), 100);
@@ -469,9 +484,9 @@ if ($mode === 'ask') {
             $history[] = ['role' => 'dishnet',  'text' => $final];
         }
     }
-    printf("\n  %d model call(s) · tokens in %d, out %d · %d refused by the price check · %d with the Business-plan note added\n",
-        $calls, $tokIn, $tokOut, $blocked, $fenced);
-    echo "@@ ask ok {$calls} {$blocked} {$fenced}\n";
+    printf("\n  %d model call(s) · tokens in %d, out %d · %d refused by the price check · %d with the Business-plan note added"
+         . " · %d with the kit tax note added\n", $calls, $tokIn, $tokOut, $blocked, $fenced, $kitted);
+    echo "@@ ask ok {$calls} {$blocked} {$fenced} {$kitted}\n";
     exit(0);
 }
 

@@ -138,6 +138,11 @@ $FLAGS = [
     'ai_fact_business_cap' => ['text',
         'Appended when the AI quotes a Business plan without offering Residential — the priority-data '
       . 'cap and the 1 Mbps drop ("omit" = never append; unset = the built-in wording)'],
+    // 5.18.48 (docs/42): appended by KitTaxNote under a Starlink kit price, where the hardware module is on. Unset
+    // uses KitTaxNote::DEFAULT_NOTE, the wording the operator approved on 27 Sep 2026; "omit" switches it off.
+    'ai_fact_kit_taxes' => ['text',
+        'Appended when the AI quotes a Starlink kit price (hardware module on) — what the kit price includes '
+      . '("omit" = never append; unset = URA taxes and the UCC registration fee, the approved wording)'],
     // 5.18.44 (docs/40): the data allowance, stated beside the plans where the install qualifies.
     // Unset uses DishNetAiBrain::UNLIMITED_FACT, the wording the operator approved on 27 Sep 2026
     // ("keep as it is"); "omit" switches it off.
@@ -400,7 +405,7 @@ if (!$clear) {
         $warn[] = 'That looks like a price. Prices come from uCRM so they stay current — a figure '
                 . 'here becomes a second catalogue that goes stale silently.';
     }
-    if ($key === 'ai_fact_prices' && $new !== '' && preg_match('/\d/', $new)) {
+    if (in_array($key, ['ai_fact_prices', 'ai_fact_kit_taxes'], true) && $new !== '' && preg_match('/\d/', $new)) {
         $warn[] = 'This is repeated to customers as a fact. A figure in it (a rate, an amount) '
                 . 'will be repeated too — make sure it is exactly right and stays right.';
     }

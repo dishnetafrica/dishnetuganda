@@ -674,6 +674,18 @@ class AiReplyWorker extends WorkerBase
                 $this->log('info', sprintf('conv %d: plan fence appended — %s',
                     (int)($ctx['conversation_id'] ?? 0), $fence['reason']));
             }
+            // 5.18.48 (docs/42): the operator's taxes line under a Starlink kit price, where the hardware module
+            // is on. Also the operator's text, appended after the check for the same reason as the fence.
+            if (!class_exists('KitTaxNote')) {
+                require_once dirname(__DIR__) . '/lib/KitTaxNote.php';
+            }
+            $kit = \KitTaxNote::apply((string)$ai['reply'], (array)($this->config ?? []),
+                                      \KitTaxNote::kitPrices((array)($ctx['products'] ?? [])));
+            if ($kit['appended']) {
+                $ai['reply'] = $kit['reply'];
+                $this->log('info', sprintf('conv %d: kit tax note appended — %s',
+                    (int)($ctx['conversation_id'] ?? 0), $kit['reason']));
+            }
             return $ai;
         }
 
