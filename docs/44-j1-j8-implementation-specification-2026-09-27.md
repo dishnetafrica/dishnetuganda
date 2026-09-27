@@ -950,7 +950,7 @@ The previous release. Conversations keep the `staff` label, which the old releas
 |---|---|---|---|
 | 0 | **The read-only uCRM users check** (§13) — **done**, 27 Sep 16:37 UTC (§13.1) | you, one command | no |
 | 1 | **Release A — 5.18.50**: J1, J2, J3, J5, J6, J7 (display), J8 | the pinned deploy command | no — nothing new is sent |
-| 2 | **Create a uCRM user for each technician** in UISP/uCRM, with the same e-mail as their staff account (docs/43 §11.3). Retailers: none. The technician works in My Jobs, not in uCRM: the account only has to exist so a job can be assigned to it. **Started 27 Sep:** one UISP user created, for S4; the §13 check confirms it | you | no |
+| 2 | **Create a uCRM user for each technician** in UISP/uCRM, with the same e-mail as their staff account (docs/43 §11.3). Retailers: none. The technician works in My Jobs, not in uCRM: the account only has to exist so a job can be assigned to it. **Started 27 Sep:** one UISP user created, for S4. The §13 check at 16:47 UTC confirms it: uCRM user **1099**, active, with S4's e-mail (§13.1) | you | no |
 | 3 | **Link each staff account** with the J2 picker: S1 → 1000, then each technician. **Give S1 a number** | you, on the Staff page | no |
 | 4 | **Release B — 5.18.51**: J4 and J7's webhook lines | the pinned deploy command | no — only later job changes send |
 | 5 | **The controlled live test** (§12.3) | you, after approval | one message to you |
@@ -1080,6 +1080,19 @@ ran to its end: 3 ok, 0 failed, 5 notes.** Nothing was created, sent or changed.
 | uCRM's own offset | **+0300** on a client, an invoice and a payment: uCRM keeps Kampala's clock |
 | Follow-up engine | **On** |
 | WhatsApp webhooks | All three numbers point at the plugin and subscribe to `MESSAGES_UPSERT`, `MESSAGES_UPDATE` and `CONNECTION_UPDATE` |
+
+**Second run, 16:47 UTC**, after the operator created a UISP user for S4 (a technician). It ran to its end: 3 ok,
+0 failed, 5 notes; nothing was changed.
+
+| Question | Measured |
+|---|---|
+| uCRM staff users | **Two**, both active and linked to a UISP user: U1 = 1000 (S1's e-mail), and **U2 = 1099 (S4's e-mail)** |
+| A phone in either record | None. `users/1099` also answers 404 |
+| What a verified picker would propose | **S1 → 1000** and **S4 → 1099**. S2, S3 and S5: no uCRM user has their e-mail |
+| Stored ids that are real | Still 0 of 4. S4 still holds 81 until it is linked |
+| Everything else | As at 16:37: uCRM writes +0300, the follow-up engine is on, and receipts are subscribed on all three numbers |
+
+A new UISP user is **active in uCRM at once**, as J2's "active" rule requires. It carries no phone, as J4 expects.
 
 ### 13.2 What it confirms, and what it sharpens
 

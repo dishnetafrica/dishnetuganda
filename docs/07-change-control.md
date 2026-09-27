@@ -1908,3 +1908,10 @@ notes; nothing was changed. Measured:
 - **Delivery receipts are subscribed on all three WhatsApp numbers**; the plugin drops them today.
 
 The specification stands as written. Nothing is coded until the operator approves docs/44 and answers D1–D8.
+
+**Second run of the uCRM users check, 27 Sep 16:47 UTC** (docs/44 §13.1), after the operator created a UISP user
+for S4. Measured:
+- uCRM now has two staff users: 1000 (S1's e-mail) and **1099 (S4's e-mail)**. Both are active and UISP-linked,
+  and neither has a phone.
+- A verified picker would propose **S1 → 1000** and **S4 → 1099**. S4 still holds 81 until it is linked.
+- Nothing was changed.
