@@ -1353,7 +1353,52 @@ Release B is neither built nor deployed until **all** of these hold, and then on
 **Its delivery gate is the live test** (§12.3 with M3), on your own number only. The log file must show exactly the
 expected messages, no duplicate and no other recipient.
 
+### 15.9 Final decisions for release A — 27 September
+
+You approved M6, M7 and the J2 correction, and set a strict exclusion. Release A is to be built and **not
+deployed**: you review the build report first.
+
+| # | Decision |
+|---|---|
+| **M6** | **Yes.** Release A sends no job-assignment WhatsApp on Uganda. All four paths are switched off: ＋ New Job, Bulk Dispatch, Reschedule and uCRM's `job.add`. The "Notify via WhatsApp" checkbox is hidden, and each answer says plainly that no message was sent. Accept, task-progress and completion messages are unchanged. South Sudan is unchanged |
+| **M7** | **Yes.** On Uganda, only a link saved through the validated picker is used for job operations: My Jobs (the list and every action), ＋ New Job and Bulk Dispatch, and later release B's recipient. Never `ftth_crm_client_id`, and never an old, unvalidated id |
+| **J2 correction** | Accepted: the My Jobs list's `ftth_crm_client_id` fallback is removed on Uganda |
+| **Strict exclusion** | **Billing, invoices, payments, customer records and their workflows are not modified.** A cleanup that would touch them is proposed separately |
+
+**What the strict exclusion removes from release A**, each to be proposed separately:
+
+1. **1.8, 1.9 and 1.10.** These are the organisation-7 client creation for staff and retailers, the wallet top-up
+   path that depends on it, and the staff-creation message about it. Unchanged.
+2. **5.3, the second-site KYC job's time** (`lib/KycService.php:1937`). KYC is the customer-onboarding workflow, so
+   it keeps today's `T09:00:00.000Z` (12:00 in Kampala). J5 still applies to ＋ New Job, Bulk Dispatch and
+   Reschedule.
+3. **J3 on save applies to job-taking roles only**: support, support leader, support engineer and admin.
+   - Sales/retailer, field-agent, collection-agent, accountant and field-accountant accounts are saved exactly as
+     today. Their numbers carry wallet, collection and invoice-queue messages.
+   - J4 and J8 still read every staff number through J3's rule when they use it, which changes nothing stored.
+4. **J8 recognises staff accounts only**: admin, accountant, field accountant, support, support leader and support
+   engineer.
+   - Dealer accounts (sales/retailer, field agent, collection agent) keep today's behaviour.
+   - S1–S5, and the six staff conversations measured in §11, are all covered.
+
+**Found while preparing, not changed** (they touch customer records or billing workflows):
+
+- **`update_client_gps`** (`includes/api/api_crm_misc.php:120-150`) writes a customer's GPS position into uCRM. It
+  checks for an assigned job only when the caller holds a uCRM link, so **an account with no link skips the check**.
+- **`save_job_signature`** (`api_crm_misc.php:17-47`) writes a log to the uCRM customer named in the request body,
+  never checked against the job. J6 limits who may call it; what it writes, and where, is unchanged.
+- **The app API's job check-in and check-out** (`api/index.php:1446-1540`) have no assignee check, and check-out
+  queues an invoice task. uCRM serves only `public.php` (docs/98), so whether this file is reachable is not measured.
+
+**What J6 does touch, as approved.** It limits who may call three job actions that write to uCRM:
+
+- the survey appends a note to the customer's uCRM record;
+- the signature writes a customer log;
+- a comment goes onto the uCRM job.
+
+Only the assignee, a support leader or an admin may call them. What they write is unchanged.
+
 ---
 
-**Your decisions are recorded (§15.6). Release A is built once you answer M6 and M7 (§15.7), and is not deployed
-automatically. Release B is BLOCKED (§15.8).** The §13 check has run; its result is in §13.1.
+**Your decisions are recorded (§15.6, §15.9). Release A is being built and will not be deployed without your
+explicit approval of its build report. Release B is BLOCKED (§15.8).** The §13 check has run; its result is in §13.1.

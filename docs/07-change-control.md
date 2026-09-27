@@ -1973,3 +1973,21 @@ today (no organisation 7). The outcome is unchanged, so it is kept as approved u
 - S1 has a valid number;
 - M4 done with no job message sent;
 - the tests pass twice.
+
+## 27 Sep — J1–J8: M6 and M7 approved; strict billing exclusion; release A being built, not deployed
+
+**What.** The operator approved **M6** (release A sends no job-assignment WhatsApp on Uganda: ＋ New Job, Bulk
+Dispatch, Reschedule and uCRM's `job.add` off; the checkbox hidden; "no message was sent" stated) and **M7** (on
+Uganda only a picker-validated link is used for job operations; never `ftth_crm_client_id`, never an old id). The J2
+correction is accepted. Recorded in docs/44 §15.9.
+
+**Strict exclusion:** billing, invoices, payments, customer records and their workflows are not modified.
+Consequences for release A:
+- **Out:** 1.8–1.10 (organisation-7 client creation, the wallet top-up path, its message) and 5.3 (the second-site
+  KYC job's time).
+- **Narrowed:** J3's save rule applies to job-taking roles only; J8 recognises staff roles only, not dealer accounts.
+- **Reported, not changed:** `update_client_gps` skips its job check for an unlinked account; `save_job_signature`
+  logs to a customer named in the request body; the app API's job check-in and check-out have no assignee check.
+
+**Next.** Build release A (5.18.50), run the full suite twice with zero failures, rehearse the deployment and the
+rollback, and stop before deployment for the operator's review of the build report. Release B stays BLOCKED.
