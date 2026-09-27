@@ -83,6 +83,12 @@ case "$TZL" in
   "") note "timezone not reported" ;;
   *) note "timezone ${TZL%% *} — the technician's job message prints the day and hour in this zone, not Kampala's" ;;
 esac
+PRL="$(printf '%s\n' "$OUT" | sed -n 's/^@@PROFILE //p' | head -1)"
+case "$PRL" in
+  uganda) ok "tenant profile uganda: the plugin runs on Uganda's rules" ;;
+  "") note "tenant profile not reported" ;;
+  *) note "tenant profile ${PRL}: the plugin runs on South Sudan's rules here" ;;
+esac
 read -r _ ST_TOTAL ST_FTTH ST_UCRM ST_ASSIGN <<<"$(printf '%s\n' "$OUT" | grep '^@@STAFF' | head -1)"
 [ -n "${ST_TOTAL:-}" ] && note "staff rows ${ST_TOTAL}: ${ST_UCRM} carry a uCRM user id, ${ST_ASSIGN} can be picked in My Jobs → New Job, ${ST_FTTH} have the FTTH CRM link that the 'CRM LINKED' tile counts"
 read -r _ J_TOTAL J_CLIENT <<<"$(printf '%s\n' "$OUT" | grep '^@@JOBS' | head -1)"

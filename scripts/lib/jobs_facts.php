@@ -32,6 +32,7 @@ require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EvolutionApiService.php';
 require_once $root . '/lib/WebhookRegistrar.php';
 require_once $root . '/lib/timezone.php';
+require_once $root . '/lib/TenantProfile.php';
 
 function out(string $s = ''): void { echo $s, "\n"; }
 function yn($v): string { return $v ? 'yes' : 'no'; }
@@ -77,10 +78,21 @@ $manifest = json_decode((string)@file_get_contents($root . '/manifest.json'), tr
 $tz = dn_tz();
 try { $off = (new DateTime('now', new DateTimeZone($tz)))->format('P'); } catch (\Throwable $e) { $off = '?'; }
 out('== 1. What is installed ==');
+// The profile the plugin actually runs on, and why: an explicit tenant_profile key, else the currency (UGX selects
+// uganda), else the South Sudan default. $cfg is already filled from the vault, where currency_code lives.
+$profileKey = strtolower(trim((string)($cfg[TenantProfile::SELECTOR_KEY] ?? '')));
+$profileCur = strtoupper(trim((string)($cfg['currency_code'] ?? $cfg['cashbook_base_currency'] ?? '')));
+$profileId  = TenantProfile::resolveId($cfg);
+$profileWhy = in_array($profileKey, TenantProfile::IDS, true) ? 'set explicitly'
+            : ($profileCur === 'UGX' ? 'selected by the currency UGX; no tenant_profile setting'
+            : 'the default; no tenant_profile setting and no UGX currency');
+$tzWhy = trim((string)($cfg['timezone'] ?? '')) !== '' ? 'from the timezone setting' : "from the {$profileId} profile";
 out('  plugin version ' . ($manifest['information']['version'] ?? $manifest['version'] ?? '?')
-    . ' · timezone ' . $tz . ' (UTC' . $off . ') · tenant profile ' . ((string)($cfg['tenant_profile'] ?? '') ?: 'not set'));
+    . ' · timezone ' . $tz . ' (UTC' . $off . ', ' . $tzWhy . ')');
+out('  tenant profile ' . $profileId . ' (' . $profileWhy . ')');
 out('  uCRM reachable for the plugin: ' . yn($crm->isConfigured()));
 out('@@TZ ' . $tz . ' ' . $off);
+out('@@PROFILE ' . $profileId);
 
 // ── 2. staff rows ──────────────────────────────────────────────────────────
 $rows = [];

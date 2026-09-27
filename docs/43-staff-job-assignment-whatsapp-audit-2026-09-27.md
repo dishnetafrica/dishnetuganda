@@ -14,8 +14,8 @@ already the quotation-summary and price-check record, and 42 is the kit-taxes re
   (Evolution) server, with made-up people and numbers.
   - Run it with `php scripts/harness/jobs-trace/trace.php`.
   - **46 of 46 observations matched the code reading, on two runs.** Nothing left the machine.
-- **Production — to measure**: only the live install can answer these. The read-only command in §10.4 measures
-  them. **It has not been run yet**, so each such line says what it will settle.
+- **Production**: measured on 27 September at 15:54 UTC by the read-only command in §10.4. The results are in
+  §11. Each line that said "production — to measure" now gives the measured answer.
 - **Reported by the code-reading pass**: three screens in §2.4 are marked so. They were read once and not
   re-checked line by line here; none of them bears on the answers.
 
@@ -41,14 +41,18 @@ What breaks the chain on Uganda today:
 
 1. **The mapping is overwritten.** Which uCRM user a staff account is gets rewritten by hard-coded **South Sudan**
    lists, on every deploy and every page load (§4.3).
-2. **Jobs made in uCRM rarely reach anyone.** A job typed straight into uCRM reaches the technician only if uCRM's
-   own user record carries a phone. The fallback to the staff account's number is broken (§5.1, path B).
+2. **Jobs made in uCRM never reach anyone.** A job typed straight into uCRM reaches the technician only if uCRM's
+   own user record carries a phone. On Uganda that record has no phone field at all (measured, §11), and the
+   fallback to the staff account's number is broken (§5.1, path B).
 3. **Changes are never announced.** Reassignment, rescheduling in uCRM and cancellation send nothing (§5.1).
 4. **Replies go to the AI.** A technician who answers on WhatsApp is treated as a customer and queued for the AI
    (§6.3).
 5. **Anyone signed in can act on any job.** Any staff account, a retailer included, can read, close or complete any
    job (§6.4).
 6. **Failures read as success.** A failed WhatsApp can show as "Delivered" (§7).
+7. **Nobody on Uganda can be assigned correctly today** (measured, §11).
+   - Every uCRM id the plugin holds names a uCRM user that does not exist.
+   - Uganda's uCRM has one user, the admin (id 1000), and the technicians have none.
 
 Retailers cannot hold uCRM jobs at all: they are not uCRM users (§4.5).
 
@@ -138,7 +142,7 @@ three support roles.
 | Create a job | **Yes**, from My Jobs → ＋ New Job, or in uCRM's own Scheduling screen | code, trace B1 |
 | Select the CRM customer | **Yes**: a live uCRM client search. The job carries `clientId`, and the client's address and GPS | code, trace B1 |
 | Select the service or order | **No.** A uCRM job has no service field, and the wizard offers none | code |
-| Assign | **Yes**, to support-role staff with a uCRM user id. **Not to a retailer or field agent** (§4.5) | code |
+| Assign | **Yes in code**, to support-role staff with a uCRM user id. **Not to a retailer or field agent** (§4.5). **On Uganda every stored id names a uCRM user that does not exist** (§11) | code, production |
 | Due date / time | **Yes, but the time is wrong:** 09:00 is sent to uCRM as **09:00 UTC, which is 12:00 in Kampala**, while the WhatsApp says 09:00 | trace B1 |
 | Priority | **No field** in the wizard or in uCRM's job | code |
 | Location | Taken from the customer's uCRM address and GPS. **It cannot be typed** | code |
@@ -156,8 +160,7 @@ plugin's live endpoint takes **every** event (docs/09).
 - It sends a WhatsApp only if **the uCRM user's own record carries a phone** (§5.1 path B).
 - For an installation job with a date and a client, it also e-mails the customer "installation scheduled", when that
   e-mail is switched on.
-- Whether uCRM user records carry a phone at all is **production — to measure**: §10.4 prints the field names of a
-  uCRM user.
+- **Measured: they do not.** Uganda's uCRM user record has no phone field at all (§11), so this path never sends.
 
 ### 2.3 Jobs the plugin creates by itself
 
@@ -204,8 +207,9 @@ status → staff acknowledgement → job status → CRM record`
 | acknowledgement → job status | **app only.** Accept sets 1, Complete sets 2 | trace C |
 | job status → CRM record | **works** for status, comments and tasks. **Photos never reach uCRM**: only their first 200 characters are kept locally | trace C3 |
 
-**What cannot be proved without a live action:** whether a real technician's phone receives the message, and whether
-the uCRM user records carry phones. The controlled test in §10.5 settles both. **It waits for your approval.**
+**What cannot be proved without a live action:** whether a real technician's phone receives the message. The
+controlled test in §10.5 settles it. **It waits for your approval.** Whether uCRM user records carry phones is now
+measured: they do not (§11).
 
 ---
 
@@ -222,8 +226,9 @@ It is **not** about jobs.
   `FtthCrmService::ensureRetailerClient` (`includes/post/post_admin.php:34`, `:559`, `includes/post/post_sales.php:159`).
   It searches organisation 7 for the staff member's e-mail and, if nothing is found, **asks uCRM to create a
   client in organisation 7 for that staff member** (`lib/FtthCrmService.php:86`, `:113`). On Uganda every attempt has
-  evidently failed, so 0 of 5. Were one to succeed, a staff member would appear in uCRM as a customer. Whether
-  organisation 7 exists on Uganda's uCRM is **production — to measure** (§10.4 prints the organisation ids).
+  evidently failed, so 0 of 5. Were one to succeed, a staff member would appear in uCRM as a customer.
+  - **Measured: organisation 7 does not exist on Uganda's uCRM**; it has only organisation 1 (§11).
+  - So every attempt fails and nothing is created.
 
 The field that matters for jobs is **`ucrm_user_id`**: the id of a uCRM **staff user**, the person a uCRM job is
 assigned to.
@@ -284,8 +289,11 @@ On your five accounts, checked against the lists (e-mails compared locally, neve
 - **The accountant, the agent and support #81** are on none. Their ids are whatever was typed.
 
 So "UCRM #1" and "UCRM #1581" are **South Sudan ids**. Uganda's uCRM is a separate installation with its own users.
-Whether id 1 happens to be you there, and whether 1581 exists at all, is **production — to measure**: §10.4
-answers both with yes or no.
+
+**Measured (§11):**
+
+- Neither 1 nor 1581 exists on Uganda's uCRM, and neither do 4 or 81.
+- Uganda's uCRM has one user, id 1000, with the admin account's e-mail.
 
 The trace proved the overwrite: a retailer account pressed Clear Cache, and a staff member's id changed from the
 sandbox's Uganda id 18 to the list's South Sudan id.
@@ -326,7 +334,7 @@ delivery, they would need their own uCRM user (§9.1).
 | Path | Trigger | Automatic? | Recipient number from | Channel | State on Uganda |
 |---|---|---|---|---|---|
 | **A** dispatch cron | poll uCRM every 5 min: new, **reassigned**, accepted | automatic | staff row (`ucrm_user_id` → `phone`) | support, as staff class | **switched off** (`cron/master.php:166-169`) |
-| **B** uCRM `job.add` webhook | a job created in uCRM, or by the plugin | automatic | **the uCRM user record's phone**; the fallback to the staff row fails | support | **works only if uCRM user records carry a phone**. Production — to measure |
+| **B** uCRM `job.add` webhook | a job created in uCRM, or by the plugin | automatic | **the uCRM user record's phone**; the fallback to the staff row fails | support | **never sends**: Uganda's uCRM user records have no phone field (measured, §11) |
 | **C** My Jobs → ＋ New Job | an admin or staff member presses Create | automatic when "Notify via WhatsApp" is ticked (the default) | staff row `phone` | support | **works** (trace B1) |
 | **D** Bulk Dispatch | a leader or admin sends a batch | automatic | staff row `phone` | support | hidden, still reachable |
 | **E** Splynx NOC assignment | Splynx | — | — | — | not Uganda |
@@ -428,7 +436,7 @@ A new job has been assigned to you:
   - Uganda gets Kampala: from the `timezone` setting, or from the Uganda tenant profile.
   - An install with neither runs on Africa/Juba, one hour behind. It prints a date-only job on the **previous day**
     (trace E3: *Sun, Oct 4 2026 8:00 AM* instead of *Mon, Oct 5 2026 9:00 AM*).
-  - §10.4 prints the live value.
+  - Measured: Uganda runs on Africa/Kampala (§11).
 - Neither message has a button or a link to the job itself.
 
 ### 5.5 Opt-out
@@ -487,8 +495,8 @@ The reply goes to `evo_webhook.php`, the same as any customer message:
 - It is queued for the **AI assistant** (`ai.reply`). Nothing checks whether the number belongs to staff (trace D).
 - The job in uCRM does not change.
 
-§10.4 counts how many staff numbers already have customer conversations, and how many AI replies were queued for
-them.
+Measured (§11): six staff conversations are filed as customer ones, and the AI has been queued **109** times for a
+staff number.
 
 ### 6.4 Who can act on a job
 
@@ -529,7 +537,7 @@ in the trace:
 | Feature | State |
 |---|---|
 | Create a uCRM job from the plugin, for a uCRM customer, with tasks | **WORKING** |
-| Assign to support-role staff with a uCRM user id | **WORKING** |
+| Assign to support-role staff with a uCRM user id | **WORKING in code; BROKEN on Uganda**: no stored id is a real uCRM user (§11) |
 | Assign to a retailer or field agent | **NOT IMPLEMENTED** |
 | Choose service / order / ticket on the job | **NOT IMPLEMENTED** |
 | Priority | **NOT IMPLEMENTED** |
@@ -540,8 +548,8 @@ in the trace:
 | Job history / audit trail | **NOT IMPLEMENTED** |
 | Staff ↔ uCRM user mapping | **BROKEN**: overwritten by South Sudan lists; no picker; no check |
 | "CRM LINKED" tile | **WORKING as built**, but it means organisation 7, not jobs |
-| WhatsApp on a job made in My Jobs | **WORKING** (numbers in international form) |
-| WhatsApp on a job made in uCRM | **PARTIAL**: only if uCRM user records carry phones; fallback broken |
+| WhatsApp on a job made in My Jobs | **WORKING in the sandbox** (numbers in international form). On Uganda no job has ever been made (§11) |
+| WhatsApp on a job made in uCRM | **BROKEN**: uCRM user records have no phone field (measured, §11); fallback broken |
 | WhatsApp on reassignment / reschedule in uCRM / cancel | **NOT IMPLEMENTED** (the only path that did it is off) |
 | One message per job (no duplicates) | **BROKEN**: B + C both send; B has no dedupe |
 | Staff number normalisation (+256 / +211) | **PARTIAL**: international form works; national form fails |
@@ -681,9 +689,10 @@ and J8.
   - J4 adds one table. An older release ignores it.
   - Nothing is migrated in uCRM.
 
-### 10.4 The read-only facts command — please run it
+### 10.4 The read-only facts command
 
-It answers the "production — to measure" points above:
+**It ran on 27 September at 15:54 UTC; the results are in §11.** It answers the "production — to measure" points
+above:
 
 - whether uCRM's staff users have a phone field;
 - whether ids 1, 81 and 1581 are real Uganda uCRM users with the same e-mail as the staff account;
@@ -697,8 +706,8 @@ It answers the "production — to measure" points above:
 - It reads a copy of the plugin's store, made inside the container and removed afterwards.
 - It asks uCRM with GET only, and Evolution only for its connection state.
 - It prints no name, e-mail, phone number, job title, token or key.
-- It was rehearsed against a fake install full of canary values: **277/277 on two runs**. Seven deliberately
-  weakened copies were each caught.
+- It was rehearsed against a fake install full of canary values: **334/334 on two runs** since the §11.4
+  correction (277/277 before it). Eight deliberately weakened copies are each caught.
 
 Run as root on the server:
 
@@ -721,6 +730,11 @@ This proves, on the real system, the links the trace cannot: a real phone receiv
   - your staff row's number is in international form;
   - your staff row's uCRM user id is **you** in uCRM ("same e-mail as this row: yes"). Otherwise uCRM would assign
     the test job to whoever holds that id, and path B could message them.
+- **Measured on 27 September (§11): neither holds yet.**
+  - Your staff row has no number.
+  - Its uCRM id is 1, which is no uCRM user; you are uCRM user 1000.
+  - So this test waits for J1. Without it, the South Sudan lists put 1 back on the next page load. After J1, your
+    row can be linked to 1000 and given a number.
 
 Steps:
 
@@ -742,21 +756,111 @@ Nothing here is run until you say so.
 
 ---
 
+## 11. Production facts, measured 27 September 15:54 UTC
+
+**How they were measured.** The operator ran `scripts/dnb-jobs-facts.sh` on the server:
+
+- installed plugin 5.18.49 (`e076632`), repository checkout `9595d4a`;
+- read-only: it changed nothing and sent nothing, and the log was sent back.
+
+Staff appear as S1–S5, the same five accounts as on the screenshot:
+
+| | Role | Badges on the screenshot |
+|---|---|---|
+| S1 | admin (the operator) | UCRM #1 |
+| S2 | accountant | — |
+| S3 | support | AGENT, Set UCRM ID |
+| S4 | support | UCRM #81 |
+| S5 | support | UCRM #1581, PWD |
+
+### 11.1 What was measured
+
+| Fact | Measured |
+|---|---|
+| Timezone | Africa/Kampala, UTC+03:00 |
+| Tenant profile | **uganda**. The first version of the command printed "not set", which described the `tenant_profile` setting, not the profile. With no such setting, the currency UGX selects uganda (`TenantProfile::resolveId`). The command now prints the profile and why (§11.4) |
+| uCRM staff users (`GET users/admins`) | **One**: id **1000**, with the same e-mail as S1. Its record has the fields id, unmsId, email, firstName, lastName, username, avatarColor and isActive. **There is no phone field** |
+| The plugin's stored uCRM ids | S1 → 1, S3 → 4, S4 → 81, S5 → 1581; S2 has none. **None of the four is a uCRM user**: `users/admins/{id}` and `users/{id}` both answer 404 |
+| The South Sudan lists | They force S1 → 1 and S5 → 1581, in all five places. Four lists hold 29 pairs; auto-map holds 30 |
+| S3's id | **4, typed since the screenshot**, which still showed "Set UCRM ID". No list forces it, and uCRM has no user 4. This is the unchecked field of §4.2, live |
+| Phones | S1 none; S2 +211; S3, S4 and S5 +256. All are in international form |
+| App tokens | All five accounts hold one, 1–32 days old |
+| Organisations | Only id 1. **Organisation 7 does not exist**, so the staff → organisation-7 client creation of §3 fails every time and creates nothing |
+| uCRM scheduling jobs | **0** |
+| Job messages ever sent | **0** in the Message Log. The log itself holds 367 rows since 12 September: the positive control |
+| Failure queue | No job message |
+| Webhook log | 300 events since 24 September, **none of them `job.add`, `job.edit` or `job.delete`** |
+| `webhooks/endpoints` | 404 through the plugin's v2.1 client. This is the same 404 that `tools/webhook_setup.php` and `tools/quote_email_doctor.php` note; it says nothing about the endpoint itself |
+| WhatsApp | Evolution runs on the account, sales and support numbers, and all three are connected. Support is not forced to accounts. Dry run is off, and there are no WASender keys |
+| Admin alert number | **Not set**, so `sendAdmin()` alerts (on completion, for example) go nowhere |
+| Dispatch cron (path A) | Not scheduled; its memory holds 0 entries |
+| Daily jobs summary | Last run 07:00:38 local time, taking 9 ms. That fits the TypeError of §7, which ends the run at once. **The plugin log was not found**, so the error text itself is not confirmed |
+| My Jobs cache | 0 jobs |
+| Staff numbers in the WhatsApp inbox | **6 conversations** filed as customer ones: S2 on support; S3 on accounts, sales and support; S4 on accounts and support |
+| AI replies queued for staff numbers | **109**, the last one on 27 September |
+| Local job records | 0 completions, 0 invoice-queue entries, 0 signatures, 0 site surveys |
+
+### 11.2 What this changes
+
+1. **Nobody can be assigned a uCRM job correctly today.**
+   - My Jobs → ＋ New Job offers S1, S3, S4 and S5.
+   - Every one of their stored ids names a uCRM user that does not exist.
+   - What uCRM does with such a job (refuse it, or hold it for no one) was not tested, because no job was created.
+2. **The technicians have no uCRM user at all.**
+   - Only the operator exists in uCRM, as user 1000.
+   - S3, S4 and S5 each need a uCRM user before any job can be theirs. That is configuration, not code (§11.3).
+3. **Path B can never send.**
+   - uCRM user records have no phone field, and the fallback is broken (§5.1).
+   - So J4's rule, that the number comes from the staff account, is not one option among several. It is the only way
+     a job made in uCRM can reach anyone.
+4. **The job system has never run on Uganda.**
+   - Zero jobs, zero job messages and zero job webhooks.
+   - Nothing has to be migrated or cleaned up for J1–J8.
+   - The duplicate-message and reassignment findings come from the code and the sandbox trace, not from production
+     history.
+5. **J8 matters now.** The AI has already been queued to answer colleagues 109 times.
+6. **The admin alert number is unset,** so the "Job Completed" admin alert of §6.1 reaches no one. Setting it is
+   your configuration and is not part of J1–J8.
+7. **The §10.5 live test cannot run yet.**
+   - S1 has no number.
+   - S1's stored id (1) is not the operator in uCRM, who is user 1000.
+   - It needs J1 deployed first, because otherwise the South Sudan lists put 1 back on the next page load. Then S1
+     can be linked to 1000 and given a number.
+
+### 11.3 A step that is yours, not code
+
+For each person who will do jobs (installations, repairs, surveys, deliveries), create a user in UISP/uCRM with the
+same e-mail as their staff account. J2's picker can then propose the link, and you confirm it.
+
+**Retailers stay retailers**: no uCRM user and no jobs, as you decided on 27 September.
+
+### 11.4 The facts command, corrected
+
+- **The tenant-profile line now prints the profile the plugin resolves, and why**, e.g. "uganda (selected by the
+  currency UGX; no tenant_profile setting)". The timezone line says where the zone came from.
+- **Rehearsed: 334 of 334 checks on two runs.** A new scenario has production's shape (no setting, currency UGX).
+  A new weakened copy, which prints the raw setting again, is caught; eight weakened copies are caught in all.
+- **Re-running it is not needed.** The uCRM users check in docs/44 §13 prints the same two lines.
+
+---
+
 ## Direct answers
 
 **1. Can I assign a job to an existing technician or retailer today?**
 
-- **A technician: yes.** Use My Jobs → ＋ New Job, or uCRM's Scheduling screen. It works only for a support-role
-  account with a uCRM user id, and those ids are currently rewritten by South Sudan lists (§4.3). The time lands 3
-  hours late in uCRM (§2.1).
+- **A technician: not correctly, today (measured, §11).**
+  - The screens exist: My Jobs → ＋ New Job, and uCRM's Scheduling screen.
+  - But every uCRM id the plugin holds names a uCRM user that does not exist.
+  - The technicians have no uCRM user at all. Only you exist in uCRM (id 1000), and your account is linked to 1.
+  - The time would also land 3 hours late in uCRM (§2.1).
 - **A retailer: no.** A retailer is not a uCRM user, and the wizard offers support roles only (§4.5).
 
 **2. Will that person automatically receive a WhatsApp message?**
 
-- **From My Jobs: yes**, if their staff row's number is in international form. You will usually get a second copy
-  when uCRM's `job.add` also fires.
-- **From uCRM's own screen: only if uCRM's user record for that person carries a phone.** The fallback to the staff
-  row is broken; §10.4 settles whether uCRM users have phones.
+- **From My Jobs: only once a technician is correctly linked** (see 1). The plugin sends when uCRM accepts the job.
+  Whether uCRM accepts a job for a user that does not exist was not tested: no job was created.
+- **From uCRM's own screen: never.** Uganda's uCRM user records have no phone field (measured), and the fallback to
+  the staff row is broken.
 - **Reassignment, a new date in uCRM, or cancellation: no message at all.**
 
 **3. Can they acknowledge and complete it through WhatsApp or the app?**
@@ -781,8 +885,11 @@ Nothing here is run until you say so.
 - **J8** — staff replies kept away from the AI.
 - For acknowledging **by WhatsApp**: J9 (reply commands), and J10 for Accept, Reject, Arrival and Failed-visit
   buttons in the app.
+- **Configuration, not code:** a uCRM user for each person who will do jobs, created by you in UISP/uCRM with the
+  same e-mail as their staff account (§11.3).
 
 ---
 
-**Wait for my approval before implementation.** Nothing in §9 will be built until you choose which changes to make.
-Send back the §10.4 log file when you can.
+**J1–J8 are approved for planning only (27 September).** Their implementation specification is
+`docs/44-j1-j8-implementation-specification-2026-09-27.md`. Nothing will be coded until you approve it; J9–J16 are
+out of scope for now.

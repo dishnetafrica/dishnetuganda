@@ -1842,3 +1842,57 @@ The smallest set of changes is J1–J8 (required) and J9–J16 (optional), in do
 
 **Next.** The operator runs the facts command and sends back its log file (docs/43 §10.4), then chooses which
 changes to build. The controlled live test (§10.5) waits for that approval.
+
+**Facts measured 27 Sep 15:54 UTC by the operator's run** (docs/43 §11):
+- Uganda's uCRM has **one staff user, id 1000, with the admin account's e-mail**, and its record has **no phone
+  field**.
+- None of the plugin's four stored ids (1, 4, 81, 1581) is a uCRM user; 4 was typed after the screenshot.
+- Organisation 7 does not exist.
+- There are **0 scheduling jobs**, and no job message or job webhook has ever existed.
+- 6 staff conversations are filed as customer ones, and the AI has been queued **109** times for staff numbers.
+- The admin alert number is unset. The timezone is Africa/Kampala.
+
+Consequences:
+- Nobody can be assigned a uCRM job correctly today.
+- Path B can never send.
+- Each technician needs a uCRM user, created by the operator.
+
+The facts command's "tenant profile not set" line described the setting, not the profile: the currency UGX selects
+uganda. It now prints the resolved profile and why. Its rehearsal: **334/334 on two runs**, eight weakened copies
+caught.
+
+## 27 Sep — J1–J8: the implementation specification (docs/44), and a read-only uCRM users check
+
+**What.** The operator accepted docs/43 and approved J1–J8 **for planning only**. It asked for one specification
+before any code, and for one more read-only check of Uganda's uCRM users. **No plugin change, nothing deployed, no
+record changed, no message sent.** J9–J16 stay out of scope.
+
+**docs/44** answers the operator's ten questions. It gives:
+- per change: the files and functions (5.18.49 line numbers), today vs wanted, schema, tests and rollback;
+- one Uganda switch, `StaffJobsGate`, false on any error, so South Sudan stays byte-identical;
+- **one schema change**: migration 075, `job_notify_state` + `job_notify_events` for J4 ("who was last told what",
+  claimed in one transaction, so each change sends exactly one message, whichever path sees it);
+- the test matrix, and two releases: A sends nothing new; B, J4, comes after the operator creates and links the
+  uCRM users;
+- **eight decisions for the operator** (D1–D8). Two notable ones: telling a technician when a job is taken away
+  (recommended), and removing the "Notify via WhatsApp" box on Uganda.
+
+**Delivery receipts** are specified as "not measured" rather than captured. The shape of Evolution's
+`messages.update` has never been recorded here.
+
+**New read-only tool, no plugin change:** `scripts/dnb-ucrm-users-facts.sh` with `scripts/lib/ucrm_users_facts.php`.
+It reads:
+- every uCRM user's list AND detail record (phone-like fields, nested ones included, as names and country codes
+  only);
+- what `users/{id}` answers for a real id;
+- the e-mail match each staff account would get;
+- the two other uCRM-id settings;
+- uCRM's timestamp offset;
+- the follow-up switch;
+- each WhatsApp number's subscribed webhook events.
+
+Rehearsed in `scripts/harness/ucrm-users/rehearse.sh`: **394/394 on two runs**, 11 weakened copies caught, and the
+mask proved with a control on the control.
+
+**Next.** The operator runs the users check and sends back its log file (docs/44 §13), and answers D1–D8. **Nothing
+is coded until the operator approves docs/44.**

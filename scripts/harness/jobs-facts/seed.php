@@ -39,7 +39,10 @@ $cfg = [
     'whatsapp_admin_phone' => '+256 774 567 890',
 ];
 // 'juba': neither a timezone nor a tenant profile — the Uganda profile alone would already give Kampala
-if ($scenario !== 'juba') $cfg['timezone'] = 'Africa/Kampala'; else unset($cfg['tenant_profile']);
+// 'ugx': production's shape on 27 Sep — no tenant_profile and no timezone setting; the currency UGX selects uganda
+if ($scenario === 'juba') unset($cfg['tenant_profile']);
+elseif ($scenario === 'ugx') { unset($cfg['tenant_profile']); $cfg['currency_code'] = 'UGX'; }
+else $cfg['timezone'] = 'Africa/Kampala';
 $store = SqliteStore::create($pdd);          // first: a first boot renames any *.json it finds to *.json.migrated
 $store->save('kyc_config.json', $cfg);
 file_put_contents($pdd . '/kyc_config.json', json_encode($cfg));   // what PluginConfig and dn_tz() read

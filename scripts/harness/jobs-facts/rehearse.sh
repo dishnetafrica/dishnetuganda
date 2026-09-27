@@ -89,6 +89,9 @@ OUT="$(run)"; RC=$?
 check "$RC" "0" "exit 0"
 has "$OUT" "ok    the report ran to its end" "the report completes"
 has "$OUT" "ok    timezone Africa/Kampala" "Kampala timezone reported"
+has "$OUT" "timezone Africa/Kampala (UTC+03:00, from the timezone setting)" "the timezone says where it came from"
+has "$OUT" "tenant profile uganda (set explicitly)" "an explicit profile is reported as such"
+has "$OUT" "ok    tenant profile uganda" "the summary names the profile"
 has "$OUT" "S1   id 1    role admin" "staff appear as S-labels with role"
 has "$OUT" "phone +256 international" "an international number shows its country code only"
 has "$OUT" "phone national 0… (goes out with no country code)" "a national-form number is called out"
@@ -134,6 +137,19 @@ OUT="$(run)"; RC=$?
 check "$RC" "0" "exit 0"
 has "$OUT" "note  timezone Africa/Juba — the technician's job message prints the day and hour in this zone, not Kampala's" "Juba is a note, never an ok"
 hasnt "$OUT" "ok    timezone" "no ok line for the timezone"
+has "$OUT" "tenant profile south-sudan (the default; no tenant_profile setting and no UGX currency)" "the default profile is said to be the default"
+has "$OUT" "note  tenant profile south-sudan" "South Sudan's rules are a note, never an ok"
+readonly_proof
+
+echo; echo "S2b production's shape: no tenant_profile and no timezone setting, currency UGX"
+build ugx "http://127.0.0.1:$UCRM_PORT"
+OUT="$(run)"; RC=$?
+check "$RC" "0" "exit 0"
+has "$OUT" "tenant profile uganda (selected by the currency UGX; no tenant_profile setting)" "UGX selects uganda, and the line says so"
+has "$OUT" "timezone Africa/Kampala (UTC+03:00, from the uganda profile)" "the zone comes from the profile"
+has "$OUT" "ok    tenant profile uganda" "the summary names the profile"
+hasnt "$OUT" "tenant profile not set" "never the misleading 'not set' of the first version"
+canaries "$OUT"
 readonly_proof
 
 echo; echo "S3  uCRM unreachable"
@@ -169,7 +185,8 @@ PY
   before=$FAILN
   local out; out="$(PATH="$SB/bin:$PATH" FAKE="$F" bash "$copyS/dnb-jobs-facts.sh" 2>&1)"
   { canaries "$out"; readonly_proof
-    if [ "$scen" = "juba" ]; then has "$out" "note  timezone Africa/Juba" "Juba noted"; fi; } >/dev/null
+    if [ "$scen" = "juba" ]; then has "$out" "note  timezone Africa/Juba" "Juba noted"; fi
+    if [ "$scen" = "ugx" ]; then has "$out" "tenant profile uganda (selected by the currency UGX" "UGX profile"; fi; } >/dev/null
   if [ "$FAILN" -gt "$before" ]; then FAILN=$before; PASS=$((PASS+1)); echo "  ok   weakened copy caught: $name"
   else FAILN=$((before+1)); echo "  FAIL weakened copy NOT caught: $name"; fi
 }
@@ -192,6 +209,9 @@ assert s.count(a) == 1; s = s.replace(a, \"\$crm->post('scheduling/jobs', ['titl
 mutant "the copy is never removed" script "
 a = 'trap cleanup EXIT'
 assert s.count(a) == 1; s = s.replace(a, ': no cleanup')"
+mutant "the report prints the raw tenant_profile setting again" report "
+a = \"\$profileId  = TenantProfile::resolveId(\$cfg);\"
+assert s.count(a) == 1; s = s.replace(a, \"\$profileId  = (string)(\$cfg['tenant_profile'] ?? '') ?: 'not set';\")" ugx
 mutant "any timezone reported as Kampala" script "
 a = '  Africa/Kampala*) ok'
 assert s.count(a) == 1; s = s.replace(a, '  *) ok')" juba
