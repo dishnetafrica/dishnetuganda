@@ -98,6 +98,53 @@ final class ReplyPrivacyGuard
     ];
 
     /**
+     * Money written with thousands separators — the only amounts the check read until 5.18.46.
+     */
+    private const SEPARATED_AMOUNT = '/(?<![\d.,])\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?(?![\d])/';
+
+    /**
+     * Money written without separators (5.18.46, docs/41): "price 700000 UGX", "TOTAL: 1999500 UGX". The prompt
+     * prints every price that way ("— price 700000"), and the model often copies it; on 27 Sep 2026 two wrong
+     * setup totals written so — 1993500 and 1999500, for 1897500 — passed a check that only read "1,999,500".
+     * Five digits or more (every UGX price is), standing alone or after a currency: never the digits inside a kit
+     * serial, an invoice or order number, a link or a date written with dashes or slashes.
+     */
+    private const PLAIN_AMOUNT = '/(?:(?<![A-Za-z0-9.,\/\-])|(?<=UGX)|(?<=USh)|(?<=Shs)|(?<=SSP)|(?<=USD))\d{5,}(?:\.\d{1,2})?(?!\d)/i';
+
+    /**
+     * A template slot the model left unfilled (5.18.46): on 27 Sep 2026 a setup reply ended "TOTAL FOR SETUP:
+     * [Sum of setup costs]". A word a template would put there, inside square brackets — never a link, "[text](url)".
+     */
+    private const PLACEHOLDER = '/\[[^\]\n]{0,60}?\b(?:sum|total|amount|price|cost|insert|enter|fill|placeholder|name|number|date|customer)\b[^\]\n]{0,60}\](?!\()/i';
+
+    /**
+     * The checks a caller adds for this install (5.18.46, docs/41). Where the hardware module is on, the assistant
+     * designs and prices whole setups and writes their totals, so amounts written without separators are read too,
+     * and a reply with an unfilled template slot is refused. Elsewhere — South Sudan — the check is exactly as it
+     * was: the same keys, both false.
+     *
+     * @return array{plain_amounts:bool, placeholders:bool}
+     */
+    public static function optionsFor(array $config): array
+    {
+        $on = filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        return ['plain_amounts' => $on, 'placeholders' => $on];
+    }
+
+    /**
+     * Every amount the check reads in a text, as written: separated ones, and — with $plain — the ones written
+     * without separators. One definition, so the AI check tool reports exactly what the guard judged.
+     *
+     * @return array<int,string>
+     */
+    public static function amountsIn(string $text, bool $plain = false): array
+    {
+        $out = preg_match_all(self::SEPARATED_AMOUNT, $text, $m) > 0 ? $m[0] : [];
+        if ($plain && preg_match_all(self::PLAIN_AMOUNT, $text, $m2) > 0) $out = array_merge($out, $m2[0]);
+        return $out;
+    }
+
+    /**
      * Inspect a reply.
      *
      * @param string $reply     what the model produced
@@ -112,6 +159,8 @@ final class ReplyPrivacyGuard
      *                          facts typed into the settings. Without it the
      *                          leak rule below refuses the payment fact the
      *                          prompt orders the model to repeat verbatim.
+     *                          plain_amounts, placeholders: optionsFor() —
+     *                          off unless the caller passes them.
      * @return array{safe:bool, reply:string, categories:array<int,string>}
      */
     public static function check(string $reply, array $permitted = []): array
@@ -157,15 +206,17 @@ final class ReplyPrivacyGuard
 
         // Money the tools did not return and the public prompt does not
         // contain. This is what catches a supplier cost stated as a number.
-        if (preg_match_all('/(?<![\d.,])\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?(?![\d])/', $text, $m) > 0) {
-            foreach ($m[0] as $amount) {
-                $n = self::normalise($amount);
-                if ($n === '' || isset($allow[$n])) continue;
-                if ($prompt !== '' && self::promptHasAmount($prompt, $n)) continue;
-                $cats[] = 'foreign:amount';
-                break;
-            }
+        // Since 5.18.46 also money written without separators, where the caller asks for it (optionsFor).
+        foreach (self::amountsIn($text, !empty($permitted['plain_amounts'])) as $amount) {
+            $n = self::normalise($amount);
+            if ($n === '' || isset($allow[$n])) continue;
+            if ($prompt !== '' && self::promptHasAmount($prompt, $n)) continue;
+            $cats[] = 'foreign:amount';
+            break;
         }
+
+        // A template slot the model left unfilled, where the caller asks for it (5.18.46).
+        if (!empty($permitted['placeholders']) && preg_match(self::PLACEHOLDER, $text) === 1) $cats[] = 'placeholder';
 
         // A verbatim run out of our own instructions — except the parts an
         // operator wrote for customers to read.

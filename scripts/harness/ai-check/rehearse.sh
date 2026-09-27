@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Rehearse scripts/dnb-ai-check.sh before anyone runs it on the server (docs/40).
 #
-# It runs twice: against the plugin the server runs today (5.18.44, commit a4abe5e, the commit deploy-5.18.44.sh
-# pinned, deployed 27 Sep 2026) and against this checkout (5.18.45). 5.18.43 was rehearsed beside 5.18.44 (docs/40 §11.6). The operator runs the check before the deploy and after it, and the two
+# It runs twice: against the plugin the server runs today (5.18.45, commit 0850e59, the commit deploy-5.18.45.sh
+# pinned, deployed 27 Sep 2026 07:54) and against this checkout (5.18.46). 5.18.43 was rehearsed beside 5.18.44
+# (docs/40 §11.6), and 5.18.44 beside 5.18.45 (docs/40 §14.4). The operator runs the check before the deploy and after it, and the two
 # logs are compared — so the check must read each version correctly, and say which it is reading.
 #
 # Each run: a sandbox plugin directory holds a COPY of that version's lib/ and workers/ — the brain's OpenAI address
@@ -14,15 +15,15 @@
 # was seeded and against what that version does. Then weakened copies of the check must each fail.
 set -u
 R="$(cd "$(dirname "$0")/../../.." && pwd)"; H="$R/scripts/harness/ai-check"
-LIVE_COMMIT="a4abe5e"   # 5.18.44, what the server runs (scripts/deploy-5.18.44.sh, 27 Sep 2026)
+LIVE_COMMIT="0850e59"   # 5.18.45, what the server runs (scripts/deploy-5.18.45.sh, 27 Sep 2026 07:54)
 
 # ── The parent: one run per plugin version ──────────────────────────────────
 if [ -z "${EXPECT:-}" ]; then
   OLD="$(mktemp -d)"; trap 'rm -rf "$OLD"' EXIT
   git -C "$R" archive "$LIVE_COMMIT" dishnet-hybrid-sudan | tar -x -C "$OLD" || { echo "could not extract $LIVE_COMMIT"; exit 2; }
   ALL_OK=0; ALL_FAIL=0
-  for v in 44 45; do
-    if [ "$v" = 44 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
+  for v in 45 46; do
+    if [ "$v" = 45 ]; then src="$OLD/dishnet-hybrid-sudan"; what="commit $LIVE_COMMIT, what the server runs"
     else src="$R/dishnet-hybrid-sudan"; what="this checkout"; fi
     echo; echo "######## plugin 5.18.$v — $what ########"
     EXPECT="$v" PLUGIN_SRC="$src" bash "$0" | tee "$OLD/out-$v"
@@ -36,9 +37,9 @@ if [ -z "${EXPECT:-}" ]; then
 fi
 
 # ── A child: one version ────────────────────────────────────────────────────
-case "$EXPECT" in 44|45) ;; *) echo "EXPECT must be 44 or 45"; exit 2 ;; esac
+case "$EXPECT" in 45|46) ;; *) echo "EXPECT must be 45 or 46"; exit 2 ;; esac
 P="${PLUGIN_SRC:?PLUGIN_SRC names the plugin directory under test}"
-v45() { [ "$EXPECT" = 45 ]; }
+v46() { [ "$EXPECT" = 46 ]; }
 SB="$(mktemp -d)"; PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; rm -rf "$SB"; }
 trap cleanup EXIT
@@ -132,8 +133,7 @@ check "$(printf '%s' "$OUT" | grep -cE 'plan copies dropped +2 product')" "1" "t
     "MANY_USERS_HOTSPOT's \"unlimited\" is reported as reaching the assistant"
   check "$(printf '%s' "$OUT" | grep -cE '"unlimited" fact +the default wording: Both Residential plans \(Residential Lite and Residential\) are unlimited')" "1" \
     "the \"unlimited\" fact is shown in its default wording"
-if v45; then
-  check "$(printf '%s' "$OUT" | grep -cE 'STARLINK ROUTERS \(indoor\) +2 — among the accessories')" "1" "the Starlink routers are counted: two"
+check "$(printf '%s' "$OUT" | grep -cE 'STARLINK ROUTERS \(indoor\) +2 — among the accessories')" "1" "the Starlink routers are counted: two"
   check "$(printf '%s' "$OUT" | grep -cE '^ +Router Mini +435,000  ← Starlink router · fits Standard 4, Standard 4 X, Mini, Gen 2 kits \(not Gen 1\)$')" "1" \
     "…Router Mini, with what it fits"
   check "$(printf '%s' "$OUT" | grep -cE '^ +Router 3 \| Starlink V4 or V5, Mini +827,000  ← Starlink router · fits Standard 4, Standard 4 X, Mini, Gen 2 and Gen 3 kits$')" "1" \
@@ -142,10 +142,11 @@ if v45; then
   check "$(has "$OUT" '; 1 to 5 of one Starlink router with any of the kit and the installation')" "yes" "the totals a router design produces are stated"
   check "$(printf '%s' "$OUT" | grep -A4 '^  BUSINESS_PLANS ' | grep -c 'after the priority block it says: about 1 Mbps until more is bought — the approved fact')" "1" \
     "BUSINESS_PLANS is reported saying the approved fact"
+if v46; then
+  check "$(printf '%s' "$OUT" | grep -cE 'the price check also +reads amounts written without commas \(700000 as well as 700,000\), and refuses a reply with an unfilled slot')" "1" \
+    "the report says what else the price check reads (5.18.46)"
 else
-  check "$(count "$OUT" 'STARLINK ROUTERS')" "0" "no Starlink-router list: this version has none"
-  check "$(printf '%s' "$OUT" | grep -A4 '^  BUSINESS_PLANS ' | grep -c 'after the priority block it says: unlimited standard data continues — NOT the approved fact')" "1" \
-    "BUSINESS_PLANS is reported contradicting the approved fact"
+  check "$(count "$OUT" 'the price check also')" "0" "an older plugin's report claims nothing it does not do"
 fi
 check "$(has "$OUT" 'customer     Hi, I want to start a wifi business, do you have unlimited internet? my number is {phone}')" "yes" \
   "c1's question is shown, the phone masked"
@@ -232,7 +233,6 @@ check "$(count "$(section "$OUT" 'How much is an outdoor access point and a Mikr
 check "$(count "$(section "$OUT" 'How much is an outdoor access point and a MikroTik router?')" 'the draft    The outdoor access point is UGX 1,234,000')" "1" \
   "…and shows the draft that was refused"
 S="$(section "$OUT" 'The WiFi does not reach the upper floors of my house.')"
-if v45; then
   check "$(prompts_with '^MORE FLOORS OR ROOMS INSIDE ONE BUILDING — STARLINK ROUTERS\.$')" "11" "every sales prompt carries the rule for more floors"
   check "$(prompts_with '^- This is for OUTDOORS and other buildings\.')" "11" "…and says the network equipment is for outdoors"
   check "$(grep -c -- '— Starlink router: Wi-Fi inside the building' "$(prompt_for 'The WiFi does not reach the upper floors of my house.')")" "2" \
@@ -240,12 +240,21 @@ if v45; then
   check "$(count "$S" 'REFUSED')" "0" "two of one Starlink router is a permitted total now"
   check "$(count "$S" 'TOTAL: UGX 870,000')" "1" "…and the customer receives it"
   check "$(count "$S" 'Starlink router')" "1" "…read as naming a Starlink router"
-  check "$(has "$OUT" '1 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
+# 5.18.46: a wrong total written without commas, and an unfilled slot — both as the live model wrote them on 27 Sep
+S="$(section "$OUT" 'How do I get the WiFi to my other building')"
+S2="$(section "$OUT" 'About 50 people at a time')"
+if v46; then
+  check "$(count "$S" 'the price check REFUSED the reply (foreign:amount)')" "1" "a wrong total written without commas is refused, as the live guard now does"
+  check "$(count "$S" 'refused      amounts it could not match to the price list: 881500')" "1" "…and the check names it as it was written"
+  check "$(count "$S2" 'the price check REFUSED the reply (placeholder)')" "1" "a reply with an unfilled slot is refused"
+  check "$(count "$S2" 'refused      it left a template slot unfilled, such as [total]')" "1" "…and the check says why"
+  check "$(count "$S2" 'the draft    Here is your setup:')" "1" "…and shows the draft"
+  check "$(has "$OUT" '3 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
 else
-  check "$(prompts_with 'MORE FLOORS OR ROOMS|This is for OUTDOORS|— Starlink router:')" "0" "no prompt has anything 5.18.45 adds"
-  check "$(count "$S" 'the price check REFUSED the reply')" "1" "two of one Starlink router is refused, as on the live path today"
-  check "$(count "$S" 'refused      amounts it could not match to the price list: 870,000')" "1" "…and the check names the amount"
-  check "$(has "$OUT" '2 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
+  check "$(count "$S" 'REFUSED')" "0" "control: 5.18.45 lets a wrong total written without commas through — the hole"
+  check "$(count "$S" 'TOTAL: 881500 UGX')" "1" "…and the customer would receive it"
+  check "$(count "$S2" '[Sum of setup costs]')" "1" "control: 5.18.45 sends the unfilled slot"
+  check "$(has "$OUT" '1 refused by the price check; 1 with the Business-plan note added')" "yes" "the closing tally matches"
 fi
 check "$(printf '%s' "$OUT" | grep -cE "$CANARIES")" "0" "nothing secret or personal is printed in --ask either"
 
@@ -311,7 +320,13 @@ PY
              [ "$(count "$s" 'the price check REFUSED the reply')" = "1" ] && [ "$(count "$s" 'refused      amounts')" = "0" ] && caught=yes ;;
     routers) [ "$(count "$o" 'ACCESSORIES (optional extras)')" = "1" ] && [ "$(count "$o" '← Starlink router')" = "0" ] && caught=yes ;;
     bizok)   [ "$(printf '%s' "$o" | grep -c '^  BUSINESS_PLANS ')" = "1" ] && [ "$(count "$o" 'the approved fact')" = "0" ] && caught=yes ;;
-    biznot)  [ "$(printf '%s' "$o" | grep -c '^  BUSINESS_PLANS ')" = "1" ] && [ "$(count "$o" 'NOT the approved fact')" = "0" ] && caught=yes ;;
+    plainref) s="$(section "$o" 'How do I get the WiFi to my other building')"
+             [ "$(count "$s" 'AI replies')" = "1" ] && [ "$(count "$s" 'REFUSED')" = "0" ] && caught=yes ;;
+    slotwhy) s="$(section "$o" 'About 50 people at a time')"
+             [ "$(count "$s" 'REFUSED the reply (placeholder)')" = "1" ] && [ "$(count "$s" 'template slot')" = "0" ] && caught=yes ;;
+    plainamt) s="$(section "$o" 'How do I get the WiFi to my other building')"
+             [ "$(count "$s" 'REFUSED the reply (foreign:amount)')" = "1" ] && [ "$(count "$s" 'could not match to the price list: 881500')" = "0" ] && caught=yes ;;
+    poline)  [ "$(count "$o" 'HARDWARE (one-time)')" = "1" ] && [ "$(count "$o" 'the price check also')" = "0" ] && caught=yes ;;
   esac
   check "$caught" "yes" "caught: $1"
   rm -rf "$SB/m"; rm -rf "$DATA"; cp -a "$SB/data.pristine" "$DATA"
@@ -328,12 +343,14 @@ mutant "the time window ignored" "AND m.sent_at >= datetime('now', ?) ORDER BY=>
   mutant "the worker's price check reached without its settings" "if (method_exists('AiReplyWorker', 'permittedAmounts')) {=>if (false) {" "--ask" total
   mutant "the worker's price check replaced by an empty list" "AiReplyWorker::permittedAmounts(\$ctx, \$prompt, \$config);=>array_slice(AiReplyWorker::permittedAmounts(\$ctx, \$prompt, \$config), 0, 0);" "--ask" home
   mutant "the report's network list not split out" "[\$kit, \$netRows] = NetworkEquipment::split(\$root, \$hw);=>[\$kit, \$netRows] = [\$hw, []];" "" netlist
-mutant "a refused reply's amounts not shown" "if ((array)\$g['categories'] === ['foreign:amount']) \$refused = =>if (false) \$refused = " "--ask" amounts
-if v45; then
-  mutant "the Starlink routers not listed" "\$routers = NetworkEquipment::starlinkRouters(\$root, \$acc);=>\$routers = [];" "" routers
-  mutant "the approved Business fact not recognised" "} elseif (preg_match('/priority/i', \$both) && preg_match('/\\b1\\s*Mbps/i', \$both)) {=>} elseif (false) {" "" bizok
-else
-  mutant "the contradicting Business claim not reported" "if (preg_match('/standard data continues|behaves like standard data|then unlimited standard data/i', \$both)) {=>if (false) {" "" biznot
+mutant "a refused reply's amounts not shown" "if (\$gc !== [] && array_diff(\$gc, ['foreign:amount', 'placeholder']) === []) {=>if (false) {" "--ask" amounts
+mutant "the Starlink routers not listed" "\$routers = NetworkEquipment::starlinkRouters(\$root, \$acc);=>\$routers = [];" "" routers
+mutant "the approved Business fact not recognised" "} elseif (preg_match('/priority/i', \$both) && preg_match('/\\b1\\s*Mbps/i', \$both)) {=>} elseif (false) {" "" bizok
+if v46; then
+  mutant "the guard judged without the install's options" "\$guardOpts = method_exists('ReplyPrivacyGuard', 'optionsFor') ? ReplyPrivacyGuard::optionsFor(\$config) : [];=>\$guardOpts = [];" "--ask" plainref
+  mutant "a refused slot not explained" "if (!empty(\$refused['placeholder'])) echo=>if (false) echo" "--ask" slotwhy
+  mutant "an amount written without commas not named" "? ReplyPrivacyGuard::amountsIn(\$raw, !empty(\$guardOpts['plain_amounts']))=>? ReplyPrivacyGuard::amountsIn(\$raw, false)" "--ask" plainamt
+  mutant "the report silent about the added checks" "if (!empty(\$po['plain_amounts'])) {=>if (false) {" "" poline
 fi
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"

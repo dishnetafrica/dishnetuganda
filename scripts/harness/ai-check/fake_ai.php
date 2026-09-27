@@ -22,6 +22,10 @@ if (stripos($last, 'unlimited business plans') !== false) {
     $reply = "For the two upper floors: 2 × Router Mini — UGX 435,000 each = UGX 870,000\nTOTAL: UGX 870,000\nThe site survey confirms how many routers are needed and where they go.";   // two of one Starlink router: refused by 5.18.44, a permitted total since 5.18.45
 } elseif (stripos($last, 'installed at my home') !== false) {
     $reply = "Starlink Standard Kit — UGX 2,649,000\nProfessional Installation — UGX 150,000\nTOTAL TO GET CONNECTED: UGX 2,799,000\nThen Residential (up to 400 Mbps) at UGX 329,000 a month.";   // a total the price check allows
+} elseif (stripos($last, 'other building') !== false) {
+    $reply = "To reach your other building:\n- MikroTik Router — price 380000 UGX\n- Outdoor Access Point — price 450000 UGX\nTOTAL: 881500 UGX\nThe site survey confirms the rest.";   // a wrong total, written without commas as the live model wrote B1 and B2 on 27 Sep: read and refused since 5.18.46
+} elseif (stripos($last, '50 people') !== false) {
+    $reply = "Here is your setup:\n- Starlink Standard Kit — UGX 2,649,000\n- Outdoor Access Point — UGX 450,000\nTOTAL FOR SETUP: [Sum of setup costs]\nThen Residential (up to 400 Mbps) at UGX 329,000 a month.";   // an unfilled slot, as the live model wrote A1 on 27 Sep: refused since 5.18.46
 } elseif (stripos($last, 'Business 500') !== false) {
     $reply = 'Business 500GB is UGX 285,000 a month. The 500 GB is priority data; after it the line drops to about 1 Mbps. For a busy site the Residential (up to 400 Mbps) plan at UGX 329,000 is the better fit.';
 } else {
