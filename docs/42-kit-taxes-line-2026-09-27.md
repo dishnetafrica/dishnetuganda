@@ -2,8 +2,9 @@
 
 27 September 2026.
 
-- **Plugin 5.18.48** — the taxes line under a kit price. Built and rehearsed, **not yet deployed**. It includes
-  5.18.47, the total check (docs/41 §9), which was never deployed on its own. The command is in §5.
+- **Plugin 5.18.48** — the taxes line under a kit price, with 5.18.47's total check (docs/41 §9). **Deployed by
+  the operator at 11:49 UTC and PASSED** (§8). The line was seen on a live reply, and the total check refused a
+  wrong total the model wrote.
 - **The quotation PDF** says the same once staff load the new Uganda quotation template into uCRM (§4). The deploy
   cannot do that part.
 
@@ -252,3 +253,63 @@ Then send back **the log file** from `/root/dnb-5.18.48/`, not a copy of the ter
 - **Noticed while testing, not changed:** `tests/test_customer_pwa.php` leaves its `php -S` server running after
   every suite run. It starts the server through a shell, and `proc_terminate` stops only the shell. Harmless on the
   server (the suite does not run there); in a test sandbox, stop stray servers before trusting a result.
+
+## 8. The 5.18.48 deploy — 27 September 2026, 11:49 UTC
+
+**PASSED: 43 ok, 0 failed, 2 notes.** `65b1ace` over `a9b46fb` (5.18.47 was never deployed on its own; it went live
+here).
+
+- **A.** The backup, as at 08:59:
+  - `plugin.sqlite3`, 22 MB: `VACUUM INTO` as `1000:1000`, integrity ok, 224 tables, the same sha256 on both sides;
+  - no `dishnet.sqlite` on this install;
+  - the data directory without the live databases, 98 MB, and the plugin's `data` folder, 108 KB;
+  - UISP health recorded; `GO`.
+  - **Note 1:** tar exited 1 — a file in the data directory changed while it was read, as a live log does. The
+    databases were copied separately and checked, so nothing is lost by it.
+- **B.** The container serves `65b1ace`.
+- **V.** All `ok`, and no fatal error in the container log since 11:49:37 UTC.
+- **Q.** The installed webhook still carries the 5.18.46 quotation summary.
+- **AI.** Every line `ok`, the two new ones among them: the report names the approved wording, and *"the taxes line
+  was added under 1 of the replies"*. Eleven model calls: *"1 refused by the price check · 1 with the Business-plan
+  note added · 1 with the kit tax note added"*.
+  - **Note 2:** the one refusal, B1 below — a correct one.
+- **F.** The summary quotes the approved sentence as the line in force.
+
+The operator pasted the terminal. This command prints no secret; the log file is still the thing to send.
+
+### 8.1 The eleven replies
+
+| Question | Reply |
+|---|---|
+| A1 "a WiFi business in my trading centre" | Residential, unlimited; the kit, installation and network equipment; offers a design — no price yet |
+| A1 "50 people, unlimited, which package?" | Residential, unlimited; offers the equipment details — no price |
+| A2 "unlimited business plans?" | none; a Business plan is a block of priority data, then about 1 Mbps — the approved fact |
+| A3 "How much is Business 500?" | 285,000, and the Business-plan note appended |
+| A4 "sell internet around my shop" | the higher-capacity Residential plan; a kit and a network; asks the area |
+| B1 "cover 200 m around my hotspot" | the five items, then **"TOTAL: 1,996,500" — wrong: they add up to 1,897,500. Refused** (`total:mismatch`): the customer would have had the fallback and a person, not a total 99,000 too high. Handed over with the reason "reason" (P9, still open) |
+| B1 "two access points and the MikroTik" | 2 × 700,000 = 1,400,000, with the MikroTik **2,100,000** — right, sent |
+| B2 "WiFi to my other building" | the five items at their prices, no total (it depends on the cable); the survey |
+| B3 "price of the access point and MikroTik" | 700,000 and 700,000 — right |
+| B4 "3 floors; the upper floors have no WiFi" | 2 × Router 3 at 827000 = 1654000, installation 150000, **TOTAL 1804000** — adds up, sent; offered only Router 3 and did not ask which kit |
+| C1 "installed at my home" | Mini Kit 2,249,000 + installation 150,000 = **2,399,000**, then both Residential plans — right, **and it ends with the taxes line** |
+
+**The taxes line, live.** C1 as a customer would receive it ends:
+
+```
+Let me know if you need any extra information!
+
+The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing is added on top.
+```
+
+**The total check, live.** B1 is the first wrong total the model wrote that 5.18.47 has refused on the server: the
+same shape as the two A1 replies docs/41 §8.2 explained, and this time the customer would not have received it.
+
+**Past conversations** (section 4 of the check). The two replies saying the plans are "not unlimited" are from
+25 Sep 21:03 and 27 Sep 05:33 UTC, both before 5.18.44 went live at 06:14 UTC (docs/40 §13). Every reply since
+names Residential as unlimited.
+
+### 8.2 Still to do
+
+- **The quotation template in uCRM** (§4): not yet loaded. Step 1 first — look at the newest quotation's PDF.
+- **The quotation summary of 5.18.46 and the new clause 2** are both proved by the next real quotation with a kit.
+- **P9** — a hand-over whose reason reads "reason" — was seen again on B1. P8 and P9 still await approval.

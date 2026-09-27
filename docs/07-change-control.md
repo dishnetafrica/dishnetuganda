@@ -1763,3 +1763,12 @@ is your own wording or switched off; a failure with the hardware module off) and
 it. Rehearsed in `scripts/harness/deploy-5.18.48/rehearse.sh`: **146/146 on two consecutive runs**. Its first run
 caught the summary claiming the sentence while the line was switched off; the summary now states what the report
 found, and a weakened copy that quotes it regardless is caught. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 11:49 UTC by the operator: PASSED, 43 ok / 0 failed / 2 notes** (docs/42 §8). 5.18.47 went
+live with it. Stage AI saw both:
+- C1, a home quote with the Mini Kit, ends with the taxes line;
+- B1 wrote "TOTAL: 1,996,500" over lines that add up to 1,897,500, and was refused — the customer would have
+  had a person, not a total 99,000 too high.
+
+The notes: tar read a changing log file (the databases are copied separately), and that one refusal.
+**The quotation template is not yet loaded in uCRM** (docs/42 §4).
