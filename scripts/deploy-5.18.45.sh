@@ -28,6 +28,11 @@
 # (scripts/deploy-hybrid.sh), stage K, stage V over the PUBLIC address and over :8443 — which ROLLS BACK BY
 # ITSELF if the public address were ever redirected — and stage AI.
 #
+# The first run, at 07:00:32 UTC on 27 Sep, stopped in stage A — "backup of …-data failed", NO-GO, nothing changed.
+# tar cannot copy a database while it is being written, and its words were thrown away. The backup now copies the
+# plugin's two databases with SQLite's VACUUM INTO, checks each copy, tars the rest without them, and prints what
+# tar says whenever it exits non-zero (docs/40 §15.1). Nothing else in this script changed; the pin is the same.
+#
 # Run as root on the server, then send back THE LOG FILE (never a copy of the terminal):
 #
 #   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
@@ -40,8 +45,9 @@
 #
 # What it never does: touch a configuration value, a customer, the webhook key, Traefik, UISP or the website,
 # or any knowledge row but BUSINESS_PLANS. The writes are the documented deploy, a backup under
-# /root/dnb-5.18.45/, that one row (stage K) — and, only if stage V finds the public address redirecting, the
-# documented rollback. Stage AI spends eleven model calls on the configured provider (a few cents) and sends nothing.
+# /root/dnb-5.18.45/ (its database copies pass through the container's /tmp and are removed there at once), that
+# one row (stage K) — and, only if stage V finds the public address redirecting, the documented rollback. Stage AI
+# spends eleven model calls on the configured provider (a few cents) and sends nothing.
 #
 # Stages:  A before-evidence + backup → GO/NO-GO   B the documented deploy   K the knowledge row
 #          V the public pages, the :8443 door and the loop check   AI the assistant, asked   F summary
@@ -126,6 +132,7 @@ if [ -z "$PDD_IN" ]; then
   else PDD_IN="$IN_CONTAINER/data"; fi
 fi
 DATA_HOST="$MOUNT${PDD_IN#/data}"
+[ -d "$DATA_HOST" ] || DATA_HOST="$PDD_IN"   # a data directory outside /data is the same path on both sides (the rehearsal's sandbox)
 echo "  data dir        $PDD_IN (container)  =  $DATA_HOST (host)"
 
 # The public address, by the plugin's own rule: crm_public_url (config.json) → pluginPublicUrl → ucrmPublicUrl.
@@ -170,15 +177,82 @@ rollback() {   # the documented rollback, executed only when stage V finds the p
 BK=""
 if [ "$AFTER_ONLY" = "0" ]; then
   BK="$OUT/backup-$TS"; mkdir -p "$BK"; chmod 700 "$BK"
+  # The live databases first, each copied as of one moment. tar cannot copy a file that is being written: this
+  # script's first run (27 Sep 2026, 07:00:32 UTC) stopped here with "backup of …-data failed" and nothing more,
+  # because tar's own words were thrown away. GNU tar exits 1, "file changed as we read it", when a file grows
+  # while it reads it — the rehearsal reproduces exactly that line — and at the top of the hour the plugin's jobs
+  # are writing. So SQLite makes the copy itself (VACUUM INTO, one read transaction) inside the container, as the
+  # database's owner (the journey audit's rule: no -wal or -shm file changes hands); the copy is checked with
+  # integrity_check and its sha256 compared on both sides, and the temporary file is removed. tar then takes the
+  # rest of the directory without the live database files, and says why whenever it exits non-zero.
+  SNAP_DBS="plugin.sqlite3 dishnet.sqlite"       # the plugin's two live databases (main.php, post_sync.php)
+  SNAP_TMP="${DNB_SNAPSHOT_TMP:-/tmp}"           # inside the container, as the plugin's own backups use it
+  mask() { sed -E 's/[0-9]{4,}/####/g; s/[^[:space:]/@]+@[^[:space:]/]+/…@…/g'; }
+  SNAPSHOT_PHP="$(cat <<'PHP'
+$src = $argv[1]; $tmp = $argv[2];
+if (file_exists($tmp)) { fwrite(STDERR, "a file is already at the temporary path\n"); exit(4); }
+register_shutdown_function(function () use ($tmp) { @unlink($tmp); });
+try {
+    $o = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 30];
+    $db = new PDO("sqlite:" . $src, null, null, $o);
+    $v = (string)$db->query("SELECT sqlite_version()")->fetchColumn();
+    $db->exec("VACUUM INTO " . $db->quote($tmp));
+    $db = null;
+    $c = new PDO("sqlite:" . $tmp, null, null, $o);
+    $ic = $c->query("PRAGMA integrity_check")->fetchAll(PDO::FETCH_COLUMN);
+    $t = (int)$c->query("SELECT count(*) FROM sqlite_master WHERE type = 'table'")->fetchColumn();
+    $c = null;
+    if ($ic !== ["ok"]) { fwrite(STDERR, "integrity_check of the copy: " . implode("; ", array_slice($ic, 0, 3)) . "\n"); exit(3); }
+    clearstatcache();
+    $n = filesize($tmp); $h = hash_file("sha256", $tmp);
+    $f = fopen($tmp, "rb"); $w = fopen("php://stdout", "wb");
+    $sent = stream_copy_to_stream($f, $w); fclose($f); fclose($w);
+    if ($sent !== $n) { fwrite(STDERR, "sent $sent of $n bytes\n"); exit(5); }
+    fwrite(STDERR, "SNAPSHOT $n $h $t $v\n");
+} catch (Throwable $e) { fwrite(STDERR, get_class($e) . ": " . $e->getMessage() . "\n"); exit(2); }
+PHP
+)"
+  for db in $SNAP_DBS; do
+    src="$PDD_IN/$db"
+    if ! docker exec "$CONTAINER" test -f "$src" 2>/dev/null; then echo "  …     $db is not in the data directory — nothing to copy"; continue; fi
+    owner="$(docker exec "$CONTAINER" stat -c '%u:%g' "$src" 2>/dev/null || true)"
+    if [ -z "$owner" ]; then bad "backup of $db failed: could not read who owns it"; continue; fi
+    docker exec -u "$owner" "$CONTAINER" php -d display_errors=stderr -r "$SNAPSHOT_PHP" "$src" "$SNAP_TMP/dnb-backup-$TS-$db" \
+      > "$BK/$db" 2> "$BK/$db.err"; rc=$?
+    docker exec -u "$owner" "$CONTAINER" rm -f "$SNAP_TMP/dnb-backup-$TS-$db" 2>/dev/null || true
+    set -- $(grep '^SNAPSHOT ' "$BK/$db.err" | tail -1)   # SNAPSHOT <bytes> <sha256> <tables> <sqlite version>
+    got_n="$(stat -c %s "$BK/$db" 2>/dev/null || echo 0)"; got_h="$(sha256sum "$BK/$db" 2>/dev/null | cut -c1-64)"
+    if [ "$rc" = "0" ] && [ "${1:-}" = "SNAPSHOT" ] && [ "$got_n" = "${2:-}" ] && [ "$got_h" = "${3:-}" ]; then
+      ok "backed up $db → $BK/$db ($(du -h "$BK/$db" | cut -f1)) — one consistent copy (VACUUM INTO as $owner, SQLite ${5:-?}), integrity ok, ${4:-?} tables, the same sha256 on both sides"
+    elif [ "$rc" = "0" ] && [ "${1:-}" = "SNAPSHOT" ]; then
+      bad "backup of $db failed: the copy that arrived is not the copy checked ($got_n of ${2:-?} bytes; sha256 differs)"
+    else
+      bad "backup of $db failed (exit $rc): $(grep -v '^SNAPSHOT ' "$BK/$db.err" | grep -v '^$' | head -2 | tr '\n' ' ' | mask | cut -c1-240)"
+    fi
+    set --
+  done
   DONE_DIRS=""
   for d in "$DATA_HOST" "$DEST/data" "$MOUNT/ucrm/data/plugins/.$PLUGIN-data"; do
     [ -d "$d" ] || continue
     case " $DONE_DIRS " in *" $d "*) continue;; esac; DONE_DIRS="$DONE_DIRS $d"
     n="$(basename "$d" | tr -c 'A-Za-z0-9._\n-' '_')"; [ -n "$n" ] || n="data-$(date -u +%s)"
     [ -e "$BK/$n.tar.gz" ] && n="$n-$(date -u +%H%M%S)"
-    if tar -C "$(dirname "$d")" -czf "$BK/$n.tar.gz" "$(basename "$d")" 2>/dev/null; then
-      ok "backed up $d → $BK/$n.tar.gz ($(du -h "$BK/$n.tar.gz" | cut -f1))"
-    else bad "backup of $d failed"; fi
+    ex=(); why=""
+    if [ "$d" -ef "$DATA_HOST" ]; then   # the data directory: its live databases were copied above
+      for db in $SNAP_DBS; do for s in "" -wal -shm -journal; do ex+=("--exclude=$(basename "$d")/$db$s"); done; done
+      why=" — without the live databases, copied above"
+    fi
+    tar -C "$(dirname "$d")" ${ex[@]+"${ex[@]}"} -czf "$BK/$n.tar.gz" "$(basename "$d")" 2> "$BK/$n.tar.err"; rc=$?
+    if [ "$rc" -le 1 ] && tar -tzf "$BK/$n.tar.gz" >/dev/null 2>&1; then
+      ok "backed up $d → $BK/$n.tar.gz ($(du -h "$BK/$n.tar.gz" | cut -f1))$why"
+      # Exit 1 is GNU tar's "some files differ": a file changed, shrank or went away while it was read. The archive
+      # is complete and readable (checked just above); those files are in it as tar found them.
+      [ "$rc" = "1" ] && { note "while tar read $d, $(grep -c . "$BK/$n.tar.err") file(s) changed or went away (tar exit 1: logs and the like, archived as tar found them). It said:"
+        grep . "$BK/$n.tar.err" | head -5 | mask | cut -c1-200 | sed 's/^/          /'; }
+    else
+      bad "backup of $d failed (tar exit $rc$([ "$rc" -le 1 ] && printf '; the archive it wrote cannot be read back')). It said:"
+      grep . "$BK/$n.tar.err" | head -5 | mask | cut -c1-200 | sed 's/^/          /'
+    fi
   done
   cp "$DEST/.deployed-commit" "$BK/deployed-commit.before" 2>/dev/null || true
   chmod -R go-rwx "$BK"
