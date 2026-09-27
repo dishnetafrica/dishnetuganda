@@ -11,6 +11,9 @@ says so. The deploy command and what to send back are in §12.
 indoor coverage, and settled which of two approved texts was right about Business data. **5.18.45** was built from
 both (§14); its deploy is §15.
 
+**27 September, 07:00 UTC:** the 5.18.45 deploy stopped at its own backup, before changing anything, and
+5.18.44 stays live. The deploy script was fixed and rehearsed (§15.1); the command is the same.
+
 ## 1. The request
 
 > "Also some customer asked about buisness they want to run in that case they need unlimited data plans not
@@ -609,7 +612,14 @@ This is built in 5.18.45 (§14.1).
 
    Send back **the log file**.
 2. **What the log should show:**
-   - **A:** `plugin commit 0850e59 (expected 0850e59)`, and the live commit `a4abe5e`, which is the rollback commit.
+   - **A:**
+     - `plugin commit 0850e59 (expected 0850e59)`, and the live commit `a4abe5e`, which is the rollback commit;
+     - `ok backed up plugin.sqlite3 …` and `ok backed up dishnet.sqlite …`, each `one consistent copy (VACUUM INTO …),
+       integrity ok`;
+     - `ok backed up …/.dishnet-hybrid-sudan-data … without the live databases`, and the plugin's `data` folder;
+     - possibly `note while tar read … It said:` with tar's own words. That is logs being written, and it is not
+       a failure;
+     - `GO`.
    - **K:** `ok K BUSINESS_PLANS now reads the 5.18.45 wording…`, then `ok K a second dry run has nothing left to do`.
    - **V:** as on 27 Sep, all `ok`.
    - **AI:**
@@ -619,3 +629,70 @@ This is built in 5.18.45 (§14.1).
      - the eleven replies, for reading. **B4** is the new one.
    - **F:** `5.18.45: PASSED`.
 3. **Running it again is safe.** Once the container serves the pinned commit, the deploy is skipped.
+
+### 15.1 The first run stopped at the backup — 27 September, 07:00:32 UTC
+
+**What the log said.** Stage A showed:
+- the plugin commit `0850e59`, as expected, and the live commit `a4abe5e`;
+- `FAIL backup of /home/unms/data/ucrm/ucrm/data/plugins/.dishnet-hybrid-sudan-data failed`;
+- `ok backed up …/dishnet-hybrid-sudan/data → …/data.tar.gz (88K)`;
+- the UISP health recorded;
+- `STOP: NO-GO: the backup did not complete`.
+
+**Nothing was deployed, and 5.18.44 stays live.** The operator pasted the terminal. This script prints no secret, so
+that did no harm; the log file is still the thing to send.
+
+**Why — most likely, not proven.** The script threw tar's own words away (`2>/dev/null`), so the log cannot say.
+- The same backup passed at 06:14 for 5.18.44.
+- GNU tar exits 1, *"file changed as we read it"*, when a file grows while it reads it. The rehearsal reproduces
+  exactly that.
+- The data directory holds the plugin's two live databases (`plugin.sqlite3`, `dishnet.sqlite`) and its logs. They
+  are written all the time, and most at the top of the hour. This run started 32 seconds past 07:00.
+
+In that case the archive tar writes is complete, but a copy of a SQLite file taken while it is written can be torn.
+**Such a copy is not a backup to rely on**, so treating exit 1 as a failure was not wrong. What was missing was a
+way to copy a live database.
+
+**What changed — the script only.** The plugin, the pin `0850e59` and every other stage are unchanged.
+1. `plugin.sqlite3` and `dishnet.sqlite` are each copied inside the container by SQLite itself (`VACUUM INTO`, one
+   read transaction), so the copy is the database as of one moment.
+   - It runs as the database's owner, so no `-wal` or `-shm` file changes hands.
+   - The copy is checked with `integrity_check`, and its sha256 is compared on both sides.
+   - The temporary file in the container's `/tmp` is removed.
+2. tar archives the rest of the data directory **without** the live database files and their `-wal`, `-shm` and
+   `-journal`. A database one level down (for example in `backups/`) stays in.
+3. tar exit 1 becomes a **note**, once the archive reads back, with tar's own words. Runs of four or more digits
+   are masked, because file names can carry phone numbers. Exit 2 or more, or an archive that cannot be read back,
+   is a **FAIL** with tar's words — and NO-GO, as before.
+
+**Proof.** `scripts/harness/deploy-5.18.45/rehearse.sh` now gives **108/108 on two consecutive runs** (it was 53).
+It runs in deploy mode while both databases get a row every 2 ms and a log gets a line every 2 ms.
+- **Control:** the script as the operator ran it (`4fe4cb7`) stops exactly as it did live — FAIL on the data
+  directory, NO-GO, nothing said about why. Bare tar exits 1 with *"file changed as we read it"*.
+- **The fixed script:**
+  - both copies are `ok`, and pass `integrity_check` again outside the container;
+  - the copy holds every knowledge row, and the rows written up to one moment — fewer than were written by the end;
+  - the directory is archived without the live databases, and with the copy one level down;
+  - tar's line is shown with the phone-length number masked;
+  - `GO`, then stage B stops, since no terminal can type DEPLOY. Nothing is deployed, no knowledge row is written,
+    and no temporary copy is left behind.
+- **Four real failures each stop it NO-GO, with the reason:**
+  - a database that is not a database (SQLite's words);
+  - tar exit 2 (tar's words);
+  - an archive that cannot be read back;
+  - a copy changed on its way out with its size intact — only the sha256 tells.
+- **Seven weakened copies are each caught:**
+  - the live databases archived as well;
+  - the copies made as root;
+  - tar's words thrown away;
+  - a failed copy only noted;
+  - tar exit 2 accepted;
+  - the archive not read back;
+  - the sha256 not compared.
+- **Not exercised:** the integrity check of the copy. No way was found to make `VACUUM INTO` produce a copy that
+  fails it, so it stays as a second check behind the sha256.
+
+**The first run's leftover.** `/root/dnb-5.18.45/backup-20260927T070032Z/` holds that run's partial backup. It can be
+kept or deleted; nothing reads it.
+
+**Next:** the same command as in item 1, run again.

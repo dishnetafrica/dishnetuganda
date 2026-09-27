@@ -1608,3 +1608,16 @@ missed an access point that its own listing showed. Fixed in deploy-5.18.45.sh.
 **Deploy.** `scripts/deploy-5.18.45.sh`, pinned to the plugin commit. Stage K corrects BUSINESS_PLANS, stage V as
 5.18.44, and stage AI asks the eleven questions with the race-free matcher. Rehearsed in
 `scripts/harness/deploy-5.18.45/rehearse.sh`: **53/53 on two consecutive runs**; six weakened copies each fail, including the matcher turned back into a pipe (the first run's one miss was the harness's detector, which still read "ten"). **Not deployed by this session.**
+
+**First run — 27 Sep 2026, 07:00:32 UTC: NO-GO at the backup, nothing changed; 5.18.44 stays live.** The tar of
+the plugin's data directory failed, and the script threw tar's words away. Most likely: *"file changed as we
+read it"* on the live databases and logs.
+
+The script now:
+- copies `plugin.sqlite3` and `dishnet.sqlite` with `VACUUM INTO`, as their owner, integrity-checked, with the
+  sha256 compared on both sides;
+- archives the rest without them;
+- treats tar exit 1 as a note with tar's words, and anything worse as a FAIL.
+
+Same pin, same command. Rehearsal **108/108 on two consecutive runs**: the old script as the control, four real
+failures, and seven weakened copies caught (docs/40 §15.1).
