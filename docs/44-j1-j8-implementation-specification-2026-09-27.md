@@ -9,7 +9,7 @@ any code. **Coding waits for your approval of it.** J9–J16 are out of scope.
 - docs/43, the read-only audit, and its §11: the production facts measured 27 September at 15:54 UTC.
 - The plugin as installed: **5.18.49, commit `e076632`**. Every file and line below is from that commit. This
   branch has not changed a plugin file since (`git diff e076632 HEAD -- dishnet-hybrid-sudan` is empty).
-- The read-only uCRM users check in §13, **to run now**.
+- The read-only uCRM users check in §13, run by the operator on 27 September at 16:37 UTC (§13.1).
 
 **The goal, in your words.** A reliable Uganda workflow where an authorised manager can assign a real uCRM job to
 the correct technician, the technician receives exactly one WhatsApp, and the job can then be safely managed in My
@@ -325,7 +325,7 @@ which is exactly what works today.
 | Path | Where | What it does on Uganda |
 |---|---|---|
 | **A** dispatch cron | `cron/job_assignment_notify.php`, off (`cron/master.php:166-169`) | nothing, and **stays off** |
-| **B** uCRM `job.add` | `webhook.php:2371-2488` | Looks for a phone on the uCRM user record, which has **no phone field** (measured). The fallback at `:2418` is broken. **Never sends** |
+| **B** uCRM `job.add` | `webhook.php:2371-2488` | Looks for a phone on the uCRM user record, which has **no phone field** (measured). Its lookup address, `users/{id}`, answers 404 even for the real user 1000 (measured, §13.1). The fallback at `:2418` is broken. **Never sends** |
 | **C** My Jobs → ＋ New Job | `includes/api/api_scheduling.php:555-661` | Sends at once to the staff row's number, if "Notify via WhatsApp" is ticked |
 | **D** Bulk Dispatch | `api_scheduling.php:898-1062` | Sends at once |
 | Reschedule | `api_scheduling.php:663-700` | Messages **whoever pressed the button** |
@@ -604,8 +604,8 @@ never sends on Uganda (measured), so there are still no duplicates.
 - **What is not changed:** My Jobs' own display converts in the phone's browser (`tabs/support/scheduling.php:191,
   592, 711`), which is already right on a Kampala phone.
 - **South Sudan: the `.000Z` strings unchanged.**
-- **uCRM's own screen** shows the time in uCRM's configured zone. The users check (§13, section 4) reads the offset
-  uCRM writes. If it is +0300, uCRM's screen shows Kampala time too.
+- **uCRM's own screen** shows the time in uCRM's configured zone. **Measured: uCRM writes +0300** (§13.1), so its
+  screen shows Kampala time too.
 
 ### 6.3 Changes
 
@@ -730,8 +730,8 @@ The previous release.
   - Tying a receipt to its message would need Evolution's message id stored on each Message Log row: a column, and
     a second schema change.
   - Capturing them without that evidence would be inventing a delivery status, which you ruled out.
-  - The users check (§13, section 6) measures whether receipts are even subscribed on each number. They can be a
-    later, separate change once one real event's shape is recorded.
+  - **Measured: receipts are subscribed on all three numbers** (§13.1). They reach the plugin today and are
+    dropped. Capturing them can be a later, separate change, once one real event's shape is recorded.
 - **South Sudan: unchanged.**
 
 ### 8.3 Changes
@@ -795,8 +795,8 @@ The previous release.
 
 - **The AI worker checks again** before doing anything (`workers/AiReplyWorker.php:92`). An event queued before the
   deploy, or by any other route, is dropped with a log line.
-- **The follow-up engine** never follows up a `staff` conversation (`lib/FollowUpPolicy.php:391`). It is off by
-  default; the users check reports whether it is on here.
+- **The follow-up engine** never follows up a `staff` conversation (`lib/FollowUpPolicy.php:391`). **It is on
+  here** (measured, §13.1), so this is needed, not a precaution.
 
 **Edge cases:**
 
@@ -947,7 +947,7 @@ The previous release. Conversations keep the `staff` label, which the old releas
 
 | Step | What | Who | Sends anything? |
 |---|---|---|---|
-| 0 | **The read-only uCRM users check** (§13) | you, one command | no |
+| 0 | **The read-only uCRM users check** (§13) — **done**, 27 Sep 16:37 UTC (§13.1) | you, one command | no |
 | 1 | **Release A — 5.18.50**: J1, J2, J3, J5, J6, J7 (display), J8 | the pinned deploy command | no — nothing new is sent |
 | 2 | **Create a uCRM user for each technician** in UISP/uCRM, with the same e-mail as their staff account (docs/43 §11.3). Retailers: none | you | no |
 | 3 | **Link each staff account** with the J2 picker: S1 → 1000, then each technician. **Give S1 a number** | you, on the Staff page | no |
@@ -987,7 +987,7 @@ On your own number, with **no customer on the job** and a neutral title (`TEST i
 
 | Id | What | How | Blocks |
 |---|---|---|---|
-| V1 | Uganda's uCRM users: ids, active, phones; what `users/{id}` answers for a real id | §13, now | nothing: it confirms §3 and §5.3 |
+| V1 | Uganda's uCRM users: ids, active, phones; what `users/{id}` answers for a real id | **done**, 27 Sep 16:37 UTC (§13.1) | nothing: it confirms §3 and §5.3 |
 | V2 | uCRM sends `job.edit` and `job.delete` to the plugin | §12.3 step 2–3 | reassignment made **in uCRM's screen**. Plugin-side changes do not depend on it |
 | V3 | uCRM accepts `…T09:00:00+0300` | §12.3 step 1 | J5 |
 | V4 | uCRM's single-job answer carries `assignedUserId`, as its list answer does | §12.3 step 1 | J4, J6. Both treat a missing value as "assigned to no one" |
@@ -1004,7 +1004,7 @@ Nothing is ever migrated in uCRM, and no setting is changed by any step.
 
 ---
 
-## 13. The read-only uCRM users check — please run it now
+## 13. The read-only uCRM users check — ran 27 September 16:37 UTC
 
 **What it answers.** You asked for the actual Uganda staff-user ids, and whether their uCRM records hold phone
 numbers, before any code. The facts command already measured the list: one user, 1000, no phone field. This check
@@ -1061,6 +1061,46 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dn
 Then send back **the log file** from `/root/dnb-jobs/`, not a copy of the terminal. The `git pull` updates only
 this checkout of the repository; the installed plugin is not touched.
 
+### 13.1 Result — 27 September 16:37 UTC
+
+Run by the operator on the server, from checkout `2d1da64`, against the installed plugin 5.18.49 (`e076632`). **It
+ran to its end: 3 ok, 0 failed, 5 notes.** Nothing was created, sent or changed.
+
+| Question | Measured |
+|---|---|
+| Profile and zone | **uganda**, selected by the currency UGX (no `tenant_profile` setting). Africa/Kampala, from the `timezone` setting |
+| uCRM staff users | **One**: id 1000, active, linked to a UISP user, with the same e-mail as S1, the admin account |
+| A phone in uCRM's user records | **None**, in the list record or in the detail record. `users/admins/1000` adds no field |
+| What path B's lookup, `users/{id}`, answers for the real user 1000 | **404.** Path B fails at its first step even for a real user, before the missing phone field and the broken fallback are reached |
+| What a verified picker would propose | S1 → 1000, by e-mail. S2–S5: no uCRM user has their e-mail |
+| Stored ids that are real uCRM users | **0 of 4** (1, 4, 81, 1581) |
+| E-mails shared by two accounts | None, among staff accounts or uCRM users |
+| The other uCRM-id settings | `bidal_ucrm_user_id` and `accountant_ucrm_user_id` are both unset |
+| uCRM's own offset | **+0300** on a client, an invoice and a payment: uCRM keeps Kampala's clock |
+| Follow-up engine | **On** |
+| WhatsApp webhooks | All three numbers point at the plugin and subscribe to `MESSAGES_UPSERT`, `MESSAGES_UPDATE` and `CONNECTION_UPDATE` |
+
+### 13.2 What it confirms, and what it sharpens
+
+- **J2 stands as specified.** Today the picker would offer exactly one uCRM user, 1000, and propose it for S1. The
+  technicians need a uCRM user each first (§12.1, step 2).
+- **J4 stands, with one more reason.** Path B's lookup address answers 404 even for a real user. So no uCRM user
+  record could ever give a number, and the staff account is the only source (§5.3).
+- **J5 is confirmed.** uCRM writes +0300. Once J5 sends Kampala's offset, uCRM's own Scheduling screen shows the
+  hour that was typed. V3, uCRM accepting +0300 on a new job, still waits for the first real job.
+- **J7: the receipts already reach the plugin and are dropped.** `MESSAGES_UPDATE` is subscribed on all three
+  numbers, so Evolution is sending delivery and read receipts today, and step 5 of `evo_webhook.php` discards them
+  (§8.1). Capturing them stays outside J1–J8 until one real event's field names are recorded (V5). The subscription
+  is no longer in question.
+- **J8's follow-up exclusion (8.4) is needed, not a precaution.** The follow-up engine is on, so a staff
+  conversation can be picked up for a follow-up today.
+  - **Not measured:** whether a follow-up was ever drafted for, or sent to, a staff number. `followup_auto_send`
+    was not read.
+  - J8 stops it either way.
+- **A second-site KYC job is created unassigned** on Uganda: both settings are unset and no support leader holds a
+  uCRM id. Under J4 nobody is messaged until someone assigns it in uCRM; then the assignee gets one message. Nothing
+  more is needed.
+
 ---
 
 ## 14. Not in J1–J8, noted on the way
@@ -1084,5 +1124,5 @@ this checkout of the repository; the installed plugin is not touched.
 
 ---
 
-**Nothing will be coded until you approve this specification and answer D1–D8.** Meanwhile, please run the §13
-check and send back its log file.
+**Nothing will be coded until you approve this specification and answer D1–D8.** The §13 check has run; its
+result is in §13.1.

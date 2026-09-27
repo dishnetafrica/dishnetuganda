@@ -1896,3 +1896,15 @@ mask proved with a control on the control.
 
 **Next.** The operator runs the users check and sends back its log file (docs/44 §13), and answers D1–D8. **Nothing
 is coded until the operator approves docs/44.**
+
+**Result of the uCRM users check, 27 Sep 16:37 UTC** (docs/44 §13.1). It ran to its end: 3 ok, 0 failed, 5
+notes; nothing was changed. Measured:
+- Uganda's uCRM has **one staff user, 1000**, active and UISP-linked, with the admin account's e-mail. There is
+  **no phone field** in its list or detail record.
+- **`users/{id}` answers 404 even for 1000**, so path B fails at its first step.
+- A verified picker would propose **S1 → 1000**. S2–S5 have no uCRM user, and **0 of 4** stored ids are real.
+- **uCRM writes +0300**: its screen keeps Kampala's clock.
+- **The follow-up engine is on**, so J8's follow-up exclusion is needed.
+- **Delivery receipts are subscribed on all three WhatsApp numbers**; the plugin drops them today.
+
+The specification stands as written. Nothing is coded until the operator approves docs/44 and answers D1–D8.

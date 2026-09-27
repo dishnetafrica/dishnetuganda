@@ -813,6 +813,8 @@ Staff appear as S1–S5, the same five accounts as on the screenshot:
    - uCRM user records have no phone field, and the fallback is broken (§5.1).
    - So J4's rule, that the number comes from the staff account, is not one option among several. It is the only way
      a job made in uCRM can reach anyone.
+   - The uCRM users check at 16:37 UTC adds: path B's lookup address, `users/{id}`, answers 404 even for the real
+     user 1000 (docs/44 §13.1).
 4. **The job system has never run on Uganda.**
    - Zero jobs, zero job messages and zero job webhooks.
    - Nothing has to be migrated or cleaned up for J1–J8.
