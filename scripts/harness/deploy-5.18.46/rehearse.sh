@@ -156,7 +156,9 @@ check "$(fails_outside_v "$OUT")" "0" "no FAIL outside stage V (V answers a stan
 check "$(printf '%s' "$OUT" | grep -cE '^  note  ')" "1" "and no other note"
 check "$(rows)" "$B" "no knowledge row is written — there is no stage K"
 check "$(grep -c 'seed_knowledge.php' "$SB/docker.log")" "0" "the knowledge tool is never run"
-check "$(has "$OUT" '5.18.46: PASSED')" "yes" "the summary says PASSED"
+NV="$(printf '%s' "$OUT" | grep -cE '^  FAIL  V[0-9]')"
+check "$(printf '%s' "$OUT" | sed -nE 's/^  checks +[0-9]+ ok, ([0-9]+) failed, ([0-9]+) notes$/\1 \2/p')" "$NV 1" \
+  "the summary counts exactly stage V's failures ($NV, the stand-in's) and the one note — on the server, where V passes, it reads PASSED"
 
 echo "== 2. a person's wording: BUSINESS_PLANS edited by a person and still saying 5.18.44's claim; MANY_USERS_HOTSPOT drifted =="
 seed_db admin old drift; B="$(rows)"; OUT="$(run)"
