@@ -4,6 +4,10 @@
 configured. On 27 September you approved J1–J8 for **planning** (docs/43 §9.2), and asked for this document before
 any code. **Coding waits for your approval of it.** J9–J16 are out of scope.
 
+> **Update, 27 September: release A (5.18.50) is built, tested and rehearsed — and not deployed.** §1–§15 remain the
+> specification and the decisions as recorded; **§16 is the build report**, awaiting your review. Production still
+> runs 5.18.49 (`e076632`).
+
 **Sources.**
 
 - docs/43, the read-only audit, and its §11: the production facts measured 27 September at 15:54 UTC.
@@ -1402,3 +1406,302 @@ Only the assignee, a support leader or an admin may call them. What they write i
 
 **Your decisions are recorded (§15.6, §15.9). Release A is being built and will not be deployed without your
 explicit approval of its build report. Release B is BLOCKED (§15.8).** The §13 check has run; its result is in §13.1.
+
+---
+
+## 16. Release A (5.18.50) — build report, 27 September
+
+**Built, tested and rehearsed. Not deployed.** Production still runs 5.18.49 (`e076632`) and nothing on the server was
+touched. The deploy waits for your review of this report and your explicit approval. **Release B stays BLOCKED**
+(§15.8).
+
+| | |
+|---|---|
+| Plugin commit (what the deploy records) | **`125fa0c`** — 38 files against `e076632`: 20 changed, 18 added, 0 removed; +3,647 / −29 lines |
+| Version | 5.18.50 |
+| Deploy command | `scripts/deploy-5.18.50.sh`, pinned to `125fa0c`; refuses any other build, and any server not running `e076632` |
+| Rollback | the same script with `--rollback` (back to `e076632`), or the documented `git checkout e076632 && bash scripts/deploy-hybrid.sh` |
+| ZIP | none: this plugin has always been deployed from the pinned commit by `deploy-hybrid.sh` (the ZIPs of 5.18.42–5.18.49 were uCRM templates) |
+
+### 16.1 What was built — Uganda only
+
+Every Uganda line sits behind one switch, `lib/StaffJobsGate.php`, which is true only where the tenant profile reads
+Uganda, and false on anything unclear. Its false branch is the 5.18.49 code, verbatim.
+
+| Item | On Uganda, after the deploy | Files |
+|---|---|---|
+| **J1** | The South Sudan staff lists no longer touch a Uganda account: not on a page load, not on a version change, not through Clear Cache, auto-map or the old id setter | `public.php`, `includes/api/api_scheduling.php`, `tabs/support/scheduling.php` |
+| **J2 + D9 + M7** | The Staff page's uCRM picker lists only real uCRM users, and saves a link only after checking on the server: the user exists, is active, is not linked to another active account, the account takes jobs, and the e-mail is the same (D9). **Only a link saved this way counts** for My Jobs, job detail, every job action, ＋ New Job and Bulk Dispatch. `ftth_crm_client_id` and an id stored the old way match nobody. The "CRM LINKED" / "⚠ No CRM link" badges are replaced (D6) | `lib/StaffLink.php`, `lib/UcrmUsers.php`, `lib/StaffDirectory.php`, `tabs/admin/retailers.php`, `includes/post/post_sync.php`, `includes/api/api_scheduling.php`, `includes/api/api_support.php`, `tabs/support/scheduling.php`, `tabs/support/bulk_dispatch.php` |
+| **J3** | A job-taking account's phone is saved in the international form; every staff number is *read* that way; nothing stored is rewritten | `includes/post/post_sync.php`, `includes/post/post_admin.php`, `lib/StaffDirectory.php`, `tabs/admin/retailers.php` |
+| **J5** | ＋ New Job, Bulk Dispatch and Reschedule send Kampala time to uCRM (`…T09:00:00+0300`) | `lib/JobTime.php`, `includes/api/api_scheduling.php` |
+| **J6 + D7** | Only the verified assignee, a support leader or an admin may act on a job; a job whose assignee cannot be read is left to a leader or an admin; the caller is re-read on every action, so an account deactivated or demoted mid-session is refused at once; `support_engineer` may create jobs | `lib/JobAccess.php`, `includes/api/api_scheduling.php`, `includes/api/api_crm_misc.php`, `includes/api/api_support.php` |
+| **M6** | **No job-assignment WhatsApp.** ＋ New Job, Bulk Dispatch, Reschedule and uCRM's `job.add` send none. The New Job box is hidden and the screen says *"No WhatsApp message is sent for jobs yet"*; New Job, Bulk Dispatch and Reschedule answer *"No WhatsApp was sent: job notifications are not switched on yet. The engineer sees the job in My Jobs."*; the webhook log says *"WhatsApp skipped: job notifications are not switched on yet"*. Accept, task-progress, completion and invoice-request messages are unchanged | `includes/api/api_scheduling.php`, `webhook.php`, `tabs/support/scheduling.php`, `tabs/support/bulk_dispatch.php` |
+| **J7 (display)** | WA Events says "Sent (handed to WhatsApp)", never "Delivered", and explains that delivery is not measured; its menu badge counts what was sent and what failed (it read keys the log never writes); the Message Log says what "sent" means and counts an opted-out message as suppressed, not failed; a job message skipped by M6 is filed Skipped | `tabs/engage/failed_queue.php`, `tabs/engage/whatsapp.php`, `includes/navigation.php` |
+| **J8 + M1** | A WhatsApp message from an active staff number (whole number, staff roles only) is not answered by the AI as a customer's; no follow-up is opened for it, and one already open is closed at the scan, the run or the send | `lib/ColleagueNumbers.php`, `evo_webhook.php`, `workers/AiReplyWorker.php`, `lib/FollowUpPolicy.php`, `cron/followup_scan.php`, `cron/followup_run.php`, `cron/followup_send.php` |
+
+`manifest.json` says 5.18.50. The other 11 added files are tests and their fixtures.
+
+### 16.2 Test counts — exact
+
+**Full plugin suite (`tests/run.sh`), twice, on the final tree (`125fa0c`), South Sudan regression tests included:**
+
+| Run | Files | Assertions passed | Failed | Exit | Duration |
+|---|---|---|---|---|---|
+| 1 | 223 | 10,422 | **0** | 0 | 994 s |
+| 2 | 223 | 10,422 | **0** | 0 | 1,006 s |
+
+**The eight new suites** (in both runs), each with weakened copies of the code that must make it fail:
+
+| Suite | What it proves | Assertions | Weakened copies caught |
+|---|---|---|---|
+| `test_staff_jobs_gate.php` | the switch: Uganda by setting or by UGX, false on anything unclear, every call passes the data directory | 41 | 7 of 7 |
+| `test_ucrm_link.php` | the picker, the server-side checks (existence, active, one account per user, role, same e-mail), J3's phone rule | 78 | 8 of 8 |
+| `test_job_time.php` | J5: Kampala time out, Kampala time shown | 34 | 5 of 5 |
+| `test_job_access.php` | J2/M7/J6: My Jobs, detail, every action, by role; stale and FTTH ids match nobody; a deactivated or demoted session is refused | 83 | 12 of 12 |
+| `test_job_notifications_off.php` | M6: the four paths send nothing, say so, write nothing to the Message Log; the seven other messages are byte-identical to 5.18.49 | 47 | 7 of 7 |
+| `test_staff_whatsapp.php` | J8/M1: staff numbers not answered, not followed up; open follow-ups closed; South Sudan unchanged | 50 | 10 of 10 |
+| `test_job_status_truth.php` | J7: "sent", not "delivered"; suppressed and skipped counted | 23 | 5 of 5 |
+| `test_staff_jobs_south_sudan.php` | **South Sudan byte for byte**: the same day on 5.18.49 (from Git) and on this tree — every answer, WhatsApp text, uCRM request, the Message Log, the webhook log, the e-mail, two forms and seven whole pages | 37 | 5 of 5 |
+| **Total** | | **393** | **59 of 59** |
+
+**Failures found, and what they were.** The first full run (before this report's runs) failed **8** assertions in
+two suites. **Both were defects of the new test code; no product line changed to fix them:**
+
+1. `test_timezone.php` (an existing guard: *no executable line pins a timezone*) caught my scenario fixture, which
+   named `Africa/Kampala`. The guard exempts `test_*` files only. The zone now comes from the two test files that call
+   the fixture — and South Sudan's runs now use **`Africa/Juba`**, which makes the South Sudan comparison stronger (a
+   Kampala clock leaking into that path would now show).
+2. `test_staff_jobs_south_sudan.php` failed on 7 pages: each tree prints its own version label (`v5.18.49` /
+   `v5.18.50`), three times per page, after the version bump. The comparison now replaces exactly `v` + each tree's
+   own manifest version; a new control proves the label is found three times on each Staff page and nothing else is
+   normalised.
+
+**Also checked:** the 37 changed PHP files use no syntax or function newer than PHP 8.0 (a token scan, with a control
+that catches 7 planted post-8.0 features). The server's own PHP checks them again before a byte is copied (§16.5, A2).
+
+### 16.3 Your checks (4) and (5)
+
+- **The four Uganda job-assignment paths are off** — `test_job_notifications_off.php`, the same day run on 5.18.49
+  and on 5.18.50: on 5.18.49 the four assignment messages go out (the control); on 5.18.50, **none reaches WhatsApp and
+  none is in the Message Log**; New Job, Bulk Dispatch and Reschedule answer `whatsapp: not_sent` with the note; the
+  webhook logs the skip; the New Job answer no longer claims "notified".
+- **Messages that are not job assignments are unchanged** — the other **seven** WhatsApp texts of the day are the
+  same text to the same number in the same order as 5.18.49: accepted, to the engineer and to the support leader; a
+  task done; all tasks done; completed, to the engineer and to the admin; the invoice request, to the accountant. The
+  Message Log rows match event for event, the customer's "installation scheduled" e-mail byte for byte, the webhook
+  log line for line (the skip line apart); uCRM receives the same writes in the same order (the J5 dates apart).
+- **The checked picker** — `test_ucrm_link.php`: only real, active uCRM users are offered; a save is refused, with
+  its reason, for a missing user, an inactive one, one already linked to another active account, a role that takes
+  no jobs, or a different e-mail; the old value is kept.
+- **Role permissions** — `test_job_access.php`: the matrix of admin, support leader, support, support engineer,
+  accountant, field accountant, sales/retailer, field agent and collection agent over list, detail, create, the
+  engineer lists and every job action; each refusal changes nothing in uCRM (non-GET count and four local tables
+  compared before and after).
+- **Staff-link validation and the removed fallback** — the same suite: an account whose `ucrm_user_id` was stored
+  without a verified link, one whose link e-mail no longer matches, and one with only `ftth_crm_client_id` all
+  **see no job and may act on none**, although the job is assigned to that very id. **S3's and S5's stale ids** are
+  exactly this case: they match nobody, now or when uCRM later hands the number to a new user (your advisor's note).
+
+**What the tests do not prove.** They run against a fake uCRM and a fake WhatsApp gateway. **No test is proof that
+WhatsApp delivers**; release A sends nothing new, and the live test of release B is a gate of its own (§12.3).
+
+### 16.4 Scope — what changed and what did not
+
+**Changed:** the 38 files in §16.1. **Not changed — by construction, and checked:**
+- **Billing, invoices, payments, customer records and their workflows.** No changed file is under billing, invoice,
+  payment, wallet, KYC, portal, cashbook, ledger, quotation, DPO, EFRIS or dunning code. Four files mix concerns and
+  were read hunk by hunk: `public.php` (only the J1 gate), `webhook.php` (only the `job.add` block), `api_crm_misc.php`
+  (only the job guard in front of the survey, signature and comment actions; what they write is unchanged),
+  `post_admin.php` (only J3's phone note).
+- **Excluded as you instructed:** 1.8–1.10 (organisation-7 client creation, the wallet top-up path, its message) and
+  5.3 (the second-site KYC job's time). J3's save rule covers job-taking roles only; J8 covers staff roles only.
+- **Found, reported, not changed** (they touch customer records): `update_client_gps` skips its job check for an
+  account with no uCRM link; `save_job_signature` logs to the customer named in the request; the app API's job
+  check-in and check-out have no assignee check (reachability unmeasured). Each can be proposed separately.
+- **South Sudan:** unchanged, byte for byte (§16.2).
+- **Scope changes against the approval:** none in the product. The two test-code fixes of §16.2 are the only
+  changes made after the first full run.
+
+### 16.5 Deployment, rollback and backup — rehearsed, not run
+
+**Rehearsal** — `scripts/harness/deploy-5.18.50/rehearse.sh`, twice, on the committed script and harness (`e83f62a`):
+**99 passed, 0 failed** and **99 passed, 0 failed**, 35 runs of the script each. It runs the real script, the real `deploy-hybrid.sh` and the real `git checkout` in a clone of the repository, against a sandbox
+container holding 5.18.49 exactly, Uganda selected as on the server (UGX in the vault, no `tenant_profile`), and
+stand-ins for the public address and the `:8443` door. DEPLOY and ROLLBACK are typed through a terminal. It covers:
+- **NO-GO before anything changes:** the tenant reads South Sudan; only one configuration source reads Uganda; the
+  server runs another build; an edited checkout; a database copy that arrives changed; anything but `DEPLOY`;
+- **the server's PHP rejecting a changed file:** NO-GO before the backup; a rejected *test* file is a note only;
+- **the deploy:** PASSED, six backups (two databases, the data directory, the plugin's `data/`, the installed plugin,
+  the configuration vault), every one of the 38 files installed as `125fa0c` has it, no data or setting changed, and
+  the log carries no staff name, e-mail or number;
+- **later runs:** an accept message since the deploy is counted, a job-assignment message fails R4 by name; a link
+  saved through the picker is a note, not a failure; a changed file, a tenant no longer Uganda, a fatal in the log —
+  each caught;
+- **the rollback:** PASSED; the 20 changed files back exactly as `e076632` has them; the 18 new files left in place and
+  inert; the checkout returned to the branch; no data changed; a second `--rollback` says there is nothing to do;
+- **forward again**, **back by the printed one-line command**, and **forward with a staff account edited during the
+  deploy** (R3 fails, naming only the account id);
+- **stage V finds the public address redirecting:** it rolls back by itself;
+- **12 weakened copies of the script**, each caught.
+
+**Rehearsal failures on the way — all in the harness, none in the deploy script:**
+1. The first attempt passed 93 of 99: **6 weakened copies never ran**, because the harness handed `--script` to the
+   real script after another option, which the real script refused as unknown. Fixed in the harness, which now also
+   fails any weakened copy that did not run. All 12 are caught since.
+2. The first evidence pair gave 99/99 and **98/99**: the one failure was the last check, *this checkout was never
+   touched*, which saw this report being written in the checkout while the run went on. The check now compares the
+   checkout before and after the run (commit `e83f62a`); the two runs above were made on that commit without
+   touching the checkout.
+
+**The commands, for when you approve** (as root; send back the **log files**, never a copy of the terminal):
+
+0. D8, your own setting (optional, approved): make the switch independent of the currency —
+
+   ```
+   docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key tenant_profile --value uganda
+   ```
+1. The read-only users check (§13), before:
+
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-jobs && bash scripts/dnb-ucrm-users-facts.sh 2>&1 | tee /root/dnb-jobs/ucrm-users-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+2. **Backup and deploy** — the script takes the backup itself, prints GO, and deploys only when you type `DEPLOY`.
+   **A backup alone:** the same command, answering anything else — the backup is taken, nothing is deployed
+   (rehearsed):
+
+   ```
+   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-5.18.50 && bash scripts/deploy-5.18.50.sh 2>&1 | tee /root/dnb-5.18.50/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+3. **Rollback**, if ever needed — the same backup first, then 5.18.49, when you type `ROLLBACK`:
+
+   ```
+   cd /opt/dishnet && mkdir -p /root/dnb-5.18.50 && bash scripts/deploy-5.18.50.sh --rollback 2>&1 | tee /root/dnb-5.18.50/rollback-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   By hand, if the script cannot run: `cd /opt/dishnet && git checkout e076632 && bash scripts/deploy-hybrid.sh && git checkout -`
+4. **Later**, to re-measure since the deploy (no job-assignment message, staff accounts):
+
+   ```
+   cd /opt/dishnet && bash scripts/deploy-5.18.50.sh --after-only 2>&1 | tee /root/dnb-5.18.50/after-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+
+**What the deploy checks** — stage A: the checkout is the pinned build, clean, and holds `e076632`; the server runs
+`e076632`; **the installed plugin reads Uganda from both configuration sources** (NO-GO otherwise); **the server's own
+PHP accepts every changed file** (NO-GO otherwise); the staff accounts and the Message Log are marked. Then the
+backup, GO, `DEPLOY`. Stage V: the public pages and the `:8443` door as every deploy since 5.18.42 checks them, and
+no fatal in the container log. Stage R: every changed file installed as `125fa0c` has it; the switch reads Uganda from
+both sources; no staff account changed during the deploy; no job-assignment message since; the cron's `job_assign`
+entry still off; the screens say no message is sent; how many accounts that take jobs hold a verified link. **Every
+read opens the database read-only, as its owner. It changes no setting, no staff account and no job, and sends
+nothing.**
+
+### 16.6 Deployment risks
+
+1. **My Jobs is empty for every technician until their link is saved (M7, by design).** No account can hold a
+   verified link before the deploy: the picker is new. After the deploy, S4 sees no job until an admin saves S4 → 1099
+   through the picker; S1 → 1000 likewise. A leader's or an admin's all-jobs view is unaffected. The deploy log's R7
+   line counts it.
+2. **V3 is not measured: uCRM has never been sent `+0300`.** J5 sends `2026-10-06T09:00:00+0300` where 5.18.49 sent
+   the typed hour as UTC (`…T09:00:00.000Z`, which is 12:00 in Kampala) or, from Reschedule, with no zone at all.
+   The offset form is ISO 8601 and the fake uCRM accepts it, but the real one has not been asked. **If uCRM refused it, ＋ New Job, Bulk Dispatch and Reschedule would fail on Uganda with
+   uCRM's error shown**, and nothing half-written. M4 (approved, after release A) measures it with one internal job;
+   the rollback is the remedy if it fails.
+3. **A rollback re-arms the South Sudan lists.** On 5.18.49 the next Staff page load rewrites the ids they name
+   (S1 → 1, S5 → 1581), which breaks a link saved for those accounts; after deploying again, save those links again.
+   Job-assignment messages come back with 5.18.49 (M6 is undone).
+4. **Your own number counts as staff under J8** once your account holds it: the AI will not answer it as a
+   customer, and no follow-up opens for it. Testing the customer assistant needs a number that is not a staff
+   account's.
+5. **The server's PHP version is not measured.** The static scan found nothing newer than PHP 8.0, and stage A2
+   refuses to deploy if the server's PHP rejects any changed file.
+6. **Stage V4 watches the container log for 60 seconds.** The staff pages are exercised only when staff use them.
+7. **The first page load after the deploy empties the jobs cache**, as on every version change; My Jobs refills
+   from uCRM.
+8. **After a rollback the 18 new files stay on disk** (`deploy-hybrid.sh` never deletes); the rehearsal proves no
+   5.18.49 file loads them.
+9. **The all-jobs list** (`scheduling_jobs_all` in `api_crm_misc.php`, leaders and admins) still checks the
+   session's cached record: a leader demoted mid-session keeps that read-only list until the session ends. Every job action re-reads the
+   caller (J6/D7).
+10. **Not known, as before (§15.5):** whether uCRM itself e-mails an assigned user, and whether another system
+    subscribed to uCRM's webhooks reacts to a job.
+
+### 16.7 Release B — the five messages for D5 (for approval; nothing built)
+
+Release B is **BLOCKED** (§15.8). For D5 you asked to see the exact messages first. Proposed, built only from
+uCRM's job and the staff directory; made-up people; Kampala time; a job with no time says "📅 Not scheduled yet":
+
+**1. A new assignment** (to the technician given the job — also the new technician of a reassignment):
+```
+Hi *Grace*,
+
+🔧 *New job for you*
+
+*Starlink installation — Test Client*
+📍 Plot 1 Test Road, Kampala
+📅 *Tue 06 Oct* at *09:00*
+
+Open *My Jobs → Job #950* for the details and the tasks.
+
+— DishNet Africa
+```
+
+**2. A reassignment** (to the technician who no longer has it, D3):
+```
+Hi *Peter*,
+
+↩️ *Job #950 is no longer assigned to you*
+
+*Starlink installation — Test Client*
+📅 Tue 06 Oct at 09:00
+It has been given to a colleague. Please do not go.
+
+— DishNet Africa
+```
+
+**3. A new time** (to the technician who has it):
+```
+Hi *Grace*,
+
+📅 *Job #950 has a new time*
+
+*Starlink installation — Test Client*
+Now: *Wed 07 Oct* at *11:00*
+Was: Tue 06 Oct at 09:00
+
+— DishNet Africa
+```
+
+**4. A removal** (the job stays, with nobody assigned, D3):
+```
+Hi *Grace*,
+
+↩️ *Job #950 is no longer assigned to you*
+
+*Starlink installation — Test Client*
+📅 Tue 06 Oct at 09:00
+Please do not go.
+
+— DishNet Africa
+```
+
+**5. A deletion** (the job is deleted in uCRM, D3):
+```
+Hi *Grace*,
+
+❌ *Job #950 has been cancelled*
+
+*Starlink installation — Test Client*
+📅 was Tue 06 Oct at 09:00
+Please do not go.
+
+— DishNet Africa
+```
+
+Open for release B's build: whether uCRM's deletion notice still carries the title and time (V2). If it does not,
+message 5 takes them from the plugin's own record of the job.
+
+### 16.8 What happens next
+
+1. **You review this report.** Nothing is deployed until you approve it explicitly.
+2. On approval, the order is §15.7's: D8 (optional), the users check, the deploy, then the links (S1 → 1000,
+   S4 → 1099; S3's and S5's ids cleared, M5) and the users check again; then M4.
+3. Release B only after D5 and the rest of §15.8, on your separate approval.

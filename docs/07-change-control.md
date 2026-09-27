@@ -1991,3 +1991,40 @@ Consequences for release A:
 
 **Next.** Build release A (5.18.50), run the full suite twice with zero failures, rehearse the deployment and the
 rollback, and stop before deployment for the operator's review of the build report. Release B stays BLOCKED.
+
+## 5.18.50 — Release A of J1–J8: staff and jobs follow Uganda's rules (docs/44 §16) — built, NOT deployed
+
+**Why.** The operator approved release A on 27 Sep with M6 (no job-assignment WhatsApp on Uganda), M7 (only a
+picker-verified uCRM link counts for jobs), the J2 correction and a strict exclusion of billing, invoices, payments,
+customer records and their workflows (docs/44 §15.9). Release A was to be built, tested twice, its deployment and
+rollback rehearsed, and **not deployed** until the build report is reviewed.
+
+**What.** Uganda only, behind one switch (`lib/StaffJobsGate.php`); South Sudan byte-identical. Plugin commit
+**`125fa0c`**: 38 files against 5.18.49 (`e076632`), 20 changed and 18 added.
+- **J1** the South Sudan staff lists never touch a Uganda account. **J2 + D9 + M7** the checked uCRM picker; only a
+  link saved through it counts for My Jobs, job detail, every job action, New Job and Bulk Dispatch — never
+  `ftth_crm_client_id`, never an old id (so S3's and S5's stale ids match nobody). **J3** job-taking accounts' phones
+  in the international form. **J5** Kampala time to uCRM from New Job, Bulk Dispatch and Reschedule. **J6 + D7** only
+  the verified assignee, a support leader or an admin acts on a job; the caller re-read on every action.
+- **M6** New Job, Bulk Dispatch, Reschedule and uCRM's `job.add` send no WhatsApp and say so; the box is hidden.
+  Accept, task-progress, completion and invoice-request messages unchanged.
+- **J7** "sent", never "delivered"; suppressed and skipped counted. **J8 + M1** a staff number is not answered by
+  the AI as a customer, and no follow-up is opened or sent for it.
+- **Not changed:** billing, invoices, payments, customer records; 1.8–1.10 and 5.3 left out as instructed.
+
+**Proof.**
+- Full suite, twice, on `125fa0c`: **223 files, 10,422 assertions passed, 0 failed, exit 0 — both runs**.
+- Eight new suites, **393 assertions, 59 weakened copies, all caught**; the South Sudan golden compares a whole
+  working day on 5.18.49 and on 5.18.50 — every answer, message, uCRM request and seven whole pages.
+- The first full run failed 8 assertions in two suites, both defects of the new test code (a zone named in a
+  fixture, which `test_timezone.php` forbids; the version label on every page after the bump). Fixed in the tests;
+  no product line changed.
+- The 37 changed PHP files use nothing newer than PHP 8.0 (a scan with a control of 7 planted features).
+
+**Deploy.** `scripts/deploy-5.18.50.sh`, pinned to `125fa0c`, only over `e076632`: backup first, a typed `DEPLOY`,
+NO-GO unless the installed plugin reads Uganda from both configuration sources and the server's own PHP accepts every
+changed file; afterwards every changed file, the switch, the staff accounts, the Message Log and the screens are
+checked. `--rollback` puts `e076632` back the same way. Rehearsed in `scripts/harness/deploy-5.18.50/rehearse.sh` —
+real `deploy-hybrid.sh` and real `git checkout` in a clone: **99/99 on two consecutive runs**, 12 weakened copies of the script each caught. Evidence in `docs/evidence/5.18.50/`.
+**Not deployed. Production still runs 5.18.49.** Release B stays BLOCKED; the five D5 messages are in docs/44 §16.7
+for approval.
