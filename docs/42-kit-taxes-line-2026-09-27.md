@@ -9,7 +9,8 @@
   cannot do that part.
 - **Plugin 5.18.49** — every Uganda quotation, with a kit or without, says *"All prices include all taxes — URA taxes
   and UCC charges are already in them. Nothing is added on top."*: on WhatsApp under the Total, and in the PDF's
-  clause 2 (§9). **Built and rehearsed; not yet deployed** (§10). Its template ZIP replaces §4's.
+  clause 2 (§9). **Deployed by the operator at 12:54 UTC and PASSED** (§11). Its template ZIP replaces §4's and is
+  not yet loaded in uCRM.
 
 **Uganda only.** Where the hardware module is off — South Sudan — nothing changes, and that is measured (§2.4).
 
@@ -506,3 +507,71 @@ Then send back **the log file** from `/root/dnb-5.18.49/`, not a copy of the ter
   - a kit quote counted under one of those two, or the note that none quoted a kit price this time;
 - the summary: `quotations` quoting the sentence, `quotation PDF` naming the new ZIP, `price fact`;
 - the last line: `5.18.49: PASSED.`
+
+## 11. The 5.18.49 deploy — 27 September 2026, 12:54 UTC
+
+**PASSED: 47 ok, 0 failed, 1 note.** `e076632` over `65b1ace` (5.18.48).
+
+**First, the price fact (§10.1).** The tool read it back as set:
+`ai_fact_prices = All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on
+top.` The `[ConfigVault] restored after re-install: dpo_…, pdf_link_secret` line it also printed is the routine
+in-memory fill every settings load performs (docs/37 §I). It names keys only, shows no value, and changed nothing.
+
+- **A.** The backup:
+  - `plugin.sqlite3`, 22 MB: `VACUUM INTO` as `1000:1000`, SQLite 3.48.0, integrity ok, 224 tables, the same sha256
+    on both sides;
+  - the data directory without the live databases, 98 MB, and the plugin's `data` folder, 108 KB;
+  - UISP health recorded; `GO`.
+  - This time tar read every file without one changing under it, so there was no tar note.
+- **B.** The container serves `e076632`.
+- **V.** All `ok`, and no fatal error in the container log since 12:54:56 UTC.
+- **Q.** All four `ok`: 5.18.46's summary, and the three new checks — the installed sentence is yours, the webhook
+  puts it under the Total, and `QuotationService` does too.
+- **AI.** Every line `ok`, the new one among them: *"the assistant is told what the quotations say"*. Eleven model
+  calls: *"1 refused by the price check · 1 with the Business-plan note added · 1 with the kit tax note added · 0
+  already saying the taxes are included"*.
+  - **The note:** that one refusal, B1 below — a correct one.
+- **F.** The summary quotes the kit line, the quotations' line and the price fact as the report found them, and
+  names the new template ZIP.
+
+The operator pasted the terminal. This command prints no secret; the log file is still the thing to send.
+
+### 11.1 The eleven replies
+
+| Question | Reply |
+|---|---|
+| A1 "a WiFi business in my trading centre" | Residential, unlimited; offers to design the network and asks its size — no price yet |
+| A1 "50 people, unlimited, which package?" | Residential 329,000; five network items, **TOTAL 1,897,500** — adds up, sent |
+| A2 "unlimited business plans?" | none; a Business plan is a block of priority data, then about 1 Mbps — the approved fact |
+| A3 "How much is Business 500?" | 285,000, and the Business-plan note appended |
+| A4 "sell internet around my shop" | Residential 329,000, unlimited |
+| B1 "cover 200 m around my hotspot" | four items, then **"TOTAL for the setup: 1996500" over lines that add up to 1,797,500. Refused** (`total:mismatch`, and the unmatched amount): the customer would have had the fallback and a person |
+| B1 "two access points and the MikroTik" | 2 × 700,000 + 700,000 = **2,100,000** — right, sent. It ends: *"Your quotation confirms any regulatory charge and tax treatment."* (§11.2) |
+| B2 "WiFi to my other building" | four items, **TOTAL 1,797,500** — adds up, sent; offers a survey |
+| B3 "price of the access point and MikroTik" | 700,000 and 700,000 — right |
+| B4 "3 floors; the upper floors have no WiFi" | 3 × Router 3 at 827,000 = **2,481,000** — adds up, sent. But it first says one router for each floor beyond the main router's, which for three floors is two (§11.2) |
+| C1 "installed at my home" | Mini Kit 2,249,000 + installation 150,000 = **2,399,000**, then Residential 329,000 — right, **and it ends with the kit line** |
+
+The model did not repeat the price fact under the kit price this time, so the plugin added the kit line; §9.3's
+other path — the model saying it itself — is proved by the rehearsal and has not yet been seen live.
+
+### 11.2 Seen in the replies, not changed
+
+- **B1's second reply still hedges on tax.** With the price fact set, the assistant was told that all prices include
+  all taxes, yet it ended with *"Your quotation confirms any regulatory charge and tax treatment."* The prompt's TAX
+  rule tells it to say the quotation confirms the tax treatment whenever no tax *line* is in its data, and the
+  model followed that. It is not wrong —
+  the quotation now says all taxes are included — but it is not the plain statement the operator asked for.
+  **P12, proposed:** when the price fact is set, the TAX rule says to state it instead of deferring to the
+  quotation. That changes what the assistant tells customers, so it waits for approval.
+- **B4 over-counted the routers.** It said one router per floor beyond the main router's, then quoted three for three
+  floors. The price check judges amounts, not the count, and the total does add up. 5.18.48's run quoted two for the
+  same question. The site survey the reply offers is where the count is confirmed. No change proposed.
+
+### 11.3 Still to do
+
+- **The quotation template in uCRM** (§10.2): not yet loaded. Upload `template-quotation-uganda-all-taxes.zip` —
+  not the 27 Sep ZIP of §4.
+- **The next real quotation** proves the line under the Total on WhatsApp, and, once the template is loaded, clause
+  2 of its PDF.
+- **P12** above awaits approval; **P8** and **P9** still do.

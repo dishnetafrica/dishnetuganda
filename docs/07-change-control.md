@@ -1809,3 +1809,10 @@ charges"*. They then chose **"One sentence (Recommended)"** for every quotation,
 **Deploy.** `scripts/deploy-5.18.49.sh`, pinned to `e076632`. Stage Q reads the three installed files; stage AI
 reports the price fact (ok when it is the quotations' sentence, a note otherwise); the summary names the new ZIP.
 Rehearsed in `scripts/harness/deploy-5.18.49/rehearse.sh`: **187/187 on two consecutive runs**. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 12:54 UTC by the operator: PASSED, 47 ok / 0 failed / 1 note** (docs/42 §11). The price fact
+was set first, by the operator's own command, and stage AI read it as the quotations' sentence. Stage Q found the
+sentence in all three installed files. The note: B1 wrote a total 199,000 over its lines and was refused. C1, a home
+quote with the Mini Kit, ends with the kit line. Seen, not changed: B1's second reply still defers tax to the
+quotation (P12, proposed for approval), and B4 quoted three routers for three floors.
+**The quotation template is not yet loaded in uCRM** (docs/42 §10.2).
