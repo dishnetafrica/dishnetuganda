@@ -579,8 +579,8 @@ This is built in 5.18.45 (§14.1).
   - no router totals, more than five, and never with the kit;
   - BUSINESS_PLANS reverted, and its short form reverted.
 - The 5.18.44 suite is unchanged: 159.
-- The full suite: SUITE45.
-- `scripts/harness/deploy-5.18.45/rehearse.sh` runs the pinned deploy script against a sandbox container: HARNESS45.
+- The full suite: **210 suites, exit 0, twice; the 189 that print totals report 8,510 passed, 0 failed on both runs** (8,426 in 5.18.44, plus the new 84).
+- `scripts/harness/deploy-5.18.45/rehearse.sh` runs the pinned deploy script against a sandbox container: **53/53 on two consecutive runs**, over seven scenarios and the matcher test. Six weakened copies each fail, the matcher turned back into a pipe among them. Its first run found one fault, in the harness: the detector for "questions not asked, reported as asked" still looked for "ten".
   Its new matcher test tries the check 20 times on 1 MB of output: the here-string finds it 20 times out of 20,
   while the 5.18.44 pipe form, as the control, finds it 0 times.
 - `tests/conversation-suite.php` has two new live scenarios for the server: `ug_more_floors` must name a Starlink
@@ -609,7 +609,7 @@ This is built in 5.18.45 (§14.1).
 
    Send back **the log file**.
 2. **What the log should show:**
-   - **A:** the pinned plugin commit, and the live commit `a4abe5e`, which is the rollback commit.
+   - **A:** `plugin commit 0850e59 (expected 0850e59)`, and the live commit `a4abe5e`, which is the rollback commit.
    - **K:** `ok K BUSINESS_PLANS now reads the 5.18.45 wording…`, then `ok K a second dry run has nothing left to do`.
    - **V:** as on 27 Sep, all `ok`.
    - **AI:**

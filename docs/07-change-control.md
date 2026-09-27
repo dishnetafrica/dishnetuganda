@@ -1603,8 +1603,8 @@ missed an access point that its own listing showed. Fixed in deploy-5.18.45.sh.
 - South Sudan: all 50 fingerprints unchanged. Uganda with no Starlink router listed: 26 fingerprints byte-identical
   to 5.18.44 (a new golden from `a4abe5e`).
 - The check's rehearsal against 5.18.44 and 5.18.45: **230/230, twice**.
-- Suite: SUITE45.
+- Suite: **210 suites, exit 0, twice; the 189 that print totals report 8,510 passed, 0 failed on both runs** (8,426 in 5.18.44, plus the new 84).
 
 **Deploy.** `scripts/deploy-5.18.45.sh`, pinned to the plugin commit. Stage K corrects BUSINESS_PLANS, stage V as
 5.18.44, and stage AI asks the eleven questions with the race-free matcher. Rehearsed in
-`scripts/harness/deploy-5.18.45/rehearse.sh`: HARNESS45. **Not deployed by this session.**
+`scripts/harness/deploy-5.18.45/rehearse.sh`: **53/53 on two consecutive runs**; six weakened copies each fail, including the matcher turned back into a pipe (the first run's one miss was the harness's detector, which still read "ten"). **Not deployed by this session.**
