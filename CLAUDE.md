@@ -3378,3 +3378,9 @@ Not in production. Nothing is HARDWARE VERIFIED; F6-B stays NOT AUTHORIZED.
 
 Do not modify production FreeRADIUS, production databases, schema, privileges,
 deployment, or Domain A (Starlink) without explicit authorization.
+
+Never hand over a deploy command and its rollback in one copyable block, in the
+chat or in a document: pasted together, the shell runs both. On 27 September the
+5.18.50 rollback started as soon as its deploy ended, and only its typed
+`ROLLBACK` question stopped it (the repository-root
+`docs/44-j1-j8-implementation-specification-2026-09-27.md` §16.9).

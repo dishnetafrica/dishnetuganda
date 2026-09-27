@@ -1992,7 +1992,7 @@ Consequences for release A:
 **Next.** Build release A (5.18.50), run the full suite twice with zero failures, rehearse the deployment and the
 rollback, and stop before deployment for the operator's review of the build report. Release B stays BLOCKED.
 
-## 5.18.50 — Release A of J1–J8: staff and jobs follow Uganda's rules (docs/44 §16) — built, NOT deployed
+## 5.18.50 — Release A of J1–J8: staff and jobs follow Uganda's rules (docs/44 §16)
 
 **Why.** The operator approved release A on 27 Sep with M6 (no job-assignment WhatsApp on Uganda), M7 (only a
 picker-verified uCRM link counts for jobs), the J2 correction and a strict exclusion of billing, invoices, payments,
@@ -2026,5 +2026,17 @@ NO-GO unless the installed plugin reads Uganda from both configuration sources a
 changed file; afterwards every changed file, the switch, the staff accounts, the Message Log and the screens are
 checked. `--rollback` puts `e076632` back the same way. Rehearsed in `scripts/harness/deploy-5.18.50/rehearse.sh` —
 real `deploy-hybrid.sh` and real `git checkout` in a clone: **99/99 on two consecutive runs**, 12 weakened copies of the script each caught. Evidence in `docs/evidence/5.18.50/`.
-**Not deployed. Production still runs 5.18.49.** Release B stays BLOCKED; the five D5 messages are in docs/44 §16.7
+**Not deployed by this session.** Release B stays BLOCKED; the five D5 messages are in docs/44 §16.7
 for approval.
+
+**Deployed 27 Sep 2026 20:08 UTC by the operator: PASSED, 41 ok / 0 failed / 1 note** (docs/44 §16.9).
+- The server's PHP is **8.1.34**, and it accepted every changed file. The installed plugin reads Uganda from both
+  configuration sources, and every changed file is installed exactly as `125fa0c` has it.
+- No staff account changed. No Message Log row of any kind was written from the mark (#374) to 20:12.
+- The note: none of the 4 accounts that take jobs holds a verified link yet. My Jobs is empty for all four until
+  their links are saved.
+- **Two rollback runs followed**, at 20:09 and 20:12, because the chat handover put the deploy and rollback commands
+  in one copyable block. Both stopped at the typed question and changed nothing. From now on a rollback command
+  always stands in a block of its own.
+
+**Release B stays BLOCKED.**

@@ -1,7 +1,11 @@
 # 5.18.50 (release A) — evidence
 
 The build report is **docs/44 §16**. These files are what it rests on. Nothing here comes from the server: every run
-is local, against fakes. **Nothing was deployed.**
+is local, against fakes. Nothing had been deployed when they were made.
+
+**Since then:** the operator deployed 5.18.50 on 27 September at 20:08 UTC: **PASSED, 41 ok / 0 failed / 1 note**.
+That run is recorded in **docs/44 §16.9**. Its log files stay on the server, root only, in `/root/dnb-5.18.50/`: the
+deploy log, and the logs of two rollback runs that stopped at their question.
 
 | File | What it is |
 |---|---|

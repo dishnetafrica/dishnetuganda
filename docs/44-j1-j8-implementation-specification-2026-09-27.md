@@ -4,9 +4,10 @@
 configured. On 27 September you approved J1–J8 for **planning** (docs/43 §9.2), and asked for this document before
 any code. **Coding waits for your approval of it.** J9–J16 are out of scope.
 
-> **Update, 27 September: release A (5.18.50) is built, tested and rehearsed — and not deployed.** §1–§15 remain the
-> specification and the decisions as recorded; **§16 is the build report**, awaiting your review. Production still
-> runs 5.18.49 (`e076632`).
+> **Update, 27 September: release A (5.18.50) is deployed.** The operator deployed it at 20:08 UTC, and the deploy's
+> own checks PASSED: 41 ok, 0 failed, 1 note (§16.9). §1–§15 remain the specification and the decisions as recorded.
+> **§16 is the build report**, written before the deploy and kept as written; **§16.9 records the deploy.** Release B
+> stays BLOCKED (§15.8).
 
 **Sources.**
 
@@ -1411,6 +1412,9 @@ explicit approval of its build report. Release B is BLOCKED (§15.8).** The §13
 
 ## 16. Release A (5.18.50) — build report, 27 September
 
+> **Deployed 27 September at 20:08 UTC by the operator: PASSED, 41 ok / 0 failed / 1 note (§16.9).** The report below
+> is kept as it was written before the deploy.
+
 **Built, tested and rehearsed. Not deployed.** Production still runs 5.18.49 (`e076632`) and nothing on the server was
 touched. The deploy waits for your review of this report and your explicit approval. **Release B stays BLOCKED**
 (§15.8).
@@ -1612,7 +1616,8 @@ nothing.**
    customer, and no follow-up opens for it. Testing the customer assistant needs a number that is not a staff
    account's.
 5. **The server's PHP version is not measured.** The static scan found nothing newer than PHP 8.0, and stage A2
-   refuses to deploy if the server's PHP rejects any changed file.
+   refuses to deploy if the server's PHP rejects any changed file. **Measured at the deploy (§16.9): PHP 8.1.34.
+   It accepted all 26 changed files that run on the server and all 11 test files.**
 6. **Stage V4 watches the container log for 60 seconds.** The staff pages are exercised only when staff use them.
 7. **The first page load after the deploy empties the jobs cache**, as on every version change; My Jobs refills
    from uCRM.
@@ -1705,3 +1710,109 @@ message 5 takes them from the plugin's own record of the job.
 2. On approval, the order is §15.7's: D8 (optional), the users check, the deploy, then the links (S1 → 1000,
    S4 → 1099; S3's and S5's ids cleared, M5) and the users check again; then M4.
 3. Release B only after D5 and the rest of §15.8, on your separate approval.
+
+### 16.9 The deploy — 27 September 2026, 20:08 UTC
+
+**PASSED: 41 ok, 0 failed, 1 note.** `125fa0c` over `e076632` (5.18.49), deployed by the operator; `DEPLOY` was typed
+at 20:08:44 UTC. Recorded from the log files, which the operator printed on the server with
+`tail -n +1 /root/dnb-5.18.50/*.log`: `deploy-20260927T200815Z.log` and the two rollback logs below. They carry no
+name, e-mail, number or secret.
+
+- **A.** The checkout at `87ba12f` (plugin commit `125fa0c`, no tracked edits); 38 files against `e076632`: 20
+  changed, 18 added, 0 removed. The server ran `e076632`.
+  - **The server's PHP is 8.1.34.** It accepted all 26 changed files that run on the server and all 11 test files
+    (A2). Risk 5 is closed.
+  - The installed plugin read Uganda from both configuration sources (A1).
+  - The staff accounts (A3): 5 accounts, all active. Of the 4 active accounts that take jobs, all 4 hold a uCRM user
+    id stored the old way and none a verified link; none holds only an FTTH id. Digest `b315fd023593b6a2`.
+  - The Message Log (A4): 374 rows; the last is #374.
+- **The backup**, `/root/dnb-5.18.50/backup-20260927T200815Z`:
+  - `plugin.sqlite3`, 22 MB: `VACUUM INTO` as `1000:1000`, SQLite 3.48.0, integrity ok, 224 tables, the same sha256
+    on both sides. There is no `dishnet.sqlite` in the data directory;
+  - the data directory without the live databases, 99 MB, and the plugin's `data` folder, 120 KB;
+  - **the installed 5.18.49 itself**, `plugin-installed-5.18.49.tar.gz`, 10 MB: a restore that needs no Git;
+  - the configuration vault, 1,953 bytes, identical;
+  - UISP health recorded; no tar note; `GO`.
+- **B.** At `DEPLOY` the script read the Message Log's mark (#374) and the staff digest (unchanged) again and wrote
+  them to `state-5.18.50.env`. `deploy-hybrid.sh`: *"✓ container now serves 125fa0c"*.
+- **V.** All `ok`:
+  - the public sign-in page answers 200 with no redirect;
+  - the portal without a session answers 302, and its Location carries no `:8443`;
+  - the Terms and Privacy pages are as checked since 5.18.42;
+  - on `:8443`, pages answer 302 to the public address, `page=api` and the wrapper 200, and a POST 401 — never a
+    redirect;
+  - no fatal error of the plugin in the container log after the 60-second wait.
+- **R.** All `ok`:
+  - R1: all 38 files installed exactly as `125fa0c` has them; the manifest says 5.18.50;
+  - R2: the switch is on from both configuration sources;
+  - R3: every staff account as it was (digest `b315fd023593b6a2`);
+  - R4: no job-assignment message since #374 — in fact no Message Log row of any kind;
+  - R5: the master cron's `job_assign` entry is still commented out;
+  - R6: the three screen texts are installed.
+  - **The note, R7:** none of the 4 accounts that take jobs holds a verified link. **My Jobs is empty for all four
+    until their links are saved** (risk 1).
+
+**Two rollback runs followed. Both stopped at their question and changed nothing.**
+- **The cause was my handover message in the chat.** It put the deploy command and the rollback command in one
+  copyable block. Pasted together, the shell ran them in turn, so the rollback started at 20:09:47, as soon as the
+  deploy ended.
+- It took its own backup (`backup-20260927T200947Z`), printed `GO` and asked for `ROLLBACK`. The answer was not
+  `ROLLBACK`, and it ended: *"STOP: not confirmed. Nothing further was done."*
+- A second run of the rollback command, at 20:12:08, did the same (`backup-20260927T201208Z`).
+- Each run's stage A read the server first. It found `125fa0c` (5.18.50) live and Uganda from both sources. The staff
+  digest was still `b315fd023593b6a2`, and the Message Log still ended at #374: **no row of any kind was written
+  between 20:08 and 20:12.**
+- Rollback mode never writes `state-5.18.50.env`. A later `--after-only` run therefore still measures from the
+  deploy's own mark (#374) and staff snapshot.
+- The operator's `deploy-hybrid.sh --check` afterwards reads `live 125fa0c`, *"Up to date."* **Production runs
+  5.18.50**, and the checkout is unchanged at `87ba12f`.
+
+> **Binding from now on:** a deploy command and its rollback are never given in one copyable block, in the chat or
+> in a document. The rollback goes in a block of its own, marked "only if needed". A pasted block is one input, and
+> the shell runs every line in it in turn. What stopped this rollback, twice, was the typed `ROLLBACK`: a rollback
+> must always ask for a word, never take a default.
+
+**The backups.** Keep `backup-20260927T200815Z`: it holds 5.18.49's installed code and the data as they were before
+the deploy. The two later ones hold 5.18.50's code and copies of the same data, taken minutes after. Nothing needs
+them, and removing them leaves two fewer copies of the customer database:
+
+```
+rm -rf /root/dnb-5.18.50/backup-20260927T200947Z /root/dnb-5.18.50/backup-20260927T201208Z
+```
+
+**What this deploy does not show.**
+- **That M6 holds in use.** R4's zero covers the run's own minutes, in which no job was created. It shows the deploy
+  sent nothing. That New Job, Bulk Dispatch, Reschedule and a job from uCRM stay silent is shown by the tests
+  (§16.2); on the server, M4 and the later `--after-only` run measure it.
+- **That anything reached a phone.** The Message Log records what the plugin sent or suppressed. It is not a
+  delivery report (J7).
+- **The staff screens in use.** R6 read the installed files; nobody signed in. V4 watched the log for 60 seconds.
+- **The suite on PHP 8.1.** It ran twice on PHP 8.4.19. On 8.1.34 the changed files pass the server's own syntax
+  check (A2), and the token scan found nothing newer than 8.0 (§16.2). PHP 8.1 could not be installed in this
+  session to run the suite on it: its package source is blocked by this session's network policy.
+- **V3**, whether uCRM accepts `+0300` (risk 2). M4 measures it.
+
+**What happens next** — each step yours, in this order:
+1. **On the Staff page**, edit → uCRM user (the new picker):
+   - **S1 → 1000** and **S4 → 1099**;
+   - **S3 and S5 → "— not linked —"** (M5);
+   - and **S1's phone number**, which release B needs. The AI then no longer answers that number as a customer
+     (risk 4).
+2. **The users check again**, then send its log file:
+
+   ```
+   cd /opt/dishnet && mkdir -p /root/dnb-jobs && bash scripts/dnb-ucrm-users-facts.sh 2>&1 | tee /root/dnb-jobs/ucrm-users-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+3. **M4** (§15.5 stage 5, §15.6): one internal job with no customer, assigned to S1 (1000). In uCRM, check that its
+   time is the one typed, in Kampala time (V3), and that the assignment is right (V4). Change its time, then delete
+   it (V2). No job message may be sent.
+4. **About a day later**, `--after-only`, then send its log file:
+
+   ```
+   cd /opt/dishnet && bash scripts/deploy-5.18.50.sh --after-only 2>&1 | tee /root/dnb-5.18.50/after-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   - R3 then names the accounts whose links were saved: a note, as expected.
+   - R4 counts every job-assignment message since #374, and must read 0.
+
+**Release B stays BLOCKED** (§15.8). It needs D5 (your approval of the five messages in §16.7), the users check
+showing the links, S1's number, M4, and its own tests.
