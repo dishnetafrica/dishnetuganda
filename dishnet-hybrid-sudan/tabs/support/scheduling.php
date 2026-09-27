@@ -2,6 +2,15 @@
 // Tab: scheduling
 // Extracted from public.php on 2026-03-15
         $myUcrmId   = (int)($retailer['ucrm_user_id'] ?? 0);
+        // 5.18.50 (docs/44 J1, M7, M6): on Uganda My Jobs knows a person only by a link saved through the verified
+        // picker — never an id typed before, forced by a list, or ftth_crm_client_id — and no job WhatsApp is sent.
+        require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+        $_sjUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir);
+        if ($_sjUganda) {
+            require_once dirname(__DIR__, 2) . '/lib/StaffDirectory.php';
+            $_sjRow   = $store->findOne('retailers.json', 'id', (int)($retailer['id'] ?? 0));
+            $myUcrmId = StaffDirectory::linkedUcrmUser(is_array($_sjRow) ? $_sjRow : []);
+        }
         $apiToken   = h($retailer['api_token'] ?? '');
         $jobDetailId = (int)($_GET['job'] ?? 0);
     ?>
@@ -96,10 +105,12 @@ $_ucrmSeedMap = [
 $_rEmail = strtolower(trim($retailer['email'] ?? ''));
 // Auto-map OR correct a wrong mapping
 $_correctId = $_ucrmSeedMap[$_rEmail] ?? null;
+if (!$_sjUganda) {
 if ($_correctId && (int)($myUcrmId) !== (int)$_correctId) {
     $myUcrmId = (int)$_correctId;
     $store->updateOne('retailers.json', 'id', (int)$retailer['id'], ['ucrm_user_id' => $myUcrmId]);
     $retailer['ucrm_user_id'] = $myUcrmId;
+}
 }
 ?>
 <?php if (!$myUcrmId): ?>
@@ -108,7 +119,11 @@ if ($_correctId && (int)($myUcrmId) !== (int)$_correctId) {
     <div style="font-size:32px;margin-bottom:12px;">🔗</div>
     <div style="font-size:16px;font-weight:800;color:#E65100;margin-bottom:8px;">UCRM Account Not Linked</div>
     <div style="font-size:13px;color:#6b7280;max-width:340px;margin:0 auto 16px;">
+<?php if ($_sjUganda): ?>
+        Your account is not linked to a uCRM user yet. An admin links it on the Staff &amp; Retailers page.
+<?php else: ?>
         Your email <strong><?= h($_rEmail) ?></strong> was not found in the staff directory.<br>Ask admin to set your UCRM User ID manually in Manage Retailers.
+<?php endif; ?>
     </div>
     <?php if ($isAdmin): ?>
     <a href="?page=dashboard&tab=retailers" style="display:inline-block;background:#1565C0;color:#fff;padding:10px 20px;border-radius:10px;font-weight:700;text-decoration:none;">Go to Manage Retailers</a>
@@ -1425,6 +1440,9 @@ window.rsSubmit = function(jobId) {
             if (overlay) overlay.remove();
             if (d.status === 'success') {
                 showToast('📅 Rescheduled — CRM updated', 'success');
+<?php if ($_sjUganda): ?>
+                if (d.data && d.data.whatsapp_note) showToast('📅 Rescheduled — CRM updated. ' + d.data.whatsapp_note, 'success');
+<?php endif; ?>
                 apiGet('scheduling_job_detail', '&job_id=' + jobId).then(function(r) {
                     if (r.status === 'success') renderJobDetail(r.data);
                 });
@@ -1646,6 +1664,16 @@ schLoadJobs(_urlRefresh);
         <button onclick="njAddTask()" style="background:#334155;color:#94a3b8;border:none;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:700;cursor:pointer;">+ Add</button>
       </div>
     </div>
+<?php if ($_sjUganda): ?>
+    <input type="checkbox" id="njNotifyWa" style="display:none;" disabled>
+    <div style="display:flex;align-items:center;gap:12px;background:#1e293b;border-radius:12px;padding:14px;">
+      <div style="font-size:20px;flex-shrink:0;">📵</div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#e2e8f0;">No WhatsApp message is sent for jobs yet</div>
+        <div style="font-size:12px;color:#64748b;">The engineer sees the job in My Jobs. Job messages are switched on in a later release.</div>
+      </div>
+    </div>
+<?php else: ?>
     <label style="display:flex;align-items:center;gap:12px;cursor:pointer;background:#1e293b;border-radius:12px;padding:14px;">
       <input type="checkbox" id="njNotifyWa" checked style="width:20px;height:20px;cursor:pointer;flex-shrink:0;">
       <div>
@@ -1653,6 +1681,7 @@ schLoadJobs(_urlRefresh);
         <div style="font-size:12px;color:#64748b;">Notify assigned engineers immediately</div>
       </div>
     </label>
+<?php endif; ?>
     <div id="njResult" style="display:none;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <button onclick="njGoStep(2)" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:14px;padding:16px;font-size:15px;font-weight:700;cursor:pointer;">← Back</button>
@@ -1758,7 +1787,9 @@ window._njOpenReady = window.njOpen = function njOpen() {
   document.getElementById('njCrmClientId').value = '0';
   document.getElementById('njCustResults').style.display = 'none';
   document.getElementById('njCustSelected').style.display = 'none';
+<?php if (!$_sjUganda): ?>
   document.getElementById('njNotifyWa').checked = true;
+<?php endif; ?>
   document.getElementById('njResult').style.display = 'none';
   var sb = document.getElementById('njSubmitBtn');
   sb.disabled = false; sb.textContent = '＋ Create Jobs';
@@ -1905,7 +1936,11 @@ function njSubmit() {
     crm_client_id: parseInt(document.getElementById('njCrmClientId').value) || 0,
     engineer_ids:  engIds,
     tasks:         _njTasks,
+<?php if ($_sjUganda): ?>
+    notify_wa:     0,
+<?php else: ?>
     notify_wa:     document.getElementById('njNotifyWa').checked ? 1 : 0,
+<?php endif; ?>
   };
 
   fetch('?page=api&action=create_job', {
@@ -1915,13 +1950,22 @@ function njSubmit() {
     body: JSON.stringify(payload)
   }).then(function(r){ return r.json(); }).then(function(d) {
     var res = document.getElementById('njResult');
+<?php if ($_sjUganda): ?>
+    if (d.code === 200 || d.status === 'ok' || d.status === 'success') {
+<?php else: ?>
     if (d.code === 200 || d.status === 'ok') {
+<?php endif; ?>
       var data = d.data || d;
       var html = '<div style="background:#064e3b;border-radius:12px;padding:14px;">'
         + '<div style="font-size:14px;font-weight:800;color:#6ee7b7;margin-bottom:8px;">✅ ' + data.created + ' job' + (data.created !== 1 ? 's' : '') + ' created!</div>';
       (data.jobs || []).forEach(function(j) {
         html += '<div style="font-size:12px;color:#a7f3d0;padding:3px 0;">🔧 Job #' + j.job_id + ' → ' + j.engineer_name + (j.notified ? ' 📱' : '') + '</div>';
       });
+<?php if ($_sjUganda): ?>
+      if (data.whatsapp_note) {
+        html += '<div style="font-size:12px;color:#fde68a;padding:6px 0 0;">📵 ' + data.whatsapp_note + '</div>';
+      }
+<?php endif; ?>
       if (data.errors && data.errors.length) {
         data.errors.forEach(function(e) {
           html += '<div style="font-size:12px;color:#fca5a5;padding:3px 0;">❌ ' + e.error + '</div>';

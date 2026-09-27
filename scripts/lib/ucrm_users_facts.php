@@ -17,7 +17,8 @@
  *      propose, whether the stored uCRM id is a real user, duplicates, and the two other
  *      settings that hold a uCRM user id
  *   4. the offset uCRM writes into its own timestamps (J5: which clock uCRM keeps)
- *   5. whether the follow-up engine is switched on (J8: staff conversations)
+ *   5. whether the follow-up engine is switched on, and whether the installed crons skip
+ *      staff numbers (J8: staff conversations; 5.18.50 and later, on Uganda)
  *   6. which events each WhatsApp number's webhook subscribes to (J7: delivery receipts)
  *
  * It sends nothing, writes nothing outside RO_DIR, and makes GET requests only (uCRM
@@ -239,7 +240,23 @@ out('@@OFFSET ' . ($offsets ? implode(',', $offsets) : '-'));
 // ── 5. follow-ups ──────────────────────────────────────────────────────────
 out('');
 out('== 5. Follow-up engine ==');
-out('  followup_enabled: ' . (PluginConfig::toBool($cfg['followup_enabled'] ?? false) ? 'on — follow-ups can be drafted for any conversation, a staff member\'s included' : 'off'));
+// Since 5.18.50 (docs/44 J8, M1) the scan, the run and the send each skip a number held by an active staff account,
+// on Uganda only. What the installed crons do is read from the crons themselves, never from lib/ColleagueNumbers.php
+// being on disk: a rollback to 5.18.49 leaves that file behind while the crons stop using it.
+$fuSkip = 0;
+foreach (['followup_scan', 'followup_run', 'followup_send'] as $fuCron) {
+    if (strpos((string)@file_get_contents($root . '/cron/' . $fuCron . '.php'), 'ColleagueNumbers') !== false) $fuSkip++;
+}
+if (!PluginConfig::toBool($cfg['followup_enabled'] ?? false)) {
+    $fuSays = 'off';
+} elseif ($profileId === 'uganda' && $fuSkip === 3) {
+    $fuSays = 'on — never for a number held by an active staff account (5.18.50, J8); an account with no number is not recognised';
+} elseif ($profileId !== 'uganda' || $fuSkip === 0) {
+    $fuSays = 'on — follow-ups can be drafted for any conversation, a staff member\'s included';
+} else {
+    $fuSays = 'on — only ' . $fuSkip . ' of the 3 installed follow-up crons skip staff numbers: the installed files are mixed';
+}
+out('  followup_enabled: ' . $fuSays);
 
 // ── 6. WhatsApp delivery receipts ──────────────────────────────────────────
 out('');

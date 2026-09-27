@@ -3,8 +3,53 @@
 // SCHEDULING / JOBS
 // ═══════════════════════════════════════════════════════════════
 
+// ── 5.18.50 (docs/44 release A): Uganda's staff and job rules ────────────────
+// On Uganda only: the South Sudan staff lists never write (J1), a staff member's uCRM user is the link saved through
+// the verified picker and nothing else (J2, M7), jobs are created and acted on only by those allowed, checked here on
+// the server against the account as stored now and the job as uCRM holds it (J6, D7), times go to uCRM with Kampala's
+// offset (J5), and no job-assignment WhatsApp is sent from any path (M6). Every other install takes the 5.18.49 code
+// below unchanged: each Uganda line is a separate branch or a condition that is false there.
+require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+$_sjUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
+$_sjNoWa   = 'No WhatsApp was sent: job notifications are not switched on yet. The engineer sees the job in My Jobs.';
+if ($_sjUganda) {
+    foreach (['StaffDirectory', 'UcrmUsers', 'StaffLink', 'JobAccess', 'JobTime'] as $_sjLib) {
+        require_once dirname(__DIR__, 2) . '/lib/' . $_sjLib . '.php';
+    }
+    // The caller as stored now, refused when no longer active (J6).
+    $sjCaller = function () use ($me2, $store, $er2): array {
+        $row = JobAccess::caller($me2, $store);
+        if ($row === null) $er2(JobAccess::INACTIVE, 403);
+        return $row;
+    };
+    // uCRM's staff users, read once per request when a rule needs them; null when uCRM did not answer.
+    $_sjUsersMemo = null; $_sjUsersRead = false;
+    $sjUsers = function () use ($crm, &$_sjUsersMemo, &$_sjUsersRead): ?array {
+        if (!$_sjUsersRead) { $_sjUsersRead = true; $_sjUsersMemo = ($crm && $crm->isConfigured()) ? UcrmUsers::all($crm) : null; }
+        return $_sjUsersMemo;
+    };
+    // Refuse, with no job data, unless the caller may act on this job (J6).
+    $sjMayAct = function (array $caller, array $job) use ($er2): void {
+        $a = JobAccess::assigneeOf($job);
+        if (!JobAccess::canActOn($caller, $a)) $er2(JobAccess::refusal($a), 403);
+    };
+}
+
 
     // ── Scheduling: clear jobs cache (admin only) ─────────────────────────────
+    // Uganda (J1): admin only, checked; empties the jobs cache and writes no staff row.
+    if ($_sjUganda && $act === 'scheduling_clear_cache') {
+        $_sjMe = $sjCaller();
+        if (!StaffDirectory::isAdmin($_sjMe)) $er2('Admin only.', 403);
+        $store->save('scheduling_jobs_cache.json', []);
+        $store->save('scheduling_cache_meta.json', [
+            'last_sync'    => 0,
+            'last_sync_ts' => '',
+            'cleared_at'   => date('Y-m-d H:i:s'),
+            'cleared_by'   => $_sjMe['email'] ?? 'unknown',
+        ]);
+        $ok2(['cleared' => true, 'message' => 'Cache cleared.']);
+    }
     if ($act === 'scheduling_clear_cache') {
         // Wipe cache files
         $store->save('scheduling_jobs_cache.json', []);
@@ -69,6 +114,13 @@
         $myAdminId  = (int)($me2['ucrm_user_id']       ?? 0); // CRM admin user ID pool
         $myClientId = (int)($me2['ftth_crm_client_id'] ?? 0); // CRM client ID pool
         $isAdminU   = $me2['is_admin'] ?? false;
+        if ($_sjUganda) {
+            // M7 and the J2 correction: only the verified link, never ftth_crm_client_id, never an old id.
+            $_sjMe      = $sjCaller();
+            $myAdminId  = StaffDirectory::linkedUcrmUser($_sjMe);
+            $myClientId = 0;
+            $isAdminU   = StaffDirectory::isAdmin($_sjMe);
+        }
 
         if (!$myAdminId && !$myClientId && !$isAdminU) {
             $ok2(['jobs' => [], 'needs_mapping' => true]);
@@ -157,6 +209,7 @@
         // Fetch job
         $job = $crm->get("scheduling/jobs/{$jobId}");
         if (!$job) $er2('Job not found.', 404);
+        if ($_sjUganda) $sjMayAct($sjCaller(), $job);   // J6: the assignee, a support leader or an admin
 
         // Security: job was fetched via assigneeId filter — trust the query filter, skip assignee array check
         // (UCRM API v1.0 returns empty assignees[] on single job fetch)
@@ -253,6 +306,11 @@
         if (!($me2['is_admin'] ?? false) && $ucrmUserId) {
 // Access verified via assigneeId query filter
         }
+        if ($_sjUganda) {   // J6, checked before uCRM is written
+            $_sjMe = $sjCaller();
+            if (!$job) $er2('Job not found.', 404);
+            $sjMayAct($_sjMe, $job);
+        }
         $result = $crm->patch("scheduling/jobs/{$jobId}", ['status' => $statusInt]);
         if ($result === null) $er2('CRM update failed: ' . json_encode($crm->getLastError()), 502);
 
@@ -303,6 +361,17 @@
         $jobId  = (int)($body['job_id'] ?? 0);
         if (!$taskId) $er2('task_id required.', 422);
         if (!$crm->isConfigured()) $er2('CRM not configured.', 503);
+        if ($_sjUganda) {
+            // J6: a task is ticked only on a job the caller may act on, and only if it is one of that job's tasks.
+            $_sjMe = $sjCaller();
+            if (!$jobId) $er2('job_id required.', 422);
+            $_sjJob = $crm->get("scheduling/jobs/{$jobId}");
+            if (!$_sjJob) $er2('Job not found.', 404);
+            $sjMayAct($_sjMe, $_sjJob);
+            $_sjTasks = $crm->get("scheduling/jobs/{$jobId}/job-tasks");
+            $_sjTaskIds = array_map(function ($t) { return (int)($t['id'] ?? 0); }, is_array($_sjTasks) ? $_sjTasks : []);
+            if (!in_array($taskId, $_sjTaskIds, true)) $er2('That task is not one of this job\'s tasks.', 403);
+        }
 
         // Patch the task
         $result = $crm->patch("scheduling/job-tasks/{$taskId}", ['closed' => $done]);
@@ -366,6 +435,7 @@
         if (!($me2['is_admin'] ?? false) && $ucrmUserId) {
 // Access verified via assigneeId query filter
         }
+        if ($_sjUganda) $sjMayAct($sjCaller(), $job);   // J6, before anything is stored or sent
 
         // Check all tasks are done before allowing completion
         $allTasks = $crm->get("scheduling/jobs/{$jobId}/job-tasks") ?? [];
@@ -553,6 +623,10 @@
     // Creates one UCRM scheduling job per assigned engineer (UCRM only supports
     // one assignedUserId per job). Each engineer gets a WhatsApp notification.
     if ($act === 'create_job' && $met === 'POST') {
+        if ($_sjUganda) {   // J6, D7: who may create a job, checked on the account as stored now
+            $_sjMe = $sjCaller();
+            if (!JobAccess::canCreate($_sjMe)) $er2('Your role cannot create jobs.', 403);
+        }
         if (!$crm->isConfigured()) $er2('CRM not configured.', 503);
 
         $title       = trim($body['title']       ?? '');
@@ -569,6 +643,20 @@
         if (!$date)            $er2('Date is required.', 422);
         if (empty($engineerIds)) $er2('At least one engineer is required.', 422);
         if (count($engineerIds) > 10) $er2('Maximum 10 engineers per job.', 422);
+        if ($_sjUganda) {
+            // J5: Kampala's day and hour, with its offset; a malformed one is refused before uCRM is written.
+            $_sjWhen = JobTime::toUcrm($date, $time, dn_tz_obj($config));
+            if ($_sjWhen === null) $er2('The date or time is not valid. Use the date picker and a time such as 09:00.', 422);
+            // J2, M7, D9: every engineer is checked before any job is created.
+            $_sjUsersNow = $sjUsers();
+            if ($_sjUsersNow === null) $er2('uCRM could not be reached to check the engineers, so no job was created.', 503);
+            $_sjAssignable = JobAccess::assignableByUcrmUser($store->load('retailers.json') ?? [], $_sjUsersNow);
+            foreach ($engineerIds as $_sjEid) {
+                if (!isset($_sjAssignable[$_sjEid])) {
+                    $er2("uCRM user #{$_sjEid} is not an engineer who can take jobs: the account is not linked through the Staff page, not active, or its e-mail differs. No job was created.", 422);
+                }
+            }
+        }
 
         // Fetch client info if provided
         $clientName = '';
@@ -592,6 +680,7 @@
             $uid = (int)($r['ucrm_user_id'] ?? 0);
             if ($uid > 0) $engByUcrm[$uid] = $r;
         }
+        if ($_sjUganda) $engByUcrm = $_sjAssignable;   // M7: verified links only
 
         $created = []; $failed = [];
         $dateLabel = date('D d M', strtotime($date));
@@ -599,7 +688,7 @@
         foreach ($engineerIds as $ucrmUserId) {
             $jobPayload = [
                 'title'          => $title . ($clientName ? ' — ' . $clientName : ''),
-                'date'           => $date . 'T' . $time . ':00.000Z',
+                'date'           => $_sjUganda ? $_sjWhen : ($date . 'T' . $time . ':00.000Z'),
                 'duration'       => $duration,
                 'description'    => $description,
                 'status'         => 1, // Open
@@ -622,9 +711,9 @@
                 $crm->post("scheduling/jobs/{$newJobId}/job-tasks", ['name' => $taskName]);
             }
 
-            // WhatsApp notification
+            // WhatsApp notification (never on Uganda until job notifications are switched on — M6)
             $eng = $engByUcrm[$ucrmUserId] ?? null;
-            if ($notifyWa && $eng && !empty($eng['phone'])) {
+            if (!$_sjUganda && $notifyWa && $eng && !empty($eng['phone'])) {
                 $engPhone     = preg_replace('/[^0-9+]/', '', $eng['phone']);
                 $engFirstName = explode(' ', $eng['name'] ?? 'Engineer')[0];
                 $dispatcher   = $me2['name'] ?? 'Support';
@@ -646,17 +735,17 @@
                 'job_id'       => $newJobId,
                 'engineer_id'  => $ucrmUserId,
                 'engineer_name'=> $eng['name'] ?? "ID:{$ucrmUserId}",
-                'notified'     => ($notifyWa && $eng && !empty($eng['phone'])),
+                'notified'     => (!$_sjUganda && $notifyWa && $eng && !empty($eng['phone'])),
             ];
         }
 
-        $ok2([
+        $ok2(array_merge([
             'created'     => count($created),
             'failed'      => count($failed),
             'jobs'        => $created,
             'errors'      => $failed,
             'client_name' => $clientName,
-        ]);
+        ], $_sjUganda ? ['whatsapp' => 'not_sent', 'whatsapp_note' => $_sjNoWa] : []));
     }
 
     // ── Scheduling: reschedule job ────────────────────────────────────────────
@@ -667,26 +756,33 @@
         if (!$jobId || !$newDate) $er2('job_id and new_date required.', 422);
         if (!$crm->isConfigured()) $er2('CRM not configured.', 503);
 
+        if ($_sjUganda) {   // J5: Kampala's day and hour with its offset; malformed is refused
+            $_sjWhen = JobTime::fromLocal($newDate, dn_tz_obj($config));
+            if ($_sjWhen === null) $er2('The new date or time is not valid. Use the date picker and a time such as 09:00.', 422);
+            $_sjMe = $sjCaller();
+        }
+
         // Verify ownership
         $job = $crm->get("scheduling/jobs/{$jobId}");
         if (!$job) $er2('Job not found.', 404);
+        if ($_sjUganda) $sjMayAct($_sjMe, $job);   // J6
         $ucrmUserId = (int)($me2['ucrm_user_id'] ?? 0);
         if (!($me2['is_admin'] ?? false) && $ucrmUserId) {
 // Access verified via assigneeId query filter
         }
 
         // PATCH new date in UCRM
-        $patchResult = $crm->patch("scheduling/jobs/{$jobId}", ['date' => $newDate]);
+        $patchResult = $crm->patch("scheduling/jobs/{$jobId}", ['date' => $_sjUganda ? $_sjWhen : $newDate]);
         if ($patchResult === null) $er2('CRM update failed: ' . json_encode($crm->getLastError()), 502);
 
         // Add reschedule comment
         $fullComment = "Rescheduled to {$newDate}" . ($comment ? ": {$comment}" : '');
         $crm->post("scheduling/jobs/{$jobId}/job-comments", ['message' => $fullComment]);
 
-        // WhatsApp to technician
+        // WhatsApp to technician (never on Uganda until job notifications are switched on — M6)
         $techPhone = preg_replace('/[^0-9]/', '', $me2['phone'] ?? '');
         $techName  = $me2['name'] ?? 'Technician';
-        if (!empty($techPhone)) {
+        if (!$_sjUganda && !empty($techPhone)) {
             $dt = date('d M Y, h:i a', strtotime($newDate));
             $msg = "Hi *{$techName}*,\n\n"
                  . "📅 *Job #{$jobId} Rescheduled*\n\n"
@@ -696,7 +792,8 @@
             $notify->sendVia('support', $techPhone, $msg, 'ops_scheduling_rescheduled');
         }
 
-        $ok2(['rescheduled' => true, 'job_id' => $jobId, 'new_date' => $newDate]);
+        $ok2(array_merge(['rescheduled' => true, 'job_id' => $jobId, 'new_date' => $newDate],
+            $_sjUganda ? ['whatsapp' => 'not_sent', 'whatsapp_note' => $_sjNoWa] : []));
     }
 
     // ── Scheduling: add comment to UCRM job ──────────────────────────────────
@@ -705,6 +802,12 @@
         $comment = trim($body['comment'] ?? '');
         if (!$jobId || !$comment) $er2('job_id and comment required.', 422);
         if (!$crm->isConfigured()) $er2('CRM not configured.', 503);
+        if ($_sjUganda) {   // J6
+            $_sjMe  = $sjCaller();
+            $_sjJob = $crm->get("scheduling/jobs/{$jobId}");
+            if (!is_array($_sjJob) || !$_sjJob) $er2('Job not found.', 404);
+            $sjMayAct($_sjMe, $_sjJob);
+        }
 
         $result = $crm->post("scheduling/jobs/{$jobId}/job-comments", ['message' => $comment]);
         if ($result === null) $er2('CRM comment failed: ' . json_encode($crm->getLastError()), 502);
@@ -713,6 +816,18 @@
     }
 
     // ── Scheduling: get assignable support staff ──────────────────────────────
+    // Uganda (J2, M7, D9): only accounts a job may be assigned to, for callers who may create one; same fields.
+    if ($_sjUganda && $act === 'get_support_staff') {
+        $_sjMe = $sjCaller();
+        if (!JobAccess::canCreate($_sjMe)) $er2('Your role cannot create jobs.', 403);
+        $_sjUsersNow = $sjUsers();
+        if ($_sjUsersNow === null) $er2('uCRM could not be reached to check the engineers.', 503);
+        $_sjOut = [];
+        foreach (JobAccess::assignableByUcrmUser($store->load('retailers.json') ?? [], $_sjUsersNow) as $_sjUid => $r) {
+            $_sjOut[] = ['id' => $r['id'] ?? 0, 'name' => $r['name'] ?? '', 'ucrm_user_id' => $_sjUid, 'role' => $r['role'] ?? ''];
+        }
+        $ok2($_sjOut);
+    }
     if ($act === 'get_support_staff') {
         $all = $store->load('retailers.json');
         $staff = array_values(array_filter($all, fn($r) =>
@@ -731,6 +846,30 @@
 
 
     // ── UCRM Users: list all users from CRM (for mapping) ────────────────────
+    // Uganda (J2, M7, D9): uCRM's own staff users, read live, for the verified picker. Admin only; no e-mail and no
+    // hard-coded list in the answer. same_email marks the user whose e-mail is retailer_id's own; nothing is chosen.
+    if ($_sjUganda && $act === 'get_ucrm_users') {
+        $_sjMe = $sjCaller();
+        if (!StaffDirectory::isAdmin($_sjMe)) $er2('Admin only.', 403);
+        $_sjUsersNow = $sjUsers();
+        if ($_sjUsersNow === null) $er2('uCRM could not be reached, so its users cannot be listed.', 503);
+        $_sjRows  = $store->load('retailers.json') ?? [];
+        $_sjForId = (int)($_GET['retailer_id'] ?? ($body['retailer_id'] ?? 0));
+        $_sjFor   = $_sjForId > 0 ? $store->findOne('retailers.json', 'id', $_sjForId) : null;
+        $_sjForEm = is_array($_sjFor) ? StaffDirectory::email($_sjFor) : '';
+        $_sjOut = [];
+        foreach ($_sjUsersNow as $_sjUid => $_sjU) {
+            $_sjHeld = StaffDirectory::byUcrmUser($_sjRows, (int)$_sjUid);
+            $_sjOut[] = [
+                'id'         => (int)$_sjUid,
+                'label'      => UcrmUsers::label($_sjU),
+                'active'     => UcrmUsers::isActive($_sjU),
+                'same_email' => $_sjForEm !== '' && UcrmUsers::email($_sjU) === $_sjForEm,
+                'linked_to'  => $_sjHeld ? ['retailer_id' => (int)($_sjHeld[0]['id'] ?? 0), 'name' => (string)($_sjHeld[0]['name'] ?? '')] : null,
+            ];
+        }
+        $ok2(['users' => $_sjOut, 'total' => count($_sjOut)]);
+    }
     if ($act === 'get_ucrm_users') {
         // Seed map from Laravel DB — definitive email→ucrmUserId
         $seedUsers = [
@@ -803,6 +942,12 @@
     }
 
 
+    // Uganda (D9, M5): nothing is linked automatically; each person is linked through the verified picker.
+    if ($_sjUganda && $act === 'auto_map_ucrm_users' && $met === 'POST') {
+        $_sjMe = $sjCaller();
+        if (!StaffDirectory::isAdmin($_sjMe)) $er2('Admin only.', 403);
+        $er2('Nothing was linked. Link each person on the Staff & Retailers page, where the link is checked with uCRM.', 409);
+    }
     if ($act === 'auto_map_ucrm_users' && $met === 'POST') {
         if (!($me2['is_admin'] ?? false)) $er2('Admin only.', 403);
 
@@ -882,6 +1027,23 @@
 
 
     // ── UCRM Users: manually set ucrm_user_id for a retailer ─────────────────
+    // Uganda (J2, D9, M7): checked with uCRM before it is saved and recorded as verified; a refusal changes nothing.
+    if ($_sjUganda && $act === 'set_ucrm_user_id' && $met === 'POST') {
+        $_sjMe = $sjCaller();
+        if (!StaffDirectory::isAdmin($_sjMe)) $er2('Admin only.', 403);
+        $retailerId = (int)($body['retailer_id'] ?? 0);
+        $ucrmUserId = (int)($body['ucrm_user_id'] ?? 0);
+        if (!$retailerId) $er2('retailer_id required.', 422);
+        $_sjRow = $store->findOne('retailers.json', 'id', $retailerId);
+        if (!is_array($_sjRow)) $er2('Account not found.', 404);
+        $_sjV = StaffLink::verify($crm, $_sjRow, $ucrmUserId, $store->load('retailers.json') ?? [], (int)($_sjMe['id'] ?? 0));
+        if (!$_sjV['ok']) $er2('The link was not changed: ' . $_sjV['reason'] . '.', $_sjV['unreachable'] ? 503 : 422);
+        $_sjLinked = $_sjV['action'] === 'link';
+        $store->updateOne('retailers.json', 'id', $retailerId, $_sjLinked
+            ? ['ucrm_user_id' => $ucrmUserId, StaffDirectory::LINK_KEY => $_sjV['link']]
+            : ['ucrm_user_id' => null, StaffDirectory::LINK_KEY => null]);
+        $ok2(['updated' => true, 'retailer_id' => $retailerId, 'ucrm_user_id' => $_sjLinked ? $ucrmUserId : 0, 'verified' => $_sjLinked]);
+    }
     if ($act === 'set_ucrm_user_id' && $met === 'POST') {
         if (!($me2['is_admin'] ?? false)) $er2('Admin only.', 403);
         $retailerId = (int)($body['retailer_id'] ?? 0);
@@ -896,6 +1058,10 @@
     // Each job gets: title, date, duration, assignee, note, task list, and
     // the GPS/address from the customer's UCRM record.
     if ($act === 'bulk_create_jobs' && $met === 'POST') {
+        if ($_sjUganda) {   // J6: checked on the account as stored now
+            $_sjMe = $sjCaller();
+            if (!StaffDirectory::isAdmin($_sjMe) && !JobAccess::isLeader($_sjMe)) $er2('Support Leader or Admin access required.', 403);
+        }
         // Only support_leader or admin can dispatch
         if (!($me2['is_admin'] ?? false) && ($me2['role'] ?? '') !== 'support_leader') {
             $er2('Support Leader or Admin access required.', 403);
@@ -918,6 +1084,30 @@
         if (!$jobDate)    $er2('Date is required.', 422);
         if (empty($customers)) $er2('No customers in batch.', 422);
         if (count($customers) > 50) $er2('Maximum 50 customers per batch.', 422);
+        if ($_sjUganda) {
+            // J5 and J2/M7/D9, for every customer in the batch before any job is created: a real Kampala day and hour,
+            // and an assignee (when one is chosen) who can take jobs through a verified link.
+            $_sjTz = dn_tz_obj($config);
+            $_sjAssignable = null;
+            foreach ($customers as $_sjN => $_sjC) {
+                if (!is_array($_sjC)) $er2('Each customer in the batch must be an object. No job was created.', 422);
+                $_sjRowNo = (int)$_sjN + 1;
+                if (JobTime::toUcrm($jobDate, trim($_sjC['job_time'] ?? $jobTime), $_sjTz) === null) {
+                    $er2("Row {$_sjRowNo}: the date or time is not valid. No job was created.", 422);
+                }
+                $_sjA = (int)($_sjC['assignee_id'] ?? $assigneeId);
+                if ($_sjA > 0) {
+                    if ($_sjAssignable === null) {
+                        $_sjUsersNow = $sjUsers();
+                        if ($_sjUsersNow === null) $er2('uCRM could not be reached to check the engineers, so no job was created.', 503);
+                        $_sjAssignable = JobAccess::assignableByUcrmUser($store->load('retailers.json') ?? [], $_sjUsersNow);
+                    }
+                    if (!isset($_sjAssignable[$_sjA])) {
+                        $er2("Row {$_sjRowNo}: uCRM user #{$_sjA} is not an engineer who can take jobs: the account is not linked through the Staff page, not active, or its e-mail differs. No job was created.", 422);
+                    }
+                }
+            }
+        }
 
         $results = [];
         $created = 0;
@@ -945,7 +1135,7 @@
             $jobPayload = [
                 'title'          => $jobTitle . ' — ' . $clientName,
                 'jobType'        => $jobType,
-                'date'           => $jobDate . 'T' . $custTime . ':00.000Z',
+                'date'           => $_sjUganda ? JobTime::toUcrm($jobDate, $custTime, $_sjTz) : ($jobDate . 'T' . $custTime . ':00.000Z'),
                 'duration'       => $duration,
                 'description'    => trim($desc),
                 'clientId'       => $crmClientId,
@@ -987,8 +1177,8 @@
                 'status'        => 'created',
             ];
 
-            // WhatsApp notification to assigned engineer
-            if ($custAssignee) {
+            // WhatsApp notification to assigned engineer (never on Uganda until job notifications are switched on — M6)
+            if ($custAssignee && !$_sjUganda) {
                 // Look up engineer phone from retailers.json
                 $allR = $store->load('retailers.json') ?? [];
                 foreach ($allR as $r) {
@@ -1052,11 +1242,11 @@
         ];
         $store->append('activity_log.json', $logEntry);
 
-        $ok2([
+        $ok2(array_merge([
             'created'  => $created,
             'failed'   => $failed,
             'total'    => count($customers),
             'results'  => $results,
             'job_date' => $jobDate,
-        ]);
+        ], $_sjUganda ? ['whatsapp' => 'not_sent', 'whatsapp_note' => $_sjNoWa] : []));
     }

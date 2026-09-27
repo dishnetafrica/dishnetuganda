@@ -79,9 +79,14 @@ if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
 }
 
 // Shutdown handler — fires on fatal/timeout/normal exit. NOT on SIGKILL (handled above).
+// 5.18.51: the normal end below releases and closes the lock itself, and unlocking a closed handle is a TypeError on
+// PHP 8 that @ does not silence. It was fatal after every completed run (4–9 an hour on the server) and stopped every
+// shutdown function registered after this one (docs/44 §16.11). is_resource() is false for a closed handle.
 register_shutdown_function(function() use ($lockFp, $lockFile) {
-    @flock($lockFp, LOCK_UN);
-    @fclose($lockFp);
+    if (is_resource($lockFp)) {
+        @flock($lockFp, LOCK_UN);
+        @fclose($lockFp);
+    }
     @touch($lockFile); // reset mtime
 });
 

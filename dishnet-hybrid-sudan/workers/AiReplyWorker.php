@@ -36,6 +36,10 @@ class AiReplyWorker extends WorkerBase
     private $flyer;
     /** Where the photo library lives; the worker resolves names against it. */
     private string $photoDir = '';
+    /** The data directory this worker runs against (5.18.50: the J8 staff check needs it for the tenant). */
+    private string $dataDir = '';
+    /** @var array|false|null J8: ['tenant' => TenantProfile] on Uganda, false elsewhere, null until first asked */
+    private $staffCheck = null;
 
     public function __construct($store, array $config, int $maxRun = 55, int $batch = 10)
     {
@@ -75,6 +79,7 @@ class AiReplyWorker extends WorkerBase
             if (is_file($pl)) require_once $pl;
         }
         $this->photoDir = $dataDir;
+        $this->dataDir  = $dataDir;
         if (class_exists('MediaLibrary')) {
             $config['photo_block'] = \MediaLibrary::promptBlock($dataDir);
         }
@@ -89,6 +94,34 @@ class AiReplyWorker extends WorkerBase
         return ['ai.reply'];
     }
 
+    /**
+     * J8: is this the whole international number of an ACTIVE DishNet staff account? Only on Uganda; false on every
+     * other install and whenever the check cannot be made, which is the 5.18.49 behaviour.
+     */
+    private function isStaffNumber(string $phone): bool
+    {
+        if ($this->staffCheck === null) {
+            $this->staffCheck = false;
+            try {
+                $root = dirname(__DIR__);
+                require_once $root . '/lib/StaffJobsGate.php';
+                if (\StaffJobsGate::applies($this->config, $this->dataDir)) {
+                    require_once $root . '/lib/StaffDirectory.php';
+                    require_once $root . '/lib/TenantProfile.php';
+                    $this->staffCheck = ['tenant' => \TenantProfile::current($this->config, $this->dataDir)];
+                }
+            } catch (\Throwable $e) {
+                $this->staffCheck = false;
+            }
+        }
+        if ($this->staffCheck === false) return false;
+        try {
+            return \StaffDirectory::activeStaffByPhone($this->store->load('retailers.json') ?? [], $phone, $this->staffCheck['tenant']) !== null;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     protected function handle(array $event): void
     {
         $p       = $event['_payload'] ?? [];
@@ -100,6 +133,13 @@ class AiReplyWorker extends WorkerBase
         if ($channel === '' || $phone === '' || $message === '') {
             $this->log('warn', 'ai.reply event missing required fields — dropping');
             return;   // not retryable; a retry cannot make the payload valid
+        }
+
+        // 5.18.50 (docs/44 J8): on Uganda a colleague's number is never answered by the AI. The webhook stops these
+        // before they are queued; this catches one queued before the deploy, or by any other route. No number logged.
+        if ($this->isStaffNumber($phone)) {
+            $this->log('info', "conv {$convId}: a colleague's number — kept for the team, not answered by the AI");
+            return;
         }
 
         // A colleague has this conversation. The question is not dropped —

@@ -116,6 +116,7 @@ $messages = isset($data['key']) ? [$data] : (is_array($data) ? array_values($dat
 
 $queued  = 0;
 $skipped = 0;
+$_evoJ8  = null;   // 5.18.50 (docs/44 J8): Uganda's active staff numbers, read once per request when first needed
 $bus     = new EventBus($pdo);
 $convSvc = new ConversationService($dataDir, $pdo);
 
@@ -259,6 +260,41 @@ foreach ($messages as $msg) {
         $convId = $convSvc->importEvoMessage($msg, $channel);
     } catch (\Throwable $e) {
         error_log('[evo_webhook] conversation store failed: ' . $e->getMessage());
+    }
+
+    // ── 8a. A colleague's number (5.18.50, docs/44 J8, Uganda only) ───────
+    // A message from an active DishNet staff account's number — the whole international number, never the last nine
+    // digits, so a +211 number is never taken for a +256 one — is kept for the team: stored above as always, the
+    // conversation filed as 'staff', and neither read as an opt-out nor queued for the AI. A colleague writing "stop
+    // the install" is not unsubscribing. Every other install goes straight on to 8b.
+    if ($_evoJ8 === null) {
+        $_evoJ8 = false;
+        try {
+            require_once __DIR__ . '/lib/StaffJobsGate.php';
+            if (StaffJobsGate::applies(is_array($config) ? $config : [], $dataDir)) {
+                require_once __DIR__ . '/lib/StaffDirectory.php';
+                require_once __DIR__ . '/lib/TenantProfile.php';
+                $_evoJ8 = [
+                    'rows'   => $store->load('retailers.json') ?? [],
+                    'tenant' => TenantProfile::current(is_array($config) ? $config : [], $dataDir),
+                ];
+            }
+        } catch (\Throwable $e) {
+            $_evoJ8 = false;
+            error_log('[evo_webhook] staff check unavailable: ' . $e->getMessage());
+        }
+    }
+    if ($_evoJ8 !== false && StaffDirectory::activeStaffByPhone($_evoJ8['rows'], $phone, $_evoJ8['tenant']) !== null) {
+        if ($convId) {
+            try {
+                $convSvc->categorise((int)$convId, 'staff');
+            } catch (\Throwable $e) {
+                error_log('[evo_webhook] staff category failed: ' . $e->getMessage());
+            }
+        }
+        error_log('[evo_webhook] staff message kept for the team (' . $channel . ')');
+        $skipped++;
+        continue;
     }
 
     // ── 8b. "STOP" ───────────────────────────────────────────────────────

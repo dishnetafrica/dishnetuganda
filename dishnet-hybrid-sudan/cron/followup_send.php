@@ -49,6 +49,11 @@ $evo     = new EvolutionApiService($config);
 $guard   = new EvoWebhookGuard($pdo, $config);
 $now     = gmdate('Y-m-d H:i:s');
 
+// 5.18.50 (docs/44 J8, M1): on Uganda an approved follow-up to a colleague's number is closed, never sent.
+// Elsewhere $colleagues is null and nothing here changes.
+require_once $pluginRoot . '/lib/ColleagueNumbers.php';
+$colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
+
 $sent = 0; $held = 0; $failed = 0;
 
 foreach ($svc->approvedDrafts(10) as $d) {
@@ -70,6 +75,11 @@ foreach ($svc->approvedDrafts(10) as $d) {
     $conv = $convSvc->getConversation((int)$d['conversation_id']);
     if ($conv === null) {
         $svc->close($fuId, 'cancelled', 'the conversation no longer exists', 'sender');
+        $held++;
+        continue;
+    }
+    if ($colleagues !== null && ($colleagues->isColleague($phone) || $colleagues->isColleagueConversation($conv))) {
+        $svc->close($fuId, 'staff', "a colleague's number", 'sender');
         $held++;
         continue;
     }

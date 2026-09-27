@@ -8,7 +8,9 @@
  *   normal  three uCRM users: one shares the admin account's e-mail, one carries a phone only in its DETAIL record
  *           (nested, contacts.*.phone) and is reachable at users/{id}, one is inactive and shares a support account's
  *           e-mail; two uCRM-id settings, one real and one not
- *   prod    the shape measured on 27 Sep 15:54 UTC: one uCRM user, the admin's e-mail, no phone anywhere
+ *   prod    the shape measured on 27 Sep 15:54 UTC: one uCRM user, the admin's e-mail, no phone anywhere; follow-ups
+ *           on, as measured on 27 Sep 20:31 UTC
+ *   prod-ss prod on South Sudan's currency, where the follow-up crons skip nobody
  *
  * Every personal value is a CANARY: the rehearsal asserts that none of them reaches the report's output.
  */
@@ -33,6 +35,8 @@ $cfg = [
     'evo_instance_sales' => 'canary-sales-inst',
 ];
 if ($scenario === 'normal') { $cfg['bidal_ucrm_user_id'] = 1007; $cfg['accountant_ucrm_user_id'] = 55; }
+if ($scenario === 'prod' || $scenario === 'prod-ss') $cfg['followup_enabled'] = true;
+if ($scenario === 'prod-ss') $cfg['currency_code'] = 'SSP';
 $store = SqliteStore::create($pdd);          // first: a first boot renames any *.json it finds to *.json.migrated
 $store->save('kyc_config.json', $cfg);
 file_put_contents($pdd . '/kyc_config.json', json_encode($cfg));   // what PluginConfig and dn_tz() read

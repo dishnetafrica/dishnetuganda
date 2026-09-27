@@ -35,6 +35,11 @@ $svc = new FollowUpService($pdo);
 $oo  = ContactOptOut::fromStore($store);
 $now = gmdate('Y-m-d H:i:s');
 
+// 5.18.50 (docs/44 J8, M1): on Uganda a colleague's conversation — filed 'staff', or from an active staff account's
+// whole number — is never opened. Every other install: $colleagues is null and nothing here changes.
+require_once $pluginRoot . '/lib/ColleagueNumbers.php';
+$colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
+
 $maxAge  = (float)($config['followup_max_age_hours'] ?? 336);   // two weeks
 $perScan = (int)($config['followup_scan_limit'] ?? 25);
 
@@ -83,8 +88,13 @@ try {
 }
 
 foreach ($rows as $conv) {
-    $f = FollowUpPolicy::isFollowable($conv, $now, $maxAge);
+    $f = FollowUpPolicy::isFollowable($conv, $now, $maxAge, $colleagues !== null);
     if (!$f['ok']) { $skipped++; continue; }
+    if ($colleagues !== null && $colleagues->isColleague((string)$conv['phone'])) {
+        $svc->log(null, (int)$conv['id'], 'skipped', "a colleague's number", 'scan');
+        $skipped++;
+        continue;
+    }
 
     // Opted out before we even open a row, so an opted-out customer never
     // acquires follow-up state at all.

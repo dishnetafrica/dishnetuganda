@@ -1,6 +1,26 @@
 <?php
 // Tab: retailers
 // Extracted from public.php on 2026-03-15
+
+// 5.18.50 (docs/44 J2, J3, D6, M7, release A). On Uganda only: the uCRM user is chosen from uCRM's own users and
+// verified when saved; the cards show whether that link is verified and whether the number can receive WhatsApp; the
+// organisation-7 CRM tile, filter and badges are not drawn (D6). One live read of uCRM's users per page view. Every
+// other install renders the 5.18.49 page byte for byte: each Uganda part is a PHP block at column 0.
+require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+$_rtUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
+$_rtUcrmUsers = null;
+$_rtTenant = null;
+if ($_rtUganda) {
+    foreach (['StaffDirectory', 'UcrmUsers', 'TenantProfile', 'PhoneNumber'] as $_rtLib) {
+        require_once dirname(__DIR__, 2) . '/lib/' . $_rtLib . '.php';
+    }
+    try {
+        $_rtCrm = function_exists('svc') ? svc('crm') : null;
+        $_rtUcrmUsers = ($_rtCrm && $_rtCrm->isConfigured()) ? UcrmUsers::all($_rtCrm) : null;
+    } catch (\Throwable $e) { $_rtUcrmUsers = null; }
+    try { $_rtTenant = TenantProfile::current(is_array($config ?? null) ? $config : [], $dataDir ?? null); }
+    catch (\Throwable $e) { $_rtTenant = null; }
+}
 ?>
 
 <!-- ══ Edit Modal ══════════════════════════════════════════════════════════ -->
@@ -134,9 +154,15 @@
         <!-- Tab: CRM Integrations -->
         <div class="re-pane" id="re-crm" style="padding:20px;">
           <div style="padding:14px;background:#EDE7F6;border-radius:12px;margin-bottom:14px;">
+<?php if ($_rtUganda): ?>
+            <label style="font-size:12px;font-weight:800;color:#7B1FA2;display:block;margin-bottom:6px;">📋 uCRM user <small style="font-weight:400;">(for jobs)</small></label>
+            <select name="ucrm_user_id" id="edit_ucrm_user_id" class="form-control" style="background:#fff;"></select>
+            <small id="edit_ucrm_note" style="color:#7B1FA2;font-size:10px;margin-top:4px;display:block;"></small>
+<?php else: ?>
             <label style="font-size:12px;font-weight:800;color:#7B1FA2;display:block;margin-bottom:6px;">📋 UCRM User ID <small style="font-weight:400;">(for job notifications)</small></label>
             <input type="number" name="ucrm_user_id" id="edit_ucrm_user_id" class="form-control" placeholder="e.g. 12" min="1" style="background:#fff;">
             <small style="color:#7B1FA2;font-size:10px;margin-top:4px;display:block;">UCRM → System → Users → click user → ID in URL</small>
+<?php endif; ?>
           </div>
           <div style="padding:14px;background:#E3F2FD;border-radius:12px;">
             <label style="font-size:12px;font-weight:800;color:#1565C0;display:block;margin-bottom:6px;">🔑 UCRM App Key <small style="font-weight:400;">(for payment attribution)</small></label>
@@ -412,10 +438,12 @@ $me = $auth->currentRetailer();
     <div class="rt-stat-val" style="color:#00838F; font-size:17px;">$<?= number_format($totalWallet, 0) ?></div>
     <div class="rt-stat-lbl">Total Wallet</div>
   </div>
+<?php if (!$_rtUganda): ?>
   <div class="rt-stat">
     <div class="rt-stat-val" style="color:<?= $syncStatus['unsynced'] > 0 ? '#BF360C' : '#2E7D32'; ?>;"><?= $syncStatus['synced'] ?>/<?= $syncStatus['total'] ?></div>
     <div class="rt-stat-lbl">CRM Linked</div>
   </div>
+<?php endif; ?>
 </div>
 
 <!-- ── Collapsible: Add New Staff ─────────────────────────────────────────── -->
@@ -543,11 +571,15 @@ $me = $auth->currentRetailer();
     <option value="active">Active</option>
     <option value="inactive">Inactive</option>
   </select>
+<?php if ($_rtUganda): ?>
+  <select id="rtCrmFilter" class="rt-filter" style="display:none;"><option value=""></option></select>
+<?php else: ?>
   <select id="rtCrmFilter" class="rt-filter" onchange="rtFilter()">
     <option value="">CRM: All</option>
     <option value="linked">CRM Linked</option>
     <option value="unlinked">Not Linked</option>
   </select>
+<?php endif; ?>
   <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
     <span id="rtCount" style="font-size:12px;color:#888;"></span>
     <a href="?page=dashboard&export=retailers" class="rt-btn rt-btn-outline"><i class="bi bi-download"></i> Export</a>
@@ -615,6 +647,39 @@ $roleColors = [
       ?>
       <span style="font-size:10px;font-weight:700;background:<?= $_pS[1] ?>;color:<?= $_pS[2] ?>;border-radius:4px;padding:1px 7px;"><?= $_pS[0] ?></span>
       <?php endforeach; ?>
+<?php if ($_rtUganda): ?>
+<?php if (StaffDirectory::takesJobs($r)):
+        $_rtId   = (int)($r['ucrm_user_id'] ?? 0);
+        $_rtVer  = StaffDirectory::linkedUcrmUser($r);
+        $_rtLive = is_array($_rtUcrmUsers) ? ($_rtUcrmUsers[$_rtId] ?? null) : null;
+        $_rtOk   = 'font-size:10px;font-weight:700;background:#E8F5E9;color:#1B5E20;border-radius:4px;padding:1px 7px;';
+        $_rtWarn = 'font-size:10px;font-weight:700;background:#FFF3E0;color:#BF360C;border-radius:4px;padding:1px 7px;cursor:pointer;';
+        if ($_rtId <= 0) {
+            $_rtB = [$_rtWarn, '⚠ Not linked to uCRM', 'Jobs cannot be assigned to this person until an admin links a uCRM user.'];
+        } elseif ($_rtUcrmUsers === null) {
+            $_rtB = $_rtVer === $_rtId
+                ? [$_rtOk, '🔗 uCRM #' . $_rtId . ' (not checked now)', 'Verified when it was saved. uCRM did not answer, so it was not checked on this page.']
+                : [$_rtWarn, '⚠ uCRM #' . $_rtId . ' not verified', 'Saved before the verified picker. It is not used for jobs until it is linked again.'];
+        } elseif ($_rtLive === null) {
+            $_rtB = [$_rtWarn, '⚠ uCRM #' . $_rtId . ' is not a uCRM user', 'uCRM has no user with this number. It is not used for jobs.'];
+        } elseif ($_rtVer !== $_rtId) {
+            $_rtB = [$_rtWarn, '⚠ uCRM #' . $_rtId . ' not verified', 'Saved before the verified picker, or the e-mail changed since. It is not used for jobs until it is linked again.'];
+        } elseif (!UcrmUsers::isActive($_rtLive) || UcrmUsers::email($_rtLive) !== StaffDirectory::email($r)) {
+            $_rtB = [$_rtWarn, '⚠ uCRM #' . $_rtId . ' inactive or e-mail differs', 'uCRM now shows this user inactive, or with another e-mail. Jobs cannot be assigned until it is fixed and linked again.'];
+        } else {
+            $_rtB = [$_rtOk, '🔗 uCRM #' . $_rtId, 'Verified link to uCRM. Jobs can be assigned to this person.'];
+        }
+        $_rtPhone = trim((string)($r['phone'] ?? ''));
+        $_rtPhoneOk = $_rtPhone === '' || ($_rtTenant !== null && StaffDirectory::phoneOf($r, $_rtTenant) !== null);
+?>
+      <span title="<?= h($_rtB[2]) ?>" onclick="openEditModal(<?= $rid ?>)" style="<?= $_rtB[0] ?>"><?= h($_rtB[1]) ?></span>
+<?php if ($_rtPhone === ''): ?>
+      <span title="Add a number in the international form, e.g. +256 7XX XXX XXX." onclick="openEditModal(<?= $rid ?>)" style="<?= $_rtWarn ?>">⚠ No number: job messages cannot reach this person</span>
+<?php elseif (!$_rtPhoneOk): ?>
+      <span title="Write it as +256 7XX XXX XXX." onclick="openEditModal(<?= $rid ?>)" style="<?= $_rtWarn ?>">⚠ Number cannot receive WhatsApp</span>
+<?php endif; ?>
+<?php endif; ?>
+<?php else: ?>
       <!-- CRM link -->
       <?php if ($hasCrm): ?>
       <a href="<?= $crmUrl ?>" target="_blank" style="font-size:10px;font-weight:700;background:#E8F5E9;color:#1B5E20;border-radius:4px;padding:1px 7px;text-decoration:none;">🔗 CRM #<?= (int)$r['ftth_crm_client_id'] ?></a>
@@ -629,6 +694,7 @@ $roleColors = [
         <span title="No UCRM User ID — Jobs tab will show Not Linked" onclick="openEditModal(<?= $rid ?>)" style="font-size:10px;font-weight:700;background:#FFF3E0;color:#BF360C;border-radius:4px;padding:1px 7px;cursor:pointer;">⚠ Set UCRM ID</span>
         <?php endif; ?>
       <?php endif; ?>
+<?php endif; ?>
       <!-- Modules -->
       <?php if (!empty($r['modules']) && is_array($r['modules'])): ?>
         <?php $sh=array_slice($r['modules'],0,2); $ex=count($r['modules'])-count($sh); ?>
@@ -760,6 +826,56 @@ $roleColors = [
 })();
 </script>
 
+<?php if ($_rtUganda): ?>
+<script>
+// 5.18.50 (docs/44 J2, D9, M7): the uCRM user picker. The link as saved is its own option, posted as "keep": a save
+// that leaves it selected changes nothing, and until uCRM answers it is the only choice there is. Choosing a user in
+// the list — the same one included — asks the server to check it with uCRM. Nothing is pre-selected for the admin:
+// the user with this account's e-mail is marked ★.
+function rtFillUcrmPicker(id, d) {
+  var sel  = document.getElementById('edit_ucrm_user_id');
+  var note = document.getElementById('edit_ucrm_note');
+  var cur  = parseInt(d.ucrm_user_id || 0, 10) || 0;
+  function opt(v, label, disabled) {
+    var o = document.createElement('option');
+    o.value = String(v); o.textContent = label; o.disabled = !!disabled;
+    sel.appendChild(o);
+    return o;
+  }
+  var asSaved = cur ? ('#' + cur + ' — as saved' + (d.ucrm_verified ? ' (verified)' : ', not verified')) : '— not linked —';
+  sel.innerHTML = '';
+  opt(cur ? 'keep' : '0', asSaved);
+  sel.value = cur ? 'keep' : '0';
+  note.textContent = 'Checking uCRM…';
+  fetch('?page=api&action=get_ucrm_users&retailer_id=' + encodeURIComponent(id), {credentials: 'same-origin'})
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      var users = res && res.status === 'success' && res.data && res.data.users;
+      if (!users) {
+        note.textContent = ((res && res.message) ? res.message + ' ' : '') + 'The link stays as it is.';
+        return;
+      }
+      sel.innerHTML = '';
+      if (cur) opt('keep', asSaved);
+      opt(0, '— not linked —');
+      var listed = false, same = false;
+      users.forEach(function (u) {
+        var elsewhere = !!(u.linked_to && u.linked_to.retailer_id !== id);
+        var label = u.label + (u.active ? '' : ' (inactive)') + (u.same_email ? '  ★ same e-mail' : '')
+                  + (elsewhere ? '  — linked to ' + u.linked_to.name : '');
+        opt(u.id, label, elsewhere || !u.active);
+        if (u.id === cur) listed = true;
+        if (u.same_email) same = true;
+      });
+      sel.value = cur ? 'keep' : '0';
+      note.textContent = (same ? '★ marks the uCRM user with this account\'s e-mail. ' : 'No uCRM user has this account\'s e-mail. ')
+        + 'Only that user can be linked; uCRM checks the choice when you save.'
+        + (cur && !d.ucrm_verified ? ' The saved #' + cur + (listed ? '' : ' is not a uCRM user, and it') + ' is not verified, so it is not used for jobs.' : '');
+    })
+    .catch(function () { note.textContent = 'uCRM could not be reached. The link stays as it is.'; });
+}
+</script>
+<?php endif; ?>
 <script>
 // ── Retailer data map — used by all modals ─────────────────────────────────
 var RETAILER_DATA = <?php
@@ -782,6 +898,7 @@ var RETAILER_DATA = <?php
       'role_id'      => $r['role_id']      ?? null,
       'modules'      => $r['modules']      ?? [],
     ];
+    if ($_rtUganda) $rdMap[(int)$r['id']]['ucrm_verified'] = StaffDirectory::linkedUcrmUser($r) > 0;
   }
   echo json_encode($rdMap, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT);
 ?>;
@@ -790,6 +907,9 @@ function openEditModal(id) {
   var d = RETAILER_DATA[id] || {};
   document.getElementById('edit_retailer_id').value  = id;
   document.getElementById('edit_ucrm_user_id').value = d.ucrm_user_id || '';
+<?php if ($_rtUganda): ?>
+  rtFillUcrmPicker(id, d);
+<?php endif; ?>
   document.getElementById('edit_ucrm_app_key').value = d.ucrm_app_key || '';
   document.getElementById('edit_carry_limit').value = d.carry_limit || '';
   // Set project checkboxes

@@ -1991,3 +1991,64 @@ Consequences for release A:
 
 **Next.** Build release A (5.18.50), run the full suite twice with zero failures, rehearse the deployment and the
 rollback, and stop before deployment for the operator's review of the build report. Release B stays BLOCKED.
+
+## 5.18.50 — Release A of J1–J8: staff and jobs follow Uganda's rules (docs/44 §16)
+
+**Why.** The operator approved release A on 27 Sep with M6 (no job-assignment WhatsApp on Uganda), M7 (only a
+picker-verified uCRM link counts for jobs), the J2 correction and a strict exclusion of billing, invoices, payments,
+customer records and their workflows (docs/44 §15.9). Release A was to be built, tested twice, its deployment and
+rollback rehearsed, and **not deployed** until the build report is reviewed.
+
+**What.** Uganda only, behind one switch (`lib/StaffJobsGate.php`); South Sudan byte-identical. Plugin commit
+**`125fa0c`**: 38 files against 5.18.49 (`e076632`), 20 changed and 18 added.
+- **J1** the South Sudan staff lists never touch a Uganda account. **J2 + D9 + M7** the checked uCRM picker; only a
+  link saved through it counts for My Jobs, job detail, every job action, New Job and Bulk Dispatch — never
+  `ftth_crm_client_id`, never an old id (so S3's and S5's stale ids match nobody). **J3** job-taking accounts' phones
+  in the international form. **J5** Kampala time to uCRM from New Job, Bulk Dispatch and Reschedule. **J6 + D7** only
+  the verified assignee, a support leader or an admin acts on a job; the caller re-read on every action.
+- **M6** New Job, Bulk Dispatch, Reschedule and uCRM's `job.add` send no WhatsApp and say so; the box is hidden.
+  Accept, task-progress, completion and invoice-request messages unchanged.
+- **J7** "sent", never "delivered"; suppressed and skipped counted. **J8 + M1** a staff number is not answered by
+  the AI as a customer, and no follow-up is opened or sent for it.
+- **Not changed:** billing, invoices, payments, customer records; 1.8–1.10 and 5.3 left out as instructed.
+
+**Proof.**
+- Full suite, twice, on `125fa0c`: **223 files, 10,422 assertions passed, 0 failed, exit 0 — both runs**.
+- Eight new suites, **393 assertions, 59 weakened copies, all caught**; the South Sudan golden compares a whole
+  working day on 5.18.49 and on 5.18.50 — every answer, message, uCRM request and seven whole pages.
+- The first full run failed 8 assertions in two suites, both defects of the new test code (a zone named in a
+  fixture, which `test_timezone.php` forbids; the version label on every page after the bump). Fixed in the tests;
+  no product line changed.
+- The 37 changed PHP files use nothing newer than PHP 8.0 (a scan with a control of 7 planted features).
+
+**Deploy.** `scripts/deploy-5.18.50.sh`, pinned to `125fa0c`, only over `e076632`: backup first, a typed `DEPLOY`,
+NO-GO unless the installed plugin reads Uganda from both configuration sources and the server's own PHP accepts every
+changed file; afterwards every changed file, the switch, the staff accounts, the Message Log and the screens are
+checked. `--rollback` puts `e076632` back the same way. Rehearsed in `scripts/harness/deploy-5.18.50/rehearse.sh` —
+real `deploy-hybrid.sh` and real `git checkout` in a clone: **99/99 on two consecutive runs**, 12 weakened copies of the script each caught. Evidence in `docs/evidence/5.18.50/`.
+**Not deployed by this session.** Release B stays BLOCKED; the five D5 messages are in docs/44 §16.7
+for approval.
+
+**Deployed 27 Sep 2026 20:08 UTC by the operator: PASSED, 41 ok / 0 failed / 1 note** (docs/44 §16.9).
+- The server's PHP is **8.1.34**, and it accepted every changed file. The installed plugin reads Uganda from both
+  configuration sources, and every changed file is installed exactly as `125fa0c` has it.
+- No staff account changed. No Message Log row of any kind was written from the mark (#374) to 20:12.
+- The note: none of the 4 accounts that take jobs holds a verified link yet. My Jobs is empty for all four until
+  their links are saved.
+- **Two rollback runs followed**, at 20:09 and 20:12, because the chat handover put the deploy and rollback commands
+  in one copyable block. Both stopped at the typed question and changed nothing. From now on a rollback command
+  always stands in a block of its own.
+
+**20:31 UTC — the links** (docs/44 §16.10). S1 → 1000 and S4 → 1099 saved through the picker, both verified. M5 (S3's
+and S5's old ids) and S1's number are still to do. The users check's follow-up line described 5.18.49 ("a staff
+member's included"). It now reads the installed crons: 413/413 on two runs, 14 weakened copies caught.
+
+**20:42 UTC — `--after-only`: 32 ok, 1 failed, 2 notes** (docs/44 §16.11). R4 still 0 and no Message Log row since
+#374. V4 found 4 fatal lines, all `cron/master.php:83`: the master closes its lock at its normal end, and its shutdown
+handler then unlocks the closed handle, which is fatal on PHP 8.
+- **Not Release A's:** `master.php` and `main.php` are unchanged since 13 Sep, and Release A changes no `exit`.
+  **Measured:** it has fired 4–9 times an hour, every hour, since at least 26 Sep 00:00 UTC — 5.18.49 included.
+- The work of each run is done and saved before it.
+- A one-line fix (`is_resource()`) is proposed as 5.18.51, awaiting approval.
+
+**Release B stays BLOCKED.**

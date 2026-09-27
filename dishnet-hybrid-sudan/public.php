@@ -1547,6 +1547,11 @@ if ($page === 'dashboard' && $tab === '' && !empty($retailer)) {
     }
 }
 
+// 5.18.50 (docs/44 J1): the South Sudan staff lists below never touch a Uganda account. On Uganda only an
+// administrator's verified link sets ucrm_user_id (tabs/admin/retailers.php, lib/StaffLink.php).
+require_once __DIR__ . '/lib/StaffJobsGate.php';
+$_staffJobsUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir);
+
 //  Auto-clear jobs cache on plugin version upgrade 
 if (!empty($retailer) && isset($store)) {
     $_pluginVer  = $GLOBALS['_PLUGIN_VER'] ?? 'unknown';
@@ -1562,6 +1567,7 @@ if (!empty($retailer) && isset($store)) {
             'auto_cleared'   => date('Y-m-d H:i:s'),
         ]);
         // Bulk-correct all retailer ucrm_user_id from seed map
+        if (!$_staffJobsUganda) {
         $_seedMapUpgrade = [
             'bhavin@dishnetafrica.com'            => 1,
             'hardik@dishnetafrica.com'            => 1124,
@@ -1605,11 +1611,12 @@ if (!empty($retailer) && isset($store)) {
         }
         unset($_r);
         if ($_changed) $store->save('retailers.json', $_allRetailers);
+        }
     }
 }
 
 //  Auto-map ucrm_user_id from seed table (fires on every page load) 
-if (!empty($retailer)) {
+if (!empty($retailer) && !$_staffJobsUganda) {
     $_ucrmSeedMapGlobal = [
         //  Core staff  confirmed from Laravel DB + UCRM agenda URLs 
         'bhavin@dishnetafrica.com'            => 1,      // Bhavin Madlani

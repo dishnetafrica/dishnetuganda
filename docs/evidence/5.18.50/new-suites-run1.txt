@@ -1,0 +1,590 @@
+=== test_staff_jobs_gate.php ===
+
+0. The South Sudan lists this test guards
+  ok   the page load list is read from the source (29 entries)
+  ok   the version change list is read from the source (29 entries)
+  ok   the My Jobs list is read from the source (29 entries)
+  ok   the Clear Cache list is read from the source (29 entries)
+  ok   one e-mail sits in all four lists with the same uCRM user — the account they would rewrite
+
+1. The gate
+  ok   tenant_profile uganda: Uganda
+  ok   UGX held only in the vault, with the data directory: Uganda
+  ok   the same install asked WITHOUT the data directory reads as South Sudan — the trap every call must avoid
+  ok   an explicit south-sudan profile wins over the vault
+  ok   nothing configured: South Sudan
+  ok   an unknown profile: South Sudan
+  ok   the gate is called at 16 places
+  ok   every call passes the data directory as its second argument
+
+2. On Uganda (selected by the vault, as the live box is before D8)
+  ok   the listed account signs in and a page renders
+  ok   a version change, a page load and My Jobs rewrite no uCRM user
+  ok   …while the version-change block did run (it cleared the cache), so the list had its chance
+  ok   Clear Cache: 403 for the acct account
+  ok   Clear Cache: 403 for the ret account
+  ok   Clear Cache: 403 for the sup account
+  ok   Clear Cache: 200 for an administrator
+  ok   the jobs cache is emptied
+  ok   and the staff table is byte-identical afterwards
+  ok   get_ucrm_users: 403 for the acct account
+  ok   get_ucrm_users: 403 for the ret account
+  ok   get_ucrm_users: 403 for the sup account
+  ok   an administrator gets uCRM's own users, and only them
+  ok   no e-mail in the answer
+  ok   none of the South Sudan list's 25 names or 29 e-mails (canary)
+  ok   the user with the account's own e-mail is marked, and nothing is chosen for it
+  ok   auto-map: 403 for a support account
+  ok   auto-map: 409 for an administrator, pointing at the Staff page
+  ok   and nothing is linked: the staff table is byte-identical
+
+3. The control: a South Sudan copy, same account, same page
+  ok   South Sudan's page load still rewrites the listed account (18 → the list's user) — the observation above is live
+  ok   and its get_ucrm_users still answers the South Sudan list, as in 5.18.49
+
+4. Weakened copies of the code must each fail this test
+  ok   caught: the version-change list left ungated
+         first: a version change, a page load and My Jobs rewrite no uCRM user
+  ok   caught: the page-load list left ungated
+         first: a version change, a page load and My Jobs rewrite no uCRM user
+  ok   caught: the My Jobs correction left ungated
+         first: a version change, a page load and My Jobs rewrite no uCRM user
+  ok   caught: the gate asked without the data directory
+         first: a version change, a page load and My Jobs rewrite no uCRM user
+  ok   caught: Clear Cache without its admin check
+         first: Clear Cache: 403 for the acct account
+  ok   caught: auto-map still writing on Uganda
+         first: auto-map: 409 for an administrator, pointing at the Staff page
+  ok   caught: get_ucrm_users back to the South Sudan list
+         first: get_ucrm_users: 403 for the acct account
+
+41 passed, 0 failed
+
+
+=== test_ucrm_link.php ===
+
+1. set_ucrm_user_id: checked with uCRM before it is saved
+  ok   a support account cannot link anyone, itself included
+  ok   an administrator links the support account to uCRM user 1099, whose e-mail is its own
+  ok   and records the link beside it: user, e-mail, when and by whom
+  ok   refused, nothing changed: an id uCRM does not know
+  ok   refused, nothing changed: an inactive uCRM user
+  ok   refused, nothing changed: a uCRM user with another e-mail (D9)
+  ok   refused, nothing changed: a uCRM user already linked to another active account
+  ok   refused, nothing changed: an accountant — a role that does not take jobs
+  ok   refused, nothing changed: a retailer
+  ok   uCRM's e-mail in capitals with spaces still matches the account's (support_engineer, D7)
+  ok   uCRM not answering: 503, and the link is not changed — never set unverified
+  ok   "not linked" clears the id and the link (M5)
+
+2. The Staff page's Edit form
+  ok   a save that leaves a verified link as it was keeps it
+  ok   …without asking uCRM again, and the page says the account was updated
+  ok   an old unverified id left as it was is kept — still unverified, matching nobody
+  ok   and the page says so
+  ok   choosing the old id itself is a choice: uCRM is asked, and says it has no such user
+  ok   a value that is no number changes nothing
+  ok   "— not linked —" clears the old id (M5)
+  ok   a refused link: the other fields save, the link does not
+  ok   and the page gives the reason
+  ok   uCRM not answering at save: the link keeps its value, the other fields save, the page says so
+  ok   a changed e-mail: the id stays, the recorded link keeps the old e-mail, and the link no longer counts (M7)
+  ok   and the page says so
+  ok   the e-mail put back: the link counts again, and nothing needs saying
+  ok   choosing the same user again is checked with uCRM, and stays linked
+  ok   a form without the field leaves the link alone
+
+3. The Staff page
+  ok   the uCRM user is a picker, not a number to type
+  ok   filled from uCRM when the Edit form opens
+  ok   the cards are found by name (a control on the locator)
+  ok   a verified link: "🔗 uCRM #1099"
+  ok   no link: "⚠ Not linked to uCRM"
+  ok   a real uCRM user saved the old way: "not verified" — the stored id alone is never trusted
+  ok   an id uCRM does not know: "is not a uCRM user"
+  ok   an accountant (no jobs) has no uCRM badge
+  ok   D6: the organisation-7 tile, filter and badges are not drawn
+  ok   …the filter kept as a hidden element, because the page script reads it
+  ok   J3: a job-taking account whose number has no international form is flagged
+  ok   J3: one with no number is flagged too
+  ok   a retailer's number is not judged (J3 is for job-taking roles)
+  ok   the form knows which links are verified
+
+4. The engineer lists offer only verified accounts
+  ok   New Job's list: exactly the two verified accounts (asked by a support engineer, D7)
+  ok   and no phone number in it
+  ok   and nothing for the ret account, who may not create a job
+  ok   and nothing for the acct account, who may not create a job
+  ok   Bulk Dispatch's list: the same two
+  ok   an account made inactive drops out at once
+  ok   and so does one whose uCRM user was made inactive in uCRM
+
+5. J3: a job-taking account's number is saved in the international form
+  ok   edit, support: "0772 123 456" is saved as "+256772123456"
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "772123456" is saved as "+256772123456"
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "+256 772 123 456" is saved as "+256772123456"
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "00256772123456" is saved as "+256772123456"
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "+211 912 345 678" is saved as "+211912345678"
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "12345" is saved as "12345", with the warning
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "07721" is saved as "07721", with the warning
+  ok     …and read back on use the same way (phoneOf)
+  ok   edit, support: "" is saved as ""
+  ok     …and read back on use the same way (phoneOf)
+  ok   an accountant's number is saved exactly as typed (J3 is for job-taking roles)
+  ok   and so is a retailer's
+  ok   create, support: saved in the international form
+  ok   create, support leader, no international form: kept, and the page warns
+  ok   create, retailer: saved exactly as typed
+  ok   import, support: saved in the international form
+
+6. Weakened copies of the code must each fail this test
+  ok   caught: the Edit form saves without asking uCRM
+         first: choosing the old id itself is a choice: uCRM is asked, and says it has no such user
+  ok   caught: the "already linked" check skipped
+         first: refused, nothing changed: a uCRM user already linked to another active account
+  ok   caught: a case-sensitive e-mail match
+         first: uCRM's e-mail in capitals with spaces still matches the account's (support_engineer, D7)
+  ok   caught: the badge trusting the stored id
+         first: a real uCRM user saved the old way: "not verified" — the stored id alone is never trusted
+  ok   caught: a link that survives a changed e-mail
+         first: a changed e-mail: the id stays, the recorded link keeps the old e-mail, and the link no longer counts (M7)
+  ok   caught: J3 bypassed on edit
+         first: …without asking uCRM again, and the page says the account was updated
+  ok   caught: an invalid number silently emptied
+         first: J3: a job-taking account whose number has no international form is flagged
+  ok   caught: the engineer list trusting any stored id
+         first: New Job's list: exactly the two verified accounts (asked by a support engineer, D7)
+
+78 passed, 0 failed
+
+
+=== test_job_time.php ===
+
+1. JobTime
+  ok   09:00 on 6 October → 2026-10-06T09:00:00+0300
+  ok   half past midnight stays on the same day
+  ok   and a minute before midnight too
+  ok   the zone is the install's, not written in (Juba is +0200)
+  ok   refused: a day that does not exist
+  ok   refused: a date without its zero
+  ok   refused: a date in another order
+  ok   refused: an hour without its zero
+  ok   refused: hour 24
+  ok   refused: minute 60
+  ok   refused: words
+  ok   refused: no date
+  ok   refused: no time
+  ok   Reschedule's "2026-10-08 11:00"
+  ok   the same with a T
+  ok   and with the seconds a browser may add
+  ok   a date alone, or words, refused
+
+2. On Uganda, through ＋ New Job, Bulk Dispatch and Reschedule
+  ok   ＋ New Job at 09:00 reaches uCRM as 2026-10-06T09:00:00+0300
+  ok   and 00:30 stays on its own day
+  ok   ＋ New Job with "2026-02-30 09:00": 422, and nothing sent to uCRM
+  ok   ＋ New Job with "2026-10-06 9am": 422, and nothing sent to uCRM
+  ok   Bulk Dispatch: each row's hour, in Kampala time
+  ok   a malformed hour in row 2: 422 naming the row, and not even row 1 is created
+  ok   Reschedule to "2026-10-08 11:00" reaches uCRM as 2026-10-08T11:00:00+0300
+  ok   Reschedule with a date and no hour: 422, and uCRM is not touched
+
+3. South Sudan: the three strings of 5.18.49, byte for byte
+  ok   ＋ New Job: 2026-10-06T09:00:00.000Z
+  ok   Bulk Dispatch: 2026-10-09T14:30:00.000Z
+  ok   Reschedule: 2026-10-08 11:00
+  ok   and South Sudan still accepts what 5.18.49 accepted (D2)
+
+4. Weakened copies of the code must each fail this test
+  ok   caught: a Z suffix left in place
+         first: 09:00 on 6 October → 2026-10-06T09:00:00+0300
+  ok   caught: an impossible day let through
+         first: refused: a day that does not exist
+  ok   caught: ＋ New Job still sending UTC
+         first: ＋ New Job at 09:00 reaches uCRM as 2026-10-06T09:00:00+0300
+  ok   caught: Reschedule sending no zone
+         first: Reschedule to "2026-10-08 11:00" reaches uCRM as 2026-10-08T11:00:00+0300
+  ok   caught: Bulk Dispatch creating before it checks every row
+         first: a malformed hour in row 2: 422 naming the row, and not even row 1 is created
+
+34 passed, 0 failed
+
+
+=== test_job_access.php ===
+
+1. My Jobs: the verified link, and nothing else
+  ok   a verified link: its own two jobs, read live from uCRM
+  ok   and the same two from the cache that read warmed
+  ok   another engineer: only the job assigned to them
+  ok   an id stored without the verified picker — even one equal to the jobs' assignee: "needs mapping", no job (cache)
+  ok   an id stored without the verified picker — even one equal to the jobs' assignee: "needs mapping", no job (live)
+  ok   a link made for an e-mail the account no longer has: "needs mapping", no job (cache)
+  ok   a link made for an e-mail the account no longer has: "needs mapping", no job (live)
+  ok   ftth_crm_client_id, the fallback 5.18.49 used when there was no uCRM id: "needs mapping", no job (cache)
+  ok   ftth_crm_client_id, the fallback 5.18.49 used when there was no uCRM id: "needs mapping", no job (live)
+  ok   an administrator linked to a user with no job: an empty list, not "needs mapping"
+
+   South Sudan, unchanged: the fallbacks M7 replaced still work there
+  ok   South Sudan: the stored id still finds the two jobs (5.18.49's behaviour, D2)
+  ok   South Sudan: ftth_crm_client_id still finds the two jobs (5.18.49's behaviour, D2)
+  ok   South Sudan: a job detail is still not checked (D2 — the same hole, left as it was)
+
+2. The matrix: every account type against every action on job 901 (T6.1)
+  ok   detail     the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   status     the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   task       the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   complete   the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   reschedule the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   comment    the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   signature  the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   survey     the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   get_survey the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.", no job data, nothing written
+  ok   control: an allowed detail does carry the job and its customer — so the "no job data" check can see them
+  ok   control: the three allowed accounts' writes reached uCRM (3 status + 3 reschedule PATCHes, 3 + 3 comments, 3 ticks, 3 signature logs)
+  ok   control: the saved survey is there for the assignee to read
+
+   Creating a job and the engineer lists: by role (D7)
+  ok   ＋ New Job: admin, support leader, support and support engineer may (D7); accountant, field accountant, sales, retailer, field agent and collector get 403, and no job is made
+  ok   New Job's engineer list: the same rule, and a refusal names nobody
+  ok   Bulk Dispatch's engineer list: the same rule, and a refusal names nobody
+
+3. M7: the verified link opens a job; a stored id does not
+  ok   a stored id equal to the job's assignee, never verified: 403
+  ok   control: the same account, once linked through the picker, may
+  ok   and with the link removed again, may not
+  ok   control: the moved account, its e-mail put back to the one verified, may
+  ok   and its e-mail changed again, may not: the link is re-verified or it does not count
+
+4. A job with no assignee, and an answer without the field (V4)
+  ok   job 903 (assignedUserId is null): tech gets 403 "This job is not assigned to you." and nothing is written
+  ok   job 903 (assignedUserId is null): acct gets 403 "This job is not assigned to you." and nothing is written
+  ok   job 903 (assignedUserId is null): stale gets 403 "This job is not assigned to you." and nothing is written
+  ok   job 903: the lead may
+  ok   job 903: the admin may
+  ok   job 904 (the answer has no assignedUserId field): tech gets 403 "This job's assignee could not be read from uCRM, so only a support leader or an admin may act on it." and nothing is written
+  ok   job 904 (the answer has no assignedUserId field): acct gets 403 "This job's assignee could not be read from uCRM, so only a support leader or an admin may act on it." and nothing is written
+  ok   job 904 (the answer has no assignedUserId field): stale gets 403 "This job's assignee could not be read from uCRM, so only a support leader or an admin may act on it." and nothing is written
+  ok   job 904: the lead may
+  ok   job 904: the admin may
+
+5. A task belongs to its job (T6.2)
+  ok   another job's task, sent with the assignee's own job id: 403, and uCRM is not touched
+  ok   a task id with no job: 422, and uCRM is not touched
+  ok   the same task with its own job, which is not theirs: 403
+  ok   control: its assignee may tick it
+
+6. Every engineer chosen has a verified link — checked before the first job is made
+  ok   uCRM user 1105, whose stored id and e-mail both match but were never verified: 422, no job
+  ok   a verified engineer and an unverified one together: not even the first job: 422, no job
+  ok   a uCRM user no account is linked to: 422, no job
+  ok   control: two verified engineers, one a support engineer (D7): two jobs
+  ok   an engineer whose account was deactivated: 422, no job
+  ok   an engineer whose uCRM user was made inactive in uCRM: 422, no job
+  ok   an engineer whose uCRM e-mail is no longer the account's (D9): 422, no job
+  ok   uCRM not answering: 503, and no job is made on an unchecked engineer
+  ok   Bulk Dispatch by tech: 403, as in 5.18.49, and no job
+  ok   Bulk Dispatch by eng: 403, as in 5.18.49, and no job
+  ok   Bulk Dispatch by stale: 403, as in 5.18.49, and no job
+  ok   Bulk Dispatch by acct: 403, as in 5.18.49, and no job
+  ok   Bulk Dispatch by the leader to an unverified user: 422 naming the row, no job
+  ok   control: the leader to a verified engineer — one job
+
+7. A job is completed by its assignee
+  ok   another engineer: 403, nothing stored, uCRM not written
+  ok   its assignee: completed — closed in uCRM and recorded
+
+8. An account deactivated or demoted with its web session open
+  ok   control: through the open web session, with no token, a leader may read a job
+  ok   deactivated: the next read is 403 "Your account is not active.", with no job data
+  ok   the next write too, and nothing reaches uCRM
+  ok   and My Jobs
+  ok   its Bearer token was already refused before 5.18.50 (the token lookup reads is_active): 401
+  ok   control: a support leader's open session may read another engineer's job
+  ok   moved to sales with the session open: the next read is refused, by the role stored now
+  ok   and it can no longer create a job
+
+9. Weakened copies of the code must each fail this test
+  ok   caught: the cached session record used instead of the account as stored now
+         first: deactivated: the next read is 403 "Your account is not active.", with no job data
+  ok   caught: uCRM user 0 treated as a match
+         first: job 903 (assignedUserId is null): acct gets 403 "This job is not assigned to you." and nothing is written
+  ok   caught: the status check placed after the uCRM write
+         first: status     the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.
+  ok   caught: acting on a job through a stored, unverified id (M7)
+         first: detail     the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.
+  ok   caught: My Jobs through a stored, unverified id (M7)
+         first: an id stored without the verified picker — even one equal to the jobs' assignee: "needs mapping", no job (ca
+  ok   caught: My Jobs falling back to ftth_crm_client_id (the J2 correction)
+         first: ftth_crm_client_id, the fallback 5.18.49 used when there was no uCRM id: "needs mapping", no job (cache)
+  ok   caught: the job detail unchecked
+         first: detail     the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.
+  ok   caught: a task of another job accepted (T6.2)
+         first: another job's task, sent with the assignee's own job id: 403, and uCRM is not touched
+  ok   caught: completion unchecked
+         first: complete   the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.
+  ok   caught: a survey readable by anyone
+         first: get_survey the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.
+  ok   caught: a signature saved by anyone
+         first: signature  the admin, the leader and the assignee may; the 12 others get 403 "This job is not assigned to you.
+  ok   caught: job creation widened to another role
+         first: ＋ New Job: admin, support leader, support and support engineer may (D7); accountant, field accountant, sales
+
+83 passed, 0 failed
+
+
+=== test_job_notifications_off.php ===
+  ok   the baseline is 5.18.49, from Git (e076632)
+  ok   the day ran: all eight steps answered 200 on this tree
+
+1. The control: 5.18.49, as Uganda, sends the four job-assignment messages on this day
+  ok   four assignment messages, all to the technician
+  ok     ＋ New Job
+  ok     Bulk Dispatch
+  ok     Reschedule
+  ok     a job created in uCRM (job.add)
+  ok   and the Message Log records the four
+  ok   and ＋ New Job answered "notified"
+
+2. This tree, as Uganda: none of the four, and each answer says so
+  ok   no job-assignment message reaches WhatsApp
+  ok   and the Message Log records none
+  ok   ＋ New Job answers whatsapp: not_sent, with "No WhatsApp was sent: job notifications are not switched on yet. The engineer sees the job in My Jobs."
+  ok   Bulk Dispatch answers whatsapp: not_sent, with "No WhatsApp was sent: job notifications are not switched on yet. The engineer sees the job in My Jobs."
+  ok   Reschedule answers whatsapp: not_sent, with "No WhatsApp was sent: job notifications are not switched on yet. The engineer sees the job in My Jobs."
+  ok   ＋ New Job does not mark the engineer "notified" (the 📱 in its result)
+  ok   and the jobs are still created and rescheduled
+  ok   the job created in uCRM: the webhook log says "WhatsApp skipped"
+  ok   and never "notification sent"
+  ok   control: 5.18.49 wrote "notification sent" there
+
+3. Every other message is 5.18.49's, byte for byte
+  ok   this tree sends the seven: accepted, to the engineer; accepted, to the support leader; a task done; all tasks done; completed, to the engineer; completed, to the admin; the invoice request, to the accountant
+  ok   each is the same text to the same number, in the same order, as 5.18.49
+  ok   the Message Log rows are the same, event for event
+  ok   the customer's "installation scheduled" e-mail: the same message, byte for byte (its date, id and boundaries aside)
+  ok   the webhook log is the same, line for line, but for the one WhatsApp line
+
+4. uCRM receives the same writes
+  ok   the same writes, in the same order (dates aside)
+  ok   and the three dates now carry Kampala's offset (J5), where 5.18.49 sent UTC or no zone
+
+5. The screens say it
+  ok   ＋ New Job says "No WhatsApp message is sent for jobs yet"
+  ok   and has no "Notify via WhatsApp" box to tick
+  ok   its form sends notify_wa 0
+  ok   the New Job and Reschedule results show the answer's note
+  ok   Bulk Dispatch's result shows it too
+
+6. The job dispatch cron stays off
+  ok   cron/master.php still has job_assign commented out
+
+7. South Sudan: the same day says the same things on both trees
+  ok   South Sudan still sends all eleven, the four assignment messages among them
+  ok   and its New Job screen keeps the "Notify via WhatsApp" box
+  ok   every message is 5.18.49's: same text, same number, same order
+  ok   the Message Log is the same
+  ok   the webhook log is the same
+  ok   the customer e-mail is the same
+  ok   uCRM receives exactly the same requests — reads, writes and dates — in the same order
+  ok   and every answer is the same
+
+8. Weakened copies of the code must each fail this test
+  ok   caught: ＋ New Job sending on Uganda
+         first: no job-assignment message reaches WhatsApp
+  ok   caught: Bulk Dispatch sending on Uganda
+         first: no job-assignment message reaches WhatsApp
+  ok   caught: Reschedule sending on Uganda
+         first: no job-assignment message reaches WhatsApp
+  ok   caught: a job created in uCRM sending on Uganda
+         first: no job-assignment message reaches WhatsApp
+  ok   caught: ＋ New Job claiming "notified"
+         first: ＋ New Job does not mark the engineer "notified" (the 📱 in its result)
+  ok   caught: an unchanged message reworded
+         first: each is the same text to the same number, in the same order, as 5.18.49
+  ok   caught: the New Job screen offering the box again
+         first: ＋ New Job says "No WhatsApp message is sent for jobs yet"
+
+47 passed, 0 failed, 0 skipped
+
+
+=== test_staff_whatsapp.php ===
+
+1. The webhook: a colleague's number is kept for the team
+  ok   a staff number writes "STOP": accepted, skipped, nothing queued
+  ok   the message is stored
+  ok   the conversation is filed "staff"
+  ok   no AI reply is queued
+  ok   and "STOP" from a colleague is not an opt-out
+  ok   a number stored in national form ("0700000113") is recognised too — the international form on use (J3)
+  ok   a staff account with a +211 number is recognised by its whole number
+
+   Customers are handled as before (T8.2)
+  ok   a customer's "STOP" is still an opt-out, as in 5.18.49
+  ok   a customer's question is queued for the AI
+  ok   a DEACTIVATED staff account's number is a customer again
+  ok   a dealer's number (sales) is a customer, not staff
+  ok   a +256 customer whose last nine digits are a +211 colleague's is a customer (T8.4)
+
+2. The AI worker: a queued reply to a colleague is dropped (T8.5)
+  ok   the model is never asked about the colleague's message
+  ok   nothing is sent to the colleague
+  ok   and the event is done, not left to retry
+  ok   control: the customer's question is answered and sent
+  ok   and so is the deactivated account's
+
+3. Follow-ups: never opened, drafted or sent for a colleague (M1)
+  ok   the scan opens nothing for a colleague: filed "staff" by the webhook
+  ok   the scan opens nothing for a colleague: filed "staff", stored in national form
+  ok   the scan opens nothing for a colleague: filed "staff", +211
+  ok   the scan opens nothing for a colleague: NOT filed "staff" — found by its number
+  ok   nor for a conversation filed "staff" whose account has since been deactivated — filed "staff" is enough by itself
+  ok   and it says why: "a colleague's number"
+  ok   control: the scan opens one for a customer
+  ok   control: the scan opens one for the deactivated account
+  ok   control: the scan opens one for the dealer
+  ok   control: the scan opens one for the +256 customer
+  ok   and none for the customer who opted out, as before
+  ok   set up: a follow-up opened for the technician before the deploy
+  ok   the run closes the colleague's follow-up: "staff"
+  ok   and says why
+  ok   control: the customer's follow-up stays open, and no model was asked for a draft
+  ok   the sender closes the colleague's approved follow-up and sends nothing
+  ok   control: the customer's approved follow-up is sent, or held for the sending window — never closed as "staff"
+
+4. isFollowable() answers as before unless asked
+  ok   asked to exclude colleagues: "a colleague's conversation"
+  ok   not asked — every other caller, and South Sudan: followable, as in 5.18.49
+
+5. South Sudan: the same staff number is handled as in 5.18.49
+  ok   the staff number is queued for the AI and not filed "staff"
+  ok   and its "STOP" is recorded as an opt-out
+  ok   another staff number is queued too
+  ok   and the follow-up scan opens one for it
+
+6. Weakened copies of the code must each fail this test
+  ok   caught: the webhook answering colleagues
+         first: a staff number writes "STOP": accepted, skipped, nothing queued
+  ok   caught: numbers matched on their last nine digits
+         first: a +256 customer whose last nine digits are a +211 colleague's is a customer (T8.4)
+  ok   caught: a deactivated account still counted as staff
+         first: a DEACTIVATED staff account's number is a customer again
+  ok   caught: dealers counted as staff
+         first: a dealer's number (sales) is a customer, not staff
+  ok   caught: the worker answering a queued colleague
+         first: the model is never asked about the colleague's message
+  ok   caught: the scan following up a conversation filed "staff"
+         first: nor for a conversation filed "staff" whose account has since been deactivated — filed "staff" is enough by i
+  ok   caught: the scan following up a colleague's older conversation
+         first: the scan opens nothing for a colleague: NOT filed "staff" — found by its number
+  ok   caught: the run keeping a colleague's follow-up open
+         first: the run closes the colleague's follow-up: "staff"
+  ok   caught: the sender sending to a colleague
+         first: the sender closes the colleague's approved follow-up and sends nothing
+  ok   caught: colleagues excluded on South Sudan too
+         first: and the follow-up scan opens one for it
+
+50 passed, 0 failed
+
+
+=== test_job_status_truth.php ===
+
+1. WA Events says "sent", because that is what the plugin knows
+  ok   the counter is labelled "Sent (handed to WhatsApp)"
+  ok   so is its filter
+  ok   and "Delivered" appears nowhere on the screen
+  ok   the explanation says delivery is not measured
+  ok   the "notification sent" line reads "Sent (handed to WhatsApp)"
+  ok   release A's job line, "WhatsApp skipped", is filed Skipped by the existing rule
+
+2. The navigation badge counts today's events
+  ok   one "notification sent" today: the badge shows 1
+  ok   with a failure too, it shows "1 fail"
+  ok   "WhatsApp skipped" alone is not counted as sent: no badge
+
+3. The Message Log
+  ok   it says what "sent" means
+  ok   its totals: 1 sent, 1 failed, 1 suppressed — the opt-out is not counted as a failure
+  ok   the opted-out message reads "suppressed (opted out)"
+  ok   a real failure still reads "✗ fail"
+  ok   and a sent one "✓ sent"
+
+4. South Sudan: all three as in 5.18.49
+  ok   WA Events still says "Delivered"
+  ok   its badge still reads keys the log never writes, and shows nothing
+  ok   the Message Log counts the opt-out as a failure and adds no note, as before
+  ok   and shows the opted-out message as "✗ fail"
+
+5. Weakened copies of the code must each fail this test
+  ok   caught: the badge reading keys the log never writes
+         first: one "notification sent" today: the badge shows 1
+  ok   caught: "Delivered" claimed again
+         first: the counter is labelled "Sent (handed to WhatsApp)"
+  ok   caught: an opt-out counted as a failure
+         first: its totals: 1 sent, 1 failed, 1 suppressed — the opt-out is not counted as a failure
+  ok   caught: an opted-out row shown as "fail"
+         first: the opted-out message reads "suppressed (opted out)"
+  ok   caught: the Message Log changed on South Sudan too
+         first: the Message Log counts the opt-out as a failure and adds no note, as before
+
+23 passed, 0 failed
+
+
+=== test_staff_jobs_south_sudan.php ===
+  ok   the baseline is 5.18.49, from Git (e076632)
+
+1. The job traffic
+  ok   every answer of the staff app and the webhook (8)
+  ok   every WhatsApp text, to the same number, in the same order (11)
+  ok   the Message Log (11)
+  ok   the webhook log (4)
+  ok   the customer's e-mail (1)
+  ok   every uCRM request — reads, writes, bodies and dates — in the same order (23)
+  ok   control: the day sent eleven WhatsApp messages, the four job-assignment ones among them
+
+2. Pages, API answers and forms
+  ok   api 00 scheduling_jobs as tech (1355 bytes)
+  ok   api 01 scheduling_jobs as tech (1355 bytes)
+  ok   api 02 scheduling_jobs as admin (121 bytes)
+  ok   api 03 scheduling_job_detail as tech (694 bytes)
+  ok   api 04 get_support_staff as admin (116 bytes)
+  ok   api 05 support_engineers as tech (242 bytes)
+  ok   api 06 get_ucrm_users as admin (3856 bytes)
+  ok   api 07 get_survey as tech (62 bytes)
+  ok   api 08 scheduling_clear_cache as acct (118 bytes)
+  ok   api 09 auto_map_ucrm_users as admin (84 bytes)
+  ok   api 10 set_ucrm_user_id as admin (99 bytes)
+  ok   form create_retailer: its message (61 bytes)
+  ok   form edit_retailer: its message (51 bytes)
+  ok   the staff table afterwards (1690 bytes)
+  ok   page the Staff page, as admin (223606 bytes)
+  ok   page ＋ New Job / My Jobs, as admin (188541 bytes)
+  ok   page Bulk Dispatch, as admin (140712 bytes)
+  ok   page WA Events, as admin (106183 bytes)
+  ok   page the Message Log, as admin (142364 bytes)
+  ok   page the dashboard, as admin (96248 bytes)
+  ok   page My Jobs, as tech (175171 bytes)
+  ok   and nothing on one side is missing from the other
+  ok   control: the Staff page is the real page, showing the edit just made
+  ok   control: the version label — normalised, and nothing else of the release — is found three times on each tree's Staff page
+
+3. Weakened copies of the code must each fail this test
+  ok   caught: the Uganda rules applied everywhere
+         first: every answer of the staff app and the webhook (8)
+  ok   caught: four spaces leaked into the South Sudan page
+         first: page ＋ New Job / My Jobs, as admin (188545 bytes)
+  ok   caught: a South Sudan branch of the Staff page lost
+         first: page the Staff page, as admin (223465 bytes)
+  ok   caught: the Uganda edit rules applied on South Sudan
+         first: the staff table afterwards (1691 bytes)
+  ok   caught: the Uganda engineer list served on South Sudan
+         first: api 05 support_engineers as tech (194 bytes)
+
+37 passed, 0 failed, 0 skipped
+
+

@@ -1,0 +1,124 @@
+== 0. what is rehearsed ==
+  script    the committed script, sha256 d33ca0694dd8bf8c
+  clone     claude/study-this-jhe2eg at e83f62a
+  ok   the script is pinned to the clone's plugin commit (125fa0c)
+  ok   the plugin is 5.18.50
+  Release A 38 files: 20 changed, 18 added
+
+== 1. NO-GO before anything changes ==
+  ok   1a the tenant reads South Sudan: NO-GO, both sources named
+  ok   …nothing deployed, no backup taken
+  ok   1b only the store copy reads Uganda (the webhooks would not): NO-GO
+  ok   …nothing deployed
+  ok   1c the server runs another build: NO-GO
+  ok   1d an edited file in the checkout: stop
+  ok   1e a backup copy that arrives changed is caught
+  ok   …NO-GO
+  ok   …before anyone is asked to type DEPLOY
+  ok   1f anything but DEPLOY: the backup is taken, then it stops
+  ok   …nothing deployed, nothing recorded as a deploy
+  ok   …and no data or configuration value changed in any of these runs
+
+== 2. the syntax check under the server's PHP, on a build with a broken file ==
+  ok   2a a runtime file the server's PHP rejects: NO-GO, named
+  ok   …nothing deployed, before the backup
+  ok   2b a test file it rejects: a note, not a NO-GO
+  ok   control: the clone is back at its commit, clean
+
+== 3. the deploy, as the operator runs it ==
+  ok   no FAIL line
+  ok   PASSED
+  ok   3: ok    A1 the installed plugin reads Uganda from both configuration sources
+  ok   3: in the container accepts all 26 changed PHP files that run on the server (and 11 test files)
+  ok   3: ok    A3 staff accounts read: 7 accounts, 6 active; of the 5 active accounts that take jobs, 3 hold a uCRM user id (0 
+  ok   3: ok    A4 the Message Log holds 4 rows; its last is #4
+  ok   3: — one consistent copy (VACUUM INTO
+  ok   3: ok    backed up the installed plugin (5.18.49, e076632)
+  ok   3: ok    backed up the configuration vault
+  ok   3: GO — evidence recorded
+  ok   3: ok    container serves 125fa0c
+  ok   3: ok    V1 the sign-in page on the public address answers 200 with zero redirects (no loop)
+  ok   3: ok    V3 the sign-in page on :8443 → 302 → the public address, same path and query (A1.3)
+  ok   3: ok    V4 no fatal
+  ok   3: ok    R1 all 38 files Release A changes are installed exactly as 125fa0c has them (18 of them new)
+  ok   3: ok    R1 the installed manifest says 5.18.50
+  ok   3: ok    R2 the installed StaffJobsGate reads Uganda from both configuration sources: Release A's rules are on (store on,
+  ok   3: ok    R3 every staff account is as it was at stage A of this run
+  ok   3: ok    R4 no job-assignment WhatsApp message in the Message Log since row #4
+  ok   3: ok    R5 the master cron's job_assign entry is still commented out
+  ok   3: ok    R6 ＋ New Job says: "No WhatsApp message is sent for jobs yet"
+  ok   3: ok    R6 Bulk Dispatch and Reschedule show the server's note that no message was sent
+  ok   3: ok    R6 a job created in uCRM is logged "WhatsApp skipped: job notifications are not switched on yet"
+  ok   3: note  R7 0 of 5 active accounts that take jobs have a verified uCRM link. The other 5 see no job in My Jobs until an a
+  ok   six backups: two databases, the data directory, the plugin's own data/, the installed plugin, the vault
+  ok   the container serves 125fa0c: every file as the commit has it, all 18 new files present
+  ok   no data and no configuration value changed
+  ok   the database backup opens: integrity ok, the 7 staff rows
+  ok   the code backup is 5.18.49, without a 5.18.50 file
+  ok   the vault copy is identical; the commit before is recorded
+  ok   where the deploy started is recorded for later runs
+  ok   the log carries no name, e-mail or phone number of a staff account
+
+== 4. later runs: --after-only ==
+  ok   4a straight after: PASSED
+  ok   …R3 compares with the deploy's own record
+  ok   4b an accept message since the deploy: R4 ok, and it is counted as information
+  ok   4c a job-assignment message since the deploy: R4 fails, naming the event (the four before the deploy are not counted)
+  ok   4d a link saved through the picker since: a note naming account 2, never a failure
+  ok   …and R7 counts it verified
+  ok   4e the tenant no longer reads Uganda: R2 fails
+  ok   4f an installed file changed after the deploy: R1 fails, naming it
+  ok   4g a fatal in the container log: V4 fails
+  ok   control: with each planted fault removed, PASSED again
+
+== 5. the rollback: --rollback, typed ROLLBACK ==
+  ok   PASSED
+  ok   5: GO — evidence recorded
+  ok   5: checking out e076632 (5.18.49) for the documented deploy
+  ok   5: ok    container serves e076632 (5.18.49)
+  ok   5: ok    RB1 all 20 files Release A had changed are back exactly as e076632 (5.18.49) has them
+  ok   5: ok    RB1 the installed manifest says 5.18.49
+  ok   5: ok    RB2 the 18 files 5.18.50 added are still on disk and inert: no 5.18.49 file loads them
+  ok   5: ok    RB3 every staff account is as it was at stage A of this run
+  ok   5: note  on 5.18.49 again: the job-assignment WhatsApp messages are sent again
+  ok   the same backup first
+  ok   the container serves e076632: every changed file as 5.18.49 has it; the 18 new files remain
+  ok   the checkout is back on claude/study-this-jhe2eg, at the commit it was on
+  ok   no data changed
+  ok   5b rolling back again: says so, checks, takes no second backup
+
+== 6. forward again, back by hand as printed, forward with an edit during the deploy ==
+  ok   6a deploy again after a rollback: PASSED, serving 125fa0c
+  ok   the summary prints the rollback by hand
+  ok   6b that line, run as printed, puts 5.18.49 back and returns the checkout
+  ok   …and --rollback confirms it
+  ok   6c a staff account edited during the deploy: R3 fails, naming account 3
+  ok   …the only failure
+  ok   …and the new number is not printed
+
+== 7. stage V finds the public address redirecting after a deploy: it rolls back by itself ==
+  ok   V1 fails and the rollback starts
+  ok   …and the log says what now serves
+  ok   5.18.49 is back, the checkout on claude/study-this-jhe2eg
+
+== 8. weakened copies of the script must each be caught ==
+  ok   caught: the Uganda check removed
+  ok   caught: a build over another live commit
+  ok   caught: DEPLOY never required
+  ok   caught: a failed backup ignored
+  ok   caught: R3 blind to a staff account edited during the deploy
+  ok   caught: R4 never counts
+  ok   caught: R1 blind
+  ok   caught: R2 takes any answer as on
+  ok   caught: ROLLBACK never required
+  ok   caught: the rollback leaves the checkout detached
+  ok   caught: RB1 blind
+  ok   caught: the syntax NO-GO removed
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+
+== 9. what the rehearsal left behind ==
+  ok   this checkout is as the rehearsal found it: same commit, same tracked files
+  ok   no weakened copy is left in the clone
+
+rehearsal: 99 passed, 0 failed (35 runs of the script)
+exit=0 seconds=137
