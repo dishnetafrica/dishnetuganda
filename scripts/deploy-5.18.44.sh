@@ -47,7 +47,7 @@ umask 077
 
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="__PIN_AFTER_COMMIT__"   # 5.18.44 — the plugin-scoped commit deploy-hybrid.sh records
+EXPECTED_PLUGIN_COMMIT="a4abe5e"   # 5.18.44 — the plugin-scoped commit deploy-hybrid.sh records
 EXPECTED_VERSION="5.18.44"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO/$PLUGIN"
