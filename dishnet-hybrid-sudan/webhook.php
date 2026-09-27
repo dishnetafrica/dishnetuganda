@@ -5,6 +5,7 @@ require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/PdfLinkToken.php';
 require_once __DIR__ . '/lib/QuoteWaLedger.php';
 require_once __DIR__ . '/lib/PaymentOptions.php';
+require_once __DIR__ . '/lib/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
 require_once __DIR__ . '/lib/currency.php';
 
 // EARLY DEBUG - log that we reached the file
@@ -269,6 +270,63 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
         whLog($changeType ?: 'email', 'Quotation email errored: ' . $e->getMessage());
         error_log('[whQuotationEmail] ' . $e->getMessage());
     }
+}
+
+/**
+ * Whether the quotation summary is Uganda's (5.18.46, docs/41). There, which line is the monthly plan comes from uCRM's
+ * own service plans (whQuotePlans); South Sudan keeps the summary it always sent, byte for byte, and its uCRM is asked
+ * nothing more.
+ */
+function whQuoteIsUganda(array $config, string $dataDir): bool
+{
+    try {
+        require_once __DIR__ . '/lib/TenantProfile.php';
+        return TenantProfile::current($config, $dataDir !== '' ? $dataDir : null)->id() === 'uganda';
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * uCRM's service plans as the quotation summary reads them: planKey => the plan's monthly price (null where uCRM keeps
+ * none). A quotation carries a plan as its Products mirror, spelled like the plan — the rule the price feed and the
+ * assistant already use (PublicPriceFeed::planKey) — so a line is the monthly plan exactly when it is spelled like one
+ * of these, and every other line is one-time.
+ *
+ * The operator, 27 Sep 2026, on order 000114: "here Monthly give wrong in message". The split before this read words
+ * in each line's name — whatever lacked "kit", "router", "cable", "installation"… was "Monthly", so an outdoor access
+ * point, connectors or consultancy were, and a plan whose name holds "month" was hardware ("ont").
+ *
+ * null when uCRM could not list its plans: the summary then makes no split rather than guess.
+ */
+function whQuotePlans($crm, string $event): ?array
+{
+    try {
+        require_once __DIR__ . '/lib/PublicPriceFeed.php';
+        $rows = $crm->get('service-plans?limit=200');
+    } catch (\Throwable $e) {
+        $rows = null;
+    }
+    if (!is_array($rows) || ($rows !== [] && array_keys($rows) !== range(0, count($rows) - 1))) {
+        whLog($event, 'quotation summary: uCRM did not list its service plans — sent without a one-time/monthly split');
+        return null;
+    }
+    $plans = [];
+    foreach ($rows as $p) {
+        if (!is_array($p)) continue;
+        $k = PublicPriceFeed::planKey((string)($p['name'] ?? ''));
+        if ($k !== '') $plans[$k] = PublicPriceFeed::planPrice($p);
+    }
+    return $plans;
+}
+
+/** How the first period of the plan lines is named: "First month", "First 3 months", or "First months" when they differ. */
+function whQuoteFirstLabel(array $qtys): string
+{
+    $q = array_values(array_unique(array_map('floatval', $qtys)));
+    if (count($q) === 1 && $q[0] <= 1) return 'First month';
+    if (count($q) === 1 && floor($q[0]) === $q[0]) return 'First ' . (int)$q[0] . ' months';
+    return 'First months';
 }
 
 function whInvoiceCreditScenario(array $invoice, array $client): array
@@ -2658,6 +2716,13 @@ switch ($changeType) {
             $hwTotal = 0.0;
             $monthlyTotal = 0.0;
 
+            // Uganda (5.18.46, docs/41): the monthly plan is the line spelled like one of uCRM's service plans, and
+            // every other line is one-time (whQuotePlans). null: uCRM could not say, so no split is shown at all.
+            // false: South Sudan — the word rule below, exactly as before.
+            $ugPlans  = whQuoteIsUganda($config, (string)$dataDir) ? whQuotePlans($crm, $changeType) : false;
+            $planQtys = [];
+            $perMonth = 0.0;
+
             foreach ($items as $_qi) {
                 $lbl = $_qi['label'] ?? '';
                 $lblLower = strtolower($lbl);
@@ -2665,6 +2730,21 @@ switch ($changeType) {
 
                 if (strpos($lblLower, 'starlink') !== false || strpos($lblLower, 'kit') !== false) $isStarlink = true;
                 if (strpos($lblLower, 'fiber') !== false || strpos($lblLower, 'ftth') !== false || strpos($lblLower, 'optical') !== false) $isFiber = true;
+
+                if ($ugPlans !== false) {
+                    if ($ugPlans === null) continue;
+                    $pk = PublicPriceFeed::planKey((string)$lbl);
+                    if ($pk !== '' && array_key_exists($pk, $ugPlans)) {
+                        $monthlyTotal += $iTotal;
+                        $planQtys[]    = (float)($_qi['quantity'] ?? 1);
+                        $perMonth     += (float)($ugPlans[$pk] ?? 0);
+                        if (!$planName) $planName = $lbl;
+                    } else {
+                        $hwTotal += $iTotal;
+                        if (!$kitName && preg_match('/kit/i', $lbl)) $kitName = $lbl;
+                    }
+                    continue;
+                }
 
                 // Detect kit vs plan
                 if (preg_match('/kit|hardware|device|router|ont|onu|cable|nanostation|mikrotik|installation/i', $lbl)) {
@@ -2721,12 +2801,22 @@ switch ($changeType) {
                 }
             }
 
-            if ($hwTotal > 0 && $monthlyTotal > 0) {
+            if ($hwTotal > 0 && $monthlyTotal > 0 && $ugPlans !== false) {
+                // What a customer reads (5.18.46): what is paid once, that the first month is inside the total, and
+                // what the plan costs after that — uCRM's plan price, not the quote line's, which may be a discount.
+                $msg .= "💰 One-time: " . dn_code($config) . " " . number_format($hwTotal, 0) . "\n";
+                $msg .= "💰 " . whQuoteFirstLabel($planQtys) . ": " . dn_code($config) . " " . number_format($monthlyTotal, 0)
+                      . ($perMonth > 0 ? " (then " . dn_code($config) . " " . number_format($perMonth, 0) . " per month)" : '') . "\n";
+            } elseif ($hwTotal > 0 && $monthlyTotal > 0) {
                 $msg .= "💰 Hardware: " . dn_code($config) . " " . number_format($hwTotal, 0) . "\n";
                 $msg .= "💰 Monthly: " . dn_code($config) . " " . number_format($monthlyTotal, 0) . "\n";
             }
 
-            $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n\n"
+            $msg .= "🏷️ *Total: " . dn_code($config) . " " . number_format($amount, 0) . "*\n"
+                 // 5.18.49 (docs/42 §9): every Uganda quotation says what its prices include, in the operator's words.
+                 // South Sudan ($ugPlans false) gets the same bytes as before.
+                 . ($ugPlans !== false ? '✅ ' . QuoteTaxLine::TEXT . "\n" : '')
+                 . "\n"
                  . PaymentOptions::quoteLines($config)   // 5.18.31: Airtel Money when pay_airtel_merchant is set
                  . "✅ Reply *YES* to proceed.\n\n";
 

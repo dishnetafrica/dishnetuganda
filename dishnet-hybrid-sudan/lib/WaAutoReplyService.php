@@ -1247,7 +1247,8 @@ class WaAutoReplyService
             // Same list the Evolution worker passes: an operator's
             // business facts are the answer, not a leak of the prompt.
             'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
-        ]);
+            // 5.18.46: the same added checks as the Evolution worker, from the same switch (docs/41).
+        ] + \ReplyPrivacyGuard::optionsFor((array)($this->config ?? [])));
         if ($res['safe']) {
             // See AiReplyWorker: the same fence on the other outbound path.
             if (!class_exists('PlanFenceGuard')) {

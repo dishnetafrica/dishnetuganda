@@ -26,6 +26,7 @@ declare(strict_types=1);
  * PATCH of their status, and served as a PDF at /quotes/{id}/pdf. The first
  * quote of a scenario is id 77, number Q-77, as it always was here.
  * pdf_down (via /__test/set) makes the PDF answer 404.
+ * Service plans (5.18.46) are served from /service-plans; plans_down makes them answer 503.
  *
  * State lives in a temp file per port. /__test/reset?scenario=… resets it,
  * /__test/set (POST JSON) merges keys (existing clients, taken usernames),
@@ -115,6 +116,22 @@ if (preg_match('#^/organizations/(\d+)$#', $p, $m) && $method === 'GET') {
     in_array((int)$m[1], $orgs, true) ? kyc_out(['id' => (int)$m[1]]) : kyc_out(['code' => 404, 'message' => 'Not Found'], 404);
 }
 if ($p === '/custom-attributes' && $method === 'GET') kyc_out($fields);
+
+// Service plans (5.18.46, tests/test_quote_summary.php). uCRM keeps a plan's price in its periods; a quotation carries
+// a plan as its Products mirror, spelled like the plan. The default is the Uganda list the deploy log of 27 Sep 2026
+// printed (scripts/dnb-ai-check.sh on the server). /__test/set 'service_plans' replaces it; 'plans_down' answers 503.
+if ($p === '/service-plans' && $method === 'GET') {
+    if (!empty($state['plans_down'])) kyc_out(['code' => 503, 'message' => 'Service Unavailable'], 503);
+    $plan = fn(int $id, string $name, int $price): array =>
+        ['id' => $id, 'name' => $name, 'periods' => [['period' => 1, 'price' => $price, 'enabled' => true]]];
+    kyc_out($state['service_plans'] ?? [
+        $plan(1, 'Starlink Residential Lite ( up to 100 Mbps)', 249000),
+        $plan(2, 'Residential (up to 400 Mbps)', 329000),
+        $plan(3, 'Starlink Business 50 GB', 175000),
+        $plan(4, 'Starlink Business 500 GB', 285000),
+        $plan(5, 'Starlink Business 1TB', 469000),
+    ]);
+}
 
 if ($p === '/clients' && $method === 'POST') {
     if ($sc === 'refuse') kyc_out(['code' => 404, 'message' => 'Not Found'], 404);

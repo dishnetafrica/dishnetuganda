@@ -65,7 +65,8 @@ function traits(string $r): string {
 
 // ── The installed plugin ────────────────────────────────────────────────────
 foreach (['bootstrap_data', 'PluginConfig', 'KnowledgeBase', 'CrmApiClient', 'ShopCatalogue', 'DishNetTools',
-          'PlanCatalogue', 'PlanFenceGuard', 'ReplyPrivacyGuard', 'BrainContext', 'DishNetAiBrain',
+          'PlanCatalogue', 'PlanFenceGuard', 'KitTaxNote', 'QuoteTaxLine', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext',
+          'DishNetAiBrain',
           'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus'] as $lib) {
     if (is_file("{$root}/lib/{$lib}.php")) require_once "{$root}/lib/{$lib}.php";
 }
@@ -151,6 +152,22 @@ if ($mode === 'report') {
     }
     $cap = trim((string)($config['ai_fact_business_cap'] ?? ''));
     out('Business-plan note', $cap === '' ? 'the default (PlanFenceGuard::DEFAULT_NOTE)' : (strtolower($cap) === 'omit' ? 'OFF (omit)' : 'your own wording: ' . clip(mask($cap), 160)));
+    // 5.18.48 (docs/42): the taxes line under a Starlink kit price, where the hardware module is on.
+    if (class_exists('KitTaxNote')) {
+        $kv = trim((string)($config['ai_fact_kit_taxes'] ?? ''));
+        out('kit tax note', !filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            ? 'off — it goes with the hardware module (ai_hardware_expert)'
+            : (strtolower($kv) === 'omit' ? 'OFF (omit)'
+            : ($kv === '' ? 'the approved wording: ' . clip(KitTaxNote::DEFAULT_NOTE, 160) : 'your own wording: ' . clip(mask($kv), 160))));
+    } else {
+        out('kit tax note', 'none — this version adds no taxes line under a kit price (5.18.48 does)');
+    }
+    // 5.18.49 (docs/42 §9): the price fact, which the operator chose to make the quotations' sentence.
+    $pf = trim((string)($config['ai_fact_prices'] ?? ''));
+    out('price fact', $pf === '' ? 'not set — the assistant may not say whether prices include tax; it says the quotation confirms it'
+        : (strtolower($pf) === 'omit' ? 'OFF (omit)'
+        : ((class_exists('QuoteTaxLine') && $pf === QuoteTaxLine::TEXT) ? "the quotations' sentence: " . clip($pf, 160)
+        : 'your own wording: ' . clip(mask($pf), 160))));
     if (defined('DishNetAiBrain::UNLIMITED_FACT')) {
         $uf = trim((string)($config['ai_fact_unlimited'] ?? ''));
         out('"unlimited" fact', $uf === '' ? 'the default wording: ' . clip(DishNetAiBrain::UNLIMITED_FACT, 110)
@@ -214,6 +231,15 @@ if ($mode === 'report') {
             }
             out('totals the price check allows', 'any combination of the first 10 one-time items, and 2 to 5 of one access point with any of the others'
                 . ($since45 ? '; 1 to 5 of one Starlink router with any of the kit and the installation' : ''));
+            // 5.18.46 (docs/41): what else the guard reads, where the installed plugin has it — so a log says which check judged.
+            $po = class_exists('ReplyPrivacyGuard') && method_exists('ReplyPrivacyGuard', 'optionsFor') ? ReplyPrivacyGuard::optionsFor($config) : [];
+            if (!empty($po['plain_amounts'])) {
+                out('the price check also', 'reads amounts written without commas (700000 as well as 700,000), and refuses a reply with an unfilled slot such as [total]');
+            }
+            // 5.18.47 (docs/41 §9): the totals rule, where the installed plugin has it.
+            if (!empty($po['totals'])) {
+                out('the price check adds up', 'each total: one that does not match the lines listed with it, or a TOTAL with no figure, is refused');
+            }
         } else {
             out('HARDWARE (one-time)', count($hw) . ' — both numbers see these; a total may combine only the first 6');
             foreach ($hw as $i => $h) {
@@ -381,18 +407,23 @@ if ($mode === 'ask') {
     ];
     // The amounts in a refused draft that the price check cannot match, each checked alone exactly as the reply was —
     // so a refusal can be read (docs/40 §13: two replies were refused on 27 Sep and the log could not say why).
-    $foreignAmounts = function (string $raw, array $vals, string $prompt) use ($config): array {
+    // The checks the live worker adds for this install, where the installed plugin has them (5.18.46, docs/41): amounts
+    // written without separators, and unfilled template slots. Passed here too, or the check would count fewer
+    // refusals than customers get. An older plugin has neither, and is checked exactly as it checks itself.
+    $guardOpts = method_exists('ReplyPrivacyGuard', 'optionsFor') ? ReplyPrivacyGuard::optionsFor($config) : [];
+    $foreignAmounts = function (string $raw, array $vals, string $prompt) use ($config, $guardOpts): array {
         $out = [];
-        if (preg_match_all('/(?<![\d.,])\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?(?![\d])/', $raw, $m)) {
-            foreach (array_unique($m[0]) as $amt) {
-                $one = ReplyPrivacyGuard::check('TOTAL ' . trim($amt), ['values' => $vals, 'prompt' => $prompt,
-                                                                      'public' => DishNetAiBrain::operatorText($config)]);
-                if (in_array('foreign:amount', (array)$one['categories'], true)) $out[] = trim((string)preg_replace('/\s+/', ' ', $amt));
-            }
+        $found = method_exists('ReplyPrivacyGuard', 'amountsIn')
+            ? ReplyPrivacyGuard::amountsIn($raw, !empty($guardOpts['plain_amounts']))
+            : (preg_match_all('/(?<![\d.,])\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?(?![\d])/', $raw, $m) ? $m[0] : []);
+        foreach (array_unique($found) as $amt) {
+            $one = ReplyPrivacyGuard::check('TOTAL ' . trim($amt), ['values' => $vals, 'prompt' => $prompt,
+                                                                  'public' => DishNetAiBrain::operatorText($config)] + $guardOpts);
+            if (in_array('foreign:amount', (array)$one['categories'], true)) $out[] = trim((string)preg_replace('/\s+/', ' ', $amt));
         }
         return $out;
     };
-    $calls = 0; $blocked = 0; $fenced = 0; $tokIn = 0; $tokOut = 0;
+    $calls = 0; $blocked = 0; $fenced = 0; $kitted = 0; $kitsaid = 0; $tokIn = 0; $tokOut = 0;
     hdr('The questions, asked of the installed assistant on the sales number — nothing is sent to anyone');
     foreach ($SCENARIOS as $name => [$channel, $turns]) {
         echo "\n  ── {$name}\n";
@@ -407,15 +438,33 @@ if ($mode === 'ask') {
             if ($raw !== '') {
                 $vals = $permitted($ctx, $prompt);
                 $g = ReplyPrivacyGuard::check($raw, ['values' => $vals, 'prompt' => $prompt,
-                                                     'public' => DishNetAiBrain::operatorText($config)]);
+                                                     'public' => DishNetAiBrain::operatorText($config)] + $guardOpts);
                 if (empty($g['safe'])) {
                     $final = ReplyPrivacyGuard::SAFE_FALLBACK; $blocked++;
                     $how[] = 'the price check REFUSED the reply (' . implode(',', (array)$g['categories']) . ') — the customer gets the fallback and staff are alerted';
-                    // Only for an amount: the model's own text for a made-up question, masked like every reply here.
-                    if ((array)$g['categories'] === ['foreign:amount']) $refused = ['amounts' => $foreignAmounts($raw, $vals, $prompt), 'draft' => $raw];
+                    // Only for an amount, an unfilled slot or a total: the model's own text for a made-up question, masked like
+                    // every reply here.
+                    $gc = (array)$g['categories'];
+                    if ($gc !== [] && array_diff($gc, ['foreign:amount', 'placeholder', 'total:missing', 'total:mismatch']) === []) {
+                        $refused = ['amounts' => in_array('foreign:amount', $gc, true) ? $foreignAmounts($raw, $vals, $prompt) : [],
+                                    'placeholder' => in_array('placeholder', $gc, true),
+                                    'totals' => (array_intersect($gc, ['total:missing', 'total:mismatch']) !== [] && class_exists('ReplyTotals'))
+                                        ? ReplyTotals::findings($raw, !empty($guardOpts['plain_amounts'])) : [],
+                                    'draft' => $raw];
+                    }
                 } else {
                     $f = PlanFenceGuard::apply($raw, $config);
                     if (!empty($f['appended'])) { $final = $f['reply']; $fenced++; $how[] = 'the Business-plan note was added'; }
+                    // After the fence, as the worker does (5.18.48).
+                    if (class_exists('KitTaxNote')) {
+                        $k = KitTaxNote::apply($final, $config, KitTaxNote::kitPrices((array)($ctx['products'] ?? [])));
+                        if (!empty($k['appended'])) { $final = $k['reply']; $kitted++; $how[] = 'the kit tax note was added'; }
+                        // 5.18.49 (docs/42 §9): with the price fact set, the model may say it itself; the worker then adds no
+                        // second line, and the reply still told the customer. Counted, so a log never reads "no kit price quoted".
+                        elseif (in_array((string)($k['reason'] ?? ''), ['the reply already says it in its own words', 'the note is already present'], true)) {
+                            $kitsaid++; $how[] = 'it quotes a kit price and already says the taxes are included, so no second line was added';
+                        }
+                    }
                 }
             }
             if (!empty($res['escalate'])) $how[] = 'hands over to staff: ' . clip(mask((string)($res['escalate_reason'] ?? '')), 100);
@@ -429,8 +478,16 @@ if ($mode === 'ask') {
             echo '    what it did  ' . traits($final) . "\n";
             if ($how) echo '    on the way   ' . implode(' · ', $how) . "\n";
             if ($refused !== null) {
-                echo '    refused      ' . ($refused['amounts'] ? 'amounts it could not match to the price list: ' . implode(' · ', $refused['amounts'])
-                                                              : 'no single amount — only together') . "\n";
+                if (!empty($refused['placeholder'])) echo "    refused      it left a template slot unfilled, such as [total]\n";
+                foreach ((array)($refused['totals'] ?? []) as $t) {
+                    if ($t['kind'] === 'missing') echo "    refused      it gives a TOTAL with no figure\n";
+                    elseif ($t['kind'] === 'equation') echo '    refused      a sum it wrote is wrong: it says ' . number_format((float)$t['stated']) . ', the figures come to ' . number_format((float)$t['sum']) . "\n";
+                    else echo '    refused      its total says ' . number_format((float)$t['stated']) . '; the lines listed with it add up to ' . number_format((float)$t['sum']) . "\n";
+                }
+                if ($refused['amounts'] || (empty($refused['placeholder']) && empty($refused['totals']))) {
+                    echo '    refused      ' . ($refused['amounts'] ? 'amounts it could not match to the price list: ' . implode(' · ', $refused['amounts'])
+                                                                  : 'no single amount — only together') . "\n";
+                }
                 $dr = mb_strlen($refused['draft']) > 900 ? mb_substr($refused['draft'], 0, 899) . '…' : $refused['draft'];
                 echo '    the draft    ' . (string)preg_replace('/\n(?=[^\n])/', "\n                 ", mask($dr)) . "\n";
             }
@@ -439,9 +496,9 @@ if ($mode === 'ask') {
             $history[] = ['role' => 'dishnet',  'text' => $final];
         }
     }
-    printf("\n  %d model call(s) · tokens in %d, out %d · %d refused by the price check · %d with the Business-plan note added\n",
-        $calls, $tokIn, $tokOut, $blocked, $fenced);
-    echo "@@ ask ok {$calls} {$blocked} {$fenced}\n";
+    printf("\n  %d model call(s) · tokens in %d, out %d · %d refused by the price check · %d with the Business-plan note added"
+         . " · %d with the kit tax note added · %d already saying the taxes are included\n", $calls, $tokIn, $tokOut, $blocked, $fenced, $kitted, $kitsaid);
+    echo "@@ ask ok {$calls} {$blocked} {$fenced} {$kitted} {$kitsaid}\n";
     exit(0);
 }
 

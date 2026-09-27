@@ -698,6 +698,12 @@ class DishNetAiBrain
             if ($v === '' || strtolower($v) === 'omit') continue;
             $out[] = $v;
         }
+        // KitTaxNote (5.18.48) appends the operator's taxes line under a kit price, and it comes back as
+        // history as the fence's note does. Listed only where it can be appended: an install without the
+        // hardware module keeps the list it had.
+        if (!class_exists('KitTaxNote')) require_once __DIR__ . '/KitTaxNote.php';
+        $kit = \KitTaxNote::note($config);
+        if ($kit !== '') $out[] = $kit;
         // The data-allowance fact (5.18.44), under the same gate as unlimitedFact(): the model is
         // told to repeat it word for word, so a reply that does must not read as a quote of the
         // prompt. Where the prompt does not state it, the list is what it was.

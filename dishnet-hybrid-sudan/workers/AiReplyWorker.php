@@ -650,7 +650,9 @@ class AiReplyWorker extends WorkerBase
                 // character; without this the guard refused the replies that
                 // obeyed it.
                 'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
-            ]);
+                // 5.18.46: where the hardware module is on, amounts written without separators and unfilled
+                // template slots too (docs/41) — on 27 Sep two wrong totals and a "[Sum of setup costs]" passed.
+            ] + \ReplyPrivacyGuard::optionsFor((array)($this->config ?? [])));
         } catch (\Throwable $e) {
             // Fail closed: a reply nobody checked is the failure this exists
             // to end, and the fallback is a smaller one than a wrong price.
@@ -671,6 +673,18 @@ class AiReplyWorker extends WorkerBase
                 $ai['reply'] = $fence['reply'];
                 $this->log('info', sprintf('conv %d: plan fence appended — %s',
                     (int)($ctx['conversation_id'] ?? 0), $fence['reason']));
+            }
+            // 5.18.48 (docs/42): the operator's taxes line under a Starlink kit price, where the hardware module
+            // is on. Also the operator's text, appended after the check for the same reason as the fence.
+            if (!class_exists('KitTaxNote')) {
+                require_once dirname(__DIR__) . '/lib/KitTaxNote.php';
+            }
+            $kit = \KitTaxNote::apply((string)$ai['reply'], (array)($this->config ?? []),
+                                      \KitTaxNote::kitPrices((array)($ctx['products'] ?? [])));
+            if ($kit['appended']) {
+                $ai['reply'] = $kit['reply'];
+                $this->log('info', sprintf('conv %d: kit tax note appended — %s',
+                    (int)($ctx['conversation_id'] ?? 0), $kit['reason']));
             }
             return $ai;
         }

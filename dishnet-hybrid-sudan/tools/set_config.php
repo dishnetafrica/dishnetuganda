@@ -129,8 +129,11 @@ $FLAGS = [
     // it the assistant hedges ("the quotation confirms the tax treatment") on
     // every price; with it, it says what the operator says, and still may
     // not calculate a tax amount or rate.
+    // 5.18.49 (docs/42 §9): on Uganda the operator chose the quotations' sentence (QuoteTaxLine::TEXT), so the
+    // assistant answers a tax question in the words every quotation uses.
     'ai_fact_prices' => ['text',
-        'What to say about tax on listed prices, e.g. "All our listed prices include VAT." (unset = the AI hedges)'],
+        'What to say about tax on listed prices — Uganda uses the quotations\' sentence: "All prices include all taxes — '
+      . 'URA taxes and UCC charges are already in them. Nothing is added on top." (unset = the AI hedges)'],
     // Appended by PlanFenceGuard to any reply that names a Business plan
     // without naming Residential. It is here, and not in the prompt, because
     // the prompt version was measured: 18 of 21 replies ignored it. "omit"
@@ -138,6 +141,11 @@ $FLAGS = [
     'ai_fact_business_cap' => ['text',
         'Appended when the AI quotes a Business plan without offering Residential — the priority-data '
       . 'cap and the 1 Mbps drop ("omit" = never append; unset = the built-in wording)'],
+    // 5.18.48 (docs/42): appended by KitTaxNote under a Starlink kit price, where the hardware module is on. Unset
+    // uses KitTaxNote::DEFAULT_NOTE, the wording the operator approved on 27 Sep 2026; "omit" switches it off.
+    'ai_fact_kit_taxes' => ['text',
+        'Appended when the AI quotes a Starlink kit price (hardware module on) — what the kit price includes '
+      . '("omit" = never append; unset = URA taxes and the UCC registration fee, the approved wording)'],
     // 5.18.44 (docs/40): the data allowance, stated beside the plans where the install qualifies.
     // Unset uses DishNetAiBrain::UNLIMITED_FACT, the wording the operator approved on 27 Sep 2026
     // ("keep as it is"); "omit" switches it off.
@@ -400,7 +408,7 @@ if (!$clear) {
         $warn[] = 'That looks like a price. Prices come from uCRM so they stay current — a figure '
                 . 'here becomes a second catalogue that goes stale silently.';
     }
-    if ($key === 'ai_fact_prices' && $new !== '' && preg_match('/\d/', $new)) {
+    if (in_array($key, ['ai_fact_prices', 'ai_fact_kit_taxes'], true) && $new !== '' && preg_match('/\d/', $new)) {
         $warn[] = 'This is repeated to customers as a fact. A figure in it (a rate, an amount) '
                 . 'will be repeated too — make sure it is exactly right and stays right.';
     }

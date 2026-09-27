@@ -22,6 +22,15 @@ if (stripos($last, 'unlimited business plans') !== false) {
     $reply = "For the two upper floors: 2 × Router Mini — UGX 435,000 each = UGX 870,000\nTOTAL: UGX 870,000\nThe site survey confirms how many routers are needed and where they go.";   // two of one Starlink router: refused by 5.18.44, a permitted total since 5.18.45
 } elseif (stripos($last, 'installed at my home') !== false) {
     $reply = "Starlink Standard Kit — UGX 2,649,000\nProfessional Installation — UGX 150,000\nTOTAL TO GET CONNECTED: UGX 2,799,000\nThen Residential (up to 400 Mbps) at UGX 329,000 a month.";   // a total the price check allows
+    // A model given the price fact ("- PRICES: …") repeats it, as the prompt permits (5.18.49): the worker then adds no
+    // second tax line under the kit price.
+    if (preg_match('/^- PRICES: (.+?) This is a stated fact you may repeat/m', $sys, $pf)) $reply .= "\n" . $pf[1];
+} elseif (stripos($last, 'other building') !== false) {
+    $reply = "To reach your other building:\n- MikroTik Router — price 380000 UGX\n- Outdoor Access Point — price 450000 UGX\nTOTAL: 881500 UGX\nThe site survey confirms the rest.";   // a wrong total, written without commas as the live model wrote B1 and B2 on 27 Sep: read and refused since 5.18.46
+} elseif (stripos($last, '50 people') !== false) {
+    $reply = "Here is your setup:\n- Starlink Standard Kit — UGX 2,649,000\n- Outdoor Access Point — UGX 450,000\nTOTAL FOR SETUP: [Sum of setup costs]\nThen Residential (up to 400 Mbps) at UGX 329,000 a month.";   // an unfilled slot, as the live model wrote A1 on 27 Sep: refused since 5.18.46
+} elseif (stripos($last, 'trading centre') !== false) {
+    $reply = "For a WiFi business, here is a starting setup:\n\n- Starlink Standard Kit — UGX 2,649,000\n- MikroTik Router — UGX 380,000\n- Outdoor Access Point — UGX 450,000\n\nTotal: UGX 3,629,000\n\nThen Residential (up to 400 Mbps) at UGX 329,000 a month.";   // a total 150,000 over its lines — the installation, never listed — as the live model wrote A1 at 09:00 on 27 Sep: 3,629,000 is itself a sum of our prices, so only 5.18.47's totals rule refuses it
 } elseif (stripos($last, 'Business 500') !== false) {
     $reply = 'Business 500GB is UGX 285,000 a month. The 500 GB is priority data; after it the line drops to about 1 Mbps. For a busy site the Residential (up to 400 Mbps) plan at UGX 329,000 is the better fit.';
 } else {

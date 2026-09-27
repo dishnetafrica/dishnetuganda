@@ -8,6 +8,7 @@ if (!function_exists('str_ends_with')) { function str_ends_with(string $h, strin
 
 require_once __DIR__ . '/NotificationService.php';
 require_once __DIR__ . '/CrmApiClient.php';
+require_once __DIR__ . '/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
 
 /**
  * QuotationService — DishNet Hybrid v4.4.20
@@ -449,6 +450,9 @@ class QuotationService
         $lines[] = "";
         $lines[] = "━━━━━━━━━━━━━━━━━━━━━━";
         $lines[] = "💰 *TOTAL: " . dn_cur($this->config) . "{$total}*";
+        // 5.18.49 (docs/42 §9): every Uganda quotation says what its prices include, in the operator's words — the same
+        // line the quote.add webhook puts under its Total. South Sudan's message is unchanged.
+        if (QuoteTaxLine::applies($this->config, $this->dataDir)) $lines[] = '✅ ' . QuoteTaxLine::TEXT;
 
         // ── Payment info ────────────────────────────────────────────────────
         if ($amountPaid !== null) {

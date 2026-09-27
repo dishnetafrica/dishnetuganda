@@ -1621,3 +1621,373 @@ The script now:
 
 Same pin, same command. Rehearsal **108/108 on two consecutive runs**: the old script as the control, four real
 failures, and seven weakened copies caught (docs/40 §15.1).
+
+**Second run — 27 Sep 2026 07:54 UTC: PASSED, 39 ok / 0 failed / 0 notes** (docs/40 §16). The backup worked live:
+`plugin.sqlite3` copied with `VACUUM INTO` as `1000:1000`, integrity ok, the same sha256 on both sides. There is no
+`dishnet.sqlite` on this install, and tar exited 0. BUSINESS_PLANS is corrected, and V and AI are all `ok`. Three
+of the eleven replies should have been refused and were not: two wrong setup totals written without commas
+(1993500 and 1999500 for 1,897,500), and "[Sum of setup costs]". That is 5.18.46.
+
+## 5.18.46 — a quotation summary a customer can read; the price check reads amounts without commas (docs/41)
+
+**Why.**
+- **The quotation summary.** The operator, on order 000114: *"here Monthly give wrong in message"*. It said
+  "Hardware" for a total that included the installation, and "Monthly" beside a Total that already included the
+  first month. The split guessed from words in each line: whatever lacked `kit`, `router`, `cable`,
+  `installation`… was "Monthly". So on a bigger-area quote the access points, connectors and consultancy
+  (1,519,500) were "Monthly", and a plan named "Monthly" was hardware ("ont"). The operator chose **"Use the
+  clearer message (Recommended)"**.
+- **The price check.** Stage AI of 5.18.45 (docs/40 §16) saw three replies the check should have refused: two
+  wrong totals without commas, and an unfilled template slot.
+
+**What.** Uganda only; South Sudan unchanged (below).
+- **The quotation summary** now says:
+  `💰 One-time: UGX 2,399,000` / `💰 First month: UGX 249,000 (then UGX 249,000 per month)` / `🏷️ Total: …`.
+  - The plan is the line spelled like one of uCRM's service plans (`PublicPriceFeed::planKey`, the rule the price
+    feed and the assistant already use). Every other line is one-time.
+  - "Then … per month" is uCRM's plan price, so a discounted first month still shows the real monthly price.
+  - Three months up front reads "First 3 months".
+  - Where uCRM cannot list its plans, there is no split, and the log says why.
+- **The price check** (`ReplyPrivacyGuard`), where the hardware module is on:
+  - it also reads plain amounts of five digits or more, alone or straight after a currency;
+  - it refuses a reply with an unfilled slot such as `[total]`;
+  - it leaves out serials, invoice numbers, links, dates, speeds and Markdown links.
+  - A refused reply becomes the safe fallback and a hand-over, as before.
+- **The check tool** judges with the same options, and says which checks judged.
+
+**South Sudan:** the quotation summary is byte-identical, with goldens taken from `webhook.php` at `fa2d463`, and
+its uCRM is asked nothing more. With the module off, every price-check verdict is identical.
+
+**Recorded, not changed.**
+- **P10:** print the prompt's prices with commas, and give the assistant the totals. It changes the Uganda prompt,
+  so it needs approval.
+- **P8** and **P9** are still open.
+
+**Proof.**
+- `tests/test_quote_summary.php` **39**; six weakened copies of `webhook.php` each fail it.
+- `tests/test_price_check_plain.php` **68**; eight weakened copies each fail it.
+- The check's rehearsal against 5.18.45 and 5.18.46: **252/252**.
+- Suite: **212 test files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.46.sh`, pinned to `131712a`. It has the backup as fixed on 27 Sep, and stage V as
+before. There is no stage K. Q checks that the installed webhook carries the new summary. Stage AI checks the new
+price-check line, and reports a refused reply as a note, never a failure. Rehearsed in
+`scripts/harness/deploy-5.18.46/rehearse.sh`: **117/117 on two consecutive runs**. Seven weakened copies of the new
+checks and seven of the backup each fail. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 08:59 UTC by the operator: PASSED, 40 ok / 0 failed / 0 notes** (docs/41 §8). The backup,
+V, Q and AI were all `ok`. Two A1 replies should have been refused and were not:
+- "Total: UGX 4,627,000", where the lines add up to 4,527,000. It equals a real sum of listed prices, the check's known
+  limit: about 4 in 10 round amounts between 1 and 6 million are permitted totals.
+- "(Add total of …)", a slot in round brackets.
+
+**Proposal P11, for approval:** a stated total must add up to its lines, and a "TOTAL" with no figure is refused.
+
+## 5.18.47 — the price check adds each total up (docs/41 §9)
+
+**Why.** Stage AI of the 5.18.46 deploy (docs/41 §8) saw two A1 replies the check should have refused:
+- "Total: UGX 4,627,000", where the lines add up to 4,527,000. The figure is itself a sum of listed prices, so the
+  price-list rule could not tell (F-1).
+- "TOTAL TO GET CONNECTED: (Add total of …)", a slot in round brackets.
+
+The operator chose **"Build the total check (Recommended)"**.
+
+**What.** Uganda only, switched by the hardware module; South Sudan unchanged.
+- **`lib/ReplyTotals.php`** refuses a reply when:
+  - its stated total is not the sum of the list lines above it — with or without the monthly lines, plus an earlier
+    subtotal — nor a total it already stated;
+  - a sum it writes out is wrong;
+  - a money TOTAL carries no figure.
+
+  The categories are `total:mismatch` and `total:missing`. A refused reply becomes the fallback and a hand-over, as
+  for every refusal.
+- **A reply is refused only if no reading of it makes the total right.** A count not beside its price ("2 × Router 3
+  — 827,000", "Router Mini x2 — 435,000") is read both ways, as the price for one or for all; "each" says for one.
+  Left to the price-list rule: two prices on a line, a price "each" with no count, a total with no list above it, a
+  total in prose, and a label that is not money.
+- **`ReplyPrivacyGuard::optionsFor`** gains `totals`. The check tool says so, and explains a refused total.
+
+**Proof.**
+- `tests/test_price_check_totals.php` **111**.
+  - The 30 live replies of 27 Sep: exactly 5 refused (the 3 already refused, and the two A1 replies) and 25 sent as
+    written.
+  - Eighteen weakened copies each fail it.
+- `tests/test_price_check_plain.php` **68**. Its pinned options now include the totals rule, deliberately.
+- The check's rehearsal against 5.18.46 and 5.18.47: **273/273, twice**. Its first run found one false refusal —
+  a count mid-line, "For the two upper floors: 2 × Router Mini — 435,000 each = 870,000". That, and two shapes like
+  it, were fixed before anything shipped.
+- Suite: **213 test files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.47.sh`, pinned to `a9b46fb`. It is deploy-5.18.46.sh with one new line in stage AI;
+the note that counts refused replies now also names a total that does not add up. Rehearsed in
+`scripts/harness/deploy-5.18.47/rehearse.sh`: **125/125 on two consecutive runs**. Eight weakened copies of the checks
+and seven of the backup each fail. **Not deployed by this session.**
+
+## 5.18.48 — a Starlink kit price says what it includes (docs/42)
+
+**Why.** On 27 Sep the live assistant quoted the Starlink Standard Kit at 2,649,000 with nothing about tax. The
+operator asked for kits to say clearly that all taxes are included, URA taxes and the UCC registration fee among
+them, and chose **"All taxes included (Recommended)"** and, for the quotation PDF, **"Yes, match it
+(Recommended)"**.
+
+**What.** Uganda only, switched by the hardware module; South Sudan unchanged.
+- **`lib/KitTaxNote.php`.** After a reply passes the price check, a reply that states the price of a Starlink kit
+  ends with: *"The kit price includes all taxes — URA taxes and the UCC registration fee are already in it. Nothing
+  is added on top."*
+  - A kit is a HARDWARE item whose name holds "Starlink" and "Kit". Accessories are never read, so the Travel Kit
+    case never counts.
+  - Nothing is added to a refused reply, to a reply that already says it, or to one with no kit price.
+  - Added by code, as the Business-plan note is: that rule, stated in the prompt, was ignored by 18 of 21 replies.
+- **`ai_fact_kit_taxes`.** Unset means the approved wording, `omit` switches it off, and any other text is used as
+  written. `set_config.php` manages it and warns when the text holds a digit.
+- **Quotation template, clause 2.** On a quote with a Starlink kit and no tax lines, "No VAT is charged on this
+  quotation." becomes the same sentence. Quotes with tax lines, or with no kit, are unchanged. The template lives
+  inside uCRM, so staff load it there (docs/42 §4): `template-quotation-uganda-2026-09-27.zip`, sha256
+  `2a01039d…7994de3`, both entries byte-identical to the repository.
+- **The check tool** reports the line in force and counts the replies that carried it.
+- **Carries 5.18.47** (the total check, above), which was never deployed on its own. The 5.18.47 command now stops
+  at stage A and changes nothing.
+
+**Proof.**
+- `tests/test_kit_tax_note.php` **73**, including eleven weakened copies. Through the real worker:
+  - the live reply of 27 Sep passes the price check and carries the sentence;
+  - South Sudan sends it exactly as written;
+  - a refused reply gets the fallback and no line.
+- The quotation template, rendered with real Twig 3 and 2.16 under the `2bfad82` template's own sandbox: **27/27 on
+  each**. The rest of every page is byte-identical to the baseline's. Three weakened copies each fail.
+- The check's rehearsal against 5.18.46 and 5.18.48: **284/284, twice**.
+- Suite: **214 test files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.48.sh`, pinned to `65b1ace`. Stage AI gains the line's report (ok, or a note when it
+is your own wording or switched off; a failure with the hardware module off) and the count of replies that carried
+it. Rehearsed in `scripts/harness/deploy-5.18.48/rehearse.sh`: **146/146 on two consecutive runs**. Its first run
+caught the summary claiming the sentence while the line was switched off; the summary now states what the report
+found, and a weakened copy that quotes it regardless is caught. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 11:49 UTC by the operator: PASSED, 43 ok / 0 failed / 2 notes** (docs/42 §8). 5.18.47 went
+live with it. Stage AI saw both:
+- C1, a home quote with the Mini Kit, ends with the taxes line;
+- B1 wrote "TOTAL: 1,996,500" over lines that add up to 1,897,500, and was refused — the customer would have
+  had a person, not a total 99,000 too high.
+
+The notes: tar read a changing log file (the databases are copied separately), and that one refusal.
+**The quotation template is not yet loaded in uCRM** (docs/42 §4).
+
+## 5.18.49 — every Uganda quotation says what its prices include (docs/42 §9)
+
+**Why.** 5.18.48 left two points open (docs/42 §7). The operator answered on 27 Sep: *"we are giving quote including
+all the taxes"*, and for the WhatsApp quotation summary, *"add it we are providing quote including UCC and URA
+charges"*. They then chose **"One sentence (Recommended)"** for every quotation, and **"Yes, same sentence
+(Recommended)"** for the assistant's price fact:
+
+> All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.
+
+**What.** Uganda only, by the tenant profile; South Sudan byte-identical.
+- **`lib/QuoteTaxLine.php`** holds the sentence once.
+- **The WhatsApp quotation summary** carries it on the line under the Total, from both builders: a quote made in uCRM
+  (`webhook.php`, `quote.add`) and a quote from the app or KYC (`QuotationService`).
+- **Quotation template, clause 2.** Every quote with no tax lines says the sentence, with a kit or without. It
+  replaces "No VAT is charged on this quotation" and 5.18.48's kit sentence; quotes with tax lines are unchanged. The
+  template lives inside uCRM, so staff load it there: **`template-quotation-uganda-all-taxes.zip`**, sha256
+  `16acf0b1…f502e400`, both entries byte-identical to the repository. **The 27 Sep ZIP of 5.18.48 is superseded and
+  must not be uploaded.**
+- **The price fact** (`ai_fact_prices`) is not set by the deploy. The operator's own command sets it
+  (docs/42 §10.1); `set_config.php`'s help now shows the sentence.
+- **The check tool** reports the price fact, and counts a kit quote that already says the taxes are included, so a
+  log never reads "no kit price quoted" about one that did. Its wording for an unset fact was corrected before
+  shipping: the prompt's TAX rule does tell the assistant something.
+
+**Proof.**
+- `tests/test_quote_tax_line.php` **31**, new, including five weakened copies. `QuotationService` for South Sudan is
+  byte-identical to its `4c01d1c` copy; Uganda's gains exactly one line.
+- `tests/test_quote_summary.php` **45**: section K through the real webhook, and two more weakened copies.
+- `test_kit_tax_note.php` (68) and `test_airtel_money.php` (58) changed on purpose, each saying why.
+- The quotation template with real Twig 3 and 2.16: **27/27 on each**, three controls failing as they should.
+- The check's rehearsal against 5.18.48 and 5.18.49: **325/325, twice**.
+- Suite: **215 files, exit 0, twice**.
+
+**Deploy.** `scripts/deploy-5.18.49.sh`, pinned to `e076632`. Stage Q reads the three installed files; stage AI
+reports the price fact (ok when it is the quotations' sentence, a note otherwise); the summary names the new ZIP.
+Rehearsed in `scripts/harness/deploy-5.18.49/rehearse.sh`: **187/187 on two consecutive runs**. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 12:54 UTC by the operator: PASSED, 47 ok / 0 failed / 1 note** (docs/42 §11). The price fact
+was set first, by the operator's own command, and stage AI read it as the quotations' sentence. Stage Q found the
+sentence in all three installed files. The note: B1 wrote a total 199,000 over its lines and was refused. C1, a home
+quote with the Mini Kit, ends with the kit line. Seen, not changed: B1's second reply still defers tax to the
+quotation (P12, proposed for approval), and B4 quoted three routers for three floors.
+**The quotation template is not yet loaded in uCRM** (docs/42 §10.2).
+
+## 27 Sep — staff job assignment, uCRM and WhatsApp: a read-only audit (docs/43)
+
+**What.** An audit, at the operator's request, of how a job reaches a technician or retailer and how they answer.
+**No plugin change.** Nothing was deployed, no job created, no record changed and no message sent.
+
+**Found.**
+- Jobs are uCRM Scheduling jobs. My Jobs → ＋ New Job assigns and messages support staff; the time lands 3 hours
+  late in uCRM.
+- Hard-coded South Sudan lists overwrite each staff member's uCRM user id on every deploy and page load.
+- A job made in uCRM reaches the technician only if uCRM's user record carries a phone; the fallback is broken.
+  Reassignment sends nothing, and B + C send duplicates.
+- A technician's WhatsApp reply goes to the AI as a customer message.
+- Any signed-in account can read, close or complete any job.
+- A failed message can show as "Delivered".
+- "0/5 CRM linked" counts the organisation-7 reseller link, not the job link.
+
+The smallest set of changes is J1–J8 (required) and J9–J16 (optional), in docs/43 §9. **None is authorised yet.**
+
+**New read-only tools, no plugin change:**
+- `scripts/dnb-jobs-facts.sh` with `scripts/lib/jobs_facts.php`, for the operator to run: 277/277 on two runs in
+  `scripts/harness/jobs-facts/rehearse.sh`, seven weakened copies caught.
+- `scripts/harness/jobs-trace/trace.php`, the sandbox trace behind the audit: 46/46 on two runs.
+
+**Next.** The operator runs the facts command and sends back its log file (docs/43 §10.4), then chooses which
+changes to build. The controlled live test (§10.5) waits for that approval.
+
+**Facts measured 27 Sep 15:54 UTC by the operator's run** (docs/43 §11):
+- Uganda's uCRM has **one staff user, id 1000, with the admin account's e-mail**, and its record has **no phone
+  field**.
+- None of the plugin's four stored ids (1, 4, 81, 1581) is a uCRM user; 4 was typed after the screenshot.
+- Organisation 7 does not exist.
+- There are **0 scheduling jobs**, and no job message or job webhook has ever existed.
+- 6 staff conversations are filed as customer ones, and the AI has been queued **109** times for staff numbers.
+- The admin alert number is unset. The timezone is Africa/Kampala.
+
+Consequences:
+- Nobody can be assigned a uCRM job correctly today.
+- Path B can never send.
+- Each technician needs a uCRM user, created by the operator.
+
+The facts command's "tenant profile not set" line described the setting, not the profile: the currency UGX selects
+uganda. It now prints the resolved profile and why. Its rehearsal: **334/334 on two runs**, eight weakened copies
+caught.
+
+## 27 Sep — J1–J8: the implementation specification (docs/44), and a read-only uCRM users check
+
+**What.** The operator accepted docs/43 and approved J1–J8 **for planning only**. It asked for one specification
+before any code, and for one more read-only check of Uganda's uCRM users. **No plugin change, nothing deployed, no
+record changed, no message sent.** J9–J16 stay out of scope.
+
+**docs/44** answers the operator's ten questions. It gives:
+- per change: the files and functions (5.18.49 line numbers), today vs wanted, schema, tests and rollback;
+- one Uganda switch, `StaffJobsGate`, false on any error, so South Sudan stays byte-identical;
+- **one schema change**: migration 075, `job_notify_state` + `job_notify_events` for J4 ("who was last told what",
+  claimed in one transaction, so each change sends exactly one message, whichever path sees it);
+- the test matrix, and two releases: A sends nothing new; B, J4, comes after the operator creates and links the
+  uCRM users;
+- **eight decisions for the operator** (D1–D8). Two notable ones: telling a technician when a job is taken away
+  (recommended), and removing the "Notify via WhatsApp" box on Uganda.
+
+**Delivery receipts** are specified as "not measured" rather than captured. The shape of Evolution's
+`messages.update` has never been recorded here.
+
+**New read-only tool, no plugin change:** `scripts/dnb-ucrm-users-facts.sh` with `scripts/lib/ucrm_users_facts.php`.
+It reads:
+- every uCRM user's list AND detail record (phone-like fields, nested ones included, as names and country codes
+  only);
+- what `users/{id}` answers for a real id;
+- the e-mail match each staff account would get;
+- the two other uCRM-id settings;
+- uCRM's timestamp offset;
+- the follow-up switch;
+- each WhatsApp number's subscribed webhook events.
+
+Rehearsed in `scripts/harness/ucrm-users/rehearse.sh`: **394/394 on two runs**, 11 weakened copies caught, and the
+mask proved with a control on the control.
+
+**Next.** The operator runs the users check and sends back its log file (docs/44 §13), and answers D1–D8. **Nothing
+is coded until the operator approves docs/44.**
+
+**Result of the uCRM users check, 27 Sep 16:37 UTC** (docs/44 §13.1). It ran to its end: 3 ok, 0 failed, 5
+notes; nothing was changed. Measured:
+- Uganda's uCRM has **one staff user, 1000**, active and UISP-linked, with the admin account's e-mail. There is
+  **no phone field** in its list or detail record.
+- **`users/{id}` answers 404 even for 1000**, so path B fails at its first step.
+- A verified picker would propose **S1 → 1000**. S2–S5 have no uCRM user, and **0 of 4** stored ids are real.
+- **uCRM writes +0300**: its screen keeps Kampala's clock.
+- **The follow-up engine is on**, so J8's follow-up exclusion is needed.
+- **Delivery receipts are subscribed on all three WhatsApp numbers**; the plugin drops them today.
+
+The specification stands as written. Nothing is coded until the operator approves docs/44 and answers D1–D8.
+
+**Second run of the uCRM users check, 27 Sep 16:47 UTC** (docs/44 §13.1), after the operator created a UISP user
+for S4. Measured:
+- uCRM now has two staff users: 1000 (S1's e-mail) and **1099 (S4's e-mail)**. Both are active and UISP-linked,
+  and neither has a phone.
+- A verified picker would propose **S1 → 1000** and **S4 → 1099**. S4 still holds 81 until it is linked.
+- Nothing was changed.
+
+**Decisions and readiness, 27 Sep** (docs/44 §15), asked for before any approval. Documentation only; nothing
+changed on the server.
+- **P1 first**, as the operator's advisor asked: who will be assigned jobs. S4 has uCRM user 1099 and S1 has 1000;
+  S3 and S5 are undecided.
+- **D9 (new):** link only to the uCRM user with the same e-mail. As written, J2 let an admin pick another user, and
+  UISP holds no names for these users.
+- **M1:** J8 must also stop follow-ups by the number, at the scan, the run and the send. As written, the category
+  is set only at a staff member's next message, and a follow-up opened earlier would continue.
+- **M2:** a message-content test (T4.13). **M3:** a title-only edit in the live test must send nothing.
+- **M4 (optional):** one silent internal test job after the links, to prove V2–V4 before release B can send.
+- **M5:** clear S3's and S5's stale ids unless they take jobs. 1581 is above uCRM's user numbers so far, so it
+  could one day name a real user.
+- Readiness: release A can be built once P1, D1, D2, D6, D7, D9, M1 and M5 are answered; nothing may send until
+  release B.
+
+## 27 Sep — J1–J8: the operator's decisions recorded; release A awaits M6 and M7; release B BLOCKED
+
+**What.** The operator reviewed docs/44 §15 and approved the two-release approach. Recorded in docs/44 §15.6.
+**No code written, nothing deployed, no record changed, no message sent.**
+
+**Decisions.**
+- **P1:**
+  - S1 yes, for the internal test and administration, with a valid number before any WhatsApp test;
+  - S4 yes, after release A and a verified link to 1099;
+  - **S3 and S5 no for now**; S2 and retailers no.
+  - No account is created and no job assigned to anyone else automatically.
+- **D1–D4, D6–D9: yes.** D8 is the operator's own settings command, in release A's runbook.
+- **D5 pending:** the exact messages (new assignment, reassignment, new time, removal, deletion) come to the operator
+  before release B is built.
+- **M1–M5 approved.** M4 runs after release A, assigned to S1, with no job message sent. M5 clears only S3's and S5's
+  ids; no other link is cleared or overwritten automatically.
+
+**Requirements recorded** (docs/44 §15.6): the full suite twice with zero failures, South Sudan regression included;
+a verified backup and the deploy and rollback commands; no automatic deploy; no silent link change; live-test
+messages to the operator's own number only; no change to customer billing, invoices, the portal or unrelated
+features. **A passing automated test is not proof that WhatsApp delivers**: release B's live test is its own gate.
+
+**Still blocking release A** (docs/44 §15.7): two confirmations.
+- **M6:** as specified, release A would still let the old code send a job-assignment WhatsApp. ＋ New Job sends with
+  its box ticked, Bulk Dispatch always, and Reschedule to whoever pressed it; uCRM's `job.add` is stopped only by a
+  404. Recommended: switch all four off on Uganda in release A and hide the box.
+- **M7:** recommended: on Uganda only a link saved through the verified picker counts, wherever a job is involved, so
+  S3's and S5's old ids match nobody even before M5 clears them.
+
+**Correction to docs/44 §3.2**, inside the approved J2 ("never use `ftth_crm_client_id`"): the My Jobs list reads it
+as a fallback (`api_scheduling.php:70, 73, 84, 141`). Release A removes the fallback on Uganda.
+
+**For requirement 8:** J1's change 1.8 sits beside the retailer wallet top-up's uCRM invoice attempt, which fails
+today (no organisation 7). The outcome is unchanged, so it is kept as approved unless the operator says otherwise.
+
+**Release B: BLOCKED** until all of these hold (docs/44 §15.8), and then only on separate approval:
+- D5 approved;
+- release A deployed and verified;
+- the links verified (S1 → 1000, S4 → 1099) and S3's and S5's ids cleared;
+- S1 has a valid number;
+- M4 done with no job message sent;
+- the tests pass twice.
+
+## 27 Sep — J1–J8: M6 and M7 approved; strict billing exclusion; release A being built, not deployed
+
+**What.** The operator approved **M6** (release A sends no job-assignment WhatsApp on Uganda: ＋ New Job, Bulk
+Dispatch, Reschedule and uCRM's `job.add` off; the checkbox hidden; "no message was sent" stated) and **M7** (on
+Uganda only a picker-validated link is used for job operations; never `ftth_crm_client_id`, never an old id). The J2
+correction is accepted. Recorded in docs/44 §15.9.
+
+**Strict exclusion:** billing, invoices, payments, customer records and their workflows are not modified.
+Consequences for release A:
+- **Out:** 1.8–1.10 (organisation-7 client creation, the wallet top-up path, its message) and 5.3 (the second-site
+  KYC job's time).
+- **Narrowed:** J3's save rule applies to job-taking roles only; J8 recognises staff roles only, not dealer accounts.
+- **Reported, not changed:** `update_client_gps` skips its job check for an unlinked account; `save_job_signature`
+  logs to a customer named in the request body; the app API's job check-in and check-out have no assignee check.
+
+**Next.** Build release A (5.18.50), run the full suite twice with zero failures, rehearse the deployment and the
+rollback, and stop before deployment for the operator's review of the build report. Release B stays BLOCKED.
