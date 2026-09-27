@@ -305,6 +305,9 @@ $ALLOW = [
     'includes/routes.php'          => ["\$host      = \$_SERVER['HTTP_HOST']" => 'PWA manifest: must match the page that asked',
                                        "\$httpsUrl = 'https://'" => 'upgrades the request the browser already made'],
     'includes/api/api_crm_sync.php' => ["\$host = \$_SERVER['HTTP_HOST']" => 'same-origin check on the referer'],
+    // Phase 2: the customer session compares the Origin header with the request host before a cookie may
+    // authenticate a POST. A comparison, not an address: no link is built from it.
+    'lib/CustomerSession.php'       => ["\$reqHost = strtolower((string)(\$_SERVER['HTTP_HOST']" => 'same-origin check on the Origin header of a cookie-authenticated request; no link is built'],
     'production-preflight.php'     => ["\$ucrmJson['pluginPublicUrl']" => 'probes the internal port on purpose'],
     'tabs/admin/settings.php'      => ["\$_emUcrm['ucrmPublicUrl']" => 'API base for the e-mail settings read'],
     'tabs/engage/wa_ai_setup.php'  => ["\$_ucrmJson['pluginPublicUrl']" => 'shown as a hint beside its port-less form'],

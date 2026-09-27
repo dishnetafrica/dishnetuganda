@@ -20,6 +20,8 @@ declare(strict_types=1);
  * Step 2 is why Uganda needs no configuration at all: currency_code is
  * already UGX there and SSP in Juba. Step 3 is why Juba does not change.
  */
+require_once __DIR__ . '/TenantProfile.php';
+
 final class PortalLocale
 {
     /** Currency → the country that spends it. Only the ones DishNet operates in. */
@@ -48,6 +50,18 @@ final class PortalLocale
             $country = $country !== '' ? $country               : $dCountry;
             return ['code' => $code, 'country' => $country,
                     'example' => self::example($code, $dCode, $dExample)];
+        }
+
+        // Phase 2: an explicit tenant_profile selector answers before the
+        // currency does. Without one, the currency rule below is unchanged.
+        $sel = strtolower(trim((string)($config[TenantProfile::SELECTOR_KEY] ?? '')));
+        if (in_array($sel, TenantProfile::IDS, true)) {
+            $t = TenantProfile::load($sel);
+            $dial = $t->dialCode(); $ex = $t->phoneExample();
+            if ($dial !== '' && $t->countryName() !== '') {
+                return ['code' => '+' . $dial, 'country' => $t->countryName(),
+                        'example' => $ex !== '' ? $ex : '+' . $dial . ' XXX XXX XXX'];
+            }
         }
 
         [$c, $n, $ex] = self::byCurrency($config);

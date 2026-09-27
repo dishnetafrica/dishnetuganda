@@ -721,6 +721,10 @@ switch ($changeType) {
 
         // Fetch full client to get phone & name — from uCRM, never from the posted body (5.18.37)
         $client = whVerified('client', $clientId, $crm->get("clients/{$clientId}"));
+        // Phase 2: the customer index learns about the client now, not at the
+        // next sync — the row carries the e-mail and the eligibility flags.
+        try { require_once __DIR__ . '/lib/ClientSearchIndex.php'; ClientSearchIndex::upsertClient($store, $client); }
+        catch (\Throwable $e) { whLog($changeType, 'index upsert failed: ' . $e->getMessage()); }
         $name   = trim(($client['firstName'] ?? '') . ' ' . ($client['lastName'] ?? ''))
              ?: ($client['companyName'] ?? 'Customer');
         $phone  = '';
@@ -2143,6 +2147,9 @@ switch ($changeType) {
                 if (!$found) $cache[] = $client; // newly-pulled, add it
                 $store->save('ucrm_clients_cache.json', $cache);
                 whLog($changeType, "ucrm_clients_cache refreshed for CRM #{$clientId}");
+                // Phase 2: and the customer index row (e-mail, eligibility flags) with it.
+                require_once __DIR__ . '/lib/ClientSearchIndex.php';
+                ClientSearchIndex::upsertClient($store, $client);
             } catch (\Throwable $e) {
                 whLog($changeType, 'cache refresh failed: ' . $e->getMessage());
                 // non-fatal — cache is best-effort, isVipClient still has

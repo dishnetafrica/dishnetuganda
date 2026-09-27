@@ -57,7 +57,29 @@ class CustomerContact
         $disk = trim((string)(self::fromDisk()[$key] ?? ''));
         if ($disk !== '') return $disk;
 
+        // Phase 2: the tenant profile answers before the historical literal.
+        // With nothing configured the profile is south-sudan, whose values ARE
+        // these DEFAULTS, so an install that configures nothing is unchanged.
+        $prof = trim((string)(self::profileDefaults($config)[$key] ?? ''));
+        if ($prof !== '') return $prof;
+
         return self::DEFAULTS[$key] ?? '';
+    }
+
+    /** The profile's contact_* values for this configuration, read once per profile. */
+    private static function profileDefaults(?array $config): array
+    {
+        static $memo = [];
+        try {
+            require_once __DIR__ . '/TenantProfile.php';
+            $cfg = ($config ?? []) + self::fromDisk();
+            $dataDir = $GLOBALS['dataDir'] ?? null;
+            $t = TenantProfile::current($cfg, is_string($dataDir) ? $dataDir : null);
+            if (!isset($memo[$t->id()])) $memo[$t->id()] = $t->contactDefaults();
+            return $memo[$t->id()];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /** The config files, read once per request. Pure reads, no side effects. */

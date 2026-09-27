@@ -1,0 +1,40 @@
+# /etc/easypanel/traefik/config/dnb-crm-root.yml
+#
+# Change set C-1 (docs/38 §C.2): absorb the BARE /crm on the public address.
+#
+# Measured (docs/37 §I.2 U4): https://crm.dishnetuganda.com/crm — no trailing
+# slash — is answered by UISP's own web server with 301 → https://crm.dishnetuganda.com:8443/crm/,
+# so a customer who types or bookmarks the short address is sent to the :8443
+# listener, whose certificate is self-signed for "localhost" (the browser warns).
+# With this file Traefik answers that one path itself, 302 → the same path with
+# the slash on 443; UISP then serves /crm/ as it does today (302 to its sign-in).
+#
+# One new file for Traefik's file provider, in the shape of dnb-customer-login.yml
+# and traefik-mail.yml on this host: two routers for ONE exact path, an explicit
+# priority above uisp.yaml's host router, tls.certResolver on the https router.
+# It never edits main.yaml or uisp.yaml and is removed by deleting the file.
+# `permanent: false` (302): a cached 301 could not be taken back. Placed and
+# verified by scripts/dnb-crm-root-redirect.sh, which fills the placeholders
+# from uisp.yaml.
+http:
+  routers:
+    dnb-crm-root:
+      rule: "Host(`__HOST__`) && Path(`/crm`)"
+      entryPoints: ["https"]
+      __PRIORITY_LINE__
+      service: noop@internal
+      middlewares: ["dnb-crm-root-redirect"]
+      tls:
+        certResolver: __RESOLVER__
+    dnb-crm-root-http:
+      rule: "Host(`__HOST__`) && Path(`/crm`)"
+      entryPoints: ["http"]
+      __PRIORITY_LINE__
+      service: noop@internal
+      middlewares: ["dnb-crm-root-redirect"]
+  middlewares:
+    dnb-crm-root-redirect:
+      redirectRegex:
+        regex: "^https?://__HOST_RE__/crm/?(\\?.*)?$"
+        replacement: "https://__HOST__/crm/${1}"
+        permanent: false

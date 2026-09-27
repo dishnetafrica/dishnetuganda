@@ -15,6 +15,14 @@ declare(strict_types=1);
  *
  *   docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/seed_knowledge.php --refresh-seeded
  *
+ * --dry-run, with either, runs the same thing inside a transaction that is always rolled back and
+ * says what WOULD be added and corrected; nothing is written (5.18.44, for the deploy command):
+ *
+ *   docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/seed_knowledge.php --refresh-seeded --dry-run
+ *
+ * --only=KEY[,KEY…] limits the run to those rows, so a release that corrects one seeded row corrects that row and
+ * nothing else it happens to find (5.18.44: --only=MANY_USERS_HOTSPOT). A key the seed does not have is refused.
+ *
  * That flag exists because a seeded row can be wrong. TBC_SLA_STATIC_IP put
  * "public/static IP availability" on the never-improvise list while
  * BUSINESS_PLANS stated a public IP as a feature of Business — so the AI was
@@ -45,12 +53,27 @@ $items = $seed['items'] ?? [];
 if (!$items) exit("knowledge_seed.json has no items\n");
 
 $refresh = in_array('--refresh-seeded', $argv, true);
+$dry     = in_array('--dry-run', $argv, true);
+$only    = [];
+foreach ($argv as $a) {
+    if (strpos($a, '--only=') === 0) $only = array_values(array_filter(array_map('trim', explode(',', substr($a, 7))), 'strlen'));
+}
+if ($only) {
+    $known = array_map(fn($i) => (string)($i['item_key'] ?? ''), $items);
+    $unknown = array_diff($only, $known);
+    if ($unknown) { fwrite(STDERR, 'not in knowledge_seed.json: ' . implode(', ', $unknown) . "\n"); exit(2); }
+    $items = array_values(array_filter($items, fn($i) => in_array((string)($i['item_key'] ?? ''), $only, true)));
+    echo 'only: ' . implode(', ', $only) . "\n";
+}
 
+if ($dry) $pdo->beginTransaction();
 $r = KnowledgeSeeder::apply($pdo, $items, $refresh);
+if ($dry) $pdo->rollBack();
 
-foreach ($r['corrected'] as $k) echo "  corrected: {$k}\n";
-printf("knowledge seed: %d added, %d already present, %d corrected\n",
-       $r['added'], $r['kept'], count($r['corrected']));
+$verb = $dry ? 'would correct' : 'corrected';
+foreach ($r['corrected'] as $k) echo "  {$verb}: {$k}\n";
+printf("knowledge seed%s: %d %s, %d already present, %d %s\n", $dry ? ' (DRY RUN — nothing was written)' : '',
+       $r['added'], $dry ? 'would be added' : 'added', $r['kept'], count($r['corrected']), $verb);
 
 if (!$refresh) {
     echo "(run with --refresh-seeded to also correct rows still as seeded)\n";

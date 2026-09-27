@@ -35,6 +35,7 @@ require __DIR__ . '/portal_data.php';
 if ($portalAuthError) {
     http_response_code(401);
     setcookie('dn_customer_token', '', time() - 3600, '/');
+    CustomerSession::clearCookie();   // Phase 2: the session cookie as well
     ?>
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Session expired</title>
@@ -113,6 +114,7 @@ if ($portalRenderDesktop) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#141414">
+<link rel="manifest" href="?page=customer_manifest">
 <title>DishNet · <?= pe(ucfirst($view)) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -973,7 +975,7 @@ elseif ($view === 'plans'): ?>
     To change your plan, contact DishNet support. We'll help you pick the right fit for your needs.
   </p>
 
-  <button class="cta-red" onclick="DishNet.openWhatsApp('+211921443002', 'Hi DishNet, I want to change my plan.')">
+  <button class="cta-red" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'Hi DishNet, I want to change my plan.')">
     <svg class="ic" style="width:16px;height:16px"><use href="#i-wa"/></svg>
     Chat with support on WhatsApp
   </button>
@@ -1068,7 +1070,7 @@ elseif ($view === 'support'): ?>
 </div>
 
 <div class="scr-body">
-  <div class="wa-card" onclick="DishNet.openWhatsApp('+211921443002', 'Hi DishNet, I need help with my service.')">
+  <div class="wa-card" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'Hi DishNet, I need help with my service.')">
     <div class="wa-card-ic"><svg class="ic" style="width:22px;height:22px"><use href="#i-wa"/></svg></div>
     <div class="wa-card-t">
       <div class="wa-card-tt">WhatsApp Support</div>
@@ -1079,19 +1081,19 @@ elseif ($view === 'support'): ?>
 
   <div class="sec-lbl" style="margin-top:18px">Other ways to reach us</div>
   <div class="list-card">
-    <div class="list-row" onclick="DishNet.openPhone('+211921443002')">
+    <div class="list-row" onclick="DishNet.openPhone('<?= pe($portalSupportPhoneDial) ?>')">
       <div class="list-ic" style="background:var(--blue-light);color:var(--blue)"><svg class="ic"><use href="#i-phone"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Call us</div>
-        <div class="list-ts">+211 921 443 005</div>
+        <div class="list-ts"><?= pe($portalSupportPhone) ?></div>
       </div>
       <span class="chev">›</span>
     </div>
-    <div class="list-row" onclick="DishNet.openEmail('info@dishnetafrica.com')">
+    <div class="list-row" onclick="DishNet.openEmail('<?= pe($portalSupportEmail) ?>')">
       <div class="list-ic"><svg class="ic"><use href="#i-mail"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Email</div>
-        <div class="list-ts">info@dishnetafrica.com</div>
+        <div class="list-ts"><?= pe($portalSupportEmail) ?></div>
       </div>
       <span class="chev">›</span>
     </div>
@@ -1099,7 +1101,7 @@ elseif ($view === 'support'): ?>
 
   <div class="sec-lbl" style="margin-top:18px">Common issues</div>
   <div class="list-card">
-    <div class="list-row" onclick="DishNet.openWhatsApp('+211921443002', 'My internet is slow or disconnected.')">
+    <div class="list-row" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'My internet is slow or disconnected.')">
       <div class="list-ic" style="background:var(--amber-light);color:var(--amber-dark)"><svg class="ic"><use href="#i-warn"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Internet slow or down</div>
@@ -1114,7 +1116,7 @@ elseif ($view === 'support'): ?>
       </div>
       <span class="chev">›</span>
     </div>
-    <div class="list-row" onclick="DishNet.openWhatsApp('+211921443002', 'I want to pay my invoice.')">
+    <div class="list-row" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'I want to pay my invoice.')">
       <div class="list-ic"><svg class="ic"><use href="#i-receipt"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Help paying invoice</div>
@@ -1251,6 +1253,34 @@ elseif ($view === 'account'):
     </div>
   </div>
 
+  <div class="sec-lbl" style="margin-top:18px" id="pwa-install-lbl" hidden>App</div>
+  <div class="list-card" id="pwa-install-card" hidden>
+    <div class="list-row" onclick="DishNet.installApp()">
+      <div class="list-ic"><svg class="ic"><use href="#i-phone"/></svg></div>
+      <div class="list-t">
+        <div class="list-tt">Install the DishNet app</div>
+        <div class="list-ts" id="pwa-install-sub">Adds DishNet to your home screen</div>
+      </div>
+    </div>
+  </div>
+  <script>
+  // 5.18.40: the portal is installable from the browser (manifest + meta tags; no
+  // service worker on purpose). The row appears only where installing is possible
+  // and not already done: never inside the Android wrapper or a standalone window.
+  (function(){
+    window.__dnInstall = { prompt: null, hint: '' };
+    if (window.Android || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true) return;
+    var card = document.getElementById('pwa-install-card'), lbl = document.getElementById('pwa-install-lbl'), sub = document.getElementById('pwa-install-sub');
+    var show = function(){ if (card) card.hidden = false; if (lbl) lbl.hidden = false; };
+    window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window.__dnInstall.prompt = e; show(); });
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/i.test(ua) && /Safari/i.test(ua) && !/CriOS|FxiOS/i.test(ua)) {
+      window.__dnInstall.hint = 'ios';
+      if (sub) sub.textContent = 'In Safari: tap Share, then "Add to Home Screen"';
+      show();
+    }
+  })();
+  </script>
   <div class="sec-lbl" style="margin-top:18px"></div>
   <div class="list-card">
     <div class="list-row" onclick="DishNet.confirmLogout()">
@@ -1330,18 +1360,32 @@ elseif ($view === 'invoice_detail'):
   </div>
 
   <!-- Totals -->
+  <?php /* 5.18.42 (docs/38 §7.5): EACH tax or levy on its own line, named as uCRM names it — read from the
+     invoice, never computed here. 5.18.43: the first row is "Subtotal" and the discount follows it directly.
+     Measured on the live install (26 Sep): invoice 000005 carries a 30 % discount and no tax at all, and the
+     operator decided to keep prices as they are ("keep price as it is"), so the earlier label read as a tax
+     still to come. Subtotal, then the discount, then any tax line, then the total. A PHP comment, not an
+     HTML one: an HTML comment is sent to the customer's browser. */ ?>
   <div class="list-card" style="margin-top:12px">
-    <?php if ($inv['subtotal'] != $inv['total']): ?>
-    <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
+    <?php if (!empty($inv['has_breakdown'])): ?>
+    <?php if ($inv['subtotal'] > 0): ?>
+    <div class="inv-subtotal" style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:13px;color:var(--gray)">Subtotal</span>
       <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['subtotal'], 2) ?></span>
     </div>
-    <?php if ($inv['tax'] > 0): ?>
-    <div style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
-      <span style="font-size:13px;color:var(--gray)">Tax</span>
-      <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($inv['tax'], 2) ?></span>
+    <?php endif; ?>
+    <?php if ($inv['discount'] > 0): ?>
+    <div class="inv-discount" style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
+      <span style="font-size:13px;color:var(--green-mid)">Discount</span>
+      <span style="font-size:13px;font-weight:600;color:var(--green-mid)">-<?= dn_cur($config) ?><?= number_format($inv['discount'], 2) ?></span>
     </div>
     <?php endif; ?>
+    <?php foreach ($inv['taxes'] as $taxLine): ?>
+    <div class="inv-tax-line" style="padding:10px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
+      <span style="font-size:13px;color:var(--gray)"><?= pe($taxLine['name']) ?></span>
+      <span style="font-size:13px;font-weight:600"><?= dn_cur($config) ?><?= number_format($taxLine['amount'], 2) ?></span>
+    </div>
+    <?php endforeach; ?>
     <?php endif; ?>
     <div style="padding:12px 16px;display:flex;justify-content:space-between;border-bottom:1px solid var(--off-white)">
       <span style="font-size:14px;font-weight:700;color:var(--dark)">Total</span>
@@ -1358,6 +1402,9 @@ elseif ($view === 'invoice_detail'):
     </div>
     <?php endif; ?>
   </div>
+  <?php if (!empty($inv['taxes'])): ?>
+  <p style="font-size:11px;color:var(--gray);margin:8px 4px 0;line-height:1.5">Each tax or levy is listed on its own line, exactly as it appears on your invoice document. The total is what you pay.</p>
+  <?php endif; ?>
 
   <?php if (!empty($portalDpoEnabled) && $inv['status'] !== 'paid' && $inv['due'] > 0): ?>
   <!-- Pay Now. The amount shown is the cached outstanding; the SERVER re-reads
@@ -1459,13 +1506,21 @@ elseif ($view === 'invoice_detail'):
   <div class="sec-lbl" style="margin-top:18px">Payment</div>
   <div class="list-card">
     <div style="padding:16px">
+      <?php if ($portalBankAccount !== '' && $portalBankName !== ''): // 5.18.41: only the tenant's own bank details, never the other tenant's ?>
       <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">Bank transfer</div>
       <div style="font-size:12px;color:var(--gray);line-height:1.6">
-        Account: <b>DishNet Africa Ltd</b><br>
-        Bank: <b>Stanbic Bank / Equity Bank</b><br>
+        Account: <b><?= pe($portalBankAccount) ?></b><br>
+        Bank: <b><?= pe($portalBankName) ?></b><br>
         Reference: <b><?= pe($inv['number']) ?></b><br>
-        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?> USD</b>
+        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?><?= pe(portalCurrencySuffix($inv['currencyCode'] ?? null, $config)) ?></b>
       </div>
+      <?php else: ?>
+      <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">Payment reference</div>
+      <div style="font-size:12px;color:var(--gray);line-height:1.6">
+        Reference: <b><?= pe($inv['number']) ?></b><br>
+        Amount: <b><?= dn_cur($config) ?><?= number_format($inv['due'], 0) ?><?= pe(portalCurrencySuffix($inv['currencyCode'] ?? null, $config)) ?></b>
+      </div>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -1554,7 +1609,7 @@ elseif ($view === 'wifi_change'):
     <div class="empty" style="margin-top:20px">
       <h3>No routers found</h3>
       <p>We couldn't find any Starlink routers for your account. Contact support to set up remote WiFi management.</p>
-      <button class="cta-alt" onclick="DishNet.openWhatsApp('+211921443002', 'I want to change my WiFi password but the app says no routers found.')" style="margin-top:16px">Contact support</button>
+      <button class="cta-alt" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'I want to change my WiFi password but the app says no routers found.')" style="margin-top:16px">Contact support</button>
     </div>
   <?php else: ?>
     <?php if ($hasMultipleRouters && !$specificRouter): ?>
@@ -1958,7 +2013,7 @@ elseif ($view === 'fiber_usage'):
         // the customer portal, not the staff app. Without it, any link click
         // (7D/14D/30D, pagination) lands on the staff interface.
         $base = '?page=customer_portal&view=fiber_usage';
-        if (!empty($_GET['token'])) $base .= '&token=' . urlencode($_GET['token']);
+        // Phase 2: no token in any URL — the session is the HttpOnly cookie.
         $merged = array_merge(['fu_range' => $fuRange, 'fu_spage' => $fuSPage], $params);
         foreach ($merged as $k => $v) $base .= '&' . $k . '=' . urlencode((string)$v);
         return $base;
@@ -3277,7 +3332,7 @@ elseif ($view === 's_hotspot_picker'):
     <div class="empty" style="margin-top:20px">
       <h3>No routers found</h3>
       <p>We couldn't find any Starlink routers on your account. Contact support if you think this is wrong.</p>
-      <button class="cta-alt" onclick="DishNet.openWhatsApp('+211921443002', 'Hotspot mode says no routers found.')" style="margin-top:16px">Contact support</button>
+      <button class="cta-alt" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'Hotspot mode says no routers found.')" style="margin-top:16px">Contact support</button>
     </div>
   <?php else: ?>
     <div class="sec-lbl" style="margin-top:4px"><?= count($hpRouters) === 1 ? 'Your site' : 'Your sites' ?></div>
@@ -4167,7 +4222,7 @@ elseif ($view === 's_hotspot'):
               '. Please check if DishNet Fiber is available at this location \u2014 ' +
               'I\'d like per-device speed caps and voucher access for my hotspot.';
     if (window.DishNet && typeof DishNet.openWhatsApp === 'function') {
-      DishNet.openWhatsApp('+211921443002', msg);
+      DishNet.openWhatsApp(DishNet.supportWa, msg);
     } else {
       // Fallback: route to internal support tab
       DishNet.go('support');
@@ -4852,7 +4907,7 @@ elseif ($view === 'service_status'):
     <div style="width:32px"></div>
   </div>
   <div style="font-size:12px;color:rgba(255,255,255,.55);position:relative;z-index:2">
-    Juba, South Sudan · Updated just now
+    <?= pe($portalLocality) ?> · Updated just now
   </div>
 </div>
 <div class="scr-body" style="padding-top:0">
@@ -4924,7 +4979,8 @@ elseif ($view === 'service_status'):
     </div>
   </div>
 
-  <!-- Fiber -->
+  <!-- Fiber — shown only where the tenant sells it (5.18.41, docs/38 A1.1) -->
+  <?php if ($portalSells('fibre')): ?>
   <div class="list-card" style="margin-top:10px">
     <div style="padding:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -4933,7 +4989,7 @@ elseif ($view === 'service_status'):
         </div>
         <div style="flex:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:var(--dark)">Fiber</div>
-          <div style="font-size:11px;color:var(--gray)">Juba metro areas</div>
+          <div style="font-size:11px;color:var(--gray)"><?= pe($portalAreaFibre) ?></div>
         </div>
         <span class="pill green">Operational</span>
       </div>
@@ -4948,8 +5004,10 @@ elseif ($view === 'service_status'):
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
-  <!-- LTE -->
+  <!-- LTE — shown only where the tenant sells it -->
+  <?php if ($portalSells('lte')): ?>
   <div class="list-card" style="margin-top:10px">
     <div style="padding:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -4958,7 +5016,7 @@ elseif ($view === 'service_status'):
         </div>
         <div style="flex:1">
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:var(--dark)">4G LTE</div>
-          <div style="font-size:11px;color:var(--gray)">Juba, Yei, Wau</div>
+          <div style="font-size:11px;color:var(--gray)"><?= pe($portalAreaLte) ?></div>
         </div>
         <span class="pill green">Operational</span>
       </div>
@@ -4973,11 +5031,12 @@ elseif ($view === 'service_status'):
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- Report issue -->
   <div class="sec-lbl" style="margin-top:20px">Experiencing issues?</div>
   <div class="list-card">
-    <div class="list-row" onclick="DishNet.openWhatsApp('+211921443002', 'My internet is down. Service: Starlink. Location: Juba.')">
+    <div class="list-row" onclick="DishNet.openWhatsApp(DishNet.supportWa, 'My internet is down. Service: Starlink. Location: <?= pjs($portalLocation) ?>.')">
       <div class="list-ic" style="background:var(--danger-light);color:var(--danger-text)"><svg class="ic"><use href="#i-warn"/></svg></div>
       <div class="list-t">
         <div class="list-tt">Report an outage</div>
@@ -5147,7 +5206,7 @@ elseif ($view === 'wifi_site'):
   </div>
 
   <!-- Support fallback -->
-  <button class="cta-alt" style="margin-top:12px" onclick="DishNet.openWhatsApp('+211921443002','I need help changing my WiFi password for <?= pe($wsLocation) ?> (<?= pe($wsKit) ?>)')">
+  <button class="cta-alt" style="margin-top:12px" onclick="DishNet.openWhatsApp(DishNet.supportWa,'I need help changing my WiFi password for <?= pe($wsLocation) ?> (<?= pe($wsKit) ?>)')">
     <svg class="ic" style="width:14px;height:14px"><use href="#i-support"/></svg>
     Need help? Contact support
   </button>
@@ -5494,7 +5553,7 @@ function _apiUrl(action) {
 // Read auth token — uses existing DishNet._token pattern (set by native WebView),
 // with PHP-embedded fallback for web PWA.
 function _authHeader() {
-  var tok = (window.DishNet && window.DishNet._token) ? window.DishNet._token : '<?= pe($token) ?>';
+  var tok = (window.DishNet && window.DishNet._token) ? window.DishNet._token : '';   // Phase 2: only a native shell injects a token; the browser's session is the HttpOnly cookie
   return tok ? { 'Authorization': 'Bearer ' + tok } : {};
 }
 
@@ -6595,7 +6654,10 @@ _startPolling();
 // ══════════════════════════════════════════════════════════════════
 window.DishNet = {
   // JWT token for in-page navigation (WebView only sends Authorization header on initial load)
-  _token: '<?= pe($token) ?>',
+  _token: '',   // Phase 2: never embedded in the page — the session is the HttpOnly cookie; a native shell may set this
+  // 5.18.41 (docs/38 A1.1): the tenant's support WhatsApp number, from the profile — the one
+  // number every "contact support" button on this page opens. Emitted once, here.
+  supportWa: <?= json_encode($portalSupportWaPlus) ?>,
 
   // v4.12.20 — Multi-account state.
   // _accounts: full list from JWT accounts claim (may have 1 or many)
@@ -6648,7 +6710,6 @@ window.DishNet = {
     // Keeps the token in the URL for WebView scenarios.
     var u = new URL(location.href);
     u.searchParams.set('view', 'home');
-    if (this._token) u.searchParams.set('token', this._token);
     location.href = u.toString();
   },
 
@@ -6699,8 +6760,12 @@ window.DishNet = {
     opts = opts || {};
     var headers = Object.assign({}, opts.headers || {});
     if (this._token && !headers['Authorization']) headers['Authorization'] = 'Bearer ' + this._token;
-    var aid = this.activeAccountId();
-    if (aid) headers['X-Account-Id'] = String(aid);
+    // Phase 2: the browser's session is the HttpOnly cookie. A same-origin fetch
+    // sends it; the header marks the request as this page's own, which the API
+    // requires before a cookie may authenticate anything but a GET.
+    headers['X-Requested-With'] = 'DishNet';
+    if (!opts.credentials) opts.credentials = 'same-origin';
+    var aid = this.activeAccountId();    if (aid) headers['X-Account-Id'] = String(aid);
     opts.headers = headers;
     return fetch(url, opts);
   },
@@ -6712,15 +6777,13 @@ window.DishNet = {
     } else {
       var u = new URL(location.href);
       u.searchParams.set('view', view);
-      if (this._token) u.searchParams.set('token', this._token);
-      location.href = u.toString();
+        location.href = u.toString();
     }
   },
   // Navigate within the same WebView (for sub-pages like invoice detail, wifi change, usage)
   goInternal(view, extraParams) {
     var u = new URL(location.href);
     u.searchParams.set('view', view);
-    if (this._token) u.searchParams.set('token', this._token);
     if (extraParams) {
       for (var k in extraParams) u.searchParams.set(k, extraParams[k]);
     }
@@ -6760,7 +6823,6 @@ window.DishNet = {
     var u = new URL(location.href);
     u.searchParams.set('view', 'invoice_detail');
     u.searchParams.set('inv_id', id);
-    if (this._token) u.searchParams.set('token', this._token);
     location.href = u.toString();
   },
   notifyPayment(id, number, amount) {
@@ -6769,10 +6831,10 @@ window.DishNet = {
     var msg = '✅ *Payment Notification*\n\n'
       + 'Customer: *' + name + '* (#' + clientId + ')\n'
       + 'Invoice: *' + number + '*\n'
-      + 'Amount: *' + <?= json_encode(dn_cur($config)) ?> + Math.round(amount) + ' USD*\n\n'
+      + 'Amount: *' + <?= json_encode(dn_cur($config)) ?> + Math.round(amount) + <?= json_encode(portalCurrencySuffix($portalCurrency, $config) . "*\n\n") ?>
       + 'The customer says they have paid. Please verify and confirm.';
-    // Send to Bidal's number
-    DishNet.openWhatsApp('+211921443002', msg);
+    // Send to the tenant's support WhatsApp (5.18.41, docs/38 A1.1)
+    DishNet.openWhatsApp(DishNet.supportWa, msg);
   },
   // v4.12.20 — In-app PDF viewer. Fetches the PDF with auth, displays in a
   // full-screen modal with an explicit close button. Avoids the iOS WebView
@@ -6850,7 +6912,7 @@ window.DishNet = {
         errorEl.style.display = 'flex';
         // Use the original URL with token as fallback so the user can still open it
         var dlLink = document.getElementById('dn-pdf-fallback-dl');
-        if (dlLink) dlLink.href = url + '&token=' + encodeURIComponent(DishNet._token || '');
+        if (dlLink) dlLink.href = url;   // Phase 2: a same-origin GET carries the session cookie; no token in any URL
         console.warn('[viewPdf] failed:', err && err.message);
       });
   },
@@ -6914,7 +6976,7 @@ window.DishNet = {
     });
   },
   openNotifications() {
-    DishNet.openWhatsApp('+211921443002', 'Hi, I want to check my DishNet notifications and updates.');
+    DishNet.openWhatsApp(DishNet.supportWa, 'Hi, I want to check my DishNet notifications and updates.');
   },
   // ── Live WiFi Config fetch ─────────────────────────────────────────────
   fetchLiveWifi() {
@@ -7195,7 +7257,7 @@ window.DishNet = {
     } else if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(function() { alert('Speed test result copied!'); });
     } else {
-      DishNet.openWhatsApp('+211921443002', text);
+      DishNet.openWhatsApp(DishNet.supportWa, text);
     }
   },
 
@@ -7249,7 +7311,7 @@ window.DishNet = {
 
     // Open WhatsApp with the report
     if (btn) { btn.disabled = false; btn.textContent = 'Send debug report to DishNet'; }
-    DishNet.openWhatsApp('+211921443002', text);
+    DishNet.openWhatsApp(DishNet.supportWa, text);
 
     if (res) {
       res.style.display = 'block';
@@ -7261,9 +7323,9 @@ window.DishNet = {
 
   _wifiErrorMsg(rawErr, errDiv) {
     if (rawErr.indexOf('TARGETID_NOT_FOUND') !== -1) {
-      errDiv.innerHTML = '<b>Router not reachable</b><br>Starlink cannot find your router right now. This usually means the dish is powered off or the router was recently replaced.<br><br>Try again in a few minutes or <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(\'+211921443002\',\'WiFi change failed — router not found\')">contact support</span>.';
+      errDiv.innerHTML = '<b>Router not reachable</b><br>Starlink cannot find your router right now. This usually means the dish is powered off or the router was recently replaced.<br><br>Try again in a few minutes or <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(DishNet.supportWa,\'WiFi change failed — router not found\')">contact support</span>.';
     } else if (rawErr.indexOf('PERMISSION_DENIED') !== -1) {
-      errDiv.innerHTML = '<b>Permission denied</b><br>Our system does not have permission to change this router\'s settings. <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(\'+211921443002\',\'WiFi change permission denied\')">Contact support</span>.';
+      errDiv.innerHTML = '<b>Permission denied</b><br>Our system does not have permission to change this router\'s settings. <span style="text-decoration:underline;cursor:pointer" onclick="DishNet.openWhatsApp(DishNet.supportWa,\'WiFi change permission denied\')">Contact support</span>.';
     } else if (rawErr.indexOf('UNAVAILABLE') !== -1 || rawErr.indexOf('DEADLINE_EXCEEDED') !== -1) {
       errDiv.innerHTML = '<b>Router is offline</b><br>Your Starlink router is not responding. Make sure the dish is powered on and connected.';
     } else {
@@ -7406,8 +7468,15 @@ window.DishNet = {
     var clientId = <?= $portalCustomerId ?>;
     var url = location.href.split('/_plugins/')[0] + '/_plugins/dishnet-data-report/public.php?clientId=' + clientId;
     if (kitNumber) url += '&kit=' + encodeURIComponent(kitNumber);
-    if (this._token) url += '&token=' + encodeURIComponent(this._token);
-    location.href = url;
+    // Phase 2: the session token never leaves its cookie. The other plugin is
+    // handed a purpose-bound ten-minute token minted on click (app_data_report_token).
+    DishNet.apiFetch(location.pathname + '?page=api&action=app_data_report_token')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var t = (d && d.data && d.data.token) ? d.data.token : '';
+        location.href = t ? url + '&token=' + encodeURIComponent(t) : url;
+      })
+      .catch(function () { location.href = url; });
   },
   // v4.12.21: toggle the editable SSID field. Called when user taps the
   // "Advanced (change network name)" link. Accepts optional forceShow to
@@ -7569,34 +7638,37 @@ window.DishNet = {
       
     });
   },
+  installApp() {
+    // 5.18.40: Chrome/Edge hand us the deferred prompt; iOS and others get the words.
+    var st = window.__dnInstall || {}; var p = st.prompt;
+    if (p && typeof p.prompt === 'function') {
+      p.prompt();
+      (p.userChoice || Promise.resolve()).then(function(){ st.prompt = null; var c = document.getElementById('pwa-install-card'); if (c) c.hidden = true; var l = document.getElementById('pwa-install-lbl'); if (l) l.hidden = true; }).catch(function(){});
+      return;
+    }
+    alert(st.hint === 'ios' ? 'In Safari, tap Share, then "Add to Home Screen".' : 'Open the browser menu and choose "Install app" or "Add to Home screen".');
+  },
   confirmLogout() {
     if (window.Android && window.Android.confirmLogout) {
       // Native will prompt biometric + logout if confirmed
       window.Android.confirmLogout();
     } else {
       if (confirm('Log out of DishNet?')) {
-        // 1. Call logout API to blacklist the JWT token
-        var token = this._token;
-        if (token) {
-          var u = new URL(location.href);
-          var logoutUrl = u.origin + u.pathname + '?page=api&action=app_logout';
-          fetch(logoutUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Bearer ' + token,
-              'Content-Type': 'application/json'
-            },
-            body: '{}'
-          }).catch(function() { /* best-effort */ });
-        }
-
-        // 2. Clear the dn_customer_token cookie
-        document.cookie = 'dn_customer_token=;path=/;max-age=0;SameSite=Lax';
-        document.cookie = 'dn_customer_token=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT;SameSite=Lax';
-
-        // 3. Redirect to customer login page
+        // 1. Revoke the session on the server (Phase 2: the cookie-authenticated
+        //    call carries X-Requested-With; the server revokes the row and clears
+        //    the HttpOnly cookie). The redirect waits for the answer so the
+        //    portal cannot be reopened on a session that is still live.
+        var u = new URL(location.href);
+        var logoutUrl = u.origin + u.pathname + '?page=api&action=app_logout';
         var loginUrl = location.pathname + '?page=customer_login';
-        location.href = loginUrl;
+        DishNet.apiFetch(logoutUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .catch(function() { /* best-effort */ })
+          .then(function() {
+            // 2. The old JavaScript cookie, if a pre-Phase-2 browser still holds it
+            document.cookie = 'dn_customer_token=;path=/;max-age=0;SameSite=Lax';
+            // 3. Redirect to customer login page
+            location.href = loginUrl;
+          });
       }
     }
   },

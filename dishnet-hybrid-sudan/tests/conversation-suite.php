@@ -36,6 +36,14 @@ require_once $root . '/lib/SqliteStore.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/DishNetTools.php';
 require_once $root . '/lib/DishNetAiBrain.php';
+// The live path's own pieces (docs/40 §6): the knowledge base, the context contract, the worker's catalogue
+// preparation and price check, and the Business-plan note.
+foreach (['KnowledgeBase', 'ConversationService', 'BrainContext', 'PlanCatalogue', 'ReplyPrivacyGuard', 'PlanFenceGuard',
+          'EventBus'] as $lib) {
+    require_once $root . '/lib/' . $lib . '.php';
+}
+require_once $root . '/workers/WorkerBase.php';
+require_once $root . '/workers/AiReplyWorker.php';
 
 $args    = $argv;
 $only    = null;
@@ -452,6 +460,60 @@ $SCENARIOS = [
      'must_not' => ['business 50', 'i recommend business', 'local priority is best']],
   ],
 
+  // ── 5.18.44 (docs/40): unlimited data for a business, and covering another area ──────────
+  // Measured live: "The plans we offer are not unlimited"; a reseller told there is no programme; no price for the
+  // access point or the MikroTik. Run these with --channel=whatsapp to include the price check.
+  'ug_unlimited' => [
+    ['say' => 'Is the internet unlimited?',
+     'any'      => ['unlimited', 'no data cap', 'no cap'],
+     'must_not' => ['not unlimited', 'are not unlimited', "aren't unlimited"]],
+  ],
+
+  'ug_business_unlimited' => [
+    ['say' => 'I have a shop and I need unlimited internet for my business. Which package?',
+     'any'      => ['residential'],
+     'must_not' => ['business 50', 'business 500', 'business 1tb', 'you need a business plan', 'not unlimited']],
+  ],
+
+  'ug_sell_internet' => [
+    ['say' => 'I want to sell internet to the people around my shop. Which package do I need?',
+     'any'      => ['residential'],
+     'must_not' => ["don't have a resell", 'do not have a resell', 'no reseller', 'business 50', 'not unlimited']],
+  ],
+
+  'ug_cover_other_building' => [
+    ['say' => 'I already have Starlink at home. How do I get the WiFi to my other building across the compound, and how much?',
+     'must'     => ['access point', 'ugx'],
+     'must_not' => ['radius', 'covers up to', 'not able to complete that one automatically']],
+  ],
+
+  'ug_two_access_points' => [
+    ['say' => 'I want wifi around my compound for my hotspot business.'],
+    ['say' => 'What would two outdoor access points and the MikroTik cost together?',
+     'must'     => ['ugx'],
+     'must_not' => ['not able to complete that one automatically', 'metres', 'meters']],
+  ],
+
+  'ug_home_total_no_network' => [
+    ['say' => 'How much will I pay to get Starlink installed at my home?',
+     'must'     => ['total'],
+     'must_not' => ['mikrotik', 'access point', 'ruijie', 'rg-rap']],
+  ],
+
+  // 5.18.45 (docs/40 §14): more floors inside one building are Starlink routers; the Ruijie is for outdoors.
+  'ug_more_floors' => [
+    ['say' => 'The WiFi does not reach the upper floors of my house. It has 3 floors. What do I need and how much?',
+     'any'      => ['router mini', 'router 3'],
+     'must'     => ['ugx'],
+     'must_not' => ['ruijie', 'rg-rap', 'not able to complete that one automatically']],
+  ],
+
+  // 5.18.45: a Business plan's priority block ends at about 1 Mbps (the operator, 27 Sep) — never "standard data continues".
+  'ug_business_after_priority' => [
+    ['say' => 'Do you have unlimited business plans?',
+     'must_not' => ['switch to unlimited standard data', 'standard data continues', 'then unlimited standard data']],
+  ],
+
   'ug_site_coverage' => [
     ['say' => 'will Starlink work at my place in Luuka District?',
      'any'      => ['clear view', 'sky', 'survey', 'technician', 'check'],
@@ -473,6 +535,8 @@ if ($list) {
     exit(0);
 }
 
+// As AiReplyWorker::__construct builds it: without the approved knowledge the replies are not the ones customers get.
+$config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo(), KnowledgeBase::answerLimit($config));
 $brain = new DishNetAiBrain($config);
 if (!$brain->isConfigured()) {
     fwrite(STDERR, "No AI provider key configured — this suite must run on the server.\n");
@@ -500,16 +564,33 @@ foreach ($SCENARIOS as $name => $turns) {
     $history = [];
 
     foreach ($turns as $i => $turn) {
-        $ctx = [
-            'channel'   => 'sales',
-            'transport' => $channel === 'whatsapp' ? 'whatsapp' : 'web',
-            'message'   => $turn['say'],
-            'customer'  => null,
-            'products'  => $products['data'],
-            'history'   => $history,
-        ];
+        // The context the live path builds: the WhatsApp sales number's contract (AiReplyWorker::buildContext), or
+        // the website chat's (web_chat.php) — each through its own catalogue preparation.
+        if ($channel === 'whatsapp') {
+            $ctx = BrainContext::build('unknown', ['customer' => null, 'channel' => 'sales', 'transport' => 'whatsapp',
+                'medium' => '', 'products' => AiReplyWorker::salesCatalogue((array)$products['data'], $config),
+                'message' => $turn['say'], 'history' => $history]);
+        } else {
+            $ctx = BrainContext::build('anonymous', ['channel' => 'sales', 'transport' => 'web', 'medium' => '',
+                'products' => BrainContext::catalogue((array)$products['data'], $config), 'message' => $turn['say'],
+                'history' => array_slice($history, -20)]);
+        }
         $res   = $brain->reply($ctx);
         $reply = trim((string)($res['reply'] ?? ''));
+        // On WhatsApp the worker checks every reply before it is sent: the price check, then the Business-plan
+        // note. The customer receives what comes out, and that is what is asserted. The website chat has neither.
+        $refused = '';
+        if ($channel === 'whatsapp' && $reply !== '') {
+            $prompt = $brain->lastSystemPrompt();
+            $g = ReplyPrivacyGuard::check($reply, ['values' => AiReplyWorker::permittedAmounts($ctx, $prompt, $config),
+                'prompt' => $prompt, 'public' => DishNetAiBrain::operatorText($config)]);
+            if (empty($g['safe'])) {
+                $refused = implode(',', (array)$g['categories']);
+                $reply   = ReplyPrivacyGuard::SAFE_FALLBACK;
+            } else {
+                $reply = (string)PlanFenceGuard::apply($reply, $config)['reply'];
+            }
+        }
         $usage = $brain->getLastUsage() ?: [];
         $tokIn  += (int)($usage['input_tokens'] ?? 0);
         $tokOut += (int)($usage['output_tokens'] ?? 0);
@@ -538,7 +619,9 @@ foreach ($SCENARIOS as $name => $turns) {
         } else {
             $pass++;
             printf("   ok    turn %d  «%s»\n", $i + 1, mb_substr($turn['say'], 0, 40));
+            printf("         reply: %s\n", mb_substr(preg_replace('/\s+/', ' ', $reply), 0, 400));
         }
+        if ($refused !== '') printf("         (the price check refused the model's reply: %s)\n", $refused);
 
         $history[] = ['role' => 'customer', 'text' => $turn['say']];
         $history[] = ['role' => 'dishnet',  'text' => $reply];

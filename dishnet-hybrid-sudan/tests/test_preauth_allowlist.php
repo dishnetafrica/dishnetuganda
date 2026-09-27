@@ -53,8 +53,8 @@ $ALLOW = [
     'login', 'customer_context',
     // PDF links, each checked by its own token
     'serve_temp_pdf', 'serve_quote_pdf', 'serve_delivery_pdf', 'serve_receipt_pdf',
-    // the customer app: sign-in, then everything behind the customer's own Bearer token
-    'app_send_otp', 'app_verify_otp', 'app_logout', 'app_me', 'app_account', 'app_plan', 'app_usage',
+    // the customer app: sign-in, then everything behind the customer's own session (cookie or Bearer)
+    'app_send_otp', 'app_verify_otp', 'app_logout', 'app_data_report_token', 'app_me', 'app_account', 'app_plan', 'app_usage',
     'app_invoices', 'app_invoice', 'app_invoice_pdf_download', 'app_invoice_receipts_list', 'app_invoice_send_whatsapp',
     'app_payments', 'app_payment_receipt_pdf', 'app_equipment', 'app_legal_version', 'app_record_consent',
     'app_register_fcm', 'app_unregister_fcm', 'app_debug_report', 'app_health_app',

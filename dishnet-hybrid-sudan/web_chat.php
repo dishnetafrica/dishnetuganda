@@ -266,7 +266,7 @@ if (!$gate['ok']) {
 }
 
 require_once __DIR__ . '/lib/KnowledgeBase.php';
-$config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo());
+$config['knowledge_block'] = KnowledgeBase::promptBlock($store->getPdo(), KnowledgeBase::answerLimit($config));
 $brain = new DishNetAiBrain($config);
 if (!$brain->isConfigured()) {
     // The visitor gets a courteous fallback; the operator needs to know which
@@ -371,8 +371,9 @@ try {
 // failed to identify — so they keep their own session history and get the
 // public catalogue, and there is no customer block at all.
 require_once __DIR__ . '/lib/BrainContext.php';
-$_catalogue = $products['ok'] ? $products['data'] : [];
-$_catalogue['stock'] = (string)($config['stock_statement'] ?? '');
+// The stock statement, and the accessories only where the hardware advice module is on — the
+// sales number's rule (BrainContext::catalogue, 5.18.44).
+$_catalogue = BrainContext::catalogue($products['ok'] ? $products['data'] : [], $config);
 $ctx = BrainContext::build(ConversationService::STATE_ANONYMOUS, [
     'channel'   => 'sales',
     'transport' => 'web',

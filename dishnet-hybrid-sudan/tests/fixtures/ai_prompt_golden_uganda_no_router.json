@@ -1,0 +1,33 @@
+{
+ "_note": "Uganda prompts and price-check lists where NO Starlink router is listed, fingerprinted (sha1) from plugin 5.18.44 (commit a4abe5e, what the server ran from 27 Sep 2026 06:15 UTC). 5.18.45 changes the Uganda prompt only where a Starlink router is among the accessories (docs/40 §14), so every one of these must stay identical. Inputs: the live plans and one-time products of 27 Sep; accessories either none or four that are not routers (one of them 'Router 3 Mount', a mount named after a router); four messages; the sales number's contract, the support number's legacy shape and the website chat; a fixed knowledge block, so a knowledge-row change cannot move them. Built by tests/test_ai_indoor_routers.php's own inputs, run against a4abe5e.",
+ "plugin": "5.18.44",
+ "commit": "a4abe5e",
+ "fingerprints": {
+  "mounts-m0-sales-contract": "c9c4d5d74f685579450eb70017150d46bc91f70d",
+  "mounts-m0-support-legacy": "ade07a4ccec144e9e4c0467c0fad4f469e81aa13",
+  "mounts-m0-web-contract": "6c159ae018328799d836dc1e0ce88cb01ce46079",
+  "mounts-m1-sales-contract": "c9c4d5d74f685579450eb70017150d46bc91f70d",
+  "mounts-m1-support-legacy": "ade07a4ccec144e9e4c0467c0fad4f469e81aa13",
+  "mounts-m1-web-contract": "6c159ae018328799d836dc1e0ce88cb01ce46079",
+  "mounts-m2-sales-contract": "c9c4d5d74f685579450eb70017150d46bc91f70d",
+  "mounts-m2-support-legacy": "ade07a4ccec144e9e4c0467c0fad4f469e81aa13",
+  "mounts-m2-web-contract": "6c159ae018328799d836dc1e0ce88cb01ce46079",
+  "mounts-m3-sales-contract": "c9c4d5d74f685579450eb70017150d46bc91f70d",
+  "mounts-m3-support-legacy": "ade07a4ccec144e9e4c0467c0fad4f469e81aa13",
+  "mounts-m3-web-contract": "6c159ae018328799d836dc1e0ce88cb01ce46079",
+  "mounts-price-check": "d86ecad40e1ca77ab31e47744f441715357bcf94",
+  "none-m0-sales-contract": "9313de4362334ba85c8818d4aa3121cae1a0a66f",
+  "none-m0-support-legacy": "e421e104d4963dcb8378eb38ce7dfe90764edba4",
+  "none-m0-web-contract": "7bf876fd1f6b33574f451f33ead67d7349c86877",
+  "none-m1-sales-contract": "9313de4362334ba85c8818d4aa3121cae1a0a66f",
+  "none-m1-support-legacy": "e421e104d4963dcb8378eb38ce7dfe90764edba4",
+  "none-m1-web-contract": "7bf876fd1f6b33574f451f33ead67d7349c86877",
+  "none-m2-sales-contract": "9313de4362334ba85c8818d4aa3121cae1a0a66f",
+  "none-m2-support-legacy": "e421e104d4963dcb8378eb38ce7dfe90764edba4",
+  "none-m2-web-contract": "7bf876fd1f6b33574f451f33ead67d7349c86877",
+  "none-m3-sales-contract": "9313de4362334ba85c8818d4aa3121cae1a0a66f",
+  "none-m3-support-legacy": "e421e104d4963dcb8378eb38ce7dfe90764edba4",
+  "none-m3-web-contract": "7bf876fd1f6b33574f451f33ead67d7349c86877",
+  "none-price-check": "16480bd352a77614e303794df61ff7fbac881f44"
+ }
+}

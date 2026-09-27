@@ -561,6 +561,38 @@ if ($page === 'app_manifest') {
     ], JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT);
     exit;
 }
+// ── Customer portal web-app manifest (5.18.40) ───────────────────────────────
+// The customer portal's own manifest, so a phone can add DishNet to its home
+// screen. It starts at the sign-in page (a live session goes straight through
+// to the portal), its scope is the plugin directory, and it reuses the icon the
+// staff app generates. There is deliberately NO service worker for customers:
+// a cache of signed-in pages on a shared phone is a data exposure, and Chrome
+// and iOS install from the manifest and the meta tags alone.
+if ($page === 'customer_manifest') {
+    header('Content-Type: application/manifest+json');
+    header('Cache-Control: public, max-age=3600');
+    $scriptPath = $_SERVER['SCRIPT_NAME'];   // e.g. /crm/_plugins/dishnet-hybrid-sudan/public.php
+    $pluginDir  = dirname($scriptPath);
+    echo json_encode([
+        'name'             => 'DishNet',
+        'short_name'       => 'DishNet',
+        'description'      => 'Your DishNet account: usage, bills, equipment and payments',
+        'id'               => $scriptPath.'?page=customer_login',
+        'start_url'        => $scriptPath.'?page=customer_login',
+        'scope'            => rtrim($pluginDir, '/').'/',   // '/' when served at a root, never '//'
+        'display'          => 'standalone',
+        'orientation'      => 'portrait',
+        'background_color' => '#141414',
+        'theme_color'      => '#141414',
+        'icons'            => [
+            ['src'=>$scriptPath.'?page=app_icon&size=192','sizes'=>'192x192','type'=>'image/png','purpose'=>'any'],
+            ['src'=>$scriptPath.'?page=app_icon&size=512','sizes'=>'512x512','type'=>'image/png','purpose'=>'any maskable'],
+            ['src'=>$scriptPath.'?page=app_icon',         'sizes'=>'any',    'type'=>'image/svg+xml'],
+        ],
+        'categories'       => ['utilities'],
+    ], JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT);
+    exit;
+}
 if ($page === 'app_icon') {
     $size = (int)($_GET['size'] ?? 0);
     // iOS requires PNG icons — generate PNG when size is requested

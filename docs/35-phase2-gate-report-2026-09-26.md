@@ -1,0 +1,246 @@
+# Phase 2 gate report — 26 September 2026
+
+Follows `34-phase2-checkpoint-2026-09-26.md`. Nothing was deployed, rolled back, migrated or changed
+in plugin or website code for this report. The only new file is a verification command,
+`scripts/phase2-verify.sh`, which the operator runs on the server.
+
+## 1. Data-report hand-off token — finding
+
+**What our side does (read in the repository, live on 5.18.40).** When a signed-in customer opens the
+usage report, the portal calls `app_data_report_token`, which mints a token for **that customer's own
+`sub`**, ten minutes long, claims `sub / kind / phone / name / accounts / aud=data-report`, signed with
+the **legacy derivation** `sha256(webhook_secret | crm_app_key-or-crm_auth_token | constant)`, and the
+browser is sent to `dishnet-data-report/public.php?clientId=<id>&kit=…&token=<that token>`.
+
+**Why it is legacy-signed.** Before Phase 2 the portal appended the customer's **session JWT** itself
+to that URL (`portal.php` of 5.18.37: `if (this._token) url += '&token=' + …`). The sibling plugin was
+therefore built to accept a token signed under that derivation; Phase 2 kept the shape so the report
+kept opening, and pinned it to a separate audience and a short life.
+
+**What is not known from this repository.** `dishnet-data-report` is not in this repository. Whether
+it verifies the signature, with which inputs, whether it compares `clientId` with the token's `sub`,
+whether it checks `exp` or `aud`, or whether it serves the page on `clientId` alone, cannot be read
+from here. Nor can this session read whether `crm_auth_token` / `crm_app_key` / `webhook_secret` are
+set on the Uganda install (this session has no server access; `webhook_secret` was recorded empty on
+15 September).
+
+**Forgeability, conditional.** If both inputs are empty the key is a constant anyone can read in the
+source, and a token for any `sub` can be minted by anyone. Whether that matters depends on the
+sibling: if it checks `sub` against `clientId` under that key, a forgery opens another customer's
+usage report; if it ignores the token, the token is decorative and the exposure is the sibling's own
+access control, not the hand-off.
+
+**Measured next, read-only:** `bash scripts/phase2-verify.sh --data-report` answers, on the server,
+with every excerpt masked: whether the sibling mentions the token, verifies a signature
+(`hash_hmac`/`hash_equals`/`JwtAuth`), references the hybrid plugin's key inputs or constant, reads
+`sub`/`accounts`, checks `exp`, checks `aud`, and which lines read `clientId`; and whether the three
+inputs are set or empty in the store copy the hand-off actually hashes (presence only).
+
+**Recommended fix, contingent on that reading:**
+- sibling verifies signature + `sub` with the shared derivation, inputs empty → forgeable → give the
+  hand-off its own generated shared secret (a change in both plugins), or, as an interim on this
+  install only, set `crm_auth_token` so the derivation has entropy — an operator decision, because
+  it is also the uCRM API credential;
+- sibling ignores the token → drop the token from the URL (one line in `portal.php`) and raise the
+  sibling's own access control as a separate finding;
+- sibling verifies signature and `exp` but not `sub` → the fix is in the sibling, not here.
+
+### 1a. The first reading (26 Sep ~05:00 UTC) — what stood, what was invalid, and the classification
+
+**What stood.**
+
+- D1: `dishnet-data-report` **2.8.80 is installed** (top level: `backup.php`, `client.php`, `cron*.php`,
+  `dr_wifi_change.php`, `data/`, …; `lib/KitRegistryWriter.php`).
+- K: in the store row `public.php` loads as `$config` — exactly what `app_data_report_token` hashes —
+  **`webhook_secret` EMPTY, `crm_auth_token` EMPTY, `crm_app_key` EMPTY.** The hand-off key on this
+  install is therefore `sha256('||' . constant)`, the constant being public in this repository: **a
+  hand-off token for any `sub` can be minted by anyone.** (The snippet's `PluginConfig::read` line
+  failed with an `ArgumentCountError` — a wrong call, fixed; it does not touch the store reading, which
+  is the one that matters, because `public.php` never calls `PluginConfig::load()`.)
+- The `clientId` lines of its `public.php`, read directly: `drFetchClientServices(string $clientId)`
+  calling uCRM `GET /api/v1.0/clients/services?clientId=X` (≈216–232); `?action=dr_raw_services&clientId=X`
+  dumping the raw uCRM response (≈243–246); `getDishnetKitPlanMap(clientId)` (≈419–426); and at
+  **643–647** the comment *"JWT is valid. SECURITY: if ?clientId= was also passed in the URL … own valid
+  JWT could set clientId=SOMEONE_ELSE in the URL and read"* followed by
+  `$urlClientId = trim($_GET['clientId'] ?? '')`.
+
+**What was INVALID, and why.** The run's mechanical lines D3–D7 read *no signature verification, no
+key inputs, never reads sub, no exp, no aud*, while its own occurrence table read `JwtAuth 2`,
+`hash_hmac 1`, the constant `1`, `webhook_secret 5`, `crm_auth_token 5`, `'sub' 4`, `'exp' 2`, `'aud' 1`
+— and the "token-handling lines" section printed nothing. The cause is the container's `grep`: it does
+not support `--include`. Every command that passed `--include='*.php'` as an option failed (stderr was
+discarded) and counted 0; the occurrence loop passed it after `--`, i.e. as a file name, so it searched
+**every** file recursively, data files included (hence `accounts 1122`, `token 267`). **The D3–D7
+verdicts and the occurrence counts are withdrawn.** The two direct-file reads (the `token` count on
+`public.php`, the `clientId` listing) used no `--include` and stand.
+
+**Classification (operator, 26 Sep): SECURITY BLOCKER.** With the key a public constant, whether a
+forged token opens another customer's report depends only on what the sibling does with `clientId` and
+the token — and the 643–647 comment says it trusts the token and binds `clientId` to it, the branch in
+which the forgery matters most. The analysis (exploitability, affected data, root cause, the
+recommended architecture, changes, rollout, tests) is **docs/36**; nothing is patched, deployed or
+changed until the remediation is approved.
+
+**The command is rewritten** (`scripts/phase2-verify.sh --data-report`). The inspection now runs **in
+PHP inside the container**, over PHP files only, with no shell grep, and prints — masked — the PHP
+inventory with per-file counts and content hashes; `public.php`'s includes; every request parameter it
+reads; the action names it dispatches on; **every function that computes an HMAC, in full**; ±15 lines
+around every `JwtAuth`/`verify(` mention; ±12 around every read of the token parameter; **±70 lines
+around "JWT is valid"**; every `clientId` line; where its key inputs come from (±2 lines); the claim
+keys it reads; its gates; the same for `client.php`, `dr_wifi_change.php` and `lib/`; the sibling's own
+uCRM credential (presence) and its data-directory names; then D2–D8 computed in PHP. K additionally
+reads the files-plus-vault view and reports whether a plain `kyc_config.json` (or `.migrated`) exists in
+either hybrid data directory — the sibling may read such a file rather than our store. Masking: the
+shared constant → `<the shared constant>`; a credential-shaped assignment loses its value; any run of
+40+ characters, any 24–39-character letters-and-digits run, any e-mail and any 7+-digit number →
+`<redacted>` / `<email>` / `<digits>`; no data file is opened. Rehearsed against two fake siblings —
+one modelled on the evidence (constant derivation read from the hybrid's settings, the 643–647 gate,
+`dr_raw_services`, an internal-auth gate, planted key literals, an e-mail, a phone number) and one that
+ignores the token: **35/35 in two consecutive runs**; the block is asserted to contain no shell grep and
+no `--include=`.
+
+**The other two production tests did not run.** The `--email <address>` and `--lead <+2567…>` lines were
+pasted with the placeholders literally; bash reads `<` and `>` as redirections and answered
+`syntax error near unexpected token '2'`. Nothing was sent to anyone. Re-issued in §7 with the
+substitution spelled out.
+
+### 1b. The source reading — 26 Sep 05:28 UTC (`verify-data-report-20260926T052852Z.log`, masked)
+
+**The forgery is NOT exploitable on this host — confirmed from the sibling's code.** Its verifier
+`drVerifyHybridJwt()` (`public.php:792–855`, file sha256 `5d10b30ae54a…`) opens
+**`<plugins dir>/dishnet-hybrid-telecom/data/plugin.sqlite3`** — the South Sudan plugin's directory
+and the pre-upgrade data location — and returns `null` when that file is absent (798–799); on this host
+the hybrid is `dishnet-hybrid-sudan` with its store in `.dishnet-hybrid-sudan-data` (K). And even at a
+store it can open, it **refuses to derive a key when either input is empty** (830–832: *"Guard: if
+either is empty, don't attempt — would collapse to attacker-predictable constant secret"*). The
+"JWT is valid" block (642–713) is live code, executed only when the verifier returns claims — which on
+this install it never does. So a forged token is refused, **and so is our legitimate hand-off token**:
+the portal's usage-report link answers "Report not found" for every Uganda customer (its own comment
+614–615: *"If neither works, only THEN do we drNotFound()"*).
+
+What the verifier does check: three segments; HMAC-SHA256 always (the header's `alg` is never trusted);
+`hash_equals`; `exp` with 5 s leeway; the caller requires `sub` and `kind = app` (642) and binds the
+URL's `clientId` to `sub` (647–652 — the first run's mechanical D5 "none" was a heuristic miss). **No
+`aud`, `iss`, `kid` or `jti`.** The token is read once (622). `dr_raw_services` is inside
+`drFetchClientServices()` behind `clientId == sub` on the token path (245–246) and in the admin
+whitelist (1101). The sibling already reads a shared secret from `_dishnet_shared/internal_auth.json`
+with `hash_equals` (1002–1010), so a hand-off key file under `_dishnet_shared/` is a pattern its own
+code already has. Installation A (South Sudan) is described by the sibling's comment (771–777) as
+holding a 32-character `webhook_secret` and a 64-character `crm_auth_token`: entropy there, no forgery;
+a replayed legacy `kind = app` JWT within its `exp` is accepted there. Not audited.
+
+**Reclassification, for the operator to confirm:** the exploit as named — a forged token opening another
+customer's report — does not exist on Uganda. What stands: the usage-report feature is **non-functional
+here** (404 for everyone), the cross-plugin design keys trust on our live credentials and another
+installation's directory, and two of the sibling's *other* paths still need reading (docs/36 §H):
+whether a customer with a uCRM client-zone session can use the MODE 2 `?clientId=` override, and whether
+an anonymous `?action=dr_wifi_…` request is refused before `dr_wifi_change.php` (which contains no gate
+word at all) runs. The command gained those regions (D-VI-b/c/d, the dispatch of `dr_wifi_change.php`,
+and D-XII-b: which hybrid directories exist on this host); rehearsed **41/41 in two consecutive runs**.
+The full analysis is **docs/36**.
+
+**The e-mail and lead runs (05:29 UTC) used the example values literally** (`you@yourdomain.com`,
+`+2567XXXXXXXX`) and stopped correctly at E1/L1 — *matches no record, nothing was sent*. Still pending;
+§7 says what to type. The lead mode printed a `sed` error (a look-ahead in a POSIX expression, on an
+unused variable) — fixed.
+
+### 1c. Which build is installed — 26 Sep 05:53 UTC (`--sibling-id`)
+
+**The South Sudan build.** `dishnet-data-report` 2.8.80, installed 2 July 2026, unchanged since the
+reads; no manifest settings; `dishnet-hybrid-telecom` at four lines (the JWT verifier's store path, its
+comment, the report page's "Back to Portal" link at `client.php:410`, the auto-block cron's admin-alert URL
+at `cron_auto_block.php:366`), `dishnet-hybrid-sudan` **nowhere**; the page heading itself reads *"JUBA,
+SOUTH SUDAN"*. On Uganda that means: the hand-off never worked, the Back-to-Portal link is dead, and the
+auto-block cron's admin alerts go to a path that does not exist. Full record and the design note that
+follows from it: **docs/36 §I and §J**. The data-report redesign is **separate remediation**, outside the
+Phase 2 gate, awaiting the operator's approval of docs/36 §J.
+
+## 2. Production e-mail sign-in — PASSED (26 Sep 05:40 UTC)
+
+`--email` on `bhavin.madlani@outlook.com` (an address on a customer record): **16 ok, 0 failed.**
+E1 matched one account, eligible; E2 `app_send_otp` → 200 "Code sent via Email."; E3 the code arrived;
+E4 verify → 200, cookie **HttpOnly · SameSite=Lax · Secure**, JSON body carried no token; E5 `app_me`
+on the cookie → 200 (login_mode e-mail), the portal recognised the session and asked for consent first;
+E6 logout → 200 and the cookie was 401 afterwards (revoked); E7 the code appeared in no container-log
+line, and in no notification, queue, conversation, pending or audit row. Audit for the address:
+`otp_sent×1 login_success×1 logout×1`. **E-mail sign-in works end to end in production.**
+
+## 3. Production eligibility refusal — the GUARD is proven; the refusal path still PENDING
+
+`--lead +211927797217` (Bhavin's own number) read `eligible=true, is_lead=0` and the command
+**STOPPED at L1** — *"this number is NOT a refused lead … a code would reach a real customer; nothing
+was sent."* That is the guard doing its job: it refuses to run the test against a real customer. To
+exercise the *refusal* path (a lead is offered the door and the gate turns it away with the uniform
+answer while nothing is sent), the number must belong to a record that is a **lead** in uCRM
+(Clients → filter Leads, or a test lead created for it). Nothing was sent to anyone in either run.
+
+## 4. Website deployment status
+
+Committed: `466e4fc` (176 links on 57 pages → the portal sign-in; guard and README updated; the
+site's own checks pass). **Live status unknown from this session**: `dishnetuganda.com` is not
+reachable from here. `bash scripts/phase2-verify.sh --website` reports it from the server (the
+5.18.40 command's stage W does the same). Until the EasyPanel redeploy (project `web`, app
+`web-uganda`) the live site still sends customers to uCRM's login.
+
+**LIVE — confirmed 26 Sep 05:02 UTC** by `--website` on the server: the home page carries 3 links to
+the DishNet portal sign-in and 0 to uCRM's login; last website commit `466e4fc`.
+
+## 5. Remaining security issues
+
+- The data-report hand-off token (§1, §1a, §1b) — classified a **security blocker**; the source reading
+  shows the forgery is **not exploitable on this host** (the sibling refuses to verify under a constant
+  key and looks for another installation's store). Open: the feature is dead here; the design (docs/36
+  §D) awaits approval; two other sibling paths await the extended read (docs/36 §H). No change until
+  approved.
+- Recorded, not Phase 2: the staff app's service worker is scoped to the plugin directory, so on a
+  staff member's own browser it also fronts the customer pages. Staff devices only.
+- Nothing else in Phase 2: the checkpoint's fourteen other security checks are green and live.
+- Pre-existing, in the SIBLING plugin (not Phase 2, not our code) — surfaced by the extended read and
+  recorded in docs/36 §H for a separate decision: (a) MODE 2 "View as Client" builds a synthetic
+  authenticated user from the URL's `?clientId=` for any holder of a uCRM session cookie, with no check
+  that it is the session's own client (matters only if non-admin client-zone logins exist for these
+  customers — operator to confirm); (b) the `dr_wifi_*` action handlers appear reachable without a
+  session (consistent with SAFETY.md; load-bearing for the Starlink block feature). Neither is fixed by,
+  nor blocks, the hand-off remediation.
+
+## 6. Final Phase 2 status — EXCLUDING the data-report redesign
+
+| Area | Status |
+|---|---|
+| Test suite | **green** — 204 suites / 8,051 checks / 0 failed, two complete runs |
+| Uganda phone OTP sign-in | **production-tested** 26 Sep 02:59 UTC (L1–L8) |
+| Uganda e-mail OTP sign-in | **production-tested** 26 Sep 05:40 UTC (16/16) |
+| JWT key set, cookie session, logout revocation, no token in URL or body | **production-tested** (both runs) |
+| Website customer-login repoint | **live** (05:02 UTC) |
+| Sudan regression | **green** (golden tests, empty config byte-identical) |
+| Phase 2 code defects | **0** |
+| Lead refusal (the uniform answer to a lead, nothing sent) | **PENDING — the one remaining production test**; the guard is proven (it refused a customer's number and sent nothing); needs a real lead's number |
+| Data-report hand-off | **not exploitable here; non-functional here** (the installed build is the South Sudan build) — **separate remediation**, docs/36 §J, awaiting approval; not a Phase 2 item |
+| Sibling-plugin findings (View as Client, `dr_wifi_*`) | **separate security work** on `dishnet-data-report`, outside Phase 2; not touched |
+| Phase 4 content readers | deferred by instruction, not Phase 2 |
+
+**Phase 2 authentication is complete.** The gate closes on the lead-refusal run; the data-report work and
+the sibling findings proceed on their own tracks.
+
+
+**Record of the earlier status lines (superseded by the table above):** authentication green (phone
+02:59, e-mail 05:40), website live 05:02, suite green twice, data-report hand-off not exploitable here
+and non-functional here, two pre-existing sibling findings recorded separately, lead refusal pending.
+
+## 7. Exact next action required from the operator
+
+0. ~~Identify the installed data-report build~~ — **done 05:53 UTC** (§1c): the South Sudan build.
+1. ~~The extended source read~~ — **done 05:40 UTC** (§1b; docs/36 §H).
+2. ~~E-mail sign-in~~ — **done 05:40 UTC**, 16/16 (§2).
+3. **The lead-refusal run — the one production test left.** The number must belong to a record that is a
+   **lead** in uCRM (Clients → filter Leads, or a test lead created for it), in international form. The
+   command checks that first and refuses to send unless it is a lead; a lead receives nothing either way,
+   because the gate refuses before sending:
+   ```
+   cd /opt/dishnet && bash scripts/phase2-verify.sh --lead +256XXXXXXXXX 2>&1 | tee /root/dnb-verify/verify-lead-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+   Type the lead's number in place of `+256XXXXXXXXX`, nothing around it.
+4. **The decision on the data-report redesign** — docs/36 §J, documentation only. **Nothing is deployed
+   or changed until it is approved.** Separate from the Phase 2 gate.
+5. **The two sibling findings** (docs/36 §H.2, §H.3) — a separate decision on whether to audit and fix
+   `dishnet-data-report`'s own access control; not Phase 2; not touched.

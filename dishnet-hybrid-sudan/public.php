@@ -517,6 +517,8 @@ require_once __DIR__ . '/lib/QuotePdfToken.php';
 require_once __DIR__ . '/lib/PdfLinkToken.php';
 QuotePdfToken::ensureSecret($store, $config);
 PdfLinkToken::ensureSecret($store, $config);   // 5.18.37: the receipt/delivery link key, generated once
+require_once __DIR__ . '/lib/CustomerJwtKeys.php';
+CustomerJwtKeys::ensure($store, $config);        // Phase 2: the customer-portal signing key set, generated once, vaulted
 // Ensure defaults for existing configs
 if (!isset($config['commission_rate']))            $config['commission_rate'] = 5;
 if (!isset($config['lte_commission_rate']))        $config['lte_commission_rate'] = 5;
@@ -724,6 +726,15 @@ function logActivity(string $dataDir, string $action, string $title, string $det
 
 $page  = $_GET['page']  ?? 'login';
 $tab   = $_GET['tab']   ?? '';
+
+// 5.18.41 (docs/38 A1.3): the customer pages answer on ONE public address. With
+// crm_public_url set (Uganda), a GET for a customer page that arrives on the
+// same host but an explicit other port (UISP's :8443, whose certificate is
+// self-signed) is sent to the public origin with the same path and query. No
+// override (South Sudan): nothing happens. Never page=api, never a POST, never
+// the native wrapper. See lib/CanonicalHost.php for the loop-proof rule.
+require_once __DIR__ . '/lib/CanonicalHost.php';
+CanonicalHost::enforce(is_array($config) ? $config : [], (string)$page);
 
 include __DIR__ . '/includes/routes.php';
 

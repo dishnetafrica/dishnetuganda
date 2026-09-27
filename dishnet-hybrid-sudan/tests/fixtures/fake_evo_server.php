@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => []];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -32,7 +32,15 @@ if ($path === '/__test/clear_webhook') {
 if ($path === '/__test/state') {
     fe2_out($state + ['marker' => 'FAKE-EVO-TEST']);
 }
-if ($path === '/instance/fetchInstances') {
+// Phase 2 test controls: start from nothing, and make the next N text sends fail.
+if ($path === '/__test/reset') {
+    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0];
+    fe2_out(['reset' => true, 'marker' => 'FAKE-EVO-TEST']);
+}
+if ($path === '/__test/fail_next') {
+    $state['fail_next'] = max(0, (int)($_GET['n'] ?? 1));
+    fe2_out(['fail_next' => $state['fail_next'], 'marker' => 'FAKE-EVO-TEST']);
+}if ($path === '/instance/fetchInstances') {
     fe2_out([[
         'name' => 'dishnet_ug', 'connectionStatus' => 'open',
         'ownerJid' => '256705993348@s.whatsapp.net', 'profileName' => 'FAKE EVO TEST',
@@ -49,6 +57,7 @@ if (preg_match('#^/webhook/set/(.+)$#', $path, $m)) {
     fe2_out(['webhook' => $state['webhooks'][$m[1]]]);
 }
 if (preg_match('#^/message/sendText/(.+)$#', $path, $m)) {
+    if (($state['fail_next'] ?? 0) > 0) { $state['fail_next']--; fe2_out(['error' => 'FAKE-EVO-FAILURE (test control)'], 500); }
     // Recorded, not just answered. A test could previously only see that a
     // send returned ok, which is the same thing production logs showed while
     // customers sat in silence — "it returned ok" is not "it said something".

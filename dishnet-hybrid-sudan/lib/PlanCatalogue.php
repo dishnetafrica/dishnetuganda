@@ -164,4 +164,37 @@ final class PlanCatalogue
       . "from outside, and it has NOTHING to do with how many people or devices use the connection. "
       . "Never offer it as a way to support more users; a hotspot with many users needs unlimited "
       . "standard data, not a priority-data cap.\n";
+
+    /**
+     * The rule shown while the Business plans are held back — Residential first (5.18.44).
+     *
+     * ASK_RULE told the model, when a customer asked about Business, to "say you can check the
+     * Business options and ask what they need it for". Measured in the live conversations of
+     * 22-26 Sep (docs/40 §10), that is what it did to nearly every customer who said "business":
+     * "It sounds like you might need a Business plan", "For a business connection, you'll need a
+     * plan that offers a public IP", "Since you're looking to supply internet …, I can check the
+     * Business plan options" — and never once led with the Residential plan the catalogue was
+     * showing it. A customer who asked "Is it unlimited?" was told "The plans we offer are not
+     * unlimited".
+     *
+     * So where the install qualifies (ai_qualification), the rule says what to DO with a business:
+     * the Residential plans, higher capacity first, unlimited data, then one question about a
+     * public IP. ASK_RULE stays, word for word, for every install that does not.
+     */
+    public static function askRule(bool $residentialFirst): string
+    {
+        if (!$residentialFirst) return self::ASK_RULE;
+        return "- Business plans are not listed above for this conversation, on purpose: nothing the "
+             . "customer has said needs one. Do not name one and do not quote a Business price from memory.\n"
+             . "- A CUSTOMER WHO IS A BUSINESS — a shop, an office, a school, a church, a lodge, someone "
+             . "who wants to sell Wi-Fi — is answered with the Residential plans listed above: recommend "
+             . "the higher-capacity one, say it has unlimited data, and give the reason in one sentence "
+             . "tied to what they told you. Never tell a business it needs a Business plan because it is "
+             . "a business.\n"
+             . "- A Business plan is for one thing, a PUBLIC IP: reaching their own cameras, a VPN or a "
+             . "server from outside. Ask about that once, in your own words, after the recommendation. "
+             . "Only if they need it, say you will check the Business options. A public IP has NOTHING to "
+             . "do with how many people or devices use the connection; a hotspot with many users needs "
+             . "unlimited standard data, not a priority-data cap.\n";
+    }
 }

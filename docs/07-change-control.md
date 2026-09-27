@@ -705,11 +705,919 @@ sign-in is inert on this schema; the cashbook auto-post throws on an integer
 the two EFRIS PDF links still use the old signing scheme; the `+211` country
 prefix and the customer-token secret derivation are Phase 2.
 
-**Applied by:** the operator, after explicit approval: `deploy-hybrid.sh`.
-Then, optionally, `php tools/crm_webhook_key.php --generate` and the same key in
-uCRM → System → Webhooks; `php tools/crm_debug.php --status` for the CRM queue.
+**Applied by:** the operator, after explicit approval (given 25 September
+2026, with one change to the sequence: `crm_webhook_key` is NOT configured in
+the deployment window — first prove, read-only, whether this uCRM can send a
+per-endpoint secret at all). One command, which records before-evidence, backs
+up the plugin's data directory, runs `deploy-hybrid.sh`, then the safe smoke
+tests, a read-only webhook inspection and the receipt-link check:
+
+```bash
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+  && mkdir -p /root/dnb-phase1 \
+  && bash scripts/phase1-deploy.sh 2>&1 | tee /root/dnb-phase1/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+`scripts/phase1-deploy.sh` never configures the webhook key, never contacts a
+customer, never posts a payment and prints no token, code or secret; the
+deployment report is written from its log file. `php tools/crm_debug.php
+--status` replaces the removed debug page.
 **Rollback:** `git checkout 9b75085` and deploy again. No data step: the new
 build writes only `pdf_link_secret` into the settings store and `ip:` rows into
 `app_otp_rate`, both ignored by 5.18.36.
-**Status:** built 25 September 2026; **NOT deployed** — awaiting the operator's
-Phase 1 deployment approval.
+**Status:** **deployed 25 September 2026 20:07 UTC** (`68f4eeb`, "✓ container
+now serves 68f4eeb", over live `c82e0b9`) by the one command above, first
+attempt. Smoke tests **35 ok, 0 failed, 2 notes**: the customer sign-in page
+answers; all 27 moved actions and the 4 removed ones are 401 anonymously; the
+constant key opens nothing; an administrator reaches the moved diagnostics and
+a non-administrator gets 403; the sign-in door answers an unknown identifier
+uniformly; the CRM debug CLI answers; no PHP fatal; `pdf_link_secret` was
+generated and vaulted at the first page load; a receipt link signed the old way
+is **403** and one minted with `PdfLinkToken` is **200** (the documented
+consequence for pre-deployment links, confirmed). `crm_webhook_key` was **not**
+configured, by decision. Two defects of the deployment script itself, found by
+the run and fixed afterwards (`b24e2f7` → the next commit): the backup archives
+were both named `.tar.gz`, so the 116 KB archive of `data/` overwrote the 91 MB
+archive of the real data directory (the deploy never touches data, so the
+rollback path is unaffected; a fresh backup is to be taken with the corrected
+script or by hand); and the read-only webhook inspection called
+`webhook/endpoints` instead of `webhooks/endpoints`, so the first inspection was
+not evidence. **Re-run 20:15 UTC with the plugin's own client:** base
+`http://localhost/crm/api/v2.1`, the control `GET payment-methods` answered
+(23 methods), and `GET webhooks/endpoints` answered **404 Not Found** on API v2.1 **and on
+v1.0** (20:17 UTC) — this uCRM's API does not serve the webhook-endpoint objects, so they cannot be
+read (nor a secret field seen) over the API; the uCRM UI (System → Webhooks) is
+the only view, and the operator's reading of that form decides whether
+`crm_webhook_key` can ever be configured here. *(Resolved 26 Sep 2026: the form was read and has
+no such field — see the 5.18.38 record. "uCRM cannot supply the Phase-1 optional webhook key through the available interface.")* **Pre-existing finding recorded
+by this run:** the plugin's own `CrmApiClient::getWebhooks()` — behind the
+Settings tab's webhook tile, the *Setup Webhook* button and `WebhookRegistrar`
+— asks that same v2.1 route and therefore sees no endpoint on this uCRM;
+delivery of events is unaffected (300 log entries) because the endpoint was
+configured in the UI. Not Phase 1's to change. Consequence to decide: while no
+key mechanism exists, `client.message` (uCRM "message to client" → WhatsApp
+forward) is ignored by 5.18.37. The checks ran against the `:8443` address with certificate
+verification off because the public address was read from the wrong file;
+also fixed. Code delivery to a phone was not exercised live (no `--login`).
+
+**Closure run, 25 Sep 2026 20:38 UTC (`80f66fa`, `--login-only --login` with the
+operator's own registered number):** the data-directory backup the deploy run
+lost was re-taken by hand at 20:12 UTC and verified read-only — 95,171,116
+bytes, mode 600, gzip integrity ok, 701 archive entries against 701 entries in
+the live directory, one top-level directory; the corrected backup naming was
+exercised against the original collision (distinct names, a repeat gets a time
+suffix). The controlled sign-in passed points 1–2 (the page renders; the number
+resolves to exactly one account) and **stopped at point 3: no code was sent.**
+`app_send_otp` answered 500 *WhatsApp sender is not configured on server*
+because the three WASender keys (`wa_plugin_url`, `wa_app_key`, `wa_auth_key`)
+are empty on the Uganda install, whose transport is Evolution
+(`wasender_configured=false`, `evolution_configured=true`,
+`dry_run_mode=false`). **Pre-existing, not Phase 1's:** 5.18.36 (`c82e0b9`)
+refused a matched number with the same three-key check, the same 500 and the
+same `otp_wa_not_configured` audit row; 5.18.37 only moved the check before the
+lookup so every number gets one answer. Points 4–9 were not reached; nothing
+was changed; the prerequisite's redesign (accept any configured transport)
+belongs to Phase 2. **Consequence recorded:** with the e-mail lookup inert (the
+structured index has no e-mail column — pinned by test in this release), the
+Uganda customer portal has no working sign-in path today and, as far as the
+code shows, had none before 5.18.37; `scripts/phase1-deploy.sh --otp-history`
+(read-only counts, no identifier or code) was added to show that from the
+production records. The uCRM UI reading (System → Webhooks) is still pending;
+`crm_webhook_key` stays unset. *(Resolved 26 Sep 2026: read, no secret field; the key stays unset
+by evidence — 5.18.38 record.)* **Two container-log findings, neither Phase
+1's:** `dishnet-hybrid-sudan/main.php:456` throws `str_pad(): Argument #1
+($string) must be of type string, int given` on every five-minute tick except
+the daily pull tick — `declare(strict_types=1)` plus an `(int)` hour, unchanged
+since the plugin's first import into this repository (2 Sep 2026); it costs the
+*scheduled for* and *total execution* log lines only, the pull and the index
+rebuild run on the pull tick, and the one-line fix (`(string)$autoPullHour`) is
+proposed for its own window, not applied; and `dishnet-data-report/main.php:105`
+(a different plugin, not in this repository) throws a `flock()` TypeError.
+**`--otp-history`, 20:49 UTC (`527a69c`), read-only:** the three WASender keys
+are empty in the store and in the settings files alike; Evolution is set (three
+instances); `dry_run_mode` off. `app_audit_log` holds **four** sign-in rows in
+its whole history, all of 25 Sep 2026 — `otp_no_account` 1 (14:28),
+`otp_no_account_email` 2 (14:28, and 20:07 = the deploy run's C5 probe),
+`otp_wa_not_configured` 1 (20:38 = the closure test) — and no `otp_sent` or
+`login_success` ever; `notification_audit_log` holds **zero** `app_otp` rows
+ever. No sign-in code has ever been handed to a transport on this install: the
+Uganda portal sign-in never worked, and 5.18.37 inherited the dead path rather
+than causing it. The `main.php:456` line appears 276 times in the last 24 h and
+**230 times on 25 Sep before the 20:07 deploy** (oldest log line kept: 13 Sep),
+so the tick's crash predates 5.18.37; other plugins logged 27 fatal lines in
+24 h. **Phase 1 is CLOSED** on this evidence; the uCRM webhook-screen reading
+stays outstanding and `crm_webhook_key` stays unset. *(Item B resolved 26 Sep 2026 — 5.18.38 record.)* **Phase 2 (authentication)
+was approved by the operator on 25 Sep 2026** after this run.
+
+## 5.18.38 — the customer signs in on the tenant's own terms, and stays signed in only where the server says so (audit Phase 2)
+
+**25 September 2026** · `lib/TenantProfile.php` (new), `profiles/south-sudan.json` (new),
+`profiles/uganda.json` (new), `lib/PhoneNumber.php` (new), `lib/CustomerJwtKeys.php` (new),
+`lib/CustomerSession.php` (new), `lib/ClientSearchIndex.php` (new), `lib/JwtAuth.php`,
+`lib/NotificationService.php`, `lib/ConfigVault.php`, `lib/PluginConfig.php`,
+`lib/CustomerContact.php`, `lib/EmailTemplate.php`, `lib/OverdueDunningHelpers.php`,
+`lib/timezone.php`, `lib/PortalLocale.php`, `includes/api/api_customer_app.php`,
+`includes/api/api_customer_support.php`, `tabs/customer_app/login_web.php`,
+`tabs/customer_app/portal_data.php`, `tabs/customer_app/portal.php`,
+`tabs/admin/app_logins.php`, `webhook.php`, `cron_sync.php`, `public.php`, `manifest.json`,
+`tools/set_config.php`, `tools/customer_jwt_key.php` (new),
+`migrations/073_customer_sessions.sql` (new), `migrations/074_client_search_index_flags.sql`
+(new), `tests/fixtures/fake_evo_server.php`, six new test suites and four updated ones.
+Record: the private Phase 2 report handed to the operator; decisions D-1…D-17 taken before
+code are in it.
+
+Phase 2 of the customer-login / portal / payments audit — **authentication**, scope
+§A.2 row 2 of the approved remediation plan, approved by the operator on 25 September
+2026 after the Phase 1 closure.
+
+**1. What was configured (observed on the Uganda install, closure run 25 Sep 2026):**
+the three WASender keys empty and Evolution set, so `app_send_otp` refused every number
+with 500 *WhatsApp sender is not configured*; `ca_phone_intl()` completing every number
+with `+211`, so a Uganda customer's code would have been addressed to South Sudan; the
+customer token signed with `sha256(webhook_secret | crm_auth_token | constant)` where both
+inputs are empty — a key anyone can read in the source; the token carried in the URL
+(`&token=`), in a JavaScript-set cookie and in the page's own script; the portal never
+consulting the logout blacklist; the e-mail identifier matching nothing (the structured
+index had no e-mail column); a uCRM lead able to sign in. `login_success` has never been
+written on this install: no customer has ever held a token there.
+
+**2. Why:** none of those is a configuration matter. A code that cannot leave, a key that
+can be computed, a session that outlives its logout and leaks into referrers and another
+plugin's URL, and a country written into the code are the four defects the plan's §D–§E
+exist to remove.
+
+**3. Exactly what changes** (no stored row is changed; two additive migrations):
+- **Transport.** `app_send_otp` asks `NotificationService::phoneTransport()` — Evolution
+  where an instance is mapped, else WASender where its three keys are set — and refuses only
+  when there is none; the WASender-only gate is gone. The result is read through a public
+  getter, not reflection. A login code is never written to the conversation store nor to
+  the retry queue; `app_otp_pending` stores an HMAC of the code, not the code.
+- **The number.** `lib/PhoneNumber.php` is the one rule (00/+/eleven digits kept as typed;
+  a trunk 0 dropped and the tenant's dial code put in front; anything else null, never a
+  guess). It carries no dial code; the tenant profile supplies it. `ca_phone_intl()`
+  delegates to it and returns `''` for a number it cannot canonicalise, which then matches
+  nobody. The identifier a sign-in is recorded under is the canonical `+E.164` number.
+- **The tenant profile.** `lib/TenantProfile.php` + `profiles/*.json`, selector
+  `tenant_profile` (else derived from the currency exactly as the login hint always was,
+  else south-sudan). Resolution per field: explicit key → profile → the reader's literal.
+  `profiles/south-sudan.json` is exactly the literals the readers carried, so an install
+  that configures nothing is byte-identical (pinned by `test_tenant_profile.php` against
+  the constants it replaced and by every existing South Sudan pin); `profiles/uganda.json`
+  holds only values already in the repository (`CustomerContact::UGANDA`,
+  `set_email_brand --uganda`, the Uganda PDF templates, the knowledge seed) and leaves
+  office hours, courts, legal texts and payment instructions null (plan §D.6). Re-pointed
+  readers: `CustomerContact`, `EmailTemplate::brand()`, the dunning footer defaults,
+  `dn_tz()`, `PortalLocale::dialHint()` (selector only; the currency rule is unchanged),
+  and the login page's title and footer.
+- **The key.** `customer_jwt_keys` (kid → 64-hex) + `customer_jwt_active_kid` +
+  `customer_jwt_key_dates`, generated once at the first request (`CustomerJwtKeys::ensure`
+  in `public.php`), vaulted, never printed; `tools/customer_jwt_key.php` shows, rotates
+  and prunes without ever printing a secret. `JwtAuth::forCustomers()` signs with the
+  active key and puts `kid` in the header and `iss`/`aud` in the claims; `verify()` in
+  customer mode requires all three, checks `alg`, and refuses an unknown kid — **so a
+  token signed the pre-Phase-2 way is refused from the deploy (E3-a; nobody on Uganda is
+  signed out, because nobody ever signed in).** `fromConfig()` stays for the unrouted
+  `api/v2/router.php` and for one hand-off (below).
+- **The session.** `app_verify_otp` records a `customer_sessions` row (migration 073)
+  and sets `dn_customer_session`: HttpOnly, SameSite=Lax, Secure when the request is
+  HTTPS (incl. `X-Forwarded-Proto`), Path = the plugin's own path, Max-Age = the token
+  lifetime (`app_jwt_ttl_days`, default 30). The JSON carries the token only to a client
+  that sends `X-DishNet-Client`; a browser never sees it. The API accepts Bearer (native
+  WebView, tests) or the cookie; a cookie may authenticate a non-GET only with
+  `X-Requested-With: DishNet` from a same-site request (403 `Cross-site request refused.`
+  otherwise). `?token=` is accepted nowhere. Every token must have a live session row:
+  logout revokes it (portal and API alike), `staff_revoke_customer_sessions` (admin) ends
+  every session of one client, with a control on the Customer App Logins tab.
+- **The pages.** The login page completes without writing a cookie and without a token in
+  the redirect; a live session that still owes consent lands on the consent step, and the
+  portal sends such a session back there; "go back" on consent ends the session. The portal
+  embeds no token, appends none to any URL, sends `Referrer-Policy: same-origin` and
+  `Cache-Control: no-store`, and downloads PDFs on the cookie (a same-origin GET carries a
+  Lax cookie, so the plan's one-time download ticket is not needed). The data-report
+  hand-off (another plugin, not in this repository) gets a purpose-bound ten-minute token
+  minted on click (`app_data_report_token`, legacy signing, `aud=data-report`) — never the
+  session token.
+- **The index and the gates.** Migration 074 adds `email`, `is_lead`, `is_archived`,
+  `is_active`, `client_type`, `has_service`, `has_invoice`; `lib/ClientSearchIndex.php` is
+  the one row builder, used by `cron_sync.php` (the only effective writer) and by the
+  webhook's `client.add`/`client.edit` for the verified client. The e-mail identifier
+  matches again. `app_send_otp` refuses — with the uniform answer, audited
+  `otp_ineligible` — an archived client, a lead unless `portal_login_allow_leads=yes`, and,
+  only when `portal_login_require_service=yes`, a client with no service; a NULL flag
+  (not yet synced) never refuses. The final business rule is Phase 3's.
+- **Declared:** `tenant_profile`, `portal_login_allow_leads`, `portal_login_require_service`,
+  `app_jwt_ttl_days` in `manifest.json` and in `tools/set_config.php` (which refuses a
+  selector that names no shipped profile). Vault keys gained the three key values and the
+  selector; `customer_jwt_keys` is a redacted secret.
+
+**4. Effect on UISP/uCRM:** none on uCRM's side. No uCRM API call is added; the webhook
+handlers gain a local index upsert of the entity they already re-read. uCRM will show the
+four new optional keys on the plugin's configuration screen and writes `""` for an unset
+one, which the code treats as unset. The data-report plugin keeps receiving a token of the
+shape it has always been given, ten minutes long.
+
+**5. Rollback:** `git checkout 68f4eeb -- dishnet-hybrid-sudan && bash scripts/deploy-hybrid.sh`
+(then return the checkout to the branch). No data step: migrations 073 and 074 are
+additive and the older code ignores them; the generated `customer_jwt_keys` stay in the
+vault for the next attempt; a Phase-2 cookie is ignored by the older code, so a customer
+signs in again — on Uganda there is nobody to affect.
+
+**Applied by:** nobody yet. Built and proved on 25 September 2026; deployment is its own
+approval and its own command.
+
+**Status:** **deployed 26 September 2026 02:59 UTC** (`fa2d463`, "✓ container now
+serves fa2d463", over live `68f4eeb`) by the one command above, first attempt; backup
+`/root/dnb-phase2/backup-20260926T025934Z` (93 MB data directory + 116 KB `data/`). Checks
+**63 ok, 1 failed, 0 notes.** The failure is **C7**: one `[DishNet UNCAUGHT] str_pad() …
+main.php:456` line in the window — the pre-existing tick crash recorded at the Phase 1
+closure (`--otp-history`: 230 lines on 25 September before that deploy), not a 5.18.38 path.
+Read off the code after the run: the line sits in the *"auto-pull scheduled for …"* log
+branch that every tick takes except the pull hour; the master cron dispatcher (and with it
+`cron_sync`) has already run by then, the pull hour does not take that branch, and the only
+work after it on an ordinary tick is the final *total execution* log line. Cosmetic, a
+one-line cast; its own change, not bundled here. **Posture P:** migrations 073 and 074
+recorded; `customer_sessions` present; the index carries the new columns (90 rows, flags
+still empty at deploy time — `cron_sync` fills them); the signing key set provisioned (`k1`)
+and the three values in the vault; the tenant profile resolves to **uganda / +256** derived
+from the vaulted currency (no selector, no currency in the store), so **the one configuration
+step was not needed and was not run**; 0 live sessions. **Sign-in L1–L8 with the operator's
+own number:** 1 account matched; transport in use `evolution` (WASender unconfigured); the
+account passes the gates; `app_send_otp` 200; the code arrived; `app_verify_otp` **200** —
+the code typed on the server was accepted (a wrong code fails here with 401); the cookie is
+`HttpOnly; SameSite=Lax; Secure`; consent 200; the portal answers **200 on the cookie**, **302**
+with a URL token and no cookie, 302 without a session; `app_me` with `?token=` **401**, with the
+Bearer token 200; logout 200; the same token afterwards **401 Token revoked**; the old cookie
+**401**; the code appears in no container log line, no `webhook_log.json`, no notification,
+queue, conversation, pending or audit row, and the newest `app_otp` notification row withholds
+the text. **D:** 0 new webhook entries during the run, 0 `entity_unverified` overall; the
+endpoint objects are not readable over API v2.1 or v1.0 (404); the uCRM UI reading (System →
+Webhooks → the plugin endpoint) was completed the same morning — the closing paragraph of this
+record; `crm_webhook_key` stays unset. **E:** `pdf_link_secret` in store and vault; the
+pre-5.18.37 link 403, a `PdfLinkToken` link 200, a random token 403. **After the deploy,
+from uCRM's own request log (System → Webhooks → Request log, read by the operator at 06:11
+EAT):** a client created in uCRM at 06:06 produced `insert`, `invitation` and `edit` events,
+each answered **OK (200)**; the edit answered *"No local record for this client (cache
+refreshed)"*, which is the branch `webhook.php` reaches **after** the Phase 2 index upsert
+(`ClientSearchIndex::upsertClient`, line 2152, before the answer at line 2171), so a client
+born in uCRM enters the sign-in index with its e-mail and flags without waiting for
+`cron_sync`. The log's request detail shows URL, *Verify SSL certificate*, response code and
+phrase, start time, duration, request and response bodies — it is the log view, not the
+endpoint form. The endpoint objects answer 404 to `webhooks/endpoints` on this uCRM for the
+plugin's own client too (`tools/quote_email_doctor.php` records it), so that form is the only
+view. **The endpoint page was then read by the operator (Webhooks → the plugin endpoint, shortly
+after the 06:16 EAT test event). It shows exactly five fields — URL · Active (Yes) · Event
+types (Any event) · Verify SSL certificate (Yes) · Use delivery window (No) — and no Secret,
+Signature, key or authentication-header field. Recorded verbatim, as agreed at the Phase 1
+closure: "uCRM cannot supply the Phase-1 optional webhook key through the available interface." `crm_webhook_key` stays unset — by evidence now, not by default — and
+the webhook keeps trusting nothing in the posted body: every entity is re-read from uCRM
+(5.18.37). Item B of the Phase 1 closure is CLOSED.**
+
+Before deployment the entry read: built, NOT deployed (plugin commit `fa2d463`). Suite 202 suites / 8002 passed / 0 failed on the second run (`phase2-suite-B`; the first run read 8001 / 1, the one failure being `test_links_without_port` flagging the new same-origin check — an allow-list entry, not a weakened guard, then 47/47); weakened copies 19 of 19 caught (M01–M19: legacy-token grace, iss/aud unchecked, session row unchecked, cookie POST without the marker, URL token accepted by the API, token in the body for browsers, consent not enforced on the portal, WASender-only gate restored, +211 hard-coded again, eligibility gates inert, code stored in clear, code into the conversation store, code into the retry queue, token back in the login redirect, default profile uganda ×2, portal accepts a URL token, lead flag inverted, phone helper with a built-in code); migrations rehearsed on a data directory built by 68f4eeb (5.18.37), opened by the 5.18.38 code: `_migrations` 72 → 74 (`073_customer_sessions.sql` 3 statements, `074_client_search_index_flags.sql` 8 statements, 0 errors in `migration.log`); `customer_sessions` created; `client_search_index` 6 → 13 columns; every pre-existing table's row count unchanged (the three `ucrm_*_cache` tables and one index row were added by the rehearsal's own sync); the key set `customer_jwt_keys` / `customer_jwt_active_kid` / `customer_jwt_key_dates` provisioned in the store; the 5.18.37 code still opens the directory.
+Production stays on 5.18.37 (`68f4eeb`). Operator decisions taken by default and flagged in
+the report: E3-a immediate cut-over; body token only for a self-announcing native client;
+30-day lifetime; sessions table; eligibility defaults (leads no, archived no, service not
+required). Not done here, by scope: Phase 3 lifecycle, Phase 4 portal content and the
+website, Phase 5 payments, the `main.php:456` tick crash.
+
+## 5.18.39 — the five-minute tick no longer dies on its own log line
+
+**What was wrong.** uCRM runs `main.php` about every five minutes. Its auto-pull block decides
+whether the daily uCRM client pull is due and, when it is not, logs *"UCRM auto-pull:
+scheduled for …"* with the hour padded to two digits by `str_pad($autoPullHour, 2, '0',
+STR_PAD_LEFT)`. `$autoPullHour` is an `int` and `main.php` declares `strict_types=1`, so under
+PHP 8 the call throws `TypeError: str_pad(): Argument #1 ($string) must be of type string, int
+given` — the `[DishNet UNCAUGHT] … main.php:456` line the container log carried on every tick
+except the pull hour: 230 on 25 September before the 5.18.37 deploy and 276 in 24 h (Phase 1
+closure), and the one line the 5.18.38 deploy's C7 check caught. **Measured consequence:** by
+that line the heartbeat, the data-integrity check, the daily-report and backup gates and the
+master cron dispatcher — `cron_sync` and every other job — had already run; the pull hour does
+not take the branch; the only work lost on an ordinary tick was the final *"main.php total
+execution"* line, and the process still exited 0 because the plugin's exception handler
+swallows the failure. Cosmetic in effect, but a crash on every tick buries a real one, and the
+tick could never report that it had finished.
+
+**The change.** `(string)$autoPullHour` on both lines (456 and 457). Nothing else in
+`main.php` changed; manifest 5.18.39.
+
+**Proof.** `tests/test_tick_auto_pull_log.php` (18) runs the REAL `main.php` in a throwaway
+copy — `cron/master.php` removed so only the tail of the tick runs and nothing needs a network,
+the child's clock set (`php -d date.timezone`) to an hour that takes the "scheduled for" branch
+— and asserts: nothing uncaught, exit 0, the branch line written with a two-digit hour
+(`03:00`), the tick reaching its last line. Then the control: the pre-5.18.39 expression put
+back in the copy dies with exactly the production message at `main.php:456`, exits 0 all the
+same, and writes neither line. Then the repository pin: two casts, no bare call. Suite
+203 suites / 8020 passed / 0 failed, one run (a one-line change with its own suite; the Phase 2 build was proved twice the day before).
+
+**Deployment (NOT done).** `scripts/deploy-5.18.39.sh`, pinned to plugin commit
+`e333261`: the Phase 1/2 machinery (before-evidence, now with the crash rate of the
+last hour and 24 h and the count of completed ticks in the heartbeat; backup; the `DEPLOY`
+prompt; the documented deploy), then **stage T waits for the next tick**, up to thirteen
+minutes, and proves it: a completed tick after the deploy (a "total execution" line newer than
+the heartbeat's last line before it), the auto-pull line with a two-digit hour, zero crash
+lines of the tick in the container log from 90 s after the deploy (a tick already running the
+old code may still die in the first seconds; that is reported as a note), other plugins' fatals
+noted and never counted against this build. Rehearsed against a fake docker in four scenarios
+(a completing tick, none, a crash after the guard, the pull hour): 7/7.
+
+**Status:** **deployed 26 September 2026 03:58 UTC** (`e333261`, "✓ container now serves e333261",
+over live `fa2d463`) by the operator with the one command above, first attempt, **7 ok / 0 failed /
+1 note**. Before: 12 crash lines in the previous hour, 276 in 24 h, 0 completed ticks among the last
+200 heartbeat lines. After: the first tick to run the new code completed at 04:05 UTC (stamped
+`07:05:03` in the heartbeat — see the clock note below), wrote *"UCRM auto-pull: scheduled for
+2026-09-27 03:00."* with the two-digit hour, and the container log holds **no crash of
+`main.php` from 90 s after the deploy**. The note is the other plugin's pre-existing
+`dishnet-data-report/main.php:105` flock TypeError. The superseded guard later added to this
+command did not exist when it ran and changed nothing about the run.
+
+**Recorded, not fixed — the heartbeat has two clocks.** Its opening lines are stamped UTC and its
+closing lines Kampala time (+03:00): a master-cron job sets PHP's default timezone midway through
+the tick, so *"[04:00:11] Heartbeat complete."* is followed by *"[07:05:03] main.php total
+execution"* for the same tick. Cosmetic in the log; it matters to anything that compares those
+timestamps, which is exactly what the 5.18.40 command did — see that entry.
+
+## Website — Customer Login opens the DishNet portal (26 Sep 2026)
+
+**Decision 8 of the customer-login remediation plan, executed (Phase 4, website half).**
+Every "Customer Login" on `dishnetuganda.com` — header, mobile menu and footer of all 57
+pages, plus "Open Portal" on the pay page, "customer portal" on the app page and "the customer
+login page" in a tutorial: **176 links** — now opens the DishNet portal sign-in,
+`https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login`,
+instead of uCRM's own client-zone login `/crm/login`. The sign-in page sends a customer who
+already has a live session straight to the portal, so the link is right for first-time and
+returning customers alike. The replacement was scripted with the counts asserted (176 in 57,
+exactly the audit's numbers; anything else would have changed nothing). `verify-site.sh`
+now allows exactly that one portal URL; `README-DEPLOY.md` records the change and closes the
+"portal deep-link" placeholder. The site's own checks pass: `verify-site.sh` (404, SEO,
+content integrity, commercial rules), `verify-address.py`, `stamp-assets.sh --check`.
+
+**Why now.** The plan gated this on Phase 2 being proved on Uganda, which the 5.18.38 deploy
+did at 02:59 UTC. Pay Now exists only in the portal (`docs/32` §7), and the website was the
+one door still pointing customers away from it.
+
+**Status: committed, NOT deployed.** The website goes live only when the operator redeploys
+it in EasyPanel (project `web`, app `web-uganda`). The 5.18.40 deployment command's stage W
+reports whether the live home page already links the portal. The short address
+`crm.dishnetuganda.com/customer-login` (plan §G step 4) is **optional and separate**:
+`scripts/customer-login-clean-url.sh` places one Traefik file from
+`scripts/traefik/dnb-customer-login.yml.template`, verifies the 302, and is undone by deleting
+the file. Not run; the website does not depend on it. **Approved by the operator on 26 Sep 2026 and handed over** (commit `4fd6b30`): the file
+carries an `https` router and an `http` router for `Host(crm.dishnetuganda.com) && Path(/customer-login)`
+sharing one `redirectRegex` middleware that matches both schemes, in the shape of `traefik-mail.yml`
+and the staging routes (explicit priority read from `uisp.yaml` plus 10, or none when it sets none;
+`tls.certResolver` on the https router only); the redirect is a 302 until the address is stable.
+Rehearsed with `docker` and `curl` as exported bash functions and a fake `uisp.yaml`, four
+scenarios — a completing route (priority 10 → 20, resolver read, valid YAML), no priority in
+`uisp.yaml`, a route Traefik never takes (both checks fail, the file is kept for the operator's
+rollback decision), a wrong Location (exactly one failure): **REHEARSAL: 12 ok, 0 failed**. The first rehearsal
+run read 11 ok / 1 failed because one assertion counted the word *priority* in the file's own
+comment lines; the assertion was corrected, the command was not. That first run had already been
+committed as `4fd6b30`, whose message says 11/11 — that figure was written before the run finished
+and is wrong; this paragraph is the record. **RUN on the server 26 September 2026 04:30:40 UTC by the
+operator, first attempt, 7 ok / 0 failed / 0 notes:** `uisp.yaml` carries priority 10 and resolver
+`letsencrypt`, so the new routers took priority 20; before the file, `https://…/customer-login` answered
+404 and the `http://` form 301; two seconds after the file was written both forms answered **302 with
+exactly the canonical sign-in as Location**, the canonical page and uCRM's own login still 200,
+Traefik not restarted. **The short address `https://crm.dishnetuganda.com/customer-login` is live.**
+Rollback remains `rm /etc/easypanel/traefik/config/dnb-customer-login.yml`. The website still links
+the canonical long URL (plan §G step 5, switching it to the short one, is optional and not done).
+
+## 5.18.40 — the customer portal can be installed on a phone
+
+**What.** The customer portal gets its own web-app manifest, `?page=customer_manifest`
+(`includes/routes.php`, beside the staff app's): name DishNet, start at the sign-in page,
+scope the plugin directory, standalone display, the portal's colours, the icon the staff app
+already generates at 192 and 512 px. Both customer pages link it (`login_web.php`,
+`portal.php`), which with the iOS meta tags they already carried makes "Install app" / "Add to
+Home Screen" appear in Chrome, Edge, Samsung Internet, Firefox and Safari. The portal's
+settings view gains an **Install the DishNet app** row that shows only where installing is
+possible and not already done: it appears when the browser hands over its install prompt
+(`beforeinstallprompt`) or on iOS Safari with the Share-menu words, and never inside the
+Android wrapper or a window already running standalone.
+
+**Deliberately no service worker for customers.** A cache of signed-in pages on a shared phone
+is a data exposure; modern browsers install from the manifest and meta tags alone. Pinned by
+the test. (The staff app's service worker is unchanged. Its scope is the plugin directory, so
+on a staff member's own browser it also fronts the customer pages — pre-existing, staff
+devices only, recorded here, not changed.)
+
+**Also carries 5.18.39** (the tick fix). 5.18.39 did go live on its own at 03:58 UTC (its entry);
+its command now stops with a pointer to the 5.18.40 command, so it cannot be run against a later
+build.
+
+**Proof.** `tests/test_customer_pwa.php` (31) serves the plugin the way uCRM does, under
+`/crm/_plugins/dishnet-hybrid-sudan/`, and asserts the manifest (200 without a login, the
+type, every field, start_url inside scope, both icons answering as images, no
+credential-shaped word), the sign-in page's link, the portal's link and Install row, no
+service worker on either page, the portal still refusing without a session, the staff
+manifest unchanged — and the control: with the link removed from the copy, the served page no
+longer carries it. Suite: run A 204 suites / 8049 passed / 1 failed — the one failure was the new test's own first version, whose HTTP client followed the portal's redirect and so read a 200 where a 302 was the answer; corrected (`follow_location` off, the 302 and its Location asserted) before run B; run B 204 suites / 8051 passed / 0 failed.
+
+**Deployment (NOT done).** `scripts/deploy-5.18.40.sh`, pinned to plugin commit
+`4a2f41c`: the Phase 1/2 machinery, then **M** the manifest over the public address
+(200, the type, standalone, start_url, scope, icons as PNG, the sign-in page's link, no service
+worker, the portal still refusing), **T** the wait for the next tick (5.18.39's proof), **W**
+whether the live website already links the portal (report only). Tick stage rehearsed against a
+fake docker: 7/7.
+
+**Status:** **deployed 26 September 2026 04:21 UTC** (`4a2f41c`, "✓ container now serves 4a2f41c",
+over live `e333261`) by the operator with the one command above, first attempt. **Stage M, all
+eleven checks passed over the public address:** the manifest 200 without a login as
+`application/manifest+json`, standalone, start_url the sign-in page inside the scope
+`/crm/_plugins/dishnet-hybrid-sudan/`, icons 192 and 512 declared and answering as PNG, the sign-in
+page linking the manifest, no service worker, the portal answering 302 without a session. (Before
+the deploy `?page=customer_manifest` answered 302, not 404; the wording that expected 404 was a
+guess and is corrected.) **Stage T in this run: T1 and T2 are NOT evidence.** They accepted the
+tick from the 5.18.39 run (`07:05:03`, before this deploy) because the comparison was by timestamp
+and the heartbeat's clock changes mid-tick (the 5.18.39 entry's clock note): `07:05:03` reads later
+than the UTC-stamped `04:20:03` snapshot line although it is earlier. T3 (crashes since deploy +
+90 s, from the container log's own UTC clock) and the 5.18.39 run's whole stage T remain valid,
+and 5.18.40 carries the same `main.php`. **Corrected in the command the same hour:** stage T now
+looks for closing lines that were absent from a pre-deploy snapshot of the heartbeat, never at
+timestamps; rehearsed in five scenarios including this exact case (an old closing line in a
+later-looking clock, nothing new → T1 fails): 8/8. Two cosmetic warnings ("ignored null byte") came
+from the icon bodies read into a shell variable; binary bodies are now stripped of NULs. **The
+run's T3, W and summary were still pending when this was written**; they are recorded from the log
+file when it arrives. The website was not yet redeployed at the time of the run.
+
+## 5.18.41 — the portal speaks the tenant's identity; consent belongs to the customer; one public address (docs/38 change set A1)
+
+**Why.** The read-only customer-journey audit (docs/37, docs/39) measured, on the Uganda install, a Support
+tab with 23 South Sudan literals and no Uganda contact, `+211` in every page's script, a Juba default, a
+South Sudan bank and " USD" on the invoice screen, Juba in the legal pages' footer; the same customer asked
+for consent again on the e-mail route after accepting by phone; and the same plugin answering on
+`:8443`, where UISP's certificate is self-signed for `localhost`. The operator adopted the remediation plan
+(docs/38): *"i will go with your recommendation"*.
+
+**What.**
+- **A1.1** `tabs/customer_app/portal_data.php` loads `TenantProfile` once and exposes what the views need;
+  every view reads variables, never the profile. `portal.php`: the Support tab's WhatsApp card, "Call us"
+  (**shows and dials the same number**, the profile's support phone — docs/38 decision A-1), the e-mail
+  row; the 16 WhatsApp sites dial one emitted constant `DishNet.supportWa`; the status view's locality; the
+  **Fiber** and **4G LTE** cards render only where the profile's `products` lists them; the invoice screen's
+  bank-transfer block prints only the profile's own `payment_instructions` (South Sudan's, made explicit in
+  its profile; **none for Uganda**, never the other tenant's bank) and repeats the currency code only when
+  the symbol does not already carry it; the payment notification the same. `legal_page.php` footer, WhatsApp
+  and e-mail from the profile; `lib/LegalContent.php`'s **contact lines** read the profile — its identity,
+  jurisdiction and regulator sentences are **still South Sudan's on every install** (change set A2, gated
+  on approved wording, docs/38 §7.3). `TenantProfile` gains `contact()`, `products()`, `sells()`,
+  `formatWa()`. South Sudan renders what it rendered, except the one difference above.
+- **A1.2** `CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId = 0)`: a row at the current
+  versions for the identifier **or** for the customer (`crm_client_id`, written only by `app_record_consent`
+  under a session the OTP proved for that customer). The login response, the portal and the login page pass
+  the session's `sub`. Recording unchanged; a row for another customer never admits; a version bump re-asks.
+- **A1.3** `lib/CanonicalHost.php`, called once in `public.php` before the routes: with `crm_public_url` set,
+  a GET/HEAD for a customer page (`customer_login`, `customer_portal`, `terms`, `privacy`,
+  `customer_manifest`) whose `Host` names the public host **with an explicit, different port** answers
+  **302** to the public address, same path and query. Never `page=api`, never a POST, never the native
+  wrapper (`X-DishNet-Client`), never another host name, never a `Host` without a port — so the public
+  origin can never match and a loop is impossible by construction. No override (South Sudan): nothing.
+
+**Found while building** (docs/38 §7.1): a closing PHP tag inside a `//` comment ended PHP mode and printed
+the rest of `portal_data.php` into the home page (caught by the rendered-page test; now a tokenizer-based
+guard with its own control); PDO binds an int as TEXT and SQLite orders TEXT above INTEGER, so a `? > 0`
+guard was true for `'0'` (the lookup now branches in PHP and binds an integer); a customer token's issuer is
+the plugin's directory name; opcache serves an edited copy up to two seconds late, so every control that
+edits a served copy polls.
+
+**Proof.** New suites, each rendering the real pages under `php -S`: `tests/test_portal_tenant.php` (88:
+Uganda pages carry nothing of South Sudan and carry the Uganda contacts; the south-sudan control; a scan of
+the sources for any literal that is not a fallback argument or a named A2 exception; the planted-literal
+control; the closing-tag guard), `tests/test_consent_identity.php` (28: the rule on the function, then over
+HTTP — the phone route consents, the e-mail route of the same customer passes, another customer does not, a
+version bump re-asks both), `tests/test_canonical_host.php` (49: the rule on arrays, then over HTTP with and
+without the override, the loop check, the wrapper, the API, a POST, the control that the redirect comes from
+CanonicalHost alone). **Eleven weakened copies, each caught** (a literal number back in one button, Juba
+back, the footer back, the bank block for every tenant, the fibre card for every tenant, the Terms contact
+literal back, consent ignoring the customer, the entry point not calling CanonicalHost, CanonicalHost
+redirecting `page=api` / a Host without a port / POSTs). Journey rehearsal against the sandbox: **77/77**,
+with L10 (the A2 wording) the only tenant finding still expected to fail. Suite run A: **207 suites /
+8,216 passed / 0 failed**; run B: **207 suites / 8,216 passed / 0 failed** — identical.
+
+**Deployment (NOT done).** `scripts/deploy-5.18.41.sh`, pinned to plugin commit `a2ea19f`: the
+5.18.40 machinery, then stage **V** over the public address and the `:8443` door — the public address must
+answer with **zero redirects** (else the script rolls back by itself), the sign-in / Terms / Privacy pages
+carry no South Sudan contact, `:8443` answers 302 to the public address for the customer pages and never for
+`page=api`, a POST or the wrapper, no fatal since the deploy. The signed-in screens are then proved by the
+operator's own `journey-audit.sh --login-phone` (L5 and L9 pass; L10 fails until A2). Rollback: redeploy the
+previous commit; consent rows written meanwhile stay valid.
+
+**Also handed over, not run:** change set **C-1** as `scripts/dnb-crm-root-redirect.sh` (one Traefik file for
+the bare `/crm`, read-first, verified, rehearsed 17/17 in `scripts/harness/crm-root/`), the **C-2**
+checklist and the **A2** wording proposal (docs/38 §7.2–7.3). **B-1 decided: O3** (docs/39 §13–14).
+
+**Status: LIVE on the Uganda install, 26 September 2026.** The operator's run of the pinned command at
+15:04:39 UTC found the container already serving `a2ea19f` (deployed by the operator shortly before; that
+run's log is in `/root/dnb-5.18.41/` if the script was used) and ran the verification alone: **16 ok, 0
+failed, 2 notes** — the public address answers 200 with zero redirects; the portal without a session still
+302s to a Location without `:8443`; the sign-in, Terms and Privacy pages carry no South Sudan contact and the
+Terms page carries the Uganda WhatsApp link and locality; `:8443` answers 302 to the public address for the
+sign-in page and the manifest, 200 for `page=api` and for the wrapper's request, 401 (never 302) for a POST;
+no fatal since the deploy. The two notes are the expected ones: the Terms page still names South Sudan ×2 and
+Juba ×2 (change set A2). **The signed-in walk was not run yet:** the operator passed the placeholder text of
+my message as the number, and the script tried it (`STOP: staff_login_lookup → 000`). The audit script now
+refuses a non-number argument up front, and every command text shows `+2567XXXXXXXX`.
+
+**C-1, attempt 1 at 15:05:08 UTC — FAILED on the script's own defect; nothing else changed.** The
+generated Traefik file carried the hostname's dots escaped with a single backslash inside the YAML
+double-quoted regex (the script produced a backslash pair, and sed's replacement halves a pair); that is
+not a valid YAML escape, so Traefik rejected the whole file and the bare `/crm` kept answering
+`301 → …:8443/crm/`. Everything around it held (`/crm/` unchanged, the portal and uCRM's login 200, Traefik
+not restarted), and the run also recorded that `uisp.yaml`'s host router carries both
+`crm.dishnetsudan.com` and `crm.dishnetuganda.com` at priority 10 (the new router sits at 20 and names the
+Uganda host only). Reproduced here by parsing the file exactly as written. Fixed the same hour: the dots are
+written as `[.]` (no backslash at all), the file is parsed as YAML with python3 **before** it is placed (a
+lone backslash or a parse failure removes the temporary file and stops), and Traefik's own log is shown and
+counted when the route is not taken. The rehearsal now parses the YAML, carries the broken-copy control (the
+26 September defect is refused before placement) and a Traefik-rejection scenario. **The re-run of the same
+command rewrites the file** — the rejected copy in the config directory is replaced, not left beside.
+
+**C-1, attempt 2 at 15:21:06 UTC — THE ROUTE IS IN PLACE.** The generated file parsed as YAML, Traefik took
+it within 2 s without a restart, and the bare `/crm` now answers **302 → `https://crm.dishnetuganda.com/crm/`**
+on both the https and the http form; `/crm/` answers exactly as before, the portal sign-in and uCRM's login
+still 200. One check failed: the script counted **two Traefik log lines naming the file** since it was written
+and — a second defect of the script — printed them only in the branch where the route is NOT taken, so
+nothing was shown. Fixed the same hour: every line naming the file is printed whatever the route did, and the
+rehearsal carries that scenario (33 checks). Also that afternoon: the operator typed the example shape
+`+2567XXXXXXXX` into the sign-in walk and the script refused it as designed; the walk is still to be run with
+the real number.
+
+**C-1 — the two Traefik lines READ (15:21:07Z) and explained; the route is healthy.** The operator ran the
+read-only log command: both lines are `ERR … /data/config/dnb-crm-root.yml: yaml: line 38: found unknown
+escape character providerName=file`, both stamped **15:21:07Z** — the second the re-run **staged its
+temporary file** (`dnb-crm-root.yml.tmp`) inside Traefik's watched directory, one step before the `mv`.
+Traefik re-parses every file in that directory on any event, so what it parsed at that moment was the
+**attempt-1 file still lying there** (the one with the invalid escape, line 38 being its `regex:` line);
+the error is the old file's, logged once per event. The attempt-2 file parses (reproduced here with PyYAML,
+line 38 `regex: "^https?://crm[.]dishnetuganda[.]com/crm/?(\\?.*)?$"`), and the router it declares exists —
+the 302 was measured on both the https and the http form. Nothing is wrong on the server. Script fix, the
+third: the temporary file is staged in the **parent** directory (same filesystem, one atomic move, one event
+carrying the final content) and the timestamp the log is read from is taken before the move; the rehearsal
+asserts both (35 checks) and that no temporary file is ever left in the watched directory. The sign-in walk:
+after the operator pasted three different placeholders as the number, `journey-audit.sh --login-phone` and
+`--login-email` now **ask for the value on the terminal** when it is missing or is not one — typed without
+echo, so a copy of the terminal cannot carry it, confirmed back masked (`+…217`, `b***@…`), never printed;
+without a terminal the usage message and exit 64 as before.
+
+## 5.18.42 — the legal documents say the tenant's country; each tax on the invoice has its own line (docs/38 change set A2, §7.5)
+
+**Why.** The operator approved the A2 wording proposal of docs/38 §7.3 (*"i will go with your recommendation"*,
+26 September 2026) and asked, the same day, to *"separate the UCC tax and other details so customer can
+understand properly"*. 5.18.41 had left the Terms and Privacy Policy's identity, jurisdiction, product, fee
+and regulator sentences as South Sudan's on every install (pinned, deliberately, until wording was approved);
+and the invoice screen's "Tax" row read a field a uCRM invoice does not have.
+
+**What.**
+- **A2 — `lib/LegalContent.php` is a TEMPLATE over the tenant profile.** Every sentence that names a company,
+  a country, a product line, a fee, a court or a regulator is composed from the profile's new `legal` block
+  and its other facts (`legal_entity`, `country.name`, `jurisdiction.law`, `jurisdiction.courts`); the file
+  carries **no tenant's wording of its own** — a test scans it for South Sudan's and for Uganda's. Where a
+  profile does not answer, the sentence falls back to a **neutral, fact-derived** form (the country's name,
+  "internet services"), never to another tenant's wording. `profiles/uganda.json` carries the approved text
+  (points 1, 2, 4, 6, 8, 9, 10 as proposed; **3, 5, 7 in the conservative form and flagged** in docs/38 §7.3:
+  *"the courts of Uganda"* with no court named; no data-protection law named; **no fee stated** because no
+  Uganda figure is confirmed — the Billing and Starlink-transfer sections point to the quotation and the
+  invoice). `profiles/south-sudan.json` carries exactly the sentences the code printed before, so the install
+  that configures nothing renders **byte for byte** what it rendered (golden sha256 `b2f4ff3b…ead4637`,
+  computed from `a2ea19f` before the template was written).
+- **The version and date are the tenant's.** `dnLegalVersion(TenantProfile $tp)` — the parameter is
+  **required**, so no caller can compare a Uganda row against another tenant's version by leaving it out
+  (that would re-ask on every sign-in, forever). Threaded through the sign-in page, the legal pages, the API's
+  login response, `app_legal_version`, `app_record_consent`, the portal and
+  `CustomerSession::hasCurrentConsent($pdo, $identifier, $clientId, $tp)`. **Uganda 1.1 / 1.1, dated
+  26 September 2026; South Sudan 1.0 / 18 April 2026.** Consequence on deploy: every Uganda customer is asked
+  once to accept the new documents on the next sign-in; no South Sudan customer is asked.
+- **The invoice's taxes — `lib/InvoiceTotals.php`.** Measured: `portal_data.php` and `app_invoice` read
+  `totalTaxes`; a uCRM invoice carries `subtotal`, `taxes[] = [{name, totalValue}]`, `totalTaxAmount`,
+  `totalDiscount` (probe-confirmed shape, the live install's invoice #1 verbatim in `test_efris_mapper.php`).
+  So **no tax line ever rendered**. Now the totals block prints, as uCRM states it: *Before tax*, **each tax
+  or levy on its own line under uCRM's own name** (`VAT 18%`, `UCC levy 2%`), *Discount* when there is one,
+  *Total*, Paid, Amount due, and one sentence saying so. The app API returns `taxes[] {name, amount}`, the
+  corrected `tax` total, `subtotal` and `discount`. **Nothing is computed by the plugin** — no rate, no
+  derived amount — so the screen cannot disagree with the invoice document uCRM issued. An invoice with no
+  tax line shows the total only. **The other half is an operator act in uCRM (docs/38 §7.5):** create the
+  taxes, set inclusive/exclusive pricing, mark the items taxable, check the PDF template — the rates and
+  whether the UCC levy is passed on are the accountant's call; the repository asserts neither.
+- `tools/tax_probe.php` gains **section 5** (read-only): for the latest invoices, exactly the tax lines the
+  invoice screen prints — so what a customer will see can be read before anyone opens the portal.
+
+**Proof.** `tests/test_portal_tenant.php` **107** (the approved Uganda sentences present; none of the other
+tenant's law, fee, court, product or regulator; the South Sudan golden; `app_legal_version` per tenant; the
+consent step's version; the invoice screen's two tax lines by name and the API's `taxes[]`; the South Sudan
+invoice without a tax line as the control; the source scan with **no exceptions left** — LegalContent.php
+carries neither tenant's wording). `tests/test_consent_identity.php` **34** (the same rows judged under both
+profiles; a version bump **in the tenant's profile** re-asks both routes; `app_legal_version` reports it).
+`tests/test_tenant_profile.php` **108** (the open questions are `legal.fees`, `legal.transfer`,
+`legal.data_protection_law`, `jurisdiction.courts`, `office.hours`, `payment_instructions`). **Twelve weakened
+copies each fail their test** (the Uganda version back to 1.0; the check ignoring the passed profile; the
+identity falling back to South Sudan; the version not read from the profile; the sign-in page showing the
+default version; the forum naming Juba; the regulator reverting; one word changed in the South Sudan profile;
+`totalTaxes` read again; one lumped "Tax" line; the API dropping `taxes`; the lines losing their names).
+Suite: **207 suites, exit 0, twice**; the 186 suites that print totals report **8,241 passed / 0 failed** on both runs. The deploy command's stage V2 was rehearsed against a local Uganda sandbox (12 ok) and a South Sudan one (10 of the 12 fail — the checks discriminate).
+
+**Deploy.** `scripts/deploy-5.18.42.sh`, pinned to the plugin commit `d857ec8`; stage V checks the Uganda wording and the
+1.1 version on the public pages. **Not deployed by this session** — the operator runs it and sends the log
+file (docs/38 §7.2 item 0).
+
+**Status: LIVE on the Uganda install, 26 September 2026, deployed 19:56:26 UTC by the operator.** The run found
+the container on `a2ea19f` (5.18.41), took a backup (`/root/dnb-5.18.42/backup-20260926T195609Z`: the data
+directory 94 MB, the plugin's `data/` 116 KB, UISP health recorded) and deployed `d857ec8`: **25 ok, 0 failed,
+0 notes.** Before and after, measured by the same checks:
+
+| | before (5.18.41) | after (5.18.42) |
+|---|---|---|
+| the Terms page: `South Sudan` · `Juba` | 2 · 2 | **0 · 0** |
+| the approved Uganda identity, governing law, forum | absent | **present** |
+| `USD 25` · `USD 150` · fibre · LTE on the Terms page | present | **0** |
+| the Privacy page: the UCC sentence, both sign-in channels, no Splynx | — | **present / absent as approved** |
+| `app_legal_version` | 1.0 | **1.1 / 1.1** |
+
+The public address answered with zero redirects, the `:8443` door behaved exactly as under 5.18.41, and the
+container logged no fatal. **The log's last line reads "5.18.41: PASSED"** — a literal left in the script's
+closing lines; the header, every check and the summary above it are 5.18.42's (`d857ec8`). Fixed in
+`deploy-5.18.43.sh`, which prints the version it deploys.
+
+**The tax probe, read-only, the same evening** (`tools/tax_probe.php`): uCRM defines **no tax rate**; the
+pricing-mode setting is not on the settings endpoint; `taxable` is empty on all 30 products and all 5 plans;
+**no product is a UCC or regulatory charge**; the five latest invoices (000001–000005) carry **no tax or levy
+line**, and 000005 carries a 30 % discount (2,498,000 − 749,400 = 1,748,600). **The operator's decision,
+verbatim: *"ok keep price as it is"* and *"its ohk the way it is"*.** Prices stay as they are and uCRM gets no
+tax configuration. The invoice screen therefore shows the total, and the discount where there is one. The
+per-tax lines 5.18.42 built stay dormant until uCRM carries a tax, and the AI's rule is unchanged. The
+`[ConfigVault] restored after re-install: dpo_…, pdf_link_secret` line the probe printed is the in-memory
+gap-fill every command-line load performs (docs/37 §I). The vault file is rewritten only when its content
+changes, so nothing was written.
+
+## 5.18.43 — an invoice's first total row reads "Subtotal" (docs/38 §7.5)
+
+**Why.** 5.18.42 labelled the first row of an invoice's totals "Before tax". Measured on the live install the
+same evening, invoice 000005 carries a 30 % discount and **no tax**, and the operator decided to keep prices as
+they are. On that invoice, and on every discounted invoice from now on, "Before tax" read as a tax still to
+come. 5.18.42 also printed the discount after the tax lines.
+
+**What.** `tabs/customer_app/portal.php`: the first row reads **Subtotal**, and the **discount follows it
+directly**, before any tax line, then the total. For invoice 000005 the column now reads Subtotal
+2,498,000.00 · Discount −749,400.00 · Total 1,748,600.00, the invoice's own arithmetic. The explanation moved
+from an HTML comment into a PHP comment: an HTML comment is sent to the customer's browser, and the first draft's
+comment put the words "Before tax" back into the page, which the new test caught. `tools/tax_probe.php` section 5
+prints the same order. Nothing else changes: no tax is computed, the app API's fields are the same, A2 is
+untouched, and the legal version stays 1.1, so no customer is asked to accept anything again.
+
+**Proof.** `tests/test_portal_tenant.php` **112**: the live shape of invoice 000005 (Subtotal, Discount, Total,
+in that order; no "Before tax", no tax line, no tax note; the app API's subtotal, discount, empty `taxes` and
+zero `tax`), and a synthetic invoice with a discount **and** a tax pinning the order Subtotal, Discount, tax
+line, Total. **Four weakened copies each fail it:** the label back to "Before tax", the discount after the tax
+lines, one lumped "Tax" line, and the explanation back in an HTML comment. Suite: **207 suites, exit 0, twice; the 186 suites that print totals report 8,246 passed / 0 failed on both runs.** The deploy command's stage V2 was rehearsed against a local Uganda sandbox (12 ok) and a South Sudan one (10 of 12 fail, the control).
+
+**Deploy.** `scripts/deploy-5.18.43.sh`, pinned to the plugin commit `04155df`; stage V re-checks everything
+5.18.42 checked. The label itself is seen only by a signed-in customer with a discounted invoice, so the test
+suite is its proof. **Not deployed by this session.**
+
+**Status: LIVE on the Uganda install, 26 September 2026, deployed 20:27:30 UTC by the operator.** The run found
+5.18.42 (`d857ec8`) live and took a backup (`/root/dnb-5.18.43/backup-20260926T202714Z`: the data directory
+95 MB, the plugin's `data/` 120 KB, UISP health recorded). It then deployed `04155df`: **25 ok, 0 failed,
+0 notes.** The before-evidence already read the A2 state: on the Terms page `South Sudan` ×0, `Juba` ×0 and the
+Uganda identity ×1, and `app_legal_version` 1.1. Every stage-V check held afterwards, so nobody was asked to
+accept anything again. The log's last line now reads *"5.18.43: PASSED"*, the version the script deployed.
+
+**The signed-in walk on 5.18.43 (operator, 20:33 UTC, `journey-audit.sh --login-phone`): 33 ok, 0 failed, 6
+notes.** L5 (no South Sudan branding), L9 (the Support tab) and **L10 (the Terms page)** all pass; every portal
+page rendered 200 with the session; logout revoked the cookie and the PDF link; the code and the cookie are
+absent from the container log. Notes, all known: L11 the invoice PDF still carries `crm.dishnetuganda.com:8443`
+×2 inside the document (C-2); Usage not implemented (B-4); no kit bound to this customer, so Equipment,
+Starlink and WiFi are partial (B-1/B-5); the Data Report hand-off link answers 404 (docs/36 §0).
+
+**Two audit-tool defects the walk exposed, fixed in `scripts/journey-audit.sh`, no plugin change:**
+- **The Legal line printed "accepted NULL"** from a field `app_legal_version` never returns. It could never
+  have printed anything else. It now prints the tenant's current versions and date. A new check, **L4**,
+  reports the server's own verdict from the verify answer (`needs_consent`): *"this customer has already
+  accepted the tenant's current Terms v1.1 and Privacy v1.1"*, or a note that the portal will ask. The
+  audit still never accepts on anyone's behalf. On this walk every page rendered, and the portal renders
+  only after a v1.1 acceptance, so this customer accepted v1.1 on the web after 19:56 UTC.
+- **The invoice lines printed "—"** for fields the API returns under other names. They now read
+  `invoice_number`, `amount`, `amount_due`, `subtotal`, `discount` and the tax lines. The list line sums
+  `amount_due`, because the list never had an `unpaid_total` key. Both were checked against the API's
+  real answer shapes here.
+
+**C-2 approved by the operator** (*"i will go with your recommadation"*). It is made by hand in uCRM's
+settings. `scripts/dnb-c2-check.sh` is a new READ-ONLY guard that runs before and after the change, and
+counts the routers on `:8443` so a mistake shows within minutes (docs/38 §7.2 item 3; rehearsal
+`scripts/harness/c2-check/rehearse.sh`, 29 checks). **The kit question was answered *"yes correct"*, read as
+"both"**, to be confirmed by the read-only `--chain 7/47/69` runs before any B code (docs/38 §7.4).
+
+**20:45 UTC, the operator's runs.** The **chains for #7, #47 and #69 confirm "both"**. Each kit is typed on the
+customer's uCRM service and held in Finance, and uCRM, Finance and Data Report name the same customer for each.
+#7's chain is complete, #47 lacks a service line, and #69's kit is not in the hybrid's stock. The order is
+revised: staff put the kits into the register first, and the B.3 code waits for a sibling to consume it
+(docs/38 §7.4). **The C-2 guard's first run** found uCRM still on `:8443` 17 seconds after `--before`, so the
+setting had not been changed yet. Its router count read 0 **with no positive control**. The guard now holds its
+own test connection to `:8443` while counting, so a zero is either *measured*, with no router connected, or
+*blind*, with the count unable to see the port. It never reports a bare zero again (rehearsal 40 checks).
+
+**20:54 UTC, the C-2 guard's second run.** With the control in place, `--before` saw 8 connections on `:8443`,
+all from the server's own or private addresses, and **none from a public address**. That is a **measured
+zero**: no router is connected to UISP over the Internet, so C-2 has none to disturb. A device on a private
+network or VPN would be among the 8; that limit is recorded. `--after` ran 17 seconds later, as the first run
+did, and uCRM was still on `:8443`. Nothing broke, and **the setting has not been changed**. The guard makes no
+change; the two fields are edited by hand in uCRM's web page between the two commands. It now says so at the
+top of its steps. An `--after` that finds the address exactly as recorded under three minutes earlier says it
+changes nothing and names both cases, not yet changed or saved and not yet rewritten (docs/38 §7.2 item 3;
+rehearsal 48 checks, two weakened copies caught).
+
+**21:01 UTC: C-2 as planned is not available; C-2b replaces it.** The operator's `--before` at 21:01 again
+measured no public connection on `:8443`. Their screenshots show UISP 3.0.159's Settings → General with the
+hostname (`crm.dishnetuganda.com`, already right) and **no port field**. uCRM's `:8443` is the port UISP was
+installed with; Ubiquiti documents `--public-https-port` for this case (read through a search engine; the page is
+blocked from this session). That means re-running UISP's installer: **not recommended, not approved, and not
+needed.** The two `:8443` links inside Uganda invoice PDFs turned out to be **the plugin's own Uganda invoice
+template**, which prints uCRM's `invoice.onlinePaymentLink` as its PAY NOW button and again as text. docs/37 and
+docs/39 said it printed no link; both are corrected. **C-2b:**
+- **The fix.** PAY NOW → `https://dishnetuganda.com/pay` (the profile's `pay_url`: Airtel Money and the portal).
+  That is three edits in uCRM's template editor, cloned first for rollback, after one READ-ONLY run of the new
+  `scripts/dnb-c2-check.sh --links`. That run shows the masked links, the template in use, which payment
+  options uCRM's own page names, UISP's installed ports and the pay page's answer.
+- **The repository.** Its template carries the same edits, pinned by `tests/test_invoice_template_links.php`
+  (17, with a control).
+- **The rehearsal.** 94 checks, twice; six weakened copies caught; one vacuous assertion found by its control
+  and rewritten. uCRM's payment page is opened from the host, the way a customer reaches it. The plugin suite passes: 8,263 assertions, 0 failed.
+- **Not changed.** No plugin release, no deployment and no server change; the uCRM template edit is the
+  operator's act.
+
+**21:35–21:40 UTC: `--links` on the server, and the two exported templates change the fix.**
+- **What `--links` found.** The two `:8443` links in invoice 000003 are uCRM's online-payment link. uCRM's page
+  offers none of the 14 payment options. UISP's public port is unset (`HTTPS_PORT=8443`, `PROXY_HTTPS_PORT`
+  empty). The pay page answers.
+- **#1000 "Invoice Ugadna" is the South Sudan invoice.** The template Uganda invoices use prints Juba, +211,
+  dishnetafrica.com, "Amount Due (USD)" and the USD late-payment terms. Its PAID check (`== '$0.00'`) never matches
+  UGX, so paid invoices read UNPAID.
+- **#1001 "V1 invoice" is the Uganda template, unused.** It is byte-identical to the repository's of 8 Sep.
+- **The fix, v2.** The repository's Uganda template, now v2, is to be pasted over #1000 with the CSS unchanged.
+  v2 sends PAY NOW to the pay page and decides PAID from the digits.
+- **The proof.** `scripts/harness/invoice-template/rehearse.sh` renders it with real Twig 3.30 and 2.16 under a
+  sandbox limited to what V1 uses: 21/21 each, and two weakened copies are caught.
+- **The organization record.** `--links` now also shows the organization, phone and e-mail masked, because v2
+  prints its address. The plugin test pins the digit rule (21).
+- **Not changed.** No release and no server change; the paste is the operator's act (docs/38 §7.2).
+- **22:00, the ZIP.** The operator asked for a ZIP to upload. `template-invoice-uganda-v2.zip` (sha256
+  `df2cc831…fdff8a52`) is built like uCRM's own exports, and both entries are byte-identical to the repository.
+  `--links` now also shows which template the organization gives new invoices (rehearsal 102).
+- **21:57, after the upload.** uCRM lists #1002 "v2", and #1000 "Invoice Ugadna" is gone from the list. The
+  organization record is Ugandan (Kampala, +256, dishnetuganda.com, TIN, Reg. No), so v2 prints Uganda details.
+  The API does not say which template new invoices use. Invoice 000003 keeps its 21 Sep PDF with the `:8443`
+  links. `--links` no longer prints the fix for an invoice whose template is gone, and it flags invalid templates
+  (rehearsal 109).
+- **22:01, confirmed on the server.** The new verdict prints for 000003 and no fix is printed; no template is
+  flagged invalid. Waiting on the screenshot of the organization's invoice template and on the next invoice.
+- **After 22:01, the operator confirms** that the organization's invoice template is now "v2" (their statement;
+  no screenshot). The one proof still to come is `--links` on the next invoice for client #1, which should end
+  "C-2 is done for this invoice". uCRM's plugin page reads *5.18.27* while 5.18.43 is verified on disk and live. It most likely
+  keeps the version from the last ZIP upload through that screen.
+
+## 26 Sep 2026 — the WhatsApp AI on unlimited data for a business, and on covering another area (docs/40)
+
+**A check, not a change.** The operator asked how the AI answers two things: a business that needs unlimited data
+(a Residential plan, not a Business plan with a GB block), and a customer who wants another area covered (uCRM
+now prices an outdoor access point and a MikroTik).
+- **Measured from the live code (5.18.43).** The prompt was rendered through `getProducts` → `BrainContext` →
+  the brain, with a sample price list. No model call was made; this session has no AI key.
+- **What works.** Business plans are held back unless the customer needs a public IP or names one. The
+  qualification rules make the higher-capacity Residential plan the default. The priority-data note is appended
+  in code.
+- **A-1, A-2 — "unlimited".** The AI is never told that the Residential plans are unlimited. Its four uses of the
+  word are rule 2 ("do not describe a null field as unlimited"), two about Business standard data, and one that
+  names no plan. The two knowledge sentences that say it (`BUSINESS_PLANS`, `MANY_USERS_HOTSPOT`) fall beyond
+  `KnowledgeBase::promptBlock`'s 600-character cut. Six seeded facts are cut in all.
+- **B-1 … B-5 — coverage.**
+  - B-1: the access point and MikroTik land in HARDWARE, and no rule links "cover another area" to them.
+  - B-2: the price check refuses a total that multiplies a quantity; the customer gets the fallback.
+  - B-3: nothing keeps them out of a home total.
+  - B-4: the sales number never sees ACCESSORIES, because `BrainContext` drops them; the support number does.
+  - B-5: a total may combine only the first six HARDWARE items.
+- **The documented live test does not test Uganda.** `tests/conversation-suite.php` builds the brain without the
+  knowledge base, so it runs the South Sudan coverage block. It also skips `BrainContext` and both reply checks.
+- **The check.** `scripts/dnb-ai-check.sh` with `scripts/lib/ai_check.php`, READ-ONLY. It reports which AI answers,
+  the price list as the AI sees it, the knowledge rows and their cut parts, and recent real conversations with
+  their replies, masked. `--ask` puts nine questions to the installed AI through the live path.
+- **It reads a copy of the database, made as its owner.** The first draft opened the live file read-only, and the
+  rehearsal showed SQLite leaving `-wal`/`-shm` behind, which would be root's on the server.
+- **Rehearsal.** `scripts/harness/ai-check/rehearse.sh`, 63/63 twice. Eight weakened copies are caught. Canaries
+  for every kind of personal or secret value stay out of the output.
+- **Not changed.** No plugin release, no setting, no knowledge-base row, no uCRM record and no server change.
+  Proposals P1–P7 (docs/40 §8) wait for the operator: the P1 wording (are both Residential plans unlimited?) and
+  the P3 decision (should the AI quote the access point and MikroTik prices or keep handing over?).
+
+## 5.18.44 — a business is sold the Residential plan; another area gets a design and a price (docs/40 §11)
+
+**Why.** The check of 26 Sep ran on the server on 27 Sep (docs/40 §10). In the live conversations the assistant
+framed every "business" as a Business plan, told a customer *"The plans we offer are not unlimited"*, told a
+would-be reseller *"we don't have a reselling program"*, and never once priced the outdoor access point or the
+MikroTik that were in uCRM — one customer who named the access point was asked to confirm its price. The MikroTik
+was the seventh one-time item, and the price check refused any total with it. **The operator's decisions,
+verbatim:** the data-allowance wording — *"keep as it is"*; covering another area — *"yes lets ai to desing and
+give price of accespoint if avaible in system"*.
+
+**What.** Only where the install runs the qualification and hardware modules (Uganda); South Sudan is
+byte-identical (below).
+- **Unlimited, stated.** Beside the plans, to be repeated word for word: *"Both Residential plans (Residential Lite
+  and Residential) are unlimited, with no data cap. Only the Business plans come with a block of priority data
+  (50 GB, 500 GB or 1 TB)."* `ai_fact_unlimited` replaces it (now in `set_config.php`); `omit` switches it off.
+- **A business gets the Residential plans;** a Business plan is for a public IP, asked about once. Someone who wants
+  to sell internet gets the higher-capacity Residential plan, and is never told there is no reseller programme.
+- **NETWORK EQUIPMENT**, out of HARDWARE, each item named by what it is for (`assets/shop/network.json`), with the
+  rule to design and price it: one access point unless the customer names a number, the survey confirming the
+  rest; never a distance, area or user count; never inside a home total.
+- **The price check** allows every combination of up to ten one-time items and 2 to 5 of an access point, on top
+  of every total it allowed before. Only access points are multiplied.
+- **The accessories reach the sales number and the website chat** (one rule, `BrainContext::catalogue`).
+- **Approved knowledge up to 1,000 characters** (was 600). **MANY_USERS_HOTSPOT** said to hand over for a site
+  assessment, the opposite of the decision; its seeded text now says to design and price, then book the survey.
+- **Tools:** `seed_knowledge.php --dry-run` (rolled back) and `--only=KEY` (that row, no other).
+- The check reads either version; `tests/conversation-suite.php` now asks the way the worker does (docs/40 P7).
+
+**Found and fixed while building** (docs/40 §11.3–§11.4): the website chat would have shown every install the
+accessories — caught by the South Sudan fingerprints; the first price-check draft multiplied every network item
+and made every round 100,000 up to a million a legal total; the SELL INTERNET rule pointed at a design rule that
+is absent where no equipment is listed. **Recorded, not changed:** the reply check also accepts an amount whose
+digits occur anywhere in the prompt run together — pre-existing on both installs, **proposal P8 for approval**.
+
+**Proof.** `tests/test_ai_unlimited_and_network.php` **159**, and **nineteen weakened copies each fail it**. South
+Sudan: all 50 prompt fingerprints and the price-check list byte-identical to 5.18.43. No existing suite needed a
+change. The check's rehearsal runs against 5.18.43 and 5.18.44: **183/183, twice**. Suite: **209 suites, exit 0, twice; the 188 suites that print totals report 8,426 passed / 0 failed on both runs.**
+
+**Deploy.** `scripts/deploy-5.18.44.sh`, pinned to the plugin commit. After the documented deploy, stage K
+corrects MANY_USERS_HOTSPOT — a dry run first, that row only, only while still as seeded, as the database's owner
+— stage V re-checks everything 5.18.43 checked, and stage AI asks the assistant the ten questions and prints the
+replies. **Rehearsed:** `scripts/harness/deploy-5.18.44/rehearse.sh` runs the pinned script against a sandbox
+container. It gave **46/46 on three consecutive runs**, over seven scenarios, and five weakened copies each fail
+(docs/40 §11.6). Its first run found two faults, both in the harness. One was a check for a line `--after-only`
+never prints. The other was a weakened copy without `--only` that was masked by the sandbox's person-edited row:
+the tool's *"Edited by hand"* stopped it before it wrote. That copy is now run on an estate with no person's
+row, beside a control. **Not deployed by this session.**
+
+**Deployed 27 Sep 2026 06:14 UTC by the operator: PASSED, 34 ok / 0 failed / 1 note** (docs/40 §13). The note was
+the deploy script's own race and not the plugin's. `aihas` piped `printf` into `grep -q` under `pipefail`, and it
+missed an access point that its own listing showed. Fixed in deploy-5.18.45.sh.
+
+## 5.18.45 — more floors are Starlink routers; a Business priority block ends at about 1 Mbps (docs/40 §14)
+
+**Why.** Two things came up on 27 Sep, once 5.18.44 was live.
+
+- **Indoor coverage.** The operator: *"Ruijie Reyee RG-RAP6262(G) … this is out door and for indoor if some one
+  want to cover more floor we have to suggest starlink routers"*.
+- **Business data.** The live check showed the assistant telling a customer that a Business plan's priority block
+  is followed by "unlimited standard data". That came from the BUSINESS_PLANS knowledge row. The note appended to
+  Business replies says the opposite: about 1 Mbps until more is bought. Asked which was right, the operator
+  answered: *"Drops to ~1 Mbps"*.
+
+**What.** Uganda only: where the hardware module is on and a Starlink router is listed.
+
+- **The Starlink routers.** Router Mini and Router 3 are taken from the shop catalogue's category *Router*, by exact
+  name (`NetworkEquipment::starlinkRouters`). Nothing is guessed from a name: *Router 3 Mount* is a mount.
+- **The prompt.** Both routers are marked in ACCESSORIES with what each fits. A new rule, **MORE FLOORS OR ROOMS
+  INSIDE ONE BUILDING**:
+  - Starlink routers as a mesh, never the outdoor access point or the MikroTik;
+  - one router per floor beyond the main router's, as quantity × price;
+  - the kit asked about in the same reply;
+  - the survey confirms the number.
+
+  NETWORK EQUIPMENT is marked *for outdoors*.
+- **The price check** allows 1 to 5 of one router, with any of the kit and the installation. That is 160 more
+  permitted totals, and not one round figure 5.18.44 refused.
+- **BUSINESS_PLANS** now says *"the connection drops to about 1 Mbps until more is bought"*. It is 981 characters,
+  and its short form 296, so both reach the assistant whole. Stage K corrects that row only.
+- **The check tool.**
+  - It lists the Starlink routers.
+  - It says what each knowledge row claims happens after the priority block.
+  - It asks eleven questions; the new one is about floors.
+  - For a refused reply, it prints the **amounts it could not match and the draft**. Two replies were refused
+    live on 27 Sep and the log could not say why.
+
+**Recorded, not changed.**
+
+- **P9:** the marker legend `<<ESCALATE reason>>` is sometimes copied word for word, so a hand-over's reason reads
+  "reason". The legend is in South Sudan's prompt too, so this needs approval.
+- **P8** is still open.
+
+**Proof.**
+
+- `tests/test_ai_indoor_routers.php` **84**; twelve weakened copies each fail it.
+- South Sudan: all 50 fingerprints unchanged. Uganda with no Starlink router listed: 26 fingerprints byte-identical
+  to 5.18.44 (a new golden from `a4abe5e`).
+- The check's rehearsal against 5.18.44 and 5.18.45: **230/230, twice**.
+- Suite: **210 suites, exit 0, twice; the 189 that print totals report 8,510 passed, 0 failed on both runs** (8,426 in 5.18.44, plus the new 84).
+
+**Deploy.** `scripts/deploy-5.18.45.sh`, pinned to the plugin commit. Stage K corrects BUSINESS_PLANS, stage V as
+5.18.44, and stage AI asks the eleven questions with the race-free matcher. Rehearsed in
+`scripts/harness/deploy-5.18.45/rehearse.sh`: **53/53 on two consecutive runs**; six weakened copies each fail, including the matcher turned back into a pipe (the first run's one miss was the harness's detector, which still read "ten"). **Not deployed by this session.**
+
+**First run — 27 Sep 2026, 07:00:32 UTC: NO-GO at the backup, nothing changed; 5.18.44 stays live.** The tar of
+the plugin's data directory failed, and the script threw tar's words away. Most likely: *"file changed as we
+read it"* on the live databases and logs.
+
+The script now:
+- copies `plugin.sqlite3` and `dishnet.sqlite` with `VACUUM INTO`, as their owner, integrity-checked, with the
+  sha256 compared on both sides;
+- archives the rest without them;
+- treats tar exit 1 as a note with tar's words, and anything worse as a FAIL.
+
+Same pin, same command. Rehearsal **108/108 on two consecutive runs**: the old script as the control, four real
+failures, and seven weakened copies caught (docs/40 §15.1).

@@ -48,9 +48,17 @@ class EmailTemplate
     /** Resolved brand values: configured value, else the historical default. */
     public static function brand(array $config): array
     {
+        // Phase 2: the tenant profile sits between the configured value and the
+        // historical default. An empty configuration selects south-sudan, whose
+        // values are exactly these DEFAULTS, so nothing changes where nothing
+        // is configured; the uganda profile fills what set_email_brand used to.
+        $prof = [];
+        try { require_once __DIR__ . '/TenantProfile.php'; $prof = TenantProfile::current($config)->emailBrandDefaults(); }
+        catch (\Throwable $e) { $prof = []; }
         $b = [];
         foreach (self::DEFAULTS as $k => $default) {
             $v = trim((string)($config[$k] ?? ''));
+            if ($v === '') $v = trim((string)($prof[$k] ?? ''));
             $b[substr($k, 6)] = $v !== '' ? $v : $default;   // strip 'email_'
         }
         return $b;

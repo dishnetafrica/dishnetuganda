@@ -249,14 +249,20 @@ if (!function_exists('_buildEmail')) {
         $cta   = $saved['cta']    ?? $def['cta'];
         $foot  = $saved['footer'] ?? $def['footer'];
 
-        $fromName  = $cfg['overdue_email_from_name']      ?? 'DishNet Accounts';
-        $acctPhone = $cfg['overdue_email_phone']           ?? '+211 921 443 009';
-        $acctEmail = $cfg['overdue_email_accounts_email']  ?? 'accounts@dishnetafrica.com';
+        // Phase 2: the tenant profile answers before the literal (config → profile
+        // → literal). An empty configuration selects south-sudan, whose values are
+        // exactly the literals below, so Sudan is unchanged.
+        $_dnProf = [];
+        try { require_once __DIR__ . '/TenantProfile.php'; $_dnProf = TenantProfile::current(is_array($cfg) ? $cfg : [], $GLOBALS['dataDir'] ?? null)->dunningDefaults(); }
+        catch (\Throwable $e) { $_dnProf = []; }
+        $fromName  = $cfg['overdue_email_from_name']      ?? $_dnProf['overdue_email_from_name']      ?? 'DishNet Accounts';
+        $acctPhone = $cfg['overdue_email_phone']           ?? $_dnProf['overdue_email_phone']          ?? '+211 921 443 009';
+        $acctEmail = $cfg['overdue_email_accounts_email']  ?? $_dnProf['overdue_email_accounts_email'] ?? 'accounts@dishnetafrica.com';
         // Hardcoded until now. The defaults are the exact strings this footer
         // has always printed, so Sudan is unchanged; an install that sets them
         // cannot leak a Juba address into another country's mail.
-        $footLine  = $cfg['overdue_email_company_line']    ?? 'DishNet Africa Ltd · Airport Road, Juba, South Sudan';
-        $footWeb   = $cfg['overdue_email_website']         ?? 'www.dishnetafrica.com';
+        $footLine  = $cfg['overdue_email_company_line']    ?? $_dnProf['overdue_email_company_line']   ?? 'DishNet Africa Ltd · Airport Road, Juba, South Sudan';
+        $footWeb   = $cfg['overdue_email_website']         ?? $_dnProf['overdue_email_website']        ?? 'www.dishnetafrica.com';
 
         $vars = ['first_name'=>$firstName,'full_name'=>$fullName,'invoice_number'=>$invNum,
                  'amount'=>$amount,'due_date'=>$dueDate,'days_overdue'=>$days,
