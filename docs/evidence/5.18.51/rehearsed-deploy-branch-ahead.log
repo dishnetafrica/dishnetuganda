@@ -1,0 +1,118 @@
+DEPLOY
+
+== 5.18.51 (deploy) — 20260927T215000Z — vm ==
+
+== A. Before-evidence (read-only) ==
+  checkout        <sandbox>/repo
+  repo HEAD       55a4273
+  plugin commit   55a4273   (expected 240f2f9)
+  installs        240f2f9 by its hash — the branch has moved on to 55a4273 since
+  plugin version  5.18.51   (expected 5.18.51)
+  tracked edits   0
+  5.18.51         3 files differ from 125fa0c: 2 changed, 1 added, 0 removed
+  serves          <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan
+  live commit     125fa0c
+  live version    5.18.50
+  --check says:
+     
+       repo      <sandbox>/repo  (55a4273)
+       serves    <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan
+       live      125fa0c
+     
+       NOT up to date — run without --check to deploy.
+     
+     (--check compares the container with the branch tip, 55a4273; this script installs 240f2f9)
+  container PHP   8.4.19
+  data dir        /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data (container)  =  <sandbox>/mount/ucrm/data/plugins/.dishnet-hybrid-sudan-data (host)
+  database owner  0:0   (every read below runs as this user, and opens the database read-only)
+  plugin URL      http://127.0.0.1:57221/public.php
+  the :8443 door  https://127.0.0.1:8443/public.php
+  before: the sign-in page on the public address → 200
+  tenant          the configuration's store copy reads uganda; its files read uganda
+  ok    A1 the installed plugin reads Uganda from both configuration sources — Release A's rules will be on
+  ok    A2 PHP 8.4.19 in the container accepts all 1 changed PHP files that run on the server (and 1 test files)
+  ok    A3 staff accounts read: 7 accounts, 6 active; of the 5 active accounts that take jobs, 3 hold a uCRM user id (0 through a verified link, 3 stored the old way) and 1 only an FTTH id — digest fa925ba5f5b9db17
+  ok    A4 the Message Log holds 4 rows; its last is #4
+  …     the fault 5.18.51 removes: 2 line(s) of "flock(): supplied resource is not a valid stream resource" from dishnet-hybrid-sudan in the last hour
+
+== A. Backup ==
+  ok    backed up plugin.sqlite3 → <sandbox>/out/backup-20260927T215000Z/plugin.sqlite3 (2.1M) — one consistent copy (VACUUM INTO as 0:0, SQLite 3.45.1), integrity ok, 116 tables, the same sha256 on both sides
+  ok    backed up dishnet.sqlite → <sandbox>/out/backup-20260927T215000Z/dishnet.sqlite (8.0K) — one consistent copy (VACUUM INTO as 0:0, SQLite 3.45.1), integrity ok, 1 tables, the same sha256 on both sides
+  ok    backed up <sandbox>/mount/ucrm/data/plugins/.dishnet-hybrid-sudan-data → <sandbox>/out/backup-20260927T215000Z/.dishnet-hybrid-sudan-data.tar.gz (4.0K) — without the live databases, copied above
+  ok    backed up <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan/data → <sandbox>/out/backup-20260927T215000Z/data.tar.gz (4.0K)
+  ok    backed up the installed plugin (5.18.50, 125fa0c) → <sandbox>/out/backup-20260927T215000Z/plugin-installed-5.18.50.tar.gz (11M) — its code, without data/
+  ok    backed up the configuration vault → <sandbox>/out/backup-20260927T215000Z/config-vault.json (34 bytes, identical)
+  note  verify-uisp-health.sh did not pass — recorded in <sandbox>/out/backup-20260927T215000Z/health-before.txt
+
+  GO — evidence recorded, backup in <sandbox>/out/backup-20260927T215000Z
+  Rollback at any time:  cd <sandbox>/repo && bash scripts/deploy-5.18.51.sh --rollback
+        or by hand:      cd <sandbox>/repo && git checkout 125fa0c && bash scripts/deploy-hybrid.sh && git checkout -
+
+== B. The documented deploy (scripts/deploy-hybrid.sh) ==
+  Type DEPLOY to deploy 5.18.51 (240f2f9) over live 125fa0c, anything else to stop: 
+  marked: the Message Log's last row is #4; staff digest fa925ba5f5b9db17 — recorded in <sandbox>/out/state-5.18.51.env
+  the checkout is on claude/study-this-jhe2eg (55a4273); checking out 240f2f9 (5.18.51) for the documented deploy
+     
+       repo      <sandbox>/repo  (240f2f9)
+       serves    <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan
+       live      125fa0c
+     
+       ✓ container now serves 240f2f9
+     
+  the checkout is back on claude/study-this-jhe2eg
+  ok    container serves 240f2f9
+
+== V. Verification over the public address and the :8443 door (nothing signed in; no customer touched) ==
+  ok    V1 the sign-in page on the public address answers 200 with zero redirects (no loop)
+  ok    V1 the portal without a session still refuses (302)
+  ok    V1 its Location carries no :8443
+  ok    V2 the sign-in page answers 200
+  ok    V2 the sign-in page carries no South Sudan contact
+  ok    V2 the Terms page answers 200
+  ok    V2 the Terms page's contacts and footer carry no South Sudan literal (A1.1)
+  ok    V2 the Terms page carries the Uganda WhatsApp link and locality
+  ok    V2 the Terms page names South Sudan ×0 and Juba ×0 (A2)
+  ok    V2 the Terms page carries the approved Uganda identity, governing law and forum (A2 points 1–3)
+  ok    V2 the Terms page states no South Sudan fee and no fibre/LTE product (A2 points 7–8)
+  ok    V2 the Terms page shows version 1.1
+  ok    V2 the Privacy page answers 200 with no South Sudan contact
+  ok    V2 the Privacy page carries the Uganda regulator sentence and both sign-in channels, and no South Sudan or fibre/LTE clause (A2 points 4, 9, 10)
+  ok    V2 app_legal_version answers 1.1 / 1.1 — nobody is asked to accept the terms again
+  ok    V3 the sign-in page on :8443 → 302 → the public address, same path and query (A1.3)
+  ok    V3 the customer manifest on :8443 → 302
+  ok    V3 page=api on :8443 is answered (200), never redirected — the wrapper's calls keep working
+  ok    V3 the native wrapper's request on :8443 is served (200), not redirected
+  ok    V3 a POST on :8443 is never redirected (200)
+  …     waiting 0s for the first requests on the code now installed
+  ok    V4 no fatal or parse error of dishnet-hybrid-sudan in the container log since 2026-09-27T21:50:03Z, besides the master's lock line (R8)
+
+== R. 5.18.51 installed, and Release A still in place (read-only) ==
+  ok    R1 all 3 files 5.18.51 changes are installed exactly as 240f2f9 has them (1 of them new)
+  ok    R1 the installed manifest says 5.18.51
+  ok    R1 Release A's other 37 files are still installed exactly as 240f2f9 has them
+  ok    R2 the installed StaffJobsGate reads Uganda from both configuration sources: Release A's rules are on (store on, files on)
+  ok    R3 every staff account is as it was at stage A of this run: role, status, e-mail, phone, uCRM user id and link (digest fa925ba5f5b9db17, 7 accounts)
+  ok    R4 no job-assignment WhatsApp message in the Message Log since row #4 (New Job, Bulk Dispatch, Reschedule, a job from uCRM: 0)
+  …     since row #4 the Message Log has 0 new row(s)
+  ok    R4 and none since the 5.18.50 deploy (Message Log row #4): M6 has held across both deploys
+  ok    R5 the master cron's job_assign entry is still commented out (as since before 5.18.49)
+  ok    R6 ＋ New Job says: "No WhatsApp message is sent for jobs yet" — its Notify via WhatsApp box is hidden on Uganda
+  ok    R6 Bulk Dispatch and Reschedule show the server's note that no message was sent
+  ok    R6 a job created in uCRM is logged "WhatsApp skipped: job notifications are not switched on yet"
+  note  R7 0 of 5 active accounts that take jobs have a verified uCRM link. The other 5 see no job in My Jobs until an admin saves their uCRM user through the picker (Staff → edit → uCRM user); 3 of them hold an id stored the old way and 1 only an FTTH id — neither counts on Uganda (M7)
+  ok    R8 the installed master.php releases its lock only while the handle is still open (is_resource)
+  note  R8 too early to judge the fatal line: it is counted from 2026-09-27T22:10:03Z, 20 minutes after the deploy, and judged after an hour of runs — run --after-only after 23:10 UTC
+
+== F. Summary ==
+  deployed commit   240f2f9  (plugin 5.18.51)
+  rollback          cd <sandbox>/repo && bash scripts/deploy-5.18.51.sh --rollback     (→ 125fa0c, 5.18.50)
+      or by hand    cd <sandbox>/repo && git checkout 125fa0c && bash scripts/deploy-hybrid.sh && git checkout -
+  backup            <sandbox>/out/backup-20260927T215000Z
+  the data          this release changes none: a rollback needs no restore. The database copies are there for a restore on instruction only
+  job messages      Uganda sends NO job-assignment WhatsApp message (New Job, Bulk Dispatch, Reschedule, a job from uCRM); accept, task-progress and completion messages are unchanged — Release B, with approved wording, is separate
+  My Jobs           shows a technician's jobs only once an admin has saved their uCRM user through the picker (R7)
+  master's lock     released once (5.18.51); the fatal line is judged by R8 an hour after the deploy
+  later             cd <sandbox>/repo && bash scripts/deploy-5.18.51.sh --after-only   re-measures R3, R4 and R8 since this deploy (R8 after an hour); send its log file
+  checks            44 ok, 0 failed, 3 notes
+
+  5.18.51 (deploy): PASSED. Send this LOG FILE back (not a copy of the terminal).

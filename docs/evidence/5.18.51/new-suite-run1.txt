@@ -1,0 +1,43 @@
+=== test_master_lock_release.php ===
+
+The lock code, read from cron/master.php
+  ok   the lock section (open, take, register the shutdown handler) is found exactly once
+  ok   the normal-end release (unlock, then close) is still there, exactly once
+  ok   the handler releases only a handle that is still open (is_resource)
+
+1. A run that completes: released once, and nothing fails at shutdown
+  ok   the process exits 0
+  ok   the jobs ran and the normal end was reached
+  ok   no "flock(): supplied resource is not a valid stream resource" at shutdown
+  ok   no fatal error of any kind
+  ok   a shutdown function registered after the handler still runs
+  ok   the lock is free afterwards
+
+2. A run that dies before the normal release: the handler releases, cleanly
+  ok   the process ends in the job's own fatal error (exit 255)
+  ok   the fatal reported is the job's
+  ok   the normal end was never reached
+  ok   the handler, which released the lock, did not fail
+  ok   the later shutdown function still runs
+  ok   the lock is free afterwards
+
+3. A run that finds the lock held: it returns at once
+  ok   control: this test holds the lock, as a running master would
+  ok   the second run exits 0, silently
+  ok   it ran no job and registered nothing
+  ok   the first run's lock is untouched
+
+4. Control: 5.18.50's handler, run the same way
+  ok   the 5.18.50 handler replaces the current one exactly once
+  ok   it ends in the server's fatal line: "Uncaught TypeError: flock(): supplied resource is not a valid stream resource"
+  ok   after the jobs had run and the normal end was reached — the fatal comes at shutdown
+  ok   and the shutdown function registered after it was skipped
+
+5. Weakened copies of the guard, each caught
+  ok   weakened copy caught: a truthiness test (a closed handle is still truthy)
+  ok   weakened copy caught: a comparison with false
+  ok   weakened copy caught: no condition at all
+  ok   the test left nothing behind
+
+27 passed, 0 failed
+

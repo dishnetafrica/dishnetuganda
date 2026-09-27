@@ -2070,6 +2070,20 @@ unverified and was not probed.
 **Release B is 5.18.52**, because 5.18.51 is the lock fix. "approved" was taken to cover building now. The deploy
 still waits for M5, S1's number, M4 and a separate approval.
 
-**Also in 5.18.52: the WA Events badge undercounts from 00:00 to 03:00 Kampala time.** The webhook writes event times
-on PHP's default clock, while the badge counts Kampala's today. It was found while testing 5.18.51 and confirmed by a
-diagnostic run.
+**The WA Events badge has no defect after all.** Its test fails between 21:00 and 24:00 UTC. That was first read, in
+the chat, as the webhook writing UTC. Measured instead: uCRM's events reach the webhook only through `public.php`, which
+applies Kampala time first, so the log and the badge share one clock (docs/44 §16.12). The test's fake log used the test
+process's own clock. 5.18.52 corrects the test, not the badge.
+
+## 5.18.51 — the master cron releases its lock once (docs/44 §16.13)
+
+- **The change, plugin commit `240f2f9`.** `cron/master.php`'s shutdown handler releases the lock only while the handle
+  is still open. 5.18.50 released it a second time, after the normal end had closed it. On PHP 8 that is a fatal
+  `TypeError`: 4–9 times an hour on the server, and every shutdown function registered after the handler was skipped.
+- **`tests/test_master_lock_release.php`, 27 assertions.** It runs `master.php`'s own lock code in a child process. The
+  control reproduces the server's exact fatal line with 5.18.50's handler, and three weakened guards are each caught.
+- **The suite, twice on `240f2f9`:** 224 files, 10,445 passed, 2 failed, identical file by file. The 2 are the badge
+  test's clock between 21:00 and 24:00 UTC (docs/44 §16.12).
+- **`scripts/deploy-5.18.51.sh` (`1517dc8`).** It installs `240f2f9` by its hash, also after later pushes. Rehearsed
+  131/131 twice; 23 weakened copies caught. The rollback is a separate command.
+- **Not deployed by this session.**

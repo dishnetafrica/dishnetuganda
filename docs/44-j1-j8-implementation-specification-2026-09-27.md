@@ -1940,6 +1940,8 @@ alone: `dishnet_wa_pusher.php` closes its lock only in its handler. Until the fi
 `--after-only` run will show this same V4 failure. That failure is this issue as long as every fatal line it lists
 is `master.php:83` with `flock()`.
 
+*Approved and built since: §16.13.*
+
 ### 16.12 Release B redesigned the South Sudan way — D5 approved, 27 September 2026, about 21:25 UTC
 
 **What happened, in order.**
@@ -2046,19 +2048,23 @@ Press Complete there when the work is finished. The same page lets you reschedul
 - **"approved" was taken to cover building now.** §15.6 requirement 6 and §15.8 say release B is built only after
   the links are verified and M4 is done. The same message proposed building now, while the operator does M5, S1's
   number and M4. The deploy is unchanged: it waits for §15.8 items 2–6 and a separate approval.
-- **The WA Events badge fix goes into 5.18.52.** It was proposed in the same message; see below.
+- **The WA Events badge fix proposed in the same message is withdrawn.** The badge has no defect; see below.
 
-**The WA Events badge undercounts after midnight — a release A defect, found while testing 5.18.51.**
+**The WA Events badge test fails after midnight — a defect in the test, not in the badge.**
 - `test_job_status_truth.php` fails two badge assertions between 21:00 and 24:00 UTC, and passes outside that window.
-- **The cause, measured.** `webhook.php` writes each event's `received_at` with `date()` and never applies the
-  tenant's zone, so it writes in PHP's default zone. `includes/navigation.php` computes "today" after `public.php`'s
-  `dn_tz_apply()`, in Kampala time. From 00:00 to 03:00 Kampala time the two dates differ.
-- **The effect.** For those three hours the badge counts none of the day's events, and for the rest of the day it
-  misses the events written in those hours.
-- **Confirmed at 21:27 UTC.** As written, the test fails 2 of 23; with its writer on Kampala time it passes 23 of 23.
-  That was a diagnostic run only, and the test is unchanged.
-- **The fix, in 5.18.52, Uganda only:** the badge reads each event's time in the zone it was written in before
-  comparing it with Kampala's today. South Sudan's badge is unchanged.
+- **First read, in the chat, as a product defect; corrected before any of this was pushed.** The reading was that
+  `webhook.php` writes `received_at` on PHP's default clock (UTC) while the badge counts Kampala's today.
+- **Measured instead.** uCRM's events reach `webhook.php` only through `public.php?page=crm_webhook`
+  (`public.php:807-810`; the file at its own path answers uCRM's 404). `public.php` applies the tenant's zone at line 30,
+  before that route. One real `job.add`, sent through a Uganda sandbox's `public.php` at 22:00 UTC on 27 September, was
+  logged at `2026-09-28 01:00:08`, which is Kampala time (`docs/evidence/5.18.51/webhook-log-clock-measurement.txt`). The
+  badge counts in the same zone, so it counts correctly.
+- **The test's model is what is wrong.** It writes its fake webhook log with `date()` in its own process, which never
+  applies the tenant's zone (UTC). As written it fails 2 of 23 in the window; with its writer on Kampala time it passes
+  23 of 23 (`docs/evidence/5.18.51/badge-window-diagnostic.txt`).
+- **The correction, in 5.18.52, tests only.** The test writes its fake log in the tenant's zone, as `public.php` does.
+  It also asserts that `public.php` applies the zone before the `crm_webhook` route, so moving that line below the route
+  (which would create exactly this defect) fails the test. The badge's code is not changed.
 
 **Numbering.** Release B is **5.18.52**; 5.18.51 is the `master.php` lock fix (§16.11). Where §12.1 and §15.5 name
 5.18.51 for release B, that is superseded.
@@ -2069,3 +2075,61 @@ Press Complete there when the work is finished. The same page lets you reschedul
   - **Accept also tells every active support leader** ("🔔 Job Accepted", unchanged).
   - §15.6 requirement 7 allows messages only to your number. So this step runs only once a read-only check shows no
     active support leader, or with those people told first and counted as expected recipients.
+
+### 16.13 5.18.51 — the master's lock fix, built and rehearsed, not deployed — 27 September 2026
+
+**Approved** by the operator (*"i will go with your recommandation"*), before the D5 approval: the one-line fix of
+§16.11, as a release of its own.
+
+**What changed — three files, plugin commit `240f2f9`:**
+- **`cron/master.php`.** The shutdown handler releases and closes the lock only while the handle is still open:
+  `if (is_resource($lockFp)) { … }`. The `@touch($lockFile)` after it is unchanged. `is_resource()` is false for a
+  closed handle, so the normal end, which closes the lock itself, no longer leads to a second unlock.
+- **`manifest.json`:** 5.18.51.
+- **`tests/test_master_lock_release.php`** (new, 27 assertions). It takes the lock section and the normal-end release
+  from `master.php` itself and runs them in a child PHP process, for three kinds of run:
+  - a completed run: no fatal, a shutdown function registered later still runs, the lock is free;
+  - a run that dies before the release: the handler releases the lock cleanly;
+  - a run that finds the lock held: it returns at once.
+  - **The control:** 5.18.50's handler, run the same way, ends in the server's exact fatal line and skips the later
+    shutdown function.
+  - **Three weakened guards are each caught:** a truthiness test, `!== false`, and no condition at all.
+- **South Sudan:** `master.php` runs there the same way. Only the fatal line goes.
+
+**The suite, twice, on `240f2f9`** (PHP 8.4.19). It ran in a git worktree that the `nobody` user can read, because
+`test_cli_data_dir.php` runs part of itself as `nobody`. A first attempt in the session's scratch directory, which
+`nobody` cannot enter, failed 9 of that test's checks for that reason alone.
+- **Both runs: 224 files, 10,445 assertions passed, 2 failed, identical file by file.**
+- **The 2 failures are `test_job_status_truth.php`'s badge assertions.** They fail between 21:00 and 24:00 UTC, and both
+  runs fell inside that window. Their cause is the test's clock, not the badge (§16.12). 5.18.52 corrects the test.
+- **`test_quote_tax_line.php` ran 29 of its 31 assertions.** In a worktree `.git` is a file, so the test skips its
+  comparison with `4c01d1c` and says so. At the same plugin commit in the main checkout it passes 31 of 31.
+- **Every other file** has 5.18.50's counts, and the new test adds 27.
+
+**The deploy script — `scripts/deploy-5.18.51.sh`, commit `1517dc8`:**
+- **Over 5.18.50 (`125fa0c`), with 5.18.50's stages:** before-evidence and GO/NO-GO, the backup, the documented deploy,
+  stage V and stage R. Release A is checked again: the Uganda switch, the staff accounts, the links, and no
+  job-assignment message since either deploy.
+- **R8 judges the master's lock line.**
+  - It checks that the installed `master.php` carries the guard.
+  - A line within 20 minutes of the deploy is a note: a run begun on 5.18.50 ends on its own code.
+  - A later line fails R8.
+  - Before an hour of runs, R8 says "too early"; with no master run since the deploy, "cannot judge".
+  - V4 leaves this one line to R8; any other fatal of the plugin still fails V4.
+- **It installs `240f2f9` by its hash, also after later releases are pushed to the branch.**
+  - Found while preparing 5.18.52: the first version refused unless the checkout's plugin commit was exactly
+    `240f2f9`, so the first 5.18.52 push would have made the command stop.
+  - Now the version and the syntax check read the pinned commit. The deploy checks that commit out and returns the
+    checkout to the branch afterwards, as the rollback does.
+  - A checkout that does not hold `240f2f9` in its history is refused before anything changes.
+- **The rollback is a separate command**, never in the same block as the deploy.
+
+**Rehearsed** in `scripts/harness/deploy-5.18.51/rehearse.sh`: a clone, the real `deploy-hybrid.sh` and `git checkout`,
+and a fake container. Its section 7b puts a later release on the branch first.
+- **131/131 on two consecutive runs of the committed script**, each running the script 52 times.
+- **23 weakened copies are each caught,** three of them for the pin.
+
+**Evidence:** `docs/evidence/5.18.51/`.
+
+**Not deployed.** It changes nothing about jobs or messages, so it can go in at any time. Before M4 is best: later
+`--after-only` checks then stop showing V4. An hour after the deploy, `--after-only` judges R8.
