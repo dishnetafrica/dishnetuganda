@@ -48,7 +48,8 @@ account to it** with the J2 picker.
 Everything else in this document follows from your instruction. These eight points need your answer. The
 recommendation is first.
 
-**§15 adds D9, P1 (who takes jobs) and five amendments, M1–M5, with the readiness assessment.**
+**§15 adds D9, P1 (who takes jobs) and amendments M1–M7, with the readiness assessment. Your decisions are
+recorded in §15.6; release B is blocked (§15.8).**
 
 | # | Question | Recommended | Why |
 |---|---|---|---|
@@ -211,6 +212,8 @@ back to 1 and 1581, and their J2 links are lost. Re-link them after deploying ag
   - "⚠ Not linked to uCRM" when empty.
 - **The New Job engineer list** offers only rows whose id is a real, active uCRM user.
 - **`ftth_crm_client_id` is not read or written** by anything here. D6 hides its tile and badges.
+  - **Correction (§15.7):** the My Jobs list does read it, as a fallback for an account with no uCRM link
+    (`api_scheduling.php:70, 73, 84, 141`). Release A removes that fallback on Uganda.
 - **Nothing is cleared automatically.** The wrong ids (1, 4, 81, 1581) stay until an admin re-links each row. The
   page shows them as "not a uCRM user", and J4 cannot message anyone through them.
 
@@ -1254,7 +1257,103 @@ D6, D7 and D9.
 **Not known, for any stage:** whether uCRM itself e-mails the assigned user, and whether another system subscribed
 to uCRM's webhooks reacts to a job. The stages prove this plugin's own sends.
 
+### 15.6 Your decisions, recorded 27 September
+
+You approved the two-release approach and answered §15.1–§15.2 as follows.
+
+| # | Your decision |
+|---|---|
+| **P1** | **S1: yes**, for the internal test and administration; it gets a valid number before any WhatsApp test. **S4: yes**, after release A and a verified link to 1099. **S3 and S5: no for now**; they get no jobs until you confirm. S2 and retailers: no. **No account is created, and no job assigned to anyone else, automatically.** S3 or S5 can be enabled later through the linking process |
+| D1 | Yes: two releases, A and B |
+| D2 | Yes: South Sudan unchanged |
+| D3 | Yes: the previous technician is told when a job is reassigned, removed or deleted |
+| D4 | Yes: "Notify via WhatsApp" is removed on Uganda |
+| **D5** | **Pending.** You see the exact messages for a new assignment, a reassignment, a new time, a removal and a deletion before release B is built |
+| D6 | Yes |
+| D7 | Yes, under the server-side checks |
+| D8 | Yes: `tenant_profile = uganda`. It is set by your own command (R5), as a step of its own in release A's runbook |
+| D9 | Yes, enforced on the server |
+| M1, M2, M3 | Approved |
+| M4 | Approved, after release A. One test job with no customer, assigned to S1 (1000). Check in uCRM that the time is Kampala's and the assignment is right; check in the webhook log that the edit and the deletion arrived; then delete it. **No job-assignment message during the test** |
+| M5 | Approved: only S3's and S5's ids are cleared. **No other link is cleared or overwritten automatically** |
+
+**Release and safety requirements, recorded:**
+
+1. Release A is built only after this record. Nothing is deployed automatically.
+2. The full suite runs twice, South Sudan regression tests included, with zero failures.
+3. A verified backup, and the deploy and rollback commands, are handed over.
+4. After release A, S1 → 1000 and S4 → 1099 are verified. No link changes silently.
+5. The internal test verifies which staff account, and which number, would be used.
+6. Release B is not built or deployed until you approve the exact wording, the links are verified and the tests pass.
+7. In the live test, messages go only to your own number: no duplicates, no other recipient.
+8. Customer billing, invoices, the portal and unrelated features are not changed.
+
+**A passing automated test is not proof that WhatsApp delivers.** No job message has ever been sent on Uganda
+(§11). Release B's live test, on your own phone, is a gate of its own.
+
+### 15.7 What still blocks release A
+
+**Two confirmations**, found while preparing it.
+
+- **M6 — release A sends no job-assignment WhatsApp on Uganda.** As specified, the old sends go only in release B
+  (§5.2). Until then:
+  - ＋ New Job sends when its box is ticked (`api_scheduling.php:625-643`);
+  - Bulk Dispatch sends with no box at all (`:990-1014`);
+  - Reschedule messages whoever pressed it (`:686-697`);
+  - uCRM's `job.add` block (`webhook.php:2408-2457`) cannot send today only because uCRM answers 404 (measured).
+
+  Once S4 is linked, a job made in My Jobs could reach S4 in the old, unapproved wording.
+
+  **Recommended:** on Uganda, release A switches off all four and hides the box, so D4 applies from release A. The
+  New Job answer then says that no WhatsApp was sent. Accept, task and completion messages stay as today; they need
+  someone to act on an existing job. South Sudan: unchanged.
+- **M7 — only a verified link counts.** Your advisor's point is that S3's and S5's old ids must not match a future
+  uCRM user. M5 clears them by hand after release A.
+
+  **Recommended in addition:** on Uganda, only a link saved through the verified picker counts, wherever a job is
+  involved:
+  - the My Jobs list;
+  - ＋ New Job;
+  - every job action (J6);
+  - in release B, the recipient (J4).
+
+  An old id then matches nobody, whether or not it has been cleared, and nothing stored changes.
+
+**A correction, inside what you approved.** §3.2 said nothing here reads `ftth_crm_client_id`. The My Jobs list
+does.
+- An account with no uCRM link is shown the jobs assigned to its `ftth_crm_client_id`
+  (`api_scheduling.php:70, 73, 84, 141`).
+- Your J2 said never use it, so release A removes that fallback on Uganda.
+- The Staff page's "CRM LINKED" tile showed no account holding one, so nothing visible changes.
+
+**For requirement 8.** One approved J1 change sits beside an invoice path.
+- 1.8 stops the plugin asking uCRM for an organisation-7 client for staff and retailers.
+- The retailer wallet top-up's uCRM invoice needs that client, and fails today because organisation 7 does not
+  exist. Its outcome and its screen stay the same.
+- It is kept as approved; say if you want it left out.
+
+**Nothing else blocks release A.** Around it, in this order, each step yours:
+
+1. D8, then the read-only users check (in the runbook);
+2. the deploy;
+3. S1's number; the links S1 → 1000 and S4 → 1099; S3's and S5's ids cleared (M5); the users check again;
+4. M4.
+
+### 15.8 Release B — BLOCKED
+
+Release B is neither built nor deployed until **all** of these hold, and then only on your separate approval:
+
+1. **D5:** you approve the exact messages;
+2. release A is deployed and verified;
+3. the users check shows S1 → 1000 and S4 → 1099, and S3's and S5's ids cleared;
+4. S1 holds a valid number;
+5. M4 is done, with no job message sent, and V2, V3 and V4 recorded;
+6. release B's tests pass: the full suite twice, South Sudan regression included, zero failures.
+
+**Its delivery gate is the live test** (§12.3 with M3), on your own number only. The log file must show exactly the
+expected messages, no duplicate and no other recipient.
+
 ---
 
-**Nothing will be coded until you approve this specification and answer P1, D1–D9 and M1–M5 (§15).** The §13
-check has run; its result is in §13.1.
+**Your decisions are recorded (§15.6). Release A is built once you answer M6 and M7 (§15.7), and is not deployed
+automatically. Release B is BLOCKED (§15.8).** The §13 check has run; its result is in §13.1.

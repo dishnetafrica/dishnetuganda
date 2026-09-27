@@ -1930,3 +1930,46 @@ changed on the server.
   could one day name a real user.
 - Readiness: release A can be built once P1, D1, D2, D6, D7, D9, M1 and M5 are answered; nothing may send until
   release B.
+
+## 27 Sep — J1–J8: the operator's decisions recorded; release A awaits M6 and M7; release B BLOCKED
+
+**What.** The operator reviewed docs/44 §15 and approved the two-release approach. Recorded in docs/44 §15.6.
+**No code written, nothing deployed, no record changed, no message sent.**
+
+**Decisions.**
+- **P1:**
+  - S1 yes, for the internal test and administration, with a valid number before any WhatsApp test;
+  - S4 yes, after release A and a verified link to 1099;
+  - **S3 and S5 no for now**; S2 and retailers no.
+  - No account is created and no job assigned to anyone else automatically.
+- **D1–D4, D6–D9: yes.** D8 is the operator's own settings command, in release A's runbook.
+- **D5 pending:** the exact messages (new assignment, reassignment, new time, removal, deletion) come to the operator
+  before release B is built.
+- **M1–M5 approved.** M4 runs after release A, assigned to S1, with no job message sent. M5 clears only S3's and S5's
+  ids; no other link is cleared or overwritten automatically.
+
+**Requirements recorded** (docs/44 §15.6): the full suite twice with zero failures, South Sudan regression included;
+a verified backup and the deploy and rollback commands; no automatic deploy; no silent link change; live-test
+messages to the operator's own number only; no change to customer billing, invoices, the portal or unrelated
+features. **A passing automated test is not proof that WhatsApp delivers**: release B's live test is its own gate.
+
+**Still blocking release A** (docs/44 §15.7): two confirmations.
+- **M6:** as specified, release A would still let the old code send a job-assignment WhatsApp. ＋ New Job sends with
+  its box ticked, Bulk Dispatch always, and Reschedule to whoever pressed it; uCRM's `job.add` is stopped only by a
+  404. Recommended: switch all four off on Uganda in release A and hide the box.
+- **M7:** recommended: on Uganda only a link saved through the verified picker counts, wherever a job is involved, so
+  S3's and S5's old ids match nobody even before M5 clears them.
+
+**Correction to docs/44 §3.2**, inside the approved J2 ("never use `ftth_crm_client_id`"): the My Jobs list reads it
+as a fallback (`api_scheduling.php:70, 73, 84, 141`). Release A removes the fallback on Uganda.
+
+**For requirement 8:** J1's change 1.8 sits beside the retailer wallet top-up's uCRM invoice attempt, which fails
+today (no organisation 7). The outcome is unchanged, so it is kept as approved unless the operator says otherwise.
+
+**Release B: BLOCKED** until all of these hold (docs/44 §15.8), and then only on separate approval:
+- D5 approved;
+- release A deployed and verified;
+- the links verified (S1 → 1000, S4 → 1099) and S3's and S5's ids cleared;
+- S1 has a valid number;
+- M4 done with no job message sent;
+- the tests pass twice.
