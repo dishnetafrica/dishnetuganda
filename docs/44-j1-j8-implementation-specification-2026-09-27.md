@@ -187,8 +187,9 @@ back to 1 and 1581, and their J2 links are lost. Re-link them after deploying ag
 
 ### 3.2 Wanted, on Uganda
 
-- **The number field becomes a picker of Uganda's uCRM users** (`GET users/admins`), each shown as `#id First L.`
-  with active or inactive:
+- **The number field becomes a picker of Uganda's uCRM users** (`GET users/admins`), each shown as `#id` with its
+  name, or with its UISP username when uCRM holds no name, and active or inactive. The UISP Users screen on 27
+  September showed no first or last name for either user:
   - the user with **the same e-mail** as the staff account (ignoring case) is marked, and pre-selected when the
     account has no link;
   - a user already linked to another active staff account is shown but cannot be chosen ("linked to …");
@@ -949,7 +950,7 @@ The previous release. Conversations keep the `staff` label, which the old releas
 |---|---|---|---|
 | 0 | **The read-only uCRM users check** (§13) — **done**, 27 Sep 16:37 UTC (§13.1) | you, one command | no |
 | 1 | **Release A — 5.18.50**: J1, J2, J3, J5, J6, J7 (display), J8 | the pinned deploy command | no — nothing new is sent |
-| 2 | **Create a uCRM user for each technician** in UISP/uCRM, with the same e-mail as their staff account (docs/43 §11.3). Retailers: none | you | no |
+| 2 | **Create a uCRM user for each technician** in UISP/uCRM, with the same e-mail as their staff account (docs/43 §11.3). Retailers: none. The technician works in My Jobs, not in uCRM: the account only has to exist so a job can be assigned to it. **Started 27 Sep:** one UISP user created, for S4; the §13 check confirms it | you | no |
 | 3 | **Link each staff account** with the J2 picker: S1 → 1000, then each technician. **Give S1 a number** | you, on the Staff page | no |
 | 4 | **Release B — 5.18.51**: J4 and J7's webhook lines | the pinned deploy command | no — only later job changes send |
 | 5 | **The controlled live test** (§12.3) | you, after approval | one message to you |
