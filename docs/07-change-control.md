@@ -2052,3 +2052,24 @@ handler then unlocks the closed handle, which is fatal on PHP 8.
 - A one-line fix (`is_resource()`) is proposed as 5.18.51, awaiting approval.
 
 **Release B stays BLOCKED.**
+
+## 27 Sep — release B redesigned the South Sudan way: D5 approved; 5.18.52 being built, not deployed (docs/44 §16.12)
+
+The operator tested a job assignment in South Sudan's system, where their number is also a staff number, and asked
+for Uganda to work the same way. The proposal put to them was answered **"approved"**, at about 21:25 UTC.
+- **Message 1**, on assignment and on reassignment to you. It carries an **ACCEPT JOB** link to the staff app's job
+  page, which is behind the staff sign-in; after signing in, the engineer lands on that job.
+- **Message 2**, after Accept, carries the completion link. It replaces the engineer's "Job Accepted"; the leaders'
+  message is unchanged.
+- D3's notices take the same greeting and footer. There is no Re Assign for engineers.
+- *"This is DishNet Africa."*, and Kampala time.
+
+South Sudan's page is on another host, addressed by the bare job number. Whether it opens without signing in is
+unverified and was not probed.
+
+**Release B is 5.18.52**, because 5.18.51 is the lock fix. "approved" was taken to cover building now. The deploy
+still waits for M5, S1's number, M4 and a separate approval.
+
+**Also in 5.18.52: the WA Events badge undercounts from 00:00 to 03:00 Kampala time.** The webhook writes event times
+on PHP's default clock, while the badge counts Kampala's today. It was found while testing 5.18.51 and confirmed by a
+diagnostic run.

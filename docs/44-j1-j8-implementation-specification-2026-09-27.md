@@ -1939,3 +1939,133 @@ shutdown handler with `is_resource($lockFp)`, which is false for a closed handle
 alone: `dishnet_wa_pusher.php` closes its lock only in its handler. Until the fix is deployed, every later
 `--after-only` run will show this same V4 failure. That failure is this issue as long as every fatal line it lists
 is `master.php:83` with `flock()`.
+
+### 16.12 Release B redesigned the South Sudan way — D5 approved, 27 September 2026, about 21:25 UTC
+
+**What happened, in order.**
+1. The operator tested a job assignment in **South Sudan's** system, where their number is also a staff number.
+   They received South Sudan's job message and opened its link.
+2. They asked for Uganda to work the same way: *"i have same number in south sudan so i get message from that
+   plugin we have to design same way"*.
+3. The design below was put to them in the chat. They answered **"approved"**.
+
+**The South Sudan reference, as shown.** Names, phone numbers and the page's session token are not reproduced here.
+- **The message.**
+  - A greeting with the technician's full name and *"This is DishNet Africa."*, then *"New Job Has Been Assigned to
+    You"*.
+  - The job title; the date as `dd.mm.yyyy hh:mm am`; the client with its id; the client's mobile; the address.
+  - *"Please click the link below to accept this job: ✅ ACCEPT JOB:"* and a link, then *"Once you accept, we will
+    send you the completion link."*
+  - *"For any questions, just reach out here."*, a contact number and the website.
+- **The page it opens.** "Job Details", on another host, addressed by the bare job number.
+  - It shows the title, client, date and time, duration, assigned user, description, status and tasks.
+  - Its buttons are Back, Accept Job, Reschedule, Re Assign and Add Comments.
+- **It is not in this repository.** Its link shape matches nothing in the repository or its history
+  (`git log --all -S`). This plugin's own dispatch cron (path A, off) is its close cousin: the same greeting and
+  emojis, but its links open uCRM's admin job screen.
+- **Unverified, and not probed from here:** whether that page opens without signing in. If it does, anyone who has
+  or guesses a job number sees a client's name, phone and address, and can press Accept or Re Assign. The operator
+  can check it in a private browser window.
+- **It says nothing about Uganda.** M6 still holds by design. Its measurement in use remains M4 and the
+  `--after-only` runs.
+
+**What Uganda already has** — measured in the code:
+- **The job page:** `?page=dashboard&tab=scheduling&job=ID` (`tabs/support/scheduling.php:134`), in the same dark
+  design. It has Accept (`scheduling_job_update`), Reschedule, Add comment, the tasks and Complete, all behind the
+  staff sign-in and J6 (`JobAccess::canActOn`).
+- **A message on Accept,** unchanged since before release A: "✅ Job Accepted" to the engineer, and "🔔 Job
+  Accepted" to every active support leader except the engineer (`api_scheduling.php:317-350`).
+
+**What it lacks:**
+1. **Message 1.** M6 switched the old sends off; J4 sends it.
+2. **A link that survives sign-in.** `RetailerAuth::requireLogin()` sends a signed-out visitor to `?page=login`, and
+   the job id is lost. After sign-in the role's dashboard opens (`public.php:1012-1017`).
+3. **The completion link after Accept.** Today's message says *"Open My Jobs tab for details."*
+
+**Approved — the two messages** (a made-up job; Kampala time):
+
+```
+Hi Grace. This is DishNet Africa.
+
+New Job Has Been Assigned to You
+
+Starlink installation
+📅 Date: 06.10.2026 09:00 am
+👤 Client: Test Client (ID:1234)
+📞 Mobile: +256 700 000 000
+📍 Address: Plot 1 Test Road, Kampala
+
+---
+Please click the link below to accept this job:
+
+✅ ACCEPT JOB:
+<link to Job #950 in the staff app>
+
+Once you accept, we will send you the completion link.
+
+For any questions, just reach out here.
+📞 <Uganda support number>
+🌐 dishnetuganda.com
+```
+
+```
+Hi Grace. This is DishNet Africa.
+
+Thank you for accepting the job! ✅
+
+Starlink installation
+📅 Date: 06.10.2026 09:00 am
+👤 Client: Test Client (ID:1234)
+
+✅ JOB COMPLETED:
+<link to Job #950>
+Press Complete there when the work is finished. The same page lets you reschedule or add a comment.
+
+📞 <Uganda support number>
+```
+
+**Approved — the rules around them:**
+- **Message 1** goes to the new assignee on `assigned` and on `reassigned` (§5.2), with the same heading in both
+  cases.
+- **Message 2** replaces the engineer's "✅ Job Accepted" on Uganda. It is sent once, when Accept moves the job into
+  progress. The leaders' "🔔 Job Accepted" is unchanged.
+- **§16.7's messages 2–5** (no longer assigned after a reassignment; a new time; removed; cancelled) keep their
+  bodies and take message 1's greeting and footer.
+- **The sign-off** is *"This is DishNet Africa."*, as in South Sudan and in §5.6's trading name.
+- **The date** is `dd.mm.yyyy hh:mm am/pm` in Kampala time (J5's `dn_tz()`). A job with no time reads *"Not
+  scheduled yet"* (§5.6).
+- **Client, Mobile and Address** appear only when uCRM has them. A job with no customer (M4, the live test) has none.
+- **The link opens the staff job page behind the staff sign-in**, and after signing in the engineer lands on that
+  job. Only the job number is carried, and where it returns is fixed, so the link cannot send anyone elsewhere.
+- **No Re Assign for engineers.** Leaders and admins reassign in uCRM. The new assignee gets message 1 and the
+  previous one D3's notice.
+- **Everything else in §5 stands:** `JobNotifier`, migration 075, exactly one message per change, the support
+  number, `CLASS_STAFF`, T4.1–T4.12.
+
+**Two things decided with it, and reported back to the operator:**
+- **"approved" was taken to cover building now.** §15.6 requirement 6 and §15.8 say release B is built only after
+  the links are verified and M4 is done. The same message proposed building now, while the operator does M5, S1's
+  number and M4. The deploy is unchanged: it waits for §15.8 items 2–6 and a separate approval.
+- **The WA Events badge fix goes into 5.18.52.** It was proposed in the same message; see below.
+
+**The WA Events badge undercounts after midnight — a release A defect, found while testing 5.18.51.**
+- `test_job_status_truth.php` fails two badge assertions between 21:00 and 24:00 UTC, and passes outside that window.
+- **The cause, measured.** `webhook.php` writes each event's `received_at` with `date()` and never applies the
+  tenant's zone, so it writes in PHP's default zone. `includes/navigation.php` computes "today" after `public.php`'s
+  `dn_tz_apply()`, in Kampala time. From 00:00 to 03:00 Kampala time the two dates differ.
+- **The effect.** For those three hours the badge counts none of the day's events, and for the rest of the day it
+  misses the events written in those hours.
+- **Confirmed at 21:27 UTC.** As written, the test fails 2 of 23; with its writer on Kampala time it passes 23 of 23.
+  That was a diagnostic run only, and the test is unchanged.
+- **The fix, in 5.18.52, Uganda only:** the badge reads each event's time in the zone it was written in before
+  comparing it with Kampala's today. South Sudan's badge is unchanged.
+
+**Numbering.** Release B is **5.18.52**; 5.18.51 is the `master.php` lock fix (§16.11). Where §12.1 and §15.5 name
+5.18.51 for release B, that is superseded.
+
+**The live test (§12.3) gains two steps,** because the link and Accept are now part of the design. They follow step 1:
+- **Open the link in message 1** on the phone, signing in if asked. Expect the job page for that job.
+- **Press Accept.** Expect message 2 on your number.
+  - **Accept also tells every active support leader** ("🔔 Job Accepted", unchanged).
+  - §15.6 requirement 7 allows messages only to your number. So this step runs only once a read-only check shows no
+    active support leader, or with those people told first and counted as expected recipients.
