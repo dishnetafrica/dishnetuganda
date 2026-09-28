@@ -60,3 +60,12 @@ none of them.
 | `job-log-reader/out-php84.txt`, `job-log-reader/out-php81.txt` | Its output for jobs 8, 80, 9 and 7 under PHP 8.4.19 and 8.1.34 (php-wasm): identical |
 
 Personal data: none. The sample's names, addresses and number are made up, and neither output prints them.
+
+## PHP's code cache — docs/44 §16.23
+
+| File | What it is |
+|---|---|
+| `opcache/repro.sh`, `opcache/repro-output.txt` | OPcache with the server's settings keeps serving a PHP file whose content changed while its modification second did not; one second later it does not. PHP 8.4.19 |
+| `opcache/check.sh` | The read-only check handed over: each file 5.18.52 changed, its second in the 5.18.51 backup and now |
+| `opcache/fix.sh` | The fix handed over: a new timestamp for the 20 installed files, each first checked against `7ad465e`; content unchanged |
+| `opcache/simulation.txt` | Both run on a simulated install built from the two commits: the check before, the fix, the check after |

@@ -1,0 +1,50 @@
+# simulated install: 5.18.51's files at 04:26:41; 5.18.52's pulled files at 07:38:10, the rest at 04:26:41 (public.php 04:26:42)
+backup  <sim>/root/backup-20260928T074131Z/plugin-installed-5.18.51.tar.gz
+includes/api/api_scheduling.php          was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 SAME SECOND: the web server may still run the 5.18.51 copy
+includes/post/post_auth.php              was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 SAME SECOND: the web server may still run the 5.18.51 copy
+lib/JobMessages.php                      was -                   now 2026-09-28 07:38:10 new in 5.18.52
+lib/JobNotifier.php                      was -                   now 2026-09-28 07:38:10 new in 5.18.52
+lib/JobReturn.php                        was -                   now 2026-09-28 04:26:41 new in 5.18.52
+manifest.json                            was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 same second (not PHP code)
+migrations/075_job_notifications.sql     was -                   now 2026-09-28 04:26:41 new in 5.18.52
+migrations/076_job_notify_email.sql      was -                   now 2026-09-28 07:38:10 new in 5.18.52
+public.php                               was 2026-09-28 04:26:41 now 2026-09-28 04:26:42 new second
+tabs/support/bulk_dispatch.php           was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 SAME SECOND: the web server may still run the 5.18.51 copy
+tabs/support/scheduling.php              was 2026-09-28 04:26:41 now 2026-09-28 07:38:10 new second
+tests/fixtures/fake_smtp_server.php      was 2026-09-28 04:26:41 now 2026-09-28 07:38:10 new second
+tests/fixtures/fake_ucrm_staff_jobs.php  was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 same second (test, not run by the web server)
+tests/fixtures/staff_jobs_sandbox.php    was 2026-09-28 04:26:41 now 2026-09-28 07:38:10 new second
+tests/fixtures/staff_jobs_scenario.php   was 2026-09-28 04:26:41 now 2026-09-28 07:38:10 new second
+tests/test_job_messages.php              was -                   now 2026-09-28 07:38:10 new in 5.18.52
+tests/test_job_notifications_day.php     was -                   now 2026-09-28 07:38:10 new in 5.18.52
+tests/test_job_notifier.php              was -                   now 2026-09-28 07:38:10 new in 5.18.52
+tests/test_job_status_truth.php          was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 same second (test, not run by the web server)
+webhook.php                              was 2026-09-28 04:26:41 now 2026-09-28 04:26:41 SAME SECOND: the web server may still run the 5.18.51 copy
+summary: 4 PHP file(s) the web server runs have the same second as at 5.18.51
+
+# fix.sh
+gave 20 file(s) a new timestamp; their content is unchanged and is exactly 7ad465e's
+
+# check.sh again
+backup  <sim>/root/backup-20260928T074131Z/plugin-installed-5.18.51.tar.gz
+includes/api/api_scheduling.php          was 2026-09-28 04:26:41 now <the fix time> new second
+includes/post/post_auth.php              was 2026-09-28 04:26:41 now <the fix time> new second
+lib/JobMessages.php                      was -                   now <the fix time> new in 5.18.52
+lib/JobNotifier.php                      was -                   now <the fix time> new in 5.18.52
+lib/JobReturn.php                        was -                   now <the fix time> new in 5.18.52
+manifest.json                            was 2026-09-28 04:26:41 now <the fix time> new second
+migrations/075_job_notifications.sql     was -                   now <the fix time> new in 5.18.52
+migrations/076_job_notify_email.sql      was -                   now <the fix time> new in 5.18.52
+public.php                               was 2026-09-28 04:26:41 now <the fix time> new second
+tabs/support/bulk_dispatch.php           was 2026-09-28 04:26:41 now <the fix time> new second
+tabs/support/scheduling.php              was 2026-09-28 04:26:41 now <the fix time> new second
+tests/fixtures/fake_smtp_server.php      was 2026-09-28 04:26:41 now <the fix time> new second
+tests/fixtures/fake_ucrm_staff_jobs.php  was 2026-09-28 04:26:41 now <the fix time> new second
+tests/fixtures/staff_jobs_sandbox.php    was 2026-09-28 04:26:41 now <the fix time> new second
+tests/fixtures/staff_jobs_scenario.php   was 2026-09-28 04:26:41 now <the fix time> new second
+tests/test_job_messages.php              was -                   now <the fix time> new in 5.18.52
+tests/test_job_notifications_day.php     was -                   now <the fix time> new in 5.18.52
+tests/test_job_notifier.php              was -                   now <the fix time> new in 5.18.52
+tests/test_job_status_truth.php          was 2026-09-28 04:26:41 now <the fix time> new second
+webhook.php                              was 2026-09-28 04:26:41 now <the fix time> new second
+summary: 0 PHP file(s) the web server runs have the same second as at 5.18.51

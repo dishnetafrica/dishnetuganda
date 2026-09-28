@@ -2847,3 +2847,69 @@ the test customer and S4. Beside it: when php-fpm started, and its OPcache setti
 `revalidate_freq`, and any in the pool's configuration). The answer decides whether 5.18.52 is running now, whether a
 php-fpm reload is needed (a production action, so its own approval), and what every later deploy script must check:
 the code PHP runs, not only the files on disk.
+
+### 16.23 Job #9 ran on the old code too; PHP's code cache, and the check and fix — 28 September 2026
+
+**The operator's second run** (log file `check-9.log`, printed on the server):
+- **Job #9** was created by the operator in uCRM at 08:26:28 UTC, with the test customer and S4. Its job.add logged
+  the same *"WhatsApp skipped: job notifications are not switched on yet"*: still 5.18.51's `webhook.php`, 45 minutes
+  after the deploy.
+- **php-fpm** has run since 2026-09-15 21:10:47 UTC; the container started at 21:09:39 UTC that day. Its OPcache
+  settings are `validate_timestamps = 1` and `revalidate_freq = 2` (`/usr/local/etc/php/php.ini`, line 21). No pool
+  file sets an OPcache value.
+- So PHP re-checks a file at most 2 seconds after it last did. **A delay cannot explain 45 minutes.**
+
+**The explanation that fits — to be confirmed on the server.** OPcache decides whether a file changed by its
+modification time, **in whole seconds**. It does not compare contents.
+- `deploy-hybrid.sh` copies with `tar`, which keeps each file's modification time from the checkout, and git sets that
+  time when it writes a file.
+- At the 5.18.51 deploy (04:26 UTC) the checkout stood at the branch tip, whose plugin was `fc5c3b7`:
+  - the script checked out `240f2f9`, and git wrote 240f2f9's copies of the files that differ;
+  - `deploy-hybrid.sh` installed those copies, with those times;
+  - the script put the checkout back on the branch, and git wrote fc5c3b7's copies, seconds later.
+- **Five PHP files changed from 240f2f9 to fc5c3b7 and not after:** `webhook.php`, `public.php`,
+  `includes/api/api_scheduling.php`, `includes/post/post_auth.php` and `tabs/support/bulk_dispatch.php`. No later pull
+  rewrote them, so 5.18.52 installed them with the time of that return to the branch.
+- **If that return fell in the same second as the checkout of 240f2f9,** each of the five has the same modification
+  second as the 5.18.51 copy PHP compiled. OPcache then keeps running the old copy until php-fpm restarts or the file's
+  time changes.
+- `scheduling.php`, `JobNotifier.php` and `JobMessages.php` changed again in `7ad465e`. A pull rewrote them later, so
+  they carry a new time: the ＋ New Job form already says *"The engineer gets a WhatsApp message…"*.
+  - The code behind that button is in `api_scheduling.php`, one of the five, and would still answer *"not switched on
+    yet"*.
+
+**Reproduced here,** with PHP 8.4.19's built-in server and the server's two settings
+(`docs/evidence/5.18.52/opcache/repro.sh`):
+
+```
+first request:                               version A
+new content, same second, 3 s later:        version A
+6 s later:                                   version A
+timestamp moved by one second, 3 s later:   version B
+PHP 8.4.19 (cli) (built: Mar 30 2026 19:28:35) (NTS)
+```
+
+**Handed over, not yet run:**
+1. **`check.sh`, read-only.** For each file 5.18.52 changed, it prints the modification second in the deploy's
+   backup of the installed 5.18.51 (`plugin-installed-5.18.51.tar.gz`) and the second now. It marks every PHP file
+   the web server runs whose second is the same, and shows the checkout's moves from `git reflog`.
+2. **`fix.sh`, only if the check marks `webhook.php`.** It gives each of the 20 installed files a new modification
+   time, and first checks each one's content against `7ad465e`; a file that differs is left alone and named. The
+   content is not changed and nothing is restarted. PHP compiles each file again at its next use, within 2 seconds.
+3. **The test.** Change job #9's time in uCRM: that is a job.edit, the first change the notifier sees for job #9.
+   So S4 gets message 1 by WhatsApp and by e-mail, and the job-log check prints the line. A job.edit sends the
+   customer nothing.
+
+**Rehearsed** on a simulated install built from the two commits: 5.18.51's copies at 04:26:41 in the backup, and the
+five files at the same second (`docs/evidence/5.18.52/opcache/simulation.txt`).
+- The check marks the four PHP files with the same second, and not `public.php`, which was given the next second.
+- The fix gives 20 files a new time, with their contents byte-identical before and after. Then the check marks none.
+- A file whose content differs from `7ad465e` is refused and keeps its time.
+
+**For every later deploy — proposed, not built:**
+- `deploy-hybrid.sh` should give each copied file the copy time (`tar -m`, or a `touch` after the copy).
+- Each deploy script should check the code PHP runs, not only the files. One way: an HTTP request whose answer
+  differs between the two versions.
+
+Until the fix runs, none of release B runs on the web server: not uCRM's job events, and not ＋ New Job, Bulk
+Dispatch, Reschedule or Accept.

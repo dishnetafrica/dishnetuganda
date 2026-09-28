@@ -2200,3 +2200,16 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   see it, because every "serves" check reads files, not what PHP runs.
 - **Next, read-only:** job #9's lines (the operator's next test job, 08:26 UTC), php-fpm's start time and its OPcache
   settings. A php-fpm reload, if needed, is its own approval.
+
+## 28 Sep — job #9 ran on 5.18.51's code too; PHP's code cache (docs/44 §16.23)
+
+- **Job #9,** created in uCRM at 08:26 UTC with the test customer and S4, logged 5.18.51's *"not switched on yet"* 45
+  minutes after the deploy. php-fpm has run since 15 Sep. Its OPcache re-checks files every 2 s
+  (`validate_timestamps = 1`, `revalidate_freq = 2`).
+- **The explanation that fits:** OPcache compares a file's modification time in whole seconds. Five PHP files may
+  carry the same second as the 5.18.51 copies, because of how the 5.18.51 deploy's checkout moves wrote them.
+  Reproduced locally; to be confirmed on the server.
+- **Handed over:** `check.sh` (read-only), and `fix.sh` (a new timestamp for the 20 files, content checked against
+  `7ad465e` and unchanged, no restart), only if the check marks `webhook.php`. Then the test: change job #9's time in
+  uCRM. Evidence in `docs/evidence/5.18.52/opcache/`.
+- **Proposed, not built:** copied files get the copy time, and every deploy checks the code PHP runs.

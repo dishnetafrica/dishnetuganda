@@ -1,0 +1,5 @@
+first request:                               version A
+new content, same second, 3 s later:        version A
+6 s later:                                   version A
+timestamp moved by one second, 3 s later:   version B
+PHP 8.4.19 (cli) (built: Mar 30 2026 19:28:35) (NTS)
