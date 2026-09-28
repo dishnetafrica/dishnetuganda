@@ -2168,3 +2168,7 @@ process's own clock. 5.18.52 corrects the test, not the badge.
 **07:26 UTC — the corrected report on the server** (docs/44 §16.18). uCRM delivers every job event to the plugin: job.add
 7, job.edit 1, job.delete 5 since 25 Sep (V2), and a job's detail carries its assignee (V4). No job message was sent. Of
 M4 only V3 is left (the hour of a job made in ＋ New Job). M5 and S1's number are still to do.
+
+**About 07:35 UTC — "approve 5.18.52"** (docs/44 §16.19). The deploy command was handed over on its own; its rollback
+is printed only at the end of the log. M5, S1's number and V3 remain; none blocks the deploy itself. The rehearsal on
+the branch tip read 170/170 again.

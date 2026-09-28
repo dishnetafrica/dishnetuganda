@@ -2673,3 +2673,35 @@ which measures J1 once more.
 2. S1's number;
 3. V3: one job in ＋ New Job, no customer, assigned to S1, at a typed hour; check the hour in uCRM; delete it there;
 4. a separate approval of 5.18.52.
+
+### 16.19 5.18.52 approved — 28 September 2026, about 07:35 UTC
+
+The operator answered **"approve 5.18.52"**. The deploy command was handed over on its own, as
+`scripts/deploy-5.18.52.sh` states it; its rollback is printed only at the end of the deploy's log (§16.9).
+
+**The state at approval, from §16.17 and §16.18:**
+- 5.18.51 is live, and its `--after-only` passed.
+- S1 → 1000 and S4 → 1099 are verified links.
+- **Not done:** M5 (S3 and S5 still hold 4 and 1581), S1's number, and M4's V3.
+
+**None of the three blocks the deploy itself:**
+- **M5:** under M7 a stale id matches nobody, so it cannot misdirect a message. M5 only tidies.
+- **S1's number:** without it the notifier records "no usable number" for S1 and sends the e-mail only. The live test
+  needs it, because its messages go to the operator's own WhatsApp.
+- **V3 (J5, live since 5.18.50):** 5.18.52 does not change how a time reaches uCRM. The live test's first step measures
+  it: the job's hour in uCRM and in message 1.
+
+**Checked again before the handover:**
+- `scripts/deploy-5.18.52.sh` is unchanged since its rehearsal (`e5d3264`), and the branch's plugin commit is still
+  `7ad465e`.
+- The leaders' *"🔔 Job Accepted"* goes only to active `support_leader` accounts with a number
+  (`api_scheduling.php`). The facts of §16.18 list none, so the live test's Accept messages nobody else (§15.6
+  requirement 7).
+- **The two jobs already in uCRM:**
+  - `JobNotifier::decide` sends nothing when a job it has never seen is deleted, so deleting them sends no message,
+    before or after the deploy.
+  - Any change to either one after the deploy sends its technician message 1 (§16.14).
+
+- **The rehearsal again, on the branch tip `a6198c2`: 170/170, 30 weakened copies caught**, identical to runs 1 and 2
+  but for the clone's commit line (`docs/evidence/5.18.52/email-rehearsal-run3-at-approval.log`, committed alone in
+  `8ae3814`, whose message describes this record).

@@ -39,6 +39,7 @@ what §16.16 rests on. Everything here is local and runs against fakes, and noth
 | `email-php81/` | Under PHP 8.1.34 (php-wasm, the server's version): `lint81.txt` (every PHP file of the change), `test_job_messages-php81.txt` (132 of 132), and `drive.php`, which drives the real notifier in-process; its output `out81.json` is byte-identical to `out84.json` under PHP 8.4.19 |
 | `email-rehearsal-run1.log`, `email-rehearsal-run2.log` | `scripts/harness/deploy-5.18.52/rehearse.sh`, twice, on the deploy script of `e5d3264` |
 | `email-rehearsed-deploy.log`, `email-rehearsed-deploy-branch-ahead.log`, `email-rehearsed-after-only.log`, `email-rehearsed-rollback.log` | As the operator's log would show them, from rehearsal run 2, with the sandbox path shortened to `<sandbox>` |
+| `email-rehearsal-run3-at-approval.log` | The same rehearsal once more at the approval (docs/44 §16.19), on the branch tip `a6198c2`: 170/170 |
 
 **Facts to read these runs with.**
 - Run 1 ran 05:32–05:50 UTC, and run 2 05:51–06:08 UTC, beside both deploy rehearsals. Their counts are identical, file
