@@ -15,6 +15,16 @@ $script = $argv[1] ?? $repo . '/scripts/job-walkthrough.sh';
 $only   = array_filter(explode(',', (string)($argv[2] ?? '')));
 require $plugin . '/tests/fixtures/staff_jobs_scenario.php';
 
+// The staff app ends its request at a warning only when PHP's error level includes it (public.php), and --accept-test
+// judges each warning by the configured level. Every PHP the rehearsal starts — the plugin, the fakes, the script's
+// helper — reads one more ini file that sets the usual production level, E_ALL without deprecations, so the verdicts do
+// not depend on this machine's php.ini. The leading ':' keeps PHP's own scan directory (its extensions) as well.
+$iniDir = sys_get_temp_dir() . '/wt-ini-' . getmypid();
+@mkdir($iniDir, 0700, true);
+file_put_contents("$iniDir/zz-wt-level.ini", "error_reporting = E_ALL & ~E_DEPRECATED\n");
+putenv('PHP_INI_SCAN_DIR=:' . $iniDir);
+register_shutdown_function(function () use ($iniDir) { @unlink("$iniDir/zz-wt-level.ini"); @rmdir($iniDir); });
+
 $pass = 0; $fail = 0;
 function ok(bool $c, string $what, string $why = ''): void
 {
@@ -23,8 +33,14 @@ function ok(bool $c, string $what, string $why = ''): void
 }
 function want(string $id): bool { global $only; return $only === [] || in_array($id, $only, true); }
 
-/** A scratch plugin tree: the plugin, with the emitting fake uCRM over the repository's; optionally another webhook.php. */
-function wt_root(string $plugin, ?string $webhook = null): string
+/**
+ * A scratch plugin tree: the plugin, with the emitting fake uCRM over the repository's; optionally another webhook.php,
+ * and optionally, in message 2's text (JobMessages::accepted), which DishNet's Accept builds after its claim and before
+ * it sends — where production's job #10 stopped (docs/44 §16.27) — one of: a PHP deprecation, which the pinned error
+ * level leaves out, then a PHP warning, which it includes ('warning'); an exception ('exception'); or a run past PHP's
+ * time limit, a fatal error ('timeout').
+ */
+function wt_root(string $plugin, ?string $webhook = null, ?string $inject = null): string
 {
     $tmp = sys_get_temp_dir() . '/wt-root-' . getmypid() . '-' . bin2hex(random_bytes(3));
     mkdir($tmp, 0700, true);
@@ -34,6 +50,16 @@ function wt_root(string $plugin, ?string $webhook = null): string
     rename("$fx/fake_ucrm_staff_jobs.php", "$fx/fake_ucrm_staff_jobs_orig.php");
     copy(__DIR__ . '/fake_ucrm_emit.php', "$fx/fake_ucrm_staff_jobs.php");
     if ($webhook !== null) file_put_contents("$tmp/webhook.php", $webhook);
+    if ($inject !== null) {
+        $code = ['warning'   => "        trim(null);\n        trigger_error('rehearsal: an injected warning at https://example.test/hook?token=rehearsal-secret', E_USER_WARNING);\n",
+                 'exception' => "        throw new \\RuntimeException('rehearsal: an injected exception');\n",
+                 'timeout'   => "        set_time_limit(1);\n        for (;;) {}\n"][$inject] ?? null;
+        if ($code === null) throw new \RuntimeException("no such injection: {$inject}");
+        $f = "$tmp/lib/JobMessages.php"; $src = (string)file_get_contents($f);
+        $at = "public static function accepted(array \$f): string\n    {\n";
+        if (substr_count($src, $at) !== 1) throw new \RuntimeException('the injection could not be made: anchor not found once');
+        file_put_contents($f, str_replace($at, $at . $code, $src));
+    }
     register_shutdown_function(function () use ($tmp) { exec('rm -rf ' . escapeshellarg($tmp)); });
     return $tmp;
 }
@@ -112,8 +138,8 @@ function wt_run(string $script, SjSandbox $s, array $args, callable $answer, int
     foreach ($pipes as $fh) @fclose($fh);
     proc_close($p);
     if (getenv('WT_SHOW')) echo "----- what the terminal showed -----\n", $buf, "\n----- end -----\n";
-    $logs = glob($out . '/walkthrough-*.log') ?: [];
-    sort($logs);
+    $logs = array_merge(glob($out . '/walkthrough-*.log') ?: [], glob($out . '/accept-test-*.log') ?: []);
+    usort($logs, function ($a, $b) { return filemtime($a) <=> filemtime($b); });
     return [$rc, $buf, $logs ? (string)file_get_contents(end($logs)) : ''];
 }
 
@@ -411,6 +437,120 @@ if (want('S10')) {
     $st = $s->q('SELECT accepted_by, version FROM job_notify_state WHERE job_id = 901');
     ok(($st[0]['accepted_by'] ?? null) == 1099 && (int)($st[0]['version'] ?? 0) === 1, "and the notifier's record is as it was");
     ok(!is_dir($s->sb . '/out/walkthrough.lock'), '--facts takes no lock');
+    $s->stop();
+}
+
+if (want('S11')) {
+    echo "\nS11 --accept-test: a test job, DishNet's Accept run by the script, message 2, then the job deleted\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt11');
+    $job = 0;
+    [$rc, $t, $log] = wt_run($script, $s, ['--accept-test', '--client', '15', '--tech', '1099'], function (string $q, string $buf) use (&$job): string {
+        if (preg_match('/created: job #(\d+)/', $buf, $m)) $job = (int)$m[1];
+        return '';
+    });
+    ok($rc === 0 && strpos($t, '== Accept test — ') !== false, 'the Accept test runs and ends with exit 0', "exit $rc");
+    ok(preg_match('/^  ✓ no PHP warning that ends the staff app\'s request, and message 2 went, and the e-mail was handed to the mail server$/m', $t) === 1,
+        'no PHP warning that ends the staff app\'s request, and message 2 went by WhatsApp and e-mail');
+    ok(strpos($t, "PHP warning, ends the staff app's request") === false && strpos($t, 'PHP error  ') === false,
+        'no warning that ends the request, and no error, is printed');
+    ok(preg_match('/^  PHP error level \(the command line\'s\)  E_ALL without E_DEPRECATED \(\d+\); set in \S+\/zz-wt-level\.ini$/m', $t) === 1
+        && strpos($t, '  PHP-FPM override  ') !== false && preg_match('/^  PHP-FPM workers  none found; this test runs as uid \d+$/m', $t) === 1,
+        'it prints the error level it judged by (the pinned one), any PHP-FPM override, and PHP-FPM\'s user beside its own');
+    ok(preg_match('/^  the Accept took  \d+\.\d s \(php\.ini\'s time limit: [^)]+\)$/m', $t) === 1, 'it prints how long the Accept took, beside php.ini\'s time limit');
+    ok(preg_match('/^  WhatsApp for job messages  the staff app\'s settings: evolution; the webhook\'s: evolution$/m', $t) === 1
+        && strpos($t, 'no WhatsApp transport for job messages') === false,
+        'it reads the same WhatsApp transport from the staff app\'s settings as from the webhook\'s, and says nothing more');
+    $tx = array_map(function ($x) { return (string)$x['text']; }, $jobTexts($s));
+    $want = ['New Job Has Been Assigned to You', 'Thank you for accepting the job!', 'has been cancelled'];
+    $got = []; foreach ($tx as $x) foreach ($want as $w) if (strpos($x, $w) !== false) { $got[] = $w; break; }
+    ok($got === $want, 'the technician got message 1, message 2 and the cancellation, in order', json_encode($got));
+    $patches = array_values(array_filter($s->crmReqs('PATCH', '#^/scheduling/jobs/\d+$#'), function ($r) use ($job) { return $r['path'] === "/scheduling/jobs/{$job}"; }));
+    ok(count($patches) === 1 && ($patches[0]['body'] ?? null) === ['status' => 1], 'uCRM saw one change to the job: the Accept (status 1)', json_encode($patches));
+    ok(!isset($s->crmDump()['jobs'][(string)$job]) && strpos($t, 'The test job #') === false, 'the test job was deleted');
+    ok($log !== '' && strpos($log, '== Accept test — ') !== false && wt_leaks($t . $log) === [], 'its log file holds the run, masked', json_encode(wt_leaks($t . $log)));
+    $s->stop();
+}
+
+if (want('S11b')) {
+    echo "\nS11b one PHP warning after the claim: the staff app's Accept leaves job #10's trail, and --accept-test names the warning\n";
+    $s = wt_sandbox(wt_root($plugin, null, 'warning'), 'wt11b');
+    $h = ['Content-Type: application/json'];
+    $d = (new DateTime('tomorrow', new DateTimeZone('Africa/Kampala')))->format('Y-m-d');
+    $j = $s->http('POST', "{$s->crm}/scheduling/jobs", ['title' => 'Fixture job', 'date' => $d . 'T10:00:00+0300', 'assignedUserId' => 1099,
+        'clientId' => 15, 'status' => 0, 'duration' => 60], $h);
+    $id = (int)($j[2]['id'] ?? 0);
+    sleep(4);
+    $r = $s->api('tech', 'POST', 'scheduling_job_update', ['job_id' => $id, 'status' => 'open', 'notify_accept' => 1]);
+    ok($r[0] === 500 && strpos((string)$r[1], 'rehearsal: an injected warning') !== false,
+        "the staff app's Accept answers 500 with the warning, which the job page shows as \"Failed: …\"", $r[0] . ' ' . substr((string)$r[1], 0, 120));
+    $st = $s->q('SELECT accepted_by FROM job_notify_state WHERE job_id = ?', [$id]);
+    $acc = $s->q("SELECT id FROM job_notify_events WHERE job_id = ? AND event = 'accepted'", [$id]);
+    $ml = $s->q("SELECT id FROM notification_audit_log WHERE event = 'ops_job_accepted_self'");
+    ok((int)($st[0]['accepted_by'] ?? 0) === 1099 && $acc === [] && $ml === [],
+        "job #10's trail: the claim is written, and neither the history nor the Message Log has message 2", json_encode([$st, $acc, $ml]));
+    [$frc, $ft] = wt_facts($script, $s, (string)$id);
+    ok($frc === 0 && preg_match("/^  DishNet's Accept claimed job #{$id} for uCRM user #1099 but recorded no message 2: a fault/m", $ft) === 1,
+        '--facts reads it exactly as it read job #10');
+    $job = 0;
+    [$rc, $t, $log] = wt_run($script, $s, ['--accept-test', '--client', '15', '--tech', '1099', '--no-customer-email'], function (string $q, string $buf) use (&$job): string {
+        if (preg_match('/created: job #(\d+)/', $buf, $m)) $job = (int)$m[1];
+        return '';
+    });
+    ok($rc === 0 && preg_match("/^  PHP warning, ends the staff app's request  E_USER_WARNING rehearsal: an injected warning at https:\\/\\/example\\.test\\/hook\\?<query> — JobMessages\\.php:\\d+$/m", $t) === 1,
+        '--accept-test prints the warning, that it ends the request, its level, file and line');
+    ok(preg_match("/^  ✗ DishNet's Accept raised 1 PHP warning\\(s\\) that end the staff app's request\\. The first: E_USER_WARNING rehearsal: an injected warning at https:\\/\\/example\\.test\\/hook\\?<query> — JobMessages\\.php:\\d+\\. Here, where warnings do not stop it, message 2 went\\.$/m", $t) === 1,
+        'and its verdict names it as what ends the staff app\'s Accept, while message 2 still went here');
+    ok($log !== '' && strpos($t . $log, 'rehearsal-secret') === false,
+        'the web address the warning quotes is printed without its query string, on screen and in the log');
+    ok(preg_match('/^  PHP warning, noted only  E_DEPRECATED trim\\(\\): Passing null to parameter #1 \\(\\$string\\) of type string is deprecated — JobMessages\\.php:\\d+$/m', $t) === 1
+        && preg_match('/^  \\(\\d+ PHP warning\\(s\\) above marked "noted only": the error level leaves them out, so they do not stop the staff app\\.\\)$/m', $t) === 1,
+        'the deprecation before it, which the error level leaves out, is marked "noted only" and not counted');
+    ok(count(array_filter($jobTexts($s), function ($x) { return strpos((string)$x['text'], 'Thank you for accepting the job!') !== false; })) === 1,
+        'message 2 went once: from the test, not from the failed Accept');
+    $s->stop();
+}
+
+if (want('S11c')) {
+    echo "\nS11c settings split: the staff app's copy holds only uCRM's connection, the rest is in config.json, which the webhook also reads\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt11c');
+    $full = $s->cfg;
+    $keep = array_intersect_key($full, array_flip(['data_dir', 'dry_run_mode', 'crm_base_url', 'crm_auth_token']));
+    $s->store()->save('kyc_config.json', $keep);
+    file_put_contents($s->data . '/kyc_config.json', json_encode($keep));
+    @mkdir($s->plug . '/data', 0700, true);
+    file_put_contents($s->plug . '/data/config.json', json_encode($full));
+    [$rc, $t] = wt_run($script, $s, ['--accept-test', '--client', '15', '--tech', '1099', '--no-customer-email'], function (string $q, string $buf): string { return ''; });
+    ok($rc === 0 && preg_match('/^  WhatsApp for job messages  the staff app\'s settings: none; the webhook\'s: evolution$/m', $t) === 1,
+        'it reads no WhatsApp transport from the staff app\'s settings, and Evolution from the webhook\'s');
+    ok(preg_match('/^  ✗ the staff app\'s settings have no WhatsApp transport for job messages, while the webhook\'s have one: in the staff app DishNet\'s Accept sends message 2 by e-mail only, and writes no Message Log row$/m', $t) === 1,
+        'and says what that does to the staff app\'s Accept');
+    ok(preg_match('/^  history  accepted accepted accept failed email=sent \(staff account #\d+ \(no WhatsApp transport took it\)\)$/m', $t) === 1
+        && preg_match('/^  ✗ no PHP warning that ends the staff app\'s request, but message 2 did not go by WhatsApp \(the e-mail was handed to the mail server\); see the history above$/m', $t) === 1,
+        'the history and the verdict: no WhatsApp for message 2, the e-mail went');
+    $tx = array_map(function ($x) { return (string)$x['text']; }, $jobTexts($s));
+    ok(count(array_filter($tx, function ($x) { return strpos($x, 'New Job Has Been Assigned to You') !== false; })) === 1
+        && count(array_filter($tx, function ($x) { return strpos($x, 'Thank you for accepting the job!') !== false; })) === 0,
+        'by WhatsApp the technician got message 1, from the webhook, and not message 2', json_encode(array_map(function ($x) { return substr($x, 0, 40); }, $tx)));
+    $s->stop();
+}
+
+foreach (['S11d' => ['exception', 'an exception', "RuntimeException: rehearsal: an injected exception — JobMessages\\.php:\\d+"],
+          'S11e' => ['timeout', 'a run past PHP\'s time limit, a fatal error', "fatal: Maximum execution time of 1 second exceeded — JobMessages\\.php:\\d+"]] as $sc => [$kind, $what, $exc]) {
+    if (!want($sc)) continue;
+    echo "\n{$sc} {$what} after the claim: --accept-test reports it, and the job still goes\n";
+    $s = wt_sandbox(wt_root($plugin, null, $kind), 'wt' . strtolower(substr($sc, 1)));
+    $job = 0;
+    [$rc, $t, $log] = wt_run($script, $s, ['--accept-test', '--client', '15', '--tech', '1099', '--no-customer-email'], function (string $q, string $buf) use (&$job): string {
+        if (preg_match('/created: job #(\d+)/', $buf, $m)) $job = (int)$m[1];
+        return '';
+    });
+    ok($rc === 0 && preg_match("/^  PHP error  {$exc}$/m", $t) === 1, 'it prints the error, with its file and line');
+    ok(preg_match("/^  ✗ DishNet's Accept stopped with a PHP error: {$exc}$/m", $t) === 1, 'its verdict says the Accept stopped with that error');
+    $st = $s->q('SELECT accepted_by FROM job_notify_state WHERE job_id = ?', [$job]);
+    $acc = $s->q("SELECT id FROM job_notify_events WHERE job_id = ? AND event = 'accepted'", [$job]);
+    $ml = $s->q("SELECT id FROM notification_audit_log WHERE event = 'ops_job_accepted_self'");
+    ok((int)($st[0]['accepted_by'] ?? 0) === 1099 && $acc === [] && $ml === [], "the trail is job #10's: the claim, and no message 2 recorded", json_encode([$st, $acc, $ml]));
+    ok(!isset($s->crmDump()['jobs'][(string)$job]) && $log !== '' && wt_leaks($t . $log) === [], 'the test job was still deleted, and the log is masked');
     $s->stop();
 }
 

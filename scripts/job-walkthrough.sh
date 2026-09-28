@@ -29,6 +29,12 @@
 #   What the plugin recorded for job N: the notifier's record (with DishNet's Accept claim), the job's history, uCRM's
 #   notices about it and what the plugin did with each, the Message Log around them, and uCRM's job now. It changes
 #   nothing and sends nothing, and writes its own log file under /root/dnb-5.18.52/.
+#
+# Accept test:  bash scripts/job-walkthrough.sh --accept-test
+#   Creates one test job (message 1 goes, as in step 1), then runs DishNet's Accept code itself: the code the staff
+#   app's Accept button runs, with the settings the staff app reads, every PHP warning written down with its file and
+#   line instead of ending the request. If the code works, message 2 goes to the technician. Then it offers to delete
+#   the job. It exists because the staff app ends a request at its first PHP warning (docs/44 §16.27).
 set -u
 
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
@@ -43,6 +49,7 @@ while [ $# -gt 0 ]; do
       case "$1" in --client) CLIENT="$2" ;; --tech) TECH="$2" ;; --facts) MODE=facts; FACTS="$2" ;; esac
       shift 2 ;;
     --no-customer-email) TITLE="TEST job (walk-through)"; shift ;;
+    --accept-test) MODE=accept; shift ;;
     *) echo "unknown option: $1"; exit 2 ;;
   esac
 done
@@ -77,6 +84,10 @@ function wt_mask(string $s): string {
     return (string)preg_replace(['/[^\s<>()"]+@[^\s<>()"]+/', '/\+\d[\d ()-]{7,}\d/', '/\b\d{9,}\b/', '/(notification sent to|No phone found for) .*/'],
                                 ['<e-mail>', '<number>', '<number>', '$1 <name>'], $s);
 }
+/** A PHP warning or error may quote a web address; its query string may carry a token, so it is never printed. */
+function wt_noquery(string $s): string {
+    return (string)preg_replace('#(https?://[^\s?"\'<>()]*)\?[^\s"\'<>()]*#', '$1?<query>', $s);
+}
 function wt_log(string $dataDir): array {
     $l = json_decode((string)@file_get_contents($dataDir . '/webhook_log.json'), true);
     return is_array($l) ? $l : [];
@@ -87,6 +98,20 @@ function wt_initials(array $c): string {
     $i = array_map(function ($w) { return (function_exists('mb_substr') ? mb_strtoupper(mb_substr($w, 0, 1)) : strtoupper(substr($w, 0, 1))) . '.'; },
                    preg_split('/\s+/', $n, -1, PREG_SPLIT_NO_EMPTY));
     return $i ? implode(' ', $i) : '(no name)';
+}
+function wt_errname(int $no): string {
+    $n = [E_WARNING => 'E_WARNING', E_NOTICE => 'E_NOTICE', E_DEPRECATED => 'E_DEPRECATED', E_USER_WARNING => 'E_USER_WARNING',
+          E_USER_NOTICE => 'E_USER_NOTICE', E_USER_DEPRECATED => 'E_USER_DEPRECATED'];
+    return $n[$no] ?? ('E_' . $no);
+}
+/** An error level in words: E_ALL, or E_ALL without the named levels it leaves out. */
+function wt_level(int $lv): string {
+    $out = [];
+    foreach ([E_DEPRECATED => 'E_DEPRECATED', E_USER_DEPRECATED => 'E_USER_DEPRECATED', E_NOTICE => 'E_NOTICE',
+              E_USER_NOTICE => 'E_USER_NOTICE', E_WARNING => 'E_WARNING', E_USER_WARNING => 'E_USER_WARNING'] as $bit => $name) {
+        if (!($lv & $bit)) $out[] = $name;
+    }
+    return $out === [] ? "E_ALL ({$lv})" : 'E_ALL without ' . implode(', ', $out) . " ({$lv})";
 }
 function wt_status($s): string {
     return ['0' => 'Open', '1' => 'In progress', '2' => 'Closed'][(string)$s] ?? ($s === null ? '(none)' : (string)$s);
@@ -234,6 +259,98 @@ case 'report':
         $e = $crm->getLastError();
         echo (int)($e['http_code'] ?? 0) === 404 ? "UCRM the job is gone (404)\n" : "UCRM did not answer\n";
     }
+    break;
+
+case 'accept-replay':
+    // Test only (docs/44 §16.27): DishNet's Accept as the staff app runs it — scheduling_job_update with notify_accept
+    // (includes/api/api_scheduling.php) — on this run's own test job, with the settings the staff app reads (the store
+    // copy of kyc_config.json, public.php), and every PHP warning written down instead of ending the request.
+    [$job, $run] = [(int)$a[0], (string)$a[1]];
+    [$j, $mine] = wt_mine($crm, $job, $run);
+    if ($j === null) { echo "FAIL uCRM did not answer for job #{$job}\n"; break; }
+    if (!$mine) { echo "REFUSED job #{$job} was not created by this walk-through run; nothing was changed\n"; break; }
+    if ((string)($j['status'] ?? '') !== '0') { echo "FAIL job #{$job} is not Open, so Accept has nothing to do\n"; break; }
+    foreach (['NotificationService', 'JobNotifier'] as $c) require_once "$plug/lib/$c.php";
+    $apiConfig = (array)($store->load('kyc_config.json') ?? []);
+    // The staff app ends a request at a warning only when its PHP error level includes that warning's level
+    // (public.php's API error handler). This PHP's configured level; a PHP-FPM pool may set its own.
+    $level = (int)(get_cfg_var('error_reporting') !== false && get_cfg_var('error_reporting') !== '' ? get_cfg_var('error_reporting') : E_ALL);
+    // Which ini file sets it: the last one read that has an error_reporting line (PHP reads php.ini, then its scan
+    // directory in order, and the last value wins).
+    $setIn = "no ini file sets it: PHP's default";
+    foreach (array_filter(array_merge([(string)php_ini_loaded_file()], array_map('trim', explode(',', (string)php_ini_scanned_files())))) as $f) {
+        if (preg_match('/^\s*error_reporting\s*=/mi', (string)@file_get_contents($f))) $setIn = 'set in ' . $f;
+    }
+    echo 'LEVEL ', wt_level($level), "; {$setIn}\n";
+    $fpm = [];
+    foreach (array_merge(glob('/usr/local/etc/php-fpm.conf') ?: [], glob('/usr/local/etc/php-fpm.d/*.conf') ?: [], glob('/etc/php*/php-fpm.d/*.conf') ?: [],
+                         glob('/etc/php/*/fpm/pool.d/*.conf') ?: []) as $f) {
+        if (preg_match_all('/^\s*php(?:_admin)?_value\[error_reporting\]\s*=\s*(.+)$/m', (string)@file_get_contents($f), $mm)) {
+            foreach ($mm[1] as $v) $fpm[] = basename($f) . ': ' . trim($v);
+        }
+    }
+    echo 'FPMLEVEL ', $fpm === [] ? 'none: no PHP-FPM pool file sets error_reporting' : implode('; ', $fpm), "\n";
+    // The staff app runs as PHP-FPM's worker user, this test as 1000:1000: a warning about a file only one of them may
+    // write would show in one place alone. Read-only, from /proc.
+    $fpmUid = [];
+    foreach (glob('/proc/[0-9]*') ?: [] as $p) {
+        if (strpos((string)@file_get_contents("$p/cmdline"), 'php-fpm: pool') !== 0) continue;
+        if (preg_match('/^Uid:\s+(\d+)/m', (string)@file_get_contents("$p/status"), $mm)) $fpmUid[(int)$mm[1]] = ($fpmUid[(int)$mm[1]] ?? 0) + 1;
+    }
+    $me = preg_match('/^Uid:\s+(\d+)/m', (string)@file_get_contents('/proc/self/status'), $mm) ? $mm[1] : '?';
+    $w = [];
+    foreach ($fpmUid as $u => $cnt) $w[] = "uid {$u} ({$cnt} worker" . ($cnt === 1 ? '' : 's') . ')';
+    echo 'FPMUSER ', $w === [] ? 'none found' : implode(', ', $w), "; this test runs as uid {$me}\n";
+    $exc = null; $r = null;
+    // A fatal error (not an exception) ends this process as it ends the staff app's request. PHP's own message would
+    // bypass the masking, so it is switched off and the fatal reported from here, masked.
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '0');
+    register_shutdown_function(function () {
+        $e = error_get_last();
+        if (is_array($e) && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            echo 'EXC fatal: ', wt_mask(wt_noquery((string)$e['message'])), ' — ', basename((string)$e['file']), ':', $e['line'], "\n";
+        }
+    });
+    // Each warning is printed as it happens, so a fatal error after it cannot lose it.
+    error_reporting(E_ALL);
+    set_error_handler(function ($no, $str, $file, $line) use ($level) {
+        echo 'WARN ', ($level & (int)$no) ? 'stops' : 'noted', ' ', wt_errname((int)$no), ' ', wt_mask(wt_noquery((string)$str)), ' — ',
+             basename((string)$file), ':', $line, "\n";
+        return true;
+    });
+    $t0 = microtime(true);
+    try {
+        $after = $crm->patch("scheduling/jobs/{$job}", ['status' => 1]);
+        if ($after === null) {
+            echo 'FAIL uCRM refused the Accept: ', wt_mask((string)json_encode($crm->getLastError())), "\n";
+        } else {
+            $n = new JobNotifier($crm, $store, new NotificationService($store, $apiConfig), $apiConfig, $dataDir);
+            $r = $n->accepted($job, $j, is_array($after) ? $after : null);
+        }
+    } catch (\Throwable $e) {
+        $exc = $e;
+    }
+    restore_error_handler();
+    // How long the Accept took, beside the time limit php.ini gives PHP-FPM (the command line has none): a request that
+    // runs past it ends as a fatal error.
+    $lim = get_cfg_var('max_execution_time');
+    echo 'TOOK ', number_format(microtime(true) - $t0, 1), " s (php.ini's time limit: ",
+         $lim === false || $lim === '' ? 'not set' : ((int)$lim === 0 ? 'none' : (int)$lim . ' s'), ")\n";
+    // Read-only: the WhatsApp transport a job message takes with the staff app's settings, and with the webhook's (the
+    // store copy with config.json and the vault, as webhook.php reads them). Nothing is sent.
+    set_error_handler(function () { return true; });
+    try {
+        $tr = function (array $c) use ($store): string { $t = (new NotificationService($store, $c))->phoneTransport('support'); return $t !== '' ? $t : 'none'; };
+        [$tApi, $tHook] = [$tr($apiConfig), $tr($config)];
+        echo "TRANSPORT the staff app's settings: {$tApi}; the webhook's: {$tHook}\n";
+        if ($tApi === 'none' && $tHook !== 'none') echo "TRANSPORT-SPLIT\n";
+    } catch (\Throwable $e) {
+        echo "TRANSPORT unreadable\n";
+    }
+    restore_error_handler();
+    if ($exc !== null) echo 'EXC ', get_class($exc), ': ', wt_mask(wt_noquery($exc->getMessage())), ' — ', basename($exc->getFile()), ':', $exc->getLine(), "\n";
+    if (is_array($r)) echo 'RESULT ', (string)($r['outcome'] ?? '?'), ' ', wt_mask((string)($r['detail'] ?? '')), "\n";
     break;
 
 case 'facts':
@@ -433,6 +550,66 @@ show_facts() {
   printf '%s\n' "$f" | sed -n 's/^ACCEPT [A-Z-]* /  /p'
   printf '%s\n' "$f" | grep -v '^\(STATE\|HIST\|LINE\|MLOG\|UCRM\|ACCEPT\) ' | sed '/^$/d; s/^/  (helper) /'
 }
+# The Accept test (--accept-test): a test job, DishNet's Accept code run here with every PHP warning written down, then
+# the offer to delete the job.
+accept_test() {
+  local out rep nw nn ne first v
+  hr "The Accept test: DishNet's Accept code, run here the way the staff app runs it"
+  say "  1. A test job for uCRM user #$TECH, tomorrow 10:00 (Kampala). The technician gets message 1, as in the walk-through."
+  say "  2. DishNet's Accept code, run by this script: the code the staff app's ✔ Accept Job button runs, with the"
+  say "     settings the staff app reads. Every PHP warning is written down with its file and line. In the staff app"
+  say "     the first one ends the request. If the code works, message 2 goes by WhatsApp and e-mail."
+  say "  3. Then it asks whether to delete the test job (\"cancelled\" goes to the technician)."
+  if ! ask "Create the test job and run the Accept test?"; then RESULT+=("accept test: skipped"); return; fi
+  remark; NAL0="$NAL"; EV0="$EV"
+  out="$(h create "$CLIENT" "$TECH" "$RUN" "$TITLE" tomorrow 10:00)"
+  case "$out" in
+    JOB\ *) JOB="$(printf '%s' "$out" | awk '{print $2}')"; say "  created: job #$JOB, $(printf '%s' "$out" | cut -d' ' -f3-)" ;;
+    *) say "  ✗ uCRM did not create the job: $out"; RESULT+=("accept test: ✗ not created"); return ;;
+  esac
+  observe add assigned assigned "create"; [ $? = 2 ] && stale_stop
+
+  hr "DishNet's Accept, run by this script"
+  remark; out="$(h accept-replay "$JOB" "$RUN")"
+  printf '%s\n' "$out" | sed -n 's/^LEVEL /  PHP error level (the command line'"'"'s)  /p; s/^FPMLEVEL /  PHP-FPM override  /p;
+    s/^FPMUSER /  PHP-FPM workers  /p; s/^TRANSPORT /  WhatsApp for job messages  /p; s/^TOOK /  the Accept took  /p'
+  printf '%s\n' "$out" | sed -n 's/^WARN stops /  PHP warning, ends the staff app'"'"'s request  /p; s/^WARN noted /  PHP warning, noted only  /p;
+    s/^EXC /  PHP error  /p; s/^RESULT /  notifier  /p; s/^FAIL /  ✗ /p; s/^REFUSED /  ✗ /p'
+  rep="$(h report "$JOB" "$NAL0" "$EV0")"
+  printf '%s\n' "$rep" | sed -n 's/^EVENT /  history  /p; s/^MLOG /  Message Log  /p; s/^UCRM /  uCRM now  /p'
+  nw="$(printf '%s\n' "$out" | grep -c '^WARN stops ')"; nn="$(printf '%s\n' "$out" | grep -c '^WARN noted ')"
+  ne="$(printf '%s\n' "$out" | grep -c '^EXC ')"
+  first="$(printf '%s\n' "$out" | grep -m1 -E '^(WARN stops|EXC) ' | sed 's/^WARN stops //; s/^EXC //')"
+  if printf '%s\n' "$out" | grep -qE '^(FAIL|REFUSED) '; then
+    v="✗ the Accept could not be run: $(printf '%s\n' "$out" | grep -m1 -E '^(FAIL|REFUSED) ' | cut -d' ' -f2-)"
+  elif [ "$nw" -gt 0 ]; then
+    v="✗ DishNet's Accept raised $nw PHP warning(s) that end the staff app's request$([ "$ne" -gt 0 ] && printf ', and an error')."
+    v="$v The first: $first"
+    printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* sent ' && v="$v. Here, where warnings do not stop it, message 2 went."
+  elif [ "$ne" -gt 0 ]; then
+    v="✗ DishNet's Accept stopped with a PHP error: $(printf '%s\n' "$out" | grep -m1 '^EXC ' | sed 's/^EXC //')"
+  elif printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* sent '; then
+    v="✓ no PHP warning that ends the staff app's request, and message 2 went"
+    printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* sent email=sent' && v="$v, and the e-mail was handed to the mail server"
+  else
+    v="✗ no PHP warning that ends the staff app's request, but message 2 did not go by WhatsApp"
+    printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* [a-z_]* email=sent' && v="$v (the e-mail was handed to the mail server)"
+    v="$v; see the history above"
+  fi
+  [ "$nn" -gt 0 ] && say "  ($nn PHP warning(s) above marked \"noted only\": the error level leaves them out, so they do not stop the staff app.)"
+  say "  $v"; RESULT+=("accept test: $v")
+  if printf '%s\n' "$out" | grep -qx 'TRANSPORT-SPLIT'; then
+    v="✗ the staff app's settings have no WhatsApp transport for job messages, while the webhook's have one: in the staff app DishNet's Accept sends message 2 by e-mail only, and writes no Message Log row"
+    say "  $v"; RESULT+=("accept test: $v")
+  fi
+
+  hr "Delete the test job"
+  if ask "Delete the test job #$JOB now?"; then
+    remark; out="$(h delete "$JOB" "$RUN")"
+    if [ "$out" = OK ]; then DELETED=1; observe delete cancelled cancelled "delete"; [ $? = 2 ] && stale_stop
+    else say "  ✗ $out"; RESULT+=("delete: ✗ $out"); fi
+  else RESULT+=("delete: skipped"); fi
+}
 
 if [ "$MODE" = facts ]; then
   LOG="$OUT/job-facts-$FACTS-$TS.log"
@@ -446,13 +623,13 @@ if [ "$MODE" = facts ]; then
   exit 0
 fi
 
-LOG="$OUT/walkthrough-$TS.log"
+if [ "$MODE" = accept ]; then LOG="$OUT/accept-test-$TS.log"; else LOG="$OUT/walkthrough-$TS.log"; fi
 LOCK="$OUT/walkthrough.lock"
 mkdir "$LOCK" 2>/dev/null || { echo "another walk-through is running ($LOCK); stop it, or remove that directory if none is"; exit 1; }
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 exec > >(tee -a "$LOG") 2>&1
 
-say "== job walk-through — $TS — run $RUN =="
+if [ "$MODE" = accept ]; then say "== Accept test — $TS — run $RUN =="; else say "== job walk-through — $TS — run $RUN =="; fi
 say "  A test job for uCRM client #$CLIENT, assigned to uCRM user #$TECH, titled \"$TITLE\"."
 say "  It sends real WhatsApp messages and e-mails to the technician, and in step 1 an e-mail to the customer"
 [ "$TITLE" = "TEST job (walk-through)" ] && say "  (not this time: the title is not an installation, so the customer gets none)."
@@ -463,6 +640,7 @@ printf '%s\n' "$PF" | grep -v '^GO$\|^NO-GO$' | sed 's/^/  /'
 if ! printf '%s\n' "$PF" | grep -qx 'GO'; then
   say ""; say "  NO-GO: fix what the NO lines say first. Nothing was created."; RESULT+=("before: NO-GO, nothing created"); finish; exit 1
 fi
+if [ "$MODE" = accept ]; then accept_test; finish; exit 0; fi
 
 hr "Step 1 of 6: create the test job"
 say "  Expected: uCRM tells the plugin (job.add). The technician gets message 1, \"New Job Has Been Assigned to You\""

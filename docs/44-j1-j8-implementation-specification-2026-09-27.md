@@ -3109,3 +3109,169 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-
 ```
 
 Then `tail -n +1` the log file it names. Its *"DishNet's Accept"* line answers step 3.
+
+### 16.27 Job #10's Accept stopped after its claim; an Accept test that can say why — 28 September 2026
+
+**The operator's `--facts 10`** (log file `job-facts-10-20260928T114857Z.log`, printed on the server). The plugin's
+log clock is Kampala (UTC+3).
+- **The notifier's record:** job #10 assigned to uCRM user #1099, time Tue 29 Sep 14:00, In progress, deleted in uCRM.
+  **DishNet's Accept claim: uCRM user #1099.** Last written at 10:29:30 UTC, by the deletion.
+- **History:** assigned, rescheduled, cancelled. **No *accepted* row.**
+- **uCRM's notices:**
+  - job.add at 13:26:09;
+  - job.edit at 13:26:32;
+  - **job.edit at 13:27:00**, *"no new assignment, time or cancellation: nothing to send"*;
+  - job.edit at 13:28:48;
+  - job.delete at 13:29:30.
+- **Message Log:** job_assigned, job_rescheduled, job_cancelled. **No `ops_job_accepted_self`.**
+- **uCRM:** the job is gone (404).
+- **The verdict:** *"DishNet's Accept claimed job #10 for uCRM user #1099 but recorded no message 2: a fault in the
+  Accept path."*
+
+**What it establishes.** DishNet's Accept ran on job #10.
+- It set the job In progress in uCRM. The notice at 13:27:00, a change with nothing to send, fits that (inferred from
+  its time and content).
+- It then wrote its claim.
+- After the claim it wrote neither of the two records that follow:
+  - the Message Log row, which `sendVia()` writes once the WhatsApp transport has answered;
+  - the history row, which comes after the WhatsApp and the e-mail.
+
+After the claim, `JobNotifier::accepted()` runs these steps in order:
+1. it reads the customer from uCRM;
+2. it builds the message's fields;
+3. `deliver()` builds message 2's text and looks up the technician's number;
+4. `sendVia()` sends the WhatsApp, then writes its Message Log row;
+5. the e-mail goes;
+6. the history row is written.
+
+**What can leave that trail — from the code:**
+- **The staff app's API ends a request at any PHP warning.** In public.php (the `page=api` branch, line 891), an error
+  handler answers 500 with `{"status":"error","message":"PHP [n]: …"}` and exits, for every error whose level is in
+  `error_reporting()`. public.php does not set that level; it is PHP-FPM's, from php.ini or a pool file.
+- **The webhook only logs it.** webhook.php turns `display_errors` off and `log_errors` on, and installs no such
+  handler (lines 12–14). A warning in code the two share is logged when messages 1, *new time* and *cancelled* go. It is
+  fatal only in the staff app's Accept.
+- **Warnings PHP 8 raises for ordinary code:**
+  - reading an array key that is not there raises `E_WARNING`, which every usual level includes;
+  - passing null to a string parameter of a built-in function raises `E_DEPRECATED` (PHP 8.1 on). It ends the request
+    only where the level includes `E_DEPRECATED`, as PHP 8's default does when php.ini sets no level.
+- **The two paths read different settings:**
+  - the staff app reads only the store copy of `kyc_config.json` (public.php:494);
+  - the webhook adds config.json, the settings file and the vault (`PluginConfig::load`, webhook.php:118).
+
+  `NotificationService` takes its WhatsApp transport from those settings: Evolution (`evo_api_url`, `evo_api_key`,
+  `evo_instance_support`) or WASender. With neither, `sendVia()` returns without sending and without a Message Log
+  row.
+- **Both records swallow database errors.** `writeLog()` and `event()` catch every exception and carry on. A database
+  locked beyond its 5-second wait would lose both rows silently, after message 2 went.
+
+**Five explanations, told apart by what reached the technician** (message 2 begins *"Thank you for accepting the
+job!"*):
+
+| What reached S4 around 13:27 (Kampala) | What the job page showed | Explanation |
+|---|---|---|
+| nothing | *"Failed: PHP [n]: …"* | **A:** a PHP warning after the claim, before the WhatsApp was sent |
+| the WhatsApp only | *"Failed: PHP [n]: …"* | **A′:** a PHP warning after the WhatsApp was sent, before its Message Log row |
+| the e-mail only, or nothing | *"Failed: PHP [n]: …"* | **B:** no WhatsApp transport in the staff app's settings (no send, no Message Log row), then a PHP warning in or after the e-mail |
+| the WhatsApp and the e-mail | *accepted* | **C:** the database locked at both writes |
+| depends on where it stopped | *"Failed: Fatal: Maximum execution time …"* | **D:** the request ran past PHP-FPM's time limit, for instance while waiting on WhatsApp or the mail server |
+
+**Against B, measured earlier, not settling it:**
+- The portal's phone sign-in code goes out through the same public.php API branch: the same settings, the same
+  `svc('notify')`, the same strict handler. It also uses the same WhatsApp line as job messages
+  (`NotificationService::SUPPORT`, `includes/api/api_customer_app.php:641`).
+- On 26 September that code went by Evolution (docs/37 §I.5).
+- `NotificationService`, `EvolutionApiService` and `ContactOptOut` have not changed since 25 September.
+
+So on 26 September the staff app's settings had a WhatsApp transport for job messages, and the sending code ran under
+that handler without a warning. B would need a change to the settings since then. A and A′ would need a warning that
+arises only on the Accept's own path, or only with this job's or this technician's data.
+
+**Reproduced in the sandbox** (rehearsal S11b):
+- One PHP warning is injected into message 2's text, after the claim and before the send.
+- The staff app's real API answers 500, which the job page shows as *"Failed: PHP [512]: …"*.
+- The trail is job #10's: the claim is written, and there is no history row and no Message Log row.
+- `--facts` reads it exactly as it read job #10.
+
+**The settings split, tried in the sandbox** (S11c): the store copy keeps only uCRM's connection, and everything else
+sits in config.json.
+- The webhook sends message 1 by WhatsApp.
+- The Accept sends message 2 by e-mail only, and writes the history row, because the sandbox's mail server raises no
+  warning.
+- So the split alone does not leave job #10's trail. It needs a warning as well.
+
+**The Accept test — new: `--accept-test`** (`scripts/` only; the plugin is unchanged). It asks first, and again before
+deleting. It:
+1. creates a test job for the technician, tomorrow 10:00, as step 1 does. Message 1 goes.
+2. runs DishNet's Accept the way the staff app does. It sets the job In progress in uCRM, then calls the real
+   `JobNotifier::accepted()` with the staff app's settings.
+   - Each PHP warning is printed as it happens, with its level, file and line, and the Accept carries on.
+   - Each warning is labelled by the error level: *"ends the staff app's request"* or *"noted only"*.
+   - An exception, or a fatal error such as a run past the time limit, ends the Accept as it would in the staff app.
+     It is reported the same way, so nothing that stops the Accept goes unseen.
+   - A web address in any of them is printed without its query string, which may carry a token.
+   - Message 2 goes, unless something stops it.
+3. prints beside it, read-only:
+   - the error level, and the ini file that sets it (PHP-FPM read its OPcache settings from
+     `/usr/local/etc/php/php.ini`, §16.23);
+   - any PHP-FPM pool override of that level;
+   - how long the Accept took, beside the time limit php.ini gives PHP-FPM;
+   - the user PHP-FPM's workers run as, beside the test's own (1000:1000). A warning about a file only one of them
+     may write would show in one place alone;
+   - the WhatsApp transport a job message takes with the staff app's settings and with the webhook's. A ✗ line
+     follows when only the staff app's has none.
+4. shows the history and Message Log rows and gives a verdict. It then asks whether to delete the test job, which
+   sends *"cancelled"*.
+
+It acts only on the job this run created, and only while that job is Open. **It cannot show** a database lock, or a
+warning that depends on timing, such as a mail server that sometimes drops the connection.
+
+**Rehearsed** (`scripts/harness/job-walkthrough/`):
+- Every PHP the rehearsal starts now reads one more ini file, which sets `E_ALL & ~E_DEPRECATED`, the usual production
+  level. So its verdicts no longer depend on the machine's php.ini.
+- **S11:** the test in a clean sandbox. No warning ends the request, message 2 goes by WhatsApp and e-mail, and both
+  settings give the same transport.
+- **S11b:** the reproduction above. The injected warning quotes a web address with a query string. Before it comes a
+  PHP deprecation, which the error level leaves out. The test:
+  - names the warning as what ends the request;
+  - prints the address without its query string;
+  - marks the deprecation *"noted only"*.
+- **S11c:** the split. The test reads no transport from the staff app's settings and Evolution from the webhook's. It
+  says what that does, and reports message 2 by e-mail only.
+- **S11d and S11e:** an exception, then a run past PHP's time limit (a fatal error), each after the claim. The test
+  names the error and its place, says the Accept stopped with it, and still deletes the job. The trail is job #10's.
+- Six new weakened copies, each caught:
+  - X12, the Accept run without its error handler;
+  - X13, every warning counted as ending the request;
+  - X14, the split never reported;
+  - X15, the query string printed;
+  - X16, a fatal error not reported;
+  - X17, the verdict for an error without a warning.
+- **107 assertions over eighteen scenarios, and seventeen weakened copies. Two consecutive runs, identical**
+  (`docs/evidence/5.18.52/walkthrough/rehearsal-run5.log` and `-run6.log`).
+- The helper passes `php -l` under PHP 8.1.34 (php-wasm) and 8.4.
+
+**Proposed for 5.18.53 — not built; each needs approval:**
+1. **The Accept must not die of a warning.** Around the notifier call, the staff app's Accept records any warning in
+   the plugin log and the history row's detail, and carries on, as the webhook does.
+2. **The history row first.** Record the Accept as *sending* before delivering, then its outcome. A request that dies
+   then still leaves a row saying so.
+3. **Show `whatsapp_note` on the job page,** so the person pressing Accept sees what became of message 2.
+4. **Only if the Accept test shows the split:** public.php reads its settings as webhook.php does
+   (`PluginConfig::load`).
+5. F-WT1 (§16.26).
+
+**For the operator:**
+1. **Two questions, from memory; no command:**
+   - What did the job page show after the second tap on ✔ Accept Job for job #10?
+   - Did S4 get *"Thank you for accepting the job!"* around 13:27 Kampala on 28 September: by WhatsApp, by e-mail, or
+     not at all?
+2. **The Accept test.** It asks typed questions, and it sends real messages to S4: message 1, message 2 and
+   *"cancelled"*. With `--no-customer-email` the test customer gets nothing; the Accept's path does not depend on the
+   job's title.
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-walkthrough.sh --accept-test --no-customer-email
+```
+
+Then `tail -n +1` the log file it names.

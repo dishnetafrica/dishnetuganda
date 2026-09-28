@@ -77,5 +77,6 @@ Personal data: none. The sample's names, addresses and number are made up, and n
 |---|---|
 | `walkthrough/rehearsal-run1.log`, `walkthrough/rehearsal-run2.log` | `scripts/harness/job-walkthrough/rehearse.sh`, twice: eight scenarios (36 assertions) on `scripts/job-walkthrough.sh`, then six weakened copies, each caught |
 | `walkthrough/rehearsal-run3.log`, `walkthrough/rehearsal-run4.log` | The same after the first run on the server (docs/44 §16.26): thirteen scenarios (77 assertions) — step 4 under uCRM's 422 rule, step 3's claim and second try, `--facts` — then eleven weakened copies, each caught |
+| `walkthrough/rehearsal-run5.log`, `walkthrough/rehearsal-run6.log` | The same after `--facts 10` (docs/44 §16.27): eighteen scenarios (107 assertions) — the Accept test, job #10's trail reproduced with one PHP warning, an exception and a fatal error, the settings split — then seventeen weakened copies, each caught |
 
 Personal data: none. The sandbox's accounts are made up, and scenarios S1 and S9 check that none of them is printed.

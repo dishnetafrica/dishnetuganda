@@ -2259,3 +2259,20 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   - a new read-only `--facts N`.
 
   Rehearsed twice, identically: 77 of 77 assertions, and eleven weakened copies caught.
+
+## 28 Sep — job #10's Accept stopped after its claim; an Accept test (docs/44 §16.27)
+
+- **`--facts 10`:** DishNet's Accept claimed job #10 for S4, but wrote no Message Log row and no history row for
+  message 2. It stopped between its claim and those two records.
+- **Why that is possible:** the staff app's API ends a request at any PHP warning (public.php:891); the webhook only
+  logs one. Both records also swallow database errors.
+- **Reproduced in the sandbox:** one PHP warning in message 2's text leaves exactly job #10's trail.
+- **Five explanations,** told apart by what reached S4 (nothing, the WhatsApp only, the e-mail only, or both) and by
+  what the job page showed. Asked of the operator.
+- **A new `--accept-test`** runs DishNet's Accept as the staff app does, and writes down every PHP warning, exception
+  and fatal error. Beside them it prints the error level and the ini file that sets it, how long the Accept took,
+  PHP-FPM's user, and the WhatsApp transport each settings copy gives. It sends real messages to S4. `scripts/` only;
+  the plugin is unchanged.
+- **Proposed for 5.18.53, not built:** the Accept survives a warning; the history row first; the job page shows what
+  became of message 2.
+- Rehearsed twice, identically: 107 assertions, and seventeen weakened copies caught.

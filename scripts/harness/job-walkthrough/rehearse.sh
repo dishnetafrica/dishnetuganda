@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rehearses scripts/job-walkthrough.sh (docs/44 §16.25, §16.26): every scenario of rehearse.php on the script as
+# Rehearses scripts/job-walkthrough.sh (docs/44 §16.25–§16.27): every scenario of rehearse.php on the script as
 # committed, then weakened copies of the script, each of which the scenario that guards it must catch. Nothing leaves
 # the host.
 set -u
@@ -36,6 +36,12 @@ mutant X8-step5-not-gated     S8 'if [ "$TOOK" != 1 ]; then' 'if false; then'
 mutant X9-claim-ignored       S10 '} elseif ($claim) {' '} elseif (false) {'
 mutant X10-no-second-try      S9 'if [ "$ACC" = NONE-PROGRESS ] && ask' 'if false && ask'
 mutant X11-facts-unmasked     S9 'echo "LINE {$at}  ", wt_mask($m), "\n";' 'echo "LINE {$at}  ", $m, "\n";'
+mutant X12-replay-no-handler  S11b 'set_error_handler(function ($no, $str, $file, $line) use ($level) {' '(function ($no, $str, $file, $line) use ($level) {'
+mutant X13-every-warning-stops S11b "echo 'WARN ', (\$level & (int)\$no) ? 'stops' : 'noted'," "echo 'WARN ', true ? 'stops' : 'noted',"
+mutant X14-split-not-reported S11c 'if ($tApi === '"'"'none'"'"' && $tHook !== '"'"'none'"'"') echo' 'if (false) echo'
+mutant X15-query-unmasked     S11b 'wt_mask(wt_noquery((string)$str))' 'wt_mask((string)$str)'
+mutant X16-fatal-unreported   S11e 'in_array($e['"'"'type'"'"'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)' 'false'
+mutant X17-error-verdict-gone S11d 'elif [ "$ne" -gt 0 ]; then' 'elif false; then'
 
 echo ""; echo "rehearsal: $pass passed, $fail failed"
 [ "$fail" = 0 ]
