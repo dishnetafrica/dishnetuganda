@@ -2944,3 +2944,68 @@ the log shows *"Job #9 (assigned) — WhatsApp sent to staff account #…"*.
 
 **Every earlier "PASSED" of 5.18.52 stands for the files and the database only.** The deploy (07:41) and
 `--after-only` (07:55) checks were right about what they read. None of them read what PHP ran (§16.22).
+
+### 16.25 A walk-through script: one test job, each step one at a time — 28 September 2026
+
+**Asked for.** After the fix (§16.24), the job-log check still showed no change to job #9: nothing had been changed in
+uCRM yet. The operator asked: *"better you prepare script which can create new job and all the steps we can do one by
+one"*.
+
+**`scripts/job-walkthrough.sh`**, run on the server from the checkout. It creates **one** test job in uCRM through
+uCRM's API, with the plugin's own API client and settings, and takes it through six steps. It **asks before each
+one**: Enter does the step, `s` skips it, anything else stops.
+
+| Step | What the script does | What the technician should get |
+|---|---|---|
+| 1 | creates the job: tomorrow 10:00 Kampala, Open, the test customer, the technician | message 1 with ✅ ACCEPT JOB; the customer gets *"installation booked"* |
+| 2 | moves it to tomorrow 14:00 | *"Job #N has a new time"* |
+| 3 | waits while the technician (or an admin, on the job page) presses Accept | message 2 with ✅ JOB COMPLETED |
+| 4 | sets nobody as the assignee | *"Job #N is no longer assigned to you"* |
+| 5 | assigns the technician again | message 1 again |
+| 6 | deletes the job | *"Job #N has been cancelled"* |
+
+- **Each message also goes by e-mail** (§16.16).
+- **After each change** the script waits for uCRM's notice to the plugin, up to 90 s. Then it prints the plugin's log
+  lines for the job, the job's message history (`job_notify_events`), the Message Log rows since the step, and uCRM's
+  job. It ends with a verdict: *"✓ as expected"*, or what was missing.
+- **Defaults:** uCRM client #1, the test customer in jobs #8 and #9, and uCRM user #1099 (S4). `--client`, `--tech` and
+  `--no-customer-email` change them.
+
+**What keeps it safe:**
+- **A preflight that changes nothing.** It reads the installed version and the notifier, Uganda, the notifier's
+  tables, the customer (initials only) and the technician's verified link, number and e-mail. Any missing piece is
+  NO-GO, and nothing is created.
+- **It changes only its own job.** Every change and the delete first read the job back from uCRM. They refuse unless
+  its description carries this run's mark, `(run wt-<time>-<pid>)`.
+- **It stops on the old code.** If the plugin answers in 5.18.51's words (§16.22), it says so and stops. It then offers
+  to delete the test job.
+- **One run at a time,** by a lock directory.
+- **Masked output.** No name, number or e-mail is printed: the customer is shown by initials, the technician as a staff
+  account number. It writes its own log file under `/root/dnb-5.18.52/`.
+
+**Two uCRM API calls the plugin has never made:** setting a job's assignee to nobody (step 4), and deleting a job
+(step 6). They are measured only against the fake. If uCRM refuses either, the script prints uCRM's answer, masked,
+and goes on. The test job can then be deleted in uCRM's own screen.
+
+**Rehearsed** in `scripts/harness/job-walkthrough/`:
+- `rehearse.php` runs the script unchanged against the plugin's sandbox: the plugin on 127.0.0.1, the repository's
+  fake WhatsApp and mail relay, and a fake uCRM. That fake (`fake_ucrm_emit.php`) sends the plugin its job webhook a
+  second after each change, as uCRM does. A stand-in `docker` runs the helper with the local PHP.
+- **36 assertions over eight scenarios:**
+  - **S1**, every step: the technician receives exactly the six WhatsApp messages in order and six e-mails, and the
+    customer one; the job's history holds the six events; uCRM saw only changes to the test job, and the job is gone
+    at the end; nothing personal is printed.
+  - **S2:** `q` creates nothing.
+  - **S3 and S4:** not Uganda, or an unverified link, is NO-GO.
+  - **S5:** the web server runs 5.18.51's `webhook.php` while the disk has 5.18.52. Step 1 names the old code and
+    stops, and the job is deleted.
+  - **S5b:** the old file on disk too is NO-GO.
+  - **S6:** another job is refused and untouched.
+  - **S7:** skipped steps send nothing.
+- **Six weakened copies of the script, each caught by its scenario:** no run-mark check, no Uganda check, no old-code
+  check, no masking, an unverified link accepted, and any answer going on.
+- The helper passes `php -l` under PHP 8.1.34 (php-wasm) as well as 8.4.19.
+- **Two consecutive runs, identical: 36 of 36 and 6 of 6 caught each** (`docs/evidence/5.18.52/walkthrough/`, about 8 minutes each).
+
+**Nothing was run on the server.** The operator runs it, after `git pull` (the plugin itself does not change):
+`cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-walkthrough.sh`

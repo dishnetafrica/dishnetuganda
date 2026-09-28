@@ -2224,3 +2224,20 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   first; none differed, and their content is unchanged. The check then showed 0 files with the old second. Nothing was
   restarted.
 - **Still to see:** the new code running. Job #9's time is to be changed in uCRM, then the job-log check run.
+
+## 28 Sep — a walk-through script: one test job, each step one at a time (docs/44 §16.25)
+
+- **Asked for** by the operator: *"prepare script which can create new job and all the steps … one by one"*.
+- **`scripts/job-walkthrough.sh`** creates one test job in uCRM, for the test customer and uCRM user #1099. It takes
+  the job through six steps: create, new time, the technician's Accept, taken away, given back, deleted. It asks
+  before each, and after each prints what the plugin did and a verdict.
+- **Safe by construction:**
+  - a read-only preflight (NO-GO creates nothing);
+  - it changes only the job carrying its own run mark;
+  - it stops on 5.18.51's code, and offers to delete the job;
+  - one run at a time; masked output and its own log file.
+- **Unassigning and deleting a job** are uCRM API calls the plugin has never made; they are measured only against the
+  fake. A refusal is printed and the run goes on.
+- **Rehearsed** against the plugin's sandbox with a webhook-sending fake uCRM, in `scripts/harness/job-walkthrough/`.
+  Two runs, each 36 of 36, and six weakened copies caught. `php -l` is clean under PHP 8.1.34.
+- **Not run on the server.**
