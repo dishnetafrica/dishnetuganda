@@ -2563,4 +2563,64 @@ e-mail. `--after-only`'s R9 shows each row's e-mail outcome.
 
 **Evidence:** `docs/evidence/5.18.52/`, the `email-*` files (the README lists them).
 
-**Not deployed.** §16.14's order stands. The links come first: 0 verified today (§16.15).
+**Not deployed.** §16.14's order stands. The links came first: 0 verified at 04:26, 2 again by 07:09 (§16.17).
+
+### 16.17 The checks of 28 September, 07:09 UTC — both findings answered; the jobs facts report corrected
+
+The operator ran `--after-only` and the users check, then printed both log files on the server with `tail -n +1` and
+pasted them. They carry no name, e-mail, number or secret.
+
+**`--after-only` (07:09:29 UTC): PASSED, 37 ok, 0 failed, 3 notes.**
+- **The master runs, and the fix holds.** R8: no line of the lock error in the 142 minutes since 04:46:40 UTC, while 39
+  of the master's jobs ran.
+  - A note: one line of the old error came within 20 minutes of the deploy, from a master run begun on 5.18.50.
+  - The quiet hour before the deploy (§16.15, point 2) most likely belongs to that run: no run ended normally in that
+    hour, and this one ended just after it.
+- **The links are back.** A3: all 4 accounts that take jobs hold a uCRM id, 2 through a verified link and 2 the old way.
+  R3 names accounts 1 and 4 as changed since 04:26:40.
+- Everything else is as at the deploy: the files, the switch, the pages and the `:8443` door. R4: no job message since
+  #377, and no new Message Log row.
+
+**The users check (07:09:44 UTC):**
+- S1 → 1000 and S4 → 1099, each the uCRM user with the account's own e-mail.
+- S3 → 4 and S5 → 1581, neither a uCRM user. S2 has none.
+- uCRM has the same two staff users, both active and neither with a phone field. Its times carry +03:00, and delivery
+  receipts are subscribed on all 3 numbers.
+
+**What happened to the links (§16.15, point 1), read from the two runs together:**
+- S3 and S5 did not change after 04:26:40, because R3 names only 1 and 4. So theirs were the 2 old-way ids at 04:26.
+  S1 and S4 therefore held no id at 04:26, and were saved again through the picker after it.
+- The code clears a link only on an administrator's explicit "— not linked —": `post_sync.php` passes a posted `0` to
+  `StaffLink::verify`, which answers `clear`. The picker opens on "as saved", which posts `keep` and changes nothing.
+- What set S1 and S4 to "not linked" between 20:42 and 04:26 is in no log.
+- **M5 is still to do:** S3 and S5 still hold 4 and 1581.
+
+**The jobs facts report was blind to `job.edit` and `job.delete`. It is corrected before M4 relies on it.**
+- `scripts/lib/jobs_facts.php` counted the two by their name in quotes (`'job.edit'`) inside a log message. No line
+  that `webhook.php` writes carries that form.
+  - On 5.18.51 a delivered `job.edit` is logged as *"Normalized changeType: edit/job → job.edit"*, *"Received UCRM
+    webhook: job.edit"* and *"Unhandled event type — logged only"*.
+  - The quoted form is in the HTTP answer (`whResp`), which is not logged.
+  - The report's rehearsal had seeded that answer as a log line, so it passed.
+- **M4's evidence (V2) is exactly these counts.** As they were, a delivered `job.edit` and `job.delete` would have read
+  0, which says "uCRM does not send them", and V2 would have failed on a false reading.
+- **The fix:**
+  - Each delivery is counted once, by its *"Received UCRM webhook: job.add | job.edit | job.delete"* line, which
+    `webhook.php` writes once per request in every version.
+  - The job.add handler's lines are counted on a line of their own, with 5.18.51's *"not switched on yet"* beside
+    5.18.49's three.
+- **docs/43 §11's "none of them `job.add`, `job.edit` or `job.delete`" stands.** uCRM held 0 jobs then (§11), so there
+  was nothing to deliver, and the `job.add` count was always read from the event name.
+- **Rehearsed** in `scripts/harness/jobs-facts/rehearse.sh`, its seed now the lines 5.18.51 writes, M4's three
+  deliveries included:
+  - **391/391 on two consecutive runs**;
+  - **10 weakened copies, each caught** (8 before). The two new ones are the old quoted-name counter, and counting by
+    the event field, which counts each delivery twice or more.
+- **Run it within a day of M4.** The webhook log keeps its newest 300 lines (`whLog`), several per delivery. At the rate
+  §11 measured, that is about three days.
+
+**Next, before 5.18.52 (§15.8):**
+1. M5, for S3 and S5 only.
+2. S1's number. These logs do not show numbers; S1's card on the Staff page does.
+3. M4, then the jobs facts command's log file.
+4. A separate approval of 5.18.52.

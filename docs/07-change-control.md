@@ -2100,6 +2100,12 @@ process's own clock. 5.18.52 corrects the test, not the badge.
   - **The hour before the deploy held no line of the master's lock error**, where every hour of 26–27 Sep held at
     least 4. `--after-only` reads the master's own record of its runs and will say whether it is running.
 
+**07:09 UTC — `--after-only`: PASSED, 37 ok / 0 failed / 3 notes, and the users check** (docs/44 §16.17).
+- **R8:** no lock-error line in the 142 minutes after 04:46, while 39 of the master's jobs ran. The fix holds and the
+  master runs.
+- **The links are back:** S1 → 1000 and S4 → 1099 verified again, saved after 04:26. S3 and S5 still hold 4 and 1581
+  (M5 to do).
+
 ## 5.18.52 — release B: job messages the South Sudan way; built and rehearsed, not deployed (docs/44 §16.14)
 
 - **The change, plugin commit `fc5c3b7`, Uganda only.** One component, `lib/JobNotifier.php`, sends every job WhatsApp
@@ -2148,3 +2154,13 @@ process's own clock. 5.18.52 corrects the test, not the badge.
   caught. The rollback is a separate command.
 - **Not deployed.** The order stands: 5.18.51's `--after-only`, the users check, M5, S1's number and M4, then a
   separate approval.
+
+## 28 Sep — the jobs facts report counts `job.edit` and `job.delete` (docs/44 §16.17)
+
+- **The defect.** `scripts/lib/jobs_facts.php` looked for the event's name in quotes inside a log line. No line the
+  webhook writes has that form: it is in the webhook's HTTP answer, which is not logged. A delivered `job.edit` or
+  `job.delete` would have read 0, and M4's evidence (V2) would have failed on a false reading.
+- **The fix.** Each delivery is counted once, by the webhook's *"Received UCRM webhook: …"* line. The job.add handler's
+  lines are counted apart, 5.18.51's *"not switched on yet"* included. docs/43's reading stands: uCRM held no job then.
+- **Rehearsed** 391/391 twice, with a seed of the lines 5.18.51 really writes. 10 weakened copies caught (2 new).
+  Read-only, as before; no plugin file changed.

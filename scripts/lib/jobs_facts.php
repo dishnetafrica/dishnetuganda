@@ -265,19 +265,26 @@ try {
 } catch (\Throwable $e) { out('  failure queue not present'); }
 $wl = json_decode((string)@file_get_contents($pdd . '/webhook_log.json'), true);
 if (is_array($wl)) {
-    $c = ['job.add' => 0, 'sent' => 0, 'nophone' => 0, 'nouser' => 0, 'edit' => 0, 'delete' => 0, 'unverified' => 0]; $oldest = '';
+    $c = ['job.add' => 0, 'sent' => 0, 'nophone' => 0, 'nouser' => 0, 'off' => 0, 'unverified' => 0]; $oldest = '';
+    // One delivery from uCRM, one "Received UCRM webhook: <type>" line: webhook.php writes it once per request, after
+    // turning uCRM's changeType/entity ("edit"/"job") into "job.edit", in every version. No other line names the event
+    // once per delivery — a job.edit or job.delete that nothing handles is otherwise logged only as "Unhandled event
+    // type — logged only" (docs/44 §16.17).
+    $rx = ['job.add' => 0, 'job.edit' => 0, 'job.delete' => 0];
     foreach ($wl as $e) {
         $ev = (string)($e['event'] ?? ''); $m = (string)($e['message'] ?? ''); $oldest = (string)($e['received_at'] ?? $oldest);
+        if (preg_match('/^Received UCRM webhook: (job\.(?:add|edit|delete))$/', $m, $mm) && isset($rx[$mm[1]])) { $rx[$mm[1]]++; continue; }
         if ($ev === 'job.add' || $ev === 'JOB_ADD') { $c['job.add']++;
             if (strpos($m, 'notification sent') !== false) $c['sent']++;
             if (strpos($m, 'No phone found') !== false) $c['nophone']++;
-            if (strpos($m, 'No user assigned') !== false) $c['nouser']++; }
-        if (strpos($m, "'job.edit'") !== false) $c['edit']++;
-        if (strpos($m, "'job.delete'") !== false) $c['delete']++;
+            if (strpos($m, 'No user assigned') !== false) $c['nouser']++;
+            if (strpos($m, 'not switched on yet') !== false) $c['off']++; }
         if ($ev === 'entity_unverified' && strpos($m, 'job #') !== false) $c['unverified']++;
     }
-    out(sprintf('  webhook log  %d entr(ies), oldest %s · job.add lines %d: "notification sent" %d · "No phone found" %d · "No user assigned" %d · job.edit %d · job.delete %d · job unverified %d',
-        count($wl), $oldest ?: '—', $c['job.add'], $c['sent'], $c['nophone'], $c['nouser'], $c['edit'], $c['delete'], $c['unverified']));
+    out(sprintf('  webhook log  %d entr(ies), oldest %s · received from uCRM: job.add %d · job.edit %d · job.delete %d',
+        count($wl), $oldest ?: '—', $rx['job.add'], $rx['job.edit'], $rx['job.delete']));
+    out(sprintf('  webhook log  job.add handler lines %d: "notification sent" %d · "No phone found" %d · "No user assigned" %d · "not switched on yet" %d · job unverified %d',
+        $c['job.add'], $c['sent'], $c['nophone'], $c['nouser'], $c['off'], $c['unverified']));
 } else {
     out('  webhook log  not found');
 }

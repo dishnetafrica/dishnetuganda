@@ -13,6 +13,7 @@ is local, against fakes. Nothing had been deployed when they were made.
 | `rehearsed-rollback.log` | The same for `--rollback` |
 | `badge-window-diagnostic.txt` | Why both suite runs show 2 failures: `test_job_status_truth.php` as written, and with its fake log on Kampala time |
 | `webhook-log-clock-measurement.txt` | One real uCRM event through a Uganda sandbox's `public.php`: the webhook log is written in Kampala time, so the badge is right and the test's clock is wrong |
+| `jobs-facts-rehearsal-run1.log`, `jobs-facts-rehearsal-run2.log` | `scripts/harness/jobs-facts/rehearse.sh`, twice, after the jobs facts report learned to count `job.edit` and `job.delete` as 5.18.51 logs them, before M4 relies on it (docs/44 §16.17): 391/391 each, 10 weakened copies caught |
 
 **Two facts to read the suite runs with.**
 - **Both runs show 2 failures:** `test_job_status_truth.php`'s two badge assertions. They fail only between 21:00 and
