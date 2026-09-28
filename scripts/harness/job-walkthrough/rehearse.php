@@ -52,10 +52,10 @@ function wt_sandbox(string $root, string $tag, array $cfg = []): SjSandbox
 }
 
 /**
- * The script, run as the operator would, its questions answered by $answer(prompt, transcript) → the line typed.
- * @return array{0:int,1:string,2:string} exit code, what the terminal showed, the log file's content
+ * The script's environment: a stand-in `docker` that runs the helper with this machine's PHP, the log directory, and
+ * step 3's wait cut to 6 s (an Accept here is done before its question is answered, so the wait never matters).
  */
-function wt_run(string $script, SjSandbox $s, array $args, callable $answer, int $timeout = 300, ?string $inContainer = null): array
+function wt_env(SjSandbox $s, ?string $inContainer = null): array
 {
     $bin = $s->sb . '/bin'; @mkdir($bin, 0700, true);
     file_put_contents("$bin/docker", "#!/bin/bash\n# rehearsal stand-in: docker exec [-i] [-u U] CONTAINER cmd… runs cmd here\n"
@@ -64,8 +64,30 @@ function wt_run(string $script, SjSandbox $s, array $args, callable $answer, int
     chmod("$bin/docker", 0755);
     $out = $s->sb . '/out'; @mkdir($out, 0700, true);
     $env = array_filter(getenv(), function ($k) { return stripos((string)$k, 'proxy') === false; }, ARRAY_FILTER_USE_KEY);
-    $env = array_merge($env, ['PATH' => $bin . ':' . getenv('PATH'), 'IN_CONTAINER' => $inContainer ?? $s->plug, 'OUT' => $out,
-        'DN_VAULT_FILE' => $s->vault, 'DN_DATA_DIR' => $s->data, 'UCRM_CONTAINER' => 'ucrm']);
+    return array_merge($env, ['PATH' => $bin . ':' . getenv('PATH'), 'IN_CONTAINER' => $inContainer ?? $s->plug, 'OUT' => $out,
+        'DN_VAULT_FILE' => $s->vault, 'DN_DATA_DIR' => $s->data, 'UCRM_CONTAINER' => 'ucrm', 'ACCEPT_WAIT' => '6']);
+}
+
+/** --facts N, as the operator would run it: [exit code, what the terminal showed, the log file's content]. */
+function wt_facts(string $script, SjSandbox $s, string $job): array
+{
+    $p = proc_open(['bash', $script, '--facts', $job], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, wt_env($s));
+    $t = (string)stream_get_contents($pipes[1]) . (string)stream_get_contents($pipes[2]);
+    fclose($pipes[1]); fclose($pipes[2]);
+    $rc = proc_close($p);
+    $logs = glob($s->sb . '/out/job-facts-' . $job . '-*.log') ?: [];
+    sort($logs);
+    return [$rc, $t, $logs ? (string)file_get_contents(end($logs)) : ''];
+}
+
+/**
+ * The script, run as the operator would, its questions answered by $answer(prompt, transcript) → the line typed.
+ * @return array{0:int,1:string,2:string} exit code, what the terminal showed, the log file's content
+ */
+function wt_run(string $script, SjSandbox $s, array $args, callable $answer, int $timeout = 300, ?string $inContainer = null): array
+{
+    $out = $s->sb . '/out';
+    $env = wt_env($s, $inContainer);
     $p = proc_open(array_merge(['bash', $script], $args), [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
     stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
     $buf = ''; $t0 = time(); $asked = 0; $rc = -1; $marker = '[Enter = yes, s = skip, q = stop]: ';
@@ -129,6 +151,8 @@ if (want('S1')) {
              'New Job Has Been Assigned to You', 'has been cancelled'];
     $got = []; foreach ($tx as $x) foreach ($want as $w) if (strpos($x, $w) !== false) { $got[] = $w; break; }
     ok($got === $want, 'the technician received exactly the six WhatsApp messages, in order', json_encode($got));
+    ok(isset($tx[3]) && strpos($tx[3], "Date: Not scheduled yet") !== false,
+        '"no longer assigned" reads "Date: Not scheduled yet": uCRM took the time away with the engineer (docs/44 §16.26)');
     $mails = array_values(array_filter($s->mails(), function ($m) { return $m['to'] === ['tech@example.test']; }));
     ok(count($mails) === 6, 'and six e-mails with the same texts', (string)count($mails));
     $cm = array_values(array_filter($s->mails(), function ($m) { return $m['to'] === ['customer@example.test']; }));
@@ -143,6 +167,11 @@ if (want('S1')) {
     $changes = array_values(array_filter($dump['requests'] ?? [], function ($r) { return in_array($r['method'], ['PATCH', 'DELETE'], true) && strpos((string)$r['path'], '/scheduling/jobs/') === 0; }));
     ok(count($changes) === 5 && count(array_filter($changes, function ($r) use ($job) { return $r['path'] === "/scheduling/jobs/{$job}"; })) === 5,
         "uCRM saw five changes, every one to the test job: the time, the job page's Accept, take away, give back, delete", json_encode(array_column($changes, 'path')));
+    $b = array_column($changes, 'body');
+    ok(($b[2] ?? null) === ['assignedUserId' => null, 'date' => null], 'step 4 took the engineer and the time away together', json_encode($b[2] ?? null));
+    ok(($b[3]['assignedUserId'] ?? null) === 1099 && is_string($b[3]['date'] ?? null) && ($b[3]['status'] ?? null) === 0,
+        'step 5 gave back the engineer and a time, and set the job Open', json_encode($b[3] ?? null));
+    ok(count(array_filter($dump['requests'] ?? [], function ($r) { return isset($r['refused']); })) === 0, 'uCRM refused nothing');
     ok(strpos($t, '[ConfigVault]') === false, "the plugin's routine vault notice is not shown");
     ok(strpos($t, 'log  ') !== false && strpos($t, 'history  assigned assigned ucrm_webhook sent email=sent') !== false,
         "it prints the plugin's log lines and the job's history");
@@ -237,6 +266,151 @@ if (want('S7')) {
         'two WhatsApp messages: message 1 and "cancelled"', json_encode(array_map(function ($x) { return substr($x, 0, 60); }, $tx)));
     ok(substr_count($t, ': skipped') === 4, 'the summary lists four steps skipped');
     ok(count(array_filter($s->mails(), function ($m) { return $m['to'] === ['customer@example.test']; })) === 0, '--no-customer-email: the customer got no e-mail');
+    $s->stop();
+}
+
+if (want('S8a')) {
+    echo "\nS8a the fake uCRM answers as the real one did on 28 September (job #10): a time with nobody assigned is 422\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt8a');
+    $url = "{$s->crm}/scheduling/jobs";
+    $new = $s->http('POST', $url, ['title' => 'Fixture', 'date' => '2026-10-01T10:00:00+0300', 'assignedUserId' => 1099, 'clientId' => 15, 'status' => 0],
+                    ['Content-Type: application/json']);
+    $id = (int)($new[2]['id'] ?? 0);
+    $a = $s->http('PATCH', "{$url}/{$id}", ['assignedUserId' => null], ['Content-Type: application/json']);
+    ok($id > 0 && $a[0] === 422 && ($a[2]['errors']['assignedUserId'][0] ?? '') === 'You must assign an user in order to set the date.',
+        'nobody assigned, the time kept: 422 with uCRM\'s own words', $a[0] . ' ' . $a[1]);
+    ok((int)($s->crmDump()['jobs'][(string)$id]['assignedUserId'] ?? 0) === 1099, 'and the job is unchanged');
+    $b = $s->http('PATCH', "{$url}/{$id}", ['assignedUserId' => null, 'date' => null], ['Content-Type: application/json']);
+    $j = (array)($s->crmDump()['jobs'][(string)$id] ?? []);
+    ok($b[0] === 200 && array_key_exists('assignedUserId', $j) && $j['assignedUserId'] === null && $j['date'] === null,
+        'nobody assigned and no time: accepted', $b[0] . ' ' . json_encode($j));
+    $s->stop();
+}
+
+if (want('S8')) {
+    echo "\nS8 uCRM refuses step 4 outright: step 4 shows uCRM's answer, and step 5 is not offered\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt8');
+    touch($s->sb . '/refuse_takeaway.txt');
+    $asked = [];
+    [$rc, $t] = wt_run($script, $s, ['--client', '15', '--tech', '1099', '--no-customer-email'], function (string $q) use (&$asked): string {
+        $asked[] = $q;
+        return strpos($q, 'Press Enter once Accept') === 0 || strpos($q, 'Change the time') === 0 ? 's' : '';
+    });
+    ok(is_file($s->sb . '/refuse_takeaway.txt'), 'the control is in place', $s->sb);
+    ok($rc === 0 && strpos($t, '✗ uCRM refused: {"http_code":422') !== false, "step 4 prints uCRM's refusal", "exit $rc");
+    ok(count(array_filter($asked, function ($q) { return strpos($q, 'Give the job back') === 0; })) === 0
+        && strpos($t, 'Skipped: step 4 did not take the job away, so there is nothing to give back.') !== false, 'step 5 is not offered, and says why');
+    ok(strpos($t, 'step 5: skipped (step 4 did not take the job away)') !== false, 'the summary says so');
+    $tx = array_map(function ($x) { return (string)$x['text']; }, $jobTexts($s));
+    ok(count($tx) === 2 && strpos($tx[1], 'has been cancelled') !== false, 'the technician got message 1 and the cancellation, nothing between', (string)count($tx));
+    $refused = array_values(array_filter($s->crmDump()['requests'] ?? [], function ($r) { return isset($r['refused']); }));
+    ok(count($refused) === 1 && ($refused[0]['body'] ?? null) === ['assignedUserId' => null, 'date' => null], 'uCRM saw one refused change: step 4\'s');
+    $s->stop();
+}
+
+if (want('S9')) {
+    echo "\nS9 step 3 done in uCRM's own screen: no claim, and the script says so; it puts the job back to Open, and the Accept\n"
+       . "   pressed in DishNet then sends message 2. --facts reads the job before and after\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt9');
+    $job = 0; $mid = [1, '', '']; $asked = [];
+    [$rc, $t] = wt_run($script, $s, ['--client', '15', '--tech', '1099'], function (string $q, string $buf) use ($s, $script, &$job, &$mid, &$asked): string {
+        $asked[] = $q;
+        if (preg_match('/created: job #(\d+)/', $buf, $m)) $job = (int)$m[1];
+        if ($q === 'Press Enter once Accept has been pressed') {
+            // uCRM's own screen: the status set in uCRM itself, which then tells the plugin (job.edit).
+            $s->http('PATCH', "{$s->crm}/scheduling/jobs/{$job}", ['status' => 1], ['Content-Type: application/json']);
+            sleep(3);
+            return '';
+        }
+        if (strpos($q, 'Put job #') === 0) { $mid = wt_facts($script, $s, (string)$job); return ''; }
+        if ($q === 'Press Enter once Accept has been pressed in DishNet') {
+            $s->api('tech', 'POST', 'scheduling_job_update', ['job_id' => $job, 'status' => 'open', 'notify_accept' => 1]);
+            return '';
+        }
+        return strpos($q, 'Take the job away') === 0 ? 'q' : '';
+    });
+    ok($rc === 0 && $job > 0, 'the run ends with exit 0 after q at step 4', "exit $rc");
+    ok(preg_match("/^  ✗ uCRM shows job #{$job} In progress, but DishNet's Accept left no claim on it: it was set In progress outside/m", $t) === 1,
+        'the first check says uCRM shows the job In progress and DishNet\'s Accept left no claim');
+    ok(strpos($t, "plugin record  assigned to uCRM user #1099;") !== false && strpos($t, "DishNet's Accept claim: none") !== false,
+        "and prints the notifier's record: no claim");
+    ok(count(array_filter($asked, function ($q) { return strpos($q, 'Put job #') === 0; })) === 1, 'it offers once to put the job back to Open');
+    ok(preg_match('/^  ✓ as expected: message 2 went, and the e-mail was handed to the mail server$/m', $t) === 1
+        && strpos($t, 'step 3 accept: ✓ as expected: message 2 went, and the e-mail was handed to the mail server (on the second try)') !== false,
+        'the Accept pressed in DishNet sends message 2; the summary says it was the second try');
+    $patches = array_values(array_filter($s->crmReqs('PATCH', '#^/scheduling/jobs/\d+$#'), function ($r) use ($job) { return $r['path'] === "/scheduling/jobs/{$job}"; }));
+    ok(count(array_filter($patches, function ($r) { return ($r['body'] ?? null) === ['status' => 0]; })) === 1, 'the script set the job back to Open once');
+    $tx = array_map(function ($x) { return (string)$x['text']; }, $jobTexts($s));
+    ok(count(array_filter($tx, function ($x) { return strpos($x, 'Thank you for accepting the job!') !== false; })) === 1, 'message 2 went exactly once');
+    [$mrc, $mt, $mlog] = $mid;
+    ok($mrc === 0 && strpos($mt, "Read-only: this changes nothing and sends nothing.") !== false, '--facts during the run: exit 0, read-only', "exit $mrc");
+    ok(preg_match("/^  DishNet's Accept left no claim on job #{$job}, yet it was In progress\\. Either it was set In progress outside/m", $mt) === 1,
+        '--facts names the case: In progress, with no claim');
+    ok(strpos($mt, 'Received UCRM webhook: job.edit') !== false && strpos($mt, "Job #{$job} — no new assignment, time or cancellation: nothing to send") !== false,
+        "--facts shows uCRM's notice of the status change and the plugin's answer to it");
+    ok($mlog !== '' && strpos($mlog, 'yet it was In progress') !== false, 'and writes the same to its own log file');
+    [$frc, $ft] = wt_facts($script, $s, (string)$job);
+    ok($frc === 0 && preg_match("/^  DishNet's Accept was recorded: message 2 went, at /m", $ft) === 1
+        && strpos($ft, "DishNet's Accept claim: uCRM user #1099") !== false, '--facts after the run: message 2 recorded, the claim uCRM user #1099');
+    ok(preg_match('/^  \d{4}-\d\d-\d\d \d\d:\d\d:\d\d  ops_job_accepted_self sent$/m', $ft) === 1, '--facts lists message 2 in the Message Log');
+    ok(strpos($ft, '<e-mail>') !== false && wt_leaks($t . $mt . $ft . $mlog) === [], 'everything printed is masked', json_encode(wt_leaks($t . $mt . $ft . $mlog)));
+    ok(!is_dir($s->sb . '/out/walkthrough.lock'), 'no lock is left behind');
+    $s->stop();
+}
+
+if (want('S9b')) {
+    echo "\nS9b the same, but q at the offer of a second try: the summary still gives step 3's verdict, and nothing more is done\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt9b');
+    $job = 0;
+    [$rc, $t] = wt_run($script, $s, ['--client', '15', '--tech', '1099', '--no-customer-email'], function (string $q, string $buf) use ($s, &$job): string {
+        if (preg_match('/created: job #(\d+)/', $buf, $m)) $job = (int)$m[1];
+        if (strpos($q, 'Change the time') === 0) return 's';
+        if ($q === 'Press Enter once Accept has been pressed') {
+            $s->http('PATCH', "{$s->crm}/scheduling/jobs/{$job}", ['status' => 1], ['Content-Type: application/json']);
+            sleep(3);
+            return '';
+        }
+        return strpos($q, 'Put job #') === 0 ? 'q' : '';
+    });
+    ok($rc === 0 && strpos($t, 'Stopped. Nothing more is done.') !== false, 'q at the offer stops the run', "exit $rc");
+    ok(preg_match("/^  step 3 accept: ✗ uCRM shows job #{$job} In progress, but DishNet's Accept left no claim/m", $t) === 1,
+        "the summary keeps step 3's verdict");
+    ok(count(array_filter($s->crmReqs('PATCH', '#^/scheduling/jobs/\d+$#'), function ($r) { return ($r['body'] ?? null) === ['status' => 0]; })) === 0,
+        'the job was not put back to Open');
+    ok(strpos($t, "The test job #{$job} is still in uCRM") !== false, 'and the summary says the test job is still in uCRM');
+    $s->stop();
+}
+
+if (want('S10')) {
+    echo "\nS10 --facts: a claim with no message 2 is named a fault; an unknown job reads as nothing; a bad number is refused\n";
+    $s = wt_sandbox(wt_root($plugin), 'wt10');
+    // Job 901, the scenario's own, assigned to 1099: the notifier's record claims it, and no history row says why.
+    $s->q("INSERT OR REPLACE INTO job_notify_state (job_id, assignee_id, job_time, job_status, title, gone, accepted_by, version, updated_at)
+           VALUES (901, 1099, '', 1, 'Fixture job', 0, 1099, 1, datetime('now'))");
+    [$rc, $t, $log] = wt_facts($script, $s, '901');
+    ok($rc === 0 && strpos($t, "DishNet's Accept claim: uCRM user #1099") !== false, 'the record shows the claim', "exit $rc");
+    ok(preg_match("/^  DishNet's Accept claimed job #901 for uCRM user #1099 but recorded no message 2: a fault in the Accept path\\./m", $t) === 1,
+        'and --facts names it a fault');
+    ok(strpos($t, 'no history row for job #901') !== false && strpos($t, "holds no notice about job #901") !== false, 'no history, no notice: said, not left blank');
+    ok($log !== '' && strpos($log, 'a fault in the Accept path') !== false, 'its log file holds the same');
+    [$rc, $t] = wt_facts($script, $s, '4242');
+    ok($rc === 0 && strpos($t, 'holds no record of job #4242') !== false && strpos($t, 'the job is gone (404)') !== false
+        && strpos($t, 'Accept has not been pressed') !== false, 'an unknown job: no record, gone in uCRM, no Accept', "exit $rc");
+    $bad = function (array $args) use ($script, $s): array {
+        $p = proc_open(array_merge(['bash', $script], $args), [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, wt_env($s));
+        $o = (string)stream_get_contents($pipes[1]) . (string)stream_get_contents($pipes[2]);
+        fclose($pipes[1]); fclose($pipes[2]);
+        return [proc_close($p), $o];
+    };
+    [$r1, $o1] = $bad(['--facts', 'abc']); [$r2, $o2] = $bad(['--facts']);
+    ok($r1 === 2 && strpos($o1, '--facts takes a job number') !== false && $r2 === 2 && strpos($o2, '--facts takes a number') !== false,
+        'a bad or missing number: refused with exit 2', "$r1 / $r2");
+    $req = $s->crmDump()['requests'] ?? [];
+    ok(count(array_filter($req, function ($r) { return $r['method'] !== 'GET'; })) === 0 && count($jobTexts($s)) === 0,
+        'read-only: uCRM saw no change and nobody was messaged');
+    $st = $s->q('SELECT accepted_by, version FROM job_notify_state WHERE job_id = 901');
+    ok(($st[0]['accepted_by'] ?? null) == 1099 && (int)($st[0]['version'] ?? 0) === 1, "and the notifier's record is as it was");
+    ok(!is_dir($s->sb . '/out/walkthrough.lock'), '--facts takes no lock');
     $s->stop();
 }
 

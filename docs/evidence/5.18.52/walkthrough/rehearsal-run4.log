@@ -1,0 +1,123 @@
+== the script as committed ==
+
+S1 every step, Enter to each question; the technician accepts at step 3
+  ok   the script ends with exit 0
+  ok   the preflight reads Uganda, and GO is not printed as a line of its own
+  ok   step 1 created a job and said its number
+  ok   all six steps say "✓ as expected", the WhatsApp and the e-mail
+  ok   and the summary lists the six
+  ok   the technician received exactly the six WhatsApp messages, in order
+  ok   "no longer assigned" reads "Date: Not scheduled yet": uCRM took the time away with the engineer (docs/44 §16.26)
+  ok   and six e-mails with the same texts
+  ok   the customer received one "installation booked" e-mail, at step 1
+  ok   the job's history holds the six events
+  ok   the test job is gone from uCRM at the end
+  ok   one job was created, and its description carries the run's mark
+  ok   uCRM saw five changes, every one to the test job: the time, the job page's Accept, take away, give back, delete
+  ok   step 4 took the engineer and the time away together
+  ok   step 5 gave back the engineer and a time, and set the job Open
+  ok   uCRM refused nothing
+  ok   the plugin's routine vault notice is not shown
+  ok   it prints the plugin's log lines and the job's history
+  ok   the customer e-mail's log line is printed with its address masked
+  ok   no name, number or e-mail of the fixtures is printed
+  ok   the log file holds the run, masked too
+  ok   the summary does not say a test job was left behind
+
+S2 q at the first question: nothing is created
+  ok   it stops at once
+  ok   no job was created and nobody was messaged
+
+S3 not Uganda: NO-GO before anything
+  ok   the preflight says NO-GO, naming the tenant
+  ok   no job was created and nobody was messaged
+
+S4 the technician's link is not verified: NO-GO
+  ok   the preflight says why, and stops
+  ok   no job was created
+
+S5 the files on disk are 5.18.52 but the web server runs 5.18.51's webhook.php (docs/44 §16.23): step 1 says so,
+   stops, and deletes the test job when asked
+  ok   the preflight passes: the disk has 5.18.52
+  ok   step 1 names the old code and stops
+  ok   and shows the plugin's own line
+  ok   the test job was deleted when asked
+  ok   nobody was messaged, and no later step ran
+
+S5b 5.18.51's webhook.php on disk as well: the preflight says so and nothing is created
+  ok   NO-GO, naming the missing notifier
+  ok   no job was created
+
+S6 a job this run did not create is refused, whatever its number
+  ok   a change and a delete of job 901 (not created by a walk-through) are refused
+  ok   job 901 is untouched, and uCRM saw no change to it
+
+S7 steps 2 to 5 skipped: message 1, then the cancellation, and nothing between
+  ok   two WhatsApp messages: message 1 and "cancelled"
+  ok   the summary lists four steps skipped
+  ok   --no-customer-email: the customer got no e-mail
+
+S8a the fake uCRM answers as the real one did on 28 September (job #10): a time with nobody assigned is 422
+  ok   nobody assigned, the time kept: 422 with uCRM's own words
+  ok   and the job is unchanged
+  ok   nobody assigned and no time: accepted
+
+S8 uCRM refuses step 4 outright: step 4 shows uCRM's answer, and step 5 is not offered
+  ok   the control is in place
+  ok   step 4 prints uCRM's refusal
+  ok   step 5 is not offered, and says why
+  ok   the summary says so
+  ok   the technician got message 1 and the cancellation, nothing between
+  ok   uCRM saw one refused change: step 4's
+
+S9 step 3 done in uCRM's own screen: no claim, and the script says so; it puts the job back to Open, and the Accept
+   pressed in DishNet then sends message 2. --facts reads the job before and after
+  ok   the run ends with exit 0 after q at step 4
+  ok   the first check says uCRM shows the job In progress and DishNet's Accept left no claim
+  ok   and prints the notifier's record: no claim
+  ok   it offers once to put the job back to Open
+  ok   the Accept pressed in DishNet sends message 2; the summary says it was the second try
+  ok   the script set the job back to Open once
+  ok   message 2 went exactly once
+  ok   --facts during the run: exit 0, read-only
+  ok   --facts names the case: In progress, with no claim
+  ok   --facts shows uCRM's notice of the status change and the plugin's answer to it
+  ok   and writes the same to its own log file
+  ok   --facts after the run: message 2 recorded, the claim uCRM user #1099
+  ok   --facts lists message 2 in the Message Log
+  ok   everything printed is masked
+  ok   no lock is left behind
+
+S9b the same, but q at the offer of a second try: the summary still gives step 3's verdict, and nothing more is done
+  ok   q at the offer stops the run
+  ok   the summary keeps step 3's verdict
+  ok   the job was not put back to Open
+  ok   and the summary says the test job is still in uCRM
+
+S10 --facts: a claim with no message 2 is named a fault; an unknown job reads as nothing; a bad number is refused
+  ok   the record shows the claim
+  ok   and --facts names it a fault
+  ok   no history, no notice: said, not left blank
+  ok   its log file holds the same
+  ok   an unknown job: no record, gone in uCRM, no Accept
+  ok   a bad or missing number: refused with exit 2
+  ok   read-only: uCRM saw no change and nobody was messaged
+  ok   and the notifier's record is as it was
+  ok   --facts takes no lock
+
+rehearsal: 77 passed, 0 failed
+
+== weakened copies ==
+  ok   caught: X1-no-run-mark-check (2 failing in S6)
+  ok   caught: X2-no-uganda-check (2 failing in S3)
+  ok   caught: X3-no-old-code-check (3 failing in S5)
+  ok   caught: X4-no-masking (3 failing in S1)
+  ok   caught: X5-unverified-link (2 failing in S4)
+  ok   caught: X6-any-answer-goes-on (2 failing in S2)
+  ok   caught: X7-step4-keeps-the-time (10 failing in S1)
+  ok   caught: X8-step5-not-gated (3 failing in S8)
+  ok   caught: X9-claim-ignored (2 failing in S10)
+  ok   caught: X10-no-second-try (10 failing in S9)
+  ok   caught: X11-facts-unmasked (1 failing in S9)
+
+rehearsal: 12 passed, 0 failed

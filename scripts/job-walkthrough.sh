@@ -1,5 +1,5 @@
 #!/bin/bash
-# job-walkthrough.sh — one test job, one step at a time (docs/44 §16.25).
+# job-walkthrough.sh — one test job, one step at a time (docs/44 §16.25, §16.26).
 #
 # Run on the server, from the checkout:   cd /opt/dishnet && bash scripts/job-walkthrough.sh
 #
@@ -10,8 +10,9 @@
 #   2. give it a new time                     → "Job #N has a new time"
 #   3. the technician accepts it              → message 2, with the completion link (the technician, or an admin, does
 #                                               this in DishNet; the script waits and checks)
-#   4. take it away from the technician       → "Job #N is no longer assigned to you"
-#   5. give it back                           → message 1 again
+#   4. take it away from the technician       → "Job #N is no longer assigned to you". uCRM keeps no time on a job
+#                                               with nobody assigned (it answers 422), so the time goes too
+#   5. give it back, with its time, Open      → message 1 again (offered only when step 4 took the job away)
 #   6. delete it                              → "Job #N has been cancelled"
 # After each step it waits for uCRM's notice to the plugin and prints what the plugin did: the plugin's log lines, the
 # job's message history, the Message Log and uCRM's job. Answer s to skip a step, anything else to stop.
@@ -23,29 +24,34 @@
 # Options: --client N (default 1)   --tech N (the technician's uCRM user id, default 1099)
 #          --no-customer-email       (a title that is not an installation, so the customer gets no e-mail)
 # It writes its own log file under /root/dnb-5.18.52/ and says where; send that file back.
+#
+# Read-only:  bash scripts/job-walkthrough.sh --facts N
+#   What the plugin recorded for job N: the notifier's record (with DishNet's Accept claim), the job's history, uCRM's
+#   notices about it and what the plugin did with each, the Message Log around them, and uCRM's job now. It changes
+#   nothing and sends nothing, and writes its own log file under /root/dnb-5.18.52/.
 set -u
 
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
 IN_CONTAINER="${IN_CONTAINER:-/data/ucrm/data/plugins/dishnet-hybrid-sudan}"
 OUT="${OUT:-/root/dnb-5.18.52}"
-CLIENT=1; TECH=1099; TITLE="TEST Starlink Installation (walk-through)"
+ACCEPT_WAIT="${ACCEPT_WAIT:-60}"
+CLIENT=1; TECH=1099; TITLE="TEST Starlink Installation (walk-through)"; MODE=walk; FACTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --client) CLIENT="${2:-}"; shift 2 ;;
-    --tech) TECH="${2:-}"; shift 2 ;;
+    --client|--tech|--facts)
+      [ $# -ge 2 ] || { echo "$1 takes a number"; exit 2; }
+      case "$1" in --client) CLIENT="$2" ;; --tech) TECH="$2" ;; --facts) MODE=facts; FACTS="$2" ;; esac
+      shift 2 ;;
     --no-customer-email) TITLE="TEST job (walk-through)"; shift ;;
     *) echo "unknown option: $1"; exit 2 ;;
   esac
 done
 case "$CLIENT$TECH" in *[!0-9]*|'') echo "--client and --tech take a number"; exit 2 ;; esac
+if [ "$MODE" = facts ]; then case "$FACTS" in *[!0-9]*|'') echo "--facts takes a job number"; exit 2 ;; esac; fi
+case "$ACCEPT_WAIT" in *[!0-9]*|'') ACCEPT_WAIT=60 ;; esac
 
 mkdir -p "$OUT" || exit 1
 TS="$(date -u +%Y%m%dT%H%M%SZ)"; RUN="wt-$TS-$$"
-LOG="$OUT/walkthrough-$TS.log"
-LOCK="$OUT/walkthrough.lock"
-mkdir "$LOCK" 2>/dev/null || { echo "another walk-through is running ($LOCK); stop it, or remove that directory if none is"; exit 1; }
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
-exec > >(tee -a "$LOG") 2>&1
 
 read -r -d '' HELPER <<'PHP'
 <?php
@@ -81,6 +87,9 @@ function wt_initials(array $c): string {
     $i = array_map(function ($w) { return (function_exists('mb_substr') ? mb_strtoupper(mb_substr($w, 0, 1)) : strtoupper(substr($w, 0, 1))) . '.'; },
                    preg_split('/\s+/', $n, -1, PREG_SPLIT_NO_EMPTY));
     return $i ? implode(' ', $i) : '(no name)';
+}
+function wt_status($s): string {
+    return ['0' => 'Open', '1' => 'In progress', '2' => 'Closed'][(string)$s] ?? ($s === null ? '(none)' : (string)$s);
 }
 function wt_when($iso, DateTimeZone $tz): string {
     try { return $iso ? (new DateTime((string)$iso))->setTimezone($tz)->format('D j M Y H:i') : '(no time)'; } catch (\Throwable $e) { return '(unreadable)'; }
@@ -148,7 +157,9 @@ case 'patch':
     foreach (array_slice($a, 2) as $kv) {
         [$k, $v] = array_pad(explode('=', $kv, 2), 2, '');
         if ($k === 'assignee') $p['assignedUserId'] = ($v === 'none') ? null : (int)$v;
-        if ($k === 'date') {
+        if ($k === 'status' && $v === 'open') $p['status'] = 0;
+        if ($k === 'date' && $v === 'none') $p['date'] = null;
+        elseif ($k === 'date') {
             [$d, $t] = array_pad(explode(' ', $v, 2), 2, '');
             if ($d === 'tomorrow') $d = (new DateTime('tomorrow', $tz))->format('Y-m-d');
             $p['date'] = JobTime::toUcrm($d, $t, $tz);
@@ -225,6 +236,85 @@ case 'report':
     }
     break;
 
+case 'facts':
+    // Read-only: what the plugin recorded for one job, and whether DishNet's Accept left its claim on it (docs/44 §16.26).
+    $job = (int)$a[0]; $st = null; $hist = [];
+    try {
+        $q = $pdo->prepare('SELECT assignee_id, job_time, job_status, gone, accepted_by, updated_at FROM job_notify_state WHERE job_id = ?');
+        $q->execute([$job]);
+        $st = $q->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($st === null) echo "STATE none: the notifier holds no record of job #{$job}\n";
+        else echo 'STATE assigned to ', $st['assignee_id'] !== null ? 'uCRM user #' . (int)$st['assignee_id'] : 'nobody',
+                  '; time ', (string)$st['job_time'] !== '' ? wt_when($st['job_time'] . ' UTC', $tz) : '(none)',
+                  '; status ', wt_status($st['job_status']), (int)$st['gone'] ? '; deleted in uCRM' : '',
+                  "; DishNet's Accept claim: ", $st['accepted_by'] !== null ? 'uCRM user #' . (int)$st['accepted_by'] : 'none',
+                  '; last written ', (string)$st['updated_at'], " UTC\n";
+    } catch (\Throwable $e) { echo "STATE unreadable: the notifier's record could not be read\n"; }
+    try {
+        $q = $pdo->prepare('SELECT * FROM job_notify_events WHERE job_id = ? ORDER BY id');
+        $q->execute([$job]);
+        $hist = $q->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($hist as $r) {
+            echo 'HIST ', $r['created_at'], '  ', $r['event'], ' ', $r['message'] ?? '-', ' ', $r['source'], ' ', $r['outcome'],
+                 ' email=', $r['email_outcome'] ?? '-', ($r['detail'] ?? '') !== '' ? ' (' . wt_mask((string)$r['detail']) . ')' : '', "\n";
+        }
+        if ($hist === []) echo "HIST none: no history row for job #{$job}\n";
+    } catch (\Throwable $e) { echo "HIST unreadable: the history could not be read\n"; }
+    // uCRM's notices about the job, oldest first: each "Received" line for it and the handler's lines after it.
+    $first = null; $last = null; $in = false;
+    foreach (array_reverse(wt_log($dataDir)) as $e) {
+        $m = (string)($e['message'] ?? ''); $d = (array)($e['data'] ?? []); $at = (string)($e['received_at'] ?? '');
+        if (strpos($m, 'Received UCRM webhook') === 0) $in = strpos($m, 'Received UCRM webhook: job.') === 0 && (int)($d['entity_id'] ?? 0) === $job;
+        $own = preg_match('/^(Received UCRM webhook|job #\d+|Customer email|Unhandled event type)/i', $m) === 1;
+        if (($in && $own) || preg_match("/^job #{$job}\\b/i", $m) === 1) {
+            echo "LINE {$at}  ", wt_mask($m), "\n";
+            if ($first === null) $first = $at;
+            $last = $at;
+        }
+    }
+    if ($first === null) echo "LINE none: the plugin's webhook log (it keeps the newest 300 entries) holds no notice about job #{$job}\n";
+    // The Message Log around those notices, on the same clock: job messages and "Job Accepted", never a number or a text.
+    if ($first !== null) {
+        $from = date('Y-m-d H:i:s', (int)strtotime($first) - 120); $to = date('Y-m-d H:i:s', (int)strtotime($last) + 300);
+        try {
+            $q = $pdo->prepare("SELECT event, success, sent_at FROM notification_audit_log WHERE sent_at BETWEEN ? AND ?"
+                . " AND (event LIKE 'job!_%' ESCAPE '!' OR event LIKE 'ops!_job!_accepted%' ESCAPE '!') ORDER BY id");
+            $q->execute([$from, $to]); $n = 0;
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) { $n++; echo 'MLOG ', $r['sent_at'], '  ', $r['event'], ' ', (int)$r['success'] ? 'sent' : 'not sent', "\n"; }
+            if ($n === 0) echo "MLOG none between {$from} and {$to}\n";
+        } catch (\Throwable $e) { echo "MLOG unreadable: the Message Log could not be read\n"; }
+    } else {
+        echo "MLOG not read: with no notice there is no time to look around\n";
+    }
+    $j = $crm->get("scheduling/jobs/{$job}");
+    if (is_array($j)) {
+        echo 'UCRM status ', wt_status($j['status'] ?? null), '; assigned to ',
+             (int)($j['assignedUserId'] ?? 0) > 0 ? 'uCRM user #' . (int)$j['assignedUserId'] : 'nobody', '; time ', wt_when($j['date'] ?? '', $tz), "\n";
+    } else {
+        $err = $crm->getLastError();
+        echo (int)($err['http_code'] ?? 0) === 404 ? "UCRM the job is gone (404)\n" : "UCRM did not answer\n";
+    }
+    // DishNet's Accept claims the job (accepted_by) before it sends message 2, and records message 2 once sent.
+    $acc = array_values(array_filter($hist, function ($r) { return ($r['event'] ?? '') === 'accepted'; }));
+    $claim = $st !== null && $st['accepted_by'] !== null;
+    $prog = (is_array($j) && (string)($j['status'] ?? '') === '1') || ($st !== null && (string)($st['job_status'] ?? '') === '1');
+    if ($acc !== []) {
+        $r = end($acc);
+        echo $r['outcome'] === 'sent' ? 'ACCEPT SENT ' : 'ACCEPT RECORDED ', "DishNet's Accept was recorded",
+             $r['outcome'] === 'sent' ? ': message 2 went' : ', but message 2 was not sent (' . $r['outcome'] . ')', ', at ', $r['created_at'], " UTC\n";
+    } elseif ($claim) {
+        echo "ACCEPT CLAIMED DishNet's Accept claimed job #{$job} for uCRM user #", (int)$st['accepted_by'],
+             " but recorded no message 2: a fault in the Accept path. Send this report back.\n";
+    } elseif ($prog) {
+        echo "ACCEPT NONE-PROGRESS DishNet's Accept left no claim on job #{$job}, yet it was In progress. Either it was set In progress",
+             " outside DishNet's Accept (uCRM's own screen or app, which sends no message 2: docs/44 §16.12), or DishNet's Accept",
+             " stopped before its claim.\n";
+    } else {
+        echo "ACCEPT NONE DishNet's Accept left no claim on job #{$job}, and neither uCRM nor the plugin's record has it In progress:",
+             " Accept has not been pressed.\n";
+    }
+    break;
+
 default:
     echo "NO unknown step\n"; exit(2);
 }
@@ -298,6 +388,69 @@ stale_stop() {
   finish; exit 1
 }
 remark() { local m; m="$(h mark)"; WH="$(printf '%s' "$m" | awk '{print $2}')"; NAL="$(printf '%s' "$m" | awk '{print $3}')"; EV="$(printf '%s' "$m" | awk '{print $4}')"; }
+# Step 3's check: message 2 in the job's history; failing that, what the plugin's record says of DishNet's Accept.
+# Sets ACC (SENT, RECORDED, CLAIMED, NONE-PROGRESS or NONE) and v, the verdict.
+accept_check() {
+  local i=0 f code
+  say "  checking for message 2 (up to $ACCEPT_WAIT s)…"
+  while :; do
+    out="$(h report "$JOB" "$NAL0" "$EV0")"
+    printf '%s\n' "$out" | grep -q '^EVENT accepted ' && break
+    [ $((i*2)) -ge "$ACCEPT_WAIT" ] && break; sleep 2; i=$((i+1))
+  done
+  printf '%s\n' "$out" | sed -n 's/^EVENT /  history  /p; s/^MLOG /  Message Log  /p; s/^UCRM /  uCRM now  /p'
+  if printf '%s\n' "$out" | grep -q '^EVENT accepted accepted [a-z_]* sent '; then ACC=SENT; v="✓ as expected: message 2 went"
+    printf '%s\n' "$out" | grep -q '^EVENT accepted accepted [a-z_]* sent email=sent' && v="$v, and the e-mail was handed to the mail server"
+  elif printf '%s\n' "$out" | grep -q '^EVENT accepted '; then ACC=RECORDED; v="✗ the Accept was recorded, but message 2 was not sent; see the history above"
+  else
+    f="$(h facts "$JOB")"
+    printf '%s\n' "$f" | sed -n 's/^STATE /  plugin record  /p'
+    code="$(printf '%s\n' "$f" | sed -n 's/^ACCEPT \([A-Z-]*\) .*/\1/p' | head -n 1)"
+    case "$code" in
+      CLAIMED) ACC=CLAIMED; v="✗ DishNet's Accept claimed job #$JOB but recorded no message 2: a fault in the Accept path. Send this log back." ;;
+      NONE-PROGRESS) ACC=NONE-PROGRESS
+        v="✗ uCRM shows job #$JOB In progress, but DishNet's Accept left no claim on it: it was set In progress outside DishNet's"
+        v="$v Accept (uCRM's own screen or app sends no message 2), or DishNet's Accept stopped before its claim" ;;
+      *) ACC=NONE; v="✗ no Accept yet: job #$JOB is not In progress, and DishNet's Accept left no claim on it" ;;
+    esac
+  fi
+  say "  $v"
+}
+# What the plugin recorded for one job (read-only), grouped.
+show_facts() {
+  local f; f="$(h facts "$1")"
+  hr "The notifier's record of job #$1"
+  printf '%s\n' "$f" | sed -n 's/^STATE /  /p'
+  hr "Its history (times UTC)"
+  printf '%s\n' "$f" | sed -n 's/^HIST /  /p'
+  hr "uCRM's notices about it, and what the plugin did (the plugin's webhook log, on its own clock: Kampala)"
+  printf '%s\n' "$f" | sed -n 's/^LINE /  /p'
+  hr "The Message Log around those notices: job messages and \"Job Accepted\" (the same clock)"
+  printf '%s\n' "$f" | sed -n 's/^MLOG /  /p'
+  hr "uCRM now"
+  printf '%s\n' "$f" | sed -n 's/^UCRM /  /p'
+  hr "DishNet's Accept"
+  printf '%s\n' "$f" | sed -n 's/^ACCEPT [A-Z-]* /  /p'
+  printf '%s\n' "$f" | grep -v '^\(STATE\|HIST\|LINE\|MLOG\|UCRM\|ACCEPT\) ' | sed '/^$/d; s/^/  (helper) /'
+}
+
+if [ "$MODE" = facts ]; then
+  LOG="$OUT/job-facts-$FACTS-$TS.log"
+  exec > >(tee -a "$LOG") 2>&1
+  say "== what the plugin recorded for job #$FACTS — $TS =="
+  say "  Read-only: this changes nothing and sends nothing."
+  show_facts "$FACTS"
+  say ""
+  say "  The whole report is in $LOG"
+  say "  Send it back:  tail -n +1 $LOG"
+  exit 0
+fi
+
+LOG="$OUT/walkthrough-$TS.log"
+LOCK="$OUT/walkthrough.lock"
+mkdir "$LOCK" 2>/dev/null || { echo "another walk-through is running ($LOCK); stop it, or remove that directory if none is"; exit 1; }
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+exec > >(tee -a "$LOG") 2>&1
 
 say "== job walk-through — $TS — run $RUN =="
 say "  A test job for uCRM client #$CLIENT, assigned to uCRM user #$TECH, titled \"$TITLE\"."
@@ -335,37 +488,43 @@ if ask "Change the time now?"; then
 else RESULT+=("step 2: skipped"); fi
 
 hr "Step 3 of 6: the technician accepts the job"
-say "  Ask the technician to open message 1, tap ✅ ACCEPT JOB, sign in to DishNet and press Accept."
-say "  (Or, signed in to DishNet as an admin: My Jobs → Job #$JOB → Accept. Message 2 still goes to the technician.)"
+say "  Ask the technician to open message 1, tap ✅ ACCEPT JOB, sign in to DishNet and tap ✔ Accept Job twice (the second"
+say "  tap confirms). Or, signed in to DishNet as an admin: My Jobs → Job #$JOB → ✔ Accept Job; message 2 still goes to the"
+say "  technician. Accept in DishNet, not in uCRM: a job set In progress in uCRM's own screen gets no message 2."
 say "  Expected: message 2, \"Thank you for accepting the job!\", with the ✅ JOB COMPLETED link, by WhatsApp and e-mail."
 if ask "Press Enter once Accept has been pressed"; then
-  say "  checking for message 2 (up to 60 s)…"
-  i=0; out=""
-  while [ $i -lt 30 ]; do
-    out="$(h report "$JOB" "$NAL0" "$EV0")"
-    printf '%s\n' "$out" | grep -q '^EVENT accepted ' && break
-    sleep 2; i=$((i+1))
-  done
-  printf '%s\n' "$out" | sed -n 's/^EVENT /  history  /p; s/^MLOG /  Message Log  /p; s/^UCRM /  uCRM now  /p'
-  if printf '%s\n' "$out" | grep -q '^EVENT accepted accepted [a-z_]* sent '; then v="✓ as expected: message 2 went"
-    printf '%s\n' "$out" | grep -q '^EVENT accepted accepted [a-z_]* sent email=sent' && v="$v, and the e-mail was handed to the mail server"
-  elif printf '%s\n' "$out" | grep -q '^EVENT accepted '; then v="✗ the Accept was recorded, but message 2 was not sent; see the history above"
-  else v="✗ no Accept was recorded for job #$JOB within 60 s"; fi
-  say "  $v"; RESULT+=("step 3 accept: $v")
+  # The verdict goes into the summary at once, so a stop at the next question keeps it; a second try replaces it.
+  accept_check; RESULT+=("step 3 accept: $v"); R3=$((${#RESULT[@]} - 1))
+  if [ "$ACC" = NONE-PROGRESS ] && ask "Put job #$JOB back to Open, so DishNet shows Accept again, and try once more?"; then
+    remark; out="$(h patch "$JOB" "$RUN" "status=open")"
+    if [ "$out" = OK ]; then
+      say "  waiting for uCRM's notice to the plugin (job.edit, up to 90 s)…"
+      h wait "$JOB" edit "$WH" 90 | sed -n 's/^LINE /  log  /p; s/^TIMEOUT /  ✗ /p'
+      say "  Job #$JOB is Open again. Now press Accept in DishNet: My Jobs → Job #$JOB → ✔ Accept Job, twice."
+      if ask "Press Enter once Accept has been pressed in DishNet"; then accept_check; RESULT[$R3]="step 3 accept: $v (on the second try)"; fi
+    else say "  ✗ putting it back to Open failed: ${out#FAIL }"; RESULT[$R3]="step 3 accept: $v; putting it back to Open failed: ${out#FAIL }"; fi
+  fi
 else RESULT+=("step 3: skipped"); fi
 
-hr "Step 4 of 6: take the job away from the technician (nobody assigned)"
-say "  Expected: job.edit. The technician gets \"Job #$JOB is no longer assigned to you\", by WhatsApp and by e-mail."
-if ask "Remove the technician from the job now?"; then
-  remark; out="$(h patch "$JOB" "$RUN" "assignee=none")"
-  if [ "$out" = OK ]; then observe edit unassigned removed "step 4 take away"; [ $? = 2 ] && stale_stop
-  else say "  ✗ $out"; RESULT+=("step 4: ✗ $out"); fi
+hr "Step 4 of 6: take the job away from the technician (nobody assigned, and so no time)"
+say "  uCRM keeps no time on a job with nobody assigned: it answers 422, \"You must assign an user in order to set the"
+say "  date.\" So the time goes too. Expected: job.edit. The technician gets \"Job #$JOB is no longer assigned to you\","
+say "  by WhatsApp and by e-mail. Its date line reads \"Not scheduled yet\": the message shows the job as uCRM now has it."
+TOOK=0
+if ask "Take the job away from the technician now?"; then
+  remark; out="$(h patch "$JOB" "$RUN" "assignee=none" "date=none")"
+  if [ "$out" = OK ]; then TOOK=1; observe edit unassigned removed "step 4 take away"; [ $? = 2 ] && stale_stop
+  else say "  ✗ uCRM refused: ${out#FAIL }"; RESULT+=("step 4: ✗ uCRM refused: ${out#FAIL }"); fi
 else RESULT+=("step 4: skipped"); fi
 
 hr "Step 5 of 6: give the job back to the technician"
+say "  With tomorrow 14:00 again, and Open, so DishNet shows Accept again."
 say "  Expected: job.edit. The technician gets message 1 again, with a new ✅ ACCEPT JOB link."
-if ask "Assign the technician again now?"; then
-  remark; out="$(h patch "$JOB" "$RUN" "assignee=$TECH")"
+if [ "$TOOK" != 1 ]; then
+  say "  Skipped: step 4 did not take the job away, so there is nothing to give back."
+  RESULT+=("step 5: skipped (step 4 did not take the job away)")
+elif ask "Give the job back to the technician now?"; then
+  remark; out="$(h patch "$JOB" "$RUN" "assignee=$TECH" "date=tomorrow 14:00" "status=open")"
   if [ "$out" = OK ]; then observe edit assigned assigned "step 5 give back"; [ $? = 2 ] && stale_stop
   else say "  ✗ $out"; RESULT+=("step 5: ✗ $out"); fi
 else RESULT+=("step 5: skipped"); fi

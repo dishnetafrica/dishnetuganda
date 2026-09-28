@@ -3,8 +3,12 @@ declare(strict_types=1);
 /**
  * REHEARSAL ONLY — the repository's fake uCRM (tests/fixtures/fake_ucrm_staff_jobs.php, included below unchanged) plus
  * what real uCRM does that it does not: a job created, changed or deleted is followed a moment later by uCRM's webhook
- * to the plugin, and DELETE of a job. The rehearsal copies this file over the fake's name in a scratch copy of the
- * plugin tree and the fake itself beside it as fake_ucrm_staff_jobs_orig.php. The plugin's webhook address is read
+ * to the plugin, DELETE of a job, and uCRM's rule that a job with a time has somebody assigned — measured on the
+ * DishNet server on 28 September (job #10): a change leaving a time and nobody assigned is answered 422, word for word
+ * as below, and changes nothing (docs/44 §16.26). With refuse_takeaway.txt beside the state file, a change that takes
+ * the assignee away is refused as well, whatever else it carries: a uCRM that refuses step 4 outright.
+ * The rehearsal copies this file over the fake's name in a scratch copy of the plugin tree and the fake itself beside it
+ * as fake_ucrm_staff_jobs_orig.php. The plugin's webhook address is read
  * from webhook_url.txt beside the fake's state file, written once the plugin is up. Everything is fictitious.
  */
 $wtState  = (string)getenv('FAKE_UCRM_STATE');
@@ -38,6 +42,27 @@ if ($wtMethod === 'DELETE' && preg_match('#^/scheduling/jobs/(\d+)$#', $wtPath, 
 }
 $wtIsCreate = $wtMethod === 'POST' && $wtPath === '/scheduling/jobs';
 $wtIsEdit   = $wtMethod === 'PATCH' && preg_match('#^/scheduling/jobs/(\d+)$#', $wtPath, $wtM);
+if ($wtIsEdit) {
+    $st  = json_decode((string)@file_get_contents($wtState), true) ?: [];
+    $cur = $st['jobs'][(string)(int)$wtM[1]] ?? null;
+    $in  = json_decode((string)file_get_contents('php://input'), true);
+    if (is_array($cur) && is_array($in)) {
+        $after  = array_merge($cur, $in);
+        $refuse = null;
+        if (is_file(dirname($wtState) . '/refuse_takeaway.txt') && array_key_exists('assignedUserId', $in) && $in['assignedUserId'] === null) {
+            $refuse = ['assignedUserId' => ['(rehearsal control) this uCRM refuses to take the job away.']];
+        } elseif (!empty($after['date']) && empty($after['assignedUserId'])) {
+            $refuse = ['assignedUserId' => ['You must assign an user in order to set the date.']];
+        }
+        if ($refuse !== null) {
+            $st['requests'][] = ['method' => 'PATCH', 'path' => $wtPath, 'query' => '', 'body' => $in, 'refused' => 422];
+            file_put_contents($wtState, json_encode($st));
+            http_response_code(422); header('Content-Type: application/json');
+            echo json_encode(['code' => 422, 'message' => 'Validation failed.', 'errors' => $refuse]);
+            exit;
+        }
+    }
+}
 if ($wtIsCreate || $wtIsEdit) {
     $wtBefore = array_keys((array)((json_decode((string)@file_get_contents($wtState), true) ?: [])['jobs'] ?? []));
     register_shutdown_function(function () use ($wtState, $wtIsCreate, $wtBefore, $wtM) {

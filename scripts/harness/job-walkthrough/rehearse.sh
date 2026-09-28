@@ -1,6 +1,7 @@
 #!/bin/bash
-# Rehearses scripts/job-walkthrough.sh (docs/44 §16.25): every scenario of rehearse.php on the script as committed,
-# then weakened copies of the script, each of which the scenario that guards it must catch. Nothing leaves the host.
+# Rehearses scripts/job-walkthrough.sh (docs/44 §16.25, §16.26): every scenario of rehearse.php on the script as
+# committed, then weakened copies of the script, each of which the scenario that guards it must catch. Nothing leaves
+# the host.
 set -u
 H="$(cd "$(dirname "$0")" && pwd)"; R="$(cd "$H/../../.." && pwd)"; S="$R/scripts/job-walkthrough.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -30,6 +31,11 @@ mutant X4-no-masking          S1 "return (string)preg_replace(['/[^\\s<>()\"]+@"
 mutant X5-unverified-link     S4 '$rows = StaffDirectory::byUcrmUser((array)($store->load('"'"'retailers.json'"'"') ?? []), $tech);' \
        '$rows = array_values(array_filter((array)($store->load('"'"'retailers.json'"'"') ?? []), function ($r) use ($tech) { return (int)($r['"'"'ucrm_user_id'"'"'] ?? 0) === $tech; }));'
 mutant X6-any-answer-goes-on  S2 '*) say "  Stopped. Nothing more is done."; finish; exit 0 ;;' '*) return 0 ;;'
+mutant X7-step4-keeps-the-time S1 '"assignee=none" "date=none"' '"assignee=none"'
+mutant X8-step5-not-gated     S8 'if [ "$TOOK" != 1 ]; then' 'if false; then'
+mutant X9-claim-ignored       S10 '} elseif ($claim) {' '} elseif (false) {'
+mutant X10-no-second-try      S9 'if [ "$ACC" = NONE-PROGRESS ] && ask' 'if false && ask'
+mutant X11-facts-unmasked     S9 'echo "LINE {$at}  ", wt_mask($m), "\n";' 'echo "LINE {$at}  ", $m, "\n";'
 
 echo ""; echo "rehearsal: $pass passed, $fail failed"
 [ "$fail" = 0 ]

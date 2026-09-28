@@ -3009,3 +3009,103 @@ and goes on. The test job can then be deleted in uCRM's own screen.
 
 **Nothing was run on the server.** The operator runs it, after `git pull` (the plugin itself does not change):
 `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-walkthrough.sh`
+
+### 16.26 The walk-through's first run: job #10 — 28 September 2026, 10:26 to 10:29 UTC
+
+**The run.** The operator ran `scripts/job-walkthrough.sh` on the server with its defaults: the test customer (uCRM
+client #1) and S4 (uCRM user #1099, staff account #4). It made job #10. The operator pasted the terminal and wrote
+*"it worked"*. Times below are the plugin's log clock, Kampala (UTC+3).
+
+| Step | What the script did | Result |
+|---|---|---|
+| before | the preflight | GO: 5.18.52 with the notifier, Uganda, both tables, client #1 with an e-mail, #1099 → staff account #4, verified, with a number and an e-mail |
+| 1 | created job #10 for Tue 29 Sep, 10:00 | ✓ job.add at 13:26:09; message 1 by WhatsApp and e-mail at 13:26:11; the customer's *"installation booked"* e-mail at 13:26:12 |
+| 2 | moved it to 14:00 | ✓ job.edit at 13:26:32; *"new time"* by WhatsApp and e-mail at 13:26:34 |
+| 3 | waited for Accept | ✗ uCRM had the job In progress, but no Accept was recorded within 60 s, and no message 2 |
+| 4 | set nobody as the assignee | ✗ uCRM refused: 422, *"You must assign an user in order to set the date."* Nothing changed |
+| 5 | assigned #1099 again | ✗ as the script counted it. job.edit at 13:28:48: *"no new assignment, time or cancellation: nothing to send"* |
+| 6 | deleted the job | ✓ job.delete at 13:29:30; *"cancelled"* by WhatsApp and e-mail at 13:29:32; uCRM answers 404 |
+
+**What it establishes:**
+- **5.18.52 runs** since §16.24's fix. On job #10 it sent message 1, *new time* and *cancelled*, each by WhatsApp and
+  by e-mail, and handled every notice within 2 s.
+- **Deleting a job through uCRM's API works,** and uCRM tells the plugin (`job.delete`). §16.25 had measured it only
+  against the fake.
+- **uCRM refuses a time with nobody assigned.** Measured on job #10: HTTP 422, with `errors.assignedUserId` reading
+  *"You must assign an user in order to set the date."* uCRM changed nothing: step 5's notice still found #1099 on the
+  job. The rule is uCRM's own check of a job, so its screen cannot keep a time without an engineer either (inferred,
+  not measured). Taking the engineer off a job with a time therefore takes the time away too.
+- **Step 5 was the notifier being right.** The job still had #1099 when step 5 assigned #1099. Nothing had changed, so
+  no second message 1 went. The script's expectation was wrong, not the plugin.
+
+**Step 3 — open.** uCRM had job #10 In progress, and the plugin recorded no Accept. From the code:
+- **DishNet's Accept** is the ✔ Accept Job button on the job page, tapped twice (`scheduling_job_update` with
+  `notify_accept`). On a job that is Open, it first claims the job for its engineer (`job_notify_state.accepted_by`,
+  under `BEGIN IMMEDIATE`). It then sends message 2 and records it in the history (§16.12).
+- **A job set In progress anywhere else** gets no message 2, by design: uCRM's own screen or app. Its notice
+  (`job.edit`) changes only the status, and the notifier sends nothing for a status (§16.12).
+- **So the record answers it:**
+  - a claim with no message 2 is a fault in the Accept path;
+  - no claim means the Accept did not go through DishNet, or DishNet's Accept stopped before its claim.
+- **The claim outlives the deletion.** `decide()` keeps `accepted_by` when a job is deleted, or keeps its engineer, so
+  job #10 can still be read.
+- **Seen in passing, not changed:** the Accept's answer carries a note on message 2 (`whatsapp_note`). Neither Accept
+  handler on the job page shows it, so the person pressing Accept sees *"accepted"* whatever became of message 2.
+
+**F-WT1 — found, not changed** (a plugin change, for its own approval). *"Job #N is no longer assigned to you"*
+(`JobMessages::removed`) prints the job's time as uCRM now has it. uCRM takes the time away with the engineer, so that
+line will read *"📅 Date: Not scheduled yet"*. The engineer needs the time they were booked for, and the notifier
+already holds it: `from_time`, the time last told. A job handed to another engineer keeps its time, so the
+*"reassigned"* messages are not affected. Seen in the rehearsal (S1); not yet on the server.
+
+**The script, changed** (`scripts/` only; the plugin is unchanged):
+- **Step 4** takes the engineer and the time away together: `assignedUserId` and `date` both null, the one change
+  uCRM's rule leaves. **Whether uCRM accepts a null time is not yet measured on the server.** If it refuses, the script
+  prints uCRM's answer and does not offer step 5.
+- **Step 5** is offered only when step 4 took the job away. It gives back the engineer, tomorrow 14:00, and Open
+  (status 0), so the job page shows Accept again (§16.12: *"a leader can set the job back to Open"*).
+- **Step 3** says to press Accept in DishNet, not in uCRM, and that the second tap confirms. When no message 2 is
+  recorded, it reads the notifier's record:
+  - a claim is reported as *"a fault in the Accept path"*;
+  - no claim on a job In progress is reported as such. The script then offers, once, to put the job back to Open, so
+    that Accept can be pressed in DishNet.
+- **New, read-only: `--facts N`.** It prints what the plugin holds on one job:
+  - the notifier's record, with the Accept claim;
+  - the job's history;
+  - uCRM's notices about the job, with the plugin's lines;
+  - the Message Log around them: the event and sent or not, never a number or a text;
+  - uCRM's job now;
+  - a verdict on DishNet's Accept.
+
+  It takes no lock, changes nothing and writes its own log file.
+- A flag given without its number now stops; before, it looped.
+
+**Rehearsed** (`scripts/harness/job-walkthrough/`):
+- The fake uCRM now answers the 422 as measured, word for word, and accepts nobody with no time (S8a).
+- New scenarios:
+  - **S8:** uCRM refuses step 4, and step 5 is not offered.
+  - **S9:** the status is set In progress in uCRM's own screen. The script finds no claim and says so. It puts the job
+    back to Open, and the Accept pressed in DishNet sends message 2. During the run, `--facts` names the case; after
+    it, it shows message 2 and the claim.
+  - **S9b:** the same, stopped at the offer of a second try. The summary keeps step 3's verdict, and the job is left
+    as it was.
+  - **S10:** `--facts` calls a claim without message 2 a fault, reads an unknown job as nothing, refuses a bad number
+    and changes nothing.
+- S1 now also checks step 4's and step 5's exact changes, and F-WT1's line.
+- **77 assertions over thirteen scenarios, and eleven weakened copies,** five of them new, each caught:
+  - step 4 keeping the time;
+  - step 5 not gated on step 4;
+  - the claim ignored;
+  - no second try;
+  - `--facts` unmasked.
+- The helper passes `php -l` under PHP 8.1.34 (php-wasm) as well as 8.4.19.
+- **Two consecutive runs, identical: 77 of 77, and 11 of 11 caught each**
+  (`docs/evidence/5.18.52/walkthrough/rehearsal-run3.log` and `-run4.log`, about 8 minutes each).
+
+**For the operator — read-only, one command:**
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-walkthrough.sh --facts 10
+```
+
+Then `tail -n +1` the log file it names. Its *"DishNet's Accept"* line answers step 3.

@@ -2241,3 +2241,21 @@ customer the older "installation booked" e-mail; test jobs need no customer.
 - **Rehearsed** against the plugin's sandbox with a webhook-sending fake uCRM, in `scripts/harness/job-walkthrough/`.
   Two runs, each 36 of 36, and six weakened copies caught. `php -l` is clean under PHP 8.1.34.
 - **Not run on the server.**
+
+## 28 Sep — the walk-through's first run: job #10 (docs/44 §16.26)
+
+- **Steps 1, 2 and 6 as expected:** message 1, the new time and the cancellation, each by WhatsApp and by e-mail, and
+  the customer's e-mail. 5.18.52 runs, and deleting a job through uCRM's API works.
+- **Step 4:** uCRM refuses a time with nobody assigned (422, measured on job #10). So step 5's *"nothing to send"* was
+  right: the engineer had never left the job.
+- **Step 3, open:** uCRM had the job In progress, but no Accept was recorded. Only DishNet's Accept sends message 2,
+  and it claims the job first, so the plugin's record tells which: `--facts 10`, read-only.
+- **F-WT1, found, not changed:** *"no longer assigned"* will read *"Date: Not scheduled yet"*, because uCRM takes the
+  time away with the engineer. A plugin change, for its own approval.
+- **The script:**
+  - step 4 takes the time away too;
+  - step 5 comes only after step 4 did, and sets the job Open again;
+  - step 3 reads the claim and offers one more try in DishNet;
+  - a new read-only `--facts N`.
+
+  Rehearsed twice, identically: 77 of 77 assertions, and eleven weakened copies caught.

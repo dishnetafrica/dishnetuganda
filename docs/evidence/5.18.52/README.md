@@ -71,10 +71,11 @@ Personal data: none. The sample's names, addresses and number are made up, and n
 | `opcache/fix.sh` | The fix handed over: a new timestamp for the 20 installed files, each first checked against `7ad465e`; content unchanged |
 | `opcache/simulation.txt` | Both run on a simulated install built from the two commits: the check before, the fix, the check after |
 
-## The walk-through script — docs/44 §16.25
+## The walk-through script — docs/44 §16.25, §16.26
 
 | File | What it is |
 |---|---|
 | `walkthrough/rehearsal-run1.log`, `walkthrough/rehearsal-run2.log` | `scripts/harness/job-walkthrough/rehearse.sh`, twice: eight scenarios (36 assertions) on `scripts/job-walkthrough.sh`, then six weakened copies, each caught |
+| `walkthrough/rehearsal-run3.log`, `walkthrough/rehearsal-run4.log` | The same after the first run on the server (docs/44 §16.26): thirteen scenarios (77 assertions) — step 4 under uCRM's 422 rule, step 3's claim and second try, `--facts` — then eleven weakened copies, each caught |
 
-Personal data: none. The sandbox's accounts are made up, and scenario S1 checks that none of them is printed.
+Personal data: none. The sandbox's accounts are made up, and scenarios S1 and S9 check that none of them is printed.
