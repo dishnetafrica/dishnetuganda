@@ -2590,8 +2590,13 @@ pasted them. They carry no name, e-mail, number or secret.
 **What happened to the links (§16.15, point 1), read from the two runs together:**
 - S3 and S5 did not change after 04:26:40, because R3 names only 1 and 4. So theirs were the 2 old-way ids at 04:26.
   S1 and S4 therefore held no id at 04:26, and were saved again through the picker after it.
-- The code clears a link only on an administrator's explicit "— not linked —": `post_sync.php` passes a posted `0` to
-  `StaffLink::verify`, which answers `clear`. The picker opens on "as saved", which posts `keep` and changes nothing.
+- The code clears a link only on an administrator's explicit act:
+  - the Staff form's "— not linked —": `post_sync.php` passes a posted `0` to `StaffLink::verify`, which answers
+    `clear`. The picker opens on "as saved", which posts `keep` and changes nothing;
+  - or the admin-only API action `set_ucrm_user_id` with `0` (`api_scheduling.php`), which no screen in this
+    repository calls.
+  - No background job writes the link. The nightly uCRM pull and the cashbook check do not touch it; the cashbook
+    check's saves of the staff list change only its cash fields, on a list read just before.
 - What set S1 and S4 to "not linked" between 20:42 and 04:26 is in no log.
 - **M5 is still to do:** S3 and S5 still hold 4 and 1581.
 
