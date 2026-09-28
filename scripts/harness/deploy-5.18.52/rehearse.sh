@@ -9,7 +9,8 @@
 #     Uganda selected as on the server: currency_code UGX in the configuration vault, no tenant_profile anywhere;
 #   · the public address and the :8443 door (TLS, self-signed) are stand-ins answering stage V as the live pages do —
 #     and the public address opens the INSTALLED plugin's store on every request, as the real public.php does, so the
-#     installed code applies its own migrations: 075 arrives through the plugin's own MigrationRunner, at stage V.
+#     installed code applies its own migrations: 075 and 076 arrive through the plugin's own MigrationRunner, at stage V.
+#   · the engineer's e-mail (§16.16): R11 reads the plugin's mail settings as yes or no; nothing is sent here.
 # DEPLOY and ROLLBACK are typed through a pseudo-terminal, as the operator types them.
 #
 #   bash scripts/harness/deploy-5.18.52/rehearse.sh            REHEARSE_KEEP=<dir> keeps every run's full output
@@ -165,8 +166,22 @@ nal_max() { sqv "SELECT coalesce(max(id), 0) FROM notification_audit_log"; }
 plant_event() { sq "INSERT INTO notification_audit_log (sender, event, phone, preview, success) VALUES ('sandbox', '$1', '256700000111', 'x', 1)"; }
 tables_075() { sqv "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('job_notify_state', 'job_notify_events')"; }
 mig_075() { sqv "SELECT count(*) FROM _migrations WHERE filename = '075_job_notifications.sql'"; }
+mig_076() { sqv "SELECT count(*) FROM _migrations WHERE filename = '076_job_notify_email.sql'"; }
+email_cols() { sqv "SELECT count(*) FROM pragma_table_info('job_notify_events') WHERE name IN ('email_outcome', 'email_detail')"; }
 migrations() { php -r '$p = new PDO("sqlite:" . $argv[1]); echo implode(",", $p->query("SELECT filename FROM _migrations ORDER BY id")->fetchAll(PDO::FETCH_COLUMN));' "$DATA/plugin.sqlite3"; }
-drop_075() { sq "DROP TABLE IF EXISTS job_notify_state; DROP TABLE IF EXISTS job_notify_events; DELETE FROM _migrations WHERE filename = '075_job_notifications.sql'"; }
+drop_075() { sq "DROP TABLE IF EXISTS job_notify_state; DROP TABLE IF EXISTS job_notify_events; DELETE FROM _migrations WHERE filename IN ('075_job_notifications.sql', '076_job_notify_email.sql')"; }
+# 076 undone alone: job_notify_events as 075 made it (no e-mail columns) and 076's ledger row gone.
+undo_076() {
+  sq "DROP TABLE IF EXISTS job_notify_events; DELETE FROM _migrations WHERE filename = '076_job_notify_email.sql'"
+  php -r '$p = new PDO("sqlite:" . $argv[1]); $p->exec(file_get_contents($argv[2]));' "$DATA/plugin.sqlite3" "$PD/migrations/075_job_notifications.sql"
+}
+mail_settings() {   # $1 none | ucrm | smtp — the plugin's mail settings as the operator may have them; a planted password
+  rm -f "$DATA/email_settings.json"
+  case "$1" in
+    ucrm) printf '{"use_ucrm_email":true,"smtp_host":"","smtp_pass":"planted-secret-5152"}' > "$DATA/email_settings.json" ;;
+    smtp) printf '{"use_ucrm_email":false,"smtp_host":"mail.example.test","smtp_user":"u","smtp_pass":"planted-secret-5152","smtp_from":"accounts@example.test"}' > "$DATA/email_settings.json" ;;
+  esac
+}
 NOW="$(date -u +%s)"
 iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
 # The deploy's record, as a deploy writes it, moved to a chosen moment: $1 epoch of the deploy, $2 its Message Log mark.
@@ -314,7 +329,7 @@ for l in "ok    A1 the installed plugin reads Uganda from both configuration sou
          "in the container accepts all $N_RUN changed PHP files that run on the server (and $N_TST test files)" \
          "ok    A3 staff accounts read: 7 accounts, 6 active; of the 5 active accounts that take jobs, 3 hold a uCRM user id (1 through a verified link, 2 stored the old way) and 1 only an FTTH id" \
          "ok    A4 the Message Log holds 4 rows; its last is #4" \
-         "migration 075 has not run here: no job_notify_state, no job_notify_events (as expected on 5.18.51)" \
+         "migrations 075 and 076 have not run here: no job_notify_state, no job_notify_events (as expected on 5.18.51)" \
          "— one consistent copy (VACUUM INTO" "ok    backed up the installed plugin (5.18.51, $BASE)" "ok    backed up the configuration vault" \
          "GO — evidence recorded" "The rollback command is printed at the end of this log, on its own." "ok    container serves $PIN" \
          "ok    V1 the sign-in page on the public address answers 200 with zero redirects (no loop)" \
@@ -327,12 +342,14 @@ for l in "ok    A1 the installed plugin reads Uganda from both configuration sou
          "ok    R4 the old ＋ New Job, Bulk Dispatch and Reschedule messages stay off since row #4 (0)" \
          "release B's job messages since row #4: none (nobody created or changed a job)" \
          "ok    R5 the master cron's job_assign entry is still commented out (path A stays off)" \
-         "ok    R6 the job notifier is wired in: New Job, Bulk Dispatch, Reschedule, Accept, uCRM's job.add/job.edit/job.delete, the sign-in return" \
+         "ok    R6 the job notifier is wired in: New Job, Bulk Dispatch, Reschedule, Accept, uCRM's job.add/job.edit/job.delete, the sign-in return, the e-mail copy" \
          "ok    R6 the old \"No WhatsApp message is sent for jobs yet\" is gone from the screen" \
          "note  R7 1 of 5 active accounts that take jobs have a verified uCRM link: only they receive job messages. The other 4 get none" \
          "ok    R8 the installed master.php keeps 5.18.51's lock guard (is_resource)" \
-         "ok    R9 migration 075 is applied: job_notify_state holds 0 job(s), job_notify_events 0 row(s)" \
-         "ok    R10 a job link opened signed out → 302 → the staff sign-in page, and no job shown"; do
+         "ok    R9 migrations 075 and 076 are applied: job_notify_state holds 0 job(s), job_notify_events 0 row(s), with the e-mail's outcome" \
+         "ok    R10 a job link opened signed out → 302 → the staff sign-in page, and no job shown" \
+         "note  R11 the plugin's mail settings name no mail server: each job message is recorded \"no e-mail: the plugin has no mail server set up\" until one is set" \
+         "and by e-mail     each of them also by e-mail, the same text, to the address on that engineer's staff account"; do
   check "$(has "$OUT" "$l")" "yes" "3: ${l:0:118}"
 done
 check "$(has "$OUT" 'installs        the checkout as it is')$(has "$OUT" 'for the documented deploy')" "yesno" \
@@ -340,9 +357,9 @@ check "$(has "$OUT" 'installs        the checkout as it is')$(has "$OUT" 'for th
 check "$(cnt "$OUT" 'ok    backed up ')" "6" "six backups: two databases, the data directory, the plugin's own data/, the installed plugin, the vault"
 check "$(live)$(installed_digest "$PIN")$(n_added_present)" "${PIN}0${N_AD}" "the container serves $PIN: every file as the commit has it, the new ones present"
 check "$(data_digest)" "$D0" "no data and no configuration value changed"
-check "$(migrations)" "$MIG0,075_job_notifications.sql" "the migrations ledger gained exactly 075, applied by the installed code at stage V's first request"
-check "$(tables_075)$(sqv 'SELECT count(*) FROM job_notify_state')$(sqv 'SELECT count(*) FROM job_notify_events')" "200" "…its two tables exist, and hold nothing: the deploy sent nothing"
-check "$(grep -c 'OK: 075_job_notifications.sql' "$DATA/migration.log")" "1" "…the plugin's migration log says so, once"
+check "$(migrations)" "$MIG0,075_job_notifications.sql,076_job_notify_email.sql" "the migrations ledger gained exactly 075 and 076, applied by the installed code at stage V's first request"
+check "$(tables_075)$(sqv 'SELECT count(*) FROM job_notify_state')$(sqv 'SELECT count(*) FROM job_notify_events')$(email_cols)" "2002" "…the two tables exist with the e-mail's two columns, and hold nothing: the deploy sent nothing"
+check "$(grep -c 'OK: 075_job_notifications.sql' "$DATA/migration.log")$(grep -c 'OK: 076_job_notify_email.sql' "$DATA/migration.log")" "11" "…the plugin's migration log says so, once each"
 check "$(grep -c "cd $REPO && bash scripts/deploy-5.18.52.sh --rollback" <<<"$OUT")" "1" "the rollback command is printed once, on its own line"
 check "$(awk '/PASSED\. Send this LOG FILE back/ {p=1} p && /deploy-5\.18\.52\.sh --rollback/ {print "after"; exit}' <<<"$OUT")" "after" \
   "…after the verdict, at the end of the log, never in the block the operator pasted"
@@ -358,7 +375,7 @@ fresh_log() { base_log "$TD"; }   # the old fault two hours before the deploy of
 fresh_log; OUT="$(run --after-only)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.52 (after): PASSED')" "0yes" "4a three hours on, nothing planted: PASSED — the lock fatal from before the deploy is not counted"
 check "$(has "$OUT" 'deploy-5.18.52.sh --after-only   re-measures R3, R4 and R9 since this deploy')" "yes" "…and the summary says what a later run re-measures"
-check "$(has "$OUT" 'migration 075 recorded 1×; job_notify_state 0 rows, job_notify_events 0 rows (5.18.52 is installed)')" "yes" "…and stage A reads the notifier's record as 5.18.52's own"
+check "$(has "$OUT" 'migration 075 recorded 1×, 076 1×; job_notify_state 0 rows, job_notify_events 0 rows (5.18.52 is installed)')" "yes" "…and stage A reads the notifier's record as 5.18.52's own"
 logline $((NOW - 1800)) "$FLOCK_TEXT"; OUT="$(run --after-only)"; fresh_log
 check "$(has "$OUT" "FAIL  V4 1 fatal line(s) of $P since")" "yes" "4b the master's lock fatal after the deploy: V4 fails — 5.18.51's fix is the baseline now"
 echo "$(date -u -d "@$((NOW - 600))" +%Y-%m-%dT%H:%M:%S).5Z [27-Sep-2026] PHP Fatal error:  Uncaught Error in /data/ucrm/data/plugins/$P/lib/JobNotifier.php:12" >> "$SB/container.log"
@@ -374,16 +391,32 @@ check "$(has "$OUT" "note  R4 release B's job messages since row #4: 2 — someo
 check "$(has "$OUT" 'job_assigned ×1')$(has "$OUT" 'ops_job_accepted_self ×1')" "yesyes" "…each named"
 sq "DELETE FROM notification_audit_log WHERE id > 4"
 sq "INSERT INTO job_notify_state (job_id, assignee_id, job_time, job_status, title) VALUES (901, 1099, '2026-09-28T09:00:00+0000', 0, 'x');
-    INSERT INTO job_notify_events (job_id, event, message, source, staff_id, outcome) VALUES (901, 'assigned', 'assigned', 'my_jobs', 2, 'sent'), (901, 'accepted', 'accepted', 'accept', 2, 'sent')"
+    INSERT INTO job_notify_events (job_id, event, message, source, staff_id, outcome, email_outcome, email_detail)
+      VALUES (901, 'assigned', 'assigned', 'my_jobs', 2, 'sent', 'sent', 'staff account #2'), (901, 'accepted', 'accepted', 'accept', 2, 'sent', 'failed', 'staff account #2: TCP connect failed')"
 OUT="$(run --after-only)"
-check "$(has "$OUT" 'ok    R9 migration 075 is applied: job_notify_state holds 1 job(s), job_notify_events 2 row(s)')$(has "$OUT" 'assigned / assigned / sent ×1')$(has "$OUT" 'accepted / accepted / sent ×1')" "yesyesyes" \
-  "4f the notifier's record: counted, event / message / outcome only"
+check "$(has "$OUT" 'ok    R9 migrations 075 and 076 are applied: job_notify_state holds 1 job(s), job_notify_events 2 row(s), with the e-mail')$(has "$OUT" 'assigned / assigned / sent / e-mail sent ×1')$(has "$OUT" 'accepted / accepted / sent / e-mail failed ×1')" "yesyesyes" \
+  "4f the notifier's record: counted, event / message / the WhatsApp's outcome / the e-mail's, only"
+check "$(grep -cF 'TCP connect' <<<"$OUT")" "0" "…no e-mail detail is printed"
 check "$(grep -cF "'x'" <<<"$OUT")" "0" "…no title of a job is printed"
 sq "DELETE FROM job_notify_events; DELETE FROM job_notify_state"
 touch "$SB/no-store"; drop_075; OUT="$(run --after-only)"
-check "$(has "$OUT" 'FAIL  R9 migration 075 is not in place (recorded 0×; job_notify_state -1, job_notify_events -1)')" "yes" "4g the migration gone and not re-applied: R9 fails"
+check "$(has "$OUT" 'FAIL  R9 migrations 075 and 076 are not in place (075 recorded 0×, 076 0×; job_notify_state -1, job_notify_events -1, e-mail columns 0)')" "yes" "4g the migrations gone and not re-applied: R9 fails"
 rm -f "$SB/no-store"; open_store
-check "$(tables_075)$(mig_075)" "21" "control: the next request's store re-applies 075 by itself"
+check "$(tables_075)$(mig_075)$(mig_076)$(email_cols)" "2112" "control: the next request's store re-applies 075 and 076 by itself"
+touch "$SB/no-store"; undo_076; OUT="$(run --after-only)"
+check "$(has "$OUT" 'FAIL  R9 migrations 075 and 076 are not in place (075 recorded 1×, 076 0×; job_notify_state 0, job_notify_events 0, e-mail columns 0)')" "yes" "4g2 076 alone gone (075's tables still there): R9 fails"
+rm -f "$SB/no-store"; open_store
+check "$(mig_076)$(email_cols)" "12" "control: the next request's store re-applies 076 by itself"
+for m in none ucrm smtp; do
+  mail_settings "$m"; OUT="$(run --after-only)"
+  case "$m" in
+    none) want="note  R11 the plugin's mail settings name no mail server" ;;
+    ucrm) want="note  R11 the engineer's e-mail goes through uCRM's mailer (use_ucrm_email on) — as every plugin e-mail" ;;
+    smtp) want="note  R11 the engineer's e-mail goes through the plugin's own SMTP settings — as every plugin e-mail" ;;
+  esac
+  check "$(has "$OUT" "$want")$(grep -cE 'planted-secret-5152|mail\.example\.test' <<<"$OUT")$(fails "$OUT")" "yes00" "4m mail settings \"$m\": R11 says which, prints no value, and fails nothing"
+done
+mail_settings none
 printf '\n// changed on the server\n' >> "$PD/lib/JobAccess.php"; OUT="$(run --after-only)"
 check "$(has "$OUT" "FAIL  R1 Release A or 5.18.51 files that differ from $PIN: lib/JobAccess.php")" "yes" "4h a Release A file changed on the server: R1 fails, naming it"
 git -C "$REPO" show "$PIN:$P/lib/JobAccess.php" > "$PD/lib/JobAccess.php"
@@ -394,6 +427,10 @@ sed -i "s/case 'job.edit':/case 'job.edited':/" "$PD/webhook.php"; OUT="$(run --
 check "$(has "$OUT" "FAIL  R6 missing from the installed files: webhook.php:case 'job.edit':")$(has "$OUT" 'FAIL  R1 installed files that differ')" "yesyes" \
   "4j uCRM's job.edit no longer handled: R6 names what is missing (and R1 the file)"
 git -C "$REPO" show "$PIN:$P/webhook.php" > "$PD/webhook.php"
+sed -i 's/\$mail = \$this->email(\$row, \$kind, \$text, \$fields);/$mail = ["outcome" => null, "detail" => ""];/' "$PD/lib/JobNotifier.php"; OUT="$(run --after-only)"
+check "$(has "$OUT" 'FAIL  R6 missing from the installed files: lib/JobNotifier.php:$mail = $this->email($row, $kind, $text, $fields);')" "yes" \
+  "4j2 the e-mail copy taken out of the installed notifier: R6 names what is missing"
+git -C "$REPO" show "$PIN:$P/lib/JobNotifier.php" > "$PD/lib/JobNotifier.php"
 touch "$SB/dashboard-open"; OUT="$(run --after-only)"; rm -f "$SB/dashboard-open"
 check "$(has "$OUT" 'FAIL  R10 a job link opened signed out → 200')" "yes" "4k a job link that shows a page signed out: R10 fails"
 php "$SB/edit_staff.php" "$DATA" 2; OUT="$(run --after-only)"
@@ -412,7 +449,7 @@ for l in "GO — evidence recorded" "checking out $BASE (5.18.51) for the docume
          "ok    RB1 all $N_MO files 5.18.52 had changed are back exactly as $BASE (5.18.51) has them" "ok    RB1 the installed manifest says 5.18.51" \
          "ok    RB2 the $N_AD file(s) 5.18.52 added are still on disk and inert: no 5.18.51 file loads them" \
          "ok    RB3 every staff account is as it was at stage A of this run" \
-         "note  on 5.18.51 again: no job WhatsApp message on Uganda (M6). Migration 075's two tables and their rows stay"; do
+         "note  on 5.18.51 again: no job WhatsApp message or e-mail on Uganda (M6). Migration 075's two tables, 076's two columns and their rows stay"; do
   check "$(has "$OUT" "$l")" "yes" "5: ${l:0:118}"
 done
 check "$(cnt "$OUT" 'ok    backed up ')$(has "$OUT" 'ok    backed up the installed plugin (5.18.52, '"$PIN"')')" "6yes" "the same backup first — of 5.18.52's code"
@@ -424,12 +461,12 @@ open_store
 check "$(data_digest)$(migrations)$(tables_075)" "$D0${MIG1}2" "no data changed; 075's ledger row and its tables stay, and 5.18.51's store leaves them alone"
 OUT="$(run --answer ROLLBACK --rollback)"
 check "$(has "$OUT" 'nothing to roll back; running the rollback checks')$(fails "$OUT")$(backups)" "yes01" "5b rolling back again: says so, checks, takes no second backup"
-check "$(has "$OUT" 'migration 075 recorded 1×; job_notify_state 0 rows, job_notify_events 0 rows (left by an earlier 5.18.52)')" "yes" "…and reads the tables 5.18.52 left behind as such"
+check "$(has "$OUT" 'migration 075 recorded 1×, 076 1×; job_notify_state 0 rows, job_notify_events 0 rows (left by an earlier 5.18.52)')" "yes" "…and reads the tables 5.18.52 left behind as such"
 
 echo; echo "== 6. forward again, back by hand as printed, forward with an edit during the deploy =="
 fresh; OUT="$(run --answer DEPLOY)"
-check "$(fails "$OUT")$(live)$(has "$OUT" 'ok    R9 migration 075 is applied')" "0${PIN}yes" "6a deploy again after a rollback: PASSED, serving $PIN; 075 already there, not applied twice"
-check "$(grep -c 'OK: 075_job_notifications.sql' "$DATA/migration.log")" "1" "…the migration log still says 075 once"
+check "$(fails "$OUT")$(live)$(has "$OUT" 'ok    R9 migrations 075 and 076 are applied')" "0${PIN}yes" "6a deploy again after a rollback: PASSED, serving $PIN; 075 and 076 already there, not applied twice"
+check "$(grep -c 'OK: 075_job_notifications.sql' "$DATA/migration.log")$(grep -c 'OK: 076_job_notify_email.sql' "$DATA/migration.log")" "11" "…the migration log still says each once"
 HAND="$(awk '/or by hand, if this script cannot run:/ {getline; sub(/^ +/, ""); print; exit}' <<<"$OUT")"
 check "$HAND" "cd $REPO && git checkout $BASE && bash scripts/deploy-hybrid.sh && git checkout -" "the summary prints the rollback by hand"
 ( export PATH="$SB/bin:$PATH"; eval "$HAND" ) >/dev/null 2>&1
@@ -564,12 +601,19 @@ mutant "R6 blind to a caller that is gone" \
 mutant "R8 blind to a missing lock guard" \
   "if grep -qF 'if (is_resource(\$lockFp)) {' \"\$DEST/cron/master.php\" 2>/dev/null; then" 'if true; then' \
   "$AFTER_SETUP"'; sed -i "s/if (is_resource(\$lockFp)) {/if (true) {/" "$PD/cron/master.php"' '--after-only' 'grep -q "ok    R8 the installed master.php" <<<"$o"'
+R9_COND='if [ "$JN_MIG" = "1" ] && [ "$JN_MIG76" = "1" ] && [ "$JN_COLS" = "1" ] && [ -n "$JN_S" ] && [ "$JN_S" != "-1" ] && [ -n "$JN_E" ] && [ "$JN_E" != "-1" ]; then'
 mutant "R9 takes a missing migration as applied" \
-  'if [ "$JN_MIG" = "1" ] && [ -n "$JN_S" ] && [ "$JN_S" != "-1" ] && [ -n "$JN_E" ] && [ "$JN_E" != "-1" ]; then' 'if true; then' \
-  "$AFTER_SETUP"'; touch "$SB/no-store"; drop_075' '--after-only' 'grep -q "ok    R9 migration 075 is applied" <<<"$o"'
+  "$R9_COND" 'if true; then' \
+  "$AFTER_SETUP"'; touch "$SB/no-store"; drop_075' '--after-only' 'grep -q "ok    R9 migrations 075 and 076 are applied" <<<"$o"'
 mutant "R9 reads the ledger only (the tables dropped behind it)" \
-  'if [ "$JN_MIG" = "1" ] && [ -n "$JN_S" ] && [ "$JN_S" != "-1" ] && [ -n "$JN_E" ] && [ "$JN_E" != "-1" ]; then' 'if [ "$JN_MIG" = "1" ]; then' \
-  "$AFTER_SETUP"'; touch "$SB/no-store"; sq "DROP TABLE job_notify_events"' '--after-only' 'grep -q "ok    R9 migration 075 is applied" <<<"$o"'
+  "$R9_COND" 'if [ "$JN_MIG" = "1" ] && [ "$JN_MIG76" = "1" ]; then' \
+  "$AFTER_SETUP"'; touch "$SB/no-store"; sq "DROP TABLE job_notify_events"' '--after-only' 'grep -q "ok    R9 migrations 075 and 076 are applied" <<<"$o"'
+mutant "R9 blind to 076 (075 alone taken for the notifier's record)" \
+  "$R9_COND" 'if [ "$JN_MIG" = "1" ] && [ -n "$JN_S" ] && [ "$JN_S" != "-1" ] && [ -n "$JN_E" ] && [ "$JN_E" != "-1" ]; then' \
+  "$AFTER_SETUP"'; touch "$SB/no-store"; undo_076' '--after-only' 'grep -q "ok    R9 migrations 075 and 076 are applied" <<<"$o"'
+mutant "R11 reads no settings as a mail server" \
+  '  "ucrm=0 smtp=1") note "R11' '  "ucrm=0 smtp=1"|none) note "R11' \
+  "$AFTER_SETUP"'; mail_settings none' '--after-only' 'grep -q "R11 the engineer.s e-mail goes through the plugin.s own SMTP settings" <<<"$o"'
 mutant "R10 takes any answer for the job link" \
   'if [ "$HTTP_CODE" = "302" ] && [ "$HTTP_LOCATION" = "$PLUGIN_BASE?page=login" ]; then ok "R10' 'if true; then ok "R10' \
   "$AFTER_SETUP"'; touch "$SB/dashboard-open"' '--after-only' 'grep -q "ok    R10" <<<"$o"'

@@ -8,8 +8,11 @@
 #              · message 1, "New Job Has Been Assigned to You", with an ACCEPT JOB link to the job's page;
 #              · message 2, after Accept, with the completion link, in place of the old "✅ Job Accepted";
 #              · a new time; "no longer assigned" (reassigned or removed); "cancelled" (deleted in uCRM).
+#            Each message also goes by e-mail, the same text, to the address on the same staff account, through the
+#            plugin's mail server (the operator's "i need", §16.16) — whether or not the WhatsApp went.
 #            The link survives the staff sign-in. Jobs made in My Jobs and Bulk Dispatch are created Open (status 0),
-#            so the Accept button shows. Migration 075 adds two tables the notifier keeps its record in.
+#            so the Accept button shows. Migration 075 adds two tables the notifier keeps its record in; 076 adds the
+#            e-mail's outcome to one of them.
 #   South Sudan: nothing changes but two empty tables; this script checks only the Uganda server.
 #   It installs the pinned commit by its hash, also once later releases have been pushed to the branch.
 #
@@ -34,15 +37,16 @@
 # opens the database READ-ONLY as the database's owner. The writes are the documented deploy (or rollback), a backup
 # under /root/dnb-5.18.52/ (its database copies pass through the container's /tmp and are removed there at once), a
 # record of where the deploy started (state-5.18.52.env beside the logs) — and, only if stage V finds the public
-# address redirecting after a deploy, the rollback. Migration 075 is applied by the plugin itself, at the first request
-# the new code serves; stage V's own page loads are such requests.
+# address redirecting after a deploy, the rollback. Migrations 075 and 076 are applied by the plugin itself, at the first
+# request the new code serves; stage V's own page loads are such requests. It reads whether the plugin's mail settings
+# name a server (yes or no, never a value) and sends no e-mail.
 #
 # Stages:  A before-evidence, the Uganda check, the syntax check under the server's own PHP, the staff snapshot,
 #            the Message Log mark, the notifier's tables, the backup → GO/NO-GO
 #          B the documented deploy (or, with --rollback, the documented deploy of 5.18.51)
 #          V the public pages, the :8443 door and the loop check; no fatal since the deploy
 #          R 5.18.52 installed: the files, the Uganda switch, staff records untouched, the old job paths silent,
-#            migration 075, the job link, the master's lock guard kept        (RB after a rollback)
+#            migrations 075 and 076, the job link, the master's lock guard kept, the mail settings   (RB after a rollback)
 #          F summary
 set -uo pipefail
 umask 077
@@ -50,7 +54,7 @@ umask 077
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="fc5c3b7"   # 5.18.52 — the plugin-scoped commit deploy-hybrid.sh records
+EXPECTED_PLUGIN_COMMIT="7ad465e"   # 5.18.52 — the plugin-scoped commit deploy-hybrid.sh records
 EXPECTED_VERSION="5.18.52"
 BASELINE_COMMIT="240f2f9"          # 5.18.51 — what the server runs first, what 5.18.52 was built and tested against, the rollback
 BASELINE_VERSION="5.18.51"
@@ -271,19 +275,34 @@ if ($argv[2] === "mark") { $r = $db->query("SELECT coalesce(max(id), 0), count(*
 $st = $db->prepare("SELECT event, count(*) FROM notification_audit_log WHERE id > ? GROUP BY event ORDER BY event"); $st->execute([(int)$argv[3]]);
 foreach ($st->fetchAll(PDO::FETCH_NUM) as $r) echo "EVENT ", preg_replace("/[^A-Za-z0-9_.:-]/", "_", (string)$r[0]), " ", (int)$r[1], "\n";
 echo "MAX ", (int)$db->query("SELECT coalesce(max(id), 0) FROM notification_audit_log")->fetchColumn(), "\n";'
-# The job notifier's record (migration 075): whether it is applied, the two tables, and what the history holds — event,
-# message and outcome with counts only; never a job's title, a person, a number or a text (the tables hold none).
+# The job notifier's record (migrations 075 and 076): whether each is applied, the two tables, the e-mail's two columns,
+# and what the history holds — event, message, the WhatsApp's outcome and the e-mail's, with counts only; never a job's
+# title, a person, an address, a number or a text (the tables hold none).
 JN_PHP='error_reporting(E_ALL); ini_set("display_errors", "stderr");
 $db = '"$RO_PDO"';
 $has = function ($t) use ($db) { $s = $db->prepare("SELECT count(*) FROM sqlite_master WHERE type = ? AND name = ?"); $s->execute(["table", $t]); return (int)$s->fetchColumn() > 0; };
-$applied = 0;
-if ($has("_migrations")) { $s = $db->prepare("SELECT count(*) FROM _migrations WHERE filename = ?"); $s->execute(["075_job_notifications.sql"]); $applied = (int)$s->fetchColumn(); }
-echo "MIGRATION ", $applied, "\n";
+$applied = 0; $applied76 = 0;
+if ($has("_migrations")) { $s = $db->prepare("SELECT count(*) FROM _migrations WHERE filename = ?");
+  $s->execute(["075_job_notifications.sql"]); $applied = (int)$s->fetchColumn(); $s->execute(["076_job_notify_email.sql"]); $applied76 = (int)$s->fetchColumn(); }
+echo "MIGRATION ", $applied, "\n", "MIGRATION76 ", $applied76, "\n";
 foreach (["job_notify_state", "job_notify_events"] as $t) echo "TABLE ", $t, " ", $has($t) ? (int)$db->query("SELECT count(*) FROM " . $t)->fetchColumn() : -1, "\n";
+$cols = $has("job_notify_events") ? array_column($db->query("PRAGMA table_info(job_notify_events)")->fetchAll(PDO::FETCH_ASSOC), "name") : [];
+$mail = in_array("email_outcome", $cols, true) && in_array("email_detail", $cols, true);
+echo "EMAILCOLS ", $mail ? 1 : 0, "\n";
 if ($has("job_notify_events")) {
-  foreach ($db->query("SELECT event, message, outcome, count(*) FROM job_notify_events GROUP BY 1, 2, 3 ORDER BY 1, 2, 3")->fetchAll(PDO::FETCH_NUM) as $r)
-    echo "ROW ", preg_replace("/[^a-z_-]/", "_", (string)$r[0]), " ", $r[1] === null ? "-" : preg_replace("/[^a-z_-]/", "_", (string)$r[1]), " ", preg_replace("/[^a-z_]/", "_", (string)$r[2]), " ", (int)$r[3], "\n";
+  foreach ($db->query("SELECT event, message, outcome, " . ($mail ? "email_outcome" : "NULL") . ", count(*) FROM job_notify_events GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3, 4")->fetchAll(PDO::FETCH_NUM) as $r)
+    echo "ROW ", preg_replace("/[^a-z_-]/", "_", (string)$r[0]), " ", $r[1] === null ? "-" : preg_replace("/[^a-z_-]/", "_", (string)$r[1]), " ", preg_replace("/[^a-z_]/", "_", (string)$r[2]),
+      " ", $r[3] === null ? "-" : preg_replace("/[^a-z_]/", "_", (string)$r[3]), " ", (int)$r[4], "\n";
 }'
+# The plugin's mail settings (email_settings.json in its data directory, as MailService reads them): whether they name a
+# server — uCRM's mailer switched on, and the plugin's own SMTP host set — as yes or no. Never a value.
+MAIL_PHP='error_reporting(E_ALL); ini_set("display_errors", "stderr");
+$f = $argv[1] . "/email_settings.json";
+if (!is_file($f)) { echo "MAIL none\n"; exit(0); }
+if (!is_readable($f)) { echo "MAIL unreadable\n"; exit(0); }
+$e = json_decode((string)file_get_contents($f), true);
+if (!is_array($e)) { echo "MAIL unparsable\n"; exit(0); }
+echo "MAIL ucrm=", empty($e["use_ucrm_email"]) ? 0 : 1, " smtp=", trim((string)($e["smtp_host"] ?? "")) === "" ? 0 : 1, "\n";'
 probe() { docker exec -u "$DB_OWNER" "$CONTAINER" php -d display_errors=stderr -r "$@"; }
 staff_snapshot() {   # $1 the file to write (mode 600); prints nothing
   probe "$STAFF_PHP" "$PDD_IN" > "$1" 2> "$1.err"; local rc=$?
@@ -340,12 +359,12 @@ if [ -n "$NAL_MARK" ]; then ok "A4 the Message Log holds $NAL_ROWS rows; its las
 elif printf '%s' "$NAL" | grep -q '^NOTABLE'; then NAL_MARK=0; note "the Message Log table does not exist yet — stage R counts from its first row"
 else bad "A4 the Message Log could not be read: $(printf '%s' "$NAL" | head -c 200 | tr '\n' ' ')"; fi
 
-# A5 — the notifier's record before the deploy: on 5.18.51 migration 075 has never run (information).
+# A5 — the notifier's record before the deploy: on 5.18.51 migrations 075 and 076 have never run (information).
 JN="$(probe "$JN_PHP" "$PDD_IN" 2>&1)"
-JN_MIG="$(printf '%s\n' "$JN" | sed -n 's/^MIGRATION //p' | head -1)"
+JN_MIG="$(printf '%s\n' "$JN" | sed -n 's/^MIGRATION //p' | head -1)"; JN_MIG76="$(printf '%s\n' "$JN" | sed -n 's/^MIGRATION76 //p' | head -1)"
 JN_S="$(printf '%s\n' "$JN" | sed -nE 's/^TABLE job_notify_state (-?[0-9]+)$/\1/p')"; JN_E="$(printf '%s\n' "$JN" | sed -nE 's/^TABLE job_notify_events (-?[0-9]+)$/\1/p')"
-if [ "$JN_MIG" = "0" ] && [ "$JN_S" = "-1" ] && [ "$JN_E" = "-1" ]; then echo "  …     migration 075 has not run here: no job_notify_state, no job_notify_events (as expected on $BASELINE_VERSION)"
-elif [ -n "$JN_MIG" ]; then echo "  …     migration 075 recorded ${JN_MIG}×; job_notify_state ${JN_S:-?} rows, job_notify_events ${JN_E:-?} rows ($([ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ] && echo "$EXPECTED_VERSION is installed" || echo "left by an earlier $EXPECTED_VERSION"))"
+if [ "$JN_MIG" = "0" ] && [ "$JN_MIG76" = "0" ] && [ "$JN_S" = "-1" ] && [ "$JN_E" = "-1" ]; then echo "  …     migrations 075 and 076 have not run here: no job_notify_state, no job_notify_events (as expected on $BASELINE_VERSION)"
+elif [ -n "$JN_MIG" ]; then echo "  …     migration 075 recorded ${JN_MIG}×, 076 ${JN_MIG76:-?}×; job_notify_state ${JN_S:-?} rows, job_notify_events ${JN_E:-?} rows ($([ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ] && echo "$EXPECTED_VERSION is installed" || echo "left by an earlier $EXPECTED_VERSION"))"
 else note "the notifier's record could not be read: $(printf '%s' "$JN" | head -c 200 | tr '\n' ' ')"; fi
 
 # ── The backup (deploy and rollback) ─────────────────────────────────────────
@@ -672,10 +691,11 @@ R6_MISS=""
 for pair in "webhook.php|function whJobNotify(" "webhook.php|case 'job.edit':" "includes/api/api_scheduling.php|\$sjNotifier()->observe(\$newJobId, 'my_jobs'" \
             "includes/api/api_scheduling.php|\$sjNotifier()->observe(\$newJobId, 'bulk'" "includes/api/api_scheduling.php|\$sjNotifier()->observe(\$jobId, 'reschedule'" \
             "includes/api/api_scheduling.php|\$sjNotifier()->accepted(" "public.php|JobReturn::remember(" "includes/post/post_auth.php|JobReturn::take(" \
-            "tabs/support/scheduling.php|The engineer gets a WhatsApp message"; do
+            "lib/JobNotifier.php|\$mail = \$this->email(\$row, \$kind, \$text, \$fields);" \
+            "tabs/support/scheduling.php|The engineer gets a WhatsApp message and the same by e-mail"; do
   grep -qF -- "${pair#*|}" "$DEST/${pair%%|*}" 2>/dev/null || R6_MISS="$R6_MISS ${pair%%|*}:${pair#*|}"
 done
-[ -z "$R6_MISS" ] && ok "R6 the job notifier is wired in: New Job, Bulk Dispatch, Reschedule, Accept, uCRM's job.add/job.edit/job.delete, the sign-in return; ＋ New Job says the engineer gets a WhatsApp message" \
+[ -z "$R6_MISS" ] && ok "R6 the job notifier is wired in: New Job, Bulk Dispatch, Reschedule, Accept, uCRM's job.add/job.edit/job.delete, the sign-in return, the e-mail copy; ＋ New Job says the engineer gets a WhatsApp message and the same by e-mail" \
   || bad "R6 missing from the installed files:$R6_MISS"
 grep -qF 'No WhatsApp message is sent for jobs yet' "$DEST/tabs/support/scheduling.php" 2>/dev/null \
   && bad "R6 the installed New Job screen still says no WhatsApp message is sent" || ok "R6 the old \"No WhatsApp message is sent for jobs yet\" is gone from the screen"
@@ -690,16 +710,18 @@ fi
 if grep -qF 'if (is_resource($lockFp)) {' "$DEST/cron/master.php" 2>/dev/null; then ok "R8 the installed master.php keeps 5.18.51's lock guard (is_resource)"
 else bad "R8 the installed master.php has lost 5.18.51's is_resource() guard on its lock release"; fi
 
-# R9 — migration 075, applied by the plugin itself at the first request the new code served (stage V made some).
+# R9 — migrations 075 and 076, applied by the plugin itself at the first request the new code served (stage V made
+# some): the two tables, and the e-mail's two columns.
 JN="$(probe "$JN_PHP" "$PDD_IN" 2>&1)"
-JN_MIG="$(printf '%s\n' "$JN" | sed -n 's/^MIGRATION //p' | head -1)"
+JN_MIG="$(printf '%s\n' "$JN" | sed -n 's/^MIGRATION //p' | head -1)"; JN_MIG76="$(printf '%s\n' "$JN" | sed -n 's/^MIGRATION76 //p' | head -1)"
+JN_COLS="$(printf '%s\n' "$JN" | sed -n 's/^EMAILCOLS //p' | head -1)"
 JN_S="$(printf '%s\n' "$JN" | sed -nE 's/^TABLE job_notify_state (-?[0-9]+)$/\1/p')"; JN_E="$(printf '%s\n' "$JN" | sed -nE 's/^TABLE job_notify_events (-?[0-9]+)$/\1/p')"
-if [ "$JN_MIG" = "1" ] && [ -n "$JN_S" ] && [ "$JN_S" != "-1" ] && [ -n "$JN_E" ] && [ "$JN_E" != "-1" ]; then
-  ok "R9 migration 075 is applied: job_notify_state holds $JN_S job(s), job_notify_events $JN_E row(s)"
-  printf '%s\n' "$JN" | awk '$1=="ROW" {print "          " $2 " / " $3 " / " $4 " ×" $5}'
+if [ "$JN_MIG" = "1" ] && [ "$JN_MIG76" = "1" ] && [ "$JN_COLS" = "1" ] && [ -n "$JN_S" ] && [ "$JN_S" != "-1" ] && [ -n "$JN_E" ] && [ "$JN_E" != "-1" ]; then
+  ok "R9 migrations 075 and 076 are applied: job_notify_state holds $JN_S job(s), job_notify_events $JN_E row(s), with the e-mail's outcome"
+  printf '%s\n' "$JN" | awk '$1=="ROW" {print "          " $2 " / " $3 " / " $4 " / e-mail " $5 " ×" $6}'
 else
-  bad "R9 migration 075 is not in place (recorded ${JN_MIG:-?}×; job_notify_state ${JN_S:-?}, job_notify_events ${JN_E:-?}) — the notifier sends nothing without its record"
-  docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "grep -F 075_job_notifications '$PDD_IN/migration.log' 2>/dev/null | tail -3" | cut -c1-200 | sed 's/^/     /'
+  bad "R9 migrations 075 and 076 are not in place (075 recorded ${JN_MIG:-?}×, 076 ${JN_MIG76:-?}×; job_notify_state ${JN_S:-?}, job_notify_events ${JN_E:-?}, e-mail columns ${JN_COLS:-?}) — the notifier keeps no record without them"
+  docker exec -u "$DB_OWNER" "$CONTAINER" sh -c "grep -E '07[56]_job_notif' '$PDD_IN/migration.log' 2>/dev/null | tail -3" | cut -c1-200 | sed 's/^/     /'
 fi
 
 # R10 — the link the messages carry: signed out, it asks for the sign-in and shows no job (the page keeps only the
@@ -707,6 +729,17 @@ fi
 http GET "$PLUGIN_BASE?page=dashboard&tab=scheduling&job=1"
 if [ "$HTTP_CODE" = "302" ] && [ "$HTTP_LOCATION" = "$PLUGIN_BASE?page=login" ]; then ok "R10 a job link opened signed out → 302 → the staff sign-in page, and no job shown"
 else bad "R10 a job link opened signed out → $HTTP_CODE ${HTTP_LOCATION:+→ $HTTP_LOCATION} (expected 302 → $PLUGIN_BASE?page=login)"; fi
+
+# R11 — where the engineer's e-mail goes out: the plugin's mail settings, read as MailService reads them (information;
+# nothing is sent, and uCRM is not asked). The first job's outcome in WA Events and job_notify_events is the proof.
+MAIL="$(probe "$MAIL_PHP" "$PDD_IN" 2>&1)"
+case "$(printf '%s\n' "$MAIL" | sed -n 's/^MAIL //p' | head -1)" in
+  "ucrm=1 smtp=1") note "R11 the engineer's e-mail goes through uCRM's mailer (use_ucrm_email on), with the plugin's own SMTP settings as its fallback — as every plugin e-mail. This script does not ask uCRM; the first job's e-mail outcome shows it" ;;
+  "ucrm=1 smtp=0") note "R11 the engineer's e-mail goes through uCRM's mailer (use_ucrm_email on) — as every plugin e-mail. This script does not ask uCRM; the first job's e-mail outcome shows it" ;;
+  "ucrm=0 smtp=1") note "R11 the engineer's e-mail goes through the plugin's own SMTP settings — as every plugin e-mail" ;;
+  "ucrm=0 smtp=0"|none) note "R11 the plugin's mail settings name no mail server: each job message is recorded \"no e-mail: the plugin has no mail server set up\" until one is set (Settings → System → Email Settings); the WhatsApp is not affected" ;;
+  *) note "R11 the plugin's mail settings could not be read ($(printf '%s' "$MAIL" | head -c 120 | tr '\n' ' ')) — the first job's e-mail outcome will say whether a server took it" ;;
+esac
 else
 # ════════════════════════════════════════════════════════
 hdr "RB. $BASELINE_VERSION, back in place (read-only)"
@@ -737,7 +770,7 @@ done
 [ -z "$USED" ] && ok "RB2 the $N_LEFT file(s) $EXPECTED_VERSION added are still on disk and inert: no $BASELINE_VERSION file loads them" \
   || bad "RB2 $BASELINE_VERSION files name a class $EXPECTED_VERSION added:$USED"
 staff_compare "RB3"
-note "on $BASELINE_VERSION again: no job WhatsApp message on Uganda (M6). Migration 075's two tables and their rows stay; $BASELINE_VERSION never reads them. Jobs created Open meanwhile stay Open in uCRM"
+note "on $BASELINE_VERSION again: no job WhatsApp message or e-mail on Uganda (M6). Migration 075's two tables, 076's two columns and their rows stay; $BASELINE_VERSION never reads them. Jobs created Open meanwhile stay Open in uCRM"
 fi
 
 # ════════════════════════════════════════════════════════
@@ -753,7 +786,8 @@ esac
 [ -n "$BK" ] && echo "  the data          this release adds two tables and changes no row: a rollback needs no restore. The database copies are there for a restore on instruction only"
 if [ "$MODE" != "rollback" ]; then
   echo "  job messages      on Uganda each job change sends one WhatsApp message, to the engineer uCRM has on the job: message 1 with the ACCEPT JOB link, a new time, \"no longer assigned\", \"cancelled\"; after Accept, message 2 with the completion link"
-  echo "  who gets them     only accounts with a verified uCRM link (R7); everyone else's job is logged \"WhatsApp skipped\" in WA Events"
+  echo "  and by e-mail     each of them also by e-mail, the same text, to the address on that engineer's staff account (R11: which mail server)"
+  echo "  who gets them     only accounts with a verified uCRM link (R7); everyone else's job is logged \"WhatsApp skipped\" in WA Events, and gets no e-mail either"
   echo "  later             cd $REPO && bash scripts/deploy-$EXPECTED_VERSION.sh --after-only   re-measures R3, R4 and R9 since this deploy; send its log file"
 fi
 echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"
