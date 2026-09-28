@@ -2190,3 +2190,13 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   on a sample log under PHP 8.4.19 and 8.1.34, with identical output. Also handed over: the test the operator asked
   for, a ＋ New Job with the test customer and S4, whose note shows the notifier's result.
 - **Nothing changed.**
+
+## 28 Sep — job #8 ran on 5.18.51's code after 5.18.52 was installed (docs/44 §16.22)
+
+- **The check's answer:** job #8's job.add, at 07:43:30 UTC, logged *"WhatsApp skipped: job notifications are not
+  switched on yet"*. Only 5.18.50 and 5.18.51 write that line. The web server ran an older compiled copy about 95
+  seconds after 5.18.52's files were in place.
+- **Likely PHP's opcode cache** (php-fpm's OPcache); its settings are not yet measured. No check of the deploy could
+  see it, because every "serves" check reads files, not what PHP runs.
+- **Next, read-only:** job #9's lines (the operator's next test job, 08:26 UTC), php-fpm's start time and its OPcache
+  settings. A php-fpm reload, if needed, is its own approval.

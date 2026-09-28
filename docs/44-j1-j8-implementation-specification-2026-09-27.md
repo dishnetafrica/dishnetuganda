@@ -2755,7 +2755,7 @@ unchanged since before release A.
 
 **What the code allows.** The customer's *"installation booked"* e-mail went at the same minute, and the job.add
 handler sends it only after its call to the notifier. So the handler ran to its end, and the notifier wrote nothing.
-Only two readings fit:
+Only two readings fit *(a third was the answer — §16.22)*:
 1. **The Uganda gate read "not Uganda" inside that request,** and the 5.18.49 path ran. uCRM answers `users/{id}`
    with 404 (§16.17), so that path finds no number and logs *"Job #8 — No phone found for …"*.
 2. **The notifier stopped before its claim** and logged *"Job #8 — could not be checked with uCRM: <reason>"*. The
@@ -2816,3 +2816,34 @@ it will work"*.
 
 Nothing was changed by this session. Job #8 itself stays unrecorded: its next change in uCRM (a new time, say) is the
 first the notifier sees, and would send message 1 then.
+
+### 16.22 Job #8 ran on 5.18.51's code — 28 September 2026
+
+**The check's answer**, run by the operator at about 08:09 UTC (the log's times are Kampala time, UTC+3):
+
+```
+webhook log: 300 entries, 2026-09-26 06:16:56 to 2026-09-28 11:09:38
+2026-09-28 10:43:30  job.add  Received UCRM webhook: job.add
+2026-09-28 10:43:30  job.add  Job #8 — WhatsApp skipped: job notifications are not switched on yet
+2026-09-28 10:43:31  job.add  Customer email sent: install_scheduled → <e-mail>
+```
+
+- **That line exists only in 5.18.50's and 5.18.51's `webhook.php`** (`240f2f9`, line 2437). `7ad465e` has no such
+  line; its job.add hands the job to the notifier. So at 07:43:30 UTC the web server ran 5.18.51's code, about 95
+  seconds after the deploy had put 5.18.52's files in place (V4 counts from 07:41:55 UTC).
+- **Neither reading in §16.21 was right.** The files on disk were 5.18.52's: R1 checks every file by its hash, at the
+  deploy and again at 07:55. What ran was an older compiled copy.
+- **The likely cause is PHP's opcode cache (OPcache)** in the web server (php-fpm). It keeps compiled scripts in
+  memory. Depending on its settings, it re-reads a changed file only after some seconds, or not until php-fpm restarts.
+  Not measured yet.
+- **Every "serves" check of the deploy reads files, not what PHP runs.** B's *"container now serves 7ad465e"* reads
+  `.deployed-commit` from disk; R1 and R6 read files. R10's answer (302 to the sign-in) is the same under 5.18.51 and
+  5.18.52. So no check of this deploy could see it.
+- **The earlier releases were picked up.** At 07:26 UTC the log held 6 job.add lines in 5.18.50's words after its
+  20:08 UTC deploy. So the code did change over at some point after that deploy; when and how is not known.
+
+**Next, read-only:** the same check for job #9, the next test job, created by the operator in uCRM at 08:26 UTC with
+the test customer and S4. Beside it: when php-fpm started, and its OPcache settings (`validate_timestamps`,
+`revalidate_freq`, and any in the pool's configuration). The answer decides whether 5.18.52 is running now, whether a
+php-fpm reload is needed (a production action, so its own approval), and what every later deploy script must check:
+the code PHP runs, not only the files on disk.
