@@ -2705,3 +2705,40 @@ The operator answered **"approve 5.18.52"**. The deploy command was handed over 
 - **The rehearsal again, on the branch tip `a6198c2`: 170/170, 30 weakened copies caught**, identical to runs 1 and 2
   but for the clone's commit line (`docs/evidence/5.18.52/email-rehearsal-run3-at-approval.log`, committed alone in
   `8ae3814`, whose message describes this record).
+
+### 16.20 5.18.52 deployed — 28 September 2026, 07:41 UTC
+
+**PASSED: 44 ok, 0 failed, 3 notes.** `7ad465e` over `240f2f9` (5.18.51), deployed by the operator (run
+`20260928T074131Z`). The operator printed the log file on the server with `tail -n +1` and pasted it; it carries no
+name, e-mail, number or secret.
+
+- **A.** 20 files against `240f2f9`: 12 changed, 8 added, 1 removed.
+  - The removed file, `tests/test_job_notifications_off.php`, stays on the server under its old name, inert (a note).
+  - The server's PHP 8.1.34 accepted all 9 changed PHP files that run on the server and the 8 test files.
+  - The staff digest is `0c5c170623a6dc3d`; the Message Log ends at #380.
+- **The backup,** `/root/dnb-5.18.52/backup-20260928T074131Z`: `plugin.sqlite3`, 23 MB, integrity ok, 225 tables; the
+  data directory, 100 MB; the installed 5.18.51, 11 MB; the vault; UISP health.
+- **B.** *"✓ container now serves 7ad465e"*.
+- **V.** All ok; no fatal or parse error of the plugin since 07:41:55 UTC.
+- **R.**
+  - R1–R6 and R8–R10 ok. R9: migrations 075 and 076 applied, both tables empty. R10: a job link opened signed out
+    answers 302 to the staff sign-in.
+  - R4: no job message at the deploy; nobody had created or changed a job yet.
+  - **Note R7:** 2 of the 4 accounts that take jobs hold a verified link (S1 and S4).
+  - **Note R11:** the engineer's e-mail goes through the plugin's own SMTP settings.
+
+**The first job on 5.18.52, at about 07:43 UTC.** The operator created job #8 in uCRM's own screen: Open, assigned to
+uCRM user 1099 (S4, verified, with a +256 number), with a customer. The operator's screenshots show two things:
+- uCRM's *"Job has been added"*;
+- in the `accounts@` Sent folder, the customer's *"Your DishNet installation is booked"* e-mail at the same minute.
+
+What reached the technician is for `--after-only` to say: R4 and R9 count it.
+
+**What the Sent folder shows about the customer e-mail.** It is the job.add handler's `install_scheduled` e-mail,
+unchanged since before release A.
+- It went to one customer (C1) once for each job created with that customer: six times on 28 September, and more
+  on the 27th. A second customer (C2) had one on the 27th.
+- Each came from a job the operator created while testing. **Test jobs need no customer** (§16.18).
+- Its *"Technician"* row reads *"Technician"*: the handler looks the name up at `GET users/{id}`, which this uCRM
+  answers with 404 (the users check, §16.17). The job carries `assignedUserFullName`, so the name is there to use. That
+  is a small change for a later release; nothing is changed here.

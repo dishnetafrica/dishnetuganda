@@ -2172,3 +2172,8 @@ M4 only V3 is left (the hour of a job made in ＋ New Job). M5 and S1's number a
 **About 07:35 UTC — "approve 5.18.52"** (docs/44 §16.19). The deploy command was handed over on its own; its rollback
 is printed only at the end of the log. M5, S1's number and V3 remain; none blocks the deploy itself. The rehearsal on
 the branch tip read 170/170 again.
+
+**Deployed 28 Sep 2026 07:41 UTC by the operator: PASSED, 44 ok / 0 failed / 3 notes** (docs/44 §16.20). `7ad465e` is
+live; migrations 075 and 076 applied; the engineer's e-mail goes through the plugin's own SMTP settings. The first job
+on 5.18.52, #8, was created at about 07:43 UTC, assigned to S4. Every test job made with a customer also sent that
+customer the older "installation booked" e-mail; test jobs need no customer.
