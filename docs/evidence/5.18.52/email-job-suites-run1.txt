@@ -1,0 +1,462 @@
+=== test_job_messages.php ===
+
+1. The two approved messages (docs/44 §16.12), byte for byte
+  ok   message 1 (ACCEPT JOB) is the approved text
+  ok   message 2 (JOB COMPLETED) is the approved text
+  ok   and this copy of message 1 is docs/44 §16.12's own code block
+  ok   and this copy of message 2 is docs/44 §16.12's own code block
+
+2. The other four, byte for byte, as built
+  ok   no longer assigned, after a reassignment (D3)
+  ok   a new time
+  ok   removed, the job staying with nobody (D3)
+  ok   cancelled, the job deleted in uCRM (D3)
+
+3. The rules around them
+  ok   Kampala time, dd.mm.yyyy hh:mm pm
+  ok   the day is Kampala's: 21:00 UTC is midnight on the next day
+  ok   no time, or none readable: "Not scheduled yet"
+  ok   a job with no customer and no address: no Client, Mobile or Address line (T4.13, the live test's job)
+  ok   no address (or only blanks): no address line
+  ok   a client uCRM gave no name to: its id still shows
+  ok   no client phone: no Mobile line
+  ok   a value carrying line breaks stays on its own line: it cannot add a link or a line
+  ok   a name ending in a full stop is not doubled
+  ok   no name: "Hi. This is …"
+  ok   no support number and no website: neither line, and nothing dangling
+  ok   plain text, as South Sudan's: no WhatsApp bold anywhere
+  ok   every message says "This is DishNet Africa."
+
+4. The decision table (JobNotifier::decide)
+  ok   never seen, deleted: -||nostate
+  ok   never told, an assignee: assigned|assigned→1099|state
+  ok   never told, nobody assigned: -||state
+  ok   never told, already closed: closed||state
+  ok   the same again (a redelivered event): -||nostate
+  ok   only the title: -||state
+  ok   only accepted (status 0 → 1): -||state
+  ok   another engineer: reassigned|assigned→1100,reassigned_away→1099|state
+  ok   another engineer and another time: reassigned|assigned→1100,reassigned_away→1099|state
+  ok   the engineer removed: unassigned|removed→1099|state
+  ok   an engineer where there was none: assigned|assigned→1099|state
+  ok   another time: rescheduled|new_time→1099|state
+  ok   a time taken away: rescheduled|new_time→1099|state
+  ok   another time, nobody assigned: -||state
+  ok   closed: closed||state
+  ok   closed, seen again: -||nostate
+  ok   closed, and moved while closed: -||state
+  ok   deleted: cancelled|cancelled→1099|state
+  ok   deleted, seen again: -||nostate
+  ok   deleted after it was closed: cancelled||state
+  ok   deleted, nobody assigned: cancelled||state
+  ok   back after a deletion (a new start): assigned|assigned→1099|state
+  ok   A → B → A: the third change messages A again — the state is compared with the last one told, so no "already sent" key blocks it
+  ok   the completion-link claim stays with the same engineer through a new time
+  ok   and is cleared when the job goes to another engineer
+  ok   the "cancelled" notice carries the title and time last told: uCRM's job is gone by then
+  ok   "Was" is the time last told, not what a browser said
+
+5. uCRM's answer
+  ok   an answer without assignedUserId is not used (V4): it could only read as "unassigned"
+  ok   an answer that says nobody (null) is used
+  ok   nor one without the time or the status
+  ok   uCRM's time is kept as UTC, whatever offset it carries
+  ok   no time, or an unreadable one: empty
+
+6. The webhook-log lines, by WA Events' own rule
+  ok   the badge's rule is the one read here (navigation.php)
+  ok   sent: "Job #950 (assigned) — WhatsApp sent to staff account #3" — WA Events files it sent, the badge counts it sent
+  ok   failed: "Job #950 (assigned) — WhatsApp failed for staff account #3" — WA Events files it failed, the badge counts it failed
+  ok   no account: "Job #950 (assigned) — WhatsApp skipped: no staff account is linked to uCRM user #1099" — WA Events files it skipped, the badge does not count it
+  ok   two accounts: "Job #950 (assigned) — WhatsApp skipped: 2 staff accounts are linked to uCRM user #1099" — WA Events files it skipped, the badge does not count it
+  ok   no number: "Job #950 (assigned) — WhatsApp skipped: staff account #3 has no usable number" — WA Events files it skipped, the badge does not count it
+  ok   recorded: "Job #950 (closed) — recorded, no message: closed in uCRM" — WA Events files it info, the badge does not count it
+  ok   no change: "Job #950 — no new assignment, time or cancellation: nothing to send" — WA Events files it info, the badge does not count it
+  ok   unverified: "Job #950 — could not be checked with uCRM: uCRM did not answer for the job" — WA Events files it info, the badge does not count it
+  ok   a reassignment writes one line per message, each filed on its own
+  ok   sent, e-mail sent: "Job #950 (assigned) — WhatsApp sent to staff account #3; e-mail handed to the mail server" — still filed sent, counted sent
+  ok   sent, e-mail refused: "Job #950 (assigned) — WhatsApp sent to staff account #3; e-mail not taken by the mail server" — still filed sent, counted sent
+  ok   sent, no address: "Job #950 (assigned) — WhatsApp sent to staff account #3; no e-mail: the staff account has no usable address" — still filed sent, counted sent
+  ok   sent, no mail server: "Job #950 (assigned) — WhatsApp sent to staff account #3; no e-mail: the plugin has no mail server set up" — still filed sent, counted sent
+  ok   failed, e-mail sent: "Job #950 (assigned) — WhatsApp failed for staff account #3; e-mail handed to the mail server" — still filed failed, counted failed
+  ok   no number, e-mail sent: "Job #950 (assigned) — WhatsApp skipped: staff account #3 has no usable number; e-mail handed to the mail server" — still filed skipped, not counted
+  ok   no number, e-mail refused: "Job #950 (assigned) — WhatsApp skipped: staff account #3 has no usable number; e-mail not taken by the mail server" — still filed skipped, not counted
+  ok   control: had the e-mail's words been "failed" or "sent to", the WhatsApp that went would be filed failed and the one skipped counted delivered
+  ok   no line carries a phone number, an e-mail address or a message's text
+
+7. The notes on the staff screens
+  ok   sent: "WhatsApp sent to the engineer, with the link to accept the job."
+  ok   sent: "WhatsApp with the new time sent to the engineer on the job."
+  ok   sent: "WhatsApp with the completion link sent to the engineer on the job."
+  ok   failed: "The WhatsApp message to the engineer failed. WA Events and the failure queue show it."
+  ok   no_staff_account: "No WhatsApp was sent: no active staff account is linked to the job's uCRM user."
+  ok   ambiguous_staff_account: "No WhatsApp was sent: more than one staff account is linked to the job's uCRM user."
+  ok   no_usable_number: "No WhatsApp was sent: the engineer's staff account has no usable phone number."
+  ok   sending: "uCRM's own notice of this change is sending the WhatsApp message. WA Events shows the result."
+  ok   no_change: "No WhatsApp was sent: nobody is assigned to the job."
+  ok   no_change: "No WhatsApp was sent: nothing the engineer needs to hear about changed."
+  ok   no_change: "No WhatsApp was sent: the job was not waiting to be accepted."
+  ok   unverified: "No WhatsApp was sent: the job could not be read back from uCRM. Its next change catches up."
+  ok   sent, e-mail sent: "WhatsApp sent to the engineer, with the link to accept the job. The same message went to the engineer's e-mail."
+  ok   sent, e-mail sent: "WhatsApp with the new time sent to the engineer on the job. The same message went to the engineer's e-mail."
+  ok   sent, e-mail failed: "WhatsApp sent to the engineer, with the link to accept the job. The e-mail copy was not taken by the mail server."
+  ok   no_usable_number, e-mail sent: "No WhatsApp was sent: the engineer's staff account has no usable phone number. The same message went to the engineer's e-mail."
+  ok   failed, e-mail no_email: "The WhatsApp message to the engineer failed. WA Events and the failure queue show it. No e-mail copy: the engineer's staff account has no usable e-mail address."
+  ok   sent, e-mail not_configured: "WhatsApp with the completion link sent to the engineer on the job. No e-mail copy: no mail server is set up for the plugin."
+  ok   no_staff_account, e-mail none: "No WhatsApp was sent: no active staff account is linked to the job's uCRM user."
+  ok   no job: no note; one job: its note
+  ok   a batch where every message went: one sentence
+  ok   a mixed batch: one sentence per outcome, naming its jobs
+  ok   the answer's summary: sent, partly_sent, not_sent
+
+8. The link survives the sign-in, and can send nobody anywhere else
+  ok   a signed-out tap on a job link keeps the job number, and nothing else
+  ok   sign-in returns to that job's page, and forgets it
+  ok   once: the next sign-in goes to the dashboard as before
+  ok   within half an hour it returns
+  ok   after half an hour it does not, and is forgotten
+  ok   a record from the future is not trusted
+  ok   anything but a plain job number is ignored: 14 shapes, an open-redirect attempt among them
+  ok   an array where the number goes is ignored
+  ok   only the job page is remembered: page=dashboard&tab=retailers&job=950
+  ok   only the job page is remembered: page=login&tab=scheduling&job=950
+  ok   only the job page is remembered: page=dashboard&job=950
+  ok   whatever the session holds, the address is the fixed one or none: {"job":950,"at":1790000000}
+  ok   whatever the session holds, the address is the fixed one or none: {"job":"950","at":"1790000000"}
+  ok   whatever the session holds, the address is the fixed one or none: {"job":"\/\/evil","at":1790000000}
+  ok   whatever the session holds, the address is the fixed one or none: {"job":0,"at":1790000000}
+  ok   whatever the session holds, the address is the fixed one or none: "string"
+  ok   whatever the session holds, the address is the fixed one or none: {"at":1790000000}
+
+9. Migration 075 on an empty database
+  ok   it creates two tables and one index
+  ok   job_notify_state's columns
+  ok   job_notify_events' columns: no phone and no message text
+  ok   and it runs again without error (CREATE … IF NOT EXISTS)
+  ok   it touches nothing that exists: no DROP, ALTER, DELETE, UPDATE or INSERT
+  ok   migration 076 adds the e-mail's two columns to job_notify_events, and nothing to job_notify_state
+  ok   run again, it meets its own columns: "duplicate column", which the migration runner treats as done
+  ok   and it is exactly two ADD COLUMNs on job_notify_events: nothing dropped, rewritten or filled
+
+10. What the notifier may and may not do
+  ok   one send, on the support number, as CLASS_STAFF: a colleague's old STOP never silences job dispatch
+  ok   it never reads a uCRM user record: those have no phone (measured), and the e-mail goes to the staff account, not to uCRM's user
+  ok   one e-mail send, to the staff account's own address, placed after the claim like the WhatsApp
+  ok   the claim (BEGIN IMMEDIATE … COMMIT) comes before the send in the source
+  ok   job.edit and job.delete hand the notifier nothing but the id: it asks uCRM, never the posted body (R3)
+  ok   job.add hands it the job uCRM answered to the webhook's own read, never $entity
+
+11. The e-mail copy (§16.16): subject and HTML part
+  ok   each message's subject is its own headline with the job's number
+  ok   plain ASCII, and no person, customer, address or number in any subject
+  ok   the ACCEPT JOB link is a link in the HTML part
+  ok   what uCRM holds is shown, never read as HTML
+  ok   strip the markup and the HTML part is the text, byte for byte: it adds nothing the text does not say
+  ok   only http and https addresses become links
+
+132 passed, 0 failed, 0 skipped
+
+=== test_job_notifications_day.php ===
+  ok   the baseline is 5.18.51, from Git (240f2f9)
+  ok   the day ran: all eight steps answered 200 on this tree
+
+1. The control: 5.18.51 sends no job-assignment message, and the old "Job Accepted"
+  ok   no assignment message on any of the four paths (M6, as installed)
+  ok   and "✅ Job Accepted" to the engineer on Accept
+  ok   its ＋ New Job answered "not_sent"
+
+2. This tree: message 1 on the four paths, message 2 on Accept
+  ok   five release-B messages, all to the engineer
+  ok   ＋ New Job: message 1
+  ok   Bulk Dispatch: message 1
+  ok   Reschedule of a job the plugin was never told about: its first message is message 1, at the new time
+  ok   a job created in uCRM (job.add): message 1
+  ok   Accept: message 2, in place of the old "✅ Job Accepted"
+  ok   the old "✅ Job Accepted" is not sent
+  ok   the Message Log records the four and message 2, under the event names 5.18.49 used for them
+  ok   ＋ New Job answers whatsapp: sent, in words, the e-mail included
+  ok   Bulk Dispatch answers whatsapp: sent, in words, the e-mail included
+  ok   Reschedule answers whatsapp: sent, in words, the e-mail included
+  ok   ＋ New Job marks the engineer "notified" — the 📱 in its result — because it went
+  ok   and Accept's answer says message 2 went, by both
+  ok   the job created in uCRM: the webhook log says "WhatsApp sent to staff account #3; e-mail handed to the mail server"
+  ok   five e-mails to the engineer's staff account, each the same text as its WhatsApp, in the same order
+  ok   each under its own subject
+  ok   from the plugin's sender, replies to the tenant's reply address — as the customer's e-mail
+  ok   control: 5.18.51 wrote "WhatsApp skipped" there
+
+3. Everything else is 5.18.51's, byte for byte
+  ok   this tree sends the other six: accepted, to the support leader; a task done; all tasks done; completed, to the engineer; completed, to the admin; the invoice request, to the accountant
+  ok   each is the same text to the same number, in the same order, as 5.18.51
+  ok   the Message Log's other rows are the same, row for row
+  ok   the customer's "installation scheduled" e-mail: the same message, byte for byte (T4.11) — the engineer's five aside
+  ok   the webhook log is the same, line for line, but for the one job line
+
+4. uCRM receives the same writes
+  ok   ＋ New Job and Bulk Dispatch create their jobs Open (status 0): the Accept button shows for them
+  ok   control: 5.18.51 created them In progress (status 1), where no Accept button is drawn
+  ok   otherwise the same writes, in the same order, dates included
+
+5. The screens, and the cron
+  ok   ＋ New Job says the engineer gets a WhatsApp message and the same by e-mail
+  ok   and still has no box to tick (D4): the message does not depend on one
+  ok   cron/master.php still has job_assign commented out (path A stays off)
+  ok   the notifier's tables hold the day: five jobs known (Accept records the one it had never seen), five history rows (four message 1, one message 2)
+
+6. South Sudan: the same day says the same things on 5.18.51 and on this tree
+  ok   South Sudan still sends its eleven, none of them release B's
+  ok   the two new tables stay empty there
+  ok   every message is 5.18.51's: same text, same number, same order
+  ok   the Message Log is the same
+  ok   the webhook log is the same
+  ok   the customer e-mail is the same
+  ok   uCRM receives exactly the same requests — reads, writes and dates — in the same order
+  ok   and every answer is the same
+
+7. Weakened copies of the code must each fail this test
+  ok   caught: message 1 reworded
+         first: ＋ New Job: message 1
+  ok   caught: South Sudan's "Job Accepted" reworded
+         first: every message is 5.18.51's: same text, same number, same order
+  ok   caught: the leader's "Job Accepted" reworded
+         first: each is the same text to the same number, in the same order, as 5.18.51
+  ok   caught: the customer e-mail's technician lookup dropped
+         first: the customer's "installation scheduled" e-mail: the same message, byte for byte (T4.11) — the engineer's fiv
+  ok   caught: Bulk Dispatch not telling the engineer
+         first: five release-B messages, all to the engineer
+  ok   caught: Reschedule not observed (its answer then reads an unset outcome)
+         first: the day ran: all eight steps answered 200 on this tree
+  ok   caught: the e-mail's text part left to be made from its HTML
+         first: five e-mails to the engineer's staff account, each the same text as its WhatsApp, in the same order
+
+50 passed, 0 failed, 0 skipped
+
+=== test_job_notifier.php ===
+
+1. ＋ New Job: message 1, once
+  ok   one WhatsApp, to the engineer's staff number
+  ok   it is message 1, built from uCRM's job and client, with the job's own link
+  ok   the Message Log has one job_assigned row, sent
+  ok   one "assigned" event: from My Jobs, sent, to staff account 3
+  ok   the answer says both went, in words
+  ok   one e-mail, to the engineer's staff account, from the plugin's sender: the same text as the WhatsApp, byte for byte (§16.16)
+  ok   its subject names the job; replies go to the reply address the other plugin e-mails use; it is addressed by name
+  ok   in its HTML part the ACCEPT JOB link is a link
+  ok   the history row says the e-mail went too, to that account
+  ok   the job is created Open (status 0), so the engineer's Accept button shows
+  ok   "Notify via WhatsApp" ticked in the request changes nothing: the old ＋ New Job message is not sent (D4)
+  ok   uCRM's job.add for it, delivered three times: still one message and one e-mail (T4.1, T4.2)
+  ok   and the webhook log says why, each time
+  ok   nothing changed, so nothing was written: the state row is still at version 1
+
+   uCRM's job.add first, then ＋ New Job
+  ok   one message: the webhook sent it, ＋ New Job found nothing new (T4.1, the other order)
+  ok   one event, recorded by the path that saw it first
+  ok   and ＋ New Job still answers "sent", e-mail included: it reads what the webhook recorded
+  ok   one e-mail too, and the webhook log line says what became of both
+
+   uCRM's values, never the browser's (T4.13)
+  ok   the title and address are uCRM's, exactly
+  ok   and so are the e-mail's: it is the same text
+  ok   a job with no customer (the live test's): no Client, Mobile or Address line
+  ok   and the hour typed is the hour said: Kampala's (J5)
+
+2. Two processes, one change (T4.3)
+  ok   a claim in progress in another connection: the observer waits for it, then finds the change already claimed and sends nothing
+  ok   control: the same, with the other claim rolled back — the observer, after waiting, sends the one message and its e-mail
+  ok   eight jobs, each observed by two processes at the same moment: exactly one message per job
+  ok   in every pair one process sent and the other found nothing new
+  ok   and exactly one e-mail per job
+
+3. A new engineer, a new time
+  ok   A → B in uCRM's screen (job.edit): message 1 to B, "no longer assigned" to A (T4.4, D3)
+  ok   and the same two by e-mail — B's to the address on B's staff account, not the one uCRM now holds for B
+  ok   the same job.edit again: nothing more
+  ok   B → A: message 1 to A again, "no longer assigned" to B — no "already sent" key blocks it
+  ok   four "reassigned" rows: one per message
+  ok   the webhook log names each message
+  ok   Reschedule pressed by the leader: the new time goes to the engineer on the job, not to the leader (T4.5)
+  ok   the leader gets nothing; the Message Log has one job_rescheduled
+  ok   the new time by e-mail too, to the engineer, not to the leader
+  ok   and the answer says so
+  ok   the same time again: no message, no e-mail, and the answer says why
+  ok   a new time set in uCRM's screen: one message, delivered twice or not
+
+4. Removed, deleted, closed; nobody to tell; forged; unreachable; failed
+  ok   the engineer removed: one "no longer assigned" notice (T4.6, D3)
+  ok   and by e-mail
+  ok   deleted in uCRM (404): one "cancelled" notice with the title and time last told, delivered twice or not
+  ok   the job is recorded gone; the Message Log has one job_cancelled
+  ok   and one e-mail, delivered twice or not
+  ok   closed in uCRM: recorded, no message, no e-mail
+  ok   a forged job.delete for a job that still exists: nothing (T4.8)
+  ok   no staff account: no message, outcome no_staff_account, and the webhook log says "skipped" (T4.7)
+  ok   two staff accounts on one uCRM user: no message, outcome ambiguous_staff_account, and the webhook log says "skipped" (T4.7)
+  ok   a number that is not one: no message, outcome no_usable_number, and the webhook log says "skipped" (T4.7)
+  ok   an id typed, not verified (M7): no message, outcome no_staff_account, and the webhook log says "skipped" (T4.7)
+  ok   a deactivated account: no message, outcome no_staff_account, and the webhook log says "skipped" (T4.7)
+  ok   none of those five sent a WhatsApp message
+  ok   one e-mail: the account with no usable number still gets the message by e-mail; nobody to message is nobody to e-mail
+  ok   the log line says so; where there was nobody, it says nothing about e-mail
+  ok   a job.edit whose body says the engineer changed, while uCRM says not: nothing sent, nothing written (T4.8)
+  ok   uCRM unreachable: no message, the state untouched, "could not be checked" logged (T4.9)
+  ok   an answer without the assignee field: no "no longer assigned" notice — a missing field is not a removal (V4)
+  ok   the next event catches up: the reassignment, told once (T4.9)
+  ok   no e-mail for the forged, the unreachable or the partial one; the two of the catch-up
+  ok   a failed send: the Message Log says failed, the failure queue holds it, the event says failed, the log says "failed" (T4.10)
+  ok   the WhatsApp failed; its e-mail copy went all the same
+  ok   and uCRM redelivering the event sends neither again
+  ok   an old "STOP" on the engineer's number does not silence job dispatch: CLASS_STAFF
+
+4b. The e-mail copy when it cannot go
+  ok   a staff account whose e-mail is not an address: the WhatsApp goes, no e-mail is tried, and the log says both
+  ok   the mail server down during a Bulk Dispatch of three: three WhatsApps sent, three e-mails recorded as not taken
+  ok   the first job waited for the mail server; the other two did not try again, and say why
+  ok   the WhatsApps stand as sent, and the answer says the e-mail did not go
+  ok   no mail server set up at all: the WhatsApp goes, and the answer says there was no e-mail to send
+  ok   control: the mail server back, the next job's e-mail goes (each request tries afresh)
+
+5. Accept: message 2, the completion link
+  ok   the engineer gets message 2, exactly
+  ok   and not the old "✅ Job Accepted"
+  ok   the support leader's "🔔 Job Accepted" is unchanged
+  ok   the Message Log has it as ops_job_accepted_self; the answer says sent
+  ok   message 2 by e-mail too, to the engineer only — the leader's notice is WhatsApp alone, as before
+  ok   Accept again, the job already in progress: no second message 2, and the answer says why
+  ok   set back to Open and accepted again by the same engineer: still one message 2, and one e-mail, per assignment
+  ok   a leader accepts an engineer's job: message 2 goes to the engineer on the job, not to the leader
+  ok   and so does its e-mail
+  ok   that job was never seen before the Accept: uCRM's job.add afterwards sends no message 1
+  ok   given to another engineer while already in progress: pressing Accept sends no message 2 — the job was not waiting
+  ok   an unassigned job accepted by an admin: no message 2, and the answer says why
+
+6. The link survives the sign-in
+  ok   opened signed out, the link goes to the sign-in page
+  ok   signing in lands on that job, and the address has no host
+  ok   it is the job's own page in My Jobs
+  ok   used once: the next sign-in goes where it always did
+  ok   a crafted link (a header in the number): nothing but the fixed job address, or the dashboard
+  ok   a crafted link (another host as the number): nothing but the fixed job address, or the dashboard
+  ok   a crafted link (an extra address beside it): nothing but the fixed job address, or the dashboard
+
+7. Bulk Dispatch, the screens, J7, the history table
+  ok   two jobs, one with an engineer: one message 1, to that engineer
+  ok   the answer says which job's message went and why the other's did not
+  ok   and one e-mail, the same text, to that engineer
+  ok   Bulk Dispatch also creates its jobs Open
+  ok   ＋ New Job says the engineer gets a WhatsApp message and the same by e-mail, and no longer that none is sent
+  ok   its result shows the answer's note, escaped, with 📱 only when it went
+  ok   so does Bulk Dispatch's
+  ok   WA Events, filtered to "sent", lists the job line "WhatsApp sent to staff account #…" (J7)
+  ok   WA Events, filtered to "failed", lists the job line "WhatsApp failed for staff account #…" (J7)
+  ok   WA Events, filtered to "skipped", lists the job line "WhatsApp skipped: no staff account…" (J7)
+  ok   48 history rows: no phone number, no e-mail address and no message text in any
+  ok   job_notify_events as 075 made it: no e-mail columns
+  ok   without 076's two columns both still go, and the history still has the row
+
+8. South Sudan: none of this
+  ok   South Sudan's ＋ New Job and its job.add each send their own message, as before — and job.edit and job.delete nothing
+  ok   and creates the job at status 1, as before
+  ok   and no e-mail to anyone: the engineer's e-mail copy is Uganda's alone
+  ok   job.edit and job.delete answer exactly as the default did
+  ok   and log exactly the default's line
+  ok   the two tables exist and stay empty (the only difference South Sudan can observe)
+  ok   and sign-in goes where it always did there
+
+9. Weakened copies of the code must each fail this test
+  ok   caught: no transaction: the state read without the lock
+         first: a claim in progress in another connection: the observer waits for it, then finds the change already claimed an
+  ok   caught: no memory: every observation treated as the first
+         first: uCRM's job.add for it, delivered three times: still one message and one e-mail (T4.1, T4.2)
+  ok   caught: the state compared with the webhook body
+         first: a job.edit whose body says the engineer changed, while uCRM says not: nothing sent, nothing written (T4.8)
+  ok   caught: the uCRM user record's phone used
+         first: one WhatsApp, to the engineer's staff number
+  ok   caught: CLASS_TRANSACTIONAL
+         first: an old "STOP" on the engineer's number does not silence job dispatch: CLASS_STAFF
+  ok   caught: the old ＋ New Job send left in
+         first: one WhatsApp, to the engineer's staff number
+  ok   caught: no D3 notice after a reassignment
+         first: A → B in uCRM's screen (job.edit): message 1 to B, "no longer assigned" to A (T4.4, D3)
+  ok   caught: job.edit not handled on Uganda
+         first: A → B in uCRM's screen (job.edit): message 1 to B, "no longer assigned" to A (T4.4, D3)
+  ok   caught: South Sudan's job.edit sent to the notifier
+         first: South Sudan's ＋ New Job and its job.add each send their own message, as before — and job.edit and job.dele
+  ok   caught: message 2 without its claim
+         first: set back to Open and accepted again by the same engineer: still one message 2, and one e-mail, per assignment
+  ok   caught: message 2 on any Accept
+         first: Accept again, the job already in progress: no second message 2, and the answer says why
+  ok   caught: the old "Job Accepted" kept on Uganda
+         first: the engineer gets message 2, exactly
+  ok   caught: jobs created In progress again
+         first: the job is created Open (status 0), so the engineer's Accept button shows
+  ok   caught: the sign-in return dropped
+         first: signing in lands on that job, and the address has no host
+  ok   caught: the sign-in return on South Sudan too
+         first: and sign-in goes where it always did there
+  ok   caught: no e-mail copy
+         first: the answer says both went, in words
+  ok   caught: the e-mail only when the WhatsApp went
+         first: one e-mail: the account with no usable number still gets the message by e-mail; nobody to message is nobody to
+  ok   caught: the e-mail to the address uCRM holds for the user
+         first: and the same two by e-mail — B's to the address on B's staff account, not the one uCRM now holds for B
+  ok   caught: no stop after the mail server refused
+         first: the first job waited for the mail server; the other two did not try again, and say why
+  ok   caught: no Reply-To
+         first: its subject names the job; replies go to the reply address the other plugin e-mails use; it is addressed by na
+  ok   caught: the e-mail in WA Events' words
+         first: one e-mail too, and the webhook log line says what became of both
+  ok   caught: a partial answer trusted
+         first: an answer without the assignee field: no "no longer assigned" notice — a missing field is not a removal (V4)
+
+130 passed, 0 failed
+
+=== test_job_status_truth.php ===
+
+1. WA Events says "sent", because that is what the plugin knows
+  ok   the counter is labelled "Sent (handed to WhatsApp)"
+  ok   so is its filter
+  ok   and "Delivered" appears nowhere on the screen
+  ok   the explanation says delivery is not measured
+  ok   release B's "WhatsApp sent to staff account" line reads "Sent (handed to WhatsApp)"
+  ok   its "WhatsApp failed for" line reads "Failed"
+  ok   and its "WhatsApp skipped:" line is filed Skipped by the existing rule
+
+2. The navigation badge counts today's events
+  ok   one job message sent today: the badge shows 1
+  ok   with a failed one too, it shows "1 fail"
+  ok   "WhatsApp skipped" alone is not counted as sent: no badge
+
+2b. "Today" is the install's own day
+  ok   public.php sets the tenant's zone before it hands an event to webhook.php
+  ok   a real event through public.php is logged on Kampala's clock, not UTC's — the badge's "today" is Kampala's at any hour
+
+3. The Message Log
+  ok   it says what "sent" means
+  ok   its totals: 1 sent, 1 failed, 1 suppressed — the opt-out is not counted as a failure
+  ok   the opted-out message reads "suppressed (opted out)"
+  ok   a real failure still reads "✗ fail"
+  ok   and a sent one "✓ sent"
+
+4. South Sudan: all three as in 5.18.49
+  ok   WA Events still says "Delivered"
+  ok   its badge still reads keys the log never writes, and shows nothing
+  ok   the Message Log counts the opt-out as a failure and adds no note, as before
+  ok   and shows the opted-out message as "✗ fail"
+
+5. Weakened copies of the code must each fail this test
+  ok   caught: the badge reading keys the log never writes
+         first: one job message sent today: the badge shows 1
+  ok   caught: "Delivered" claimed again
+         first: the counter is labelled "Sent (handed to WhatsApp)"
+  ok   caught: an opt-out counted as a failure
+         first: its totals: 1 sent, 1 failed, 1 suppressed — the opt-out is not counted as a failure
+  ok   caught: an opted-out row shown as "fail"
+         first: the opted-out message reads "suppressed (opted out)"
+  ok   caught: the Message Log changed on South Sudan too
+         first: the Message Log counts the opt-out as a failure and adds no note, as before
+  ok   caught: the tenant's zone no longer set before the webhook route (the log would be UTC)
+         first: public.php sets the tenant's zone before it hands an event to webhook.php
+
+27 passed, 0 failed
+

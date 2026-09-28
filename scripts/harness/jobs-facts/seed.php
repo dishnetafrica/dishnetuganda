@@ -89,13 +89,33 @@ $store->save('scheduling_jobs_cache.json', [['id' => 501, 'title' => 'Canary Ins
 $store->save('job_completions.json', [['job_id' => 501, 'technician' => 'Canary Techname', 'comment' => 'Canary completion note']]);
 $store->save('job_invoice_queue.json', [['id' => 1, 'client_name' => 'Canary Zebra Client', 'status' => 'pending']]);
 
-file_put_contents($pdd . '/webhook_log.json', json_encode([
-    ['id' => 5, 'event' => 'job.edit', 'message' => "Event 'job.edit' received and logged (no action configured).", 'data' => [], 'received_at' => '2026-09-26 11:00:00'],
-    ['id' => 4, 'event' => 'job.add', 'message' => 'Job #502 — No phone found for Canary Supportname', 'data' => ['tech_email' => 'canary.support@canary-mail.test'], 'received_at' => '2026-09-25 11:00:00'],
-    ['id' => 3, 'event' => 'job.add', 'message' => 'Job #501 notification sent to Canary Adminname', 'data' => ['tech_phone' => '+256 771 000 001', 'client' => 'Canary Zebra Client'], 'received_at' => '2026-09-24 11:00:00'],
-    ['id' => 2, 'event' => 'quote.add', 'message' => 'Quote for Canary Zebra Client', 'data' => [], 'received_at' => '2026-09-23 11:00:00'],
-    ['id' => 1, 'event' => 'job.add', 'message' => 'Job #503 — No user assigned', 'data' => ['job_title' => 'Canary payment collection Zebra'], 'received_at' => '2026-09-22 11:00:00'],
-]));
+// The lines webhook.php really writes (whLog, newest first). One uCRM delivery is several lines: "normalize" turns
+// uCRM's changeType/entity into job.edit, "_debug", then "Received UCRM webhook: job.edit", then the handler's own. On
+// 5.18.51 a job.edit or job.delete has no handler: its line is "Unhandled event type — logged only". The newest three
+// deliveries are M4 as 5.18.51 logs it (docs/44 §16.17); the older ones are 5.18.49's job.add lines.
+$wlRows = [
+    ['job.delete', 'Unhandled event type — logged only', ['entity_id' => 601], '2026-09-28 10:05:02'],
+    ['job.delete', 'Received UCRM webhook: job.delete', ['entity_id' => 601, 'uuid' => 'canary-uuid-3'], '2026-09-28 10:05:02'],
+    ['_debug', 'Services initialized', ['crm_configured' => 'YES'], '2026-09-28 10:05:02'],
+    ['normalize', 'Normalized changeType: delete/job → job.delete', ['original_changeType' => 'delete', 'entity_type' => 'job', 'normalized' => 'job.delete'], '2026-09-28 10:05:02'],
+    ['job.edit', 'Unhandled event type — logged only', ['entity_id' => 601], '2026-09-28 10:03:00'],
+    ['job.edit', 'Received UCRM webhook: job.edit', ['entity_id' => 601, 'uuid' => 'canary-uuid-2'], '2026-09-28 10:03:00'],
+    ['_debug', 'Services initialized', ['crm_configured' => 'YES'], '2026-09-28 10:03:00'],
+    ['normalize', 'Normalized changeType: edit/job → job.edit', ['original_changeType' => 'edit', 'entity_type' => 'job', 'normalized' => 'job.edit'], '2026-09-28 10:03:00'],
+    ['job.add', 'Job #601 — WhatsApp skipped: job notifications are not switched on yet', ['job_title' => 'Canary test job Zebra'], '2026-09-28 10:00:01'],
+    ['job.add', 'Received UCRM webhook: job.add', ['entity_id' => 601, 'uuid' => 'canary-uuid-1'], '2026-09-28 10:00:01'],
+    ['normalize', 'Normalized changeType: insert/job → job.add', ['original_changeType' => 'insert', 'entity_type' => 'job', 'normalized' => 'job.add'], '2026-09-28 10:00:01'],
+    ['job.add', 'Job #502 — No phone found for Canary Supportname', ['tech_email' => 'canary.support@canary-mail.test'], '2026-09-25 11:00:00'],
+    ['job.add', 'Received UCRM webhook: job.add', ['entity_id' => 502], '2026-09-25 11:00:00'],
+    ['job.add', 'Job #501 notification sent to Canary Adminname', ['tech_phone' => '+256 771 000 001', 'client' => 'Canary Zebra Client'], '2026-09-24 11:00:00'],
+    ['job.add', 'Received UCRM webhook: job.add', ['entity_id' => 501], '2026-09-24 11:00:00'],
+    ['quote.add', 'Quote for Canary Zebra Client', [], '2026-09-23 11:00:00'],
+    ['job.add', 'Job #503 — No user assigned', ['job_title' => 'Canary payment collection Zebra'], '2026-09-22 11:00:00'],
+    ['job.add', 'Received UCRM webhook: job.add', ['entity_id' => 503], '2026-09-22 11:00:00'],
+];
+$wl = []; $id = count($wlRows);
+foreach ($wlRows as [$ev, $msg, $data, $at]) $wl[] = ['id' => $id--, 'event' => $ev, 'message' => $msg, 'data' => $data, 'received_at' => $at];
+file_put_contents($pdd . '/webhook_log.json', json_encode($wl));
 file_put_contents($plugin . '/data/plugin.log', implode("\n", [
     '[2026-09-26 07:00:03] [master] RUN staff_jobs',
     '[2026-09-26 07:00:03] [master] ERROR staff_jobs: CrmApiClient::__construct(): Argument #1 ($baseUrl) must be of type string, array given, called in /data/ucrm/data/plugins/dishnet-hybrid-sudan/cron/staff_jobs_summary.php on line 47',

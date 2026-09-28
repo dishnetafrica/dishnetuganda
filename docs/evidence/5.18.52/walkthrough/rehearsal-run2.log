@@ -1,0 +1,66 @@
+== the script as committed ==
+
+S1 every step, Enter to each question; the technician accepts at step 3
+  ok   the script ends with exit 0
+  ok   the preflight reads Uganda, and GO is not printed as a line of its own
+  ok   step 1 created a job and said its number
+  ok   all six steps say "✓ as expected", the WhatsApp and the e-mail
+  ok   and the summary lists the six
+  ok   the technician received exactly the six WhatsApp messages, in order
+  ok   and six e-mails with the same texts
+  ok   the customer received one "installation booked" e-mail, at step 1
+  ok   the job's history holds the six events
+  ok   the test job is gone from uCRM at the end
+  ok   one job was created, and its description carries the run's mark
+  ok   uCRM saw five changes, every one to the test job: the time, the job page's Accept, take away, give back, delete
+  ok   the plugin's routine vault notice is not shown
+  ok   it prints the plugin's log lines and the job's history
+  ok   the customer e-mail's log line is printed with its address masked
+  ok   no name, number or e-mail of the fixtures is printed
+  ok   the log file holds the run, masked too
+  ok   the summary does not say a test job was left behind
+
+S2 q at the first question: nothing is created
+  ok   it stops at once
+  ok   no job was created and nobody was messaged
+
+S3 not Uganda: NO-GO before anything
+  ok   the preflight says NO-GO, naming the tenant
+  ok   no job was created and nobody was messaged
+
+S4 the technician's link is not verified: NO-GO
+  ok   the preflight says why, and stops
+  ok   no job was created
+
+S5 the files on disk are 5.18.52 but the web server runs 5.18.51's webhook.php (docs/44 §16.23): step 1 says so,
+   stops, and deletes the test job when asked
+  ok   the preflight passes: the disk has 5.18.52
+  ok   step 1 names the old code and stops
+  ok   and shows the plugin's own line
+  ok   the test job was deleted when asked
+  ok   nobody was messaged, and no later step ran
+
+S5b 5.18.51's webhook.php on disk as well: the preflight says so and nothing is created
+  ok   NO-GO, naming the missing notifier
+  ok   no job was created
+
+S6 a job this run did not create is refused, whatever its number
+  ok   a change and a delete of job 901 (not created by a walk-through) are refused
+  ok   job 901 is untouched, and uCRM saw no change to it
+
+S7 steps 2 to 5 skipped: message 1, then the cancellation, and nothing between
+  ok   two WhatsApp messages: message 1 and "cancelled"
+  ok   the summary lists four steps skipped
+  ok   --no-customer-email: the customer got no e-mail
+
+rehearsal: 36 passed, 0 failed
+
+== weakened copies ==
+  ok   caught: X1-no-run-mark-check (2 failing in S6)
+  ok   caught: X2-no-uganda-check (2 failing in S3)
+  ok   caught: X3-no-old-code-check (3 failing in S5)
+  ok   caught: X4-no-masking (3 failing in S1)
+  ok   caught: X5-unverified-link (2 failing in S4)
+  ok   caught: X6-any-answer-goes-on (2 failing in S2)
+
+rehearsal: 7 passed, 0 failed

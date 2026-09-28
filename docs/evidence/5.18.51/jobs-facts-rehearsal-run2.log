@@ -1,0 +1,176 @@
+
+S1  the normal run
+  ok   exit 0
+  ok   the report completes
+  ok   Kampala timezone reported
+  ok   the timezone says where it came from
+  ok   an explicit profile is reported as such
+  ok   the summary names the profile
+  ok   staff appear as S-labels with role
+  ok   an international number shows its country code only
+  ok   a national-form number is called out
+  ok   a South Sudan number is recognised
+  ok   S1 forced to 1 by all five maps
+  ok   S5 forced to 1581
+  ok   uCRM user 1: real, same e-mail, no phone field; the webhook's endpoint 404
+  ok   uCRM user 81: phone field present but empty
+  ok   1581 is no Uganda uCRM user
+  ok   the tile, computed as the page does
+  ok   organisation 7 checked (ids only)
+  ok   who the New Job picker offers
+  ok   an expired app token is called out
+  ok   the PWD badge
+  ok   the AGENT badge (is_employee false)
+  ok   uCRM staff users counted
+  ok   uCRM users matched to staff rows
+  ok   jobs by status
+  ok   jobs by assignee
+  ok   jobs with a client
+  ok   title classes (no title printed)
+  ok   job detail field names
+  ok   Message Log job_assigned counts
+  ok   Message Log positive control
+  ok   failure queue counted
+  ok   each job event uCRM delivered counted once, by its Received line (M4's evidence, V2)
+  ok   the job.add handler's lines counted
+  ok   our uCRM endpoint described
+  ok   endpoints counted
+  ok   Evolution channels
+  ok   support connection state
+  ok   the dispatch cron is not scheduled
+  ok   daily summary last run
+  ok   the summary's error from the plugin log
+  ok   a staff number filed as a customer conversation
+  ok   AI queued for a staff number
+  ok   local job records
+  ok   no canary word (names, e-mails, titles, addresses, previews, keys, hosts, instances)
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no phone digits (771234567)
+  ok   no phone digits (771 234 567)
+  ok   no phone digits (772345678)
+  ok   no phone digits (772 345 678)
+  ok   no phone digits (912345678)
+  ok   no phone digits (912 345 678)
+  ok   no phone digits (773456789)
+  ok   no phone digits (773 456 789)
+  ok   no phone digits (774567890)
+  ok   no phone digits (774 567 890)
+  ok   no phone digits (775000007)
+  ok   no phone digits (775 000 007)
+  ok   no phone digits (771000001)
+  ok   no phone digits (771 000 001)
+  ok   no token fragment
+  ok   the live store is byte-identical afterwards
+  ok   the store copy was removed
+  ok   uCRM saw GET only (11 requests)
+  ok   Evolution saw connection-state reads only
+  ok   the report was pointed at the copy, not the live store
+
+S2  neither a timezone nor a tenant profile set (the plugin then runs on Africa/Juba, like South Sudan)
+  ok   exit 0
+  ok   Juba is a note, never an ok
+  ok   no ok line for the timezone
+  ok   the default profile is said to be the default
+  ok   South Sudan's rules are a note, never an ok
+  ok   the live store is byte-identical afterwards
+  ok   the store copy was removed
+  ok   uCRM saw GET only (11 requests)
+  ok   Evolution saw connection-state reads only
+  ok   the report was pointed at the copy, not the live store
+
+S2b production's shape: no tenant_profile and no timezone setting, currency UGX
+  ok   exit 0
+  ok   UGX selects uganda, and the line says so
+  ok   the zone comes from the profile
+  ok   the summary names the profile
+  ok   never the misleading 'not set' of the first version
+  ok   no canary word (names, e-mails, titles, addresses, previews, keys, hosts, instances)
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no phone digits (771234567)
+  ok   no phone digits (771 234 567)
+  ok   no phone digits (772345678)
+  ok   no phone digits (772 345 678)
+  ok   no phone digits (912345678)
+  ok   no phone digits (912 345 678)
+  ok   no phone digits (773456789)
+  ok   no phone digits (773 456 789)
+  ok   no phone digits (774567890)
+  ok   no phone digits (774 567 890)
+  ok   no phone digits (775000007)
+  ok   no phone digits (775 000 007)
+  ok   no phone digits (771000001)
+  ok   no phone digits (771 000 001)
+  ok   no token fragment
+  ok   the live store is byte-identical afterwards
+  ok   the store copy was removed
+  ok   uCRM saw GET only (11 requests)
+  ok   Evolution saw connection-state reads only
+  ok   the report was pointed at the copy, not the live store
+
+S3  uCRM unreachable
+  ok   exit 0 — the store facts still come
+  ok   uCRM users: no list, said so
+  ok   jobs: no list, said so
+  ok   still completes
+  ok   no canary word (names, e-mails, titles, addresses, previews, keys, hosts, instances)
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no phone digits (771234567)
+  ok   no phone digits (771 234 567)
+  ok   no phone digits (772345678)
+  ok   no phone digits (772 345 678)
+  ok   no phone digits (912345678)
+  ok   no phone digits (912 345 678)
+  ok   no phone digits (773456789)
+  ok   no phone digits (773 456 789)
+  ok   no phone digits (774567890)
+  ok   no phone digits (774 567 890)
+  ok   no phone digits (775000007)
+  ok   no phone digits (775 000 007)
+  ok   no phone digits (771000001)
+  ok   no phone digits (771 000 001)
+  ok   no token fragment
+
+S4  no store
+  ok   exit 1
+  ok   stops before anything else
+  ok   the report was never started
+
+S5  weakened copies
+  ok   weakened copy caught: the report prints staff names
+  ok   weakened copy caught: the report prints job titles
+  ok   weakened copy caught: the report prints the webhook address
+  ok   weakened copy caught: the report is pointed at the live store
+  ok   weakened copy caught: the report writes to uCRM
+  ok   weakened copy caught: the copy is never removed
+  ok   weakened copy caught: the report prints the raw tenant_profile setting again
+  ok   weakened copy caught: any timezone reported as Kampala
+  ok   weakened copy caught: job events counted by a quoted name no log line carries (the counter before §16.17)
+  ok   weakened copy caught: job events counted by the event field: every delivery counted twice or more
+
+S6  control: the mask alone keeps a leaked number and e-mail out
+  ok   a leaked number is masked
+  ok   a leaked e-mail is masked
+  ok   no canary word (names, e-mails, titles, addresses, previews, keys, hosts, instances)
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no staff e-mail taken from the hard-coded map
+  ok   no phone digits (771234567)
+  ok   no phone digits (771 234 567)
+  ok   no phone digits (772345678)
+  ok   no phone digits (772 345 678)
+  ok   no phone digits (912345678)
+  ok   no phone digits (912 345 678)
+  ok   no phone digits (773456789)
+  ok   no phone digits (773 456 789)
+  ok   no phone digits (774567890)
+  ok   no phone digits (774 567 890)
+  ok   no phone digits (775000007)
+  ok   no phone digits (775 000 007)
+  ok   no phone digits (771000001)
+  ok   no phone digits (771 000 001)
+  ok   no token fragment
+  ok   control on the control: without the mask the same leak shows
+
+391 passed, 0 failed

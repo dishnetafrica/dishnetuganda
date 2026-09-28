@@ -86,6 +86,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='do_login') 
     $retailer = $auth->webLogin($loginEmail, $_POST['password'] ?? '');
     if ($retailer) {
         $limiter->recordSuccess($loginEmail, $loginIp);   // clear failure counter
+        // 5.18.52 (docs/44 §16.12): on Uganda, back to the job whose link was opened signed out.
+        require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+        if (StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+            require_once dirname(__DIR__, 2) . '/lib/JobReturn.php';
+            $_jobReturn = JobReturn::take($_SESSION, time());
+            if ($_jobReturn !== null) redirect($_jobReturn);
+        }
         redirect('?page=dashboard&tab=form');
     } else {
         $result = $limiter->recordFailure($loginEmail, $loginIp);

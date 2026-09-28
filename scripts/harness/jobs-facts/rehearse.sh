@@ -117,7 +117,8 @@ has "$OUT" "field names of one job (detail): id, title, description, clientId" "
 has "$OUT" "job_assigned                       sent 2 · failed 1" "Message Log job_assigned counts"
 has "$OUT" "holds 5 row(s) of every kind" "Message Log positive control"
 has "$OUT" "failure queue job_assigned failed 1" "failure queue counted"
-has "$OUT" 'job.add lines 3: "notification sent" 1 · "No phone found" 1 · "No user assigned" 1 · job.edit 1' "webhook log counted"
+has "$OUT" "received from uCRM: job.add 4 · job.edit 1 · job.delete 1" "each job event uCRM delivered counted once, by its Received line (M4's evidence, V2)"
+has "$OUT" 'job.add handler lines 4: "notification sent" 1 · "No phone found" 1 · "No user assigned" 1 · "not switched on yet" 1 · job unverified 0' "the job.add handler's lines counted"
 has "$OUT" "ours: active yes · events any · job.add delivered yes · job.edit delivered yes · route reaches webhook.php" "our uCRM endpoint described"
 has "$OUT" "2 endpoint(s), 1 of them this plugin's" "endpoints counted"
 has "$OUT" "channels with an instance: account, support" "Evolution channels"
@@ -185,6 +186,7 @@ PY
   before=$FAILN
   local out; out="$(PATH="$SB/bin:$PATH" FAKE="$F" bash "$copyS/dnb-jobs-facts.sh" 2>&1)"
   { canaries "$out"; readonly_proof
+    has "$out" "received from uCRM: job.add 4 · job.edit 1 · job.delete 1" "webhook events counted"
     if [ "$scen" = "juba" ]; then has "$out" "note  timezone Africa/Juba" "Juba noted"; fi
     if [ "$scen" = "ugx" ]; then has "$out" "tenant profile uganda (selected by the currency UGX" "UGX profile"; fi; } >/dev/null
   if [ "$FAILN" -gt "$before" ]; then FAILN=$before; PASS=$((PASS+1)); echo "  ok   weakened copy caught: $name"
@@ -215,6 +217,12 @@ assert s.count(a) == 1; s = s.replace(a, \"\$profileId  = (string)(\$cfg['tenant
 mutant "any timezone reported as Kampala" script "
 a = '  Africa/Kampala*) ok'
 assert s.count(a) == 1; s = s.replace(a, '  *) ok')" juba
+mutant "job events counted by a quoted name no log line carries (the counter before §16.17)" report "
+a = \"preg_match('/^Received UCRM webhook: (job\\\\.(?:add|edit|delete))\$/', \$m, \$mm)\"
+assert s.count(a) == 1; s = s.replace(a, \"preg_match(\\\"/'(job\\\\.(?:add|edit|delete))'/\\\", \$m, \$mm)\")"
+mutant "job events counted by the event field: every delivery counted twice or more" report "
+a = \"preg_match('/^Received UCRM webhook: (job\\\\.(?:add|edit|delete))\$/', \$m, \$mm)\"
+assert s.count(a) == 1; s = s.replace(a, \"preg_match('/^(job\\\\.(?:add|edit|delete))\$/', \$ev, \$mm)\")"
 
 # The mask is the backstop: with it in place, a number the report wrongly prints is still masked (the control).
 rm -rf "$SB/m"; mkdir -p "$SB/m/scripts/lib"; cp "$SCRIPT" "$SB/m/scripts/"; cp "$R/scripts/lib/jobs_facts.php" "$SB/m/scripts/lib/"

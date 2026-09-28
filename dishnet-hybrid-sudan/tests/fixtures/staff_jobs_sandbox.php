@@ -82,6 +82,11 @@ final class SjSandbox
         $store = $s->store();
         $store->save('kyc_config.json', $s->cfg);
         file_put_contents($s->data . '/kyc_config.json', json_encode($s->cfg));
+        // An admin's first dashboard page runs the piggyback cron (public.php): cron/master.php, after the page — and under
+        // php -S the connection stays open until it ends. master.php reads wa.dishnetafrica.com and dishnetss.com, real
+        // hosts a sandbox must never contact (measured: a TLS session to the first, DNS waits on the second that outlast
+        // the client's 90 s). Marked as just run, ten years ahead, it does not run here.
+        file_put_contents($s->data . '/piggyback_last_run.txt', (string)(time() + 10 * 365 * 86400));
 
         // The plugin, proved by a nonce only this sandbox knows. exec is disabled: no background worker is spawned.
         $nonce = bin2hex(random_bytes(8));
@@ -228,6 +233,73 @@ final class SjSandbox
 
     // ── The fake Evolution ───────────────────────────────────────────────────
     public function texts(): array { return (array)($this->http('GET', "{$this->evo}/__test/state")[2]['text_calls'] ?? []); }
+
+    // ── A fake SMTP relay ────────────────────────────────────────────────────
+    /** @var string the relay's transcript, '' until mailRelay() starts one */
+    public $smtpTranscript = '';
+
+    /**
+     * A relay of this sandbox's own, and the plugin's mail settings pointed at it: [port, transcript]. It stops after
+     * $idle seconds without a connection.
+     */
+    public function mailRelay(int $idle = 30): array
+    {
+        $transcript = $this->sb . '/smtp.json';
+        foreach (range(0, 11) as $slot) {
+            $port = 12800 + ((getmypid() * 5 + $slot * 11 + random_int(0, 5)) % 180);
+            $p = proc_open(sprintf('exec %s %s %d %s %d', escapeshellarg(PHP_BINARY), escapeshellarg($this->root . '/tests/fixtures/fake_smtp_server.php'),
+                    $port, escapeshellarg($transcript), $idle),
+                [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+            for ($i = 0; $i < 50; $i++) {
+                usleep(100000);
+                if (!proc_get_status($p)['running']) break;
+                if (!is_file($transcript)) continue;
+                $c = @fsockopen('127.0.0.1', $port, $e1, $e2, 2);
+                if ($c) {
+                    $g = fgets($c, 256); fwrite($c, "QUIT\r\n"); fclose($c);
+                    if (strpos((string)$g, 'fake.smtp.test') !== false) {
+                        $this->adopt($p);
+                        $this->smtpTranscript = $transcript;
+                        file_put_contents($this->data . '/email_settings.json', json_encode(['use_ucrm_email' => false, 'smtp_host' => '127.0.0.1',
+                            'smtp_port' => $port, 'smtp_user' => '', 'smtp_pass' => '', 'smtp_enc' => '', 'smtp_from' => 'accounts@example.test']));
+                        return [$port, $transcript];
+                    }
+                }
+            }
+            proc_terminate($p); proc_close($p); @unlink($transcript);
+        }
+        throw new \RuntimeException('the fake SMTP relay did not start');
+    }
+
+    /** Every message the relay took, in order: envelope, the headers that matter, and the two parts, CRLF read as LF. */
+    public function mails(): array
+    {
+        $out = [];
+        foreach (json_decode((string)@file_get_contents($this->smtpTranscript), true) ?: [] as $m) {
+            if (trim((string)($m['data'] ?? '')) === '') continue;   // the readiness probe: a connection and no message
+            $out[] = ['from' => (string)$m['mail_from'], 'to' => (array)$m['rcpt_to']] + self::parseMail((string)$m['data']);
+        }
+        return $out;
+    }
+
+    /** One message's headers (From, To, Subject, Reply-To) and its text/plain and text/html parts. */
+    public static function parseMail(string $data): array
+    {
+        $d = str_replace("\r\n", "\n", $data);
+        [$head, $body] = array_pad(explode("\n\n", $d, 2), 2, '');
+        $h = [];
+        foreach (explode("\n", (string)preg_replace('/\n[ \t]+/', ' ', $head)) as $line) {
+            if (preg_match('/^([A-Za-z-]+):\s*(.*)$/', $line, $m)) $h[strtolower($m[1])] = $m[2];
+        }
+        // A part ends where its boundary line begins: a message's own text may hold "---".
+        $b = preg_match('/boundary="?([^";\s]+)"?/i', (string)($h['content-type'] ?? ''), $bm) ? $bm[1] : '';
+        $part = function (string $type) use ($body, $b): ?string {
+            if ($b === '') return null;
+            return preg_match('#Content-Type: ' . preg_quote($type, '#') . '; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n\n(.*?)\n\n--' . preg_quote($b, '#') . '#s', $body, $m) ? $m[1] : null;
+        };
+        return ['header_from' => $h['from'] ?? '', 'header_to' => $h['to'] ?? '', 'subject' => $h['subject'] ?? '', 'reply_to' => $h['reply-to'] ?? '',
+                'text' => $part('text/plain'), 'html' => $part('text/html')];
+    }
 
     // ── The store ────────────────────────────────────────────────────────────
     public function store(): \SqliteStore

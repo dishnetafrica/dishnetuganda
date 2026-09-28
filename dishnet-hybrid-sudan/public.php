@@ -1016,6 +1016,14 @@ if($page==='login'&&$auth->currentRetailer()){
     elseif(in_array($role,['accountant','field_accountant'],true)||!empty($r['is_admin'])) redirect('?page=dashboard&tab=ceo_dashboard');
     else redirect('?page=dashboard&tab=form');
 }
+// 5.18.52 (docs/44 §16.12): on Uganda a signed-out tap on a job link keeps only the job number, so sign-in returns to it.
+if ($page === 'dashboard' && !$auth->currentRetailer()) {
+    require_once __DIR__ . '/lib/StaffJobsGate.php';
+    if (StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir)) {
+        require_once __DIR__ . '/lib/JobReturn.php';
+        JobReturn::remember($_GET, $_SESSION, time());
+    }
+}
 if($page==='dashboard')$retailer=$auth->requireLogin();
 
 // 

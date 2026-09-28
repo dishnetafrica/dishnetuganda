@@ -1,0 +1,157 @@
+== 0. what is rehearsed ==
+  script    the committed script, sha256 68bb012e48a22be1
+  clone     claude/study-this-jhe2eg at 1517dc8
+  ok   the script is pinned to the clone's plugin commit (240f2f9)
+  ok   the plugin is 5.18.51
+  5.18.51   3 files: 2 changed, 1 added · Release A's other files: 37
+
+== 1. NO-GO before anything changes ==
+  ok   1a the tenant reads South Sudan: NO-GO, both sources named
+  ok   …nothing deployed, no backup taken
+  ok   1b the server still runs 5.18.49: NO-GO — 5.18.51 goes only over 5.18.50
+  ok   1c an edited file in the checkout: stop
+  ok   1d a backup copy that arrives changed is caught
+  ok   …NO-GO, before anyone is asked to type DEPLOY
+  ok   1e anything but DEPLOY: the backup is taken, then it stops
+  ok   …nothing deployed, nothing recorded as a deploy
+  ok   …and no data or configuration value changed in any of these runs
+
+== 2. the syntax check under the server's PHP, on a build with a broken file ==
+  ok   2a the master cron rejected by the server's PHP: NO-GO, named
+  ok   …nothing deployed, before the backup
+  ok   2b a test file it rejects: a note, not a NO-GO
+  ok   control: the clone is back at its commit, clean
+
+== 3. the deploy, as the operator runs it (a master run begun on 5.18.50 ends just after it) ==
+  ok   no FAIL line
+  ok   PASSED
+  ok   3: ok    A1 the installed plugin reads Uganda from both configuration sources
+  ok   3: in the container accepts all 1 changed PHP files that run on the server (and 1 test files)
+  ok   3: ok    A3 staff accounts read: 7 accounts, 6 active; of the 5 active accounts that take jobs, 3 hold a uCRM user id (0 
+  ok   3: ok    A4 the Message Log holds 4 rows; its last is #4
+  ok   3: the fault 5.18.51 removes: 2 line(s) of "flock(): supplied resource is not a valid stream resource" from dishnet-hybri
+  ok   3: — one consistent copy (VACUUM INTO
+  ok   3: ok    backed up the installed plugin (5.18.50, 125fa0c)
+  ok   3: ok    backed up the configuration vault
+  ok   3: GO — evidence recorded
+  ok   3: ok    container serves 240f2f9
+  ok   3: ok    V1 the sign-in page on the public address answers 200 with zero redirects (no loop)
+  ok   3: ok    V4 no fatal or parse error of dishnet-hybrid-sudan in the container log since
+  ok   3: besides the master's lock line (R8)
+  ok   3: ok    R1 all 3 files 5.18.51 changes are installed exactly as 240f2f9 has them (1 of them new)
+  ok   3: ok    R1 the installed manifest says 5.18.51
+  ok   3: ok    R1 Release A's other 37 files are still installed exactly as 240f2f9 has them
+  ok   3: ok    R2 the installed StaffJobsGate reads Uganda from both configuration sources: Release A's rules are on (store on,
+  ok   3: ok    R3 every staff account is as it was at stage A of this run
+  ok   3: ok    R4 no job-assignment WhatsApp message in the Message Log since row #4
+  ok   3: ok    R4 and none since the 5.18.50 deploy (Message Log row #4): M6 has held across both deploys
+  ok   3: ok    R5 the master cron's job_assign entry is still commented out
+  ok   3: ok    R6 ＋ New Job says: "No WhatsApp message is sent for jobs yet"
+  ok   3: note  R7 0 of 5 active accounts that take jobs have a verified uCRM link
+  ok   3: ok    R8 the installed master.php releases its lock only while the handle is still open (is_resource)
+  ok   3: note  R8 1 line(s) of the old fatal within 20 minutes of the deploy: a master run begun on 5.18.50 ends on its own cod
+  ok   3: note  R8 too early to judge the fatal line
+  ok   3: the checkout is at the pinned commit: installed as it is, no checkout of another commit
+  ok   six backups: two databases, the data directory, the plugin's own data/, the installed plugin, the vault
+  ok   the container serves 240f2f9: every file as the commit has it, the new test present
+  ok   no data and no configuration value changed
+  ok   the code backup is 5.18.50: its master.php without the guard
+  ok   where the deploy started is recorded, with the fault's count in the hour before
+  ok   the log carries no name, e-mail or phone number of a staff account
+
+== 4. later runs: --after-only, the deploy three hours ago ==
+  ok   4a three hours on, nothing planted: PASSED
+  ok   …R8: no line after the grace, with the master's own schedule showing runs
+  ok   4b the fatal line half an hour ago: R8 fails
+  ok   …and V4 leaves that line to R8
+  ok   4c the line five minutes after the deploy (a run begun on 5.18.50): a note, not a failure
+  ok   4d no line, but the master's schedule shows no run since: cannot judge — never ok
+  ok   4e half an hour after the deploy: too early
+  ok   4f any other fatal of the plugin: V4 fails
+  ok   4g an assignment message between the two deploys: this deploy's R4 is clean, and the count since 5.18.50 fails
+  ok   4h no record of the 5.18.50 deploy: said so, counted from this deploy
+  ok   4i a Release A file changed on the server: R1 fails, naming it
+  ok   control: with each planted fault removed, PASSED again, R8 ok
+
+== 5. the rollback: --rollback, typed ROLLBACK ==
+  ok   PASSED
+  ok   5: GO — evidence recorded
+  ok   5: checking out 125fa0c (5.18.50) for the documented deploy
+  ok   5: ok    container serves 125fa0c (5.18.50)
+  ok   5: ok    RB1 all 2 files 5.18.51 had changed are back exactly as 125fa0c (5.18.50) has them
+  ok   5: ok    RB1 the installed manifest says 5.18.50
+  ok   5: ok    RB2 the 1 file(s) 5.18.51 added are still on disk and inert: no 5.18.50 file loads them
+  ok   5: ok    RB3 every staff account is as it was at stage A of this run
+  ok   5: note  on 5.18.50 again: the master's lock fatal returns
+  ok   the same backup first
+  ok   the container serves 125fa0c: master.php and the manifest as 5.18.50 has them; the new test remains
+  ok   the installed master.php is 5.18.50's again
+  ok   the checkout is back on claude/study-this-jhe2eg, at the commit it was on
+  ok   no data changed
+  ok   5b rolling back again: says so, checks, takes no second backup
+
+== 6. forward again, back by hand as printed, forward with an edit during the deploy ==
+  ok   6a deploy again after a rollback: PASSED, serving 240f2f9
+  ok   the summary prints the rollback by hand
+  ok   6b that line, run as printed, puts 5.18.50 back and returns the checkout
+  ok   …and --rollback confirms it
+  ok   6c a staff account edited during the deploy: R3 fails, naming account 3
+  ok   …the only failure
+  ok   …and the new number is not printed
+
+== 7. stage V finds the public address redirecting after a deploy: it rolls back by itself ==
+  ok   V1 fails and the rollback starts
+  ok   …and the log says what now serves
+  ok   5.18.50 is back, the checkout on claude/study-this-jhe2eg
+
+== 7b. the branch has moved on: a later release is on it before this one is deployed ==
+  ok   control: the clone's branch is ahead of 240f2f9, at a later plugin commit (6fe2338) that says 5.18.52
+  ok   7b-1 the deploy with the branch ahead: PASSED
+  ok   7b-1: installs        240f2f9 by its hash — the branch has moved on to 6fe2338 since
+  ok   7b-1: plugin version  5.18.51   (expected 5.18.51)
+  ok   7b-1: in the container accepts all 1 changed PHP files that run on the server
+  ok   7b-1: checking out 240f2f9 (5.18.51) for the documented deploy
+  ok   7b-1: the checkout is back on claude/study-this-jhe2eg
+  ok   7b-1: ok    container serves 240f2f9
+  ok   7b-1: ok    R1 all 3 files 5.18.51 changes are installed exactly as 240f2f9 has them
+  ok   …the container serves 240f2f9: nothing of the later release is installed
+  ok   …the checkout is back on claude/study-this-jhe2eg at the later commit, clean
+  ok   …no data changed
+  ok   7b-2 --after-only with the branch ahead: PASSED
+  ok   7b-3 --rollback with the branch ahead: 5.18.50 back, the checkout on claude/study-this-jhe2eg at the later commit
+  ok   7b-4 a checkout without 240f2f9 in its history: refused, nothing deployed, no backup
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+
+== 8. weakened copies of the script must each be caught ==
+  ok   caught: the Uganda check removed
+  ok   caught: a build over another live commit
+  ok   caught: DEPLOY never required
+  ok   caught: a failed backup ignored
+  ok   caught: R3 blind to a staff account edited during the deploy
+  ok   caught: R4 never counts
+  ok   caught: R4 blind across the two deploys
+  ok   caught: R1 blind
+  ok   caught: R1 blind to Release A's files
+  ok   caught: R2 takes any answer as on
+  ok   caught: V4 counts the master's lock line (a run begun on 5.18.50 would fail the deploy)
+  ok   caught: R8 without the grace
+  ok   caught: R8 never fails
+  ok   caught: R8 judges without proof that the master ran
+  ok   caught: R8 judges before an hour of runs
+  ok   caught: R8 blind to a missing guard
+  ok   caught: ROLLBACK never required
+  ok   caught: the rollback leaves the checkout detached
+  ok   caught: RB1 blind
+  ok   caught: the syntax NO-GO removed
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+  ok   caught: the deploy installs the branch tip instead of the pinned commit
+  ok   caught: the checkout left on the pinned commit after the deploy
+  ok   8b pinned to a broken build while the branch has fixed it: the check reads the pinned files — NO-GO, nothing deployed
+  ok   caught: the syntax check reads the working tree, not the pinned commit
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+
+== 9. what the rehearsal left behind ==
+  ok   this checkout is as the rehearsal found it: same commit, same tracked files
+  ok   no weakened copy is left in the clone
+
+rehearsal: 131 passed, 0 failed (52 runs of the script)

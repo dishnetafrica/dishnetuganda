@@ -1,0 +1,54 @@
+WA Events badge TEST — the 21:00–24:00 UTC failure is the test's clock, not the badge (see webhook-log-clock-measurement.txt); diagnostic, 5.18.51 testing, 2026-09-27T21:52Z (inside 21:00–24:00 UTC)
+commit 240f2f9 (5.18.51); the test is unchanged in both runs
+
+== 1. as written: the test's writer on PHP's default clock, as webhook.php writes on the server
+  ok   the counter is labelled "Sent (handed to WhatsApp)"
+  ok   so is its filter
+  ok   and "Delivered" appears nowhere on the screen
+  ok   the explanation says delivery is not measured
+  ok   the "notification sent" line reads "Sent (handed to WhatsApp)"
+  ok   release A's job line, "WhatsApp skipped", is filed Skipped by the existing rule
+  FAIL one "notification sent" today: the badge shows 1
+  FAIL with a failure too, it shows "1 fail"
+  ok   "WhatsApp skipped" alone is not counted as sent: no badge
+  ok   it says what "sent" means
+  ok   its totals: 1 sent, 1 failed, 1 suppressed — the opt-out is not counted as a failure
+  ok   the opted-out message reads "suppressed (opted out)"
+  ok   a real failure still reads "✗ fail"
+  ok   and a sent one "✓ sent"
+  ok   WA Events still says "Delivered"
+  ok   its badge still reads keys the log never writes, and shows nothing
+  ok   the Message Log counts the opt-out as a failure and adds no note, as before
+  ok   and shows the opted-out message as "✗ fail"
+  ok   caught: the badge reading keys the log never writes
+  ok   caught: "Delivered" claimed again
+  ok   caught: an opt-out counted as a failure
+  ok   caught: an opted-out row shown as "fail"
+  ok   caught: the Message Log changed on South Sudan too
+21 passed, 2 failed
+
+== 2. diagnostic only: the same test with its writer on Kampala time (php -d date.timezone=Africa/Kampala)
+  ok   the counter is labelled "Sent (handed to WhatsApp)"
+  ok   so is its filter
+  ok   and "Delivered" appears nowhere on the screen
+  ok   the explanation says delivery is not measured
+  ok   the "notification sent" line reads "Sent (handed to WhatsApp)"
+  ok   release A's job line, "WhatsApp skipped", is filed Skipped by the existing rule
+  ok   one "notification sent" today: the badge shows 1
+  ok   with a failure too, it shows "1 fail"
+  ok   "WhatsApp skipped" alone is not counted as sent: no badge
+  ok   it says what "sent" means
+  ok   its totals: 1 sent, 1 failed, 1 suppressed — the opt-out is not counted as a failure
+  ok   the opted-out message reads "suppressed (opted out)"
+  ok   a real failure still reads "✗ fail"
+  ok   and a sent one "✓ sent"
+  ok   WA Events still says "Delivered"
+  ok   its badge still reads keys the log never writes, and shows nothing
+  ok   the Message Log counts the opt-out as a failure and adds no note, as before
+  ok   and shows the opted-out message as "✗ fail"
+  ok   caught: the badge reading keys the log never writes
+  ok   caught: "Delivered" claimed again
+  ok   caught: an opt-out counted as a failure
+  ok   caught: an opted-out row shown as "fail"
+  ok   caught: the Message Log changed on South Sudan too
+23 passed, 0 failed

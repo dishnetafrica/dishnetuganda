@@ -2,7 +2,7 @@
 /**
  * fake_smtp_server.php — a relay that accepts everything and remembers it.
  *
- *   php tests/fixtures/fake_smtp_server.php <port> <transcript.json>
+ *   php tests/fixtures/fake_smtp_server.php <port> <transcript.json> [idle-seconds]
  *
  * The envelope sender is the one part of an email no test could see before
  * this existed. It is not in the message — it is a line of the SMTP
@@ -22,7 +22,8 @@ declare(strict_types=1);
 
 $port = (int)($argv[1] ?? 0);
 $file = (string)($argv[2] ?? '');
-if ($port <= 0 || $file === '') { fwrite(STDERR, "usage: fake_smtp_server.php <port> <transcript>\n"); exit(1); }
+$idle = max(1, (int)($argv[3] ?? 30));   // how long without a connection before it stops; a long test asks for more
+if ($port <= 0 || $file === '') { fwrite(STDERR, "usage: fake_smtp_server.php <port> <transcript> [idle-seconds]\n"); exit(1); }
 
 $srv = @stream_socket_server("tcp://127.0.0.1:{$port}", $errno, $errstr);
 if (!$srv) { fwrite(STDERR, "listen failed: {$errstr}\n"); exit(1); }
@@ -39,8 +40,8 @@ $record = function (array $session) use ($file): void {
 @file_put_contents($file, json_encode([], JSON_PRETTY_PRINT));
 
 while (true) {
-    $c = @stream_socket_accept($srv, 30);
-    if (!$c) break;   // 30s idle: the test is over, or it died. Either way, stop.
+    $c = @stream_socket_accept($srv, $idle);
+    if (!$c) break;   // idle that long: the test is over, or it died. Either way, stop.
     stream_set_timeout($c, 10);
 
     $session = ['ehlo' => '', 'mail_from' => '', 'rcpt_to' => [], 'data' => '', 'commands' => []];

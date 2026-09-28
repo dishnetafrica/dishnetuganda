@@ -2,8 +2,8 @@
 // Tab: bulk_dispatch
 // Extracted from public.php on 2026-03-15
         $apiToken = h($retailer['api_token'] ?? "");
-        // 5.18.50 (docs/44 M6, J2): on Uganda the page says that no WhatsApp was sent, and why the engineer list is
-        // empty. Every other install renders the page byte for byte as before.
+        // 5.18.50 (docs/44 J2): on Uganda the page says why the engineer list is empty; since 5.18.52 (J4) it also says
+        // what happened to each job's WhatsApp. Every other install renders the page byte for byte as before.
         require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
         $_bdUganda = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
     ?>
@@ -519,7 +519,8 @@ window.bdFire = function() {
         if (res.created > 0) {
             html += '<div style="margin-top:12px;font-size:12px;color:#2E7D32;font-weight:700;">✓ Field agents will see these jobs in their My Jobs tab immediately.</div>';
 <?php if ($_bdUganda): ?>
-            if (res.whatsapp_note) html += '<div style="margin-top:6px;font-size:12px;color:#92400e;font-weight:700;">📵 ' + escHtml(res.whatsapp_note) + '</div>';
+            if (res.whatsapp_note) html += '<div style="margin-top:6px;font-size:12px;color:' + (res.whatsapp === 'sent' ? '#2E7D32' : '#92400e') + ';font-weight:700;">'
+                + (res.whatsapp === 'sent' ? '📱 ' : '📵 ') + escHtml(res.whatsapp_note) + '</div>';
 <?php endif; ?>
             // Clear batch after successful dispatch
             batch = [];

@@ -1,0 +1,101 @@
+ROLLBACK
+
+== 5.18.52 (rollback) — 20260928T055701Z — vm ==
+
+== A. Before-evidence (read-only) ==
+  checkout        <sandbox>/repo
+  repo HEAD       e5d3264
+  plugin commit   7ad465e   (expected 7ad465e)
+  installs        the checkout as it is
+  plugin version  5.18.52   (expected 5.18.52)
+  tracked edits   0
+  5.18.52         20 files differ from 240f2f9: 12 changed, 8 added, 1 removed
+  note  files removed or renamed in 5.18.52 stay on the server under their old name (deploy-hybrid.sh never deletes): tests/test_job_notifications_off.php 
+  serves          <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan
+  live commit     7ad465e
+  live version    5.18.52
+  --check says:
+     
+       repo      <sandbox>/repo  (7ad465e)
+       serves    <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan
+       live      7ad465e
+     
+       Up to date.
+     
+  container PHP   8.4.19
+  data dir        /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data (container)  =  <sandbox>/mount/ucrm/data/plugins/.dishnet-hybrid-sudan-data (host)
+  database owner  0:0   (every read below runs as this user, and opens the database read-only)
+  plugin URL      http://127.0.0.1:41833/public.php
+  the :8443 door  https://127.0.0.1:8443/public.php
+  job links       http://127.0.0.1:41833/public.php?page=dashboard&tab=scheduling&job=<id>   (what message 1 and message 2 carry)
+  before: the sign-in page on the public address → 200
+  tenant          the configuration's store copy reads uganda; its files read uganda
+  ok    A1 the installed plugin reads Uganda from both configuration sources — the job notifier will be on
+  ok    A3 staff accounts read: 7 accounts, 6 active; of the 5 active accounts that take jobs, 3 hold a uCRM user id (1 through a verified link, 2 stored the old way) and 1 only an FTTH id — digest d4d96bcbdd00233e
+  ok    A4 the Message Log holds 4 rows; its last is #4
+  …     migration 075 recorded 1×, 076 1×; job_notify_state 0 rows, job_notify_events 0 rows (5.18.52 is installed)
+
+== A. Backup ==
+  ok    backed up plugin.sqlite3 → <sandbox>/out/backup-20260928T055701Z/plugin.sqlite3 (2.2M) — one consistent copy (VACUUM INTO as 0:0, SQLite 3.45.1), integrity ok, 118 tables, the same sha256 on both sides
+  ok    backed up dishnet.sqlite → <sandbox>/out/backup-20260928T055701Z/dishnet.sqlite (8.0K) — one consistent copy (VACUUM INTO as 0:0, SQLite 3.45.1), integrity ok, 1 tables, the same sha256 on both sides
+  ok    backed up <sandbox>/mount/ucrm/data/plugins/.dishnet-hybrid-sudan-data → <sandbox>/out/backup-20260928T055701Z/.dishnet-hybrid-sudan-data.tar.gz (4.0K) — without the live databases, copied above
+  ok    backed up <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan/data → <sandbox>/out/backup-20260928T055701Z/data.tar.gz (4.0K)
+  ok    backed up the installed plugin (5.18.52, 7ad465e) → <sandbox>/out/backup-20260928T055701Z/plugin-installed-5.18.52.tar.gz (11M) — its code, without data/
+  ok    backed up the configuration vault → <sandbox>/out/backup-20260928T055701Z/config-vault.json (34 bytes, identical)
+  note  verify-uisp-health.sh did not pass — recorded in <sandbox>/out/backup-20260928T055701Z/health-before.txt
+
+  GO — evidence recorded, backup in <sandbox>/out/backup-20260928T055701Z
+  Deploy again at any time:  cd <sandbox>/repo && bash scripts/deploy-5.18.52.sh
+
+== B. The rollback: the documented deploy of 240f2f9 (5.18.51) ==
+  Type ROLLBACK to put 5.18.51 (240f2f9) back over live 7ad465e, anything else to stop: 
+  the checkout is on claude/study-this-jhe2eg; checking out 240f2f9 (5.18.51) for the documented deploy
+     
+       repo      <sandbox>/repo  (240f2f9)
+       serves    <sandbox>/mount/ucrm/data/plugins/dishnet-hybrid-sudan
+       live      7ad465e
+     
+       ✓ container now serves 240f2f9
+     
+  the container now serves 240f2f9; the checkout is back on claude/study-this-jhe2eg
+  ok    container serves 240f2f9 (5.18.51)
+
+== V. Verification over the public address and the :8443 door (nothing signed in; no customer touched) ==
+  ok    V1 the sign-in page on the public address answers 200 with zero redirects (no loop)
+  ok    V1 the portal without a session still refuses (302)
+  ok    V1 its Location carries no :8443
+  ok    V2 the sign-in page answers 200
+  ok    V2 the sign-in page carries no South Sudan contact
+  ok    V2 the Terms page answers 200
+  ok    V2 the Terms page's contacts and footer carry no South Sudan literal (A1.1)
+  ok    V2 the Terms page carries the Uganda WhatsApp link and locality
+  ok    V2 the Terms page names South Sudan ×0 and Juba ×0 (A2)
+  ok    V2 the Terms page carries the approved Uganda identity, governing law and forum (A2 points 1–3)
+  ok    V2 the Terms page states no South Sudan fee and no fibre/LTE product (A2 points 7–8)
+  ok    V2 the Terms page shows version 1.1
+  ok    V2 the Privacy page answers 200 with no South Sudan contact
+  ok    V2 the Privacy page carries the Uganda regulator sentence and both sign-in channels, and no South Sudan or fibre/LTE clause (A2 points 4, 9, 10)
+  ok    V2 app_legal_version answers 1.1 / 1.1 — nobody is asked to accept the terms again
+  ok    V3 the sign-in page on :8443 → 302 → the public address, same path and query (A1.3)
+  ok    V3 the customer manifest on :8443 → 302
+  ok    V3 page=api on :8443 is answered (200), never redirected — the wrapper's calls keep working
+  ok    V3 the native wrapper's request on :8443 is served (200), not redirected
+  ok    V3 a POST on :8443 is never redirected (200)
+  …     waiting 0s for the first requests on the code now installed
+  ok    V4 no fatal or parse error of dishnet-hybrid-sudan in the container log since 2026-09-28T05:57:03Z
+
+== RB. 5.18.51, back in place (read-only) ==
+  ok    RB1 all 12 files 5.18.52 had changed are back exactly as 240f2f9 (5.18.51) has them
+  ok    RB1 the installed manifest says 5.18.51
+  ok    RB2 the 8 file(s) 5.18.52 added are still on disk and inert: no 5.18.51 file loads them
+  ok    RB3 every staff account is as it was at stage A of this run: role, status, e-mail, phone, uCRM user id and link (digest d4d96bcbdd00233e, 7 accounts)
+  note  on 5.18.51 again: no job WhatsApp message or e-mail on Uganda (M6). Migration 075's two tables, 076's two columns and their rows stay; 5.18.51 never reads them. Jobs created Open meanwhile stay Open in uCRM
+
+== F. Summary ==
+  serving           240f2f9  (plugin 5.18.51)
+  deploy again      cd <sandbox>/repo && bash scripts/deploy-5.18.52.sh
+  backup            <sandbox>/out/backup-20260928T055701Z
+  the data          this release adds two tables and changes no row: a rollback needs no restore. The database copies are there for a restore on instruction only
+  checks            35 ok, 0 failed, 3 notes
+
+  5.18.52 (rollback): PASSED. Send this LOG FILE back (not a copy of the terminal).

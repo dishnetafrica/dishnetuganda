@@ -22,17 +22,21 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/staff_jobs_sandbox.php';
 
-/** 5.18.49, the release this one replaces. */
+/** 5.18.49, the release 5.18.50 replaced — South Sudan's reference for release A. */
 const SJ_BASELINE = 'e076632';
+
+/** 5.18.51, the release 5.18.52 replaces (docs/44 §16.13, §16.14): the plugin commit installed before release B. */
+const SJ_BASELINE_51 = '240f2f9';
 
 /** The events a job-assignment message is logged under, in 5.18.49: the four paths M6 switches off on Uganda. */
 const SJ_ASSIGNMENT_EVENTS = ['ops_scheduling_job_assigned', 'ops_scheduling_rescheduled', 'job_assigned'];
 
 /**
- * The 5.18.49 plugin tree, from Git, with this repository's fakes beside it: [dir, reason]. dir is null when Git cannot
- * supply it (no git, or a checkout without that commit) — a caller reports that as a skip, never as a pass.
+ * A released plugin tree, from Git — 5.18.49 unless another commit is named — with this repository's fakes beside it:
+ * [dir, reason]. dir is null when Git cannot supply it (no git, or a checkout without that commit) — a caller reports
+ * that as a skip, never as a pass.
  */
-function sj_baseline_tree(): array
+function sj_baseline_tree(string $commit = SJ_BASELINE): array
 {
     $tmp = sys_get_temp_dir() . '/sj-base-' . getmypid() . '-' . bin2hex(random_bytes(3));
     mkdir($tmp, 0700, true);
@@ -40,13 +44,13 @@ function sj_baseline_tree(): array
     $top = trim((string)shell_exec('git -C ' . escapeshellarg(__DIR__) . ' rev-parse --show-toplevel 2>/dev/null'));
     $out = [];
     if ($top !== '') {
-        exec('git -C ' . escapeshellarg($top) . ' archive --prefix=plugin/ ' . escapeshellarg(SJ_BASELINE . ':dishnet-hybrid-sudan')
+        exec('git -C ' . escapeshellarg($top) . ' archive --prefix=plugin/ ' . escapeshellarg($commit . ':dishnet-hybrid-sudan')
             . ' | tar -x -C ' . escapeshellarg($tmp) . ' 2>&1', $out, $rc);
     }
     $dir = $tmp . '/plugin';
     if (!is_file($dir . '/manifest.json')) {
         exec('rm -rf ' . escapeshellarg($tmp));
-        return [null, 'git could not supply ' . SJ_BASELINE . ': ' . trim(implode(' ', $out))];
+        return [null, 'git could not supply ' . $commit . ': ' . trim(implode(' ', $out))];
     }
     @mkdir($dir . '/tests/fixtures', 0700, true);
     foreach (['fake_ucrm_staff_jobs.php', 'fake_evo_server.php', 'fake_smtp_server.php', 'staff_jobs_sandbox.php'] as $f) {
@@ -104,26 +108,6 @@ final class SjScenario
         $s->staff('acct',  ['name' => 'Sandbox Accountant', 'email' => 'acct@example.test', 'role' => 'accountant', 'phone' => '+256700000113']);
     }
 
-    /** A fake SMTP relay for the customer's e-mail: [port, transcript]. */
-    private static function smtp(SjSandbox $s, string $root): array
-    {
-        $transcript = $s->sb . '/smtp.json';
-        foreach (range(0, 11) as $slot) {
-            $port = 12800 + ((getmypid() * 5 + $slot * 11 + random_int(0, 5)) % 180);
-            $p = proc_open(sprintf('exec %s %s %d %s', escapeshellarg(PHP_BINARY), escapeshellarg($root . '/tests/fixtures/fake_smtp_server.php'), $port, escapeshellarg($transcript)),
-                [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
-            for ($i = 0; $i < 50; $i++) {
-                usleep(100000);
-                if (!proc_get_status($p)['running']) break;
-                if (!is_file($transcript)) continue;
-                $c = @fsockopen('127.0.0.1', $port, $e1, $e2, 2);
-                if ($c) { $g = fgets($c, 256); fwrite($c, "QUIT\r\n"); fclose($c); if (strpos((string)$g, 'fake.smtp.test') !== false) { $s->adopt($p); return [$port, $transcript]; } }
-            }
-            proc_terminate($p); proc_close($p); @unlink($transcript);
-        }
-        throw new \RuntimeException('the fake SMTP relay did not start');
-    }
-
     /**
      * The day, on the plugin tree at $root, configured by $cfg. $extra($s) runs after the day, before the servers stop,
      * for a caller's own captures. Returns what was said and done, in order.
@@ -139,9 +123,7 @@ final class SjScenario
                  'email_company_name' => 'DishNet Sandbox Limited', 'email_locality' => 'Kampala, Uganda',
                  'email_support_phone' => '+256 700 000 100', 'email_reply_to' => 'support@example.test', 'email_website' => 'example.test'];
         $s = SjSandbox::start($root, $cfg, $tag);
-        [$smtpPort, $transcript] = self::smtp($s, $root);
-        file_put_contents($s->data . '/email_settings.json', json_encode(['use_ucrm_email' => false, 'smtp_host' => '127.0.0.1',
-            'smtp_port' => $smtpPort, 'smtp_user' => '', 'smtp_pass' => '', 'smtp_enc' => '', 'smtp_from' => 'accounts@example.test']));
+        [, $transcript] = $s->mailRelay();   // for the customer's e-mail, and on Uganda since 5.18.52 the engineer's
         $s->seedCrm(self::crm());
         self::staff($s);
 

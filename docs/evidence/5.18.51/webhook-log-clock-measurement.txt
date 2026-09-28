@@ -1,0 +1,11 @@
+Which clock the webhook log really uses — measured 2026-09-27T22:00Z, plugin 240f2f9 (5.18.51)
+One uCRM event (job.add) sent the way uCRM sends it, to public.php?page=crm_webhook of a sandboxed plugin
+(tests/fixtures/staff_jobs_sandbox.php, tenant_profile uganda); the real public.php, webhook.php and whLog() wrote the line.
+
+http status        : 200
+log rows           : 3
+newest line        : job #987654 could not be read from uCRM — event skipped, posted body
+received_at written: 2026-09-28 01:00:08
+UTC now            : 2026-09-27 22:00:08 .. 2026-09-27 22:00:08
+Kampala now        : 2026-09-28 01:00:08
+verdict            : KAMPALA time
