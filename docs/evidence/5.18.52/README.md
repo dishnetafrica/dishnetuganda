@@ -50,3 +50,13 @@ what §16.16 rests on. Everything here is local and runs against fakes, and noth
 
 Personal data: none. The suites and the rehearsal use made-up accounts, and the rehearsal checks that its log prints
 none of them.
+
+## The job-log check — docs/44 §16.21
+
+| File | What it is |
+|---|---|
+| `job-log-reader/reader.php` | The read-only check handed over for job #8: one job's lines from the plugin's webhook log, masked |
+| `job-log-reader/sample-webhook_log.json` | A made-up log it was tested on: job #8's lines, a client event with the same id, jobs #80 and #9 |
+| `job-log-reader/out-php84.txt`, `job-log-reader/out-php81.txt` | Its output for jobs 8, 80, 9 and 7 under PHP 8.4.19 and 8.1.34 (php-wasm): identical |
+
+Personal data: none. The sample's names, addresses and number are made up, and neither output prints them.

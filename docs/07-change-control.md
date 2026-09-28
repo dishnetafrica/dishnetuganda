@@ -2177,3 +2177,16 @@ the branch tip read 170/170 again.
 live; migrations 075 and 076 applied; the engineer's e-mail goes through the plugin's own SMTP settings. The first job
 on 5.18.52, #8, was created at about 07:43 UTC, assigned to S4. Every test job made with a customer also sent that
 customer the older "installation booked" e-mail; test jobs need no customer.
+
+## 28 Sep — job #8 left no record; a read-only check and a test job (docs/44 §16.21)
+
+- **The 07:55 UTC `--after-only`: PASSED, 37 ok / 0 failed / 3 notes.** But job #8 left no trace: `job_notify_state`
+  and `job_notify_events` are empty, and the Message Log still ends at #380. The operator created job #8 at about 07:43
+  UTC in uCRM, assigned to S4 (verified link), with the test customer.
+- **The job.add handler ran to its end,** because the customer's e-mail went, and the notifier wrote nothing. Either
+  the Uganda gate read "not Uganda" in that request, or the notifier stopped before its claim; its log line names the
+  reason.
+- **Handed over:** a read-only check that prints one job's lines from the plugin's webhook log, masked. It was tested
+  on a sample log under PHP 8.4.19 and 8.1.34, with identical output. Also handed over: the test the operator asked
+  for, a ＋ New Job with the test customer and S4, whose note shows the notifier's result.
+- **Nothing changed.**

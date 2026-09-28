@@ -2742,3 +2742,77 @@ unchanged since before release A.
 - Its *"Technician"* row reads *"Technician"*: the handler looks the name up at `GET users/{id}`, which this uCRM
   answers with 404 (the users check, §16.17). The job carries `assignedUserFullName`, so the name is there to use. That
   is a small change for a later release; nothing is changed here.
+
+### 16.21 Job #8 left no record; the check that says why, and a test job — 28 September 2026
+
+**What the 07:55 UTC `--after-only` shows** (run `20260928T075524Z`, printed on the server with `tail -n +1`):
+**PASSED, 37 ok, 0 failed, 3 notes**, but job #8 left no trace:
+- `job_notify_state` 0 rows, `job_notify_events` 0 rows, and the Message Log still ends at #380.
+- Job #8 was created at about 07:43 UTC, after the deploy, in uCRM's own screen: Open, assigned to uCRM user 1099 (S4,
+  verified link, +256 number), with the test customer (C1).
+- R4's words *"nobody created or changed a job"* are an inference from zero rows. They are wrong here: a job the
+  notifier did not record looks exactly like no job.
+
+**What the code allows.** The customer's *"installation booked"* e-mail went at the same minute, and the job.add
+handler sends it only after its call to the notifier. So the handler ran to its end, and the notifier wrote nothing.
+Only two readings fit:
+1. **The Uganda gate read "not Uganda" inside that request,** and the 5.18.49 path ran. uCRM answers `users/{id}`
+   with 404 (§16.17), so that path finds no number and logs *"Job #8 — No phone found for …"*.
+2. **The notifier stopped before its claim** and logged *"Job #8 — could not be checked with uCRM: <reason>"*. The
+   reason is one of: uCRM's answer lacks the assignee, time or status; called inside a transaction; the job state
+   could not be locked; the job state could not be read or written.
+
+Any other line would contradict the empty tables. The line is in the plugin's webhook log, which keeps the newest 300
+entries.
+
+**The check, read-only.** It prints one job's lines from that log, oldest first:
+- the job's own lines, and each uCRM job event for it with the customer-e-mail line of that request (within two
+  minutes);
+- e-mail addresses, numbers of nine digits or more, and the name in the old path's two lines, masked.
+
+It writes nothing and runs as `1000:1000`. Tested against a sample log (`docs/evidence/5.18.52/job-log-reader/`): a
+client event with the same id, a job #80 and a later job are left out, and nothing personal prints. Its output under
+PHP 8.4.19 and under PHP 8.1.34 (php-wasm, the server's version) is identical. The job number is its one argument:
+
+```
+docker exec -i -u 1000:1000 ucrm php -- 8 <<'PHP'
+<?php
+$n = (int)($argv[1] ?? 0); $f = $argv[2] ?? '/data/ucrm/data/plugins/.dishnet-hybrid-sudan-data/webhook_log.json';
+$l = json_decode((string)@file_get_contents($f), true);
+if (!is_array($l) || !$l) { echo "no webhook log at $f\n"; exit(1); }
+echo "webhook log: ", count($l), " entries, ", (end($l)['received_at'] ?? '?'), " to ", (reset($l)['received_at'] ?? '?'), "\n";
+$hit = 0; $keep = false; $t0 = 0;
+foreach (array_reverse($l) as $e) {
+    $m = (string)($e['message'] ?? ''); $d = (array)($e['data'] ?? []); $t = (int)strtotime((string)($e['received_at'] ?? ''));
+    if (strpos($m, 'Received UCRM webhook') === 0) {
+        $keep = (int)($d['entity_id'] ?? 0) === $n && strpos($m, 'Received UCRM webhook: job.') === 0; $t0 = $t;
+    }
+    $mine = preg_match("/^job #{$n}\\b/i", $m)
+         || ($keep && abs($t - $t0) <= 120 && (strpos($m, 'Received UCRM webhook') === 0 || strpos($m, 'Customer email') === 0));
+    if (!$mine) continue;
+    $m = preg_replace(['/[^\s<>()]+@[^\s<>()]+/', '/\+\d[\d ()-]{7,}\d/', '/\b\d{9,}\b/', '/(notification sent to|No phone found for) .*/'],
+                      ['<e-mail>', '<number>', '<number>', '$1 <name>'], $m);
+    echo ($e['received_at'] ?? ''), "  ", ($e['event'] ?? ''), "  ", $m, "\n"; $hit++;
+}
+if (!$hit) echo "no line for job #$n: nothing arrived for it, or it has left the log (it keeps the newest 300 entries)\n";
+PHP
+```
+
+**The test the operator asked for:** *"one test with [the test customer] … and [S4] as technician … we want to see how
+it will work"*.
+- **Through the plugin's ＋ New Job** (My Jobs), not uCRM's screen: the answer shows the notifier's result under the
+  button. The job.add that uCRM then sends runs the notifier a second time, and the check above prints what it did.
+- Title *"TEST Starlink Installation"*, the test customer, today, a time later today, S4 alone.
+- **Expected if it works:**
+  - S4 gets message 1 by WhatsApp and the same text by e-mail;
+  - the note reads *"WhatsApp sent to the engineer, with the link to accept the job. The same message went to the
+    engineer's e-mail."*, or *"uCRM's own notice of this change is sending the WhatsApp message…"* when the webhook
+    claimed the job first;
+  - the test customer gets the *"installation booked"* e-mail. Its *"Technician"* row still reads *"Technician"*
+    (§16.20).
+- **After S4 presses ACCEPT JOB and signs in:** message 2 with the completion link, by WhatsApp and by e-mail.
+- **If it does not:** the note gives the outcome. An `unverified` outcome shows on the screen only as *"could not be
+  read back from uCRM"*. Its reason is in the webhook log's line for the same job, which the check prints.
+
+Nothing was changed by this session. Job #8 itself stays unrecorded: its next change in uCRM (a new time, say) is the
+first the notifier sees, and would send message 1 then.

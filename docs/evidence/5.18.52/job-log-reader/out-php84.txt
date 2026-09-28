@@ -1,0 +1,20 @@
+== job 8
+webhook log: 16 entries, 2026-09-28 10:43:10 to 2026-09-28 10:58:30
+2026-09-28 10:43:10  job.add  Received UCRM webhook: job.add
+2026-09-28 10:43:10  job.add  Job #8 — could not be checked with uCRM: the job state could not be locked
+2026-09-28 10:43:11  job.add  Customer email sent: install_scheduled → <e-mail>
+2026-09-28 10:55:00  job.edit  Received UCRM webhook: job.edit
+2026-09-28 10:55:01  job.edit  Job #8 (assigned) — WhatsApp sent to staff account #3; e-mail handed to the mail server
+2026-09-28 10:55:01  job.edit  Job #8 notification sent to <name>
+== job 80
+webhook log: 16 entries, 2026-09-28 10:43:10 to 2026-09-28 10:58:30
+2026-09-28 10:49:00  job.add  Received UCRM webhook: job.add
+2026-09-28 10:49:00  job.add  Job #80 — No phone found for <name>
+2026-09-28 10:49:00  job.add  Job #80: no customer e-mail — not an installation job
+== job 9
+webhook log: 16 entries, 2026-09-28 10:43:10 to 2026-09-28 10:58:30
+2026-09-28 10:58:00  job.add  Received UCRM webhook: job.add
+2026-09-28 10:58:30  job.add  Customer email sent: install_scheduled → <e-mail>
+== job 7
+webhook log: 16 entries, 2026-09-28 10:43:10 to 2026-09-28 10:58:30
+no line for job #7: nothing arrived for it, or it has left the log (it keeps the newest 300 entries)
