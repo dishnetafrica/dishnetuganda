@@ -2629,3 +2629,47 @@ pasted them. They carry no name, e-mail, number or secret.
 2. S1's number. These logs do not show numbers; S1's card on the Staff page does.
 3. M4, then the jobs facts command's log file.
 4. A separate approval of 5.18.52.
+
+### 16.18 The jobs facts at 07:26 UTC — uCRM sends every job event to the plugin (V2); what remains
+
+The operator ran the corrected jobs facts command (§16.17), printed its log file on the server with `tail -n +1` and
+pasted it, with a screenshot of the Staff page. The screenshot shows names, e-mails and numbers; none is repeated here.
+
+**V2, measured: uCRM delivers job.add, job.edit and job.delete to the plugin.**
+- Since 25 Sep 19:53, the oldest line kept: **job.add 7, job.edit 1, job.delete 5**, each counted by its "Received UCRM
+  webhook" line.
+- The job.add handler's own lines: *"not switched on yet"* 6, from deliveries on 5.18.50 and 5.18.51, where M6 holds;
+  *"No phone found"* 1, from a delivery on 5.18.49, before 20:08 UTC on 27 Sep.
+- **No job message was sent.** The Message Log holds no job message of any kind; its 380 rows are the positive
+  control.
+
+**V4, measured:** uCRM holds 2 jobs, both Open (status 0), one assigned to 1000 (S1) and one to 1099 (S4). A job's
+detail carries `assignedUserId`.
+
+**V3 is all that is left of M4:** whether a job made in the plugin's ＋ New Job shows in uCRM at the hour typed. uCRM's
+own screen made the jobs above, so they cannot answer it.
+
+**Both jobs have a customer and "installation" in the title.**
+- On job.add, 5.18.51, like every version before it, e-mails the customer *"installation scheduled"* when the job has a
+  client, an installation title and a date, and that e-mail (`install_scheduled`) is switched on.
+- The 7 deliveries left 14 handler lines: one WhatsApp line each, and 7 more. The e-mail step logs one line when it runs
+  and none when the e-mail is switched off, so the deliveries most likely each logged an e-mail outcome.
+- WA Events, searched for `install_scheduled`, shows whether a customer was sent one. **For a test job: no customer.**
+- **After 5.18.52, the next change to either job sends its technician message 1** (§16.14): S4 by WhatsApp and e-mail,
+  S1 by e-mail only while S1 has no number.
+
+**Still to do, as the screenshot and the facts agree:** M5 (S3 still holds 4, S5 1581) and S1's number.
+
+**J1 holds in production.** The installed South Sudan maps still name S1 → 1 and S5 → 1581, yet S1 keeps 1000 across
+page loads: the maps no longer touch a Uganda account. After M5, a reload of the Staff page must leave S5 cleared,
+which measures J1 once more.
+
+**Two lines of the facts report predate release A** and are read accordingly:
+- *"hard-coded South Sudan maps force"* describes the installed files, not what J1 lets them do;
+- *"offered in My Jobs → New Job: S1, S3, S4, S5"* is 5.18.49's rule. Under M7, 5.18.51 offers S1 and S4 only.
+
+**Next:**
+1. M5, then reload the Staff page;
+2. S1's number;
+3. V3: one job in ＋ New Job, no customer, assigned to S1, at a typed hour; check the hour in uCRM; delete it there;
+4. a separate approval of 5.18.52.

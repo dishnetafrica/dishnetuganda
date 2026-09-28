@@ -2164,3 +2164,7 @@ process's own clock. 5.18.52 corrects the test, not the badge.
   lines are counted apart, 5.18.51's *"not switched on yet"* included. docs/43's reading stands: uCRM held no job then.
 - **Rehearsed** 391/391 twice, with a seed of the lines 5.18.51 really writes. 10 weakened copies caught (2 new).
   Read-only, as before; no plugin file changed.
+
+**07:26 UTC — the corrected report on the server** (docs/44 §16.18). uCRM delivers every job event to the plugin: job.add
+7, job.edit 1, job.delete 5 since 25 Sep (V2), and a job's detail carries its assignee (V4). No job message was sent. Of
+M4 only V3 is left (the hour of a job made in ＋ New Job). M5 and S1's number are still to do.
