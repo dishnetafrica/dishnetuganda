@@ -8,6 +8,9 @@
  * Every value comes from uCRM's job, uCRM's client, the staff directory and the tenant profile — never from what a
  * browser sent (T4.13). A value uCRM does not have gives no line at all. These are pure functions: JobNotifier
  * gathers the values, these only arrange them, so a test can pin every byte.
+ *
+ * Each message also goes by e-mail, to the staff account's own address (docs/44 §16.16, the operator's "i need"): the
+ * same text, under a subject naming the job, with an HTML part that is that text and nothing else.
  */
 final class JobMessages
 {
@@ -96,6 +99,33 @@ final class JobMessages
              . "📅 Was: " . self::s($f, 'was') . "\n"
              . "Please do not go.\n\n"
              . self::footer($f);
+    }
+
+    /** The e-mail's subject: the message's own headline and the job's number. Plain ASCII. */
+    public static function subject(string $kind, array $f): string
+    {
+        $id = (int)($f['job_id'] ?? 0);
+        switch ($kind) {
+            case 'assigned':        return "New job assigned to you: Job #{$id}";
+            case 'accepted':        return "Job #{$id} accepted: your completion link";
+            case 'reassigned_away':
+            case 'removed':         return "Job #{$id} is no longer assigned to you";
+            case 'new_time':        return "Job #{$id} has a new time";
+            case 'cancelled':       return "Job #{$id} has been cancelled";
+            default:                return "Job #{$id}";
+        }
+    }
+
+    /**
+     * The e-mail's HTML part: the message text itself, escaped, every line kept, every link clickable. The text part
+     * is the message byte for byte; this adds nothing a reader of the text would not see.
+     */
+    public static function html(string $text): string
+    {
+        $h = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+        $h = (string)preg_replace('#https?://[^\s<>"\']+#', '<a href="$0">$0</a>', $h);
+        return '<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#222222;">'
+             . str_replace("\n", "<br>\r\n", $h) . '</div>';
     }
 
     private static function greeting(array $f): string

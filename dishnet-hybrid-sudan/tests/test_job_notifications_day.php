@@ -13,7 +13,8 @@ declare(strict_types=1);
  * job created in uCRM (job.add), Accept, two tasks, Complete.
  *   1. the control: 5.18.51, as Uganda, sends none of the four assignment messages and the old "✅ Job Accepted";
  *   2. this tree: message 1 on each of the four paths — Reschedule's job is one the plugin was never told about, so its
- *      first message is message 1 at its next change (§5.5) — and message 2 on Accept; every answer says so;
+ *      first message is message 1 at its next change (§5.5) — and message 2 on Accept; every answer says so; and since
+ *      §16.16 each of the five also by e-mail, the same text, to the engineer's staff account;
  *   3. every other message, the Message Log's other rows, the customer's "installation scheduled" e-mail and the
  *      webhook log are 5.18.51's, byte for byte, but for the one job line;
  *   4. uCRM receives the same writes in the same order; only ＋ New Job and Bulk Dispatch now create their jobs Open
@@ -23,7 +24,8 @@ declare(strict_types=1);
  *      empty;
  *   7. weakened copies of the code each fail this test.
  *
- * What this proves is what the plugin hands to WhatsApp. It is not proof of delivery to a phone.
+ * What this proves is what the plugin hands to WhatsApp and to the mail server. It is not proof of delivery to a phone or
+ * an inbox.
  *
  *   php test_job_notifications_day.php [--root=DIR] [--no-mutants]
  */
@@ -118,13 +120,26 @@ is_(array_values(array_intersect($evs, $B_EVENTS)) === ['job_assigned', 'job_ass
     'the Message Log records the four and message 2, under the event names 5.18.49 used for them', json_encode($evs));
 foreach (['create' => '＋ New Job', 'bulk' => 'Bulk Dispatch', 'reschedule' => 'Reschedule'] as $step => $label) {
     $d = $data($new, $step);
-    is_(($d['whatsapp'] ?? null) === 'sent' && ($d['whatsapp_note'] ?? null) === 'WhatsApp sent to the engineer, with the link to accept the job.',
-        "{$label} answers whatsapp: sent, in words", json_encode($d, JSON_UNESCAPED_UNICODE));
+    is_(($d['whatsapp'] ?? null) === 'sent'
+        && ($d['whatsapp_note'] ?? null) === 'WhatsApp sent to the engineer, with the link to accept the job. The same message went to the engineer\'s e-mail.',
+        "{$label} answers whatsapp: sent, in words, the e-mail included", json_encode($d, JSON_UNESCAPED_UNICODE));
 }
 is_(($data($new, 'create')['jobs'][0]['notified'] ?? null) === true, '＋ New Job marks the engineer "notified" — the 📱 in its result — because it went');
-is_(($data($new, 'accept')['whatsapp_note'] ?? '') === 'WhatsApp with the completion link sent to the engineer on the job.', 'and Accept\'s answer says message 2 went');
+is_(($data($new, 'accept')['whatsapp_note'] ?? '') === 'WhatsApp with the completion link sent to the engineer on the job. The same message went to the engineer\'s e-mail.',
+    'and Accept\'s answer says message 2 went, by both');
 $wh = array_column($new['whlog'], 'message');
-is_(in_array('Job #911 (assigned) — WhatsApp sent to staff account #3', $wh, true), 'the job created in uCRM: the webhook log says "WhatsApp sent to staff account #3"', json_encode($wh, JSON_UNESCAPED_UNICODE));
+is_(in_array('Job #911 (assigned) — WhatsApp sent to staff account #3; e-mail handed to the mail server', $wh, true),
+    'the job created in uCRM: the webhook log says "WhatsApp sent to staff account #3; e-mail handed to the mail server"', json_encode($wh, JSON_UNESCAPED_UNICODE));
+// §16.16: the same five by e-mail — the text, byte for byte, to the engineer's staff account.
+$techMail = array_values(array_filter($new['mail'], function ($m) { return $m['to'] === ['tech@example.test']; }));
+$parsed   = array_map(function ($m) { return SjSandbox::parseMail($m['data']); }, $techMail);
+is_(count($techMail) === 5 && array_column($parsed, 'text') === array_column($b, 'text'),
+    'five e-mails to the engineer\'s staff account, each the same text as its WhatsApp, in the same order', json_encode(array_column($parsed, 'subject')));
+is_(array_column($parsed, 'subject') === ['New job assigned to you: Job #950', 'New job assigned to you: Job #951', 'New job assigned to you: Job #905',
+                                          'New job assigned to you: Job #911', 'Job #901 accepted: your completion link'],
+    'each under its own subject', json_encode(array_column($parsed, 'subject')));
+is_(array_unique(array_column($techMail, 'from')) === ['accounts@example.test'] && array_unique(array_column($parsed, 'reply_to')) === ['support@example.test'],
+    'from the plugin\'s sender, replies to the tenant\'s reply address — as the customer\'s e-mail', json_encode([array_column($techMail, 'from'), array_column($parsed, 'reply_to')]));
 if ($old) is_(in_array('Job #911 — WhatsApp skipped: job notifications are not switched on yet', array_column($old['whlog'], 'message'), true), 'control: 5.18.51 wrote "WhatsApp skipped" there');
 
 echo "\n3. Everything else is 5.18.51's, byte for byte\n";
@@ -136,7 +151,9 @@ is_(count($other($new)) === 6 && $seen === array_values($names), 'this tree send
 if ($old) {
     is_($other($old) === $other($new), 'each is the same text to the same number, in the same order, as 5.18.51', json_encode(['5.18.51' => $other($old), 'this' => $other($new)], JSON_UNESCAPED_UNICODE));
     is_($logOther($old) === $logOther($new), 'the Message Log\'s other rows are the same, row for row');
-    is_(count($new['mail']) === 1 && $old['mail'] === $new['mail'], 'the customer\'s "installation scheduled" e-mail: the same message, byte for byte (T4.11)', count($old['mail']) . ' vs ' . count($new['mail']));
+    $customerMail = array_values(array_filter($new['mail'], function ($m) { return $m['to'] !== ['tech@example.test']; }));
+    is_(count($customerMail) === 1 && $old['mail'] === $customerMail, 'the customer\'s "installation scheduled" e-mail: the same message, byte for byte (T4.11) — the engineer\'s five aside',
+        count($old['mail']) . ' vs ' . count($customerMail));
     is_($whOther($old) === $whOther($new), 'the webhook log is the same, line for line, but for the one job line', json_encode([$whOther($old), $whOther($new)], JSON_UNESCAPED_UNICODE));
 } else {
     skip_('the byte-for-byte comparison with 5.18.51');
@@ -153,8 +170,8 @@ if ($old) {
 
 echo "\n5. The screens, and the cron\n";
 $sch = (string)($new['extra']['scheduling'] ?? '');
-is_(strpos($sch, 'The engineer gets a WhatsApp message') !== false && strpos($sch, 'No WhatsApp message is sent for jobs yet') === false,
-    '＋ New Job says the engineer gets a WhatsApp message', strlen($sch) . ' bytes');
+is_(strpos($sch, 'The engineer gets a WhatsApp message and the same by e-mail') !== false && strpos($sch, 'No WhatsApp message is sent for jobs yet') === false,
+    '＋ New Job says the engineer gets a WhatsApp message and the same by e-mail', strlen($sch) . ' bytes');
 is_(strpos($sch, 'Notify assigned engineers immediately') === false && strpos($sch, '<input type="checkbox" id="njNotifyWa" style="display:none;" disabled>') !== false,
     'and still has no box to tick (D4): the message does not depend on one');
 $master = (string)file_get_contents($root . '/cron/master.php');
@@ -193,6 +210,8 @@ if ($withMutants) {
          'Bulk Dispatch not telling the engineer'],
         ['includes/api/api_scheduling.php', "        if (\$_sjUganda) {\n            \$_sjR = \$sjNotifier()->observe(\$jobId, 'reschedule',", "        if (false) {\n            \$_sjR = \$sjNotifier()->observe(\$jobId, 'reschedule',",
          'Reschedule not observed (its answer then reads an unset outcome)'],
+        ['lib/JobNotifier.php', 'JobMessages::html($text), str_replace("\n", "\r\n", $text),', 'JobMessages::html($text), \'\',',
+         'the e-mail\'s text part left to be made from its HTML'],
     ];
     foreach ($MUTANTS as [$rel, $old_, $new_, $label]) {
         [$tmp, $n] = sj_weakened_copy($root, $rel, $old_, $new_);

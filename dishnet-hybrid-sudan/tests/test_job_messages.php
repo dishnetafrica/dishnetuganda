@@ -14,8 +14,11 @@ declare(strict_types=1);
  *   6. the webhook-log lines against WA Events' own rule (J7), and the badge's; no number, no text in them;
  *   7. the notes the staff screens show;
  *   8. the sign-in return: only a job number is kept, it returns once, within half an hour, to a fixed address;
- *   9. migration 075 on an empty database: two tables and an index, nothing else touched;
- *  10. the notifier's source: support number, CLASS_STAFF, no uCRM user record, nothing from a webhook body.
+ *   9. migration 075 on an empty database: two tables and an index, nothing else touched; 076 adds the e-mail's two
+ *      columns and nothing else;
+ *  10. the notifier's source: support number, CLASS_STAFF, no uCRM user record, nothing from a webhook body; the e-mail
+ *      to the staff account's own address, after the claim;
+ *  11. the e-mail copy (§16.16): its subject for each message, and an HTML part that is the text and nothing else.
  *
  *   php test_job_messages.php [--root=DIR]
  */
@@ -203,9 +206,32 @@ if (preg_match('/function fq_classify_webhook\(array \$entry\): string \{.*?\n\}
     is_($two === ['Job #950 (reassigned: new engineer) — WhatsApp sent to staff account #3',
                   'Job #950 (reassigned: previous engineer) — WhatsApp skipped: no staff account is linked to uCRM user #1000'],
         'a reassignment writes one line per message, each filed on its own', json_encode($two, JSON_UNESCAPED_UNICODE));
+    // Since §16.16 a line also says what became of the e-mail copy, in words neither rule looks for: the line is still
+    // filed, and counted, by its WhatsApp alone.
+    $withMail = function (string $o, string $d, string $email) use ($msg): array {
+        return ['event' => 'assigned', 'outcome' => $o, 'messages' => [$msg($o, $d) + ['email' => $email, 'email_detail' => 'staff account #3']]];
+    };
+    $EMAIL = [
+        ['sent, e-mail sent',          $withMail('sent', 'staff account #3', 'sent'),                                  'sent',    'sent',   '; e-mail handed to the mail server'],
+        ['sent, e-mail refused',       $withMail('sent', 'staff account #3', 'failed'),                                'sent',    'sent',   '; e-mail not taken by the mail server'],
+        ['sent, no address',           $withMail('sent', 'staff account #3', 'no_email'),                              'sent',    'sent',   '; no e-mail: the staff account has no usable address'],
+        ['sent, no mail server',       $withMail('sent', 'staff account #3', 'not_configured'),                        'sent',    'sent',   '; no e-mail: the plugin has no mail server set up'],
+        ['failed, e-mail sent',        $withMail('failed', 'staff account #3', 'sent'),                                'failed',  'failed', '; e-mail handed to the mail server'],
+        ['no number, e-mail sent',     $withMail('no_usable_number', 'staff account #3 has no usable number', 'sent'), 'skipped', '',       '; e-mail handed to the mail server'],
+        ['no number, e-mail refused',  $withMail('no_usable_number', 'staff account #3 has no usable number', 'failed'), 'skipped', '',     '; e-mail not taken by the mail server'],
+    ];
+    foreach ($EMAIL as [$label, $r, $wantFq, $wantBadge, $clause]) {
+        $l = JobNotifier::logLines(950, $r);
+        is_(count($l) === 1 && substr($l[0], -strlen($clause)) === $clause && fq_classify_webhook(['message' => $l[0], 'event' => 'job.add']) === $wantFq && $badge($l[0]) === $wantBadge,
+            "{$label}: \"{$l[0]}\" — still filed {$wantFq}" . ($wantBadge !== '' ? ", counted {$wantBadge}" : ', not counted'));
+    }
+    is_(fq_classify_webhook(['message' => 'Job #950 (assigned) — WhatsApp sent to staff account #3; e-mail failed', 'event' => 'job.add']) === 'failed'
+        && $badge('Job #950 (assigned) — WhatsApp skipped: staff account #3 has no usable number; e-mail sent to staff account #3') === 'sent',
+        'control: had the e-mail\'s words been "failed" or "sent to", the WhatsApp that went would be filed failed and the one skipped counted delivered');
     $allLines = [];
-    foreach ($LINES as $x) $allLines = array_merge($allLines, JobNotifier::logLines(950, $x[1]));
-    is_(!preg_grep('/\d{9,}/', $allLines) && !preg_grep('/Hi |ACCEPT JOB|This is/', $allLines), 'no line carries a phone number or a message\'s text');
+    foreach (array_merge($LINES, $EMAIL) as $x) $allLines = array_merge($allLines, JobNotifier::logLines(950, $x[1]));
+    is_(!preg_grep('/\d{9,}/', $allLines) && !preg_grep('/Hi |ACCEPT JOB|This is/', $allLines) && !preg_grep('/@/', $allLines),
+        'no line carries a phone number, an e-mail address or a message\'s text');
 } else {
     is_(false, 'fq_classify_webhook() is found in tabs/engage/failed_queue.php');
 }
@@ -227,6 +253,18 @@ $NOTES = [
     [['outcome' => 'unverified', 'detail' => 'x'],                              'No WhatsApp was sent: the job could not be read back from uCRM. Its next change catches up.'],
 ];
 foreach ($NOTES as [$r, $want]) is_(JobNotifier::note($r) === $want, "{$r['outcome']}: \"{$want}\"", JobNotifier::note($r));
+// Since §16.16 the note goes on to say what became of the e-mail copy; a message with no e-mail recorded says nothing more.
+$E = function (string $o, ?string $email, string $k = 'assigned'): array { return ['outcome' => $o, 'messages' => [['message' => $k, 'email' => $email]]]; };
+$MAILNOTES = [
+    [$E('sent', 'sent'),                         'WhatsApp sent to the engineer, with the link to accept the job. The same message went to the engineer\'s e-mail.'],
+    [$E('sent', 'sent', 'new_time'),             'WhatsApp with the new time sent to the engineer on the job. The same message went to the engineer\'s e-mail.'],
+    [$E('sent', 'failed'),                       'WhatsApp sent to the engineer, with the link to accept the job. The e-mail copy was not taken by the mail server.'],
+    [$E('no_usable_number', 'sent'),             'No WhatsApp was sent: the engineer\'s staff account has no usable phone number. The same message went to the engineer\'s e-mail.'],
+    [$E('failed', 'no_email'),                   'The WhatsApp message to the engineer failed. WA Events and the failure queue show it. No e-mail copy: the engineer\'s staff account has no usable e-mail address.'],
+    [$E('sent', 'not_configured', 'accepted'),   'WhatsApp with the completion link sent to the engineer on the job. No e-mail copy: no mail server is set up for the plugin.'],
+    [$E('no_staff_account', null),               'No WhatsApp was sent: no active staff account is linked to the job\'s uCRM user.'],
+];
+foreach ($MAILNOTES as [$r, $want]) is_(JobNotifier::note($r) === $want, "{$r['outcome']}, e-mail " . ($r['messages'][0]['email'] ?? 'none') . ": \"{$want}\"", JobNotifier::note($r));
 $sent = ['outcome' => 'sent', 'messages' => [['message' => 'assigned']]];
 is_(JobNotifier::notes([]) === '' && JobNotifier::notes([951 => $sent]) === JobNotifier::note($sent), 'no job: no note; one job: its note');
 is_(JobNotifier::notes([951 => $sent, 952 => $sent, 953 => $sent]) === 'All 3 jobs: WhatsApp sent to the engineer, with the link to accept the job.',
@@ -282,6 +320,18 @@ is_($cols('job_notify_events') === ['id', 'job_id', 'event', 'message', 'from_as
 $pdo->exec($sql);
 is_(true, 'and it runs again without error (CREATE … IF NOT EXISTS)');
 is_(preg_match('/\b(DROP|ALTER|DELETE|UPDATE|INSERT)\b/i', (string)preg_replace('/--[^\n]*/', '', $sql)) === 0, 'it touches nothing that exists: no DROP, ALTER, DELETE, UPDATE or INSERT');
+$sql76 = (string)@file_get_contents($root . '/migrations/076_job_notify_email.sql');
+$pdo->exec($sql76);
+is_(array_slice($cols('job_notify_events'), -2) === ['email_outcome', 'email_detail'] && count($cols('job_notify_events')) === 15
+    && $cols('job_notify_state') === ['job_id', 'assignee_id', 'job_time', 'job_status', 'title', 'gone', 'accepted_by', 'version', 'updated_at'],
+    'migration 076 adds the e-mail\'s two columns to job_notify_events, and nothing to job_notify_state', json_encode($cols('job_notify_events')));
+$again = '';
+try { $pdo->exec($sql76); } catch (\Throwable $e) { $again = $e->getMessage(); }
+is_(stripos($again, 'duplicate column') !== false && stripos((string)@file_get_contents($root . '/lib/MigrationRunner.php'), "stripos(\$err, 'duplicate column')") !== false,
+    'run again, it meets its own columns: "duplicate column", which the migration runner treats as done', $again);
+$stmts76 = array_values(array_filter(array_map('trim', explode(';', (string)preg_replace('/--[^\n]*/', '', $sql76)))));
+is_(count($stmts76) === 2 && count(preg_grep('/^ALTER TABLE job_notify_events ADD COLUMN email_(outcome|detail) TEXT$/', $stmts76)) === 2,
+    'and it is exactly two ADD COLUMNs on job_notify_events: nothing dropped, rewritten or filled', json_encode($stmts76));
 
 // ── 10. The notifier's source ────────────────────────────────────────────────
 echo "\n10. What the notifier may and may not do\n";
@@ -289,7 +339,10 @@ $jn = (string)file_get_contents($root . '/lib/JobNotifier.php');
 $code = (string)preg_replace('#/\*.*?\*/|//[^\n]*#s', '', $jn);
 is_(substr_count($code, "->sendVia('support', \$phone, \$text, \$log, [], ContactOptOut::CLASS_STAFF)") === 1 && substr_count($code, '->sendVia(') === 1,
     'one send, on the support number, as CLASS_STAFF: a colleague\'s old STOP never silences job dispatch');
-is_(strpos($code, 'users/') === false, 'it never reads a uCRM user record: those have no phone (measured)');
+is_(strpos($code, 'users/') === false, 'it never reads a uCRM user record: those have no phone (measured), and the e-mail goes to the staff account, not to uCRM\'s user');
+is_(substr_count($code, '$mail->send(') === 1 && strpos($code, '$to = StaffDirectory::email($row);') !== false
+    && strpos($code, '$mail->send(') > strpos($code, "\$pdo->exec('COMMIT');"),
+    'one e-mail send, to the staff account\'s own address, placed after the claim like the WhatsApp');
 is_(strpos($code, "BEGIN IMMEDIATE") !== false && strpos($code, 'sendVia') > strpos($code, "\$pdo->exec('COMMIT');"),
     'the claim (BEGIN IMMEDIATE … COMMIT) comes before the send in the source');
 $wh = (string)@file_get_contents($root . '/webhook.php');
@@ -297,6 +350,25 @@ is_(preg_match("/case 'job\\.delete':\\s*case 'JOB_DELETE': \\{.*?whJobNotify\\(
     'job.edit and job.delete hand the notifier nothing but the id: it asks uCRM, never the posted body (R3)');
 is_(substr_count($wh, 'whJobNotify($jobId, $job,') === 2 && strpos($wh, '$job = whVerified(\'job\', $jobId, whFetchFirst($crm, ["scheduling/jobs/{$jobId}"]));') !== false,
     'job.add hands it the job uCRM answered to the webhook\'s own read, never $entity');
+
+// ── 11. The e-mail copy ──────────────────────────────────────────────────────
+echo "\n11. The e-mail copy (§16.16): subject and HTML part\n";
+$SUBJECTS = ['assigned' => 'New job assigned to you: Job #950', 'accepted' => 'Job #950 accepted: your completion link',
+             'reassigned_away' => 'Job #950 is no longer assigned to you', 'removed' => 'Job #950 is no longer assigned to you',
+             'new_time' => 'Job #950 has a new time', 'cancelled' => 'Job #950 has been cancelled'];
+$got = [];
+foreach (array_keys($SUBJECTS) as $k) $got[$k] = JobMessages::subject($k, $f);
+is_($got === $SUBJECTS, 'each message\'s subject is its own headline with the job\'s number', json_encode($got));
+is_(!preg_grep('/[^\x20-\x7E]/', $got) && !preg_grep('/Grace|Test Client|Plot 1|\+256/', $got), 'plain ASCII, and no person, customer, address or number in any subject');
+$text = JobMessages::assigned(['link' => 'https://crm.example/crm/_plugins/dishnet/public.php?page=dashboard&tab=scheduling&job=950', 'title' => 'Survey <b>&</b> "quote"'] + $f);
+$html = JobMessages::html($text);
+is_(strpos($html, '<a href="https://crm.example/crm/_plugins/dishnet/public.php?page=dashboard&amp;tab=scheduling&amp;job=950">') !== false,
+    'the ACCEPT JOB link is a link in the HTML part', $html);
+is_(strpos($html, 'Survey &lt;b&gt;&amp;&lt;/b&gt; &quot;quote&quot;') !== false && strpos($html, '<b>') === false, 'what uCRM holds is shown, never read as HTML');
+is_(html_entity_decode(strip_tags(str_replace("<br>\r\n", "\n", $html)), ENT_QUOTES, 'UTF-8') === $text,
+    'strip the markup and the HTML part is the text, byte for byte: it adds nothing the text does not say');
+$js = JobMessages::html("javascript:alert(1)\nftp://x.example/a\nhttps://ok.example/p");
+is_(substr_count($js, '<a href=') === 1 && strpos($js, '<a href="https://ok.example/p">') !== false, 'only http and https addresses become links');
 
 printf("\n%d passed, %d failed, %d skipped\n", $pass, $fail, $skip);
 exit($fail === 0 ? 0 : 1);

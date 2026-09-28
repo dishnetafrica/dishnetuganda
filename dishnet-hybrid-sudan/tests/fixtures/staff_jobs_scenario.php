@@ -108,26 +108,6 @@ final class SjScenario
         $s->staff('acct',  ['name' => 'Sandbox Accountant', 'email' => 'acct@example.test', 'role' => 'accountant', 'phone' => '+256700000113']);
     }
 
-    /** A fake SMTP relay for the customer's e-mail: [port, transcript]. */
-    private static function smtp(SjSandbox $s, string $root): array
-    {
-        $transcript = $s->sb . '/smtp.json';
-        foreach (range(0, 11) as $slot) {
-            $port = 12800 + ((getmypid() * 5 + $slot * 11 + random_int(0, 5)) % 180);
-            $p = proc_open(sprintf('exec %s %s %d %s', escapeshellarg(PHP_BINARY), escapeshellarg($root . '/tests/fixtures/fake_smtp_server.php'), $port, escapeshellarg($transcript)),
-                [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
-            for ($i = 0; $i < 50; $i++) {
-                usleep(100000);
-                if (!proc_get_status($p)['running']) break;
-                if (!is_file($transcript)) continue;
-                $c = @fsockopen('127.0.0.1', $port, $e1, $e2, 2);
-                if ($c) { $g = fgets($c, 256); fwrite($c, "QUIT\r\n"); fclose($c); if (strpos((string)$g, 'fake.smtp.test') !== false) { $s->adopt($p); return [$port, $transcript]; } }
-            }
-            proc_terminate($p); proc_close($p); @unlink($transcript);
-        }
-        throw new \RuntimeException('the fake SMTP relay did not start');
-    }
-
     /**
      * The day, on the plugin tree at $root, configured by $cfg. $extra($s) runs after the day, before the servers stop,
      * for a caller's own captures. Returns what was said and done, in order.
@@ -143,9 +123,7 @@ final class SjScenario
                  'email_company_name' => 'DishNet Sandbox Limited', 'email_locality' => 'Kampala, Uganda',
                  'email_support_phone' => '+256 700 000 100', 'email_reply_to' => 'support@example.test', 'email_website' => 'example.test'];
         $s = SjSandbox::start($root, $cfg, $tag);
-        [$smtpPort, $transcript] = self::smtp($s, $root);
-        file_put_contents($s->data . '/email_settings.json', json_encode(['use_ucrm_email' => false, 'smtp_host' => '127.0.0.1',
-            'smtp_port' => $smtpPort, 'smtp_user' => '', 'smtp_pass' => '', 'smtp_enc' => '', 'smtp_from' => 'accounts@example.test']));
+        [, $transcript] = $s->mailRelay();   // for the customer's e-mail, and on Uganda since 5.18.52 the engineer's
         $s->seedCrm(self::crm());
         self::staff($s);
 

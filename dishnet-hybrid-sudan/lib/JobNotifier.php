@@ -25,6 +25,10 @@
  * the one active row VERIFIED-linked to it (M7); the number is J3's form of that row's phone. Messages go on the support
  * number as CLASS_STAFF. A failed send is not retried: the state has moved on, and the failure stands in the Message
  * Log, the failure queue and job_notify_events.
+ *
+ * Each message also goes by e-mail, the same text, to that staff account's own address — the one its verified link was
+ * saved with — through the plugin's mail server (docs/44 §16.16). The e-mail goes whether or not the WhatsApp did, and
+ * its outcome is recorded beside the WhatsApp's without changing it. Nobody to message means nobody to e-mail.
  */
 final class JobNotifier
 {
@@ -41,12 +45,20 @@ final class JobNotifier
     /** Outcomes of one message. */
     public const MESSAGE_OUTCOMES = ['sent', 'failed', 'no_staff_account', 'ambiguous_staff_account', 'no_usable_number'];
 
+    /** Outcomes of its e-mail copy; null when there was no staff account to send it to. */
+    public const EMAIL_OUTCOMES = ['sent', 'failed', 'no_email', 'not_configured'];
+
     private $crm;
     private $store;
     private $notify;
     private $config;
     private $tenant;
     private $tz;
+    private $dataDir;
+    /** @var MailService|null one per notifier, so uCRM's mail settings are read once per request */
+    private $mailer = null;
+    /** @var string|null why no more e-mail is tried in this request, once the mail server has refused one */
+    private $mailDown = null;
 
     public function __construct($crm, $store, $notify, array $config, ?string $dataDir)
     {
@@ -62,6 +74,7 @@ final class JobNotifier
         $this->config = $config;
         $this->tenant = TenantProfile::current($config, $dataDir);
         $this->tz     = dn_tz_obj($config);
+        $this->dataDir = $dataDir;
     }
 
     /**
@@ -137,8 +150,9 @@ final class JobNotifier
         foreach ($plan['messages'] as $m) {
             if ($m['kind'] === 'assigned' && $client === null) $client = $this->client((int)($job['clientId'] ?? 0));
             $out = $this->deliver((int)$m['to'], $m['kind'], $this->fields($jobId, $m, (array)$job, $client ?? []));
-            $this->event($jobId, $plan['event'], $m['kind'], $plan, $source, $out['staff_id'], $out['outcome'], $out['detail']);
-            $sent[] = ['message' => $m['kind'], 'outcome' => $out['outcome'], 'detail' => $out['detail'], 'staff_id' => $out['staff_id']];
+            $this->event($jobId, $plan['event'], $m['kind'], $plan, $source, $out['staff_id'], $out['outcome'], $out['detail'], $out['email'], $out['email_detail']);
+            $sent[] = ['message' => $m['kind'], 'outcome' => $out['outcome'], 'detail' => $out['detail'], 'staff_id' => $out['staff_id'],
+                       'email' => $out['email'], 'email_detail' => $out['email_detail']];
         }
         return self::result($plan['event'], $sent[0]['outcome'], $sent[0]['detail'], $assignee, $sent);
     }
@@ -200,9 +214,10 @@ final class JobNotifier
 
         $fields = $this->fields($jobId, ['kind' => 'accepted'], $job, $this->client((int)($job['clientId'] ?? 0)));
         $out = $this->deliver($assignee, 'accepted', $fields);
-        $this->event($jobId, 'accepted', 'accepted', $plan, 'accept', $out['staff_id'], $out['outcome'], $out['detail']);
+        $this->event($jobId, 'accepted', 'accepted', $plan, 'accept', $out['staff_id'], $out['outcome'], $out['detail'], $out['email'], $out['email_detail']);
         return self::result('accepted', $out['outcome'], $out['detail'], $assignee,
-            [['message' => 'accepted', 'outcome' => $out['outcome'], 'detail' => $out['detail'], 'staff_id' => $out['staff_id']]]);
+            [['message' => 'accepted', 'outcome' => $out['outcome'], 'detail' => $out['detail'], 'staff_id' => $out['staff_id'],
+              'email' => $out['email'], 'email_detail' => $out['email_detail']]]);
     }
 
     /** The job page in the staff app: My Jobs → this job. Behind the staff sign-in; only the job number is carried. */
@@ -230,8 +245,7 @@ final class JobNotifier
     public function recordedSince(int $jobId, string $message, int $afterId = 0): ?array
     {
         try {
-            $st = $this->store->getPdo()->prepare('SELECT event, message, outcome, detail, staff_id, to_assignee_id, source
-                FROM job_notify_events WHERE job_id = ? AND message = ? AND id > ? ORDER BY id DESC LIMIT 1');
+            $st = $this->store->getPdo()->prepare('SELECT * FROM job_notify_events WHERE job_id = ? AND message = ? AND id > ? ORDER BY id DESC LIMIT 1');
             $st->execute([$jobId, $message, $afterId]);
             $row = $st->fetch(\PDO::FETCH_ASSOC);
         } catch (\Throwable $e) {
@@ -241,7 +255,8 @@ final class JobNotifier
         $staff = $row['staff_id'] === null ? null : (int)$row['staff_id'];
         $to    = $row['to_assignee_id'] === null ? null : (int)$row['to_assignee_id'];
         return self::result((string)$row['event'], (string)$row['outcome'], (string)$row['detail'], $to,
-            [['message' => (string)$row['message'], 'outcome' => (string)$row['outcome'], 'detail' => (string)$row['detail'], 'staff_id' => $staff]])
+            [['message' => (string)$row['message'], 'outcome' => (string)$row['outcome'], 'detail' => (string)$row['detail'], 'staff_id' => $staff,
+              'email' => ($row['email_outcome'] ?? null) === null ? null : (string)$row['email_outcome'], 'email_detail' => (string)($row['email_detail'] ?? '')]])
             + ['by' => (string)$row['source']];
     }
 
@@ -374,20 +389,19 @@ final class JobNotifier
         ];
     }
 
-    /** The staff account behind a uCRM user, then the message to its number. */
+    /** The staff account behind a uCRM user, then the message to its number and, the same text, to its e-mail. */
     private function deliver(int $ucrmUserId, string $kind, array $fields): array
     {
+        $none = ['email' => null, 'email_detail' => ''];
         $hits = StaffDirectory::byUcrmUser((array)($this->store->load('retailers.json') ?? []), $ucrmUserId);
         if (count($hits) === 0) {
-            return ['outcome' => 'no_staff_account', 'staff_id' => null, 'detail' => "no staff account is linked to uCRM user #{$ucrmUserId}"];
+            return ['outcome' => 'no_staff_account', 'staff_id' => null, 'detail' => "no staff account is linked to uCRM user #{$ucrmUserId}"] + $none;
         }
         if (count($hits) > 1) {
-            return ['outcome' => 'ambiguous_staff_account', 'staff_id' => null, 'detail' => count($hits) . " staff accounts are linked to uCRM user #{$ucrmUserId}"];
+            return ['outcome' => 'ambiguous_staff_account', 'staff_id' => null, 'detail' => count($hits) . " staff accounts are linked to uCRM user #{$ucrmUserId}"] + $none;
         }
         $row = $hits[0];
         $id  = (int)($row['id'] ?? 0);
-        $phone = StaffDirectory::phoneOf($row, $this->tenant);
-        if ($phone === null) return ['outcome' => 'no_usable_number', 'staff_id' => $id, 'detail' => "staff account #{$id} has no usable number"];
         $fields['name'] = trim((string)($row['name'] ?? ''));
         switch ($kind) {
             case 'assigned':        $text = JobMessages::assigned($fields);       $log = self::LOG_ASSIGNED;    break;
@@ -396,25 +410,93 @@ final class JobNotifier
             case 'removed':         $text = JobMessages::removed($fields);        $log = self::LOG_UNASSIGNED;  break;
             case 'new_time':        $text = JobMessages::newTime($fields);        $log = self::LOG_RESCHEDULED; break;
             case 'cancelled':       $text = JobMessages::cancelled($fields);      $log = self::LOG_CANCELLED;   break;
-            default: return ['outcome' => 'failed', 'staff_id' => $id, 'detail' => "staff account #{$id}: no such message"];
+            default: return ['outcome' => 'failed', 'staff_id' => $id, 'detail' => "staff account #{$id}: no such message"] + $none;
         }
-        $this->notify->sendVia('support', $phone, $text, $log, [], ContactOptOut::CLASS_STAFF);
-        $r = $this->notify->lastSendResult();
-        if (!empty($r['success'])) return ['outcome' => 'sent', 'staff_id' => $id, 'detail' => "staff account #{$id}"];
-        $why = ($r['http_code'] === null && $r['error'] === null) ? ' (no WhatsApp transport took it)' : '';
-        return ['outcome' => 'failed', 'staff_id' => $id, 'detail' => "staff account #{$id}{$why}"];
+        $phone = StaffDirectory::phoneOf($row, $this->tenant);
+        if ($phone === null) {
+            $wa = ['outcome' => 'no_usable_number', 'staff_id' => $id, 'detail' => "staff account #{$id} has no usable number"];
+        } else {
+            $this->notify->sendVia('support', $phone, $text, $log, [], ContactOptOut::CLASS_STAFF);
+            $r = $this->notify->lastSendResult();
+            if (!empty($r['success'])) {
+                $wa = ['outcome' => 'sent', 'staff_id' => $id, 'detail' => "staff account #{$id}"];
+            } else {
+                $why = ($r['http_code'] === null && $r['error'] === null) ? ' (no WhatsApp transport took it)' : '';
+                $wa = ['outcome' => 'failed', 'staff_id' => $id, 'detail' => "staff account #{$id}{$why}"];
+            }
+        }
+        $mail = $this->email($row, $kind, $text, $fields);
+        return $wa + ['email' => $mail['outcome'], 'email_detail' => $mail['detail']];
     }
 
-    private function event(int $jobId, string $event, ?string $message, array $plan, string $source, ?int $staffId, string $outcome, string $detail): void
+    /**
+     * The same message by e-mail, to the staff account's own address — the one its verified uCRM link was saved with
+     * (M7) — through the plugin's mail server, as every other plugin e-mail goes. Never throws, and never changes what
+     * the WhatsApp did. After a refusal that is not about this one address, nothing more is tried in this request: a
+     * mail server that does not answer would otherwise cost each job of a Bulk Dispatch its whole connection timeout.
+     */
+    private function email(array $row, string $kind, string $text, array $fields): array
     {
+        $id = (int)($row['id'] ?? 0);
+        $to = StaffDirectory::email($row);
+        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return ['outcome' => 'no_email', 'detail' => "staff account #{$id} has no usable e-mail address"];
+        }
+        if ($this->mailDown !== null) return ['outcome' => 'failed', 'detail' => "staff account #{$id}: not tried, {$this->mailDown}"];
         try {
-            $this->store->getPdo()->prepare('INSERT INTO job_notify_events
-                    (job_id, event, message, from_assignee_id, to_assignee_id, from_time, to_time, source, staff_id, outcome, detail)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                ->execute([$jobId, $event, $message, $plan['from'], $plan['to'], $plan['from_time'], $plan['to_time'],
-                           $source, $staffId, $outcome, $detail]);
+            $mail = $this->mailer();
+            if ($mail === null || !$mail->getConfig()) {
+                return ['outcome' => 'not_configured', 'detail' => 'no mail server is set up for the plugin'];
+            }
+            $reply = $this->replyTo();
+            $name  = trim((string)preg_replace('/[\x00-\x1F"<>]+/', ' ', (string)($fields['name'] ?? '')));
+            $r = $mail->send($to, $name, JobMessages::subject($kind, $fields), JobMessages::html($text), str_replace("\n", "\r\n", $text),
+                $reply !== '' ? ['Reply-To' => $reply] : []);
         } catch (\Throwable $e) {
-            // The Message Log still holds the send; a missing history row must not undo it.
+            $this->mailDown = 'an earlier e-mail in this request could not be sent';
+            return ['outcome' => 'failed', 'detail' => "staff account #{$id}: the e-mail could not be sent"];
+        }
+        if (!empty($r['ok'])) return ['outcome' => 'sent', 'detail' => "staff account #{$id}"];
+        $err = trim((string)preg_replace('/\S+@\S+/', '<address>', (string)($r['error'] ?? '')));
+        if (!preg_match('/^(RCPT TO|Invalid recipient)/', $err)) $this->mailDown = 'the mail server did not take an earlier e-mail in this request';
+        return ['outcome' => 'failed', 'detail' => "staff account #{$id}: " . ($err !== '' ? substr($err, 0, 120) : 'the mail server did not take it')];
+    }
+
+    /** The plugin's mail sender, made once; null without a data directory to read its settings from. */
+    private function mailer(): ?MailService
+    {
+        if ($this->mailer === null) {
+            if ($this->dataDir === null || $this->dataDir === '') return null;
+            if (!class_exists('MailService')) require_once __DIR__ . '/MailService.php';
+            $this->mailer = new MailService($this->dataDir);
+        }
+        return $this->mailer;
+    }
+
+    /** Where a reply goes: the tenant's e-mail reply address, as on every other plugin e-mail; '' for none. */
+    private function replyTo(): string
+    {
+        $v = trim((string)($this->config['email_reply_to'] ?? ''));
+        if ($v === '') $v = trim((string)($this->tenant->emailBrandDefaults()['email_reply_to'] ?? ''));
+        return MailService::normalizeFrom($v);
+    }
+
+    private function event(int $jobId, string $event, ?string $message, array $plan, string $source, ?int $staffId, string $outcome, string $detail,
+                           ?string $email = null, string $emailDetail = ''): void
+    {
+        $row = ['job_id' => $jobId, 'event' => $event, 'message' => $message, 'from_assignee_id' => $plan['from'], 'to_assignee_id' => $plan['to'],
+                'from_time' => $plan['from_time'], 'to_time' => $plan['to_time'], 'source' => $source, 'staff_id' => $staffId,
+                'outcome' => $outcome, 'detail' => $detail];
+        // With the e-mail's two columns (migration 076); without them only if they are missing, so the history keeps the
+        // WhatsApp whatever became of 076.
+        foreach ([$row + ['email_outcome' => $email, 'email_detail' => $email === null ? null : $emailDetail], $row] as $r) {
+            try {
+                $this->store->getPdo()->prepare('INSERT INTO job_notify_events (' . implode(', ', array_keys($r)) . ') VALUES ('
+                    . implode(', ', array_fill(0, count($r), '?')) . ')')->execute(array_values($r));
+                return;
+            } catch (\Throwable $e) {
+                // The Message Log still holds the send; a missing history row must not undo it.
+            }
         }
     }
 
@@ -432,16 +514,32 @@ final class JobNotifier
         foreach ((array)($r['messages'] ?? []) as $m) {
             $what = self::label((string)($r['event'] ?? ''), (string)$m['message']);
             switch ($m['outcome']) {
-                case 'sent':   $out[] = "Job #{$jobId} ({$what}) — WhatsApp sent to {$m['detail']}"; break;
-                case 'failed': $out[] = "Job #{$jobId} ({$what}) — WhatsApp failed for {$m['detail']}"; break;
-                default:       $out[] = "Job #{$jobId} ({$what}) — WhatsApp skipped: {$m['detail']}";
+                case 'sent':   $line = "Job #{$jobId} ({$what}) — WhatsApp sent to {$m['detail']}"; break;
+                case 'failed': $line = "Job #{$jobId} ({$what}) — WhatsApp failed for {$m['detail']}"; break;
+                default:       $line = "Job #{$jobId} ({$what}) — WhatsApp skipped: {$m['detail']}";
             }
+            $out[] = $line . self::emailClause($m['email'] ?? null);
         }
         if ($out !== []) return $out;
         switch ($r['outcome'] ?? '') {
             case 'recorded':  return ["Job #{$jobId} (" . ($r['event'] ?? '') . ") — recorded, no message: {$r['detail']}"];
             case 'no_change': return ["Job #{$jobId} — no new assignment, time or cancellation: nothing to send"];
             default:          return ["Job #{$jobId} — could not be checked with uCRM: {$r['detail']}"];
+        }
+    }
+
+    /**
+     * The e-mail's part of a log line. Worded so that WA Events files the line by its WhatsApp alone, and its badge
+     * counts only WhatsApp: none of the words their rules look for ("sent", "failed", "skipped", "error", …) is here.
+     */
+    private static function emailClause(?string $email): string
+    {
+        switch ($email) {
+            case 'sent':           return '; e-mail handed to the mail server';
+            case 'failed':         return '; e-mail not taken by the mail server';
+            case 'no_email':       return '; no e-mail: the staff account has no usable address';
+            case 'not_configured': return '; no e-mail: the plugin has no mail server set up';
+            default:               return '';
         }
     }
 
@@ -458,8 +556,24 @@ final class JobNotifier
         }
     }
 
-    /** One sentence for the person who pressed the button: what happened to this job's WhatsApp message. */
+    /** For the person who pressed the button: what happened to this job's WhatsApp message, then to its e-mail copy. */
     public static function note(array $r): string
+    {
+        return self::waNote($r) . self::emailNote($r['messages'][0]['email'] ?? null);
+    }
+
+    private static function emailNote(?string $email): string
+    {
+        switch ($email) {
+            case 'sent':           return ' The same message went to the engineer\'s e-mail.';
+            case 'failed':         return ' The e-mail copy was not taken by the mail server.';
+            case 'no_email':       return ' No e-mail copy: the engineer\'s staff account has no usable e-mail address.';
+            case 'not_configured': return ' No e-mail copy: no mail server is set up for the plugin.';
+            default:               return '';
+        }
+    }
+
+    private static function waNote(array $r): string
     {
         $msg = (string)($r['messages'][0]['message'] ?? '');
         switch ($r['outcome'] ?? '') {

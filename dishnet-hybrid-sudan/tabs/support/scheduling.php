@@ -1670,8 +1670,8 @@ schLoadJobs(_urlRefresh);
     <div style="display:flex;align-items:center;gap:12px;background:#1e293b;border-radius:12px;padding:14px;">
       <div style="font-size:20px;flex-shrink:0;">📱</div>
       <div>
-        <div style="font-size:14px;font-weight:700;color:#e2e8f0;">The engineer gets a WhatsApp message</div>
-        <div style="font-size:12px;color:#64748b;">It carries a link to accept the job. After they accept, a second message brings the completion link. You see here whether it was sent.</div>
+        <div style="font-size:14px;font-weight:700;color:#e2e8f0;">The engineer gets a WhatsApp message and the same by e-mail</div>
+        <div style="font-size:12px;color:#64748b;">It carries a link to accept the job. After they accept, a second message brings the completion link. You see here whether each was sent.</div>
       </div>
     </div>
 <?php else: ?>
