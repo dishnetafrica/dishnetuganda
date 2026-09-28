@@ -2088,6 +2088,18 @@ process's own clock. 5.18.52 corrects the test, not the badge.
   131/131 twice; 23 weakened copies caught. The rollback is a separate command.
 - **Not deployed by this session.**
 
+**Deployed 28 Sep 2026 04:26 UTC by the operator: PASSED, 44 ok / 0 failed / 2 notes** (docs/44 §16.15).
+- The pin held: the branch stood at `fc5c3b7` (5.18.52), and the script installed `240f2f9` by its hash and put the
+  checkout back on the branch.
+- The server's PHP 8.1.34 accepted the changed PHP files. Every changed file is installed as `240f2f9` has it, and no
+  staff account and no Message Log row changed.
+- **Note R8:** the lock line is judged by `--after-only` an hour after the deploy.
+- **Found, not yet explained:**
+  - **The verified links read 0 of 4**, where 2 were verified at 20:42 UTC the night before (R7). The users check will
+    say why.
+  - **The hour before the deploy held no line of the master's lock error**, where every hour of 26–27 Sep held at
+    least 4. `--after-only` reads the master's own record of its runs and will say whether it is running.
+
 ## 5.18.52 — release B: job messages the South Sudan way; built and rehearsed, not deployed (docs/44 §16.14)
 
 - **The change, plugin commit `fc5c3b7`, Uganda only.** One component, `lib/JobNotifier.php`, sends every job WhatsApp
@@ -2107,3 +2119,32 @@ process's own clock. 5.18.52 corrects the test, not the badge.
 - **`scripts/deploy-5.18.52.sh` (`9e1740d`).** It goes over 5.18.51 only, and installs `fc5c3b7` by its hash.
   Rehearsed 159/159 twice; 28 weakened copies caught. The rollback is a separate command, printed on its own.
 - **Not deployed.** It waits for 5.18.51, then M5, S1's number and M4, then a separate approval.
+
+## 28 Sep — 5.18.52 also e-mails the engineer each job message (docs/44 §16.16)
+
+- **Asked for.** The operator answered the offer with *"i need"*: the same text as each job WhatsApp, to the e-mail on
+  the engineer's staff account. 5.18.52 was not deployed, so the change is part of it. **5.18.52 is now plugin commit
+  `7ad465e`**; `fc5c3b7` was never deployed.
+- **The change, Uganda only.** Every message the notifier sends also goes by e-mail, to the same verified staff account
+  (M7):
+  - message 1, message 2, a new time, "no longer assigned" and "cancelled";
+  - through the plugin's mail server, with the tenant's reply address;
+  - the text part is the WhatsApp text, byte for byte, under a subject that names the job;
+  - it goes whether or not the WhatsApp did.
+- **Its outcome is recorded beside the WhatsApp's:** sent, failed, no usable address, or no mail server. It appears in
+  the history, the log line and the screens' note. After the mail server refuses, the rest of the request tries no more
+  e-mail.
+- **Migration 076** adds the two history columns. South Sudan is unchanged.
+- **Tests only:** the sandbox no longer runs the admin page's piggyback cron, which reached `wa.dishnetafrica.com` and
+  `dishnetss.com` from the tests.
+- **Tests.**
+  - `test_job_messages.php` 132 (was 107); `test_job_notifier.php` 130 (was 97), with 22 weakened copies caught;
+    `test_job_notifications_day.php` 50 (was 46), with 7.
+  - Under PHP 8.1.34 (php-wasm): lint clean, 132 of 132, and the notifier's output byte-identical to PHP 8.4's.
+- **The suite, twice on `7ad465e`:** 226 files, 10,718 passed, 0 failed, identical file by file. Only the three job
+  suites differ from `fc5c3b7`'s runs.
+- **`scripts/deploy-5.18.52.sh` (`e5d3264`).** It installs `7ad465e` by its hash. R9 also checks migration 076. R11,
+  new, says which mail server the e-mail will use and prints no value. Rehearsed 170/170 twice; 30 weakened copies
+  caught. The rollback is a separate command.
+- **Not deployed.** The order stands: 5.18.51's `--after-only`, the users check, M5, S1's number and M4, then a
+  separate approval.

@@ -2076,7 +2076,8 @@ Press Complete there when the work is finished. The same page lets you reschedul
   - §15.6 requirement 7 allows messages only to your number. So this step runs only once a read-only check shows no
     active support leader, or with those people told first and counted as expected recipients.
 
-**Built since:** §16.14 — 5.18.52, plugin commit `fc5c3b7`, not deployed.
+**Built since:** §16.14 — 5.18.52, plugin commit `fc5c3b7`, never deployed; rebuilt with the engineer's e-mail as
+`7ad465e` (§16.16), not deployed.
 
 ### 16.13 5.18.51 — the master's lock fix, built and rehearsed, not deployed — 27 September 2026
 
@@ -2136,7 +2137,12 @@ and a fake container. Its section 7b puts a later release on the branch first.
 **Not deployed.** It changes nothing about jobs or messages, so it can go in at any time. Before M4 is best: later
 `--after-only` checks then stop showing V4. An hour after the deploy, `--after-only` judges R8.
 
+*Deployed 28 September, 04:26 UTC: §16.15.*
+
 ### 16.14 5.18.52 — release B, built and rehearsed, not deployed — 27 September 2026
+
+> **28 September:** 5.18.52 is now plugin commit `7ad465e`, which adds the engineer's e-mail (§16.16). `fc5c3b7` was
+> never deployed. This section describes it, and holds for `7ad465e` in everything but the e-mail.
 
 **Built on the D5 approval (§16.12). Uganda only; plugin commit `fc5c3b7`.** On South Sudan every answer, message and
 log line is byte-identical to 5.18.51. Its only change is two empty tables.
@@ -2357,3 +2363,204 @@ test. It is tests only and changes no result. Starting the server with `exec php
 2. §15.8 items 3–5: M5, S1's number and M4;
 3. a separate approval of 5.18.52;
 4. the live test.
+
+### 16.15 5.18.51 deployed — 28 September 2026, 04:26 UTC
+
+**PASSED: 44 ok, 0 failed, 2 notes.** `240f2f9` over `125fa0c` (5.18.50), deployed by the operator. The run began at
+04:26:14 UTC and the deploy itself at 04:26:40. This record is taken from the terminal the operator pasted in the chat;
+the log file stays on the server as `/root/dnb-5.18.51/deploy-20260928T042614Z.log`. The paste carries no name, e-mail,
+number or secret.
+
+- **The pin did its job (§16.13).** The pull brought the checkout to `c58f8fa`, whose plugin commit is `fc5c3b7`
+  (5.18.52). The script said so and checked out `240f2f9` for `deploy-hybrid.sh`, which answered *"✓ container now
+  serves 240f2f9"*. Then it put the checkout back on the branch. `--check` read *"NOT up to date"*, because it compares
+  the container with the branch tip; the script printed that note beside it.
+- **A.** 3 files against `125fa0c`: 2 changed, 1 added, 0 removed.
+  - The server's PHP 8.1.34 accepted the 1 changed PHP file that runs on the server and the 1 test file (A2).
+  - Uganda from both configuration sources (A1).
+  - The Message Log: 377 rows; the last is #377 (A4).
+  - **The staff accounts (A3):** 5 accounts, all active. Of the 4 that take jobs, 2 hold a uCRM user id, **0 of them
+    through a verified link** and 2 stored the old way; none holds only an FTTH id. Digest `6ffd5645ae7cd318`. See
+    point 1 below.
+  - **The fault 5.18.51 removes: 0 lines in the hour before the deploy.** See point 2 below.
+- **The backup,** `/root/dnb-5.18.51/backup-20260928T042614Z`:
+  - `plugin.sqlite3`, 22 MB: `VACUUM INTO` as `1000:1000`, SQLite 3.48.0, integrity ok, 225 tables, the same sha256 on
+    both sides. There is no `dishnet.sqlite`;
+  - the data directory without the live databases, 100 MB, and the plugin's `data` folder, 128 KB;
+  - the installed 5.18.50 itself, 11 MB;
+  - the configuration vault, 1,953 bytes, identical;
+  - UISP health recorded; `GO`.
+- **B.** At `DEPLOY` the mark (#377) and the staff digest went to `state-5.18.51.env`.
+- **V.** All ok, as at 5.18.50: the public sign-in page, the Terms and Privacy pages, and the `:8443` door. V4 found no
+  fatal or parse error of the plugin in the 60 seconds after the deploy; the master's lock line is left to R8.
+- **R.** All ok:
+  - R1: the 3 files exactly as `240f2f9` has them, 1 of them new; the manifest says 5.18.51; release A's other 37 files
+    unchanged;
+  - R2: the switch on from both sources;
+  - R3: every staff account as at stage A;
+  - R4: no job-assignment message since #377, in fact no new row of any kind, and none since the 5.18.50 deploy (#374);
+  - R5: `job_assign` still commented out;
+  - R6: release A's three screen texts;
+  - R8: the installed `master.php` carries the `is_resource` guard.
+  - **Note R7:** none of the 4 accounts that take jobs has a verified link.
+  - **Note R8:** too early to judge. The lock line is counted from 04:46:40 UTC and judged after an hour of runs, so
+    `--after-only` is due after 05:46 UTC.
+
+**Two things this log cannot explain, and the check that will.**
+1. **The verified links fell from 2 to 0 overnight.** At 20:42 UTC (§16.11), S1 and S4 held verified links and S3 and
+   S5 held ids stored the old way: 4 accounts with an id. At 04:26 only 2 hold an id, and neither is verified.
+   - Two readings fit the counts:
+     - M5 was done (S3 and S5 cleared), and S1's and S4's links no longer verify;
+     - or S1 and S4 lost their ids, and S3 and S5 still hold theirs.
+   - A link verifies only while the account's uCRM id and e-mail are the ones it was saved with
+     (`StaffDirectory::linkedUcrmUser`). An edit of either, or a save that drops the link record, undoes it.
+   - **The users check tells the two readings apart,** per masked account (§16.10, step 2).
+   - **Until the links are back, 5.18.52 would message nobody.** R7 of its deploy counts them.
+2. **No line of the master's lock error in the hour before the deploy.** §16.11 counted at least 4 in every one of 45
+   hours.
+   - The error comes at every normal end of a master run. An hour without it is an hour in which no master run reached
+     its normal end. Either none ran; or one is still running and holds the lock, so every later run returns at once;
+     or each run ended some other way.
+   - This log cannot tell which. **`--after-only` can:** R8 reads the master's own record of its runs beside the
+     count, and says "cannot judge" when no master job ran.
+
+5.18.51 stays; neither finding is a reason to roll it back.
+
+### 16.16 5.18.52 — each job message also by e-mail, built and rehearsed, not deployed — 28 September 2026
+
+**Asked for.** The chat offered: *"If you want Uganda's technicians to get an e-mail too, I can add it to 5.18.52: the
+same text as the WhatsApp, sent to the e-mail on their staff account. That's a new change, so only if you say yes."*
+The operator answered *"i need"*, and in the same message asked for Uganda to work like South Sudan's system. 5.18.52
+had not been deployed, so the e-mail is part of it: **5.18.52 is now plugin commit `7ad465e`**. `fc5c3b7` was never
+deployed. §16.14 still describes everything but the e-mail.
+
+**What it does — Uganda only, in `lib/JobNotifier.php`:**
+- **Every job message the notifier sends by WhatsApp also goes by e-mail:** message 1, message 2, a new time, "no longer
+  assigned" and "cancelled".
+  - The text part is the WhatsApp text, byte for byte.
+  - The HTML part is that text escaped, with every line kept and every link clickable; nothing is added
+    (`JobMessages::html`).
+  - The subject names the job, in plain ASCII: *"New job assigned to you: Job #950"*, *"Job #950 accepted: your
+    completion link"*, *"Job #950 is no longer assigned to you"*, *"Job #950 has a new time"*, *"Job #950 has been
+    cancelled"*.
+- **To the same staff account as the WhatsApp:** the one with the verified link (M7), at its own e-mail. A link verifies
+  only while that e-mail is the one it was saved with. So the e-mail goes to the address the admin linked, never to an
+  address uCRM holds for the user.
+- **Through the plugin's mail server,** as every plugin e-mail goes (`MailService`). That is uCRM's mail settings when
+  `use_ucrm_email` is on, else the plugin's own SMTP settings. Reply-To is the tenant's reply address:
+  `email_reply_to`, or else the Uganda profile's `accounts@dishnetuganda.com`.
+- **Whether or not the WhatsApp went.** An account with no usable number, or whose WhatsApp failed, still gets the
+  e-mail. Nobody to message (no account, or two) means nobody to e-mail.
+- **After the WhatsApp, outside the lock.** The state has committed by then. The e-mail never changes what the WhatsApp
+  did, and never throws.
+- **One refusal stops the rest of the request's e-mail.** After the mail server fails for any reason but one address,
+  later e-mails in the same request are recorded as not tried. Otherwise a Bulk Dispatch would wait out a connection
+  timeout for every job. A refused address (`RCPT TO`, invalid recipient) stops only its own e-mail.
+
+**The outcome is recorded beside the WhatsApp's, never in place of it:**
+
+| Outcome | Means |
+|---|---|
+| `sent` | the mail server took it |
+| `failed` | the mail server did not take it, or it was not tried after an earlier failure in the same request |
+| `no_email` | the staff account's e-mail is not a usable address |
+| `not_configured` | the plugin has no mail server set up |
+| none | nobody to message, so nobody to e-mail |
+
+- **`job_notify_events`** gains `email_outcome` and `email_detail` (migration 076). The detail is a short reason, never
+  an address: a server's error has its addresses replaced by `<address>`.
+- **The webhook log line** gains a clause in words WA Events does not sort by: *"; e-mail handed to the mail server"*,
+  *"; e-mail not taken by the mail server"*, *"; no e-mail: …"*. WA Events and its badge still count the WhatsApp
+  alone; a test checks each clause against WA Events' own rule.
+- **The staff screens' note** for each job gains one sentence: *"The same message went to the engineer's e-mail."*, or
+  why not.
+- **＋ New Job** now says *"The engineer gets a WhatsApp message and the same by e-mail"*.
+
+**"sent" means the mail server took it.** Whether it reached the inbox is not measured, as for every plugin e-mail.
+
+**Migration 076** adds the two columns. 075 is not edited: where it has run, the plugin's migration runner would only
+warn about a changed file, and the columns would never be added. If 076 has not been applied, the history row is still
+written, without them.
+
+**South Sudan is unchanged.** Its job messages do not go through the notifier, and it sends a technician no e-mail. The
+notifier suite's section 8 and the day test measure it.
+
+**Found and fixed on the way — tests only.**
+- The test sandbox ran the admin dashboard's "piggyback" cron: after an admin page, `public.php` runs
+  `cron/master.php`, at most once every 5 minutes.
+- Under `php -S` the connection stays open until that ends. It reached `wa.dishnetafrica.com`, the WhatsApp feed's
+  default address, over TLS, and waited on DNS for `dishnetss.com`. That took longer than the test client's 90 seconds,
+  so the scheduling page's checks failed.
+- The sandbox now marks the piggyback as just run, ten years ahead. Measured with `strace`: no connection leaves the
+  machine, and the page answers in 0.2 s.
+- Earlier runs of this sandbox, since 5.18.50, ran the same cron, with the sandbox's made-up settings.
+
+**The tests — new and changed:**
+- **`test_job_messages.php`: 132** (was 107). It adds:
+  - the subjects;
+  - the HTML: escaping, links, only `http`/`https` made clickable, and the text recovered from it unchanged;
+  - the log clauses against WA Events' rule, with no `@` in any line;
+  - the notes; migration 076;
+  - the e-mail sent once, after the commit, to `StaffDirectory::email()`.
+- **`test_job_notifier.php`: 130** (was 97).
+  - The sandbox gets its own SMTP relay (`tests/fixtures/fake_smtp_server.php`) and reads each message's parts.
+  - Every section checks the e-mail: to whom, the subject, the text equal to the WhatsApp, the HTML, Reply-To, and the
+    outcome in the history, the log line and the note.
+  - **Section 4b, new:**
+    - an e-mail that is not an address: the WhatsApp goes, `no_email`;
+    - the mail server down during a Bulk Dispatch of three: the first e-mail waits for it and fails, the other two
+      are not tried and say why, and the three WhatsApps stand as sent;
+    - no mail server set up at all: `not_configured`;
+    - the control: with the mail server back, the next job's e-mail goes.
+  - Section 7 rebuilds `job_notify_events` as 075 made it, and shows the history kept without the two columns.
+  - **22 weakened copies are each caught** (16 before). The six new ones:
+    - no e-mail copy;
+    - the e-mail only when the WhatsApp went;
+    - the address uCRM holds for the user;
+    - no stop after the mail server refused;
+    - no Reply-To;
+    - the e-mail's outcome in WA Events' words.
+- **`test_job_notifications_day.php`: 50** (was 46).
+  - The day's five technician e-mails: their texts equal release B's five WhatsApps, with their subjects and Reply-To.
+  - The customer's e-mail is compared without them.
+  - **7 weakened copies are each caught** (6 before). The new one leaves the text part to be made from the HTML.
+- **PHP 8.1** (php-wasm 8.1.34, the server's version):
+  - every PHP file of the change passes `php -l`;
+  - `test_job_messages.php` passes 132 of 132;
+  - the notifier, driven in-process through no mail server, a reassignment, an address that is not one, a mail server
+    that refuses, Accept and the history, gives byte-identical output under 8.1.34 and 8.4.19.
+
+**The suite** (PHP 8.4.19, in the main checkout):
+- **Twice on `7ad465e`: 226 files, 10,718 assertions passed, 0 failed, identical file by file** (1,080 s and 1,018 s).
+  Run 2 ran beside both deploy rehearsals.
+- **Compared with `fc5c3b7`'s runs (§16.14), file by file,** 223 files have the same counts. The other three are the job
+  suites: `test_job_messages.php` adds 25, `test_job_notifier.php` 33 and `test_job_notifications_day.php` 4.
+
+**The deploy script — `scripts/deploy-5.18.52.sh`, commit `e5d3264`:**
+- **It installs `7ad465e` by its hash,** over 5.18.51 only, as before.
+- **A5 and R9** read migration 076 beside 075, and R9 reads its two columns too. R9's rows show the e-mail's outcome
+  beside the WhatsApp's, as counts only.
+- **R6** also checks the e-mail call in the installed notifier, and ＋ New Job's new sentence.
+- **R11, new, a note:** which mail server the engineer's e-mail will use: uCRM's mail settings, the plugin's SMTP, or
+  none.
+  - It reads the settings as `MailService` does, and prints no value.
+  - With none, every job message is recorded "no e-mail" until one is set (Settings → System → Email Settings). The
+    WhatsApp is not affected.
+- **The summary** says each message also goes by e-mail. **The rollback note** says 076's two columns stay, with their
+  rows.
+
+**Rehearsed** in `scripts/harness/deploy-5.18.52/rehearse.sh`:
+- **170/170 on two consecutive runs of the committed script** (159 before), each running it 68 times;
+- **30 weakened copies, each caught** (28 before). The two new ones leave R9 blind to 076, and make R11 read no settings
+  as a mail server;
+- the new scenarios:
+  - 076 alone missing: R9 fails, and the plugin's next request applies it again;
+  - the e-mail call taken out of the installed notifier: R6 names what is missing;
+  - R11 with each of the three mail settings: it says which, prints no value and fails nothing.
+
+**The live test (§16.14) gains one expectation per message:** an e-mail with the same text, at the linked account's
+e-mail. `--after-only`'s R9 shows each row's e-mail outcome.
+
+**Evidence:** `docs/evidence/5.18.52/`, the `email-*` files (the README lists them).
+
+**Not deployed.** §16.14's order stands. The links come first: 0 verified today (§16.15).

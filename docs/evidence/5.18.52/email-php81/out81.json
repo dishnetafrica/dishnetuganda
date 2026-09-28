@@ -1,0 +1,193 @@
+{
+    "assigned, no mail server": {
+        "event": "assigned",
+        "outcome": "sent",
+        "messages": [
+            [
+                "assigned",
+                "sent",
+                "not_configured"
+            ]
+        ],
+        "note": "WhatsApp sent to the engineer, with the link to accept the job. No e-mail copy: no mail server is set up for the plugin.",
+        "log": [
+            "Job #5 (assigned) — WhatsApp sent to staff account #3; no e-mail: the plugin has no mail server set up"
+        ]
+    },
+    "redelivered": {
+        "event": null,
+        "outcome": "no_change",
+        "messages": []
+    },
+    "reassigned": {
+        "event": "reassigned",
+        "outcome": "no_usable_number",
+        "messages": [
+            [
+                "assigned",
+                "no_usable_number",
+                "not_configured"
+            ],
+            [
+                "reassigned_away",
+                "sent",
+                "not_configured"
+            ]
+        ],
+        "log": [
+            "Job #5 (reassigned: new engineer) — WhatsApp skipped: staff account #4 has no usable number; no e-mail: the plugin has no mail server set up",
+            "Job #5 (reassigned: previous engineer) — WhatsApp sent to staff account #3; no e-mail: the plugin has no mail server set up"
+        ]
+    },
+    "odd address": {
+        "event": "assigned",
+        "outcome": "sent",
+        "messages": [
+            [
+                "assigned",
+                "sent",
+                "no_email"
+            ]
+        ]
+    },
+    "mail server down": {
+        "0": {
+            "event": "assigned",
+            "outcome": "sent",
+            "messages": [
+                [
+                    "assigned",
+                    "sent",
+                    "failed"
+                ]
+            ]
+        },
+        "1": {
+            "event": "assigned",
+            "outcome": "sent",
+            "messages": [
+                [
+                    "assigned",
+                    "sent",
+                    "failed"
+                ]
+            ]
+        },
+        "second_detail": "staff account #3: not tried, the mail server did not take an earlier e-mail in this request",
+        "notes": "All 2 jobs: WhatsApp sent to the engineer, with the link to accept the job. The e-mail copy was not taken by the mail server."
+    },
+    "accepted": {
+        "event": "accepted",
+        "outcome": "sent",
+        "messages": [
+            [
+                "accepted",
+                "sent",
+                "failed"
+            ]
+        ]
+    },
+    "recordedSince": {
+        "event": "reassigned",
+        "outcome": "no_usable_number",
+        "messages": [
+            [
+                "assigned",
+                "no_usable_number",
+                "not_configured"
+            ]
+        ]
+    },
+    "history": [
+        [
+            5,
+            "assigned",
+            "assigned",
+            "sent",
+            "not_configured"
+        ],
+        [
+            5,
+            "reassigned",
+            "assigned",
+            "no_usable_number",
+            "not_configured"
+        ],
+        [
+            5,
+            "reassigned",
+            "reassigned_away",
+            "sent",
+            "not_configured"
+        ],
+        [
+            6,
+            "assigned",
+            "assigned",
+            "sent",
+            "no_email"
+        ],
+        [
+            7,
+            "assigned",
+            "assigned",
+            "sent",
+            "failed"
+        ],
+        [
+            8,
+            "assigned",
+            "assigned",
+            "sent",
+            "failed"
+        ],
+        [
+            7,
+            "accepted",
+            "accepted",
+            "sent",
+            "failed"
+        ]
+    ],
+    "whatsapp": [
+        [
+            "support",
+            "+256700000111",
+            "job_assigned"
+        ],
+        [
+            "support",
+            "+256700000111",
+            "job_unassigned"
+        ],
+        [
+            "support",
+            "+256700000125",
+            "job_assigned"
+        ],
+        [
+            "support",
+            "+256700000111",
+            "job_assigned"
+        ],
+        [
+            "support",
+            "+256700000111",
+            "job_assigned"
+        ],
+        [
+            "support",
+            "+256700000111",
+            "ops_job_accepted_self"
+        ]
+    ],
+    "migrations": [
+        "070_followups.sql",
+        "071_dpo_payments.sql",
+        "072_wa_message_location.sql",
+        "073_customer_sessions.sql",
+        "074_client_search_index_flags.sql",
+        "075_job_notifications.sql",
+        "076_job_notify_email.sql"
+    ]
+}

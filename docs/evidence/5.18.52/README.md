@@ -26,3 +26,26 @@ is local, against fakes. Nothing had been deployed when they were made.
 
 Personal data: none. The suites use made-up accounts, and so does the rehearsal; its log is checked to print none of
 them.
+
+## The e-mail copy — plugin commit `7ad465e` (docs/44 §16.16)
+
+5.18.52 was rebuilt with the engineer's e-mail on 28 September; `fc5c3b7` above was never deployed. These files are
+what §16.16 rests on. Everything here is local and runs against fakes, and nothing had been deployed when they were made.
+
+| File | What it is |
+|---|---|
+| `email-suite-run1-tally.txt`, `email-suite-run2-tally.txt` | The full plugin suite, twice, on `7ad465e`, in the main checkout: assertions passed and failed per file, the totals, the exit code and the duration |
+| `email-job-suites-run1.txt` | The whole output of the four job suites in that run 1 |
+| `email-php81/` | Under PHP 8.1.34 (php-wasm, the server's version): `lint81.txt` (every PHP file of the change), `test_job_messages-php81.txt` (132 of 132), and `drive.php`, which drives the real notifier in-process; its output `out81.json` is byte-identical to `out84.json` under PHP 8.4.19 |
+| `email-rehearsal-run1.log`, `email-rehearsal-run2.log` | `scripts/harness/deploy-5.18.52/rehearse.sh`, twice, on the deploy script of `e5d3264` |
+| `email-rehearsed-deploy.log`, `email-rehearsed-deploy-branch-ahead.log`, `email-rehearsed-after-only.log`, `email-rehearsed-rollback.log` | As the operator's log would show them, from rehearsal run 2, with the sandbox path shortened to `<sandbox>` |
+
+**Facts to read these runs with.**
+- Run 1 ran 05:32–05:50 UTC, and run 2 05:51–06:08 UTC, beside both deploy rehearsals. Their counts are identical, file
+  by file.
+- Against `fc5c3b7`'s runs, only the three job suites differ: `test_job_messages.php` 107 → 132, `test_job_notifier.php`
+  97 → 130 and `test_job_notifications_day.php` 46 → 50.
+- `test_customer_pwa.php` still leaves its `php -S` server running after a run (§16.14); each run's was stopped by hand.
+
+Personal data: none. The suites and the rehearsal use made-up accounts, and the rehearsal checks that its log prints
+none of them.

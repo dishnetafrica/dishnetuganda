@@ -1,0 +1,11 @@
+PHP 8.1 (php-wasm) — plugin commit 7ad465e, 2026-09-28T05:50:17Z
+8.1.34
+lib/JobMessages.php: No syntax errors detected in lib/JobMessages.php
+lib/JobNotifier.php: No syntax errors detected in lib/JobNotifier.php
+tabs/support/scheduling.php: No syntax errors detected in tabs/support/scheduling.php
+tests/fixtures/fake_smtp_server.php: No syntax errors detected in tests/fixtures/fake_smtp_server.php
+tests/fixtures/staff_jobs_sandbox.php: No syntax errors detected in tests/fixtures/staff_jobs_sandbox.php
+tests/fixtures/staff_jobs_scenario.php: No syntax errors detected in tests/fixtures/staff_jobs_scenario.php
+tests/test_job_messages.php: No syntax errors detected in tests/test_job_messages.php
+tests/test_job_notifications_day.php: No syntax errors detected in tests/test_job_notifications_day.php
+tests/test_job_notifier.php: No syntax errors detected in tests/test_job_notifier.php
