@@ -2913,3 +2913,34 @@ five files at the same second (`docs/evidence/5.18.52/opcache/simulation.txt`).
 
 Until the fix runs, none of release B runs on the web server: not uCRM's job events, and not ＋ New Job, Bulk
 Dispatch, Reschedule or Accept.
+
+### 16.24 The cause confirmed, and the fix applied — 28 September 2026, 09:18:55 UTC
+
+The operator ran both handed-over steps (log files `timestamps.log` and `fix-timestamps.log`, printed on the server):
+
+**The check confirmed §16.23.**
+- **Five PHP files the web server runs** had the same modification second as the 5.18.51 copies in the deploy's
+  backup, **04:26:40**: `webhook.php`, `public.php`, `includes/api/api_scheduling.php`, `includes/post/post_auth.php`
+  and `tabs/support/bulk_dispatch.php`.
+- **The checkout's own record** (`git reflog`) shows the 5.18.51 deploy's two moves in that one second:
+  - *"checkout: moving from claude/study-this-jhe2eg to 240f2f9"* at 04:26:40;
+  - *"checkout: moving from 240f2f9… to claude/study-this-jhe2eg"* at 04:26:40.
+- **The files 5.18.52 changed again** (`scheduling.php`, `JobNotifier.php`, `JobMessages.php` and the rest) carry
+  **07:26:43 UTC**, the pull that brought `7ad465e`. The pull at 07:41:31 brought documents only.
+- **So from 07:41 to 09:18 UTC the web server ran 5.18.51's copies of those five files.** That covers uCRM's job
+  events, ＋ New Job, Bulk Dispatch, Reschedule, Accept and the sign-in return. It ran 5.18.52's copies of the rest.
+
+**The fix, run by the operator at 09:18:55 UTC.**
+- *"gave 20 file(s) a new timestamp; their content is unchanged and is exactly 7ad465e's"*. No file differed from
+  `7ad465e`, and none was left alone.
+- The check again: every file shows 09:18:55, and *"0 PHP file(s) the web server runs have the same second as at
+  5.18.51"*.
+- Nothing was restarted. PHP compiles each file again at its next use.
+
+**Not yet seen: the new code running.** The job-log check ran straight after the fix, before any change in uCRM. It
+shows job #9's two job.add lines from 08:26 UTC and nothing newer; the log's last entry is from 08:41 UTC. The proof is
+the test of §16.23: change job #9's time in uCRM. Then the technician gets message 1 by WhatsApp and by e-mail, and
+the log shows *"Job #9 (assigned) — WhatsApp sent to staff account #…"*.
+
+**Every earlier "PASSED" of 5.18.52 stands for the files and the database only.** The deploy (07:41) and
+`--after-only` (07:55) checks were right about what they read. None of them read what PHP ran (§16.22).

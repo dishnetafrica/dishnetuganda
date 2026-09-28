@@ -2213,3 +2213,14 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   `7ad465e` and unchanged, no restart), only if the check marks `webhook.php`. Then the test: change job #9's time in
   uCRM. Evidence in `docs/evidence/5.18.52/opcache/`.
 - **Proposed, not built:** copied files get the copy time, and every deploy checks the code PHP runs.
+
+## 28 Sep — the cause confirmed and fixed: the same second, 04:26:40 (docs/44 §16.24)
+
+- **The check:** five PHP files the web server runs had the modification second of the 5.18.51 copies, 04:26:40. They
+  are `webhook.php`, `public.php`, `api_scheduling.php`, `post_auth.php` and `bulk_dispatch.php`. `git reflog` shows
+  the 5.18.51 deploy's checkout of `240f2f9` and its return to the branch in that one second.
+- **So from 07:41 to 09:18 UTC the web server ran 5.18.51's copies of those five files.**
+- **The fix, by the operator at 09:18:55 UTC:** 20 files given a new timestamp. Each was checked against `7ad465e`
+  first; none differed, and their content is unchanged. The check then showed 0 files with the old second. Nothing was
+  restarted.
+- **Still to see:** the new code running. Job #9's time is to be changed in uCRM, then the job-log check run.
