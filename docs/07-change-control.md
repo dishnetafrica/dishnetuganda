@@ -2333,3 +2333,31 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   Message Log row were saved, while the webhook wrote the job's record during the Accept**: the collision that lost
   both on 28 September. Message 1 and *"cancelled"* went and were recorded too.
 - **Next:** `--after-only` after a day of real jobs.
+
+## 30 Sep — notifications and bulk communication, uCRM and the plugin: an audit (docs/45)
+
+**What.** An audit, at the operator's request, of every notification uCRM and the plugin send on Uganda, and of
+uCRM's bulk ("multi-user") communication. **Nothing was changed:** no code, configuration, schedule or record;
+nothing deployed; nothing sent.
+
+**Found.**
+- The plugin carries almost all customer communication: WhatsApp for every event, and the eight Uganda e-mails
+  switched on 15 Sep.
+- uCRM's own notifications, its mailer, its e-mail log and its bulk e-mail ("Mailing") have **never been looked at on
+  this server**. Its documentation is blocked from this session, so every uCRM feature is marked unverified.
+- Possible duplicates with uCRM: invoice, quotation, receipt, suspension. KYC quotes always trigger uCRM's quote
+  e-mail.
+- Reminders go by two paths with separate guards. The overdue WhatsApp still says *"suspending tonight"*, although
+  the prepaid e-mail ladder was stopped for saying so.
+- Ten code defects (docs/45 §4.4). Among them: the payment webhook stops after the receipt (run here under PHP 8.1.34,
+  the server's version); the retailer app can send a second receipt; the WhatsApp "Event Map" switches are read by no
+  sender.
+- **No usable way to message many customers at once** about maintenance or news. The plugin's outage alert has no
+  screen, and uCRM's Mailing is unverified.
+- Seven staff-side findings (docs/45 §4.5). Among them: the failure-queue API checks no role, and the 07:00
+  staff-jobs brief never sends.
+- Missing: e-mail for customers without a phone, and for invoices raised as drafts; retries and delivery receipts;
+  SMS; consent and unsubscribe; admin and watchdog alert numbers.
+
+**Next.** The read-only checks V1–V11 (docs/45 §8), then the owner decisions O1–O8. Every fix (F1–F14) and gap
+(G1–G11) waits for approval, and none is part of Release A or B.
