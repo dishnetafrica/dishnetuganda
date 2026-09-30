@@ -2387,3 +2387,48 @@ file; the South Sudan comparison green in both. **Rehearsed:** the deploy script
 
 **Next.** Your review of docs/46 §G–§H, then, on your approval only, `scripts/deploy-5.18.54.sh` (its rollback is
 printed at the end of its log), then the checks of §G.
+
+## 30 Sep — distribution management on uCRM and the plugin: an audit and a phased plan (docs/47)
+
+**What.** An audit of the uCRM installation and the DishNet plugin, and a phased plan for a distribution network of
+prospective partners: fuel-station chains, supermarkets, shops, distributors and wholesale buyers. **Audit only:**
+- no code, migration, setting or uCRM record was changed;
+- nothing was deployed;
+- no server was contacted;
+- no test was run.
+
+**Found:**
+- **uCRM** (4.5.33, measured 23 Sep) can hold a partner as one **company client**: invoices, payments, credit notes,
+  balance. It has no place for an outlet, and no partner price list.
+- **uCRM organisations** are DishNet's own issuing entities, and Uganda has one. They must not be used for partners.
+- **The plugin already has most of the machinery:**
+  - stock units and movements, purchases and costing, and the authoritative kit binding (B-1);
+  - the append-only financial audit and per-currency reporting;
+  - the job scheduler, country gating and the customer-portal session design.
+- **Missing:** partners, outlets, the owner of stock apart from its location, dispatch and receipt, consignment,
+  dated prices and commission rules, settlements and partner sign-in.
+- **Partner users cannot safely sign in through anything that exists today.** The plan is a minimal, separate
+  partner portal with its own identity and a deny-by-default API.
+- **Tax is the one real block.** uCRM has no VAT configured, and the plugin refuses EFRIS production. Invoicing a
+  VAT-registered partner waits on the accountant.
+- **Existing defects** (docs/47 §7.2, PD-1 to PD-13):
+  - **PD-1:** the collections CSV export appears to have no sign-in check. It was found by reading and **not
+    reproduced**, and a fix of its own is recommended now.
+  - Duplicate serials are possible.
+  - Stock balances are clamped at zero.
+  - Migrations are marked applied after a failed statement.
+  - A payment turns a residential client into a company client.
+
+**Proposed** (docs/47 §14):
+- Phase 0 foundations first.
+- Then partners and outlets; the stock journal; prices, orders and sales; commissions and settlements.
+- Then a **staff-operated pilot before any partner signs in**, then the partner portal, then the rollout.
+- Every phase is additive, switched off at deploy, tested with weakened copies, and deployed by a pinned script with
+  a separate rollback.
+
+**Next.** Your review:
+- the decisions D-1 to D-15 (D-6 needs the accountant);
+- the verifications NV-1 to NV-13, three of which write a test record to uCRM and need your approval;
+- PD-1 on its own.
+
+Nothing is built until you approve a phase.
