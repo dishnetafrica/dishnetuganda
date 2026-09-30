@@ -78,7 +78,12 @@ require $root . "/webhook.php";
             'dry_run_mode'   => false, 'data_dir' => $this->dataDir,
             'webhook_secret' => 'nhsecret',
         ];
-        file_put_contents($this->dataDir . '/kyc_config.json', json_encode(array_merge($base, $extra), JSON_PRETTY_PRINT));
+        $cfg = array_merge($base, $extra);
+        file_put_contents($this->dataDir . '/kyc_config.json', json_encode($cfg, JSON_PRETTY_PRINT));
+        // The store copy too: the crons read only that one, as they do on the server.
+        require_once $this->root . '/lib/StoreInterface.php';
+        require_once $this->root . '/lib/SqliteStore.php';
+        \SqliteStore::create($this->dataDir)->save('kyc_config.json', $cfg);
     }
 
     public int $smtpPort = 0;
@@ -194,7 +199,7 @@ require $root . "/webhook.php";
      *
      * @param array<string, array<int, array{0:string,1:string}>> $patches  relative path => list of [search, replace]
      */
-    public static function weakened(string $root, array $patches, string $tag = 'wk'): string
+    public static function weakened(string $root, array $patches, string $tag = 'wk', array $extraFiles = []): string
     {
         $dst = sys_get_temp_dir() . '/' . $tag . '_' . getmypid() . '_' . substr(md5(uniqid('', true)), 0, 6);
         exec('rm -rf ' . escapeshellarg($dst));
@@ -233,6 +238,12 @@ require $root . "/webhook.php";
                 if (strpos($src, $replace) === false) throw new \RuntimeException("weakened copy: replacement missing in {$rel}");
             }
             file_put_contents($dst . '/' . $rel, $src);
+        }
+        foreach ($extraFiles as $rel => $content) {
+            if (is_link(dirname($dst . '/' . $rel)) || is_link($dst . '/' . $rel)) {
+                throw new \RuntimeException("weakened copy: {$rel} would be written through a link into the real tree");
+            }
+            file_put_contents($dst . '/' . $rel, $content);
         }
         return $dst;
     }

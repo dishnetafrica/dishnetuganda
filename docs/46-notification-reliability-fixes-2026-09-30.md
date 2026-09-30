@@ -91,6 +91,68 @@ administrator side, and reliability.
 | 30 | **M4**: failed WhatsApps wait for a person | P3 | new `lib/NotificationRetry.php`, `cron/master.php` | Automatic, bounded retries, only for failures the provider certainly did not accept, only for messages that cannot go stale in the window; then `exhausted` | a refused send is retried and sent once; a timeout is never retried automatically; after the last try the row reads `exhausted` |
 | 31 | **New, N-1**: Evolution sends are retried after a timeout, which can duplicate | P2 | `lib/EvolutionApiService.php` | A POST is retried only when the connection was never made | a timeout after connecting is not retried |
 | 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows | P3 | new check in the reminder/retry job | An admin alert, and a plugin-log line, when a scheduled job is overdue or failed sends pile up | both raise one alert, with a cooldown |
+| 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
+| 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
+
+## §B The build, row by row
+
+Every change below applies only where `NotifyGate` says Uganda; everywhere else the 5.18.53 code runs, verbatim
+(§0.1). Test counts are the suite's own; each test also runs weakened copies of the code and must catch every one.
+
+### Rows 1–4: the payment webhook and one receipt per payment (commits `ebe1ff1`, `46ad439`)
+
+- **Row 1, D-1.** `payment.add` now carries on after the first receipt instead of dying on an undefined lock, so the
+  "just paid" marker, the payment push, the Starlink instant restore, the app-cache refresh and the Workbench close
+  run, and uCRM gets one answer. `tests/test_payment_webhook_flow.php`: **20**, three weakened copies caught.
+  *Customer-visible consequence:* the "just paid" marker now works, so the redundant "Service Restored" WhatsApp
+  within three minutes of a payment is no longer sent (C7), as designed.
+- **Rows 2–4, D-2, D3a–c.** `lib/ReceiptOnce.php`: the WhatsApp receipt is claimed once per payment (`PAY<id>`), and
+  by payment reference (`PAYREF:<ref>`) for a collection receipted before uCRM had it; the e-mail (`PAYWORK<id>`)
+  and the receipt PDF (`PAYPDF<id>`) keep guards of their own, so a receipt sent by the app or by staff no longer
+  costs the customer the e-mail and the PDF. `tests/test_receipts_once.php`: **23**, five weakened copies caught.
+
+### Rows 5–8 and 20: reminders from one path, in the daytime, with the prepaid rules
+
+- **One path (row 5, D-4, D5).** uCRM's `invoice.near_due` and `invoice.overdue` events are written to the webhook
+  log and answered *"recorded"*; they send nothing. Before, each sent once per invoice **per day**, so an event
+  raised daily meant a daily "Final Notice". The reminders come only from `lib/InvoiceReminders.php`: 7, 3 and 1
+  day before the due date, and 1, 3, 5 and 7 days after, each once per invoice. Its guard keys are the 02:00 job's
+  own (`<number>-pre-d7`, `<number>-d3`), so nothing reminded before the upgrade is reminded again after it.
+  **uCRM's own e-mail for these events is untouched** (§0.2, V1).
+- **Daytime (row 6, N-2).** `cron/customer_reminders.php` runs the reminders, then win-back, once a day at the first
+  master cycle between 09:00 and 17:00 Kampala time (`reminder_hour`, `reminder_until_hour`), so a cycle missed at
+  09:00 is made up later that day, once (`lib/JobWindow.php`). It is in master.php's job list with
+  `'gate' => 'reminders'`, and the dispatch loop skips a gated job before it records anything: on South Sudan it
+  never runs. The 02:00 maintenance job's reminder tasks (4a, 4), its new-invoice scan (4b, which the 15-minute
+  scanner covers with the same guard) and its win-back say `MOVED` on Uganda. The 15-minute invoice scanner sends
+  nothing during quiet hours, 21:00–08:00 (`notify_quiet_from_hour`, `notify_quiet_until_hour`; equal values switch
+  them off): it looks back 24 hours, so an invoice raised in the night is announced at 08:00. *Not changed:* the
+  `invoice.add` webhook still announces an invoice a person creates, at whatever hour they create it.
+- **The claim after the checks (row 7, N-3).** A tier is recorded only once every check has passed, just before the
+  send. An invoice paid since the list was read, or a client with no phone, no longer uses the tier up: the
+  reminder goes on a later run that day, once the phone is in uCRM.
+- **Prepaid (row 8, C1, C2).** With `billing_model = prepaid`, nothing is sent after the due date: those four texts
+  speak of suspension and debt. Each is logged (*"SUPPRESSED #… prepaid"*), counted, and not recorded as sent. The
+  reminders before the due date still go. The suspension WhatsApp becomes a **pause** notice on prepaid: *"Your paid
+  service period for … has ended, so your internet is paused for now. Nothing is cancelled."*, with the pay link, no
+  reconnection fee, and "Already paid? Reply…". It says what the service-paused e-mail (approved, live since 15
+  September) says; **the WhatsApp wording is listed in §E for your confirmation.** Absent or `postpaid`: the texts are
+  today's, unchanged.
+- **Win-back (row 20, C9).** `lib/WinBack.php` is the maintenance job's win-back, moved to the daytime run, sent as a
+  *proactive* message: a customer who wrote STOP no longer receives it. Its log and keys are the old task's
+  (`winback_log.json`, `WB<service id>`).
+- **Also changed, on Uganda's run:** the phone is the first contact that has one (the old job read contact 0 only);
+  a list that comes back at uCRM's page limit (500) is reported in the run's log and in uCRM's log for the plugin,
+  instead of silently missing reminders past it; the due date is read as a calendar date (row 34, N-5); the scanner's
+  log reaches the data directory (row 33, N-4).
+- **Unchanged, and flagged:** the postpaid day-5 text says *"Service Suspending Tonight … suspended at midnight"*.
+  Whether that is true depends on uCRM's suspension settings, which this work cannot read (§E).
+- **Tests:** `tests/test_reminders_one_path.php`, **90**: every tier once; a second run the same day sends nothing;
+  the missing phone added, the reminder goes; the old job's keys honoured; prepaid; the page limit; STOP stops
+  win-back; uCRM's events recorded; pause vs suspension; the 02:00 job run whole, `MOVED`, nothing sent; the daytime
+  job run as master.php includes it; the scanner inside and outside quiet hours; the window, the quiet hours and
+  the due date as unit answers; master.php's gate; and South Sudan unchanged in every one of those. Eleven weakened
+  copies, each caught.
 
 ## §D Deferred, with the reason
 
@@ -110,4 +172,11 @@ administrator side, and reliability.
 
 ## §E Decisions for you (none needed to review this work)
 
-Filled in with the build.
+Collected as the build goes; completed with the final report.
+
+| # | Decision | Recommendation | Until you decide |
+|---|---|---|---|
+| E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
+| E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
+| E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–8, 20 so far) | One at a time, each after its Uganda deployment has been watched | South Sudan keeps 5.18.53 |

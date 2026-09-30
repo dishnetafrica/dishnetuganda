@@ -32,6 +32,9 @@ require_once __DIR__ . '/lib/NotificationService.php';
 
 function ilog(string $msg): void {
     $ts = date('Y-m-d H:i:s');
+    // 5.18.54 (docs/46, N-4): $dataDir is not in scope here, so this wrote to "/invoice_notify_cron.log" and failed
+    // with two warnings a line. Uganda reads the global; elsewhere it is left as it was.
+    if (!empty($GLOBALS['_ilogUg'])) $dataDir = (string)($GLOBALS['dataDir'] ?? '');
     file_put_contents(
         $dataDir . '/invoice_notify_cron.log',
         "[{$ts}] {$msg}\n",
@@ -49,6 +52,11 @@ if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
 $store  = SqliteStore::create($dataDir);
 $config = $store->load('kyc_config.json') ?? [];
 
+// 5.18.54 (docs/46 row 6): whether the Uganda fixes apply — set before the first ilog() line (N-4 below).
+require_once __DIR__ . '/lib/NotifyGate.php';
+require_once __DIR__ . '/lib/InvoiceReminders.php';
+$GLOBALS['_ilogUg'] = NotifyGate::applies(NotifyGate::REMINDERS, is_array($config) ? $config : [], $dataDir);
+
 $crm = CrmApiClient::fromUcrm(__DIR__, $config);
 if (!$crm->isConfigured()) {
     ilog("SKIP — CRM not configured");
@@ -56,6 +64,13 @@ if (!$crm->isConfigured()) {
 }
 
 $notify = new NotificationService($store, $config);
+
+// 5.18.54 (docs/46 row 6): on Uganda this scan sends no customer notice during quiet hours (default 21:00-08:00
+// local). It looks back 24 hours, so an invoice raised at midnight is announced in the morning instead.
+if ($GLOBALS['_ilogUg'] && InvoiceReminders::quiet(is_array($config) ? $config : [], (int)date('G'))) {
+    ilog('Quiet hours (' . date('H:i') . ') — no customer notices now; the next daytime run covers the last 24 hours');
+    flock($lockFp, LOCK_UN); fclose($lockFp); return;
+}
 
 // ── Dedup: uses SQLite notification_dedup table (atomic, shared with webhook.php) ──
 

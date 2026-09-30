@@ -34,6 +34,7 @@ require_once dirname(__DIR__) . '/lib/error_handler.php';
  *   staff_jobs      — daily at 07:00  (per-staff WA job brief)
  *   cashbook_summary— daily at 18:00  (evening cashbook P&L to admin/accountant)
  *   gdrive_backup  — configurable    (Google Drive cloud backup, default daily at 03:00)
+ *   customer_reminders — daily, first cycle 09:00-17:00 (Uganda only: payment reminders + win-back; 5.18.54)
  *
  * Architecture:
  *   Uses data/master_schedule.json to track last run timestamps.
@@ -272,7 +273,24 @@ $_m_jobs = [
     // entirely in data-report; Hybrid just receives webhook notifications
     // and handles app-cache refresh. Single source of truth, no cross-
     // plugin HTTP gymnastics.
+
+    // ── 5.18.54 (docs/46 rows 5-8): Uganda's payment reminders and win-back, in the daytime ─────────────────
+    // Once a day, at the first cycle between run_hour and run_until (local time; reminder_hour and
+    // reminder_until_hour override them below), so a cycle missed at 09:00 is made up later that day, once.
+    // 'gate' names the NotifyGate fix it belongs to: where that fix does not apply (South Sudan) the job is never
+    // dispatched and the 02:00 maintenance job keeps these tasks, so that schedule does not change.
+    'customer_reminders' => ['interval' => 86400, 'run_hour' => 9, 'run_until' => 17, 'gate' => 'reminders', 'script' => __DIR__ . '/customer_reminders.php'],
 ];
+
+// ── 5.18.54: gated jobs and the reminder window (docs/46 rows 5-8) ──────────────────────────────────────────
+require_once dirname(__DIR__) . '/lib/NotifyGate.php';
+require_once dirname(__DIR__) . '/lib/JobWindow.php';
+$_m_remHour  = (int)($_m_config['reminder_hour'] ?? 9);
+$_m_remUntil = (int)($_m_config['reminder_until_hour'] ?? 17);
+if ($_m_remHour < 0 || $_m_remHour > 23) $_m_remHour = 9;
+if ($_m_remUntil <= $_m_remHour || $_m_remUntil > 24) $_m_remUntil = min(24, $_m_remHour + 8);
+$_m_jobs['customer_reminders']['run_hour']  = $_m_remHour;
+$_m_jobs['customer_reminders']['run_until'] = $_m_remUntil;
 
 $_m_ran = [];
 
@@ -282,6 +300,9 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
         master_log("BUDGET EXCEEDED after " . (time() - $_m_now) . "s — deferring remaining jobs");
         break;
     }
+
+    // 5.18.54: a job that belongs to one install is not dispatched elsewhere — no run, no schedule row
+    if (isset($_m_job['gate']) && !NotifyGate::applies((string)$_m_job['gate'], is_array($_m_config) ? $_m_config : [], $dataDir)) continue;
 
     $_m_scriptPath = $_m_job['script'];
 
@@ -296,7 +317,10 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
     $_m_interval = (int)$_m_job['interval'];
 
     // Hour-restricted jobs (maintenance, bidal_summary) — only run at their hour
-    if (isset($_m_job['run_hour'])) {
+    if (isset($_m_job['run_hour']) && isset($_m_job['run_until'])) {
+        // 5.18.54: a window — once a day, at the first cycle inside it (lib/JobWindow.php)
+        if (!JobWindow::due((int)$_m_now, $_m_lastRun, (int)$_m_job['run_hour'], (int)$_m_job['run_until'])) continue;
+    } elseif (isset($_m_job['run_hour'])) {
         $_m_targetHour = (int)$_m_job['run_hour'];
         if ($_m_hour !== $_m_targetHour) continue;
         // Day-of-week gate (0=Sunday, 1=Monday ... 6=Saturday)

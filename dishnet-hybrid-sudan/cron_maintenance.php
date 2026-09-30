@@ -63,6 +63,10 @@ if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
 
 $store   = SqliteStore::create($dataDir); // SQLite — shares same plugin.sqlite3
 $config  = $store->load('kyc_config.json');
+// 5.18.54 (docs/46 rows 5-8): on Uganda the reminders (tasks 4a and 4), the new-invoice scan (4b, which the
+// 15-minute scanner covers with the same guard) and win-back run in the daytime, not at 02:00.
+require_once __DIR__ . '/lib/NotifyGate.php';
+$_nrMoved = NotifyGate::applies(NotifyGate::REMINDERS, is_array($config) ? $config : [], $dataDir);
 $crm     = CrmApiClient::fromUcrm(__DIR__, $config);
 $notify  = new NotificationService($store, $config);
 $started = date('Y-m-d H:i:s');
@@ -564,7 +568,10 @@ try {
 mlog("\n[4a/5] Pre-Due Invoice Reminders");
 
 try {
-    if (!$crm->isConfigured()) {
+    if ($_nrMoved) {
+        mlog("  MOVED — sent by the daytime reminder run (cron/customer_reminders.php)");
+        $results['pre_due_reminders'] = ['moved' => 'customer_reminders'];
+    } elseif (!$crm->isConfigured()) {
         mlog("  SKIP — CRM not configured");
         $results['pre_due_reminders'] = ['skipped' => 'CRM not configured'];
     } else {
@@ -702,7 +709,10 @@ try {
 mlog("\n[4b/7] New Invoice Notification Scanner");
 
 try {
-    if (!$crm->isConfigured()) {
+    if ($_nrMoved) {
+        mlog("  MOVED — the 15-minute scanner (cron_invoice_notify.php) covers these invoices, in the daytime");
+        $results['invoice_notify_scanner'] = ['moved' => 'inv_notify'];
+    } elseif (!$crm->isConfigured()) {
         mlog("  SKIP — CRM not configured");
         $results['invoice_notify_scanner'] = ['skipped' => 'CRM not configured'];
     } else {
@@ -853,7 +863,10 @@ try {
 mlog("\n[5/5] Overdue Escalation Scanner");
 
 try {
-    if (!$crm->isConfigured()) {
+    if ($_nrMoved) {
+        mlog("  MOVED — sent by the daytime reminder run (cron/customer_reminders.php)");
+        $results['overdue_escalation'] = ['moved' => 'customer_reminders'];
+    } elseif (!$crm->isConfigured()) {
         mlog("  SKIP — CRM not configured (crm_base_url / ucrm.json missing)");
         $results['overdue_escalation'] = ['skipped' => 'CRM not configured'];
     } else {
@@ -1191,6 +1204,9 @@ try {
 // WIN-BACK FOLLOW-UP — 7 days after service ended
 // Sends a "we miss you" message to churned customers
 // ══════════════════════════════════════════════════════════════════════════════
+if ($_nrMoved) {
+    mlog("\n── Win-back check ──\n  MOVED — sent by the daytime reminder run (cron/customer_reminders.php)");
+} else
 try {
     mlog("\n── Win-back check ──");
     $winbackLog = $store->load('winback_log.json') ?: [];

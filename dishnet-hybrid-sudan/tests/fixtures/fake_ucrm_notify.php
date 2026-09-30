@@ -8,7 +8,7 @@ declare(strict_types=1);
  * a test can prove what the plugin asked for and, as important, what it never did (no PATCH to /options, no second
  * credit note).
  *
- *   POST /__test/seed      {"clients":{"7":{…}}, "payments":{…}, "invoices":{…}, "credit_notes":{…}, "quotes":{…},
+ *   POST /__test/seed      {"clients":{"7":{…}}, "payments":{…}, "invoices":{…}, "invoices_fresh":{…}, "credit_notes":{…}, "quotes":{…},
  *                           "services":{…}, "options":{…}, "fail":{"PATCH /options":500}}
  *   GET  /__test/requests  every request since the seed
  *   GET  /__test/state     marker + the records
@@ -19,7 +19,7 @@ declare(strict_types=1);
  */
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_notify_' . ($_SERVER['SERVER_PORT'] ?? '0') . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['clients' => [], 'payments' => [], 'invoices' => [], 'credit_notes' => [], 'quotes' => [],
+$state += ['clients' => [], 'payments' => [], 'invoices' => [], 'invoices_fresh' => [], 'credit_notes' => [], 'quotes' => [],
            'services' => [], 'options' => [], 'fail' => [], 'requests' => [], 'seq' => 5000];
 
 function fn_out($data, int $http = 200): void
@@ -43,9 +43,9 @@ if ($path === '/__test/state')    fn_out(['marker' => 'FAKE-UCRM-NOTIFY'] + $sta
 if ($path === '/__test/requests') fn_out(['requests' => $state['requests'], 'count' => count($state['requests'])]);
 if ($path === '/__test/seed') {
     $seed = is_array($json) ? $json : [];
-    $state = ['clients' => [], 'payments' => [], 'invoices' => [], 'credit_notes' => [], 'quotes' => [],
+    $state = ['clients' => [], 'payments' => [], 'invoices' => [], 'invoices_fresh' => [], 'credit_notes' => [], 'quotes' => [],
               'services' => [], 'options' => [], 'fail' => [], 'requests' => [], 'seq' => 5000];
-    foreach (['clients', 'payments', 'invoices', 'credit_notes', 'quotes', 'services', 'options', 'fail'] as $k) {
+    foreach (['clients', 'payments', 'invoices', 'invoices_fresh', 'credit_notes', 'quotes', 'services', 'options', 'fail'] as $k) {
         if (isset($seed[$k]) && is_array($seed[$k])) $state[$k] = $seed[$k];
     }
     fn_out(['seeded' => true]);
@@ -116,7 +116,8 @@ if (preg_match('#^/invoices/(\d+)/pdf$#', $p, $m)) {
     exit;
 }
 if (preg_match('#^/invoices/(\d+)$#', $p, $m)) {
-    $x = $one('invoices', $m[1]);
+    // invoices_fresh: what a single read answers when it should differ from the list (paid since the list was read)
+    $x = $state['invoices_fresh'][$m[1]] ?? $one('invoices', $m[1]);
     $x === null ? fn_out(['message' => 'Not found'], 404) : fn_out($x);
 }
 if ($p === '/invoices') fn_out($filterList(array_values($state['invoices'])));

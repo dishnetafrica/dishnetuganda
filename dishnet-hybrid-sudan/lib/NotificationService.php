@@ -1066,7 +1066,8 @@ class NotificationService
     // Sent 7 days after service ended to try recovering churned customers
     // ══════════════════════════════════════════════════════════════════════
 
-    public function winBackFollowup(string $customerPhone, string $customerName, string $serviceName, string $endedDate): void
+    public function winBackFollowup(string $customerPhone, string $customerName, string $serviceName, string $endedDate,
+                                    string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
         $msg = "👋 *We Miss You — DishNet Africa*\n\n"
              . "Dear {$customerName},\n\n"
@@ -1080,7 +1081,8 @@ class NotificationService
 
         $this->sendVia(self::ACCOUNTS, $customerPhone, $msg,
             'ops_win_back',
-            ['customer_name'=>$customerName,'service_name'=>$serviceName,'ended_date'=>$endedDate]
+            ['customer_name'=>$customerName,'service_name'=>$serviceName,'ended_date'=>$endedDate],
+            $class   // 5.18.54 (C9): Uganda's win-back passes CLASS_PROACTIVE, so STOP stops it
         );
     }
 

@@ -1786,7 +1786,24 @@ switch ($changeType) {
         // activation as a welcome — the same uCRM event announces both.
         whMarkPaused($store, (int)$serviceId, true);
 
+        // 5.18.54 (docs/46 row 8, C2): on a prepaid install a period that ends is a pause, not a suspension for an
+        // unpaid debt. The WhatsApp says what the service-paused e-mail says (approved and live since 15 September);
+        // everything after the text — the e-mail, the push — is the same for both.
+        require_once __DIR__ . '/lib/InvoiceReminders.php';
+        $_suspPrepaid = NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir) && InvoiceReminders::prepaid($config);
         if ($phone) {
+            if ($_suspPrepaid) {
+            $notify->sendVia('accounts', $phone,
+                "⏸️ *Service Paused — DishNet Africa*\n\n"
+                . "Dear {$name},\n\n"
+                . "Your paid service period for *{$svcName}* has ended, so your internet is paused for now. Nothing is cancelled.\n\n"
+                . "To resume, pay online: " . CustomerContact::payUrl($config) . "\n"
+                . "There is no reconnection fee — your service resumes as soon as your payment reaches us.\n\n"
+                . "Already paid? Reply with your payment confirmation and we will check it straight away.\n\n"
+                . "📞 " . CustomerContact::sales($config) . "\n"
+                . "— DishNet Accounts",
+                'ops_service_paused');
+            } else {
             $notify->sendVia('accounts', $phone,
                 "🚫 *Service Suspended — DishNet Africa*\n\n"
                 . "Dear {$name},\n\n"
@@ -1798,6 +1815,7 @@ switch ($changeType) {
                 . "📞 " . CustomerContact::sales($config) . "\n"
                 . "— DishNet Accounts",
                 'ops_service_suspended');
+            }
             whLog($changeType, "Suspension WhatsApp sent to {$name} ({$svcName})");
 
             // "Paused", not "suspended": on a prepaid install the period simply
@@ -3178,6 +3196,12 @@ switch ($changeType) {
     case 'invoice.near_due': {
         $invoiceId = (int)$entityId;
         if (!$invoiceId) whResp(200, 'near_due — no invoice ID.');
+        // 5.18.54 (docs/46 row 5, D-4): on Uganda the daytime reminder run is the one path for reminders, with one
+        // guard per invoice and tier. This event is recorded; it sends nothing (uCRM's own e-mail is uCRM's).
+        if (NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir)) {
+            whLog($changeType, "near_due recorded for invoice #{$invoiceId} — reminders are sent by the daily reminder run");
+            whResp(200, 'near_due — recorded; reminders are sent by the daily reminder run.');
+        }
 
         $invoice = $crm->get("invoices/{$invoiceId}");
         if (!$invoice) $invoice = $crm->get("billing/invoices/{$invoiceId}");
@@ -3246,6 +3270,12 @@ switch ($changeType) {
     case 'invoice.overdue': {
         $invoiceId = (int)$entityId;
         if (!$invoiceId) whResp(200, 'overdue — no invoice ID.');
+        // 5.18.54 (docs/46 row 5, D-4/D5): see invoice.near_due. Before, this sent once per invoice PER DAY, so an
+        // event raised daily meant a daily "Final Notice".
+        if (NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir)) {
+            whLog($changeType, "overdue recorded for invoice #{$invoiceId} — reminders are sent by the daily reminder run");
+            whResp(200, 'overdue — recorded; reminders are sent by the daily reminder run.');
+        }
 
         $invoice = $crm->get("invoices/{$invoiceId}");
         if (!$invoice) $invoice = $crm->get("billing/invoices/{$invoiceId}");
