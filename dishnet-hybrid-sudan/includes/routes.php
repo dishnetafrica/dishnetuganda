@@ -264,6 +264,14 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
 
 // ── Collections CSV export — must run before HTML buffer fills ────────────
 if (($tab ?? '') === 'all_collections' && !empty($_GET['col_export']) && $_GET['col_export'] === 'csv') {
+    // 5.18.55 (docs/48 PD-1): this export runs at public.php:739, BEFORE the
+    // page login gate (public.php:1027), so it must authenticate and
+    // authorise itself before any data is read. All Collections is an
+    // admin-only tab (public.php roles=>['admin']); enforce the same here.
+    $colR3 = $auth->requireLogin();
+    if (empty($colR3['is_admin']) && (($colR3['role'] ?? '') !== 'admin')) {
+        header('Location: ?page=dashboard'); exit;
+    }
     $colFDate3  = $_GET['col_from']  ?? '';
     $colTDate3  = $_GET['col_to']    ?? '';
     $colSearch3 = trim($_GET['col_q'] ?? '');

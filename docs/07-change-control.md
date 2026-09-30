@@ -2432,3 +2432,41 @@ prospective partners: fuel-station chains, supermarkets, shops, distributors and
 - PD-1 on its own.
 
 Nothing is built until you approve a phase.
+
+## 30 Sep — security & financial-integrity verification (docs/48); PD-1 collections-export fix (5.18.55)
+
+The master security + financial-integrity review, and the first authorised fix.
+**Nothing deployed.** The live server still runs 5.18.53.
+
+**Verified (read-only; docs/48 is the full report):**
+- The notification defects (docs/45) are fixed in the 5.18.54 code and are
+  test-pinned, but 5.18.54 is **not deployed** — so live 5.18.53 still exhibits
+  them. Handling is a deploy decision.
+- The security findings **PD-1..PD-13** (docs/47 §7.2) and the stock / migration /
+  financial-integrity findings are **confirmed in code** and present in **both**
+  5.18.53 and 5.18.54.
+
+**Fixed in code (5.18.55):**
+- **PD-1 — the collections CSV export had no sign-in or role check.** It runs at
+  public.php:739, before the page login gate at public.php:1027, keyed only on
+  `tab=all_collections&col_export=csv` — an anonymous dump of every customer's
+  payment collection (11 columns incl. customer name, uCRM client id, amount,
+  method, uCRM payment id). Added `$auth->requireLogin()` + an admin gate as the
+  first statements of the export block (includes/routes.php), before any data is
+  read, mirroring the staff-cashbook export. All Collections is an admin-only tab.
+- New regression test `tests/test_collections_export_auth.php` (8 assertions),
+  with a control-on-control: it fails if the gate is removed.
+
+**Tests (`bash tests/run.sh`):** before = 247 files / 11,295 ok / 0 failed / exit 0;
+the new test passes 8/8 standalone; the full suite is re-run twice after the
+change as the acceptance confirmation.
+
+**Held for approval (nothing done):**
+- Deploy of any release — including 5.18.54 to fix **D-1** (the payment-webhook
+  crash, already fixed in 5.18.54, no new code needed).
+- The other remediation batches (PD-2..PD-13; FI1..FI5; S1..S5; U1/U2) — docs/48 §7;
+  several are blocked pending an accounting or business decision.
+- The distribution module (docs/47) — waits on this review being approved.
+
+No production/config/data change; no customer or staff message; no payment or
+refund; no accounting or tax decision; nothing deployed.
