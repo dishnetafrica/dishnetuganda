@@ -627,6 +627,11 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
 
         $quoteNum = $quote['number'] ?? ($app['quote_ref'] ?? "Q-{$quoteId}");
         $amount   = $quote['totalUntaxed'] ?? $quote['total'] ?? ($app['total_amount'] ?? '');
+        // 5.18.54 (docs/46 row 21, C8): on Uganda the amounts below are in the tenant's currency and the number to call
+        // is the tenant's own. The "$" and the +211 number are South Sudan's, and stay there.
+        require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+        $_c8Ug  = NotifyGate::applies(NotifyGate::TENANT_TEXT, is_array($config ?? null) ? $config : [], $GLOBALS['dataDir'] ?? null);
+        $_c8Amt = is_numeric($amount) ? dn_money($amount, $config) : '';
 
         // Fetch PDF via API — this often works even when GET details doesn't
         $pdfRaw = $crm->getRawContent("quotes/{$quoteId}/pdf");
@@ -646,6 +651,17 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
                 $itemLines .= "\n  • " . ($qi['label'] ?? 'Item') . ' — ' . dn_cur($config) . number_format((float)($qi['total'] ?? $qi['price'] ?? 0), 2);
             }
 
+            if ($_c8Ug) {
+                require_once dirname(__DIR__, 2) . '/lib/CustomerContact.php';
+                $textQuote = "📄 *Quote #{$quoteNum}*\n\n"
+                    . "Dear {$custName},\n\n"
+                    . "Here is your DishNet quotation:\n"
+                    . $itemLines . "\n\n"
+                    . ($_c8Amt !== '' ? "💰 *Total: {$_c8Amt}*\n\n" : '')
+                    . "Valid for 30 days.\n"
+                    . "To proceed, contact your agent or call " . CustomerContact::support($config) . ".\n\n"
+                    . "— DishNet Africa";
+            } else {
             $textQuote = "📄 *Quote #{$quoteNum}*\n\n"
                 . "Dear {$custName},\n\n"
                 . "Here is your DishNet quotation:\n"
@@ -654,13 +670,15 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
                 . "Valid for 30 days.\n"
                 . "To proceed, contact your agent or call +211 921 443 006.\n\n"
                 . "— DishNet Africa";
+            }
 
             $notify->sendVia('support', $sendTo, $textQuote, 'ops_quote_text');
             $sentTo = [$sendTo];
 
             $adminPhone = trim($config['whatsapp_admin_phone'] ?? '');
             if ($ccAdmin && $adminPhone && $adminPhone !== $sendTo) {
-                $notify->sendVia('support', $adminPhone, "📋 Quote #{$quoteNum} sent to {$custName} ({$sendTo})\nAmount: \${$amount}", 'ops_quote_admin_cc');
+                $notify->sendVia('support', $adminPhone, "📋 Quote #{$quoteNum} sent to {$custName} ({$sendTo})\nAmount: "
+                    . ($_c8Ug ? ($_c8Amt !== '' ? $_c8Amt : 'not given') : "\${$amount}"), 'ops_quote_admin_cc');
                 $sentTo[] = $adminPhone;
             }
 
@@ -697,7 +715,7 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
 
         $notify = svc('notify');
         $custName = $app ? trim(($app['firstname'] ?? '') . ' ' . ($app['lastname'] ?? '')) : '';
-        $caption = "Quote #{$quoteNum}" . ($amount ? " — \${$amount}" : '') . "\n— DishNet Africa";
+        $caption = "Quote #{$quoteNum}" . ($_c8Ug ? ($_c8Amt !== '' ? " — {$_c8Amt}" : '') : ($amount ? " — \${$amount}" : '')) . "\n— DishNet Africa";
 
         // Send to customer
         $notify->sendDocument('support', $sendTo, $pdfUrl, "Quote-{$quoteNum}.pdf", $caption, 'ops_quote_pdf_manual');
@@ -706,7 +724,8 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
         // CC to admin
         $adminPhone = trim($config['whatsapp_admin_phone'] ?? '');
         if ($ccAdmin && $adminPhone && $adminPhone !== $sendTo) {
-            $adminCaption = "📋 Quote #{$quoteNum} sent to {$custName} ({$sendTo})\nAmount: \${$amount}\nSent by: " . ($retailer['name'] ?? 'Admin');
+            $adminCaption = "📋 Quote #{$quoteNum} sent to {$custName} ({$sendTo})\nAmount: "
+                . ($_c8Ug ? ($_c8Amt !== '' ? $_c8Amt : 'not given') : "\${$amount}") . "\nSent by: " . ($retailer['name'] ?? 'Admin');
             $notify->sendDocument('support', $adminPhone, $pdfUrl, "Quote-{$quoteNum}.pdf", $adminCaption, 'ops_quote_pdf_admin_cc');
             $sentTo[] = $adminPhone;
         }

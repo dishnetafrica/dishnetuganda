@@ -96,6 +96,7 @@ administrator side, and reliability.
 | 36 | **New, N-8** (found while building row 25): the morning brief asks uCRM for each person's jobs with `assigneeId`, a filter uCRM ignores (`cron/jobs_cache.php` records it). Unnoticed only because the brief never ran: fixed as it stood, it would have sent every technician the whole company's job list, customers' names included | P1 | `cron/staff_jobs_summary.php` | The jobs are read once and each person gets those assigned to them, as My Jobs does, through a verified uCRM link only | a technician's brief holds their jobs and nobody else's; an id typed without the picker matches nobody |
 | 37 | **New, N-7** (found while building row 16): `client.invite` shares D-6's block, so inviting a customer to uCRM's client zone suspends their own identity mailbox | P2 | `webhook.php` | With D-6: only a deleted or archived client is suspended | an invitation touches no mailbox |
 | 38 | **New, N-9** (found while building row 17): a quote made in uCRM gets `quote.add`'s WhatsApp and, within five minutes, the quote cron's too. The cron's list of sent quotes, which the webhook also checks, sits in `quote_wa_state.json` and never reads back (row 35), and the webhook never took the claim the cron honours | P2 | `webhook.php` | On Uganda every quotation takes the claim (`QuoteWaLedger`) before it is sent, as the cron does | a quote made in uCRM: one WhatsApp, the webhook's; the cron finds the claim |
+| 39 | **New, N-10** (found while building row 21): the dunning template screen shows South Sudan's number and addresses in every field nobody has set, and Save stores what the form shows — so the first Save puts the Juba number into Uganda's configuration, where it outranks the tenant profile in every ladder e-mail. Its preview printed Juba's number, company line and website too | P2 | `tabs/admin/overdue_email_tpl.php`, `includes/api/api_crm_misc.php` | On Uganda an unset field shows this install's value (its settings, then the tenant profile), as the e-mail builder already does; the preview prints what the e-mail prints | a Save without typing stores Uganda's number; the preview shows no +211 and no South Sudan line |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -351,6 +352,44 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   the retry job — no welcome; South Sudan — both, as in 5.18.53. Three weakened copies, each caught: the form writes
   no mark, the webhook ignores it, the retry job writes none.
 
+### Rows 21, 22 and 39: no South Sudan content in Uganda's messages and screens (C8, C4, N-10)
+
+- **The quote resend (row 21).** The staff action that sends a quote again by WhatsApp (`wa_send_quote_pdf`) said
+  "Total: $1600000" and "call +211 921 443 006" when uCRM had no PDF, "— $2500000" in the PDF's caption, and
+  "Amount: $…" in the administrator's copy. On Uganda: the total in the tenant's currency (`UGX 1,600,000.00`), the
+  tenant's support number (`CustomerContact`, which falls back to the tenant profile), and the same currency in both
+  administrator copies. A total uCRM does not give is left out, not printed as a bare "$".
+- **The app pushes (row 21).** "Invoice … for $1600000 USD" and "Your payment of $250000 USD": the callers pass no
+  currency, so it was always USD. On Uganda: `UGX 1,600,000.00`. They go only where an FCM key is set.
+- **The ladder's WhatsApp (row 21).** All nine stages were signed "— DishNet Accounts · +211 921 443 009". On Uganda
+  they carry the accounts name and number the ladder's e-mails already print: `overdue_email_from_name` and
+  `overdue_email_phone` when set, otherwise the tenant profile (`+256 705 993 348`). The ladder runs only where billing
+  is postpaid. The credit note of row 21 was fixed with row 12.
+- **The settings screen (row 22, C4).** The e-mail card labelled uCRM's mailer "RECOMMENDED" and the plugin's own SMTP
+  "FALLBACK", on an install whose setup uses its own SMTP (`tools/email_setup.php` writes `use_ucrm_email=false`) and
+  whose uCRM mailer was reported failing. On Uganda the card marks the path this install is set to use as IN USE; with
+  uCRM's mailer on, the SMTP box keeps FALLBACK, which is then true. The badges show the saved setting.
+- **The ladder template screen (row 39, N-10, new).** Every field nobody has set showed South Sudan's value — the Juba
+  number and `accounts@dishnetafrica.com` — and Save stores whatever the form shows. So the first Save would have put
+  the Juba number into Uganda's configuration, where it outranks the tenant profile in every ladder e-mail, and now in
+  the ladder's WhatsApp too. On Uganda an unset field shows this install's value from the tenant profile, as the
+  e-mail builder already did. The preview (`overdue_email_preview`) filled its phone the same way and printed its own
+  Juba lines ("Call +211 921 443 002", "DishNet Africa Ltd · South Sudan", `www.dishnetafrica.com`); on Uganda it prints
+  the settings' or the profile's.
+- **Measured, not changed:** the screen's reply-to field (`overdue_email_reply_to`) is stored but read by no sender; the
+  ladder's Reply-To comes from the SMTP settings. Its default on Uganda is the accounts address, for consistency only.
+- **Tests:** `tests/test_notify_tenant_text.php`, **30**:
+  - the resend, through the real staff API against the fake uCRM and WhatsApp, with and without a PDF;
+  - the pushes and all nine ladder stages, through a probe inside the sandbox (`tests/fixtures/notify_text_probe.php`),
+    each push captured before it would reach FCM;
+  - both screens as a signed-in administrator, Save pressed without typing, and the preview;
+  - South Sudan unchanged in each; six weakened copies, each caught.
+
+  The South Sudan comparison (`test_staff_jobs_south_sudan.php`) now also opens the e-mail settings and the ladder
+  template screen, byte for byte, with one more indented-tag copy. One value is set aside, and only there: the settings
+  card prints the SMTP port, which in the sandbox is its own fake relay's, picked per run. The comparison reads that
+  port from the sandbox's settings and replaces it in that one field; any other number on the page still counts.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -417,7 +456,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–20, 24–29, 35–38 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–22, 24–29, 35–39 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

@@ -313,6 +313,33 @@ if (!function_exists('_oel_replace')) {
     }
 }
 
+if (!function_exists('_dunningWaSign')) {
+    /**
+     * 5.18.54 (docs/46 row 21, C8): the line that signs the ladder's WhatsApp messages. On Uganda it names this install's
+     * accounts team and number — those its ladder e-mails already print (overdue_email_from_name and
+     * overdue_email_phone, then the tenant profile). Everywhere else, and on any error, it is the South Sudan line these
+     * messages have always carried.
+     */
+    function _dunningWaSign(): string
+    {
+        $literal = '— DishNet Accounts · +211 921 443 009';
+        try {
+            $cfg = _dunningEffectiveConfig();
+            $dd  = $GLOBALS['dataDir'] ?? null;
+            $dd  = is_string($dd) ? $dd : null;
+            require_once __DIR__ . '/NotifyGate.php';
+            if (!NotifyGate::applies(NotifyGate::TENANT_TEXT, $cfg, $dd)) return $literal;
+            require_once __DIR__ . '/TenantProfile.php';
+            $prof  = TenantProfile::current($cfg, $dd)->dunningDefaults();
+            $name  = trim((string)($cfg['overdue_email_from_name'] ?? '')) ?: trim((string)($prof['overdue_email_from_name'] ?? '')) ?: 'DishNet Accounts';
+            $phone = trim((string)($cfg['overdue_email_phone'] ?? '')) ?: trim((string)($prof['overdue_email_phone'] ?? ''));
+            return $phone !== '' ? "— {$name} · {$phone}" : "— {$name}";
+        } catch (\Throwable $e) {
+            return $literal;
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // WHATSAPP MESSAGE BUILDER
 // ═══════════════════════════════════════════════════════════════════════════
@@ -327,7 +354,7 @@ if (!function_exists('_buildWhatsApp')) {
                  . "The good news — paying this amount restores your internet *automatically and immediately*. No need to call us.\n\n"
                  . "Pay online here:\n{$invoiceUrl}\n\n"
                  . "If you've already paid, simply send us your payment confirmation and we'll verify right away. 😊\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         // Stage 5 = Day 75 WhatsApp (service suspended ~75 days)
         if ($stage === 5) {
@@ -336,14 +363,14 @@ if (!function_exists('_buildWhatsApp')) {
                  . "We genuinely want to get you back online. Settling this balance is all it takes — your service reconnects automatically the moment payment is confirmed.\n\n"
                  . "Pay here: {$invoiceUrl}\n\n"
                  . "Or reply to this message and we'll help you sort it out. We're here for you.\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         // v4.21.66: Stage 9 = monthly recurring (Day 210+). Soft, non-pressured tone.
         if ($stage === 9) {
             return "Hi {$firstName},\n\n"
                  . "Just our monthly note about invoice *{$invNum}* — *{$amount}* outstanding ({$days} days).\n\n"
                  . "We understand things change. If you'd like to settle this — full or partial — or if there's something we should know, please reply or call us. No pressure, just keeping the door open.\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         // v4.21.67: All other stages now have proper WhatsApp copy (was generic
         // before). Email-only stages (1, 2, 4, 6, 7, 8) when sent via bulk-send
@@ -352,33 +379,33 @@ if (!function_exists('_buildWhatsApp')) {
             return "Hi {$firstName},\n\n"
                  . "Your DishNet service is suspended — invoice *{$invNum}* for *{$amount}* is outstanding ({$days} days).\n\n"
                  . "Pay online to restore service automatically:\n{$invoiceUrl}\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         if ($stage === 4) {
             return "Hi {$firstName},\n\n"
                  . "Friendly reminder — invoice *{$invNum}* for *{$amount}* has been overdue for *{$days} days*. Your DishNet service is suspended until this is settled.\n\n"
                  . "Settle here: {$invoiceUrl}\n\n"
                  . "Or reply if you'd like to discuss a payment plan.\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         if ($stage === 6 || $stage === 7) {
             return "Hi {$firstName},\n\n"
                  . "Invoice *{$invNum}* for *{$amount}* has been unpaid for *{$days} days*. We genuinely want to resolve this with you.\n\n"
                  . "If there's a reason — billing dispute, financial hardship, contact change — please reply so we can help. Otherwise, settle here: {$invoiceUrl}\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         if ($stage === 8) {
             return "Hi {$firstName},\n\n"
                  . "Long-overdue follow-up on invoice *{$invNum}* — *{$amount}* ({$days} days). We will keep a brief monthly check-in until resolved.\n\n"
                  . "Open to discussing payment plans or partial settlement: {$invoiceUrl}\n\n"
-                 . "— DishNet Accounts · +211 921 443 009";
+                 . _dunningWaSign();
         }
         // Catch-all
         return "Hi {$firstName},\n\n"
              . "We're reaching out about invoice *{$invNum}* for *{$amount}* ({$days} days overdue).\n\n"
              . "Pay here: {$invoiceUrl}\n\n"
              . "Or reply for help.\n\n"
-             . "— DishNet Accounts · +211 921 443 009";
+             . _dunningWaSign();
     }
 }
 

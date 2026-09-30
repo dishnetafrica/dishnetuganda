@@ -81,6 +81,21 @@ $globalFrom   = $cfg['overdue_email_from_name']  ?? 'DishNet Accounts';
 $globalReply  = $cfg['overdue_email_reply_to']    ?? 'accounts@dishnetafrica.com';
 $globalPhone  = $cfg['overdue_email_phone']       ?? '+211 921 443 009';
 $globalEmail  = $cfg['overdue_email_accounts_email'] ?? 'accounts@dishnetafrica.com';
+// 5.18.54 (docs/46 row 39, N-10): on Uganda a field nobody has set shows this install's own value — the one its ladder
+// e-mails already print, from the tenant profile — not South Sudan's. Saving this form stores whatever it shows, so the
+// first Save put the Juba number and addresses into Uganda's configuration, where they outrank the profile.
+require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+if (NotifyGate::applies(NotifyGate::TENANT_TEXT, is_array($cfg) ? $cfg : [], $dataDir ?? ($GLOBALS['dataDir'] ?? null))) {
+    $_n10 = [];
+    try {
+        require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
+        $_n10 = TenantProfile::current(is_array($cfg) ? $cfg : [], $dataDir ?? ($GLOBALS['dataDir'] ?? null))->dunningDefaults();
+    } catch (\Throwable $e) { $_n10 = []; }
+    $globalFrom  = $cfg['overdue_email_from_name']      ?? ($_n10['overdue_email_from_name'] ?? $globalFrom);
+    $globalReply = $cfg['overdue_email_reply_to']       ?? ($_n10['overdue_email_accounts_email'] ?? $globalReply);
+    $globalPhone = $cfg['overdue_email_phone']          ?? ($_n10['overdue_email_phone'] ?? $globalPhone);
+    $globalEmail = $cfg['overdue_email_accounts_email'] ?? ($_n10['overdue_email_accounts_email'] ?? $globalEmail);
+}
 
 // ── Handle save ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['tpl_action'] ?? '') === 'save') {

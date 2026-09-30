@@ -65,6 +65,12 @@ function norm_(string $x, SjSandbox $s, bool $page = false): string
     $x = (string)preg_replace('/name="_csrf" value="[^"]*"/', 'name="_csrf" value="<csrf>"', $x);
     $x = (string)preg_replace('/\b\d+[smhd] ago\b/', '<ago>', $x);
     $x = (string)preg_replace('/"cache_age_sec":\d+/', '"cache_age_sec":<n>', $x);
+    // The sandbox's own mail relay listens on a port picked per run, and the e-mail settings card prints it: that
+    // number, in that field, and nothing else.
+    $mail = json_decode((string)@file_get_contents($s->data . '/email_settings.json'), true);
+    if (is_array($mail) && (int)($mail['smtp_port'] ?? 0) > 0) {
+        $x = (string)preg_replace('/(name="smtp_port"[^>]*\bvalue=")' . (int)$mail['smtp_port'] . '"/', '${1}<relay-port>"', $x);
+    }
     return (string)preg_replace('/\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?\b/', '<clock>', $x);
 }
 
@@ -100,7 +106,9 @@ $day = function (SjSandbox $s): array {
     foreach (['admin' => ['the Staff page' => 'tab=retailers', '＋ New Job / My Jobs' => 'tab=scheduling', 'Bulk Dispatch' => 'tab=bulk_dispatch',
                           'WA Events' => 'tab=engage_failed_queue&fqsub=crm_events', 'the Message Log' => 'tab=whatsapp&subtab=log', 'the dashboard' => 'tab=dashboard',
                           // 5.18.54 (docs/46 rows 9, 27, 29): pages the notification fixes touched on Uganda only
-                          'the Event Map' => 'tab=whatsapp&subtab=events', 'the AI setup' => 'tab=wa_ai_setup', 'the help page' => 'tab=faq'],
+                          'the Event Map' => 'tab=whatsapp&subtab=events', 'the AI setup' => 'tab=wa_ai_setup', 'the help page' => 'tab=faq',
+                          // 5.18.54 (docs/46 rows 22, 39): the e-mail settings card and the ladder template screen
+                          'the e-mail settings' => 'tab=settings&stab=system', 'the ladder templates' => 'tab=overdue_email_tpl'],
               'tech'  => ['My Jobs' => 'tab=scheduling']] as $who => $pages) {
         foreach ($pages as $label => $qs) $o["page {$label}, as {$who}"] = norm_($s->page($who, 'page=dashboard&' . $qs), $s, true);
     }
@@ -162,6 +170,9 @@ if ($withMutants) {
          'six spaces leaked into the South Sudan AI setup page'],
         ['tabs/help/faq.php', "<?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;", "    <?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;",
          'four spaces leaked into the South Sudan help page'],
+        ['tabs/admin/settings.php', "<?php endif; ?>\n        </label>\n        <div style=\"font-size:12px;color:#666;margin:4px 0 10px;\">\n            Reads SMTP",
+         "        <?php endif; ?>\n        </label>\n        <div style=\"font-size:12px;color:#666;margin:4px 0 10px;\">\n            Reads SMTP",
+         'eight spaces leaked into the South Sudan e-mail settings'],
     ];
     foreach ($MUTANTS as [$rel, $o_, $n_, $label]) {
         [$tmp, $n] = sj_weakened_copy($root, $rel, $o_, $n_);
