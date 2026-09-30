@@ -1,0 +1,8 @@
+dishnet-hybrid-sudan/lib/EvoWebhookGuard.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/lib/EvoWebhookGuard.php
+dishnet-hybrid-sudan/lib/JobNotifier.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/lib/JobNotifier.php
+dishnet-hybrid-sudan/lib/NotificationService.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/lib/NotificationService.php
+dishnet-hybrid-sudan/lib/PluginLog.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/lib/PluginLog.php
+dishnet-hybrid-sudan/tests/fixtures/fake_evo_server.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/tests/fixtures/fake_evo_server.php
+dishnet-hybrid-sudan/tests/fixtures/staff_jobs_sandbox.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/tests/fixtures/staff_jobs_sandbox.php
+dishnet-hybrid-sudan/tests/test_job_records_race.php: No syntax errors detected in /home/user/dishnetuganda/dishnet-hybrid-sudan/tests/test_job_records_race.php
+8.1.34

@@ -2298,3 +2298,27 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   `scripts/` only; the plugin is unchanged.
 - Rehearsed twice, identically: 121 assertions over twenty-two scenarios, and nineteen weakened copies
   caught.
+
+## 5.18.53 — message 2's records saved, and a line whenever a record cannot be; built and rehearsed, not deployed (docs/44 §16.29)
+
+- **The change, plugin commit `6b71ea6`,** on the operator's approval of §16.28's items 1 to 3:
+  - **the fix:** the job notifier's claim ends its read before its COMMIT, in `accepted()` and in `observe()`. Two
+    lines, `$st->closeCursor();`;
+  - **the log:** when the Message Log row, the failure-queue row, the Inbox row, the echo claim or the job history row
+    cannot be saved, one line goes to the plugin log (`data/plugin.log`, the log uCRM shows on the plugin's page): the
+    record, its table, the event or job, and the error. Never a number, an address or a text. The send is never
+    undone;
+  - **the test:** `test_job_records_race.php` (46) forces 28 September's race through the real staff API and webhook.
+    With the fix every record is saved; 5.18.52 loses them and says nothing; with the fix taken out, four lines say
+    which were lost. Twelve weakened copies are each caught.
+- **Not in it:** F-WT1 and `whatsapp_note` on the job page (not approved).
+- **South Sudan:** nothing sent, shown or stored changes. A record that cannot be saved now has its line there too.
+- **PHP 8.1.34 (the server's):** every changed PHP file passes `php -l`, and the helper and the open read behave as
+  under 8.4.19.
+- **The suite, twice on `6b71ea6`:** 227 files, 10,764 passed, 0 failed, identical file by file. Against 5.18.52 only
+  the new file differs.
+- **`scripts/deploy-5.18.53.sh` (`0045253`).** It goes over 5.18.52 only, and installs `6b71ea6` by its hash.
+  New: each changed file gets the time of the copy (§16.23), and R12 checks those times and OPcache's settings; R13
+  reads the plugin log's *"not saved"* lines since the deploy. Rehearsed 198/198 twice; 36 weakened copies caught.
+  The rollback is a separate command, printed on its own.
+- **Not deployed.** Next: the deploy command, then the Accept test (§16.27).

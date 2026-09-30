@@ -1,0 +1,6 @@
+PHP 8.1
+path: data/plugin.log beside the code
+mask: SQLSTATE[23000]: 19 refused: <number> <e-mail> second line ?
+line: [<time>] [records] not saved: the Message Log row (notification_audit_log), event job_assigned — SQLSTATE[HY000]: General error: 5 database is locked
+left open (5.18.52)        journal wal · the next write: NOT saved: SQLSTATE[HY000]: General error: 5 database is locked (at once)
+closeCursor() (5.18.53)    journal wal · the next write: saved (at once)
