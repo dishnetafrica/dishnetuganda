@@ -37,12 +37,13 @@ final class NotifyGate
     public const RETRIES        = 'retries';          // 30: bounded automatic retries (M4)
     public const EVO_RETRY      = 'evo_retry';        // 31: no automatic resend after a timeout (N-1)
     public const WATCHDOG       = 'watchdog';         // 32: jobs stopped, failures piling up
+    public const MAIL_CLASS     = 'mail_class';       // 40: the ladder's SMTP sender loads the class it calls (N-11)
 
     public const ALL = [
         self::PAYMENT_FLOW, self::RECEIPT_ONCE, self::REMINDERS, self::EVENT_MAP, self::QUEUE_ADMIN,
         self::ACTION_LINKS, self::CREDIT_NOTE, self::ACTIVATION, self::PHONE_FORM, self::EVENT_ONCE,
         self::DRAFT_IDENTITY, self::QUOTE_ONCE, self::KYC_QUOTE_SEND, self::KYC_WELCOME, self::WINBACK_OPTOUT, self::TENANT_TEXT,
-        self::LADDER_RECORD, self::STAFF_SIDE, self::RETRIES, self::EVO_RETRY, self::WATCHDOG,
+        self::LADDER_RECORD, self::STAFF_SIDE, self::RETRIES, self::EVO_RETRY, self::WATCHDOG, self::MAIL_CLASS,
     ];
 
     /** Fixes approved for every tenant, South Sudan included. Empty until approved (docs/46 §E). */

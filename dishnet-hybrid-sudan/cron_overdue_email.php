@@ -460,6 +460,22 @@ foreach ($allInvoices as $inv) {
             $amtDue, $daysOverdue, $ok ? 1 : 0, $ok ? null : $error,
         ]);
     } catch (\Throwable $e) {}
+    // 5.18.54 (docs/46 row 23, D-5): on Uganda a stage that failed once and then went is recorded as sent. For stages
+    // 1-8 the INSERT above is ignored once a row exists — the failed attempt's — so the success was never written, the
+    // "already sent" check never found one, and the stage went again on every run.
+    if ($ok && (int)$matchedStage['id'] !== 9) {
+        require_once __DIR__ . '/lib/NotifyGate.php';
+        if (NotifyGate::applies(NotifyGate::LADDER_RECORD, is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+            try {
+                $pdo->prepare("UPDATE overdue_email_log SET success = 1, error = NULL, sent_at = datetime('now'),
+                                      days_overdue = ?, amount_due = ?
+                                WHERE invoice_number = ? AND stage = ? AND success = 0")
+                    ->execute([$daysOverdue, $amtDue, $invNum, $matchedStage['id']]);
+            } catch (\Throwable $e) {
+                olog("could not record that stage {$matchedStage['id']} went for {$invNum}: " . $e->getMessage());
+            }
+        }
+    }
 
     usleep(500000);
 }

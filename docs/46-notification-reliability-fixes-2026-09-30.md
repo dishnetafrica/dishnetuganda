@@ -97,6 +97,7 @@ administrator side, and reliability.
 | 37 | **New, N-7** (found while building row 16): `client.invite` shares D-6's block, so inviting a customer to uCRM's client zone suspends their own identity mailbox | P2 | `webhook.php` | With D-6: only a deleted or archived client is suspended | an invitation touches no mailbox |
 | 38 | **New, N-9** (found while building row 17): a quote made in uCRM gets `quote.add`'s WhatsApp and, within five minutes, the quote cron's too. The cron's list of sent quotes, which the webhook also checks, sits in `quote_wa_state.json` and never reads back (row 35), and the webhook never took the claim the cron honours | P2 | `webhook.php` | On Uganda every quotation takes the claim (`QuoteWaLedger`) before it is sent, as the cron does | a quote made in uCRM: one WhatsApp, the webhook's; the cron finds the claim |
 | 39 | **New, N-10** (found while building row 21): the dunning template screen shows South Sudan's number and addresses in every field nobody has set, and Save stores what the form shows — so the first Save puts the Juba number into Uganda's configuration, where it outranks the tenant profile in every ladder e-mail. Its preview printed Juba's number, company line and website too | P2 | `tabs/admin/overdue_email_tpl.php`, `includes/api/api_crm_misc.php` | On Uganda an unset field shows this install's value (its settings, then the tenant profile), as the e-mail builder already does; the preview prints what the e-mail prints | a Save without typing stores Uganda's number; the preview shows no +211 and no South Sudan line |
+| 40 | **New, N-11** (found while building row 23): since 11 September (`4c3edb6`) the ladder's own SMTP sender announces itself with `MailService::ehloName()`, and nothing on the ladder's path loads `MailService`. `master.php` runs its jobs inside one process, so the ladder has the class only if something earlier in that process loaded it. From `main.php`'s tick, unless an earlier job happened to load it, every ladder e-mail fails after connecting — `Class "MailService" not found` — and is logged as a failure. The EHLO test loaded the class itself, so it never saw this | P2 | `lib/OverdueDunningHelpers.php` | On Uganda the sender loads the class it calls | the cron run on its own relays the e-mail. **Whether production's Monday runs failed this way is not known**: its log answers it (§G) |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -390,6 +391,52 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   card prints the SMTP port, which in the sandbox is its own fake relay's, picked per run. The comparison reads that
   port from the sandbox's settings and replaces it in that one field; any other number on the page still counts.
 
+### Rows 23 and 40: the overdue ladder sends from its own run, and records what went (D-5, N-11)
+
+- **The class the sender calls (row 40, N-11, new).** Row 23's test sent the ladder's first e-mail through a relay
+  that answers, and it failed: `Class "MailService" not found`.
+  - Since 11 September (`4c3edb6`, the EHLO fix) the ladder's own SMTP sender (`_rawSmtp` in
+    `lib/OverdueDunningHelpers.php`) announces itself with `MailService::ehloName()`.
+  - Nothing on the ladder's path loads `MailService`: not the cron, not its helpers, not `master.php`. A walk of
+    every top-level `require` found that neither `main.php` nor any job scheduled before the ladder loads it either.
+  - `master.php` includes its jobs in its own process. The ladder therefore has the class only when something
+    earlier in that process loaded it: a job that happened to send an e-mail first, or a cycle started from
+    `public.php`, which loads it.
+  - From `main.php`'s tick, the plugin's own five-minute run, a ladder e-mail therefore fails after connecting,
+    and is logged as a failure, unless an earlier job in that run happened to load the class.
+  - The EHLO test (`tests/test_ehlo_name.php`) loads `MailService` itself and reads the senders only as text, so it
+    could not see this.
+
+  On Uganda the sender now loads the class it calls. Whether production's Monday runs failed this way is **not
+  known**; `overdue_email_log` answers it (§G).
+- **The record (row 23, D-5).**
+  - For stages 1–8 the log row is written with `INSERT OR IGNORE` under a unique (invoice, stage). When the first
+    attempt fails, its row says `success = 0`.
+  - The attempt that later goes is ignored, so the "already sent" check never finds a success. The stage then goes
+    again at every weekly run until its window closes; stage 1's window (days 14–30) holds up to three Mondays.
+  - On Uganda a success now updates that row: `success = 1`, no error, and the time and amount of the send.
+  - A failure never does (the update requires the send to have gone). Stage 9, which is monthly, uses both channels
+    and keeps its own rows, is untouched.
+- **Measured, not changed:**
+  - A WhatsApp stage (3, 5) that fails is not retried: its claim is taken before the send, so every later run skips
+    it (`wa_dedup`). Which failures may be retried is row 30's (M4).
+  - The manual send from the overdue workbench runs inside `public.php`, which loads the class, so row 40 does not
+    affect it.
+  - The 07:00 cashbook report has the same missing class (§D, N-12).
+- **Tests:** `tests/test_notify_ladder_record.php`, **12**. The real cron runs three times, against the fake uCRM and
+  the fake relay: with the relay down, with it up, and again.
+  - Uganda, the cron on its own: run 1 fails and its row says so. Run 2 relays one message, and its row says it
+    went. Run 3 sends nothing and skips the stage as sent.
+  - South Sudan on its own: run 2 fails on the missing class, as in 5.18.53.
+  - South Sudan with the class loaded first, as from `public.php` (`tests/fixtures/run_with_mail_class.php`): run 3
+    sends the stage again, as in 5.18.53.
+  - Three weakened copies, each caught: the success not recorded, a failure recorded as a success, and the class
+    not loaded.
+
+  The fake relay (`tests/fixtures/fake_smtp_server.php`) now accepts `AUTH LOGIN`, which the ladder's sender always
+  sends. It still does not offer it, so a client that authenticates only when offered behaves as before. It records
+  the user name, never the password.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -446,6 +493,7 @@ the unprivileged `nobody` user, and that copy sat in a private directory. The fi
 | D1, D5 (uCRM's e-mail), D9 (uCRM's notice) | uCRM may send its own copy | Ownership decisions O1–O5, after V1–V3. **uCRM's notifications are not switched off by this work** |
 | G10, S-7's screen | A WhatsApp broadcast screen | A new feature and a decision |
 | G6 | Uganda-branded uCRM templates | Only if uCRM keeps any client e-mail after O1–O3 |
+| N-12 | The 07:00 cashbook report (`lib/DailyReportService.php`, sent from `main.php`) makes the same `MailService::ehloName()` call without loading the class, and catches only `Exception`, which a missing class is not. Measured by reading, and by loading exactly what `main.php` loads before it: the class is absent. So from `main.php` the report connects, fails, and — failing before its day is marked — tries again at every tick until midnight | It is the accounts team's cashbook report, not a customer notification, and this work changes no reporting. **Recommended as its own one-line change** (the same class load), for both tenants; its log line `Daily report ERROR` says whether it has been failing |
 
 ## §E Decisions for you (none needed to review this work)
 
@@ -456,7 +504,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–22, 24–29, 35–39 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–29, 33–40 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

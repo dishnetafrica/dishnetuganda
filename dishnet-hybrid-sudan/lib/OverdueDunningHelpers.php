@@ -440,6 +440,16 @@ if (!function_exists('_sendEmail')) {
 if (!function_exists('_rawSmtp')) {
     function _rawSmtp(array $s, string $to, string $message, string &$error): bool
     {
+        // 5.18.54 (docs/46 row 40, N-11): the EHLO below calls MailService::ehloName() (since 4c3edb6), and nothing on
+        // the ladder's own path loads MailService. Run from main.php's tick, an e-mail failed here after connecting —
+        // Class "MailService" not found — unless an earlier job in the same process happened to load it.
+        if (!class_exists('MailService')) {
+            $dd = $GLOBALS['dataDir'] ?? null;
+            require_once __DIR__ . '/NotifyGate.php';
+            if (NotifyGate::applies(NotifyGate::MAIL_CLASS, _dunningEffectiveConfig(), is_string($dd) ? $dd : null)) {
+                require_once __DIR__ . '/MailService.php';
+            }
+        }
         try {
             $sock = @fsockopen(($s['enc'] === 'ssl' ? 'ssl://' : '') . $s['host'], $s['port'], $errno, $errstr, 15);
             if (!$sock) { $error = "Connect failed: {$errstr}"; return false; }

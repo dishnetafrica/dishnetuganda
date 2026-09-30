@@ -16,7 +16,9 @@
  *
  * Plaintext only, no AUTH offered, accepts every sender. A real relay
  * refusing a sender is a different test; this one answers "what did the
- * plugin actually say".
+ * plugin actually say". A client that sends AUTH LOGIN unasked, as the
+ * dunning ladder's own sender does, is accepted with any credentials; the
+ * user name is recorded, the password is not.
  */
 declare(strict_types=1);
 
@@ -47,8 +49,20 @@ while (true) {
     $session = ['ehlo' => '', 'mail_from' => '', 'rcpt_to' => [], 'data' => '', 'commands' => []];
     fwrite($c, "220 fake.smtp.test ESMTP ready\r\n");
 
-    $inData = false; $body = '';
+    $inData = false; $body = ''; $auth = '';
     while (($line = fgets($c, 4096)) !== false) {
+        if ($auth !== '') {
+            // The two lines that answer an AUTH LOGIN prompt: kept out of the commands, so no password is recorded.
+            if ($auth === 'user') {
+                $session['auth_user'] = (string)base64_decode(rtrim($line, "\r\n"), true);
+                $auth = 'pass';
+                fwrite($c, "334 UGFzc3dvcmQ6\r\n");
+            } else {
+                $auth = '';
+                fwrite($c, "235 2.7.0 Authentication successful\r\n");
+            }
+            continue;
+        }
         if ($inData) {
             if (rtrim($line, "\r\n") === '.') {
                 $inData = false;
@@ -86,6 +100,13 @@ while (true) {
             break;
         } elseif ($verb === 'RSET') {
             fwrite($c, "250 2.0.0 Ok\r\n");
+        } elseif ($verb === 'AUTH') {
+            // AUTH LOGIN, which the dunning ladder's own sender always sends (lib/OverdueDunningHelpers.php _rawSmtp):
+            // any credentials are accepted. Never advertised, so a client that authenticates only when offered still
+            // goes straight to MAIL FROM.
+            $session['auth'] = strtoupper(trim(substr($cmd, 5)));
+            if ($session['auth'] === 'LOGIN') { $auth = 'user'; fwrite($c, "334 VXNlcm5hbWU6\r\n"); }
+            else fwrite($c, "504 5.5.4 Unrecognized authentication type\r\n");
         } else {
             fwrite($c, "502 5.5.2 Not implemented\r\n");
         }
