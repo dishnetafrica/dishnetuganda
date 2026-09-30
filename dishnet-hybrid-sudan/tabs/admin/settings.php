@@ -1252,6 +1252,11 @@ $_emUcrm = file_exists($_emUcrmJson) ? (json_decode((string)@file_get_contents($
 $_emApiUrl = trim($_emUcrm['ucrmLocalUrl'] ?? $_emUcrm['ucrmPublicUrl'] ?? '');
 $_emAppKey = trim($_emUcrm['pluginAppKey'] ?? '');
 $_emUcrmConnected = ($_emApiUrl !== '' && $_emAppKey !== '');
+// 5.18.54 (docs/46 row 22, C4): on Uganda the two mail paths are labelled by what this install is set to use, not
+// ranked. "RECOMMENDED" sent people towards uCRM's mailer on an install that sends through its own mail server.
+require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+$_c4Ug   = NotifyGate::applies(NotifyGate::TENANT_TEXT, is_array($config ?? null) ? $config : [], $dataDir ?? null);
+$_c4Ucrm = !empty($eSettings['use_ucrm_email']);
 ?>
 <div class="st-card">
     <div class="st-card-title"> Email Notifications</div>
@@ -1271,7 +1276,13 @@ $_emUcrmConnected = ($_emApiUrl !== '' && $_emAppKey !== '');
     <div style="border:1px solid #10B981;border-radius:8px;padding:14px;margin-top:12px;background:#F0FDF4;">
         <label style="font-size:11px;font-weight:700;color:#059669;letter-spacing:0.04em;">
             📨 USE UCRM MAILER
+<?php if ($_c4Ug): ?>
+<?php if ($_c4Ucrm): ?>
+            <span style="background:#10B981;color:#fff;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">IN USE</span>
+<?php endif; ?>
+<?php else: ?>
             <span style="background:#10B981;color:#fff;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">RECOMMENDED</span>
+<?php endif; ?>
         </label>
         <div style="font-size:12px;color:#666;margin:4px 0 10px;">
             Reads SMTP settings from UCRM (System &rarr; Mailer). No extra config needed &mdash; uses the same email setup your CRM already has.
@@ -1291,7 +1302,11 @@ $_emUcrmConnected = ($_emApiUrl !== '' && $_emAppKey !== '');
     <div id="emailSmtpBlock" style="border:1px solid #fbbf24;border-radius:8px;padding:14px;margin-top:12px;background:#FFFBEB;<?= !empty($eSettings['use_ucrm_email']) ? 'display:none;' : '' ?>">
         <label style="font-size:11px;font-weight:700;color:#92400e;letter-spacing:0.04em;">
             📡 SMTP SETTINGS
+<?php if ($_c4Ug && !$_c4Ucrm): ?>
+            <span style="background:#10B981;color:#fff;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">IN USE</span>
+<?php else: ?>
             <span style="background:#f59e0b;color:#fff;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">FALLBACK</span>
+<?php endif; ?>
         </label>
         <div style="font-size:12px;color:#666;margin:4px 0 10px;">
             Used if UCRM email is disabled or fails. PHP's built-in mail() doesn't work in Docker.

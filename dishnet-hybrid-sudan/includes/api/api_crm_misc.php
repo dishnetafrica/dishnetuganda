@@ -1317,6 +1317,21 @@ if ($act === 'overdue_email_preview' && $met === 'POST') {
 
     $globalPhone = $cfg['overdue_email_phone']           ?? '+211 921 443 002';
     $globalEmail = $cfg['overdue_email_accounts_email']  ?? 'accounts@dishnetafrica.com';
+    // 5.18.54 (docs/46 row 39, N-10): on Uganda the preview shows what the ladder e-mail itself would print — this
+    // install's number, address, company line and website, from its settings and then the tenant profile — not Juba's.
+    require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+    $_n10Ug = NotifyGate::applies(NotifyGate::TENANT_TEXT, is_array($cfg) ? $cfg : [], $GLOBALS['dataDir'] ?? null);
+    if ($_n10Ug) {
+        $_n10 = [];
+        try {
+            require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
+            $_n10 = TenantProfile::current(is_array($cfg) ? $cfg : [], $GLOBALS['dataDir'] ?? null)->dunningDefaults();
+        } catch (\Throwable $e) { $_n10 = []; }
+        $globalPhone = $cfg['overdue_email_phone']          ?? ($_n10['overdue_email_phone'] ?? $globalPhone);
+        $globalEmail = $cfg['overdue_email_accounts_email'] ?? ($_n10['overdue_email_accounts_email'] ?? $globalEmail);
+        $_n10Line    = (string)($cfg['overdue_email_company_line'] ?? ($_n10['overdue_email_company_line'] ?? 'DishNet Africa Ltd'));
+        $_n10Web     = (string)($cfg['overdue_email_website'] ?? ($_n10['overdue_email_website'] ?? ''));
+    }
 
     $tpl = [
         'subject' => $body['subject'] ?? '',
@@ -1488,6 +1503,13 @@ body{background:#f5f5f5;font-family:Helvetica,Arial,sans-serif;}
 </div>
 </body></html>';
 
+    if ($_n10Ug) {   // 5.18.54 (docs/46 row 39, N-10): the frame's own Juba lines, as the e-mail itself prints them
+        $html = str_replace(
+            ['Call +211 921 443 002', 'DishNet Africa Ltd &middot; South Sudan', 'www.dishnetafrica.com', '>dishnetafrica.com<'],
+            ['Call ' . htmlspecialchars($globalPhone), htmlspecialchars($_n10Line), htmlspecialchars($_n10Web),
+             '>' . htmlspecialchars((string)preg_replace('#^www\.#', '', $_n10Web)) . '<'],
+            $html);
+    }
     $ok2(['html' => $html, 'subject' => $rep($tpl['subject'])]);
 }
 
@@ -4276,8 +4298,21 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
                         'invoice_url'   => $invoiceUrl,
                         '_raw_message'  => $waMsg,
                     ]);
-                    $waOk = true;
-                    $sentWa++;
+                    // 5.18.54 (docs/46 row 28, S-6): send() does not throw when WhatsApp refuses, so on Uganda the count
+                    // reads the send's own result — "sent" is what WhatsApp accepted; a refusal is counted as failed, and
+                    // the message waits in the Failed Queue as every failed send does. send() returns before sendVia()
+                    // on an empty text, leaving the previous send's result in place: that case is read here, not there.
+                    require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+                    $_s6 = !NotifyGate::applies(NotifyGate::STAFF_SIDE, is_array($cfg) ? $cfg : [], $dataDir ?? null)
+                         ? ['success' => true]
+                         : (trim((string)$waMsg) === '' ? ['success' => false, 'error' => 'no message text'] : $notify->lastSendResult());
+                    if (!empty($_s6['success'])) {
+                        $waOk = true;
+                        $sentWa++;
+                    } else {
+                        $waOk = false;
+                        $errors[] = ['invoice_number' => $invNum, 'error' => 'wa_failed: ' . (string)($_s6['error'] ?? 'not sent')];
+                    }
                 } catch (\Throwable $e) {
                     $waOk = false;
                     $errors[] = ['invoice_number' => $invNum, 'error' => 'wa_failed: ' . $e->getMessage()];

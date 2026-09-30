@@ -56,6 +56,8 @@ function norm_(string $x, SjSandbox $s, bool $page = false): string
     }
     if ($ver[$s->root] !== '') $x = (string)preg_replace('/\bv' . preg_quote($ver[$s->root], '/') . '\b/', 'v<version>', $x);
     foreach ($s->tok as $k => $t) $x = str_replace($t, "<tok:{$k}>", $x);
+    // The sandbox's own directories, which a page may print (the AI setup page names the flyer's path): per run.
+    $x = str_replace([$s->data, $s->plug], ['<data>', '<plug>'], $x);
     foreach (['crm' => $s->crm, 'evo' => $s->evo, 'plugin' => (string)preg_replace('#/public\.php$#', '', $s->base)] as $k => $a) {
         $x = str_replace([$a, str_replace('/', '\/', $a)], "<{$k}>", $x);
     }
@@ -63,6 +65,12 @@ function norm_(string $x, SjSandbox $s, bool $page = false): string
     $x = (string)preg_replace('/name="_csrf" value="[^"]*"/', 'name="_csrf" value="<csrf>"', $x);
     $x = (string)preg_replace('/\b\d+[smhd] ago\b/', '<ago>', $x);
     $x = (string)preg_replace('/"cache_age_sec":\d+/', '"cache_age_sec":<n>', $x);
+    // The sandbox's own mail relay listens on a port picked per run, and the e-mail settings card prints it: that
+    // number, in that field, and nothing else.
+    $mail = json_decode((string)@file_get_contents($s->data . '/email_settings.json'), true);
+    if (is_array($mail) && (int)($mail['smtp_port'] ?? 0) > 0) {
+        $x = (string)preg_replace('/(name="smtp_port"[^>]*\bvalue=")' . (int)$mail['smtp_port'] . '"/', '${1}<relay-port>"', $x);
+    }
     return (string)preg_replace('/\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?\b/', '<clock>', $x);
 }
 
@@ -96,9 +104,28 @@ $day = function (SjSandbox $s): array {
     $o['the staff table afterwards'] = norm_(json_encode($rows, JSON_UNESCAPED_UNICODE), $s);
     $s->login('tech', 'tech@example.test', 'sj-password-1');
     foreach (['admin' => ['the Staff page' => 'tab=retailers', '＋ New Job / My Jobs' => 'tab=scheduling', 'Bulk Dispatch' => 'tab=bulk_dispatch',
-                          'WA Events' => 'tab=engage_failed_queue&fqsub=crm_events', 'the Message Log' => 'tab=whatsapp&subtab=log', 'the dashboard' => 'tab=dashboard'],
+                          'WA Events' => 'tab=engage_failed_queue&fqsub=crm_events', 'the Message Log' => 'tab=whatsapp&subtab=log', 'the dashboard' => 'tab=dashboard',
+                          // 5.18.54 (docs/46 rows 9, 27, 29): pages the notification fixes touched on Uganda only
+                          'the Event Map' => 'tab=whatsapp&subtab=events', 'the AI setup' => 'tab=wa_ai_setup', 'the help page' => 'tab=faq',
+                          // 5.18.54 (docs/46 rows 22, 39): the e-mail settings card and the ladder template screen
+                          'the e-mail settings' => 'tab=settings&stab=system', 'the ladder templates' => 'tab=overdue_email_tpl'],
               'tech'  => ['My Jobs' => 'tab=scheduling']] as $who => $pages) {
         foreach ($pages as $label => $qs) $o["page {$label}, as {$who}"] = norm_($s->page($who, 'page=dashboard&' . $qs), $s, true);
+    }
+    // 5.18.54 (docs/46 row 30): the Failed Queue list and the WA Inbox, which the automatic retry touched on Uganda only.
+    // Two failed rows, so that each row's cells are drawn: one WhatsApp refused, one that may have been sent.
+    $s->q("CREATE TABLE IF NOT EXISTS notification_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT NOT NULL DEFAULT 'support',
+           phone TEXT NOT NULL, message TEXT NOT NULL, event TEXT DEFAULT NULL, vars TEXT DEFAULT NULL, status TEXT NOT NULL DEFAULT 'failed',
+           http_code INTEGER DEFAULT NULL, error TEXT DEFAULT NULL, attempts INTEGER NOT NULL DEFAULT 1, last_attempt_at TEXT NOT NULL,
+           retry_at TEXT DEFAULT NULL, retry_by TEXT DEFAULT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+    foreach ([['ops_payment_received', 'Not sent — Evolution refused it [HTTP 400 on POST /message/sendText/sj-account]'],
+              ['event_client_add', 'May have been sent — no answer from Evolution: timeout']] as $i => [$ev, $err]) {
+        $s->q("INSERT INTO notification_queue (sender, phone, message, event, status, attempts, error, last_attempt_at, created_at)
+               VALUES ('accounts', ?, ?, ?, 'failed', 1, ?, '2026-09-30 09:00:00', '2026-09-30 06:00:00')",
+              ['21190000020' . $i, "SJ-FAILED-{$i}", $ev, $err]);
+    }
+    foreach (['the Failed Queue' => 'tab=engage_failed_queue&fqsub=queue', 'the WA Inbox' => 'tab=wa_inbox'] as $label => $qs) {
+        $o["page {$label}, as admin"] = norm_($s->page('admin', 'page=dashboard&' . $qs), $s, true);
     }
     return $o;
 };
@@ -131,6 +158,9 @@ foreach ($old['extra'] as $k => $a) {
     is_($a === $b, $k . ' (' . strlen($b) . ' bytes)', $a === $b ? '' : where_($a, $b));
 }
 is_(array_keys($old['extra']) === array_keys($new['extra']), 'and nothing on one side is missing from the other');
+$fqPage = $new['extra']['page the Failed Queue, as admin'] ?? '';
+is_(substr_count($fqPage, 'SJ-FAILED-') >= 2 && strpos($fqPage, 'fq-status-failed') !== false,
+    'control: the Failed Queue page is the real list, showing both seeded rows');
 $staffPage = $new['extra']['page the Staff page, as admin'] ?? '';
 is_(strlen($staffPage) > 50000 && strpos($staffPage, 'Sandbox Tech Renamed') !== false, 'control: the Staff page is the real page, showing the edit just made');
 $oldStaff = $old['extra']['page the Staff page, as admin'] ?? '';
@@ -151,6 +181,21 @@ if ($withMutants) {
          "    if (true) {", 'the Uganda edit rules applied on South Sudan'],
         ['includes/api/api_support.php', "        if (StaffJobsGate::applies(is_array(\$config ?? null) ? \$config : [], \$dataDir ?? null)) {",
          "        if (true) {", 'the Uganda engineer list served on South Sudan'],
+        // 5.18.54 (docs/46 rows 9, 27, 29): each page the notification fixes touched, one indented control tag each
+        ['tabs/engage/whatsapp.php', "<?php if (!\$_emUnused): ?>\n        <form method=\"POST\" id=\"waSaveForm\"",
+         "        <?php if (!\$_emUnused): ?>\n        <form method=\"POST\" id=\"waSaveForm\"", 'eight spaces leaked into the South Sudan Message Log'],
+        ['tabs/engage/wa_ai_setup.php', "<?php\n        // 5.18.54 (docs/46 row 27, S-5)", "      <?php\n        // 5.18.54 (docs/46 row 27, S-5)",
+         'six spaces leaked into the South Sudan AI setup page'],
+        ['tabs/help/faq.php', "<?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;", "    <?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;",
+         'four spaces leaked into the South Sudan help page'],
+        // 5.18.54 (docs/46 row 30): the Failed Queue's Uganda-only style and status cell
+        ['tabs/engage/failed_queue.php', "<?php if(\$fqUg):?>.fq-status-exhausted{background:#ef444422;color:#fca5a5}\n<?php endif;?>\n",
+         ".fq-status-exhausted{background:#ef444422;color:#fca5a5}\n", 'the exhausted style printed on South Sudan'],
+        ['tabs/engage/failed_queue.php', "?></span><?php if(\$fqUg && in_array(", "?></span>\n<?php if(\$fqUg && in_array(",
+         'a line break leaked into each South Sudan queue row'],
+        ['tabs/admin/settings.php', "<?php endif; ?>\n        </label>\n        <div style=\"font-size:12px;color:#666;margin:4px 0 10px;\">\n            Reads SMTP",
+         "        <?php endif; ?>\n        </label>\n        <div style=\"font-size:12px;color:#666;margin:4px 0 10px;\">\n            Reads SMTP",
+         'eight spaces leaked into the South Sudan e-mail settings'],
     ];
     foreach ($MUTANTS as [$rel, $o_, $n_, $label]) {
         [$tmp, $n] = sj_weakened_copy($root, $rel, $o_, $n_);

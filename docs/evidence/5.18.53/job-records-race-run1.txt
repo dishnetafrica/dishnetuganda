@@ -1,0 +1,75 @@
+=== test_job_records_race.php ===
+
+1. The Accept, with uCRM's notice of it arriving while message 2 is with WhatsApp
+  ok   message 1 went first, through the notifier: the job's record exists at version 1, as on the server
+  ok   the Accept reached WhatsApp, and WhatsApp holds message 2
+  ok   the Accept's claim was committed before the send (version 2)
+  ok   meanwhile uCRM's job.edit went through the webhook and wrote the job's record (version 3), with message 2 still unanswered
+  ok   released: the staff app answers "sent", and the engineer got message 2 once
+  ok   its Message Log row is saved (ops_job_accepted_self, sent)
+  ok   its history row is saved: accepted, sent
+  ok   its echo claim is saved, so its echo is not mistaken for a colleague typing
+  ok   its conversation-store row is saved: the Inbox shows it
+  ok   and the plugin log has no "not saved" line
+
+2. The webhook's own send, with another uCRM notice arriving while it is with WhatsApp
+  ok   uCRM's job.edit (the job given to Tech Two) was claimed, then held at WhatsApp
+  ok   meanwhile uCRM's job.add for another job went through the webhook and wrote that job's record, with nothing to send
+  ok   released: message 1 to Tech Two, and "no longer assigned" to Tech
+  ok   both Message Log rows are saved
+  ok   both history rows are saved
+  ok   both echo claims and both conversation-store rows are saved
+  ok   and the plugin log has no "not saved" line
+
+3. The same Accept without the fix
+  ok   5.18.52 exactly (7ad465e): the same race — the claim, then uCRM's notice written while message 2 is held
+  ok   message 2 goes, and the staff app says "sent"
+  ok   and none of its four records is saved: no Message Log row, no history row, no echo claim, no Inbox row — the server's trail
+  ok   and nothing says so: 5.18.52 writes nothing to the plugin log
+  ok   5.18.53 with only the fix taken out: message 2 goes and its records are lost again
+  ok   but not in silence: the plugin log names each lost record — the echo claim, the Message Log row, the Inbox row, the history row — and the error
+
+4. A record that cannot be saved: one line in the plugin log, and the message still goes
+  ok   every record refused: the job given back to Tech still sends both messages, and the webhook answers as always
+  ok   one line per lost record, in the order they were lost: the record, its table, the event or the job, and the error
+         e.g. [2026-09-30 08:44:56] [records] not saved: the Message Log row (notification_audit_log), event job_assigned — SQLSTATE[23000]: Integrity constraint violation: 19 refused by the test: <number> <e-mail>
+  ok   no line carries a number, an address, a name or a message's text — the error's own number and address are masked
+  ok   each line carries the plugin's clock (Kampala), as the master cron's own lines do
+  ok   a send that fails, with its failure-queue row refused too: a line for that row as well
+  ok   control: the triggers removed, the next change sends and saves, and writes no line — the lines came from the refusals alone
+  ok   the same message claimed twice: the second is a duplicate, and a duplicate writes no line
+  ok   the log is uCRM's for this plugin, data/plugin.log beside the code — not the data directory, which on the server is elsewhere
+
+5. South Sudan
+  ok   ＋ New Job sends South Sudan's own message, as before
+  ok   no line in the plugin log, and the notifier's tables stay empty
+  ok   its only difference: a record that cannot be saved now has its line there too — and the message still goes
+
+6. Weakened copies of the code must each fail this test
+  ok   caught: accepted() leaves the claim's read open
+         first: its Message Log row is saved (ops_job_accepted_self, sent)
+  ok   caught: observe() leaves the state's read open
+         first: both Message Log rows are saved
+  ok   caught: the Message Log row lost in silence
+         first: one line per lost record, in the order they were lost: the record, its table, the event or the job, and the er
+  ok   caught: the failure-queue row lost in silence
+         first: a send that fails, with its failure-queue row refused too: a line for that row as well
+  ok   caught: the conversation-store row lost in silence
+         first: one line per lost record, in the order they were lost: the record, its table, the event or the job, and the er
+  ok   caught: the echo claim lost in silence
+         first: one line per lost record, in the order they were lost: the record, its table, the event or the job, and the er
+  ok   caught: the history row lost in silence
+         first: one line per lost record, in the order they were lost: the record, its table, the event or the job, and the er
+  ok   caught: a duplicate echo reported as lost
+         first: the same message claimed twice: the second is a duplicate, and a duplicate writes no line
+  ok   caught: the error written unmasked
+         first: one line per lost record, in the order they were lost: the record, its table, the event or the job, and the er
+  ok   caught: the line written to the data directory
+         first: the log is uCRM's for this plugin, data/plugin.log beside the code — not the data directory, which on the se
+  ok   caught: the line only in PHP's error log
+         first: one line per lost record, in the order they were lost: the record, its table, the event or the job, and the er
+  ok   caught: a lost record stops the send
+         first: every record refused: the job given back to Tech still sends both messages, and the webhook answers as always
+
+46 passed, 0 failed
+

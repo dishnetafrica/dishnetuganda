@@ -161,8 +161,9 @@ is_(substr_count($src, 'sendMediaViaEvolution(') === 3,
     substr_count($src, 'sendMediaViaEvolution(') . ' occurrence(s)');
 is_(substr_count($src, 'end of the WASender branch') === 3,
     'all three senders keep WASender as the fallback');
-is_(strpos($src, 'if (!$this->enabled && !$this->evoAvailable($sender)) return;') !== false,
-    'the guard consults both transports before giving up');
+// 5.18.54 (docs/46 row 32): the guard still consults both transports; since then it also says so when it gives up.
+is_(substr_count($src, 'if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }') === 3,
+    'the guard consults both transports before giving up, in all three senders, and leaves a trace when it does');
 
 foreach ([$dir, $dir2, $dir3, $dir4, $dir5, $dir6] as $d) { @array_map('unlink', glob($d . '/*') ?: []); @rmdir($d); }
 printf("\n%d passed, %d failed\n", $pass, $fail);

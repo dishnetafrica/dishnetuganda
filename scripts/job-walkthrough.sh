@@ -301,6 +301,24 @@ case 'accept-replay':
     $w = [];
     foreach ($fpmUid as $u => $cnt) $w[] = "uid {$u} ({$cnt} worker" . ($cnt === 1 ? '' : 's') . ')';
     echo 'FPMUSER ', $w === [] ? 'none found' : implode(', ', $w), "; this test runs as uid {$me}\n";
+    // Read-only, on a connection of its own so that this one keeps no read open: the job's record version before and
+    // after the Accept. The Accept's claim adds one; any more is another process writing the record meanwhile.
+    $dbFile = '';
+    foreach ($pdo->query('PRAGMA database_list')->fetchAll(PDO::FETCH_ASSOC) as $d) {
+        if (($d['name'] ?? '') === 'main') $dbFile = (string)($d['file'] ?? '');
+    }
+    $ver = function () use ($dbFile, $job) {
+        if ($dbFile === '') return null;
+        try {
+            $c = new PDO('sqlite:' . $dbFile, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            $c->exec('PRAGMA busy_timeout = 2000');
+            $v = $c->query('SELECT version FROM job_notify_state WHERE job_id = ' . (int)$job)->fetchAll(PDO::FETCH_COLUMN);
+            return isset($v[0]) ? (int)$v[0] : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    };
+    $v0 = $ver();
     $exc = null; $r = null;
     // A fatal error (not an exception) ends this process as it ends the staff app's request. PHP's own message would
     // bypass the masking, so it is switched off and the fatal reported from here, masked.
@@ -332,6 +350,8 @@ case 'accept-replay':
         $exc = $e;
     }
     restore_error_handler();
+    $v1 = $ver();
+    echo 'STATEVER ', $v0 === null ? 'none' : $v0, ' ', $v1 === null ? 'none' : $v1, "\n";
     // How long the Accept took, beside the time limit php.ini gives PHP-FPM (the command line has none): a request that
     // runs past it ends as a fatal error.
     $lim = get_cfg_var('max_execution_time');
@@ -350,7 +370,8 @@ case 'accept-replay':
     }
     restore_error_handler();
     if ($exc !== null) echo 'EXC ', get_class($exc), ': ', wt_mask(wt_noquery($exc->getMessage())), ' — ', basename($exc->getFile()), ':', $exc->getLine(), "\n";
-    if (is_array($r)) echo 'RESULT ', (string)($r['outcome'] ?? '?'), ' ', wt_mask((string)($r['detail'] ?? '')), "\n";
+    if (is_array($r)) echo 'RESULT ', (string)($r['outcome'] ?? '?'), ' ', wt_mask((string)($r['detail'] ?? '')),
+                           '; e-mail: ', (string)($r['messages'][0]['email'] ?? 'none'), "\n";
     break;
 
 case 'facts':
@@ -591,12 +612,23 @@ accept_test() {
   elif printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* sent '; then
     v="✓ no PHP warning that ends the staff app's request, and message 2 went"
     printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* sent email=sent' && v="$v, and the e-mail was handed to the mail server"
+  elif printf '%s\n' "$out" | grep -q '^RESULT sent '; then
+    if printf '%s\n' "$rep" | grep -q '^MLOG ops_job_accepted_self '; then
+      v="✗ message 2 went (the notifier says sent), but its history row was not saved, and nothing reported it"
+    else
+      v="✗ message 2 went (the notifier says sent), but neither its history row nor its Message Log row was saved, and nothing reported it"
+    fi
   else
     v="✗ no PHP warning that ends the staff app's request, but message 2 did not go by WhatsApp"
     printf '%s\n' "$rep" | grep -q '^EVENT accepted accepted [a-z_]* [a-z_]* email=sent' && v="$v (the e-mail was handed to the mail server)"
     v="$v; see the history above"
   fi
   [ "$nn" -gt 0 ] && say "  ($nn PHP warning(s) above marked \"noted only\": the error level leaves them out, so they do not stop the staff app.)"
+  sv="$(printf '%s\n' "$out" | sed -n 's/^STATEVER //p')"; sv0="${sv%% *}"; sv1="${sv##* }"
+  case "$sv0.$sv1" in
+    *[!0-9.]*|.|*.|.*) ;;
+    *) [ $((sv1 - sv0)) -ge 2 ] && say "  (the job's record changed $((sv1 - sv0)) times while the Accept ran: once by the Accept's own claim, and by another process as well, the webhook handling uCRM's notice of the status change)" ;;
+  esac
   say "  $v"; RESULT+=("accept test: $v")
   if printf '%s\n' "$out" | grep -qx 'TRANSPORT-SPLIT'; then
     v="✗ the staff app's settings have no WhatsApp transport for job messages, while the webhook's have one: in the staff app DishNet's Accept sends message 2 by e-mail only, and writes no Message Log row"

@@ -16,13 +16,31 @@
         }
     }
 
+    // ── 5.18.54 (docs/46 rows 10-11): Uganda's rules for the failure queue and for the links that act ─────────────
+    require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+    $_nqCfg    = is_array($config ?? null) ? $config : [];
+    $_nqAdminQ = NotifyGate::applies(NotifyGate::QUEUE_ADMIN, $_nqCfg, $dataDir ?? null);
+    $_nqLinks  = NotifyGate::applies(NotifyGate::ACTION_LINKS, $_nqCfg, $dataDir ?? null);
+    /** A request that may act: a POST that says confirm=1. A link — a GET, a prefetch — never may. */
+    $_nqConfirmed = function () use ($met, $body): bool {
+        return $met === 'POST' && (string)($body['confirm'] ?? $_POST['confirm'] ?? '') === '1';
+    };
+
     // Test invoice notification (admin only)
     // Usage: ?page=api&action=test_invoice_notify&client_id=123
     // Or: ?page=api&action=test_invoice_notify&client_id=123&debug_key=YOUR_WEBHOOK_SECRET
-    if ($act === 'test_invoice_notify' && $met === 'GET') {
-        if (!$debugAuth) $er2('Admin or debug_key required', 403);
-        
-        $clientId = (int)($_GET['client_id'] ?? 0);
+    if ($act === 'test_invoice_notify' && ($_nqLinks || $met === 'GET')) {
+        if ($_nqLinks) {
+            // 5.18.54 (docs/46 row 11, D-7): this sends a WhatsApp to a real client. An administrator's session only — the
+            // webhook secret no longer opens it — and only a POST that says confirm=1: a link cannot send it.
+            if (!$isAdmin) $er2('Administrators only.', 403);
+            if ($met !== 'POST') $er2('Nothing sent. This sends a test invoice WhatsApp to a real client: POST it, with confirm=1.', 405);
+            if (!$_nqConfirmed()) $er2('Nothing sent: confirm=1 is missing.', 400);
+        } elseif (!$debugAuth) {
+            $er2('Admin or debug_key required', 403);
+        }
+
+        $clientId = (int)($_nqLinks ? ($body['client_id'] ?? $_POST['client_id'] ?? $_GET['client_id'] ?? 0) : ($_GET['client_id'] ?? 0));
         if (!$clientId) $er2('Missing client_id parameter', 400);
         
         // Fetch client from CRM
@@ -337,7 +355,9 @@
         if (!$isAdmin) $er2('Admin only', 403);
         if (!$crm->isConfigured()) $er2('CRM not configured', 503);
 
-        $dryRun = !empty($_GET['dry_run']);
+        // 5.18.54 (docs/46 row 11, C3): read-only on Uganda. From a plain link this switched off two of uCRM's own
+        // notifications; uCRM's settings are changed in uCRM's own screen, by a person who can see what they do.
+        $dryRun = $_nqLinks ? true : !empty($_GET['dry_run']);
 
         // First read current values
         $current = $crm->get('options');
@@ -391,6 +411,9 @@
                 $result['status'] = 'failed';
                 $result['message'] = 'PATCH /options failed — check UCRM API permissions';
             }
+        } elseif ($_nqLinks) {
+            $result['read_only'] = true;
+            $result['message'] = "Read-only: nothing was changed. uCRM's notification settings are changed in uCRM → Settings → Notifications.";
         } else {
             $result['message'] = 'Dry run — no changes made. Remove &dry_run=1 to apply.';
         }
@@ -404,7 +427,10 @@
     if ($act === 'invoice_notify_scan') {
         if (!$isAdmin) $er2('Admin only', 403);
 
-        $doSend = ($_GET['send'] ?? '0') === '1';
+        // 5.18.54 (docs/46 row 11, D-7): on Uganda a GET only previews, send=1 or not. Sending is a POST with confirm=1,
+        // under the guard every other invoice sender claims (INV<number>) instead of the old file, so it cannot announce an
+        // invoice the webhook or a scanner already has; and, as the scanners, only an unpaid invoice (status 1 or 2).
+        $doSend = $_nqLinks ? $_nqConfirmed() : (($_GET['send'] ?? '0') === '1');
         $invNotifyLog = $store->load('invoice_notify_log.json') ?: [];
         $results2 = [];
 
@@ -433,7 +459,7 @@
 
             $invoiceNum = (string)($inv['number'] ?? $inv['id'] ?? '?');
             $logKey     = "INV{$invoiceNum}";
-            $alreadySent = isset($invNotifyLog[$logKey]);
+            $alreadySent = $_nqLinks ? $notify->dedupCheck($logKey) : isset($invNotifyLog[$logKey]);
 
             $clientId = (int)($inv['clientId'] ?? 0);
             $total    = (float)($inv['total'] ?? 0);
@@ -450,7 +476,10 @@
                 'action'      => 'skip',
             ];
 
-            if ($isRecent && !$alreadySent && $clientId && $total > 0) {
+            $unpaid = !$_nqLinks || in_array((int)($inv['status'] ?? -1), [1, 2], true);
+            if ($_nqLinks && !$unpaid) $entry['reason'] = 'not unpaid (status ' . (int)($inv['status'] ?? -1) . ')';
+
+            if ($isRecent && !$alreadySent && $clientId && $total > 0 && $unpaid) {
                 // Fetch client phone
                 $client2 = $crm->get("clients/{$clientId}");
                 $phone2 = '';
@@ -462,9 +491,11 @@
                 $entry['phone'] = $phone2 ?: '(none)';
                 $entry['name']  = $name2;
 
-                if ($phone2 && $doSend) {
+                if ($phone2 && $doSend && $_nqLinks && !$notify->dedupMark($logKey)) {
+                    $entry['action'] = 'already_sent';          // announced meanwhile, by the webhook or a scanner
+                } elseif ($phone2 && $doSend) {
                     $notify->invoiceCreated($phone2, $name2, $invoiceNum, $total, $entry['due_date'] ?: 'See invoice');
-                    $invNotifyLog[$logKey] = date('Y-m-d H:i:s');
+                    if (!$_nqLinks) $invNotifyLog[$logKey] = date('Y-m-d H:i:s');
                     $entry['action'] = 'SENT';
                     usleep(500000);
                 } elseif ($phone2) {
@@ -477,7 +508,7 @@
             $recent[] = $entry;
         }
 
-        if ($doSend && !empty($invNotifyLog)) {
+        if ($doSend && !empty($invNotifyLog) && !$_nqLinks) {
             $store->save('invoice_notify_log.json', $invNotifyLog);
         }
 
@@ -485,7 +516,8 @@
             'endpoint_used'  => $endpoint,
             'total_fetched'  => count($allInvoices ?: []),
             'recent_count'   => count($recent),
-            'mode'           => $doSend ? 'LIVE — messages sent' : 'DRY RUN — add &send=1 to send',
+            'mode'           => $doSend ? 'LIVE — messages sent'
+                                         : ($_nqLinks ? 'PREVIEW — nothing sent. To send, POST with confirm=1' : 'DRY RUN — add &send=1 to send'),
             'invoices'       => $recent,
         ], 'Invoice notification scanner');
     }
@@ -673,6 +705,18 @@
     // ══════════════════════════════════════════════════════════════════════
     // NOTIFICATION QUEUE — view failed sends, retry single/bulk, dismiss
     // ══════════════════════════════════════════════════════════════════════
+
+    // 5.18.54 (docs/46 row 10, S-1): on Uganda these follow the Failed Queue screen's rule, the WhatsApp administrator
+    // rule. The rows hold customers' numbers and the whole text of their messages, and a retry sends a WhatsApp; until
+    // now any signed-in account could list, resend or dismiss them by name.
+    if ($_nqAdminQ && in_array($act, ['notification_queue', 'notification_retry', 'notification_retry_bulk',
+                                      'notification_dismiss', 'notification_dismiss_all', 'notification_purge'], true)) {
+        require_once dirname(__DIR__, 2) . '/lib/WhatsAppAccess.php';
+        if (!WhatsAppAccess::allowsTab((bool)$isAdmin, 'engage_failed_queue', $_nqCfg,
+                strtolower((string)($retailer['role'] ?? $me2['role'] ?? '')))) {
+            $er2(WhatsAppAccess::denial(), 403);
+        }
+    }
 
     // GET ?page=api&action=notification_queue&status=failed&limit=50&offset=0
     if ($act === 'notification_queue' && $met === 'GET') {

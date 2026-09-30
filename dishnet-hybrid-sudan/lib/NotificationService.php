@@ -1066,7 +1066,8 @@ class NotificationService
     // Sent 7 days after service ended to try recovering churned customers
     // ══════════════════════════════════════════════════════════════════════
 
-    public function winBackFollowup(string $customerPhone, string $customerName, string $serviceName, string $endedDate): void
+    public function winBackFollowup(string $customerPhone, string $customerName, string $serviceName, string $endedDate,
+                                    string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
         $msg = "👋 *We Miss You — DishNet Africa*\n\n"
              . "Dear {$customerName},\n\n"
@@ -1080,7 +1081,8 @@ class NotificationService
 
         $this->sendVia(self::ACCOUNTS, $customerPhone, $msg,
             'ops_win_back',
-            ['customer_name'=>$customerName,'service_name'=>$serviceName,'ended_date'=>$endedDate]
+            ['customer_name'=>$customerName,'service_name'=>$serviceName,'ended_date'=>$endedDate],
+            $class   // 5.18.54 (C9): Uganda's win-back passes CLASS_PROACTIVE, so STOP stops it
         );
     }
 
@@ -1531,8 +1533,56 @@ class NotificationService
 
     private function sendAdminMsg(string $message, string $event = '', array $vars = []): void
     {
-        if (empty($this->adminPhone)) return;
+        if (empty($this->adminPhone)) { $this->noAdminNumber($event); return; }
         $this->sendVia(self::SUPPORT, $this->adminPhone, $message, $event, $vars);
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 32, docs/45 §2.3): on Uganda a send that finds no WhatsApp connection for its sender leaves a
+     * line in uCRM's log for the plugin, once a day per sender. Before, it returned in silence — and most scheduled jobs
+     * read only the database copy of the settings, which can lack the connection the settings files have.
+     */
+    private function noTransport(string $sender, string $event): void
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            if (!\NotifyGate::applies(\NotifyGate::WATCHDOG, (array)$this->cfgForContacts, $dir)) return;
+            if (!$this->dedupMark('NOTRANSPORT:' . $sender . ':' . date('Y-m-d'))) return;
+            require_once __DIR__ . '/PluginLog.php';
+            \PluginLog::write('whatsapp', 'a WhatsApp (' . ($event !== '' ? $event : 'no event name') . ') was not sent: no WhatsApp '
+                . 'connection is set up for the ' . $sender . ' sender in the settings this process read (docs/45 §2.3)');
+        } catch (\Throwable $e) { /* a trace never breaks its caller */ }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 26, S-4): on Uganda an administrator alert with no number to go to leaves a line in uCRM's log
+     * for the plugin, once per alert and day. Before, it vanished, and a missing alert looked like a quiet day.
+     */
+    private function noAdminNumber(string $event): void
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            if (!\NotifyGate::applies(\NotifyGate::STAFF_SIDE, (array)$this->cfgForContacts, $dir)) return;
+            if (!$this->dedupMark('NOADMIN:' . ($event !== '' ? $event : 'alert') . ':' . date('Y-m-d'))) return;
+            require_once __DIR__ . '/PluginLog.php';
+            \PluginLog::write('alerts', 'an administrator alert (' . ($event !== '' ? $event : 'no event name')
+                . ') was not sent: no administrator number is set (whatsapp_admin_phone)');
+        } catch (\Throwable $e) { /* an alert about an alert never breaks its caller */ }
+    }
+
+    /**
+     * 5.18.54 (S-4): a WhatsApp sent outside sendVia() — AlertService's, through Evolution directly — recorded in the
+     * Message Log like any other, so the log shows every alert that went, or failed. "Sent" means Evolution took it.
+     */
+    public function logSend(string $sender, string $event, string $to, string $text, bool $ok, ?int $httpCode = null, ?string $error = null): void
+    {
+        $this->writeLog([
+            'sender' => $sender, 'event' => $event !== '' ? $event : null, 'to' => (string)preg_replace('/[^0-9]/', '', $to),
+            'preview' => mb_substr($text, 0, 70), 'success' => $ok, 'http_code' => $httpCode,
+            'error' => $error !== null ? mb_substr($error, 0, 200) : null, 'sent_at' => date('Y-m-d H:i:s'),
+        ]);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -1561,10 +1611,17 @@ class NotificationService
      */
     public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = '', string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
+        // 5.18.54 (docs/46 row 46, N-19), Uganda only: a document send starts from no result, as sendVia has since Phase 2,
+        // so a caller reading lastSendResult() after an early return (no number, an opt-out, PDFs switched off) reads this
+        // call's outcome, not the previous send's. The quote cron's log is that caller.
+        if ($this->quoteLogUg()) { $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null; }
         if (empty($toPhone) || empty($publicUrl)) return;
-        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
-        if ($this->optedOut(preg_replace('/[^0-9]/', '', $toPhone) ?? '', $sender, $class, $event)) return;
+        [$docTo, $docRaw] = $this->recipient($toPhone);
+        if ($this->optedOut($docRaw, $sender, $class, $event)) return;
+        // 5.18.54 (D-10): and in the form the document goes to.
+        if ($docTo !== $docRaw && $docTo !== '' && $this->optedOut($docTo, $sender, $class, $event)) return;
 
         // v4.9.20: Global PDF kill-switch — skip document sends when disabled
         if (!$this->pdfEnabled) {
@@ -1576,7 +1633,8 @@ class NotificationService
             return;
         }
 
-        $to = preg_replace('/[^0-9]/', '', $toPhone);
+        $to = $docTo;
+        if ($to === '' && $docRaw !== '') { $this->unusableNumber($sender, $event, $docRaw, "[DOC] {$filename}"); return; }
         if (empty($to)) return;
 
         if ($this->dryRunMode) {
@@ -1676,7 +1734,7 @@ class NotificationService
     public function sendImage(string $sender, string $toPhone, string $publicUrl, string $caption = '', string $event = ''): void
     {
         if (empty($toPhone) || empty($publicUrl)) return;
-        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
         $to = preg_replace('/[^0-9]/', '', $toPhone);
         if (empty($to)) return;
@@ -1942,6 +2000,53 @@ class NotificationService
     public function setOptOut($o): void { $this->optOut = $o; }
 
     /** @return ContactOptOut|null */
+    /** @var array{0:bool,1:?TenantProfile}|null [whether D-10 applies, the tenant], read once per instance */
+    private $phoneForm = null;
+
+    /**
+     * 5.18.54 (docs/46 row 14, D-10, M9): who a message goes to — [the digits it is sent to, the digits as given].
+     *
+     * On Uganda a number goes to WhatsApp in international form, by the helper the sign-in and the job messages already
+     * use: "0772 123 456" is sent to 256772123456, which WhatsApp can deliver, where the digits as typed could not be.
+     * A number already international is kept as it is, whatever its country. One that cannot be read gives '' for the
+     * first, and the caller logs it as such rather than sending to it. Elsewhere, and whenever the tenant cannot be
+     * told, both are the digits as given: the 5.18.53 behaviour.
+     */
+    private function recipient(string $toPhone): array
+    {
+        $raw = (string)preg_replace('/[^0-9]/', '', $toPhone);
+        if ($this->phoneForm === null) {
+            $this->phoneForm = [false, null];
+            try {
+                require_once __DIR__ . '/NotifyGate.php';
+                $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+                if (\NotifyGate::applies(\NotifyGate::PHONE_FORM, (array)$this->cfgForContacts, $dir)) {
+                    require_once __DIR__ . '/TenantProfile.php';
+                    require_once __DIR__ . '/PhoneNumber.php';
+                    $this->phoneForm = [true, \TenantProfile::current((array)$this->cfgForContacts, $dir)];
+                }
+            } catch (\Throwable $e) {
+                $this->phoneForm = [false, null];
+            }
+        }
+        [$on, $tenant] = $this->phoneForm;
+        if (!$on || $raw === '') return [$raw, $raw];
+        $intl = \PhoneNumber::international($toPhone, $tenant);
+        return [$intl === null ? '' : substr($intl, 1), $raw];
+    }
+
+    /** D-10: a number WhatsApp cannot use is a failed row in the Message Log, with the reason — never a send. */
+    private function unusableNumber(string $sender, string $event, string $asGiven, string $text): void
+    {
+        $this->_lastSendSuccess = false; $this->_lastHttpCode = null;
+        $this->_lastError = 'not a number WhatsApp can use: it is neither international nor a national number of this country';
+        $this->writeLog([
+            'sender' => $sender, 'event' => $event !== '' ? $event : null, 'to' => $asGiven,
+            'preview' => mb_substr($text, 0, 70), 'success' => false, 'error' => $this->_lastError,
+            'sent_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
     private function optOut()
     {
         if ($this->optOut === false) {
@@ -2006,12 +2111,15 @@ class NotificationService
         $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null;
         if (empty($toPhone)) return;        // `enabled` is WASender's readiness alone. Returning on it was what
         // made every send on an Evolution-only install disappear in silence.
-        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
-        $to = preg_replace('/[^0-9]/', '', $toPhone);
+        [$to, $asGiven] = $this->recipient($toPhone);
+        if ($to === '' && $asGiven !== '') { $this->unusableNumber($sender, $event, $asGiven, $message); return; }
         if (empty($to)) return;
 
         if ($this->optedOut($to, $sender, $class, $event)) return;
+        // 5.18.54 (D-10): an opt-out recorded as the number was typed still blocks it in international form.
+        if ($asGiven !== $to && $asGiven !== '' && $this->optedOut($asGiven, $sender, $class, $event)) return;
         
         // DRY RUN GUARD - log but don't send
         if ($this->dryRunMode) {
@@ -2141,7 +2249,9 @@ class NotificationService
                     ]);
                 }
             } catch (\Throwable $e) {
-                // Never break message sending for conversation logging
+                // Never break message sending for conversation logging — but say so (5.18.53): the Inbox then lacks
+                // a message the customer or engineer did receive.
+                self::notSaved('the conversation-store row', 'wa_messages', $event, $e);
             }
         }
     }
@@ -2189,7 +2299,8 @@ class NotificationService
                 date('Y-m-d H:i:s'),
             ]);
         } catch (\Throwable $e) {
-            // Never break the main flow
+            // Never break the main flow — but say so (5.18.53): a failed send missing from the queue is never retried.
+            self::notSaved('the failure-queue row', 'notification_queue', $event, $e);
         }
     }
 
@@ -2225,6 +2336,8 @@ class NotificationService
 
             $where = ($status !== 'all') ? "WHERE status = ?" : "";
             $params = ($status !== 'all') ? [$status] : [];
+            // 5.18.54 (docs/46 row 30), Uganda: a row the automatic retry gave up on still waits for a person.
+            if ($status === 'failed' && $this->retriesUg()) { $where = "WHERE status IN ('failed', 'exhausted')"; $params = []; }
 
             // Total count
             $countSql = "SELECT COUNT(*) FROM notification_queue {$where}";
@@ -2256,6 +2369,7 @@ class NotificationService
             $stmt = $pdo->query("SELECT status, COUNT(*) as cnt FROM notification_queue GROUP BY status");
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             $stats = ['failed' => 0, 'sent' => 0, 'dismissed' => 0];
+            if ($this->retriesUg()) $stats['exhausted'] = 0;   // 5.18.54 (docs/46 row 30)
             foreach ($rows as $r) {
                 $stats[$r['status']] = (int) $r['cnt'];
             }
@@ -2271,6 +2385,7 @@ class NotificationService
      */
     public function retryOne(int $queueId, string $retryBy = 'Admin'): array
     {
+        if ($this->retriesUg()) return $this->retryOneUg($queueId, $retryBy);   // 5.18.54, docs/46 row 30
         try {
             $pdo = $this->store->getPdo();
             $stmt = $pdo->prepare("SELECT * FROM notification_queue WHERE id = ? AND status = 'failed'");
@@ -2321,6 +2436,7 @@ class NotificationService
      */
     public function retryBulk(string $retryBy = 'Admin', int $maxBatch = 50): array
     {
+        if ($this->retriesUg()) return $this->retryBulkUg($retryBy, $maxBatch);   // 5.18.54, docs/46 row 30
         $result = ['total' => 0, 'sent' => 0, 'failed' => 0];
         try {
             $pdo = $this->store->getPdo();
@@ -2345,6 +2461,128 @@ class NotificationService
         return $result;
     }
 
+    /** 5.18.54 (docs/46 row 46): Uganda only. */
+    private function quoteLogUg(): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            return \NotifyGate::applies(\NotifyGate::QUOTE_ONCE, (array)$this->cfgForContacts, $dir);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /** 5.18.54 (docs/46 row 30): Uganda only. */
+    private function retriesUg(): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            return \NotifyGate::applies(\NotifyGate::RETRIES, (array)$this->cfgForContacts, $dir);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 30), Uganda: retryOne(), safe beside the automatic retry (lib/NotificationRetry.php).
+     * - The row is claimed in one statement, so of two retries of one row (a person's and the automatic one, or two
+     *   clicks) exactly one sends. Before, it was read and then marked: a small window in which both could send.
+     * - The last result is cleared before the send: a document retry that returned early read the previous send's
+     *   success, and marked a row sent that was not.
+     * - Retry mode ends whatever happens: an exception left it on, and every later failure in that process went
+     *   unqueued.
+     * - A retry that sent nothing says so, and one that stopped with an error is recorded as one that may have been
+     *   sent. An exhausted row is retried like a failed one. 'claimed' says whether this call had the row.
+     */
+    private function retryOneUg(int $queueId, string $retryBy): array
+    {
+        require_once __DIR__ . '/EvolutionApiService.php';
+        require_once __DIR__ . '/NotificationRetry.php';
+        try {
+            $pdo   = $this->store->getPdo();
+            $claim = $pdo->prepare("UPDATE notification_queue SET status = 'retrying', attempts = attempts + 1, last_attempt_at = ?
+                                     WHERE id = ? AND status IN ('failed', 'exhausted')");
+            $claim->execute([date('Y-m-d H:i:s'), $queueId]);
+            if ($claim->rowCount() !== 1) {
+                return ['success' => false, 'claimed' => false,
+                        'error' => 'Not found, or already sent, dismissed or being retried'];
+            }
+            $st = $pdo->prepare("SELECT * FROM notification_queue WHERE id = ?");
+            $st->execute([$queueId]);
+            $row = $st->fetch(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'claimed' => false, 'error' => $e->getMessage()];
+        }
+
+        $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null;
+        $this->_retryMode = true;
+        $stopped = null;
+        try {
+            $vars  = json_decode($row['vars'] ?? '{}', true) ?: [];
+            $isDoc = ($vars['_type'] ?? '') === 'document' && !empty($vars['url']);
+            if ($isDoc) {
+                // A quotation PDF link is signed for the day it was minted: re-sign it (as retryOne does).
+                require_once __DIR__ . '/QuotePdfToken.php';
+                $url = QuotePdfToken::refreshUrl((string)$vars['url'], $this->evoConfig);
+                $this->sendDocument($row['sender'], $row['phone'], $url, $vars['filename'] ?? 'document.pdf', $row['message'], $row['event'] ?? '');
+            } else {
+                $this->sendVia($row['sender'], $row['phone'], $row['message'], $row['event'] ?? '', $vars);
+            }
+        } catch (\Throwable $e) {
+            $stopped = \EvolutionApiService::MAYBE_SENT . 'the retry stopped with an error: ' . mb_substr($e->getMessage(), 0, 200);
+        } finally {
+            $this->_retryMode = false;
+        }
+
+        $sent = $stopped === null && (bool)$this->_lastSendSuccess;
+        try {
+            if ($sent) {
+                $pdo->prepare("UPDATE notification_queue SET status = 'sent', retry_at = ?, retry_by = ? WHERE id = ?")
+                    ->execute([date('Y-m-d H:i:s'), $retryBy, $queueId]);
+                return ['success' => true, 'claimed' => true, 'error' => null];
+            }
+            $err = $stopped ?? (string)($this->_lastError ?? '');
+            if ($err === '' && $this->_lastHttpCode === null) $err = \NotificationRetry::NO_ATTEMPT_TEXT;
+            $pdo->prepare("UPDATE notification_queue SET status = 'failed', http_code = ?, error = ? WHERE id = ?")
+                ->execute([(int)($this->_lastHttpCode ?? 0), $err, $queueId]);
+            return ['success' => false, 'claimed' => true, 'error' => $err];
+        } catch (\Throwable $e) {
+            return ['success' => $sent, 'claimed' => true, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 30), Uganda: Retry All leaves out every row that may already have reached the customer; a
+     * person retries those one at a time, after looking at the chat. Exhausted rows go with the failed ones.
+     * 'skipped' counts the rows left out.
+     */
+    private function retryBulkUg(string $retryBy, int $maxBatch): array
+    {
+        $result = ['total' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        try {
+            require_once __DIR__ . '/NotificationRetry.php';
+            $rows = $this->store->getPdo()->query(
+                "SELECT id, error, http_code FROM notification_queue WHERE status IN ('failed', 'exhausted') ORDER BY created_at, id"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                if (\NotificationRetry::classify($row['error'], $row['http_code']) === \NotificationRetry::MAYBE_SENT) {
+                    $result['skipped']++;
+                    continue;
+                }
+                if ($result['total'] >= $maxBatch) continue;
+                $result['total']++;
+                $r = $this->retryOne((int)$row['id'], $retryBy);
+                if (!empty($r['success'])) $result['sent']++; else $result['failed']++;
+                usleep(300000);   // as retryBulk: do not hammer the sender
+            }
+        } catch (\Throwable $e) {
+            // partial results
+        }
+        return $result;
+    }
+
     /**
      * Dismiss a failed notification (mark as dismissed, won't retry).
      */
@@ -2352,7 +2590,9 @@ class NotificationService
     {
         try {
             $pdo = $this->store->getPdo();
-            $stmt = $pdo->prepare("UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE id = ? AND status = 'failed'");
+            $stmt = $pdo->prepare($this->retriesUg()   // 5.18.54 (docs/46 row 30): an exhausted row too
+                ? "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE id = ? AND status IN ('failed', 'exhausted')"
+                : "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE id = ? AND status = 'failed'");
             $stmt->execute([$dismissedBy, $queueId]);
             return $stmt->rowCount() > 0;
         } catch (\Throwable $e) {
@@ -2368,7 +2608,9 @@ class NotificationService
     {
         try {
             $pdo = $this->store->getPdo();
-            $stmt = $pdo->prepare("UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE status = 'failed'");
+            $stmt = $pdo->prepare($this->retriesUg()   // 5.18.54 (docs/46 row 30): an exhausted row too
+                ? "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE status IN ('failed', 'exhausted')"
+                : "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE status = 'failed'");
             $stmt->execute([$dismissedBy]);
             return $stmt->rowCount();
         } catch (\Throwable $e) {
@@ -2626,7 +2868,19 @@ class NotificationService
                 mb_substr($entry['error'] ?? '', 0, 500) ?: null,
                 $entry['sent_at']   ?? date('Y-m-d H:i:s'),
             ]);
-        } catch (\Throwable $e) { /* never break main flow */ }
+        } catch (\Throwable $e) {
+            // Never break the main flow — and, since 5.18.53, never in silence: without its row here, a message that
+            // went reads as one that never did (docs/44 §16.28).
+            self::notSaved('the Message Log row', 'notification_audit_log', (string)($entry['event'] ?? ''), $e);
+        }
+    }
+
+    /** 5.18.53: a record of a send that could not be saved gets a line in the plugin log. Never a number or a text. */
+    private static function notSaved(string $record, string $table, string $event, \Throwable $e): void
+    {
+        if (!is_file(__DIR__ . '/PluginLog.php')) return;
+        require_once __DIR__ . '/PluginLog.php';
+        \PluginLog::notSaved($record, $table, $event !== '' ? 'event ' . $event : 'no event name', $e);
     }
 
     /**

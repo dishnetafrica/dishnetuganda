@@ -11,6 +11,10 @@ declare(strict_types=1);
  *   scheduling/jobs (GET, POST), scheduling/jobs/{id}    — jobs (GET, PATCH)
  *   scheduling/jobs/{id}/job-tasks (GET, POST), scheduling/job-tasks/{id} (PATCH), scheduling/jobs/{id}/job-comments
  *   clients/{id}, clients/{id}/client-logs, clients/{id} (PATCH)
+ *   billing/credit-notes (POST), credit-notes/{id} and billing/credit-notes/{id} (GET) — credit notes (5.18.54)
+ *   clients/services/{id} (GET) — one service, seeded under "services" (5.18.54)
+ *   quotes/{id} and billing/quotes/{id} (GET) — one quote, seeded under "quotes" (5.18.54)
+ *   billing/quotes (POST, GET list), billing/quotes/{id} and …/send (PATCH), quotes/{id}/pdf — quotes (5.18.54)
  *
  * Test controls: /__test/state (marker), /__test/dump, /__test/seed (POST, merges keys), /__test/users_down (POST
  * {"down":true}) makes every users endpoint answer 502 — "uCRM could not be reached".
@@ -134,6 +138,72 @@ if ($method === 'POST' && preg_match('#^/clients/(\d+)/client-logs$#', $path, $m
     fu_out($l, 201);
 }
 if ($method === 'GET' && preg_match('#^/clients/(\d+)/services$#', $path)) fu_out([]);
+// 5.18.54 (docs/46 row 13): one service, as service.add reads it back; 404 unless seeded under "services".
+if ($method === 'GET' && preg_match('#^/clients/services/(\d+)$#', $path, $m)) {
+    $sv = $state['services'][$m[1]] ?? null;
+    $sv === null ? fu_out(['code' => 404, 'message' => 'Service not found.'], 404) : fu_out($sv);
+}
 if ($method === 'GET' && $path === '/clients') fu_out(array_values($state['clients']));
-if ($method === 'GET' && $path === '/invoices') fu_out([]);
+// 5.18.54 (docs/46 row 11): invoice lists and uCRM's settings document, for the notification controls. Unseeded, the
+// invoice list is empty, as before.
+if ($method === 'GET' && ($path === '/invoices' || $path === '/billing/invoices')) fu_out(array_values((array)($state['invoices'] ?? [])));
+if ($method === 'GET' && preg_match('#^/(?:billing/)?invoices/(\d+)$#', $path, $m)) {
+    $inv = $state['invoices'][$m[1]] ?? null;
+    $inv === null ? fu_out(['code' => 404, 'message' => 'Invoice not found.'], 404) : fu_out($inv);
+}
+if ($path === '/options') {
+    if ($method === 'PATCH') { $state['options'] = array_merge((array)($state['options'] ?? []), $body); fu_out($state['options']); }
+    fu_out((array)($state['options'] ?? []));
+}
+// 5.18.54 (docs/46 row 12): credit notes, as the staff screen creates them and the webhook reads them back.
+if ($method === 'POST' && ($path === '/billing/credit-notes' || $path === '/billing/credit-notes/add')) {
+    $id = (int)($state['next_cn'] ?? 4400);
+    $state['next_cn'] = $id + 1;
+    $total = 0.0;
+    foreach ((array)($body['items'] ?? []) as $it) $total += (float)($it['price'] ?? 0) * (float)($it['quantity'] ?? 1);
+    $cn = ['id' => $id, 'number' => 'CN-' . $id, 'clientId' => (int)($body['clientId'] ?? 0), 'total' => $total, 'note' => (string)($body['note'] ?? '')];
+    $state['credit_notes'][(string)$id] = $cn;
+    fu_out($cn, 201);
+}
+if ($method === 'GET' && preg_match('#^/(?:billing/)?credit-notes/(\d+)$#', $path, $m)) {
+    $cn = $state['credit_notes'][$m[1]] ?? null;
+    $cn === null ? fu_out(['code' => 404, 'message' => 'Credit note not found.'], 404) : fu_out($cn);
+}
+// 5.18.54 (docs/46 row 15): one quote, as quote.approve reads it back; 404 unless seeded under "quotes".
+if ($method === 'GET' && preg_match('#^/(?:billing/)?quotes/(\d+)$#', $path, $m)) {
+    $qt = $state['quotes'][$m[1]] ?? null;
+    $qt === null ? fu_out(['code' => 404, 'message' => 'Quote not found.'], 404) : fu_out($qt);
+}
+// 5.18.54 (docs/46 row 17): quotes as the quote screens make them, the quote cron lists them, and both it and the
+// webhook fetch their PDF. A made quote is open (status 1), numbered Q-<id>, its lines kept as "items".
+if ($method === 'POST' && $path === '/billing/quotes') {
+    $id = (int)($state['next_quote'] ?? 3500);
+    $state['next_quote'] = $id + 1;
+    $items = []; $total = 0.0;
+    foreach ((array)($body['invoiceItems'] ?? []) as $it) {
+        $line = (float)($it['price'] ?? 0) * (float)($it['quantity'] ?? 1);
+        $items[] = ['label' => (string)($it['label'] ?? 'Item'), 'quantity' => (float)($it['quantity'] ?? 1),
+                    'price' => (float)($it['price'] ?? 0), 'total' => $line];
+        $total += $line;
+    }
+    $q = ['id' => $id, 'number' => 'Q-' . $id, 'clientId' => (int)($body['clientId'] ?? 0), 'status' => 1,
+          'items' => $items, 'total' => $total, 'createdDate' => date('c'), 'adminNotes' => (string)($body['adminNotes'] ?? '')];
+    $state['quotes'][(string)$id] = $q;
+    fu_out($q, 201);
+}
+if ($method === 'GET' && $path === '/billing/quotes') fu_out(array_values((array)($state['quotes'] ?? [])));
+if ($method === 'PATCH' && preg_match('#^/billing/quotes/(\d+)/send$#', $path)) fu_out(new stdClass());
+if ($method === 'PATCH' && preg_match('#^/billing/quotes/(\d+)$#', $path, $m)) {
+    if (!isset($state['quotes'][$m[1]])) fu_out(['code' => 404], 404);
+    $state['quotes'][$m[1]] = array_merge($state['quotes'][$m[1]], $body);
+    fu_out($state['quotes'][$m[1]]);
+}
+if ($method === 'GET' && preg_match('#^/quotes/(\d+)/pdf$#', $path, $m)) {
+    if (!isset($state['quotes'][$m[1]])) fu_out(['code' => 404], 404);
+    http_response_code(200);
+    header('Content-Type: application/pdf');
+    echo "%PDF-1.4\n% FAKE-UCRM quote " . $m[1] . "\n" . str_repeat('0', 200) . "\n%%EOF\n";
+    file_put_contents($GLOBALS['stateFile'], json_encode($GLOBALS['state']));
+    exit;
+}
 fu_out(['code' => 404, 'message' => 'FAKE-UCRM-STAFF-JOBS: not simulated: ' . $method . ' ' . $path], 404);

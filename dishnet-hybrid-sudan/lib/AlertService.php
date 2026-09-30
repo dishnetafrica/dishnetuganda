@@ -52,7 +52,7 @@ class AlertService
     public function notify(string $key, string $text, int $cooldownMin = 240): array
     {
         $to = $this->target();
-        if ($to === '') return ['sent' => false, 'reason' => 'no_alert_number'];
+        if ($to === '') { $this->record($key, '', $text, null, 'no_alert_number'); return ['sent' => false, 'reason' => 'no_alert_number']; }
 
         $now = time();
         if ($cooldownMin > 0 && $this->lastSent($key) > $now - $cooldownMin * 60) {
@@ -72,13 +72,61 @@ class AlertService
             }
             $r = $evo->sendText('sales', $to, $text, ContactOptOut::CLASS_STAFF);
             if (empty($r['ok'])) {
-                $this->recordSent($key, 0);          // release: let the next run retry
+                if (!$this->mayHaveGone($r)) $this->recordSent($key, 0);   // release: let the next run retry
+                $this->record($key, $to, $text, false, (string)($r['error'] ?? '?'), isset($r['http']) ? (int)$r['http'] : null);
                 return ['sent' => false, 'reason' => 'send_failed: ' . (string)($r['error'] ?? '?')];
             }
+            $this->record($key, $to, $text, true, null, isset($r['http']) ? (int)$r['http'] : null);
             return ['sent' => true, 'reason' => 'sent'];
         } catch (\Throwable $e) {
             $this->recordSent($key, 0);
+            $this->record($key, $to, $text, false, $e->getMessage());
             return ['sent' => false, 'reason' => 'send_failed: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 26, S-4), Uganda only: every alert leaves a trace. One that went, or failed, is a Message Log
+     * row like any other send; one with no number to go to is a line in uCRM's log for the plugin, once per alert and
+     * day. Before, an alert through here left nothing, and a missing alert looked like a quiet day. A record that
+     * cannot be written never stops the alert.
+     *
+     * @param bool|null $ok  null: not attempted, for $why
+     */
+    private function record(string $key, string $to, string $text, ?bool $ok, ?string $why, ?int $http = null): void
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            if (!NotifyGate::applies(NotifyGate::STAFF_SIDE, $this->config, $dir)) return;
+            require_once __DIR__ . '/NotificationService.php';
+            $ns = new NotificationService($this->store, $this->config);
+            $event = 'ops_alert_' . (string)preg_replace('/[^a-z0-9_]/', '_', strtolower(strtok($key, ':') ?: 'alert'));
+            if ($ok === null) {
+                if (!$ns->dedupMark('NOALERT:' . $key . ':' . date('Y-m-d'))) return;
+                require_once __DIR__ . '/PluginLog.php';
+                PluginLog::write('alerts', "an alert ({$event}) was not sent: no alert number is set (alert_whatsapp)");
+                return;
+            }
+            $ns->logSend('sales', $event, $to, $text, $ok, $http, $why);
+        } catch (\Throwable $e) { /* the alert matters more than its record */ }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 44, N-17), Uganda only: a failed alert that may nevertheless have reached the phone keeps its
+     * cooldown. Released, the next run of whatever raised it sent it again: the duplicate row 31 stopped for customer
+     * messages, on the administrator's phone. An alert that certainly did not leave is still released, so the next run
+     * tries again.
+     */
+    private function mayHaveGone(array $r): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            require_once __DIR__ . '/EvolutionApiService.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            return NotifyGate::applies(NotifyGate::EVO_RETRY, $this->config, $dir) && EvolutionApiService::mayHaveBeenSent($r);
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 

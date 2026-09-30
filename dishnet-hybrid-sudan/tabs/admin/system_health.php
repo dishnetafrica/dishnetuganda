@@ -53,6 +53,33 @@ $row('Core', 'Background worker', $_hSpawn ? 'ok' : 'warn',
               : 'exec() blocked — replies wait for the scheduled run');
 
 // Has the scheduler actually run recently?
+// 5.18.54 (docs/46 row 43, N-16), Uganda only: master.php's record is read where master writes it. master saves it
+// through SqliteStore, which writes the database and no file, so the file check in the else branch says "has never run"
+// however often master runs (or gives the age of a file an older store left behind). Beside it, the watchdog's own
+// conditions (lib/NotifyWatchdog.php): a notification job stopped or unfinished, failed WhatsApps piling up, no
+// WhatsApp connection in the copy of the settings the scheduled jobs read.
+require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+if (NotifyGate::applies(NotifyGate::WATCHDOG, $_hCfg, $GLOBALS['dataDir'] ?? null)) {
+    require_once dirname(__DIR__, 2) . '/lib/NotifyWatchdog.php';
+    $_hSch  = (array)($store->load('master_schedule.json') ?? []);
+    $_hLast = 0;
+    foreach ($_hSch as $_hRec) {
+        if (is_array($_hRec) && (int)($_hRec['last_run'] ?? 0) > 1) $_hLast = max($_hLast, (int)$_hRec['last_run']);
+    }
+    if ($_hLast === 0) {
+        $row('Core', 'Scheduler (cron)', 'warn',
+             'has never run — uCRM starts it from the plugin about every five minutes; check that the plugin is enabled');
+    } else {
+        $age = time() - $_hLast;
+        $row('Core', 'Scheduler (cron)',
+             $age < 600 ? 'ok' : 'warn',
+             'last ran ' . ($age < 120 ? 'under 2 minutes' : round($age / 60) . ' minutes') . ' ago');
+    }
+    $_hHeld = NotifyWatchdog::check($_hSch, $_hPdo, time(), (array)($store->load('kyc_config.json') ?? []), $_hCfg);
+    $row('Core', 'Notification jobs', $_hHeld ? 'bad' : 'ok',
+         $_hHeld ? implode(' · ', array_column($_hHeld, 'text'))
+                 : 'none stopped or unfinished; fewer than ' . NotifyWatchdog::PILE . ' failed WhatsApps in the last 24 hours');
+} else {
 $_hSched = $GLOBALS['dataDir'] . '/master_schedule.json';
 if (is_file($_hSched)) {
     $age = time() - (int)@filemtime($_hSched);
@@ -62,6 +89,7 @@ if (is_file($_hSched)) {
 } else {
     $row('Core', 'Scheduler (cron)', 'warn',
          'has never run — install the master.php crontab entry');
+}
 }
 
 // ── AI ───────────────────────────────────────────────────────────────────────

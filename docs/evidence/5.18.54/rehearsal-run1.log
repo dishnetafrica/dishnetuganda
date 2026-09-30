@@ -1,0 +1,257 @@
+rehearsal run 1, started 14:19:45Z, on fde675c, deploy script sha256 b606ad2f7d49ab3a5d98502feda85571016483f2b2a5f564f4039238161dc80e
+== 0. what is rehearsed ==
+  script    the committed script, sha256 b606ad2f7d49ab3a
+  clone     claude/study-this-jhe2eg at fde675c
+  ok   the script is pinned to the clone's plugin commit (e8a8508)
+  ok   the plugin is 5.18.54
+  5.18.54   91 files: 46 changed, 45 added (48 PHP run on the server, 42 test PHP) · 0 removed or renamed · the other files of Release A, 5.18.51, 5.18.52 and 5.18.53: 39
+  ok   control: 5.18.54 removes no file
+  ok   control: the pinned NotifyGate names its fixes (23)
+  ok   the header's deploy command stands alone: no rollback and no checkout of another commit in its block (docs/44 §16.9)
+  ok   control: 5.18.53 installed and its store opened through the stand-in: 075 and 076 applied, as on the server
+  ok   control: the plugin log already holds one "not saved" line, from before the deploy
+  ok   control: opening the store again changes no row the digest covers
+
+== 1. NO-GO before anything changes ==
+  ok   1a the tenant reads South Sudan: NO-GO, both sources named
+  ok   …nothing deployed, no backup taken
+  ok   1b the server still runs 5.18.52: NO-GO — 5.18.53 goes first
+  ok   …nothing deployed, no backup taken
+  ok   1c an edited file in the checkout: stop
+  ok   1d a backup copy that arrives changed is caught
+  ok   …NO-GO, before anyone is asked to type DEPLOY
+  ok   1e anything but DEPLOY: the backup is taken, then it stops
+  ok   …nothing deployed, nothing recorded as a deploy
+  ok   1f a copy still carrying the placeholder pin: stops before anything is read
+  ok   …and no data or configuration value changed in any of these runs, and no installed file was touched
+
+== 2. the syntax check under the server's PHP, on a build with a broken file ==
+  ok   2a the gate rejected by the server's PHP: NO-GO, named
+  ok   …nothing deployed, before the backup
+  ok   2b a test file it rejects: a note, not a NO-GO
+  ok   control: the clone is back at its commit, clean
+
+== 3. the deploy, as the operator runs it ==
+  ok   no FAIL line
+  ok   PASSED
+  ok   3: ok    A1 the installed plugin reads Uganda from both configuration sources — the notification fixes and the job noti
+  ok   3: 91 files differ from 6b71ea6: 46 changed, 45 added, 0 removed
+  ok   3: in the container accepts all 48 changed PHP files that run on the server (and 42 test files)
+  ok   3: ok    A3 staff accounts read: 7 accounts, 6 active; of the 5 active accounts that take jobs, 3 hold a uCRM user id (1 
+  ok   3: ok    A4 the Message Log holds 4 rows; its last is #4
+  ok   3: migrations 075 and 076 are applied, as 5.18.52 left them: job_notify_state 0 job(s), job_notify_events 0 row(s)
+  ok   3: ok    A6 the plugin log (data/plugin.log, 189 bytes) can be written by the database's owner, as whom PHP-FPM writes
+  ok   3: OPcache         enable -, validate_timestamps 1 (php.ini:21), revalidate_freq 2 ('-' is unset: PHP's defaults are 1, 1
+  ok   3: settings (store) billing_model=unset timezone=unset whatsapp_admin_phone=unset alert_whatsapp=unset identity_enabled=u
+  ok   3: settings (files) billing_model=unset timezone=unset whatsapp_admin_phone=unset alert_whatsapp=unset identity_enabled=u
+  ok   3: — one consistent copy (VACUUM INTO
+  ok   3: ok    backed up the installed plugin (5.18.53, 6b71ea6)
+  ok   3: ok    backed up the configuration vault
+  ok   3: GO — evidence recorded
+  ok   3: The rollback command is printed at the end of this log, on its own.
+  ok   3: gave the 91 installed file(s) this release changes the time of this copy
+  ok   3: ok    container serves e8a8508
+  ok   3: ok    V1 the sign-in page on the public address answers 200 with zero redirects (no loop)
+  ok   3: ok    V4 no fatal or parse error of dishnet-hybrid-sudan in the container log since
+  ok   3: ok    R1 all 91 files 5.18.54 changes are installed exactly as e8a8508 has them (45 of them new)
+  ok   3: ok    R1 the installed manifest says 5.18.54
+  ok   3: ok    R1 the 39 other files of Release A, 5.18.51, 5.18.52 and 5.18.53 are installed exactly as e8a8508 has them
+  ok   3: ok    R2 the installed StaffJobsGate reads Uganda from both configuration sources: the job notifier is on (store on, f
+  ok   3: ok    R2 the installed NotifyGate reads Uganda from both configuration sources: all 23 of 5.18.54's fixes are on (stor
+  ok   3: ok    R3 every staff account is as it was at stage A of this run
+  ok   3: ok    R4 the old ＋ New Job, Bulk Dispatch and Reschedule messages stay off since row #4 (0)
+  ok   3: release B's job messages since row #4: none (nobody created or changed a job)
+  ok   3: ok    R5 the master cron's job_assign entry is still commented out (path A stays off)
+  ok   3: ok    R5 the installed master.php registers 5.18.54's three jobs — the watchdog second, the daytime reminders, the r
+  ok   3: ok    R6 the job notifier is wired in: New Job, Bulk Dispatch, Reschedule, Accept, uCRM's job.add/job.edit/job.delete,
+  ok   3: ok    R6 5.18.53 is in the installed files: the claim's read ends before its COMMIT in accepted() and observe()
+  ok   3: ok    R6 5.18.54 is in the installed files: the gate; the payment flow; the draft invoice's claim
+  ok   3: note  R7 1 of 5 active accounts that take jobs have a verified uCRM link: only they receive job messages. The other 4 
+  ok   3: ok    R8 the installed master.php keeps 5.18.51's lock guard (is_resource)
+  ok   3: ok    R9 migrations 075 and 076 are still applied: job_notify_state holds 0 job(s), job_notify_events 0 row(s), with t
+  ok   3: ok    R10 a job link opened signed out → 302 → the staff sign-in page, and no job shown
+  ok   3: note  R11 the plugin's mail settings name no mail server
+  ok   3: ok    R12 all 91 files this release changes carry a time from this deploy
+  ok   3: ok    R12 OPcache checks a file's time at most every 2 s and no PHP-FPM pool overrides it: PHP-FPM compiles each chang
+  ok   3: ok    R13 the plugin log (data/plugin.log) has no "not saved" line since the deploy
+  ok   3: since the deploy the plugin log holds no [watchdog], [whatsapp] or [alerts] line
+  ok   3: note  R14 neither copy of the settings names a WhatsApp connection
+  ok   3: notify_watchdog has not run yet (master runs it at its next cycle)
+  ok   3: customer_reminders has not run yet (master runs it at its next cycle inside 09:00–17:00)
+  ok   3: notify_retry has not run yet (master runs it at its next cycle)
+  ok   3: ok    R14 none of the watchdog's conditions holds now: no notification job stopped or unfinished, no pile of failures,
+  ok   3: note  R14 no administrator number (whatsapp_admin_phone) is set in either copy of the settings: the watchdog's alerts 
+  ok   3: the failure queue by status: empty
+  ok   3: the notifications 5.18.54's fixes are on for Uganda (R2), master runs its three new jobs (R5), each change is in the f
+  ok   3: nothing removed; the checkout is at the pinned commit: installed as it is, no checkout of another commit
+  ok   six backups: two databases, the data directory, the plugin's own data/, the installed plugin, the vault
+  ok   the container serves e8a8508: every file as the commit has it, the new ones present
+  ok   every file 5.18.54 changes carries the deploy's time on disk — the copy's, not the clone's
+  ok   no data and no configuration value changed
+  ok   the migrations ledger is unchanged: 5.18.54 has no migration
+  ok   …the notifier's two tables are as 5.18.52 left them, and the deploy sent nothing
+  ok   the rollback command is printed once, on its own line
+  ok   …after the verdict, at the end of the log, never in the block the operator pasted
+  ok   the code backup is 5.18.53: without the notification gate
+  ok   where the deploy started is recorded: the Message Log's mark, the plugin log's size, the files' times before it
+  ok   …the time recorded for NotificationService.php before the deploy is the installed 5.18.53 copy's
+  ok   the log carries no name, e-mail or phone number of a staff account
+
+== 4. later runs: --after-only, the deploy three hours ago ==
+  ok   4a three hours on, nothing planted: PASSED — the lock fatal from before the deploy is not counted
+  ok   …and the summary says what a later run re-measures
+  ok   …stage A reads the notifier's record as 5.18.52 left it; R12 and R13 measure from the deploy's record
+  ok   4b the master's lock fatal after the deploy: V4 fails — 5.18.51's fix is the baseline now
+  ok   4c a fatal of the notifier: V4 fails, and shows the line
+  ok   4d a message from the old New Job path: R4 fails, naming the event
+  ok   4e release B's own messages (message 1, message 2): counted as a note, not a failure
+  ok   …each named
+  ok   4f the notifier's record: counted, event / message / the WhatsApp's outcome / the e-mail's, only
+  ok   …no e-mail detail is printed
+  ok   …no title of a job is printed
+  ok   4g the migrations gone and not re-applied: R9 fails
+  ok   control: the next request's store re-applies 075 and 076 by itself
+  ok   4g2 076 alone gone (075's tables still there): R9 fails
+  ok   control: the next request's store re-applies 076 by itself
+  ok   4m mail settings "none": R11 says which, prints no value, and fails nothing
+  ok   4m mail settings "ucrm": R11 says which, prints no value, and fails nothing
+  ok   4m mail settings "smtp": R11 says which, prints no value, and fails nothing
+  ok   4h a Release A file changed on the server: R1 fails, naming it
+  ok   4i a file 5.18.54 added, changed on the server: R1 fails, naming it
+  ok   4j uCRM's job.edit no longer handled: R6 names what is missing (and R1 the file)
+  ok   4j2 the e-mail copy taken out of the installed notifier: R6 names what is missing
+  ok   4n the fix taken out of the installed notifier (one of its two reads left open): R6 names it
+  ok   4n2 the failure queue's line taken out of the installed code: R6 names it
+  ok   4o a changed file's time put back before the deploy: R12 fails, naming it
+  ok   4p OPcache told not to check files' times: R12 fails, naming the setting and where it is
+  ok   4q a PHP-FPM pool file sets an OPcache value: a note, not a failure
+  ok   4q2 no php.ini where PHP keeps it: A7 and R12 say they could not read it, and fail nothing
+  ok   4r a "not saved" line since the deploy: a note, not a failure — and the line from before the deploy is not counted
+  ok   …the line is printed, its time kept, its number and address masked
+  ok   …and neither the number nor the address is printed
+  ok   4s the plugin log cleared in uCRM since the deploy: said, and read from its start
+  ok   4t the watchdog's and WhatsApp's lines since the deploy: counted, by tag, as a note
+  ok   …counted, not printed
+  ok   4u master without the retry job: R5 names what is missing
+  ok   4v the draft invoice's claim taken out: R6 names it
+  ok   4w quote_wa silent two hours and the retry job unfinished: R14 names both conditions, and fails the unfinished job
+  ok   …the watchdog's last run and the queue, counted
+  ok   …no row's error or number is printed
+  ok   4x the WhatsApp connection in the settings files only: R14 says the scheduled jobs cannot send, and the watchdog's transport condition holds
+  ok   …no key is printed, and nothing fails
+  ok   4y South Sudan's currency in the vault: R2 says no fix is on
+  ok   4k a job link that shows a page signed out: R10 fails
+  ok   4l a staff account edited since the deploy (a link saved, an edit): a note naming its id, not a failure
+  ok   …and the new number is not printed
+  ok   control: with each planted fault removed, PASSED again
+
+== 5. the rollback: --rollback, typed ROLLBACK ==
+  ok   PASSED
+  ok   5: GO — evidence recorded
+  ok   5: checking out 6b71ea6 (5.18.53) for the documented deploy
+  ok   5: ok    container serves 6b71ea6 (5.18.53)
+  ok   5: ok    RB1 all 46 files 5.18.54 had changed are back exactly as 6b71ea6 (5.18.53) has them
+  ok   5: ok    RB1 the installed manifest says 5.18.53
+  ok   5: ok    RB2 the 45 file(s) 5.18.54 added are still on disk and inert: no 5.18.53 file loads them
+  ok   5: ok    RB3 every staff account is as it was at stage A of this run
+  ok   5: ok    RB4 the files the rollback put back carry its time
+  ok   5: note  on 5.18.53 again: payment.add dies after the receipt, two reminder paths send once more
+  ok   the same backup first — of 5.18.54's code
+  ok   the container serves 6b71ea6: every changed file as 5.18.53 has it; the added ones remain
+  ok   the installed notification service, webhook and master are 5.18.53's again; NotifyGate.php stays, unused
+  ok   the checkout is back on claude/study-this-jhe2eg, at the commit it was on
+  ok   no data changed; the notifier's tables and the migrations ledger stay as 5.18.52 left them
+  ok   5b rolling back again: says so, checks, takes no second backup
+  ok   …reads the notifier's record as 5.18.52's, and checks no file's time: nothing was rolled back
+
+== 6. forward again, back by hand as printed, forward with an edit during the deploy ==
+  ok   6a deploy again after a rollback: PASSED, serving e8a8508, every file with this deploy's time; 075 and 076 still there
+  ok   …the migration log still says each once
+  ok   the summary prints the rollback by hand
+  ok   6b that line, run as printed, puts 5.18.53 back and returns the checkout
+  ok   …and --rollback confirms it
+  ok   6c a staff account edited during the deploy: R3 fails, naming account 3
+  ok   …the only failure
+  ok   …and the new number is not printed
+
+== 7. stage V finds the public address redirecting after a deploy: it rolls back by itself ==
+  ok   V1 fails and the rollback starts
+  ok   …and the log says what now serves
+  ok   5.18.53 is back, the checkout on claude/study-this-jhe2eg
+
+== 7b. the branch has moved on: a later release is on it before this one is deployed ==
+  ok   control: the clone's branch is ahead of e8a8508, at a later plugin commit (5d7f438) that says 5.18.55
+  ok   7b-1 the deploy with the branch ahead: PASSED
+  ok   7b-1: installs        e8a8508 by its hash — the branch has moved on to 5d7f438 since
+  ok   7b-1: plugin version  5.18.54   (expected 5.18.54)
+  ok   7b-1: in the container accepts all 48 changed PHP files that run on the server
+  ok   7b-1: checking out e8a8508 (5.18.54) for the documented deploy
+  ok   7b-1: the checkout is back on claude/study-this-jhe2eg
+  ok   7b-1: ok    container serves e8a8508
+  ok   7b-1: ok    R1 all 91 files 5.18.54 changes are installed exactly as e8a8508 has them
+  ok   7b-1: ok    R12 all 91 files this release changes carry a time from this deploy
+  ok   …the container serves e8a8508: nothing of the later release is installed
+  ok   …the checkout is back on claude/study-this-jhe2eg at the later commit, clean
+  ok   …no data changed
+  ok   7b-2 --after-only with the branch ahead: PASSED
+  ok   7b-3 --rollback with the branch ahead: 5.18.53 back, the checkout on claude/study-this-jhe2eg at the later commit
+  ok   7b-4 a checkout without e8a8508 in its history: refused, nothing deployed, no backup
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+
+== 7c. the trap of §16.23: Git wrote the files in the second of the copies PHP compiled before ==
+  ok   control: the clone's copies carry the installed copies' second, and the clone is still clean
+  ok   7c the deploy gives each file the time of the copy: R12 ok, PASSED
+  ok   …on disk every file 5.18.54 changes carries the deploy's time — never the second PHP-FPM compiled 5.18.53's copy in
+
+== 8. weakened copies of the script must each be caught ==
+  ok   caught: the Uganda check removed
+  ok   caught: a build over another live commit (5.18.52, before 5.18.53 is in)
+  ok   caught: DEPLOY never required
+  ok   caught: a failed backup ignored
+  ok   caught: the placeholder-pin guard removed
+  ok   caught: R3 blind to a staff account edited during the deploy
+  ok   caught: R4 never counts the old job paths
+  ok   caught: R4 blind to the old Reschedule message
+  ok   caught: R4 fails release B's own messages (the old rule, M6, kept)
+  ok   caught: R1 blind
+  ok   caught: R1 blind to Release A's files
+  ok   caught: R2 takes any answer as on
+  ok   caught: V4 blind to the master's lock line (5.18.51's own window kept)
+  ok   caught: R6 blind to a caller that is gone
+  ok   caught: R8 blind to a missing lock guard
+  ok   caught: R9 takes a missing migration as applied
+  ok   caught: R9 reads the ledger only (the tables dropped behind it)
+  ok   caught: R9 blind to 076 (075 alone taken for the notifier's record)
+  ok   caught: R11 reads no settings as a mail server
+  ok   caught: R10 takes any answer for the job link
+  ok   caught: ROLLBACK never required
+  ok   caught: the rollback leaves the checkout detached
+  ok   caught: RB1 blind
+  ok   caught: RB2 blind to a 5.18.53 file that loads a class 5.18.54 added
+  ok   caught: the copy's time not given (the files keep the second Git wrote them in)
+  ok   caught: R12 blind to a file older than the deploy
+  ok   caught: R12 takes validate_timestamps 0 as checking
+  ok   caught: R6 blind to the fix taken out
+  ok   caught: R13 blind to a "not saved" line
+  ok   caught: R13 counts the lines from before the deploy
+  ok   caught: R13 prints the plugin log's numbers unmasked
+  ok   caught: R13 reads the data directory instead of the plugin log
+  ok   caught: R2 takes any count of NotifyGate's fixes as all
+  ok   caught: R5 blind to a job master no longer registers
+  ok   caught: R6 blind to a 5.18.54 change taken out
+  ok   caught: R13 blind to the watchdog's lines
+  ok   caught: R14 blind to a job that never finished
+  ok   caught: the syntax NO-GO removed
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+  ok   caught: the deploy installs the branch tip instead of the pinned commit
+  ok   caught: the checkout left on the pinned commit after the deploy
+  ok   8b pinned to a broken build while the branch has fixed it: the check reads the pinned files — NO-GO, nothing deployed
+  ok   caught: the syntax check reads the working tree, not the pinned commit
+  ok   control: the clone is back on claude/study-this-jhe2eg at its commit
+
+== 9. what the rehearsal left behind ==
+  ok   this checkout is as the rehearsal found it: same commit, same tracked files
+  ok   no weakened copy is left in the clone
+
+rehearsal: 227 passed, 0 failed (94 runs of the script)
+exit=0

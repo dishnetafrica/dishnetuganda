@@ -235,6 +235,17 @@
                 }
                 if ($custPhone) {
                     $txnRef = $crmPaymentId ? 'CRM-PAY-'.$crmPaymentId : 'COL-'.($collection['id']??'');
+                    require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+                    require_once dirname(__DIR__, 2) . '/lib/ReceiptOnce.php';
+                    if (NotifyGate::applies(NotifyGate::RECEIPT_ONCE, is_array($config ?? null) ? $config : [], $dataDir)) {
+                        // 5.18.54 (docs/46 rows 2-3, D-2/D3b): claim the guard payment.add honours before sending.
+                        // PAY<id> when uCRM has the payment; the payment's reference as well, which is all there is
+                        // when the post failed and a retry job will post it later. The note file below was read by
+                        // nothing, so the webhook sent a second receipt.
+                        if (ReceiptOnce::claimCollection($notify, $crmPaymentId ? (int)$crmPaymentId : null, (string)($paymentRef ?? ''))) {
+                            $notify->paymentReceived($custPhone, $custName, $amount, $txnRef);
+                        }
+                    } else {
                     $notify->paymentReceived($custPhone, $custName, $amount, $txnRef);
 
                     // Mark as notified — webhook.php checks this to avoid double-send
@@ -242,6 +253,7 @@
                         $payLog = $store->load('payment_notify_log.json') ?: [];
                         $payLog['PAY'.$crmPaymentId] = date('Y-m-d H:i:s');
                         $store->save('payment_notify_log.json', $payLog);
+                    }
                     }
                 }
             }

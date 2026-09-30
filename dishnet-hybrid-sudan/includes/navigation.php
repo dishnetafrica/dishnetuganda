@@ -65,7 +65,13 @@ try {
         $_pdo = $store->getPdo();
         try { $_waUnread2    = (int)$_pdo->query("SELECT COALESCE(SUM(unread_count),0) FROM wa_conversations WHERE status != 'closed'")->fetchColumn(); } catch (\Throwable $e) { $_waUnread2 = 0; }
         try { $_waNeedsHuman2= (int)$_pdo->query("SELECT COUNT(*) FROM wa_conversations WHERE state = 'needs_human' AND status != 'closed'")->fetchColumn(); } catch (\Throwable $e) { $_waNeedsHuman2 = 0; }
-        try { $_nqFailed2    = (int)$_pdo->query("SELECT COUNT(*) FROM notification_queue WHERE status = 'failed'")->fetchColumn(); } catch (\Throwable $e) { $_nqFailed2 = 0; }
+        // 5.18.54 (docs/46 row 30): on Uganda a row the automatic retry gave up on (`exhausted`) still waits for a person
+        try {
+            require_once dirname(__DIR__) . '/lib/NotifyGate.php';
+            $_nqWait2 = NotifyGate::applies(NotifyGate::RETRIES, is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                      ? "status IN ('failed', 'exhausted')" : "status = 'failed'";
+            $_nqFailed2 = (int)$_pdo->query("SELECT COUNT(*) FROM notification_queue WHERE {$_nqWait2}")->fetchColumn();
+        } catch (\Throwable $e) { $_nqFailed2 = 0; }
         try { $_waLead2      = (int)$_pdo->query("SELECT COUNT(*) FROM wa_lead_recovery WHERE is_customer = 0 AND status = 'new'")->fetchColumn(); } catch (\Throwable $e) { $_waLead2 = 0; }
         try { $_lcAction2    = (int)$_pdo->query("SELECT COUNT(*) FROM service_lifecycle WHERE needs_action = 1 AND deleted_at IS NULL")->fetchColumn(); } catch (\Throwable $e) { $_lcAction2 = 0; }
         try { $_fibPend2     = (int)$_pdo->query("SELECT COUNT(*) FROM fiber_collection_jobs WHERE status='pending'")->fetchColumn(); } catch (\Throwable $e) { $_fibPend2 = 0; }

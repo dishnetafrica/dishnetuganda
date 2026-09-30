@@ -22,6 +22,11 @@ if (!function_exists('str_starts_with')) { function str_starts_with(string $h, s
 $notify   = svc('notify');
 $fqSub    = $_GET['fqsub'] ?? 'queue';
 $dataDir  = method_exists($store, 'getDataDir') ? $store->getDataDir() : dirname(__DIR__, 2) . '/data';
+// 5.18.54 (docs/46 row 30): on Uganda receipts, welcomes and quotations are retried automatically; a row the automatic
+// retry gave up on reads `exhausted` and waits here like a failed one.
+require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+$fqUg = NotifyGate::applies(NotifyGate::RETRIES, is_array($config ?? null) ? $config : [], $dataDir);
+if ($fqUg) require_once dirname(__DIR__, 2) . '/lib/NotificationRetry.php';
 
 // ── Handle POST actions ──────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -39,7 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($fqAction === 'retry_bulk') {
         $maxBatch = max(1, min(100, (int)($_POST['max_batch'] ?? 50)));
         $result = $notify->retryBulk($adminName, $maxBatch);
+        if ($fqUg) {
+            $fqLeft = (int)($result['skipped'] ?? 0) > 0
+                    ? " {$result['skipped']} left out: they may have been sent, so retry each one on its own after checking the chat." : '';
+            flash("Bulk retry: {$result['sent']}/{$result['total']} sent, {$result['failed']} still failed.{$fqLeft}",
+                  ($result['failed'] > 0 || $fqLeft !== '') ? 'warning' : 'success');
+        } else {
         flash("Bulk retry: {$result['sent']}/{$result['total']} sent, {$result['failed']} still failed", $result['failed'] > 0 ? 'warning' : 'success');
+        }
         redirect('?page=dashboard&tab=engage_failed_queue&fqsub=queue');
     }
     if ($fqAction === 'dismiss_one') {
@@ -62,6 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Shared data ──────────────────────────────────────────────────────────────
 $stats = $notify->getQueueStats();
+// 5.18.54 (docs/46 row 30): what waits for a person, on Uganda failed and exhausted rows alike
+$fqWaiting = (int)$stats['failed'] + ($fqUg ? (int)($stats['exhausted'] ?? 0) : 0);
 
 $eventLabels = [
     'ops_kyc_submitted'=>'📋 KYC','ops_kyc_crm_created'=>'✅ CRM','ops_kyc_crm_failed'=>'⚠️ CRM Fail',
@@ -142,6 +156,8 @@ function fq_classify_webhook(array $entry): string {
 .fq-status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase}
 .fq-status-failed{background:#ef444422;color:#ef4444}.fq-status-sent{background:#22c55e22;color:#22c55e}
 .fq-status-dismissed{background:#64748b22;color:#94a3b8}.fq-status-retrying{background:#f59e0b22;color:#f59e0b}
+<?php if($fqUg):?>.fq-status-exhausted{background:#ef444422;color:#fca5a5}
+<?php endif;?>
 .fq-status-skipped{background:#f59e0b22;color:#f59e0b}.fq-status-info{background:#60a5fa22;color:#60a5fa}
 .fq-pager{display:flex;gap:6px;justify-content:center;margin-top:16px;align-items:center}
 .fq-pager a{padding:4px 10px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#e2e8f0;text-decoration:none;font-size:12px}
@@ -152,7 +168,7 @@ function fq_classify_webhook(array $entry): string {
 <!-- SUB-TAB BAR -->
 <div class="fq-subtabs">
     <a href="?page=dashboard&tab=engage_failed_queue&fqsub=queue" class="fq-subtab <?= $fqSub==='queue'?'active':'' ?>">
-        🔄 Failed Queue<?php if($stats['failed']>0):?><span class="fq-badge"><?=$stats['failed']?></span><?php endif;?>
+        🔄 Failed Queue<?php if($fqWaiting>0):?><span class="fq-badge"><?=$fqWaiting?></span><?php endif;?>
     </a>
     <a href="?page=dashboard&tab=engage_failed_queue&fqsub=crm_events" class="fq-subtab <?= $fqSub==='crm_events'?'active':'' ?>">
         📡 CRM Events
@@ -169,16 +185,21 @@ function fq_classify_webhook(array $entry): string {
 ?>
 <div class="fq-stats">
     <div class="fq-stat fq-stat-failed"><div class="fq-stat-num"><?=$stats['failed']?></div><div class="fq-stat-label">Failed</div></div>
+<?php if($fqUg):?>
+    <div class="fq-stat fq-stat-failed"><div class="fq-stat-num"><?=(int)($stats['exhausted']??0)?></div><div class="fq-stat-label">Retries used up</div></div>
+<?php endif;?>
     <div class="fq-stat fq-stat-sent"><div class="fq-stat-num"><?=$stats['sent']?></div><div class="fq-stat-label">Retried ✓</div></div>
     <div class="fq-stat fq-stat-dismissed"><div class="fq-stat-num"><?=$stats['dismissed']?></div><div class="fq-stat-label">Dismissed</div></div>
 </div>
 <div class="fq-filters">
-    <?php foreach(['failed'=>'❌ Failed','sent'=>'✅ Retried','dismissed'=>'🗑 Dismissed','all'=>'All'] as $fk=>$fl): ?>
-    <a href="?page=dashboard&tab=engage_failed_queue&fqsub=queue&status=<?=$fk?>" class="fq-filter-btn <?=$filterStatus===$fk?'active':''?>"><?=$fl?> (<?=$fk==='all'?array_sum($stats):($stats[$fk]??0)?>)</a>
+<?php $fqFilters = $fqUg ? ['failed'=>'❌ Failed','exhausted'=>'⏹ Retries used up','sent'=>'✅ Retried','dismissed'=>'🗑 Dismissed','all'=>'All']
+                             : ['failed'=>'❌ Failed','sent'=>'✅ Retried','dismissed'=>'🗑 Dismissed','all'=>'All']; ?>
+    <?php foreach($fqFilters as $fk=>$fl): ?>
+    <a href="?page=dashboard&tab=engage_failed_queue&fqsub=queue&status=<?=$fk?>" class="fq-filter-btn <?=$filterStatus===$fk?'active':''?>"><?=$fl?> (<?=$fk==='all'?array_sum($stats):($fk==='failed'?$fqWaiting:($stats[$fk]??0))?>)</a>
     <?php endforeach; ?>
-    <?php if($filterStatus==='failed' && $stats['failed']>0):?>
+    <?php if($filterStatus==='failed' && $fqWaiting>0):?>
     <div class="fq-actions">
-        <form method="post" style="display:inline;" onsubmit="return confirm('Retry all <?=$stats['failed']?> failed?')"><input type="hidden" name="fq_action" value="retry_bulk"><input type="hidden" name="max_batch" value="50"><button type="submit" class="fq-btn fq-btn-retry">🔄 Retry All</button></form>
+        <form method="post" style="display:inline;" onsubmit="return confirm('Retry all <?=$fqWaiting?> failed?<?=$fqUg?' Messages that may have been sent are left out.':''?>')"><input type="hidden" name="fq_action" value="retry_bulk"><input type="hidden" name="max_batch" value="50"><button type="submit" class="fq-btn fq-btn-retry">🔄 Retry All</button></form>
         <form method="post" style="display:inline;" onsubmit="return confirm('Dismiss all?')"><input type="hidden" name="fq_action" value="dismiss_all"><button type="submit" class="fq-btn fq-btn-dismiss">🗑 Dismiss All</button></form>
     </div>
     <?php endif; ?>
@@ -187,17 +208,26 @@ function fq_classify_webhook(array $entry): string {
     <?php endif; ?>
 </div>
 
+<?php if($fqUg):?>
+<p style="font-size:12px;color:#64748b;margin-bottom:12px;">Receipts, welcome messages and quotations that WhatsApp refused, or that never left this server, are retried automatically: up to three times in about three hours. After the last try they read <strong>exhausted</strong> and wait here. Nothing that may already have reached the customer is retried automatically, and <em>Retry All</em> leaves it out: check the chat, then retry it on its own or dismiss it. "Retried" means WhatsApp accepted the message; whether it reached the phone is not measured.</p>
+<?php endif;?>
 <?php if(empty($items)):?>
 <div class="fq-empty"><div class="fq-empty-icon"><?=$filterStatus==='failed'?'✅':'📭'?></div>
 <div style="font-size:16px;font-weight:600;"><?=$filterStatus==='failed'?'No failed notifications!':'Nothing here'?></div>
-<div style="font-size:13px;"><?=$filterStatus==='failed'?'All WhatsApp messages are delivering successfully.':'No items match this filter.'?></div></div>
+<div style="font-size:13px;"><?=$filterStatus==='failed'?($fqUg?'Nothing is waiting: no WhatsApp has failed. (Whether a sent message reached the phone is not measured.)':'All WhatsApp messages are delivering successfully.'):'No items match this filter.'?></div></div>
 <?php else: ?>
 <div style="overflow-x:auto;border:1px solid #334155;border-radius:8px;">
 <table class="fq-table"><thead><tr><th>#</th><th>Status</th><th>Phone</th><th>Sender</th><th>Event</th><th>Message</th><th>Error</th><th>Tries</th><th>When</th><th>Actions</th></tr></thead><tbody>
 <?php foreach($items as $it): ?>
 <tr>
 <td style="color:#64748b;"><?=(int)$it['id']?></td>
-<td><span class="fq-status fq-status-<?=$it['status']??'failed'?>"><?=htmlspecialchars($it['status']??'failed')?></span></td>
+<td><span class="fq-status fq-status-<?=$it['status']??'failed'?>"><?=htmlspecialchars($it['status']??'failed')?></span><?php if($fqUg && in_array($it['status']??'', ['failed','exhausted'], true)):
+    $fqClass = NotificationRetry::classify($it['error'] ?? null, $it['http_code'] ?? null);
+    $fqNext  = NotificationRetry::nextTryAt($it);
+    if ($fqClass === NotificationRetry::MAYBE_SENT):?><br><span style="font-size:10px;color:#f59e0b;">may have been sent: check the chat first</span>
+<?php elseif ($fqNext !== null):?><br><span style="font-size:10px;color:#60a5fa;">automatic retry at <?=htmlspecialchars(date('H:i', $fqNext))?></span>
+<?php elseif (($it['status']??'') === 'exhausted'):?><br><span style="font-size:10px;color:#94a3b8;">no automatic try left</span>
+<?php endif; endif;?></td>
 <td class="fq-phone"><?=htmlspecialchars($it['phone']??'')?></td>
 <td><span class="fq-sender fq-sender-<?=$it['sender']??'support'?>"><?=htmlspecialchars($it['sender']??'support')?></span></td>
 <td><?=fq_event_label($it['event']??'',$eventLabels)?></td>
@@ -206,7 +236,7 @@ function fq_classify_webhook(array $entry): string {
 <td style="text-align:center;"><?=(int)($it['attempts']??1)?></td>
 <td class="fq-time"><?=fq_ago($it['created_at']??'')?><br><span style="font-size:10px;"><?=htmlspecialchars(substr($it['created_at']??'',0,16))?></span>
 <?php if($it['status']==='sent'&&!empty($it['retry_at'])):?><br><span style="color:#22c55e;">✓ <?=fq_ago($it['retry_at'])?></span><?php if(!empty($it['retry_by'])):?><br><span style="font-size:10px;">by <?=htmlspecialchars($it['retry_by'])?></span><?php endif; endif;?></td>
-<td><?php if($it['status']==='failed'):?>
+<td><?php if($it['status']==='failed' || ($fqUg && $it['status']==='exhausted')):?>
 <form method="post" style="display:inline;"><input type="hidden" name="fq_action" value="retry_one"><input type="hidden" name="queue_id" value="<?=(int)$it['id']?>"><button type="submit" class="fq-btn fq-btn-retry fq-btn-sm" title="Retry">🔄</button></form>
 <form method="post" style="display:inline;"><input type="hidden" name="fq_action" value="dismiss_one"><input type="hidden" name="queue_id" value="<?=(int)$it['id']?>"><button type="submit" class="fq-btn fq-btn-dismiss fq-btn-sm" title="Dismiss">🗑</button></form>
 <?php elseif($it['status']==='sent'):?><span style="color:#22c55e;font-size:12px;">✅</span><?php else:?><span style="color:#64748b;font-size:12px;">—</span><?php endif;?></td>

@@ -122,6 +122,7 @@ final class JobNotifier
             $st = $pdo->prepare('SELECT * FROM job_notify_state WHERE job_id = ?');
             $st->execute([$jobId]);
             $was  = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
+            $st->closeCursor();   // 5.18.53: the read ends before the COMMIT, as in accepted()
             $plan = self::decide($was, $now);
             if ($plan['state'] !== null) {
                 $s = $plan['state'];
@@ -190,6 +191,10 @@ final class JobNotifier
             $st = $pdo->prepare('SELECT accepted_by FROM job_notify_state WHERE job_id = ?');
             $st->execute([$jobId]);
             $row = $st->fetch(\PDO::FETCH_ASSOC);
+            // 5.18.53 (docs/44 §16.28): the read ends here. Left open, it kept SQLite's read snapshot past the COMMIT
+            // (WAL): once another process wrote — uCRM's notice of this very Accept, a second later — every later write
+            // of this request failed at once, and message 2 went with none of its records saved.
+            $st->closeCursor();
             if (is_array($row) && (int)($row['accepted_by'] ?? 0) === $assignee) {
                 $pdo->exec('COMMIT');
                 return self::result(null, 'no_change', 'the completion link was already sent for this assignment', $assignee);
@@ -489,14 +494,21 @@ final class JobNotifier
                 'outcome' => $outcome, 'detail' => $detail];
         // With the e-mail's two columns (migration 076); without them only if they are missing, so the history keeps the
         // WhatsApp whatever became of 076.
+        $failed = null;
         foreach ([$row + ['email_outcome' => $email, 'email_detail' => $email === null ? null : $emailDetail], $row] as $r) {
             try {
                 $this->store->getPdo()->prepare('INSERT INTO job_notify_events (' . implode(', ', array_keys($r)) . ') VALUES ('
                     . implode(', ', array_fill(0, count($r), '?')) . ')')->execute(array_values($r));
                 return;
             } catch (\Throwable $e) {
-                // The Message Log still holds the send; a missing history row must not undo it.
+                // A missing history row must not undo the send. Since 5.18.53 it is said in the plugin log: on
+                // 28 September the Message Log row was lost with it, and nothing said so (docs/44 §16.28).
+                $failed = $e;
             }
+        }
+        if ($failed !== null && is_file(__DIR__ . '/PluginLog.php')) {
+            require_once __DIR__ . '/PluginLog.php';
+            PluginLog::notSaved('the job history row', 'job_notify_events', "job #{$jobId}, {$event}" . ($message !== null ? "/{$message}" : ''), $failed);
         }
     }
 

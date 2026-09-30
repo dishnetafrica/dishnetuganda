@@ -114,10 +114,31 @@ if (!function_exists('fcm_send_push')) {
 
 // ── Convenience helpers for specific events ──────────────────────
 
+if (!function_exists('fcm_push_tenant_amount')) {
+    /**
+     * 5.18.54 (docs/46 row 21, C8): the amount a push shows, on Uganda — in the tenant's currency ("UGX 50,000.00"). The
+     * callers pass no currency, so the pushes below said "$50000 USD" to Ugandan customers. Null where the Uganda text
+     * does not apply: South Sudan's push is the 5.18.53 push.
+     */
+    function fcm_push_tenant_amount(array $config, float $amount): ?string {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dd = $GLOBALS['dataDir'] ?? null;
+            if (!NotifyGate::applies(NotifyGate::TENANT_TEXT, $config, is_string($dd) ? $dd : null)) return null;
+            require_once __DIR__ . '/currency.php';
+            return dn_money($amount, $config);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+}
+
 if (!function_exists('fcm_push_invoice_created')) {
     function fcm_push_invoice_created($pdo, array $config, int $clientId, string $invoiceNumber, float $amount, string $currency = 'USD'): array {
+        $ug = fcm_push_tenant_amount($config, $amount);   // 5.18.54 (docs/46 row 21, C8)
         return fcm_send_push($pdo, $config, $clientId, 'invoice_created',
             'New Invoice · DishNet',
+            $ug !== null ? "Invoice {$invoiceNumber} for {$ug} has been created. Tap to view." :
             "Invoice {$invoiceNumber} for \${$amount} {$currency} has been created. Tap to view.",
             ['invoice_number' => $invoiceNumber, 'amount' => (string)$amount]
         );
@@ -126,8 +147,10 @@ if (!function_exists('fcm_push_invoice_created')) {
 
 if (!function_exists('fcm_push_payment_received')) {
     function fcm_push_payment_received($pdo, array $config, int $clientId, float $amount, string $currency = 'USD'): array {
+        $ug = fcm_push_tenant_amount($config, $amount);   // 5.18.54 (docs/46 row 21, C8)
         return fcm_send_push($pdo, $config, $clientId, 'payment_received',
             'Payment Confirmed · DishNet',
+            $ug !== null ? "Your payment of {$ug} has been received. Thank you!" :
             "Your payment of \${$amount} {$currency} has been received. Thank you!",
             ['amount' => (string)$amount]
         );

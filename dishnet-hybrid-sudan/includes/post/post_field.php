@@ -1182,10 +1182,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
             $txnRef    = $crmPayId ? 'PAY-' . $crmPayId : 'COL-' . ($collection['id'] ?? '');
             $dedupKey  = $crmPayId ? 'PAY' . $crmPayId : 'COL' . ($collection['id'] ?? uniqid());
 
+            require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+            require_once dirname(__DIR__, 2) . '/lib/ReceiptOnce.php';
+            $_rcptUg = NotifyGate::applies(NotifyGate::RECEIPT_ONCE, is_array($config ?? null) ? $config : [], $dataDir ?? null);
             if (!$notify->dedupMark($dedupKey)) {
                 // Already sent (unlikely from field flow but guard against double-tap)
                 error_log("[post_field] WA payment receipt SKIPPED — already sent for {$dedupKey}");
             } else {
+                // 5.18.54 (docs/46 row 3, D3b): the payment's reference too, so that when a retry job posts a failed
+                // collection later, payment.add does not receipt it a second time.
+                if ($_rcptUg && !empty($paymentRef)) $notify->dedupMark(ReceiptOnce::refKey((string)$paymentRef));
                 $notify->paymentReceived($custPhone, $custName, $amount, $txnRef);
 
                 // Queue receipt PDF — cron_quote_wa.php picks this up in ~5 min
@@ -1200,6 +1206,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='collect_pay
                         }
                     }
                     if (!$_alreadyQueued) {
+                        if ($_rcptUg) $notify->dedupMark(ReceiptOnce::pdfKey((int)$crmPayId));   // 5.18.54: payment.add then queues none
                         $receiptQueue[] = [
                             'payment_id'    => $crmPayId,
                             'phone'         => $custPhone,

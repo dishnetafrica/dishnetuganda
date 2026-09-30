@@ -395,6 +395,18 @@ final class FollowUpService
         // failure is not a decision to abandon the message.
     }
 
+    /**
+     * 5.18.54 (docs/46 row 31): a send that may have reached the customer. WhatsApp took the request and no answer came
+     * back. The draft leaves the approved list as 'uncertain', so it is not sent again, and the log says why; a person
+     * can look at the chat. The follow-up itself stays open: its next draft, if any, still needs approval.
+     */
+    public function recordUncertain(int $followupId, int $draftId, string $why, string $by): void
+    {
+        $this->db->prepare("UPDATE followup_drafts SET status = 'uncertain' WHERE id = ? AND status = 'approved'")
+                 ->execute([$draftId]);
+        $this->log($followupId, null, 'uncertain', 'may have been sent, so not sent again: ' . $why, $by);
+    }
+
     /** Follow-ups sent today on a channel — for the daily cap. */
     public function sentTodayOn(string $channel, string $nowUtc): int
     {

@@ -173,7 +173,12 @@ class EvoWebhookGuard
             $stmt->execute([$messageId, $instance, $event]);
             return true;
         } catch (\PDOException $e) {
-            // UNIQUE violation = we already handled this message.
+            // UNIQUE violation = we already handled this message. Any other failure is a claim that was not saved; the
+            // answer stays the same, and since 5.18.53 it is said in the plugin log (docs/44 §16.28).
+            if (!preg_match('/(UNIQUE|PRIMARY KEY) constraint failed/', $e->getMessage()) && is_file(__DIR__ . '/PluginLog.php')) {
+                require_once __DIR__ . '/PluginLog.php';
+                \PluginLog::notSaved('the echo claim', 'evo_webhook_seen', 'event ' . $event, $e);
+            }
             return false;
         }
     }

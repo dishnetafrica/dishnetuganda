@@ -3275,3 +3275,357 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-
 ```
 
 Then `tail -n +1` the log file it names.
+
+### 16.28 Message 2 goes, its records are lost: the Accept test's result, the cause, and a one-line fix — 28–30 September 2026
+
+**The operator's Accept test** (job #11, 16:12–16:13 Kampala on 28 September; log file
+`accept-test-20260928T131222Z.log`):
+- The preflight was GO. Job #11 was created, and message 1 went by WhatsApp and e-mail.
+- **The PHP environment:**
+  - error level `E_ALL` (32767), set in `/usr/local/etc/php/php.ini`, with no PHP-FPM override;
+  - PHP-FPM's 12 workers run as uid 1000, as the test did;
+  - the Accept took 2.0 s, and php.ini sets no time limit;
+  - both settings copies give Evolution for job messages.
+- **No PHP warning, and no error.**
+- **The notifier: `sent staff account #4`.** Message 2 went by WhatsApp.
+- Yet the history held only the *assigned* row, and the Message Log only `job_assigned`.
+- Deleting the job sent *cancelled* by WhatsApp and e-mail, both recorded.
+
+**What it establishes:**
+- **The warning explanations of §16.27 (A, A′, B and D) are ruled out for this run:**
+  - no warning and no error;
+  - the same transport in both settings copies;
+  - 2 s against no time limit;
+  - the same user as PHP-FPM.
+- **The Accept completes and sends message 2; afterwards neither of its records exists.** That is job #10's trail
+  again, this time with the notifier's own word that message 2 went.
+- **Production's PHP counts deprecations** (`E_ALL`). A PHP 8.1 deprecation anywhere in the staff app's API would
+  end its request. None arose on the Accept's path. Recorded, not changed.
+
+**The cause — measured, then reproduced:**
+- **The claim's read is left open.** `JobNotifier::accepted()` claims the job inside `BEGIN IMMEDIATE … COMMIT`
+  (`lib/JobNotifier.php:190–192`):
+  - it reads the claim with `$st->fetch()`, and never finishes or closes `$st`;
+  - `$st` stays alive until `accepted()` returns, that is, through the whole delivery.
+- **In SQLite's WAL mode, a statement left open keeps the connection's read snapshot after the COMMIT.**
+- **The Accept provokes a second writer.** Its own status change makes uCRM send the plugin `job.edit`. The
+  webhook's `observe()` then writes the job's record, because `decide()` sets a state for any live job. It does so
+  while the Accept is still waiting on Evolution.
+- **The next write then fails at once.** The Accept's next write, the Message Log row, must upgrade the stale snapshot.
+  SQLite refuses that with *"database is locked"*, and without waiting. The conversation-store row and the history
+  row fail the same way.
+- **All three swallow the error** (`catch (\Throwable)`), and the message had already gone before the first of them.
+- **So message 2 is sent, and nothing is recorded or reported.** The staff app shows the Accept as done.
+- **Measured in isolation**, with two connections to a WAL database (SQLite 3.45):
+  - with the statement left open, the write fails in 0.00 s;
+  - with the statement closed before the COMMIT, the same write succeeds.
+- **Why the sandbox never showed it:** its fake Evolution answered at once, so the Accept's writes were done before
+  uCRM's notice arrived a second later.
+
+**Reproduced with the real plugin code** (rehearsal). Evolution answers in 4 s here; the real one took about 2 s on
+the server. The servers answer several requests at once, as PHP-FPM does.
+- **S12, the Accept test** (job #11's path):
+  - the notifier says *sent*, and the technician gets message 2 once;
+  - another process wrote the job's record during the Accept;
+  - neither row is saved. The server's output, line for line.
+- **S12c, the staff app's own API** (job #10's path):
+  - the API answers success with WhatsApp *sent*, and the technician gets message 2;
+  - the claim is written, and the webhook wrote the record too;
+  - neither row is saved.
+- **S12b and S12d, the same two with one line added** to a scratch copy of the plugin: `$st->closeCursor();` after
+  the claim's read. **Both rows are saved.** That line is the only difference from S12 and S12c.
+- **Stable:** S12 to S12d passed three times in a row with 4 s. A first draft with 2 s missed the race once, so the
+  window was widened.
+
+**What happened on 28 September, therefore** (inferred from the above):
+- **S4 was sent "Thank you for accepting the job!" twice by WhatsApp**: for job #10 at about 13:27 Kampala, and for
+  job #11 at about 16:12. For #11 the notifier says so. The e-mail most likely went too.
+- **Since 5.18.52 (07:41 UTC on 28 September), most likely every Accept made through DishNet has sent message 2 and
+  recorded nothing.** On the server, uCRM's notice lands inside the Accept's delivery. What each such Accept lost:
+  - the history row;
+  - the Message Log row;
+  - the conversation-store row;
+  - the Evolution echo claim. So the echo of message 2 reached the plugin unclaimed, which, by the code's own comment,
+    reads as a colleague typing and stands the AI down on that chat. Inferred from the comment, not measured.
+- **The webhook's own sends keep the same open statement.** `observe()` reads the same way
+  (`lib/JobNotifier.php:122–124`).
+  - They were all recorded, because nothing else normally writes during their delivery.
+  - The risk is latent: two uCRM notices for one job within about two seconds, or any other write in that window,
+    would lose them the same way.
+- **What people saw:**
+  - the job page showed the Accept as done;
+  - `--facts` and the walk-through reported *"no message 2 recorded"*. That was true of the records, not of the
+    message.
+
+**Proposed: 5.18.53 — not built; it needs approval:**
+1. **The fix:** close the claim's read before its COMMIT, in `accepted()` and in `observe()`. That is
+   `$st->closeCursor();` after each fetch: two lines.
+2. **No silent loss again:** when `writeLog()` or `event()` cannot write, one line goes to the plugin log, naming the
+   table and the error.
+3. **A regression test in the plugin's own suite.** It forces the race with a second connection writing during the
+   send. It must fail without the fix and pass with it.
+4. The deploy script and its rehearsal, and the suite twice, as for 5.18.52.
+5. **Optional, each approvable on its own:**
+   - F-WT1: *"no longer assigned"* shows the booked time (§16.26);
+   - show `whatsapp_note` on the job page.
+
+§16.27's proposals 1 and 2 (surviving a warning; the history row first) are **withdrawn as the explanation**: the test
+ruled warnings out. They remain possible hardening, and are not in 5.18.53.
+
+> **30 September:** items 1 to 3 were approved and built as 5.18.53 (§16.29); neither optional item was approved.
+
+**The test, changed** (`scripts/` only; the plugin is unchanged):
+- The *notifier* line now carries the e-mail's outcome.
+- **A read-only probe, on a connection of its own**, reports the job record's version before and after the Accept.
+  When the record changed twice or more, it says another process wrote it meanwhile.
+- **A new verdict:** *"message 2 went (the notifier says sent), but neither its history row nor its Message Log row
+  was saved, and nothing reported it"*.
+
+**Rehearsed** (`scripts/harness/job-walkthrough/`):
+- Two new injections, into the scratch plugin copy only:
+  - `slow-evo`, an Evolution as slow to answer as the real one;
+  - `fix-cursor`, the proposed fix.
+- Four new scenarios, S12 to S12d.
+- Two new weakened copies, each caught by S12: X18 removes the new verdict, and X19 removes the version note.
+- **121 assertions over twenty-two scenarios, and nineteen weakened copies. Two consecutive runs,
+  identical** (`docs/evidence/5.18.52/walkthrough/rehearsal-run7.log` and `-run8.log`).
+- The helper passes `php -l` under PHP 8.1.34 (php-wasm) and 8.4.
+
+**For the operator — no command this time:**
+1. **On S4's phone and e-mail,** look for two *"Thank you for accepting the job!"* messages from 28 September: about
+   13:27 (job #10) and about 16:12 (job #11), Kampala time. Finding them confirms the diagnosis on the real line.
+2. **Decide on 5.18.53:** the fix, the logging and the regression test. Say whether to include either optional item.
+
+### 16.29 5.18.53 — message 2's records saved, and a line whenever a record cannot be; built and rehearsed, not deployed — 30 September 2026
+
+**Built on the operator's approval** of §16.28's items 1 to 3 (*"yes go ahead"*; then *"1. Close that read in the two
+places it happens. That's two lines. 2. Write a line to the plugin log whenever a record can't be saved, so this can't
+happen silently again. 3. Add a test to the plugin's suite that reproduces the problem, fails without the fix, and
+passes with it. build all this"*). **Plugin commit `6b71ea6`.** The two optional items (F-WT1; `whatsapp_note` on the job
+page) were not approved and are not in it.
+
+**1. The fix: two lines** (`lib/JobNotifier.php`).
+- `observe()`: `$st->closeCursor();` right after the job's record is read, before `decide()` and the COMMIT.
+- `accepted()`: the same, right after the claim's read.
+- Nothing else in the notifier changed: the messages and their words, who receives them, the claim and the order of the
+  records are 5.18.52's.
+
+**2. A line in the plugin log whenever a record of a send cannot be saved** (`lib/PluginLog.php`, new).
+- **Where:** `data/plugin.log` beside the plugin's code. That is the log uCRM shows on the plugin's page, where the
+  master cron's lines go. It is not the plugin's data directory (on the server, `.dishnet-hybrid-sudan-data` beside
+  the plugin).
+- **What a line looks like** (the plugin's clock, Kampala, as the master cron's lines):
+
+  ```
+  [2026-09-30 16:12:30] [records] not saved: the Message Log row (notification_audit_log), event ops_job_accepted_self — SQLSTATE[HY000]: General error: 5 database is locked
+  ```
+- **The five records**, each at the place that swallows its own failure:
+
+| Record | Table | Where |
+|---|---|---|
+| the Message Log row | `notification_audit_log` | `NotificationService::writeLog()` |
+| the failure-queue row (a failed send, for a retry by hand) | `notification_queue` | `NotificationService::queueFailed()` |
+| the conversation-store row (the Inbox) | `wa_messages` | `NotificationService`, the conversation logging after a send |
+| the echo claim | `evo_webhook_seen` | `EvoWebhookGuard::claim()`: a duplicate is the claim working, and writes no line |
+| the job history row | `job_notify_events` | `JobNotifier::event()`: one line, after both forms of the row failed |
+
+- **Each still swallows its failure:** a message already sent is never undone by its bookkeeping. The line only says
+  so.
+- **Never a number, an address or a text.** Callers name the record, its table, and an event name or a job number. The
+  error is masked as well (every e-mail address and every phone-like number), and a line is cut at 400 characters.
+- **It never throws and never raises a PHP warning**, since the staff app's API ends a request at one (§16.27). When the
+  file cannot be written, the line goes to PHP's error log, which is the container's log.
+- **Wider than the proposal:** §16.28 named `writeLog()` and `event()`. The Accept of 28 September also lost the
+  conversation-store row and the echo claim, so all five are covered.
+- **South Sudan** runs no job notifier, so the fix does not reach it. The five lines do: a record that cannot be saved
+  there now has its line too. Nothing sent, shown or stored differs.
+
+**3. The regression test** (`tests/test_job_records_race.php`, new: 46 assertions, about 55 s).
+- **It forces 28 September's race through the real code:** the real staff API and the real webhook, in the job sandbox
+  (Uganda), with the plugin's server answering four requests at once, as PHP-FPM does.
+  - The fake Evolution holds the Accept's message 2 until the test lets it go.
+  - Meanwhile uCRM's `job.edit` for the same job reaches the webhook, which writes the job's record.
+  - Then message 2 is let go.
+- **With the fix:** message 2 is sent once, and all four records of the send are saved: the history row, the Message
+  Log row, the Inbox row and the echo claim. The record's version goes 1 → 2 (the claim) → 3 (the webhook). No line in
+  the plugin log.
+- **The same for `observe()`:** uCRM's `job.edit` giving a job to another engineer is claimed and held at WhatsApp
+  while uCRM's `job.add` for another job goes through the webhook. Released, both its messages (message 1 to the new
+  engineer, *"no longer assigned"* to the other) have all their records.
+- **5.18.52 exactly** (`7ad465e`, in a tree of its own): message 2 is sent, the four records are lost, and nothing is
+  written anywhere; `plugin.log` does not even exist. That is job #11's trail.
+- **5.18.53 with the fix taken out:** the records are lost again, and four lines say which: the echo claim, the Message
+  Log row, the Inbox row and the history row, each *"database is locked"*.
+- **The lines themselves:** with a trigger refusing all five tables, the job given back to its engineer still sends
+  both its messages, and eight lines name the lost records in the order they were written (the echo claim, the Message
+  Log row, the Inbox row and the history row, for each message). A failed send whose failure-queue row is refused too
+  adds that row's line. With the triggers removed, no line. Every line is masked and on the Kampala clock; a duplicate
+  echo claim writes none; and the file is found beside the code wherever the data directory is.
+- **South Sudan:** New Job sends its message as before, no line is written, and the notifier's tables stay empty. With
+  the Message Log refused, the message still goes, and one line says so.
+- **Twelve weakened copies, each caught:** either read left open (2); each of the five lines removed (5); a duplicate
+  echo reported as lost; the error written unmasked; the line written in the data directory; the line only in PHP's
+  error log; a lost record that stops the send.
+
+**Under PHP 8.1.34, the server's version** (php-wasm):
+- every changed PHP file passes `php -l`;
+- a driver that runs the helper and the open read gives the same output as under 8.4.19, but for its version line. The
+  write after the open read fails at once with *"database is locked"*, although a 5 s busy timeout is set; after
+  `closeCursor()` it is saved.
+
+**The suite** (PHP 8.4.19, in the main checkout):
+- **Twice on `6b71ea6`: 227 files, 10,764 assertions passed, 0 failed, identical file by file** (1,084 s and
+  1,139 s). A run just before the commit, on the identical files, gave the same counts (1,107 s).
+- **Compared with 5.18.52's runs (§16.16), file by file,** all 226 files have the same counts; `test_job_records_race.php`
+  (46) is new.
+
+**The deploy script — `scripts/deploy-5.18.53.sh`, commit `0045253`:**
+- **Over 5.18.52 only** (`7ad465e`). Any other live commit is a NO-GO that says *"deploy 5.18.52 first"*. It installs
+  `6b71ea6` by its hash, also after later pushes.
+- **The same stages as 5.18.52:** before-evidence and GO/NO-GO, the backup, the documented deploy on a typed DEPLOY,
+  stage V and stage R. The rollback to 5.18.52 asks for a typed ROLLBACK, and its command is printed once, at the end
+  of the log, on its own. There is no migration, so a rollback needs no restore.
+- **New — the copy's time (§16.23):** after the documented deploy, and after a rollback, each installed file this
+  release changes gets the time of the copy. `tar` keeps the checkout's time, which Git may have written in the very
+  second of the copy PHP-FPM compiled before, and OPcache tells a changed file only by that second.
+- **New checks:**
+  - **A6:** the database's owner (PHP-FPM's user) can write the plugin log; if not, the lines go to PHP's error log,
+    and it says so.
+  - **A7:** OPcache's settings, read as text from `php.ini`, `conf.d` and the PHP-FPM pool files.
+  - **A8:** each changed file's time before the deploy.
+  - **R6:** the fix (both reads) and the five lines are in the installed files.
+  - **R12:** each changed file carries a time from this deploy, and none keeps the second of the copy before it; and
+    OPcache checks files' times. `validate_timestamps 0` fails; a pool file that sets an OPcache value is a note.
+  - **R13:** the plugin log since the deploy. No *"not saved"* line is ok; any is a note, printed masked (the last 10).
+  - **RB4**, after a rollback: the files put back carry the rollback's time.
+- **What PHP-FPM runs cannot be read from a page:** no answer differs between 5.18.52 and 5.18.53. So R12 checks the two
+  things that decide it, the files' times and OPcache's settings. The Accept test afterwards runs the installed files
+  in a fresh PHP process, so it tests the code on disk; PHP-FPM's copy is what R12 covers.
+
+**Rehearsed** in `scripts/harness/deploy-5.18.53/rehearse.sh`:
+- **198/198 on two consecutive runs of the committed script**, each running it 83 times;
+  **36 weakened copies, each caught.**
+- **New in the rehearsal:**
+  - PHP's settings in the container are the server's: `php.ini` line 21 `validate_timestamps=1`, then
+    `revalidate_freq=2`, and no pool override. Taken the other way (0, a pool override, no `php.ini`), R12 fails,
+    notes, or says it could not read them.
+  - The plugin log starts with a *"not saved"* line from before the deploy, which no check may count; planted lines
+    since the deploy are printed with their numbers and addresses masked; a log cleared since the deploy is read from
+    its start.
+  - **§16.23's trap:** the clone's copies of the changed files carry the second of the installed ones. The deploy gives
+    each the time of the copy, and R12 passes; the weakened copy without it leaves the old second in place.
+- **Found while rehearsing, and corrected in the harness, not the script:** `git archive` of a path (`7ad465e:dir`)
+  stamps its files with the current time, not the commit's.
+
+**After the deploy: the Accept test** (§16.27, unchanged). It creates one test job, runs DishNet's Accept code with the
+installed files, and sends real messages to S4: message 1, message 2, and *"cancelled"* when the job is deleted. With
+`--no-customer-email` the test customer gets nothing.
+- **Expected:** *"✓ no PHP warning that ends the staff app's request, and message 2 went"*, with the history row and the
+  Message Log row listed under it.
+- **When uCRM's notice lands during the Accept**, as it did on 28 September, the test also says *"the job's record changed
+  2 times while the Accept ran"*. With both, the race happened and the records survived it. Without that note, the race
+  did not happen during that run, and the test shows only that nothing else broke.
+- Then `--after-only` the next day: R13 counts any record lost since.
+
+**Not in 5.18.53:** F-WT1 and `whatsapp_note` on the job page (not approved); §16.27's proposals 1 and 2 (withdrawn as
+the explanation, §16.28).
+
+**Evidence:** `docs/evidence/5.18.53/`.
+
+**For the operator:**
+1. **The deploy.** Run as root on the server; it asks you to type DEPLOY. Then send back the log file with
+   `tail -n +1`, never a copy of the terminal. Its rollback is printed at the end of that log, on its own, and asks for
+   a typed ROLLBACK.
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+  && mkdir -p /root/dnb-5.18.53 \
+  && bash scripts/deploy-5.18.53.sh 2>&1 | tee /root/dnb-5.18.53/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+2. **Once it has PASSED, the Accept test.** It asks typed questions and sends real messages to S4.
+
+```
+cd /opt/dishnet && bash scripts/job-walkthrough.sh --accept-test --no-customer-email
+```
+
+Then `tail -n +1` the log file it names.
+
+**Not deployed.**
+
+> **30 September, 06:33 UTC:** deployed, PASSED; the Accept test on it confirmed the fix (§16.30).
+
+### 16.30 5.18.53 deployed, and the Accept test on it — 30 September 2026, 06:33 UTC
+
+**PASSED: 49 ok, 0 failed, 2 notes.** `6b71ea6` over `7ad465e` (5.18.52), deployed by the operator (run
+`20260930T063323Z`; the deploy itself at 06:33:53 UTC). The pull brought the checkout from `c10fdda` to `edc0085`,
+whose plugin commit is `6b71ea6`, so the script installed the checkout as it stood. The operator printed the log file
+with `tail -n +1` and pasted it; it carries no name, e-mail, number or secret.
+
+- **A.**
+  - 8 files against `7ad465e`: 6 changed, 2 added, 0 removed. The server's PHP 8.1.34 accepted the 4 changed PHP files
+    that run on the server and the 3 test files.
+  - Uganda from both configuration sources. 5 staff accounts, all active, digest `0c5c170623a6dc3d` (as at §16.20).
+    The Message Log ends at #441.
+  - Migrations 075 and 076 applied, as 5.18.52 left them: 3 jobs, 6 history rows.
+  - **A6:** the plugin log did not exist yet; the database's owner (1000:1000, PHP-FPM's user) can create it.
+  - **A7:** `validate_timestamps 1` at `php.ini:21`; `enable` and `revalidate_freq` unset, so PHP's defaults (on,
+    2 s); no PHP-FPM pool file sets an OPcache value.
+- **The backup,** `/root/dnb-5.18.53/backup-20260930T063323Z`: `plugin.sqlite3`, 24 MB, integrity ok, 227 tables; the
+  data directory, 108 MB; the plugin's own `data/`, 100 KB; the installed 5.18.52, 11 MB; the vault; UISP health.
+- **B.** *"✓ container now serves 6b71ea6"*; the 8 files were given the copy's time, 06:33:54 UTC.
+- **V.** All ok; no fatal or parse error of the plugin since 06:33:53 UTC, after the 60 s wait.
+- **R.**
+  - R1–R6, R8–R10, R12 and R13 ok. R6: the fix and the five lines are in the installed files.
+  - R9: the 6 history rows are message 1 ×3, *"cancelled"* ×2 and a new time ×1, each sent by WhatsApp and e-mail.
+  - **R12:** all 8 files carry the deploy's time, and OPcache re-checks files' times at most every 2 s, with no pool
+    override.
+  - **R13:** no plugin log yet, so no *"not saved"* line.
+  - **Note R7:** 2 of the 4 accounts that take jobs hold a verified link (S1 and S4); the other two still hold ids
+    stored the old way (M5).
+  - **Note R11:** the engineer's e-mail goes through the plugin's own SMTP settings.
+
+**The Accept test on 5.18.53: job #13, 06:35 UTC (09:35 Kampala).** Taken from the terminal the operator pasted; the log
+file stays on the server as `/root/dnb-5.18.52/accept-test-20260930T063526Z.log`.
+- **Before:** the installed plugin is 5.18.53, with the notifier, on Uganda. The technician is uCRM user 1099 → S4:
+  verified, active, with a usable number and an e-mail. The title is not an installation, so the test customer got no
+  e-mail.
+- **Created:** job #13, for 1 October 10:00 Kampala. uCRM's `job.add` reached the plugin in 2 s, and message 1 went to
+  S4 by WhatsApp and e-mail.
+- **DishNet's Accept:**
+  - the same environment as on 28 September: error level `E_ALL` from `php.ini`, no PHP-FPM override, PHP-FPM's 12
+    workers and the test both uid 1000, Evolution in both settings copies;
+  - it took 1.7 s; the notifier says *sent* to S4, e-mail *sent*;
+  - **the job's record changed twice while it ran:** once by the Accept's own claim, and once by the webhook handling
+    uCRM's notice of the status change. That is the collision that lost both records on 28 September;
+  - **this time both records were saved:** the history row (`accepted/accepted`, sent, e-mail sent) and the Message Log
+    row (`ops_job_accepted_self`, sent);
+  - the verdict: *"✓ no PHP warning that ends the staff app's request, and message 2 went, and the e-mail was handed to
+    the mail server"*.
+- **Deleted:** uCRM's `job.delete` reached the plugin in 2 s. *"Cancelled"* went to S4 by WhatsApp and e-mail, and its
+  history row and Message Log row were saved. uCRM now answers 404 for the job.
+
+**What this establishes:**
+- **The fix works on the server.** Job #11 (§16.28) met the same collision on 5.18.52: message 2 went, and neither
+  record was saved. Job #13 met it on 5.18.53, and both were.
+- **What it does not cover:** the Accept test runs the installed files in a fresh PHP process. The staff app's own
+  ✔ Accept Job button runs through PHP-FPM, whose copy R12 covers: every changed file carries the deploy's time, and
+  OPcache re-checks times every 2 s. The first Accept pressed in the staff app will show it directly, through
+  `--facts N` for that job.
+
+**A correction to §16.29:** the rehearsal's container has a `php.ini` that sets `revalidate_freq=2`. The server's leaves
+it unset (A7), which is PHP's default of 2 s. The behaviour is the same, and R12 reads both the same way.
+
+**Found on the way, not changed:** `scripts/job-walkthrough.sh` still writes its logs under `/root/dnb-5.18.52/`.
+
+**For the operator — no command now:**
+1. On S4's phone and e-mail, job #13's three messages: message 1, *"Thank you for accepting the job!"* and
+   *"cancelled"*, each by WhatsApp and by e-mail.
+2. After a day of real jobs, the checks again. R4 and R9 count the job messages sent since the deploy, and R13 says
+   whether any record could not be saved. It asks nothing and changes nothing:
+
+```
+cd /opt/dishnet && bash scripts/deploy-5.18.53.sh --after-only 2>&1 | tee /root/dnb-5.18.53/after-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+   Then `tail -n +1 /root/dnb-5.18.53/after-*.log`.

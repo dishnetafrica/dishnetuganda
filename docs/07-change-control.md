@@ -2276,3 +2276,159 @@ customer the older "installation booked" e-mail; test jobs need no customer.
 - **Proposed for 5.18.53, not built:** the Accept survives a warning; the history row first; the job page shows what
   became of message 2.
 - Rehearsed twice, identically: 107 assertions, and seventeen weakened copies caught.
+
+## 28–30 Sep — message 2 goes, its records are lost: the cause and a one-line fix (docs/44 §16.28)
+
+- **The Accept test on the server (job #11):** no PHP warning, no error, 2.0 s, Evolution in both settings copies.
+  The Accept code says message 2 was **sent**, yet neither its history row nor its Message Log row exists. So the
+  warning explanations are ruled out.
+- **The cause:**
+  - the Accept's claim leaves its database read open (`lib/JobNotifier.php:192`);
+  - uCRM's notice of the Accept's own status change makes the webhook write the job's record meanwhile;
+  - the Accept's later writes then fail at once with *"database is locked"*, and each of them swallows the error.
+  Measured with two connections, then reproduced with the real plugin code, both through the Accept test and through
+  the staff app's own API.
+- **The fix, shown in the sandbox:** `$st->closeCursor();` after the claim's read. Both rows are saved.
+- **So on 28 September S4 most likely received message 2 for jobs #10 and #11.** Asked of the operator.
+- **Proposed for 5.18.53, not built:**
+  - the fix in `accepted()` and `observe()`;
+  - a log line whenever a record cannot be written;
+  - a regression test that fails without the fix.
+- **The Accept test** now names this case, and shows when another process wrote the job's record during the Accept.
+  `scripts/` only; the plugin is unchanged.
+- Rehearsed twice, identically: 121 assertions over twenty-two scenarios, and nineteen weakened copies
+  caught.
+
+## 5.18.53 — message 2's records saved, and a line whenever a record cannot be; built and rehearsed, not deployed (docs/44 §16.29)
+
+- **The change, plugin commit `6b71ea6`,** on the operator's approval of §16.28's items 1 to 3:
+  - **the fix:** the job notifier's claim ends its read before its COMMIT, in `accepted()` and in `observe()`. Two
+    lines, `$st->closeCursor();`;
+  - **the log:** when the Message Log row, the failure-queue row, the Inbox row, the echo claim or the job history row
+    cannot be saved, one line goes to the plugin log (`data/plugin.log`, the log uCRM shows on the plugin's page): the
+    record, its table, the event or job, and the error. Never a number, an address or a text. The send is never
+    undone;
+  - **the test:** `test_job_records_race.php` (46) forces 28 September's race through the real staff API and webhook.
+    With the fix every record is saved; 5.18.52 loses them and says nothing; with the fix taken out, four lines say
+    which were lost. Twelve weakened copies are each caught.
+- **Not in it:** F-WT1 and `whatsapp_note` on the job page (not approved).
+- **South Sudan:** nothing sent, shown or stored changes. A record that cannot be saved now has its line there too.
+- **PHP 8.1.34 (the server's):** every changed PHP file passes `php -l`, and the helper and the open read behave as
+  under 8.4.19.
+- **The suite, twice on `6b71ea6`:** 227 files, 10,764 passed, 0 failed, identical file by file. Against 5.18.52 only
+  the new file differs.
+- **`scripts/deploy-5.18.53.sh` (`0045253`).** It goes over 5.18.52 only, and installs `6b71ea6` by its hash.
+  New: each changed file gets the time of the copy (§16.23), and R12 checks those times and OPcache's settings; R13
+  reads the plugin log's *"not saved"* lines since the deploy. Rehearsed 198/198 twice; 36 weakened copies caught.
+  The rollback is a separate command, printed on its own.
+- **Not deployed.** Next: the deploy command, then the Accept test (§16.27).
+
+## 30 Sep — 5.18.53 deployed (PASSED 49/0/2), and the Accept test on it (docs/44 §16.30)
+
+- **The deploy, 06:33 UTC:** `6b71ea6` over `7ad465e`, installed as the checkout stood at `edc0085`. 49 ok, 0 failed;
+  notes R7 (2 of the 4 job-taking accounts verified, M5) and R11 (the plugin's SMTP). The 8 changed files carry the
+  deploy's time and OPcache re-checks times (R12); there is no plugin log yet (R13). Backup
+  `/root/dnb-5.18.53/backup-20260930T063323Z`.
+- **The Accept test, job #13, 06:35 UTC:** message 2 went by WhatsApp and e-mail in 1.7 s, and **its history row and
+  Message Log row were saved, while the webhook wrote the job's record during the Accept**: the collision that lost
+  both on 28 September. Message 1 and *"cancelled"* went and were recorded too.
+- **Next:** `--after-only` after a day of real jobs.
+
+## 30 Sep — notifications and bulk communication, uCRM and the plugin: an audit (docs/45)
+
+**What.** An audit, at the operator's request, of every notification uCRM and the plugin send on Uganda, and of
+uCRM's bulk ("multi-user") communication. **Nothing was changed:** no code, configuration, schedule or record;
+nothing deployed; nothing sent.
+
+**Found.**
+- The plugin carries almost all customer communication: WhatsApp for every event, and the eight Uganda e-mails
+  switched on 15 Sep.
+- uCRM's own notifications, its mailer, its e-mail log and its bulk e-mail ("Mailing") have **never been looked at on
+  this server**. Its documentation is blocked from this session, so every uCRM feature is marked unverified.
+- Possible duplicates with uCRM: invoice, quotation, receipt, suspension. KYC quotes always trigger uCRM's quote
+  e-mail.
+- Reminders go by two paths with separate guards. The overdue WhatsApp still says *"suspending tonight"*, although
+  the prepaid e-mail ladder was stopped for saying so.
+- Ten code defects (docs/45 §4.4). Among them: the payment webhook stops after the receipt (run here under PHP 8.1.34,
+  the server's version); the retailer app can send a second receipt; the WhatsApp "Event Map" switches are read by no
+  sender.
+- **No usable way to message many customers at once** about maintenance or news. The plugin's outage alert has no
+  screen, and uCRM's Mailing is unverified.
+- Seven staff-side findings (docs/45 §4.5). Among them: the failure-queue API checks no role, and the 07:00
+  staff-jobs brief never sends.
+- Missing: e-mail for customers without a phone, and for invoices raised as drafts; retries and delivery receipts;
+  SMS; consent and unsubscribe; admin and watchdog alert numbers.
+
+**Next.** The read-only checks V1–V11 (docs/45 §8), then the owner decisions O1–O8. Every fix (F1–F14) and gap
+(G1–G11) waits for approval, and none is part of Release A or B.
+
+## 30 Sep — 5.18.54: notification reliability, built and rehearsed, not deployed (docs/46)
+
+**What.** The bug-fix project that followed docs/45: every customer notification once, through the right channel, at
+the right time, with a record and a safe retry. Repository only: **nothing deployed, no setting changed, no message
+sent, no uCRM notification switched on or off.** Every change is behind `NotifyGate`, true only on Uganda; South Sudan
+runs 5.18.53's code.
+
+**Built** (docs/46 §A, §B): 47 rows, each with its tests and weakened copies. Among them:
+- the payment webhook carries on after the receipt, and a payment gets one WhatsApp receipt (rows 1–4);
+- reminders come from one daily run in the daytime, each tier once, with the prepaid rules (5–8, 20);
+- the failure-queue API is for administrators only, and no GET link sends or changes uCRM (10, 11);
+- one message per uCRM event, credit note and quote; numbers in international form (12–17, 38, 45);
+- a refused WhatsApp is retried a bounded number of times; one that may have gone never is (30, 31, 42, 44);
+- a watchdog for stopped jobs and piling failures, and System Health reads master's record (32, 43).
+
+**Not built, with the reason** (docs/46 §D): e-mail retries and delivery receipts, SMS, consent for marketing, the
+broadcast screen, and four senders outside the Message Log (N-20), among 16. **Decisions for you** (§E): 12, none
+needed to review the work. uCRM's own e-mails stay on (E-12).
+
+**Tested:** the full plugin suite twice on `e8a8508`: 247 files, 11,336 assertions, 0 failed, identical file by
+file; the South Sudan comparison green in both. **Rehearsed:** the deploy script (`fde675c`) twice: 227 checks each,
+0 failed, 94 runs of the script, 41 weakened copies caught. Evidence: `docs/evidence/5.18.54/`.
+
+**Next.** Your review of docs/46 §G–§H, then, on your approval only, `scripts/deploy-5.18.54.sh` (its rollback is
+printed at the end of its log), then the checks of §G.
+
+## 30 Sep — distribution management on uCRM and the plugin: an audit and a phased plan (docs/47)
+
+**What.** An audit of the uCRM installation and the DishNet plugin, and a phased plan for a distribution network of
+prospective partners: fuel-station chains, supermarkets, shops, distributors and wholesale buyers. **Audit only:**
+- no code, migration, setting or uCRM record was changed;
+- nothing was deployed;
+- no server was contacted;
+- no test was run.
+
+**Found:**
+- **uCRM** (4.5.33, measured 23 Sep) can hold a partner as one **company client**: invoices, payments, credit notes,
+  balance. It has no place for an outlet, and no partner price list.
+- **uCRM organisations** are DishNet's own issuing entities, and Uganda has one. They must not be used for partners.
+- **The plugin already has most of the machinery:**
+  - stock units and movements, purchases and costing, and the authoritative kit binding (B-1);
+  - the append-only financial audit and per-currency reporting;
+  - the job scheduler, country gating and the customer-portal session design.
+- **Missing:** partners, outlets, the owner of stock apart from its location, dispatch and receipt, consignment,
+  dated prices and commission rules, settlements and partner sign-in.
+- **Partner users cannot safely sign in through anything that exists today.** The plan is a minimal, separate
+  partner portal with its own identity and a deny-by-default API.
+- **Tax is the one real block.** uCRM has no VAT configured, and the plugin refuses EFRIS production. Invoicing a
+  VAT-registered partner waits on the accountant.
+- **Existing defects** (docs/47 §7.2, PD-1 to PD-13):
+  - **PD-1:** the collections CSV export appears to have no sign-in check. It was found by reading and **not
+    reproduced**, and a fix of its own is recommended now.
+  - Duplicate serials are possible.
+  - Stock balances are clamped at zero.
+  - Migrations are marked applied after a failed statement.
+  - A payment turns a residential client into a company client.
+
+**Proposed** (docs/47 §14):
+- Phase 0 foundations first.
+- Then partners and outlets; the stock journal; prices, orders and sales; commissions and settlements.
+- Then a **staff-operated pilot before any partner signs in**, then the partner portal, then the rollout.
+- Every phase is additive, switched off at deploy, tested with weakened copies, and deployed by a pinned script with
+  a separate rollback.
+
+**Next.** Your review:
+- the decisions D-1 to D-15 (D-6 needs the accountant);
+- the verifications NV-1 to NV-13, three of which write a test record to uCRM and need your approval;
+- PD-1 on its own.
+
+Nothing is built until you approve a phase.

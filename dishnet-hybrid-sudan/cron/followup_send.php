@@ -131,6 +131,16 @@ foreach ($svc->approvedDrafts(10) as $d) {
     $ok = empty($res['suppressed']) && (!isset($res['ok']) || !empty($res['ok']))
           && empty($res['error']);
     if (!$ok) {
+        // 5.18.54 (docs/46 row 31, N-1), Uganda: a failed draft stays approved and goes again in five minutes. When it may
+        // already have reached the customer, that is the same follow-up twice, so it is set aside instead, and says why.
+        if (EvolutionApiService::mayHaveBeenSent($res)) {
+            require_once $pluginRoot . '/lib/NotifyGate.php';
+            if (NotifyGate::applies(NotifyGate::EVO_RETRY, $config, $dataDir)) {
+                $svc->recordUncertain($fuId, (int)$d['id'], (string)$res['error'], 'sender');
+                $failed++;
+                continue;
+            }
+        }
         $svc->recordFailure($fuId, (int)$d['id'],
             (string)($res['error'] ?? 'the send failed'), 'sender');
         $failed++;

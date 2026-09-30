@@ -7,6 +7,8 @@ require_once __DIR__ . '/lib/QuoteWaLedger.php';
 require_once __DIR__ . '/lib/PaymentOptions.php';
 require_once __DIR__ . '/lib/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
 require_once __DIR__ . '/lib/currency.php';
+require_once __DIR__ . '/lib/NotifyGate.php';     // 5.18.54: the notification fixes, Uganda only (docs/46)
+require_once __DIR__ . '/lib/ReceiptOnce.php';    // 5.18.54: one receipt per payment (docs/46 rows 2-4)
 
 // EARLY DEBUG - log that we reached the file
 error_reporting(E_ALL);
@@ -589,6 +591,23 @@ function whVerified(string $label, int $id, ?array $row): array {
     return $row;
 }
 
+/**
+ * 5.18.54 (docs/46 row 15, D10): true the first time this uCRM event reaches the message it guards, false when uCRM
+ * delivers the same event again. The key is the event's own id (its uuid) and the message, claimed just before that
+ * message is sent: an event that sends two messages sends each once, and two real events — two uuids — each send.
+ *
+ * On Uganda only. Elsewhere, and for an event that carries no uuid, always true: the 5.18.53 behaviour.
+ */
+function whEventOnce($uuid, string $message, $notify, array $config, ?string $dataDir): bool {
+    require_once __DIR__ . '/lib/NotifyGate.php';
+    if (!NotifyGate::applies(NotifyGate::EVENT_ONCE, $config, $dataDir)) return true;
+    $uuid = is_scalar($uuid) ? trim((string)$uuid) : '';
+    if ($uuid === '') return true;
+    // uCRM's event ids are UUIDs; anything else is reduced to a fixed-length key rather than stored as sent.
+    if (!preg_match('/^[A-Za-z0-9-]{1,64}$/', $uuid)) $uuid = 'h' . sha1($uuid);
+    return $notify->dedupMark("EVT:{$uuid}:{$message}");
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') whResp(405, 'POST required.');
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -833,19 +852,35 @@ switch ($changeType) {
                           . "Please review and merge if duplicate.\n"
                           . dn_crm_web($config) . "/crm/client/{$clientId}";
 
+                if (!whEventOnce($uuid, 'dup_alert', $notify, $config, $dataDir)) {
+                    whLog($changeType, "Duplicate phone alert for #{$clientId}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+                } else {
                 $notify->sendAdmin($alertMsg, 'ops_dup_alert');
                 whLog($changeType, "Duplicate phone alert sent — new #{$clientId} matches existing #" . ($dupFound['id'] ?? '?'));
+                }
             }
         }
 
         if ($phone) {
             // Welcome message — only if NOT already sent by plugin (check local apps)
             $existingApp = $store->findOne('kyc_applications.json', 'crm_client_id', (string)$clientId);
+            // 5.18.54 (docs/46 row 19, D8): the KYC form, and its retry job, save the application only after uCRM has
+            // answered, and this event can come first. Both mark the username before asking uCRM
+            // (KycService::markSignup); on Uganda the mark counts as the application.
+            $kycMarked = false;
+            if (!$existingApp && trim((string)($client['username'] ?? '')) !== '') {
+                require_once __DIR__ . '/lib/NotifyGate.php';
+                $kycMarked = NotifyGate::applies(NotifyGate::KYC_WELCOME, $config, $dataDir)
+                          && $notify->dedupCheck('KYCNEW:' . trim((string)$client['username']));
+            }
+            $kycClient = $existingApp || $kycMarked;
             // kyc_messages_like_crm (5.18.30): a customer the KYC form put into
             // uCRM gets this welcome too, as one created in uCRM does; the form
             // then sends no booking message of its own (kycCrmCreated).
-            $kycLikeCrm = $existingApp && NotificationService::kycLikeCrm($config);
-            if (!$existingApp || $kycLikeCrm) {
+            $kycLikeCrm = $kycClient && NotificationService::kycLikeCrm($config);
+            if ((!$kycClient || $kycLikeCrm) && !whEventOnce($uuid, 'welcome', $notify, $config, $dataDir)) {
+                whLog($changeType, "Welcome for #{$clientId}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+            } elseif (!$kycClient || $kycLikeCrm) {
                 // Client created directly in UCRM (not via our KYC form) — send welcome.
                 // The text is written here on purpose: NotificationService::send()
                 // sends exactly what it is handed since 5.18.4. Before that it built
@@ -864,7 +899,8 @@ switch ($changeType) {
                 whLog($changeType, "Welcome sent to {$name} ({$phone})"
                     . ($kycLikeCrm ? ' — KYC customer, kyc_messages_like_crm' : ''), ['crm_id' => $clientId]);
             } else {
-                whLog($changeType, "KYC-registered client — welcome already sent by plugin", ['crm_id' => $clientId]);
+                whLog($changeType, "KYC-registered client — welcome already sent by plugin"
+                    . ($kycMarked ? ' (its application was still being saved: the form\'s mark)' : ''), ['crm_id' => $clientId]);
             }
         }
 
@@ -1251,11 +1287,31 @@ switch ($changeType) {
             } catch (\Throwable $_e) { /* non-fatal */ }
             // ── Atomic dedup: SQLite INSERT OR IGNORE — race-safe ──
             $payLogKey = "PAY{$paymentId}";
-            if (!$notify->dedupMark($payLogKey)) {
+            // 5.18.54 (docs/46 rows 2-4, D-2/D3): on Uganda the WhatsApp text receipt, this handler's own work (the
+            // e-mail, the receipt PDF, the delivery note) and the PDF each happen once per payment, whoever gets there
+            // first. PAY<id> is the text's guard: the retailer app and the staff collections claim it when they
+            // receipt a payment themselves, and a collection receipted before uCRM had the payment claims its
+            // reference instead. Before, a claim by anyone else skipped the e-mail and the PDF with the text (D3c).
+            $_rcptUg     = NotifyGate::applies(NotifyGate::RECEIPT_ONCE, $config, $dataDir);
+            $_rcptSendWa = true;
+            $_rcptWhy    = '';
+            if ($_rcptUg) {
+                $_rcptWaFirst = $notify->dedupMark($payLogKey);
+                $_rcptRef     = ReceiptOnce::refFromNote((string)($payment['note'] ?? ''));
+                $_rcptByRef   = $_rcptRef !== '' && $notify->dedupCheck(ReceiptOnce::refKey($_rcptRef));
+                $_rcptSendWa  = $_rcptWaFirst && !$_rcptByRef;
+                $_rcptWhy     = !$_rcptWaFirst ? 'already sent for PAY-' . $txnId
+                              : 'sent when the payment was collected (Ref: ' . $_rcptRef . ')';
+            }
+            if ($_rcptUg ? !$notify->dedupMark(ReceiptOnce::workKey((int)$paymentId)) : !$notify->dedupMark($payLogKey)) {
                 whLog($changeType, "Payment notification SKIPPED — already sent for PAY-{$txnId}");
             } else {
                 // Send text receipt to customer
-                $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
+                if ($_rcptSendWa) {
+                    $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
+                } else {
+                    whLog($changeType, "WhatsApp receipt not sent again — {$_rcptWhy}");
+                }
 
                 whCustomerEmail('payment_received', (int)$clientId, $name, [
                     'amount'    => $amount,
@@ -1277,6 +1333,9 @@ switch ($changeType) {
                         break;
                     }
                 }
+
+                // 5.18.54: on Uganda the PDF has a guard of its own, which the staff collections claim when they queue it
+                if ($_rcptUg && !$_alreadyQueued && !$notify->dedupMark(ReceiptOnce::pdfKey((int)$paymentId))) $_alreadyQueued = true;
 
                 if (!$_alreadyQueued) {
                     $receiptQueue[] = [
@@ -1368,8 +1427,16 @@ switch ($changeType) {
                     whLog('delivery_error', "Delivery note trigger failed for PAY-{$paymentId}: " . $delEx->getMessage());
                 }
 
+                // 5.18.54 (docs/46 row 1, D-1): Uganda carries on to the work below — the "just paid" marker, the
+                // payment push, the Starlink instant restore, the app-cache refresh and the Workbench close. uCRM
+                // has had its answer above, so the end of this case sends none. The two lines in the else branch
+                // release a lock that was never taken: flock() on null is a TypeError, and none of that work ran.
+                if (NotifyGate::applies(NotifyGate::PAYMENT_FLOW, $config, $dataDir)) {
+                    $payResponded = true;
+                } else {
                 flock($payLockFp, LOCK_UN); fclose($payLockFp); @unlink($payLockFile);
                 exit;
+                }
             } // end plugin dedup else
         }
 
@@ -1491,6 +1558,8 @@ switch ($changeType) {
             }
         }
 
+        // 5.18.54 (D-1): the answer went before the delivery note; a second one would only raise header warnings.
+        if (!empty($payResponded)) exit;
         whResp(200, 'payment.add processed.');
     }
 
@@ -1518,11 +1587,23 @@ switch ($changeType) {
 
         // Only notify if service is active (status=1)
         if ($phone && $status == 1) {
+            // 5.18.54 (docs/46 row 13, D-9, C5): nothing sends login details by e-mail. On Uganda the sentence says how
+            // the customer does sign in: the DishNet portal, with their phone number and a one-time code (proven on
+            // 26 September, docs/37). The words are listed for approval in docs/46 §E.
+            require_once __DIR__ . '/lib/NotifyGate.php';
+            $_d9Login = NotifyGate::applies(NotifyGate::ACTIVATION, is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                ? "🔑 To sign in to your DishNet account, open this link and enter your phone number. We send you a one-time code; there is no password to remember.\n"
+                  . "🔗 " . dn_plugin_public($config) . "?page=customer_login\n\n"
+                : "🔑 Login credentials have been shared via email.\n\n";
+            // 5.18.54 (D10): the WhatsApp and the app push once per uCRM event; the e-mail keeps its own guard.
+            $_d10Act = whEventOnce($uuid, 'activation', $notify, $config, $dataDir);
+            if (!$_d10Act) whLog($changeType, "Service activated notification for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+            if ($_d10Act) {
             $notify->sendVia('accounts', $phone,
                 "🚀 *Service Activated — DishNet Africa*\n\n"
                 . "Dear {$name},\n\n"
                 . "Your DishNet service *{$svcName}* is now active. 🌐\n\n"
-                . "🔑 Login credentials have been shared via email.\n\n"
+                . $_d9Login
                 . "Manage your account:\n"
                 . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
                 . "📞 Support: " . CustomerContact::accounts($config) . "\n"
@@ -1531,6 +1612,7 @@ switch ($changeType) {
                 . "— DishNet Team",
                 'ops_service_activated');
             whLog($changeType, "Service activated notification -> {$name} ({$svcName})");
+            }
 
             // The template reads plan_name, monthly_price, activated_on,
             // account_number and address; the first wiring passed 'plan' and
@@ -1547,7 +1629,7 @@ switch ($changeType) {
             ], "SVCADD{$clientId}:{$serviceId}", $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
-            try {
+            if ($_d10Act) try {
                 fcm_push_service_activated($store->getPdo(), $config, (int)$clientId, $svcName);
             } catch (\Throwable $e) { /* silent — push is best-effort */ }
         } else {
@@ -1725,7 +1807,9 @@ switch ($changeType) {
 
                 // Admin alert: this is the ONLY signal that anything happened.
                 $adminPhone = (string)($config['whatsapp_admin_phone'] ?? '');
-                if ($adminPhone !== '') {
+                if ($adminPhone !== '' && !whEventOnce($uuid, 'vip_alert', $notify, $config, $dataDir)) {
+                    whLog($changeType, "VIP alert for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+                } elseif ($adminPhone !== '') {
                     $outstandingFmt = number_format($outstandingRaw, 2);
                     $notify->sendVia('accounts', $adminPhone,
                         "🛡️ *VIP Suspension Intercepted*\n\n"
@@ -1751,7 +1835,28 @@ switch ($changeType) {
         // activation as a welcome — the same uCRM event announces both.
         whMarkPaused($store, (int)$serviceId, true);
 
-        if ($phone) {
+        // 5.18.54 (docs/46 row 8, C2): on a prepaid install a period that ends is a pause, not a suspension for an
+        // unpaid debt. The WhatsApp says what the service-paused e-mail says (approved and live since 15 September);
+        // everything after the text — the e-mail, the push — is the same for both.
+        require_once __DIR__ . '/lib/InvoiceReminders.php';
+        $_suspPrepaid = NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir) && InvoiceReminders::prepaid($config);
+        // 5.18.54 (D10): the WhatsApp, the e-mail and the push once per uCRM event (the e-mail also keeps its own
+        // guard). The devices are blocked below either way: that step is idempotent and is not a message.
+        if ($phone && !whEventOnce($uuid, 'suspension', $notify, $config, $dataDir)) {
+            whLog($changeType, "Suspension notice for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
+            if ($_suspPrepaid) {
+            $notify->sendVia('accounts', $phone,
+                "⏸️ *Service Paused — DishNet Africa*\n\n"
+                . "Dear {$name},\n\n"
+                . "Your paid service period for *{$svcName}* has ended, so your internet is paused for now. Nothing is cancelled.\n\n"
+                . "To resume, pay online: " . CustomerContact::payUrl($config) . "\n"
+                . "There is no reconnection fee — your service resumes as soon as your payment reaches us.\n\n"
+                . "Already paid? Reply with your payment confirmation and we will check it straight away.\n\n"
+                . "📞 " . CustomerContact::sales($config) . "\n"
+                . "— DishNet Accounts",
+                'ops_service_paused');
+            } else {
             $notify->sendVia('accounts', $phone,
                 "🚫 *Service Suspended — DishNet Africa*\n\n"
                 . "Dear {$name},\n\n"
@@ -1763,6 +1868,7 @@ switch ($changeType) {
                 . "📞 " . CustomerContact::sales($config) . "\n"
                 . "— DishNet Accounts",
                 'ops_service_suspended');
+            }
             whLog($changeType, "Suspension WhatsApp sent to {$name} ({$svcName})");
 
             // "Paused", not "suspended": on a prepaid install the period simply
@@ -2135,7 +2241,10 @@ switch ($changeType) {
         } catch (\Throwable $_) {}
 
         // ── 3. Send "Service Temporarily Restored" WA ──────────────────
-        if ($phone) {
+        // 5.18.54 (D10): once per uCRM event, with its push; the restore above runs either way.
+        if ($phone && !whEventOnce($uuid, 'postpone', $notify, $config, $dataDir)) {
+            whLog($changeType, "Postpone notice for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $deadlineLine = $postponedToFmt
                 ? "Please settle by *{$postponedToFmt}* to avoid another suspension.\n\n"
                 : "Please settle the outstanding balance to avoid another suspension.\n\n";
@@ -2185,7 +2294,9 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
-        if ($phone) {
+        if ($phone && !whEventOnce($uuid, 'service_end', $notify, $config, $dataDir)) {
+            whLog($changeType, "Churn recovery for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $notify->serviceEnded($phone, $name, $svcName);
             whLog($changeType, "Churn recovery sent to {$name} ({$svcName})");
         }
@@ -2364,7 +2475,9 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
-        if ($phone) {
+        if ($phone && !whEventOnce($uuid, 'quote_approved', $notify, $config, $dataDir)) {
+            whLog($changeType, "Quote approved notification for #{$num}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $msg = "✅ *Quote Approved — DishNet Africa*\n\n"
                  . "Dear {$name},\n\n"
                  . "Thank you for approving Quote *#{$num}*!\n\n"
@@ -2580,7 +2693,11 @@ switch ($changeType) {
 
         // ── Atomic dedup: SQLite INSERT OR IGNORE — race-safe with invoice.add + cron
         $invLogKey = "INV{$invoNum}";
-        if (!$notify->dedupMark($invLogKey)) {
+        // 5.18.54 (docs/46 row 47, N-21), Uganda only: the claim waits for the phone, as invoice.add's does. Taken here, a
+        // client with no phone used it up, and the 15-minute scanner, which honours it, never announced the invoice once
+        // a phone was added.
+        $_draftClaimLate = NotifyGate::applies(NotifyGate::DRAFT_CLAIM, $config, $dataDir);
+        if (!$_draftClaimLate && !$notify->dedupMark($invLogKey)) {
             whLog($changeType, "Already notified: #{$invoNum} — skipping");
             whResp(200, 'draft_approved — already notified.');
         }
@@ -2626,6 +2743,10 @@ switch ($changeType) {
             'remaining'   => $creditData['remaining'], 'scenario' => $creditData['scenario'],
         ]);
 
+        if ($phone && $_draftClaimLate && !$notify->dedupMark($invLogKey)) {
+            whLog($changeType, "Already notified: #{$invoNum} — skipping");
+            whResp(200, 'draft_approved — already notified.');
+        }
         if ($phone) {
             whSendInvoiceNotification($notify, $crm, $phone, $name,
                 $invoiceId, $invoNum, $amount, $dueDate ?: 'See invoice',
@@ -2905,6 +3026,14 @@ switch ($changeType) {
             // the cron's fallback sent it first; an error sends nothing either,
             // leaving the quote to that fallback rather than risking it twice.
             // Other quotes are not claimed — their path is unchanged.
+            //
+            // 5.18.54 (docs/46 row 17, D2c and N-9): on Uganda every quotation takes the claim. The quote screens
+            // (QuotationService) claim a quote they have just made before sending it, and cron_quote_wa's second flow
+            // claims before it sends: whoever is first sends, so a quote gets one WhatsApp. Before, a quote made in uCRM
+            // went from here and again from the cron within five minutes (the check at the top reads a list that never
+            // reads back, row 35), and one made on the quote screens went from both.
+            require_once __DIR__ . '/lib/NotifyGate.php';
+            $_quoteOnce = NotifyGate::applies(NotifyGate::QUOTE_ONCE, is_array($config ?? null) ? $config : [], $dataDir ?? null);
             if ($kycLikeCrm) {
                 $kycClaimErr = '';
                 try {
@@ -2917,6 +3046,22 @@ switch ($changeType) {
                     whLog($changeType, $kycClaimErr === ''
                         ? "Quote #{$quoteNum} already sent by cron_quote_wa — not sending it again"
                         : "Quote #{$quoteNum} not sent: its send record could not be written ({$kycClaimErr}) — left to cron_quote_wa");
+                    exit;
+                }
+            } elseif ($_quoteOnce) {
+                $_qoErr = '';
+                try {
+                    $_qoClaimed = QuoteWaLedger::claim($store->getPdo(), (int)$quoteId, (string)$quoteNum, 'webhook');
+                } catch (\Throwable $e) {
+                    $_qoClaimed = false;
+                    $_qoErr     = $e->getMessage();
+                }
+                if (!$_qoClaimed) {
+                    // Refused: the quote screen that made it, or the cron, has sent it. An error sends nothing either,
+                    // leaving the quote to the cron, which claims before it sends, rather than risking it twice.
+                    whLog($changeType, $_qoErr === ''
+                        ? "Quote #{$quoteNum} already sent — by the quote screen that made it, or by cron_quote_wa — not sending it again"
+                        : "Quote #{$quoteNum} not sent: its send record could not be written ({$_qoErr}) — left to cron_quote_wa");
                     exit;
                 }
             }
@@ -3083,6 +3228,14 @@ switch ($changeType) {
             }
 
             if ($phone) {
+                // 5.18.54 (docs/46 row 12, D7): on Uganda once per credit note. The staff screen claims its own note when it
+                // sends the message that says how the money came back; a second delivery of this event finds the claim.
+                require_once __DIR__ . '/lib/NotifyGate.php';
+                if (NotifyGate::applies(NotifyGate::CREDIT_NOTE, is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                    && !$notify->dedupMark('CN' . $creditNoteId)) {
+                    whLog($changeType, "Credit note #{$cnNum}: already announced — by the staff screen, or by an earlier delivery of this event; not sent again");
+                    whResp(200, 'credit_note.add processed (already announced).');
+                }
                 $msg = "💳 *Credit Note Issued*\n\n"
                      . "Hi {$name},\n\n"
                      . "A credit of *" . dn_money($amount, $config, null) . "* (#{$cnNum}) has been applied to your account.\n\n"
@@ -3124,7 +3277,9 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
-        if ($phone) {
+        if ($phone && !whEventOnce($uuid, 'client_message', $notify, $config, $dataDir)) {
+            whLog($changeType, "Client message for {$name}: this uCRM event was delivered again — not forwarded again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $msg = "📩 *Message from DishNet*\n\n"
                  . "Hi {$name},\n\n"
                  . $messageText . "\n\n"
@@ -3143,6 +3298,12 @@ switch ($changeType) {
     case 'invoice.near_due': {
         $invoiceId = (int)$entityId;
         if (!$invoiceId) whResp(200, 'near_due — no invoice ID.');
+        // 5.18.54 (docs/46 row 5, D-4): on Uganda the daytime reminder run is the one path for reminders, with one
+        // guard per invoice and tier. This event is recorded; it sends nothing (uCRM's own e-mail is uCRM's).
+        if (NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir)) {
+            whLog($changeType, "near_due recorded for invoice #{$invoiceId} — reminders are sent by the daily reminder run");
+            whResp(200, 'near_due — recorded; reminders are sent by the daily reminder run.');
+        }
 
         $invoice = $crm->get("invoices/{$invoiceId}");
         if (!$invoice) $invoice = $crm->get("billing/invoices/{$invoiceId}");
@@ -3211,6 +3372,12 @@ switch ($changeType) {
     case 'invoice.overdue': {
         $invoiceId = (int)$entityId;
         if (!$invoiceId) whResp(200, 'overdue — no invoice ID.');
+        // 5.18.54 (docs/46 row 5, D-4/D5): see invoice.near_due. Before, this sent once per invoice PER DAY, so an
+        // event raised daily meant a daily "Final Notice".
+        if (NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir)) {
+            whLog($changeType, "overdue recorded for invoice #{$invoiceId} — reminders are sent by the daily reminder run");
+            whResp(200, 'overdue — recorded; reminders are sent by the daily reminder run.');
+        }
 
         $invoice = $crm->get("invoices/{$invoiceId}");
         if (!$invoice) $invoice = $crm->get("billing/invoices/{$invoiceId}");
@@ -3513,6 +3680,18 @@ switch ($changeType) {
     case 'client.invite':
     case 'client.delete':
     case 'client.archive': {
+        // 5.18.54 (docs/46 row 16, D-6, and N-7): the two events above the end of a relationship share this block, so a
+        // draft invoice suspended the mailbox of the client whose id equals the INVOICE's, and a client-zone invitation
+        // suspended the invited customer's own. Taking the invoice's client instead would suspend the right customer
+        // each time uCRM drafts their recurring invoice. On Uganda neither event touches an identity; only a deleted or
+        // archived client is suspended. Elsewhere the 5.18.53 code runs, unchanged.
+        if (in_array($changeType, ['invoice.add_draft', 'client.invite'], true)) {
+            require_once __DIR__ . '/lib/NotifyGate.php';
+            if (NotifyGate::applies(NotifyGate::DRAFT_IDENTITY, is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+                whLog($changeType, 'Acknowledged — no identity change: only a deleted or archived client is suspended', ['entity_id' => $entityId]);
+                whResp(200, "{$changeType} acknowledged.");
+            }
+        }
         // Retention, not deletion: the customer's DishNet identity mailbox
         // goes into a suspended hold (login off, every message kept). Actual
         // mailbox deletion is a manual admin act under the retention policy —
