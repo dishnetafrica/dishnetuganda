@@ -4,18 +4,20 @@ declare(strict_types=1);
  * notify_units_side.php — the small decisions behind Uganda's reminder run, answered by the plugin tree under test (a
  * weakened copy included), so a test can compare them with what they must be. TEST ONLY.
  *
- *   php notify_units_side.php <pluginRoot>   → prints {"name": answer, …} as JSON
+ *   php notify_units_side.php <pluginRoot> <runZone> <dateZone>   → prints {"name": answer, …} as JSON
+ *   (the zones come from the calling test: a fixture may not pin one, tests/test_timezone.php)
  *
  *   window.*  JobWindow::due in Africa/Kampala: is the once-a-day job due at this time, given its last run?
  *   quiet.*   InvoiceReminders::quiet: is this hour inside the quiet hours?
  *   date.*    InvoiceReminders::parseDate: uCRM's due date as a local calendar date (Africa/Juba, UTC+2, on purpose:
  *             the zone that differs from uCRM's +0300)
  */
-[$_, $root] = array_pad($argv, 2, '');
+[$_, $root, $runZone, $dateZone] = array_pad($argv, 4, '');
+if ($runZone === '' || $dateZone === '') { fwrite(STDERR, "usage: notify_units_side.php <pluginRoot> <runZone> <dateZone>\n"); exit(2); }
 require_once $root . '/lib/JobWindow.php';
 require_once $root . '/lib/InvoiceReminders.php';
 
-date_default_timezone_set('Africa/Kampala');
+date_default_timezone_set($runZone);
 $t = fn(string $s): int => (int)strtotime($s);
 $out = [];
 
@@ -38,7 +40,7 @@ $out['quiet.off (0-0) 3h']      = InvoiceReminders::quiet(['notify_quiet_from_ho
 $out['quiet.invalid (25-8) 3h'] = InvoiceReminders::quiet(['notify_quiet_from_hour' => 25, 'notify_quiet_until_hour' => 8], 3);
 
 // Due dates, read in Africa/Juba.
-$juba = new DateTimeZone('Africa/Juba');
+$juba = new DateTimeZone($dateZone);
 $d = function (string $raw) use ($juba) { $x = InvoiceReminders::parseDate($raw, $juba); return $x ? $x->format('Y-m-d H:i T') : null; };
 $out['date.+0300 midnight']       = $d('2026-10-12T00:00:00+0300');
 $out['date.+03:00 midnight']      = $d('2026-10-12T00:00:00+03:00');

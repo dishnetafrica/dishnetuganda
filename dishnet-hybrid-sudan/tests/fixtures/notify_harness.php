@@ -18,6 +18,8 @@ final class NotifyHarness
     public int $evoPort = 0;
     public int $webPort = 0;
     public string $tenant;
+    /** The zone the caller named: a test file may pin one, a fixture may not (tests/test_timezone.php). */
+    public string $zone = '';
     /** @var resource[] */
     private array $procs = [];
 
@@ -27,6 +29,10 @@ final class NotifyHarness
         $h = new self();
         $h->root = $root;
         $h->tenant = $tenant;
+        if (!isset($config['timezone']) || !is_string($config['timezone']) || $config['timezone'] === '') {
+            throw new \InvalidArgumentException('NotifyHarness::start(): the caller names the timezone');
+        }
+        $h->zone = $config['timezone'];
         $h->tmp = sys_get_temp_dir() . '/' . $tag . '_' . getmypid() . '_' . substr(md5(uniqid('', true)), 0, 6);
         exec('rm -rf ' . escapeshellarg($h->tmp));
         @mkdir($h->tmp . '/data', 0777, true);
@@ -70,7 +76,7 @@ require $root . "/webhook.php";
     {
         $base = [
             'tenant_profile' => $this->tenant,
-            'timezone'       => $this->tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba',
+            'timezone'       => $this->zone,
             'crm_base_url'   => "http://127.0.0.1:{$this->crmPort}", 'crm_auth_token' => 'NOTIFYKEY',
             'crm_public_url' => 'https://crm.example.test',
             'evo_api_url'    => "http://127.0.0.1:{$this->evoPort}", 'evo_api_key' => 'test-key',

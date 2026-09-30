@@ -20,6 +20,8 @@ function is_(bool $c, string $m, string $d = ''): void { global $pass, $fail;
 $root = dirname(__DIR__);
 if (!getenv('DN_VAULT_FILE')) putenv('DN_VAULT_FILE=' . tempnam(sys_get_temp_dir(), 'dn-vault-'));
 require_once __DIR__ . '/fixtures/notify_harness.php';
+/** Each tenant's zone, named here: a test file may pin one, a fixture may not (tests/test_timezone.php). */
+function nh_zone(string $tenant): string { return $tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba'; }
 
 $seed = [
     'clients'  => ['7' => ['id' => 7, 'firstName' => 'Test', 'lastName' => 'Payer', 'isLead' => false,
@@ -33,7 +35,7 @@ $seed = [
 
 /** One run: returns what an assertion needs. */
 $run = function (string $pluginRoot, string $tenant, bool $twice = false) use ($seed): array {
-    $h = NotifyHarness::start($pluginRoot, $tenant, [], 'payflow');
+    $h = NotifyHarness::start($pluginRoot, $tenant, ['timezone' => nh_zone($tenant)], 'payflow');
     $h->seedCrm($seed);
     $r1 = $h->fire('payment.add', 'payment', 9101, 'uuid-pay-1');
     $h->settle(2.0);

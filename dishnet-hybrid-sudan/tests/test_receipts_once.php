@@ -25,6 +25,8 @@ function is_(bool $c, string $m, string $d = ''): void { global $pass, $fail;
 $root = dirname(__DIR__);
 if (!getenv('DN_VAULT_FILE')) putenv('DN_VAULT_FILE=' . tempnam(sys_get_temp_dir(), 'dn-vault-'));
 require_once __DIR__ . '/fixtures/notify_harness.php';
+/** Each tenant's zone, named here: a test file may pin one, a fixture may not (tests/test_timezone.php). */
+function nh_zone(string $tenant): string { return $tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba'; }
 
 const REF_APP = 'PWA-12-7-20260930101010';
 const REF_COL = 'PWA-12-7-20260930111111';
@@ -67,7 +69,7 @@ $queued = function (NotifyHarness $h, int $pid): int {
 $scenarios = function (string $pluginRoot, string $tenant) use ($seed, $emailCfg, $side, $receipts, $queued): array {
     $out = [];
     // A. the app first, then payment.add
-    $h = NotifyHarness::start($pluginRoot, $tenant, $emailCfg, 'rcpt'); $h->withSmtp(); $h->seedCrm($seed);
+    $h = NotifyHarness::start($pluginRoot, $tenant, $emailCfg + ['timezone' => nh_zone($tenant)], 'rcpt'); $h->withSmtp(); $h->seedCrm($seed);
     $side($pluginRoot, $h, 'app', [9101, REF_APP, 'CRM-PAY-9101']);
     $h->fire('payment.add', 'payment', 9101); $h->settle(2.0);
     $out['A'] = ['texts' => $receipts($h->evoTexts()), 'mails' => count($h->smtpMessages()), 'pdf' => $queued($h, 9101)];
@@ -81,7 +83,7 @@ $scenarios = function (string $pluginRoot, string $tenant) use ($seed, $emailCfg
     $h->stop();
 
     // C. a collection receipted before uCRM had it, posted later
-    $h = NotifyHarness::start($pluginRoot, $tenant, $emailCfg, 'rcpt'); $h->withSmtp(); $h->seedCrm($seed);
+    $h = NotifyHarness::start($pluginRoot, $tenant, $emailCfg + ['timezone' => nh_zone($tenant)], 'rcpt'); $h->withSmtp(); $h->seedCrm($seed);
     $side($pluginRoot, $h, 'app', [0, REF_COL, 'COL-55']);
     $h->fire('payment.add', 'payment', 9102); $h->settle(2.0);
     $out['C'] = ['texts' => $receipts($h->evoTexts()), 'mails' => count($h->smtpMessages()), 'pdf' => $queued($h, 9102)];

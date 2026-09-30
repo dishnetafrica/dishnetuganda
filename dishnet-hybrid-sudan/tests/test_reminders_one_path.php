@@ -30,6 +30,8 @@ function is_(bool $c, string $m, string $d = ''): void { global $pass, $fail;
 $root = dirname(__DIR__);
 if (!getenv('DN_VAULT_FILE')) putenv('DN_VAULT_FILE=' . tempnam(sys_get_temp_dir(), 'dn-vault-'));
 require_once __DIR__ . '/fixtures/notify_harness.php';
+/** Each tenant's zone, named here: a test file may pin one, a fixture may not (tests/test_timezone.php). */
+function nh_zone(string $tenant): string { return $tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba'; }
 
 const DAY = '2026-10-05';     // the day the side runner is given (a Monday)
 
@@ -113,7 +115,7 @@ $runScript = function (string $tree, NotifyHarness $h, string $script): string {
 // The scenarios, as functions of the plugin tree, so a weakened copy runs the very same ones.
 // ══════════════════════════════════════════════════════════════════════════════
 $dailyRun = function (string $pluginRoot) use ($estate, $reminders, $claimed, $claim, $runSide): array {
-    $h = NotifyHarness::start($pluginRoot, 'uganda', [], 'rem');
+    $h = NotifyHarness::start($pluginRoot, 'uganda', ['timezone' => nh_zone('uganda')], 'rem');
     $h->seedCrm($estate(DAY));
     $claim($h, 'INV-9311-pre-d3'); $claim($h, 'INV-9312-d3');
     $r1 = $runSide($pluginRoot, $h, DAY);
@@ -130,7 +132,7 @@ $dailyRun = function (string $pluginRoot) use ($estate, $reminders, $claimed, $c
     return $out;
 };
 $prepaidRun = function (string $pluginRoot) use ($estate, $reminders, $claimed, $claim, $runSide): array {
-    $h = NotifyHarness::start($pluginRoot, 'uganda', ['billing_model' => 'prepaid'], 'rem');
+    $h = NotifyHarness::start($pluginRoot, 'uganda', ['billing_model' => 'prepaid', 'timezone' => nh_zone('uganda')], 'rem');
     $h->seedCrm($estate(DAY));
     $claim($h, 'INV-9311-pre-d3'); $claim($h, 'INV-9312-d3');
     $r = $runSide($pluginRoot, $h, DAY);
@@ -139,7 +141,7 @@ $prepaidRun = function (string $pluginRoot) use ($estate, $reminders, $claimed, 
     return $out;
 };
 $pageLimitRun = function (string $pluginRoot) use ($inv, $on, $clients, $runSide): array {
-    $h = NotifyHarness::start($pluginRoot, 'uganda', [], 'rem');
+    $h = NotifyHarness::start($pluginRoot, 'uganda', ['timezone' => nh_zone('uganda')], 'rem');
     $many = [];
     for ($i = 1; $i <= 500; $i++) $many[(string)(20000 + $i)] = $inv(20000 + $i, $on(DAY, 20));
     $h->seedCrm(['clients' => $clients, 'invoices' => $many]);
@@ -152,7 +154,7 @@ $pageLimitRun = function (string $pluginRoot) use ($inv, $on, $clients, $runSide
     return ['r' => $r, 'pluginlog' => $new];
 };
 $winbackRun = function (string $pluginRoot) use ($clients, $on, $runSide): array {
-    $h = NotifyHarness::start($pluginRoot, 'uganda', [], 'rem');
+    $h = NotifyHarness::start($pluginRoot, 'uganda', ['timezone' => nh_zone('uganda')], 'rem');
     $ended = $on(DAY, -8) . 'T00:00:00+0300';
     $h->seedCrm(['clients' => $clients, 'services' => [
         '601' => ['id' => 601, 'clientId' => 7,  'name' => 'Home 50', 'status' => 3, 'activeTo' => $ended],
@@ -177,7 +179,7 @@ $winbackRun = function (string $pluginRoot) use ($clients, $on, $runSide): array
     return $out;
 };
 $webhookRun = function (string $pluginRoot, string $tenant) use ($estate, $reminders): array {
-    $h = NotifyHarness::start($pluginRoot, $tenant, [], 'rem');
+    $h = NotifyHarness::start($pluginRoot, $tenant, ['timezone' => nh_zone($tenant)], 'rem');
     $today = (new DateTimeImmutable('today', new DateTimeZone($tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba')))->format('Y-m-d');
     $h->seedCrm($estate($today, false, $tenant === 'uganda' ? '+0300' : '+0200'));
     $a = $h->fire('invoice.near_due', 'invoice', 9301); $h->settle(0.5);
@@ -189,7 +191,7 @@ $webhookRun = function (string $pluginRoot, string $tenant) use ($estate, $remin
     return $out;
 };
 $suspendRun = function (string $pluginRoot, string $tenant, string $model) use ($clients): array {
-    $h = NotifyHarness::start($pluginRoot, $tenant, $model === '' ? [] : ['billing_model' => $model], 'rem');
+    $h = NotifyHarness::start($pluginRoot, $tenant, ($model === '' ? [] : ['billing_model' => $model]) + ['timezone' => nh_zone($tenant)], 'rem');
     $h->seedCrm(['clients' => $clients, 'services' => [
         '701' => ['id' => 701, 'clientId' => 7, 'name' => 'Site : Test (000701) Service Plan HOME50 : Period', 'status' => 3,
                   'activeTo' => '2026-09-29T00:00:00+0300'],
@@ -204,7 +206,7 @@ $suspendRun = function (string $pluginRoot, string $tenant, string $model) use (
 };
 /** The 02:00 job, run whole from a tree with a real copy of it, against invoices due relative to today. */
 $maintenanceRun = function (string $pluginRoot, string $tenant, array $patches = [], string $offset = '', int $runs = 1) use ($on, $inv, $clients, $reminders, $treeFor, $runScript): array {
-    $h = NotifyHarness::start($pluginRoot, $tenant, [], 'rem');
+    $h = NotifyHarness::start($pluginRoot, $tenant, ['timezone' => nh_zone($tenant)], 'rem');
     $zone   = $tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba';
     $offset = $offset !== '' ? $offset : ($tenant === 'uganda' ? '+0300' : '+0200');
     $today  = (new DateTimeImmutable('today', new DateTimeZone($zone)))->format('Y-m-d');
@@ -225,7 +227,7 @@ $maintenanceRun = function (string $pluginRoot, string $tenant, array $patches =
 };
 /** cron/customer_reminders.php, as master.php would include it, from a tree with a real copy of it. */
 $dailyJobRun = function (string $pluginRoot, string $tenant) use ($on, $inv, $clients, $reminders, $treeFor, $runScript): array {
-    $h = NotifyHarness::start($pluginRoot, $tenant, [], 'rem');
+    $h = NotifyHarness::start($pluginRoot, $tenant, ['timezone' => nh_zone($tenant)], 'rem');
     $zone   = $tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba';
     $offset = $tenant === 'uganda' ? '+0300' : '+0200';
     $today  = (new DateTimeImmutable('today', new DateTimeZone($zone)))->format('Y-m-d');
@@ -242,7 +244,7 @@ $scanRun = function (string $pluginRoot, bool $quietNow) use ($inv, $on, $client
     $hour = (int)(new DateTimeImmutable('now', new DateTimeZone('Africa/Kampala')))->format('G');
     $cfg  = $quietNow ? ['notify_quiet_from_hour' => $hour, 'notify_quiet_until_hour' => ($hour + 2) % 24]
                       : ['notify_quiet_from_hour' => ($hour + 2) % 24, 'notify_quiet_until_hour' => ($hour + 4) % 24];
-    $h = NotifyHarness::start($pluginRoot, 'uganda', $cfg, 'rem');
+    $h = NotifyHarness::start($pluginRoot, 'uganda', $cfg + ['timezone' => nh_zone('uganda')], 'rem');
     $today = (new DateTimeImmutable('today', new DateTimeZone('Africa/Kampala')))->format('Y-m-d');
     $h->seedCrm(['clients' => $clients, 'invoices' => ['9601' => $inv(9601, $on($today, 14), 7,
         ['createdDate' => (new DateTimeImmutable('-1 hour'))->format('Y-m-d\TH:i:sO')])]]);
@@ -254,7 +256,8 @@ $scanRun = function (string $pluginRoot, bool $quietNow) use ($inv, $on, $client
     return $r;
 };
 $units = function (string $pluginRoot): array {
-    $j = json_decode((string)shell_exec('php ' . escapeshellarg(__DIR__ . '/fixtures/notify_units_side.php') . ' ' . escapeshellarg($pluginRoot) . ' 2>&1'), true);
+    $j = json_decode((string)shell_exec('php ' . escapeshellarg(__DIR__ . '/fixtures/notify_units_side.php') . ' ' . escapeshellarg($pluginRoot)
+        . ' ' . escapeshellarg('Africa/Kampala') . ' ' . escapeshellarg('Africa/Juba') . ' 2>&1'), true);   // the run's zone; the date zone, UTC+2 on purpose
     return is_array($j) ? $j : [];
 };
 const UNITS = [
