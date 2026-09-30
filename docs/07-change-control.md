@@ -2470,3 +2470,32 @@ change as the acceptance confirmation.
 
 No production/config/data change; no customer or staff message; no payment or
 refund; no accounting or tax decision; nothing deployed.
+
+## 30 Sep — 5.18.55 deploy APPROVED; pinned deploy script + rehearsal ready (awaiting the operator's run)
+
+The operator approved deploying 5.18.55. **Scope, stated plainly:** the live server
+runs 5.18.53; 5.18.54 was built but never deployed; so deploying 5.18.55 takes live
+**5.18.53 → 5.18.55** in one step — landing the ENTIRE 5.18.54 notification-reliability
+release (docs/46: D-1 the payment-webhook fix, receipts-once, one reminder path,
+prepaid wording, S-1 failure-queue roles, the watchdog, the staff brief, …) PLUS
+**PD-1** (the collections-export sign-in/admin gate, docs/48). This one deploy
+therefore also resolves the outstanding D-1 deploy question.
+
+**Prepared and validated (nothing deployed):**
+- `scripts/deploy-5.18.55.sh` — pinned to 9514633, over baseline 5.18.53 (6b71ea6),
+  backup-first documented deploy, full R-stage verification (R1 byte-checks every
+  changed file vs the pinned commit; R1b names the PD-1 gate), a SEPARATE typed
+  ROLLBACK to 5.18.53. Derived from the rehearsed deploy-5.18.54.sh; deploy/rollback
+  machinery byte-identical.
+- `scripts/harness/deploy-5.18.55/rehearse.sh` — rehearsal **228 passed, 0 failed**
+  (deploy PASSED, rollback PASSED, forward-again, auto-rollback on a failed page
+  check, branch-ahead control at 5.18.56, OPcache-timing §16.23, all weakened copies
+  caught).
+- Full suite `bash tests/run.sh`: green **before** (247 files / 11,295 ok / 0 failed)
+  and **twice after** (248 / 11,303 / 0, twice).
+
+**Handed to the operator** to run as root on the server (cd /opt/dishnet, pull the
+branch, run the script, tee to a log file). The rollback command is given separately
+and is never pasted together with the deploy (docs/44 §16.9). The result will be
+recorded here once the operator sends the log file. No production change has been
+made from this session.
