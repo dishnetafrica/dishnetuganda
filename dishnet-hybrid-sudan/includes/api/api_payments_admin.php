@@ -539,7 +539,7 @@
         // whether the money came back in cash, with its reference and reason. So the note is claimed (CN<id>) as soon as
         // uCRM has numbered it, before the cash is booked: uCRM's credit_note.add for it, which can arrive while this
         // request is still running, then sends nothing. Claimed only when there is a number to send to. The amount is in
-        // the tenant's currency, never "$".
+        // the tenant's currency, never a dollar sign.
         require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
         $_cnOnce = NotifyGate::applies(NotifyGate::CREDIT_NOTE, is_array($config ?? null) ? $config : [], $dataDir ?? null);
         if ($_cnOnce && $_cnPhone !== '') {
