@@ -3621,6 +3621,11 @@ it unset (A7), which is PHP's default of 2 s. The behaviour is the same, and R12
 **For the operator — no command now:**
 1. On S4's phone and e-mail, job #13's three messages: message 1, *"Thank you for accepting the job!"* and
    *"cancelled"*, each by WhatsApp and by e-mail.
-2. After a day of real jobs: `cd /opt/dishnet && bash scripts/deploy-5.18.53.sh --after-only`, then `tail -n +1` its
-   log file. R4 and R9 count the job messages sent since the deploy, and R13 says whether any record could not be
-   saved.
+2. After a day of real jobs, the checks again. R4 and R9 count the job messages sent since the deploy, and R13 says
+   whether any record could not be saved. It asks nothing and changes nothing:
+
+```
+cd /opt/dishnet && bash scripts/deploy-5.18.53.sh --after-only 2>&1 | tee /root/dnb-5.18.53/after-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+   Then `tail -n +1 /root/dnb-5.18.53/after-*.log`.
