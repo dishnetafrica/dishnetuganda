@@ -280,6 +280,12 @@ $_m_jobs = [
     // 'gate' names the NotifyGate fix it belongs to: where that fix does not apply (South Sudan) the job is never
     // dispatched and the 02:00 maintenance job keeps these tasks, so that schedule does not change.
     'customer_reminders' => ['interval' => 86400, 'run_hour' => 9, 'run_until' => 17, 'gate' => 'reminders', 'script' => __DIR__ . '/customer_reminders.php'],
+
+    // ── 5.18.54 (docs/46 row 30): Uganda's automatic retry of failed customer WhatsApps ───────────────────────
+    // Receipts, welcomes and quotations that WhatsApp refused or that never left, at most three times
+    // (lib/NotificationRetry.php). Never a message that may already have reached the customer. 240, not 300: master
+    // runs on a ~300 s heartbeat, and an interval of exactly 300 can skip a cycle (test_cron_keepalive_order.php).
+    'notify_retry'  => ['interval' => 240, 'gate' => 'retries', 'script' => __DIR__ . '/notify_retry.php'],
 ];
 
 // ── 5.18.54: gated jobs and the reminder window (docs/46 rows 5-8) ──────────────────────────────────────────

@@ -2314,6 +2314,8 @@ class NotificationService
 
             $where = ($status !== 'all') ? "WHERE status = ?" : "";
             $params = ($status !== 'all') ? [$status] : [];
+            // 5.18.54 (docs/46 row 30), Uganda: a row the automatic retry gave up on still waits for a person.
+            if ($status === 'failed' && $this->retriesUg()) { $where = "WHERE status IN ('failed', 'exhausted')"; $params = []; }
 
             // Total count
             $countSql = "SELECT COUNT(*) FROM notification_queue {$where}";
@@ -2345,6 +2347,7 @@ class NotificationService
             $stmt = $pdo->query("SELECT status, COUNT(*) as cnt FROM notification_queue GROUP BY status");
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             $stats = ['failed' => 0, 'sent' => 0, 'dismissed' => 0];
+            if ($this->retriesUg()) $stats['exhausted'] = 0;   // 5.18.54 (docs/46 row 30)
             foreach ($rows as $r) {
                 $stats[$r['status']] = (int) $r['cnt'];
             }
@@ -2360,6 +2363,7 @@ class NotificationService
      */
     public function retryOne(int $queueId, string $retryBy = 'Admin'): array
     {
+        if ($this->retriesUg()) return $this->retryOneUg($queueId, $retryBy);   // 5.18.54, docs/46 row 30
         try {
             $pdo = $this->store->getPdo();
             $stmt = $pdo->prepare("SELECT * FROM notification_queue WHERE id = ? AND status = 'failed'");
@@ -2410,6 +2414,7 @@ class NotificationService
      */
     public function retryBulk(string $retryBy = 'Admin', int $maxBatch = 50): array
     {
+        if ($this->retriesUg()) return $this->retryBulkUg($retryBy, $maxBatch);   // 5.18.54, docs/46 row 30
         $result = ['total' => 0, 'sent' => 0, 'failed' => 0];
         try {
             $pdo = $this->store->getPdo();
@@ -2434,6 +2439,116 @@ class NotificationService
         return $result;
     }
 
+    /** 5.18.54 (docs/46 row 30): Uganda only. */
+    private function retriesUg(): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            return \NotifyGate::applies(\NotifyGate::RETRIES, (array)$this->cfgForContacts, $dir);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 30), Uganda: retryOne(), safe beside the automatic retry (lib/NotificationRetry.php).
+     * - The row is claimed in one statement, so of two retries of one row (a person's and the automatic one, or two
+     *   clicks) exactly one sends. Before, it was read and then marked: a small window in which both could send.
+     * - The last result is cleared before the send: a document retry that returned early read the previous send's
+     *   success, and marked a row sent that was not.
+     * - Retry mode ends whatever happens: an exception left it on, and every later failure in that process went
+     *   unqueued.
+     * - A retry that sent nothing says so, and one that stopped with an error is recorded as one that may have been
+     *   sent. An exhausted row is retried like a failed one. 'claimed' says whether this call had the row.
+     */
+    private function retryOneUg(int $queueId, string $retryBy): array
+    {
+        require_once __DIR__ . '/EvolutionApiService.php';
+        require_once __DIR__ . '/NotificationRetry.php';
+        try {
+            $pdo   = $this->store->getPdo();
+            $claim = $pdo->prepare("UPDATE notification_queue SET status = 'retrying', attempts = attempts + 1, last_attempt_at = ?
+                                     WHERE id = ? AND status IN ('failed', 'exhausted')");
+            $claim->execute([date('Y-m-d H:i:s'), $queueId]);
+            if ($claim->rowCount() !== 1) {
+                return ['success' => false, 'claimed' => false,
+                        'error' => 'Not found, or already sent, dismissed or being retried'];
+            }
+            $st = $pdo->prepare("SELECT * FROM notification_queue WHERE id = ?");
+            $st->execute([$queueId]);
+            $row = $st->fetch(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'claimed' => false, 'error' => $e->getMessage()];
+        }
+
+        $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null;
+        $this->_retryMode = true;
+        $stopped = null;
+        try {
+            $vars  = json_decode($row['vars'] ?? '{}', true) ?: [];
+            $isDoc = ($vars['_type'] ?? '') === 'document' && !empty($vars['url']);
+            if ($isDoc) {
+                // A quotation PDF link is signed for the day it was minted: re-sign it (as retryOne does).
+                require_once __DIR__ . '/QuotePdfToken.php';
+                $url = QuotePdfToken::refreshUrl((string)$vars['url'], $this->evoConfig);
+                $this->sendDocument($row['sender'], $row['phone'], $url, $vars['filename'] ?? 'document.pdf', $row['message'], $row['event'] ?? '');
+            } else {
+                $this->sendVia($row['sender'], $row['phone'], $row['message'], $row['event'] ?? '', $vars);
+            }
+        } catch (\Throwable $e) {
+            $stopped = \EvolutionApiService::MAYBE_SENT . 'the retry stopped with an error: ' . mb_substr($e->getMessage(), 0, 200);
+        } finally {
+            $this->_retryMode = false;
+        }
+
+        $sent = $stopped === null && (bool)$this->_lastSendSuccess;
+        try {
+            if ($sent) {
+                $pdo->prepare("UPDATE notification_queue SET status = 'sent', retry_at = ?, retry_by = ? WHERE id = ?")
+                    ->execute([date('Y-m-d H:i:s'), $retryBy, $queueId]);
+                return ['success' => true, 'claimed' => true, 'error' => null];
+            }
+            $err = $stopped ?? (string)($this->_lastError ?? '');
+            if ($err === '' && $this->_lastHttpCode === null) $err = \NotificationRetry::NO_ATTEMPT_TEXT;
+            $pdo->prepare("UPDATE notification_queue SET status = 'failed', http_code = ?, error = ? WHERE id = ?")
+                ->execute([(int)($this->_lastHttpCode ?? 0), $err, $queueId]);
+            return ['success' => false, 'claimed' => true, 'error' => $err];
+        } catch (\Throwable $e) {
+            return ['success' => $sent, 'claimed' => true, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 30), Uganda: Retry All leaves out every row that may already have reached the customer; a
+     * person retries those one at a time, after looking at the chat. Exhausted rows go with the failed ones.
+     * 'skipped' counts the rows left out.
+     */
+    private function retryBulkUg(string $retryBy, int $maxBatch): array
+    {
+        $result = ['total' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        try {
+            require_once __DIR__ . '/NotificationRetry.php';
+            $rows = $this->store->getPdo()->query(
+                "SELECT id, error, http_code FROM notification_queue WHERE status IN ('failed', 'exhausted') ORDER BY created_at, id"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                if (\NotificationRetry::classify($row['error'], $row['http_code']) === \NotificationRetry::MAYBE_SENT) {
+                    $result['skipped']++;
+                    continue;
+                }
+                if ($result['total'] >= $maxBatch) continue;
+                $result['total']++;
+                $r = $this->retryOne((int)$row['id'], $retryBy);
+                if (!empty($r['success'])) $result['sent']++; else $result['failed']++;
+                usleep(300000);   // as retryBulk: do not hammer the sender
+            }
+        } catch (\Throwable $e) {
+            // partial results
+        }
+        return $result;
+    }
+
     /**
      * Dismiss a failed notification (mark as dismissed, won't retry).
      */
@@ -2441,7 +2556,9 @@ class NotificationService
     {
         try {
             $pdo = $this->store->getPdo();
-            $stmt = $pdo->prepare("UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE id = ? AND status = 'failed'");
+            $stmt = $pdo->prepare($this->retriesUg()   // 5.18.54 (docs/46 row 30): an exhausted row too
+                ? "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE id = ? AND status IN ('failed', 'exhausted')"
+                : "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE id = ? AND status = 'failed'");
             $stmt->execute([$dismissedBy, $queueId]);
             return $stmt->rowCount() > 0;
         } catch (\Throwable $e) {
@@ -2457,7 +2574,9 @@ class NotificationService
     {
         try {
             $pdo = $this->store->getPdo();
-            $stmt = $pdo->prepare("UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE status = 'failed'");
+            $stmt = $pdo->prepare($this->retriesUg()   // 5.18.54 (docs/46 row 30): an exhausted row too
+                ? "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE status IN ('failed', 'exhausted')"
+                : "UPDATE notification_queue SET status = 'dismissed', retry_by = ? WHERE status = 'failed'");
             $stmt->execute([$dismissedBy]);
             return $stmt->rowCount();
         } catch (\Throwable $e) {

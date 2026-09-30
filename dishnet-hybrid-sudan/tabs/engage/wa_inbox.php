@@ -128,8 +128,12 @@ $_syncOk = !empty($_syncState['last_sync_at']) && (time() - strtotime($_syncStat
 // Count failed messages in the notification queue so Bidal sees them inline
 $_nqFailedCount = 0;
 try {
+    // 5.18.54 (docs/46 row 30): on Uganda a row the automatic retry gave up on (`exhausted`) still waits for a person
+    require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+    $_nqWait = NotifyGate::applies(NotifyGate::RETRIES, is_array($config ?? null) ? $config : [], $dataDir ?? null)
+             ? "status IN ('failed', 'exhausted')" : "status = 'failed'";
     $_nqFailedCount = (int)$store->getPdo()
-        ->query("SELECT COUNT(*) FROM notification_queue WHERE status = 'failed'")
+        ->query("SELECT COUNT(*) FROM notification_queue WHERE {$_nqWait}")
         ->fetchColumn();
 } catch (Throwable $_nqe) {}
 

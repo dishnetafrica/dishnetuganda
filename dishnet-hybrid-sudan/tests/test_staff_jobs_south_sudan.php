@@ -112,6 +112,21 @@ $day = function (SjSandbox $s): array {
               'tech'  => ['My Jobs' => 'tab=scheduling']] as $who => $pages) {
         foreach ($pages as $label => $qs) $o["page {$label}, as {$who}"] = norm_($s->page($who, 'page=dashboard&' . $qs), $s, true);
     }
+    // 5.18.54 (docs/46 row 30): the Failed Queue list and the WA Inbox, which the automatic retry touched on Uganda only.
+    // Two failed rows, so that each row's cells are drawn: one WhatsApp refused, one that may have been sent.
+    $s->q("CREATE TABLE IF NOT EXISTS notification_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT NOT NULL DEFAULT 'support',
+           phone TEXT NOT NULL, message TEXT NOT NULL, event TEXT DEFAULT NULL, vars TEXT DEFAULT NULL, status TEXT NOT NULL DEFAULT 'failed',
+           http_code INTEGER DEFAULT NULL, error TEXT DEFAULT NULL, attempts INTEGER NOT NULL DEFAULT 1, last_attempt_at TEXT NOT NULL,
+           retry_at TEXT DEFAULT NULL, retry_by TEXT DEFAULT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+    foreach ([['ops_payment_received', 'Not sent — Evolution refused it [HTTP 400 on POST /message/sendText/sj-account]'],
+              ['event_client_add', 'May have been sent — no answer from Evolution: timeout']] as $i => [$ev, $err]) {
+        $s->q("INSERT INTO notification_queue (sender, phone, message, event, status, attempts, error, last_attempt_at, created_at)
+               VALUES ('accounts', ?, ?, ?, 'failed', 1, ?, '2026-09-30 09:00:00', '2026-09-30 06:00:00')",
+              ['21190000020' . $i, "SJ-FAILED-{$i}", $ev, $err]);
+    }
+    foreach (['the Failed Queue' => 'tab=engage_failed_queue&fqsub=queue', 'the WA Inbox' => 'tab=wa_inbox'] as $label => $qs) {
+        $o["page {$label}, as admin"] = norm_($s->page('admin', 'page=dashboard&' . $qs), $s, true);
+    }
     return $o;
 };
 
@@ -143,6 +158,9 @@ foreach ($old['extra'] as $k => $a) {
     is_($a === $b, $k . ' (' . strlen($b) . ' bytes)', $a === $b ? '' : where_($a, $b));
 }
 is_(array_keys($old['extra']) === array_keys($new['extra']), 'and nothing on one side is missing from the other');
+$fqPage = $new['extra']['page the Failed Queue, as admin'] ?? '';
+is_(substr_count($fqPage, 'SJ-FAILED-') >= 2 && strpos($fqPage, 'fq-status-failed') !== false,
+    'control: the Failed Queue page is the real list, showing both seeded rows');
 $staffPage = $new['extra']['page the Staff page, as admin'] ?? '';
 is_(strlen($staffPage) > 50000 && strpos($staffPage, 'Sandbox Tech Renamed') !== false, 'control: the Staff page is the real page, showing the edit just made');
 $oldStaff = $old['extra']['page the Staff page, as admin'] ?? '';
@@ -170,6 +188,11 @@ if ($withMutants) {
          'six spaces leaked into the South Sudan AI setup page'],
         ['tabs/help/faq.php', "<?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;", "    <?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;",
          'four spaces leaked into the South Sudan help page'],
+        // 5.18.54 (docs/46 row 30): the Failed Queue's Uganda-only style and status cell
+        ['tabs/engage/failed_queue.php', "<?php if(\$fqUg):?>.fq-status-exhausted{background:#ef444422;color:#fca5a5}\n<?php endif;?>\n",
+         ".fq-status-exhausted{background:#ef444422;color:#fca5a5}\n", 'the exhausted style printed on South Sudan'],
+        ['tabs/engage/failed_queue.php', "?></span><?php if(\$fqUg && in_array(", "?></span>\n<?php if(\$fqUg && in_array(",
+         'a line break leaked into each South Sudan queue row'],
         ['tabs/admin/settings.php', "<?php endif; ?>\n        </label>\n        <div style=\"font-size:12px;color:#666;margin:4px 0 10px;\">\n            Reads SMTP",
          "        <?php endif; ?>\n        </label>\n        <div style=\"font-size:12px;color:#666;margin:4px 0 10px;\">\n            Reads SMTP",
          'eight spaces leaked into the South Sudan e-mail settings'],

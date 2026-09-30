@@ -88,7 +88,7 @@ administrator side, and reliability.
 | 27 | **S-5**: the alert-number field suggests `+249…` | P3 | `tabs/engage/wa_ai_setup.php` | The tenant's example number | `+256` on Uganda |
 | 28 | **S-6**: the Workbench counts WhatsApps as sent whether they went or not | P3 | `includes/api/api_crm_misc.php` | Count what the provider accepted | a failed send is counted as failed |
 | 29 | **S-7**: the help page sends staff to an outage screen that does not exist | P3 | `tabs/help/faq.php` | Correct the answer. The broadcast screen itself is G10, a decision | the answer names no missing tab |
-| 30 | **M4**: failed WhatsApps wait for a person | P3 | new `lib/NotificationRetry.php`, `cron/master.php` | Automatic, bounded retries, only for failures the provider certainly did not accept, only for messages that cannot go stale in the window; then `exhausted` | a refused send is retried and sent once; a timeout is never retried automatically; after the last try the row reads `exhausted` |
+| 30 | **M4**: failed WhatsApps wait for a person | P3 | new `lib/NotificationRetry.php`, new `cron/notify_retry.php`, `cron/master.php`, `lib/NotificationService.php`, `tabs/engage/failed_queue.php`, `includes/navigation.php`, `tabs/engage/wa_inbox.php`, `tabs/help/faq.php` | Automatic, bounded retries, only for failures the provider certainly did not accept, only for messages that cannot go stale in the window; then `exhausted` | a refused send is retried and sent once; a timeout is never retried automatically; after the last try the row reads `exhausted` |
 | 31 | **New, N-1**: Evolution sends are retried after a timeout, which can duplicate; and two callers send again by themselves after any failure (the AI reply worker through its event queue, the follow-up sender at its next run) | P2 | `lib/EvolutionApiService.php`, `workers/AiReplyWorker.php`, `cron/followup_send.php`, `lib/FollowUpService.php` | A POST is retried only when nothing was sent; a send that may have gone says so, and neither caller sends it again | a timeout after connecting is not retried; the AI reply and the follow-up go once |
 | 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows | P3 | new check in the reminder/retry job | An admin alert, and a plugin-log line, when a scheduled job is overdue or failed sends pile up | both raise one alert, with a cooldown |
 | 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
@@ -99,6 +99,7 @@ administrator side, and reliability.
 | 39 | **New, N-10** (found while building row 21): the dunning template screen shows South Sudan's number and addresses in every field nobody has set, and Save stores what the form shows — so the first Save puts the Juba number into Uganda's configuration, where it outranks the tenant profile in every ladder e-mail. Its preview printed Juba's number, company line and website too | P2 | `tabs/admin/overdue_email_tpl.php`, `includes/api/api_crm_misc.php` | On Uganda an unset field shows this install's value (its settings, then the tenant profile), as the e-mail builder already does; the preview prints what the e-mail prints | a Save without typing stores Uganda's number; the preview shows no +211 and no South Sudan line |
 | 40 | **New, N-11** (found while building row 23): since 11 September (`4c3edb6`) the ladder's own SMTP sender announces itself with `MailService::ehloName()`, and nothing on the ladder's path loads `MailService`. `master.php` runs its jobs inside one process, so the ladder has the class only if something earlier in that process loaded it. From `main.php`'s tick, unless an earlier job happened to load it, every ladder e-mail fails after connecting — `Class "MailService" not found` — and is logged as a failure. The EHLO test loaded the class itself, so it never saw this | P2 | `lib/OverdueDunningHelpers.php` | On Uganda the sender loads the class it calls | the cron run on its own relays the e-mail. **Whether production's Monday runs failed this way is not known**: its log answers it (§G) |
 | 41 | **New, N-13** (found while building row 31): a read (GET) that meets a 500 with a plain-text body retries with the response where its request body belongs, and dies of a TypeError. The reads are the instance and webhook checks | P3 | `lib/EvolutionApiService.php` | On Uganda a read's retry keeps its own body | the read retries, three requests, and ends in an error, not an exception |
+| 42 | **New, N-15** (found while building row 30): a person's retry from the Failed Queue could lose later failures, and report a message sent that was not. A retry whose send stopped with an error left the notifier in retry mode, so every later failed send in that process went unqueued, and left its row `retrying`, which no list shows. A retry that sent nothing read the previous send's result: a document row for a number that had opted out read *sent* | P2 | `lib/NotificationService.php` | On Uganda retry mode always ends, the last result is cleared before the send, a retry that sent nothing says so, and the row is claimed in one statement | a later failure after a stopped retry is queued; the opted-out row reads failed, *no attempt was made* |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -438,6 +439,113 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   sends. It still does not offer it, so a client that authenticates only when offered behaves as before. It records
   the user name, never the password.
 
+### Rows 30 and 42: bounded automatic retries, and a safe manual retry (M4, N-15)
+
+- **What is retried** (`lib/NotificationRetry.php`, `EVENTS`), and only these:
+  - receipts: `ops_payment_received`, `ops_invoice_auto_paid`;
+  - welcomes: `event_client_add`, `ops_kyc_customer_welcome`;
+  - quotations: `ops_quote_created` (uCRM's `quote.add`), `ops_quote_wa` (the quote cron), `ops_quote_text` (the WhatsApp
+    tab), `quote_kyc`, `quote_lead`, `quote_cash`, `quote_manual` (the quotation screens).
+
+  They are still true hours later. Not retried, and waiting for a person as before:
+  - invoice notices, reminders and balances, which a payment can overtake;
+  - service-status and installation messages;
+  - staff messages, documents, and every event the list does not name.
+
+  No other path sends a failed receipt again: the payment's claim (`PAY<id>`) is taken before the send and kept (rows
+  2–4). The quotation claim is kept in the same way (rows 17, 38).
+- **Only when WhatsApp certainly did not take it:**
+  - an answer that refused it (an HTTP 4xx, read from the error the client writes, or WASender's status), or
+  - a request that never left (row 31's `Not sent — `).
+
+  Never retried automatically, and left for a person:
+  - `May have been sent — ` and a gateway's 502 or 504;
+  - anything the class cannot read, such as a 500 from Evolution or a WASender timeout.
+- **How often.**
+  - The job `notify_retry` runs at every master cycle, about every five minutes, gated to Uganda
+    (`'gate' => 'retries'`). Its interval is 240 s: an interval of exactly 300 s can skip a cycle of the ~300 s
+    heartbeat.
+  - It makes three tries at most, 10, 30 and 120 minutes after the attempt before.
+  - It makes none later than six hours after the message was queued.
+  - It makes at most five tries a run, and starts none after 30 s, inside master's 60 s limit for a job.
+  - `attempts` counts every send of the row, including the first send and a person's retries, and bounds the tries.
+- **Then `exhausted`.** A failed automatic try that leaves no further try sets the row to `exhausted`.
+  - It stays in the Failed Queue, where a person can still retry or dismiss it.
+  - The navigation badge and the inbox banner count it with the failed rows.
+  - Nothing is tried automatically again.
+- **A try that never finished.** A row still `retrying` 15 minutes on (the process stopped during the send) is set to
+  `failed` with `May have been sent — its last try did not finish…`, for a person. Before, it stayed `retrying`, which no
+  list shows.
+- **The Failed Queue screen (Uganda).**
+  - A filter, *Retries used up*.
+  - Under each status, what happens next: *automatic retry at HH:MM*, *no automatic try left*, or *may have been sent:
+    check the chat first*.
+  - Retry and Dismiss on exhausted rows.
+  - **Retry All leaves out every row that may have been sent**, and says how many; those are retried one at a time.
+  - The empty queue no longer says every message is "delivering successfully" (J7: sent is not delivered).
+  - The FAQ answer says what is retried automatically.
+- **Consent.** A retry goes through the same opt-out check as the first send, in the same class. A customer who has since
+  opted out of everything is not sent it, and the row says *no attempt was made*. The automatic retry does not try it again.
+- **Row 42 (N-15, new): a person's retry, made safe beside the automatic one.** Two defects are measured on 5.18.53 (South
+  Sudan in the test):
+  - A retry whose send stopped with an error left the notifier in retry mode. Every later failed send in that process
+    went unqueued. The row stayed `retrying`.
+  - A retry that sent nothing read the previous send's success. A document row for a number that had opted out of
+    everything read *sent*, and no request was made.
+
+  On Uganda:
+  - retry mode ends in a `finally`;
+  - the last result is cleared before the send;
+  - a retry that sent nothing records `Not sent — no attempt was made…`;
+  - one that stopped with an error is recorded as one that may have been sent.
+
+  The row is also claimed in one statement (`UPDATE … WHERE status IN ('failed', 'exhausted')`). Before, it was read, then
+  marked, which left a window in which two retries could both send it. **That window is microseconds wide and was not
+  measured.** The claim closes it by construction; the test proves only that a row being retried is refused.
+- **The six statuses the brief names.** Provider acceptance is kept apart from delivery.
+
+  | Status | Where it is | Means |
+  |---|---|---|
+  | queued | a `failed` row with an automatic try pending (the screen shows its time) | the retry will send it |
+  | attempted | a row whose error begins `May have been sent — ` (row 31), or one still `retrying` | it may have reached the customer; only a person may send it again |
+  | sent | Message Log `success = 1`; a queue row `sent` | WhatsApp accepted it. **Not** delivered |
+  | delivered | — | **Not measured** (M5, §D). Never claimed |
+  | failed | a `failed` row | refused, or never left; waits for the retry or a person |
+  | retry-exhausted | an `exhausted` row | the automatic tries are spent; waits for a person |
+- **Not covered.**
+  - A message that a person sent again by hand, outside the Failed Queue, is not seen by the retry: its row should be
+    dismissed.
+  - The retry does not re-read uCRM: the listed messages do not depend on later state.
+  - E-mails are not retried (§D, M4).
+- **Time zone.** `created_at` is SQLite's UTC; `last_attempt_at` is written with `date()`, in the install's zone.
+  - The schedule reads `last_attempt_at` in that zone. Every entry point that writes it applies the zone: `public.php`
+    and `master.php` (`dn_tz_apply()`).
+  - Measured in the harness: a row written in another zone looked three hours old. The seed now writes in the plugin's
+    zone.
+  - A writer in another zone would only move a try earlier or later; it cannot make one that may have been sent eligible.
+- **Tests:** `tests/test_notify_retries.php`, **57**. They use the real notifier and the real job, from a copy of the plugin
+  (`tests/fixtures/notify_retry_probe.php`), against the socket-level fake Evolution. Cases:
+  - refused, refused, taken: 3 requests, *sent*;
+  - a timeout: 1 request, never tried, left out of Retry All;
+  - refused every time: 4 requests, *exhausted*, a person can still retry it, no automatic try follows;
+  - never left, then back: sent;
+  - a reminder and a staff message untouched, a welcome and a quotation tried;
+  - a row being retried refused; an unfinished try shown to a person;
+  - both row 42 defects, measured on South Sudan and fixed on Uganda;
+  - South Sudan: no retry;
+  - the classifier and the schedule;
+  - the screen, the badge and a person's retry of an exhausted row, in both countries.
+
+  Ten weakened copies, each caught.
+- **South Sudan, byte for byte.** Its page comparison (`tests/test_staff_jobs_south_sudan.php`) now also draws the
+  Failed Queue list, with two failed rows, and the WA Inbox, against the baseline from Git.
+  - Its first run caught what the gate had missed: the `exhausted` style line printed on every South Sudan Failed Queue
+    page (57 bytes, found on WA Events).
+  - Reading the page's other changes for the same fault found three more, each also outside the gate: a line break in
+    each row's status cell, four spaces before the filter buttons, and a full stop added to the Retry All message.
+  - All four are now behind the gate, with the control tags at column 0. Two more weakened copies prove that the
+    comparison catches the first two. **51** assertions, 0 failed.
+
 ### Rows 31 and 41: a WhatsApp that may have gone is not sent again (N-1, N-13)
 
 - **The client (row 31, N-1).** `EvolutionApiService::request()` retried every failed transfer up to three times, a
@@ -584,6 +692,7 @@ sender off, which is O1–O6.
 | M1 | No e-mail for a customer with no phone | Adds e-mails that do not exist today on the invoice, receipt and service paths. Whether uCRM already e-mails those customers is not known (V1), so this could create duplicates. It also restructures live handlers (docs/45 G2) |
 | M2 | No e-mail for draft or scanner invoices | Same: a new e-mail whose uCRM twin may exist (V1, V4) |
 | M3 | No notice when an installation moves | A new customer message: wording needs your approval first (G4) |
+| M4 (e-mail) | A failed customer e-mail is never retried (the WhatsApp half is row 30) | There is no failure queue for e-mail: the ladder records its failures in `overdue_email_log`, the other e-mails in `customer_email_log`. A retry needs one, and a decision on which e-mails stay true. And the SMTP sender cannot yet tell *not sent* from *may have been sent*: a relay that times out after the body is reported `Message body rejected` (§B, rows 31 and 41). **Recommended:** that distinction first, then a retry of the same three kinds as row 30 |
 | M5 | Delivery receipts | Operator position since docs/44 (J7, V5): not captured until one real `messages.update` event has been recorded, and linking needs a column (a schema change). "Sent" keeps meaning *handed to WhatsApp* |
 | M6 | SMS | No provider for this plugin (G9) |
 | M7 | Bulk e-mail | uCRM Mailing is the candidate (O7), after V2 and V5 |
@@ -604,7 +713,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–29, 31, 33–41 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–31, 33–42 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |
