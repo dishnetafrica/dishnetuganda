@@ -28,6 +28,7 @@ final class NotifyGate
     public const EVENT_ONCE     = 'event_once';       // 15: one message per uCRM event (D10)
     public const DRAFT_IDENTITY = 'draft_identity';   // 16: add_draft passes the client, not the invoice (D-6)
     public const QUOTE_ONCE     = 'quote_once';       // 17: one WhatsApp per plugin quote (D2c)
+    public const KYC_QUOTE_SEND = 'kyc_quote_send';   // 18: uCRM's refusal to send a KYC quote is logged (D-8)
     public const KYC_WELCOME    = 'kyc_welcome';      // 19: welcome and "Request Confirmed!" never both (D8)
     public const WINBACK_OPTOUT = 'winback_optout';   // 20: STOP stops win-back (C9)
     public const TENANT_TEXT    = 'tenant_text';      // 21-22: no South Sudan content in Uganda paths (C8, C4)
@@ -40,7 +41,7 @@ final class NotifyGate
     public const ALL = [
         self::PAYMENT_FLOW, self::RECEIPT_ONCE, self::REMINDERS, self::EVENT_MAP, self::QUEUE_ADMIN,
         self::ACTION_LINKS, self::CREDIT_NOTE, self::ACTIVATION, self::PHONE_FORM, self::EVENT_ONCE,
-        self::DRAFT_IDENTITY, self::QUOTE_ONCE, self::KYC_WELCOME, self::WINBACK_OPTOUT, self::TENANT_TEXT,
+        self::DRAFT_IDENTITY, self::QUOTE_ONCE, self::KYC_QUOTE_SEND, self::KYC_WELCOME, self::WINBACK_OPTOUT, self::TENANT_TEXT,
         self::LADDER_RECORD, self::STAFF_SIDE, self::RETRIES, self::EVO_RETRY, self::WATCHDOG,
     ];
 

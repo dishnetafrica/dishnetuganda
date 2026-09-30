@@ -28,6 +28,8 @@ declare(strict_types=1);
  * pdf_down (via /__test/set) makes the PDF answer 404.
  * Service plans (5.18.46) are served from /service-plans; plans_down makes them answer 503.
  *
+ * refuse_send (5.18.54, via /__test/set) makes /billing/quotes/{id}/send answer 422.
+ *
  * webhook_on_create (5.18.54, via /__test/set): a created client's client.add is POSTed to that URL before the
  * create is answered — uCRM's event overtaking the form (docs/46 row 19). Needs PHP_CLI_SERVER_WORKERS > 1.
  *
@@ -209,6 +211,11 @@ if (preg_match('#^/clients/(\d+)/quotes$#', $p, $m) && $method === 'POST') {
     kyc_out($quote, 201);
 }
 if (preg_match('#^/billing/quotes/(\d+)(/send)?$#', $p, $m)) {
+    // 5.18.54 (docs/46 row 18, tests/test_notify_kyc_quote_send.php): uCRM refusing to send a quote. The message names an
+    // address on purpose, so a test can show the plugin's log masks it. /__test/set {"refuse_send": true}.
+    if (!empty($m[2]) && !empty($state['refuse_send'])) {
+        kyc_out(['code' => 422, 'message' => 'TEST: quote cannot be sent, client test.person@example.test has no billing e-mail'], 422);
+    }
     $quote = $state['quotes'][$m[1]] ?? null;
     if ($quote === null) kyc_out(['id' => (int)$m[1], 'number' => 'Q-' . $m[1]]);
     if ($method === 'PATCH' && empty($m[2]) && isset($body['status'])) {

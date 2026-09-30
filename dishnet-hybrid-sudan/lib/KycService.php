@@ -77,6 +77,43 @@ class KycService
     }
 
     /**
+     * 5.18.54 (docs/46 row 18, D-8): uCRM's own send for a KYC quote, behind a prepared switch.
+     *
+     * The send marks the quote sent in uCRM and has uCRM e-mail it; the plugin's quote.add e-mail can then be a second
+     * (docs/45 D2a). Which of the two owns the quotation e-mail is decision O6, taken once uCRM's own notification
+     * settings have been read, so nothing changes by default: kyc_quote_send_via_crm unset, or on, makes the call exactly
+     * as before, in both countries; 0 makes none. The answer used to be dropped. On Uganda a refusal now leaves a line in
+     * uCRM's log for the plugin, naming the quote and never the customer; South Sudan's call is the 5.18.53 call.
+     */
+    public static function sendQuoteViaCrm($quoteCrm, array $cfg, ?string $dataDir, $quoteId, string $context): void
+    {
+        $switch = $cfg['kyc_quote_send_via_crm'] ?? '';
+        if ($switch !== '' && $switch !== null && !filter_var($switch, FILTER_VALIDATE_BOOLEAN)) {
+            error_log("[KycService] Quote #{$quoteId} ({$context}): uCRM's send not called — kyc_quote_send_via_crm is off");
+            return;
+        }
+        $answer = $quoteCrm->patch("billing/quotes/{$quoteId}/send");
+        if ($answer !== null) return;
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            if (!\NotifyGate::applies(\NotifyGate::KYC_QUOTE_SEND, $cfg, $dataDir)) return;
+            require_once __DIR__ . '/PluginLog.php';
+            $err = method_exists($quoteCrm, 'getLastError') ? (array)$quoteCrm->getLastError() : [];
+            $why = isset($err['http_code'])
+                ? 'uCRM answered HTTP ' . (int)$err['http_code']
+                  . (is_array($err['response'] ?? null) && is_scalar($err['response']['message'] ?? null)
+                      ? ': ' . (string)$err['response']['message'] : '')
+                : (isset($err['curl_error']) ? 'uCRM could not be reached' : 'no answer');
+            $line = "KYC quote #{$quoteId} ({$context}) was not sent by uCRM — {$why}. "
+                  . 'The quote is in uCRM, and its WhatsApp is still queued.';
+            error_log('[KycService] ' . \PluginLog::mask($line));
+            \PluginLog::write('quotes', $line);
+        } catch (\Throwable $e) {
+            error_log('[KycService] quote send result not recorded: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Return a clone of this service using a different CRM client.
      * Used to post KYC payments under the agent's personal UCRM app key
      * so "Created By" in UCRM shows the agent's name.
@@ -320,7 +357,7 @@ class KycService
             }
             if ($ucrmQuoteNumber) $qRef = $ucrmQuoteNumber;
 
-            $quoteCrm->patch("billing/quotes/{$quoteId}/send");
+            self::sendQuoteViaCrm($quoteCrm, $cfg, $this->dataDir, $quoteId, "additional service, client #{$customerId}");   // D-8
 
             $this->store->updateOne('kyc_applications.json', 'id', $appId, [
                 'quote_id'             => $quoteId,
@@ -1622,7 +1659,8 @@ class KycService
         if ($number) {
             $store->updateOne('kyc_applications.json', 'id', $appId, ['quote_ref' => $number]);
         }
-        $quoteCrm->patch("billing/quotes/{$quoteId}/send");
+        self::sendQuoteViaCrm($quoteCrm, $cfg, method_exists($store, 'getDataDir') ? $store->getDataDir() : null,
+            $quoteId, "application #{$appId}");   // D-8, below
         $store->updateOne('kyc_applications.json', 'id', $appId, [
             'quote_id'      => $quoteId,
             'quote_created' => true,

@@ -196,6 +196,11 @@ $FLAGS = [
     // first line and reached nobody; fixed, it goes every morning. 0 holds it back.
     'staff_jobs_brief' => ['bool',
         'The morning jobs brief to each technician with a verified uCRM link, 07:00 (Uganda; unset = on, 0 = off)'],
+    // 5.18.54 (docs/46 row 18, D-8): a KYC quote asks uCRM to send it, which has uCRM e-mail it. Unset keeps that call,
+    // in both countries. Who owns the quotation e-mail — uCRM or the plugin — is decision O6 (docs/45), taken after
+    // uCRM's own notification settings are read; 0 is the switch for the day it is taken.
+    'kyc_quote_send_via_crm' => ['bool',
+        'A KYC quote asks uCRM to send it, so uCRM e-mails the quotation (unset = on, as always; 0 = it does not ask)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {

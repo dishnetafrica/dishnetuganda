@@ -304,6 +304,31 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   administrator, and the real `cron_quote_wa.php`, against a fake uCRM that makes, lists and prints quotes. South Sudan
   records both duplicates as they are. Three weakened copies, each caught.
 
+### Row 18: uCRM's send for a KYC quote, behind a prepared switch (D-8)
+
+- **What it did.** A KYC quote — a new customer's (the retry job runs the same code) or an existing customer's
+  additional service — asks uCRM to send it (`PATCH billing/quotes/{id}/send`), which is uCRM's own quotation e-mail
+  (docs/45 N6, reported failing on 9 September and not checked since). The plugin's `quote.add` e-mail can send a
+  second (docs/45 D2a). uCRM's answer was never read.
+- **What changes by default: nothing.** Which of the two owns the quotation e-mail is decision O6 (docs/45), taken
+  after uCRM's own settings are read (V1–V3). So the call stays. `kyc_quote_send_via_crm` unset, or on, makes it exactly
+  as before, in both countries; `0` makes none, and the quote is still made in uCRM and its WhatsApp still queued. It is
+  a prepared switch, read in both countries (§0.1): unset, it changes nothing anywhere.
+  `php tools/set_config.php --key kyc_quote_send_via_crm --value 0` sets it.
+- **uCRM's answer, on Uganda.** A refusal leaves one line in uCRM's log for the plugin (`[quotes]`) with the quote's
+  number, the application or client number, and uCRM's answer, any address or number in it masked; never the
+  customer's name or number. The quote and its WhatsApp stand. South Sudan's call is the 5.18.53 call, its answer
+  unread.
+- **Not done here:** making the KYC quote follow `quote_email_via_plugin` like the plugin's other quotes (docs/45 F4).
+  That would stop uCRM's e-mail for every KYC quote whenever the plugin's quotation e-mail is on — a change in who
+  e-mails customers, which is O6.
+- **Tests:** `tests/test_notify_kyc_quote_send.php`, **24**, through the real `KycService`, from a copy of the code,
+  against the fake uCRM: both places the send is made; unset, `0` and `1`; a refusal on both paths, masked; South Sudan
+  unset, refused (nothing new written) and `0`; the switch set through the real `tools/set_config.php`, then read by
+  the form. Six weakened copies, each caught. *Found while writing it:* a copy of the code without `profiles/` cannot
+  resolve a tenant, so the gate reads false everywhere and every South Sudan check passes for the wrong reason. The
+  Uganda refusal check failed on it, and the copy now carries the profiles.
+
 ### Row 19: the welcome and "Request Confirmed!" never both (D8)
 
 - **The race.** The KYC form creates the customer in uCRM, then saves its application with the new client's id.
@@ -392,7 +417,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–17, 19, 20, 24–29, 35–38 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–20, 24–29, 35–38 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |
