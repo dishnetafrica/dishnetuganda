@@ -2239,8 +2239,8 @@ else:
         ['id'=>'service_status', 'label'=>'Service Status Check',     'icon'=>'[Pipeline]', 'group'=>'Support',    'roles'=>['support','support_leader','admin']],
         ['id'=>'tickets',        'label'=>'Support Tickets',          'icon'=>'[Pipeline]', 'group'=>'Support',    'roles'=>['support','support_leader','admin']],
         // Accounts group
-        ['id'=>'cashbook',       'label'=>'Cashbook (USD & SSP)',     'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin','sales','sales_staff','field_agent','field_accountant']],
-        ['id'=>'ssp_imprest',    'label'=>'SSP Imprest (Company View)', 'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin']],
+        ['id'=>'cashbook',       'label'=> (dn_ssp_selectable($config) ? 'Cashbook (USD & SSP)' : 'Cashbook (' . dn_book_base($config) . ')'),     'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin','sales','sales_staff','field_agent','field_accountant']],
+        ['id'=>'ssp_imprest',    'label'=>'SSP Imprest (Company View)', 'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=> (dn_ssp_selectable($config) ? ['accountant','admin'] : [])],
         ['id'=>'accounts_dash',       'label'=>'Accounts Dashboard',      'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin']],
         ['id'=>'balance_identity',    'label'=>'Balance Identity',         'icon'=>'[Pipeline]',  'group'=>'Accounts',   'roles'=>['accountant','admin']],
         ['id'=>'collections',    'label'=>'All Collections Report',   'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin']],

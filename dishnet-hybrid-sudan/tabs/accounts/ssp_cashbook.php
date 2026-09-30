@@ -12,6 +12,12 @@ if (!$isAcct) {
     echo '<div style="padding:40px;text-align:center;color:#dc2626;">Accountant access required.</div>';
     return;
 }
+// 5.18.57: the SSP Cashbook is a South-Sudan-only screen.
+if (!function_exists('dn_ssp_selectable')) require_once __DIR__ . '/../../lib/currency.php';
+if (!dn_ssp_selectable($config ?? null)) {
+    echo '<div style="padding:40px;color:#64748b;font-weight:700;">SSP flows are not enabled on this installation. This is a South Sudan cash view; Uganda uses the Cashbook (UGX).</div>';
+    return;
+}
 
 // ── CSV EXPORT ───────────────────────────────────────────────────────────────
 if (!empty($_GET['sspcb_export']) && $_GET['sspcb_export'] === 'csv') {

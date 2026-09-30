@@ -439,7 +439,7 @@ foreach ($trend as $t) {
             <div class="fc-form-group"><label>Invoice Date</label><input type="date" name="invoice_date" value="<?=date('Y-m-d')?>"></div>
             <div class="fc-form-group"><label>Billing Period</label><input type="month" name="billing_period" value="<?=date('Y-m')?>"></div>
             <div class="fc-form-group"><label>Total Amount ($)</label><input type="number" name="total_amount" step="0.01" required placeholder="0.00"></div>
-            <div class="fc-form-group"><label>Currency</label><select name="currency"><option value="USD">USD</option><option value="SSP">SSP</option></select></div>
+            <div class="fc-form-group"><label>Currency</label><select name="currency"><option value="USD">USD</option><?php if (dn_ssp_selectable($config ?? null)): ?><option value="SSP">SSP</option><?php endif; ?></select></div>
         </div>
 
         <h4 style="font-size:13px;color:#e2e8f0;margin:12px 0 8px;">Line Items (optional)</h4>

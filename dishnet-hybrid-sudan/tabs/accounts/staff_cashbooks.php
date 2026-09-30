@@ -12,6 +12,12 @@ require_once __DIR__ . '/../../lib/WalletService.php';
 $cpSvc = new DualReadCashPosition($store, $store->getPdo(), $dataDir ?? '');
 $walSvc = new WalletService($store);
 try { $cbSvc = new CashbookService($store, $dataDir); $sysRate = $cbSvc->getExchangeRate() ?: 5700; } catch (\Throwable $e) { $sysRate = 5700; }
+// 5.18.57: SSP is a South-Sudan-only secondary cash currency. On Uganda
+// (dn_ssp_selectable=false) the whole SSP layer — the tab, bag, column, hero,
+// exchange, dropdown option and sub-labels — is hidden, and the base tab reads UGX.
+// On South Sudan $scSSP=true and $scBaseCode='USD', so every gate below is a no-op.
+$scSSP      = dn_ssp_selectable($config);
+$scBaseCode = dn_book_base($config);
 // Last actual market rate from cash_ins.json (may differ from system rate per person/changer)
 $_scExcCtx  = isset($cbSvc) ? $cbSvc->getLastExchangeContext($store->load('cash_ins.json') ?: []) : [];
 $_scLastRate = (int)($_scExcCtx['last_rate'] ?? 0);
@@ -847,7 +853,7 @@ uasort($staffSums, function($a, $b) {
 function scCatIc(string $c):string{$m=['Collection'=>'💰','Expense'=>'🧾','Handover'=>'🤝','SSP Received'=>'🇸🇸','Exchange'=>'🔄','Staff Payment'=>'👤','Fuel'=>'⛽','Transport'=>'🚗','Commission'=>'🤝','Refund'=>'↩️','Power'=>'⚡','Vehicle'=>'🚗'];return $m[$c]??'📝';}
 
 // Currency tab: usd (default) or ssp
-$curTab=$_GET['sc_cur']??'usd';
+$curTab=$scSSP?($_GET['sc_cur']??'usd'):'usd';
 ?>
 
 <style>
@@ -960,8 +966,8 @@ $curTab=$_GET['sc_cur']??'usd';
     <span style="font-weight:800;color:#0f0f0f;"><?=$_cntBal?></span> of <?=$_cntAll?> staff holding cash
   </div>
   <div style="display:flex;gap:14px;margin-left:auto;flex-wrap:wrap;">
-    <div style="font-size:11px;"><span style="color:#94a3b8;">USD</span> <span style="font-weight:800;color:<?=$_totUsd>=0?'var(--green)':'#dc2626'?>;"><?=scM($_totUsd)?></span></div>
-    <?php if($_totSsp>0):?><div style="font-size:11px;"><span style="color:#94a3b8;">SSP</span> <span style="font-weight:800;color:#c2410c;"><?=number_format($_totSsp,0)?></span></div><?php endif;?>
+    <div style="font-size:11px;"><span style="color:#94a3b8;"><?=$scBaseCode?></span> <span style="font-weight:800;color:<?=$_totUsd>=0?'var(--green)':'#dc2626'?>;"><?=scM($_totUsd)?></span></div>
+    <?php if($scSSP && $_totSsp>0):?><div style="font-size:11px;"><span style="color:#94a3b8;">SSP</span> <span style="font-weight:800;color:#c2410c;"><?=number_format($_totSsp,0)?></span></div><?php endif;?>
     <?php if($_totWal>0):?><div style="font-size:11px;"><span style="color:#94a3b8;">Wallet</span> <span style="font-weight:800;color:#6d28d9;"><?=scM($_totWal)?></span></div><?php endif;?>
   </div>
 </div>
@@ -991,7 +997,7 @@ $curTab=$_GET['sc_cur']??'usd';
   <div class="sc-bv <?=$bc?>"><?=scM($ss['usd'])?></div>
   <?php if($ss['ssp'] > 0 || $ss['wallet'] > 0): ?>
   <div class="sc-sub-row">
-    <?php if($ss['ssp'] > 0): ?>
+    <?php if($scSSP && $ss['ssp'] > 0): ?>
     <div class="sc-sub-item">
       <div class="sc-sub-lbl">🇸🇸 SSP</div>
       <div class="sc-sub-val ssp"><?=number_format($ss['ssp'],0)?></div>
@@ -1015,8 +1021,8 @@ $curTab=$_GET['sc_cur']??'usd';
   <thead>
     <tr style="background:#f8f8f5;">
       <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Staff</th>
-      <th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">USD Cash</th>
-      <th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">SSP Bag</th>
+      <th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;"><?=$scBaseCode?> Cash</th>
+      <?php if($scSSP): ?><th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">SSP Bag</th><?php endif; ?>
       <th style="padding:10px 14px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Wallet</th>
       <th style="padding:10px 14px;text-align:center;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Pending</th>
     </tr>
@@ -1031,7 +1037,7 @@ $curTab=$_GET['sc_cur']??'usd';
         <div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;"><?=htmlspecialchars($ss['role'])?></div>
       </td>
       <td style="padding:10px 14px;text-align:right;font-weight:900;font-size:14px;color:<?=$ss['usd']>0?'var(--green)':($ss['usd']<0?'#dc2626':'#cbd5e1')?>;"><?=scM($ss['usd'])?></td>
-      <td style="padding:10px 14px;text-align:right;font-weight:800;font-size:13px;color:<?=$ss['ssp']>0?'#c2410c':'#e2e8f0'?>;"><?=$ss['ssp']>0?number_format($ss['ssp'],0):'—'?></td>
+      <?php if($scSSP): ?><td style="padding:10px 14px;text-align:right;font-weight:800;font-size:13px;color:<?=$ss['ssp']>0?'#c2410c':'#e2e8f0'?>;"><?=$ss['ssp']>0?number_format($ss['ssp'],0):'—'?></td><?php endif; ?>
       <td style="padding:10px 14px;text-align:right;font-weight:800;font-size:13px;color:<?=$ss['wallet']>0?'#6d28d9':'#e2e8f0'?>;"><?=$ss['wallet']>0?scM($ss['wallet']):'—'?></td>
       <td style="padding:10px 14px;text-align:center;"><?php if($ss['pend']>0):?><span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:800;"><?=$ss['pend']?></span><?php else:?><span style="color:#e2e8f0;">—</span><?php endif;?></td>
     </tr>
@@ -1041,7 +1047,7 @@ $curTab=$_GET['sc_cur']??'usd';
     <tr style="background:#f8f8f5;border-top:2px solid var(--border);">
       <td style="padding:10px 14px;font-weight:900;font-size:12px;color:#0f0f0f;">TOTAL (<?=$_cntAll?> staff)</td>
       <td style="padding:10px 14px;text-align:right;font-weight:900;font-size:14px;color:<?=$_totUsd>=0?'var(--green)':'#dc2626'?>;"><?=scM($_totUsd)?></td>
-      <td style="padding:10px 14px;text-align:right;font-weight:900;font-size:13px;color:#c2410c;"><?=number_format($_totSsp,0)?></td>
+      <?php if($scSSP): ?><td style="padding:10px 14px;text-align:right;font-weight:900;font-size:13px;color:#c2410c;"><?=number_format($_totSsp,0)?></td><?php endif; ?>
       <td style="padding:10px 14px;text-align:right;font-weight:900;font-size:13px;color:#6d28d9;"><?=scM($_totWal)?></td>
       <td></td>
     </tr>
@@ -1116,7 +1122,7 @@ function scApply(){
 <!-- Stat Grid -->
 <div class="cb3-stats">
   <div class="cb3-stat">
-    <div class="cb3-stat-lbl"><?=$curTab==='ssp'?'SSP':'USD'?> collected</div>
+    <div class="cb3-stat-lbl"><?=$curTab==='ssp'?'SSP':$scBaseCode?> collected</div>
     <div class="cb3-stat-val g"><?=$curTab==='ssp'?number_format($sIn,0):scM($uIn)?></div>
   </div>
   <div class="cb3-stat">
@@ -1139,11 +1145,13 @@ function scApply(){
 <!-- Currency Tabs -->
 <div class="cb3-tabs">
   <a href="?page=dashboard&tab=staff_cashbooks&sc_staff=<?=$selId?>&sc_cur=usd<?=!empty($fFrom)?'&sc_from='.urlencode($fFrom):''?><?=!empty($fTo)?'&sc_to='.urlencode($fTo):''?>"
-     class="cb3-tab <?=$curTab==='usd'?'on':''?>">💵 USD Cashbook
+     class="cb3-tab <?=$curTab==='usd'?'on':''?>">💵 <?=$scBaseCode?> Cashbook
     <?php if($uPend>0):?><span class="cb3-badge"><?=$uPend?></span><?php endif;?></a>
+  <?php if($scSSP): ?>
   <a href="?page=dashboard&tab=staff_cashbooks&sc_staff=<?=$selId?>&sc_cur=ssp<?=!empty($fFrom)?'&sc_from='.urlencode($fFrom):''?><?=!empty($fTo)?'&sc_to='.urlencode($fTo):''?>"
      class="cb3-tab <?=$curTab==='ssp'?'on':''?>">🇸🇸 SSP Cashbook
     <?php if($sPend>0):?><span class="cb3-badge"><?=$sPend?></span><?php endif;?></a>
+  <?php endif; ?>
   <a href="?page=dashboard&tab=staff_cashbooks" class="cb3-tab" style="margin-left:auto;font-size:11px;">← All Staff</a>
 </div>
 
@@ -1164,9 +1172,11 @@ function scApply(){
   <button onclick="scAddManual()" style="padding:7px 14px;background:#059669;border:none;border-radius:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
     ➕ Manual Entry
   </button>
+  <?php if($scSSP): ?>
   <button onclick="scOpenExchange()" style="padding:7px 14px;background:#7c3aed;border:none;border-radius:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;">
     💱 Convert Currency
   </button>
+  <?php endif; ?>
   <?php endif; ?>
 </div>
 
@@ -1176,7 +1186,7 @@ $isSSP   = ($curTab==='ssp');
 if (empty($activeL)): ?>
 <div style="padding:40px 20px;text-align:center;color:var(--mute);">
   <div style="font-size:32px;margin-bottom:8px;">📭</div>
-  <div style="font-size:14px;font-weight:700;">No <?=$isSSP?'SSP':'USD'?> entries</div>
+  <div style="font-size:14px;font-weight:700;">No <?=$isSSP?'SSP':$scBaseCode?> entries</div>
   <div style="font-size:12px;margin-top:4px;">for <?=htmlspecialchars($fFrom)?> to <?=htmlspecialchars($fTo)?></div>
 </div>
 <?php else: ?>
@@ -1264,7 +1274,7 @@ if (empty($activeL)): ?>
 </div>
 
 <div style="padding:10px 14px;font-size:12px;color:var(--mute);text-align:center;background:#fff;border-top:1px solid var(--border);">
-  <?=count($activeL)?> <?=$isSSP?'SSP':'USD'?> entries · <?=htmlspecialchars($fFrom)?> to <?=htmlspecialchars($fTo)?>
+  <?=count($activeL)?> <?=$isSSP?'SSP':$scBaseCode?> entries · <?=htmlspecialchars($fFrom)?> to <?=htmlspecialchars($fTo)?>
 </div>
 <?php endif;?>
 <?php endif;?>
@@ -1338,10 +1348,10 @@ if (empty($activeL)): ?>
 <input type="hidden" name="man_staff_id" value="<?=$selId?>">
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
   <div><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Direction</label><select name="man_direction" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;"><option value="in">↑ IN (received)</option><option value="out">↓ OUT (paid)</option></select></div>
-  <div><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Currency</label><select name="man_currency" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;"><option value="USD">USD</option><option value="SSP">SSP</option></select></div>
+  <div><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Currency</label><select name="man_currency" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;"><?php foreach(dn_book_currencies($config) as $_mc): ?><option value="<?=htmlspecialchars($_mc)?>"><?=htmlspecialchars($_mc)?></option><?php endforeach; ?></select></div>
 </div>
 <div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Amount</label><input type="number" name="man_amount" step="0.01" min="0.01" required style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:18px;font-weight:900;box-sizing:border-box;"></div>
-<div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Category</label><select name="man_category" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;"><option value="Adjustment">Adjustment</option><option value="Correction">Correction</option><option value="Cash Advance">Cash Advance</option><option value="SSP Received">SSP Received</option><option value="Exchange">Exchange</option><option value="Other">Other</option></select></div>
+<div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Category</label><select name="man_category" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;"><option value="Adjustment">Adjustment</option><option value="Correction">Correction</option><option value="Cash Advance">Cash Advance</option><?php if($scSSP): ?><option value="SSP Received">SSP Received</option><?php endif; ?><option value="Exchange">Exchange</option><option value="Other">Other</option></select></div>
 <div style="margin-bottom:16px;"><label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Description / Reason *</label><input type="text" name="man_description" required placeholder="What is this entry for?" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;box-sizing:border-box;"></div>
 <div style="display:flex;gap:10px;"><button type="button" onclick="document.getElementById('scManual').style.display='none'" style="flex:1;background:#f8f8f5;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">Cancel</button><button type="submit" style="flex:2;background:#059669;color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;">Add Entry</button></div>
 </form></div></div>
@@ -1363,6 +1373,7 @@ if (empty($activeL)): ?>
 </div>
 <?php endif; ?>
 
+<?php if($scSSP): ?>
 <!-- ══ Currency Exchange Modal ══ -->
 <div id="scExchangeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
 <div style="background:#fff;border-radius:20px;padding:24px;width:100%;max-width:420px;margin:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
@@ -1471,6 +1482,7 @@ if (empty($activeL)): ?>
   </form>
 </div>
 </div>
+<?php endif; /* $scSSP: exchange modal */ ?>
 
 <script>
 function scEdit(id,desc,amt,cat){document.getElementById('seId').value=id;document.getElementById('seAmt').value=amt;document.getElementById('seDesc').value=desc;document.getElementById('seCat').value=cat;document.getElementById('scEM').style.display='flex';}
