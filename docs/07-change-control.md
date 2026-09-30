@@ -2532,3 +2532,56 @@ Rollback to 5.18.53 remains available on its own (docs/44 §16.9):
 
 **docs/48: D-1 (§3) and PD-1 (§5) are now resolved in production.** The remaining
 docs/48 items (PD-2..PD-13, FI1..FI5, S1..S5, U1) stay staged for a later decision.
+
+## 30 Sep — 5.18.56 BUILT (Staff Cashbooks `$config` scope fix); deploy script + rehearsal ready; NOT deployed
+
+The operator reported a `Warning: Undefined variable $config` on every figure card of the
+**Staff Cashbooks** screen (admin/accountant only) and asked to check it. Root cause and fix:
+
+- `tabs/accounts/staff_cashbooks.php:846` defines the money formatter
+  `function scM(float $n):string{...dn_cur($config)...}`. A PHP function does **not** inherit
+  the including scope, so the bare `$config` was undefined inside `scM()` — hence the warning on
+  every card that calls it. The **amounts were already correct** (`dn_cur()` defaults to `UGX`
+  when config is absent); only the warning text leaked into the UI.
+- **Fix (one line):** `scM()` now brings `$config` into scope with `global $config`, matching the
+  codebase's existing pattern (`tabs/customer_app/portal_data.php:1092`). Verified by tracing the
+  include chain: the tab is required at global scope (`public.php:3008`, inside two `if` blocks,
+  no enclosing function), so `global $config` binds to the same `$config` (`public.php:494`) the
+  rest of the tab uses — the formatter now shows the configured symbol **and** emits no warning.
+- **Pre-existing, not from 5.18.55:** `git diff 6b71ea6 9514633 -- <file>` is empty — this file
+  was not touched by the 5.18.55 release; the bug has been latent on an admin-only screen.
+
+**Tested.** New regression test `tests/test_staff_cashbook_scope.php` (9 assertions): structural
+(scM declares `$config` global) + runtime (scM called with no `$config` in scope raises no
+"Undefined variable" warning and still renders `UGX`) + a control on the control (the pre-fix
+definition **does** warn). `php -l` clean. **Full plugin suite green** (`tests/run.sh` exit 0;
+249 test files, `php "$t" || fail=1` then `exit "$fail"` — 0 means every file passed). No existing
+test conflicts (only `test_cashbook_currency.php` reads the file's source, and its assertions do
+not match the added line; no test pins the manifest version).
+
+**Committed** to `claude/study-this-jhe2eg` at **`81d4324`** (manifest bumped 5.18.55 → 5.18.56).
+
+**Deploy prepared (operator-run; this session cannot reach production).**
+`scripts/deploy-5.18.56.sh` — pinned to `81d4324`, **baseline 5.18.55 (`9514633`)**, rollback to
+5.18.55. It is a diff-proven minimal derivation of the production-run `deploy-5.18.55.sh`: only the
+pin/version/baseline labels, the output paths, two RELEASE_A labels, the new **R1c** line (names
+the installed scM fix), the rollback note and two summary lines change — the backup /
+GO-NO-GO / typed-DEPLOY / typed-ROLLBACK / R1-R14 machinery is byte-identical. With baseline
+5.18.55, stages **R2-R14 double as a full regression check** that 5.18.52-5.18.55 are intact
+(NotifyGate's fixes on, the job notifier wired, migrations 075/076, **PD-1's export gate, R1b**).
+Rehearsed in `scripts/harness/deploy-5.18.56/rehearse.sh` against a fake container starting at
+5.18.55: **68 passed, 0 failed, twice** — the deploy PASSES, R1c fires (with a control: a missing
+scM fix on the server is caught, and an R1c-blinded copy of the script is detected), the 3-file
+delta installs byte-for-byte, the rollback returns `staff_cashbooks.php` to 5.18.55.
+
+Run on the server as root, then send back **the log file** (rollback is a separate command,
+printed at the end of the deploy's log — never pasted together with the deploy, docs/44 §16.9):
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+      && mkdir -p /root/dnb-5.18.56 \
+      && bash scripts/deploy-5.18.56.sh 2>&1 | tee /root/dnb-5.18.56/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+**Also (operator action, unrelated to the code):** set `whatsapp_admin_phone` to `211927797217`
+in **Engage → WhatsApp** ("🔔 Admin Alert Number") — this resolves the R14 note from the 5.18.55
+deploy (the admin number was unset, so the watchdog/KYC/handover alerts reached only the plugin
+log). `+211` is the South Sudan code, consistent with that screen's existing `211…` examples.
