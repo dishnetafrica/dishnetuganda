@@ -3275,3 +3275,121 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/job-
 ```
 
 Then `tail -n +1` the log file it names.
+
+### 16.28 Message 2 goes, its records are lost: the Accept test's result, the cause, and a one-line fix — 28–30 September 2026
+
+**The operator's Accept test** (job #11, 16:12–16:13 Kampala on 28 September; log file
+`accept-test-20260928T131222Z.log`):
+- The preflight was GO. Job #11 was created, and message 1 went by WhatsApp and e-mail.
+- **The PHP environment:**
+  - error level `E_ALL` (32767), set in `/usr/local/etc/php/php.ini`, with no PHP-FPM override;
+  - PHP-FPM's 12 workers run as uid 1000, as the test did;
+  - the Accept took 2.0 s, and php.ini sets no time limit;
+  - both settings copies give Evolution for job messages.
+- **No PHP warning, and no error.**
+- **The notifier: `sent staff account #4`.** Message 2 went by WhatsApp.
+- Yet the history held only the *assigned* row, and the Message Log only `job_assigned`.
+- Deleting the job sent *cancelled* by WhatsApp and e-mail, both recorded.
+
+**What it establishes:**
+- **The warning explanations of §16.27 (A, A′, B and D) are ruled out for this run:**
+  - no warning and no error;
+  - the same transport in both settings copies;
+  - 2 s against no time limit;
+  - the same user as PHP-FPM.
+- **The Accept completes and sends message 2; afterwards neither of its records exists.** That is job #10's trail
+  again, this time with the notifier's own word that message 2 went.
+- **Production's PHP counts deprecations** (`E_ALL`). A PHP 8.1 deprecation anywhere in the staff app's API would
+  end its request. None arose on the Accept's path. Recorded, not changed.
+
+**The cause — measured, then reproduced:**
+- **The claim's read is left open.** `JobNotifier::accepted()` claims the job inside `BEGIN IMMEDIATE … COMMIT`
+  (`lib/JobNotifier.php:190–192`):
+  - it reads the claim with `$st->fetch()`, and never finishes or closes `$st`;
+  - `$st` stays alive until `accepted()` returns, that is, through the whole delivery.
+- **In SQLite's WAL mode, a statement left open keeps the connection's read snapshot after the COMMIT.**
+- **The Accept provokes a second writer.** Its own status change makes uCRM send the plugin `job.edit`. The
+  webhook's `observe()` then writes the job's record, because `decide()` sets a state for any live job. It does so
+  while the Accept is still waiting on Evolution.
+- **The next write then fails at once.** The Accept's next write, the Message Log row, must upgrade the stale snapshot.
+  SQLite refuses that with *"database is locked"*, and without waiting. The conversation-store row and the history
+  row fail the same way.
+- **All three swallow the error** (`catch (\Throwable)`), and the message had already gone before the first of them.
+- **So message 2 is sent, and nothing is recorded or reported.** The staff app shows the Accept as done.
+- **Measured in isolation**, with two connections to a WAL database (SQLite 3.45):
+  - with the statement left open, the write fails in 0.00 s;
+  - with the statement closed before the COMMIT, the same write succeeds.
+- **Why the sandbox never showed it:** its fake Evolution answered at once, so the Accept's writes were done before
+  uCRM's notice arrived a second later.
+
+**Reproduced with the real plugin code** (rehearsal). Evolution answers in 4 s here; the real one took about 2 s on
+the server. The servers answer several requests at once, as PHP-FPM does.
+- **S12, the Accept test** (job #11's path):
+  - the notifier says *sent*, and the technician gets message 2 once;
+  - another process wrote the job's record during the Accept;
+  - neither row is saved. The server's output, line for line.
+- **S12c, the staff app's own API** (job #10's path):
+  - the API answers success with WhatsApp *sent*, and the technician gets message 2;
+  - the claim is written, and the webhook wrote the record too;
+  - neither row is saved.
+- **S12b and S12d, the same two with one line added** to a scratch copy of the plugin: `$st->closeCursor();` after
+  the claim's read. **Both rows are saved.** That line is the only difference from S12 and S12c.
+- **Stable:** S12 to S12d passed three times in a row with 4 s. A first draft with 2 s missed the race once, so the
+  window was widened.
+
+**What happened on 28 September, therefore** (inferred from the above):
+- **S4 was sent "Thank you for accepting the job!" twice by WhatsApp**: for job #10 at about 13:27 Kampala, and for
+  job #11 at about 16:12. For #11 the notifier says so. The e-mail most likely went too.
+- **Since 5.18.52 (07:41 UTC on 28 September), most likely every Accept made through DishNet has sent message 2 and
+  recorded nothing.** On the server, uCRM's notice lands inside the Accept's delivery. What each such Accept lost:
+  - the history row;
+  - the Message Log row;
+  - the conversation-store row;
+  - the Evolution echo claim. So the echo of message 2 reached the plugin unclaimed, which, by the code's own comment,
+    reads as a colleague typing and stands the AI down on that chat. Inferred from the comment, not measured.
+- **The webhook's own sends keep the same open statement.** `observe()` reads the same way
+  (`lib/JobNotifier.php:122–124`).
+  - They were all recorded, because nothing else normally writes during their delivery.
+  - The risk is latent: two uCRM notices for one job within about two seconds, or any other write in that window,
+    would lose them the same way.
+- **What people saw:**
+  - the job page showed the Accept as done;
+  - `--facts` and the walk-through reported *"no message 2 recorded"*. That was true of the records, not of the
+    message.
+
+**Proposed: 5.18.53 — not built; it needs approval:**
+1. **The fix:** close the claim's read before its COMMIT, in `accepted()` and in `observe()`. That is
+   `$st->closeCursor();` after each fetch: two lines.
+2. **No silent loss again:** when `writeLog()` or `event()` cannot write, one line goes to the plugin log, naming the
+   table and the error.
+3. **A regression test in the plugin's own suite.** It forces the race with a second connection writing during the
+   send. It must fail without the fix and pass with it.
+4. The deploy script and its rehearsal, and the suite twice, as for 5.18.52.
+5. **Optional, each approvable on its own:**
+   - F-WT1: *"no longer assigned"* shows the booked time (§16.26);
+   - show `whatsapp_note` on the job page.
+
+§16.27's proposals 1 and 2 (surviving a warning; the history row first) are **withdrawn as the explanation**: the test
+ruled warnings out. They remain possible hardening, and are not in 5.18.53.
+
+**The test, changed** (`scripts/` only; the plugin is unchanged):
+- The *notifier* line now carries the e-mail's outcome.
+- **A read-only probe, on a connection of its own**, reports the job record's version before and after the Accept.
+  When the record changed twice or more, it says another process wrote it meanwhile.
+- **A new verdict:** *"message 2 went (the notifier says sent), but neither its history row nor its Message Log row
+  was saved, and nothing reported it"*.
+
+**Rehearsed** (`scripts/harness/job-walkthrough/`):
+- Two new injections, into the scratch plugin copy only:
+  - `slow-evo`, an Evolution as slow to answer as the real one;
+  - `fix-cursor`, the proposed fix.
+- Four new scenarios, S12 to S12d.
+- Two new weakened copies, each caught by S12: X18 removes the new verdict, and X19 removes the version note.
+- **121 assertions over twenty-two scenarios, and nineteen weakened copies. Two consecutive runs,
+  identical** (`docs/evidence/5.18.52/walkthrough/rehearsal-run7.log` and `-run8.log`).
+- The helper passes `php -l` under PHP 8.1.34 (php-wasm) and 8.4.
+
+**For the operator — no command this time:**
+1. **On S4's phone and e-mail,** look for two *"Thank you for accepting the job!"* messages from 28 September: about
+   13:27 (job #10) and about 16:12 (job #11), Kampala time. Finding them confirms the diagnosis on the real line.
+2. **Decide on 5.18.53:** the fix, the logging and the regression test. Say whether to include either optional item.

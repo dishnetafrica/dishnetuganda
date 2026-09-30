@@ -2276,3 +2276,25 @@ customer the older "installation booked" e-mail; test jobs need no customer.
 - **Proposed for 5.18.53, not built:** the Accept survives a warning; the history row first; the job page shows what
   became of message 2.
 - Rehearsed twice, identically: 107 assertions, and seventeen weakened copies caught.
+
+## 28–30 Sep — message 2 goes, its records are lost: the cause and a one-line fix (docs/44 §16.28)
+
+- **The Accept test on the server (job #11):** no PHP warning, no error, 2.0 s, Evolution in both settings copies.
+  The Accept code says message 2 was **sent**, yet neither its history row nor its Message Log row exists. So the
+  warning explanations are ruled out.
+- **The cause:**
+  - the Accept's claim leaves its database read open (`lib/JobNotifier.php:192`);
+  - uCRM's notice of the Accept's own status change makes the webhook write the job's record meanwhile;
+  - the Accept's later writes then fail at once with *"database is locked"*, and each of them swallows the error.
+  Measured with two connections, then reproduced with the real plugin code, both through the Accept test and through
+  the staff app's own API.
+- **The fix, shown in the sandbox:** `$st->closeCursor();` after the claim's read. Both rows are saved.
+- **So on 28 September S4 most likely received message 2 for jobs #10 and #11.** Asked of the operator.
+- **Proposed for 5.18.53, not built:**
+  - the fix in `accepted()` and `observe()`;
+  - a log line whenever a record cannot be written;
+  - a regression test that fails without the fix.
+- **The Accept test** now names this case, and shows when another process wrote the job's record during the Accept.
+  `scripts/` only; the plugin is unchanged.
+- Rehearsed twice, identically: 121 assertions over twenty-two scenarios, and nineteen weakened copies
+  caught.

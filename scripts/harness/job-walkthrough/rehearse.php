@@ -50,15 +50,26 @@ function wt_root(string $plugin, ?string $webhook = null, ?string $inject = null
     rename("$fx/fake_ucrm_staff_jobs.php", "$fx/fake_ucrm_staff_jobs_orig.php");
     copy(__DIR__ . '/fake_ucrm_emit.php', "$fx/fake_ucrm_staff_jobs.php");
     if ($webhook !== null) file_put_contents("$tmp/webhook.php", $webhook);
-    if ($inject !== null) {
-        $code = ['warning'   => "        trim(null);\n        trigger_error('rehearsal: an injected warning at https://example.test/hook?token=rehearsal-secret', E_USER_WARNING);\n",
-                 'exception' => "        throw new \\RuntimeException('rehearsal: an injected exception');\n",
-                 'timeout'   => "        set_time_limit(1);\n        for (;;) {}\n"][$inject] ?? null;
-        if ($code === null) throw new \RuntimeException("no such injection: {$inject}");
-        $f = "$tmp/lib/JobMessages.php"; $src = (string)file_get_contents($f);
-        $at = "public static function accepted(array \$f): string\n    {\n";
-        if (substr_count($src, $at) !== 1) throw new \RuntimeException('the injection could not be made: anchor not found once');
-        file_put_contents($f, str_replace($at, $at . $code, $src));
+    $inAccepted = "public static function accepted(array \$f): string\n    {\n";
+    $claimFetch = "\$row = \$st->fetch(\\PDO::FETCH_ASSOC);\n            if (is_array(\$row) && (int)(\$row['accepted_by'] ?? 0) === \$assignee) {\n";
+    $evoSend    = "if (preg_match('#^/message/sendText/(.+)\$#', \$path, \$m)) {\n";
+    foreach (array_filter(explode(',', (string)$inject)) as $kind) {
+        [$rel, $at, $code] = [
+            'warning'    => ['lib/JobMessages.php', $inAccepted, "        trim(null);\n        trigger_error('rehearsal: an injected warning at https://example.test/hook?token=rehearsal-secret', E_USER_WARNING);\n"],
+            'exception'  => ['lib/JobMessages.php', $inAccepted, "        throw new \\RuntimeException('rehearsal: an injected exception');\n"],
+            'timeout'    => ['lib/JobMessages.php', $inAccepted, "        set_time_limit(1);\n        for (;;) {}\n"],
+            // The real Evolution takes about a second to answer; the fake answers at once.
+            // Four seconds: uCRM's notice reaches the webhook a second after the Accept's own change, and the webhook
+            // must have written the job's record well before the Accept writes its own rows.
+            'slow-evo'   => ['tests/fixtures/fake_evo_server.php', $evoSend, "    usleep(4000000);   // rehearsal: slower to answer than the real one\n"],
+            // The proposed 5.18.53 fix, to show it: the claim's read is closed before its COMMIT.
+            'fix-cursor' => ['lib/JobNotifier.php', $claimFetch, null],
+        ][$kind] ?? [null, null, null];
+        if ($rel === null) throw new \RuntimeException("no such injection: {$kind}");
+        $f = "$tmp/$rel"; $src = (string)file_get_contents($f);
+        if (substr_count($src, $at) !== 1) throw new \RuntimeException("the injection {$kind} could not be made: anchor not found once");
+        $new = $code === null ? str_replace("\$row = \$st->fetch(\\PDO::FETCH_ASSOC);\n", "\$row = \$st->fetch(\\PDO::FETCH_ASSOC);\n            \$st->closeCursor();\n", $at) : $at . $code;
+        file_put_contents($f, str_replace($at, $new, $src));
     }
     register_shutdown_function(function () use ($tmp) { exec('rm -rf ' . escapeshellarg($tmp)); });
     return $tmp;
@@ -551,6 +562,71 @@ foreach (['S11d' => ['exception', 'an exception', "RuntimeException: rehearsal: 
     $ml = $s->q("SELECT id FROM notification_audit_log WHERE event = 'ops_job_accepted_self'");
     ok((int)($st[0]['accepted_by'] ?? 0) === 1099 && $acc === [] && $ml === [], "the trail is job #10's: the claim, and no message 2 recorded", json_encode([$st, $acc, $ml]));
     ok(!isset($s->crmDump()['jobs'][(string)$job]) && $log !== '' && wt_leaks($t . $log) === [], 'the test job was still deleted, and the log is masked');
+    $s->stop();
+}
+
+// Jobs #10 and #11 on the server: the Accept sends message 2, then loses both its records. Reproduced by the two things
+// the sandbox otherwise lacks: an Evolution as slow to answer as the real one, and uCRM's notice of the Accept's own
+// status change, handled by the webhook, arriving meanwhile. Then the proposed fix, the claim's read closed before its
+// COMMIT, under the same conditions.
+foreach (['S12'  => ['slow-evo', false, "job #10 and #11's trail reproduced: Evolution as slow as the real one, uCRM's notice of the Accept meanwhile"],
+          'S12b' => ['slow-evo,fix-cursor', true, "the same with the claim's read closed before its COMMIT (the proposed 5.18.53 fix): both rows are saved"]] as $sc => [$kind, $fixed, $what]) {
+    if (!want($sc)) continue;
+    echo "\n{$sc} {$what}\n";
+    // Servers that answer several requests at once, as PHP-FPM does: uCRM's notice never waits behind another request.
+    putenv('PHP_CLI_SERVER_WORKERS=4');
+    try { $s = wt_sandbox(wt_root($plugin, null, $kind), 'wt' . strtolower(substr($sc, 1))); } finally { putenv('PHP_CLI_SERVER_WORKERS'); }
+    [$rc, $t, $log] = wt_run($script, $s, ['--accept-test', '--client', '15', '--tech', '1099', '--no-customer-email'], function (string $q, string $buf): string { return ''; });
+    $got = count(array_filter($jobTexts($s), function ($x) { return strpos((string)$x['text'], 'Thank you for accepting the job!') !== false; }));
+    ok($rc === 0 && preg_match('/^  notifier  sent staff account #\d+; e-mail: sent$/m', $t) === 1 && $got === 1,
+        'the Accept code sends message 2, by WhatsApp and e-mail, and the technician gets it once', "exit $rc, texts $got");
+    ok(preg_match("/^  \\(the job's record changed [2-9] times while the Accept ran: once by the Accept's own claim, and by another process as well/m", $t) === 1,
+        "another process, the webhook with uCRM's notice, wrote the job's record while the Accept ran");
+    $hist = preg_match('/^  history  accepted accepted accept sent email=sent /m', $t) === 1;
+    $mlog = preg_match('/^  Message Log  ops_job_accepted_self sent 1$/m', $t) === 1;
+    if (!$fixed) {
+        ok(!$hist && !$mlog, "yet neither its history row nor its Message Log row was saved: the server's trail");
+        ok(preg_match("/^  ✗ message 2 went \\(the notifier says sent\\), but neither its history row nor its Message Log row was saved, and nothing reported it$/m", $t) === 1,
+            'and the verdict says exactly that');
+    } else {
+        ok($hist && $mlog, 'both its history row and its Message Log row were saved');
+        ok(preg_match("/^  ✓ no PHP warning that ends the staff app's request, and message 2 went, and the e-mail was handed to the mail server$/m", $t) === 1,
+            'and the verdict is the clean one');
+    }
+    $s->stop();
+}
+
+// Job #10's own path: the staff app's API, its server answering several requests at once as PHP-FPM does, so that
+// uCRM's notice of the Accept is handled while the Accept is still sending.
+foreach (['S12c' => ['slow-evo', false, "job #10's path: the staff app's own Accept, its server answering the webhook at the same time as PHP-FPM does"],
+          'S12d' => ['slow-evo,fix-cursor', true, "the same with the proposed fix: both rows are saved"]] as $sc => [$kind, $fixed, $what]) {
+    if (!want($sc)) continue;
+    echo "\n{$sc} {$what}\n";
+    putenv('PHP_CLI_SERVER_WORKERS=4');
+    try { $s = wt_sandbox(wt_root($plugin, null, $kind), 'wt' . strtolower(substr($sc, 1))); } finally { putenv('PHP_CLI_SERVER_WORKERS'); }
+    $d = (new DateTime('tomorrow', new DateTimeZone('Africa/Kampala')))->format('Y-m-d');
+    $j = $s->http('POST', "{$s->crm}/scheduling/jobs", ['title' => 'Fixture job', 'date' => $d . 'T10:00:00+0300', 'assignedUserId' => 1099,
+        'clientId' => 15, 'status' => 0, 'duration' => 60], ['Content-Type: application/json']);
+    $id = (int)($j[2]['id'] ?? 0);
+    for ($i = 0; $i < 60 && $s->q("SELECT id FROM job_notify_events WHERE job_id = ? AND event = 'assigned'", [$id]) === []; $i++) usleep(250000);
+    $t0 = microtime(true);
+    $r = $s->api('tech', 'POST', 'scheduling_job_update', ['job_id' => $id, 'status' => 'open', 'notify_accept' => 1]);
+    $took = microtime(true) - $t0;
+    sleep(3);   // the webhook's handling of uCRM's notice, which began during the Accept, finishes
+    $st  = $s->q('SELECT accepted_by, version FROM job_notify_state WHERE job_id = ?', [$id]);
+    $acc = $s->q("SELECT id FROM job_notify_events WHERE job_id = ? AND event = 'accepted'", [$id]);
+    $ml  = $s->q("SELECT id FROM notification_audit_log WHERE event = 'ops_job_accepted_self'");
+    $got = count(array_filter($jobTexts($s), function ($x) { return strpos((string)$x['text'], 'Thank you for accepting the job!') !== false; }));
+    ok($r[0] === 200 && ($r[2]['data']['whatsapp'] ?? null) === 'sent' && $got === 1,
+        "the staff app's Accept answers success, message 2 sent, and the technician gets it once",
+        $r[0] . ' ' . json_encode($r[2]['data']['whatsapp'] ?? null) . " texts {$got}, " . round($took, 1) . ' s');
+    ok((int)($st[0]['accepted_by'] ?? 0) === 1099 && (int)($st[0]['version'] ?? 0) >= 3,
+        "the claim is written, and the job's record was also written by the webhook (version " . (int)($st[0]['version'] ?? 0) . ')');
+    if (!$fixed) {
+        ok($acc === [] && $ml === [], "yet neither the history nor the Message Log has message 2: job #10's trail", json_encode([$acc, $ml]));
+    } else {
+        ok(count($acc) === 1 && count($ml) === 1, 'the history and the Message Log both have message 2', json_encode([$acc, $ml]));
+    }
     $s->stop();
 }
 

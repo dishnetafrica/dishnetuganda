@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rehearses scripts/job-walkthrough.sh (docs/44 §16.25–§16.27): every scenario of rehearse.php on the script as
+# Rehearses scripts/job-walkthrough.sh (docs/44 §16.25–§16.28): every scenario of rehearse.php on the script as
 # committed, then weakened copies of the script, each of which the scenario that guards it must catch. Nothing leaves
 # the host.
 set -u
@@ -42,6 +42,8 @@ mutant X14-split-not-reported S11c 'if ($tApi === '"'"'none'"'"' && $tHook !== '
 mutant X15-query-unmasked     S11b 'wt_mask(wt_noquery((string)$str))' 'wt_mask((string)$str)'
 mutant X16-fatal-unreported   S11e 'in_array($e['"'"'type'"'"'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)' 'false'
 mutant X17-error-verdict-gone S11d 'elif [ "$ne" -gt 0 ]; then' 'elif false; then'
+mutant X18-lost-rows-unnamed  S12 'elif printf '"'"'%s\n'"'"' "$out" | grep -q '"'"'^RESULT sent '"'"'; then' 'elif false; then'
+mutant X19-no-version-note    S12 '*) [ $((sv1 - sv0)) -ge 2 ] && say' '*) false && say'
 
 echo ""; echo "rehearsal: $pass passed, $fail failed"
 [ "$fail" = 0 ]
