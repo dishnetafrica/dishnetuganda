@@ -2322,3 +2322,14 @@ customer the older "installation booked" e-mail; test jobs need no customer.
   reads the plugin log's *"not saved"* lines since the deploy. Rehearsed 198/198 twice; 36 weakened copies caught.
   The rollback is a separate command, printed on its own.
 - **Not deployed.** Next: the deploy command, then the Accept test (§16.27).
+
+## 30 Sep — 5.18.53 deployed (PASSED 49/0/2), and the Accept test on it (docs/44 §16.30)
+
+- **The deploy, 06:33 UTC:** `6b71ea6` over `7ad465e`, installed as the checkout stood at `edc0085`. 49 ok, 0 failed;
+  notes R7 (2 of the 4 job-taking accounts verified, M5) and R11 (the plugin's SMTP). The 8 changed files carry the
+  deploy's time and OPcache re-checks times (R12); there is no plugin log yet (R13). Backup
+  `/root/dnb-5.18.53/backup-20260930T063323Z`.
+- **The Accept test, job #13, 06:35 UTC:** message 2 went by WhatsApp and e-mail in 1.7 s, and **its history row and
+  Message Log row were saved, while the webhook wrote the job's record during the Accept**: the collision that lost
+  both on 28 September. Message 1 and *"cancelled"* went and were recorded too.
+- **Next:** `--after-only` after a day of real jobs.

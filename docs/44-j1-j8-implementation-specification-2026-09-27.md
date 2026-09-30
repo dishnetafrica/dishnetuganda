@@ -3552,3 +3552,75 @@ cd /opt/dishnet && bash scripts/job-walkthrough.sh --accept-test --no-customer-e
 Then `tail -n +1` the log file it names.
 
 **Not deployed.**
+
+> **30 September, 06:33 UTC:** deployed, PASSED; the Accept test on it confirmed the fix (§16.30).
+
+### 16.30 5.18.53 deployed, and the Accept test on it — 30 September 2026, 06:33 UTC
+
+**PASSED: 49 ok, 0 failed, 2 notes.** `6b71ea6` over `7ad465e` (5.18.52), deployed by the operator (run
+`20260930T063323Z`; the deploy itself at 06:33:53 UTC). The pull brought the checkout from `c10fdda` to `edc0085`,
+whose plugin commit is `6b71ea6`, so the script installed the checkout as it stood. The operator printed the log file
+with `tail -n +1` and pasted it; it carries no name, e-mail, number or secret.
+
+- **A.**
+  - 8 files against `7ad465e`: 6 changed, 2 added, 0 removed. The server's PHP 8.1.34 accepted the 4 changed PHP files
+    that run on the server and the 3 test files.
+  - Uganda from both configuration sources. 5 staff accounts, all active, digest `0c5c170623a6dc3d` (as at §16.20).
+    The Message Log ends at #441.
+  - Migrations 075 and 076 applied, as 5.18.52 left them: 3 jobs, 6 history rows.
+  - **A6:** the plugin log did not exist yet; the database's owner (1000:1000, PHP-FPM's user) can create it.
+  - **A7:** `validate_timestamps 1` at `php.ini:21`; `enable` and `revalidate_freq` unset, so PHP's defaults (on,
+    2 s); no PHP-FPM pool file sets an OPcache value.
+- **The backup,** `/root/dnb-5.18.53/backup-20260930T063323Z`: `plugin.sqlite3`, 24 MB, integrity ok, 227 tables; the
+  data directory, 108 MB; the plugin's own `data/`, 100 KB; the installed 5.18.52, 11 MB; the vault; UISP health.
+- **B.** *"✓ container now serves 6b71ea6"*; the 8 files were given the copy's time, 06:33:54 UTC.
+- **V.** All ok; no fatal or parse error of the plugin since 06:33:53 UTC, after the 60 s wait.
+- **R.**
+  - R1–R6, R8–R10, R12 and R13 ok. R6: the fix and the five lines are in the installed files.
+  - R9: the 6 history rows are message 1 ×3, *"cancelled"* ×2 and a new time ×1, each sent by WhatsApp and e-mail.
+  - **R12:** all 8 files carry the deploy's time, and OPcache re-checks files' times at most every 2 s, with no pool
+    override.
+  - **R13:** no plugin log yet, so no *"not saved"* line.
+  - **Note R7:** 2 of the 4 accounts that take jobs hold a verified link (S1 and S4); the other two still hold ids
+    stored the old way (M5).
+  - **Note R11:** the engineer's e-mail goes through the plugin's own SMTP settings.
+
+**The Accept test on 5.18.53: job #13, 06:35 UTC (09:35 Kampala).** Taken from the terminal the operator pasted; the log
+file stays on the server as `/root/dnb-5.18.52/accept-test-20260930T063526Z.log`.
+- **Before:** the installed plugin is 5.18.53, with the notifier, on Uganda. The technician is uCRM user 1099 → S4:
+  verified, active, with a usable number and an e-mail. The title is not an installation, so the test customer got no
+  e-mail.
+- **Created:** job #13, for 1 October 10:00 Kampala. uCRM's `job.add` reached the plugin in 2 s, and message 1 went to
+  S4 by WhatsApp and e-mail.
+- **DishNet's Accept:**
+  - the same environment as on 28 September: error level `E_ALL` from `php.ini`, no PHP-FPM override, PHP-FPM's 12
+    workers and the test both uid 1000, Evolution in both settings copies;
+  - it took 1.7 s; the notifier says *sent* to S4, e-mail *sent*;
+  - **the job's record changed twice while it ran:** once by the Accept's own claim, and once by the webhook handling
+    uCRM's notice of the status change. That is the collision that lost both records on 28 September;
+  - **this time both records were saved:** the history row (`accepted/accepted`, sent, e-mail sent) and the Message Log
+    row (`ops_job_accepted_self`, sent);
+  - the verdict: *"✓ no PHP warning that ends the staff app's request, and message 2 went, and the e-mail was handed to
+    the mail server"*.
+- **Deleted:** uCRM's `job.delete` reached the plugin in 2 s. *"Cancelled"* went to S4 by WhatsApp and e-mail, and its
+  history row and Message Log row were saved. uCRM now answers 404 for the job.
+
+**What this establishes:**
+- **The fix works on the server.** Job #11 (§16.28) met the same collision on 5.18.52: message 2 went, and neither
+  record was saved. Job #13 met it on 5.18.53, and both were.
+- **What it does not cover:** the Accept test runs the installed files in a fresh PHP process. The staff app's own
+  ✔ Accept Job button runs through PHP-FPM, whose copy R12 covers: every changed file carries the deploy's time, and
+  OPcache re-checks times every 2 s. The first Accept pressed in the staff app will show it directly, through
+  `--facts N` for that job.
+
+**A correction to §16.29:** the rehearsal's container has a `php.ini` that sets `revalidate_freq=2`. The server's leaves
+it unset (A7), which is PHP's default of 2 s. The behaviour is the same, and R12 reads both the same way.
+
+**Found on the way, not changed:** `scripts/job-walkthrough.sh` still writes its logs under `/root/dnb-5.18.52/`.
+
+**For the operator — no command now:**
+1. On S4's phone and e-mail, job #13's three messages: message 1, *"Thank you for accepting the job!"* and
+   *"cancelled"*, each by WhatsApp and by e-mail.
+2. After a day of real jobs: `cd /opt/dishnet && bash scripts/deploy-5.18.53.sh --after-only`, then `tail -n +1` its
+   log file. R4 and R9 count the job messages sent since the deploy, and R13 says whether any record could not be
+   saved.
