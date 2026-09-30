@@ -2619,3 +2619,68 @@ Three notes (configuration, not errors), carried over from the 5.18.55 state:
 Rollback to 5.18.55 remains available on its own (docs/44 §16.9):
 `cd /opt/dishnet && bash scripts/deploy-5.18.56.sh --rollback` (reintroduces only the cosmetic
 scM warning; all of 5.18.54's fixes and PD-1 stay in place).
+
+## 30 Sep — 5.18.57 BUILT (Uganda accounting UI shows UGX, not South Sudan's SSP); deploy script + rehearsal ready; NOT deployed
+
+**Reported by the operator (screenshot of the Staff Cashbooks screen):** the accountant/admin
+cash screens showed *"💵 USD Cashbook 🇸🇸 SSP Cashbook"* on the **Uganda (UGX)** install. SSP is
+South Sudan's local secondary cash currency; it must never appear on Uganda. A proper account-
+manager UI audit of the accounting plane found the leak across seven screens.
+
+**Root cause (measured, not inferred):** the cashbook was built for South Sudan's dual-currency
+(USD + SSP) model and the SSP layer was hardcoded. The plugin already carried the tenant helpers
+(`dn_ssp_selectable($config)` → false on Uganda; `dn_book_base($config)` → UGX on Uganda, USD on
+Sudan) but the accounting screens never consulted them. The "USD" cashbook tab is really the BASE
+bag — on Uganda it already holds UGX money (collections write the base currency), so relabelling it
+UGX is correct, **not** a data change.
+
+**Fixed in code (5.18.57) — display-only, tenant-gated:**
+- `tabs/accounts/staff_cashbooks.php` — derives `$scSSP = dn_ssp_selectable($config)` and
+  `$scBaseCode = dn_book_base($config)` once; the base tab reads *"💵 UGX Cashbook"*; the
+  🇸🇸 SSP tab, the SSP bag column, the USD↔SSP exchange modal + Convert button, the SSP
+  grid/stat/footer sub-items and the "SSP Received" category are all wrapped in `if($scSSP)`;
+  the manual-entry currency dropdown loops `dn_book_currencies($config)`.
+- `tabs/accounts/ssp_imprest.php`, `ssp_cashbook.php` — whole-screen early return on Uganda
+  (mirrors `ssp_overview.php`): *"SSP flows are not enabled on this installation…"*.
+- `public.php` — the Cashbook nav label is tenant-aware; the SSP Imprest nav item is hidden on
+  Uganda (`'roles'=>[]`).
+- `tabs/accounts/cash_declaration.php` — the three SSP cash-count blocks gated; base labels from
+  `dn_book_base`.
+- `tabs/accounts/cash_advances.php`, `fiber_costs.php` — the SSP dropdown option gated.
+- **On South Sudan every gate stays open and `$scBaseCode = 'USD'`, so the screens render
+  byte-for-byte as before.** No amount, stored row, ledger or accounting logic changes.
+
+**Proof:** new `tests/test_cashbook_tenant.php` (**26/0**) RENDERS the real tab-bar and dropdown
+fragments under a Uganda config and under a South Sudan config and reads the output as an account
+manager would: Uganda shows *"UGX Cashbook"*, no *"SSP Cashbook"*, no 🇸🇸; South Sudan unchanged.
+It carries a **control on the control** — strip the `$scSSP` gate and the SSP tab reappears on
+Uganda. Full plugin suite green (0 FAIL). `php -l` clean on all seven screens.
+
+**Committed** to `claude/study-this-jhe2eg` at **`eea3d65`** (manifest bumped 5.18.56 → 5.18.57).
+
+`scripts/deploy-5.18.57.sh` — pinned to `eea3d65`, **baseline 5.18.56 (`81d4324`)**, rollback to
+5.18.56. It is a diff-proven minimal derivation of the production-run `deploy-5.18.56.sh`: only the
+pin/version/baseline labels, the output paths, the RELEASE_A labels, the new **R1d** check, the
+rollback note and two summary lines change — the backup / GO-NO-GO / typed-DEPLOY / typed-ROLLBACK /
+R1-R14 machinery is byte-identical. **R1d** names the tenant gate on the installed screens; **R1c**
+(the inherited scM `$config` fix) and stages R2-R14 double as a full regression check that
+5.18.52-5.18.56 are intact.
+
+Rehearsed in `scripts/harness/deploy-5.18.57/rehearse.sh` against a fake container starting at
+5.18.56: **70 passed, 0 failed, three times** — the deploy PASSES; R1d fires (with teeth: revert
+the gate on the server and R1d fails, naming it); the 9-file delta installs byte-for-byte; the
+rollback returns the accounting screens to 5.18.56 (SSP visible on Uganda again); the base gate
+refuses an older commit; a weakened copy whose R1d grep can no longer tell the fix apart is caught.
+
+**Deploy is HELD for the operator's explicit approval.** When approved, the pinned command (stands
+alone; the rollback prints separately at the end of its log — docs/44 §16.9):
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+      && mkdir -p /root/dnb-5.18.57 \
+      && bash scripts/deploy-5.18.57.sh 2>&1 | tee /root/dnb-5.18.57/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+**Scope note:** this release fixes the **accounting plane** (seven screens). A follow-up **5.18.58**
+is offered for the same SSP-on-Uganda pattern on the sales/support plane (`my_account.php`,
+`wallet.php`, `field_expenses.php`) and the `fiber_costs.php:190` `$` USD-symbol leak. Still
+outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = `211927797217`**
+in Engage → WhatsApp.
