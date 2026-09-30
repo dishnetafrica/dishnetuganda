@@ -101,6 +101,7 @@ administrator side, and reliability.
 | 40 | **New, N-11** (found while building row 23): since 11 September (`4c3edb6`) the ladder's own SMTP sender announces itself with `MailService::ehloName()`, and nothing on the ladder's path loads `MailService`. `master.php` runs its jobs inside one process, so the ladder has the class only if something earlier in that process loaded it. From `main.php`'s tick, unless an earlier job happened to load it, every ladder e-mail fails after connecting — `Class "MailService" not found` — and is logged as a failure. The EHLO test loaded the class itself, so it never saw this | P2 | `lib/OverdueDunningHelpers.php` | On Uganda the sender loads the class it calls | the cron run on its own relays the e-mail. **Whether production's Monday runs failed this way is not known**: its log answers it (§G) |
 | 41 | **New, N-13** (found while building row 31): a read (GET) that meets a 500 with a plain-text body retries with the response where its request body belongs, and dies of a TypeError. The reads are the instance and webhook checks | P3 | `lib/EvolutionApiService.php` | On Uganda a read's retry keeps its own body | the read retries, three requests, and ends in an error, not an exception |
 | 42 | **New, N-15** (found while building row 30): a person's retry from the Failed Queue could lose later failures, and report a message sent that was not. A retry whose send stopped with an error left the notifier in retry mode, so every later failed send in that process went unqueued, and left its row `retrying`, which no list shows. A retry that sent nothing read the previous send's result: a document row for a number that had opted out read *sent* | P2 | `lib/NotificationService.php` | On Uganda retry mode always ends, the last result is cleared before the send, a retry that sent nothing says so, and the row is claimed in one statement | a later failure after a stopped retry is queued; the opted-out row reads failed, *no attempt was made* |
+| 43 | **New, N-16** (found while building row 32): the two places a person looks to see whether the scheduled jobs run misread master's record. System Health reads the age of `master_schedule.json`, a file nothing writes (master saves its record to the database), so it says *has never run* while master runs. The cron status tool takes its zone from a literal master.php no longer has, so its headline is in another zone than its rows; and it would list jobs gated to Uganda on South Sudan, as *NEVER RUN* | P3 | `tabs/admin/system_health.php`, `tools/cron_status.php` | On Uganda System Health reads the record where master writes it, with the watchdog's conditions beside it, and the tool makes master's own zone call. On both, a job gated off is not listed, so South Sudan's list is 5.18.53's | Uganda: *last ran under 2 minutes ago*, a stopped job named, the headline in Kampala time; South Sudan: the 5.18.53 row, and the 5.18.53 tool's job list |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -645,6 +646,78 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   Ten weakened copies, each caught. One proves the no-connection line's daily limit: without it, two sends leave two
   lines, so both sends reached it.
 
+### Row 43: when each notification goes, in which zone, and where to see that it did (N-16)
+
+- **The zone.** Two entry points apply the install's zone before anything reads a clock, both through `dn_tz_apply()`:
+  - `cron/master.php`, which runs every scheduled job inside its own process (uCRM's tick reaches it through
+    `main.php`);
+  - `public.php`, through which uCRM's webhook, WhatsApp's and every page arrive.
+
+  Uganda runs on **Africa/Kampala** (UTC+3), from its `timezone` setting, as measured on the server (docs/44 §13.1:
+  *"Africa/Kampala, from the `timezone` setting"*). South Sudan sets none and runs on its profile's Africa/Juba
+  (UTC+2). Stored times are UTC (`gmdate`, SQLite's `datetime('now')`). The one exception is the failure queue's
+  `last_attempt_at`, written in local time, which row 30 reads in the same zone.
+- **The schedule on Uganda, after this work.** master.php runs on uCRM's plugin tick, about every five minutes (a
+  *cycle*), so no job runs more often than that. An interval is a minimum between runs: *300 s* means every cycle or
+  every second one, and *900 s* every third or fourth, depending on the tick's jitter. That is why row 32 gave the
+  watchdog 840 s, not 900. The jobs that send messages, in the order master dispatches them (#):
+
+  | # | Job | When | What it sends | Watchdog limit (row 32) |
+  |---|---|---|---|---|
+  | 1 | `starlink_alive` | every cycle | nothing: the Starlink keep-alive goes first | — |
+  | 2 | `notify_watchdog` | every third cycle (840 s) | row 32's alerts, to the administrator | itself |
+  | 3 | `event_processor` | every cycle | the WhatsApps of queued uCRM events | 30 min |
+  | 5 | `starlink_mail` | 300 s | Starlink order notices to customers (row 45) | — |
+  | 10 | `quote_wa` | 300 s | quotations made in uCRM or in the KYC app | 1 h |
+  | 16 | `ai_reply` | every cycle | the AI's replies | 30 min |
+  | 22 | `wa_watchdog` | 900 s | alerts about chats left unanswered | 3 h |
+  | 27 | `followup_send` | 300 s | follow-ups a person approved | 1 h |
+  | 31 | `inv_notify` | 900 s; nothing sent 21:00–08:00 | new invoices no webhook announced | 3 h |
+  | 32 | `overdue_email` | Mondays, in the 09:00 hour | the overdue e-mail ladder | 8 days |
+  | 38 | `staff_jobs` | in the 07:00 hour | the morning jobs brief (row 25) | 26 h |
+  | 43 | `maintenance` | in the 02:00 hour | on Uganda, no customer message (rows 5–8 moved them) | 26 h |
+  | 45 | `lead_alerts` | 300 s | lead alerts to agents and supervisors | — |
+  | 47 | `customer_reminders` | once a day, the first cycle between 09:00 and 17:00 | payment reminders, prepaid notices, win-back (rows 5–8) | 26 h |
+  | 48 | `notify_retry` | every cycle (240 s) | row 30's retries | 1 h |
+
+  Staff reports run in their hour too: `cash_carry_remind` at 08:00, `cashbook_summary` and `staff_ssp_report` at
+  18:00. A job tied to one hour is not made up if master misses that hour (§D, N-22); the reminders' window is. uCRM's
+  webhooks send the rest as their events arrive: receipts, invoices, welcomes, suspension and restoration, quotes and
+  job messages (docs/45 §2.2). South Sudan's schedule is 5.18.53's: jobs 2, 47 and 48 are gated off there, and its
+  reminders stay in the 02:00 job.
+- **Where a person sees that the jobs ran.**
+  - System Health: its *Scheduler* row, fixed on Uganda by this row, and its new *Notification jobs* row, which shows
+    the watchdog's conditions.
+  - `php tools/cron_status.php --all`, whose headline is now in Kampala time.
+  - For customer messages: the Message Log (*sent* means handed to WhatsApp) and the Failed Queue.
+- **System Health, measured.** master saves its record through `SqliteStore`, which writes the database and no file.
+  The *Scheduler* row read the age of `master_schedule.json`, so it said *has never run — install the master.php
+  crontab entry* with master running a minute earlier, or it gave the age of a file an older store left behind.
+  - On Uganda the row now reads the newest run in the record: *last ran under 2 minutes ago*. With no record at all
+    it says *has never run*, and that uCRM starts master from the plugin, not a crontab.
+  - Beside it, *Notification jobs* names a stopped or unfinished job, a pile of failures, or the missing WhatsApp
+    connection. It is a problem (red) when one holds, and otherwise says none holds.
+  - South Sudan keeps the 5.18.53 row, word for word, defect included (§E).
+- **`tools/cron_status.php`.**
+  - It took its zone from a `date_default_timezone_set('…')` literal in master.php. master.php calls `dn_tz_apply()`
+    instead, so the pattern matched nothing, and the headline came out in the tool's own zone (UTC in the sandbox),
+    beside rows master stamped in Kampala time. On Uganda the tool now makes master's own call, so the two cannot
+    differ.
+  - It lists every job it reads in master.php, so the Uganda jobs of rows 5–8, 30 and 32 would have appeared on South
+    Sudan as jobs nobody runs, `notify_retry` as *NEVER RUN* (measured on this work's code before the fix: three jobs
+    more than the 5.18.53 tool listed). A job whose gate does not apply is no longer listed, in either country. On
+    South Sudan this keeps the list exactly 5.18.53's, headline included.
+- **Tests:** `tests/test_notify_schedule_health.php`, **19**. The real System Health page is drawn through
+  `public.php` as a signed-in administrator, and the real tool is run, in a sandbox. Before the fix it failed 7 of
+  its 14 checks. It proves:
+  - on Uganda: the record read, a two-hour-silent `quote_wa` named, *has never run* only with no record at all;
+  - on South Sudan: the 5.18.53 row, and no new row;
+  - the tool's headline in Kampala time on Uganda;
+  - the tool's job list on South Sudan equal, job for job and in order, to the 5.18.53 tool's reading of 5.18.53's
+    master.php, both taken from Git.
+
+  Five weakened copies, each caught.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -760,6 +833,7 @@ sender off, which is O1–O6.
 | G6 | Uganda-branded uCRM templates | Only if uCRM keeps any client e-mail after O1–O3 |
 | N-14 | The lead pages (Sales → WhatsApp leads, Engage → WhatsApp) send with the older client, `EvolutionApiClient`, and after **any** error, a timeout included, send the same text again through the notifier. So a lead can get it twice. When the notifier is used, the page reports a failure whatever happened, because it reads a result the notifier does not return (`sendVia` returns nothing) | They are staff actions on leads, not automatic notifications, and a fix means changing that older client, which cannot tell "not sent" from "may have been sent". **Recommended:** fall back only when nothing was sent, and read the notifier's real result |
 | N-12 | The 07:00 cashbook report (`lib/DailyReportService.php`, sent from `main.php`) makes the same `MailService::ehloName()` call without loading the class, and catches only `Exception`, which a missing class is not. Measured by reading, and by loading exactly what `main.php` loads before it: the class is absent. So from `main.php` the report connects, fails, and — failing before its day is marked — tries again at every tick until midnight | It is the accounts team's cashbook report, not a customer notification, and this work changes no reporting. **Recommended as its own one-line change** (the same class load), for both tenants; its log line `Daily report ERROR` says whether it has been failing |
+| N-22 | A job tied to one hour runs only when a master cycle falls inside that hour, and a missed hour is not made up: the Monday 09:00 overdue e-mail ladder then waits a week, and the 07:00 staff brief a day. master runs on uCRM's tick, about every five minutes, so an hour is missed only when the plugin does not run for that whole hour, or when the jobs dispatched before it spend each cycle's budget. Row 6 gave the customer reminders a window instead (09:00–17:00, made up the same day). The staff reports at 08:00, 18:00 and 23:00 behave the same way; they are outside this work | A window changes when each job goes, which is a decision for each (a 07:00 brief sent at 11:00, a Monday ladder on Tuesday). What this work adds is that a miss is seen: row 32's watchdog reports the brief two hours after the slot it missed, and the ladder the next day. **Recommended:** the ladder first — customer-facing, and a miss costs a week |
 
 ## §E Decisions for you (none needed to review this work)
 
@@ -770,7 +844,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–42 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–43 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

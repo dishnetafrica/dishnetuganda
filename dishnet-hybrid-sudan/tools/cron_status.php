@@ -40,6 +40,21 @@ if (preg_match("/date_default_timezone_set\(\s*'([^']+)'\s*\)/", $masterSrc, $tz
 $dataDir  = cliDataDir($root);
 $schedule = SqliteStore::create($dataDir)->load('master_schedule.json') ?? [];
 
+// 5.18.54 (docs/46 row 43, N-16). master.php no longer names its zone as a literal: it calls dn_tz_apply(), so the
+// pattern above matches nothing and the headline came out in this process's zone, beside rows master stamped in its
+// own. On Uganda this tool makes master's own call, so the two cannot differ.
+//
+// And a job master.php registers with a 'gate' is dispatched only where that NotifyGate fix applies. Elsewhere it has
+// no record, and listing it would report a job nobody runs as NEVER RUN, so it is not listed there, as it was not
+// listed before it existed.
+require_once $root . '/lib/PluginConfig.php';
+require_once $root . '/lib/NotifyGate.php';
+$gateCfg = (array)(SqliteStore::create($dataDir)->load('kyc_config.json') ?? []) + PluginConfig::load($root, $dataDir);
+if (NotifyGate::applies(NotifyGate::WATCHDOG, $gateCfg, $dataDir)) {
+    require_once $root . '/lib/timezone.php';
+    dn_tz_apply();
+}
+
 // The job list lives inside master.php's array. Including that file would run
 // every job on this machine, so the registration lines are read as text — the
 // same reason the ordering test reads them rather than importing them.
@@ -56,6 +71,7 @@ foreach (explode("\n", $src) as $line) {
     if ($t === '' || $t[0] === '#') continue;
     if (strpos($t, '//') === 0 || strpos($t, '*') === 0) continue;
     if (preg_match("/'([a-z0-9_]+)'\s*=>\s*\['interval'\s*=>\s*(\d+)/i", $line, $one)) {
+        if (preg_match("/'gate'\s*=>\s*'([a-z_]+)'/", $line, $g) && !NotifyGate::applies($g[1], $gateCfg, $dataDir)) continue;
         // Hour-gated jobs are not late when they have not run — master.php
         // skips them until their hour comes round. Listing them as NEVER RUN
         // put eight healthy daily jobs in a report about broken ones.

@@ -36,7 +36,7 @@ final class NotifyGate
     public const STAFF_SIDE     = 'staff_side';       // 24-29: S-2 … S-7
     public const RETRIES        = 'retries';          // 30: bounded automatic retries (M4)
     public const EVO_RETRY      = 'evo_retry';        // 31: no automatic resend after a timeout (N-1)
-    public const WATCHDOG       = 'watchdog';         // 32: jobs stopped, failures piling up
+    public const WATCHDOG       = 'watchdog';         // 32, 43: jobs stopped, failures piling up; where that is seen (N-16)
     public const MAIL_CLASS     = 'mail_class';       // 40: the ladder's SMTP sender loads the class it calls (N-11)
 
     public const ALL = [
