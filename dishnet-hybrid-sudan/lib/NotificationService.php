@@ -1596,7 +1596,10 @@ class NotificationService
         if (empty($toPhone) || empty($publicUrl)) return;
         if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
-        if ($this->optedOut(preg_replace('/[^0-9]/', '', $toPhone) ?? '', $sender, $class, $event)) return;
+        [$docTo, $docRaw] = $this->recipient($toPhone);
+        if ($this->optedOut($docRaw, $sender, $class, $event)) return;
+        // 5.18.54 (D-10): and in the form the document goes to.
+        if ($docTo !== $docRaw && $docTo !== '' && $this->optedOut($docTo, $sender, $class, $event)) return;
 
         // v4.9.20: Global PDF kill-switch — skip document sends when disabled
         if (!$this->pdfEnabled) {
@@ -1608,7 +1611,8 @@ class NotificationService
             return;
         }
 
-        $to = preg_replace('/[^0-9]/', '', $toPhone);
+        $to = $docTo;
+        if ($to === '' && $docRaw !== '') { $this->unusableNumber($sender, $event, $docRaw, "[DOC] {$filename}"); return; }
         if (empty($to)) return;
 
         if ($this->dryRunMode) {
@@ -1974,6 +1978,53 @@ class NotificationService
     public function setOptOut($o): void { $this->optOut = $o; }
 
     /** @return ContactOptOut|null */
+    /** @var array{0:bool,1:?TenantProfile}|null [whether D-10 applies, the tenant], read once per instance */
+    private $phoneForm = null;
+
+    /**
+     * 5.18.54 (docs/46 row 14, D-10, M9): who a message goes to — [the digits it is sent to, the digits as given].
+     *
+     * On Uganda a number goes to WhatsApp in international form, by the helper the sign-in and the job messages already
+     * use: "0772 123 456" is sent to 256772123456, which WhatsApp can deliver, where the digits as typed could not be.
+     * A number already international is kept as it is, whatever its country. One that cannot be read gives '' for the
+     * first, and the caller logs it as such rather than sending to it. Elsewhere, and whenever the tenant cannot be
+     * told, both are the digits as given: the 5.18.53 behaviour.
+     */
+    private function recipient(string $toPhone): array
+    {
+        $raw = (string)preg_replace('/[^0-9]/', '', $toPhone);
+        if ($this->phoneForm === null) {
+            $this->phoneForm = [false, null];
+            try {
+                require_once __DIR__ . '/NotifyGate.php';
+                $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+                if (\NotifyGate::applies(\NotifyGate::PHONE_FORM, (array)$this->cfgForContacts, $dir)) {
+                    require_once __DIR__ . '/TenantProfile.php';
+                    require_once __DIR__ . '/PhoneNumber.php';
+                    $this->phoneForm = [true, \TenantProfile::current((array)$this->cfgForContacts, $dir)];
+                }
+            } catch (\Throwable $e) {
+                $this->phoneForm = [false, null];
+            }
+        }
+        [$on, $tenant] = $this->phoneForm;
+        if (!$on || $raw === '') return [$raw, $raw];
+        $intl = \PhoneNumber::international($toPhone, $tenant);
+        return [$intl === null ? '' : substr($intl, 1), $raw];
+    }
+
+    /** D-10: a number WhatsApp cannot use is a failed row in the Message Log, with the reason — never a send. */
+    private function unusableNumber(string $sender, string $event, string $asGiven, string $text): void
+    {
+        $this->_lastSendSuccess = false; $this->_lastHttpCode = null;
+        $this->_lastError = 'not a number WhatsApp can use: it is neither international nor a national number of this country';
+        $this->writeLog([
+            'sender' => $sender, 'event' => $event !== '' ? $event : null, 'to' => $asGiven,
+            'preview' => mb_substr($text, 0, 70), 'success' => false, 'error' => $this->_lastError,
+            'sent_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
     private function optOut()
     {
         if ($this->optOut === false) {
@@ -2040,10 +2091,13 @@ class NotificationService
         // made every send on an Evolution-only install disappear in silence.
         if (!$this->enabled && !$this->evoAvailable($sender)) return;
 
-        $to = preg_replace('/[^0-9]/', '', $toPhone);
+        [$to, $asGiven] = $this->recipient($toPhone);
+        if ($to === '' && $asGiven !== '') { $this->unusableNumber($sender, $event, $asGiven, $message); return; }
         if (empty($to)) return;
 
         if ($this->optedOut($to, $sender, $class, $event)) return;
+        // 5.18.54 (D-10): an opt-out recorded as the number was typed still blocks it in international form.
+        if ($asGiven !== $to && $asGiven !== '' && $this->optedOut($asGiven, $sender, $class, $event)) return;
         
         // DRY RUN GUARD - log but don't send
         if ($this->dryRunMode) {

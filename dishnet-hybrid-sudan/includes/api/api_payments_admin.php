@@ -535,6 +535,18 @@
         $cnNum = (string)($cnResult['number'] ?? $cnId);
         $cbSr  = '';
 
+        // 5.18.54 (docs/46 row 12, D7): on Uganda one message per credit note, and this screen's is the one kept — it says
+        // whether the money came back in cash, with its reference and reason. So the note is claimed (CN<id>) as soon as
+        // uCRM has numbered it, before the cash is booked: uCRM's credit_note.add for it, which can arrive while this
+        // request is still running, then sends nothing. Claimed only when there is a number to send to. The amount is in
+        // the tenant's currency, never "$".
+        require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+        $_cnOnce = NotifyGate::applies(NotifyGate::CREDIT_NOTE, is_array($config ?? null) ? $config : [], $dataDir ?? null);
+        if ($_cnOnce && $_cnPhone !== '') {
+            if (!isset($notify)) $notify = svc('notify');
+            $notify->dedupMark('CN' . $cnId);
+        }
+
         // ── Step 4: Debit staff bag + cashbook (cash_refund only) ─────────────
         if ($refundType === 'cash_refund') {
             require_once dirname(__DIR__, 2) . '/lib/StaffLedgerService.php';
@@ -590,9 +602,10 @@
 
         // ── Step 5: WhatsApp to customer ──────────────────────────────────────
         $waLabel   = $refundType === 'cash_refund' ? 'Cash Refund' : 'Credit Note';
+        $_cnAmt    = $_cnOnce ? dn_money($amount, is_array($config ?? null) ? $config : [], null) : "\${$amount}";
         $waDetail  = $refundType === 'cash_refund'
-            ? "Cash of *\${$amount}* has been returned to you."
-            : "A credit of *\${$amount}* has been applied to your account and will offset your next invoice.";
+            ? "Cash of *{$_cnAmt}* has been returned to you."
+            : "A credit of *{$_cnAmt}* has been applied to your account and will offset your next invoice.";
         try {
             if ($_cnPhone) {
                 if (!isset($notify)) $notify = svc('notify');

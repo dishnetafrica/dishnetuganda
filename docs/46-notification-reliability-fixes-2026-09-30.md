@@ -94,6 +94,7 @@ administrator side, and reliability.
 | 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
 | 35 | **New, N-6** (found while building rows 9–11): **a guard kept in a keyed JSON document does not work.** The store reads a keyed document back as a list holding the object unless its table is on `SqliteStore::$FLAT_TABLES`, so `isset($log[$key])` is never true — and each save nests the old data a level deeper. Measured on `winback_log.json`, `invoice_notify_log.json`, `wa_templates.json` and `renewal_remind_log.json` | P1 | `lib/WinBack.php`; `includes/api/api_notifications.php` (row 11) | Win-back: once per ended service, guarded in `notification_dedup` (it went on each of the four days of its window); the invoice scan: row 11. The other effects are recorded in §B and decided in §E | two runs, and a run the next day, send one win-back; the old log, nested, is still honoured |
 | 36 | **New, N-8** (found while building row 25): the morning brief asks uCRM for each person's jobs with `assigneeId`, a filter uCRM ignores (`cron/jobs_cache.php` records it). Unnoticed only because the brief never ran: fixed as it stood, it would have sent every technician the whole company's job list, customers' names included | P1 | `cron/staff_jobs_summary.php` | The jobs are read once and each person gets those assigned to them, as My Jobs does, through a verified uCRM link only | a technician's brief holds their jobs and nobody else's; an id typed without the picker matches nobody |
+| 37 | **New, N-7** (found while building row 16): `client.invite` shares D-6's block, so inviting a customer to uCRM's client zone suspends their own identity mailbox | P2 | `webhook.php` | With D-6: only a deleted or archived client is suspended | an invitation touches no mailbox |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -230,6 +231,32 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   dies on its first line. Thirteen weakened copies, each caught, each by the defect itself (a copy that merely crashed
   is never counted as caught).
 
+### Rows 12–14, 16 and 37: credit notes, activation, numbers, identity (D7, D-9, D-10, D-6, N-7)
+
+- **One message per credit note (row 12, D7).** The staff screen's message is the one kept: it says whether the money
+  came back in cash, with the reference and the reason. So the screen claims the note (`CN<id>`) as soon as uCRM has
+  numbered it — before the cash is booked, because uCRM's `credit_note.add` for it can arrive while the request is still
+  running — and only when there is a number to send to. uCRM's event then sends nothing; a note made in uCRM itself is
+  announced by the event once, however often it is delivered. The staff screen's amount is in the tenant's currency
+  (`UGX 50000`), never `$`.
+- **Activation (row 13, D-9, C5).** "Login credentials have been shared via email" is gone: nothing sends them. In its
+  place, on Uganda: *"🔑 To sign in to your DishNet account, open this link and enter your phone number. We send you a
+  one-time code; there is no password to remember."* and the portal's sign-in address. **For your approval (§E-8).**
+- **Numbers in international form (row 14, D-10, M9).** Every WhatsApp and document the plugin sends goes to the number
+  in international form, by the helper the sign-in and the job messages already use: `0772 000 917` is sent to
+  `256772000917`, where the digits as typed could not be delivered. A number already international is kept as it is,
+  whatever its country. An opt-out recorded in either form still blocks — measured both ways. A number that is neither
+  international nor a national number of this country is not sent to: it is a failed Message Log row that says why.
+- **A draft invoice suspended a mailbox (row 16, D-6; row 37, N-7).** `invoice.add_draft` and `client.invite` share the
+  block that suspends the identity mailbox of a deleted or archived client, so a draft invoice suspended the client whose
+  id equals the **invoice's** — and an invitation suspended the invited customer's own. **The fix differs from the plan
+  in §A, deliberately:** taking the invoice's client instead would suspend the *right* customer each time uCRM drafts
+  their recurring invoice. On Uganda neither event touches an identity; a deleted or archived client is still
+  suspended. It matters only with `identity_enabled` (not known on the server, §0.2).
+- **Tests:** `tests/test_notify_customer_fixes.php`, **32**, through the real webhook, the staff screen signed in as an
+  administrator, a fake uCRM (credit notes and services added to it) and the fake WhatsApp. South Sudan unchanged in
+  each. Eight weakened copies, each caught.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -274,7 +301,8 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–11, 20, 24–29, 35, 36 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–14, 16, 20, 24–29, 35–37 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
+| E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |
 | E-6 | Add the keyed files of row 35 to `SqliteStore::$FLAT_TABLES`, for every tenant | After E-5, and with South Sudan's approval: it fixes their win-back repeat too, and it would switch on renewal reminders wherever enabled | Uganda is fixed at each sender |

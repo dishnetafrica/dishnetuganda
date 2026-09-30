@@ -1553,11 +1553,19 @@ switch ($changeType) {
 
         // Only notify if service is active (status=1)
         if ($phone && $status == 1) {
+            // 5.18.54 (docs/46 row 13, D-9, C5): nothing sends login details by e-mail. On Uganda the sentence says how
+            // the customer does sign in: the DishNet portal, with their phone number and a one-time code (proven on
+            // 26 September, docs/37). The words are listed for approval in docs/46 §E.
+            require_once __DIR__ . '/lib/NotifyGate.php';
+            $_d9Login = NotifyGate::applies(NotifyGate::ACTIVATION, is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                ? "🔑 To sign in to your DishNet account, open this link and enter your phone number. We send you a one-time code; there is no password to remember.\n"
+                  . "🔗 " . dn_plugin_public($config) . "?page=customer_login\n\n"
+                : "🔑 Login credentials have been shared via email.\n\n";
             $notify->sendVia('accounts', $phone,
                 "🚀 *Service Activated — DishNet Africa*\n\n"
                 . "Dear {$name},\n\n"
                 . "Your DishNet service *{$svcName}* is now active. 🌐\n\n"
-                . "🔑 Login credentials have been shared via email.\n\n"
+                . $_d9Login
                 . "Manage your account:\n"
                 . "🔗 " . CustomerContact::payUrl($config) . "\n\n"
                 . "📞 Support: " . CustomerContact::accounts($config) . "\n"
@@ -3136,6 +3144,14 @@ switch ($changeType) {
             }
 
             if ($phone) {
+                // 5.18.54 (docs/46 row 12, D7): on Uganda once per credit note. The staff screen claims its own note when it
+                // sends the message that says how the money came back; a second delivery of this event finds the claim.
+                require_once __DIR__ . '/lib/NotifyGate.php';
+                if (NotifyGate::applies(NotifyGate::CREDIT_NOTE, is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                    && !$notify->dedupMark('CN' . $creditNoteId)) {
+                    whLog($changeType, "Credit note #{$cnNum}: already announced — by the staff screen, or by an earlier delivery of this event; not sent again");
+                    whResp(200, 'credit_note.add processed (already announced).');
+                }
                 $msg = "💳 *Credit Note Issued*\n\n"
                      . "Hi {$name},\n\n"
                      . "A credit of *" . dn_money($amount, $config, null) . "* (#{$cnNum}) has been applied to your account.\n\n"
@@ -3578,6 +3594,18 @@ switch ($changeType) {
     case 'client.invite':
     case 'client.delete':
     case 'client.archive': {
+        // 5.18.54 (docs/46 row 16, D-6, and N-7): the two events above the end of a relationship share this block, so a
+        // draft invoice suspended the mailbox of the client whose id equals the INVOICE's, and a client-zone invitation
+        // suspended the invited customer's own. Taking the invoice's client instead would suspend the right customer
+        // each time uCRM drafts their recurring invoice. On Uganda neither event touches an identity; only a deleted or
+        // archived client is suspended. Elsewhere the 5.18.53 code runs, unchanged.
+        if (in_array($changeType, ['invoice.add_draft', 'client.invite'], true)) {
+            require_once __DIR__ . '/lib/NotifyGate.php';
+            if (NotifyGate::applies(NotifyGate::DRAFT_IDENTITY, is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+                whLog($changeType, 'Acknowledged — no identity change: only a deleted or archived client is suspended', ['entity_id' => $entityId]);
+                whResp(200, "{$changeType} acknowledged.");
+            }
+        }
         // Retention, not deletion: the customer's DishNet identity mailbox
         // goes into a suspended hold (login off, every message kept). Actual
         // mailbox deletion is a manual admin act under the retention policy —
