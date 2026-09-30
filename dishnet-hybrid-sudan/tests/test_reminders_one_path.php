@@ -157,13 +157,22 @@ $winbackRun = function (string $pluginRoot) use ($clients, $on, $runSide): array
     $h->seedCrm(['clients' => $clients, 'services' => [
         '601' => ['id' => 601, 'clientId' => 7,  'name' => 'Home 50', 'status' => 3, 'activeTo' => $ended],
         '602' => ['id' => 602, 'clientId' => 10, 'name' => 'Home 50', 'status' => 3, 'activeTo' => $ended],
+        '603' => ['id' => 603, 'clientId' => 8,  'name' => 'Home 50', 'status' => 3, 'activeTo' => $ended],
     ]]);
     require_once $pluginRoot . '/lib/ContactOptOut.php';
     $opt = (new ContactOptOut($h->pdo()))->add('256700000010', ['scope' => 'proactive', 'reason' => 'STOP', 'source' => 'keyword']);
-    $r = $runSide($pluginRoot, $h, DAY, true);
-    $texts = $h->evoTexts();
-    $out = ['r' => $r, 'opt' => $opt, 'to7' => count(array_filter($texts, fn($t) => $t['number'] === '256700000007' && strpos($t['text'], 'We Miss You') !== false)),
-            'to10' => count(array_filter($texts, fn($t) => $t['number'] === '256700000010'))];
+    // The old task's log as the store leaves it after two of its runs: a list holding the object, nested (N-6).
+    require_once $pluginRoot . '/lib/StoreInterface.php';
+    require_once $pluginRoot . '/lib/SqliteStore.php';
+    \SqliteStore::create($h->dataDir)->save('winback_log.json', ['0' => ['0' => ['WB603' => '2026-10-04 02:00:05'], 'WB999' => 'x'], 'WB998' => 'y']);
+    $count = fn(string $n) => count(array_filter($h->evoTexts(), fn($t) => $t['number'] === $n && strpos($t['text'], 'We Miss You') !== false));
+    $r  = $runSide($pluginRoot, $h, DAY, true);
+    $first = $count('256700000007');
+    $runSide($pluginRoot, $h, DAY, true);                  // the same day again
+    $runSide($pluginRoot, $h, $on(DAY, 1), true);          // the next day, still inside the 7-10 day window
+    $out = ['r' => $r, 'opt' => $opt, 'first7' => $first, 'to7' => $count('256700000007'),
+            'to10' => count(array_filter($h->evoTexts(), fn($t) => $t['number'] === '256700000010')),
+            'to8' => $count('256700000008')];
     $h->stop();
     return $out;
 };
@@ -194,7 +203,7 @@ $suspendRun = function (string $pluginRoot, string $tenant, string $model) use (
     return $out;
 };
 /** The 02:00 job, run whole from a tree with a real copy of it, against invoices due relative to today. */
-$maintenanceRun = function (string $pluginRoot, string $tenant, array $patches = [], string $offset = '') use ($on, $inv, $clients, $reminders, $treeFor, $runScript): array {
+$maintenanceRun = function (string $pluginRoot, string $tenant, array $patches = [], string $offset = '', int $runs = 1) use ($on, $inv, $clients, $reminders, $treeFor, $runScript): array {
     $h = NotifyHarness::start($pluginRoot, $tenant, [], 'rem');
     $zone   = $tenant === 'uganda' ? 'Africa/Kampala' : 'Africa/Juba';
     $offset = $offset !== '' ? $offset : ($tenant === 'uganda' ? '+0300' : '+0200');
@@ -206,7 +215,8 @@ $maintenanceRun = function (string $pluginRoot, string $tenant, array $patches =
     require_once $pluginRoot . '/lib/ContactOptOut.php';
     (new ContactOptOut($h->pdo()))->add('256700000010', ['scope' => 'proactive', 'reason' => 'STOP', 'source' => 'keyword']);
     $tree = $treeFor($pluginRoot, $h, 'cron_maintenance.php', $patches);
-    $log  = $runScript($tree, $h, 'cron_maintenance.php');
+    $log  = '';
+    for ($i = 0; $i < $runs; $i++) $log .= $runScript($tree, $h, 'cron_maintenance.php');
     $texts = $h->evoTexts();
     $out = ['log' => $log, 't' => $reminders($texts), 'newInvoice' => count(array_filter($texts, fn($t) => strpos($t['text'], 'New Invoice') !== false)),
             'winback10' => count(array_filter($texts, fn($t) => $t['number'] === '256700000010'))];
@@ -305,8 +315,10 @@ is_(strpos($pl['pluginlog'] . $pl['r']['stderr'], "page limit (500)") !== false,
 echo "\n5. Win-back: a proactive message, so STOP stops it (C9)\n";
 $w = $winbackRun($root);
 is_(!empty($w['opt']['ok']), 'the opt-out is recorded (control)', json_encode($w['opt']));
-is_($w['to7'] === 1, 'the customer who did not opt out receives it', (string)$w['to7']);
+is_($w['first7'] === 1, 'the customer who did not opt out receives it', (string)$w['first7']);
 is_($w['to10'] === 0, 'the customer who wrote STOP does not', (string)$w['to10']);
+is_($w['to7'] === 1, 'once: the same day again and the next day send nothing (N-6: the old guard never read back)', (string)$w['to7']);
+is_($w['to8'] === 0, 'a service named in the old task\'s log, nested as the store leaves it, is not written to again', (string)$w['to8']);
 
 echo "\n6. uCRM's reminder events: recorded, nothing sent (D-4, D5)\n";
 $wu = $webhookRun($root, 'uganda');
@@ -373,6 +385,8 @@ $ms = $maintenanceRun($root, 'south-sudan');
 is_($ms['t'] === ['overdue-d3 INV-9402 → 256700000007', 'pre-d7 INV-9401 → 256700000007'], 'the 02:00 job still sends the reminders', json_encode($ms['t']) . ' ' . substr($ms['log'], 0, 300));
 is_(strpos($ms['log'], 'MOVED') === false, 'and moves nothing');
 is_($ms['winback10'] === 1, 'its win-back still goes as a transactional message, STOP or not (C9 there awaits approval)', (string)$ms['winback10']);
+$m6 = $maintenanceRun($root, 'south-sudan', [], '', 2);
+is_($m6['winback10'] === 2, 'recorded, not changed (N-6): there the 02:00 job\'s win-back goes again on its next run', (string)$m6['winback10']);
 $m5 = $maintenanceRun($root, 'south-sudan', [], '+0300');
 is_($m5['t'] === ['overdue-d3 INV-9402 → 256700000007'],
     'recorded, not changed (N-5): with uCRM dates at +0300 under Africa/Juba, the 02:00 job misses the 7-day reminder', json_encode($m5['t']));
@@ -393,12 +407,15 @@ $mut = [
                                                                             "public static function preKey(string \$num, string \$tier): string     { return \"R-{\$num}-pre-{\$tier}\"; }"]]],
     'the page limit not reported' => ['lib/InvoiceReminders.php' => [['if (count($rows) >= self::PAGE_LIMIT) {', 'if (false) {']]],
     'win-back as a transactional message again' => ['lib/WinBack.php' => [['\ContactOptOut::CLASS_PROACTIVE', '\ContactOptOut::CLASS_TRANSACTIONAL']]],
+    'win-back on the old file guard again' => ['lib/WinBack.php' => [
+        ['            if (isset($old[$key]) || $this->notify->dedupCheck($key)) continue;', '            if (isset($old[$key])) continue;'],
+        ['            if (!$this->notify->dedupMark($key)) continue;                          // claimed just before the send', '']]],
 ];
 foreach ($mut as $name => $patch) {
     $wk = NotifyHarness::weakened($root, $patch, 'rem_wk');
     if (isset($patch['lib/WinBack.php'])) {
         $m = $winbackRun($wk);
-        is_($m['to10'] !== 0, "caught: {$name}");
+        is_($m['first7'] === 1 && ($m['to10'] !== 0 || $m['to7'] > 1), "caught: {$name}", json_encode(['to7' => $m['to7'], 'to10' => $m['to10']]));
         continue;
     }
     $a = $dailyRun($wk); $b = $prepaidRun($wk); $c = $pageLimitRun($wk);

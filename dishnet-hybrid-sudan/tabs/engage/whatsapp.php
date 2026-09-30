@@ -21,9 +21,18 @@ if (!WhatsAppAccess::allowsTab((bool)($retailer['is_admin'] ?? false), 'whatsapp
 // ── Handle CRUD actions for message templates ─────────────────────────────
 $waTplFile = 'wa_templates.json';
 $waTpls    = $store->load($waTplFile) ?? [];
+// 5.18.54 (docs/46 row 9, D-3): no sender reads wa_templates.json — a text changed here, or a message "disabled", goes
+// out exactly as the plugin's code writes it. On Uganda the Event Map says so and no longer saves as if it worked.
+require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+$_emUnused = NotifyGate::applies(NotifyGate::EVENT_MAP, is_array($config ?? null) ? $config : [], $dataDir ?? null);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($tab === 'whatsapp' || $tab === 'wa_leads')) {
     $waAct = $_POST['wa_action'] ?? '';
+
+    if ($_emUnused && ($waAct === 'wa_save_template' || $waAct === 'wa_reset_template')) {
+        flash('Not saved. No message reads these texts or switches: customers receive what the plugin\'s code says, whatever this page shows.', 'warning');
+        redirect('?page=dashboard&tab=whatsapp&subtab=events');
+    }
 
     // Save single template
     if ($waAct === 'wa_save_template') {
@@ -1174,6 +1183,16 @@ REPLY STYLE
      ════════════════════════════════════════════════════ -->
 <?php elseif($waSubtab === 'events'): ?>
 
+<?php if ($_emUnused): ?>
+<!-- 5.18.54 (docs/46 row 9, D-3): the truth about this page, on Uganda -->
+<div id="waEventMapNotUsed" style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 16px;margin-bottom:14px;font-size:12px;color:#7f1d1d;">
+    <div style="font-weight:800;margin-bottom:4px;">Reference only — nothing on this page changes a message</div>
+    No sender reads these texts or these on/off switches. Every message goes out as the plugin's code writes it, whatever
+    this page shows, so saving is switched off here. Which of these uCRM also sends depends on uCRM's own settings
+    (uCRM → Settings → Notifications), not on this page. <strong>Test Send</strong> still sends the text below to the
+    number you give, to check the WhatsApp connection.
+</div>
+<?php else: ?>
 <!-- Duplicate Prevention Warning -->
 <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:14px;font-size:12px;">
     <div style="display:flex;align-items:flex-start;gap:10px;">
@@ -1193,6 +1212,7 @@ REPLY STYLE
     ① <strong>UCRM Direct → WASender (Accounts)</strong> — billing events (invoice, payment, suspend) — configured in UCRM → System → Notifications<br>
     ② <strong>Plugin → WASender (Support/Accounts)</strong> — internal ops (KYC, wallet, handover, lead, LTE) — configured here
 </div>
+<?php endif; ?>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div style="font-size:13px;font-weight:800;color:#1e293b;">📋 <?= count($waEventDefs) ?> events · <?= count($waTpls) ?> customised</div>
@@ -1240,7 +1260,9 @@ REPLY STYLE
     <td style="color:#64748b;font-size:11px;"><?= h($def['trigger']) ?></td>
     <td style="font-weight:600;color:#065f46;font-size:11px;"><?= h($def['recipient']) ?></td>
     <td>
-        <?php if($handledBy === 'ucrm'): ?>
+        <?php if($_emUnused): ?>
+        <span class="wa2-badge" style="background:#f1f5f9;color:#64748b;">not read</span>
+        <?php elseif($handledBy === 'ucrm'): ?>
         <span class="wa2-badge" style="background:#dbeafe;color:#1e40af;">🏢 UCRM</span>
         <?php elseif($handledBy === 'both'): ?>
         <span class="wa2-badge" style="background:#fee2e2;color:#991b1b;">⚠️ BOTH</span>
@@ -1256,7 +1278,9 @@ REPLY STYLE
         <?php endif; ?>
     </td>
     <td>
-        <?php if(!$enabled): ?>
+        <?php if($_emUnused): ?>
+        <span class="wa2-badge" style="background:#f1f5f9;color:#64748b;">not used</span>
+        <?php elseif(!$enabled): ?>
         <span class="wa2-badge wa2-off">⏸ off</span>
         <?php else: ?>
         <span class="wa2-badge wa2-on">▶ on</span>
@@ -2165,6 +2189,11 @@ $_wlSuppressed = function (array $l): bool {
     <div class="wa2-modal-body">
 
         <!-- Status toggle -->
+        <?php if ($_emUnused): ?>
+        <div class="wa2-field" style="font-size:12px;color:#7f1d1d;">Reference only: this text is not what customers receive, and there is no on/off switch that works. (docs/46 row 9)</div>
+        <input type="checkbox" id="waModalEnabled" hidden disabled>
+        <span id="waEnabledLabel" hidden></span>
+        <?php else: ?>
         <div class="wa2-field">
             <label>Status</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -2172,6 +2201,7 @@ $_wlSuppressed = function (array $l): bool {
                 <span style="font-size:13px;font-weight:700;" id="waEnabledLabel">Enabled — this message will send</span>
             </label>
         </div>
+        <?php endif; ?>
 
         <!-- Sender toggle -->
         <div class="wa2-field">
@@ -2215,6 +2245,7 @@ $_wlSuppressed = function (array $l): bool {
     </div>
 
     <div class="wa2-modal-footer">
+        <?php if (!$_emUnused): ?>
         <form method="POST" id="waSaveForm" style="display:contents;">
             <?= csrfField() ?>
             <input type="hidden" name="wa_action"    value="wa_save_template">
@@ -2230,6 +2261,7 @@ $_wlSuppressed = function (array $l): bool {
             <input type="hidden" name="tpl_key"   id="fResetKey">
             <button type="button" class="wa2-btn-reset" onclick="waReset()">↺ Reset to Default</button>
         </form>
+        <?php endif; ?>
         <form method="POST" id="waTestForm" style="display:contents;">
             <?= csrfField() ?>
             <input type="hidden" name="wa_action"   value="wa_test_send">

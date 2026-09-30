@@ -135,5 +135,15 @@ if ($method === 'POST' && preg_match('#^/clients/(\d+)/client-logs$#', $path, $m
 }
 if ($method === 'GET' && preg_match('#^/clients/(\d+)/services$#', $path)) fu_out([]);
 if ($method === 'GET' && $path === '/clients') fu_out(array_values($state['clients']));
-if ($method === 'GET' && $path === '/invoices') fu_out([]);
+// 5.18.54 (docs/46 row 11): invoice lists and uCRM's settings document, for the notification controls. Unseeded, the
+// invoice list is empty, as before.
+if ($method === 'GET' && ($path === '/invoices' || $path === '/billing/invoices')) fu_out(array_values((array)($state['invoices'] ?? [])));
+if ($method === 'GET' && preg_match('#^/(?:billing/)?invoices/(\d+)$#', $path, $m)) {
+    $inv = $state['invoices'][$m[1]] ?? null;
+    $inv === null ? fu_out(['code' => 404, 'message' => 'Invoice not found.'], 404) : fu_out($inv);
+}
+if ($path === '/options') {
+    if ($method === 'PATCH') { $state['options'] = array_merge((array)($state['options'] ?? []), $body); fu_out($state['options']); }
+    fu_out((array)($state['options'] ?? []));
+}
 fu_out(['code' => 404, 'message' => 'FAKE-UCRM-STAFF-JOBS: not simulated: ' . $method . ' ' . $path], 404);

@@ -206,13 +206,13 @@ final class SjSandbox
     }
 
     /** A panel form, with the day's CSRF token read from a page this account can see. */
-    public function form(string $who, array $fields, string $csrfFrom = 'page=dashboard&tab=retailers'): array
+    public function form(string $who, array $fields, string $csrfFrom = 'page=dashboard&tab=retailers', string $postTo = 'page=dashboard'): array
     {
         if (!isset($fields['_csrf'])) {
             preg_match('/name="_csrf" value="([^"]+)"/', $this->page($who, $csrfFrom), $m);
             $fields['_csrf'] = html_entity_decode($m[1] ?? '', ENT_QUOTES);
         }
-        return $this->http('POST', "{$this->base}?page=dashboard", http_build_query($fields),
+        return $this->http('POST', "{$this->base}?{$postTo}", http_build_query($fields),
             ['Content-Type: application/x-www-form-urlencoded'], $this->jars[$who]);
     }
 

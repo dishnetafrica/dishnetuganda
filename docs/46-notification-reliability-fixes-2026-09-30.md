@@ -92,6 +92,7 @@ administrator side, and reliability.
 | 31 | **New, N-1**: Evolution sends are retried after a timeout, which can duplicate | P2 | `lib/EvolutionApiService.php` | A POST is retried only when the connection was never made | a timeout after connecting is not retried |
 | 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows | P3 | new check in the reminder/retry job | An admin alert, and a plugin-log line, when a scheduled job is overdue or failed sends pile up | both raise one alert, with a cooldown |
 | 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
+| 35 | **New, N-6** (found while building rows 9–11): **a guard kept in a keyed JSON document does not work.** The store reads a keyed document back as a list holding the object unless its table is on `SqliteStore::$FLAT_TABLES`, so `isset($log[$key])` is never true — and each save nests the old data a level deeper. Measured on `winback_log.json`, `invoice_notify_log.json`, `wa_templates.json` and `renewal_remind_log.json` | P1 | `lib/WinBack.php`; `includes/api/api_notifications.php` (row 11) | Win-back: once per ended service, guarded in `notification_dedup` (it went on each of the four days of its window); the invoice scan: row 11. The other effects are recorded in §B and decided in §E | two runs, and a run the next day, send one win-back; the old log, nested, is still honoured |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -139,8 +140,8 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   September) says; **the WhatsApp wording is listed in §E for your confirmation.** Absent or `postpaid`: the texts are
   today's, unchanged.
 - **Win-back (row 20, C9).** `lib/WinBack.php` is the maintenance job's win-back, moved to the daytime run, sent as a
-  *proactive* message: a customer who wrote STOP no longer receives it. Its log and keys are the old task's
-  (`winback_log.json`, `WB<service id>`).
+  *proactive* message: a customer who wrote STOP no longer receives it. It is also sent **once** per ended service:
+  the old task's guard never read back and it went on each of the four days of its window (row 35, N-6).
 - **Also changed, on Uganda's run:** the phone is the first contact that has one (the old job read contact 0 only);
   a list that comes back at uCRM's page limit (500) is reported in the run's log and in uCRM's log for the plugin,
   instead of silently missing reminders past it; the due date is read as a calendar date (row 34, N-5); the scanner's
@@ -153,6 +154,53 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   job run as master.php includes it; the scanner inside and outside quiet hours; the window, the quiet hours and
   the due date as unit answers; master.php's gate; and South Sudan unchanged in every one of those. Eleven weakened
   copies, each caught.
+
+### Rows 9–11: the Event Map, the failure queue, and the links that act
+
+- **The failure queue (row 10, S-1).** The six queue actions (`notification_queue`, `_retry`, `_retry_bulk`,
+  `_dismiss`, `_dismiss_all`, `_purge`) follow the Failed Queue screen's rule, the WhatsApp administrator rule
+  (`WhatsAppAccess`). Measured through the real API: a support or sales account gets **403** with the rule's own words,
+  and the refused calls change nothing and send nothing; an administrator lists, retries (one WhatsApp) and dismisses as
+  before. **The inbox banner's "Retry Now" needed no change:** the router's tab map (`'wa_inbox' => '*admin'`) already
+  opens the inbox to administrators only, whatever `wa_inbox_roles` says — measured, a support account granted the
+  inbox is not shown it.
+- **The links that act (row 11, D-7, C3).**
+  - *Test invoice notification:* an administrator's session only — the webhook secret no longer opens it — and only a
+    **POST with `confirm=1`**. A GET, even a link that says `confirm=1`, gets **405** and sends nothing.
+  - *Invoice scan:* a GET previews, `send=1` or not. Sending is a POST with `confirm=1`, under the guard every other
+    invoice sender uses (`INV<number>`, claimed just before the send), so an invoice the webhook or a scanner already
+    announced shows as sent and is never announced again; and, as the scanners, only an unpaid invoice (status 1 or 2).
+    *Found while building (row 35, N-6):* the old file guard never read back, so until now each run with `send=1`
+    re-announced every recent invoice.
+  - *`crm_fix_notifications`:* **read-only**. It shows uCRM's current values and says where to change them (uCRM →
+    Settings → Notifications). No PATCH reaches uCRM, by GET or by POST.
+- **The Event Map (row 9, D-3, C6).** The page says it is reference only and why; the false "Duplicate Prevention
+  Active" banner, the on/off switch, Save and Reset are gone; each row says *not used*; a forged save is refused with a
+  message. **Test Send** stays: it sends the text to the number the administrator gives, to check the connection.
+  *Also measured:* the page could not even show its own saves — `wa_templates.json` is a keyed document the store
+  does not read back (row 35).
+- **Tests:** `tests/test_notify_staff_controls.php`, **45**, through the real plugin under `php -S` as administrator,
+  support and sales accounts: every refusal changes nothing; the controls prove the administrator's path still works;
+  South Sudan unchanged in each; six weakened copies, each caught.
+
+### Row 35 (N-6): guards that never read back
+
+`SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
+unless the table is on `$FLAT_TABLES` (the store's own comment says two caches were lost this way before). Measured
+by saving and reloading each file, then through the real jobs:
+
+| File | What its guard was for | What happened | Now |
+|---|---|---|---|
+| `winback_log.json` | one win-back per ended service | **sent on each of the four days of its 7–10-day window** | Uganda: `WB<id>` in `notification_dedup`, once; the old log still honoured, read flattened. South Sudan unchanged, recorded by the test (§E) |
+| `invoice_notify_log.json` | the admin invoice scan's "already sent" | every run with `send=1` re-announced every recent invoice | Uganda: the shared `INV<number>` guard (row 11) |
+| `wa_templates.json` | the Event Map's saved texts | the page never showed a saved text (and no sender read it anyway) | row 9 |
+| `renewal_remind_log.json` | the renewal pass: once a day, once per customer per renewal month | its `_last_run` never reads back, so **every pass looks like the first, which is a dry run**: with `renewal_reminders_enabled` on, it logs a dry run every 15 minutes and **never sends** | **not changed** — making it work would start a customer message that has never gone out (§E-5) |
+| `quote_wa_state.json` | the quote PDFs waiting for a retry (`pdf_pending`) | the retry list never reads back: a quote PDF that failed is not retried | recorded for row 17 |
+| `handover_nudge_log.json`, `cashbook_summary_log.json` | staff nudges and the evening summary, once a day | the 02:00 job runs once a day, so no repeat was measured from it | recorded, not changed |
+
+**Why not add these tables to `$FLAT_TABLES`?** It is one line, and it would fix every one of them — in South Sudan as
+well, where it would change what customers receive, and it would switch on the renewal reminders wherever they are
+enabled. That is §E's to decide; the fixes above are Uganda's, at each sender.
 
 ## §D Deferred, with the reason
 
@@ -179,4 +227,6 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–8, 20 so far) | One at a time, each after its Uganda deployment has been watched | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–11, 20, 35 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages | South Sudan keeps 5.18.53 |
+| E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
+| E-6 | Add the keyed files of row 35 to `SqliteStore::$FLAT_TABLES`, for every tenant | After E-5, and with South Sudan's approval: it fixes their win-back repeat too, and it would switch on renewal reminders wherever enabled | Uganda is fixed at each sender |
