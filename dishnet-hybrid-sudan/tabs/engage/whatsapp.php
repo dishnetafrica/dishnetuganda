@@ -2189,11 +2189,11 @@ $_wlSuppressed = function (array $l): bool {
     <div class="wa2-modal-body">
 
         <!-- Status toggle -->
-        <?php if ($_emUnused): ?>
+<?php /* 5.18.54: control tags at column 0, so South Sudan's page stays byte for byte as it was */ if ($_emUnused): ?>
         <div class="wa2-field" style="font-size:12px;color:#7f1d1d;">Reference only: this text is not what customers receive, and there is no on/off switch that works. (docs/46 row 9)</div>
         <input type="checkbox" id="waModalEnabled" hidden disabled>
         <span id="waEnabledLabel" hidden></span>
-        <?php else: ?>
+<?php else: ?>
         <div class="wa2-field">
             <label>Status</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -2201,7 +2201,7 @@ $_wlSuppressed = function (array $l): bool {
                 <span style="font-size:13px;font-weight:700;" id="waEnabledLabel">Enabled — this message will send</span>
             </label>
         </div>
-        <?php endif; ?>
+<?php endif; ?>
 
         <!-- Sender toggle -->
         <div class="wa2-field">
@@ -2245,7 +2245,7 @@ $_wlSuppressed = function (array $l): bool {
     </div>
 
     <div class="wa2-modal-footer">
-        <?php if (!$_emUnused): ?>
+<?php if (!$_emUnused): ?>
         <form method="POST" id="waSaveForm" style="display:contents;">
             <?= csrfField() ?>
             <input type="hidden" name="wa_action"    value="wa_save_template">
@@ -2261,7 +2261,7 @@ $_wlSuppressed = function (array $l): bool {
             <input type="hidden" name="tpl_key"   id="fResetKey">
             <button type="button" class="wa2-btn-reset" onclick="waReset()">↺ Reset to Default</button>
         </form>
-        <?php endif; ?>
+<?php endif; ?>
         <form method="POST" id="waTestForm" style="display:contents;">
             <?= csrfField() ?>
             <input type="hidden" name="wa_action"   value="wa_test_send">

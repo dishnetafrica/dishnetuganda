@@ -56,6 +56,8 @@ function norm_(string $x, SjSandbox $s, bool $page = false): string
     }
     if ($ver[$s->root] !== '') $x = (string)preg_replace('/\bv' . preg_quote($ver[$s->root], '/') . '\b/', 'v<version>', $x);
     foreach ($s->tok as $k => $t) $x = str_replace($t, "<tok:{$k}>", $x);
+    // The sandbox's own directories, which a page may print (the AI setup page names the flyer's path): per run.
+    $x = str_replace([$s->data, $s->plug], ['<data>', '<plug>'], $x);
     foreach (['crm' => $s->crm, 'evo' => $s->evo, 'plugin' => (string)preg_replace('#/public\.php$#', '', $s->base)] as $k => $a) {
         $x = str_replace([$a, str_replace('/', '\/', $a)], "<{$k}>", $x);
     }
@@ -96,7 +98,9 @@ $day = function (SjSandbox $s): array {
     $o['the staff table afterwards'] = norm_(json_encode($rows, JSON_UNESCAPED_UNICODE), $s);
     $s->login('tech', 'tech@example.test', 'sj-password-1');
     foreach (['admin' => ['the Staff page' => 'tab=retailers', '＋ New Job / My Jobs' => 'tab=scheduling', 'Bulk Dispatch' => 'tab=bulk_dispatch',
-                          'WA Events' => 'tab=engage_failed_queue&fqsub=crm_events', 'the Message Log' => 'tab=whatsapp&subtab=log', 'the dashboard' => 'tab=dashboard'],
+                          'WA Events' => 'tab=engage_failed_queue&fqsub=crm_events', 'the Message Log' => 'tab=whatsapp&subtab=log', 'the dashboard' => 'tab=dashboard',
+                          // 5.18.54 (docs/46 rows 9, 27, 29): pages the notification fixes touched on Uganda only
+                          'the Event Map' => 'tab=whatsapp&subtab=events', 'the AI setup' => 'tab=wa_ai_setup', 'the help page' => 'tab=faq'],
               'tech'  => ['My Jobs' => 'tab=scheduling']] as $who => $pages) {
         foreach ($pages as $label => $qs) $o["page {$label}, as {$who}"] = norm_($s->page($who, 'page=dashboard&' . $qs), $s, true);
     }
@@ -151,6 +155,13 @@ if ($withMutants) {
          "    if (true) {", 'the Uganda edit rules applied on South Sudan'],
         ['includes/api/api_support.php', "        if (StaffJobsGate::applies(is_array(\$config ?? null) ? \$config : [], \$dataDir ?? null)) {",
          "        if (true) {", 'the Uganda engineer list served on South Sudan'],
+        // 5.18.54 (docs/46 rows 9, 27, 29): each page the notification fixes touched, one indented control tag each
+        ['tabs/engage/whatsapp.php', "<?php if (!\$_emUnused): ?>\n        <form method=\"POST\" id=\"waSaveForm\"",
+         "        <?php if (!\$_emUnused): ?>\n        <form method=\"POST\" id=\"waSaveForm\"", 'eight spaces leaked into the South Sudan Message Log'],
+        ['tabs/engage/wa_ai_setup.php', "<?php\n        // 5.18.54 (docs/46 row 27, S-5)", "      <?php\n        // 5.18.54 (docs/46 row 27, S-5)",
+         'six spaces leaked into the South Sudan AI setup page'],
+        ['tabs/help/faq.php', "<?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;", "    <?php endif; ?>\n\n    <div class=\"faq-c\">&#128273;",
+         'four spaces leaked into the South Sudan help page'],
     ];
     foreach ($MUTANTS as [$rel, $o_, $n_, $label]) {
         [$tmp, $n] = sj_weakened_copy($root, $rel, $o_, $n_);

@@ -426,7 +426,7 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
     <input type="hidden" name="wa_action" value="save_alerts">
     <div class="wa-row">
       <span class="n">Alert a human on</span>
-      <?php
+<?php
         // 5.18.54 (docs/46 row 27, S-5): on Uganda the example is the tenant's own number format, not Sudan's +249.
         require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
         $_s5Ph = '+249XXXXXXXXX';
@@ -434,7 +434,7 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
             require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
             $_s5Ph = TenantProfile::current($_wCfg, $_wData ?? null)->phoneExample() ?: $_s5Ph;
         }
-      ?>
+?>
       <input type="text" name="alert_whatsapp" style="min-width:200px" placeholder="<?= h($_s5Ph) ?>"
              value="<?= h((string)($_wCfg['alert_whatsapp'] ?? '')) ?>">
       <label style="font-size:13px">hours

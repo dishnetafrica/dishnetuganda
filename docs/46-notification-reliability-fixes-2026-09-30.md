@@ -323,6 +323,28 @@ by saving and reloading each file, then through the real jobs:
 well, where it would change what customers receive, and it would switch on the renewal reminders wherever they are
 enabled. That is §E's to decide; the fixes above are Uganda's, at each sender.
 
+### Found by the first full run of the suite, and fixed
+
+The first full run on this work failed four of its files. Two were faults of this work:
+
+- **South Sudan's pages were no longer byte for byte (rows 9, 27, 29).** Each Uganda-only branch in a page was
+  written with its `<?php if … ?>` tags indented. PHP prints the spaces before a tag and drops the newline after it,
+  so the South Sudan branch — the 5.18.53 text — came out with its whitespace changed: **32 bytes more on the Message
+  Log** (commit `b482832`, measured by `tests/test_staff_jobs_south_sudan.php`). The AI setup page and the help page
+  (`5c5ce42`) had the same pattern, on pages that test did not yet open. A browser folds the spaces, so nothing
+  visible changed, but §0.1 promises the 5.18.53 page and the test holds it to the byte. The tags now start in
+  column 0; on South Sudan each page renders as 5.18.53 did. The test now opens the Event Map, the AI setup page and
+  the help page too, and three weakened copies — one indented tag in each file — are each caught: **43**.
+- **The notification test harness chose the timezone itself.** `test_timezone` allows a zone name such as
+  `Africa/Kampala` in code only inside a `test_*` file, so that no shared file decides a clock. The harness written
+  for rows 1–8 (`tests/fixtures/notify_harness.php`, `notify_units_side.php`) chose Kampala or Juba by tenant. The
+  three suites that use it now name the zone, and the harness refuses to start without one. No plugin file changed;
+  the three still pass: **20**, **23**, **94**.
+
+The other two were not faults of the code: `test_currency_sweep` flagged a comment of row 12 that quoted a dollar
+sign (reworded, `0f72e2a`), and `test_cli_data_dir` could not read the copy under test — it runs part of itself as
+the unprivileged `nobody` user, and that copy sat in a private directory. The final runs use a copy it can read.
+
 ## §D Deferred, with the reason
 
 | # | Finding | Why not now |
