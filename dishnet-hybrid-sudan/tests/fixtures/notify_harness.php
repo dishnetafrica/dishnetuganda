@@ -81,6 +81,35 @@ require $root . "/webhook.php";
         file_put_contents($this->dataDir . '/kyc_config.json', json_encode(array_merge($base, $extra), JSON_PRETTY_PRINT));
     }
 
+    public int $smtpPort = 0;
+    public string $smtpTranscript = '';
+
+    /** A fake SMTP relay, and the plugin's own mail settings pointed at it (the customer e-mails' transport). */
+    public function withSmtp(): void
+    {
+        $this->smtpTranscript = $this->tmp . '/smtp.json';
+        $t = $this->smtpTranscript;
+        $this->smtpPort = $this->serve(sprintf('exec php %s {PORT} %s 600', escapeshellarg($this->root . '/tests/fixtures/fake_smtp_server.php'),
+                                               escapeshellarg($t)),
+            function (int $port) use ($t): bool {
+                if (!is_file($t)) return false;
+                $sock = @fsockopen('127.0.0.1', $port, $e1, $e2, 2); if (!$sock) return false;
+                $g = fgets($sock, 256); @fclose($sock); return strpos((string)$g, 'fake.smtp.test') !== false;
+            }, 11800);
+        if ($this->smtpPort === 0) throw new \RuntimeException('could not start the fake SMTP relay');
+        file_put_contents($this->dataDir . '/email_settings.json', json_encode([
+            'use_ucrm_email' => false, 'smtp_host' => '127.0.0.1', 'smtp_port' => $this->smtpPort,
+            'smtp_user' => '', 'smtp_pass' => '', 'smtp_enc' => '', 'smtp_from' => 'accounts@example.test',
+        ], JSON_PRETTY_PRINT));
+    }
+
+    /** The messages the relay accepted (sessions that carried a message). */
+    public function smtpMessages(): array
+    {
+        $all = json_decode((string)@file_get_contents($this->smtpTranscript), true) ?: [];
+        return array_values(array_filter($all, fn($x) => trim((string)($x['data'] ?? '')) !== ''));
+    }
+
     public function seedCrm(array $seed): void
     {
         $this->post("http://127.0.0.1:{$this->crmPort}/__test/seed", json_encode($seed), ['Content-Type: application/json']);

@@ -8,6 +8,7 @@ require_once __DIR__ . '/lib/PaymentOptions.php';
 require_once __DIR__ . '/lib/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
 require_once __DIR__ . '/lib/currency.php';
 require_once __DIR__ . '/lib/NotifyGate.php';     // 5.18.54: the notification fixes, Uganda only (docs/46)
+require_once __DIR__ . '/lib/ReceiptOnce.php';    // 5.18.54: one receipt per payment (docs/46 rows 2-4)
 
 // EARLY DEBUG - log that we reached the file
 error_reporting(E_ALL);
@@ -1252,11 +1253,31 @@ switch ($changeType) {
             } catch (\Throwable $_e) { /* non-fatal */ }
             // ── Atomic dedup: SQLite INSERT OR IGNORE — race-safe ──
             $payLogKey = "PAY{$paymentId}";
-            if (!$notify->dedupMark($payLogKey)) {
+            // 5.18.54 (docs/46 rows 2-4, D-2/D3): on Uganda the WhatsApp text receipt, this handler's own work (the
+            // e-mail, the receipt PDF, the delivery note) and the PDF each happen once per payment, whoever gets there
+            // first. PAY<id> is the text's guard: the retailer app and the staff collections claim it when they
+            // receipt a payment themselves, and a collection receipted before uCRM had the payment claims its
+            // reference instead. Before, a claim by anyone else skipped the e-mail and the PDF with the text (D3c).
+            $_rcptUg     = NotifyGate::applies(NotifyGate::RECEIPT_ONCE, $config, $dataDir);
+            $_rcptSendWa = true;
+            $_rcptWhy    = '';
+            if ($_rcptUg) {
+                $_rcptWaFirst = $notify->dedupMark($payLogKey);
+                $_rcptRef     = ReceiptOnce::refFromNote((string)($payment['note'] ?? ''));
+                $_rcptByRef   = $_rcptRef !== '' && $notify->dedupCheck(ReceiptOnce::refKey($_rcptRef));
+                $_rcptSendWa  = $_rcptWaFirst && !$_rcptByRef;
+                $_rcptWhy     = !$_rcptWaFirst ? 'already sent for PAY-' . $txnId
+                              : 'sent when the payment was collected (Ref: ' . $_rcptRef . ')';
+            }
+            if ($_rcptUg ? !$notify->dedupMark(ReceiptOnce::workKey((int)$paymentId)) : !$notify->dedupMark($payLogKey)) {
                 whLog($changeType, "Payment notification SKIPPED — already sent for PAY-{$txnId}");
             } else {
                 // Send text receipt to customer
-                $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
+                if ($_rcptSendWa) {
+                    $notify->paymentReceived($phone, $name, $amount, "PAY-{$txnId}");
+                } else {
+                    whLog($changeType, "WhatsApp receipt not sent again — {$_rcptWhy}");
+                }
 
                 whCustomerEmail('payment_received', (int)$clientId, $name, [
                     'amount'    => $amount,
@@ -1278,6 +1299,9 @@ switch ($changeType) {
                         break;
                     }
                 }
+
+                // 5.18.54: on Uganda the PDF has a guard of its own, which the staff collections claim when they queue it
+                if ($_rcptUg && !$_alreadyQueued && !$notify->dedupMark(ReceiptOnce::pdfKey((int)$paymentId))) $_alreadyQueued = true;
 
                 if (!$_alreadyQueued) {
                     $receiptQueue[] = [

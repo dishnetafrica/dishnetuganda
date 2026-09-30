@@ -97,6 +97,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
             $txnRef   = $crmPayId ? 'PAY-' . $crmPayId : 'COL-' . ($collection['id'] ?? '');
             $dedupKey = $crmPayId ? 'PAY' . $crmPayId : 'COL' . ($collection['id'] ?? uniqid());
 
+            require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+            require_once dirname(__DIR__, 2) . '/lib/ReceiptOnce.php';
+            $_rcptUg = NotifyGate::applies(NotifyGate::RECEIPT_ONCE, is_array($config ?? null) ? $config : [], $dataDir ?? null);
             if ($notify->dedupMark($dedupKey)) {
                 $notify->paymentReceived($custPhone, $custName, $amount, $txnRef);
 
@@ -107,6 +110,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
                         if ((int)($_rqi['payment_id'] ?? 0) === $crmPayId) { $_alreadyQueued = true; break; }
                     }
                     if (!$_alreadyQueued) {
+                        if ($_rcptUg) $notify->dedupMark(ReceiptOnce::pdfKey((int)$crmPayId));   // 5.18.54: payment.add then queues none
                         $receiptQueue[] = [
                             'payment_id'    => $crmPayId,
                             'phone'         => $custPhone,
