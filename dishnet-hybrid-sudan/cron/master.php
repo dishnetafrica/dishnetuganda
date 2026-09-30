@@ -144,6 +144,14 @@ $_m_jobs = [
     // there is. Two cheap calls per account per tick.
     'starlink_alive' => ['interval' => 120,                 'script' => __DIR__ . '/starlink_keepalive.php'],
 
+    // ── 5.18.54 (docs/46 row 32): Uganda's watchdog, second ──────────────────────────────────────────────
+    // An administrator hears when a notification job stops, a job dies in a run, failed messages pile up, or the
+    // scheduled jobs' copy of the settings has no WhatsApp (lib/NotifyWatchdog.php). Straight after the keep-alive, so
+    // that a job which spends the budget cannot starve the one that reports it. Every third cycle, about 15 minutes:
+    // 840, not 900, for the reason the keep-alive gives (an interval on the heartbeat's boundary can skip a cycle).
+    // Gated: South Sudan does not run it.
+    'notify_watchdog' => ['interval' => 840, 'gate' => 'watchdog', 'script' => __DIR__ . '/notify_watchdog.php'],
+
     // ── FAST & FREQUENT (run every cycle) ────────────────────────────────
     'event_processor'=> ['interval' => 30,                  'script' => __DIR__ . '/event_processor.php'],
     'identity_worker'=> ['interval' => 60,                  'script' => __DIR__ . '/identity_worker.php'],

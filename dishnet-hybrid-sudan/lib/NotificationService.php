@@ -1538,6 +1538,24 @@ class NotificationService
     }
 
     /**
+     * 5.18.54 (docs/46 row 32, docs/45 §2.3): on Uganda a send that finds no WhatsApp connection for its sender leaves a
+     * line in uCRM's log for the plugin, once a day per sender. Before, it returned in silence — and most scheduled jobs
+     * read only the database copy of the settings, which can lack the connection the settings files have.
+     */
+    private function noTransport(string $sender, string $event): void
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            if (!\NotifyGate::applies(\NotifyGate::WATCHDOG, (array)$this->cfgForContacts, $dir)) return;
+            if (!$this->dedupMark('NOTRANSPORT:' . $sender . ':' . date('Y-m-d'))) return;
+            require_once __DIR__ . '/PluginLog.php';
+            \PluginLog::write('whatsapp', 'a WhatsApp (' . ($event !== '' ? $event : 'no event name') . ') was not sent: no WhatsApp '
+                . 'connection is set up for the ' . $sender . ' sender in the settings this process read (docs/45 §2.3)');
+        } catch (\Throwable $e) { /* a trace never breaks its caller */ }
+    }
+
+    /**
      * 5.18.54 (docs/46 row 26, S-4): on Uganda an administrator alert with no number to go to leaves a line in uCRM's log
      * for the plugin, once per alert and day. Before, it vanished, and a missing alert looked like a quiet day.
      */
@@ -1594,7 +1612,7 @@ class NotificationService
     public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = '', string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
         if (empty($toPhone) || empty($publicUrl)) return;
-        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
         [$docTo, $docRaw] = $this->recipient($toPhone);
         if ($this->optedOut($docRaw, $sender, $class, $event)) return;
@@ -1712,7 +1730,7 @@ class NotificationService
     public function sendImage(string $sender, string $toPhone, string $publicUrl, string $caption = '', string $event = ''): void
     {
         if (empty($toPhone) || empty($publicUrl)) return;
-        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
         $to = preg_replace('/[^0-9]/', '', $toPhone);
         if (empty($to)) return;
@@ -2089,7 +2107,7 @@ class NotificationService
         $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null;
         if (empty($toPhone)) return;        // `enabled` is WASender's readiness alone. Returning on it was what
         // made every send on an Evolution-only install disappear in silence.
-        if (!$this->enabled && !$this->evoAvailable($sender)) return;
+        if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
         [$to, $asGiven] = $this->recipient($toPhone);
         if ($to === '' && $asGiven !== '') { $this->unusableNumber($sender, $event, $asGiven, $message); return; }

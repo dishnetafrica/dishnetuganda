@@ -50,6 +50,7 @@ keeps today's behaviour until the fact is known.
 | `identity_enabled` | plugin settings (V11) | D-6 |
 | How client numbers are stored in uCRM | uCRM clients | D-10: how many numbers were being sent in a form WhatsApp cannot use |
 | The shape of one Evolution `messages.update` receipt | a real event (docs/44 V5) | M5: delivery receipts |
+| Whether the database copy of the settings holds the WhatsApp connection the settings files hold (docs/45 §2.3) | the watchdog's *transport* alert, or uCRM's log for the plugin (row 32) | whether the scheduled jobs send any WhatsApp at all |
 
 ## §A The checklist: every finding, its fix, its test, and what "done" means
 
@@ -90,7 +91,7 @@ administrator side, and reliability.
 | 29 | **S-7**: the help page sends staff to an outage screen that does not exist | P3 | `tabs/help/faq.php` | Correct the answer. The broadcast screen itself is G10, a decision | the answer names no missing tab |
 | 30 | **M4**: failed WhatsApps wait for a person | P3 | new `lib/NotificationRetry.php`, new `cron/notify_retry.php`, `cron/master.php`, `lib/NotificationService.php`, `tabs/engage/failed_queue.php`, `includes/navigation.php`, `tabs/engage/wa_inbox.php`, `tabs/help/faq.php` | Automatic, bounded retries, only for failures the provider certainly did not accept, only for messages that cannot go stale in the window; then `exhausted` | a refused send is retried and sent once; a timeout is never retried automatically; after the last try the row reads `exhausted` |
 | 31 | **New, N-1**: Evolution sends are retried after a timeout, which can duplicate; and two callers send again by themselves after any failure (the AI reply worker through its event queue, the follow-up sender at its next run) | P2 | `lib/EvolutionApiService.php`, `workers/AiReplyWorker.php`, `cron/followup_send.php`, `lib/FollowUpService.php` | A POST is retried only when nothing was sent; a send that may have gone says so, and neither caller sends it again | a timeout after connecting is not retried; the AI reply and the follow-up go once |
-| 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows | P3 | new check in the reminder/retry job | An admin alert, and a plugin-log line, when a scheduled job is overdue or failed sends pile up | both raise one alert, with a cooldown |
+| 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows. And (docs/45 §2.3) most scheduled jobs send nothing, and say nothing, when their copy of the settings lacks the WhatsApp connection | P3 | new `lib/NotifyWatchdog.php`, new `cron/notify_watchdog.php`, `cron/master.php`, `lib/NotificationService.php` | A job of its own, second in master's list: one WhatsApp to the administrator and one line in uCRM's log for the plugin when a notification job is overdue or died in a run, when ten or more failed WhatsApps from the last 24 hours wait, or when the database copy of the settings has no WhatsApp connection and the files have one. Each at most once in six hours. A send that finds no connection leaves a log line, once a day per sender | each condition raises one alert and one log line; a second run inside six hours raises none; the log line is written when the alert itself fails; South Sudan: nothing |
 | 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
 | 35 | **New, N-6** (found while building rows 9–11): **a guard kept in a keyed JSON document does not work.** The store reads a keyed document back as a list holding the object unless its table is on `SqliteStore::$FLAT_TABLES`, so `isset($log[$key])` is never true — and each save nests the old data a level deeper. Measured on `winback_log.json`, `invoice_notify_log.json`, `wa_templates.json` and `renewal_remind_log.json` | P1 | `lib/WinBack.php`; `includes/api/api_notifications.php` (row 11) | Win-back: once per ended service, guarded in `notification_dedup` (it went on each of the four days of its window); the invoice scan: row 11. The other effects are recorded in §B and decided in §E | two runs, and a run the next day, send one win-back; the old log, nested, is still honoured |
 | 36 | **New, N-8** (found while building row 25): the morning brief asks uCRM for each person's jobs with `assigneeId`, a filter uCRM ignores (`cron/jobs_cache.php` records it). Unnoticed only because the brief never ran: fixed as it stood, it would have sent every technician the whole company's job list, customers' names included | P1 | `cron/staff_jobs_summary.php` | The jobs are read once and each person gets those assigned to them, as My Jobs does, through a verified uCRM link only | a technician's brief holds their jobs and nobody else's; an id typed without the picker matches nobody |
@@ -588,6 +589,62 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
     (`tests/fixtures/no_resend_probe.php`), each run twice against the fake.
   - South Sudan as in 5.18.53 in each, the TypeError included. Five weakened copies, each caught.
 
+### Row 32: a watchdog for stopped jobs and piling failures, and the silent send (docs/45 §2.3)
+
+- **What it watches** (`lib/NotifyWatchdog.php`), from master.php's own record and the failure queue:
+  - **overdue**: a notification job whose last run is older than its limit. The limits are at least three of the job's
+    own intervals (30 minutes at the least), 26 hours for a daily job and 8 days for the weekly ladder, so a healthy
+    job is never named. A test checks every limit against master's registrations:
+
+    | Job | Limit |
+    |---|---|
+    | `event_processor`, `ai_reply` | 30 min |
+    | `quote_wa`, `followup_send`, `notify_retry` | 1 h |
+    | `inv_notify`, `wa_watchdog` | 3 h |
+    | `staff_jobs`, `customer_reminders`, `maintenance` | 26 h |
+    | `overdue_email` | 8 days |
+
+  - **unfinished**: a job whose record still reads `duration_ms = -1`. master writes -1 before a job and its time
+    after, and the watchdog runs inside master under its lock, so a -1 on any other job is a process that died in it,
+    taking every job after it in that cycle with it. The watchdog's own -1 is skipped;
+  - **piling up**: ten or more failed or exhausted WhatsApps queued in the last 24 hours;
+  - **no transport** (docs/45 §2.3): the database copy of the settings, which most scheduled jobs read alone, has no
+    WhatsApp connection, while the settings files have one.
+- **How it says so.** One WhatsApp to the administrator (`sendAdmin`, event `ops_watchdog_<condition>`), beginning
+  *"⚠️ DishNet plugin watchdog:"*, and one line in uCRM's log for the plugin (`[watchdog]`).
+  - The log line is written first and whatever happens to the WhatsApp: when the queue piles up, the WhatsApp is the
+    thing most likely to be failing.
+  - Each condition is alerted at most once in a six-hour window, marked in `notification_dedup`.
+  - **The WhatsApp needs `whatsapp_admin_phone`**, which was not set on 27 September (docs/45 M10). Until it is, the
+    alert reaches nobody by WhatsApp, and the log line is the whole of it (row 26 records the missing number too).
+- **Where it runs.** Its own job, `notify_watchdog`, registered second, straight after the Starlink keep-alive, so a
+  job that spends master's time budget cannot starve it. Every third cycle: 840 s, not 900, for the keep-alive's
+  reason.
+  - It cannot report master itself stopping, because it runs inside master. uCRM's tick (`main.php`) and an
+    administrator's visit to the dashboard both start master.
+- **The silent send.** `sendVia`, `sendDocument` and `sendImage` returned without a word when neither WASender nor
+  Evolution was set up for the sender. On Uganda they now leave one line in uCRM's log for the plugin, once a day per
+  sender: *"a WhatsApp (event) was not sent: no WhatsApp connection is set up for the … sender in the settings this
+  process read (docs/45 §2.3)"*.
+- **What this does not do, deliberately.**
+  - It does not make the scheduled jobs read the settings files. Which copy is right is a production fact (§0.2), and
+    a job that sends nothing today would start sending to customers. The watchdog says which copy lacks what; a person
+    saves the settings.
+  - It restarts nothing, and it does not measure delivery.
+- **Tests:** `tests/test_notify_watchdog.php`, **34**. The real `cron/notify_watchdog.php` runs from a copy of the plugin
+  (`tests/fixtures/notify_watchdog_probe.php`), with master's record written as master writes it, against the
+  socket-level fake Evolution. It proves:
+  - each condition raises one alert and one log line;
+  - a job within its limit, a job never run and the watchdog's own record are not named;
+  - nine waiting raise nothing; two runs raise one alert, and six hours on, a second;
+  - a refused alert still leaves its log line;
+  - the settings copies are compared, and a send with no connection leaves one line for two sends;
+  - South Sudan: nothing;
+  - master's registration: second, gated, every watched job one master runs.
+
+  Ten weakened copies, each caught. One proves the no-connection line's daily limit: without it, two sends leave two
+  lines, so both sends reached it.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -713,7 +770,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–31, 33–42 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–42 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |
