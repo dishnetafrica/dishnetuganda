@@ -2141,7 +2141,9 @@ class NotificationService
                     ]);
                 }
             } catch (\Throwable $e) {
-                // Never break message sending for conversation logging
+                // Never break message sending for conversation logging — but say so (5.18.53): the Inbox then lacks
+                // a message the customer or engineer did receive.
+                self::notSaved('the conversation-store row', 'wa_messages', $event, $e);
             }
         }
     }
@@ -2189,7 +2191,8 @@ class NotificationService
                 date('Y-m-d H:i:s'),
             ]);
         } catch (\Throwable $e) {
-            // Never break the main flow
+            // Never break the main flow — but say so (5.18.53): a failed send missing from the queue is never retried.
+            self::notSaved('the failure-queue row', 'notification_queue', $event, $e);
         }
     }
 
@@ -2626,7 +2629,19 @@ class NotificationService
                 mb_substr($entry['error'] ?? '', 0, 500) ?: null,
                 $entry['sent_at']   ?? date('Y-m-d H:i:s'),
             ]);
-        } catch (\Throwable $e) { /* never break main flow */ }
+        } catch (\Throwable $e) {
+            // Never break the main flow — and, since 5.18.53, never in silence: without its row here, a message that
+            // went reads as one that never did (docs/44 §16.28).
+            self::notSaved('the Message Log row', 'notification_audit_log', (string)($entry['event'] ?? ''), $e);
+        }
+    }
+
+    /** 5.18.53: a record of a send that could not be saved gets a line in the plugin log. Never a number or a text. */
+    private static function notSaved(string $record, string $table, string $event, \Throwable $e): void
+    {
+        if (!is_file(__DIR__ . '/PluginLog.php')) return;
+        require_once __DIR__ . '/PluginLog.php';
+        \PluginLog::notSaved($record, $table, $event !== '' ? 'event ' . $event : 'no event name', $e);
     }
 
     /**

@@ -30,7 +30,11 @@ final class SjSandbox
     /** The plugin directories a sandbox does not need. */
     private const SKIP = ['tests', 'docs', 'prototype', 'dishnet-mikrotik-control-plane', 'data', '.git'];
 
-    public static function start(string $root, array $cfg, string $tag = 'sj'): self
+    /**
+     * $opt['workers']: the plugin's server answers that many requests at once, as PHP-FPM does on the server — for a test
+     * in which one request runs while another waits (5.18.53). Without it, one request at a time, as before.
+     */
+    public static function start(string $root, array $cfg, string $tag = 'sj', array $opt = []): self
     {
         $s = new self();
         $s->root = rtrim($root, '/');
@@ -91,9 +95,11 @@ final class SjSandbox
         // The plugin, proved by a nonce only this sandbox knows. exec is disabled: no background worker is spawned.
         $nonce = bin2hex(random_bytes(8));
         file_put_contents($s->plug . '/__nonce.txt', $nonce);
+        $env = ['DN_VAULT_FILE' => $s->vault, 'DN_DATA_DIR' => $s->data];
+        if ((int)($opt['workers'] ?? 0) > 1) $env['PHP_CLI_SERVER_WORKERS'] = (string)(int)$opt['workers'];
         $port = $s->serve(sprintf('exec php -d disable_functions=exec -S 127.0.0.1:{PORT} -t %s', escapeshellarg($s->plug)),
             function (int $p) use ($s, $nonce): bool { return trim($s->http('GET', "http://127.0.0.1:{$p}/__nonce.txt")[1]) === $nonce; },
-            12600, ['DN_VAULT_FILE' => $s->vault, 'DN_DATA_DIR' => $s->data]);
+            12600, $env);
         @unlink($s->plug . '/__nonce.txt');
         if (!$port) throw new \RuntimeException('the plugin did not start');
         $s->base = "http://127.0.0.1:{$port}/public.php";

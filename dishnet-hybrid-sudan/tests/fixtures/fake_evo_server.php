@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'hold_dir' => ''];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -34,8 +34,15 @@ if ($path === '/__test/state') {
 }
 // Phase 2 test controls: start from nothing, and make the next N text sends fail.
 if ($path === '/__test/reset') {
-    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0];
+    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'hold_dir' => ''];
     fe2_out(['reset' => true, 'marker' => 'FAKE-EVO-TEST']);
+}
+// 5.18.53: hold the next text send until the test releases it — a WhatsApp as slow to answer as the test needs, so that
+// another request can run meanwhile. The test names a directory of its own: the held send writes "held" there, then
+// waits for "release" (60 s at most) before it is recorded and answered.
+if ($path === '/__test/hold') {
+    $state['hold_dir'] = (string)($_GET['dir'] ?? '');
+    fe2_out(['hold' => $state['hold_dir'], 'marker' => 'FAKE-EVO-TEST']);
 }
 if ($path === '/__test/fail_next') {
     $state['fail_next'] = max(0, (int)($_GET['n'] ?? 1));
@@ -57,6 +64,14 @@ if (preg_match('#^/webhook/set/(.+)$#', $path, $m)) {
     fe2_out(['webhook' => $state['webhooks'][$m[1]]]);
 }
 if (preg_match('#^/message/sendText/(.+)$#', $path, $m)) {
+    if (($state['hold_dir'] ?? '') !== '') {
+        $dir = $state['hold_dir'];
+        $state['hold_dir'] = '';                                  // this send only
+        file_put_contents($stateFile, json_encode($state));
+        file_put_contents($dir . '/held', '1');
+        for ($i = 0; $i < 600 && !is_file($dir . '/release'); $i++) usleep(100000);
+        $state = json_decode((string)file_get_contents($stateFile), true) ?: $state;
+    }
     if (($state['fail_next'] ?? 0) > 0) { $state['fail_next']--; fe2_out(['error' => 'FAKE-EVO-FAILURE (test control)'], 500); }
     // Recorded, not just answered. A test could previously only see that a
     // send returned ok, which is the same thing production logs showed while
