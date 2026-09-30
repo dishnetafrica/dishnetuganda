@@ -257,6 +257,27 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   administrator, a fake uCRM (credit notes and services added to it) and the fake WhatsApp. South Sudan unchanged in
   each. Eight weakened copies, each caught.
 
+### Row 15: one message per uCRM event (D10)
+
+- **The guard.** Each webhook message with no guard of its own is claimed just before it is sent, in
+  `notification_dedup`, under the event's own id and the message: `EVT:<uuid>:<message>`. When uCRM delivers the same
+  event again, the claim is refused and nothing is sent; the log says the event was delivered again. The claim holds no
+  text, number or name.
+- **Where.** `client.add` — the welcome and the duplicate-number alert, two messages from one event, each claimed on
+  its own; `service.add` — the activation WhatsApp and its app push (the e-mail keeps its own guard);
+  `service.suspend` — the suspension notice with its e-mail and push, and a VIP's administrator alert; `service.postpone`;
+  `service.end`; `quote.approve`; `client.message`. `credit_note.add` is guarded per note since row 12.
+- **What it does not hold back.** Two real events are two ids: a second suspension, or a second message typed in uCRM,
+  is sent — measured. An event with **no** id is never guarded, because nothing would tell two of them apart; measured
+  too. The devices of a suspended customer are still blocked on every delivery: that step is idempotent and sends
+  nothing.
+- **Whether uCRM delivers an event twice is not known (V4).** The guard costs one table row per message and changes
+  nothing when events arrive once.
+- **Tests:** `tests/test_notify_event_once.php`, **23**: every event above delivered twice through the real webhook,
+  with the webhook's own key; twelve claims for twelve messages; South Sudan sends each redelivery again, as before, and
+  writes no claim. Five weakened copies, each caught — no guard, a key without the event, a key without the message, the
+  suspension site unguarded, events without an id sharing one claim.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -301,7 +322,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–14, 16, 20, 24–29, 35–37 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–16, 20, 24–29, 35–37 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

@@ -13,6 +13,7 @@ declare(strict_types=1);
  *   clients/{id}, clients/{id}/client-logs, clients/{id} (PATCH)
  *   billing/credit-notes (POST), credit-notes/{id} and billing/credit-notes/{id} (GET) — credit notes (5.18.54)
  *   clients/services/{id} (GET) — one service, seeded under "services" (5.18.54)
+ *   quotes/{id} and billing/quotes/{id} (GET) — one quote, seeded under "quotes" (5.18.54)
  *
  * Test controls: /__test/state (marker), /__test/dump, /__test/seed (POST, merges keys), /__test/users_down (POST
  * {"down":true}) makes every users endpoint answer 502 — "uCRM could not be reached".
@@ -166,5 +167,10 @@ if ($method === 'POST' && ($path === '/billing/credit-notes' || $path === '/bill
 if ($method === 'GET' && preg_match('#^/(?:billing/)?credit-notes/(\d+)$#', $path, $m)) {
     $cn = $state['credit_notes'][$m[1]] ?? null;
     $cn === null ? fu_out(['code' => 404, 'message' => 'Credit note not found.'], 404) : fu_out($cn);
+}
+// 5.18.54 (docs/46 row 15): one quote, as quote.approve reads it back; 404 unless seeded under "quotes".
+if ($method === 'GET' && preg_match('#^/(?:billing/)?quotes/(\d+)$#', $path, $m)) {
+    $qt = $state['quotes'][$m[1]] ?? null;
+    $qt === null ? fu_out(['code' => 404, 'message' => 'Quote not found.'], 404) : fu_out($qt);
 }
 fu_out(['code' => 404, 'message' => 'FAKE-UCRM-STAFF-JOBS: not simulated: ' . $method . ' ' . $path], 404);

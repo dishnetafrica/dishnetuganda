@@ -591,6 +591,23 @@ function whVerified(string $label, int $id, ?array $row): array {
     return $row;
 }
 
+/**
+ * 5.18.54 (docs/46 row 15, D10): true the first time this uCRM event reaches the message it guards, false when uCRM
+ * delivers the same event again. The key is the event's own id (its uuid) and the message, claimed just before that
+ * message is sent: an event that sends two messages sends each once, and two real events — two uuids — each send.
+ *
+ * On Uganda only. Elsewhere, and for an event that carries no uuid, always true: the 5.18.53 behaviour.
+ */
+function whEventOnce($uuid, string $message, $notify, array $config, ?string $dataDir): bool {
+    require_once __DIR__ . '/lib/NotifyGate.php';
+    if (!NotifyGate::applies(NotifyGate::EVENT_ONCE, $config, $dataDir)) return true;
+    $uuid = is_scalar($uuid) ? trim((string)$uuid) : '';
+    if ($uuid === '') return true;
+    // uCRM's event ids are UUIDs; anything else is reduced to a fixed-length key rather than stored as sent.
+    if (!preg_match('/^[A-Za-z0-9-]{1,64}$/', $uuid)) $uuid = 'h' . sha1($uuid);
+    return $notify->dedupMark("EVT:{$uuid}:{$message}");
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') whResp(405, 'POST required.');
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -835,8 +852,12 @@ switch ($changeType) {
                           . "Please review and merge if duplicate.\n"
                           . dn_crm_web($config) . "/crm/client/{$clientId}";
 
+                if (!whEventOnce($uuid, 'dup_alert', $notify, $config, $dataDir)) {
+                    whLog($changeType, "Duplicate phone alert for #{$clientId}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+                } else {
                 $notify->sendAdmin($alertMsg, 'ops_dup_alert');
                 whLog($changeType, "Duplicate phone alert sent — new #{$clientId} matches existing #" . ($dupFound['id'] ?? '?'));
+                }
             }
         }
 
@@ -847,7 +868,9 @@ switch ($changeType) {
             // uCRM gets this welcome too, as one created in uCRM does; the form
             // then sends no booking message of its own (kycCrmCreated).
             $kycLikeCrm = $existingApp && NotificationService::kycLikeCrm($config);
-            if (!$existingApp || $kycLikeCrm) {
+            if ((!$existingApp || $kycLikeCrm) && !whEventOnce($uuid, 'welcome', $notify, $config, $dataDir)) {
+                whLog($changeType, "Welcome for #{$clientId}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+            } elseif (!$existingApp || $kycLikeCrm) {
                 // Client created directly in UCRM (not via our KYC form) — send welcome.
                 // The text is written here on purpose: NotificationService::send()
                 // sends exactly what it is handed since 5.18.4. Before that it built
@@ -1561,6 +1584,10 @@ switch ($changeType) {
                 ? "🔑 To sign in to your DishNet account, open this link and enter your phone number. We send you a one-time code; there is no password to remember.\n"
                   . "🔗 " . dn_plugin_public($config) . "?page=customer_login\n\n"
                 : "🔑 Login credentials have been shared via email.\n\n";
+            // 5.18.54 (D10): the WhatsApp and the app push once per uCRM event; the e-mail keeps its own guard.
+            $_d10Act = whEventOnce($uuid, 'activation', $notify, $config, $dataDir);
+            if (!$_d10Act) whLog($changeType, "Service activated notification for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+            if ($_d10Act) {
             $notify->sendVia('accounts', $phone,
                 "🚀 *Service Activated — DishNet Africa*\n\n"
                 . "Dear {$name},\n\n"
@@ -1574,6 +1601,7 @@ switch ($changeType) {
                 . "— DishNet Team",
                 'ops_service_activated');
             whLog($changeType, "Service activated notification -> {$name} ({$svcName})");
+            }
 
             // The template reads plan_name, monthly_price, activated_on,
             // account_number and address; the first wiring passed 'plan' and
@@ -1590,7 +1618,7 @@ switch ($changeType) {
             ], "SVCADD{$clientId}:{$serviceId}", $config, $dataDir, $crm, $store, $changeType);
 
             // Push notification to customer's app
-            try {
+            if ($_d10Act) try {
                 fcm_push_service_activated($store->getPdo(), $config, (int)$clientId, $svcName);
             } catch (\Throwable $e) { /* silent — push is best-effort */ }
         } else {
@@ -1768,7 +1796,9 @@ switch ($changeType) {
 
                 // Admin alert: this is the ONLY signal that anything happened.
                 $adminPhone = (string)($config['whatsapp_admin_phone'] ?? '');
-                if ($adminPhone !== '') {
+                if ($adminPhone !== '' && !whEventOnce($uuid, 'vip_alert', $notify, $config, $dataDir)) {
+                    whLog($changeType, "VIP alert for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+                } elseif ($adminPhone !== '') {
                     $outstandingFmt = number_format($outstandingRaw, 2);
                     $notify->sendVia('accounts', $adminPhone,
                         "🛡️ *VIP Suspension Intercepted*\n\n"
@@ -1799,7 +1829,11 @@ switch ($changeType) {
         // everything after the text — the e-mail, the push — is the same for both.
         require_once __DIR__ . '/lib/InvoiceReminders.php';
         $_suspPrepaid = NotifyGate::applies(NotifyGate::REMINDERS, $config, $dataDir) && InvoiceReminders::prepaid($config);
-        if ($phone) {
+        // 5.18.54 (D10): the WhatsApp, the e-mail and the push once per uCRM event (the e-mail also keeps its own
+        // guard). The devices are blocked below either way: that step is idempotent and is not a message.
+        if ($phone && !whEventOnce($uuid, 'suspension', $notify, $config, $dataDir)) {
+            whLog($changeType, "Suspension notice for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             if ($_suspPrepaid) {
             $notify->sendVia('accounts', $phone,
                 "⏸️ *Service Paused — DishNet Africa*\n\n"
@@ -2196,7 +2230,10 @@ switch ($changeType) {
         } catch (\Throwable $_) {}
 
         // ── 3. Send "Service Temporarily Restored" WA ──────────────────
-        if ($phone) {
+        // 5.18.54 (D10): once per uCRM event, with its push; the restore above runs either way.
+        if ($phone && !whEventOnce($uuid, 'postpone', $notify, $config, $dataDir)) {
+            whLog($changeType, "Postpone notice for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $deadlineLine = $postponedToFmt
                 ? "Please settle by *{$postponedToFmt}* to avoid another suspension.\n\n"
                 : "Please settle the outstanding balance to avoid another suspension.\n\n";
@@ -2246,7 +2283,9 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
-        if ($phone) {
+        if ($phone && !whEventOnce($uuid, 'service_end', $notify, $config, $dataDir)) {
+            whLog($changeType, "Churn recovery for {$name}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $notify->serviceEnded($phone, $name, $svcName);
             whLog($changeType, "Churn recovery sent to {$name} ({$svcName})");
         }
@@ -2425,7 +2464,9 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
-        if ($phone) {
+        if ($phone && !whEventOnce($uuid, 'quote_approved', $notify, $config, $dataDir)) {
+            whLog($changeType, "Quote approved notification for #{$num}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $msg = "✅ *Quote Approved — DishNet Africa*\n\n"
                  . "Dear {$name},\n\n"
                  . "Thank you for approving Quote *#{$num}*!\n\n"
@@ -3193,7 +3234,9 @@ switch ($changeType) {
             if (!empty($c['phone'])) { $phone = $c['phone']; break; }
         }
 
-        if ($phone) {
+        if ($phone && !whEventOnce($uuid, 'client_message', $notify, $config, $dataDir)) {
+            whLog($changeType, "Client message for {$name}: this uCRM event was delivered again — not forwarded again", ['uuid' => $uuid]);
+        } elseif ($phone) {
             $msg = "📩 *Message from DishNet*\n\n"
                  . "Hi {$name},\n\n"
                  . $messageText . "\n\n"
