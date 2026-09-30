@@ -634,7 +634,7 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
 - **What this does not do, deliberately.**
   - It does not make the scheduled jobs read the settings files. Which copy is right is a production fact (§0.2), and
     a job that sends nothing today would start sending to customers. The watchdog says which copy lacks what; a person
-    saves the settings.
+    decides whether to copy the connection in (`php tools/notify_doctor.php --fix` does it; §H.10, risk 4).
   - It restarts nothing, and it does not measure delivery.
 - **Tests:** `tests/test_notify_watchdog.php`, **34**. The real `cron/notify_watchdog.php` runs from a copy of the plugin
   (`tests/fixtures/notify_watchdog_probe.php`), with master's record written as master writes it, against the
@@ -949,3 +949,355 @@ Every identifier docs/45 uses, by kind:
 
 **Found during this work (N-1 … N-22):** each is a row of §A or a line of §D. N-12, N-14, N-20 and N-22 are in §D;
 every other number is a row.
+
+## §G After deployment: what a person checks
+
+Everything here reads. Nothing sends a message, changes a record or switches anything, except §G.5, which sends real
+messages to the test accounts only, and only if you decide to run it. Every query below prints counts and event names,
+never a number, a name or a message text.
+
+### §G.1 The deploy's own evidence
+
+- **The deploy's log.** Stage R checks the installed files, the gates, the three new master jobs, the files' new
+  times (what PHP-FPM will run), the plugin log since the deploy, the failure queue and master's record (§H.8). Send
+  back the log file, never a copy of the terminal.
+- **About a day later, `--after-only`.** It asks nothing and changes nothing in the plugin or in uCRM; it writes only
+  its own evidence under `/root/dnb-5.18.54/`. It runs stages V and R again, and R3, R4, R9, R12, R13 and R14 count
+  from the deploy's own record:
+
+```
+cd /opt/dishnet && bash scripts/deploy-5.18.54.sh --after-only 2>&1 | tee /root/dnb-5.18.54/after-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+  Then send back that log file, with `tail -n +1`.
+
+### §G.2 The settings 5.18.54 reads
+
+Stage A prints each of these from both copies of the settings (the database and the files): the billing model and the
+zone by name, the others as *set*, *unset*, *on* or *off*, never their values.
+
+| Setting | What it decides here | Row, decision |
+|---|---|---|
+| `billing_model` | the prepaid rules apply only with `prepaid`; absent means postpaid | rows 5–8, E-2 |
+| `timezone` | the zone every notification time is read in: Africa/Kampala expected | row 43 |
+| `whatsapp_admin_phone` | the watchdog's alerts | rows 26, 32; E-11 |
+| `alert_whatsapp` | the other administrator alerts | rows 26, 44; E-11 |
+| `staff_jobs_brief` | the 07:00 jobs brief: on unless `0` | row 25; E-7 |
+| `renewal_reminders_enabled` | renewal reminders, which have never been sent | row 35; E-5 |
+| `kyc_quote_send_via_crm` | whether uCRM is asked to e-mail a KYC quote: unset means as today | row 18; E-10 |
+| `identity_enabled` | D-6's identity path | rows 16, 37 |
+| `wa_accounts_number` | whether the retailer app sends receipts at all | rows 2–4 |
+
+The plugin's customer e-mails (`customer_emails_enabled`, `customer_email_<kind>`) are not changed by this release;
+E-12 is the decision about them.
+
+### §G.3 The verification reads of docs/45 (V1–V11)
+
+These decide E-3, E-10 and E-12, and show whether uCRM sends its own copy of any plugin message. They are docs/45
+§8's reads, unchanged. Look and press nothing, and send back counts and event names only.
+
+- **In uCRM:**
+  - **V1:** the notification settings, and the billing and suspension settings;
+  - **V2:** the mailer, never its password;
+  - **V3:** the e-mail log for the last 30 days, as counts;
+  - **V4:** the webhook request log, including whether `invoice.near_due` and `invoice.overdue` arrive;
+  - **V5:** whether a Mailing entry exists (send nothing);
+  - **V6:** whether the notification templates say Uganda or South Sudan;
+  - **V7:** the installed plugins.
+- **In the plugin:**
+  - **V8:** the Message Log, and **V9:** the failure queue: §G.4's first three queries;
+  - **V10:** the customer e-mail log: §G.4's last query;
+  - **V11:** the settings. §G.2 prints nine of them. The other four (`efris_auto_submit`, `followup_enabled`,
+    `quote_email_via_plugin`, `kyc_messages_like_crm`) are on the plugin's settings screens.
+
+### §G.4 The first days, row by row
+
+| Row | Where to look | What 5.18.54 should show |
+|---|---|---|
+| 1–4 | Message Log, event of a receipt | one WhatsApp receipt per payment; `payment.add` carries on after it (the Starlink restore and the app refresh run) |
+| 5–7 | Message Log, reminder events | reminders only between 09:00 and 17:00 Kampala, each tier once per invoice; none from uCRM's `near_due`/`overdue` events |
+| 23, 40 | `overdue_email_log`, failed rows by stage and error | no *Class "MailService" not found* after the deploy; the next Monday ladder run records each e-mail |
+| 25 | the staff's phones at 07:00 | each account with a verified link gets its jobs or *no jobs today*; the administrator a list of unlinked accounts |
+| 30 | `notification_queue` by status | a message WhatsApp refused, of an event the retries cover, goes at most four times in all: the first send and three retries, 10, 30 and 120 minutes after the try before, none later than six hours after it was queued; then `exhausted` |
+| 31 | Message Log and Failed Queue errors starting *"May have been sent —"* | never retried automatically; a person decides |
+| 32 | uCRM's log for the plugin (`data/plugin.log`) | `[watchdog]` lines only when a job has stopped or failures pile up. A `[whatsapp]` line saying no WhatsApp connection is set up for a sender: the settings that process read lack it; for the scheduled jobs, that is the database copy (docs/45 §2.3, and §H.10 risk 4) |
+| 43 | System Health, and `php tools/cron_status.php --all` | *Scheduler: last ran under 2 minutes ago*; *Notification jobs*: none stopped or unfinished; the tool's headline in Africa/Kampala |
+| 44 | Message Log rows of event `ops_alert_*` whose error starts *"May have been sent —"* | the same alert not sent again before its cooldown ends (there may be none) |
+| 45 | `starlink_events` by status, with `starlink_mail_enabled` on | a notice is recorded as sent only when its number has an international form; one without stays unsent |
+| 46 | `quote_wa_log.json` | *TEXT NOT SENT (…)* or *PDF NOT SENT (…)* only when WhatsApp did not take the message |
+| 47 | `notification_dedup`, for an invoice approved from a draft for a customer with no phone | no `INV<number>` claim until a phone is added; then the 15-minute scanner sends it once |
+
+**The counts.** The queries below define exactly what to count. They are read-only, as the database's owner,
+against `plugin.sqlite3` opened read-only. Each prints counts, event names and statuses only: never a number, a
+name, an address or a message text. Say if you want them as one rehearsed command, like `--after-only`.
+
+```
+SELECT status, COUNT(*) FROM notification_queue GROUP BY status;
+SELECT event, COUNT(*) FROM notification_audit_log WHERE sent_at >= datetime('now', '-1 day') GROUP BY event;
+SELECT event, COUNT(*) FROM (SELECT event, phone, date(sent_at) d, COUNT(*) n FROM notification_audit_log
+  WHERE success = 1 AND sent_at >= datetime('now', '-2 days') GROUP BY event, phone, d HAVING n > 1) GROUP BY event;
+SELECT stage, CASE WHEN error LIKE '%MailService%' THEN 'MailService' WHEN COALESCE(error, '') = '' THEN '-'
+  ELSE 'other' END AS kind, COUNT(*) FROM overdue_email_log WHERE success = 0 GROUP BY stage, kind;
+SELECT template, status, COUNT(*) FROM customer_email_log WHERE created_at >= datetime('now', '-30 days')
+  GROUP BY template, status;
+```
+
+- **The third query** lists, per event, how many customers got the same event more than once on one day. Two
+  different invoices on one day are legitimate, so it is a list to look at, not a verdict.
+- **The fourth** sorts the ladder's failures without printing them. `MailService` rows after the deploy would mean
+  row 40 did not hold.
+
+### §G.5 The controlled test with the test accounts (M12)
+
+The tests in §H.4 prove the code against fakes; none proves delivery. Delivery is proved only by real messages to
+real phones. Use only the test customer C1 (uCRM client #1) and the technician S4 (uCRM user #1099), the accounts
+docs/44 §16.21–16.30 used, and only after the deploy has PASSED. Each step below creates something in uCRM; say
+which you want run, and it can be built as a walk-through like `scripts/job-walkthrough.sh`.
+
+| Test | Creates | Expected |
+|---|---|---|
+| A job for C1 with S4 (the existing `scripts/job-walkthrough.sh`) | a test job, deleted at the end | S4 gets message 1, message 2 after Accept, *"cancelled"*; each once |
+| A quote for C1 | a quote, deleted afterwards | one WhatsApp to C1, and `quote_wa_log.json` reads *TEXT SENT* |
+| A payment on C1 | a payment record: decide how your accounting treats a test payment before choosing it | one WhatsApp receipt to C1, even if uCRM delivers the event twice |
+
+**Provider acceptance is not delivery.** *Sent* in the Message Log means WhatsApp's gateway accepted the message. Only
+the phone shows that it arrived; M5 (delivery receipts) stays deferred.
+
+## §H The final report
+
+### §H.1 Status of every finding
+
+| | Count | Where |
+|---|---|---|
+| Fixed, each with its own tests | **47 rows**: every defect D-1…D-10, every duplicate the plugin causes, every conflict C1…C9, every staff-side finding S-1…S-7, M4 (WhatsApp), M9, M10 (the log line), M11, and 18 found during this work (N-1…N-22 less the four deferred) | §A, §B |
+| Deferred, each with its reason | **16 lines** | §D |
+| Decisions for you | **12** (E-1…E-12); none is needed to review this work | §E |
+| Left where it is on purpose | uCRM's own notifications, and every plugin e-mail switch | §C |
+
+Every docs/45 identifier is accounted for in §F. **Found, not changed:** N-12 (the cashbook report's missing class)
+and N-22 (a missed hour is not made up) are outside notifications or need a decision; N-14 and N-20 (the direct
+Evolution senders) are each their own change.
+
+### §H.2 The commits
+
+Each commit carries its rows' code, tests and docs/46 section; `git show <commit>` gives the whole change.
+
+| Commit | What |
+|---|---|
+| `5f2a159` | this document: baseline and checklist |
+| `ebe1ff1` | row 1 |
+| `46ad439` | rows 2–4 |
+| `1dd3333` | rows 5–8, 20, 33, 34 |
+| `b482832` | rows 9–11, 35 |
+| `5c5ce42` | rows 24–29, 36 |
+| `b089607`, `0f72e2a` | rows 12–14, 16, 37 |
+| `c5c3a5e` | row 15 |
+| `ee0f033` | rows 17, 38 |
+| `7c98790`, `72eef69` | found by the first full run: South Sudan's pages byte for byte again; the test harness's zone |
+| `b81d1b8` | row 19 |
+| `dc1504a` | row 18 |
+| `a5fe294` | rows 21, 22, 39 |
+| `73418f5` | rows 23, 40 |
+| `5b4d4dc` | §C and E-10 |
+| `22c4ee5` | rows 31, 41 |
+| `1c6640b` | rows 30, 42 |
+| `c130597` | row 32 |
+| `d624e03` | row 43 |
+| `a207b0d` | rows 44–47 |
+| `97746c1` | §C, §F, E-11, E-12 |
+| **`e8a8508`** | **the version, 5.18.54: the plugin commit the deploy installs** |
+| `fde675c` | `scripts/deploy-5.18.54.sh` and its rehearsal, outside the plugin |
+| this commit | this report, docs/07, `docs/evidence/5.18.54/` |
+
+### §H.3 Root causes
+
+Each row of §A names its own. Grouped, every row once:
+
+- **Sent twice, or not at all, because of how a message was guarded.** Two paths with a guard each: rows 5, 19 and
+  24. A claim taken too early or too broadly: rows 4, 7 and 47. A guard missing, or written and never read back:
+  rows 2, 3, 12, 15, 17, 23, 35 and 38.
+- **Sent again after a failure that may have gone through:** rows 31 and 44.
+- **A failure nobody saw, or saw reported as a success:** rows 18, 26, 28, 30, 32, 42, 43 and 46.
+- **Code that crashed, or never ran as meant:** rows 1, 9, 16, 25, 29, 33, 36, 37, 40 and 41.
+- **The wrong time or zone:** rows 6 and 34.
+- **The wrong words, number form or country:** rows 8, 13, 14, 21, 22, 27, 39 and 45.
+- **Access and consent:** rows 10, 11 and 20.
+
+### §H.4 The suite, twice, on the final commit
+
+**The command,** as a contributor runs it, in the main checkout of `dishnetuganda`:
+
+```
+cd dishnet-hybrid-sudan && bash tests/run.sh
+```
+
+`tests/run.sh` runs every `tests/test_*.php` file in turn, each with its own settings vault, and exits non-zero if any
+file fails. It ran twice, one run after the other, on plugin commit `e8a8508` (5.18.54), under PHP 8.4.19 on Linux
+6.18. The branch moved to `fde675c` during run 1; that commit holds only `scripts/`. The runner checked before run 1
+and after run 2 that nothing under `dishnet-hybrid-sudan/` differed from `e8a8508`.
+
+| Run | Started (UTC) | Files | Assertions passed | Failed | Exit | Duration |
+|---|---|---|---|---|---|---|
+| 1 | 14:02:13 | 247 | 11,336 | **0** | 0 | 1,720 s |
+| 2 | 14:30:53 | 247 | 11,336 | **0** | 0 | 1,784 s |
+
+- **The two runs are identical, file by file.** Each file's own count is in
+  `docs/evidence/5.18.54/suite-run1-tally.txt` and `suite-run2-tally.txt`.
+- **Against 5.18.53's runs** (`docs/evidence/5.18.53/`), file by file:
+  - 226 files have the same counts;
+  - 20 files are this work's new suites;
+  - one changed: `test_staff_jobs_south_sudan.php`, 37 → 51, the pages this work touches and their weakened copies,
+    added to the South Sudan comparison.
+- **§B gives each suite's count when its row was built.** Two suites gained checks from later rows:
+  - `test_reminders_one_path.php`, 90 → 94, from row 35's win-back checks;
+  - `test_notify_retries.php`, 57 → 58, from row 46.
+
+  Every other count in §B is the final one.
+- **South Sudan stays green.** Every suite of this work runs its South Sudan case against 5.18.53's behaviour, and
+  `test_staff_jobs_south_sudan.php` compares South Sudan's pages, messages and job list with 5.18.53's, taken from
+  Git, byte for byte: 51 assertions, 0 failed, in both runs.
+- **Under PHP 8.1.34, the server's version,** every one of the 90 PHP files 5.18.54 adds or changes passes `php -l`
+  (`docs/evidence/5.18.54/php81/lint81.txt`).
+- **What these runs do not show: that any message reached a phone or an inbox.** They prove the code against fakes of
+  uCRM, Evolution and SMTP. Delivery is §G.5's to show.
+
+### §H.5 Evidence for retries and duplicate prevention
+
+Each suite runs the real handler, job or screen against fakes (uCRM, Evolution, SMTP) and counts what reached the
+fake. §B gives, row by row, what each suite checks, how many of its checks failed before the fix where that was
+measured, and the weakened copies of the code it catches. The counts below are from the final runs (§H.4).
+
+**Retries: a message that certainly did not leave is tried again, a bounded number of times; one that may have left
+never is.**
+
+| Suite | Assertions | What it proves |
+|---|---|---|
+| `test_notify_retries.php` | 58 | a refused send is retried and sent once; a timeout is never retried automatically; four tries in all, then `exhausted`; only within six hours; a person's retry from the Failed Queue ends its retry mode and says when nothing was sent (rows 30, 42) |
+| `test_notify_evo_retry.php` | 23 | a POST is repeated only when nothing was sent; a send that may have gone says so, and neither the AI replies nor the follow-ups send it again (rows 31, 41) |
+| `test_alert_maybe_sent.php` | 9 | an administrator alert that may have gone keeps its cooldown (row 44) |
+
+**Duplicates: one message per payment, event, tier, quote and invoice, however many times the event arrives.**
+
+| Suite | Assertions | What it proves |
+|---|---|---|
+| `test_payment_webhook_flow.php` | 20 | `payment.add` carries on after the receipt (row 1) |
+| `test_receipts_once.php` | 23 | one WhatsApp receipt per payment, whichever path sends first (rows 2–4) |
+| `test_reminders_one_path.php` | 94 | each reminder tier once per invoice, in the daytime, from one path; the old job's keys honoured; win-back once (rows 5–8, 20, 33–35) |
+| `test_notify_event_once.php` | 23 | a redelivered uCRM event sends nothing again (row 15) |
+| `test_notify_quote_once.php` | 19 | one WhatsApp per quote, from the screens, `quote.add` and the quote cron together (rows 17, 38) |
+| `test_notify_kyc_race.php` | 14 | the welcome and *"Request Confirmed!"* never both (row 19) |
+| `test_notify_customer_fixes.php` | 32 | one credit-note message; the identity paths (rows 12, 13, 16, 37) |
+| `test_notify_ladder_record.php` | 12 | the overdue ladder records a later success and does not resend weekly (row 23) |
+| `test_notify_staff_side.php` | 53 | the leaders' Accept copy once; the brief; alerts that leave a trace (rows 24–29) |
+| `test_draft_approved_claim.php` | 9 | an invoice approved from a draft: one WhatsApp, none for a redelivery, and the scanner sends it once a phone is added (row 47) |
+
+**The record: what the logs and screens say is what happened.**
+- `test_notify_watchdog.php` (34, row 32);
+- `test_notify_schedule_health.php` (19, row 43);
+- `test_quote_cron_log.php` (10, row 46).
+
+**South Sudan.**
+- Each of the 16 suites above has a section asserting South Sudan's 5.18.53 behaviour, duplicates included (§E).
+- `test_staff_jobs_south_sudan.php` (51) compares South Sudan's pages, messages and job list with 5.18.53's, taken
+  from Git, byte for byte.
+
+### §H.6 When each notification goes
+
+The schedule and trigger table is in §B, row 43: each job, its interval or hour, what it sends, and the watchdog's
+limit for it. uCRM's webhooks send the rest as their events arrive. Every time is Africa/Kampala on Uganda.
+
+### §H.7 What depends on uCRM
+
+- **Facts this work could not read** (§0.2): the billing model, uCRM's own notification settings, whether uCRM raises
+  the reminder events, the alert numbers, how numbers are stored. Each fix works whatever the value is, or keeps
+  today's behaviour until it is known.
+- **uCRM's own e-mails** stay on (E-12, after V1–V3). Where uCRM and the plugin both send, a customer can get two
+  e-mails for one event; this release removes no uCRM message.
+- **uCRM's webhooks** still carry every event-driven message. Row 15 makes a redelivered event send nothing again;
+  row 47 lets the invoice scanner pick up a draft-approved invoice whose phone arrived later.
+
+### §H.8 Deployment plan
+
+**Before.** Your approval of this report. None of the decisions in §E is needed to deploy. The server must run
+5.18.53, as it has since 30 September 06:33 UTC (docs/44 §16.30); the script refuses any other live commit.
+
+**When.** A working day after 09:00 Kampala, when someone can watch the first watchdog run and the day's reminder run
+(§H.10, risk 1).
+
+**The command.** Run as root on the server; it asks you to type DEPLOY. Then send back the log file with
+`tail -n +1`, never a copy of the terminal.
+
+```
+cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+  && mkdir -p /root/dnb-5.18.54 \
+  && bash scripts/deploy-5.18.54.sh 2>&1 | tee /root/dnb-5.18.54/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+```
+
+**What it does,** in order; any NO-GO stops it before anything changes:
+- **A**, evidence before anything changes: the Uganda check from both copies of the settings, the new files under the
+  server's own PHP, the staff accounts, the Message Log's last row, the notifier's tables, OPcache's settings, the
+  installed files' times, the settings of §G.2, and a backup of both databases (`VACUUM INTO`), the data, the installed
+  5.18.53 and the vault. Then GO or NO-GO, and the typed DEPLOY.
+- **B**, the documented deploy of `e8a8508`, by its hash, also after later pushes; each changed file gets the time of
+  its copy, so PHP-FPM compiles it again (docs/44 §16.23).
+- **V**, the public pages, the :8443 door, no redirect loop, no fatal error since the deploy.
+- **R**, the installed files and gates, staff records untouched, master's three new jobs, the files' new times, the
+  plugin log, the failure queue and master's record (R1–R14).
+- **F**, the summary, and the rollback command, printed once, on its own, at the end of the log.
+
+**It never** changes a setting, a customer, a staff account, a job or a message, switches a notification on or off,
+sends anything, or calls uCRM. There is no migration.
+
+**Rehearsed.** `scripts/harness/deploy-5.18.54/rehearse.sh` ran the committed script (sha256 `b606ad2f…`) twice
+against a clone, a fake docker and stand-in public pages.
+- Each run: 227 checks and 0 failed, over 94 runs of the script.
+- The runs cover:
+  - the NO-GO cases, which stop before anything changes;
+  - the deploy;
+  - `--after-only` three hours on, clean and then with one fault planted at a time;
+  - the rollback;
+  - a later release already on the branch;
+  - stage V's own rollback;
+  - the trap of docs/44 §16.23.
+- 41 weakened copies of the script, each caught.
+- What the operator would see is in `docs/evidence/5.18.54/rehearsed-*.log`.
+
+### §H.9 Rollback plan
+
+**When.** Stage V finding the public address redirecting after the deploy: the script then puts 5.18.53 back by
+itself. Otherwise, a stage R failure you judge serious, or messages going wrong in the first days (§G.4).
+
+**How.** The rollback command is printed at the end of the deploy's log, on its own; it is never handed over with the
+deploy command, because pasted together the shell runs both (docs/44 §16.9). It is the script's `--rollback` option.
+It asks for a typed ROLLBACK, takes the same backup, installs 5.18.53 (`6b71ea6`) by its hash through the same
+documented deploy, gives the files the time of the copy, and checks the result (stage RB).
+
+**What a rollback does not undo:**
+- messages already sent;
+- claims written to `notification_dedup`, which 5.18.53 does not read and which change nothing there;
+- failure-queue rows marked `exhausted`: 5.18.53's Failed Queue lists them under *All*, but its Retry and Dismiss act
+  only on `failed` rows;
+- master's record of the three new jobs, which 5.18.53 does not run;
+- lines in the plugin log.
+
+There is no migration, so nothing needs restoring; the backup is there if something else goes wrong.
+
+**After a rollback the two reminder paths are back** (row 5, D-4).
+- The 02:00 job's reminders use the daily run's guard keys, so a tier already sent is not sent again.
+- uCRM's reminder events send again through the webhook, whose guard lasts a day, so a Final Notice can come every day.
+  The rollback's own summary says so.
+
+### §H.10 Risks, and what 5.18.54 does about each
+
+| # | Risk | What 5.18.54 does about it |
+|---|---|---|
+| 1 | **Reminders on the deploy day.** | The daily run uses the 02:00 job's own guard keys, so a tier that job claimed that morning is not sent again. Only if the 02:00 job did not run that day (N-22) can a customer who got uCRM's event reminder before the deploy get the daily run's reminder for the same invoice after it, once |
+| 2 | **Messages refused shortly before the deploy go out after it.** | By design (row 30): a message WhatsApp refused in the six hours before the deploy can be retried in the first minutes after it, at most four tries in all, only for the listed events and never after a timeout |
+| 3 | **Messages that start after the deploy** | The 07:00 jobs brief (E-7; `staff_jobs_brief = 0` holds it); reminders to customers whose phone is not on their first contact; the prepaid notices only with `billing_model = prepaid`; the watchdog's alerts, to `whatsapp_admin_phone` if set, else only to the plugin log (E-11) |
+| 4 | **The database copy of the settings lacks the WhatsApp connection** (docs/45 §2.3) | Then the scheduled jobs send nothing, as before; now R14, the watchdog and a `[whatsapp]` log line say so. Copying it in is a separate decision, not part of this release: `php tools/notify_doctor.php --fix` copies the `evo_*` keys from the settings files into the database copy, and the scheduled jobs that send nothing today would then start sending (§B row 32). The general settings screen does not write the connection |
+| 5 | **uCRM sends its own copy of some e-mails** | Unchanged: both stay until E-12 |
+| 6 | **Delivery is not proven by tests** | Tests prove the code against fakes. *Sent* means WhatsApp's gateway accepted the message (M5 deferred). §G.5 is the proof |
+| 7 | **PHP-FPM keeps running the old files** | Each changed file gets the time of its copy; R12 checks it and OPcache's settings (docs/44 §16.23) |
+| 8 | **South Sudan** | Not deployed by this script, and unchanged if it were: every change sits behind NotifyGate, false there. The South Sudan suites compare its pages, messages and job list with 5.18.53's |
+| 9 | **The server's PHP** | 8.1.34. Every one of the 90 PHP files 5.18.54 adds or changes passes `php -l` under PHP 8.1.34. Under PHP 8.4, `lib/EvolutionApiService.php` (not changed by this work) raises a deprecation notice; only a PHP upgrade would meet it |
+| 10 | **Four senders outside the Message Log** (N-20) | Unchanged and deferred: the follow-ups, the AI replies, the Starlink notices and the lead pages keep their own records |

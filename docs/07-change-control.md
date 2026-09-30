@@ -2361,3 +2361,29 @@ nothing deployed; nothing sent.
 
 **Next.** The read-only checks V1–V11 (docs/45 §8), then the owner decisions O1–O8. Every fix (F1–F14) and gap
 (G1–G11) waits for approval, and none is part of Release A or B.
+
+## 30 Sep — 5.18.54: notification reliability, built and rehearsed, not deployed (docs/46)
+
+**What.** The bug-fix project that followed docs/45: every customer notification once, through the right channel, at
+the right time, with a record and a safe retry. Repository only: **nothing deployed, no setting changed, no message
+sent, no uCRM notification switched on or off.** Every change is behind `NotifyGate`, true only on Uganda; South Sudan
+runs 5.18.53's code.
+
+**Built** (docs/46 §A, §B): 47 rows, each with its tests and weakened copies. Among them:
+- the payment webhook carries on after the receipt, and a payment gets one WhatsApp receipt (rows 1–4);
+- reminders come from one daily run in the daytime, each tier once, with the prepaid rules (5–8, 20);
+- the failure-queue API is for administrators only, and no GET link sends or changes uCRM (10, 11);
+- one message per uCRM event, credit note and quote; numbers in international form (12–17, 38, 45);
+- a refused WhatsApp is retried a bounded number of times; one that may have gone never is (30, 31, 42, 44);
+- a watchdog for stopped jobs and piling failures, and System Health reads master's record (32, 43).
+
+**Not built, with the reason** (docs/46 §D): e-mail retries and delivery receipts, SMS, consent for marketing, the
+broadcast screen, and four senders outside the Message Log (N-20), among 16. **Decisions for you** (§E): 12, none
+needed to review the work. uCRM's own e-mails stay on (E-12).
+
+**Tested:** the full plugin suite twice on `e8a8508`: 247 files, 11,336 assertions, 0 failed, identical file by
+file; the South Sudan comparison green in both. **Rehearsed:** the deploy script (`fde675c`) twice: 227 checks each,
+0 failed, 94 runs of the script, 41 weakened copies caught. Evidence: `docs/evidence/5.18.54/`.
+
+**Next.** Your review of docs/46 §G–§H, then, on your approval only, `scripts/deploy-5.18.54.sh` (its rollback is
+printed at the end of its log), then the checks of §G.
