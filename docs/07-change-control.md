@@ -2499,3 +2499,36 @@ branch, run the script, tee to a log file). The rollback command is given separa
 and is never pasted together with the deploy (docs/44 §16.9). The result will be
 recorded here once the operator sends the log file. No production change has been
 made from this session.
+
+## 30 Sep — 5.18.55 DEPLOYED to production, 20:07:46 UTC (PASSED 55/0/3)
+
+The operator ran `scripts/deploy-5.18.55.sh` on the server (dishnetuganda, /opt/dishnet).
+**Result: `5.18.55 (deploy): PASSED` — 55 ok, 0 failed, 3 notes.** Live moved
+5.18.53 (6b71ea6) → 5.18.55 (9514633); container PHP 8.1.34. Backup-first under
+`/root/dnb-5.18.55/backup-20260930T200746Z` (plugin.sqlite3 24M, integrity ok,
+228 tables, sha256 match; data dirs; installed 5.18.53 code; config vault). The
+release changes no table or row — a rollback needs no restore.
+
+Verified live:
+- R1: all 93 changed files installed byte-for-byte as 9514633; manifest 5.18.55.
+- **R1 PD-1: the collections CSV export now requires sign-in + admin before any data
+  is read** — the docs/48 §5 security fix is confirmed in production.
+- R2: NotifyGate reads Uganda from both config sources; all 23 of 5.18.54's fixes on
+  — including **D-1 (payment-webhook), receipts-once, one daily reminder path,
+  prepaid wording, S-1 failure-queue roles, the watchdog and the staff brief.**
+- V1–V4: public sign-in 200, no redirect loop, no :8443 leak; Uganda Terms/Privacy
+  v1.1 (no South Sudan literal); no fatal/parse error since the deploy.
+- R3 staff unchanged; R12 changed files carry the deploy's time (OPcache recompiles).
+
+Three notes (configuration, not errors):
+- R7: 2 of 4 active job-taking staff have a verified uCRM link; the other 2 receive
+  no job WhatsApps until an admin saves their uCRM user (Staff → edit → uCRM user).
+- R14: `whatsapp_admin_phone` is unset, so the notification watchdog's alerts reach
+  only the plugin log, not WhatsApp (docs/46 E-11).
+- R11: the engineer's job e-mail goes through the plugin's own SMTP settings.
+
+Rollback to 5.18.53 remains available on its own (docs/44 §16.9):
+`cd /opt/dishnet && bash scripts/deploy-5.18.55.sh --rollback`.
+
+**docs/48: D-1 (§3) and PD-1 (§5) are now resolved in production.** The remaining
+docs/48 items (PD-2..PD-13, FI1..FI5, S1..S5, U1) stay staged for a later decision.
