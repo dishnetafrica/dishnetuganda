@@ -843,7 +843,7 @@ uasort($staffSums, function($a, $b) {
     $bHas = ($b['usd'] != 0 || $b['ssp'] > 0 || $b['wallet'] > 0) ? 1 : 0;
     if ($aHas !== $bHas) return $bHas - $aHas;
     return strcmp($a['name'], $b['name']);
-});function scM(float $n):string{return($n<0?'-':'').dn_cur($config) . number_format(abs($n),2);}
+});function scM(float $n):string{global $config;return($n<0?'-':'').dn_cur($config) . number_format(abs($n),2);}
 function scCatIc(string $c):string{$m=['Collection'=>'💰','Expense'=>'🧾','Handover'=>'🤝','SSP Received'=>'🇸🇸','Exchange'=>'🔄','Staff Payment'=>'👤','Fuel'=>'⛽','Transport'=>'🚗','Commission'=>'🤝','Refund'=>'↩️','Power'=>'⚡','Vehicle'=>'🚗'];return $m[$c]??'📝';}
 
 // Currency tab: usd (default) or ssp
