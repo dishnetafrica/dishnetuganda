@@ -478,6 +478,62 @@ The other two were not faults of the code: `test_currency_sweep` flagged a comme
 sign (reworded, `0f72e2a`), and `test_cli_data_dir` could not read the copy under test — it runs part of itself as
 the unprivileged `nobody` user, and that copy sat in a private directory. The final runs use a copy it can read.
 
+## §C Ownership: who sends what, and what this work leaves where it is
+
+The rule of 15 September still holds, and this work follows it: **one owner per event and channel, and the plugin's
+sender is proven before uCRM's is switched off**. In that record's words: *"Turning uCRM off first creates silence,
+which is worse than duplication"* (UGANDA-EMAIL-OWNERSHIP.md:40-42; docs/45 §5).
+
+**No uCRM notification was switched on or off, and no plugin e-mail switch was changed.** Where uCRM may send its own
+copy of a plugin message, both stay until you decide (O1–O6), after uCRM's own settings are read (V1–V3).
+
+### §C.1 What stays where
+
+| Messages | Owner after this work | What this work changed |
+|---|---|---|
+| Customer WhatsApp, every event | the plugin (uCRM has none) | once per event and per payment (rows 2–4, 12, 15, 17, 19, 38); one reminder path, in the daytime (5–7); wording that was wrong (8, 13, 21); numbers in international form (14) |
+| Portal login codes | the plugin | nothing |
+| Staff job messages and the morning brief | the plugin | rows 24–29, 36 |
+| Admin alerts | the plugin, to numbers that are not set (M10) | an alert with no number now leaves a plugin-log line (row 26); the watchdog is row 32 |
+| Transactional e-mail: invoice, receipt, welcome, paused, resumed, installation, support, quotation | the plugin since 15 September; uCRM possibly too (N1, N4, N5, N6, none verified) | nothing: the duplicates D1, D5 and D9 wait for O1–O3 and O6 (§D) |
+| The overdue e-mail ladder (postpaid only) | the plugin | it sends from its own run, and records what went (rows 23, 40) |
+| uCRM's reminder e-mails (N2, N3) | uCRM, if switched on (not verified) | nothing: O4, O5 |
+| A KYC quote's e-mail | uCRM, asked by the plugin (N6); the plugin's `quote.add` e-mail may send a second (D2a) | a prepared switch, unset = as today (row 18); the decision is E-10 |
+| Client-zone invitation, forgotten password, tickets, uCRM's staff notices, Mailing (N7–N11) | uCRM | nothing; the activation WhatsApp no longer promises an e-mail nobody sends (row 13) |
+| uCRM's notification settings | uCRM's own screens | the plugin's link that could change two of them is read-only on Uganda (row 11) |
+
+### §C.2 Duplicates removed without changing uCRM
+
+Every duplicate this work removes lies inside the plugin: two plugin paths, or one path run twice:
+
+- the receipt (rows 2–4);
+- the reminders (5–7);
+- the credit note (12);
+- redelivered events (15);
+- the quotes (17, 38);
+- the welcome and "Request Confirmed!" (19);
+- the ladder's weekly repeat (23);
+- the leaders' copy (24).
+
+**Duplicates between the plugin and uCRM are not touched** (D1, D5, D9, D2a): removing one would mean switching one
+sender off, which is O1–O6.
+
+### §C.3 Consent and opt-outs (row 20)
+
+- **"STOP" now stops what is promotional:** the AI follow-ups, as before, and win-back (row 20).
+- **It does not stop service messages:** invoices, receipts, reminders, notices of a pause, suspension or
+  resumption, job and installation messages, and login codes. They are about the service the customer pays for. This
+  was already the plugin's rule (docs/45 §1, the opt-out row), and this work keeps it.
+- **The outage notice stays a service message. The reason:** it is one fixed text telling a customer that their own
+  internet will be down, on a date and within a time window (`outageAlert`, sent by `notify_outage`,
+  `includes/notify_actions.php:49-84`).
+  - Like an invoice, it is about the service they pay for, and a customer who has stopped marketing still needs it.
+  - Nothing can send it today, because it has no screen (S-7, G10).
+  - If G10 gives it a screen with free text, that screen must choose per message: maintenance is a service message,
+    while announcements and news are promotional and honour STOP.
+- **E-mail** has no opt-out check and no unsubscribe header. The plugin sends transactional e-mail only; promotional
+  e-mail belongs to uCRM Mailing (O7), which has its own. Consent for anything promotional is M8 (§D).
+
 ## §D Deferred, with the reason
 
 | # | Finding | Why not now |
@@ -510,3 +566,4 @@ Collected as the build goes; completed with the final report.
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |
 | E-9 | The quote PDF retry list (rows 17, 35): a quote PDF that could not be fetched when its text went is queued for a retry that never reads back. Make it work, or leave it | Leave it until a quote has gone out text-only in production: the retry would send a PDF up to an hour after its text | Unchanged: text-only |
 | E-6 | Add the keyed files of row 35 to `SqliteStore::$FLAT_TABLES`, for every tenant | After E-5, and with South Sudan's approval: it fixes their win-back repeat too, and it would switch on renewal reminders wherever enabled | Uganda is fixed at each sender |
+| E-10 | Who e-mails a KYC quote (docs/45 O6, F4)? Today uCRM is asked to send it, and the plugin's own quotation e-mail may send a second (D2a) | **The plugin, for every quote, as docs/45 recommends**, after uCRM's quotation notice is read (V1) and one real plugin quotation e-mail has been seen. Then, with the plugin's quotation e-mail on (`quote_email_via_plugin`), `kyc_quote_send_via_crm = 0` (row 18) is the whole change. **With it off, that setting would leave a KYC quote with no e-mail at all**, so the two go together | uCRM is asked to send it, as today |
