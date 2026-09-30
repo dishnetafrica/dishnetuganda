@@ -356,7 +356,19 @@ if ($_sjUganda) {
             }
 
             // 2. Notify support leaders that job was accepted
-            $allR3 = $store->load('retailers.json') ?? [];
+            // 5.18.54 (docs/46 row 24, S-2): on Uganda the leaders hear of an Accept once per job and assignment, as the
+            // engineer does (message 2). A second tap, or an Accept of a job already in progress, tells them nothing new;
+            // the claim is JOBACC<job>:<assignee>, taken before the first send.
+            $_s2Quiet = false;
+            if ($_sjUganda) {
+                require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+                if (NotifyGate::applies(NotifyGate::STAFF_SIDE, is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+                    $_s2Assignee = (int)($_sjAccepted['assignee'] ?? 0) ?: (int)(is_array($job) ? ($job['assignedUserId'] ?? 0) : 0);
+                    $_s2Quiet = (($_sjAccepted['outcome'] ?? '') === 'no_change')
+                             || !$notify->dedupMark("JOBACC{$jobId}:{$_s2Assignee}");
+                }
+            }
+            $allR3 = $_s2Quiet ? [] : ($store->load('retailers.json') ?? []);
             foreach ($allR3 as $r3) {
                 if (($r3['role'] ?? '') !== 'support_leader') continue;
                 if (empty($r3['is_active'])) continue;

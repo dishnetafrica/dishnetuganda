@@ -4276,8 +4276,21 @@ if ($act === 'owb_bulk_send' && $met === 'POST') {
                         'invoice_url'   => $invoiceUrl,
                         '_raw_message'  => $waMsg,
                     ]);
-                    $waOk = true;
-                    $sentWa++;
+                    // 5.18.54 (docs/46 row 28, S-6): send() does not throw when WhatsApp refuses, so on Uganda the count
+                    // reads the send's own result — "sent" is what WhatsApp accepted; a refusal is counted as failed, and
+                    // the message waits in the Failed Queue as every failed send does. send() returns before sendVia()
+                    // on an empty text, leaving the previous send's result in place: that case is read here, not there.
+                    require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+                    $_s6 = !NotifyGate::applies(NotifyGate::STAFF_SIDE, is_array($cfg) ? $cfg : [], $dataDir ?? null)
+                         ? ['success' => true]
+                         : (trim((string)$waMsg) === '' ? ['success' => false, 'error' => 'no message text'] : $notify->lastSendResult());
+                    if (!empty($_s6['success'])) {
+                        $waOk = true;
+                        $sentWa++;
+                    } else {
+                        $waOk = false;
+                        $errors[] = ['invoice_number' => $invNum, 'error' => 'wa_failed: ' . (string)($_s6['error'] ?? 'not sent')];
+                    }
                 } catch (\Throwable $e) {
                     $waOk = false;
                     $errors[] = ['invoice_number' => $invNum, 'error' => 'wa_failed: ' . $e->getMessage()];

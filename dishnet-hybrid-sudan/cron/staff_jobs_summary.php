@@ -44,7 +44,26 @@ $config  = $store->load('kyc_config.json') ?? [];
 $notify  = new NotificationService($store, $config);
 
 // ── CRM client ────────────────────────────────────────────────────────────
-$crm = new CrmApiClient($config);
+// 5.18.54 (docs/46 row 25, S-3): `new CrmApiClient($config)` passes the settings array where the constructor takes the
+// address, a TypeError on the first line: the brief has never been sent. On Uganda it is built the way every other job
+// builds it, each person's jobs are found through their VERIFIED uCRM link (docs/44 M7: a stored id alone could hand one
+// person another's job list), a person is sent the brief at most once a day, and as a staff message (an opt-out on a
+// staff number never blocks their work). Elsewhere the 5.18.53 code runs, unchanged.
+require_once dirname(__DIR__) . '/lib/NotifyGate.php';
+$_sbUg = NotifyGate::applies(NotifyGate::STAFF_SIDE, is_array($config) ? $config : [], $dataDir);
+if ($_sbUg) {
+    require_once dirname(__DIR__) . '/lib/StaffDirectory.php';
+    require_once dirname(__DIR__) . '/lib/ContactOptOut.php';
+}
+// It has never reached anyone, so it can be held back: staff_jobs_brief = 0 stops it (tools/set_config.php). Unset, on.
+if ($_sbUg) {
+    $_sbSwitch = $config['staff_jobs_brief'] ?? '';
+    if ($_sbSwitch !== '' && $_sbSwitch !== null && !filter_var($_sbSwitch, FILTER_VALIDATE_BOOLEAN)) {
+        log_msg_staff_jobs('Switched off (staff_jobs_brief) — no brief today.');
+        return;
+    }
+}
+$crm = $_sbUg ? CrmApiClient::fromUcrm(dirname(__DIR__), $config) : new CrmApiClient($config);
 if (!$crm->isConfigured()) {
     log_msg_staff_jobs('CRM not configured — cannot fetch scheduling jobs. Exiting.');
     return;
@@ -58,8 +77,8 @@ $allRetailers = $store->load('retailers.json') ?? [];
 
 // Staff eligible for job notifications
 $staff = array_filter($allRetailers, fn($r) =>
-    in_array($r['role'] ?? 'sales', ['support', 'support_leader', 'admin']) &&
-    !empty($r['is_active']) &&
+    ($_sbUg ? (is_array($r) && StaffDirectory::isActive($r) && StaffDirectory::takesJobs($r))
+            : (in_array($r['role'] ?? 'sales', ['support', 'support_leader', 'admin']) && !empty($r['is_active']))) &&
     empty($r['on_leave']) &&
     !empty($r['phone'])
 );
@@ -69,6 +88,25 @@ if (empty($staff)) {
     return;
 }
 
+// ── Uganda: every open job, read once ────────────────────────────────────
+// uCRM ignores every assignee filter (cron/jobs_cache.php), so the 5.18.53 query below, asked per person with
+// assigneeId, answers with EVERYONE's jobs: fixed as it stood, the brief would have handed each person the whole list,
+// customers' names included. On Uganda the jobs are read once and each person gets those assigned to them, as My Jobs
+// does. A read that fails sends no brief at all: none is better than a wrong one.
+$_sbJobs = [];
+if ($_sbUg) {
+    require_once dirname(__DIR__) . '/lib/TenantProfile.php';
+    $_sbTenant = TenantProfile::current(is_array($config) ? $config : [], $dataDir);
+    $_sbFrom   = date('Y-m-d', strtotime('-7 days'));
+    $_sbRead   = $crm->get("scheduling/jobs?limit=500&dateFrom={$_sbFrom}&statuses[]=0&statuses[]=1");
+    if (!is_array($_sbRead)) {
+        log_msg_staff_jobs('CRM API error reading the jobs: ' . json_encode($crm->getLastError()) . ' — no brief today');
+        return;
+    }
+    $_sbJobs = array_values(array_filter($_sbRead, 'is_array'));
+    if (count($_sbJobs) >= 500) log_msg_staff_jobs('WARNING: uCRM returned ' . count($_sbJobs) . ' jobs, its page limit — a brief may miss jobs past it');
+}
+
 // ── Track unmapped staff for admin alert ─────────────────────────────────
 $unmapped = [];
 
@@ -76,14 +114,23 @@ $unmapped = [];
 foreach ($staff as $person) {
     $name        = $person['name'] ?? 'Staff';
     $phone       = preg_replace('/[^0-9+]/', '', $person['phone'] ?? '');
-    $ucrmUserId  = (int)($person['ucrm_user_id'] ?? 0);
+    $ucrmUserId  = $_sbUg ? StaffDirectory::linkedUcrmUser($person) : (int)($person['ucrm_user_id'] ?? 0);
 
     if (!$ucrmUserId) {
         $unmapped[] = $name;
-        log_msg_staff_jobs("Skipping {$name} — no ucrm_user_id set");
+        log_msg_staff_jobs("Skipping {$name} — " . ($_sbUg ? 'no verified uCRM link' : 'no ucrm_user_id set'));
         continue;
     }
 
+    if ($_sbUg) {
+        // The number as every job message reads it (J3): the tenant's international form, or nobody.
+        $phone = (string)StaffDirectory::phoneOf($person, $_sbTenant);
+        if ($phone === '') {
+            log_msg_staff_jobs("Skipping {$name} — no usable phone number");
+            continue;
+        }
+        $jobs = array_values(array_filter($_sbJobs, fn($j) => (int)($j['assignedUserId'] ?? 0) === $ucrmUserId));
+    } else {
     // Fetch today's jobs assigned to this user from UCRM
     // Also fetch overdue open/pending from last 7 days
     $sevenDaysAgo = date('Y-m-d', strtotime('-7 days'));
@@ -100,6 +147,7 @@ foreach ($staff as $person) {
     }
 
     if (!is_array($jobs)) $jobs = [];
+    }
 
     // Split: today vs overdue
     $todayJobs   = [];
@@ -187,7 +235,9 @@ foreach ($staff as $person) {
         }
 
         $msg .= "\n🔍 *Full details & updates:*\n";
-        $msg .= "🔗 " . dn_plugin_public($config) . "?tab=scheduling\n";
+        // On Uganda the link opens My Jobs: without page=dashboard it is the sign-in page, which sends a signed-in person
+        // to their role's dashboard instead.
+        $msg .= "🔗 " . dn_plugin_public($config) . ($_sbUg ? '?page=dashboard&tab=scheduling' : '?tab=scheduling') . "\n";
         $msg .= "\nPlease start with pending jobs and work through your list systematically.\n";
         $msg .= "Have a productive day! 🛠\n";
         $msg .= "Need support? 📞 " . CustomerContact::support($config) . "\n";
@@ -195,22 +245,37 @@ foreach ($staff as $person) {
     }
 
     // Send via WASender (support channel)
+    if ($_sbUg) {
+        if (!$notify->dedupMark('STAFFBRIEF:' . ((int)($person['id'] ?? 0) ?: $phone) . ':' . $todayStr)) {
+            log_msg_staff_jobs("Skipping {$name} — today's brief was already sent");
+            continue;
+        }
+        $notify->sendVia('support', $phone, $msg, 'staff_jobs_summary', [], ContactOptOut::CLASS_STAFF);
+        // What the provider answered, and never the number: "accepted" is WhatsApp taking it, not the phone showing it.
+        $_sbOk = !empty($notify->lastSendResult()['success']);
+        log_msg_staff_jobs(($_sbOk ? "Brief accepted by WhatsApp for {$name}" : "Brief NOT sent to {$name} (see the Message Log)")
+            . " — today:{$countToday} overdue:{$countOverdue}");
+    } else {
     $notify->sendRaw($phone, $msg, 'staff_jobs_summary');
 
     log_msg_staff_jobs("Sent to {$name} ({$phone}) — today:{$countToday} overdue:{$countOverdue}");
+    }
 
     // Small delay between sends to avoid rate limiting
     usleep(500000); // 0.5 seconds
 }
 
 // ── Alert admin about unmapped staff ─────────────────────────────────────
-if (!empty($unmapped)) {
+// On Uganda once a day, like the briefs: a second run the same day tells the administrator nothing new.
+if (!empty($unmapped) && (!$_sbUg || $notify->dedupMark('STAFFBRIEF:unmapped:' . $todayStr))) {
     $names = implode(', ', $unmapped);
     $adminMsg = "⚠️ *Staff Jobs Summary — Mapping Alert*\n\n"
-        . "The following staff members have no UCRM User ID set and "
+        . ($_sbUg ? "The following staff members have no verified uCRM user link and "
+                  : "The following staff members have no UCRM User ID set and ")
         . "did NOT receive today's job summary:\n\n"
         . implode("\n", array_map(fn($n) => "  • {$n}", $unmapped)) . "\n\n"
-        . "Fix: Plugin → Manage Retailers → Edit each person → set UCRM User ID.\n"
+        . ($_sbUg ? "Fix: Plugin → Manage Retailers → Edit each person → pick their uCRM user (the link is verified by e-mail).\n"
+                  : "Fix: Plugin → Manage Retailers → Edit each person → set UCRM User ID.\n")
         . "Find IDs at: " . dn_crm_web($config) . "/nms/settings/users";
     $notify->sendAdmin($adminMsg, 'staff_jobs_unmapped_alert');
     log_msg_staff_jobs("Admin alert sent — unmapped staff: {$names}");

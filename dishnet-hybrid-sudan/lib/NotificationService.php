@@ -1533,8 +1533,38 @@ class NotificationService
 
     private function sendAdminMsg(string $message, string $event = '', array $vars = []): void
     {
-        if (empty($this->adminPhone)) return;
+        if (empty($this->adminPhone)) { $this->noAdminNumber($event); return; }
         $this->sendVia(self::SUPPORT, $this->adminPhone, $message, $event, $vars);
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 26, S-4): on Uganda an administrator alert with no number to go to leaves a line in uCRM's log
+     * for the plugin, once per alert and day. Before, it vanished, and a missing alert looked like a quiet day.
+     */
+    private function noAdminNumber(string $event): void
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            if (!\NotifyGate::applies(\NotifyGate::STAFF_SIDE, (array)$this->cfgForContacts, $dir)) return;
+            if (!$this->dedupMark('NOADMIN:' . ($event !== '' ? $event : 'alert') . ':' . date('Y-m-d'))) return;
+            require_once __DIR__ . '/PluginLog.php';
+            \PluginLog::write('alerts', 'an administrator alert (' . ($event !== '' ? $event : 'no event name')
+                . ') was not sent: no administrator number is set (whatsapp_admin_phone)');
+        } catch (\Throwable $e) { /* an alert about an alert never breaks its caller */ }
+    }
+
+    /**
+     * 5.18.54 (S-4): a WhatsApp sent outside sendVia() — AlertService's, through Evolution directly — recorded in the
+     * Message Log like any other, so the log shows every alert that went, or failed. "Sent" means Evolution took it.
+     */
+    public function logSend(string $sender, string $event, string $to, string $text, bool $ok, ?int $httpCode = null, ?string $error = null): void
+    {
+        $this->writeLog([
+            'sender' => $sender, 'event' => $event !== '' ? $event : null, 'to' => (string)preg_replace('/[^0-9]/', '', $to),
+            'preview' => mb_substr($text, 0, 70), 'success' => $ok, 'http_code' => $httpCode,
+            'error' => $error !== null ? mb_substr($error, 0, 200) : null, 'sent_at' => date('Y-m-d H:i:s'),
+        ]);
     }
 
     // ══════════════════════════════════════════════════════════════════════

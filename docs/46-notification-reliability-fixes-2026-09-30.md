@@ -93,6 +93,7 @@ administrator side, and reliability.
 | 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows | P3 | new check in the reminder/retry job | An admin alert, and a plugin-log line, when a scheduled job is overdue or failed sends pile up | both raise one alert, with a cooldown |
 | 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
 | 35 | **New, N-6** (found while building rows 9–11): **a guard kept in a keyed JSON document does not work.** The store reads a keyed document back as a list holding the object unless its table is on `SqliteStore::$FLAT_TABLES`, so `isset($log[$key])` is never true — and each save nests the old data a level deeper. Measured on `winback_log.json`, `invoice_notify_log.json`, `wa_templates.json` and `renewal_remind_log.json` | P1 | `lib/WinBack.php`; `includes/api/api_notifications.php` (row 11) | Win-back: once per ended service, guarded in `notification_dedup` (it went on each of the four days of its window); the invoice scan: row 11. The other effects are recorded in §B and decided in §E | two runs, and a run the next day, send one win-back; the old log, nested, is still honoured |
+| 36 | **New, N-8** (found while building row 25): the morning brief asks uCRM for each person's jobs with `assigneeId`, a filter uCRM ignores (`cron/jobs_cache.php` records it). Unnoticed only because the brief never ran: fixed as it stood, it would have sent every technician the whole company's job list, customers' names included | P1 | `cron/staff_jobs_summary.php` | The jobs are read once and each person gets those assigned to them, as My Jobs does, through a verified uCRM link only | a technician's brief holds their jobs and nobody else's; an id typed without the picker matches nobody |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -183,6 +184,52 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   support and sales accounts: every refusal changes nothing; the controls prove the administrator's path still works;
   South Sudan unchanged in each; six weakened copies, each caught.
 
+### Rows 24–29 and 36: the staff side (S-2 … S-7, N-8)
+
+- **The leaders' "Job Accepted" copy (row 24, S-2).** On Uganda it goes once per job and assignment, as message 2
+  does: the claim is `JOBACC<job>:<assignee>`, taken before the first send, and nothing is claimed or sent when the job
+  notifier says the job was not waiting to be accepted. A second tap, or an Accept of a job already in progress, tells
+  the leaders nothing new; a new engineer's Accept does. The text is unchanged.
+- **The morning jobs brief (row 25, S-3; row 36, N-8).** It died on its first line — `new CrmApiClient($config)` hands
+  the settings array to a constructor that takes an address, a `TypeError` — so it has never reached anyone. On Uganda:
+  - the uCRM client is built as every other job builds it;
+  - *found while fixing*: its query filtered by `assigneeId`, which uCRM ignores, so each person would have been sent
+    the whole company's job list, customers' names included (row 36). The open and pending jobs of the past week are now
+    read **once**, and each person gets those assigned to them, as My Jobs does;
+  - a person's jobs are found through their **verified** uCRM link only (docs/44 M7): an id typed without the picker
+    matches nobody — measured, a leader with the technician's id typed in gets no brief;
+  - it goes once a day per person (`STAFFBRIEF:<account>:<date>`), as a staff message through the support number, to
+    the number in international form, as every job message goes; the administrator's list of accounts with no verified
+    link, once a day;
+  - its link opens My Jobs (`?page=dashboard&tab=scheduling`); without `page=dashboard` it was the sign-in page, which
+    sends a signed-in person to their role's dashboard instead;
+  - the run's log says what WhatsApp answered — *accepted*, not *delivered* — and carries no phone number;
+  - **it goes from the first 07:00 after deployment** (§E-7). `staff_jobs_brief = 0` holds it back
+    (`php tools/set_config.php --key staff_jobs_brief --value 0`).
+- **Alerts that went nowhere (row 26, S-4).**
+  - An administrator alert with no number (`whatsapp_admin_phone` unset) leaves one line a day, per alert, in uCRM's
+    log for the plugin, naming the alert and the setting; before, it vanished.
+  - An operations alert (`AlertService`: the watchdog, the escalations) with no number (`alert_whatsapp`) does the
+    same. One that went, or failed, is a Message Log row like any other send — *sent* meaning WhatsApp took it.
+  - *Measured while building:* the alert service read the HTTP status under a key the WhatsApp client does not return,
+    so it was always empty; it reads the right one.
+- **The alert-number field (row 27, S-5)** suggests `+256 7XX XXX XXX`, the tenant's example, not Sudan's `+249`.
+- **The Workbench bulk send (row 28, S-6)** counts what WhatsApp accepted: a refused message is counted as failed,
+  with WhatsApp's reason, where it was counted as sent. A message with no text is counted as failed too (the sender
+  returns before it records a result). *Unchanged, and stated:* the Workbench claims its guard before it sends, so a
+  refused message is not sent again by a second bulk send — it waits in the Failed Queue, as every failed send does.
+- **The help page (row 29, S-7).** The WhatsApp answers say what this install does: the Message Log and the Failed
+  Queue (and that *sent* means WhatsApp took it); the plugin sends the WhatsApp messages, uCRM its own e-mails, set in
+  uCRM; a one-off message goes from WA Inbox & Bot; there is no broadcast screen. Gone: the "Notify tab" that does not
+  exist, the WASender server this install does not use, and "our plugin never touches" the invoice, payment and
+  suspension messages it sends.
+- **Tests:** `tests/test_notify_staff_side.php`, **53**, through the real plugin under `php -S`: the Accept four ways;
+  the brief run twice against a week of jobs, a leader with an unverified id and an accountant, and held back once; the
+  alerts raised by `tests/fixtures/notify_alert_probe.php` inside the sandbox, with and without numbers and with a
+  refusal; both screens; the Workbench against a refusing WhatsApp. South Sudan unchanged in each — its brief still
+  dies on its first line. Thirteen weakened copies, each caught, each by the defect itself (a copy that merely crashed
+  is never counted as caught).
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -227,6 +274,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–11, 20, 35 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–11, 20, 24–29, 35, 36 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
+| E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-6 | Add the keyed files of row 35 to `SqliteStore::$FLAT_TABLES`, for every tenant | After E-5, and with South Sudan's approval: it fixes their win-back repeat too, and it would switch on renewal reminders wherever enabled | Uganda is fixed at each sender |

@@ -192,6 +192,10 @@ $FLAGS = [
     'pay_airtel_merchant' => ['text',
         'Airtel Money merchant ID customers pay — digits only; shown on quotations and in e-mails '
       . 'with "dial *185*9#" (unset = not shown)'],
+    // 5.18.54 (docs/46 row 25, S-3): the 07:00 jobs brief to each technician, on Uganda. Until 5.18.54 it died on its
+    // first line and reached nobody; fixed, it goes every morning. 0 holds it back.
+    'staff_jobs_brief' => ['bool',
+        'The morning jobs brief to each technician with a verified uCRM link, 07:00 (Uganda; unset = on, 0 = off)'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
