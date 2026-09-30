@@ -833,16 +833,17 @@ sender is proven before uCRM's is switched off**. In that record's words: *"Turn
 which is worse than duplication"* (UGANDA-EMAIL-OWNERSHIP.md:40-42; docs/45 §5).
 
 **No uCRM notification was switched on or off, and no plugin e-mail switch was changed.** Where uCRM may send its own
-copy of a plugin message, both stay until you decide (O1–O6), after uCRM's own settings are read (V1–V3).
+copy of a plugin message, both stay until you decide (O1–O6: E-10 and E-12), after uCRM's own settings are read
+(V1–V3).
 
 ### §C.1 What stays where
 
 | Messages | Owner after this work | What this work changed |
 |---|---|---|
-| Customer WhatsApp, every event | the plugin (uCRM has none) | once per event and per payment (rows 2–4, 12, 15, 17, 19, 38); one reminder path, in the daytime (5–7); wording that was wrong (8, 13, 21); numbers in international form (14) |
+| Customer WhatsApp, every event | the plugin (uCRM has none) | once per event and per payment (rows 2–4, 12, 15, 17, 19, 38); one reminder path, in the daytime (5–7); wording that was wrong (8, 13, 21); numbers in international form (14, and the Starlink order notices, 45); a refused message retried, one that may have gone never resent (30, 31); an invoice approved from a draft no longer lost when the phone is added later (47) |
 | Portal login codes | the plugin | nothing |
 | Staff job messages and the morning brief | the plugin | rows 24–29, 36 |
-| Admin alerts | the plugin, to numbers that are not set (M10) | an alert with no number now leaves a plugin-log line (row 26); the watchdog is row 32 |
+| Admin alerts | the plugin, to numbers that are not set (M10) | an alert with no number now leaves a plugin-log line (row 26); the watchdog is row 32; an alert that may have gone is not sent again (row 44) |
 | Transactional e-mail: invoice, receipt, welcome, paused, resumed, installation, support, quotation | the plugin since 15 September; uCRM possibly too (N1, N4, N5, N6, none verified) | nothing: the duplicates D1, D5 and D9 wait for O1–O3 and O6 (§D) |
 | The overdue e-mail ladder (postpaid only) | the plugin | it sends from its own run, and records what went (rows 23, 40) |
 | uCRM's reminder e-mails (N2, N3) | uCRM, if switched on (not verified) | nothing: O4, O5 |
@@ -861,7 +862,9 @@ Every duplicate this work removes lies inside the plugin: two plugin paths, or o
 - the quotes (17, 38);
 - the welcome and "Request Confirmed!" (19);
 - the ladder's weekly repeat (23);
-- the leaders' copy (24).
+- the leaders' copy (24);
+- a WhatsApp sent again after a timeout, by Evolution's retry, the AI replies or the follow-ups (31);
+- an administrator alert sent again after a failure that may have gone through (44).
 
 **Duplicates between the plugin and uCRM are not touched** (D1, D5, D9, D2a): removing one would mean switching one
 sender off, which is O1–O6.
@@ -895,7 +898,7 @@ sender off, which is O1–O6.
 | M7 | Bulk e-mail | uCRM Mailing is the candidate (O7), after V2 and V5 |
 | M8 | Consent and unsubscribe for promotional messages | Beyond win-back (row 20): a design of its own, needed before any marketing (G5) |
 | M12 | No production proof | A controlled test with test accounts after deployment (§G). Tests here prove the code, not delivery |
-| D1, D5 (uCRM's e-mail), D9 (uCRM's notice) | uCRM may send its own copy | Ownership decisions O1–O5, after V1–V3. **uCRM's notifications are not switched off by this work** |
+| D1, D5 (uCRM's e-mail), D9 (uCRM's notice) | uCRM may send its own copy | Ownership decisions O1–O5 (E-12), after V1–V3. **uCRM's notifications are not switched off by this work** |
 | G10, S-7's screen | A WhatsApp broadcast screen | A new feature and a decision |
 | G6 | Uganda-branded uCRM templates | Only if uCRM keeps any client e-mail after O1–O3 |
 | N-14 | The lead pages (Sales → WhatsApp leads, Engage → WhatsApp) send with the older client, `EvolutionApiClient`, and after **any** error, a timeout included, send the same text again through the notifier. So a lead can get it twice. When the notifier is used, the page reports a failure whatever happened, because it reads a result the notifier does not return (`sendVia` returns nothing) | They are staff actions on leads, not automatic notifications, and a fix means changing that older client, which cannot tell "not sent" from "may have been sent". **Recommended:** fall back only when nothing was sent, and read the notifier's real result |
@@ -919,3 +922,30 @@ Collected as the build goes; completed with the final report.
 | E-9 | The quote PDF retry list (rows 17, 35): a quote PDF that could not be fetched when its text went is queued for a retry that never reads back. Make it work, or leave it | Leave it until a quote has gone out text-only in production: the retry would send a PDF up to an hour after its text | Unchanged: text-only |
 | E-6 | Add the keyed files of row 35 to `SqliteStore::$FLAT_TABLES`, for every tenant | After E-5, and with South Sudan's approval: it fixes their win-back repeat too, and it would switch on renewal reminders wherever enabled | Uganda is fixed at each sender |
 | E-10 | Who e-mails a KYC quote (docs/45 O6, F4)? Today uCRM is asked to send it, and the plugin's own quotation e-mail may send a second (D2a) | **The plugin, for every quote, as docs/45 recommends**, after uCRM's quotation notice is read (V1) and one real plugin quotation e-mail has been seen. Then, with the plugin's quotation e-mail on (`quote_email_via_plugin`), `kyc_quote_send_via_crm = 0` (row 18) is the whole change. **With it off, that setting would leave a KYC quote with no e-mail at all**, so the two go together | uCRM is asked to send it, as today |
+| E-11 | Who receives administrator alerts? The watchdog (row 32) writes to `whatsapp_admin_phone`. The other alerts go to `alert_whatsapp`: the AI's and the website chat's hand-overs to a person, chats left unanswered, the WhatsApp webhook guard and the Starlink mail worker. Neither was set on 27 September (docs/45 M10) | Set both after deployment, to a number someone reads. If a job is already stopped, the watchdog's first alert comes within about 15 minutes | Every alert leaves a line in uCRM's log for the plugin; nothing reaches a phone |
+| E-12 | Who sends each customer e-mail that uCRM may send as well (docs/45 O1–O4): the new invoice (D1), the receipt (O2), suspension, pause and resumption (D9, O3), and uCRM's reminder e-mails (N2, N3; D5) | **Not yet**: uCRM's e-mails stay on for now. First read uCRM's notification settings, mailer and e-mail log (V1–V3). Then keep one sender per kind: the plugin's where its e-mail of that kind is on and one real one has been seen, by switching uCRM's notice off in uCRM's own screen; otherwise uCRM's. The plugin's side needs no code: `customer_emails_enabled`, and one switch per kind (`customer_email_invoice`, `customer_email_payment_received`, `customer_email_service_paused`, `customer_email_service_resumed`) | Both stay as they are: where both are on, a customer can get two e-mails for one event |
+
+## §F Coverage: every item of docs/45, and where it went
+
+Every identifier docs/45 uses, by kind:
+- **row**: fixed in this work (§A, §B);
+- **§C**: ownership, left where it is on purpose;
+- **§D**: deferred, with the reason;
+- **§E**: a decision for you;
+- **§G**: checked after deployment.
+
+| docs/45 | Where it went |
+|---|---|
+| **Defects D-1 … D-10** | rows 1 (D-1), 2 (D-2), 9 (D-3), 5 (D-4), 23 (D-5), 16 and 37 (D-6), 11 (D-7), 18 (D-8), 13 (D-9), 14 (D-10) |
+| **Duplicates D1 … D10** | D1, D5 (uCRM's e-mail) and D9 (uCRM's notice): §C, §D and E-12, after V1–V3 · D2: (a) the KYC quote's e-mail, row 18 and E-10; (b) a plugin quote's uCRM e-mail when the plugin's own is off or failed, E-10; (c) row 17 · D3 (a, b, c): rows 2–4 · D4, D5: row 5 · D6: protected by `INV<number>`; its one hole, the admin scan with `send=1`, is row 11, and draft approval's claim is row 47 · D7: row 12 · D8: row 19 · D10: row 15 |
+| **Conflicts C1 … C9** | rows 8 (C1, C2), 11 (C3), 22 (C4), 13 (C5), 9 (C6), 1 (C7), 12 and 21 (C8), 20 (C9) |
+| **Staff side S-1 … S-7** | rows 10 (S-1) and 24–29 (S-2 … S-7) |
+| **Missing M1 … M12** | M1, M2, M3, M5, M6, M7, M8, M12: §D · M4: row 30 (WhatsApp), §D (e-mail) · M9: row 14 · M10: row 26 (a missing number is logged) and §G (set it) · M11: below |
+| **M11: paths no test ran** | Each now runs in a test: `invoice.near_due` and `invoice.overdue` (row 5); `service.postpone`, `service.end` and `quote.approve` (row 15); `credit_note.add` (row 12); the WhatsApp side of `payment.add` (rows 1–4); `cron_invoice_notify` (rows 6, 33, 47); the daily job's tasks 4, 4a and 4b, and win-back, in both countries (rows 5–8, 20); the app push (row 21); `crm_fix_notifications` (row 11); `invoice.draft_approved` (row 47). None is left |
+| **Gaps G1 … G11** | G1: row 14 · G2: §D M1 · G3: §D M4 · G4: §D M3 · G5: row 20 (STOP) and §D M8 · G6, G10: §D · G7: each row's tests, and M11 above · G8: §D M5 · G9: §D M6 · G11: §G (the numbers are settings) and rows 26–27 |
+| **Ownership O1 … O8** | O1, O2, O3, O6: §C; uCRM's possible copies are E-12, after V1–V3, and O6 is E-10 · O4, O5: the plugin's side is rows 5–8 and E-2; uCRM's reminder e-mails are E-12 · O7: §D M7 · O8: row 13, since the activation text no longer promises an e-mail, and §C |
+| **Verification V1 … V11** | §0.2 and §G. All are reads of uCRM or of the server, which this work cannot make |
+| **R0** (a read-only facts command) | not built. §G's checks are read-only queries a person runs; the command remains an offer |
+
+**Found during this work (N-1 … N-22):** each is a row of §A or a line of §D. N-12, N-14, N-20 and N-22 are in §D;
+every other number is a row.
