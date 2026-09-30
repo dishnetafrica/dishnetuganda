@@ -24,10 +24,10 @@ final class NotifyGate
     public const ACTION_LINKS   = 'action_links';     // 11: no GET link that sends or changes uCRM (D-7, C3)
     public const CREDIT_NOTE    = 'credit_note_once'; // 12: one credit-note message, in the tenant's currency (D7)
     public const ACTIVATION     = 'activation_text';  // 13: no promise of an e-mail nobody sends (D-9)
-    public const PHONE_FORM     = 'phone_form';       // 14: international form before WhatsApp (D-10)
+    public const PHONE_FORM     = 'phone_form';       // 14, 45: international form before WhatsApp (D-10, N-18)
     public const EVENT_ONCE     = 'event_once';       // 15: one message per uCRM event (D10)
     public const DRAFT_IDENTITY = 'draft_identity';   // 16: add_draft passes the client, not the invoice (D-6)
-    public const QUOTE_ONCE     = 'quote_once';       // 17: one WhatsApp per plugin quote (D2c)
+    public const QUOTE_ONCE     = 'quote_once';       // 17, 46: one WhatsApp per plugin quote (D2c); its cron's log (N-19)
     public const KYC_QUOTE_SEND = 'kyc_quote_send';   // 18: uCRM's refusal to send a KYC quote is logged (D-8)
     public const KYC_WELCOME    = 'kyc_welcome';      // 19: welcome and "Request Confirmed!" never both (D8)
     public const WINBACK_OPTOUT = 'winback_optout';   // 20: STOP stops win-back (C9)
@@ -35,15 +35,17 @@ final class NotifyGate
     public const LADDER_RECORD  = 'ladder_record';    // 23: the e-mail ladder records a later success (D-5)
     public const STAFF_SIDE     = 'staff_side';       // 24-29: S-2 … S-7
     public const RETRIES        = 'retries';          // 30: bounded automatic retries (M4)
-    public const EVO_RETRY      = 'evo_retry';        // 31: no automatic resend after a timeout (N-1)
+    public const EVO_RETRY      = 'evo_retry';        // 31, 44: no automatic resend after a timeout (N-1, N-17)
     public const WATCHDOG       = 'watchdog';         // 32, 43: jobs stopped, failures piling up; where that is seen (N-16)
     public const MAIL_CLASS     = 'mail_class';       // 40: the ladder's SMTP sender loads the class it calls (N-11)
+    public const DRAFT_CLAIM    = 'draft_claim';      // 47: draft_approved claims its invoice after the phone check (N-21)
 
     public const ALL = [
         self::PAYMENT_FLOW, self::RECEIPT_ONCE, self::REMINDERS, self::EVENT_MAP, self::QUEUE_ADMIN,
         self::ACTION_LINKS, self::CREDIT_NOTE, self::ACTIVATION, self::PHONE_FORM, self::EVENT_ONCE,
         self::DRAFT_IDENTITY, self::QUOTE_ONCE, self::KYC_QUOTE_SEND, self::KYC_WELCOME, self::WINBACK_OPTOUT, self::TENANT_TEXT,
         self::LADDER_RECORD, self::STAFF_SIDE, self::RETRIES, self::EVO_RETRY, self::WATCHDOG, self::MAIL_CLASS,
+        self::DRAFT_CLAIM,
     ];
 
     /** Fixes approved for every tenant, South Sudan included. Empty until approved (docs/46 §E). */

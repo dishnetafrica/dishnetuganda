@@ -436,6 +436,8 @@ $failedWhere = function (array $triples, string $what): bool {
     foreach ($triples as [$ok, $m]) if (!$ok && strpos($m, $what) !== false) return true;
     return false;
 };
+/** Row 46's clearing at the start of a document send, as lib/NotificationService.php has it. */
+const NR_DOC_CLEAR = "        if (\$this->quoteLogUg()) { \$this->_lastSendSuccess = false; \$this->_lastHttpCode = null; \$this->_lastError = null; }\n";
 $mutants = [
     'every failure retried, a timeout included' => [[['lib/NotificationRetry.php',
         "        return \$class === self::NOT_SENT || \$class === self::REFUSED;\n", "        return true;\n"]],
@@ -457,9 +459,14 @@ $mutants = [
     'retry mode left on after an exception' => [[['lib/NotificationService.php',
         "        } finally {\n            \$this->_retryMode = false;\n        }\n\n        \$sent = \$stopped === null", "        }\n\n        \$sent = \$stopped === null"]],
         fn(string $t) => ($c = $caseStuckMode($t, 'uganda')) && $c['row2'] === [], 'the later failure went unqueued'],
-    'the last result not cleared before a retry' => [[['lib/NotificationService.php',
+    // Since row 46 a document send clears the last result itself on Uganda (QUOTE_ONCE), so the retry's own clearing is
+    // a second guard there. It is the only one wherever RETRIES applies and QUOTE_ONCE does not — each fix is approved
+    // for South Sudan on its own (docs/46 E-4) — which this copy models by switching the document send's clearing off.
+    // The control after the loop shows that the retry's clearing then holds by itself.
+    'the last result not cleared before a retry (where the document send does not clear it)' => [[['lib/NotificationService.php',
         "        \$this->_lastSendSuccess = false; \$this->_lastHttpCode = null; \$this->_lastError = null;\n        \$this->_retryMode = true;\n        \$stopped = null;\n",
-        "        \$this->_retryMode = true;\n        \$stopped = null;\n"]],
+        "        \$this->_retryMode = true;\n        \$stopped = null;\n"],
+        ['lib/NotificationService.php', NR_DOC_CLEAR, '']],
         fn(string $t) => ($c = $caseStale($t, 'uganda')) && ($c['row1']['status'] ?? '') === 'sent', 'the opted-out row read sent'],
     'Retry All sends what may have been sent' => [[['lib/NotificationService.php',
         "                if (\\NotificationRetry::classify(\$row['error'], \$row['http_code']) === \\NotificationRetry::MAYBE_SENT) {\n                    \$result['skipped']++;\n                    continue;\n                }\n", '']],
@@ -485,6 +492,21 @@ foreach ($withMutants ? $mutants : [] as $name => [$edits, $caught, $why]) {
     if (!$okAnchors) { is_(false, "caught: {$name}", "the anchor was not found exactly once in {$miss}"); nr_drop($t); continue; }
     $ok = (bool)$caught($t);
     is_($ok, "caught: {$name}" . ($ok ? " ({$why})" : ''));
+    nr_drop($t);
+}
+if ($withMutants) {
+    // Control on the control: the document send's clearing alone switched off (RETRIES without QUOTE_ONCE). The retry's
+    // own clearing still reports the opted-out row as not sent, so each of the two guards holds by itself.
+    $t = nr_tree($root);
+    $src = (string)file_get_contents($t . '/lib/NotificationService.php');
+    if (substr_count($src, NR_DOC_CLEAR) !== 1) {
+        is_(false, 'control: the document send\'s clearing is found exactly once');
+    } else {
+        file_put_contents($t . '/lib/NotificationService.php', str_replace(NR_DOC_CLEAR, '', $src));
+        $c = $caseStale($t, 'uganda');
+        is_(($c['row1']['status'] ?? '') === 'failed',
+            'control: without the document send\'s clearing, the retry\'s own still reports the opted-out row as not sent', nr_show($c));
+    }
     nr_drop($t);
 }
 

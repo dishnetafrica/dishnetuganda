@@ -2693,7 +2693,11 @@ switch ($changeType) {
 
         // ── Atomic dedup: SQLite INSERT OR IGNORE — race-safe with invoice.add + cron
         $invLogKey = "INV{$invoNum}";
-        if (!$notify->dedupMark($invLogKey)) {
+        // 5.18.54 (docs/46 row 47, N-21), Uganda only: the claim waits for the phone, as invoice.add's does. Taken here, a
+        // client with no phone used it up, and the 15-minute scanner, which honours it, never announced the invoice once
+        // a phone was added.
+        $_draftClaimLate = NotifyGate::applies(NotifyGate::DRAFT_CLAIM, $config, $dataDir);
+        if (!$_draftClaimLate && !$notify->dedupMark($invLogKey)) {
             whLog($changeType, "Already notified: #{$invoNum} — skipping");
             whResp(200, 'draft_approved — already notified.');
         }
@@ -2739,6 +2743,10 @@ switch ($changeType) {
             'remaining'   => $creditData['remaining'], 'scenario' => $creditData['scenario'],
         ]);
 
+        if ($phone && $_draftClaimLate && !$notify->dedupMark($invLogKey)) {
+            whLog($changeType, "Already notified: #{$invoNum} — skipping");
+            whResp(200, 'draft_approved — already notified.');
+        }
         if ($phone) {
             whSendInvoiceNotification($notify, $crm, $phone, $name,
                 $invoiceId, $invoNum, $amount, $dueDate ?: 'See invoice',

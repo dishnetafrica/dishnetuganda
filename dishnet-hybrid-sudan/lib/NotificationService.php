@@ -1611,6 +1611,10 @@ class NotificationService
      */
     public function sendDocument(string $sender, string $toPhone, string $publicUrl, string $filename, string $caption = '', string $event = '', string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
+        // 5.18.54 (docs/46 row 46, N-19), Uganda only: a document send starts from no result, as sendVia has since Phase 2,
+        // so a caller reading lastSendResult() after an early return (no number, an opt-out, PDFs switched off) reads this
+        // call's outcome, not the previous send's. The quote cron's log is that caller.
+        if ($this->quoteLogUg()) { $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null; }
         if (empty($toPhone) || empty($publicUrl)) return;
         if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
@@ -2455,6 +2459,18 @@ class NotificationService
             // Return partial results
         }
         return $result;
+    }
+
+    /** 5.18.54 (docs/46 row 46): Uganda only. */
+    private function quoteLogUg(): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            return \NotifyGate::applies(\NotifyGate::QUOTE_ONCE, (array)$this->cfgForContacts, $dir);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /** 5.18.54 (docs/46 row 30): Uganda only. */

@@ -102,6 +102,10 @@ administrator side, and reliability.
 | 41 | **New, N-13** (found while building row 31): a read (GET) that meets a 500 with a plain-text body retries with the response where its request body belongs, and dies of a TypeError. The reads are the instance and webhook checks | P3 | `lib/EvolutionApiService.php` | On Uganda a read's retry keeps its own body | the read retries, three requests, and ends in an error, not an exception |
 | 42 | **New, N-15** (found while building row 30): a person's retry from the Failed Queue could lose later failures, and report a message sent that was not. A retry whose send stopped with an error left the notifier in retry mode, so every later failed send in that process went unqueued, and left its row `retrying`, which no list shows. A retry that sent nothing read the previous send's result: a document row for a number that had opted out read *sent* | P2 | `lib/NotificationService.php` | On Uganda retry mode always ends, the last result is cleared before the send, a retry that sent nothing says so, and the row is claimed in one statement | a later failure after a stopped retry is queued; the opted-out row reads failed, *no attempt was made* |
 | 43 | **New, N-16** (found while building row 32): the two places a person looks to see whether the scheduled jobs run misread master's record. System Health reads the age of `master_schedule.json`, a file nothing writes (master saves its record to the database), so it says *has never run* while master runs. The cron status tool takes its zone from a literal master.php no longer has, so its headline is in another zone than its rows; and it would list jobs gated to Uganda on South Sudan, as *NEVER RUN* | P3 | `tabs/admin/system_health.php`, `tools/cron_status.php` | On Uganda System Health reads the record where master writes it, with the watchdog's conditions beside it, and the tool makes master's own zone call. On both, a job gated off is not listed, so South Sudan's list is 5.18.53's | Uganda: *last ran under 2 minutes ago*, a stopped job named, the headline in Kampala time; South Sudan: the 5.18.53 row, and the 5.18.53 tool's job list |
+| 44 | **New, N-17** (found while building row 32): an administrator alert that may have reached the phone is sent again at the next run. `AlertService` releases its cooldown after any failed send, one that may have gone (row 31) included | P3 | `lib/AlertService.php` | On Uganda the cooldown is kept after a send that may have gone; after one that certainly did not leave it is released, as before | one request for an alert that may have gone; two for one that never left |
+| 45 | **New, N-18** (found while building row 32): the Starlink mail worker's customer WhatsApps (order confirmed, shipped, service active) go to the number as uCRM stores it. They go through Evolution directly, so row 14's international form never reached them: a local form is not a WhatsApp address, and the event is recorded as notified | P2 | `workers/StarlinkMailWorker.php` | On Uganda the number in international form, as every notifier send; a number with none is not sent to | *0772 000 001* is sent to 256772000001; *12345* is not sent to, and not recorded as notified |
+| 46 | **New, N-19** (found while building row 32): the quote cron's log says *TEXT SENT* and *PDF SENT* whatever happened, because the notifier's sends return nothing. And a document send that returns before sending (PDFs switched off, an opt-out) leaves the previous send's result in place | P3 | `cron_quote_wa.php`, `lib/NotificationService.php` | On Uganda the log reads the notifier's result: *NOT SENT*, with its reason, when it did not go; a document send starts from no result, as a text send has since Phase 2 | a refused text reads TEXT NOT SENT and waits in the Failed Queue; with PDFs switched off the PDF reads PDF NOT SENT; a quotation that went reads as before |
+| 47 | **New, N-21** (found while mapping docs/45 M11): `invoice.draft_approved`, the event uCRM's automatic invoicing raises, takes the invoice's claim (`INV<number>`) before it reads the customer's phone. With no phone, nothing is sent and the claim stays, so the 15-minute scanner, which honours it, never announces the invoice once a phone is added. `invoice.add` reads the phone first. No test ran this path (M11) | P2 | `webhook.php`, `lib/NotifyGate.php` | On Uganda the claim is taken just before the send, as `invoice.add` takes it | a customer with a phone: one WhatsApp, and none for a redelivery; with no phone: no claim, and once a phone is added the scanner sends it, once |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -718,6 +722,69 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
 
   Five weakened copies, each caught.
 
+### Rows 44–47: four found while building row 32 and mapping docs/45 (N-17, N-18, N-19, N-21)
+
+Each is on Uganda only; South Sudan keeps 5.18.53. Rows 44–46 sit behind the gate of the row whose rule they extend;
+row 47 has its own.
+
+- **Row 44 (N-17): an alert that may have gone is not sent again.** `AlertService` takes its cooldown before a send
+  and releases it when the send fails, so that the next run tries again. Since row 31 a failure says whether the
+  message may nevertheless have left: *"May have been sent — …"*, or a 502 or 504 on the POST. Released after one of
+  those, the same alert went to the administrator again at the next run of whatever raised it (the watchdog, the
+  hand-over, the Starlink mail worker).
+  - The cooldown is now kept after such a failure. After one that certainly did not leave, or a refusal, it is
+    released as before. Gate: row 31's (`EVO_RETRY`).
+  - Measured before the fix: two requests to Evolution for one alert that may have gone (the test failed 2 of its 6
+    checks, both doubtful kinds).
+  - `tests/test_alert_maybe_sent.php`, **9**: the real `AlertService` against a scripted Evolution, for both kinds
+    of doubtful failure, two certain ones and South Sudan. Three weakened copies, each caught.
+- **Row 45 (N-18): the Starlink order notices go to a WhatsApp address.** The Starlink mail worker tells a customer
+  that their order is confirmed, that the kit has shipped, or that the service is active.
+  - It sends through Evolution directly, not through the notifier, so row 14's rule (D-10: international form before
+    WhatsApp) never reached it. It passed on the number as uCRM stores it.
+  - Measured before the fix: *0772 000 001* went out as given. Evolution reduces it to 0772000001, which is not a
+    WhatsApp address, and the event was recorded as *notified* (the test failed 3 of its 4 checks).
+  - Now the number goes in international form: *0772 000 001* is sent to 256772000001. A number with no international
+    form (*12345*) is not sent to, and the event is not recorded as notified. A number already international reached
+    WhatsApp before too; it now has the notifier's form. Gate: row 14's (`PHONE_FORM`).
+  - How uCRM stores Uganda's numbers is not known (§0.2), so this works whichever form they are in.
+  - `tests/test_starlink_notice_number.php`, **7**: the real worker's `processEmail`, with fakes for uCRM,
+    Evolution and the classifier. Three weakened copies, each caught.
+  - The notices still leave no Message Log row and no failure-queue entry: §D, N-20.
+- **Row 46 (N-19): the quote cron's log says what happened.**
+  - `cron_quote_wa.php` wrote *TEXT SENT* and *PDF SENT* after every send, because the notifier's sends return
+    nothing. Measured before the fix: WhatsApp refused a quotation's text, the Failed Queue held it, and the cron's
+    log (`quote_wa_log.json`) said *TEXT SENT*; with PDFs switched off it said *PDF SENT* (2 of 6 checks failed).
+  - Now each line reads the notifier's result: *TEXT NOT SENT (reason)* when it did not go. The five log sites share
+    one helper. Gate: row 17's (`QUOTE_ONCE`), the quote cron's own.
+  - The notifier needed one change for that to hold. A text send has started from no result since Phase 2; a document
+    send did not, so a PDF that the notifier returned before sending (PDFs switched off, an opt-out) left the text's
+    result in place, and the log would have said *PDF SENT*. On Uganda a document send now starts from no result too.
+    No other caller reads the result after a document send (the four that read it follow a text send), and the
+    manual retry already clears it first (row 42).
+  - That makes row 42's clearing a second guard on Uganda, so the retries suite (rows 30 and 42) no longer caught the
+    weakened copy that drops it. The copy now drops the document send's clearing too: a server where RETRIES applies
+    and QUOTE_ONCE does not, which approving the fixes for South Sudan one at a time (E-4) allows. A new control shows
+    the retry's own clearing holds by itself there. `tests/test_notify_retries.php`: 58, was 57.
+  - What the cron sends, when, and to whom is unchanged. A refused text still claims the quote (row 17), so the cron
+    does not send it again; row 30's retry does, if WhatsApp refused it.
+  - `tests/test_quote_cron_log.php`, **10**: the real cron through the sandbox, with the fake Evolution refusing
+    text sends, and once with PDFs switched off. Four weakened copies, each caught.
+- **Row 47 (N-21): an invoice approved from a draft is not lost for want of a phone.**
+  - uCRM's automatic invoicing makes a draft and approves it, which raises `invoice.draft_approved`. Its handler took
+    the shared claim `INV<number>` before it read the customer's phone. With no phone, nothing was sent and the claim
+    stayed, so the 15-minute scanner, which honours the claim, never announced the invoice once a phone was added.
+    `invoice.add` has always read the phone first.
+  - Now, on Uganda, the claim is taken just before the send, as `invoice.add` takes it. Gate: `DRAFT_CLAIM`, its own.
+    One cost, accepted: an event uCRM delivers twice now reads the client from uCRM before it meets the claim, and
+    then sends nothing, as before.
+  - Measured before the fix, through the real webhook and the real scanner: the invoice for the customer with no phone
+    was claimed, and once a phone was added the scanner sent nothing (2 of 6 checks failed).
+  - docs/45 M11 listed this path as one no test ran. `tests/test_draft_approved_claim.php`, **9**, runs it. It
+    checks one WhatsApp for a customer with a phone, none for uCRM delivering the event again, no claim without a
+    phone, and the scanner sending it once a phone is added. South Sudan as in 5.18.53. Three weakened copies, each
+    caught.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -832,6 +899,7 @@ sender off, which is O1–O6.
 | G10, S-7's screen | A WhatsApp broadcast screen | A new feature and a decision |
 | G6 | Uganda-branded uCRM templates | Only if uCRM keeps any client e-mail after O1–O3 |
 | N-14 | The lead pages (Sales → WhatsApp leads, Engage → WhatsApp) send with the older client, `EvolutionApiClient`, and after **any** error, a timeout included, send the same text again through the notifier. So a lead can get it twice. When the notifier is used, the page reports a failure whatever happened, because it reads a result the notifier does not return (`sendVia` returns nothing) | They are staff actions on leads, not automatic notifications, and a fix means changing that older client, which cannot tell "not sent" from "may have been sent". **Recommended:** fall back only when nothing was sent, and read the notifier's real result |
+| N-20 | Four paths send WhatsApp through Evolution directly, not through the notifier: the follow-up sender (`cron/followup_send.php`), the AI replies (`workers/AiReplyWorker.php`), the Starlink order notices (`workers/StarlinkMailWorker.php`, row 45) and the lead pages (N-14). Each keeps its own record: the follow-up tables, the conversation and the worker's log, `starlink_events` and uCRM's client log, and nothing for the lead pages. None writes a Message Log row or queues a failure, so the Message Log is not the whole record, and the Failed Queue and row 30's retry do not cover them. Opt-outs are honoured on all four (Evolution checks them). A fifth, the job-assignment notice (`cron/job_assignment_notify.php`), is not scheduled | Routing them through the notifier changes their senders, their records and, for the AI replies, their timing. Each is its own change. **Recommended order:** the Starlink notices (customer-facing, one message type each), then the follow-ups |
 | N-12 | The 07:00 cashbook report (`lib/DailyReportService.php`, sent from `main.php`) makes the same `MailService::ehloName()` call without loading the class, and catches only `Exception`, which a missing class is not. Measured by reading, and by loading exactly what `main.php` loads before it: the class is absent. So from `main.php` the report connects, fails, and — failing before its day is marked — tries again at every tick until midnight | It is the accounts team's cashbook report, not a customer notification, and this work changes no reporting. **Recommended as its own one-line change** (the same class load), for both tenants; its log line `Daily report ERROR` says whether it has been failing |
 | N-22 | A job tied to one hour runs only when a master cycle falls inside that hour, and a missed hour is not made up: the Monday 09:00 overdue e-mail ladder then waits a week, and the 07:00 staff brief a day. master runs on uCRM's tick, about every five minutes, so an hour is missed only when the plugin does not run for that whole hour, or when the jobs dispatched before it spend each cycle's budget. Row 6 gave the customer reminders a window instead (09:00–17:00, made up the same day). The staff reports at 08:00, 18:00 and 23:00 behave the same way; they are outside this work | A window changes when each job goes, which is a decision for each (a 07:00 brief sent at 11:00, a Monday ladder on Tuesday). What this work adds is that a miss is seen: row 32's watchdog reports the brief two hours after the slot it missed, and the ladder the next day. **Recommended:** the ladder first — customer-facing, and a miss costs a week |
 
@@ -844,7 +912,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–43 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–47 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

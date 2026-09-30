@@ -65,6 +65,9 @@ $quoteCrm = $_adminToken
     : $crm;
 
 $notify  = new NotificationService($store, $config);
+// 5.18.54 (docs/46 row 46, N-19), Uganda only: the log says what the notifier did (qwa_said, below).
+require_once __DIR__ . '/lib/NotifyGate.php';
+$_qwaSaid = NotifyGate::applies(NotifyGate::QUOTE_ONCE, is_array($config) ? $config : [], $dataDir);
 $quotSvc = new QuotationService($store, $dataDir, $config);
 
 // ── Ensure quote_pdfs directory exists ─────────────────────────────────────
@@ -205,7 +208,7 @@ foreach ($apps as $app) {
     try {
         $notify->sendVia(NotificationService::SUPPORT, $phone, $msg, 'ops_quote_wa');
         $waSent = true;
-        qwa_log("TEXT SENT KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
+        qwa_log(qwa_said($notify, 'TEXT', $_qwaSaid) . " KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
     } catch (\Throwable $e) {
         qwa_log("TEXT FAILED KYC app #{$appId} quote #{$quoteId}: " . $e->getMessage());
         $failed++;
@@ -222,7 +225,7 @@ foreach ($apps as $app) {
                 "Quote #{$quoteRef} — {$_qwaMoneytotal}\n— DishNet Africa",
                 'ops_quote_pdf'
             );
-            qwa_log("PDF SENT KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
+            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
         } catch (\Throwable $e) {
             qwa_log("PDF FAILED KYC app #{$appId} quote #{$quoteId}: " . $e->getMessage());
         }
@@ -339,7 +342,7 @@ foreach ($quotes as $q) {
     try {
         $notify->sendVia(NotificationService::SUPPORT, $phone, $msg, 'ops_quote_wa');
         $waSent = true;
-        qwa_log("TEXT SENT UCRM quote #{$qId} {$qNumber} → {$phone} ({$clientName})");
+        qwa_log(qwa_said($notify, 'TEXT', $_qwaSaid) . " UCRM quote #{$qId} {$qNumber} → {$phone} ({$clientName})");
     } catch (\Throwable $e) {
         qwa_log("TEXT FAILED UCRM quote #{$qId}: " . $e->getMessage());
         $failed++;
@@ -351,7 +354,7 @@ foreach ($quotes as $q) {
                 "Quote-{$qNumber}.pdf",
                 "Quote #{$qNumber} — {$_qwaMoneytotal}\n— DishNet Africa",
                 'ops_quote_pdf');
-            qwa_log("PDF SENT UCRM quote #{$qId} {$qNumber}");
+            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " UCRM quote #{$qId} {$qNumber}");
         } catch (\Throwable $e) {
             qwa_log("PDF FAILED UCRM quote #{$qId}: " . $e->getMessage());
         }
@@ -425,7 +428,7 @@ if (!empty($pdfPending)) {
                 "Quote #{$pqNum} — {$_qwaMoneypqAmt}\n— DishNet Africa",
                 'ops_quote_pdf'
             );
-            qwa_log("PDF SENT from pending queue: #{$pqNum} → {$pqName} ({$pqPhone})");
+            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " from pending queue: #{$pqNum} → {$pqName} ({$pqPhone})");
             $pdfDone[] = $idx;
             // Also add to sentIds so we don't double-process
             if (!in_array($pqId, $sentIds, true)) {
@@ -885,6 +888,23 @@ function _qwa_resolveName(int $clientId, array $q, \CrmApiClient $crm): string
         }
     } catch (\Throwable $e) {}
     return 'Valued Customer';
+}
+
+/**
+ * 5.18.54 (docs/46 row 46, N-19): "TEXT SENT" or "PDF SENT", on Uganda only when the notifier says it was. sendVia and
+ * sendDocument return nothing, so these lines were written whatever happened, and a refused quotation read as sent in
+ * this log; the Message Log held the truth. Otherwise "… NOT SENT", with the notifier's own reason, or "no attempt was
+ * made" when it returned before sending (PDFs switched off, an opt-out, a number WhatsApp cannot use). On Uganda a
+ * document send starts from no result (row 46, in the notifier), so a PDF line never repeats the text's result.
+ * Elsewhere (South Sudan), the 5.18.53 words.
+ */
+function qwa_said(NotificationService $n, string $what, bool $ug): string
+{
+    if (!$ug) return "{$what} SENT";
+    $r = $n->lastSendResult();
+    if (!empty($r['success'])) return "{$what} SENT";
+    $why = trim((string)($r['error'] ?? ''));
+    return "{$what} NOT SENT (" . ($why !== '' ? mb_substr($why, 0, 200) : 'no attempt was made') . ')';
 }
 
 /**

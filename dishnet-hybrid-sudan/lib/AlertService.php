@@ -72,7 +72,7 @@ class AlertService
             }
             $r = $evo->sendText('sales', $to, $text, ContactOptOut::CLASS_STAFF);
             if (empty($r['ok'])) {
-                $this->recordSent($key, 0);          // release: let the next run retry
+                if (!$this->mayHaveGone($r)) $this->recordSent($key, 0);   // release: let the next run retry
                 $this->record($key, $to, $text, false, (string)($r['error'] ?? '?'), isset($r['http']) ? (int)$r['http'] : null);
                 return ['sent' => false, 'reason' => 'send_failed: ' . (string)($r['error'] ?? '?')];
             }
@@ -110,6 +110,24 @@ class AlertService
             }
             $ns->logSend('sales', $event, $to, $text, $ok, $http, $why);
         } catch (\Throwable $e) { /* the alert matters more than its record */ }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 44, N-17), Uganda only: a failed alert that may nevertheless have reached the phone keeps its
+     * cooldown. Released, the next run of whatever raised it sent it again: the duplicate row 31 stopped for customer
+     * messages, on the administrator's phone. An alert that certainly did not leave is still released, so the next run
+     * tries again.
+     */
+    private function mayHaveGone(array $r): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            require_once __DIR__ . '/EvolutionApiService.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            return NotifyGate::applies(NotifyGate::EVO_RETRY, $this->config, $dir) && EvolutionApiService::mayHaveBeenSent($r);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     private function lastSent(string $key): int

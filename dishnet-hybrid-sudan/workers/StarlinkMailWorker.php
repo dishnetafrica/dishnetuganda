@@ -286,6 +286,8 @@ class StarlinkMailWorker
                 if (!empty($ct['phone'])) { $phone = (string)$ct['phone']; break; }
             }
             if ($phone === '') return false;
+            $phone = $this->internationalUg($phone);
+            if ($phone === '') return false;
             $first = trim((string)($client['firstName'] ?? '')) ?: 'there';
             $text  = match ($c['type']) {
                 'ORDER_CONFIRMED' => "Hi {$first}, good news — your DishNet Starlink order is confirmed. We'll message you when it ships.",
@@ -301,6 +303,28 @@ class StarlinkMailWorker
             return is_array($r) ? !empty($r['ok']) || !isset($r['ok']) : (bool)$r;
         } catch (\Throwable $e) {
             return false;
+        }
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 45, N-18), Uganda only: the number in international form, as every send through the notifier
+     * has had since row 14 (D-10). This worker sends through Evolution itself and passed on the number as uCRM stores
+     * it: a local form ("0772…") is not a WhatsApp address. A number with no international form is not sent to ('').
+     * Anywhere else, or when the tenant cannot be read, the number as given, as in 5.18.53.
+     */
+    private function internationalUg(string $phone): string
+    {
+        try {
+            require_once dirname(__DIR__) . '/lib/NotifyGate.php';
+            $dd = $this->config['_data_dir'] ?? ($GLOBALS['dataDir'] ?? null);
+            $dd = is_string($dd) && $dd !== '' ? $dd : null;
+            if (!\NotifyGate::applies(\NotifyGate::PHONE_FORM, $this->config, $dd)) return $phone;
+            require_once dirname(__DIR__) . '/lib/TenantProfile.php';
+            require_once dirname(__DIR__) . '/lib/PhoneNumber.php';
+            $intl = \PhoneNumber::international($phone, \TenantProfile::current($this->config, $dd));
+            return $intl === null ? '' : substr($intl, 1);
+        } catch (\Throwable $e) {
+            return $phone;
         }
     }
 
