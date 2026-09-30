@@ -3007,6 +3007,14 @@ switch ($changeType) {
             // the cron's fallback sent it first; an error sends nothing either,
             // leaving the quote to that fallback rather than risking it twice.
             // Other quotes are not claimed — their path is unchanged.
+            //
+            // 5.18.54 (docs/46 row 17, D2c and N-9): on Uganda every quotation takes the claim. The quote screens
+            // (QuotationService) claim a quote they have just made before sending it, and cron_quote_wa's second flow
+            // claims before it sends: whoever is first sends, so a quote gets one WhatsApp. Before, a quote made in uCRM
+            // went from here and again from the cron within five minutes (the check at the top reads a list that never
+            // reads back, row 35), and one made on the quote screens went from both.
+            require_once __DIR__ . '/lib/NotifyGate.php';
+            $_quoteOnce = NotifyGate::applies(NotifyGate::QUOTE_ONCE, is_array($config ?? null) ? $config : [], $dataDir ?? null);
             if ($kycLikeCrm) {
                 $kycClaimErr = '';
                 try {
@@ -3019,6 +3027,22 @@ switch ($changeType) {
                     whLog($changeType, $kycClaimErr === ''
                         ? "Quote #{$quoteNum} already sent by cron_quote_wa — not sending it again"
                         : "Quote #{$quoteNum} not sent: its send record could not be written ({$kycClaimErr}) — left to cron_quote_wa");
+                    exit;
+                }
+            } elseif ($_quoteOnce) {
+                $_qoErr = '';
+                try {
+                    $_qoClaimed = QuoteWaLedger::claim($store->getPdo(), (int)$quoteId, (string)$quoteNum, 'webhook');
+                } catch (\Throwable $e) {
+                    $_qoClaimed = false;
+                    $_qoErr     = $e->getMessage();
+                }
+                if (!$_qoClaimed) {
+                    // Refused: the quote screen that made it, or the cron, has sent it. An error sends nothing either,
+                    // leaving the quote to the cron, which claims before it sends, rather than risking it twice.
+                    whLog($changeType, $_qoErr === ''
+                        ? "Quote #{$quoteNum} already sent — by the quote screen that made it, or by cron_quote_wa — not sending it again"
+                        : "Quote #{$quoteNum} not sent: its send record could not be written ({$_qoErr}) — left to cron_quote_wa");
                     exit;
                 }
             }

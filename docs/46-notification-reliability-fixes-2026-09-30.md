@@ -95,6 +95,7 @@ administrator side, and reliability.
 | 35 | **New, N-6** (found while building rows 9–11): **a guard kept in a keyed JSON document does not work.** The store reads a keyed document back as a list holding the object unless its table is on `SqliteStore::$FLAT_TABLES`, so `isset($log[$key])` is never true — and each save nests the old data a level deeper. Measured on `winback_log.json`, `invoice_notify_log.json`, `wa_templates.json` and `renewal_remind_log.json` | P1 | `lib/WinBack.php`; `includes/api/api_notifications.php` (row 11) | Win-back: once per ended service, guarded in `notification_dedup` (it went on each of the four days of its window); the invoice scan: row 11. The other effects are recorded in §B and decided in §E | two runs, and a run the next day, send one win-back; the old log, nested, is still honoured |
 | 36 | **New, N-8** (found while building row 25): the morning brief asks uCRM for each person's jobs with `assigneeId`, a filter uCRM ignores (`cron/jobs_cache.php` records it). Unnoticed only because the brief never ran: fixed as it stood, it would have sent every technician the whole company's job list, customers' names included | P1 | `cron/staff_jobs_summary.php` | The jobs are read once and each person gets those assigned to them, as My Jobs does, through a verified uCRM link only | a technician's brief holds their jobs and nobody else's; an id typed without the picker matches nobody |
 | 37 | **New, N-7** (found while building row 16): `client.invite` shares D-6's block, so inviting a customer to uCRM's client zone suspends their own identity mailbox | P2 | `webhook.php` | With D-6: only a deleted or archived client is suspended | an invitation touches no mailbox |
+| 38 | **New, N-9** (found while building row 17): a quote made in uCRM gets `quote.add`'s WhatsApp and, within five minutes, the quote cron's too. The cron's list of sent quotes, which the webhook also checks, sits in `quote_wa_state.json` and never reads back (row 35), and the webhook never took the claim the cron honours | P2 | `webhook.php` | On Uganda every quotation takes the claim (`QuoteWaLedger`) before it is sent, as the cron does | a quote made in uCRM: one WhatsApp, the webhook's; the cron finds the claim |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -278,6 +279,31 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   writes no claim. Five weakened copies, each caught — no guard, a key without the event, a key without the message, the
   suspension site unguarded, events without an id sharing one claim.
 
+### Rows 17 and 38: one WhatsApp per quote (D2c, N-9)
+
+- **One claim for every quote sender.** `wa_sent_quotes` (`QuoteWaLedger`) already kept the quote cron's two flows
+  apart, and a KYC customer's quote under `kyc_messages_like_crm`. On Uganda every sender now takes it before sending:
+  `quote.add` (`webhook`), the quote screens — lead quote, manual quote, and the LTE registration's quote
+  (`plugin_lead`, `plugin_manual`, `plugin_kyc`) — and the cron, as before. Whoever is first sends.
+- **A quote made on the quote screens (row 17, D2c).** The screen makes the quote in uCRM, claims it, and sends its
+  WhatsApp; uCRM's `quote.add` for it then stands down, and its log says why. If `quote.add` was first — uCRM's event
+  can overtake the screen — the webhook sends the quotation with its PDF and the screen sends nothing more. Its result
+  and its quote log then read *sent*, with `wa_sent_by: quote.add`, so nobody is invited to send it again.
+- **A quote made in uCRM (row 38, N-9, new).** Measured in South Sudan's copy of the same code: `quote.add` sends it,
+  and the cron's second flow sends it again on its next run — two quotation WhatsApps (the texts were counted; the PDFs
+  that follow each were not). The store itself warns that
+  `quote_wa_state.json` loses its keys when read back. On Uganda `quote.add` claims it, and the cron finds the claim.
+- **What changes when a send fails.** Before, on a quote made in uCRM, the cron's second send was the duplicate when
+  the webhook's send had worked, and a retry when it had not. Now a failed send is in the Failed Queue (row 10), like
+  every other failed WhatsApp; bounded automatic retries are row 30's.
+- **Not changed:** the PDF retry list `pdf_pending` in `quote_wa_state.json` still never reads back, so a quote whose
+  PDF could not be fetched when its text went stays text-only, as today. Making it read back starts a send that has
+  never run in production (§E-9). The e-mail side of quotations (D2a, D2b) is uCRM's and the plugin's quote e-mail —
+  row 18 and ownership decision O6.
+- **Tests:** `tests/test_notify_quote_once.php`, **19**, through `quote.add`, the manual-quote form signed in as an
+  administrator, and the real `cron_quote_wa.php`, against a fake uCRM that makes, lists and prints quotes. South Sudan
+  records both duplicates as they are. Three weakened copies, each caught.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -290,7 +316,7 @@ by saving and reloading each file, then through the real jobs:
 | `invoice_notify_log.json` | the admin invoice scan's "already sent" | every run with `send=1` re-announced every recent invoice | Uganda: the shared `INV<number>` guard (row 11) |
 | `wa_templates.json` | the Event Map's saved texts | the page never showed a saved text (and no sender read it anyway) | row 9 |
 | `renewal_remind_log.json` | the renewal pass: once a day, once per customer per renewal month | its `_last_run` never reads back, so **every pass looks like the first, which is a dry run**: with `renewal_reminders_enabled` on, it logs a dry run every 15 minutes and **never sends** | **not changed** — making it work would start a customer message that has never gone out (§E-5) |
-| `quote_wa_state.json` | the quote PDFs waiting for a retry (`pdf_pending`) | the retry list never reads back: a quote PDF that failed is not retried | recorded for row 17 |
+| `quote_wa_state.json` | the quotes already sent (`sent_ids`), and the PDFs waiting for a retry (`pdf_pending`) | the sent list never reads back, so a quote made in uCRM went twice (row 38); the retry list never reads back, so a quote PDF that failed is not retried | Uganda: the claim of rows 17 and 38; `pdf_pending` not changed (§E-9) |
 | `handover_nudge_log.json`, `cashbook_summary_log.json` | staff nudges and the evening summary, once a day | the 02:00 job runs once a day, so no repeat was measured from it | recorded, not changed |
 
 **Why not add these tables to `$FLAT_TABLES`?** It is one line, and it would fix every one of them — in South Sudan as
@@ -322,8 +348,9 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–16, 20, 24–29, 35–37 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–17, 20, 24–29, 35–38 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |
+| E-9 | The quote PDF retry list (rows 17, 35): a quote PDF that could not be fetched when its text went is queued for a retry that never reads back. Make it work, or leave it | Leave it until a quote has gone out text-only in production: the retry would send a PDF up to an hour after its text | Unchanged: text-only |
 | E-6 | Add the keyed files of row 35 to `SqliteStore::$FLAT_TABLES`, for every tenant | After E-5, and with South Sudan's approval: it fixes their win-back repeat too, and it would switch on renewal reminders wherever enabled | Uganda is fixed at each sender |

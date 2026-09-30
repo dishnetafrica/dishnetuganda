@@ -104,7 +104,9 @@ class QuotationService
             'agent'   => $retailer['name'] ?? '',
         ]);
 
-        $sent = $this->sendWA($phone, $msg, 'quote_kyc');
+        // 5.18.54 (docs/46 row 17, D2c): one WhatsApp per quote on Uganda — see claimQuoteWa().
+        $byEvent = !$this->claimQuoteWa($crmQuoteId, (string)$quoteRef, 'plugin_kyc');
+        $sent = $byEvent ? true : $this->sendWA($phone, $msg, 'quote_kyc');
 
         $this->logQuote([
             'type'           => 'kyc',
@@ -119,7 +121,7 @@ class QuotationService
             'sent_via_crm'   => true,
             'sent_by'        => $retailer['name'] ?? '',
             'valid_until'    => date('Y-m-d', strtotime('+' . self::VALIDITY_DAYS . ' days')),
-        ]);
+        ] + ($byEvent ? ['wa_sent_by' => 'quote.add'] : []));
 
         return $sent;
     }
@@ -173,7 +175,11 @@ class QuotationService
 
         // Send WA to customer
         $waSent = false;
-        if ($phone) {
+        // 5.18.54 (docs/46 row 17, D2c): one WhatsApp per quote on Uganda — see claimQuoteWa().
+        $waByEvent = $phone && $crmQuoteId && !$this->claimQuoteWa((int)$crmQuoteId, $quoteRef, 'plugin_lead');
+        if ($waByEvent) {
+            $waSent = true;   // uCRM's quote.add claimed it first and sends it, with its PDF
+        } elseif ($phone) {
             $msg    = $this->buildProformaMessage($quoteRef, $name, $items, $total, [
                 'type'       => 'Quotation — ' . ucfirst($lead['service_type'] ?? 'Service'),
                 'via_crm'    => $sentViaCrm,
@@ -212,7 +218,7 @@ class QuotationService
             'sent_via_crm'   => $sentViaCrm,
             'sent_by'        => $retailer['name'] ?? '',
             'valid_until'    => date('Y-m-d', strtotime('+' . self::VALIDITY_DAYS . ' days')),
-        ]);
+        ] + ($waByEvent ? ['wa_sent_by' => 'quote.add'] : []));
 
         return [
             'ok'           => true,
@@ -221,7 +227,7 @@ class QuotationService
             'sent_via_crm' => $sentViaCrm,
             'crm_quote_id' => $crmQuoteId,
             'total'        => $total,
-        ];
+        ] + ($waByEvent ? ['wa_sent_by' => 'quote.add'] : []);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -355,7 +361,9 @@ class QuotationService
             'agent'   => $retailer['name'] ?? '',
             'note'    => $note,
         ]);
-        $waSent = $this->sendWA($phone, $msg, 'quote_manual');
+        // 5.18.54 (docs/46 row 17, D2c): one WhatsApp per quote on Uganda — see claimQuoteWa().
+        $waByEvent = $crmQuoteId && !$this->claimQuoteWa((int)$crmQuoteId, $quoteRef, 'plugin_manual');
+        $waSent = $waByEvent ? true : $this->sendWA($phone, $msg, 'quote_manual');
 
         $this->logQuote([
             'type'           => 'manual',
@@ -370,7 +378,7 @@ class QuotationService
             'sent_via_crm'   => $sentViaCrm,
             'sent_by'        => $retailer['name'] ?? '',
             'valid_until'    => date('Y-m-d', strtotime('+' . self::VALIDITY_DAYS . ' days')),
-        ]);
+        ] + ($waByEvent ? ['wa_sent_by' => 'quote.add'] : []));
 
         return [
             'ok'           => true,
@@ -379,7 +387,7 @@ class QuotationService
             'sent_via_crm' => $sentViaCrm,
             'crm_quote_id' => $crmQuoteId,
             'total'        => $total,
-        ];
+        ] + ($waByEvent ? ['wa_sent_by' => 'quote.add'] : []);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -857,6 +865,28 @@ class QuotationService
     // ══════════════════════════════════════════════════════════════════════════
     // PRIVATE
     // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * 5.18.54 (docs/46 row 17, D2c): whether this screen sends the WhatsApp for quote $quoteId, which it has just made in
+     * uCRM. uCRM then raises quote.add, and the webhook sends its own quotation unless the quote is claimed in the
+     * ledger every quote sender honours (QuoteWaLedger). Claimed here first, the webhook's is refused; refused here, the
+     * webhook was first and sends it with its PDF, so this screen does not. Either way the customer gets one.
+     *
+     * Uganda only: elsewhere, always true, as in 5.18.53. When the ledger cannot be written, true: this screen has no
+     * fallback, and one message too many is better than none.
+     */
+    private function claimQuoteWa(int $quoteId, string $ref, string $source): bool
+    {
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            if (!\NotifyGate::applies(\NotifyGate::QUOTE_ONCE, $this->config, $this->dataDir)) return true;
+            require_once __DIR__ . '/QuoteWaLedger.php';
+            return \QuoteWaLedger::claim($this->store->getPdo(), $quoteId, $ref, $source);
+        } catch (\Throwable $e) {
+            error_log('[QuotationService] quote WhatsApp claim failed, sending anyway: ' . $e->getMessage());
+            return true;
+        }
+    }
 
     private function sendWA(string $phone, string $message, string $event): bool
     {

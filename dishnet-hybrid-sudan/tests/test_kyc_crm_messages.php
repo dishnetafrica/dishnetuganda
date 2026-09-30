@@ -371,7 +371,11 @@ foreach ([false, true] as $on) {
     fire('quote.add', 77);
     is_(events(wa($P)) === ['event_client_add', 'ops_quote_created', 'ops_quote_pdf'],
         ($on ? 'on' : 'off') . ': welcome, summary, PDF — as always', json_encode(events(wa($P))));
-    is_(ledger($s) === [], ($on ? 'on' : 'off') . ': and no claim is taken for it — its path is not the switch\'s', json_encode(ledger($s)));
+    // 5.18.54 (docs/46 row 38, N-9): this install is Uganda (UGX), where every quotation is now claimed before it is
+    // sent, so the quote cron cannot send it again. The claim is the webhook's own, the same with the switch off or on:
+    // still not the switch's, whose claim is webhook_kyc. Before 5.18.54 no claim was taken here.
+    is_(ledger($s) === [['quote_id' => 77, 'source' => 'webhook']], ($on ? 'on' : 'off')
+        . ': its claim is the webhook\'s own (5.18.54, row 38), not the switch\'s', json_encode(ledger($s)));
 }
 
 // ── H. the retry job creates a customer the form could not ──────────────────
