@@ -7,6 +7,7 @@ require_once __DIR__ . '/lib/QuoteWaLedger.php';
 require_once __DIR__ . '/lib/PaymentOptions.php';
 require_once __DIR__ . '/lib/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
 require_once __DIR__ . '/lib/currency.php';
+require_once __DIR__ . '/lib/NotifyGate.php';     // 5.18.54: the notification fixes, Uganda only (docs/46)
 
 // EARLY DEBUG - log that we reached the file
 error_reporting(E_ALL);
@@ -1368,8 +1369,16 @@ switch ($changeType) {
                     whLog('delivery_error', "Delivery note trigger failed for PAY-{$paymentId}: " . $delEx->getMessage());
                 }
 
+                // 5.18.54 (docs/46 row 1, D-1): Uganda carries on to the work below — the "just paid" marker, the
+                // payment push, the Starlink instant restore, the app-cache refresh and the Workbench close. uCRM
+                // has had its answer above, so the end of this case sends none. The two lines in the else branch
+                // release a lock that was never taken: flock() on null is a TypeError, and none of that work ran.
+                if (NotifyGate::applies(NotifyGate::PAYMENT_FLOW, $config, $dataDir)) {
+                    $payResponded = true;
+                } else {
                 flock($payLockFp, LOCK_UN); fclose($payLockFp); @unlink($payLockFile);
                 exit;
+                }
             } // end plugin dedup else
         }
 
@@ -1491,6 +1500,8 @@ switch ($changeType) {
             }
         }
 
+        // 5.18.54 (D-1): the answer went before the delivery note; a second one would only raise header warnings.
+        if (!empty($payResponded)) exit;
         whResp(200, 'payment.add processed.');
     }
 
