@@ -864,13 +864,23 @@ switch ($changeType) {
         if ($phone) {
             // Welcome message — only if NOT already sent by plugin (check local apps)
             $existingApp = $store->findOne('kyc_applications.json', 'crm_client_id', (string)$clientId);
+            // 5.18.54 (docs/46 row 19, D8): the KYC form, and its retry job, save the application only after uCRM has
+            // answered, and this event can come first. Both mark the username before asking uCRM
+            // (KycService::markSignup); on Uganda the mark counts as the application.
+            $kycMarked = false;
+            if (!$existingApp && trim((string)($client['username'] ?? '')) !== '') {
+                require_once __DIR__ . '/lib/NotifyGate.php';
+                $kycMarked = NotifyGate::applies(NotifyGate::KYC_WELCOME, $config, $dataDir)
+                          && $notify->dedupCheck('KYCNEW:' . trim((string)$client['username']));
+            }
+            $kycClient = $existingApp || $kycMarked;
             // kyc_messages_like_crm (5.18.30): a customer the KYC form put into
             // uCRM gets this welcome too, as one created in uCRM does; the form
             // then sends no booking message of its own (kycCrmCreated).
-            $kycLikeCrm = $existingApp && NotificationService::kycLikeCrm($config);
-            if ((!$existingApp || $kycLikeCrm) && !whEventOnce($uuid, 'welcome', $notify, $config, $dataDir)) {
+            $kycLikeCrm = $kycClient && NotificationService::kycLikeCrm($config);
+            if ((!$kycClient || $kycLikeCrm) && !whEventOnce($uuid, 'welcome', $notify, $config, $dataDir)) {
                 whLog($changeType, "Welcome for #{$clientId}: this uCRM event was delivered again — not sent again", ['uuid' => $uuid]);
-            } elseif (!$existingApp || $kycLikeCrm) {
+            } elseif (!$kycClient || $kycLikeCrm) {
                 // Client created directly in UCRM (not via our KYC form) — send welcome.
                 // The text is written here on purpose: NotificationService::send()
                 // sends exactly what it is handed since 5.18.4. Before that it built
@@ -889,7 +899,8 @@ switch ($changeType) {
                 whLog($changeType, "Welcome sent to {$name} ({$phone})"
                     . ($kycLikeCrm ? ' — KYC customer, kyc_messages_like_crm' : ''), ['crm_id' => $clientId]);
             } else {
-                whLog($changeType, "KYC-registered client — welcome already sent by plugin", ['crm_id' => $clientId]);
+                whLog($changeType, "KYC-registered client — welcome already sent by plugin"
+                    . ($kycMarked ? ' (its application was still being saved: the form\'s mark)' : ''), ['crm_id' => $clientId]);
             }
         }
 

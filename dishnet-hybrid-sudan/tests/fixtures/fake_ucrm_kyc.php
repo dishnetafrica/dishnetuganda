@@ -28,6 +28,9 @@ declare(strict_types=1);
  * pdf_down (via /__test/set) makes the PDF answer 404.
  * Service plans (5.18.46) are served from /service-plans; plans_down makes them answer 503.
  *
+ * webhook_on_create (5.18.54, via /__test/set): a created client's client.add is POSTed to that URL before the
+ * create is answered — uCRM's event overtaking the form (docs/46 row 19). Needs PHP_CLI_SERVER_WORKERS > 1.
+ *
  * State lives in a temp file per port. /__test/reset?scenario=… resets it,
  * /__test/set (POST JSON) merges keys (existing clients, taken usernames),
  * /__test/log returns every request.
@@ -151,6 +154,21 @@ if ($p === '/clients' && $method === 'POST') {
     $state['clients'][] = $client;
     $state['taken'][]   = (string)($body['username'] ?? '');
     kyc_save($state, $stateFile);
+    // 5.18.54 (docs/46 row 19, tests/test_notify_kyc_race.php): uCRM's client.add, delivered BEFORE this create is
+    // answered — the race D8 is about, forced. /__test/set {"webhook_on_create": "<url>", "webhook_on_create_key": "…"}.
+    // The webhook reads the client back from this fake while this request waits, so it must run with
+    // PHP_CLI_SERVER_WORKERS above 1. What the webhook answered is kept under "race".
+    if (!empty($state['webhook_on_create'])) {
+        $ch = curl_init((string)$state['webhook_on_create']);
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_PROXY => '',
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Ucrm-Key: ' . (string)($state['webhook_on_create_key'] ?? '')],
+            CURLOPT_POSTFIELDS => json_encode(['changeType' => 'client.add', 'entity' => 'client', 'entityId' => $client['id'],
+                'uuid' => 'race-' . $client['id'], 'extraData' => ['entity' => ['id' => $client['id']]]])]);
+        $wr = curl_exec($ch); $wc = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $now = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: $state) : $state;
+        $now['race'][] = ['client' => $client['id'], 'code' => $wc, 'body' => is_string($wr) ? substr($wr, 0, 300) : ''];
+        kyc_save($now, $stateFile);
+    }
     kyc_out($client, 201);
 }
 if ($p === '/clients' && $method === 'GET') {

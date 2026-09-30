@@ -304,6 +304,28 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   administrator, and the real `cron_quote_wa.php`, against a fake uCRM that makes, lists and prints quotes. South Sudan
   records both duplicates as they are. Three weakened copies, each caught.
 
+### Row 19: the welcome and "Request Confirmed!" never both (D8)
+
+- **The race.** The KYC form creates the customer in uCRM, then saves its application with the new client's id.
+  uCRM raises `client.add` as soon as it has made the client, and the webhook chooses between its welcome and the
+  form's own "Request Confirmed!" by looking for an application with that id. When the event overtakes the form, it
+  finds none, and the customer got both. The retry job (`KycCrmSync`), which creates the customers the form could
+  not, has the same window.
+- **The fix, on Uganda.** Before each attempt to create the client, the form and the retry job mark its username
+  (`KYCNEW:<username>`, in `notification_dedup`: no new table). A webhook that finds no application looks for the
+  mark on the new client's username, treats a marked client as the form's, sends no welcome, and its log says the
+  mark decided it. With `kyc_messages_like_crm` on, the switch's path is unchanged: the welcome goes and the form
+  sends none. A mark that cannot be written, or read, changes nothing: the webhook decides as before.
+- **A limit, stated.** A mark is kept as long as the table keeps any claim (45 days). If a create fails for good and
+  someone then makes a client by hand in uCRM with that same plugin-made username (`STAR…`, `FTTH…`) within that
+  time, that client gets no welcome; the webhook's log names the mark.
+- **Tests:** `tests/test_notify_kyc_race.php`, **14**. The race is forced, not hoped for: the fake uCRM delivers
+  `client.add` to the real webhook before it answers the create (with several workers, because the webhook reads
+  the client back from it meanwhile). Through the real form and the real retry job: the race — one message, "Request
+  Confirmed!"; no race — one message, found by its application (control); `kyc_messages_like_crm` — the welcome only;
+  the retry job — no welcome; South Sudan — both, as in 5.18.53. Three weakened copies, each caught: the form writes
+  no mark, the webhook ignores it, the retry job writes none.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -370,7 +392,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–17, 20, 24–29, 35–38 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–17, 19, 20, 24–29, 35–38 so far) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

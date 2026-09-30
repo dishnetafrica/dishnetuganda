@@ -197,6 +197,9 @@ final class KycCrmSync
         $username = (string)($payload['username'] ?? '');
         $res = null;
         for ($try = 1; $try <= 5; $try++) {
+            // 5.18.54 (docs/46 row 19, D8): the same mark as the form's, before uCRM is asked (KycService::markSignup).
+            KycService::markSignup($this->store, $this->config,
+                method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null, $username);
             $res = $this->crm->post('clients', $payload);
             if (is_array($res) && !empty($res['id'])) break;
             $err = $this->crm->getLastError();

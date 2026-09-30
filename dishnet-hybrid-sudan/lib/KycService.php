@@ -55,6 +55,28 @@ class KycService
     }
 
     /**
+     * 5.18.54 (docs/46 row 19, D8): mark $username as a client this plugin is about to create in uCRM, on Uganda.
+     *
+     * uCRM raises client.add as soon as it has made the client, and the webhook decides between its welcome and the
+     * form's own "Request Confirmed!" by looking for the application that names the client — which the form saves only
+     * after uCRM has answered. The event can overtake it, and the customer then got both. The mark is written before
+     * uCRM is asked; the webhook reads it as the application. Kept in notification_dedup, so no new table. An error
+     * writes nothing, and the webhook then decides as before.
+     */
+    public static function markSignup($store, array $config, ?string $dataDir, string $username): void
+    {
+        if ($username === '') return;
+        try {
+            require_once __DIR__ . '/NotifyGate.php';
+            if (!\NotifyGate::applies(\NotifyGate::KYC_WELCOME, $config, $dataDir)) return;
+            require_once __DIR__ . '/NotificationService.php';
+            (new \NotificationService($store, $config))->dedupMark('KYCNEW:' . $username);
+        } catch (\Throwable $e) {
+            error_log('[KycService] sign-up mark not written: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Return a clone of this service using a different CRM client.
      * Used to post KYC payments under the agent's personal UCRM app key
      * so "Created By" in UCRM shows the agent's name.
@@ -658,6 +680,7 @@ class KycService
 
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             $crmPayload['username'] = $username;
+            self::markSignup($this->store, is_array($cfg ?? null) ? $cfg : [], $this->dataDir, $username);   // D8, below
             $crmResponse = $this->crm->post('clients', $crmPayload);
 
             if ($crmResponse && !empty($crmResponse['id'])) {
