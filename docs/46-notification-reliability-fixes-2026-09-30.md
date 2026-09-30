@@ -89,7 +89,7 @@ administrator side, and reliability.
 | 28 | **S-6**: the Workbench counts WhatsApps as sent whether they went or not | P3 | `includes/api/api_crm_misc.php` | Count what the provider accepted | a failed send is counted as failed |
 | 29 | **S-7**: the help page sends staff to an outage screen that does not exist | P3 | `tabs/help/faq.php` | Correct the answer. The broadcast screen itself is G10, a decision | the answer names no missing tab |
 | 30 | **M4**: failed WhatsApps wait for a person | P3 | new `lib/NotificationRetry.php`, `cron/master.php` | Automatic, bounded retries, only for failures the provider certainly did not accept, only for messages that cannot go stale in the window; then `exhausted` | a refused send is retried and sent once; a timeout is never retried automatically; after the last try the row reads `exhausted` |
-| 31 | **New, N-1**: Evolution sends are retried after a timeout, which can duplicate | P2 | `lib/EvolutionApiService.php` | A POST is retried only when the connection was never made | a timeout after connecting is not retried |
+| 31 | **New, N-1**: Evolution sends are retried after a timeout, which can duplicate; and two callers send again by themselves after any failure (the AI reply worker through its event queue, the follow-up sender at its next run) | P2 | `lib/EvolutionApiService.php`, `workers/AiReplyWorker.php`, `cron/followup_send.php`, `lib/FollowUpService.php` | A POST is retried only when nothing was sent; a send that may have gone says so, and neither caller sends it again | a timeout after connecting is not retried; the AI reply and the follow-up go once |
 | 32 | **Watchdog**: nobody hears when a job stops or the failure queue grows | P3 | new check in the reminder/retry job | An admin alert, and a plugin-log line, when a scheduled job is overdue or failed sends pile up | both raise one alert, with a cooldown |
 | 33 | **New, N-4** (found while building row 6): the 15-minute invoice scanner's log helper reads `$dataDir`, which is not in its scope, so every line goes to `/invoice_notify_cron.log` — two PHP warnings a line, or a file at the root of the filesystem | P3 | `cron_invoice_notify.php` | The helper reads the data directory the script resolved | the log lands in the data directory, with no warning |
 | 35 | **New, N-6** (found while building rows 9–11): **a guard kept in a keyed JSON document does not work.** The store reads a keyed document back as a list holding the object unless its table is on `SqliteStore::$FLAT_TABLES`, so `isset($log[$key])` is never true — and each save nests the old data a level deeper. Measured on `winback_log.json`, `invoice_notify_log.json`, `wa_templates.json` and `renewal_remind_log.json` | P1 | `lib/WinBack.php`; `includes/api/api_notifications.php` (row 11) | Win-back: once per ended service, guarded in `notification_dedup` (it went on each of the four days of its window); the invoice scan: row 11. The other effects are recorded in §B and decided in §E | two runs, and a run the next day, send one win-back; the old log, nested, is still honoured |
@@ -98,6 +98,7 @@ administrator side, and reliability.
 | 38 | **New, N-9** (found while building row 17): a quote made in uCRM gets `quote.add`'s WhatsApp and, within five minutes, the quote cron's too. The cron's list of sent quotes, which the webhook also checks, sits in `quote_wa_state.json` and never reads back (row 35), and the webhook never took the claim the cron honours | P2 | `webhook.php` | On Uganda every quotation takes the claim (`QuoteWaLedger`) before it is sent, as the cron does | a quote made in uCRM: one WhatsApp, the webhook's; the cron finds the claim |
 | 39 | **New, N-10** (found while building row 21): the dunning template screen shows South Sudan's number and addresses in every field nobody has set, and Save stores what the form shows — so the first Save puts the Juba number into Uganda's configuration, where it outranks the tenant profile in every ladder e-mail. Its preview printed Juba's number, company line and website too | P2 | `tabs/admin/overdue_email_tpl.php`, `includes/api/api_crm_misc.php` | On Uganda an unset field shows this install's value (its settings, then the tenant profile), as the e-mail builder already does; the preview prints what the e-mail prints | a Save without typing stores Uganda's number; the preview shows no +211 and no South Sudan line |
 | 40 | **New, N-11** (found while building row 23): since 11 September (`4c3edb6`) the ladder's own SMTP sender announces itself with `MailService::ehloName()`, and nothing on the ladder's path loads `MailService`. `master.php` runs its jobs inside one process, so the ladder has the class only if something earlier in that process loaded it. From `main.php`'s tick, unless an earlier job happened to load it, every ladder e-mail fails after connecting — `Class "MailService" not found` — and is logged as a failure. The EHLO test loaded the class itself, so it never saw this | P2 | `lib/OverdueDunningHelpers.php` | On Uganda the sender loads the class it calls | the cron run on its own relays the e-mail. **Whether production's Monday runs failed this way is not known**: its log answers it (§G) |
+| 41 | **New, N-13** (found while building row 31): a read (GET) that meets a 500 with a plain-text body retries with the response where its request body belongs, and dies of a TypeError. The reads are the instance and webhook checks | P3 | `lib/EvolutionApiService.php` | On Uganda a read's retry keeps its own body | the read retries, three requests, and ends in an error, not an exception |
 | 34 | **New, N-5** (found while building row 5): the 02:00 job counts the days to a due date from an instant. uCRM sends a date as midnight in its own zone (`…T00:00:00+0300`); under another zone the count is off by one — measured under Africa/Juba: a date 7 days away counts 6, so the 7-day reminder is never sent, and each earlier tier goes a day early | P2 | `lib/InvoiceReminders.php` | Uganda's run reads the due date as a calendar date. Uganda itself was not affected (Kampala is +0300, like its uCRM); South Sudan's job is unchanged, and whether its uCRM sends +0300 is not known | a +0300 date 7 days away counts 7 under Juba; South Sudan recorded as it is |
 
 ## §B The build, row by row
@@ -437,6 +438,48 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   sends. It still does not offer it, so a client that authenticates only when offered behaves as before. It records
   the user name, never the password.
 
+### Rows 31 and 41: a WhatsApp that may have gone is not sent again (N-1, N-13)
+
+- **The client (row 31, N-1).** `EvolutionApiService::request()` retried every failed transfer up to three times, a
+  POST included, under the comment *"Connection never completed — safe to retry regardless of method."*
+  - curl fails in the same way when the request left and no answer came back. So a timeout after Evolution had taken a
+    message sent it twice more.
+  - **Measured** with a fake Evolution that takes the request and never answers: on South Sudan (5.18.53) the same
+    message arrives three times.
+  - On Uganda a POST is retried only while nothing has left: before the connection and the TLS handshake are done
+    (curl's pre-transfer time 0, nothing uploaded). Such a failure begins `Not sent — `.
+  - After that the POST fails at once, and begins `May have been sent — `. A 502 or 504 from a gateway in front of
+    Evolution counts the same way, since it may have forwarded the request. An HTML answer now names its status, so
+    that the two can be told apart. Reads are retried as before.
+- **The two callers that sent again by themselves (row 31).**
+  - *The AI reply worker* threw on a failed send. Its event queue then asked the AI again and sent again, after 10 s,
+    then 30 s. **Measured** on South Sudan: two runs, the AI asked twice, the reply sent six times. On Uganda, after a
+    send that may have gone, the event ends and the conversation goes to a person: marked for a human, the team
+    alerted, no holding line sent on top.
+  - *The follow-up sender* left a failed draft approved, so it went again at its next run, five minutes later, without
+    limit. **Measured** on South Sudan: six sends over two runs. On Uganda a send that may have gone sets the draft
+    aside as `uncertain` and logs why. The follow-up stays open, and its next draft, if any, still needs a person.
+- **The read that died (row 41, N-13, new).** A read that met a 500 with a body that is neither JSON nor HTML retried
+  with the response where its own request body belongs, and died of a TypeError (**measured**). On Uganda a read's
+  retry keeps its own body.
+- **Found by reading, not changed:**
+  - AlertService releases its cooldown after a failed alert, so an alert that may have gone can go again. Those are
+    staff, not customers.
+  - An e-mail whose relay timed out after the body was sent is reported "Message body rejected" by MailService: the
+    same doubt. No e-mail is retried automatically, and row 30 retries none.
+  - The lead pages' own WhatsApp client falls back to the notifier after any error (§D, N-14).
+- **Tests:** `tests/test_notify_evo_retry.php`, **23**.
+  - One call at a time (`tests/fixtures/evo_retry_probe.php`) against a fake Evolution at socket level
+    (`tests/fixtures/fake_evo_raw.php`), which records every connection and every request that arrives:
+    - no answer after the request arrived, or the connection closed: one request, "may have been sent";
+    - a TLS handshake that fails: three connections and no request, "not sent";
+    - a refusal and a success: one request each;
+    - a read meeting a 500 with a plain-text body: three reads and an error.
+  - The error texts, as the retry job and the workers read them.
+  - The real AI reply worker (the AI a stand-in) and the real follow-up cron, from a copy of the plugin
+    (`tests/fixtures/no_resend_probe.php`), each run twice against the fake.
+  - South Sudan as in 5.18.53 in each, the TypeError included. Five weakened copies, each caught.
+
 ### Row 35 (N-6): guards that never read back
 
 `SqliteStore::save()` stores a keyed document as one row; `load()` gives it back as a list holding that object
@@ -549,6 +592,7 @@ sender off, which is O1–O6.
 | D1, D5 (uCRM's e-mail), D9 (uCRM's notice) | uCRM may send its own copy | Ownership decisions O1–O5, after V1–V3. **uCRM's notifications are not switched off by this work** |
 | G10, S-7's screen | A WhatsApp broadcast screen | A new feature and a decision |
 | G6 | Uganda-branded uCRM templates | Only if uCRM keeps any client e-mail after O1–O3 |
+| N-14 | The lead pages (Sales → WhatsApp leads, Engage → WhatsApp) send with the older client, `EvolutionApiClient`, and after **any** error, a timeout included, send the same text again through the notifier. So a lead can get it twice. When the notifier is used, the page reports a failure whatever happened, because it reads a result the notifier does not return (`sendVia` returns nothing) | They are staff actions on leads, not automatic notifications, and a fix means changing that older client, which cannot tell "not sent" from "may have been sent". **Recommended:** fall back only when nothing was sent, and read the notifier's real result |
 | N-12 | The 07:00 cashbook report (`lib/DailyReportService.php`, sent from `main.php`) makes the same `MailService::ehloName()` call without loading the class, and catches only `Exception`, which a missing class is not. Measured by reading, and by loading exactly what `main.php` loads before it: the class is absent. So from `main.php` the report connects, fails, and — failing before its day is marked — tries again at every tick until midnight | It is the accounts team's cashbook report, not a customer notification, and this work changes no reporting. **Recommended as its own one-line change** (the same class load), for both tenants; its log line `Daily report ERROR` says whether it has been failing |
 
 ## §E Decisions for you (none needed to review this work)
@@ -560,7 +604,7 @@ Collected as the build goes; completed with the final report.
 | E-1 | Apply the payment fix (row 1, D-1) to South Sudan: its `payment.add` dies the same way after the first receipt | **Yes** — the Starlink restore and the app refresh do not run there either | South Sudan keeps 5.18.53 |
 | E-2 | The prepaid pause WhatsApp (row 8), word for word as in §B | Confirm, or give the words you want | It is built with these words, and sent only with `billing_model = prepaid` |
 | E-3 | The postpaid day-5 text promises suspension "tonight … at midnight". True only if uCRM suspends that night | Check uCRM → Settings → Suspension (the grace period) against it; if they differ, the text should follow uCRM, not the reverse | Unchanged |
-| E-4 | The other Uganda fixes for South Sudan (rows 2–29, 33–40 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
+| E-4 | The other Uganda fixes for South Sudan (rows 2–29, 31, 33–41 so far; row 18's switch is already read there, unset) | One at a time, each after its Uganda deployment has been watched. S-1 (row 10) first: any signed-in account there can list, resend and dismiss failed customer messages. **The brief (row 25) must not be fixed there alone**: its query would hand everyone the whole job list (row 36) | South Sudan keeps 5.18.53 |
 | E-5 | The renewal reminders (row 35): with `renewal_reminders_enabled` on, they have never been sent — every pass is a dry run. Make them work, or leave them off? | First read the setting on the server. If it is off, leave it off; if it is on, decide whether customers should now start receiving a renewal reminder 4–6 days before each renewal, which they never have | Unchanged: nothing is sent |
 | E-7 | The morning jobs brief (row 25) starts: every morning at 07:00, each active account that takes jobs and has a verified uCRM link gets its jobs, or "no jobs today"; the administrator gets a daily list of such accounts with no link | **Keep it**: it is the fix of a message that was meant to go. If the daily list is noise until every link is verified, hold the brief back with `staff_jobs_brief = 0` | It goes after deployment |
 | E-8 | The activation sentence (row 13), word for word as in §B | Confirm, or give the words you want | It is built with these words |

@@ -183,6 +183,15 @@ class AiReplyWorker extends WorkerBase
         // ── Point of no return ───────────────────────────────────────────
         $send = $this->evo->sendText($channel, $phone, $reply, ContactOptOut::CLASS_REPLY);
         if (!$send['ok']) {
+            // 5.18.54 (docs/46 row 31, N-1), Uganda: throwing hands the event back to EventBus, which asks the AI again
+            // and sends again. When the reply may already have reached the customer, that is a second answer: a person
+            // takes over instead, and no holding line is sent on top of it.
+            if (\EvolutionApiService::mayHaveBeenSent($send) && $this->noResendAfterDoubt()) {
+                $this->log('warn', "conv {$convId}: the reply may have been sent (no answer from WhatsApp); not sent again");
+                $this->escalate($convId, $channel, $phone,
+                    'the reply may not have reached the customer; check the chat before answering', true);
+                return;
+            }
             throw new \RuntimeException('Evolution send failed: ' . $send['error']);
         }
 
@@ -1374,6 +1383,17 @@ class AiReplyWorker extends WorkerBase
         $attempts = (int)($event['attempts'] ?? 0) + 1;
         $this->escalate($convId, $channel, $phone,
             "no reply after {$attempts} attempts (" . mb_substr($e->getMessage(), 0, 80) . ')');
+    }
+
+    /** 5.18.54 (docs/46 row 31): Uganda only. */
+    private function noResendAfterDoubt(): bool
+    {
+        try {
+            require_once dirname(__DIR__) . '/lib/NotifyGate.php';
+            return \NotifyGate::applies(\NotifyGate::EVO_RETRY, $this->config, $this->dataDir !== '' ? $this->dataDir : null);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**

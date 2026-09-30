@@ -41,6 +41,14 @@ class EvolutionApiService
     /** Channels we accept from a webhook or a send call. */
     const CHANNELS = [self::CHANNEL_SALES, self::CHANNEL_SUPPORT, self::CHANNEL_ACCOUNT];
 
+    /**
+     * 5.18.54 (docs/46 row 31, N-1), Uganda: how a failed send's error begins when the transport, not Evolution, ended
+     * it. NOT_SENT: the request never left, so nothing can have reached WhatsApp. MAYBE_SENT: it left and no answer
+     * came back, so the customer may have the message; it is never sent again automatically.
+     */
+    const NOT_SENT   = 'Not sent — ';
+    const MAYBE_SENT = 'May have been sent — ';
+
     private string $baseUrl;
     private string $apiKey;
     private int    $timeout;
@@ -55,6 +63,10 @@ class EvolutionApiService
     /** Resolved lazily; injectable for tests. false = not yet looked for. */
     private $optOut = false;
     private ?string $optOutDataDir = null;
+
+    /** 5.18.54 (docs/46 row 31): the configuration, for NotifyGate; and its answer, once asked. */
+    private array $gateConfig = [];
+    private ?bool $noResendUg = null;
 
     /**
      * Give this service an opt-out list, or null to disable the check.
@@ -101,6 +113,7 @@ class EvolutionApiService
         $this->baseUrl = self::normaliseBaseUrl((string)($config['evo_api_url'] ?? ''));
         $this->apiKey  = trim((string)($config['evo_api_key'] ?? ''));
         $this->timeout = $timeout;
+        $this->gateConfig = $config;
 
         // Preferred, explicit per-channel config.
         $map = [
@@ -531,6 +544,120 @@ class EvolutionApiService
     }
 
     /**
+     * 5.18.54 (docs/46 rows 30, 31): whether a failed send may nonetheless have reached the customer, read from the
+     * error this class wrote. It may have if the request left and no answer came back, or if a gateway in front of
+     * Evolution timed out or broke off (502, 504). Such a send is never repeated automatically; a person decides.
+     *
+     * @param array|string $result a send's result, or its error text
+     */
+    public static function mayHaveBeenSent($result): bool
+    {
+        $e = is_array($result) ? (string)($result['error'] ?? '') : (string)$result;
+        if (strpos($e, self::MAYBE_SENT) === 0) return true;
+        return (bool)preg_match('/\[HTTP 50[24] on (POST|PUT|PATCH|DELETE) /', $e);
+    }
+
+    /** 5.18.54 (docs/46 row 31): Uganda only, asked once per instance. */
+    private function noResend(): bool
+    {
+        if ($this->noResendUg === null) {
+            try {
+                require_once __DIR__ . '/NotifyGate.php';
+                $dd = $this->gateConfig['_data_dir'] ?? ($GLOBALS['dataDir'] ?? null);
+                $this->noResendUg = NotifyGate::applies(NotifyGate::EVO_RETRY, $this->gateConfig,
+                                                        is_string($dd) && $dd !== '' ? $dd : null);
+            } catch (\Throwable $e) {
+                $this->noResendUg = false;
+            }
+        }
+        return $this->noResendUg;
+    }
+
+    /**
+     * 5.18.54 (docs/46 row 31, N-1), Uganda: request(), keeping the promise its comment makes.
+     *
+     * curl reports every transport failure the same way; what separates them is whether the request had left.
+     * - Until curl is about to send it (the connection and any TLS handshake done: pre-transfer time 0, nothing
+     *   uploaded), nothing can have reached Evolution, and trying again is safe.
+     * - After that, Evolution may have taken the message and only its answer was lost, so a second POST could send it
+     *   twice. The POST fails at once, and its error says it may have been sent.
+     * - Reads are retried as before. A read's retry keeps its own body: the branch below overwrites it with the
+     *   response, and a read that met a 500 with a plain-text body then died of a TypeError.
+     * - An HTML answer now names its status, so that a 502 or 504 from a gateway can be told from a refusal.
+     */
+    private function requestUg(string $method, string $path, ?array $body): array
+    {
+        if ($this->baseUrl === '' || $this->apiKey === '') {
+            return $this->fail('Evolution API is not configured');
+        }
+        $read = $method === 'GET';
+        for ($attempt = 1; ; $attempt++) {
+            $ch = curl_init($this->baseUrl . $path);
+            $opts = [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => ['apikey: ' . $this->apiKey, 'Content-Type: application/json'],
+                CURLOPT_TIMEOUT        => $this->timeout,
+                CURLOPT_CONNECTTIMEOUT => 8,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_POSTREDIR      => 7,   // keep POST across a redirect
+            ];
+            if (!$read) {
+                $opts[CURLOPT_CUSTOMREQUEST] = $method;
+                $opts[CURLOPT_POSTFIELDS]    = json_encode($body ?? []);
+            }
+            curl_setopt_array($ch, $opts);
+
+            $raw       = curl_exec($ch);
+            $httpCode  = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            $unsent    = (float)curl_getinfo($ch, CURLINFO_PRETRANSFER_TIME) == 0.0
+                      && (float)curl_getinfo($ch, CURLINFO_SIZE_UPLOAD) == 0.0;
+            curl_close($ch);
+
+            if ($raw === false) {
+                if (($read || $unsent) && $attempt < 3) {
+                    usleep(200000 * $attempt);
+                    continue;
+                }
+                if ($read) return $this->fail('Connection failed: ' . $curlError);
+                return $this->fail($unsent ? self::NOT_SENT . 'no connection to Evolution: ' . $curlError
+                                           : self::MAYBE_SENT . 'no answer from Evolution: ' . $curlError);
+            }
+
+            $data = json_decode((string)$raw, true);
+            if (!is_array($data)) {
+                $text = ltrim((string)$raw);
+                if ($text !== '' && ($text[0] === '<' || stripos($text, '<!doctype') === 0)) {
+                    $msg = 'Got an HTML page, not the API. Check the URL is the API root '
+                         . '(no /manager on the end).';
+                    $detail = $msg . ' [HTTP ' . $httpCode . ' on ' . $method . ' ' . $path . ']';
+                    $this->lastError = ['message' => $msg, 'http' => $httpCode, 'path' => $path, 'detail' => $detail];
+                    return ['ok' => false, 'http' => $httpCode, 'data' => [], 'error' => $detail];
+                }
+                $data = ['raw' => mb_substr((string)$raw, 0, 500)];
+            }
+
+            if ($httpCode >= 500 && $read && $attempt < 3) {
+                usleep(200000 * $attempt);
+                continue;
+            }
+
+            if ($httpCode >= 400) {
+                $msg = $data['message'] ?? ($data['error'] ?? ('HTTP ' . $httpCode));
+                if (is_array($msg)) $msg = implode('; ', array_map('strval', $msg));
+                $msg = (string)$msg;
+                $detail = $msg . ' [HTTP ' . $httpCode . ' on ' . $method . ' ' . $path . ']';
+                $this->lastError = ['message' => $msg, 'http' => $httpCode,
+                                    'path' => $path, 'method' => $method, 'detail' => $detail];
+                return ['ok' => false, 'http' => $httpCode, 'data' => $data, 'error' => $detail];
+            }
+
+            $this->lastError = [];
+            return ['ok' => true, 'http' => $httpCode, 'data' => $data, 'error' => ''];
+        }
+    }
+
+    /**
      * One HTTP call.
      *
      * Retries idempotent reads and connection-level failures. A POST that
@@ -539,6 +666,7 @@ class EvolutionApiService
      */
     private function request(string $method, string $path, array $body = null, int $attempt = 1): array
     {
+        if ($this->noResend()) return $this->requestUg($method, $path, $body);   // 5.18.54, docs/46 row 31
         if ($this->baseUrl === '' || $this->apiKey === '') {
             return $this->fail('Evolution API is not configured');
         }
