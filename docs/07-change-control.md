@@ -2585,3 +2585,37 @@ printed at the end of the deploy's log — never pasted together with the deploy
 in **Engage → WhatsApp** ("🔔 Admin Alert Number") — this resolves the R14 note from the 5.18.55
 deploy (the admin number was unset, so the watchdog/KYC/handover alerts reached only the plugin
 log). `+211` is the South Sudan code, consistent with that screen's existing `211…` examples.
+
+## 30 Sep — 5.18.56 DEPLOYED to production, ~21:16 UTC (PASSED 56/0/3)
+
+The operator ran `scripts/deploy-5.18.56.sh` on the server (dishnetuganda, /opt/dishnet).
+**Result: `5.18.56 (deploy): PASSED` — 56 ok, 0 failed, 3 notes.** Live moved
+5.18.55 (9514633) → 5.18.56 (81d4324); container PHP 8.1.34. Backup-first under
+`/root/dnb-5.18.56/backup-20260930T211513Z` (plugin.sqlite3 24M, integrity ok, 228 tables,
+sha256 match both sides; data dirs; installed 5.18.55 code; config vault). **The release
+changes no table or row — a rollback needs no restore.**
+
+Verified live:
+- **R1 5.18.56: the Staff Cashbooks scM() money formatter brings `$config` into scope — no
+  "Undefined variable $config" warning on its figure cards.** The docs/48-adjacent display fix
+  is confirmed in production; the admin/accountant screen is clean.
+- R1: all 3 changed files installed byte-for-byte as 81d4324; manifest 5.18.56; the 131 other
+  files of Release A through 5.18.55 installed exactly as pinned (full regression).
+- **Regression intact:** R1b PD-1 collections-export gate present; R2 NotifyGate all 23 of
+  5.18.54's fixes on (store 23/23, files 23/23); R5/R6 the job notifier wired; R9 migrations
+  075/076 applied (4 jobs / 10 events); R8 the 5.18.51 lock guard.
+- R3 staff unchanged (digest 0c5c170623a6dc3d, 5 accounts); V1–V4 sign-in 200, no redirect
+  loop, no :8443 leak, Uganda Terms/Privacy v1.1, no fatal/parse error since the deploy;
+  R12 the 3 changed files carry the deploy's time (OPcache recompiles at next use).
+
+Three notes (configuration, not errors), carried over from the 5.18.55 state:
+- R7: 2 of 4 active job-taking staff have a verified uCRM link; the other 2 receive no job
+  WhatsApps until an admin saves their uCRM user (Staff → edit → uCRM user).
+- **R14: `whatsapp_admin_phone` is still unset (store `empty`, files `unset`), so the
+  notification watchdog's alerts reach only the plugin log (docs/46 E-11).** The requested
+  `211927797217` has NOT yet been entered — operator action in Engage → WhatsApp.
+- R11: the engineer's job e-mail goes through the plugin's own SMTP settings.
+
+Rollback to 5.18.55 remains available on its own (docs/44 §16.9):
+`cd /opt/dishnet && bash scripts/deploy-5.18.56.sh --rollback` (reintroduces only the cosmetic
+scM warning; all of 5.18.54's fixes and PD-1 stay in place).
