@@ -22,6 +22,30 @@ every production-affecting action **wait for explicit approval**, as the assignm
 > interchangeable or create a second, conflicting WhatsApp integration."* §3 answers it from the code,
 > on evidence, and its conclusion shapes everything after it.
 
+> **Approved 1 October 2026 (operator decision).** The operator approved the distributor foundation and
+> the notification pilot (B-2…B-6), deferred the partner portal to its own phase (B-7), and set the
+> safety boundaries in their instruction's §E/§F: development branch only, each phase **off by default**,
+> additive migrations, synthetic test data, Uganda and South Sudan behaviour preserved, Domain B
+> untouched, and **no production deployment, no real uCRM/distributor records and no live WhatsApp sends
+> without explicit approval.** **Two workstreams run in parallel and both are committed:** **WS-A** — the
+> distributor foundation + notification pilot (this document's Phases 1–3; build underway, starting with
+> P1a, the local registry); **WS-B** — each authorised person on their **own WhatsApp number** with the
+> DishNet AI answering (Phase 5), a tracked deliverable, **not** an optional enhancement.
+>
+> **B-1 resolved (operator, 1 Oct): WS-B uses the existing Evolution pattern, not the Cloud API.** DishNet
+> has purchased **21 physical SIMs and issues one per person, so DishNet owns and controls every number** —
+> which removes the account-ownership and onboarding concerns §3 raises for third-party numbers, and lets
+> a problem number be re-provisioned under DishNet's own control. One Evolution instance per SIM; the fixed
+> three-channel map (§4.3) becomes an instance→distributor map. **Residual risk, accepted and mitigated:**
+> WhatsApp can still ban a number used for automation regardless of who owns the SIM, so WS-B keeps a
+> spare-SIM pool, warms a number before automated use, and holds automated-send volume modest. **No real
+> distributor number is connected until WS-B's onboarding, messaging policy, cost and rollback are
+> separately approved.**
+>
+> **Wording correction (operator).** Of the pilot's three events, only *new lead attributed* originates
+> from an inbound WhatsApp message; *payment verified* and *new customer activated* are **CRM/business
+> events** (uCRM webhooks, re-verified against the authoritative record), not "inbound-triggered."
+
 ---
 
 ## 0. How to read this, and what it builds on
@@ -592,8 +616,9 @@ removed.
 
 ### 15.1 The smallest safe pilot
 
-**One distributor, one Ugandan territory, three inbound-triggered notifications, sent from a
-DishNet-controlled number in draft→approve mode — and no new live WhatsApp integration.**
+**One distributor, one Ugandan territory, three event-triggered notifications (one from an inbound
+message, two from CRM/business events), sent from a DishNet-controlled number in draft→approve mode — and
+no new live WhatsApp integration.**
 
 Concretely, the pilot is **Phases 1–3**:
 

@@ -2962,3 +2962,46 @@ uCRM client, partner, service or account is created; appointing a partner stays 
   to the plugin's `site_origins` (the application is still stored either way).
 - **Rollback:** revert the page on the branch and rebuild `web-uganda`. The plugin's capture table/data are
   untouched by the website.
+
+## 01 Oct — 5.18.61: distributor registry (WS-A P1a of the docs/49 plan) — BUILT, off by default, NOT deployed
+
+The first appointed-distributor **entity**, the smallest independently-releasable batch of the distributor
+plan the operator approved (docs/49, §15; operator "go P1a"). It is a **local record only** — it creates no
+uCRM client, grants no account/login/wallet/portal, and makes no uCRM call anywhere. Build only; **no deploy,
+no production change, no real records.** The riskiest piece (linking a uCRM company client — the coherence
+operation) is deliberately split out as its own later batch (P1b).
+
+**1. What changed (plugin 5.18.61).** All additive, and the whole feature is gated **twice**: the
+`distributors_enabled` config flag (**default off**) *and* the existing Uganda tenant gate. South Sudan and a
+flag-off Uganda install are unchanged.
+- `migrations/078_distributor_core.sql` — `dist_partners` (docs/47 §9.2 shape; `status` starts `prospect`,
+  `ucrm_client_id` nullable until active) + `dist_appointment` (application→partner provenance, one per
+  application). Additive, idempotent; nothing in 001–077 touched. **No phone column — dedupe is structurally
+  never by phone** (docs/47 §9.1; the wrong-customer-disclosure rule).
+- `lib/DistributorRegistry.php` — create / get / list / setStatus / `appointFromApplication`. Dedupe by
+  normalised TIN (unique where present) and uCRM id (unique where linked); a duplicate TIN is a **refusal**,
+  never an upsert. Actor passed from the identity boundary, never a request field. No uCRM, ever.
+- `tabs/admin/distributors.php` — admin-only (defence-in-depth `$isAdmin` check **and** the flag), lists
+  partners, and appoints a `DNP-…` application as a local prospect. `includes/post/post_distributors.php` —
+  the `dist_appoint` POST, `requireAdmin()` + the global CSRF gate + the flag + Uganda gate.
+- `public.php` — three additive lines (tab file, `*admin` perm, Uganda+flag-gated nav module);
+  `includes/post_handlers.php` — one additive `require`. Manifest → **5.18.61**.
+
+**2. Tests.** New `tests/test_distributor_registry.php` — **59 assertions, 0 failed** (migration facts;
+create/dedupe/enum guards each with a positive control; appointment + provenance + one-per-application;
+**the headline: two applications sharing a phone appoint to two distinct partners**; the no-uCRM boundary by
+source grep; the wiring + double gate; off-by-default). Regression subset green: `test_distributor_apply`
+61/0 (version pin bumped 5.18.60→5.18.61), `test_migration_integrity` 28/0 (078 applies + is recorded),
+`test_schema_doctor` 19/0, `test_whatsapp_admin_only` 104/0 (tab perms intact), **South Sudan golden 51/0/0
+(admin UI renders byte-for-byte identically — the Uganda-gated nav never touches SS)**. Full plugin suite run
+as the after-gate. All changed PHP `php -l` clean.
+
+**3. Not done, deliberately (await their own approval).** P1b (link a uCRM company client — the one uCRM
+write), territory + attribution (P2), the distributor-notification pilot (P3), the partner portal (P4,
+operator deferred per B-7), and WS-B (per-distributor own-number WhatsApp + AI — committed, Evolution + 21
+DishNet-owned SIMs). No operability toggle for the flag ships in P1a; enabling it is a controlled config set
+at the (separately-approved) deploy step.
+
+**4. Deployment.** **None in this batch.** When approved it will follow the pinned `deploy-5.18.NN.sh` +
+rehearsal pattern, baseline-gated on 5.18.60, flag staying off on deploy. Rollback is trivial: the flag off
+restores prior behaviour exactly, and migration 078 only *adds* two unused tables.

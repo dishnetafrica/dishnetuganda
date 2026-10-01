@@ -126,3 +126,4 @@ require __DIR__ . '/post/post_sync.php';
 require __DIR__ . '/post/post_leads.php';
 require __DIR__ . '/post/post_cashbook.php';
 require __DIR__ . '/post/post_field.php';
+require __DIR__ . '/post/post_distributors.php';   // WS-A P1a (docs/49): appoint an application as a local prospect partner. Admin + flag + Uganda gated.

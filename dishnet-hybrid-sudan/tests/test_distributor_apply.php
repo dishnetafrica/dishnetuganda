@@ -127,7 +127,7 @@ is_(strpos($pub, "\$_staffJobsUganda ? [['id'=>'partner_applications'") !== fals
 
 echo "\nG. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.60', 'manifest version is 5.18.60');
+is_(($mani['information']['version'] ?? '') === '5.18.61', 'manifest version is 5.18.61');
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";
