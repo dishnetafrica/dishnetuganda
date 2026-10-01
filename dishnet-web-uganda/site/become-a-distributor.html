@@ -25,7 +25,7 @@
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd — Uganda", "url": "https://dishnetuganda.com", "logo": "https://dishnetuganda.com/assets/img/og-uganda.png", "image": "https://dishnetuganda.com/assets/img/og-uganda.png", "telephone": "+256 705 993 348", "email": "info@dishnetafrica.com", "address": {"@type": "PostalAddress", "streetAddress": "4th floor, Acacia Mall, 14-18 Cooper Road, office TT06", "addressLocality": "Kampala", "addressCountry": "UG"}, "areaServed": ["Kampala", "Entebbe", "Wakiso", "Mukono", "Masaka", "Mityana", "Mubende", "Luwero", "Kayunga", "Mpigi", "Jinja", "Mbale", "Soroti", "Tororo", "Iganga", "Busia", "Kumi", "Kapchorwa", "Pallisa", "Bugiri", "Gulu", "Lira", "Arua", "Kitgum", "Adjumani", "Moyo", "Nebbi", "Pader", "Apac", "Koboko", "Mbarara", "Fort Portal", "Hoima", "Kasese", "Kabale", "Masindi", "Bushenyi", "Ntungamo", "Rukungiri", "Kisoro"], "description": "Starlink satellite internet, fiber, managed WiFi zones, CCTV and network security across Uganda.", "sameAs": ["https://dishnetafrica.com"]}</script>
 <style>
 /* ============================================================
-   Become a DishNet Distributor — interactive onboarding prototype
+   Become a DishNet Distributor — interactive onboarding wizard
    Layout: a branded marketing hero + a self-contained 8-step wizard.
    Palette/type mirror the live DishNet Uganda design system
    (styles.css v1.0). Deliberate single (light) theme — the live
@@ -405,7 +405,6 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
     <div class="container">
       <div class="wizard" id="wizard">
         <div class="wiz-head">
-          <span class="wiz-demo-tag" title="This prototype does not save data to any DishNet system">Prototype · Demo</span>
           <span class="wiz-eyebrow">Partner application</span>
         </div>
         <div class="progress">
@@ -474,7 +473,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
     </div>
     <div class="footer-bottom">
       <span>&copy; 2026 DishNet Africa Ltd — Uganda. All rights reserved.</span>
-      <span>Partner prototype — for review. Not a live application form.</span>
+      <span>An expression of interest — not a guarantee of approval or commercial terms.</span>
     </div>
   </div>
 </footer>
@@ -858,7 +857,7 @@ function computeTraining(){
 }
 STEP_HTML[5]=function(){
   var groups=computeTraining();var total=groups.reduce(function(n,g){return n+g.mods.length;},0);
-  var html='<p class="step-intro">Based on your choices, here is the training DishNet proposes for a <b>'+esc(MODEL_NAME[S.model]||'partner')+'</b>. Durations are estimates. Nothing here has been scheduled or completed — this prototype only shows the proposed experience.</p>';
+  var html='<p class="step-intro">Based on your choices, here is the training DishNet proposes for a <b>'+esc(MODEL_NAME[S.model]||'partner')+'</b>. Durations are estimates. Nothing here has been scheduled or completed — it shows the training DishNet proposes.</p>';
   html+='<div class="notice" style="margin-bottom:20px"><span class="ic">🎓</span><div><strong>'+total+' proposed modules.</strong> Sales training and technical certification are separate. Completing a sales module does not authorise anyone to perform installations — only certified DishNet technicians install equipment.</div></div>';
   groups.forEach(function(g){
     html+='<div class="tr-group"><h3><span class="tr-tag tag-'+g.tag+'">'+(g.tag==='core'?'Core':g.tag==='tech'?'Technical':'Model')+'</span>'+esc(g.label)+'</h3><p class="tr-sub">'+esc(g.sub)+'</p>';
@@ -896,8 +895,7 @@ STEP_HTML[6]=function(){
   html+=revBlock('Proposed training',5,'<div class="rev-dl">'+dd(mods.length+' modules',mods.join(', '))+'</div>');
   html+='<div class="notice notice-amber" style="margin:16px 0"><span class="ic">⚠️</span><div>Submitting this form is an expression of interest only. It does not create an authorised distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms. DishNet will review and may contact you.</div></div>';
   html+='<div class="consent" id="consentBox"><input type="checkbox" id="f_consent" name="consent"'+(S.consent?' checked':'')+'><label for="f_consent">I confirm the information is accurate and I agree that DishNet Africa Ltd may contact me about this application and hold these details for that purpose, in line with the <a href="privacy.html" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">privacy policy</a>. <span class="req">*</span></label></div>'+
-    '<p class="field err" id="consentErr">Please tick the box to submit.</p>'+
-    '<p class="hint" style="margin-top:4px">Demo mode: your answers are not sent to DishNet or saved to any system when you submit here.</p>';
+    '<p class="field err" id="consentErr">Please tick the box to submit.</p>';
   return html;
 };
 wire[6]=function(){
@@ -936,7 +934,7 @@ STEP_HTML[7]=function(){
     '</ol>'+
     '<div class="notice"><span class="ic">ℹ️</span><div>Submitting this form does not create an authorised distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms.</div></div>'+
     '<div class="contact-inline">Talk to the DishNet partner team:<span class="big">'+esc(WA_DISPLAY)+'</span>WhatsApp / phone &nbsp;·&nbsp; <span style="user-select:all">'+esc(EMAIL)+'</span><br>'+
-      '<a class="btn btn-primary" style="margin-top:12px" href="'+waLink(msg)+'" target="_blank" rel="noopener">'+(stored?'Message DishNet on WhatsApp':'Send my details on WhatsApp')+'</a></div>'+
+      '<a class="btn btn-primary" style="margin-top:12px" href='+JSON.stringify(waLink(msg))+' target="_blank" rel="noopener">'+(stored?'Message DishNet on WhatsApp':'Send my details on WhatsApp')+'</a></div>'+
     '<p class="hint" style="text-align:center">You can reopen the DishNet Planning Preview below to see how your answers map to DishNet’s internal process.</p>';
   return html;
 };
