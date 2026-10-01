@@ -2684,3 +2684,66 @@ is offered for the same SSP-on-Uganda pattern on the sales/support plane (`my_ac
 `wallet.php`, `field_expenses.php`) and the `fiber_costs.php:190` `$` USD-symbol leak. Still
 outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = `211927797217`**
 in Engage → WhatsApp.
+
+## 1 Oct — 5.18.58 BUILT (Uganda sales/support cash screens show UGX, not SSP); deploy script + rehearsal ready; NOT deployed
+
+**Part two of the tenant-currency fix** (5.18.57 cleared the accountant/admin accounting plane;
+this clears the field-agent sales/support plane). Same approach: display-only, tenant-gated on
+`dn_ssp_selectable($config)`. On **South Sudan** every gate stays open, `dn_book_base='USD'` and
+`dn_cur='$'`, so the screens render **byte-for-byte** as before. No amount, stored row, ledger or
+accounting logic changes.
+
+**Fixed in code (5.18.58):**
+- `tabs/support/field_expenses.php` — the balance hero gates its **"🇸🇸 SSP Balance"** tile on
+  `dn_ssp_selectable` and labels the base tile from `dn_book_base` (Uganda → "💵 UGX Balance"); the
+  grid collapses to one column. (The currency toggle below was already tenant-aware.)
+- `tabs/sales/my_account.php` — `$_mcIsSupport` now requires `dn_ssp_selectable`, so the SSP-first
+  support hero, the SSP cashbook buttons, the SSP position summary and the SSP ledger **collapse to
+  the base-currency view** on Uganda; the field-accountant SSP hero tile is gated; the
+  `ssp_book`/`usd_book` views redirect to summary on Uganda; the expense and advance currency
+  toggles gate the SSP pill and label the base pill from `dn_book_base`.
+- `tabs/sales/wallet.php` — `$fr_is_support_role` requires `dn_ssp_selectable` (the SSP-first
+  field-register hero collapses to the base hero); the SSP currency filter button, the SSP summary
+  section, the collection-role SSP card and the entry-modal SSP currency pill are gated; base
+  labels/symbol follow `dn_book_base`/`dn_cur` (the entry-modal amount prefix via `rtrim(dn_cur)` so
+  it stays `$` on Sudan).
+- `tabs/accounts/fiber_costs.php` — `fc_fmt()` derives its symbol from `rtrim(dn_cur($config))`
+  instead of a hardcoded `$` (byte-identical `$100.00` on Sudan; `UGX100.00` on Uganda).
+
+**Proof:** new `tests/test_sales_support_tenant.php` (**36/0**) RENDERS the Field Expenses balance
+hero and `fc_fmt()` under a Uganda config and a South Sudan config, asserts no SSP / no 🇸🇸 on
+Uganda and the base currency shown, structural gate checks for all four screens, the support-flag
+collapse, and a **control on the control** (strip the `$feSSP` gate → the SSP tile reappears on
+Uganda). `php -l` clean on all four screens. The currency/cashbook/tenant test subset passes
+(**369 assertions, 0 failed** across six tests incl. 5.18.57's `test_cashbook_tenant`). The full
+plugin suite is **0 FAIL through every test that touches these files** (all alphabetically before
+the slow `test_job_*` fake-server cluster); a full-suite run to completion is slow on this host
+(fake-HTTP-server tests) and is the background regression net — the change is display-only and
+isolated to four presentation files with no code path to the job/notification/WhatsApp tests.
+
+**Committed** to `claude/study-this-jhe2eg` at **`fcab6bd`** (manifest 5.18.57 → 5.18.58).
+
+`scripts/deploy-5.18.58.sh` — pinned to `fcab6bd`, **baseline 5.18.57 (`eea3d65`)**, rollback to
+5.18.57. Diff-proven minimal derivation of the 5.18.57 deploy script: only the pin/labels, output
+paths, the new **R1e** check, the rollback note and two summary lines change — the machinery is
+byte-identical. **R1e** names the sales/support tenant gate on the installed screens; **R1c** (the
+5.18.56 scM fix), **R1d** (the 5.18.57 accounting gate) and R2–R14 re-verify 5.18.52–5.18.57 are
+intact.
+
+Rehearsed in `scripts/harness/deploy-5.18.58/rehearse.sh` against a fake container starting at
+5.18.57: **71 passed, 0 failed, twice** — the deploy PASSES; R1e has teeth (revert the gate on the
+server → R1e fails, naming it); the 6-file delta installs byte-for-byte; the rollback returns the
+field-agent screens to 5.18.57 (SSP visible on Uganda again); the base gate refuses an older commit;
+a weakened copy whose R1e grep can no longer tell the fix apart is caught.
+
+**Deploy is HELD for the operator's explicit approval, and chains after 5.18.57** (its base gate
+refuses any live commit but 5.18.57's `eea3d65`). When 5.18.57 is live and 5.18.58 is approved, the
+pinned command (stands alone; the rollback prints separately at the end of its log — docs/44 §16.9):
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+      && mkdir -p /root/dnb-5.18.58 \
+      && bash scripts/deploy-5.18.58.sh 2>&1 | tee /root/dnb-5.18.58/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+With 5.18.58 the Uganda SSP-on-UGX cleanup covers the **whole plugin UI** (accounting +
+sales/support). Still outstanding (operator action, not code): **`whatsapp_admin_phone` =
+`211927797217`** in Engage → WhatsApp.
