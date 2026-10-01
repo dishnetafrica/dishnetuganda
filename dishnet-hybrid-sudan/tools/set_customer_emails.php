@@ -10,6 +10,8 @@ chdir(dirname(__DIR__));
  *   php tools/set_customer_emails.php --on payment_received --on welcome
  *   php tools/set_customer_emails.php --off invoice
  *   php tools/set_customer_emails.php --master on|off
+ *   php tools/set_customer_emails.php --cc on|off            CC the client's other contacts
+ *   php tools/set_customer_emails.php --reminder-email on|off  payment reminders by email (before-due)
  *   php tools/set_customer_emails.php --all-off          panic switch
  *
  * Two switches guard every send: the master and the event's own. Both must be
@@ -45,6 +47,14 @@ function show(array $config): void
     echo "\n  Not switched here:\n";
     echo "    login_code   sent by the portal the moment a customer asks for a\n";
     echo "                 code — gating it would lock people out\n\n";
+
+    $cc  = CustomerEmailDispatcher::ccEnabled($config);
+    $rem = !empty(CustomerEmailDispatcher::effectiveConfig($config)['reminder_email_enabled']);
+    echo "  DELIVERY OPTIONS\n";
+    printf("    %-32s %s\n", 'CC the client\'s other contacts', $cc ? 'ON' : 'off');
+    echo  "                                     first contact = To, every other email in CC\n";
+    printf("    %-32s %s\n", 'Payment reminders by email', $rem ? 'ON' : 'off');
+    echo  "                                     before-due only, alongside WhatsApp; needs MASTER on\n\n";
 }
 
 $config = PluginConfig::load($root, $dataDir);
@@ -72,14 +82,28 @@ foreach ($argv as $i => $a) {
         if (!in_array($v, ['on', 'off'], true)) { fwrite(STDERR, "--master takes on or off\n"); exit(1); }
         $changes['customer_emails_enabled'] = $v === 'on' ? '1' : '';
     }
+    if ($a === '--cc' && isset($argv[$i + 1])) {
+        $v = strtolower(trim($argv[$i + 1]));
+        if (!in_array($v, ['on', 'off'], true)) { fwrite(STDERR, "--cc takes on or off\n"); exit(1); }
+        $changes['email_cc_contacts'] = $v === 'on' ? '1' : '';
+    }
+    if ($a === '--reminder-email' && isset($argv[$i + 1])) {
+        $v = strtolower(trim($argv[$i + 1]));
+        if (!in_array($v, ['on', 'off'], true)) { fwrite(STDERR, "--reminder-email takes on or off\n"); exit(1); }
+        $changes['reminder_email_enabled'] = $v === 'on' ? '1' : '';
+    }
 }
 if (in_array('--all-off', $argv, true)) {
     $changes['customer_emails_enabled'] = '';
     foreach ($valid as $k) $changes['customer_email_' . $k] = '';
+    // The reminder e-mail is a lifecycle send too — the panic switch stops it.
+    // (CC is a recipient shape, not a send, and master-off already stops all
+    // sends, so --all-off leaves it untouched.)
+    $changes['reminder_email_enabled'] = '';
 }
 
 if (!$changes) {
-    fwrite(STDERR, "Nothing to do. Use --show, --on <event>, --off <event>, --master on|off, --all-off\n");
+    fwrite(STDERR, "Nothing to do. Use --show, --on <event>, --off <event>, --master on|off, --cc on|off, --reminder-email on|off, --all-off\n");
     exit(1);
 }
 
@@ -98,6 +122,11 @@ $states = CustomerEmailDispatcher::states($fresh);
 $wrong  = [];
 foreach ($changes as $k => $v) {
     $wantOn = $v !== '';
+    if ($k === 'email_cc_contacts' || $k === 'reminder_email_enabled') {
+        $isOn = !empty(CustomerEmailDispatcher::effectiveConfig($fresh)[$k]);
+        if ($isOn !== $wantOn) $wrong[] = "{$k} reads " . ($isOn ? 'ON' : 'off') . ", wanted " . ($wantOn ? 'ON' : 'off');
+        continue;
+    }
     if ($k === 'customer_emails_enabled') {
         $isOn = CustomerEmailDispatcher::masterEnabled($fresh);
         if ($isOn !== $wantOn) $wrong[] = "master reads " . ($isOn ? 'ON' : 'off') . ", wanted " . ($wantOn ? 'ON' : 'off');

@@ -458,6 +458,32 @@ class MailService
         $write("RCPT TO:<{$toEmail}>");
         if (!$expect('250', 'rcpt_to')) return ['ok' => false, 'error' => 'RCPT TO rejected — recipient invalid or relay denied', 'log' => $log];
 
+        // Carbon copies. A Cc header carries the display list; the relay only
+        // delivers to addresses it is given an RCPT for, so every Cc address
+        // also needs its own RCPT TO or it would appear in the header and
+        // receive nothing. Addresses are taken from the Cc header the caller
+        // set (so there is one source of truth), de-duplicated against the To
+        // and each other, and validated. A Cc the relay refuses is logged and
+        // skipped — the To is already accepted and the customer must still get
+        // their mail; one bad office address cannot sink the send.
+        $ccHeader = '';
+        foreach ($extraHeaders as $hk => $hv) { if (strcasecmp((string)$hk, 'Cc') === 0) { $ccHeader = (string)$hv; break; } }
+        if ($ccHeader !== '') {
+            $seen = [strtolower($toEmail) => true];
+            foreach (preg_split('/[,;]+/', $ccHeader) as $rawCc) {
+                $ccAddr = self::bareAddress(trim((string)$rawCc));
+                if ($ccAddr === '' || !filter_var($ccAddr, FILTER_VALIDATE_EMAIL)) continue;
+                $lc = strtolower($ccAddr);
+                if (isset($seen[$lc])) continue;
+                $seen[$lc] = true;
+                $write("RCPT TO:<{$ccAddr}>");
+                $ccResp = $read();
+                $ccOk   = (substr($ccResp, 0, 3) === '250');
+                $log[]  = ['step' => 'rcpt_cc', 'ok' => $ccOk,
+                           'msg'  => $ccOk ? "cc {$ccAddr}" : "cc {$ccAddr} refused: {$ccResp}"];
+            }
+        }
+
         $write('DATA');
         if (!$expect('354', 'data_init')) return ['ok' => false, 'error' => 'DATA rejected', 'log' => $log];
 

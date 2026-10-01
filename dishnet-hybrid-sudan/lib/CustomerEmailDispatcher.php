@@ -33,6 +33,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/CustomerEmails.php';
 require_once __DIR__ . '/EmailTemplate.php';
 require_once __DIR__ . '/MailService.php';
+require_once __DIR__ . '/EmailRecipients.php';
 
 class CustomerEmailDispatcher
 {
@@ -184,6 +185,18 @@ class CustomerEmailDispatcher
         return !empty($c['customer_email_' . $key]);
     }
 
+    /**
+     * Whether a customer email should CC the client's other contacts.
+     *
+     * Absent means off, so the code ships inert: existing emails keep going to
+     * a single recipient until an operator turns email_cc_contacts on. When on,
+     * the To is unchanged and every OTHER address on the client is CC'd.
+     */
+    public static function ccEnabled(array $config): bool
+    {
+        return !empty(self::effectiveConfig($config)['email_cc_contacts']);
+    }
+
     /** Every event and its current state, for settings screens and doctors. */
     public static function states(array $config): array
     {
@@ -231,9 +244,10 @@ class CustomerEmailDispatcher
                 return $this->result(false, "no such template: {$key}", '');
             }
 
+            $cc = [];
             $email = trim((string)(is_array($to) ? '' : $to));
             if (is_array($to)) {
-                [$email, $found] = $this->lookupContact((int)($to['client_id'] ?? 0));
+                [$email, $found, $cc] = $this->lookupRecipients((int)($to['client_id'] ?? 0));
                 // Some call sites know the client id but not the name.
                 if (trim($name) === '') $name = $found;
             }
@@ -262,10 +276,11 @@ class CustomerEmailDispatcher
             // would rather miss an email than get it twice.
             if ($mark !== '') $this->claim($mark, $key, $email, $sender);
 
+            $headers = ['Reply-To' => EmailTemplate::replyTo($this->config)];
+            if ($cc) $headers['Cc'] = implode(', ', $cc);
             $res = $mail->send($email, $name, (string)$built['subject'],
                                (string)$built['html'], (string)$built['text'],
-                               ['Reply-To' => EmailTemplate::replyTo($this->config)],
-                               $attachments);
+                               $headers, $attachments);
 
             $ok = !empty($res['ok']);
             if ($mark !== '') $this->settle($mark, $ok, (string)($res['error'] ?? ''));
@@ -274,6 +289,64 @@ class CustomerEmailDispatcher
             // Deliberately swallowed: see the class comment. The caller has
             // already done the thing that matters.
             error_log('[CustomerEmailDispatcher] ' . $key . ': ' . $e->getMessage());
+            return $this->result(false, 'error: ' . $e->getMessage(), '');
+        }
+    }
+
+    /**
+     * Send one payment-reminder email — the e-mail arm of the Uganda reminders
+     * cron (InvoiceReminders). Separate from send() because the reminder is not
+     * a catalogue event: it has its own switch (reminder_email_enabled) and is
+     * kept out of the catalogue so the preview screen and the South Sudan golden
+     * are untouched. It still shares the billing-first To, the CC list (when
+     * email_cc_contacts is on), the dedupe log and the mailer.
+     *
+     * Gated by BOTH the master switch and reminder_email_enabled, so --all-off
+     * stops reminders too. Dedupe key names the invoice+tier so a retry is a
+     * no-op and, because it is a distinct key from the WhatsApp dedupe, the two
+     * channels never block each other.
+     *
+     * @return array{sent:bool, reason:string, to:string}
+     */
+    public function sendReminderDue(int $clientId, string $name, array $data, string $dedupe = ''): array
+    {
+        try {
+            // $this->config is already the effective (disk-merged) config —
+            // resolved once in the constructor — so read the switch from it
+            // directly rather than re-resolving it.
+            if (!self::masterEnabled($this->config)
+                || empty($this->config['reminder_email_enabled'])) {
+                return $this->result(false, 'switched off', '');
+            }
+            [$email, $found, $cc] = $this->lookupRecipients($clientId);
+            if (trim($name) === '') $name = $found;
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $this->result(false, 'no usable email address', $email);
+            }
+
+            $mark = $dedupe !== '' ? "reminder_due:{$dedupe}" : '';
+            if ($mark !== '' && $this->alreadySent($mark)) {
+                return $this->result(false, 'already sent', $email);
+            }
+
+            $built = CustomerEmails::reminderDue($this->config, $data + ['name' => $name]);
+            $mail  = new MailService($this->dataDir);
+            if (!$mail->getConfig()) {
+                return $this->result(false, 'plugin mail is not configured', $email);
+            }
+            $sender = MailService::bareAddress((string)($mail->getConfig()['from'] ?? ''));
+            if ($mark !== '') $this->claim($mark, 'reminder_due', $email, $sender);
+
+            $headers = ['Reply-To' => EmailTemplate::replyTo($this->config)];
+            if ($cc) $headers['Cc'] = implode(', ', $cc);
+            $res = $mail->send($email, $name, (string)$built['subject'],
+                               (string)$built['html'], (string)$built['text'], $headers);
+
+            $ok = !empty($res['ok']);
+            if ($mark !== '') $this->settle($mark, $ok, (string)($res['error'] ?? ''));
+            return $this->result($ok, $ok ? 'sent' : (string)($res['error'] ?? 'send failed'), $email);
+        } catch (\Throwable $e) {
+            error_log('[CustomerEmailDispatcher] reminder_due: ' . $e->getMessage());
             return $this->result(false, 'error: ' . $e->getMessage(), '');
         }
     }
@@ -293,9 +366,38 @@ class CustomerEmailDispatcher
      */
     private function lookupContact(int $clientId): array
     {
-        if ($clientId <= 0 || !$this->crm) return ['', ''];
-        $client = $this->crm->get("clients/{$clientId}") ?: [];
+        [$email, $name] = $this->lookupRecipients($clientId);
+        return [$email, $name];
+    }
 
+    /**
+     * To, display name, and the CC list for a client.
+     *
+     * The To is the long-standing billing-first rule — turning CC on never
+     * moves it. The CC list is every OTHER address on the client, and only
+     * when email_cc_contacts is on, so with the switch off this returns an
+     * empty CC and behaves exactly as it always did.
+     *
+     * @return array{0:string,1:string,2:array<int,string>}  [email, name, cc]
+     */
+    private function lookupRecipients(int $clientId): array
+    {
+        if ($clientId <= 0 || !$this->crm) return ['', '', []];
+        $client = $this->crm->get("clients/{$clientId}") ?: [];
+        [$email, $name] = self::contactFor($client);
+        $cc = ($email !== '' && self::ccEnabled($this->config))
+            ? EmailRecipients::ccFor($client, $email) : [];
+        return [$email, $name, $cc];
+    }
+
+    /**
+     * The billing-first To rule, on an already-fetched client. Billing contact
+     * with an email first, then any contact with one.
+     *
+     * @return array{0:string,1:string}  [email, name]
+     */
+    private static function contactFor(array $client): array
+    {
         $name = trim((string)(($client['firstName'] ?? '') . ' ' . ($client['lastName'] ?? '')));
         if ($name === '') $name = trim((string)($client['companyName'] ?? ''));
 

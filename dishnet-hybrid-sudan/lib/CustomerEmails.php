@@ -560,6 +560,67 @@ class CustomerEmails
         return self::pack($c, $sub, $body, $text, 'Reference ' . $ref);
     }
 
+    // ── PAYMENT REMINDER (prepaid-safe; NOT a catalogue entry) ──────────
+    //
+    // Deliberately outside CATALOGUE: the reminder is sent only by the Uganda
+    // reminders cron (InvoiceReminders), never by the webhook, and keeping it
+    // out of the catalogue leaves the preview screen, set_customer_emails and
+    // the South Sudan golden byte-identical. Its switch is reminder_email_enabled,
+    // read by CustomerEmailDispatcher::sendReminderDue, not the per-event ones.
+    //
+    // The wording is prepaid-correct: it asks the customer to pay on or before
+    // the due date to keep the service running, and never threatens suspension —
+    // the reason the old overdue e-mail ladder was stopped on 15 September.
+    public static function reminderDue(array $c, array $d): array
+    {
+        $e      = fn($s) => EmailTemplate::e((string)$s);
+        $num    = (string)($d['invoice_number'] ?? '');
+        $amt    = self::amt($c, $d['amount'] ?? '');
+        $due    = (string)($d['due_date'] ?? '');
+        $plan   = (string)($d['plan_name'] ?? '');
+        // "due in 7 days" / "due in 3 days" / "due tomorrow" / "due on <date>".
+        $phrase = trim((string)($d['due_phrase'] ?? ''));
+        $when   = $phrase !== '' ? $phrase : ($due !== '' ? 'due on ' . $due : 'due soon');
+        $sub    = "Payment reminder — invoice {$num} {$when}";
+
+        $body = EmailTemplate::h1('Payment reminder')
+              . EmailTemplate::p('Dear ' . $e(self::greetingName($d)) . ',')
+              . EmailTemplate::p('This is a friendly reminder that your DishNet payment'
+                . ($plan !== '' ? ' for ' . $e($plan) : '') . ' is ' . $e($when) . '.')
+              . EmailTemplate::facts([
+                    'Invoice'           => $num,
+                    'Plan'              => $plan,
+                    'Amount due'        => $amt,
+                    'Due date'          => $due,
+                    'Payment reference' => $num,
+                ])
+              . (($d['pay_url'] ?? '') !== ''
+                    ? EmailTemplate::button($c, 'Pay ' . $amt, (string)$d['pay_url'])
+                    : '')
+              . self::payHow($c)
+              . EmailTemplate::note('Your service is prepaid. Paying on or before <strong>' . $e($due)
+                . '</strong> keeps your internet running without interruption.', 'info')
+              . EmailTemplate::p('If you have already paid, thank you — please ignore this reminder. '
+                . self::supportLine($c));
+
+        $text = "Dear " . self::greetingName($d) . ",\r\n\r\n"
+              . "A friendly reminder that your DishNet payment" . ($plan !== '' ? " for {$plan}" : "")
+              . " is {$when}.\r\n\r\n"
+              . self::textFacts([
+                    'Invoice'           => $num,
+                    'Plan'              => $plan,
+                    'Amount due'        => $amt,
+                    'Due date'          => $due,
+                    'Payment reference' => $num,
+                ])
+              . "\r\n"
+              . self::payHowText($c)
+              . "Your service is prepaid - paying on or before {$due} keeps your internet running.\r\n\r\n"
+              . "If you have already paid, thank you - please ignore this reminder.\r\n\r\n";
+
+        return self::pack($c, $sub, $body, $text, $amt . ' ' . $when);
+    }
+
     /** Render any catalogue key with a data array — used by the preview screen. */
     public static function render(string $key, array $config, array $data): array
     {
