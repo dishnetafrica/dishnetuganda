@@ -197,12 +197,12 @@ $fr_ssp_week_out = round(array_sum(array_column(array_values(
 $fr_ssp_pending_cnt = count(array_filter($fr_expenses, fn($e) =>
     ($e['currency'] ?? 'USD') === 'SSP' && ($e['status'] ?? '') === 'pending'));
 // Support roles see SSP-first hero (they receive SSP for expenses, not USD collections)
-$fr_is_support_role = in_array($userRole ?? '', ['support_leader', 'support']);
+$fr_is_support_role = dn_ssp_selectable($config ?? null) && in_array($userRole ?? '', ['support_leader', 'support']);
 
 // ── View / filters ────────────────────────────────────────────────────────
 $fr_view = $_GET['fr_view'] ?? 'ledger';
 $fr_curr = strtoupper($_GET['fr_curr'] ?? '');
-if (!in_array($fr_curr, ['USD','SSP'])) $fr_curr = '';
+if (!in_array($fr_curr, dn_ssp_selectable($config ?? null) ? ['USD','SSP'] : ['USD'])) $fr_curr = '';
 $fr_from = $_GET['fr_from'] ?? '';
 $fr_to   = $_GET['fr_to']   ?? '';
 
@@ -649,7 +649,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     </div>
   </div>
 
-  <?php if ($fr_ssp_holding > 0): ?>
+  <?php if (dn_ssp_selectable($config ?? null) && $fr_ssp_holding > 0): ?>
   <!-- SSP card — only shown if she has SSP -->
   <div class="fr3-bal-card fr3-bal-ssp">
     <div class="fr3-bal-lbl">🇸🇸 SSP — Cash in Bag</div>
@@ -687,9 +687,11 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
   <button class="fr3-curr-btn <?php echo $fr_curr===''?'on':''; ?>"
     onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>'">All</button>
   <button class="fr3-curr-btn <?php echo $fr_curr==='USD'?'on':''; ?>"
-    onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>&fr_curr=USD<?php echo $fr_from?"&fr_from=$fr_from":""; ?><?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">💵 USD</button>
+    onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>&fr_curr=USD<?php echo $fr_from?"&fr_from=$fr_from":""; ?><?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">💵 <?= dn_book_base($config) ?></button>
+  <?php if (dn_ssp_selectable($config ?? null)): ?>
   <button class="fr3-curr-btn <?php echo $fr_curr==='SSP'?'on':''; ?>"
     onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>&fr_curr=SSP<?php echo $fr_from?"&fr_from=$fr_from":""; ?><?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">🇸🇸 SSP</button>
+  <?php endif; ?>
   <input type="date" class="fr3-fi" value="<?php echo htmlspecialchars($fr_from); ?>"
     onchange="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?><?php echo $fr_curr?"&fr_curr=$fr_curr":""; ?>&fr_from='+this.value+'<?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">
   <input type="date" class="fr3-fi" value="<?php echo htmlspecialchars($fr_to); ?>"
@@ -813,7 +815,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
 <?php elseif($fr_view === 'summary'): ?>
 <div style="padding:14px;">
   <!-- USD summary -->
-  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--mute);margin-bottom:8px;">💵 USD</div>
+  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--mute);margin-bottom:8px;">💵 <?= dn_book_base($config) ?></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
     <div class="fr3-sum-card">
       <div class="fr3-sum-lbl">Total IN</div>
@@ -832,10 +834,11 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     </div>
   </div>
   <div class="fr3-sum-card" style="margin-bottom:20px;">
-    <div class="fr3-sum-lbl">🏦 Current USD Holding</div>
+    <div class="fr3-sum-lbl">🏦 Current <?= dn_book_base($config) ?> Holding</div>
     <div class="fr3-sum-val b"><?= dn_cur($config) ?><?php echo number_format($fr_usd_holding,2); ?></div>
   </div>
 
+  <?php if (dn_ssp_selectable($config ?? null)): ?>
   <!-- SSP summary -->
   <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--mute);margin-bottom:8px;">🇸🇸 SSP</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
@@ -853,6 +856,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     <div class="fr3-sum-val b"><?php echo number_format($fr_ssp_holding,0); ?> SSP</div>
     <div class="fr3-sum-sub">≈ <?= dn_cur($config) ?><?php echo number_format($fr_ssp_usd_eq,2); ?> USD @ <?php echo number_format($fr_rate,0); ?> SSP/USD</div>
   </div>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -880,21 +884,23 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
 
     <!-- Currency pills -->
     <div class="fr3-curr-row">
-      <div class="fr3-cpill" id="fr3PillUSD" onclick="fr3SetCurr('USD')">
-        <div class="fr3-cpill-lbl">💵 USD</div>
+      <div class="fr3-cpill<?= dn_ssp_selectable($config ?? null) ? '' : ' sel' ?>" id="fr3PillUSD" onclick="fr3SetCurr('USD')">
+        <div class="fr3-cpill-lbl">💵 <?= dn_book_base($config) ?></div>
         <div class="fr3-cpill-bal" id="fr3PillUSDbal"><?= dn_cur($config) ?><?php echo number_format($fr_usd_holding,2); ?></div>
       </div>
+      <?php if (dn_ssp_selectable($config ?? null)): ?>
       <div class="fr3-cpill sel" id="fr3PillSSP" onclick="fr3SetCurr('SSP')">
         <div class="fr3-cpill-lbl">🇸🇸 SSP</div>
         <div class="fr3-cpill-bal" id="fr3PillSSPbal"><?php echo number_format($fr_ssp_holding,0); ?></div>
       </div>
+      <?php endif; ?>
     </div>
 
     <!-- Direction cards -->
     <div class="fr3-dir-row">
       <div class="fr3-dir-btn in" id="fr3DirIn" onclick="fr3SetDir('in')">
         <div class="fr3-dir-ic">⬆️</div>
-        <div class="fr3-dir-lbl" id="fr3DirInLbl">SSP IN</div>
+        <div class="fr3-dir-lbl" id="fr3DirInLbl"><?= dn_ssp_selectable($config ?? null) ? 'SSP IN' : (dn_book_base($config) . ' IN') ?></div>
         <div class="fr3-dir-sub" id="fr3DirInSub">Received · Exchange</div>
       </div>
       <?php if (dn_ssp_selectable($config ?? null)): ?>
@@ -1332,13 +1338,13 @@ function fr3SetCurr(cur) {
   if (cur === 'USD' && !_fr3IsAcct) {
     inBtn.style.opacity      = '0.35';
     inBtn.style.pointerEvents = 'none';
-    inLbl.textContent = 'USD IN';
+    inLbl.textContent = '<?= dn_book_base($config) ?> IN';
     inSub.textContent = 'Use Collect tab';
     if (_fr3Dir === 'in') { _fr3Dir = ''; document.getElementById('fr3DirIn').classList.remove('sel'); document.getElementById('fr3CatSection').style.display='none'; document.getElementById('fr3FieldSection').style.display='none'; }
   } else if (cur === 'USD' && _fr3IsAcct) {
     inBtn.style.opacity      = '1';
     inBtn.style.pointerEvents = '';
-    inLbl.textContent = 'USD IN';
+    inLbl.textContent = '<?= dn_book_base($config) ?> IN';
     inSub.textContent = 'Advance · Collection';
   } else {
     inBtn.style.opacity      = '1';
@@ -1347,8 +1353,8 @@ function fr3SetCurr(cur) {
     inSub.textContent = 'Received · Exchange';
   }
   // update amount label
-  document.getElementById('fr3AmtLbl').textContent = cur==='SSP' ? 'AMOUNT (SSP)' : 'AMOUNT (USD)';
-  document.getElementById('fr3AmtPrefix').textContent = cur==='SSP' ? '' : '$';
+  document.getElementById('fr3AmtLbl').textContent = cur==='SSP' ? 'AMOUNT (SSP)' : 'AMOUNT (<?= dn_book_base($config) ?>)';
+  document.getElementById('fr3AmtPrefix').textContent = cur==='SSP' ? '' : '<?= rtrim(dn_cur($config)) ?>';
   // re-render cats if direction already selected
   if (_fr3Dir) { fr3RenderCats(); _fr3Cat=''; document.getElementById('fr3FieldSection').style.display='none'; }
   fr3UpdateHeader();

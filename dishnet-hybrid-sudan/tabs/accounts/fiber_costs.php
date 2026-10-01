@@ -187,7 +187,10 @@ $_leakageBadge = 0;
 try { $_leakageBadge = (int)$store->getPdo()->query("SELECT COUNT(*) FROM fiber_services_cache WHERE splynx_status = 'active' AND (crm_status IS NULL OR crm_status != 'Active')")->fetchColumn(); } catch (\Throwable $_e) {}
 
 function fc_fmt(float $v, string $cur = 'USD'): string {
-    return ($cur === 'SSP' ? '' : '$') . number_format($v, 2);
+    // 5.18.58: the base-currency symbol follows the tenant (Uganda UGX, South Sudan $).
+    // rtrim: dn_cur() appends a space, but fc_fmt's original "$" had none — keep Sudan byte-identical.
+    global $config;
+    return ($cur === 'SSP' ? '' : rtrim(dn_cur($config))) . number_format($v, 2);
 }
 function fc_status_badge(string $s): string {
     $colors = ['received'=>'#f59e0b','verified'=>'#3b82f6','approved'=>'#8b5cf6','paid'=>'#22c55e','posted'=>'#64748b'];

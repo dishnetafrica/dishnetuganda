@@ -87,15 +87,17 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
 </div>
 
 <!-- Stats -->
-<?php $cur = $summary['by_currency'] ?? ['USD'=>['balance'=>0,'pending'=>0],'SSP'=>['balance'=>0,'pending'=>0]]; ?>
-<div class="fe-stats" style="grid-template-columns:repeat(2,1fr);">
+<?php $cur = $summary['by_currency'] ?? ['USD'=>['balance'=>0,'pending'=>0],'SSP'=>['balance'=>0,'pending'=>0]];
+$feSSP = dn_ssp_selectable($config ?? null); $feBase = dn_book_base($config ?? null); ?>
+<div class="fe-stats" style="grid-template-columns:repeat(<?= $feSSP ? 2 : 1 ?>,1fr);">
     <div class="fe-stat" style="background:#f0fdf4;border-color:#bbf7d0;">
-        <div class="fe-stat-label">💵 USD Balance</div>
+        <div class="fe-stat-label">💵 <?= $feBase ?> Balance</div>
         <div class="fe-stat-value" style="color:<?= ($cur['USD']['balance'] ?? 0) > 0 ? '#15803d' : '#991b1b' ?>;"><?= dn_cur($config) ?><?= number_format($cur['USD']['balance'] ?? 0, 2) ?></div>
         <?php if (($cur['USD']['pending'] ?? 0) > 0): ?>
         <div style="font-size:10px;color:#f59e0b;"><?= dn_cur($config) ?><?= number_format($cur['USD']['pending'], 2) ?> pending</div>
         <?php endif; ?>
     </div>
+    <?php if ($feSSP): ?>
     <div class="fe-stat" style="background:#eff6ff;border-color:#bfdbfe;">
         <div class="fe-stat-label">🇸🇸 SSP Balance</div>
         <div class="fe-stat-value" style="color:<?= ($cur['SSP']['balance'] ?? 0) > 0 ? '#1d4ed8' : '#991b1b' ?>;"><?= number_format($cur['SSP']['balance'] ?? 0, 0) ?> SSP</div>
@@ -103,6 +105,7 @@ $categories = ['fuel' => '⛽ Fuel', 'parts' => '🔧 Parts', 'transport' => '�
         <div style="font-size:10px;color:#f59e0b;"><?= number_format($cur['SSP']['pending'], 0) ?> SSP pending</div>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 </div>
 <div class="fe-stats" style="grid-template-columns:repeat(2,1fr);margin-top:-6px;">
     <div class="fe-stat">
