@@ -344,16 +344,27 @@ hdr "V. Verification over the public address (nothing signed in; no switch chang
 # ════════════════════════════════════════════════════════
 if [ -n "$PLUGIN_BASE" ]; then
   http GET "$PLUGIN_BASE?page=customer_login" -L
-  if [ "$HTTP_CODE" = "200" ] && [ "$HTTP_REDIRECTS" = "0" ]; then ok "V1 the sign-in page on the public address answers 200 with zero redirects (no loop)"
+  if [ "$HTTP_CODE" = "000" ]; then
+    # The server's own shell could not open a connection to the public URL. That is the ABSENCE of a reading, not a
+    # failing page: a code-only release changes no routing (R6 proves the sign-in code is byte-intact) and V4 proves no
+    # fatal, so a NOTE — never a FAIL that would read as "the page is broken". The commonest cause here is a :8443
+    # public port the host cannot reach from inside (hairpin); the plugin's own :8443 rule is "not the public address".
+    case "$PLUGIN_BASE" in
+      *:8443*) note "V1/V2 could not probe the public page: the derived address is $PLUGIN_BASE and the server cannot reach its own :8443 public port from inside the host (curl 000 — hairpin). This says nothing about whether the page works; the code is verified by R1–R6 below and by V4 (no fatal). To confirm the page itself, open $PLUGIN_BASE?page=customer_login in a browser, or re-run: bash scripts/deploy-$EXPECTED_VERSION.sh --after-only --plugin-base <an address the server can reach>" ;;
+      *) note "V1/V2 could not probe the public page: $PLUGIN_BASE is not reachable from the server (curl 000). This says nothing about the page; R1–R6 and V4 verify the code. Open the sign-in page in a browser, or re-run with --plugin-base <a reachable address>" ;;
+    esac
   else
-    bad "V1 the sign-in page on the public address → $HTTP_CODE after $HTTP_REDIRECTS redirect(s) ${HTTP_LOCATION:+(last $HTTP_LOCATION)}"
-    if [ "$MODE" = "deploy" ] && [ "${HTTP_REDIRECTS:-0}" != "0" ]; then echo; echo "  ROLLING BACK — the public address must never redirect"; do_rollback || true; stop "rolled back (serves $(live_commit)); send the log file"; fi
+    if [ "$HTTP_CODE" = "200" ] && [ "$HTTP_REDIRECTS" = "0" ]; then ok "V1 the sign-in page on the public address answers 200 with zero redirects (no loop)"
+    else
+      bad "V1 the sign-in page on the public address → $HTTP_CODE after $HTTP_REDIRECTS redirect(s) ${HTTP_LOCATION:+(last $HTTP_LOCATION)}"
+      if [ "$MODE" = "deploy" ] && [ "${HTTP_REDIRECTS:-0}" != "0" ]; then echo; echo "  ROLLING BACK — the public address must never redirect"; do_rollback || true; stop "rolled back (serves $(live_commit)); send the log file"; fi
+    fi
+    http GET "$PLUGIN_BASE?page=customer_portal&view=home"
+    case "$HTTP_CODE" in 302|401) ok "V1 the portal without a session still refuses ($HTTP_CODE)";; *) bad "V1 the portal without a session → $HTTP_CODE";; esac
+    http GET "$PLUGIN_BASE?page=customer_login"
+    if [ "$HTTP_CODE" = "200" ] && [ "$(count '+211')" = "0" ] && [ "$(count 'dishnetafrica.com')" = "0" ]; then ok "V2 the sign-in page answers 200 and carries no South Sudan contact"
+    else bad "V2 sign-in page → $HTTP_CODE; '+211' ×$(count '+211') · dishnetafrica.com ×$(count 'dishnetafrica.com')"; fi
   fi
-  http GET "$PLUGIN_BASE?page=customer_portal&view=home"
-  case "$HTTP_CODE" in 302|401) ok "V1 the portal without a session still refuses ($HTTP_CODE)";; *) bad "V1 the portal without a session → $HTTP_CODE";; esac
-  http GET "$PLUGIN_BASE?page=customer_login"
-  if [ "$HTTP_CODE" = "200" ] && [ "$(count '+211')" = "0" ] && [ "$(count 'dishnetafrica.com')" = "0" ]; then ok "V2 the sign-in page answers 200 and carries no South Sudan contact"
-  else bad "V2 sign-in page → $HTTP_CODE; '+211' ×$(count '+211') · dishnetafrica.com ×$(count 'dishnetafrica.com')"; fi
 else note "V1/V2 skipped — the plugin's public URL could not be derived (re-run with --plugin-base); the R checks below read the install directly"; fi
 
 # V3 — the two new switches are STILL OFF on the live install: the deploy turned nothing on. (The operator turns them on

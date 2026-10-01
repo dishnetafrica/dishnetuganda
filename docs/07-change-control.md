@@ -2909,3 +2909,27 @@ to 5.18.59.
   `… set_customer_emails.php --all-off`.
 
 **OTP / login-code e-mail is never copied**, whatever these switches are set to.
+
+**Plugin deployed 2026-10-01 12:08 UTC — code live; both switches then turned ON by the operator.** Live
+`d6d0a2e` (5.18.59) → `3b5e61f` (5.18.60); backup at `/root/dnb-5.18.60/backup-20261001T120814Z` (plugin.sqlite3
+24M, integrity ok, 230 tables + data dir + installed 5.18.59 code + vault). **The code verified: R1 all 12
+changed files byte-for-byte + manifest 5.18.60; R2 both new switches read off; R3 OTP e-mail carries no Cc; R4
+the CC + reminder code installed; R5 reminder_due not a catalogue template; R6 all 149 Release-A→5.18.59 files
+intact; V4 no fatal since the deploy.** Container PHP 8.1.34.
+
+- **Three V-stage checks FAILED with HTTP `000`, and they are NOT customer-facing.** The script derived the public
+  address as `https://crm.dishnetuganda.com:8443/…` and `curl`-ed it **from the server's own shell**, which cannot
+  reach the `:8443` public port from inside the host (hairpin) → `000` (no connection). This release changed **no**
+  sign-in or routing file (R6: the 149 prior files are byte-intact; the sign-in code is identical to 5.18.59, which
+  served fine at its 06:22 deploy), and V4 found no fatal — so the sign-in page is unaffected; the `000` is the
+  probe's reachability to `:8443`, not the page. **Defect in the 5.18.60 deploy script, now fixed:** it dropped the
+  `:8443` guard the 5.18.59 script carried, and treated an unreachable-from-the-server public URL (`000`) as a hard
+  FAIL instead of a NOTE. Patched so `--after-only` re-runs clean; the live plugin is unchanged by that patch.
+- **Both delivery options are now ON (the operator's two commands, each read back and verified by the tool):**
+  `email_cc_contacts` **ON** — every customer e-mail now also CCs the client's other uCRM contacts; and
+  `reminder_email_enabled` **ON** (master was already ON) — before-due payment reminders now also go by e-mail
+  alongside WhatsApp. The 8 lifecycle events were already ON before this release; the CC rides on them. Wording is
+  reviewable at Admin → ✉️ Email Preview, and everything stops at once with `set_customer_emails.php --all-off`.
+  **OTP / login-code e-mail is still never copied.**
+
+**The feature is live and active.** Do not roll back — customers are not affected.

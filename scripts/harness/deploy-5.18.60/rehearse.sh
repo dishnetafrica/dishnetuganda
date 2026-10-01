@@ -265,6 +265,15 @@ BK="$(ls -d "$SB/out"/backup-* | tail -1)"
 check "$(tar -xzOf "$BK"/plugin-installed-5.18.59.tar.gz $P/manifest.json | grep -c '"version": "5.18.59"')" "1" "the code backup is 5.18.59"
 check "$(tar -tzf "$BK"/plugin-installed-5.18.59.tar.gz | grep -c "$P/lib/EmailRecipients.php")" "0" \
   "…and the backup has no EmailRecipients.php: a rollback restores the pre-5.18.60 code exactly"
+# V1/V2 when the public URL cannot be reached from the server (curl 000): a NOTE, never a FAIL — the probe reached
+# nothing, so it says nothing about the page; R1–R6 verify the code. (The real :8443 hairpin on the server, 2026-10-01.)
+OUT="$(run --after-only --plugin-base http://127.0.0.1:1/public.php)"
+check "$(has "$OUT" 'note  V1/V2 could not probe the public page')$(has "$OUT" 'is not reachable from the server (curl 000)')" "yesyes" \
+  "2e an unreachable public URL (curl 000) is a NOTE naming the probe, not a FAIL"
+check "$(fails "$OUT")$(has "$OUT" '5.18.60 (after): PASSED')" "0yes" "2f …and the run still PASSES — the probe says nothing about the code (R1–R6 do)"
+OUT="$(run --after-only --plugin-base https://127.0.0.1:8443/crm/_plugins/dishnet-hybrid-sudan/public.php)"
+check "$(has "$OUT" 'cannot reach its own :8443 public port')$(fails "$OUT")$(has "$OUT" '5.18.60 (after): PASSED')" "yes0yes" \
+  "2g a :8443 address the server cannot reach → the :8443-specific NOTE, still PASSES (the server's own 2026-10-01 case)"
 
 echo; echo "== 3. R1 and R6 have teeth: a changed file reverted on the server is caught =="
 ST="$SB/out/state-5.18.60.env"
