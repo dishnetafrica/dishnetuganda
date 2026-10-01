@@ -24,9 +24,19 @@ if (empty($config['distributors_enabled'])) {
     return;
 }
 
+require_once __DIR__ . '/../../lib/DistributorAttribution.php';
 $reg = DistributorRegistry::fromStore($store);
 $apps = DistributorApplicationService::fromStore($store, $dataDir);
+$att = DistributorAttribution::fromStore($store);
 $hh = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+$partnerOptions = function ($sel = 0) use ($reg, $hh) {
+    $o = '<option value="">— choose a distributor —</option>';
+    foreach ($reg->listAll() as $p) {
+        $o .= '<option value="' . (int)$p['id'] . '"' . ((int)$sel === (int)$p['id'] ? ' selected' : '') . '>'
+            . $hh($p['partner_code'] . ' — ' . ($p['legal_name'] ?: '(unnamed)')) . '</option>';
+    }
+    return $o;
+};
 
 echo '<div style="max-width:1100px;margin:0 auto;">';
 echo '<h2 style="font-size:22px;margin:0 0 4px;">Distributors</h2>';
@@ -79,6 +89,61 @@ if (!$partners) {
            . '</tr>';
     }
     echo '</tbody></table>';
+}
+
+// ── Territory & attribution (WS-A P2) ──
+echo '<h3 style="font-size:16px;margin:26px 0 8px;">Territory &amp; attribution</h3>';
+echo '<p style="color:#6b7280;margin:0 0 12px;font-size:13px;">Define each distributor\'s areas, then attribute a '
+   . 'customer or lead to its owner. Attribution is <b>never by phone</b>; one customer/lead has <b>one active owner</b> '
+   . '(re-attributing keeps the history); one area belongs to <b>one distributor</b>.</p>';
+if (!$partners) {
+    echo '<div style="padding:18px;color:#6b7280;border:1px dashed #e5e7eb;border-radius:10px;margin-bottom:20px;">Appoint a distributor first, then its territory can be defined.</div>';
+} else {
+    echo '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px;">';
+    echo '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;display:flex;gap:6px;align-items:end;flex-wrap:wrap;">'
+       . csrfField() . '<input type="hidden" name="action" value="dist_region_add">'
+       . '<label style="font-size:12px;color:#6b7280;">Distributor<br><select name="partner_id" required style="padding:5px;">' . $partnerOptions() . '</select></label>'
+       . '<label style="font-size:12px;color:#6b7280;">Region code<br><input name="code" required maxlength="40" style="padding:5px;width:90px;"></label>'
+       . '<label style="font-size:12px;color:#6b7280;">Region name<br><input name="name" maxlength="160" style="padding:5px;width:140px;"></label>'
+       . '<button type="submit" style="background:#111827;color:#fff;border:0;border-radius:5px;padding:7px 11px;font-weight:600;cursor:pointer;">Add region</button></form>';
+    $regs = [];
+    foreach ($partners as $p) foreach ($att->regionsFor((int)$p['id']) as $rg) $regs[] = ['id' => (int)$rg['id'], 'label' => $p['partner_code'] . ' / ' . $rg['code'] . ' ' . $rg['name']];
+    if ($regs) {
+        $ro = '';
+        foreach ($regs as $rg) $ro .= '<option value="' . (int)$rg['id'] . '">' . $hh($rg['label']) . '</option>';
+        echo '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;display:flex;gap:6px;align-items:end;flex-wrap:wrap;">'
+           . csrfField() . '<input type="hidden" name="action" value="dist_area_add">'
+           . '<label style="font-size:12px;color:#6b7280;">Region<br><select name="region_id" required style="padding:5px;">' . $ro . '</select></label>'
+           . '<label style="font-size:12px;color:#6b7280;">Area / district<br><input name="area" required maxlength="120" placeholder="e.g. Nakawa" style="padding:5px;width:140px;"></label>'
+           . '<button type="submit" style="background:#111827;color:#fff;border:0;border-radius:5px;padding:7px 11px;font-weight:600;cursor:pointer;">Add area</button></form>';
+    }
+    echo '</div>';
+    $terr = $att->territory();
+    if ($terr) {
+        $pById = []; foreach ($partners as $p) $pById[(int)$p['id']] = $p;
+        echo '<table style="border-collapse:collapse;width:100%;font-size:13px;margin-bottom:20px;"><thead><tr style="text-align:left;border-bottom:2px solid #e5e7eb;">'
+           . '<th style="padding:7px 9px;">Area</th><th style="padding:7px 9px;">Region</th><th style="padding:7px 9px;">Distributor</th></tr></thead><tbody>';
+        foreach ($terr as $t) {
+            $pp = $pById[(int)$t['partner_id']] ?? [];
+            echo '<tr style="border-bottom:1px solid #f1f1ef;"><td style="padding:7px 9px;">' . $hh($t['area_label']) . '</td>'
+               . '<td style="padding:7px 9px;color:#6b7280;">' . $hh(trim($t['region_code'] . ' ' . $t['region_name'])) . '</td>'
+               . '<td style="padding:7px 9px;">' . $hh(($pp['partner_code'] ?? ('#' . (int)$t['partner_id'])) . ' — ' . ($pp['legal_name'] ?? '')) . '</td></tr>';
+        }
+        echo '</tbody></table>';
+    } else {
+        echo '<p style="color:#9ca3af;font-size:13px;margin:0 0 20px;">No areas defined yet.</p>';
+    }
+    echo '<h4 style="font-size:14px;margin:6px 0 6px;">Attribute a customer or lead</h4>';
+    echo '<p style="color:#6b7280;font-size:12.5px;margin:0 0 8px;">The territory table above proposes the owner for a location — you confirm the distributor here. Re-attributing supersedes the previous owner (kept as history).</p>';
+    echo '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0 0 6px;display:flex;gap:6px;align-items:end;flex-wrap:wrap;">'
+       . csrfField() . '<input type="hidden" name="action" value="dist_attribute">'
+       . '<label style="font-size:12px;color:#6b7280;">Scope<br><select name="scope" style="padding:5px;"><option value="ucrm_client">uCRM client</option><option value="lead">Lead</option></select></label>'
+       . '<label style="font-size:12px;color:#6b7280;">Customer / lead id<br><input name="entity_id" required maxlength="120" placeholder="e.g. 5001" style="padding:5px;width:110px;"></label>'
+       . '<label style="font-size:12px;color:#6b7280;">Owner (confirm)<br><select name="partner_id" required style="padding:5px;">' . $partnerOptions() . '</select></label>'
+       . '<label style="font-size:12px;color:#6b7280;">Basis<br><select name="assigned_via" style="padding:5px;"><option value="territory">territory</option><option value="manual">manual</option></select></label>'
+       . '<label style="font-size:12px;color:#6b7280;">Note<br><input name="note" maxlength="200" style="padding:5px;width:150px;"></label>'
+       . '<button type="submit" style="background:#C8102E;color:#fff;border:0;border-radius:5px;padding:7px 12px;font-weight:600;cursor:pointer;">Confirm owner</button></form>';
+    echo '<p style="font-size:12px;color:#9ca3af;margin:0 0 20px;">Never attributed by phone — use the uCRM client id or the lead id.</p>';
 }
 
 // ── Applications not yet appointed ──

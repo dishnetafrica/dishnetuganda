@@ -3049,3 +3049,44 @@ status automation on link; no territory/attribution (P2); no notifications (P3);
 rehearsed `deploy-5.18.NN.sh`, flag staying off. The one production behaviour P1b adds — a uCRM **read** when
 an admin links a client with the flag on — only ever runs post-deploy, admin-triggered. Rollback: flag off
 restores prior behaviour; no schema change to revert.
+
+## 01 Oct — 5.18.63: distributor territory + customer attribution (WS-A P2) — BUILT, off by default, NOT deployed
+
+On the operator's "P2 (territory + attribution) go ahead". Adds the attribution spine: a distributor's
+**territory** (areas/districts) and the **structured customer/lead → distributor owner** link. **Local only;
+no uCRM, no messages, no production change.** Behind `distributors_enabled` (default off) and Uganda-gated.
+
+**1. Files & migration.**
+- `migrations/079_distributor_territory.sql` — `dist_regions` (docs/47 §9.3), `dist_territory_map`
+  (area_key → region → distributor), `dist_customer_links` (scope ∈ {ucrm_client, lead}, entity_id, partner,
+  assigned_via, active, history). Additive/idempotent; 001-078 untouched. **No phone column anywhere.**
+- `lib/DistributorAttribution.php` — `addRegion`/`addArea` (territory), `candidateFor` (resolver), `link`
+  (attribution), `activeLink`/`history`/`territory`/`linksForPartner`.
+- `tabs/admin/distributors.php` — a Territory & attribution section (add region, add area, the territory map
+  table, and a confirm-owner form). `includes/post/post_distributors.php` — `dist_region_add`/`dist_area_add`/
+  `dist_attribute` POSTs, admin + CSRF + flag + Uganda. Manifest → 5.18.63; three version pins updated.
+
+**2. Rules baked in (docs/49 §6), each proven.**
+- **Never by phone** — no phone column; `link()` takes/reads no phone (asserted on the method body); keyed by
+  the uCRM client id or lead id.
+- **One owner at a time** — one *active* link per (scope, entity_id), enforced by a partial unique index;
+  re-attributing **supersedes** the old row (kept as history with `superseded_at`), never a silent overwrite.
+- **One distributor per area** — `area_key` is globally unique; an area already another distributor's is
+  refused and flagged, never merged; so a territory resolve returns at most one candidate (ambiguity → null).
+- **Human-confirmed (pilot, B-6)** — `candidateFor()` only *proposes*; the admin confirms the owner via the
+  form. Nothing auto-attributes a real customer.
+
+**3. Tests.** `tests/test_distributor_territory.php` — **47/0**: migration + no-phone invariant; region dup
+refused (+control); area normalisation + one-area-one-distributor conflict (+control) + idempotent; resolver
+proposes one / fails safe to null / case-insensitive; attribution active link, **relink supersedes with
+history kept and exactly one active** (+the partial-unique-index floor proven by a direct 2nd-active INSERT
+being refused, with the inactive-row control); scope/via/entity/partner guards; scope separates a lead from a
+client with the same id; handlers admin+flag+Uganda; tab forms; no uCRM. Regression: registry 57/0, apply
+61/0, link 33/0, **South Sudan golden 51/0 (admin UI byte-for-byte unchanged)**. Full suite as after-gate.
+`php -l` clean.
+
+**4. Deployment.** **None.** P1a+P1b+P2 (5.18.61→.63) deploy together when approved, flag off. Rollback:
+flag off restores prior behaviour; migration 079 only *adds* three unused tables. Preserves Uganda/South
+Sudan; Domain B untouched. **Not built, deliberately:** `dist_outlets` (stock-side, a later phase);
+auto-attribution of real customers on the customer/lead screens (the resolver is the spine; that wiring is a
+separate step); P3 notifications; the partner portal (P4).
