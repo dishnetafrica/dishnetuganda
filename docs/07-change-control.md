@@ -3154,8 +3154,14 @@ pins bumped: registry **57/0**, apply **61/0**, link **33/0**, territory **47/0*
 admin UI and the whole job-day (every uCRM call, WhatsApp text, webhook log, e-mail) byte-for-byte unchanged,
 all 11 mutants still caught** — proving the `webhook.php` hooks are strict no-ops off. Full suite as after-gate.
 
-**4. Deployment.** **None.** P1a+P1b+P2+P3 (5.18.61→.64) deploy together when approved, flag off. Rollback:
-flag off restores prior behaviour; migration 080 only *adds* three unused tables; the `webhook.php` hooks are
-no-ops when off. Preserves Uganda/South Sudan; Domain B untouched. **Not built, deliberately:** the live
-WhatsApp transport (binding the Evolution/Cloud-API adapter is a separate, approved step — the pilot queues,
-never sends); the partner portal (P4); WS-B (per-distributor own-number WhatsApp + AI).
+**4. Deployment.** **Built and rehearsed, NOT run.** On the operator's go-ahead, `scripts/deploy-5.18.64.sh`
+(pinned to `03df9a5`, installs P1a+P1b+P2+P3 over live 5.18.60) with `distributors_enabled` left OFF — backup +
+GO/NO-GO, byte-for-byte verify, the three additive migrations (078/079/080) apply on the next request, R4 proves
+the Null channel is bound so nothing can be sent, and the rollback to 5.18.60 is a separate command (never pasted
+with the deploy). `tools/set_distributors.php --on|--off|--show` is the operator toggle (Uganda only; still sends
+nothing). The rehearsal `scripts/harness/deploy-5.18.64/rehearse.sh` drives it end to end against a fake 5.18.60
+server with teeth + a mutant control: **88/0**. This session cannot reach the server; the operator runs the
+one-line command and sends back the log. Rollback: flag off, or the script's `--rollback`; the additive tables
+stay empty and ignored by 5.18.60. Preserves Uganda/South Sudan; Domain B untouched. **Not built, deliberately:**
+the live WhatsApp transport (a separate, approved step — the pilot queues, never sends); the partner portal (P4);
+WS-B (per-distributor own-number WhatsApp + AI).
