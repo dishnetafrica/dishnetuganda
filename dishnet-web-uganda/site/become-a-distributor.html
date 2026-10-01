@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Become a DishNet Distributor</title>
+<meta name="description" content="Partner with DishNet Uganda. Explore the partner models, tell us about your business, see your proposed training plan and submit an expression of interest. Prototype — subject to DishNet review and written agreement.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://dishnetuganda.com/become-a-distributor.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DishNet Uganda">
+<meta property="og:title" content="Become a DishNet Distributor — Uganda">
+<meta property="og:description" content="Grow your business with DishNet. Explore the partnership, choose a partner model, see your proposed training plan and submit an expression of interest.">
+<meta property="og:url" content="https://dishnetuganda.com/become-a-distributor.html">
+<meta property="og:image" content="https://dishnetuganda.com/assets/img/og-uganda.png">
+<meta property="og:locale" content="en_UG">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Become a DishNet Distributor — Uganda">
+<meta name="twitter:description" content="Grow your business with DishNet. Explore the partnership and submit an expression of interest.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23C8102E'/%3E%3Ctext x='16' y='23' font-family='Arial,Helvetica,sans-serif' font-size='21' font-weight='800' fill='white' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Become a DishNet Distributor — interactive onboarding prototype
+   Layout: a branded marketing hero + a self-contained 8-step wizard.
+   Palette/type mirror the live DishNet Uganda design system
+   (styles.css v1.0). Deliberate single (light) theme — the live
+   site has no dark mode; every colour is a token and the body
+   background is explicit, so it renders correctly on any host.
+   ============================================================ */
+:root{
+  color-scheme: light;
+  --bg:#FAFAF8; --surface:#FFFFFF; --surface-alt:#F3F2EE;
+  --text:#1A1A1A; --text-secondary:#5A5A58;
+  --accent:#C8102E; --accent-dark:#A00D24; --accent-glow:rgba(200,16,46,0.12);
+  --green:#22C55E; --green-glow:rgba(34,197,94,0.12);
+  --blue:#0EA5E9; --blue-glow:rgba(14,165,233,0.10);
+  --amber:#B45309; --amber-glow:rgba(180,83,9,0.10);
+  --border:#E5E4E0; --dark-bg:#0B1120;
+  --radius:14px; --radius-sm:8px; --radius-pill:100px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:0 4px 20px rgba(0,0,0,0.08);
+  --shadow-lg:0 12px 40px rgba(0,0,0,0.10);
+  --font-display:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --font-body:'DM Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --transition:0.25s cubic-bezier(0.4,0,0.2,1);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+[hidden]{display:none!important}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+.container{max-width:1120px;margin:0 auto;padding:0 24px}
+.section{padding:72px 0}
+.section-sm{padding:48px 0}
+.muted{color:var(--text-secondary)}
+.accent{color:var(--accent)}
+
+.badge-label{display:inline-block;font-family:var(--font-display);font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:6px 16px;border-radius:var(--radius-pill);margin-bottom:18px}
+.badge-accent{color:var(--accent);background:var(--accent-glow)}
+.badge-blue{color:var(--blue);background:var(--blue-glow)}
+.badge-white{color:#fff;border:1px solid rgba(255,255,255,.35)}
+
+.section-title{font-family:var(--font-display);font-size:clamp(26px,4vw,40px);font-weight:700;line-height:1.15;margin-bottom:12px;text-wrap:balance}
+.section-subtitle{font-size:17px;color:var(--text-secondary);max-width:620px;line-height:1.7}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-display);font-weight:600;font-size:15px;padding:14px 26px;border-radius:var(--radius-pill);transition:var(--transition);border:1.5px solid transparent;text-align:center}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-dark);transform:translateY(-1px);box-shadow:0 6px 20px rgba(200,16,46,.3)}
+.btn-outline{border-color:var(--border);color:var(--text);background:var(--surface)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.btn-white{background:#fff;color:var(--text)}
+.btn-white:hover{background:#f5f5f5;transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--text-secondary);border-color:var(--border)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn[disabled]{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.btn-lg{padding:16px 32px;font-size:16px}
+
+/* Uganda flag strip */
+.ug-strip{height:4px;background:linear-gradient(90deg,#000 0 16.6%,#FCDC04 16.6% 33.3%,#D90000 33.3% 50%,#000 50% 66.6%,#FCDC04 66.6% 83.3%,#D90000 83.3% 100%)}
+
+/* Header */
+.header{position:sticky;top:env(safe-area-inset-top,0px);z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--border)}
+.header-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0}
+.logo-lockup{display:flex;align-items:center;gap:10px}
+.logo-lockup .wordmark{font-family:var(--font-display);font-weight:800;font-size:24px;letter-spacing:-.6px;color:var(--accent);line-height:1}
+.logo-lockup .ug-tag{font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:1.2px;color:#fff;background:var(--accent);padding:3px 9px;border-radius:5px}
+.nav{display:flex;align-items:center;gap:28px}
+.nav a{font-family:var(--font-display);font-size:14px;font-weight:500;color:var(--text);transition:var(--transition)}
+.nav a:hover,.nav a.active{color:var(--accent)}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.header-cta{font-family:var(--font-display);font-size:14px;font-weight:600;padding:10px 20px;border-radius:var(--radius-pill);background:var(--accent);color:#fff;transition:var(--transition)}
+.header-cta:hover{background:var(--accent-dark)}
+.mobile-toggle{display:none;width:42px;height:42px;align-items:center;justify-content:center}
+.mobile-toggle span,.mobile-toggle span::before,.mobile-toggle span::after{display:block;width:22px;height:2px;background:var(--text);position:relative;content:''}
+.mobile-toggle span::before{position:absolute;left:0;top:-7px;content:''}
+.mobile-toggle span::after{position:absolute;left:0;top:7px;content:''}
+.mobile-nav{display:none;position:fixed;inset:0;background:rgba(255,255,255,.98);backdrop-filter:blur(20px);z-index:200;flex-direction:column;padding:96px 28px 28px;gap:6px}
+.mobile-nav.open{display:flex}
+.mobile-nav a{font-family:var(--font-display);font-size:20px;font-weight:600;padding:12px 0;border-bottom:1px solid var(--border)}
+.mobile-nav-close{position:absolute;top:18px;right:22px;font-size:30px;width:42px;height:42px;display:flex;align-items:center;justify-content:center}
+
+/* Hero */
+.hero{background:radial-gradient(1100px 480px at 82% -12%,var(--accent-glow),transparent 60%),var(--bg);padding:64px 0 40px}
+.hero h1{font-family:var(--font-display);font-size:clamp(34px,5vw,56px);font-weight:800;line-height:1.07;margin:16px 0}
+.hero p.lede{font-size:18px;color:var(--text-secondary);max-width:620px;line-height:1.75;margin-bottom:26px}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+.hero-trust{display:flex;gap:18px;flex-wrap:wrap;font-size:13.5px;color:var(--text-secondary);margin-top:22px}
+.hero-trust span{display:inline-flex;align-items:center;gap:6px}
+
+.notice{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:16px 18px;font-size:13.5px;color:var(--text-secondary);line-height:1.6;display:flex;gap:12px;align-items:flex-start}
+.notice .ic{flex:none;font-size:18px;line-height:1.3}
+.notice strong{color:var(--text)}
+.notice-amber{border-color:rgba(180,83,9,.3);background:var(--amber-glow)}
+
+/* Service category cards */
+.svc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:36px}
+.svc-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow-sm)}
+.svc-card .ic{font-size:26px;margin-bottom:12px}
+.svc-card h3{font-family:var(--font-display);font-size:17px;font-weight:700;margin-bottom:6px}
+.svc-card p{font-size:13.5px;color:var(--text-secondary);line-height:1.6}
+
+/* Benefits */
+.ben-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}
+.ben{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.ben h3{font-family:var(--font-display);font-size:16px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.ben p{font-size:14px;color:var(--text-secondary);line-height:1.65}
+
+/* ============ Wizard ============ */
+.wizard-section{background:var(--surface-alt);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.wizard{background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-md);overflow:hidden;max-width:860px;margin:0 auto}
+.wiz-head{padding:26px 32px 0}
+.wiz-eyebrow{font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent)}
+.wiz-demo-tag{float:right;font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--amber);background:var(--amber-glow);padding:4px 10px;border-radius:var(--radius-pill)}
+/* progress */
+.progress{padding:18px 32px 0}
+.progress-meta{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--text-secondary);margin-bottom:8px}
+.progress-meta b{font-family:var(--font-display);color:var(--text);font-weight:700}
+.progress-track{height:6px;background:var(--surface-alt);border-radius:var(--radius-pill);overflow:hidden}
+.progress-bar{height:100%;width:0;background:var(--accent);border-radius:var(--radius-pill);transition:width .35s ease}
+.progress-dots{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.pdot{font-family:var(--font-display);font-size:11px;font-weight:600;color:var(--text-secondary);background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-pill);padding:4px 11px;transition:var(--transition)}
+.pdot[aria-current="step"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.pdot.done{color:var(--accent);border-color:var(--accent-glow);background:var(--accent-glow)}
+.pdot[data-jump]{cursor:pointer}
+
+.wiz-body{padding:24px 32px 8px;min-height:280px}
+.step-title{font-family:var(--font-display);font-size:23px;font-weight:700;margin-bottom:6px;text-wrap:balance}
+.step-intro{font-size:15px;color:var(--text-secondary);line-height:1.65;margin-bottom:22px;max-width:62ch}
+
+/* selection cards (radio/checkbox) */
+.opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.opt{position:relative;display:block;border:1.5px solid var(--border);border-radius:var(--radius);padding:18px 18px 18px 50px;cursor:pointer;transition:var(--transition);background:var(--surface)}
+.opt:hover{border-color:#cfcdc7;box-shadow:var(--shadow-sm)}
+.opt input{position:absolute;left:16px;top:20px;width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.opt:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.opt:has(input:focus-visible){outline:3px solid var(--accent);outline-offset:2px}
+.opt .opt-ic{font-size:20px}
+.opt h4{font-family:var(--font-display);font-size:16px;font-weight:700;margin:4px 0 4px;display:flex;align-items:center;gap:8px}
+.opt p{font-size:13px;color:var(--text-secondary);line-height:1.55}
+.opt-grid.one{grid-template-columns:1fr}
+
+/* forms */
+.field{margin-bottom:18px}
+.field label.flabel{display:block;font-family:var(--font-display);font-size:13px;font-weight:600;margin-bottom:6px}
+.field .req{color:var(--accent)}
+.field .hint{font-size:12px;color:var(--text-secondary);margin-top:5px;line-height:1.5}
+.field input[type=text],.field input[type=email],.field input[type=tel],.field input[type=url],.field input[type=number],.field select,.field textarea{
+  width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:15px;transition:var(--transition);background:var(--bg);color:var(--text)}
+.field textarea{resize:vertical;min-height:92px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.field.invalid input,.field.invalid select,.field.invalid textarea{border-color:var(--accent);background:#fff6f7}
+.field .err{display:none;color:var(--accent);font-size:12.5px;margin-top:5px;font-weight:600}
+.field.invalid .err{display:block}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+fieldset{border:0}
+legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;margin-bottom:8px;padding:0}
+.chip-row{display:flex;flex-wrap:wrap;gap:10px}
+.chk{position:relative;display:inline-flex;align-items:center;gap:9px;border:1.5px solid var(--border);border-radius:var(--radius-pill);padding:9px 16px 9px 14px;cursor:pointer;font-size:14px;transition:var(--transition);background:var(--surface)}
+.chk:hover{border-color:#cfcdc7}
+.chk input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
+.chk:has(input:checked){border-color:var(--accent);background:var(--accent-glow);color:var(--accent);font-weight:600}
+.chk:has(input:focus-visible){outline:3px solid var(--accent);outline-offset:2px}
+.radio-row{display:flex;flex-wrap:wrap;gap:10px}
+
+/* repeatable outlets */
+.outlet-list{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.outlet-row{display:grid;grid-template-columns:1.3fr 1fr auto;gap:10px;align-items:center}
+.outlet-row .btn-rm{border:1px solid var(--border);border-radius:var(--radius-sm);width:42px;height:42px;font-size:18px;color:var(--text-secondary)}
+.outlet-row .btn-rm:hover{border-color:var(--accent);color:var(--accent)}
+.btn-add{margin-top:6px;font-family:var(--font-display);font-weight:600;font-size:13.5px;color:var(--accent);display:inline-flex;align-items:center;gap:6px}
+
+/* training roadmap */
+.tr-group{margin-bottom:22px}
+.tr-group h3{font-family:var(--font-display);font-size:15px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+.tr-group .tr-sub{font-size:12.5px;color:var(--text-secondary);margin-bottom:12px}
+.tr-tag{font-family:var(--font-display);font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:3px 9px;border-radius:var(--radius-pill)}
+.tag-core{color:var(--accent);background:var(--accent-glow)}
+.tag-model{color:var(--blue);background:var(--blue-glow)}
+.tag-tech{color:var(--amber);background:var(--amber-glow)}
+.mod{border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:10px;background:var(--surface)}
+.mod-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mod h4{font-family:var(--font-display);font-size:15px;font-weight:700}
+.mod .mod-status{flex:none;font-family:var(--font-display);font-size:11px;font-weight:700;color:var(--text-secondary);background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-pill);padding:3px 10px}
+.mod p{font-size:13px;color:var(--text-secondary);line-height:1.6;margin-top:5px}
+.mod .mod-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:9px;font-size:12px;color:var(--text-secondary)}
+.mod .mod-meta b{color:var(--text);font-weight:600}
+
+/* review */
+.rev-block{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.rev-head{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface-alt);padding:13px 16px}
+.rev-head h3{font-family:var(--font-display);font-size:15px;font-weight:700}
+.rev-edit{font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--accent);display:inline-flex;align-items:center;gap:5px}
+.rev-body{padding:14px 16px}
+.rev-dl{display:grid;grid-template-columns:200px 1fr;gap:8px 18px;font-size:14px}
+.rev-dl dt{color:var(--text-secondary)}
+.rev-dl dd{color:var(--text);font-weight:500}
+.rev-empty{color:var(--text-secondary);font-style:italic;font-size:14px}
+.consent{display:flex;gap:11px;align-items:flex-start;border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;margin:16px 0;background:var(--surface)}
+.consent.invalid{border-color:var(--accent);background:#fff6f7}
+.consent input{margin-top:3px;width:18px;height:18px;accent-color:var(--accent);flex:none}
+.consent label{font-size:13.5px;color:var(--text-secondary);line-height:1.6}
+
+/* confirmation */
+.confirm-hero{text-align:center;padding:14px 0 6px}
+.confirm-check{width:68px;height:68px;border-radius:50%;background:var(--green-glow);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 16px}
+.steps-next{counter-reset:s;display:grid;gap:12px;margin:22px 0;text-align:left}
+.steps-next li{list-style:none;position:relative;padding-left:46px;font-size:14.5px;color:var(--text-secondary);line-height:1.6}
+.steps-next li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:-2px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-family:var(--font-display);font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center}
+.steps-next b{color:var(--text)}
+.contact-inline{background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin:18px 0;font-size:14px;line-height:1.7}
+.contact-inline .big{font-family:var(--font-display);font-size:19px;font-weight:700;color:var(--text);display:block;margin:2px 0 2px;user-select:all}
+
+/* footer nav of wizard */
+.wiz-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 32px 26px;border-top:1px solid var(--border);margin-top:14px;flex-wrap:wrap}
+.wiz-foot .spacer{flex:1}
+
+/* planning preview */
+.planning{max-width:860px;margin:26px auto 0;border:1.5px dashed var(--accent);border-radius:16px;background:var(--surface);overflow:hidden}
+.planning-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;background:var(--accent-glow)}
+.planning-head h3{font-family:var(--font-display);font-size:15px;font-weight:800;color:var(--accent);display:flex;align-items:center;gap:8px}
+.planning-head .lock{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent)}
+.planning-body{padding:18px 22px}
+.planning .pp-note{font-size:12.5px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px}
+.pp-sec{margin-bottom:16px}
+.pp-sec h4{font-family:var(--font-display);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-secondary);margin-bottom:8px}
+.pp-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pp-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 15px}
+.pp-card h5{font-family:var(--font-display);font-size:13px;font-weight:700;margin-bottom:7px}
+.pp-card ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+.pp-card li{font-size:13px;color:var(--text-secondary);line-height:1.5;padding-left:16px;position:relative}
+.pp-card li::before{content:'›';position:absolute;left:0;color:var(--accent);font-weight:700}
+.pp-kv{font-size:13.5px;line-height:1.7}
+.pp-kv b{font-family:var(--font-display)}
+.pp-next{background:var(--accent-glow);border-radius:var(--radius-sm);padding:12px 15px;font-size:13.5px;line-height:1.6}
+
+/* footer */
+.footer{background:var(--dark-bg);color:rgba(255,255,255,.7);padding:46px 0 0;margin-top:0}
+.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:40px;padding-bottom:30px;border-bottom:1px solid rgba(255,255,255,.1)}
+.footer-brand .wordmark{font-family:var(--font-display);font-weight:800;font-size:21px;letter-spacing:-.4px;color:#fff;display:block;margin-bottom:8px}
+.footer-brand p{font-size:14px;line-height:1.7;max-width:320px}
+.footer-brand .addr{font-size:13px;line-height:1.55;opacity:.7;margin-top:12px;max-width:320px}
+.footer h4{font-family:var(--font-display);font-size:14px;font-weight:600;color:#fff;margin-bottom:14px}
+.footer-links{list-style:none}
+.footer-links li{margin-bottom:8px}
+.footer-links a{font-size:14px;transition:var(--transition)}
+.footer-links a:hover{color:#fff}
+.footer-bottom{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:18px 0;font-size:13px;flex-wrap:wrap}
+
+/* floating whatsapp */
+.wa-float{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));right:20px;z-index:90;width:54px;height:54px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(37,211,102,.4);transition:var(--transition)}
+.wa-float:hover{transform:scale(1.08)}
+.wa-float svg{width:28px;height:28px;fill:#fff}
+
+@media (max-width:900px){
+  .svc-grid{grid-template-columns:1fr 1fr}
+  .ben-grid{grid-template-columns:1fr}
+  .pp-two{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  .nav,.nav-actions{display:none}
+  .mobile-toggle{display:flex}
+  .section{padding:52px 0}
+  .wiz-head,.progress,.wiz-body,.wiz-foot{padding-left:20px;padding-right:20px}
+  .opt-grid{grid-template-columns:1fr}
+  .frow{grid-template-columns:1fr}
+  .rev-dl{grid-template-columns:1fr}
+  .rev-dl dt{margin-top:6px}
+  .outlet-row{grid-template-columns:1fr 1fr auto}
+  .footer-grid{grid-template-columns:1fr}
+}
+@media (max-width:480px){
+  .svc-grid{grid-template-columns:1fr}
+  .wiz-foot{flex-direction:column-reverse;align-items:stretch}
+  .wiz-foot .btn{width:100%}
+  .wiz-foot .spacer{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+<div class="ug-strip"></div>
+
+<header class="header">
+  <div class="container">
+    <div class="header-inner">
+      <a href="https://dishnetuganda.com/index.html" class="logo-lockup" aria-label="DishNet Uganda home">
+        <span class="wordmark">DishNet</span><span class="ug-tag">UGANDA</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="https://dishnetuganda.com/index.html">Home</a>
+        <a href="https://dishnetuganda.com/services.html">Internet</a>
+        <a href="https://dishnetuganda.com/shop.html">Shop</a>
+        <a href="https://dishnetuganda.com/coverage.html">Coverage</a>
+        <a href="#partners" class="active">Partners</a>
+        <a href="https://dishnetuganda.com/contact.html">Contact</a>
+      </nav>
+      <div class="nav-actions">
+        <a href="https://dishnetuganda.com/contact.html" class="btn btn-outline" style="padding:10px 18px;font-size:14px">Talk to Our Team</a>
+        <a href="#apply" class="header-cta">Apply</a>
+      </div>
+      <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false"><span></span></button>
+    </div>
+  </div>
+</header>
+
+<div class="mobile-nav" id="mobileNav">
+  <button class="mobile-nav-close" id="mClose" aria-label="Close menu">&times;</button>
+  <a href="https://dishnetuganda.com/index.html">Home</a>
+  <a href="https://dishnetuganda.com/services.html">Internet Services</a>
+  <a href="https://dishnetuganda.com/shop.html">Shop</a>
+  <a href="https://dishnetuganda.com/coverage.html">Coverage</a>
+  <a href="#partners" data-close>Become a Partner</a>
+  <a href="#apply" data-close>Apply</a>
+  <a href="https://dishnetuganda.com/contact.html">Contact</a>
+</div>
+
+<main id="partners">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <span class="badge-label badge-accent">DishNet Partner Program</span>
+      <h1>Grow Your Business<br><span class="accent">with DishNet</span></h1>
+      <p class="lede">Partner with DishNet Uganda to bring connectivity solutions to businesses, communities and customers across Uganda.</p>
+      <div class="hero-actions">
+        <a href="#apply" class="btn btn-primary btn-lg">Explore the Partnership</a>
+        <a href="https://dishnetuganda.com/contact.html" class="btn btn-outline btn-lg">Talk to Our Team</a>
+      </div>
+      <div class="hero-trust">
+        <span>✓ Local Uganda team</span>
+        <span>✓ Training &amp; support</span>
+        <span>✓ Genuine hardware</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+  <section class="section-sm">
+    <div class="container">
+      <span class="badge-label badge-accent">What you could offer</span>
+      <h2 class="section-title">Connectivity your customers need</h2>
+      <p class="section-subtitle">Partners help DishNet reach more of Uganda. The services available to a partner depend on the agreed model and the location — not every product is offered in every area.</p>
+      <div class="svc-grid">
+        <div class="svc-card"><div class="ic">📡</div><h3>Starlink</h3><p>Satellite connectivity and equipment for homes, businesses and remote sites.</p></div>
+        <div class="svc-card"><div class="ic">🌐</div><h3>Data Network</h3><p>DishNet managed data network services, including WiFi zones where offered.</p></div>
+        <div class="svc-card"><div class="ic">⚡</div><h3>Fibre &amp; fixed</h3><p>Fibre and other fixed-connectivity services where coverage is available.</p></div>
+        <div class="svc-card"><div class="ic">🏢</div><h3>Business connectivity</h3><p>Connectivity solutions for offices, branches, institutions and organisations.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BENEFITS / WHO CAN APPLY -->
+  <section class="section-sm" style="padding-top:8px">
+    <div class="container">
+      <span class="badge-label badge-blue">Why partner with DishNet</span>
+      <h2 class="section-title">Built around a local team</h2>
+      <div class="ben-grid">
+        <div class="ben"><h3>🤝 One local team</h3><p>Sales, installation, billing and technical support are coordinated through DishNet's Uganda operation.</p></div>
+        <div class="ben"><h3>🎓 Training provided</h3><p>Partners receive structured training suited to their model before going live. Technical installation is a separate certification.</p></div>
+        <div class="ben"><h3>🛠️ Technical backup</h3><p>Partners escalate to authorised DishNet technicians. Complex installations can be handled jointly.</p></div>
+        <div class="ben"><h3>📦 Genuine hardware</h3><p>Where a model includes hardware, it is genuine, supported equipment — handled under agreed terms.</p></div>
+        <div class="ben"><h3>🧭 Clear processes</h3><p>Orders, onboarding, support and (where relevant) stock follow defined DishNet procedures.</p></div>
+        <div class="ben"><h3>🌍 Reach across Uganda</h3><p>DishNet installs and supports across four regions and 40+ towns, and keeps growing.</p></div>
+      </div>
+      <div class="notice notice-amber" style="margin-top:26px">
+        <span class="ic">ℹ️</span>
+        <div><strong>This is an expression of interest, not an offer.</strong> Submitting an application does not guarantee approval, exclusivity, credit or appointment as an authorised distributor. Commercial terms, eligibility, the partner model and any stock or credit arrangements remain subject to DishNet review and a written agreement. DishNet does not publish or promise fixed discounts, commissions, margins, territories or earnings here.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WIZARD -->
+  <section class="section wizard-section" id="apply">
+    <div class="container">
+      <div class="wizard" id="wizard">
+        <div class="wiz-head">
+          <span class="wiz-demo-tag" title="This prototype does not save data to any DishNet system">Prototype · Demo</span>
+          <span class="wiz-eyebrow">Partner application</span>
+        </div>
+        <div class="progress">
+          <div class="progress-meta"><span>Your application</span><span>Step <b id="pNum">1</b> of <b id="pTotal">8</b></span></div>
+          <div class="progress-track"><div class="progress-bar" id="pBar"></div></div>
+          <div class="progress-dots" id="pDots" role="list" aria-label="Application steps"></div>
+        </div>
+
+        <form id="wizForm" novalidate>
+          <div class="wiz-body" id="wizBody" aria-live="polite"><!-- steps render here --></div>
+          <div class="wiz-foot">
+            <button type="button" class="btn btn-ghost" id="btnBack" hidden>← Back</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-outline" id="btnRestart" hidden>Start again</button>
+            <button type="button" class="btn btn-primary" id="btnNext">Continue →</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- INTERNAL PLANNING PREVIEW -->
+      <aside class="planning" id="planning" hidden>
+        <div class="planning-head">
+          <h3>🔒 DishNet Planning Preview</h3>
+          <span class="lock">Internal · not shown to applicants</span>
+        </div>
+        <div class="planning-body" id="planningBody">
+          <p class="pp-note">A planning aid for the DishNet team to read what this application would require. It is generated from the answers on this screen only. It is not an administrative system, it does not store anything, and it is not a real approval. In production this view is for DishNet staff and never exposes an applicant's details publicly.</p>
+          <div id="planningContent"></div>
+        </div>
+      </aside>
+      <div style="max-width:860px;margin:14px auto 0;text-align:center">
+        <button type="button" class="btn btn-ghost" id="btnPlanning" style="font-size:13px;padding:9px 18px">Show DishNet Planning Preview (internal)</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="wordmark">DishNet Uganda</span>
+        <p>Connecting Uganda — Starlink, fibre, managed WiFi zones, CCTV and network security with professional installation and local support.</p>
+        <div class="addr">4th floor, Acacia Mall, 14-18 Cooper Road, office TT06, Kampala, Uganda.</div>
+      </div>
+      <div>
+        <h4>Partners</h4>
+        <ul class="footer-links">
+          <li><a href="#apply">Apply to partner</a></li>
+          <li><a href="https://dishnetuganda.com/reseller.html">Reseller program</a></li>
+          <li><a href="https://dishnetuganda.com/contact.html">Talk to our team</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>DishNet</h4>
+        <ul class="footer-links">
+          <li><a href="https://dishnetuganda.com/index.html">Home</a></li>
+          <li><a href="https://dishnetuganda.com/coverage.html">Coverage</a></li>
+          <li><a href="https://dishnetuganda.com/terms.html">Terms of Use</a></li>
+          <li><a href="https://dishnetuganda.com/privacy.html">Privacy Policy</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 DishNet Africa Ltd — Uganda. All rights reserved.</span>
+      <span>Partner prototype — for review. Not a live application form.</span>
+    </div>
+  </div>
+</footer>
+
+<a href="https://wa.me/256705993348" class="wa-float" target="_blank" rel="noopener" aria-label="WhatsApp DishNet"><svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+
+<script>
+"use strict";
+(function(){
+/* ---------- site chrome ---------- */
+var mToggle=document.getElementById('mToggle'),mNav=document.getElementById('mobileNav'),mClose=document.getElementById('mClose');
+if(mToggle)mToggle.addEventListener('click',function(){mNav.classList.add('open');mToggle.setAttribute('aria-expanded','true');});
+if(mClose)mClose.addEventListener('click',function(){mNav.classList.remove('open');mToggle.setAttribute('aria-expanded','false');});
+Array.prototype.forEach.call(document.querySelectorAll('#mobileNav [data-close]'),function(a){a.addEventListener('click',function(){mNav.classList.remove('open');});});
+
+/* ---------- WhatsApp contact (shown as text too; link is a convenience) ---------- */
+var WA_NUMBER='256705993348', WA_DISPLAY='+256 705 993 348', EMAIL='info@dishnetafrica.com';
+function waLink(msg){return 'https://wa.me/'+WA_NUMBER+(msg?('?text='+encodeURIComponent(msg)):'');}
+
+/* ---------- data ---------- */
+var MODELS=[
+  {id:'corporate',ic:'🏙️',name:'Corporate or chain partner',desc:'For organisations with multiple outlets or a nationwide branch network.'},
+  {id:'regional',ic:'🗺️',name:'Regional distributor',desc:'For a business intending to develop a territory and supply or support multiple outlets.'},
+  {id:'retail',ic:'🏬',name:'Retail outlet or reseller',desc:'For a business selling DishNet products or services to customers at one or more locations.'},
+  {id:'referral',ic:'📣',name:'Referral or sales partner',desc:'For a business that introduces potential customers to DishNet without necessarily holding stock.'}
+];
+var MODEL_NAME={};MODELS.forEach(function(m){MODEL_NAME[m.id]=m.name;});
+
+var SERVICES=[
+  {id:'starlink',name:'Starlink'},
+  {id:'data',name:'Data Network'},
+  {id:'fibre',name:'Fibre & fixed connectivity'},
+  {id:'business',name:'Business connectivity solutions'}
+];
+var SERVICE_NAME={};SERVICES.forEach(function(s){SERVICE_NAME[s.id]=s.name;});
+
+/* activities — some are hidden for a pure referral partner */
+var ACTIVITIES=[
+  {id:'refer',name:'Refer customers to DishNet',referral:true},
+  {id:'sell_services',name:'Sell DishNet services',referral:true},
+  {id:'sell_hardware',name:'Sell or distribute hardware',referral:false},
+  {id:'outlet',name:'Operate a customer-facing outlet',referral:false},
+  {id:'first_line',name:'Provide first-line customer assistance',referral:true},
+  {id:'stock',name:'Hold or manage stock',referral:false}
+];
+var ACT_NAME={};ACTIVITIES.forEach(function(a){ACT_NAME[a.id]=a.name;});
+
+/* training modules. who = who must complete; est = estimated only; assess = assessment proposed */
+function M(name,purpose,who,est,assess){return {name:name,purpose:purpose,who:who,est:est,assess:assess};}
+var TRAIN_COMMON=[
+  M('Introduction to DishNet','Who DishNet is, the services and how partners fit in.','All partner staff','~30 min',false),
+  M('Product knowledge','What each service is, who it suits and where it is available.','All partner staff','~1 hour',true),
+  M('Ethical sales & pricing integrity','Honest selling; prices and terms come only from DishNet.','All customer-facing staff','~45 min',true),
+  M('Customer privacy & data protection','Handling customer information correctly and lawfully.','All partner staff','~45 min',true),
+  M('Lead handling','Capturing an enquiry and passing it on correctly.','Sales & front-desk staff','~30 min',false),
+  M('Customer onboarding basics','What a customer needs to get connected and what to expect.','Customer-facing staff','~45 min',false),
+  M('Support escalation','When and how to escalate to DishNet support.','All customer-facing staff','~30 min',false)
+];
+var TRAIN_SALES=[
+  M('Lead qualification','Telling a ready customer from an early enquiry.','Sales & referral staff','~45 min',true),
+  M('Customer needs assessment','Understanding what a customer actually needs.','Sales staff','~45 min',false),
+  M('Product suitability','Matching the right service to the customer and location.','Sales staff','~45 min',true),
+  M('Lead registration & tracking','Recording a lead so it is not lost or duplicated.','Sales & referral staff','~30 min',false),
+  M('Referral attribution & follow-up','How referrals are recognised and followed up.','Referral partners','~30 min',false)
+];
+var TRAIN_RETAIL=[
+  M('Product & plan selection','Choosing the correct product and plan for a sale.','Outlet staff','~45 min',true),
+  M('Order placement','Placing an order through the agreed DishNet process.','Outlet staff','~45 min',true),
+  M('Customer onboarding','Getting a retail customer set up correctly.','Outlet staff','~1 hour',false),
+  M('Hardware handling','Receiving, storing and handing over equipment safely.','Outlet / stock staff','~45 min',false),
+  M('Payment & receipt procedures','Taking payment and issuing a proper receipt.','Outlet staff','~45 min',true),
+  M('Returns & warranty escalation','Handling returns and warranty cases correctly.','Outlet staff','~30 min',false)
+];
+var TRAIN_DISTRIB=[
+  M('Outlet management','Supporting and overseeing the outlets in a territory.','Distributor managers','~1 hour',false),
+  M('Territory planning','Planning coverage and growth across a region.','Distributor managers','~1 hour',false),
+  M('Order & dispatch procedures','Ordering and moving stock to outlets correctly.','Distributor ops staff','~1 hour',true),
+  M('Stock transfers & reconciliation','Keeping stock accurate as it moves and is counted.','Distributor ops staff','~1 hour',true),
+  M('Outlet reporting','Reporting sales and stock back to DishNet.','Distributor managers','~45 min',false),
+  M('Partner performance & escalation','Measuring performance and escalating issues.','Distributor managers','~45 min',false)
+];
+var TRAIN_CORP=[
+  M('Multi-outlet onboarding','Bringing several outlets on board in a coordinated way.','Corporate coordinators','~1 hour',false),
+  M('Outlet contacts & responsibilities','Who does what across the branch network.','Corporate coordinators','~45 min',false),
+  M('Centralised order coordination','Coordinating orders across outlets from head office.','Corporate coordinators','~1 hour',true),
+  M('Outlet-level reporting','Reading and acting on outlet-level reports.','Corporate coordinators','~45 min',false),
+  M('Corporate account escalation','The escalation path for a corporate account.','Corporate coordinators','~30 min',false)
+];
+/* technical — clearly separate from sales; does NOT confer installation authority */
+var TRAIN_TECH=[
+  M('Installation prerequisites','What must be true before an installation can begin.','Technical staff','~1 hour',true),
+  M('Basic troubleshooting','First-line diagnosis of common connectivity problems.','Technical / support staff','~1 hour',true),
+  M('Site readiness','Checking a site is ready for equipment.','Technical staff','~45 min',false),
+  M('Escalation to authorised DishNet technicians','When a job must go to a certified DishNet technician.','Technical / support staff','~30 min',false),
+  M('Safety & customer-premises requirements','Working safely on a customer’s premises.','Technical staff','~45 min',true)
+];
+
+/* responsibilities matrix by model: partner vs DishNet */
+var RESP={
+  corporate:{
+    partner:['Coordinate outlets and nominate outlet contacts','Submit orders through the agreed process','Hand over equipment and onboard customers at outlets','Provide first-line assistance and report at outlet level'],
+    dishnet:['Approve the partner and each outlet','Provide training and account management','Create services and activate connectivity','Invoice, collect and own the customer billing relationship','Provide technical installation and escalation']
+  },
+  regional:{
+    partner:['Develop the territory and support outlets','Order, receive and move stock accurately','Report sales and stock back to DishNet','Collect and settle only where authorised in writing'],
+    dishnet:['Approve the distributor and its territory','Supply stock under agreed terms and ownership','Provide training, pricing and settlement rules','Invoice and reconcile; own the billing relationship','Provide technical installation and escalation']
+  },
+  retail:{
+    partner:['Sell approved products and plans at the outlet','Place orders and onboard customers correctly','Handle hardware, payments and receipts properly','Provide first-line assistance and escalate'],
+    dishnet:['Approve the outlet','Provide training, product list and prices','Create services and activate connectivity','Invoice and own the billing relationship','Provide technical installation and escalation']
+  },
+  referral:{
+    partner:['Introduce and register genuine leads','Follow ethical sales and privacy rules','Hand the customer to DishNet to close and serve'],
+    dishnet:['Approve the referral partner','Provide lead-handling training and tracking','Qualify, quote, sell and onboard the customer','Own the customer, billing and support entirely','Recognise referrals under agreed terms']
+  }
+};
+
+/* approvals DishNet would make, by model */
+var APPROVALS={
+  corporate:['Partner (company) approval','Each outlet approval','Services and locations offered','Any stock / credit arrangement (separate, in writing)'],
+  regional:['Partner (company) approval','Territory definition','Stock supply and ownership terms','Settlement and collection authority (separate, in writing)'],
+  retail:['Partner (outlet) approval','Products and plans the outlet may sell','Any stock / payment handling terms'],
+  referral:['Referral partner approval','Lead-handling and attribution terms']
+};
+
+/* ---------- state ---------- */
+var S={model:'',profile:{},coverage:{outlets:[]},services:[],activities:[],readiness:{},consent:false};
+var STORE_KEY='dn_distributor_prototype_v1';
+function save(){try{sessionStorage.setItem(STORE_KEY,JSON.stringify({S:S,step:step}));}catch(e){}}
+function load(){try{var r=sessionStorage.getItem(STORE_KEY);if(r){var o=JSON.parse(r);if(o&&o.S){S=Object.assign(S,o.S);if(!S.coverage)S.coverage={outlets:[]};if(!S.coverage.outlets)S.coverage.outlets=[];}}}catch(e){}}
+
+/* ---------- step engine ---------- */
+var STEPS=['Model','Business','Coverage','Services','Readiness','Training','Review','Done'];
+var TITLES=['Choose your partner model','Tell us about your business','Coverage and outlets','Products and services','Readiness and training needs','Your proposed training plan','Review and submit','Application received'];
+var step=0;
+var body=document.getElementById('wizBody'),btnNext=document.getElementById('btnNext'),btnBack=document.getElementById('btnBack'),btnRestart=document.getElementById('btnRestart');
+var pNum=document.getElementById('pNum'),pBar=document.getElementById('pBar'),pDots=document.getElementById('pDots');
+document.getElementById('pTotal').textContent=STEPS.length;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function isReferral(){return S.model==='referral';}
+
+function renderProgress(){
+  pNum.textContent=step+1;
+  pBar.style.width=Math.round((step)/(STEPS.length-1)*100)+'%';
+  pDots.innerHTML='';
+  STEPS.forEach(function(lbl,i){
+    var d=document.createElement(i<step&&step<STEPS.length-1?'button':'span');
+    d.className='pdot'+(i<step?' done':'');
+    d.setAttribute('role','listitem');
+    d.textContent=(i+1)+'. '+lbl;
+    if(i===step)d.setAttribute('aria-current','step');
+    if(i<step&&step<STEPS.length-1){d.type='button';d.setAttribute('data-jump',i);d.addEventListener('click',function(){gotoStep(i);});}
+    pDots.appendChild(d);
+  });
+}
+
+function renderStep(){
+  renderProgress();
+  body.innerHTML=(step===STEPS.length-1?'':'<h2 class="step-title">'+esc(TITLES[step])+'</h2>')+STEP_HTML[step]();
+  wire[step]&&wire[step]();
+  btnBack.hidden=(step===0||step===STEPS.length-1);
+  btnRestart.hidden=(step!==STEPS.length-1);
+  if(step===STEPS.length-1){btnNext.hidden=true;}
+  else{btnNext.hidden=false;btnNext.textContent=(step===6?'Submit application':'Continue →');}
+  var w=document.getElementById('wizard');if(w&&step>0){var top=w.getBoundingClientRect().top+window.pageYOffset-80;window.scrollTo({top:top});}
+  save();
+}
+function gotoStep(i){step=i;renderStep();}
+
+/* ========== STEP 1: MODEL ========== */
+var STEP_HTML=[],wire=[];
+STEP_HTML[0]=function(){
+  return '<p class="step-intro">Pick the model that best fits your business. The next steps adapt to your choice. These are proposed models we are validating, not already-approved contract categories.</p>'+
+  '<div class="opt-grid">'+MODELS.map(function(m){
+    return '<label class="opt"><input type="radio" name="model" value="'+m.id+'"'+(S.model===m.id?' checked':'')+'>'+
+      '<h4><span class="opt-ic">'+m.ic+'</span>'+esc(m.name)+'</h4><p>'+esc(m.desc)+'</p></label>';
+  }).join('')+'</div>'+
+  '<p class="field err" id="modelErr" style="margin-top:14px">Please choose a partner model to continue.</p>';
+};
+wire[0]=function(){
+  Array.prototype.forEach.call(body.querySelectorAll('input[name=model]'),function(r){
+    r.addEventListener('change',function(){S.model=r.value;document.getElementById('modelErr').style.display='none';save();});
+  });
+};
+function validate0(){if(!S.model){var e=document.getElementById('modelErr');e.style.display='block';return false;}return true;}
+
+/* ========== STEP 2: BUSINESS PROFILE ========== */
+function inp(id,label,req,type,ph,val,hint){
+  return '<div class="field" data-field="'+id+'"><label class="flabel" for="f_'+id+'">'+esc(label)+(req?' <span class="req">*</span>':'')+'</label>'+
+    '<input type="'+(type||'text')+'" id="f_'+id+'" name="'+id+'" value="'+esc(val||'')+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+(type==='email'?' autocomplete="email"':'')+'>'+
+    (hint?'<p class="hint">'+esc(hint)+'</p>':'')+'<p class="err" id="e_'+id+'">This field is required.</p></div>';
+}
+STEP_HTML[1]=function(){
+  var p=S.profile;
+  return '<p class="step-intro">We only need enough to review an expression of interest. Please do not enter passwords, payment-card details or identity documents.</p>'+
+  inp('biz_name','Registered business name',true,'text','e.g. Example Traders Ltd',p.biz_name)+
+  inp('trading_name','Trading name (if different)',false,'text','',p.trading_name)+
+  '<div class="field" data-field="biz_type"><label class="flabel" for="f_biz_type">Business type <span class="req">*</span></label>'+
+    '<select id="f_biz_type" name="biz_type">'+['','Sole proprietor','Partnership','Limited company','NGO or institution','Other'].map(function(o){return '<option value="'+esc(o)+'"'+(p.biz_type===o?' selected':'')+'>'+(o?esc(o):'Select…')+'</option>';}).join('')+'</select>'+
+    '<p class="err" id="e_biz_type">Please choose a business type.</p></div>'+
+  '<div class="frow">'+inp('contact_name','Contact person',true,'text','Full name',p.contact_name)+inp('contact_role','Role / title',false,'text','e.g. Director',p.contact_role)+'</div>'+
+  '<div class="frow">'+inp('email','Business email',true,'email','name@business.com',p.email)+inp('phone','Telephone / WhatsApp',true,'tel','+256 7XX XXX XXX',p.phone)+'</div>'+
+  '<div class="frow">'+inp('city','City or district',true,'text','e.g. Kampala',p.city)+inp('website','Website (if any)',false,'url','https://',p.website)+'</div>'+
+  '<div class="field" data-field="desc"><label class="flabel" for="f_desc">Brief description of your business</label>'+
+    '<textarea id="f_desc" name="desc" placeholder="What does your business do today?">'+esc(p.desc||'')+'</textarea></div>'+
+  '<fieldset class="field" data-field="operating"><legend class="flabel">Is the business already operating? <span class="req">*</span></legend>'+
+    '<div class="radio-row">'+['Yes','Not yet'].map(function(o){return '<label class="chk"><input type="radio" name="operating" value="'+o+'"'+(p.operating===o?' checked':'')+'>'+o+'</label>';}).join('')+'</div>'+
+    '<p class="err" id="e_operating">Please choose one.</p></fieldset>';
+};
+wire[1]=function(){
+  body.querySelectorAll('input,select,textarea').forEach(function(el){
+    el.addEventListener('input',function(){clearErr(el.closest('.field'));});
+    el.addEventListener('change',function(){clearErr(el.closest('.field'));});
+  });
+};
+function clearErr(f){if(f)f.classList.remove('invalid');}
+function setErr(id,msg){var f=body.querySelector('[data-field="'+id+'"]');if(f){f.classList.add('invalid');if(msg){var e=f.querySelector('.err');if(e)e.textContent=msg;}}return f;}
+function grabProfile(){
+  var p=S.profile;['biz_name','trading_name','biz_type','contact_name','contact_role','email','phone','city','website','desc'].forEach(function(k){var el=document.getElementById('f_'+k);if(el)p[k]=el.value.trim();});
+  var op=body.querySelector('input[name=operating]:checked');p.operating=op?op.value:'';
+}
+function validate1(){
+  grabProfile();var p=S.profile,ok=true,first=null;
+  function bad(id,msg){var f=setErr(id,msg);if(!first)first=f;ok=false;}
+  if(!p.biz_name)bad('biz_name');
+  if(!p.biz_type)bad('biz_type');
+  if(!p.contact_name)bad('contact_name');
+  if(!p.email)bad('email');else if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email))bad('email','Please enter a valid email address.');
+  if(!p.phone)bad('phone');else if(p.phone.replace(/[^0-9]/g,'').length<9)bad('phone','Please enter a valid phone number.');
+  if(!p.city)bad('city');
+  if(!p.operating)bad('operating');
+  if(first)first.scrollIntoView({behavior:'smooth',block:'center'});
+  return ok;
+}
+
+/* ========== STEP 3: COVERAGE & OUTLETS ========== */
+STEP_HTML[2]=function(){
+  var c=S.coverage;var ref=isReferral();
+  var groups=['SMEs','Corporate customers','Retail consumers','Institutions','Other'];
+  var html='<p class="step-intro">'+(ref?'As a referral or sales partner you won’t be asked for stock or outlet details.':'Tell us where you operate and how you are set up. For a corporate chain you can describe several proposed outlets.')+'</p>';
+  html+='<div class="field" data-field="regions"><label class="flabel" for="f_regions">Which regions or districts do you cover?</label>'+
+    '<input type="text" id="f_regions" name="regions" value="'+esc(c.regions||'')+'" placeholder="e.g. Kampala, Wakiso, Mukono"><p class="hint">List the areas you can reach customers in.</p></div>';
+  html+='<fieldset class="field"><legend class="flabel">Who do you serve?</legend><div class="chip-row">'+
+    groups.map(function(g){return '<label class="chk"><input type="checkbox" name="groups" value="'+esc(g)+'"'+((c.groups||[]).indexOf(g)>-1?' checked':'')+'>'+g+'</label>';}).join('')+'</div></fieldset>';
+  if(!ref){
+    html+='<fieldset class="field"><legend class="flabel">Do you have sales staff or field technicians?</legend><div class="chip-row">'+
+      ['Sales staff','Field technicians','Neither yet'].map(function(g){return '<label class="chk"><input type="checkbox" name="team" value="'+esc(g)+'"'+((c.team||[]).indexOf(g)>-1?' checked':'')+'>'+g+'</label>';}).join('')+'</div></fieldset>';
+    html+='<fieldset class="field"><legend class="flabel">Do you have existing physical outlets?</legend><div class="radio-row">'+
+      ['Yes','No'].map(function(o){return '<label class="chk"><input type="radio" name="hasOutlets" value="'+o+'"'+(c.hasOutlets===o?' checked':'')+'>'+o+'</label>';}).join('')+'</div></fieldset>';
+    html+='<div class="field" data-field="outletCount" id="wrapOutletCount"'+(c.hasOutlets==='Yes'?'':' hidden')+'><label class="flabel" for="f_outletCount">How many outlets do you operate?</label>'+
+      '<input type="number" min="1" id="f_outletCount" name="outletCount" value="'+esc(c.outletCount||'')+'" style="max-width:160px"></div>';
+    html+='<fieldset class="field"><legend class="flabel">Do you intend to add outlets?</legend><div class="radio-row">'+
+      ['Yes','No','Not sure'].map(function(o){return '<label class="chk"><input type="radio" name="addOutlets" value="'+o+'"'+(c.addOutlets===o?' checked':'')+'>'+o+'</label>';}).join('')+'</div></fieldset>';
+  }
+  if(S.model==='corporate'){
+    html+='<div class="field"><label class="flabel">Proposed outlets (optional)</label><p class="hint" style="margin-top:0;margin-bottom:8px">Describe branches you would bring on board. You can add several.</p>'+
+      '<div class="outlet-list" id="outletList"></div>'+
+      '<button type="button" class="btn-add" id="addOutlet">+ Add an outlet</button></div>';
+  }
+  return html;
+};
+wire[2]=function(){
+  var c=S.coverage;
+  var ho=body.querySelectorAll('input[name=hasOutlets]');ho.forEach(function(r){r.addEventListener('change',function(){var w=document.getElementById('wrapOutletCount');if(w)w.hidden=(r.value!=='Yes');});});
+  if(S.model==='corporate'){renderOutletRows();document.getElementById('addOutlet').addEventListener('click',function(){S.coverage.outlets.push({name:'',city:''});renderOutletRows();});}
+};
+function renderOutletRows(){
+  var list=document.getElementById('outletList');if(!list)return;
+  if(!S.coverage.outlets.length)S.coverage.outlets.push({name:'',city:''});
+  list.innerHTML=S.coverage.outlets.map(function(o,i){
+    return '<div class="outlet-row"><input type="text" data-oi="'+i+'" data-ok="name" placeholder="Outlet / branch name" value="'+esc(o.name)+'">'+
+      '<input type="text" data-oi="'+i+'" data-ok="city" placeholder="Town / district" value="'+esc(o.city)+'">'+
+      '<button type="button" class="btn-rm" data-rm="'+i+'" aria-label="Remove outlet">&times;</button></div>';
+  }).join('');
+  list.querySelectorAll('input').forEach(function(el){el.addEventListener('input',function(){S.coverage.outlets[+el.dataset.oi][el.dataset.ok]=el.value;save();});});
+  list.querySelectorAll('[data-rm]').forEach(function(b){b.addEventListener('click',function(){S.coverage.outlets.splice(+b.dataset.rm,1);renderOutletRows();save();});});
+}
+function grabCoverage(){
+  var c=S.coverage;
+  var rg=document.getElementById('f_regions');if(rg)c.regions=rg.value.trim();
+  c.groups=Array.prototype.map.call(body.querySelectorAll('input[name=groups]:checked'),function(x){return x.value;});
+  if(!isReferral()){
+    c.team=Array.prototype.map.call(body.querySelectorAll('input[name=team]:checked'),function(x){return x.value;});
+    var hov=body.querySelector('input[name=hasOutlets]:checked');c.hasOutlets=hov?hov.value:'';
+    var oc=document.getElementById('f_outletCount');c.outletCount=oc?oc.value.trim():'';
+    var ao=body.querySelector('input[name=addOutlets]:checked');c.addOutlets=ao?ao.value:'';
+  }
+  /* outlets captured live */
+  S.coverage.outlets=(S.coverage.outlets||[]).filter(function(o){return o.name||o.city;});
+}
+function validate2(){grabCoverage();return true;/* step 3 is descriptive; nothing hard-required */}
+
+/* ========== STEP 4: SERVICES & ACTIVITIES ========== */
+STEP_HTML[3]=function(){
+  var acts=ACTIVITIES.filter(function(a){return isReferral()?a.referral:true;});
+  return '<p class="step-intro">Select the services you are interested in and how you intend to work with DishNet. Availability depends on the location and the agreed model.</p>'+
+  '<fieldset class="field" data-field="services"><legend class="flabel">Services you are interested in <span class="req">*</span></legend><div class="chip-row">'+
+    SERVICES.map(function(s){return '<label class="chk"><input type="checkbox" name="services" value="'+s.id+'"'+(S.services.indexOf(s.id)>-1?' checked':'')+'>'+esc(s.name)+'</label>';}).join('')+'</div>'+
+    '<p class="err" id="e_services">Please choose at least one service.</p></fieldset>'+
+  '<fieldset class="field" data-field="activities"><legend class="flabel">How do you intend to work with DishNet? <span class="req">*</span></legend><div class="chip-row">'+
+    acts.map(function(a){return '<label class="chk"><input type="checkbox" name="activities" value="'+a.id+'"'+(S.activities.indexOf(a.id)>-1?' checked':'')+'>'+esc(a.name)+'</label>';}).join('')+'</div>'+
+    '<p class="err" id="e_activities">Please choose at least one.</p>'+
+    '<p class="hint">Hardware, outlet and stock options are matched to your partner model.</p></fieldset>';
+};
+wire[3]=function(){body.querySelectorAll('input[type=checkbox]').forEach(function(el){el.addEventListener('change',function(){clearErr(el.closest('.field'));});});};
+function validate3(){
+  S.services=Array.prototype.map.call(body.querySelectorAll('input[name=services]:checked'),function(x){return x.value;});
+  S.activities=Array.prototype.map.call(body.querySelectorAll('input[name=activities]:checked'),function(x){return x.value;});
+  var ok=true,first=null;
+  if(!S.services.length){var f=setErr('services');first=first||f;ok=false;}
+  if(!S.activities.length){var g=setErr('activities');first=first||g;ok=false;}
+  if(first)first.scrollIntoView({behavior:'smooth',block:'center'});
+  return ok;
+}
+
+/* ========== STEP 5: READINESS ========== */
+function sel(id,label,opts,val){
+  return '<div class="field"><label class="flabel" for="f_'+id+'">'+esc(label)+'</label><select id="f_'+id+'" name="'+id+'">'+
+    [''].concat(opts).map(function(o){return '<option value="'+esc(o)+'"'+(val===o?' selected':'')+'>'+(o?esc(o):'Select…')+'</option>';}).join('')+'</select></div>';
+}
+STEP_HTML[4]=function(){
+  var r=S.readiness;var stocky=S.activities.indexOf('stock')>-1||S.activities.indexOf('outlet')>-1||S.model==='regional'||S.model==='corporate';
+  return '<p class="step-intro">This helps us shape a training plan that fits you. There are no wrong answers.</p>'+
+  '<div class="frow">'+sel('sales_exp','Sales experience',['None yet','Some','Experienced'],r.sales_exp)+sel('tech_exp','Telecom or IT experience',['None yet','Some','Experienced'],r.tech_exp)+'</div>'+
+  '<div class="frow">'+inp('staff_count','Number of staff to be trained',false,'number','e.g. 4',r.staff_count)+sel('tech_cap','Technical support capability',['None','Basic','Skilled team'],r.tech_cap)+'</div>'+
+  '<div class="frow">'+sel('enquiries','Ability to handle customer enquiries',['With training','Yes, already'],r.enquiries)+(stocky?sel('stockcap','Managing orders, stock and collections',['Not applicable','With training','Yes, already'],r.stockcap):'')+'</div>'+
+  '<fieldset class="field"><legend class="flabel">Preferred training format</legend><div class="radio-row">'+
+    ['Online','In-person','Blended'].map(function(o){return '<label class="chk"><input type="radio" name="fmt" value="'+o+'"'+(r.fmt===o?' checked':'')+'>'+o+'</label>';}).join('')+'</div></fieldset>';
+};
+wire[4]=function(){};
+function grabReadiness(){var r=S.readiness;['sales_exp','tech_exp','staff_count','tech_cap','enquiries','stockcap'].forEach(function(k){var el=document.getElementById('f_'+k);if(el)r[k]=el.value.trim();});var f=body.querySelector('input[name=fmt]:checked');r.fmt=f?f.value:'';}
+function validate4(){grabReadiness();return true;}
+
+/* ========== STEP 6: TRAINING ROADMAP ========== */
+function computeTraining(){
+  var groups=[{tag:'core',label:'Core modules — everyone',sub:'Required for every partner, whatever the model.',mods:TRAIN_COMMON}];
+  var modelMods=[],modelLabel='';
+  if(S.model==='corporate'){modelMods=TRAIN_CORP.concat(TRAIN_RETAIL);modelLabel='Corporate & chain partner';}
+  else if(S.model==='regional'){modelMods=TRAIN_DISTRIB.concat(TRAIN_RETAIL);modelLabel='Regional distributor';}
+  else if(S.model==='retail'){modelMods=TRAIN_RETAIL.concat(TRAIN_SALES);modelLabel='Retail outlet / reseller';}
+  else if(S.model==='referral'){modelMods=TRAIN_SALES;modelLabel='Referral / sales partner';}
+  /* dedupe by name */
+  var seen={},md=[];modelMods.forEach(function(m){if(!seen[m.name]){seen[m.name]=1;md.push(m);}});
+  if(md.length)groups.push({tag:'model',label:modelLabel+' modules',sub:'Matched to your selected model.',mods:md});
+  var techTriggers=['sell_hardware','outlet','first_line','stock'];
+  var needsTech=S.activities.some(function(a){return techTriggers.indexOf(a)>-1;});
+  if(needsTech)groups.push({tag:'tech',label:'Technical modules (optional)',sub:'For staff who will touch hardware, sites or first-line support. Separate from any installation certification.',mods:TRAIN_TECH});
+  return groups;
+}
+STEP_HTML[5]=function(){
+  var groups=computeTraining();var total=groups.reduce(function(n,g){return n+g.mods.length;},0);
+  var html='<p class="step-intro">Based on your choices, here is the training DishNet proposes for a <b>'+esc(MODEL_NAME[S.model]||'partner')+'</b>. Durations are estimates. Nothing here has been scheduled or completed — this prototype only shows the proposed experience.</p>';
+  html+='<div class="notice" style="margin-bottom:20px"><span class="ic">🎓</span><div><strong>'+total+' proposed modules.</strong> Sales training and technical certification are separate. Completing a sales module does not authorise anyone to perform installations — only certified DishNet technicians install equipment.</div></div>';
+  groups.forEach(function(g){
+    html+='<div class="tr-group"><h3><span class="tr-tag tag-'+g.tag+'">'+(g.tag==='core'?'Core':g.tag==='tech'?'Technical':'Model')+'</span>'+esc(g.label)+'</h3><p class="tr-sub">'+esc(g.sub)+'</p>';
+    g.mods.forEach(function(m){
+      html+='<div class="mod"><div class="mod-top"><h4>'+esc(m.name)+'</h4><span class="mod-status">Not started</span></div>'+
+        '<p>'+esc(m.purpose)+'</p><div class="mod-meta"><span>Who: <b>'+esc(m.who)+'</b></span><span>Est. duration: <b>'+esc(m.est)+'</b></span><span>Assessment: <b>'+(m.assess?'Proposed':'None')+'</b></span></div></div>';
+    });
+    html+='</div>';
+  });
+  return html;
+};
+wire[5]=function(){};
+function validate5(){return true;}
+
+/* ========== STEP 7: REVIEW ========== */
+function dd(label,val){return '<dt>'+esc(label)+'</dt><dd>'+(val?esc(val):'<span class="rev-empty">—</span>')+'</dd>';}
+function revBlock(title,stepIdx,inner){
+  return '<div class="rev-block"><div class="rev-head"><h3>'+esc(title)+'</h3><button type="button" class="rev-edit" data-edit="'+stepIdx+'">✎ Edit</button></div><div class="rev-body">'+inner+'</div></div>';
+}
+STEP_HTML[6]=function(){
+  var p=S.profile,c=S.coverage,r=S.readiness;
+  var svc=S.services.map(function(x){return SERVICE_NAME[x];}).join(', ');
+  var act=S.activities.map(function(x){return ACT_NAME[x];}).join(', ');
+  var groups=computeTraining();var mods=[];groups.forEach(function(g){g.mods.forEach(function(m){mods.push(m.name);});});
+  var html='<p class="step-intro">Please check your answers. You can edit any section before submitting.</p>';
+  html+=revBlock('Partner model',0,'<div class="rev-dl">'+dd('Model',MODEL_NAME[S.model])+'</div>');
+  html+=revBlock('Business profile',1,'<div class="rev-dl">'+dd('Registered name',p.biz_name)+dd('Trading name',p.trading_name)+dd('Business type',p.biz_type)+dd('Contact',[p.contact_name,p.contact_role].filter(Boolean).join(' · '))+dd('Email',p.email)+dd('Phone / WhatsApp',p.phone)+dd('City / district',p.city)+dd('Website',p.website)+dd('Already operating',p.operating)+(p.desc?dd('About',p.desc):'')+'</div>');
+  var covInner='<div class="rev-dl">'+dd('Regions / districts',c.regions)+dd('Serves',(c.groups||[]).join(', '));
+  if(!isReferral()){covInner+=dd('Team',(c.team||[]).join(', '))+dd('Existing outlets',c.hasOutlets+(c.hasOutlets==='Yes'&&c.outletCount?(' ('+c.outletCount+')'):''))+dd('Plans to add outlets',c.addOutlets);}
+  if((c.outlets||[]).length)covInner+=dd('Proposed outlets',c.outlets.map(function(o){return [o.name,o.city].filter(Boolean).join(', ');}).filter(Boolean).join(' · '));
+  covInner+='</div>';
+  html+=revBlock('Coverage and outlets',2,covInner);
+  html+=revBlock('Products and activities',3,'<div class="rev-dl">'+dd('Services',svc)+dd('Activities',act)+'</div>');
+  html+=revBlock('Training needs',4,'<div class="rev-dl">'+dd('Sales experience',r.sales_exp)+dd('Telecom / IT experience',r.tech_exp)+dd('Staff to train',r.staff_count)+dd('Technical capability',r.tech_cap)+dd('Preferred format',r.fmt)+'</div>');
+  html+=revBlock('Proposed training',5,'<div class="rev-dl">'+dd(mods.length+' modules',mods.join(', '))+'</div>');
+  html+='<div class="notice notice-amber" style="margin:16px 0"><span class="ic">⚠️</span><div>Submitting this form is an expression of interest only. It does not create an authorised distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms. DishNet will review and may contact you.</div></div>';
+  html+='<div class="consent" id="consentBox"><input type="checkbox" id="f_consent" name="consent"'+(S.consent?' checked':'')+'><label for="f_consent">I confirm the information is accurate and I agree that DishNet Africa Ltd may contact me about this application and hold these details for that purpose, in line with the <a href="https://dishnetuganda.com/privacy.html" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">privacy policy</a>. <span class="req">*</span></label></div>'+
+    '<p class="field err" id="consentErr">Please tick the box to submit.</p>'+
+    '<p class="hint" style="margin-top:4px">Demo mode: your answers are not sent to DishNet or saved to any system when you submit here.</p>';
+  return html;
+};
+wire[6]=function(){
+  body.querySelectorAll('[data-edit]').forEach(function(b){b.addEventListener('click',function(){gotoStep(+b.dataset.edit);});});
+  var cb=document.getElementById('f_consent');if(cb)cb.addEventListener('change',function(){S.consent=cb.checked;document.getElementById('consentErr').style.display='none';document.getElementById('consentBox').classList.remove('invalid');save();});
+};
+function validate6(){
+  var cb=document.getElementById('f_consent');S.consent=!!(cb&&cb.checked);
+  if(!S.consent){document.getElementById('consentErr').style.display='block';document.getElementById('consentBox').classList.add('invalid');return false;}
+  return true;
+}
+
+/* ========== STEP 8: CONFIRMATION ========== */
+STEP_HTML[7]=function(){
+  var p=S.profile;var name=p.contact_name?(' '+p.contact_name.split(' ')[0]):'';
+  var msg='Hello DishNet Uganda, I would like to apply to become a partner.'+
+    '\nModel: '+(MODEL_NAME[S.model]||'')+
+    '\nBusiness: '+(p.biz_name||'')+
+    '\nCity: '+(p.city||'')+
+    '\nServices: '+S.services.map(function(x){return SERVICE_NAME[x];}).join(', ');
+  return '<div class="confirm-hero"><div class="confirm-check">✓</div>'+
+    '<h2 class="step-title" style="text-align:center">Thank you'+esc(name)+'</h2>'+
+    '<p class="step-intro" style="margin:6px auto 0;text-align:center">Your expression of interest is ready. Here is what would happen next.</p></div>'+
+    '<ol class="steps-next">'+
+    '<li><b>DishNet reviews your expression of interest.</b> We look at the model, services and coverage you described.</li>'+
+    '<li><b>We may contact you for clarification.</b> Using the phone or email you provided.</li>'+
+    '<li><b>Commercial terms and the partner model are discussed separately.</b> Nothing is fixed by this form.</li>'+
+    '<li><b>If approved, next steps follow.</b> A written agreement, training and operational onboarding, as applicable to your model.</li>'+
+    '</ol>'+
+    '<div class="notice notice-amber"><span class="ic">ℹ️</span><div><strong>This is a demonstration.</strong> Your answers were not submitted to DishNet or saved to any system. To actually reach the team now, use WhatsApp or email below.</div></div>'+
+    '<div class="contact-inline">Talk to the DishNet partner team:<span class="big">'+esc(WA_DISPLAY)+'</span>WhatsApp / phone &nbsp;·&nbsp; <span style="user-select:all">'+esc(EMAIL)+'</span><br>'+
+      '<a class="btn btn-primary" style="margin-top:12px" href="'+waLink(msg)+'" target="_blank" rel="noopener">Message DishNet on WhatsApp</a></div>'+
+    '<p class="hint" style="text-align:center">You can reopen the DishNet Planning Preview below to see how your answers map to DishNet’s internal process.</p>';
+};
+wire[7]=function(){try{sessionStorage.removeItem(STORE_KEY);}catch(e){} renderPlanning(); var pl=document.getElementById('planning'); };
+
+/* ---------- planning preview ---------- */
+function renderPlanning(){
+  var host=document.getElementById('planningContent');if(!host)return;
+  if(!S.model){host.innerHTML='<p class="rev-empty">Choose a partner model and fill in the application to populate this preview.</p>';return;}
+  var p=S.profile,c=S.coverage;
+  var resp=RESP[S.model]||{partner:[],dishnet:[]};
+  var appr=APPROVALS[S.model]||[];
+  var groups=computeTraining();var modCount=groups.reduce(function(n,g){return n+g.mods.length;},0);
+  var needsStock=(S.activities.indexOf('stock')>-1||S.activities.indexOf('outlet')>-1||S.model==='regional'||S.model==='corporate');
+  var needsColl=(S.model==='regional'||S.model==='corporate');
+  var h='';
+  h+='<div class="pp-sec"><h4>Application summary</h4><div class="pp-kv">'+
+    '<b>Model:</b> '+esc(MODEL_NAME[S.model])+'<br>'+
+    '<b>Business:</b> '+esc(p.biz_name||'—')+(p.city?(' · '+esc(p.city)):'')+'<br>'+
+    '<b>Contact:</b> '+esc([p.contact_name,p.email,p.phone].filter(Boolean).join(' · ')||'—')+'<br>'+
+    '<b>Services:</b> '+esc(S.services.map(function(x){return SERVICE_NAME[x];}).join(', ')||'—')+'<br>'+
+    '<b>Activities:</b> '+esc(S.activities.map(function(x){return ACT_NAME[x];}).join(', ')||'—')+'</div></div>';
+  h+='<div class="pp-sec"><h4>Responsibilities</h4><div class="pp-two">'+
+    '<div class="pp-card"><h5>The partner would</h5><ul>'+resp.partner.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>'+
+    '<div class="pp-card"><h5>DishNet would</h5><ul>'+resp.dishnet.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div></div></div>';
+  h+='<div class="pp-sec"><h4>Operational requirements</h4><div class="pp-two">'+
+    '<div class="pp-card"><h5>Stock &amp; outlets</h5><ul>'+(needsStock?['A stock location per outlet / partner warehouse','Dispatch and receipt tracking','Ownership vs custody (if consignment is agreed)'].map(function(x){return '<li>'+esc(x)+'</li>';}).join(''):'<li>Not required for this model</li>')+'</ul></div>'+
+    '<div class="pp-card"><h5>Collections &amp; settlement</h5><ul>'+(needsColl?['Settlement rules and statements','Collection authority only where agreed in writing','Reconciliation against DishNet invoices'].map(function(x){return '<li>'+esc(x)+'</li>';}).join(''):'<li>DishNet owns billing; no partner collection needed</li>')+'</ul></div></div></div>';
+  h+='<div class="pp-sec"><h4>Training to assign</h4><div class="pp-kv">'+modCount+' modules across '+groups.length+' group'+(groups.length>1?'s':'')+' — '+groups.map(function(g){return esc(g.label)+' ('+g.mods.length+')';}).join('; ')+'.</div></div>';
+  h+='<div class="pp-sec"><h4>Approvals DishNet would need</h4><div class="pp-card"><ul>'+appr.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div></div>';
+  var next='Create one uCRM <b>company client</b> for the partner legal entity and tag it as a partner (not a retail customer), then record the partner, outlets and training plan in the distribution module. Do not activate credit, allocate stock or grant portal access until approved. See the integration notes (docs/48) for the field-by-field mapping.';
+  h+='<div class="pp-sec"><h4>Suggested next internal step</h4><div class="pp-next">'+next+'</div></div>';
+  host.innerHTML=h;
+}
+var btnPlanning=document.getElementById('btnPlanning');
+btnPlanning.addEventListener('click',function(){
+  var pl=document.getElementById('planning');var open=!pl.hidden;
+  if(open){pl.hidden=true;btnPlanning.textContent='Show DishNet Planning Preview (internal)';}
+  else{renderPlanning();pl.hidden=false;btnPlanning.textContent='Hide DishNet Planning Preview';pl.scrollIntoView({behavior:'smooth',block:'start'});}
+});
+
+/* ---------- validation dispatch ---------- */
+var VALID=[validate0,validate1,validate2,validate3,validate4,validate5,validate6];
+btnNext.addEventListener('click',function(){
+  if(step<STEPS.length-1){
+    if(VALID[step]&&!VALID[step]())return;
+    if(step===6){ /* submit */ save(); step=7; renderStep();
+      if(!document.getElementById('planning').hidden){renderPlanning();}
+      return;
+    }
+    step++;renderStep();
+  }
+});
+btnBack.addEventListener('click',function(){ if(step>0){ if(step<=6&&VALID[step-0]){/* capture current without blocking */ try{captureSoft();}catch(e){}} step--; renderStep(); }});
+function captureSoft(){ if(step===1)grabProfile(); else if(step===2)grabCoverage(); else if(step===3){S.services=Array.prototype.map.call(body.querySelectorAll('input[name=services]:checked'),function(x){return x.value;});S.activities=Array.prototype.map.call(body.querySelectorAll('input[name=activities]:checked'),function(x){return x.value;});} else if(step===4)grabReadiness(); save(); }
+btnRestart.addEventListener('click',function(){ S={model:'',profile:{},coverage:{outlets:[]},services:[],activities:[],readiness:{},consent:false}; try{sessionStorage.removeItem(STORE_KEY);}catch(e){} step=0; document.getElementById('planning').hidden=true; btnPlanning.textContent='Show DishNet Planning Preview (internal)'; renderStep(); });
+
+/* ---------- boot ---------- */
+load();
+if(step>6)step=0; /* never resume onto the confirmation screen */
+renderStep();
+
+/* expose a tiny hook for automated checks (no effect on users) */
+window.__DN_WIZARD__={goto:gotoStep,state:function(){return S;},steps:STEPS.length};
+})();
+</script>
+</body>
+</html>
