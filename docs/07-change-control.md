@@ -2745,5 +2745,40 @@ pinned command (stands alone; the rollback prints separately at the end of its l
       && bash scripts/deploy-5.18.58.sh 2>&1 | tee /root/dnb-5.18.58/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
 
 With 5.18.58 the Uganda SSP-on-UGX cleanup covers the **whole plugin UI** (accounting +
-sales/support). Still outstanding (operator action, not code): **`whatsapp_admin_phone` =
-`211927797217`** in Engage → WhatsApp.
+sales/support). Still outstanding (operator action, not code): no **`whatsapp_admin_phone`** is set
+in either copy of the settings, so the watchdog's alerts reach only the plugin log (deploy note R14;
+set a WhatsApp number in Engage → WhatsApp to also receive them on a phone).
+
+### DEPLOYED — 2026-10-01 04:05 UTC — PASSED (58 ok, 0 failed, 4 notes)
+
+Run by the operator on `dishnetuganda`:
+`bash scripts/deploy-5.18.58.sh … | tee /root/dnb-5.18.58/deploy-20261001T040503Z.log`. **The chain
+held:** stage A before-evidence read **live `eea3d65` / 5.18.57**, so 5.18.57 went in first and
+5.18.58 deployed on top of it exactly as its base gate requires. Plugin commit `fcab6bd`, version
+5.18.58; container PHP 8.1.34 accepted all four changed screens (A2).
+
+- **Backup first** — `plugin.sqlite3` (24M, integrity ok, same sha256 both sides), the data dir
+  (116M), the installed 5.18.57 tree (11M) and the config vault, under
+  `/root/dnb-5.18.58/backup-20261001T040503Z`. (The one tar "file changed as we read it" note is a
+  live log rotating during the copy — benign, archived as found.)
+- **B** — `DEPLOY` typed; container now serves `fcab6bd`; the 6 changed files were stamped with the
+  copy time so PHP-FPM recompiles each at next use.
+- **V** — public sign-in **200, no loop, no `:8443` leak**; Terms/Privacy render Uganda-correct
+  (A1/A2, version 1.1, no South Sudan literal); `:8443` redirects correctly; **no fatal/parse error**
+  since the deploy.
+- **R — the fix is confirmed installed and live:** R1 "5.18.58: the sales/support cash screens are
+  tenant-aware — Field Expenses, My Account and Wallet hide SSP on Uganda, and fiber_costs' symbol
+  follows the tenant"; all 6 files byte-match `fcab6bd`; the 138 other Release-A-through-5.18.57 files
+  intact. The full **5.18.52–5.18.57 regression net is green** — PD-1 export gate (R1b), scM fix
+  (R1c), **5.18.57 accounting tenant gate (R1d)**, NotifyGate 23/23 (R2), job notifier wired (R5,R6),
+  migrations 075/076 applied (R9), lock guard (R8), scheduler can send (R14).
+- **The data is untouched** — this release changes no table and no row, so a rollback needs no
+  restore. Rollback to 5.18.57 remains `bash scripts/deploy-5.18.58.sh --rollback` (typed ROLLBACK),
+  printed on its own at the end of the deploy log.
+- **4 notes, all pre-existing / informational:** R7 — 2 of 4 active job-taking staff still lack a
+  verified uCRM link (they get no job WhatsApp until an admin saves their uCRM user via the picker);
+  R11 — engineer e-mail uses the plugin's SMTP; R14 — no `whatsapp_admin_phone` set (above); the tar
+  live-log note.
+
+**5.18.58 is live. The Uganda SSP-on-UGX UI cleanup is complete end to end; South Sudan is
+unchanged.**
