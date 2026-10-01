@@ -3166,7 +3166,7 @@ stay empty and ignored by 5.18.60. Preserves Uganda/South Sudan; Domain B untouc
 the live WhatsApp transport (a separate, approved step — the pilot queues, never sends); the partner portal (P4);
 WS-B (per-distributor own-number WhatsApp + AI).
 
-## 01 Oct — 5.18.65: Distributors link in the left sidebar (Admin section) — BUILT, deploy rehearsed, NOT deployed
+## 01 Oct — 5.18.65: Distributors link in the left sidebar (Admin section) — DEPLOYED to production 21:25 UTC (PASSED 18/0/0)
 
 On the operator's "yes go ahead" to putting the Distributors screen in the side menu. 5.18.64 deployed the pilot and
 the operator turned it on, but the registry was reachable only by typing the `?page=dashboard&tab=distributors` URL —
@@ -3190,7 +3190,12 @@ identical to 5.18.49, all 11 mutants still caught — proving the sidebar block 
 distributor suites green with pins bumped (apply 61/0, territory 47/0, notify 66/0, link 33/0). Full plugin suite
 **green, run twice** (`run.sh` exit 0 both runs, 0 failures).
 
-**3. Deployment.** **Built and rehearsed, NOT run.** `scripts/deploy-5.18.65.sh` (pinned to `ce3fa91`, installs
+**3. Deployment. DEPLOYED to production 2026-10-01 21:25 UTC — PASSED (18 ok, 0 failed, 0 notes).** The operator ran
+the pinned command; the log shows: plugin commit `ce3fa91` over live `03df9a5` (5.18.64), 7 files byte-for-byte (R1),
+the pilot switch read **on** before and after and unchanged by the deploy (V3/R2), no migration (R3), the Null channel
+still bound — nothing can be sent (R4), Release A→5.18.64 preserved (173 files, R5), and the **Distributors sidebar
+link installed and gated (R6)**. The **Distributors** link is now live under **Admin** in the left sidebar on the
+Uganda install. `scripts/deploy-5.18.65.sh` (pinned to `ce3fa91`, installs
 5.18.65 over live **5.18.64**) — backup + GO/NO-GO, byte-for-byte verify (R1), the pilot switch **unchanged** by the
 deploy (V3/R2 read the live state before and after and require them equal — whatever the operator set it to, it
 stays; even on, nothing is sent), **no migration** (R3 is a regression check that 5.18.64's three are still present
