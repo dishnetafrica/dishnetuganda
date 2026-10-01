@@ -3090,3 +3090,72 @@ flag off restores prior behaviour; migration 079 only *adds* three unused tables
 Sudan; Domain B untouched. **Not built, deliberately:** `dist_outlets` (stock-side, a later phase);
 auto-attribution of real customers on the customer/lead screens (the resolver is the spine; that wiring is a
 separate step); P3 notifications; the partner portal (P4).
+
+## 01 Oct — 5.18.64: distributor notifications, pilot core (WS-A P3) — BUILT, off by default, NOTHING SENT, NOT deployed
+
+On the operator's "p3 go ahead". When something happens to a distributor's own customer or lead — a lead
+attributed, a payment received, a new customer activated (B-5's three events) — an alert is **drafted** for a
+DishNet admin to approve. **Draft → approve, never auto-send (B-4). NOTHING is sent to a real number in this
+pilot:** the bound transport is a Null channel, so approving *queues* an alert; connecting a live WhatsApp
+number is a separate, explicitly-approved step. **Local only — no uCRM write, no message, no production
+change.** Behind `distributors_enabled` (default off) and Uganda-gated.
+
+**1. Files.**
+- `migrations/080_distributor_notifications.sql` — `dist_contacts` (a distributor's **verified** number;
+  `verified` defaults 0, never trusted from a form), `dist_notify_consent` (the distributor's own `muted`
+  flag — the only suppressor), `dist_notify_log` (the draft→approve outbox; `status`
+  draft|approved|sent|rejected|suppressed; `dedup_key` **UNIQUE** = the once-per-(distributor,event,entity)
+  claim floor). Additive, idempotent; nothing in 001–079 touched.
+- `lib/WhatsAppChannel.php` — the provider **port** (docs/49 §3.3). `NullWhatsAppChannel` is bound in the
+  pilot (sends nothing); `EvolutionWhatsAppChannel` (a thin wrapper over the existing `EvolutionApiService`)
+  exists so the port has its one real adapter but is **constructed nowhere** — the "one adapter live at a
+  time, never a second integration" rule.
+- `lib/DistributorNotifier.php` — builds a privacy-guarded draft, checks the distributor's own consent, claims
+  the dedup key, resolves the verified recipient; `approve()` hands an approved draft to the channel (Null →
+  queued, never sent); `reject()`; contacts + consent management.
+- `lib/DistributorEvents.php` — the one flag-gated, **try/catch-isolated** entry point every event source
+  calls. A strict no-op unless Uganda **and** the flag; resolves the owning distributor from
+  `dist_customer_links` (079); builds a draft only. Any throw is swallowed — safe to drop into a live path.
+- `includes/post/post_distributors.php` — attributing a **lead** now fires `lead_attributed` from our own
+  handler; new admin actions `dist_contact_add` / `dist_contact_verify` / `dist_consent_mute` /
+  `dist_notify_approve` / `dist_notify_reject`, all admin + CSRF + flag + Uganda.
+- `tabs/admin/distributors.php` — a **Notifications** section: verified numbers & consent per distributor, the
+  draft→approve queue, recent activity. Copy says plainly nothing is sent in the pilot.
+- **`webhook.php` — two thin, flag-gated, try/catch-isolated hooks** (the one live-file change this phase):
+  the `payment.add` handler (after the response is flushed, off the uCRM-**re-verified** payment) and
+  `service.add` on first activation (`status === 1`). Each calls `DistributorEvents::maybeNotify()` and is a
+  **strict no-op** when the pilot is off — every South Sudan install, and Uganda by default. Proven below.
+- Manifest → 5.18.64; the four distributor-test version pins updated.
+
+**2. The rules, each proven.**
+- **Draft → approve, no live send.** The bound channel is Null; `approve()` queues (`approved`), it does not
+  send. A fake *live* channel in the test proves the approve→send path exists and works, but no live adapter
+  is bound in the pilot.
+- **Privacy (docs/49 §11).** Every draft body passes `ReplyPrivacyGuard::check()` with an allow-list of **only
+  the owning customer's own** amount/ids, so a foreign customer's value is blocked (`foreign:amount`) and
+  never queued. An edited body is re-checked on approve.
+- **Consent (CLASS_DISTRIBUTOR).** A customer's opt-out never suppresses a distributor alert (the recipient is
+  the distributor, and the design routes nothing through a customer opt-out); only the distributor's own
+  `muted` does.
+- **Exactly once.** The UNIQUE `dedup_key` is the floor — a webhook replay or double-submit creates no second
+  draft.
+- **Verified recipient only.** A number is a destination only when `verified = 1`; 0 or >1 verified resolves
+  to none (ambiguous, fail safe).
+- **Never by phone for ownership.** The owner comes from `dist_customer_links` (079), keyed by the uCRM client
+  id or the lead id; a phone here is only a verified destination.
+
+**3. Tests.** `tests/test_distributor_notify.php` — **66/0**: migration + dedup floor; contacts (0/1/>1
+recipient resolution); consent; the three events → draft, dedup once, suppressed-when-muted; **privacy — a
+foreign amount blocked, a paired allow-list control, and a weakened copy of the notifier (guard removed) that
+lets the value through, proving the guard has teeth**; draft→approve with Null (queued) and a fake live channel
+(sent); reject; the Uganda+flag gate (on/off, owned/unowned); the DB unique floor (+control); wiring/gating;
+the port (Null bound, Evolution adapter present but unbound); no uCRM. Existing distributor suites green with
+pins bumped: registry **57/0**, apply **61/0**, link **33/0**, territory **47/0**. **South Sudan golden 51/0 —
+admin UI and the whole job-day (every uCRM call, WhatsApp text, webhook log, e-mail) byte-for-byte unchanged,
+all 11 mutants still caught** — proving the `webhook.php` hooks are strict no-ops off. Full suite as after-gate.
+
+**4. Deployment.** **None.** P1a+P1b+P2+P3 (5.18.61→.64) deploy together when approved, flag off. Rollback:
+flag off restores prior behaviour; migration 080 only *adds* three unused tables; the `webhook.php` hooks are
+no-ops when off. Preserves Uganda/South Sudan; Domain B untouched. **Not built, deliberately:** the live
+WhatsApp transport (binding the Evolution/Cloud-API adapter is a separate, approved step — the pilot queues,
+never sends); the partner portal (P4); WS-B (per-distributor own-number WhatsApp + AI).

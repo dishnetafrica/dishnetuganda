@@ -91,11 +91,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
             $r = $att->addArea((int)($_POST['region_id'] ?? 0), (string)($_POST['area'] ?? ''), $actor);
             flash(!empty($r['added']) ? 'Area added to the territory.' : 'That area already belongs to this distributor.', 'success');
         } else { // dist_attribute — human-confirmed owner
-            $r = $att->link((string)($_POST['scope'] ?? ''), (string)($_POST['entity_id'] ?? ''), (int)($_POST['partner_id'] ?? 0),
+            $scope    = (string)($_POST['scope'] ?? '');
+            $entityId = (string)($_POST['entity_id'] ?? '');
+            $r = $att->link($scope, $entityId, (int)($_POST['partner_id'] ?? 0),
                             (string)($_POST['assigned_via'] ?? 'manual'), $actor, (string)($_POST['note'] ?? ''), 'admin');
-            flash(!empty($r['linked'])
+            // Attributing a LEAD to a distributor IS the "new lead attributed" event
+            // (docs/49 §7, Flow B). Draft an alert for the owner — nothing is sent
+            // (pilot is draft->approve only). This is the one event wired from our own
+            // code; the two CRM events hook the live webhook paths (DistributorEvents).
+            $extra = '';
+            if ($scope === 'lead' && !empty($r['linked'])) {
+                require_once dirname(__DIR__, 2) . '/lib/DistributorEvents.php';
+                $ev = DistributorEvents::maybeNotify($store, is_array($config ?? null) ? $config : [], $dataDir ?? null,
+                    'lead_attributed', ['lead_id' => $entityId], [], $actor);
+                if (!empty($ev['created'])) $extra = ' A draft alert is waiting for your approval under Notifications below.';
+            }
+            flash((!empty($r['linked'])
                 ? (!empty($r['relinked']) ? 'Owner changed (the previous owner is kept as history).' : 'Owner recorded.')
-                : 'That customer/lead is already owned by this distributor.', 'success');
+                : 'That customer/lead is already owned by this distributor.') . $extra, 'success');
+        }
+    } catch (\Throwable $e) {
+        flash('Could not complete: ' . $e->getMessage(), 'danger');
+    }
+    redirect('?page=dashboard&tab=distributors');
+}
+
+// WS-A P3: distributor notifications — verified contacts, consent, and the
+// draft->approve queue. Admin + flag + Uganda, local only. The bound channel is
+// NullWhatsAppChannel, so APPROVING a draft queues it — nothing is sent to a
+// real number in the pilot (docs/49 §3.3, Bhavin B-4).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['dist_contact_add', 'dist_contact_verify', 'dist_consent_mute', 'dist_notify_approve', 'dist_notify_reject'], true)) {
+    $admin = $auth->requireAdmin();
+    require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+    $enabled = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)
+        && !empty($config['distributors_enabled']);
+    if (!$enabled) {
+        flash('Distributor management is not enabled on this install.', 'danger');
+        redirect('?page=dashboard');
+    }
+    require_once dirname(__DIR__, 2) . '/lib/DistributorNotifier.php';
+    $notifier = DistributorNotifier::fromStore($store); // NullWhatsAppChannel — nothing is sent
+    $actor = trim((string)($admin['name'] ?? '') . ' <' . (string)($admin['email'] ?? '') . '>');
+    $act = (string)($_POST['action'] ?? '');
+    try {
+        if ($act === 'dist_contact_add') {
+            $notifier->addContact((int)($_POST['partner_id'] ?? 0), (string)($_POST['phone'] ?? ''), (string)($_POST['role'] ?? 'owner'), $actor);
+            flash('Number recorded (unverified). Verify it before it can receive alerts.', 'success');
+        } elseif ($act === 'dist_contact_verify') {
+            $notifier->verifyContact((int)($_POST['contact_id'] ?? 0), $actor);
+            flash('Number verified — it can now receive this distributor\'s alerts.', 'success');
+        } elseif ($act === 'dist_consent_mute') {
+            $mute = ((string)($_POST['muted'] ?? '') === '1');
+            $notifier->setMuted((int)($_POST['partner_id'] ?? 0), $mute, $actor);
+            flash($mute ? 'Alerts muted for this distributor (their own choice).' : 'Alerts un-muted for this distributor.', 'success');
+        } elseif ($act === 'dist_notify_approve') {
+            $r = $notifier->approve((int)($_POST['log_id'] ?? 0), $actor, isset($_POST['body']) ? (string)$_POST['body'] : null);
+            if (!empty($r['ok'])) {
+                flash(($r['status'] ?? '') === 'sent'
+                    ? 'Approved and sent.'
+                    : 'Approved and queued. Live WhatsApp sending is not enabled in the pilot — nothing was sent to a number.', 'success');
+            } else {
+                flash('Could not approve: ' . ($r['reason'] ?? 'unknown'), 'danger');
+            }
+        } else { // dist_notify_reject
+            $notifier->reject((int)($_POST['log_id'] ?? 0), $actor, (string)($_POST['note'] ?? ''));
+            flash('Draft rejected.', 'success');
         }
     } catch (\Throwable $e) {
         flash('Could not complete: ' . $e->getMessage(), 'danger');

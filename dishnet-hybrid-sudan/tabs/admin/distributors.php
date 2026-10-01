@@ -25,9 +25,11 @@ if (empty($config['distributors_enabled'])) {
 }
 
 require_once __DIR__ . '/../../lib/DistributorAttribution.php';
+require_once __DIR__ . '/../../lib/DistributorNotifier.php';
 $reg = DistributorRegistry::fromStore($store);
 $apps = DistributorApplicationService::fromStore($store, $dataDir);
 $att = DistributorAttribution::fromStore($store);
+$notifier = DistributorNotifier::fromStore($store);
 $hh = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
 $partnerOptions = function ($sel = 0) use ($reg, $hh) {
     $o = '<option value="">— choose a distributor —</option>';
@@ -144,6 +146,120 @@ if (!$partners) {
        . '<label style="font-size:12px;color:#6b7280;">Note<br><input name="note" maxlength="200" style="padding:5px;width:150px;"></label>'
        . '<button type="submit" style="background:#C8102E;color:#fff;border:0;border-radius:5px;padding:7px 12px;font-weight:600;cursor:pointer;">Confirm owner</button></form>';
     echo '<p style="font-size:12px;color:#9ca3af;margin:0 0 20px;">Never attributed by phone — use the uCRM client id or the lead id.</p>';
+}
+
+// ── Notifications (WS-A P3) ──
+echo '<h3 style="font-size:16px;margin:28px 0 8px;">Notifications</h3>';
+echo '<p style="color:#6b7280;margin:0 0 4px;font-size:13px;">When something happens to a distributor\'s own customer or lead — a lead attributed, a '
+   . 'payment received, a new customer activated — an alert is <b>drafted</b> here for you to approve. The assistant proposes; you decide.</p>';
+echo '<p style="margin:0 0 12px;padding:9px 12px;background:#fff6f7;border:1px solid #f0c9cf;border-radius:8px;font-size:12.5px;color:#6b7280;">'
+   . '<b>Nothing is sent to a real number in this pilot.</b> Approving a draft queues it; connecting a live WhatsApp number is a separate, '
+   . 'explicitly-approved step. A customer\'s opt-out never mutes a distributor; a distributor can mute their own alerts.</p>';
+if ($partners) {
+    $pById = $pById ?? [];
+    foreach ($partners as $p) $pById[(int)$p['id']] = $p;
+
+    // Verified numbers & consent, per distributor
+    echo '<h4 style="font-size:14px;margin:14px 0 6px;">Verified numbers &amp; consent</h4>';
+    echo '<table style="border-collapse:collapse;width:100%;font-size:13px;margin-bottom:18px;"><thead><tr style="text-align:left;border-bottom:2px solid #e5e7eb;">'
+       . '<th style="padding:7px 9px;">Distributor</th><th style="padding:7px 9px;">Numbers (verified numbers receive alerts)</th>'
+       . '<th style="padding:7px 9px;">Alerts</th></tr></thead><tbody>';
+    foreach ($partners as $p) {
+        $pid = (int)$p['id'];
+        $contacts = $notifier->contactsFor($pid);
+        $verified = array_values(array_filter($contacts, fn($c) => (int)$c['verified'] === 1));
+        $muted = $notifier->isMuted($pid);
+        echo '<tr style="border-bottom:1px solid #f1f1ef;vertical-align:top;">';
+        echo '<td style="padding:8px 9px;font-weight:600;">' . $hh($p['partner_code']) . '<br><span style="font-weight:400;color:#6b7280;font-size:12px;">' . $hh($p['legal_name']) . '</span></td>';
+        echo '<td style="padding:8px 9px;">';
+        if (!$contacts) {
+            echo '<span style="color:#9ca3af;">No number yet.</span>';
+        } else {
+            echo '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;">';
+            foreach ($contacts as $c) {
+                $v = (int)$c['verified'] === 1;
+                echo '<div style="display:flex;gap:6px;align-items:center;">'
+                   . '<code style="font-size:12px;">' . $hh($c['phone']) . '</code>'
+                   . '<span style="font-size:11px;color:#6b7280;">' . $hh($c['role']) . '</span>'
+                   . ($v
+                       ? '<span style="font-size:10px;font-weight:700;color:#166534;background:#DCFCE7;border-radius:999px;padding:1px 7px;">verified</span>'
+                       : '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;">' . csrfField()
+                           . '<input type="hidden" name="action" value="dist_contact_verify"><input type="hidden" name="contact_id" value="' . (int)$c['id'] . '">'
+                           . '<button type="submit" style="font-size:11px;background:#111827;color:#fff;border:0;border-radius:4px;padding:2px 8px;cursor:pointer;">Verify</button></form>')
+                   . '</div>';
+            }
+            echo '</div>';
+            if (count($verified) > 1) {
+                echo '<div style="font-size:11px;color:#b45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;margin-bottom:6px;">More than one number is verified — alerts are held until exactly one is verified (no guessing).</div>';
+            }
+        }
+        // add a number
+        echo '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;display:flex;gap:4px;align-items:center;flex-wrap:wrap;">' . csrfField()
+           . '<input type="hidden" name="action" value="dist_contact_add"><input type="hidden" name="partner_id" value="' . $pid . '">'
+           . '<input type="text" name="phone" placeholder="+256…" required style="width:130px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">'
+           . '<select name="role" style="padding:3px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;"><option value="owner">owner</option><option value="ops">ops</option></select>'
+           . '<button type="submit" style="font-size:11px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:3px 8px;cursor:pointer;">Add number</button></form>';
+        echo '</td>';
+        // consent
+        echo '<td style="padding:8px 9px;">'
+           . '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;">' . csrfField()
+           . '<input type="hidden" name="action" value="dist_consent_mute"><input type="hidden" name="partner_id" value="' . $pid . '">'
+           . '<input type="hidden" name="muted" value="' . ($muted ? '0' : '1') . '">'
+           . ($muted
+               ? '<span style="font-size:11px;font-weight:700;color:#991B1B;">muted</span> <button type="submit" style="font-size:11px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:2px 8px;cursor:pointer;">Un-mute</button>'
+               : '<span style="font-size:11px;font-weight:700;color:#166534;">on</span> <button type="submit" style="font-size:11px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:2px 8px;cursor:pointer;">Mute</button>')
+           . '</form></td>';
+        echo '</tr>';
+    }
+    echo '</tbody></table>';
+
+    // Drafts awaiting approval
+    $drafts = $notifier->pendingDrafts(50);
+    echo '<h4 style="font-size:14px;margin:14px 0 6px;">Alerts awaiting your approval <span style="color:#6b7280;font-weight:400;">(' . count($drafts) . ')</span></h4>';
+    if (!$drafts) {
+        echo '<p style="color:#9ca3af;font-size:13px;margin:0 0 16px;">Nothing waiting. Alerts appear here when a distributor\'s customer/lead triggers one of the three events.</p>';
+    } else {
+        foreach ($drafts as $d) {
+            $pp = $pById[(int)$d['partner_id']] ?? [];
+            $who = ($pp['partner_code'] ?? ('#' . (int)$d['partner_id'])) . ' — ' . ($pp['legal_name'] ?? '');
+            $dest = (string)$d['to_phone'] !== '' ? $hh($d['to_phone']) : '<span style="color:#b45309;">no verified number yet — add &amp; verify one above</span>';
+            echo '<div style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:12px;overflow:hidden;">';
+            echo '<div style="padding:9px 12px;background:#f8fafc;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">'
+               . '<span style="font-weight:600;font-size:13px;">' . $hh($who) . '</span>'
+               . '<span style="font-size:12px;color:#6b7280;">' . $hh(str_replace('_', ' ', $d['event'])) . ' · to ' . $dest . '</span></div>';
+            echo '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;padding:11px 12px;">' . csrfField()
+               . '<input type="hidden" name="action" value="dist_notify_approve"><input type="hidden" name="log_id" value="' . (int)$d['id'] . '">'
+               . '<textarea name="body" style="width:100%;box-sizing:border-box;min-height:64px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;">' . $hh($d['body']) . '</textarea>'
+               . '<div style="display:flex;gap:8px;margin-top:8px;">'
+               . '<button type="submit" style="background:#166534;color:#fff;border:0;border-radius:7px;padding:6px 14px;font-weight:600;cursor:pointer;">Approve &amp; queue</button>'
+               . '</form>'
+               . '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;">' . csrfField()
+               . '<input type="hidden" name="action" value="dist_notify_reject"><input type="hidden" name="log_id" value="' . (int)$d['id'] . '">'
+               . '<button type="submit" style="background:#fff;color:#991B1B;border:1px solid #FCA5A5;border-radius:7px;padding:6px 14px;font-weight:600;cursor:pointer;">Reject</button></form>'
+               . '</div>';
+            echo '</div>';
+        }
+    }
+
+    // Recent activity
+    $recent = $notifier->recent(20);
+    if ($recent) {
+        echo '<h4 style="font-size:14px;margin:18px 0 6px;">Recent alerts</h4>';
+        echo '<table style="border-collapse:collapse;width:100%;font-size:12.5px;margin-bottom:8px;"><thead><tr style="text-align:left;border-bottom:2px solid #e5e7eb;">'
+           . '<th style="padding:6px 9px;">When</th><th style="padding:6px 9px;">Distributor</th><th style="padding:6px 9px;">Event</th><th style="padding:6px 9px;">Status</th></tr></thead><tbody>';
+        $badge = ['draft' => '#64748B', 'approved' => '#166534', 'sent' => '#166534', 'rejected' => '#991B1B', 'suppressed' => '#92400E', 'blocked' => '#991B1B'];
+        foreach ($recent as $r) {
+            $pp = $pById[(int)$r['partner_id']] ?? [];
+            $col = $badge[$r['status']] ?? '#64748B';
+            echo '<tr style="border-bottom:1px solid #f1f1ef;">'
+               . '<td style="padding:6px 9px;color:#6b7280;">' . $hh(substr((string)$r['created_at'], 0, 16)) . '</td>'
+               . '<td style="padding:6px 9px;">' . $hh($pp['partner_code'] ?? ('#' . (int)$r['partner_id'])) . '</td>'
+               . '<td style="padding:6px 9px;">' . $hh(str_replace('_', ' ', $r['event'])) . '</td>'
+               . '<td style="padding:6px 9px;font-weight:700;color:' . $col . ';">' . $hh($r['status'])
+               . ((string)$r['reason'] !== '' ? ' <span style="font-weight:400;color:#9ca3af;">· ' . $hh($r['reason']) . '</span>' : '') . '</td></tr>';
+        }
+        echo '</tbody></table>';
+    }
 }
 
 // ── Applications not yet appointed ──
