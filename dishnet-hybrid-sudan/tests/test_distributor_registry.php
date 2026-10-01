@@ -123,6 +123,18 @@ is_(strpos($pub, "'distributors' => '*admin'") !== false, 'the distributors tab 
 is_(strpos($pub, "distributors_enabled") !== false && strpos($pub, "id'=>'distributors'") !== false, 'the nav module is behind the distributors_enabled flag');
 is_(strpos($pub, "\$_staffJobsUganda && is_array(\$config ?? null) && !empty(\$config['distributors_enabled'])") !== false,
     'the nav module is gated on BOTH Uganda and the flag');
+// 5.18.65: the registry also has a LEFT-SIDEBAR link in includes/navigation.php — the clickable item an admin
+// actually sees — gated identically: admin + Uganda (StaffJobsGate) + distributors_enabled. ($ALL_MODULES above
+// feeds the module list / Staff permission matrix; this is the sidebar entry.) The gate must sit immediately
+// before the link, so a copy that drops it fails this.
+$nav    = nc($root . '/includes/navigation.php');
+$navPos = strpos($nav, 'tab=distributors');
+is_($navPos !== false, 'the left sidebar has a Distributors link (tab=distributors)');
+$navGate = $navPos !== false ? substr($nav, max(0, $navPos - 500), 500) : '';
+is_(strpos($navGate, '$isAdmin') !== false
+    && strpos($navGate, 'StaffJobsGate::applies') !== false
+    && strpos($navGate, "distributors_enabled") !== false,
+    'the sidebar link is gated by admin + Uganda (StaffJobsGate) + the flag, immediately before it');
 $ph = nc($root . '/includes/post_handlers.php');
 is_(strpos($ph, "/post/post_distributors.php") !== false, 'post_handlers.php includes the distributor handler');
 $pd = nc($root . '/includes/post/post_distributors.php');
@@ -138,7 +150,7 @@ is_(strpos($tab, 'CrmApiClient') === false, 'the tab calls no uCRM');
 
 echo "\nG. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.64', 'manifest version is 5.18.64');
+is_(($mani['information']['version'] ?? '') === '5.18.65', 'manifest version is 5.18.65');
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";

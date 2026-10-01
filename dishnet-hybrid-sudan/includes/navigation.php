@@ -514,6 +514,21 @@ try {
     <span class="nav-icon"><i class="bi bi-clipboard-data-fill" style="color:#dc2626;"></i></span> Overdue Workbench
 </a>
 <?php endif; ?>
+<?php
+    // WS-A (docs/49): the distributor registry sidebar link. Gated exactly as the tab itself
+    // (tabs/admin/distributors.php) and the $ALL_MODULES entry (public.php) are: admin-only,
+    // Uganda-only (StaffJobsGate is fail-closed — any doubt => not Uganda => hidden), and behind the
+    // distributors_enabled flag, which is OFF by default. So on every install the sidebar is unchanged
+    // until an admin turns the flag on, and South Sudan never sees it. Self-contained: it requires the
+    // gate class and re-checks $isAdmin here, so the link cannot leak if this block is ever moved.
+    if (!class_exists('StaffJobsGate')) require_once dirname(__DIR__) . '/lib/StaffJobsGate.php';
+    if ($isAdmin
+        && StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)
+        && !empty($config['distributors_enabled'])): ?>
+<a href="?page=dashboard&tab=distributors" class="kyc-tab <?= $tab==='distributors'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-diagram-2-fill" style="color:#7C3AED;"></i></span> Distributors
+</a>
+<?php endif; ?>
 
 <?php /*  DISHNET 4G  */ ?>
 <?php /*  UCRM SYNC  */ ?>
