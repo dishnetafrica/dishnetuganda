@@ -9,6 +9,14 @@ This is also a **product-discovery exercise**: the prototype exists so DishNet c
 models to support, what to ask applicants, what training each partner needs, and what the future
 distribution module (root `docs/47`) must hold — **before** any of it is built.
 
+> **Update — 1 October, integration built (5.18.59).** On your approval ("integrate into live website",
+> submissions **captured in the plugin**, search **indexed**) the page is now a live site citizen and the
+> submission is wired to a new plugin endpoint that stores applications for staff review. **It is built,
+> tested and held — nothing has been deployed by this session.** The two deploys (website → `main`;
+> plugin → operator-run `deploy-5.18.59.sh`) wait for your explicit go-ahead. See **§12** for exactly
+> what changed and what is still NOT done. Every compliance guardrail in §7 still holds: an application
+> is **not** an approval, and **no uCRM client, partner, service or account is created.**
+
 ---
 
 ## 1. What was built, and where
@@ -280,3 +288,70 @@ and nothing was deployed, there is no state to restore and no other page is affe
 Next step is the operator's: review the screens, decide the partner model and the §6 questions, then approve
 (a) integrating the page into the live site and (b) how submissions should flow. Nothing proceeds without
 that approval.
+
+---
+
+## 12. Integration as built (5.18.59) — built and tested, NOT deployed
+
+On your approval — *"integrate into live website"*, submissions **"Capture in the plugin"**, search
+**"Yes, index it"** — the prototype became a live site citizen and the submission was wired to a new plugin
+endpoint. Everything below is in the branch and **held**; this session deployed nothing.
+
+### 12.1 The website half (`dishnet-web-uganda/`)
+
+- **`site/become-a-distributor.html`** is now a normal page, not a noindex demo: the `robots` noindex meta is
+  removed, it carries the shared favicon, fonts and a `LocalBusiness` JSON-LD block, and every cross-page
+  nav/footer link is relative like the rest of the site.
+- **Submission.** The wizard's final step POSTs a form-encoded body
+  (`payload=<JSON>&hp=<honeypot>&t=<ms since the page rendered>`) to the plugin endpoint
+  `…/public.php?page=distributor_apply`. On success it shows *"Thank you"* with a reference
+  (`DNP-NNNNN`). **If the endpoint is unreachable it falls back to the WhatsApp hand-off** — so a real
+  applicant never loses their application, and the page is safe to publish even before the plugin endpoint
+  is live.
+- **Discoverable (indexed).** A footer "Become a Distributor" link on every top-level page (38 pages), the
+  `reseller.html` CTA points here, and `sitemap.xml` lists the URL.
+- **Guards:** `verify-address.py` passes (58 pages; one address / phone / coverage; 87 JSON-LD blocks
+  parse). The headless wizard test (`scratchpad/wiz_test.js`) drives the whole flow — stored confirmation
+  with its `DNP-00042` reference, the form-encoded payload, and the WhatsApp fallback branch — **47/47**.
+
+### 12.2 The plugin half (`dishnet-hybrid-sudan/`, version 5.18.59)
+
+| Piece | File | Note |
+|---|---|---|
+| Capture table | `migrations/077_distributor_applications.sql` | `dist_partner_applications`, additive, idempotent. Pre-approval intake only. |
+| Server-side gate | `lib/DistributorApplicationService.php` | `normalise()` — partner model whitelisted, labels **derived server-side**, service/activity ids whitelisted, control chars stripped, lengths capped, required fields enforced. The browser is never trusted. |
+| Public endpoint | `distributor_apply.php` | Modelled on `web_chat.php`: CORS from the shared site-origin allow-list (never `*`), OPTIONS preflight, POST-only, honeypot, minimum fill-time, per-IP rate limit, 20 KB payload cap. Reached **before** the login gate. |
+| Public route | `public.php` | `page=distributor_apply` routed ahead of `requireLogin()`. |
+| Staff review | `tabs/admin/partner_applications.php` | Read-only list + detail, admin-gated. Every cell escaped. |
+
+- **The admin review tab is Uganda-only.** The module is added to `$ALL_MODULES` only on the Uganda tenant
+  (`$_staffJobsUganda`), so a South Sudan / non-Uganda install's admin UI is byte-for-byte unchanged (proved
+  by the South Sudan golden render test). The endpoint and table are harmless on South Sudan (unused, empty).
+- **The boundary that matters.** A row in `dist_partner_applications` is an **application, not an approval**:
+  the endpoint and the service create **no uCRM client, partner, service or account** and grant **no portal
+  access**. Appointing a partner stays a separate DishNet staff action (`docs/47`). A test asserts the
+  endpoint and service name no `CrmApiClient`, no uCRM API path and no client creation; the deploy script's
+  stage R5 re-checks it on the installed files.
+- **Tests:** `tests/test_distributor_apply.php` **61/0** (migration, `normalise()` valid/invalid/sanitise,
+  create/get/list/counts, endpoint CORS + anti-abuse guards, the no-uCRM boundary, the route before the
+  login gate, the Uganda-only module gate, manifest 5.18.59). Full plugin suite green; the South Sudan
+  golden stays green.
+
+### 12.3 The two held deploys
+
+Both are the operator's to run, and each is held for your explicit go-ahead:
+
+1. **Website** → merge the branch to **`main`**, rebuild `web-uganda` on EasyPanel, then run
+   `verify-site.sh` / `verify-address.py` (`dishnet-web-uganda/README-DEPLOY.md`). Safe to do first — the
+   WhatsApp fallback covers the window before the plugin endpoint is live.
+2. **Plugin 5.18.59** → operator-run `scripts/deploy-5.18.59.sh` (typed `DEPLOY`; a **separate** typed
+   `ROLLBACK`, printed on its own at the end of the log — never pasted together). Pinned to the reviewed
+   commit, baseline-gated on 5.18.58, backs up first, applies migration 077, then verifies the endpoint's
+   guards and that no application row was created by its own probes. Rehearsed in
+   `scripts/harness/deploy-5.18.59/`.
+
+### 12.4 Still NOT done (unchanged from §11, restated)
+
+No partner portal or sign-in; no commercial terms, commissions, margins, territories or credit; no uCRM
+sync of applications; `reseller.html`'s over-claims untouched. The capture is intake for staff review — the
+front door to the future distribution module (`docs/47`), not the module itself.

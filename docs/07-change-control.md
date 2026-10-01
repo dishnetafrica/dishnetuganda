@@ -2782,3 +2782,50 @@ held:** stage A before-evidence read **live `eea3d65` / 5.18.57**, so 5.18.57 we
 
 **5.18.58 is live. The Uganda SSP-on-UGX UI cleanup is complete end to end; South Sudan is
 unchanged.**
+
+## 01 Oct — 5.18.59: "Become a DishNet Distributor" page integrated; applications captured in the plugin (docs/48 §12)
+
+Built, tested and **held — nothing deployed.** On your approval (*"integrate into live website"*; submissions
+**"Capture in the plugin"**; search **"Yes, index it"**) the recruitment page prototype (docs/48) became a
+live site citizen and its wizard now submits to a new plugin endpoint that stores applications for staff
+review — the front door to the future distribution module (docs/47).
+
+**1. Currently configured.** The page existed only as a noindex demo (`become-a-distributor.html`, commit
+`9ebf2c2`) that saved nothing. The plugin had no intake endpoint and no applications table.
+
+**2. Why.** Put the page live and capture submissions so staff can review them. A recruitment page that goes
+nowhere — or that silently drops a submission — costs trust.
+
+**3. What changed.**
+- **Website (commit `babce15`):** `become-a-distributor.html` — noindex removed; favicon / fonts /
+  LocalBusiness JSON-LD added; links made relative; the final step POSTs `payload`/`hp`/`t` (form-encoded,
+  so no CORS preflight) to `…/public.php?page=distributor_apply`; success shows a `DNP-NNNNN` reference;
+  **WhatsApp fallback** if the endpoint is unreachable. Footer link on 38 pages, reseller CTA, sitemap entry.
+- **Plugin 5.18.59 (commit `d6d0a2e`):** migration 077 `dist_partner_applications` (additive, idempotent);
+  `DistributorApplicationService::normalise()` (server-side validation/sanitisation — model + ids
+  whitelisted, labels derived server-side, control chars stripped, lengths capped); the public
+  `distributor_apply` endpoint (origin allow-list, never `*`; OPTIONS; POST-only; honeypot; minimum
+  fill-time; per-IP rate limit; 20 KB cap), routed before `requireLogin()`; a read-only admin review tab,
+  **Uganda-tenant-gated** so South Sudan's admin UI is byte-for-byte unchanged.
+- **The boundary:** an application is NOT an approval — no uCRM client, partner, service or account is
+  created, and no portal access is granted. Appointing a partner stays a separate staff act (docs/47).
+
+**4. Effect on UISP/uCRM.** None. The endpoint makes no uCRM call and the table is the plugin's own SQLite;
+nothing is created in uCRM. The website half is independent of UISP entirely.
+
+**5. Rollback.** Website: revert the merge on `main`, rebuild `web-uganda`. Plugin: the separate
+`scripts/deploy-5.18.59.sh --rollback` (typed `ROLLBACK`) — printed on its own at the end of the deploy log,
+never pasted with the deploy — returns 5.18.58; the new table and any rows simply stay, unread by 5.18.58, so
+no data restore is needed (the release changes no existing table).
+
+**Tests:** headless wizard **47/0**; `verify-address.py` 58 pages; `test_distributor_apply.php` **61/0**; the
+South Sudan golden stays green; full plugin suite green; `deploy-5.18.59.sh` rehearsed **85/0 twice**.
+
+**Held — two operator-run deploys, each awaiting your explicit go-ahead:**
+- **Website** → merge the branch to `main`, rebuild `web-uganda` on EasyPanel, run `verify-site.sh` /
+  `verify-address.py`. Safe to do first: the WhatsApp fallback covers the window before the endpoint is live.
+- **Plugin 5.18.59** → operator-run `scripts/deploy-5.18.59.sh` (typed `DEPLOY`). Baseline-gated on 5.18.58,
+  backs up first, applies migration 077, verifies the endpoint's guards and that its own probes created no
+  application row. The rollback is the script's own `--rollback`, printed at the end of the log.
+
+**Nothing is deployed. No uCRM record is created anywhere.**
