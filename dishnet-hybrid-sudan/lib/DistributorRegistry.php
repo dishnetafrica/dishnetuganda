@@ -175,6 +175,108 @@ class DistributorRegistry
         }
     }
 
+    /**
+     * Link an appointed partner to an EXISTING uCRM company client (WS-A P1b).
+     *
+     * This reads the uCRM client to verify and cache it; it NEVER creates or
+     * modifies a uCRM record. $crm is any CrmApiClient (a fake in tests). The
+     * only live uCRM dependency in the whole distributor feature is this one
+     * read, and it is an administrative, off-the-operating-path action.
+     *
+     * Identity + dedupe (docs/47 §9.1, docs/49): the client must be a COMPANY
+     * (clientType 2 / companyName present); dedupe is by uCRM client id and
+     * normalised TIN, **never by phone**. A uCRM id already linked to another
+     * partner, or a TIN another partner holds, is REFUSED and flagged for
+     * review — never silently merged or re-pointed. The partial unique indexes
+     * on ucrm_client_id and tin_norm are the floor beneath these checks.
+     *
+     * @return array{linked:bool, ucrm_client_id:int, legal_name?:string, tin?:string, reason?:string}
+     * @throws \RuntimeException on any conflict, a non-company client, a missing
+     *         identity, or a uCRM read error/timeout.
+     */
+    public function linkUcrmClient(int $partnerId, int $ucrmClientId, $crm, string $actor): array
+    {
+        $partner = $this->get($partnerId);
+        if (!$partner) throw new \RuntimeException('Partner not found.');
+        if ($ucrmClientId <= 0) throw new \RuntimeException('A valid uCRM client id is required.');
+
+        // Already linked? Same id is an idempotent no-op; a different id is refused
+        // (re-linking is a separate, audited action, not part of P1b).
+        if (!empty($partner['ucrm_client_id'])) {
+            if ((int)$partner['ucrm_client_id'] === $ucrmClientId) {
+                return ['linked' => false, 'reason' => 'already_linked', 'ucrm_client_id' => $ucrmClientId];
+            }
+            throw new \RuntimeException('This partner is already linked to uCRM client #'
+                . (int)$partner['ucrm_client_id'] . '. Unlinking/relinking is a separate, audited action.');
+        }
+
+        // uCRM id already owned by another partner? Conflict — never steal it.
+        $other = $this->findByUcrmClientId($ucrmClientId);
+        if ($other && (int)$other['id'] !== $partnerId) {
+            throw new \RuntimeException('uCRM client #' . $ucrmClientId . ' is already linked to partner '
+                . $other['partner_code'] . '. Conflicts are flagged for review, never merged.');
+        }
+
+        // The one live uCRM read. In development there is no uCRM, so this refuses
+        // loudly rather than guessing.
+        if (!is_object($crm) || !method_exists($crm, 'isConfigured') || !$crm->isConfigured()) {
+            throw new \RuntimeException('uCRM is not configured on this install.');
+        }
+        $client = $crm->get('clients/' . $ucrmClientId);
+        if ($client === null) {
+            $err = method_exists($crm, 'getLastError') ? (string)(($crm->getLastError()['message'] ?? '')) : '';
+            throw new \RuntimeException('Could not read uCRM client #' . $ucrmClientId
+                . ' — a uCRM error or timeout' . ($err !== '' ? ': ' . $err : '') . '. Nothing was changed.');
+        }
+        if (!is_array($client) || empty($client)) {
+            throw new \RuntimeException('uCRM client #' . $ucrmClientId . ' was not found.');
+        }
+
+        // Must be a company (legal entity), never an individual. docs/47 §9.1.
+        $isCompany = ((int)($client['clientType'] ?? 0) === 2) || !empty($client['companyName']);
+        if (!$isCompany) {
+            throw new \RuntimeException('uCRM client #' . $ucrmClientId
+                . ' is an individual, not a company. A distributor is a legal entity.');
+        }
+        $companyName = self::scrub($client['companyName'] ?? '', 200);
+        if ($companyName === '') {
+            throw new \RuntimeException('uCRM client #' . $ucrmClientId . ' has no company name — its legal identity is incomplete.');
+        }
+
+        // TIN coherence + dedupe (never phone): a normalised TIN another partner
+        // holds is a conflict for review, not a merge.
+        $tin = self::scrub($client['companyTaxId'] ?? '', 60);
+        $tinNorm = self::normTin($tin);
+        if ($tinNorm !== '') {
+            $tinOwner = $this->findByTinNorm($tinNorm);
+            if ($tinOwner && (int)$tinOwner['id'] !== $partnerId) {
+                throw new \RuntimeException('Another partner (' . $tinOwner['partner_code']
+                    . ') already holds this TIN. Conflicts are flagged for review, never merged.');
+            }
+        }
+        $regNo = self::scrub($client['companyRegistrationNumber'] ?? '', 80);
+
+        // Link + cache uCRM's company fields (uCRM is now the master; this is a
+        // read-only local copy). The unique indexes are the floor: a race that
+        // slips past the pre-checks fails here and is reported as a conflict.
+        try {
+            $st = $this->db->prepare(
+                "UPDATE dist_partners
+                    SET ucrm_client_id = ?, ucrm_linked_by = ?, ucrm_linked_at = datetime('now'),
+                        legal_name = ?, tin = ?, tin_norm = ?, registration_no = ?, updated_at = datetime('now')
+                  WHERE id = ?"
+            );
+            $st->execute([$ucrmClientId, self::scrub($actor, 160), $companyName, $tin, $tinNorm, $regNo, $partnerId]);
+        } catch (\PDOException $e) {
+            if (stripos($e->getMessage(), 'unique') !== false) {
+                throw new \RuntimeException('That uCRM client id or TIN is already linked to another partner (conflict). Nothing was changed.');
+            }
+            throw $e;
+        }
+
+        return ['linked' => true, 'ucrm_client_id' => $ucrmClientId, 'legal_name' => $companyName, 'tin' => $tin];
+    }
+
     public function setStatus(int $id, string $status, string $actor): bool
     {
         if (!in_array($status, self::STATUSES, true)) throw new \RuntimeException('Unknown status.');

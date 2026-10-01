@@ -101,13 +101,20 @@ $ap2 = $reg->appointFromApplication($appB, [], 'admin <a@x>');
 is_($ap2['partner_id'] !== $ap1['partner_id'], 'two applications sharing a phone yield two DISTINCT partners (never deduped by phone)');
 is_(count($reg->listAll()) >= 2, 'both same-phone partners exist');
 
-echo "\nD. boundary — no uCRM, no client/account creation in the whole batch\n";
-foreach (['lib/DistributorRegistry.php','tabs/admin/distributors.php','includes/post/post_distributors.php'] as $f) {
+echo "\nD. boundary — registry + tab never touch uCRM; the P1b link handler only READS, never creates\n";
+// The registry's linkUcrmClient is duck-typed on a passed-in client, and the tab only renders a form,
+// so neither references CrmApiClient. (Updated in 5.18.62: post_distributors.php now DOES build a
+// CrmApiClient — deliberately, to READ an existing company client for the link — asserted below.)
+foreach (['lib/DistributorRegistry.php','tabs/admin/distributors.php'] as $f) {
     $src = nc($root . '/' . $f);
-    is_(strpos($src, 'CrmApiClient') === false, "$f does not use CrmApiClient");
-    is_(strpos($src, 'api/v2.1') === false && strpos($src, 'X-Auth-App-Key') === false, "$f makes no uCRM API call");
+    is_(strpos($src, 'CrmApiClient') === false, "$f does not reference CrmApiClient");
     is_(stripos($src, 'createClient') === false, "$f creates no uCRM client");
 }
+$ph = nc($root . '/includes/post/post_distributors.php');
+is_(strpos($ph, 'linkUcrmClient') !== false, 'the link handler goes through DistributorRegistry::linkUcrmClient (read + local write)');
+is_(stripos($ph, 'createClient') === false, 'the link handler creates no uCRM client');
+is_(strpos($ph, "->post(") === false && strpos($ph, "->patch(") === false && strpos($ph, "->delete(") === false,
+    'the link handler issues no uCRM write (no POST/PATCH/DELETE)');
 
 echo "\nE. the tab + POST handler are wired and gated\n";
 $pub = nc($root . '/public.php');
@@ -131,7 +138,7 @@ is_(strpos($tab, 'CrmApiClient') === false, 'the tab calls no uCRM');
 
 echo "\nG. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.61', 'manifest version is 5.18.61');
+is_(($mani['information']['version'] ?? '') === '5.18.62', 'manifest version is 5.18.62');
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";

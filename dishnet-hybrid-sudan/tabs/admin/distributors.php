@@ -32,7 +32,8 @@ echo '<div style="max-width:1100px;margin:0 auto;">';
 echo '<h2 style="font-size:22px;margin:0 0 4px;">Distributors</h2>';
 echo '<p style="color:#6b7280;margin:0 0 6px;">Appointed distribution partners. Appointing a partner here creates a '
    . '<b>local prospect record only</b> — it does not create a uCRM client, grant any account or send anything. '
-   . 'Linking a uCRM company client and giving portal access are separate, later steps.</p>';
+   . 'Linking an <b>existing</b> uCRM company client (the uCRM column) reads it to verify and cache its company '
+   . 'details — it creates and changes nothing in uCRM. Giving portal access is a separate, later step.</p>';
 
 $c = $reg->counts();
 echo '<p style="color:#6b7280;margin:0 0 18px;font-size:13px;">' . (int)$c['total'] . ' partner(s)'
@@ -54,7 +55,19 @@ if (!$partners) {
        . '<th style="padding:9px 10px;">Status</th><th style="padding:9px 10px;">uCRM</th>'
        . '<th style="padding:9px 10px;">Appointed</th></tr></thead><tbody>';
     foreach ($partners as $p) {
-        $ucrm = ($p['ucrm_client_id'] ?? null) ? ('#' . (int)$p['ucrm_client_id']) : '<span style="color:#9ca3af">not linked</span>';
+        if ($p['ucrm_client_id'] ?? null) {
+            $ucrm = '#' . (int)$p['ucrm_client_id'];
+        } else {
+            // Link to an EXISTING uCRM company client. Reads it to verify + cache; creates nothing in uCRM.
+            $ucrm = '<form method="post" action="?page=dashboard&amp;tab=distributors" style="margin:0;display:flex;gap:4px;align-items:center;" '
+                  . 'onsubmit="return confirm(\'Link ' . $hh($p['partner_code']) . ' to the uCRM company client id you entered? This reads the existing uCRM client to verify and cache it — it creates and changes nothing in uCRM.\');">'
+                  . csrfField()
+                  . '<input type="hidden" name="action" value="dist_link_ucrm">'
+                  . '<input type="hidden" name="partner_id" value="' . (int)$p['id'] . '">'
+                  . '<input type="number" name="ucrm_client_id" min="1" placeholder="uCRM id" required style="width:84px;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;">'
+                  . '<button type="submit" style="background:#111827;color:#fff;border:0;border-radius:5px;padding:5px 9px;font-weight:600;cursor:pointer;font-size:12px;">Link</button>'
+                  . '</form>';
+        }
         echo '<tr style="border-bottom:1px solid #f1f1ef;">'
            . '<td style="padding:9px 10px;font-weight:600;">' . $hh($p['partner_code']) . '</td>'
            . '<td style="padding:9px 10px;">' . $hh($p['legal_name']) . '</td>'

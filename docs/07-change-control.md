@@ -3005,3 +3005,47 @@ at the (separately-approved) deploy step.
 **4. Deployment.** **None in this batch.** When approved it will follow the pinned `deploy-5.18.NN.sh` +
 rehearsal pattern, baseline-gated on 5.18.60, flag staying off on deploy. Rollback is trivial: the flag off
 restores prior behaviour exactly, and migration 078 only *adds* two unused tables.
+
+## 01 Oct — 5.18.62: distributor → uCRM company-client LINK (WS-A P1b) — BUILT, off by default, NOT deployed
+
+On the operator's "proceed p1b" (after the P1a verification gate reported green). Links an appointed
+distributor partner to an **existing** uCRM company client. **No migration** — migration 078 already carries
+`ucrm_client_id` / `ucrm_linked_by` / `ucrm_linked_at`. **Reads uCRM to verify and cache; never creates or
+modifies a uCRM record.** Build only; **no deploy, no production change, no real uCRM record touched.** Still
+behind the `distributors_enabled` flag (default off) and Uganda-gated.
+
+**1. What changed (plugin 5.18.62).**
+- `lib/DistributorRegistry.php` — new `linkUcrmClient(partnerId, ucrmClientId, $crm, actor)`: reads the client
+  (`$crm->get("clients/{id}")`), requires a **company** (`clientType=2` / `companyName` present) with a legal
+  name, **dedupes by uCRM id and normalised TIN — never phone**, refuses a client already linked to another
+  partner and a TIN another partner holds (**conflicts flagged for review, never merged or re-pointed**),
+  caches uCRM's company fields (uCRM is master), and stamps who/when. A same-id re-link is an idempotent no-op;
+  a different id is refused (relink is a separate, audited action). The partial unique indexes on
+  `ucrm_client_id` and `tin_norm` are the **floor** beneath the app checks (a race fails there and reports a
+  conflict).
+- `includes/post/post_distributors.php` — new `dist_link_ucrm` POST: `requireAdmin()` + the global CSRF gate +
+  the flag + Uganda gate; builds `CrmApiClient::fromUcrm()` and calls `linkUcrmClient`. **Issues no uCRM write
+  of its own** (no POST/PATCH/DELETE, no `createClient`).
+- `tabs/admin/distributors.php` — the uCRM column renders an inline **Link** form (admin, CSRF) for unlinked
+  partners, with a confirm that states it reads an existing client and creates nothing; linked partners show
+  the id. Manifest → **5.18.62**.
+
+**2. Tests.** New `tests/test_distributor_link_ucrm.php` — **33 assertions, 0 failed** — drives the link
+through a `FakeCrm extends CrmApiClient` (overrides `get()`, records every call): success + field caching;
+idempotent same-link; already-linked-other; duplicate uCRM id (conflict); individual-not-company; missing
+company name; **normalised-TIN collision (conflict)**; uCRM error/timeout; not-found; not-configured; the
+unique index as the floor; **never by phone** (the method body reads no phone field); and the admin+flag+Uganda
+gating. **Read-only proven**: across the whole run the fake recorded only `GET` calls — **no POST/PATCH/DELETE,
+so no uCRM client was created or modified.** `test_distributor_registry.php` updated (**57/0**) — its P1a-era
+"post_distributors.php does not use CrmApiClient" assertion was deliberately re-scoped to the P1b boundary (the
+handler may READ uCRM; it creates nothing), with the reason recorded in the test. `test_distributor_apply.php`
+pin → 5.18.62 (61/0). South Sudan golden **51/0** (admin UI byte-for-byte unchanged). Full suite as after-gate.
+All changed PHP `php -l` clean.
+
+**3. Not done, deliberately.** No unlink/relink operation (a separate audited action if ever wanted); no
+status automation on link; no territory/attribution (P2); no notifications (P3); no portal (P4); no WS-B.
+
+**4. Deployment.** **None.** P1a (5.18.61) and P1b (5.18.62) deploy together when approved, as one pinned,
+rehearsed `deploy-5.18.NN.sh`, flag staying off. The one production behaviour P1b adds — a uCRM **read** when
+an admin links a client with the flag on — only ever runs post-deploy, admin-triggered. Rollback: flag off
+restores prior behaviour; no schema change to revert.
