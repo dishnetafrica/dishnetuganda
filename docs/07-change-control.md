@@ -2933,3 +2933,32 @@ intact; V4 no fatal since the deploy.** Container PHP 8.1.34.
   **OTP / login-code e-mail is still never copied.**
 
 **The feature is live and active.** Do not roll back — customers are not affected.
+
+## 01 Oct — "Become a DishNet Distributor" page LIVE on the website (docs/48 §12.3)
+
+The held website half of the 5.18.59 distributor-recruitment integration is now **live**:
+`https://dishnetuganda.com/become-a-distributor.html` answers **`HTTP/2 200`**. The recruitment funnel is
+connected end to end — live site → the plugin's `distributor_apply` capture endpoint → the **Distributor
+Applications** staff-review tab. **An application is still an expression of interest, not an approval:** no
+uCRM client, partner, service or account is created; appointing a partner stays a separate staff act
+(`docs/47`, unbuilt).
+
+- **Pre-publish honesty fixes (commit `a7e4b62`, on `claude/study-this-jhe2eg`).** The 5.18.59 integration
+  (`babce15`) wired the submit to the live endpoint but left the page's prototype clothing, and it had never
+  been run through `verify-site.sh` (the website half was held). Caught and fixed before publishing: removed
+  the "Prototype · Demo" badge, the *"Demo mode: your answers are not sent or saved"* line above Submit, and
+  the footer *"not a live application form"* — all false now the submit is real; the honest *"expression of
+  interest only"* notice stays. The WhatsApp fallback button is built via `JSON.stringify` so the site
+  link-checker no longer reads it as broken, and `verify-site.sh` now allows the intended `distributor_apply`
+  intake URL. `verify-site.sh` PASS (58 pages, 67 refs 0 broken, one portal URL, no price leaks),
+  `verify-address.py` PASS, inline JS `node --check` OK.
+- **Confirmed live on the server:** the page carries `page=distributor_apply` and **none** of the demo
+  strings, so it is the fixed version, not a stale cache.
+- **Publish path:** `web-uganda` (EasyPanel) builds the live site from the **branch**
+  (`claude/study-this-jhe2eg`), not from `main` — so `main` was not the deploy path. PR #18 (branch → `main`),
+  opened as the publish route, was **closed as not required**; reopen/merge only to keep `main` in sync.
+- **Still to confirm:** a real wizard submit returning a `DNP-NNNNN` reference into the Distributor
+  Applications tab. If the submit shows the WhatsApp fallback instead of a reference, add `dishnetuganda.com`
+  to the plugin's `site_origins` (the application is still stored either way).
+- **Rollback:** revert the page on the branch and rebuild `web-uganda`. The plugin's capture table/data are
+  untouched by the website.
