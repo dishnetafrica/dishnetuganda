@@ -24,6 +24,7 @@ require_once dirname(__DIR__) . '/lib/InvoiceReminders.php';
 require_once dirname(__DIR__) . '/lib/WinBack.php';
 require_once dirname(__DIR__) . '/lib/currency.php';
 require_once dirname(__DIR__) . '/lib/bootstrap_data.php';
+require_once dirname(__DIR__) . '/lib/CustomerEmailDispatcher.php';
 
 $dataDir = getDataDir(dirname(__DIR__));
 $store   = SqliteStore::create($dataDir);
@@ -41,9 +42,15 @@ if (!$crm->isConfigured()) {
 $notify = new NotificationService($store, $config);
 $today  = new DateTimeImmutable('today', dn_tz_obj());
 
+// The e-mail arm of the reminders. Inert unless reminder_email_enabled (and the
+// master switch) are on — see CustomerEmailDispatcher::sendReminderDue — so this
+// changes nothing until an operator turns it on.
+$remPdo        = method_exists($store, 'getPdo') ? $store->getPdo() : null;
+$remDispatcher = new CustomerEmailDispatcher($dataDir, $config, $crm, $remPdo);
+
 log_msg_customer_reminders('Payment reminders for ' . $today->format('Y-m-d') . ' (' . dn_tz() . ')');
 try {
-    $r = (new InvoiceReminders($crm, $notify, $config, 'log_msg_customer_reminders'))->run($today);
+    $r = (new InvoiceReminders($crm, $notify, $config, 'log_msg_customer_reminders', $remDispatcher))->run($today);
     log_msg_customer_reminders(sprintf('Reminders done — before due: 7d=%d 3d=%d 1d=%d; after due: 1d=%d 3d=%d 5d=%d 7d=%d; '
         . 'suppressed (prepaid)=%d, skipped=%d, errors=%d, invoices read=%d',
         $r['pre']['d7'], $r['pre']['d3'], $r['pre']['d1'],

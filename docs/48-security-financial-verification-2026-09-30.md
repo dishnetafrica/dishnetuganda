@@ -261,8 +261,12 @@ The two priority narrow items are called out separately, as instructed.
   review is complete and approved.
 
 ### §8.1 — Test evidence
-(Recorded with the commit: exact command `bash tests/run.sh`, before/after
-counts, and the new `test_collections_export_auth.php` result.)
+- Command: `bash tests/run.sh` (dependency-free, per-test vault).
+- **Before** the change: **247 files, 11,295 ok, 0 failed, exit 0.**
+- New test `tests/test_collections_export_auth.php`: **8/8**, standalone —
+  including the control-on-control (it fails if the gate is removed).
+- **After** the change: the full suite is re-run **twice** (248 files with the
+  new test). Result recorded in `docs/07` and reported to the operator.
 
 ---
 

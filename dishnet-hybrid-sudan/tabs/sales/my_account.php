@@ -492,6 +492,8 @@ $txns = array_slice($txns, 0, 30);
 // ── Current sub-view ──
 $v = $_GET['v'] ?? 'summary';
 if ($v === 'exchange' && !dn_ssp_selectable($config ?? null)) { $v = 'summary'; }
+if ($v === 'ssp_book' && !dn_ssp_selectable($config ?? null)) { $v = 'summary'; }
+if ($v === 'usd_book' && !dn_ssp_selectable($config ?? null)) { $v = 'summary'; }
 $oweText  = $exposure > 0 ? 'You owe company' : ($exposure < 0 ? 'Company owes you' : 'Settled');
 $oweColor = $exposure > 0 ? '#dc2626' : ($exposure < 0 ? '#16a34a' : '#64748b');
 ?>
@@ -543,7 +545,7 @@ $oweColor = $exposure > 0 ? '#dc2626' : ($exposure < 0 ? '#16a34a' : '#64748b');
 
 <?php
 // Define support flag before if/else so it's always available
-$_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 'sales', 'sales_staff', 'field_agent', 'collection']);
+$_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role'] ?? '', ['support_leader', 'support', 'sales', 'sales_staff', 'field_agent', 'collection']);
 ?>
 
 <?php if (($retailer['role'] ?? '') === 'field_accountant'):
@@ -601,17 +603,20 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
     <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:4px;"><?= h($agentName) ?></div>
 
     <!-- USD + SSP side by side -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <?php $maSSP = dn_ssp_selectable($config ?? null); ?>
+    <div style="display:grid;grid-template-columns:<?= $maSSP ? '1fr 1fr' : '1fr' ?>;gap:12px;margin-bottom:12px;">
         <div style="background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:14px;padding:14px 12px;">
             <div style="font-size:9px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.8px;">💵 Today</div>
             <div style="font-size:28px;font-weight:900;color:#4ade80;letter-spacing:-1px;margin-top:2px;"><?= dn_cur($config) ?><?= number_format($_mcTodayCollected, 0) ?></div>
             <div style="font-size:10px;color:#94a3b8;margin-top:2px;">collected today</div>
         </div>
+        <?php if ($maSSP): ?>
         <div style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:14px 12px;">
             <div style="font-size:9px;font-weight:800;color:#60a5fa;text-transform:uppercase;letter-spacing:.8px;">🇸🇸 SSP</div>
             <div style="font-size:28px;font-weight:900;color:#60a5fa;letter-spacing:-1px;margin-top:2px;"><?= number_format($_mcSspBal, 0) ?></div>
             <?php if ($_mcSspBal > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ <?= dn_cur($config) ?><?= number_format($_mcSspUsd, 2) ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">in bag</div><?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
 
     <!-- Month + status pills -->
@@ -669,7 +674,7 @@ $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 
 
 <?php
     // Support roles (Bidal, Joel, Emmanuel) — load SSP data and show SSP-first hero
-    $_mcIsSupport = in_array($retailer['role'] ?? '', ['support_leader', 'support', 'sales', 'sales_staff', 'field_agent', 'collection']);
+    $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role'] ?? '', ['support_leader', 'support', 'sales', 'sales_staff', 'field_agent', 'collection']);
     if ($_mcIsSupport) {
         $_mcCashIn   = array_filter($store->load('cash_ins.json') ?: [], fn($i) => (int)($i['collector_id'] ?? 0) === $agentId);
         $_mcExpenses2 = array_values($_mcMyExps);
@@ -1385,9 +1390,11 @@ $_ubRows = array_reverse($_ubRows);
         <?php $_mcDefaultSSP = $_mcIsSupport && $_mcSspBal2 > 0; ?>
         <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:<?= $_mcDefaultSSP ? '#f8fafc' : '#f0fdf4' ?>;color:<?= $_mcDefaultSSP ? '#9ca3af' : '#15803d' ?>;" id="mc_cur_usd">
-                <input type="radio" name="currency" value="USD" <?= $_mcDefaultSSP ? '' : 'checked' ?> style="display:none;" onchange="mcCur('USD')"> 💵 USD</label>
+                <input type="radio" name="currency" value="USD" <?= $_mcDefaultSSP ? '' : 'checked' ?> style="display:none;" onchange="mcCur('USD')"> 💵 <?= dn_book_base($config) ?></label>
+            <?php if (dn_ssp_selectable($config ?? null)): ?>
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:<?= $_mcDefaultSSP ? '#fff7ed' : '#f8fafc' ?>;color:<?= $_mcDefaultSSP ? '#c2410c' : '#9ca3af' ?>;" id="mc_cur_ssp">
                 <input type="radio" name="currency" value="SSP" <?= $_mcDefaultSSP ? 'checked' : '' ?> style="display:none;" onchange="mcCur('SSP')"> 🇸🇸 SSP</label>
+            <?php endif; ?>
         </div>
 
         <label class="mc-label">Amount</label>
@@ -1609,9 +1616,11 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
 
         <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f0fdf4;color:#15803d;" id="mc_adv_usd">
-                <input type="radio" name="currency" value="USD" checked style="display:none;" onchange="mcAdvCur('USD')"> 💵 USD</label>
+                <input type="radio" name="currency" value="USD" checked style="display:none;" onchange="mcAdvCur('USD')"> 💵 <?= dn_book_base($config) ?></label>
+            <?php if (dn_ssp_selectable($config ?? null)): ?>
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f8fafc;color:#9ca3af;" id="mc_adv_ssp">
                 <input type="radio" name="currency" value="SSP" style="display:none;" onchange="mcAdvCur('SSP')"> 🇸🇸 SSP</label>
+            <?php endif; ?>
         </div>
 
         <label class="mc-label">Amount Needed</label>

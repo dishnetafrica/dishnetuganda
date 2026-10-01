@@ -2432,3 +2432,504 @@ prospective partners: fuel-station chains, supermarkets, shops, distributors and
 - PD-1 on its own.
 
 Nothing is built until you approve a phase.
+
+## 30 Sep — security & financial-integrity verification (docs/48); PD-1 collections-export fix (5.18.55)
+
+The master security + financial-integrity review, and the first authorised fix.
+**Nothing deployed.** The live server still runs 5.18.53.
+
+**Verified (read-only; docs/48 is the full report):**
+- The notification defects (docs/45) are fixed in the 5.18.54 code and are
+  test-pinned, but 5.18.54 is **not deployed** — so live 5.18.53 still exhibits
+  them. Handling is a deploy decision.
+- The security findings **PD-1..PD-13** (docs/47 §7.2) and the stock / migration /
+  financial-integrity findings are **confirmed in code** and present in **both**
+  5.18.53 and 5.18.54.
+
+**Fixed in code (5.18.55):**
+- **PD-1 — the collections CSV export had no sign-in or role check.** It runs at
+  public.php:739, before the page login gate at public.php:1027, keyed only on
+  `tab=all_collections&col_export=csv` — an anonymous dump of every customer's
+  payment collection (11 columns incl. customer name, uCRM client id, amount,
+  method, uCRM payment id). Added `$auth->requireLogin()` + an admin gate as the
+  first statements of the export block (includes/routes.php), before any data is
+  read, mirroring the staff-cashbook export. All Collections is an admin-only tab.
+- New regression test `tests/test_collections_export_auth.php` (8 assertions),
+  with a control-on-control: it fails if the gate is removed.
+
+**Tests (`bash tests/run.sh`):** before = 247 files / 11,295 ok / 0 failed / exit 0;
+the new test passes 8/8 standalone; the full suite is re-run twice after the
+change as the acceptance confirmation.
+
+**Held for approval (nothing done):**
+- Deploy of any release — including 5.18.54 to fix **D-1** (the payment-webhook
+  crash, already fixed in 5.18.54, no new code needed).
+- The other remediation batches (PD-2..PD-13; FI1..FI5; S1..S5; U1/U2) — docs/48 §7;
+  several are blocked pending an accounting or business decision.
+- The distribution module (docs/47) — waits on this review being approved.
+
+No production/config/data change; no customer or staff message; no payment or
+refund; no accounting or tax decision; nothing deployed.
+
+## 30 Sep — 5.18.55 deploy APPROVED; pinned deploy script + rehearsal ready (awaiting the operator's run)
+
+The operator approved deploying 5.18.55. **Scope, stated plainly:** the live server
+runs 5.18.53; 5.18.54 was built but never deployed; so deploying 5.18.55 takes live
+**5.18.53 → 5.18.55** in one step — landing the ENTIRE 5.18.54 notification-reliability
+release (docs/46: D-1 the payment-webhook fix, receipts-once, one reminder path,
+prepaid wording, S-1 failure-queue roles, the watchdog, the staff brief, …) PLUS
+**PD-1** (the collections-export sign-in/admin gate, docs/48). This one deploy
+therefore also resolves the outstanding D-1 deploy question.
+
+**Prepared and validated (nothing deployed):**
+- `scripts/deploy-5.18.55.sh` — pinned to 9514633, over baseline 5.18.53 (6b71ea6),
+  backup-first documented deploy, full R-stage verification (R1 byte-checks every
+  changed file vs the pinned commit; R1b names the PD-1 gate), a SEPARATE typed
+  ROLLBACK to 5.18.53. Derived from the rehearsed deploy-5.18.54.sh; deploy/rollback
+  machinery byte-identical.
+- `scripts/harness/deploy-5.18.55/rehearse.sh` — rehearsal **228 passed, 0 failed**
+  (deploy PASSED, rollback PASSED, forward-again, auto-rollback on a failed page
+  check, branch-ahead control at 5.18.56, OPcache-timing §16.23, all weakened copies
+  caught).
+- Full suite `bash tests/run.sh`: green **before** (247 files / 11,295 ok / 0 failed)
+  and **twice after** (248 / 11,303 / 0, twice).
+
+**Handed to the operator** to run as root on the server (cd /opt/dishnet, pull the
+branch, run the script, tee to a log file). The rollback command is given separately
+and is never pasted together with the deploy (docs/44 §16.9). The result will be
+recorded here once the operator sends the log file. No production change has been
+made from this session.
+
+## 30 Sep — 5.18.55 DEPLOYED to production, 20:07:46 UTC (PASSED 55/0/3)
+
+The operator ran `scripts/deploy-5.18.55.sh` on the server (dishnetuganda, /opt/dishnet).
+**Result: `5.18.55 (deploy): PASSED` — 55 ok, 0 failed, 3 notes.** Live moved
+5.18.53 (6b71ea6) → 5.18.55 (9514633); container PHP 8.1.34. Backup-first under
+`/root/dnb-5.18.55/backup-20260930T200746Z` (plugin.sqlite3 24M, integrity ok,
+228 tables, sha256 match; data dirs; installed 5.18.53 code; config vault). The
+release changes no table or row — a rollback needs no restore.
+
+Verified live:
+- R1: all 93 changed files installed byte-for-byte as 9514633; manifest 5.18.55.
+- **R1 PD-1: the collections CSV export now requires sign-in + admin before any data
+  is read** — the docs/48 §5 security fix is confirmed in production.
+- R2: NotifyGate reads Uganda from both config sources; all 23 of 5.18.54's fixes on
+  — including **D-1 (payment-webhook), receipts-once, one daily reminder path,
+  prepaid wording, S-1 failure-queue roles, the watchdog and the staff brief.**
+- V1–V4: public sign-in 200, no redirect loop, no :8443 leak; Uganda Terms/Privacy
+  v1.1 (no South Sudan literal); no fatal/parse error since the deploy.
+- R3 staff unchanged; R12 changed files carry the deploy's time (OPcache recompiles).
+
+Three notes (configuration, not errors):
+- R7: 2 of 4 active job-taking staff have a verified uCRM link; the other 2 receive
+  no job WhatsApps until an admin saves their uCRM user (Staff → edit → uCRM user).
+- R14: `whatsapp_admin_phone` is unset, so the notification watchdog's alerts reach
+  only the plugin log, not WhatsApp (docs/46 E-11).
+- R11: the engineer's job e-mail goes through the plugin's own SMTP settings.
+
+Rollback to 5.18.53 remains available on its own (docs/44 §16.9):
+`cd /opt/dishnet && bash scripts/deploy-5.18.55.sh --rollback`.
+
+**docs/48: D-1 (§3) and PD-1 (§5) are now resolved in production.** The remaining
+docs/48 items (PD-2..PD-13, FI1..FI5, S1..S5, U1) stay staged for a later decision.
+
+## 30 Sep — 5.18.56 BUILT (Staff Cashbooks `$config` scope fix); deploy script + rehearsal ready; NOT deployed
+
+The operator reported a `Warning: Undefined variable $config` on every figure card of the
+**Staff Cashbooks** screen (admin/accountant only) and asked to check it. Root cause and fix:
+
+- `tabs/accounts/staff_cashbooks.php:846` defines the money formatter
+  `function scM(float $n):string{...dn_cur($config)...}`. A PHP function does **not** inherit
+  the including scope, so the bare `$config` was undefined inside `scM()` — hence the warning on
+  every card that calls it. The **amounts were already correct** (`dn_cur()` defaults to `UGX`
+  when config is absent); only the warning text leaked into the UI.
+- **Fix (one line):** `scM()` now brings `$config` into scope with `global $config`, matching the
+  codebase's existing pattern (`tabs/customer_app/portal_data.php:1092`). Verified by tracing the
+  include chain: the tab is required at global scope (`public.php:3008`, inside two `if` blocks,
+  no enclosing function), so `global $config` binds to the same `$config` (`public.php:494`) the
+  rest of the tab uses — the formatter now shows the configured symbol **and** emits no warning.
+- **Pre-existing, not from 5.18.55:** `git diff 6b71ea6 9514633 -- <file>` is empty — this file
+  was not touched by the 5.18.55 release; the bug has been latent on an admin-only screen.
+
+**Tested.** New regression test `tests/test_staff_cashbook_scope.php` (9 assertions): structural
+(scM declares `$config` global) + runtime (scM called with no `$config` in scope raises no
+"Undefined variable" warning and still renders `UGX`) + a control on the control (the pre-fix
+definition **does** warn). `php -l` clean. **Full plugin suite green** (`tests/run.sh` exit 0;
+249 test files, `php "$t" || fail=1` then `exit "$fail"` — 0 means every file passed). No existing
+test conflicts (only `test_cashbook_currency.php` reads the file's source, and its assertions do
+not match the added line; no test pins the manifest version).
+
+**Committed** to `claude/study-this-jhe2eg` at **`81d4324`** (manifest bumped 5.18.55 → 5.18.56).
+
+**Deploy prepared (operator-run; this session cannot reach production).**
+`scripts/deploy-5.18.56.sh` — pinned to `81d4324`, **baseline 5.18.55 (`9514633`)**, rollback to
+5.18.55. It is a diff-proven minimal derivation of the production-run `deploy-5.18.55.sh`: only the
+pin/version/baseline labels, the output paths, two RELEASE_A labels, the new **R1c** line (names
+the installed scM fix), the rollback note and two summary lines change — the backup /
+GO-NO-GO / typed-DEPLOY / typed-ROLLBACK / R1-R14 machinery is byte-identical. With baseline
+5.18.55, stages **R2-R14 double as a full regression check** that 5.18.52-5.18.55 are intact
+(NotifyGate's fixes on, the job notifier wired, migrations 075/076, **PD-1's export gate, R1b**).
+Rehearsed in `scripts/harness/deploy-5.18.56/rehearse.sh` against a fake container starting at
+5.18.55: **68 passed, 0 failed, twice** — the deploy PASSES, R1c fires (with a control: a missing
+scM fix on the server is caught, and an R1c-blinded copy of the script is detected), the 3-file
+delta installs byte-for-byte, the rollback returns `staff_cashbooks.php` to 5.18.55.
+
+Run on the server as root, then send back **the log file** (rollback is a separate command,
+printed at the end of the deploy's log — never pasted together with the deploy, docs/44 §16.9):
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+      && mkdir -p /root/dnb-5.18.56 \
+      && bash scripts/deploy-5.18.56.sh 2>&1 | tee /root/dnb-5.18.56/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+**Also (operator action, unrelated to the code):** set `whatsapp_admin_phone` to `211927797217`
+in **Engage → WhatsApp** ("🔔 Admin Alert Number") — this resolves the R14 note from the 5.18.55
+deploy (the admin number was unset, so the watchdog/KYC/handover alerts reached only the plugin
+log). `+211` is the South Sudan code, consistent with that screen's existing `211…` examples.
+
+## 30 Sep — 5.18.56 DEPLOYED to production, ~21:16 UTC (PASSED 56/0/3)
+
+The operator ran `scripts/deploy-5.18.56.sh` on the server (dishnetuganda, /opt/dishnet).
+**Result: `5.18.56 (deploy): PASSED` — 56 ok, 0 failed, 3 notes.** Live moved
+5.18.55 (9514633) → 5.18.56 (81d4324); container PHP 8.1.34. Backup-first under
+`/root/dnb-5.18.56/backup-20260930T211513Z` (plugin.sqlite3 24M, integrity ok, 228 tables,
+sha256 match both sides; data dirs; installed 5.18.55 code; config vault). **The release
+changes no table or row — a rollback needs no restore.**
+
+Verified live:
+- **R1 5.18.56: the Staff Cashbooks scM() money formatter brings `$config` into scope — no
+  "Undefined variable $config" warning on its figure cards.** The docs/48-adjacent display fix
+  is confirmed in production; the admin/accountant screen is clean.
+- R1: all 3 changed files installed byte-for-byte as 81d4324; manifest 5.18.56; the 131 other
+  files of Release A through 5.18.55 installed exactly as pinned (full regression).
+- **Regression intact:** R1b PD-1 collections-export gate present; R2 NotifyGate all 23 of
+  5.18.54's fixes on (store 23/23, files 23/23); R5/R6 the job notifier wired; R9 migrations
+  075/076 applied (4 jobs / 10 events); R8 the 5.18.51 lock guard.
+- R3 staff unchanged (digest 0c5c170623a6dc3d, 5 accounts); V1–V4 sign-in 200, no redirect
+  loop, no :8443 leak, Uganda Terms/Privacy v1.1, no fatal/parse error since the deploy;
+  R12 the 3 changed files carry the deploy's time (OPcache recompiles at next use).
+
+Three notes (configuration, not errors), carried over from the 5.18.55 state:
+- R7: 2 of 4 active job-taking staff have a verified uCRM link; the other 2 receive no job
+  WhatsApps until an admin saves their uCRM user (Staff → edit → uCRM user).
+- **R14: `whatsapp_admin_phone` is still unset (store `empty`, files `unset`), so the
+  notification watchdog's alerts reach only the plugin log (docs/46 E-11).** The requested
+  `211927797217` has NOT yet been entered — operator action in Engage → WhatsApp.
+- R11: the engineer's job e-mail goes through the plugin's own SMTP settings.
+
+Rollback to 5.18.55 remains available on its own (docs/44 §16.9):
+`cd /opt/dishnet && bash scripts/deploy-5.18.56.sh --rollback` (reintroduces only the cosmetic
+scM warning; all of 5.18.54's fixes and PD-1 stay in place).
+
+## 30 Sep — 5.18.57 BUILT (Uganda accounting UI shows UGX, not South Sudan's SSP); deploy script + rehearsal ready; NOT deployed
+
+**Reported by the operator (screenshot of the Staff Cashbooks screen):** the accountant/admin
+cash screens showed *"💵 USD Cashbook 🇸🇸 SSP Cashbook"* on the **Uganda (UGX)** install. SSP is
+South Sudan's local secondary cash currency; it must never appear on Uganda. A proper account-
+manager UI audit of the accounting plane found the leak across seven screens.
+
+**Root cause (measured, not inferred):** the cashbook was built for South Sudan's dual-currency
+(USD + SSP) model and the SSP layer was hardcoded. The plugin already carried the tenant helpers
+(`dn_ssp_selectable($config)` → false on Uganda; `dn_book_base($config)` → UGX on Uganda, USD on
+Sudan) but the accounting screens never consulted them. The "USD" cashbook tab is really the BASE
+bag — on Uganda it already holds UGX money (collections write the base currency), so relabelling it
+UGX is correct, **not** a data change.
+
+**Fixed in code (5.18.57) — display-only, tenant-gated:**
+- `tabs/accounts/staff_cashbooks.php` — derives `$scSSP = dn_ssp_selectable($config)` and
+  `$scBaseCode = dn_book_base($config)` once; the base tab reads *"💵 UGX Cashbook"*; the
+  🇸🇸 SSP tab, the SSP bag column, the USD↔SSP exchange modal + Convert button, the SSP
+  grid/stat/footer sub-items and the "SSP Received" category are all wrapped in `if($scSSP)`;
+  the manual-entry currency dropdown loops `dn_book_currencies($config)`.
+- `tabs/accounts/ssp_imprest.php`, `ssp_cashbook.php` — whole-screen early return on Uganda
+  (mirrors `ssp_overview.php`): *"SSP flows are not enabled on this installation…"*.
+- `public.php` — the Cashbook nav label is tenant-aware; the SSP Imprest nav item is hidden on
+  Uganda (`'roles'=>[]`).
+- `tabs/accounts/cash_declaration.php` — the three SSP cash-count blocks gated; base labels from
+  `dn_book_base`.
+- `tabs/accounts/cash_advances.php`, `fiber_costs.php` — the SSP dropdown option gated.
+- **On South Sudan every gate stays open and `$scBaseCode = 'USD'`, so the screens render
+  byte-for-byte as before.** No amount, stored row, ledger or accounting logic changes.
+
+**Proof:** new `tests/test_cashbook_tenant.php` (**26/0**) RENDERS the real tab-bar and dropdown
+fragments under a Uganda config and under a South Sudan config and reads the output as an account
+manager would: Uganda shows *"UGX Cashbook"*, no *"SSP Cashbook"*, no 🇸🇸; South Sudan unchanged.
+It carries a **control on the control** — strip the `$scSSP` gate and the SSP tab reappears on
+Uganda. Full plugin suite green (0 FAIL). `php -l` clean on all seven screens.
+
+**Committed** to `claude/study-this-jhe2eg` at **`eea3d65`** (manifest bumped 5.18.56 → 5.18.57).
+
+`scripts/deploy-5.18.57.sh` — pinned to `eea3d65`, **baseline 5.18.56 (`81d4324`)**, rollback to
+5.18.56. It is a diff-proven minimal derivation of the production-run `deploy-5.18.56.sh`: only the
+pin/version/baseline labels, the output paths, the RELEASE_A labels, the new **R1d** check, the
+rollback note and two summary lines change — the backup / GO-NO-GO / typed-DEPLOY / typed-ROLLBACK /
+R1-R14 machinery is byte-identical. **R1d** names the tenant gate on the installed screens; **R1c**
+(the inherited scM `$config` fix) and stages R2-R14 double as a full regression check that
+5.18.52-5.18.56 are intact.
+
+Rehearsed in `scripts/harness/deploy-5.18.57/rehearse.sh` against a fake container starting at
+5.18.56: **70 passed, 0 failed, three times** — the deploy PASSES; R1d fires (with teeth: revert
+the gate on the server and R1d fails, naming it); the 9-file delta installs byte-for-byte; the
+rollback returns the accounting screens to 5.18.56 (SSP visible on Uganda again); the base gate
+refuses an older commit; a weakened copy whose R1d grep can no longer tell the fix apart is caught.
+
+**Deploy is HELD for the operator's explicit approval.** When approved, the pinned command (stands
+alone; the rollback prints separately at the end of its log — docs/44 §16.9):
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+      && mkdir -p /root/dnb-5.18.57 \
+      && bash scripts/deploy-5.18.57.sh 2>&1 | tee /root/dnb-5.18.57/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+**Scope note:** this release fixes the **accounting plane** (seven screens). A follow-up **5.18.58**
+is offered for the same SSP-on-Uganda pattern on the sales/support plane (`my_account.php`,
+`wallet.php`, `field_expenses.php`) and the `fiber_costs.php:190` `$` USD-symbol leak. Still
+outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = `211927797217`**
+in Engage → WhatsApp.
+
+## 1 Oct — 5.18.58 BUILT (Uganda sales/support cash screens show UGX, not SSP); deploy script + rehearsal ready; NOT deployed
+
+**Part two of the tenant-currency fix** (5.18.57 cleared the accountant/admin accounting plane;
+this clears the field-agent sales/support plane). Same approach: display-only, tenant-gated on
+`dn_ssp_selectable($config)`. On **South Sudan** every gate stays open, `dn_book_base='USD'` and
+`dn_cur='$'`, so the screens render **byte-for-byte** as before. No amount, stored row, ledger or
+accounting logic changes.
+
+**Fixed in code (5.18.58):**
+- `tabs/support/field_expenses.php` — the balance hero gates its **"🇸🇸 SSP Balance"** tile on
+  `dn_ssp_selectable` and labels the base tile from `dn_book_base` (Uganda → "💵 UGX Balance"); the
+  grid collapses to one column. (The currency toggle below was already tenant-aware.)
+- `tabs/sales/my_account.php` — `$_mcIsSupport` now requires `dn_ssp_selectable`, so the SSP-first
+  support hero, the SSP cashbook buttons, the SSP position summary and the SSP ledger **collapse to
+  the base-currency view** on Uganda; the field-accountant SSP hero tile is gated; the
+  `ssp_book`/`usd_book` views redirect to summary on Uganda; the expense and advance currency
+  toggles gate the SSP pill and label the base pill from `dn_book_base`.
+- `tabs/sales/wallet.php` — `$fr_is_support_role` requires `dn_ssp_selectable` (the SSP-first
+  field-register hero collapses to the base hero); the SSP currency filter button, the SSP summary
+  section, the collection-role SSP card and the entry-modal SSP currency pill are gated; base
+  labels/symbol follow `dn_book_base`/`dn_cur` (the entry-modal amount prefix via `rtrim(dn_cur)` so
+  it stays `$` on Sudan).
+- `tabs/accounts/fiber_costs.php` — `fc_fmt()` derives its symbol from `rtrim(dn_cur($config))`
+  instead of a hardcoded `$` (byte-identical `$100.00` on Sudan; `UGX100.00` on Uganda).
+
+**Proof:** new `tests/test_sales_support_tenant.php` (**36/0**) RENDERS the Field Expenses balance
+hero and `fc_fmt()` under a Uganda config and a South Sudan config, asserts no SSP / no 🇸🇸 on
+Uganda and the base currency shown, structural gate checks for all four screens, the support-flag
+collapse, and a **control on the control** (strip the `$feSSP` gate → the SSP tile reappears on
+Uganda). `php -l` clean on all four screens. The currency/cashbook/tenant test subset passes
+(**369 assertions, 0 failed** across six tests incl. 5.18.57's `test_cashbook_tenant`). The full
+plugin suite is **0 FAIL through every test that touches these files** (all alphabetically before
+the slow `test_job_*` fake-server cluster); a full-suite run to completion is slow on this host
+(fake-HTTP-server tests) and is the background regression net — the change is display-only and
+isolated to four presentation files with no code path to the job/notification/WhatsApp tests.
+
+**Committed** to `claude/study-this-jhe2eg` at **`fcab6bd`** (manifest 5.18.57 → 5.18.58).
+
+`scripts/deploy-5.18.58.sh` — pinned to `fcab6bd`, **baseline 5.18.57 (`eea3d65`)**, rollback to
+5.18.57. Diff-proven minimal derivation of the 5.18.57 deploy script: only the pin/labels, output
+paths, the new **R1e** check, the rollback note and two summary lines change — the machinery is
+byte-identical. **R1e** names the sales/support tenant gate on the installed screens; **R1c** (the
+5.18.56 scM fix), **R1d** (the 5.18.57 accounting gate) and R2–R14 re-verify 5.18.52–5.18.57 are
+intact.
+
+Rehearsed in `scripts/harness/deploy-5.18.58/rehearse.sh` against a fake container starting at
+5.18.57: **71 passed, 0 failed, twice** — the deploy PASSES; R1e has teeth (revert the gate on the
+server → R1e fails, naming it); the 6-file delta installs byte-for-byte; the rollback returns the
+field-agent screens to 5.18.57 (SSP visible on Uganda again); the base gate refuses an older commit;
+a weakened copy whose R1e grep can no longer tell the fix apart is caught.
+
+**Deploy is HELD for the operator's explicit approval, and chains after 5.18.57** (its base gate
+refuses any live commit but 5.18.57's `eea3d65`). When 5.18.57 is live and 5.18.58 is approved, the
+pinned command (stands alone; the rollback prints separately at the end of its log — docs/44 §16.9):
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
+      && mkdir -p /root/dnb-5.18.58 \
+      && bash scripts/deploy-5.18.58.sh 2>&1 | tee /root/dnb-5.18.58/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+With 5.18.58 the Uganda SSP-on-UGX cleanup covers the **whole plugin UI** (accounting +
+sales/support). Still outstanding (operator action, not code): no **`whatsapp_admin_phone`** is set
+in either copy of the settings, so the watchdog's alerts reach only the plugin log (deploy note R14;
+set a WhatsApp number in Engage → WhatsApp to also receive them on a phone).
+
+### DEPLOYED — 2026-10-01 04:05 UTC — PASSED (58 ok, 0 failed, 4 notes)
+
+Run by the operator on `dishnetuganda`:
+`bash scripts/deploy-5.18.58.sh … | tee /root/dnb-5.18.58/deploy-20261001T040503Z.log`. **The chain
+held:** stage A before-evidence read **live `eea3d65` / 5.18.57**, so 5.18.57 went in first and
+5.18.58 deployed on top of it exactly as its base gate requires. Plugin commit `fcab6bd`, version
+5.18.58; container PHP 8.1.34 accepted all four changed screens (A2).
+
+- **Backup first** — `plugin.sqlite3` (24M, integrity ok, same sha256 both sides), the data dir
+  (116M), the installed 5.18.57 tree (11M) and the config vault, under
+  `/root/dnb-5.18.58/backup-20261001T040503Z`. (The one tar "file changed as we read it" note is a
+  live log rotating during the copy — benign, archived as found.)
+- **B** — `DEPLOY` typed; container now serves `fcab6bd`; the 6 changed files were stamped with the
+  copy time so PHP-FPM recompiles each at next use.
+- **V** — public sign-in **200, no loop, no `:8443` leak**; Terms/Privacy render Uganda-correct
+  (A1/A2, version 1.1, no South Sudan literal); `:8443` redirects correctly; **no fatal/parse error**
+  since the deploy.
+- **R — the fix is confirmed installed and live:** R1 "5.18.58: the sales/support cash screens are
+  tenant-aware — Field Expenses, My Account and Wallet hide SSP on Uganda, and fiber_costs' symbol
+  follows the tenant"; all 6 files byte-match `fcab6bd`; the 138 other Release-A-through-5.18.57 files
+  intact. The full **5.18.52–5.18.57 regression net is green** — PD-1 export gate (R1b), scM fix
+  (R1c), **5.18.57 accounting tenant gate (R1d)**, NotifyGate 23/23 (R2), job notifier wired (R5,R6),
+  migrations 075/076 applied (R9), lock guard (R8), scheduler can send (R14).
+- **The data is untouched** — this release changes no table and no row, so a rollback needs no
+  restore. Rollback to 5.18.57 remains `bash scripts/deploy-5.18.58.sh --rollback` (typed ROLLBACK),
+  printed on its own at the end of the deploy log.
+- **4 notes, all pre-existing / informational:** R7 — 2 of 4 active job-taking staff still lack a
+  verified uCRM link (they get no job WhatsApp until an admin saves their uCRM user via the picker);
+  R11 — engineer e-mail uses the plugin's SMTP; R14 — no `whatsapp_admin_phone` set (above); the tar
+  live-log note.
+
+**5.18.58 is live. The Uganda SSP-on-UGX UI cleanup is complete end to end; South Sudan is
+unchanged.**
+
+## 01 Oct — 5.18.59: "Become a DishNet Distributor" page integrated; applications captured in the plugin (docs/48 §12)
+
+Built, tested and **held — nothing deployed.** On your approval (*"integrate into live website"*; submissions
+**"Capture in the plugin"**; search **"Yes, index it"**) the recruitment page prototype (docs/48) became a
+live site citizen and its wizard now submits to a new plugin endpoint that stores applications for staff
+review — the front door to the future distribution module (docs/47).
+
+**1. Currently configured.** The page existed only as a noindex demo (`become-a-distributor.html`, commit
+`9ebf2c2`) that saved nothing. The plugin had no intake endpoint and no applications table.
+
+**2. Why.** Put the page live and capture submissions so staff can review them. A recruitment page that goes
+nowhere — or that silently drops a submission — costs trust.
+
+**3. What changed.**
+- **Website (commit `babce15`):** `become-a-distributor.html` — noindex removed; favicon / fonts /
+  LocalBusiness JSON-LD added; links made relative; the final step POSTs `payload`/`hp`/`t` (form-encoded,
+  so no CORS preflight) to `…/public.php?page=distributor_apply`; success shows a `DNP-NNNNN` reference;
+  **WhatsApp fallback** if the endpoint is unreachable. Footer link on 38 pages, reseller CTA, sitemap entry.
+- **Plugin 5.18.59 (commit `d6d0a2e`):** migration 077 `dist_partner_applications` (additive, idempotent);
+  `DistributorApplicationService::normalise()` (server-side validation/sanitisation — model + ids
+  whitelisted, labels derived server-side, control chars stripped, lengths capped); the public
+  `distributor_apply` endpoint (origin allow-list, never `*`; OPTIONS; POST-only; honeypot; minimum
+  fill-time; per-IP rate limit; 20 KB cap), routed before `requireLogin()`; a read-only admin review tab,
+  **Uganda-tenant-gated** so South Sudan's admin UI is byte-for-byte unchanged.
+- **The boundary:** an application is NOT an approval — no uCRM client, partner, service or account is
+  created, and no portal access is granted. Appointing a partner stays a separate staff act (docs/47).
+
+**4. Effect on UISP/uCRM.** None. The endpoint makes no uCRM call and the table is the plugin's own SQLite;
+nothing is created in uCRM. The website half is independent of UISP entirely.
+
+**5. Rollback.** Website: revert the merge on `main`, rebuild `web-uganda`. Plugin: the separate
+`scripts/deploy-5.18.59.sh --rollback` (typed `ROLLBACK`) — printed on its own at the end of the deploy log,
+never pasted with the deploy — returns 5.18.58; the new table and any rows simply stay, unread by 5.18.58, so
+no data restore is needed (the release changes no existing table).
+
+**Tests:** headless wizard **47/0**; `verify-address.py` 58 pages; `test_distributor_apply.php` **61/0**; the
+South Sudan golden stays green; full plugin suite green; `deploy-5.18.59.sh` rehearsed **85/0 twice**.
+
+**Held — two operator-run deploys, each awaiting your explicit go-ahead:**
+- **Website** → merge the branch to `main`, rebuild `web-uganda` on EasyPanel, run `verify-site.sh` /
+  `verify-address.py`. Safe to do first: the WhatsApp fallback covers the window before the endpoint is live.
+- **Plugin 5.18.59** → operator-run `scripts/deploy-5.18.59.sh` (typed `DEPLOY`). Baseline-gated on 5.18.58,
+  backs up first, applies migration 077, verifies the endpoint's guards and that its own probes created no
+  application row. The rollback is the script's own `--rollback`, printed at the end of the log.
+
+**Plugin deployed 2026-10-01 06:22–06:23 UTC — PASSED 27 / 0 / 0.** The operator ran
+`scripts/deploy-5.18.59.sh` on the server: live `fcab6bd` (5.18.58) → `d6d0a2e` (5.18.59); backup at
+`/root/dnb-5.18.59/backup-20261001T062238Z` (plugin.sqlite3 24M + data dir + installed 5.18.58 code + vault);
+**migration 077 applied** (`dist_partner_applications` + both indexes, 0 rows); every endpoint guard verified
+over the live URL (OPTIONS 204/403, GET 405, honeypot/too-fast/empty POST all refused); **R4 — the deploy's
+probes created no application row**; **R5 — no uCRM reference in the installed endpoint/service**; R7 — all 144
+prior-release files intact; retailers table unchanged (5 rows); no fatal in the container log. The separate
+`--rollback` command was printed at the end of the log, not alongside the deploy.
+
+**The capture endpoint is now live and ready. The WEBSITE half is still held** — until
+`become-a-distributor.html` reaches `main` and `web-uganda` is rebuilt, the live site does not yet point real
+submissions at the endpoint (and the page carries a WhatsApp fallback regardless). **No uCRM record is created
+anywhere.**
+
+## 01 Oct — 5.18.60: customer e-mails can CC the client's other contacts; payment reminders can go by e-mail
+
+Built, tested and **held — nothing deployed, and nothing turned on.** On your request (*"we need to send
+reminder on email as well as per configured in crm if we have more than one then first one as main and rest in
+cc"*) and your two choices — CC scope **"All customer emails"**, overdue on prepaid **"Before-due only"** — the
+plugin gains two operator-facing delivery options. **Both ship OFF.** Deploying this release changes nothing a
+customer receives until you turn a switch on with `tools/set_customer_emails.php`.
+
+**1. Currently configured.** Every customer e-mail (welcome, invoice, receipt, quotation) goes to exactly one
+address — the client's main/billing contact — and no one is copied. Payment reminders go out by **WhatsApp only**;
+there was no e-mail reminder path, and on prepaid the overdue e-mail ladder stays suppressed (no "suspension"
+wording). A uCRM client with several contact e-mails had the others reach none of the mail.
+
+**2. Why.** You asked for reminders to also go by e-mail, and for all customer mail to copy the client's other
+contacts as configured in uCRM (first contact as the main recipient, the rest in CC). A business with a billing
+clerk, an owner and an office address should see the same invoice reach all three.
+
+**3. What changed (plugin 5.18.60, commit `3b5e61f`).** Code-only — no migration, no new table, no admin tab, no
+website change, no cron-schedule change.
+- **`email_cc_contacts` (OFF by default).** When on, **every** customer e-mail goes **To** the main/billing
+  contact and **CCs every OTHER distinct contact e-mail** on that uCRM client. The To is unchanged; CC is purely
+  additive. CC is delivered for real — a `Cc:` header **and** one `RCPT TO` per copied address — and an
+  invalid/refused CC is logged and skipped, never sinking the send. Applies to welcome, invoice, receipt,
+  quotation and the new reminder.
+- **`reminder_email_enabled` (OFF by default; needs the master switch on).** When on, the Uganda payment-reminder
+  cron sends a **before-due** reminder by e-mail (7/3/1 days) **alongside** each WhatsApp. It is prepaid-safe —
+  it never threatens suspension or cut-off — and it is **not** a catalogue template, so the Email Preview screen
+  and the South Sudan install are byte-for-byte unchanged. The overdue tiers stay suppressed on prepaid, as
+  before.
+- **OTP / login-code e-mail is NEVER copied.** A login code goes to one person, by design; `OtpEmail` sets no Cc
+  and resolves no contacts. The deploy script asserts this (R3) against the installed file.
+- New `lib/EmailRecipients.php` (the To/CC resolver), a read-only `tools/mail_log_doctor.php` diagnostic, and
+  `tests/test_reminder_email_cc.php`.
+
+**4. Effect on UISP/uCRM.** None written. The CC addresses are **read** from the uCRM client's own contacts; the
+reminder e-mail uses the plugin's existing SMTP (Brevo relay). No uCRM record is created or changed, no schedule
+changes, and the South Sudan install is untouched.
+
+**5. Rollback.** The separate `scripts/deploy-5.18.60.sh --rollback` (typed `ROLLBACK`) — printed on its own at
+the end of the deploy log, never pasted with the deploy — returns 5.18.59. The release changes no table and no
+row, so a rollback needs no data restore; it also wrote no config, so the switches are untouched either way.
+
+**Tests:** `test_reminder_email_cc.php` **25/0** (EmailRecipients; CC delivered through a fake SMTP — To + both
+CCs in `RCPT TO`, Cc header present, off = single recipient; the reminder render is prepaid-safe and gated;
+`reminder_due` not in the CATALOGUE; OtpEmail carries no Cc). Full plugin suite **11,501 / 0** across 253 files.
+`scripts/deploy-5.18.60.sh` rehearsed **84/0 twice** (`scripts/harness/deploy-5.18.60/rehearse.sh`), including:
+the base gate (5.18.59 first, or NO-GO), V3/R2 reading both switches off on the live install through the plugin's
+own tool and still reading the live state when one is flipped on, R3 proving the installed OTP e-mail carries no
+Cc (with a control-on-the-control: a Cc planted in OtpEmail is caught, and a blinded copy is not), R5 proving
+`reminder_due` is not a catalogue template, R6 proving Release A→5.18.59 are installed as pinned, and the rollback
+to 5.18.59.
+
+**Held — one operator-run deploy, awaiting your explicit go-ahead:**
+- **Plugin 5.18.60** → operator-run `scripts/deploy-5.18.60.sh` (typed `DEPLOY`). Baseline-gated on 5.18.59,
+  backs up first (the two databases + data dir + installed 5.18.59 code + vault), copies the code, and verifies —
+  including that **both new switches still read off** on the live install (the deploy turns nothing on). The
+  rollback is the script's own `--rollback`, printed at the end of the log.
+
+**After it is live, the two switches are yours to turn on, deliberately, one at a time:**
+- CC every customer e-mail to the client's other contacts:
+  `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_customer_emails.php --cc on`
+- Payment reminders by e-mail (before-due only, alongside WhatsApp — needs the master on):
+  `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_customer_emails.php --master on --reminder-email on`
+- See the current state any time: `… set_customer_emails.php --show`. Turn everything off at once:
+  `… set_customer_emails.php --all-off`.
+
+**OTP / login-code e-mail is never copied**, whatever these switches are set to.
+
+**Plugin deployed 2026-10-01 12:08 UTC — code live; both switches then turned ON by the operator.** Live
+`d6d0a2e` (5.18.59) → `3b5e61f` (5.18.60); backup at `/root/dnb-5.18.60/backup-20261001T120814Z` (plugin.sqlite3
+24M, integrity ok, 230 tables + data dir + installed 5.18.59 code + vault). **The code verified: R1 all 12
+changed files byte-for-byte + manifest 5.18.60; R2 both new switches read off; R3 OTP e-mail carries no Cc; R4
+the CC + reminder code installed; R5 reminder_due not a catalogue template; R6 all 149 Release-A→5.18.59 files
+intact; V4 no fatal since the deploy.** Container PHP 8.1.34.
+
+- **Three V-stage checks FAILED with HTTP `000`, and they are NOT customer-facing.** The script derived the public
+  address as `https://crm.dishnetuganda.com:8443/…` and `curl`-ed it **from the server's own shell**, which cannot
+  reach the `:8443` public port from inside the host (hairpin) → `000` (no connection). This release changed **no**
+  sign-in or routing file (R6: the 149 prior files are byte-intact; the sign-in code is identical to 5.18.59, which
+  served fine at its 06:22 deploy), and V4 found no fatal — so the sign-in page is unaffected; the `000` is the
+  probe's reachability to `:8443`, not the page. **Defect in the 5.18.60 deploy script, now fixed:** it dropped the
+  `:8443` guard the 5.18.59 script carried, and treated an unreachable-from-the-server public URL (`000`) as a hard
+  FAIL instead of a NOTE. Patched so `--after-only` re-runs clean; the live plugin is unchanged by that patch.
+- **Both delivery options are now ON (the operator's two commands, each read back and verified by the tool):**
+  `email_cc_contacts` **ON** — every customer e-mail now also CCs the client's other uCRM contacts; and
+  `reminder_email_enabled` **ON** (master was already ON) — before-due payment reminders now also go by e-mail
+  alongside WhatsApp. The 8 lifecycle events were already ON before this release; the CC rides on them. Wording is
+  reviewable at Admin → ✉️ Email Preview, and everything stops at once with `set_customer_emails.php --all-off`.
+  **OTP / login-code e-mail is still never copied.**
+
+**The feature is live and active.** Do not roll back — customers are not affected.

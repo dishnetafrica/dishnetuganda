@@ -305,7 +305,7 @@ function advStatusBadge(string $s): string {
             <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Currency</label>
             <select name="currency" style="width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;">
               <option value="USD">USD</option>
-              <option value="SSP">SSP</option>
+              <?php if (dn_ssp_selectable($config ?? null)): ?><option value="SSP">SSP</option><?php endif; ?>
             </select>
           </div>
         </div>

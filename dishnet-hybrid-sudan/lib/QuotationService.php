@@ -771,9 +771,17 @@ class QuotationService
             ]);
             $subject = $built['subject'];
 
+            // Same CC rule as every other customer email: when email_cc_contacts
+            // is on, the client's other contact addresses are copied. Off by
+            // default, so this send is unchanged until an operator turns it on.
+            $qHeaders = ['Reply-To' => $cmail];
+            if (CustomerEmailDispatcher::ccEnabled($this->config)) {
+                $qcc = EmailRecipients::ccFor($client, $email);
+                if ($qcc) $qHeaders['Cc'] = implode(', ', $qcc);
+            }
             $send = $mail->send($email, $name !== '' ? $name : 'Customer',
                 $subject, $built['html'], $built['text'],
-                ['Reply-To' => $cmail],
+                $qHeaders,
                 [[
                     'name'    => 'Quotation-' . (preg_replace('/[^A-Za-z0-9_\-]/', '', $number) ?: 'quote') . '.pdf',
                     'mime'    => 'application/pdf',

@@ -52,10 +52,12 @@ final class InvoiceReminders
     /** @var object NotificationService */ private $notify;
     private array $config;
     /** @var callable(string):void */ private $log;
+    /** @var object|null CustomerEmailDispatcher — the e-mail arm, or null for WhatsApp only. */ private $dispatcher;
 
-    public function __construct($crm, $notify, array $config, callable $log)
+    public function __construct($crm, $notify, array $config, callable $log, $dispatcher = null)
     {
         $this->crm = $crm; $this->notify = $notify; $this->config = $config; $this->log = $log;
+        $this->dispatcher = $dispatcher;
     }
 
     private function log(string $m): void { ($this->log)($m); }
@@ -148,6 +150,12 @@ final class InvoiceReminders
                 if ($tier === 'd7')     $this->notify->invoiceDue7Days($phone, $name, $num, $total, $currency, $dueTxt, $svcName);
                 elseif ($tier === 'd3') $this->notify->invoiceDue3Days($phone, $name, $num, $total, $currency, $dueTxt, $svcName);
                 else                    $this->notify->invoiceDueTomorrow($phone, $name, $num, $total, $currency, $dueTxt, $svcName);
+                // The e-mail twin, alongside the WhatsApp. Overdue tiers never
+                // reach here, so e-mail reminders are before-due only on prepaid,
+                // exactly as WhatsApp is. A no-op unless a dispatcher was given
+                // and reminder_email_enabled is on.
+                $this->reminderEmail((int)$clientId, is_array($client) ? $client : [],
+                                     $num, (float)$total, (string)$currency, $dueTxt, (string)$svcName, (string)$tier, $key);
             } else {
                 if ($tier === 'd1')     $this->notify->overdueDay1($phone, $name, $num, $total, $currency, $svcName);
                 elseif ($tier === 'd3') $this->notify->overdueDay3($phone, $name, $num, $total, $currency, $svcName);
@@ -159,6 +167,47 @@ final class InvoiceReminders
             usleep(300000);
         }
         return $out;
+    }
+
+    /**
+     * The e-mail twin of a pre-due WhatsApp reminder.
+     *
+     * A no-op unless a dispatcher was supplied (WhatsApp-only otherwise); the
+     * dispatcher itself then checks reminder_email_enabled and the master
+     * switch, derives the To/CC from uCRM, and dedupes. Never throws — a mail
+     * failure must not abort the reminder pass that has already sent WhatsApp.
+     */
+    private function reminderEmail(int $clientId, array $client, string $num, float $total,
+                                   string $currency, string $dueTxt, string $svcName, string $tier, string $key): void
+    {
+        if (!$this->dispatcher || !method_exists($this->dispatcher, 'sendReminderDue')) return;
+        if (!class_exists('CustomerContact') && is_file(__DIR__ . '/CustomerContact.php')) {
+            require_once __DIR__ . '/CustomerContact.php';
+        }
+        $phrase = $tier === 'd7' ? 'due in 7 days' : ($tier === 'd3' ? 'due in 3 days' : 'due tomorrow');
+        $name   = trim((string)($client['firstName'] ?? '') . ' ' . (string)($client['lastName'] ?? ''));
+        if ($name === '') $name = (string)($client['companyName'] ?? '');
+        $data = [
+            'first_name'     => (string)($client['firstName'] ?? ''),
+            'invoice_number' => $num,
+            'amount'         => $total,
+            'currency'       => $currency,
+            'due_date'       => $dueTxt,
+            'due_phrase'     => $phrase,
+            'plan_name'      => $svcName,
+            'pay_url'        => class_exists('CustomerContact') ? CustomerContact::payUrl($this->config) : '',
+        ];
+        try {
+            $r = $this->dispatcher->sendReminderDue($clientId, $name, $data, $key);
+            $reason = (string)($r['reason'] ?? '');
+            if (!empty($r['sent'])) {
+                $this->log("  EMAILED #{$num} pre-{$tier} → " . (string)($r['to'] ?? ''));
+            } elseif ($reason !== 'switched off' && $reason !== 'already sent') {
+                $this->log("  email reminder #{$num} pre-{$tier} not sent: {$reason}");
+            }
+        } catch (\Throwable $e) {
+            $this->log("  email reminder #{$num} pre-{$tier} error: " . $e->getMessage());
+        }
     }
 
     /**

@@ -152,6 +152,7 @@ try {
             <div style="font-size:13px;font-weight:800;color:#15803d;">✓ Match</div>
             <?php endif; ?>
         </div>
+        <?php if (dn_ssp_selectable($config ?? null)): ?>
         <div class="cd-bal-box" style="background:#fff;border:1px solid #e2e8f0;">
             <div class="cd-label">🇸🇸 SSP</div>
             <div style="font-size:11px;color:#6b7280;">Expected: <?= number_format((float)$todayDecl['expected_ssp']) ?></div>
@@ -162,6 +163,7 @@ try {
             <div style="font-size:13px;font-weight:800;color:#15803d;">✓ Match</div>
             <?php endif; ?>
         </div>
+        <?php endif; /* dn_ssp_selectable */ ?>
     </div>
     <div style="font-size:11px;color:#6b7280;text-align:center;">Submitted at <?= substr($todayDecl['created_at'] ?? '', 11, 5) ?></div>
 </div>
@@ -175,13 +177,15 @@ try {
     <!-- Expected balances -->
     <div class="cd-bal">
         <div class="cd-bal-box" style="background:#f0fdf4;">
-            <div class="cd-label">💵 Expected USD</div>
+            <div class="cd-label">💵 Expected <?= dn_book_base($config) ?></div>
             <div style="font-size:22px;font-weight:900;color:#15803d;"><?= dn_cur($config) ?><?= number_format((float)$pos['cash_in_hand'], 2) ?></div>
         </div>
+        <?php if (dn_ssp_selectable($config ?? null)): ?>
         <div class="cd-bal-box" style="background:#eff6ff;">
             <div class="cd-label">🇸🇸 Expected SSP</div>
             <div style="font-size:22px;font-weight:900;color:#1d4ed8;"><?= number_format($expSsp) ?></div>
         </div>
+        <?php endif; ?>
     </div>
 
     <form method="POST" action="?page=dashboard&tab=cash_declaration" enctype="multipart/form-data">
@@ -189,14 +193,16 @@ try {
         <input type="hidden" name="cd_action" value="declare">
 
         <div style="margin-bottom:14px;">
-            <label style="font-size:11px;font-weight:700;color:#15803d;display:block;margin-bottom:4px;">💵 ACTUAL USD CASH COUNT</label>
+            <label style="font-size:11px;font-weight:700;color:#15803d;display:block;margin-bottom:4px;">💵 ACTUAL <?= dn_book_base($config) ?> CASH COUNT</label>
             <input type="number" name="declared_usd" class="cd-inp" placeholder="0.00" step="0.01" min="0" required style="border-color:#bbf7d0;">
         </div>
 
+        <?php if (dn_ssp_selectable($config ?? null)): ?>
         <div style="margin-bottom:14px;">
             <label style="font-size:11px;font-weight:700;color:#1d4ed8;display:block;margin-bottom:4px;">🇸🇸 ACTUAL SSP CASH COUNT</label>
             <input type="number" name="declared_ssp" class="cd-inp" placeholder="0" step="1" min="0" style="border-color:#bfdbfe;">
         </div>
+        <?php endif; ?>
 
         <div style="margin-bottom:14px;">
             <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">📸 PHOTO OF CASH (optional)</label>

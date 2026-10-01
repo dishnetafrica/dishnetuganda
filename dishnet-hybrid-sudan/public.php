@@ -780,6 +780,19 @@ if ($page === 'prices') {
     exit;
 }
 
+// ── Public distributor-recruitment intake (5.18.59) ─────────────────────
+// Receives an expression of interest from the website's "Become a DishNet
+// Distributor" page. Public and unauthenticated by design (a recruitment
+// form), so distributor_apply.php carries the same guards as web_chat:
+// an origin allow-list, a per-IP rate limit, a honeypot and a minimum
+// fill-time. It writes ONLY its own table (077) — no uCRM, no partner, no
+// account. Routed here because uCRM only exposes public.php.
+if ($page === 'distributor_apply') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/distributor_apply.php';
+    exit;
+}
+
 // ── Public accessories shop (5.18.11) ──────────────────────────────────
 // URL: public.php?page=shop            the page (add &format=json for the website)
 //      public.php?page=shop_img&s=…    a product photo, sized (&w=240|480)
@@ -2239,8 +2252,8 @@ else:
         ['id'=>'service_status', 'label'=>'Service Status Check',     'icon'=>'[Pipeline]', 'group'=>'Support',    'roles'=>['support','support_leader','admin']],
         ['id'=>'tickets',        'label'=>'Support Tickets',          'icon'=>'[Pipeline]', 'group'=>'Support',    'roles'=>['support','support_leader','admin']],
         // Accounts group
-        ['id'=>'cashbook',       'label'=>'Cashbook (USD & SSP)',     'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin','sales','sales_staff','field_agent','field_accountant']],
-        ['id'=>'ssp_imprest',    'label'=>'SSP Imprest (Company View)', 'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin']],
+        ['id'=>'cashbook',       'label'=> (dn_ssp_selectable($config) ? 'Cashbook (USD & SSP)' : 'Cashbook (' . dn_book_base($config) . ')'),     'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin','sales','sales_staff','field_agent','field_accountant']],
+        ['id'=>'ssp_imprest',    'label'=>'SSP Imprest (Company View)', 'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=> (dn_ssp_selectable($config) ? ['accountant','admin'] : [])],
         ['id'=>'accounts_dash',       'label'=>'Accounts Dashboard',      'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin']],
         ['id'=>'balance_identity',    'label'=>'Balance Identity',         'icon'=>'[Pipeline]',  'group'=>'Accounts',   'roles'=>['accountant','admin']],
         ['id'=>'collections',    'label'=>'All Collections Report',   'icon'=>'[Pipeline]', 'group'=>'Accounts',   'roles'=>['accountant','admin']],
@@ -2284,6 +2297,12 @@ else:
         ['id'=>'sync_queue',     'label'=>'CRM Sync Queue',           'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'duplicate_log',  'label'=>'Duplicate Review',         'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','accountant']],
         ['id'=>'overdue_email_log','label'=>'Overdue Emails',          'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','accountant']],
+        // Uganda-only: the "Become a DishNet Distributor" recruitment page is a Uganda product (dishnetuganda.com).
+        // Added to the module list ONLY on the Uganda tenant ($_staffJobsUganda = StaffJobsGate::applies, computed
+        // above). On South Sudan / non-Uganda the array is unchanged, so the Staff-page permission matrix
+        // (tabs/admin/retailers.php iterates every module) and the whole admin UI stay byte-for-byte as before — the
+        // South Sudan golden test's own axis. The capture endpoint and table are harmless there (unused, empty).
+        ...($_staffJobsUganda ? [['id'=>'partner_applications','label'=>'Distributor Applications','icon'=>'[Orders]', 'group'=>'Admin', 'roles'=>['admin']]] : []),
         ['id'=>'overdue_email_tpl','label'=>'Overdue Templates',        'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'overdue_workbench','label'=>'Overdue Workbench',        'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','accountant','field_accountant']],
         ['id'=>'maintenance',    'label'=>'System Maintenance',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2731,6 +2750,7 @@ $_tabFiles = [
     'sync_queue'       => 'tabs/admin/sync_queue.php',
     'duplicate_log'    => 'tabs/admin/duplicate_log.php',
     'overdue_email_log'=> 'tabs/admin/overdue_email_log.php',
+    'partner_applications'=> 'tabs/admin/partner_applications.php',
     'overdue_email_tpl'=> 'tabs/admin/overdue_email_tpl.php',
     'overdue_workbench'=> 'tabs/admin/overdue_workbench.php',
     'ucrm_data'        => 'tabs/admin/ucrm_data.php',
@@ -2815,6 +2835,7 @@ $_tabPerms = [
     'ops_daily_report'     => ['*admin', 'accounts_dash'],
     'ops_settlement'       => '*admin',
     'ops_sync_health'      => '*admin',
+    'partner_applications' => '*admin',
     // HRM (v4.11.0)
     'hrm_dashboard'        => ['accounts_dash', '*admin'],
     'hrm_employees'        => ['accounts_dash', '*admin'],

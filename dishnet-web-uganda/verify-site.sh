@@ -134,11 +134,14 @@ wa=$(grep -rhoE 'wa\.me/[0-9]+' "$HERE/site" --include='*.html' | sort -u)
 # One customer-portal URL, everywhere it appears — plus the plugin's public
 # price feed, which legitimately lives on the same host — and, since the
 # shop page, the accessories feed and the bare origin shop.html preconnects
-# to, because every product photo is served from there too.
-portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --include='*.html' | sort -u \
+# to, because every product photo is served from there too — and the public
+# distributor-application intake the Become-a-Distributor page posts to.
+# (The sed strips a trailing '...; the intake URL lives in single-quoted JS.)
+portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --include='*.html' | sed "s/'.*//" | sort -u \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=prices$' \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=web_chat$' \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=shop&amp;format=json$' \
+         | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=distributor_apply$' \
          | grep -v '^https://crm\.dishnetuganda\.com$')
 [ "$portal" = "https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
 # Never the bare /crm. The server in front of uCRM answers it with a permanent

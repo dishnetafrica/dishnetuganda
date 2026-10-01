@@ -18,6 +18,12 @@ if (!($retailer['is_admin'] ?? false) && !in_array($retailer['role'] ?? '', ['ad
     echo '<div style="padding:40px;color:#dc2626;font-weight:700;">Access denied — admin/accountant only.</div>';
     return;
 }
+// 5.18.57: SSP Imprest is a South-Sudan-only cash view.
+if (!function_exists('dn_ssp_selectable')) require_once __DIR__ . '/../../lib/currency.php';
+if (!dn_ssp_selectable($config ?? null)) {
+    echo '<div style="padding:40px;color:#64748b;font-weight:700;">SSP flows are not enabled on this installation. This is a South Sudan cash view; Uganda uses the Cashbook (UGX).</div>';
+    return;
+}
 
 require_once __DIR__ . '/../../lib/SspImprestReportService.php';
 
