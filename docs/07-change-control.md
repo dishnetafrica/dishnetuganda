@@ -3165,3 +3165,41 @@ one-line command and sends back the log. Rollback: flag off, or the script's `--
 stay empty and ignored by 5.18.60. Preserves Uganda/South Sudan; Domain B untouched. **Not built, deliberately:**
 the live WhatsApp transport (a separate, approved step — the pilot queues, never sends); the partner portal (P4);
 WS-B (per-distributor own-number WhatsApp + AI).
+
+## 01 Oct — 5.18.65: Distributors link in the left sidebar (Admin section) — BUILT, deploy rehearsed, NOT deployed
+
+On the operator's "yes go ahead" to putting the Distributors screen in the side menu. 5.18.64 deployed the pilot and
+the operator turned it on, but the registry was reachable only by typing the `?page=dashboard&tab=distributors` URL —
+the left sidebar (`includes/navigation.php`) is hand-curated and had no link. **One UI change over 5.18.64:** a
+"Distributors" link in the left sidebar's **Admin** section. **No migration, no new behaviour, the pilot switch
+untouched.**
+
+**1. Files.**
+- `includes/navigation.php` — a self-contained, self-gated block in the Admin section (after Overdue Workbench): the
+  link renders only when `$isAdmin` **and** Uganda (`StaffJobsGate::applies`, fail-closed) **and**
+  `!empty($config['distributors_enabled'])` — the exact triple gate the tab (`tabs/admin/distributors.php`) and the
+  `$ALL_MODULES` menu entry (`public.php`) already use. On South Sudan, and on Uganda while the flag is off, the block
+  is pure PHP that emits **zero bytes**. It re-`require`s `StaffJobsGate` and re-checks `$isAdmin` itself, so it cannot
+  leak if moved.
+- `manifest.json` → 5.18.65. Five distributor test files: version pins 5.18.64 → 5.18.65.
+
+**2. Tests.** `tests/test_distributor_registry.php` (**59/0**) gains two assertions: the sidebar carries
+`tab=distributors`, and the admin+Uganda+flag gate sits within the 8 lines before it (a copy that drops the gate
+fails). **South Sudan golden 51/0** — the Staff page, dashboard and the whole job-day render **byte-for-byte**
+identical to 5.18.49, all 11 mutants still caught — proving the sidebar block emits nothing on South Sudan. Existing
+distributor suites green with pins bumped (apply 61/0, territory 47/0, notify 66/0, link 33/0). Full plugin suite
+**green, run twice** (`run.sh` exit 0 both runs, 0 failures).
+
+**3. Deployment.** **Built and rehearsed, NOT run.** `scripts/deploy-5.18.65.sh` (pinned to `ce3fa91`, installs
+5.18.65 over live **5.18.64**) — backup + GO/NO-GO, byte-for-byte verify (R1), the pilot switch **unchanged** by the
+deploy (V3/R2 read the live state before and after and require them equal — whatever the operator set it to, it
+stays; even on, nothing is sent), **no migration** (R3 is a regression check that 5.18.64's three are still present
+and the six tables intact), the Null channel still bound so nothing can be sent (R4), Release A→5.18.64 preserved
+(R5), and the **Distributors sidebar link installed and gated (R6)**. The rollback to 5.18.64 is a **separate**
+`--rollback` command (never pasted with the deploy, root docs/44 §16.9); it restores code only, so the pilot, its
+config and its tables are untouched and the screen stays reachable at the URL. The rehearsal
+`scripts/harness/deploy-5.18.65/rehearse.sh` drives the deploy + checks + rollback end to end against a fake 5.18.64
+server (pilot **ON**, as the live one is) with R1/R6/R5 teeth and an R4 control-on-control mutant: **87/0**. This
+session cannot reach the server; the operator runs the one-line command and sends back the log. Preserves
+Uganda/South Sudan (South Sudan sees nothing); Domain B untouched. **Not changed:** the pilot itself, the Null
+transport (still queues, never sends), P4, WS-B.
