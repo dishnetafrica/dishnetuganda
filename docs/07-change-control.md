@@ -2828,4 +2828,16 @@ South Sudan golden stays green; full plugin suite green; `deploy-5.18.59.sh` reh
   backs up first, applies migration 077, verifies the endpoint's guards and that its own probes created no
   application row. The rollback is the script's own `--rollback`, printed at the end of the log.
 
-**Nothing is deployed. No uCRM record is created anywhere.**
+**Plugin deployed 2026-10-01 06:22–06:23 UTC — PASSED 27 / 0 / 0.** The operator ran
+`scripts/deploy-5.18.59.sh` on the server: live `fcab6bd` (5.18.58) → `d6d0a2e` (5.18.59); backup at
+`/root/dnb-5.18.59/backup-20261001T062238Z` (plugin.sqlite3 24M + data dir + installed 5.18.58 code + vault);
+**migration 077 applied** (`dist_partner_applications` + both indexes, 0 rows); every endpoint guard verified
+over the live URL (OPTIONS 204/403, GET 405, honeypot/too-fast/empty POST all refused); **R4 — the deploy's
+probes created no application row**; **R5 — no uCRM reference in the installed endpoint/service**; R7 — all 144
+prior-release files intact; retailers table unchanged (5 rows); no fatal in the container log. The separate
+`--rollback` command was printed at the end of the log, not alongside the deploy.
+
+**The capture endpoint is now live and ready. The WEBSITE half is still held** — until
+`become-a-distributor.html` reaches `main` and `web-uganda` is rebuilt, the live site does not yet point real
+submissions at the endpoint (and the page carries a WhatsApp fallback regardless). **No uCRM record is created
+anywhere.**

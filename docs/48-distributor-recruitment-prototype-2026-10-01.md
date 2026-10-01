@@ -337,18 +337,18 @@ endpoint. Everything below is in the branch and **held**; this session deployed 
   login gate, the Uganda-only module gate, manifest 5.18.59). Full plugin suite green; the South Sudan
   golden stays green.
 
-### 12.3 The two held deploys
+### 12.3 The two deploys
 
-Both are the operator's to run, and each is held for your explicit go-ahead:
-
-1. **Website** → merge the branch to **`main`**, rebuild `web-uganda` on EasyPanel, then run
-   `verify-site.sh` / `verify-address.py` (`dishnet-web-uganda/README-DEPLOY.md`). Safe to do first — the
-   WhatsApp fallback covers the window before the plugin endpoint is live.
-2. **Plugin 5.18.59** → operator-run `scripts/deploy-5.18.59.sh` (typed `DEPLOY`; a **separate** typed
-   `ROLLBACK`, printed on its own at the end of the log — never pasted together). Pinned to the reviewed
-   commit, baseline-gated on 5.18.58, backs up first, applies migration 077, then verifies the endpoint's
-   guards and that no application row was created by its own probes. Rehearsed in
-   `scripts/harness/deploy-5.18.59/`.
+1. **Plugin 5.18.59 — DEPLOYED 2026-10-01 06:22–06:23 UTC, PASSED 27 / 0 / 0.** The operator ran
+   `scripts/deploy-5.18.59.sh`: live 5.18.58 (`fcab6bd`) → 5.18.59 (`d6d0a2e`); backup taken; **migration 077
+   applied** (table + both indexes, 0 rows); every endpoint guard verified over the live URL; the probes
+   created no application row (R4); no uCRM reference in the installed code (R5); all 144 prior-release files
+   intact (R7); no fatal. The capture endpoint is now live and ready. The separate `--rollback` was printed on
+   its own at the end of the log.
+2. **Website — still held for your go-ahead.** Merge the branch to **`main`**, rebuild `web-uganda` on
+   EasyPanel, then run `verify-site.sh` / `verify-address.py` (`dishnet-web-uganda/README-DEPLOY.md`). Until
+   this runs, the live site does not yet point real submissions at the (now-ready) endpoint; the WhatsApp
+   fallback covers that window regardless.
 
 ### 12.4 Still NOT done (unchanged from §11, restated)
 
