@@ -2841,3 +2841,71 @@ prior-release files intact; retailers table unchanged (5 rows); no fatal in the 
 `become-a-distributor.html` reaches `main` and `web-uganda` is rebuilt, the live site does not yet point real
 submissions at the endpoint (and the page carries a WhatsApp fallback regardless). **No uCRM record is created
 anywhere.**
+
+## 01 Oct — 5.18.60: customer e-mails can CC the client's other contacts; payment reminders can go by e-mail
+
+Built, tested and **held — nothing deployed, and nothing turned on.** On your request (*"we need to send
+reminder on email as well as per configured in crm if we have more than one then first one as main and rest in
+cc"*) and your two choices — CC scope **"All customer emails"**, overdue on prepaid **"Before-due only"** — the
+plugin gains two operator-facing delivery options. **Both ship OFF.** Deploying this release changes nothing a
+customer receives until you turn a switch on with `tools/set_customer_emails.php`.
+
+**1. Currently configured.** Every customer e-mail (welcome, invoice, receipt, quotation) goes to exactly one
+address — the client's main/billing contact — and no one is copied. Payment reminders go out by **WhatsApp only**;
+there was no e-mail reminder path, and on prepaid the overdue e-mail ladder stays suppressed (no "suspension"
+wording). A uCRM client with several contact e-mails had the others reach none of the mail.
+
+**2. Why.** You asked for reminders to also go by e-mail, and for all customer mail to copy the client's other
+contacts as configured in uCRM (first contact as the main recipient, the rest in CC). A business with a billing
+clerk, an owner and an office address should see the same invoice reach all three.
+
+**3. What changed (plugin 5.18.60, commit `3b5e61f`).** Code-only — no migration, no new table, no admin tab, no
+website change, no cron-schedule change.
+- **`email_cc_contacts` (OFF by default).** When on, **every** customer e-mail goes **To** the main/billing
+  contact and **CCs every OTHER distinct contact e-mail** on that uCRM client. The To is unchanged; CC is purely
+  additive. CC is delivered for real — a `Cc:` header **and** one `RCPT TO` per copied address — and an
+  invalid/refused CC is logged and skipped, never sinking the send. Applies to welcome, invoice, receipt,
+  quotation and the new reminder.
+- **`reminder_email_enabled` (OFF by default; needs the master switch on).** When on, the Uganda payment-reminder
+  cron sends a **before-due** reminder by e-mail (7/3/1 days) **alongside** each WhatsApp. It is prepaid-safe —
+  it never threatens suspension or cut-off — and it is **not** a catalogue template, so the Email Preview screen
+  and the South Sudan install are byte-for-byte unchanged. The overdue tiers stay suppressed on prepaid, as
+  before.
+- **OTP / login-code e-mail is NEVER copied.** A login code goes to one person, by design; `OtpEmail` sets no Cc
+  and resolves no contacts. The deploy script asserts this (R3) against the installed file.
+- New `lib/EmailRecipients.php` (the To/CC resolver), a read-only `tools/mail_log_doctor.php` diagnostic, and
+  `tests/test_reminder_email_cc.php`.
+
+**4. Effect on UISP/uCRM.** None written. The CC addresses are **read** from the uCRM client's own contacts; the
+reminder e-mail uses the plugin's existing SMTP (Brevo relay). No uCRM record is created or changed, no schedule
+changes, and the South Sudan install is untouched.
+
+**5. Rollback.** The separate `scripts/deploy-5.18.60.sh --rollback` (typed `ROLLBACK`) — printed on its own at
+the end of the deploy log, never pasted with the deploy — returns 5.18.59. The release changes no table and no
+row, so a rollback needs no data restore; it also wrote no config, so the switches are untouched either way.
+
+**Tests:** `test_reminder_email_cc.php` **25/0** (EmailRecipients; CC delivered through a fake SMTP — To + both
+CCs in `RCPT TO`, Cc header present, off = single recipient; the reminder render is prepaid-safe and gated;
+`reminder_due` not in the CATALOGUE; OtpEmail carries no Cc). Full plugin suite **11,501 / 0** across 253 files.
+`scripts/deploy-5.18.60.sh` rehearsed **84/0 twice** (`scripts/harness/deploy-5.18.60/rehearse.sh`), including:
+the base gate (5.18.59 first, or NO-GO), V3/R2 reading both switches off on the live install through the plugin's
+own tool and still reading the live state when one is flipped on, R3 proving the installed OTP e-mail carries no
+Cc (with a control-on-the-control: a Cc planted in OtpEmail is caught, and a blinded copy is not), R5 proving
+`reminder_due` is not a catalogue template, R6 proving Release A→5.18.59 are installed as pinned, and the rollback
+to 5.18.59.
+
+**Held — one operator-run deploy, awaiting your explicit go-ahead:**
+- **Plugin 5.18.60** → operator-run `scripts/deploy-5.18.60.sh` (typed `DEPLOY`). Baseline-gated on 5.18.59,
+  backs up first (the two databases + data dir + installed 5.18.59 code + vault), copies the code, and verifies —
+  including that **both new switches still read off** on the live install (the deploy turns nothing on). The
+  rollback is the script's own `--rollback`, printed at the end of the log.
+
+**After it is live, the two switches are yours to turn on, deliberately, one at a time:**
+- CC every customer e-mail to the client's other contacts:
+  `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_customer_emails.php --cc on`
+- Payment reminders by e-mail (before-due only, alongside WhatsApp — needs the master on):
+  `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_customer_emails.php --master on --reminder-email on`
+- See the current state any time: `… set_customer_emails.php --show`. Turn everything off at once:
+  `… set_customer_emails.php --all-off`.
+
+**OTP / login-code e-mail is never copied**, whatever these switches are set to.
