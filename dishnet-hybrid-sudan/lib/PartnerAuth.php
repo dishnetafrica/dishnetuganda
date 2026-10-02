@@ -237,6 +237,34 @@ final class PartnerAuth
         return $st->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 
+    /**
+     * Is $code the account's current, un-expired, not-overspent login code?
+     * Returns the user id WITHOUT consuming it — the dispatcher uses this to
+     * authorise enrolment (begin/confirm) while a proven code is held. A miss is
+     * booked exactly like a wrong sign-in (attempts++ and a fail toward the
+     * decaying lock), so it cannot brute-force the code for free, and a locked
+     * account always returns null.
+     */
+    public static function checkCode(\PDO $pdo, array $config, string $rawPhone, string $code, TenantProfile $tp, string $ip = '', ?int $now = null): ?int
+    {
+        $now = $now ?? time();
+        $user = self::findActiveByPhone($pdo, self::canonical($rawPhone, $tp));
+        if (!$user) return null;
+        $uid = (int)$user['id'];
+        if (self::lockStatus($pdo, $config, $uid, $now)['locked']) return null;
+        $otp = self::pending($pdo, $uid);
+        $ok = $otp
+            && (int)$otp['expires_at'] > $now
+            && (int)$otp['attempts'] < self::cfg($config, 'code_max_attempts')
+            && hash_equals((string)$otp['code_hash'], self::hashCode($code, $config));
+        if (!$ok) {
+            if ($otp) $pdo->prepare("UPDATE dist_partner_otp SET attempts = attempts + 1 WHERE user_id = ?")->execute([$uid]);
+            self::rateAdd($pdo, 'fail:user:' . $uid, $now);
+            return null;
+        }
+        return $uid;
+    }
+
     // ── TOTP enrolment (dispatcher calls these only after the code is verified) ─
 
     public static function isEnrolled(array $user): bool

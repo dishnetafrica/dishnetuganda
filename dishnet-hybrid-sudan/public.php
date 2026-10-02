@@ -793,6 +793,20 @@ if ($page === 'distributor_apply') {
     exit;
 }
 
+// ── Distributor partner portal API (WS-A P4d, docs/50) ─────────────────
+// URL: public.php?page=partner_api&action=…
+//
+// The distributor-facing portal's data surface, served under the uCRM address
+// (D-9a). partner_api.php self-gates on Uganda + distributors_enabled (off/other
+// tenant ⇒ its own 404), authenticates its OWN distributor session (never a
+// staff token), and is deny-by-default: an undeclared action is 404 and it never
+// falls through to the staff api_handlers.php. Inert until the pilot flag is on.
+if ($page === 'partner_api') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/partner_api.php';
+    exit;
+}
+
 // ── Public accessories shop (5.18.11) ──────────────────────────────────
 // URL: public.php?page=shop            the page (add &format=json for the website)
 //      public.php?page=shop_img&s=…    a product photo, sized (&w=240|480)
