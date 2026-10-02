@@ -3263,3 +3263,42 @@ as the separate gate.
 **4. Deployment. NONE — and none is in scope.** Real OTP delivery, wiring the sender into `partner_api.php`, enabling
 the portal/flag, P4e (portal pages), P4f (deploy artifacts), staging rehearsal and deployment all remain **separate,
 explicitly-approved** steps. `docs/53 §8` is the as-built record. PD-2 / PD-5 / PD-8 remediation (docs/52) is untouched.
+
+## 02 Oct — PD-8: same-site CSRF guard on the staff JSON API (both surfaces) — BUILT in development, NOT deployed
+
+On the operator's approval of the `docs/54` PD-8 design, limited to **cookie-authenticated CSRF protection only**. The
+two staff JSON surfaces — `public.php?page=api` and `public.php?page=stock_api` — accept either a Bearer `api_token`
+(every integration) or the browser session cookie (`kyc_retailer`, deliberately `SameSite=None` for the uCRM iframe).
+Because that cookie rides cross-site requests too, and the JSON path never ran a CSRF check while CORS is `*`, a page a
+signed-in staff member visits could drive a "simple" (preflight-free) cross-site write on their behalf. This closes
+that. **Development and test only; not deployed; no flag change; CORS unchanged; Uganda and South Sudan preserved;
+Domain B untouched.**
+
+**1. Files.**
+- `lib/StaffApiCsrf.php` — **new**. One pure method, `mustBlock($authedViaCookie, $method)`. It exempts GET/HEAD/OPTIONS
+  (safe methods / preflight), exempts anything **not** cookie-authenticated (Bearer integrations) — keyed off the
+  **server-side auth outcome, never a header's presence** — and, for a cookie-authenticated mutation, delegates
+  "our own page?" to `CustomerSession::crossSite()`, reused verbatim.
+- `includes/api_handlers.php` (`?page=api`) — captures `$authedViaCookie` (false before `tokenAuth()`, true only in the
+  session-fallback branch) and refuses `403 cross_site` after the staff auth check; the pre-auth customer-app actions
+  exit earlier and are untouched.
+- `includes/routes.php` (`?page=stock_api`) — the same, before the stock handler runs.
+
+**2. No static allow-list (a safer deviation from the `docs/54` §6 plan).** `crossSite()` compares the request's
+`Origin` to its **own `Host`**, so the Traefik hostname and the UISP `:8443` origin each validate against themselves and
+are **not** treated as interchangeable — no list to misconfigure, and the operator's point-5 hard-stop did not arise.
+Only `crossSite()` is reused, **not** `cookieUseAllowed()`, which also demands `X-Requested-With: DishNet` — a header the
+staff UI does not send.
+
+**3. Tests.** `tests/test_api_csrf_guard.php` — **51/0**: a unit matrix over `mustBlock()` (safe methods, Bearer
+exemption, same-origin pass, cross-site block by `Sec-Fetch-Site` and by `Origin`≠`Host`, missing/`null`/malformed
+`Origin`, the four Traefik-vs-`:8443` permutations, three weakened copies each caught, and source-wiring assertions
+incl. the unchanged CORS `*`); and, over real HTTP on **both** surfaces, Bearer cross-site → allowed, cookie cross-site
+→ 403 (incl. the form / FormData / text-plain "simple request" cases), cookie same-origin → allowed, GET → allowed,
+invalid-Bearer-then-cookie → blocked, valid-Bearer-plus-cookie → allowed, anonymous cross-site → 401. Full plugin suite
+run **twice** via `tests/run.sh` (263 files); focused `test_api_csrf_guard.php` **51/0**, zero failures in the passes
+under way at commit time; the confirmed exit-0 aggregate for both passes is appended here on completion.
+
+**4. Scope / deployment. NONE in scope.** CORS narrowing (step 4), PD-5, PD-2, P4e, portal/flag changes, OTP
+wiring/sending, staging and deployment all remain separate, explicitly-approved steps. The manifest version is
+unchanged (release/versioning is the operator's step). `docs/54 §10` is the as-built record.

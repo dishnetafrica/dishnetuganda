@@ -255,3 +255,87 @@ No PD-8/PD-5/PD-2 fix implemented; no P4e; the OTP sender (`docs/53`) remains un
 `$deliver = null`; no OTP sent, no live provider contacted; no feature flag changed and the portal stays disabled; no
 deployment; no production data/config touched; Uganda and South Sudan behaviour preserved; Domain B untouched; PD-1
 carried as recorded-fixed without re-verification. Awaiting approval before any code change.
+
+*(The "awaiting approval" status above was the Phase-3 inventory record. §10 below records the subsequently-approved
+PD-8 guard implementation and supersedes that one line.)*
+
+---
+
+## 10. Implementation evidence — PD-8 same-site guard (BUILT in development; NOT deployed)
+
+On the operator's approval to implement **only** the PD-8 cookie-authenticated CSRF protection — the smallest shared
+same-site guard on both staff JSON surfaces, reusing `CustomerSession::crossSite()`; CORS, PD-5, PD-2 and P4e explicitly
+out of scope. **Development and test only. No deployment, no flag change, no production data/config touched. Uganda and
+South Sudan behaviour preserved. Domain B untouched. CORS policy left exactly as this document found it — its own
+follow-up (step 4).**
+
+### 10.1 What was built
+
+- **`lib/StaffApiCsrf.php` (new)** — one pure method, `mustBlock(bool $authedViaCookie, string $method): bool`,
+  returning whether to refuse the request `403 cross_site`. It
+  (a) exempts `GET`/`HEAD`/`OPTIONS` (safe methods / CORS preflight);
+  (b) exempts anything **not** authenticated by the browser cookie — every Bearer `api_token` integration — keyed off
+  the **server-side auth outcome**, never a header's presence;
+  (c) for a cookie-authenticated mutation, delegates "is this our own page?" to **`CustomerSession::crossSite()`**,
+  reused verbatim so there is a single definition of same-site in the codebase.
+- **`includes/api_handlers.php` (`?page=api`)** — sets `$authedViaCookie = false` before `tokenAuth()`, `true` only in
+  the session-fallback branch, and calls the guard immediately after the staff auth check (`if (!$me2) …`) — so the
+  pre-auth customer-app actions, which exit earlier, are untouched.
+- **`includes/routes.php` (`?page=stock_api`)** — same: `false` before `tokenAuth()`, `true` when `requireLogin()`
+  returns a live cookie session; guard before the stock handler and before `StockService::ensureTables()`.
+
+### 10.2 Deviation from the §2/§6 plan, recorded — NO static allow-list, and why it is safer
+
+The inventory's §6 plan spoke of a "two-origin allow-list" (the Traefik hostname + the UISP `:8443` origin). The built
+guard uses **no allow-list.** `crossSite()` compares the request's `Origin` to the request's **own `Host`**, so every
+hostname the API is legitimately reached on validates against itself, and the two origins are **not** treated as
+interchangeable — a request whose `Host` is the Traefik name and whose `Origin` is `:8443` is cross-site, and the
+reverse likewise. This is strictly better than an enumerated list: there is nothing to misconfigure, and the operator's
+point-5 hard-stop ("if a safe allow-list cannot be established from code and tests, STOP and report") **did not arise**
+— safety derives from the request's own `Host`, not from a guessed list. Proven by the four Traefik-vs-`:8443`
+permutations in the test.
+
+### 10.3 What it checks, and the deliberate fail-open
+
+`crossSite()` is true (blocked) when `Sec-Fetch-Site: cross-site`, or an `Origin` is present whose host(:port) ≠ the
+request `Host`. It is false (allowed) when neither signal is present, or `Origin: null` (opaque). A cross-origin
+`fetch()` or form submission **always** carries an `Origin`, so the real CSRF vector is caught; the fail-open is only
+for a **same-origin** caller that strips both headers (the daily `csrfToken` already covers the form-POST surface). A
+malformed `Origin` with no parseable host is **blocked** (fails safe).
+
+### 10.4 Why only `crossSite()`, not `cookieUseAllowed()`
+
+`CustomerSession::cookieUseAllowed()` additionally demands `X-Requested-With: DishNet`. The staff browser UI does not
+send that header, so requiring it would break the panel. Only `crossSite()` is reused; no new header is required of the
+staff API.
+
+### 10.5 Tests — `tests/test_api_csrf_guard.php` (51/0)
+
+- **Unit matrix** over `mustBlock()`: safe-method exemption; Bearer exemption; same-origin pass; cross-site block by
+  `Sec-Fetch-Site` and, separately, by `Origin`≠`Host`; missing / `null` / malformed `Origin`; case-insensitive method;
+  the **four Traefik-vs-`:8443` permutations** (non-interchangeability); **three weakened copies** — ignore-the-cookie,
+  `Sec-Fetch`-only, guard-GET-too — each shown to diverge from the real guard on a distinguishing input; and
+  source-wiring assertions: both surfaces call the guard with the cookie **outcome**; the guard runs **after** the staff
+  auth (pre-auth customer-app path untouched); the guard carries no tenant marker (so UG and SS are identical); and the
+  pre-existing CORS `*` is left unchanged on both surfaces.
+- **Over real HTTP**, on **both** `?page=api` and `?page=stock_api` (signing a staff member in via `do_login`,
+  capturing `PHPSESSID`): Bearer cross-site POST → not blocked; cookie cross-site POST → **403 `cross_site`**; cookie
+  same-origin POST → passes to the dispatcher (404 unknown, i.e. authenticated **and** allowed, not 401/403); GET cookie
+  cross-site → not blocked. Plus the **"simple request" content-types** (`x-www-form-urlencoded`, `multipart/form-data`,
+  `text/plain`) each still blocked; the **outcome-based** proofs (an invalid Bearer that falls through to the cookie is
+  a cookie auth → blocked; a valid Bearer alongside a cookie is a Bearer auth → not blocked); missing / `null` /
+  malformed `Origin` over HTTP; and an anonymous cross-site POST still 401 (the auth guard fires first, never the CSRF
+  guard).
+- **Full plugin suite:** run end-to-end **twice** via `tests/run.sh` (263 test files). The focused suite is **51/0**;
+  the full-suite passes were under way at commit time with **zero failures** observed, and the confirmed exit-0
+  aggregate for both passes is recorded in the `docs/07` entry on completion.
+
+### 10.6 Boundaries honoured
+
+CORS left exactly as found (`Access-Control-Allow-Origin: *` on both surfaces) — narrowing is step 4, a separate
+follow-up. No PD-5, no PD-2, no P4e, no portal/flag change, no OTP wiring/send, no live provider, no deployment, no
+production data/config. Uganda **and** South Sudan preserved — the guard is tenant-blind and admits every legitimate
+same-origin and Bearer request (the only new refusal is a cookie-authenticated **cross-site** mutation, which no
+legitimate staff caller or integration makes). Domain B untouched. **Not deployed; the manifest version is unchanged**
+— release / versioning / staging rehearsal / deployment are the operator's separate, explicitly-approved steps, as is
+the CORS narrowing.
