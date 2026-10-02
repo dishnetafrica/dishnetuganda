@@ -74,7 +74,16 @@ $req = [
     'ua'     => (string)($_SERVER['HTTP_USER_AGENT'] ?? ''),
 ];
 
-// Pilot: nothing is sent. A real messaging sender is wired later, behind the flag.
+// Pilot: NOTHING is sent. The delivery seam is null, so no code leaves the
+// server from this live entry — whatever the flag, whatever the config.
+//
+// The sender exists (lib/PartnerOtpSender.php, WS-A P4, docs/53): it delivers the
+// code over the EXISTING Evolution support instance to the account's OWN verified
+// contact, resolved server-side (never from the request). Wiring it here —
+//     $deliver = [PartnerOtpSender::fromConfig($pdo, $config), 'send'];
+// turns on real OTP sending and is a SEPARATE, explicitly-approved step (a real
+// send is its own gate; the portal flag stays off meanwhile). It is left unwired
+// deliberately so no accidental send is possible from the live path.
 $deliver = null;
 
 $resp = PartnerApi::handle($pdo, $config, $tp, $req, $deliver);

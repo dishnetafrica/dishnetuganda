@@ -3208,3 +3208,58 @@ server (pilot **ON**, as the live one is) with R1/R6/R5 teeth and an R4 control-
 session cannot reach the server; the operator runs the one-line command and sends back the log. Preserves
 Uganda/South Sudan (South Sudan sees nothing); Domain B untouched. **Not changed:** the pilot itself, the Null
 transport (still queues, never sends), P4, WS-B.
+
+## 02 Oct — WS-A P4: distributor-portal OTP over the existing Evolution WhatsApp + admin TOTP reset — BUILT in development, NOT deployed, NOTHING SENT
+
+On the operator's implementation approval of `docs/53` (decision **D2 — reuse the existing support instance
+`evo_instance_support`; fake-Evolution tests only; real sending a separate future gate**). This fills the delivery
+seam the P4 sign-in (P4c/P4d) left null. **Development and test schema only. No real WhatsApp send, no live-provider
+test, no deployment, no flag change, the portal stays OFF.** South Sudan and Uganda (flag off) are unchanged; Domain B
+is untouched.
+
+**1. Files.**
+- `migrations/083_distributor_portal_otp_delivery.sql` — **new** `dist_partner_auth_log`, the non-secret
+  authentication-plane record (OTP-send outcome + TOTP-reset audit). Additive, idempotent, inert until the flag is on;
+  nothing in 001–082 touched. A CHECK constrains `otp_send` outcomes to `accepted / failed / unknown / no_recipient` —
+  **there is deliberately no `delivered` value, so Evolution's acceptance can never be written as delivery.** No
+  `code` / `secret` / `token` column.
+- `lib/PartnerOtpSender.php` — **new**. `fromConfig()` binds `EvolutionWhatsAppChannel` on `CHANNEL_SUPPORT` (D2) over
+  the EXISTING `EvolutionApiService` — the same `WhatsAppChannel` port the distributor notifications use, **not**
+  `NotificationService`, message class `CLASS_STAFF`. `resolveRecipient($userId)` derives the destination **server-side
+  from the account alone** → the account's OWN verified `dist_contacts` number → else `null` (no send). `send()` calls
+  the channel **exactly once** (never a self-retry), maps the result to `accepted / failed / unknown`, records a
+  non-secret row; the login request's number is ignored.
+- `lib/PartnerAccounts.php` — **+`resetTotp($userId,$actor)`**: clears the authenticator, revokes every live session,
+  and audits, **in one transaction** (fail-closed). Actor from the identity boundary. Mirrors `disable()`/`setRole()`.
+- `includes/post/post_distributors.php` — **+`dist_totp_reset`** staff handler: `requireAdmin()` + Uganda + flag gate,
+  actor = the authenticated admin, calls `resetTotp()`. No self-service.
+- `partner_api.php` — **behaviour unchanged: `$deliver = null`** (the live entry binds NO sender); comment refined to
+  show the separately-approved wiring.
+- `tests/fixtures/fake_evo_server.php` — strictly-additive `code` param on `/__test/fail_next` (default 500) so a test
+  can force a gateway 50x; existing callers unaffected.
+
+**2. Tests.** `tests/test_partner_otp_delivery.php` — **68/0**, all synthetic, against the fake Evolution server:
+migration 083 (incl. the DB-level `delivered` refusal + control); the server-side verified-only recipient resolver
+(unverified / absent / foreign-number / disabled all → no send; resolver takes a user id only, by reflection); a real
+`accepted` send on the **support** instance to the **verified** number carrying the code, with the request's bogus
+number ignored; `failed` on a provider 500; `unknown` on a gateway 504 **and** on a real Uganda timeout, each reaching
+Evolution exactly once and never resent; `no_recipient` with the uniform `{status:"sent"}` response; the per-account
+send cap gating sending (four requests, cap two → two sends); the secrets scan (code / TOTP secret / apikey / token in
+no log row or response); the admin TOTP reset revoking a live session, clearing the authenticator, and auditing with
+the acting admin; the outcome-mapping table with the no-self-retry guarantee (channel called exactly once); the
+separation + support-binding checks; the no-accidental-send checks; and **three weakened copies each caught** (a copy
+that reads the destination from the request, one that records an uncertain send as `accepted`, one that logs the code).
+Full plugin suite **green, run twice** (`run.sh` exit 0, 0 failures). The fake-server change is additive; the
+Evolution-dependent suites stay green.
+
+**3. No accidental real send (operator-requested review).** There is no path, under any test or configuration, that
+makes the live entry send in this phase: (a) `partner_api.php` keeps `$deliver = null` (asserted as code, comments
+stripped), so the live portal produces the code and sends nothing whatever the flag/config; (b) `PartnerApi` hard-codes
+no sender — delivery is injected; (c) the portal 404s unless Uganda **and** `distributors_enabled`, and the pilot flag
+is off; (d) the sender is constructed only in tests, pointed at the `127.0.0.1` fake, which never contacts WhatsApp —
+no test uses a real `evo_api_url`; (e) wiring it live is a visible one-line change, deliberately absent and documented
+as the separate gate.
+
+**4. Deployment. NONE — and none is in scope.** Real OTP delivery, wiring the sender into `partner_api.php`, enabling
+the portal/flag, P4e (portal pages), P4f (deploy artifacts), staging rehearsal and deployment all remain **separate,
+explicitly-approved** steps. `docs/53 §8` is the as-built record. PD-2 / PD-5 / PD-8 remediation (docs/52) is untouched.

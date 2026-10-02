@@ -162,3 +162,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
     }
     redirect('?page=dashboard&tab=distributors');
 }
+
+// WS-A P4 (docs/53 §5): admin-only, audited TOTP reset for a distributor portal
+// account. Clears the authenticator AND revokes the account's live sessions in
+// one transaction; the distributor enrols a new authenticator at their next
+// sign-in, which still needs a fresh one-time login code — so this recovers a
+// lost device without becoming a sign-in bypass. No self-service. Admin + flag +
+// Uganda, local only. The actor is the authenticated admin from the identity
+// boundary, never a request field (PartnerAccounts::resetTotp requires it).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'dist_totp_reset') {
+    $admin = $auth->requireAdmin();
+
+    require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+    $enabled = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)
+        && !empty($config['distributors_enabled']);
+    if (!$enabled) {
+        flash('Distributor management is not enabled on this install.', 'danger');
+        redirect('?page=dashboard');
+    }
+
+    require_once dirname(__DIR__, 2) . '/lib/PartnerAccounts.php';
+    $acct = PartnerAccounts::fromStore($store);
+    $actor = trim((string)($admin['name'] ?? '') . ' <' . (string)($admin['email'] ?? '') . '>');
+
+    try {
+        $r = $acct->resetTotp((int)($_POST['user_id'] ?? 0), $actor);
+        flash('Authenticator reset. The distributor must set up a new authenticator at their next sign-in, and '
+            . (int)($r['revoked'] ?? 0) . ' active session(s) were signed out.', 'success');
+    } catch (\Throwable $e) {
+        flash('Could not reset the authenticator: ' . $e->getMessage(), 'danger');
+    }
+    redirect('?page=dashboard&tab=distributors');
+}

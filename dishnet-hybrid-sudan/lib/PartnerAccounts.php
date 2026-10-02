@@ -157,4 +157,56 @@ class PartnerAccounts
             throw $e;
         }
     }
+
+    /**
+     * Reset the authenticator for a portal account — an ADMIN-ONLY recovery
+     * (WS-A P4, docs/53 §5). Clears the TOTP secret and its confirmed flag,
+     * REVOKES every live session, and writes an AUDIT row, ALL in one
+     * transaction. The distributor must enrol a fresh authenticator at their next
+     * sign-in — which still requires a fresh one-time login code — so this is not
+     * a sign-in bypass. There is NO self-service reset (that would be a second
+     * account-takeover path); the actor is passed in from the staff identity
+     * boundary, never a request field, exactly as disable()/setRole() are.
+     *
+     * The audit row is atomic with the reset: if it cannot be written the whole
+     * operation rolls back, so there is never a silent, unaudited reset.
+     *
+     * @return array{ok:bool, revoked:int}
+     * @throws \RuntimeException if the account does not exist.
+     */
+    public function resetTotp(int $userId, string $actor): array
+    {
+        $own = !$this->db->inTransaction();
+        if ($own) $this->db->beginTransaction();
+        try {
+            $user = $this->get($userId);
+            if ($user === null) throw new \RuntimeException('Portal account not found.');
+
+            $this->db->prepare(
+                "UPDATE dist_partner_users SET totp_secret = '', totp_confirmed = 0, updated_at = datetime('now') WHERE id = ?"
+            )->execute([$userId]);
+
+            $revoked = PartnerSession::revokeAllForUser($this->db, $userId, 'totp_reset:' . self::scrub($actor, 48));
+
+            // Audited (dist_partner_auth_log, migration 083). Non-secret only: no
+            // code, no secret, no key, no token — a revoked-session count and the
+            // acting admin, nothing more.
+            $this->db->prepare(
+                "INSERT INTO dist_partner_auth_log (user_id, partner_id, contact_id, event, outcome, detail, actor, at)
+                 VALUES (?,?,NULL,'totp_reset','ok',?,?,?)"
+            )->execute([
+                $userId,
+                (int)$user['partner_id'],
+                'sessions_revoked=' . (int)$revoked,
+                self::scrub($actor, 160),
+                time(),
+            ]);
+
+            if ($own) $this->db->commit();
+            return ['ok' => true, 'revoked' => (int)$revoked];
+        } catch (\Throwable $e) {
+            if ($own && $this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+    }
 }
