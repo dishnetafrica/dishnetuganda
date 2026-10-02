@@ -3296,8 +3296,8 @@ exemption, same-origin pass, cross-site block by `Sec-Fetch-Site` and by `Origin
 incl. the unchanged CORS `*`); and, over real HTTP on **both** surfaces, Bearer cross-site → allowed, cookie cross-site
 → 403 (incl. the form / FormData / text-plain "simple request" cases), cookie same-origin → allowed, GET → allowed,
 invalid-Bearer-then-cookie → blocked, valid-Bearer-plus-cookie → allowed, anonymous cross-site → 401. Full plugin suite
-run **twice** via `tests/run.sh` (263 files); focused `test_api_csrf_guard.php` **51/0**, zero failures in the passes
-under way at commit time; the confirmed exit-0 aggregate for both passes is appended here on completion.
+**green, run twice** — `tests/run.sh` exit 0 both times, **263 files / 10,521 assertions / 0 failed** (identical both
+passes); `test_api_csrf_guard.php` **51/0**.
 
 **4. Scope / deployment. NONE in scope.** CORS narrowing (step 4), PD-5, PD-2, P4e, portal/flag changes, OTP
 wiring/sending, staging and deployment all remain separate, explicitly-approved steps. The manifest version is

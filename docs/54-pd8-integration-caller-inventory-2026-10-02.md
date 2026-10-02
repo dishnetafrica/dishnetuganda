@@ -326,9 +326,9 @@ staff API.
   a cookie auth → blocked; a valid Bearer alongside a cookie is a Bearer auth → not blocked); missing / `null` /
   malformed `Origin` over HTTP; and an anonymous cross-site POST still 401 (the auth guard fires first, never the CSRF
   guard).
-- **Full plugin suite:** run end-to-end **twice** via `tests/run.sh` (263 test files). The focused suite is **51/0**;
-  the full-suite passes were under way at commit time with **zero failures** observed, and the confirmed exit-0
-  aggregate for both passes is recorded in the `docs/07` entry on completion.
+- **Full plugin suite: green, run twice** — `tests/run.sh` exit 0 both times, **263 test files / 10,521 assertions /
+  0 failed** (identical totals on both passes; `test_api_csrf_guard.php` contributes 51). Zero `FAIL` status lines; the
+  only `… failed` strings in the logs are prose (log lines and assertion labels).
 
 ### 10.6 Boundaries honoured
 
