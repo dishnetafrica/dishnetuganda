@@ -44,8 +44,10 @@ official equivalent** (see `01` §D and `40`).
 |---|---|---|
 | `00-README.md` | this index | ✅ |
 | `01-official-api-v2-catalogue.md` | **#4** verified official-API V2 endpoint/field catalogue | ✅ written (from the supplied spec) |
+| `05-official-api-live-access-test.md` | **live-access validation record** (credential scope, org-wide-vs-single-account, side-by-side) | ✅ scaffold written; **live sections PENDING operator probe run** |
+| `probe/starlink_api_probe.py` + `probe/README.md` | **safe read-only probe** the operator runs where egress+credentials exist | ✅ written (compiles; no secret) |
 | `10-baseline-data-report.md` | **#1a** baseline inventory — data-report | ✅ written (from real source) |
-| `11-baseline-finance.md` | **#1b** baseline inventory — finance | ⏳ in progress (source attached v7.3.9; inventory running) |
+| `11-baseline-finance.md` | **#1b** baseline inventory — finance | ✅ written (from real source v7.3.9) |
 | `20-mapping-data-report.md` | **#2** exhaustive function→API mapping — data-report (10-column table) | ✅ written |
 | `21-mapping-finance.md` | **#3** exhaustive function→API mapping — finance | ⏳ follows `11` |
 | `30-shared-architecture.md` | **#5** cross-plugin shared-architecture recommendation | ✅ written |
@@ -62,10 +64,14 @@ missing API fields · recommended approach · tests + regression risks.
 
 ## Sources used (and their trust level)
 
-- **Official API:** the V2 OpenAPI **3.0.4** JSON the operator pasted verbatim
+- **Official API (spec):** the V2 OpenAPI **3.0.4** JSON the operator pasted verbatim
   (`starlink.com/api/public/swagger/v2`). `starlink.com` is egress-blocked here, so **no live
-  call was or will be made.** Auth-flow and rate-limit specifics not in the JSON are labelled
-  **[D]** (documented) vs **[V]** (verified in JSON) in `01`.
+  call was or will be made from this session.** Auth-flow and rate-limit specifics not in the JSON
+  are labelled **[D]** (documented) vs **[V]** (verified in JSON) in `01`.
+- **Official API (live):** the operator later created a real OIDC **service-account credential**.
+  This session still cannot reach `starlink.com` (egress `403`), so the **live** validation is done
+  by the operator running `probe/` and pasting the redacted result into `05`. The credential/secret
+  are **never** stored or committed here (and the shared secret should be **rotated** — `05`§12).
 - **data-report:** real source — `dishnetafrica/datareport` @ `012810d6` (== the deployed
   v2.8.80 plugin), cloned read-only to `/home/user/datareport`.
 - **finance:** real source attached by the operator as `dishnet-starlink-finance` **v7.3.9** (ZIP),
