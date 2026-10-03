@@ -3423,3 +3423,60 @@ install, a backup before copying, read-only checks afterwards, a log file sent b
     ("NOT up to date") as the documented consequence of installing a release commit, not as a fault.
   - **Not yet seen:** a technician's photo and location on a real job. Next: a phone, signed in as a technician — My Jobs
     → a job → *Take photo* → *Mark as Completed* → *Allow location*; then `bash scripts/deploy-5.18.66.sh --after-only`.
+
+## 03 Oct — 5.18.67: the Site photos card lays out cleanly on a phone (Uganda, My Jobs) — BUILT, rehearsed, NOT deployed
+
+**Seen in production first.** Minutes after the 5.18.66 deploy the operator opened a live job on a phone and sent two
+screenshots of the new *Site photos* card (0/12; Kit / dish, Cable used, Router / model, Other) — the first sighting of
+5.18.66 running. They also showed the defect: the word *required* sat on the same line as the label, so *Cable used* and
+*Router / model* wrapped, the *Take photo* button beside them shrank, and its own text wrapped. "yes fix it."
+
+**1. The change — one hunk, `tabs/support/scheduling.php`, `schRenderPhotos()`.** Each label row is still one flex row,
+but the left side is now a column: the label, and under it the status in 11 px — *required* (amber), *✓ added* (green;
+was a bare ✓), or *N photo(s)* for an optional label that has some. The button keeps `white-space:nowrap;flex-shrink:0`,
+so it holds one line at any width; `min-width:0` on the column lets a long label wrap on its own side instead. Nothing
+else: no API, no server code, no migration, no setting, no uCRM write; the card still renders only behind `UG_PHOTOS`, so
+**South Sudan is unaffected** (the card does not exist there). `manifest.json` 5.18.67; the nine manifest-version pins
+moved. Main commit **`9343f60`** (11 files). Green on it: `test_job_photos` 72/0 and the nine pins; PHP 7.4 syntax; the
+job page's `<script>` block parses under Node.
+
+**2. The release commit, as 5.18.66 taught.** The branch tip still carries the undeployed partner-portal stack and PD-8,
+so the release is cut on the live version: **`release/5.18.67` = `96857d8`, parent `8137912` (5.18.66, production since
+19:39 UTC)** — `9343f60` cherry-picked, the four pins for test files that do not exist at 5.18.66 left out. The code hunks
+of `scheduling.php` and `manifest.json` are **identical** between the two commits (diffed). Seven files differ from
+`8137912`: the two above and five `test_distributor_*` pins; **no migration, no new file.** On that tree:
+`test_job_photos` 72/0, `test_distributor_registry` 59/0, `test_distributor_apply` 61/0, `test_migration_integrity` 28/0.
+
+**3. `scripts/deploy-5.18.67.sh`** — pinned `96857d8` over `8137912`, the 5.18.66 script's shape, with the differences a
+code-only release needs: **A0** also refuses a pin whose delta carries *any* migration (5.18.67 adds none — a pin with
+one is another build); the parent check still refuses a copy pinned to the branch tip before the container is looked at;
+**R3** is now a regression — migration 084 still installed and its two tables present with their row counts (a count is
+never a failure; the deploy touches neither table nor the photo folder, both read before and after); **R6** adds the one
+marker the new layout introduces (`flex-shrink:0;">📷 `, once in the file) beside the 5.18.66 photo-surface markers;
+**RB** (after a rollback) proves the old layout is back *and* the 5.18.66 photo surface is intact — the rollback restores
+code only, no data was involved. V5, V3/R2, R4 ("no `partner_api.php` / `StaffApiCsrf.php` installed") and R5 (Release A
+→ 5.18.66, 179 files) are as before. 22 checks on a clean deploy. The operator's command is in the header, deploy only;
+the rollback is printed at the end of the deploy's own log, as its own command (root docs/44 §16.9).
+
+**4. Rehearsal `scripts/harness/deploy-5.18.67/rehearse.sh`: 103/0 over 16 runs of the script, twice.** Against a clone
+of this repo, the real `deploy-hybrid.sh`, a fake container holding 5.18.66 exactly (`git archive 8137912`) with the pilot
+*on* and the photo tables created by 5.18.66's own migration run (`present:0:0`), and a stand-in web server for stage V:
+**0** controls — 7 files, none new, no migration, no portal/CSRF file; the marker present at the pin and absent at the
+base; the header command stands alone (no `--rollback`, no checkout of another commit); **1** NO-GO — a server still on
+5.18.65 ("deploy 5.18.66 first", nothing deployed, no backup), a placeholder pin, and **a copy pinned to the branch tip
+`9343f60` (parent `7cefd79`) refused before any live read**; **2** the deploy as the operator runs it — PASSED, 22 ok,
+every expected line, five backups, every changed file byte-for-byte, **the data digest unchanged** (no table, no setting),
+photo tables 2 and pilot tables 8 as before, `partner_api.php`/`StaffApiCsrf.php` absent, the rollback command once and
+after the verdict, and the code backup's job page carries the *old* layout (a rollback restores 5.18.66's card exactly);
+**3** teeth — the job page reverted to 5.18.66 on the install fails **R1 by name and R6 on `old-photo-layout`**; a changed
+Release-A file fails R5 by name; each removed, `--after-only` passes; **4** V3/R2 read the live switch off and on again;
+**4e** a live channel planted in `webhook.php` and a planted `partner_api.php` each fail R4 by name; **5** the rollback
+(typed `ROLLBACK`) — PASSED, 5.18.66's manifest and card back, the photo surface intact, no data changed; **6** an
+R1-blinded copy calls the reverted page installed while the real script fails it (control on the control); **7** the
+checkout as found, no weakened copy left. The 5.18.66 rehearsal's 2b (084's first boot) has no counterpart: nothing
+applies on first request here.
+
+**5. The operator's command** (deploy only; send back the log file):
+`cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.67 && mkdir -p /root/dnb-5.18.67 && bash scripts/deploy-5.18.67.sh 2>&1 | tee /root/dnb-5.18.67/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+— it refuses unless the container serves `8137912`; `--check` will read "NOT up to date" before and after (the branch tip
+is not what is installed — the documented consequence, not a fault). **RESULT: pending the operator's run.**
