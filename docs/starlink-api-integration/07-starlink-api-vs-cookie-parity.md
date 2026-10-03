@@ -28,6 +28,14 @@ Cookies remain the **known-good production baseline**; the API is **not** made a
 Cookies stay primary per account until that account has a **proven** API replacement; Finance never
 depends on the auth method (it keeps reading `sl_invoice_lines.json` / `dr_kit_registry.json`).
 
+> **Implementation status (2026-10-03):** the "API account adapter" box above is now **built** — a
+> parallel, **flag-OFF**, read-only adapter in the data-report plugin on branch
+> **`claude/official-api-shadow-adapter`** of `dishnetafrica/datareport` (`official_api/official_api_sync.php`).
+> It fetches the one credentialled account via the official API and writes **shadow** files under
+> `data/api_shadow/` only; it is inert unless `DR_OFFICIAL_API_SYNC=yes` + env credentials, touches no
+> existing file or the cookie path, and is **not deployed** (the operator installs it when ready).
+> This realizes the parallel source without changing anything the plugin already produces.
+
 ## 1. Method [CURRENT]
 `probe/starlink_api_vs_cookie.py` (read-only) runs on the server where both the API and the local data
 files are reachable. It:
