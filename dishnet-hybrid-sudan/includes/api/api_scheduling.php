@@ -229,13 +229,20 @@ if ($_sjUganda) {
         if (!$job) $er2('Job not found.', 404);
         if ($_sjUganda) $sjMayAct($sjCaller(), $job);   // J6: the assignee, a support leader or an admin
 
+        // 5.18.66 (Uganda only): the job's site photos, its completion location and the photo rules travel with the detail.
+        $_jpExtra = [];
+        if ($_sjUganda) {
+            require_once dirname(__DIR__, 2) . '/lib/JobPhotos.php';
+            $_jpExtra = JobPhotos::detailExtras($store->getPdo(), $jobId, $job, is_array($config ?? null) ? $config : []);
+        }
+
         // Security: job was fetched via assigneeId filter — trust the query filter, skip assignee array check
         // (UCRM API v1.0 returns empty assignees[] on single job fetch)
         $ucrmUserId = (int)($me2['ucrm_user_id'] ?? 0);
         $isAdmin    = $me2['is_admin'] ?? false;
 
         $clientId = (int)($job['client']['id'] ?? 0);
-        if (!$clientId) $ok2(['job' => $job, 'client' => null, 'services' => [], 'pending_invoices' => [], 'tasks' => []]);
+        if (!$clientId) $ok2(['job' => $job, 'client' => null, 'services' => [], 'pending_invoices' => [], 'tasks' => []] + $_jpExtra);
 
         // Client — safe subset only (no balance, no financial history)
         $clientFull = $crm->get("clients/{$clientId}");
@@ -301,7 +308,7 @@ if ($_sjUganda) {
             'gps'              => $gps,
             'survey'           => $existingSurvey,
             'signature'        => $existingSig,
-        ]);
+        ] + $_jpExtra);
     }
 
     // ── Scheduling: update job status ────────────────────────────────────────
@@ -482,6 +489,25 @@ if ($_sjUganda) {
             }
         }
 
+        // 5.18.66 (Uganda only): an installation needs its kit, cable and router photos first, and every completion
+        // carries where the technician was — a fix, or their reason there is none. Both are refused HERE, before
+        // anything is stored or sent. South Sudan reaches none of this: $_jpGps stays null and the code below is 5.18.65's.
+        $_jpGps = null; $_jpPdo = null;
+        if ($_sjUganda) {
+            require_once dirname(__DIR__, 2) . '/lib/JobPhotos.php';
+            $_jpPdo = $store->getPdo();
+            $_jpCfg = is_array($config ?? null) ? $config : [];
+            if (JobPhotos::photosRequired($_jpCfg) && JobPhotos::isInstallJob($job)) {
+                $_jpMissing = JobPhotos::missingRequired($_jpPdo, $jobId);
+                if ($_jpMissing) $er2('Add the required photos first: ' . JobPhotos::labelNames($_jpMissing) . '.', 422);
+            }
+            $_jpV = JobPhotos::validateGps(is_array($body) ? $body : []);
+            if (!$_jpV['ok']) $er2($_jpV['error'], 422);
+            $_jpGps = $_jpV['gps'];
+            $lat = $_jpGps['lat'];   // the record and the WhatsApp below carry the validated fix, or nothing
+            $lon = $_jpGps['lon'];
+        }
+
         // Store completion record in local JSON (photos stored as base64 thumbnails)
         $completions = $store->load('job_completions.json') ?? [];
         $photos      = $body['photos'] ?? [];   // array of {type, data_url} from JS
@@ -499,6 +525,7 @@ if ($_sjUganda) {
         ];
         $completions[] = $record;
         $store->save('job_completions.json', $completions);
+        if ($_jpGps !== null) JobPhotos::saveCompletion($_jpPdo, $jobId, $rid, $_jpGps);   // 5.18.66 (Uganda): where it was completed from
 
         // Mark job closed in UCRM (status = 2 = Closed — integer required by UCRM API)
         $patchResult = $crm->patch("scheduling/jobs/{$jobId}", ['status' => 2]);
@@ -508,6 +535,8 @@ if ($_sjUganda) {
         if ($comment) {
             $crm->post("scheduling/jobs/{$jobId}/job-comments", ['message' => $comment]);
         }
+        // 5.18.66: the completion location stays in the plugin (job_completion_gps, the job page). Nothing new is written
+        // to uCRM here, so a completion sends uCRM exactly the writes 5.18.65 did (tests/test_job_notifications_day.php).
 
         // Send WhatsApp confirmation to technician
         $techPhone = preg_replace('/[^0-9]/', '', $me2['phone'] ?? '');

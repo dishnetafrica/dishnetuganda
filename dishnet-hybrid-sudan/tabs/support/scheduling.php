@@ -155,6 +155,7 @@ if ($_correctId && (int)($myUcrmId) !== (int)$_correctId) {
 var TOKEN   = '<?= $apiToken ?>';
 var headers = {'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'};
 var jobId   = <?= $jobDetailId ?>;
+var UG_PHOTOS = <?= $_sjUganda ? 'true' : 'false' ?>;   // 5.18.66: site photos + completion location, Uganda only
 function apiGet(action,qs){return fetch('?page=api&action='+action+(qs||''),{credentials:'same-origin',headers:headers}).then(function(r){return r.json();}); }
 function apiPost(action,body){ return fetch('?page=api&action='+action,{
           credentials:'same-origin',
@@ -268,6 +269,9 @@ apiGet('scheduling_job_detail','&job_id='+jobId).then(function(resp){
         html+='</div>';
     }
 
+    // Site photos (5.18.66, Uganda): taken during the job; an installation needs kit, cable and router before it can be completed
+    if(UG_PHOTOS) html+=schPhotosCard(data,closed);
+
     // Survey (only for survey jobs)
     if(isSurvey){
         html+='<div style="'+card+'border:2px solid #1e40af;">';
@@ -298,10 +302,12 @@ apiGet('scheduling_job_detail','&job_id='+jobId).then(function(resp){
         html+='</div></div>';
     } else {
         html+='<div style="background:#14532d;border-radius:12px;padding:16px;text-align:center;margin-bottom:8px;"><div style="font-size:28px;">✅</div><div style="font-size:15px;font-weight:800;color:#4ade80;margin-top:4px;">Job Completed</div></div>';
+        if(UG_PHOTOS) html+=schCompletionCard(data.completion);   // 5.18.66: where it was completed from
     }
 
     el.innerHTML=html;
     document.getElementById('schJobDetailPage')._jobData={job:job,client:cl};
+    if(UG_PHOTOS) schRenderPhotos();
 }).catch(function(e){
     document.getElementById('schJobDetailPage').innerHTML='<div style="padding:20px;color:#dc3545;text-align:center;">⚠ Network error: '+e.message+'</div>';
 });
@@ -376,6 +382,184 @@ window._scDoComplete=function(jId){
         else{var e=document.getElementById('scError');if(e)e.textContent='⚠ '+(d.message||'Failed');}
     }).catch(function(){var e=document.getElementById('scError');if(e)e.textContent='⚠ Network error';});
 };
+
+// ── Site photos + completion location (5.18.66, Uganda only) ─────────────────
+// Everything below is inert unless UG_PHOTOS: the card is only drawn, the photo functions only called, and
+// schOpenCompleteFormImpl only defined, on Uganda. South Sudan keeps the notes-only form above, untouched.
+var PH_CARD='background:#1e293b;border-radius:12px;padding:1rem;margin-bottom:12px;';
+var PHOTO_LABELS={kit:'Kit / dish',cable:'Cable used',model:'Router / model',other:'Other'};
+var PHOTO_ORDER=['kit','cable','model','other'];
+var _photos=[], _photoRules={required:['kit','cable','model'],enforced:false,max_per_job:12}, _jobClosed=false, _photoLabel='';
+function schPhotosCard(data,closed){
+    _photos=data.photos||[]; if(data.photo_rules) _photoRules=data.photo_rules; _jobClosed=!!closed;
+    if(closed&&!_photos.length) return '';
+    var h='<div style="'+PH_CARD+'border:2px solid #1e3a5f;">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:11px;font-weight:800;color:#60a5fa;text-transform:uppercase;letter-spacing:.5px;">📷 Site photos</span><span id="schPhotoCount" style="font-size:12px;color:#64748b;"></span></div>';
+    if(_photoRules.enforced&&!closed) h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">Kit, cable and router photos are needed before this installation can be completed. They are shrunk on your phone before upload.</div>';
+    h+='<div id="schPhotoSlots"></div>';
+    h+='<div id="schPhotoMsg" style="font-size:12px;color:#94a3b8;min-height:16px;margin-top:4px;"></div>';
+    h+='</div>';
+    return h;
+}
+function schRenderPhotos(){
+    var box=document.getElementById('schPhotoSlots'); if(!box) return;
+    var cnt=document.getElementById('schPhotoCount'); if(cnt) cnt.textContent=_photos.length+' / '+_photoRules.max_per_job;
+    var canAdd=!_jobClosed&&_photos.length<_photoRules.max_per_job;
+    var h='';
+    PHOTO_ORDER.forEach(function(lb){
+        var mine=_photos.filter(function(p){return p.label===lb;});
+        if(_jobClosed&&!mine.length) return;
+        var req=_photoRules.enforced&&_photoRules.required.indexOf(lb)!==-1;
+        h+='<div style="background:#0f1724;border-radius:10px;padding:10px 12px;margin-bottom:6px;">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">';
+        h+='<span style="font-size:13px;font-weight:700;color:#e2e8f0;">'+escHtml(PHOTO_LABELS[lb]||lb)+(req?(mine.length?' <span style="color:#4ade80;">✓</span>':' <span style="color:#fbbf24;font-size:11px;">required</span>'):'')+'</span>';
+        if(canAdd) h+='<button onclick="schPhotoPick(\''+lb+'\')" class="sch-act-btn" style="background:#1e3a5f;color:#93c5fd;margin:0;width:auto;min-height:40px;padding:8px 14px;font-size:13px;">📷 '+(mine.length?'Add another':'Take photo')+'</button>';
+        h+='</div>';
+        if(mine.length){
+            h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">';
+            mine.forEach(function(p){
+                h+='<div style="position:relative;">';
+                h+='<a href="'+escHtml(p.url)+'" target="_blank"><img src="'+escHtml(p.url)+'" alt="'+escHtml(p.label_name||p.label)+'" style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid #334155;background:#1e293b;display:block;"></a>';
+                if(!_jobClosed) h+='<button onclick="schPhotoDelete('+p.id+')" title="Remove" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#7f1d1d;color:#fca5a5;font-size:12px;cursor:pointer;line-height:22px;padding:0;">✕</button>';
+                h+='</div>';
+            });
+            h+='</div>';
+        }
+        h+='</div>';
+    });
+    h+='<input type="file" id="schPhotoFile" accept="image/*" capture="environment" style="display:none" onchange="schPhotoChosen(this)">';
+    box.innerHTML=h;
+}
+window.schPhotoPick=function(lb){ _photoLabel=lb; var f=document.getElementById('schPhotoFile'); if(f){ f.value=''; f.click(); } };
+// A camera shot is 2–6 MB. Shrink it here, on the phone, to at most 1600 px on the long edge as JPEG — small enough to
+// upload on a weak signal, sharp enough to read a serial sticker. The server checks what arrives and re-encodes it again.
+function schShrink(file){
+    return new Promise(function(res){
+        var img=new Image(); var url=URL.createObjectURL(file);
+        img.onload=function(){
+            URL.revokeObjectURL(url);
+            var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height, max=1600;
+            if(!w||!h){ res(file); return; }
+            var r=Math.min(1,max/Math.max(w,h));
+            var cw=Math.max(1,Math.round(w*r)), ch=Math.max(1,Math.round(h*r));
+            var cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+            try{ cv.getContext('2d').drawImage(img,0,0,cw,ch); }catch(e){ res(file); return; }
+            if(!cv.toBlob){ res(file); return; }
+            cv.toBlob(function(b){ res(b||file); },'image/jpeg',0.82);
+        };
+        img.onerror=function(){ URL.revokeObjectURL(url); res(file); };
+        img.src=url;
+    });
+}
+function schPhotoSay(text,color){ var m=document.getElementById('schPhotoMsg'); if(m){ m.style.color=color||'#94a3b8'; m.textContent=text; } }
+window.schPhotoChosen=function(inp){
+    var file=inp.files&&inp.files[0]; if(!file) return;
+    var lb=_photoLabel||'other';
+    schPhotoSay('⏳ Preparing '+(PHOTO_LABELS[lb]||lb)+' photo…');
+    schShrink(file).then(function(blob){
+        schPhotoSay('⬆ Uploading ('+Math.round(blob.size/1024)+' KB)…');
+        var fd=new FormData(); fd.append('job_id',String(jobId)); fd.append('label',lb); fd.append('photo',blob,lb+'.jpg');
+        return fetch('?page=api&action=job_photo_upload',{method:'POST',credentials:'same-origin',headers:{'Authorization':'Bearer '+TOKEN},body:fd}).then(function(r){return r.json();});
+    }).then(function(d){
+        if(d&&d.status==='success'){ _photos=(d.data&&d.data.photos)||_photos; schRenderPhotos(); schPhotoSay('✓ Saved','#4ade80'); }
+        else schPhotoSay('⚠ '+((d&&d.message)||'Upload failed'),'#fca5a5');
+    }).catch(function(){ schPhotoSay('⚠ Network error — the photo was not saved','#fca5a5'); });
+};
+window.schPhotoDelete=function(id){
+    if(!confirm('Remove this photo?')) return;
+    apiPost('job_photo_delete',{photo_id:id}).then(function(d){
+        if(d.status==='success'){ _photos=(d.data&&d.data.photos)||[]; schRenderPhotos(); schPhotoSay('Photo removed'); }
+        else alert('⚠ '+(d.message||'Could not remove the photo'));
+    }).catch(function(){ alert('⚠ Network error'); });
+};
+function schCompletionCard(c){
+    if(!c) return '';
+    var h='<div style="'+PH_CARD+'">';
+    h+='<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">📍 Completed from</div>';
+    if(c.lat!==null&&c.lat!==undefined&&c.lon!==null&&c.lon!==undefined){
+        h+='<a href="'+escHtml(c.maps_url||('https://www.google.com/maps/search/?api=1&query='+c.lat+','+c.lon))+'" target="_blank" style="color:#93c5fd;font-weight:700;text-decoration:none;">'+escHtml(String(c.lat))+', '+escHtml(String(c.lon))+' — open in Maps →</a>';
+        if(c.accuracy_m!==null&&c.accuracy_m!==undefined) h+='<div style="color:#94a3b8;font-size:12px;margin-top:2px;">accuracy ±'+Math.round(c.accuracy_m)+' m</div>';
+    } else {
+        h+='<div style="color:#fbbf24;font-size:13px;">No GPS fix — '+escHtml(c.missing_reason||'')+'</div>';
+    }
+    h+='<div style="color:#64748b;font-size:12px;margin-top:4px;">'+escHtml(c.captured_at||'')+' UTC</div>';
+    h+='</div>';
+    return h;
+}
+// The completion form My Jobs opens on Uganda (schOpenCompleteForm above hands over to this when it is defined):
+// the required photos, the technician's location, notes. The server refuses what is missing; this only says so earlier.
+var _loc=null, _locErr='';
+function schLocShow(){
+    var st=document.getElementById('scLocStatus'); var rb=document.getElementById('scReasonBox'); if(!st) return;
+    if(_loc){ st.style.color='#15803d'; st.textContent='📍 Location captured · ±'+Math.round(_loc.acc)+' m'; if(rb) rb.style.display='none'; }
+    else{ st.style.color='#b45309'; st.textContent='⚠ '+_locErr; if(rb) rb.style.display='block'; }
+}
+function schLocate(){
+    var st=document.getElementById('scLocStatus'); if(st){ st.style.color='#374151'; st.textContent='⏳ Getting your location…'; }
+    var rb=document.getElementById('scReasonBox'); if(rb) rb.style.display='none';
+    _loc=null; _locErr='';
+    if(!navigator.geolocation){ _locErr='This browser has no location support.'; schLocShow(); return; }
+    navigator.geolocation.getCurrentPosition(function(p){
+        _loc={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy,ts:new Date(p.timestamp||Date.now()).toISOString()};
+        schLocShow();
+    },function(e){
+        _locErr=(e&&e.code===1)?'Location permission was denied. Allow location for this site, then tap Retry.'
+               :(e&&e.code===3)?'Location timed out. Step outside or near a window, then tap Retry.'
+               :'Location is unavailable on this device right now.';
+        schLocShow();
+    },{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+}
+window.schLocRetry=function(){ schLocate(); };
+if(UG_PHOTOS){
+window.schOpenCompleteFormImpl=function(jId){
+    var missing=(_photoRules.enforced?_photoRules.required:[]).filter(function(lb){ return !_photos.some(function(p){return p.label===lb;}); });
+    var overlay=document.createElement('div'); overlay.id='schCompleteOverlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:4000;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;';
+    var subStyle='background:linear-gradient(135deg,#1B5E20,#2E7D32);color:#fff;font-size:15px;'+(missing.length?'opacity:.5;':'');
+    var h='<div style="background:#f8fafc;max-width:480px;width:100%;margin:20px auto;border-radius:20px;overflow:hidden;">'
+        +'<div style="background:linear-gradient(135deg,#1B5E20,#2E7D32);padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+        +'<div style="font-size:17px;font-weight:800;">✅ Complete Job #'+jId+'</div>'
+        +'<button onclick="document.getElementById(\'schCompleteOverlay\').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:18px;cursor:pointer;">✕</button>'
+        +'</div><div style="padding:16px;">';
+    h+='<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:6px;">📷 Site photos</div>';
+    h+='<div style="font-size:13px;margin-bottom:12px;color:#374151;">';
+    PHOTO_ORDER.forEach(function(lb){
+        var n=_photos.filter(function(p){return p.label===lb;}).length;
+        var req=_photoRules.enforced&&_photoRules.required.indexOf(lb)!==-1;
+        h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb;"><span>'+escHtml(PHOTO_LABELS[lb]||lb)+'</span><span style="font-weight:700;color:'+(n?'#15803d':(req?'#b45309':'#9ca3af'))+'">'+(n?n+' ✓':(req?'missing':'—'))+'</span></div>';
+    });
+    h+='</div>';
+    if(missing.length) h+='<div style="background:#FFF3E0;color:#9a3412;border-radius:10px;padding:10px;font-size:12px;margin-bottom:12px;">Add the missing photo'+(missing.length>1?'s':'')+' on the job page first: '+escHtml(missing.map(function(lb){return PHOTO_LABELS[lb]||lb;}).join(', '))+'.</div>';
+    h+='<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:6px;">📍 Your location</div>';
+    h+='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><div id="scLocStatus" style="flex:1;font-size:13px;color:#374151;">⏳ Getting your location…</div><button onclick="schLocRetry()" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Retry</button></div>';
+    h+='<div id="scReasonBox" style="display:none;margin-bottom:12px;"><div style="font-size:12px;color:#374151;margin-bottom:4px;">No GPS fix — say why (required):</div><input id="scReason" maxlength="200" placeholder="e.g. indoors, no signal; location blocked on this phone" style="width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px;font-size:13px;box-sizing:border-box;"></div>';
+    h+='<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:6px;">💬 Completion Notes</div>';
+    h+='<textarea id="scComment" rows="3" placeholder="e.g. Service activated, customer briefed…" style="width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px;font-size:13px;box-sizing:border-box;margin-bottom:12px;"></textarea>';
+    h+='<div id="scError" style="color:#dc3545;font-size:12px;min-height:14px;margin-bottom:8px;"></div>';
+    h+='<button id="scSubmit" onclick="window._scDoCompleteUg('+jId+')" class="sch-act-btn" style="'+subStyle+'"'+(missing.length?' disabled':'')+'>✅ Mark as Completed</button>';
+    h+='</div></div>';
+    overlay.innerHTML=h;
+    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+    document.body.appendChild(overlay);
+    schLocate();
+};
+window._scDoCompleteUg=function(jId){
+    var comment=((document.getElementById('scComment')||{}).value||'').trim();
+    var errEl=document.getElementById('scError'); var btn=document.getElementById('scSubmit');
+    var payload={job_id:jId,comment:comment};
+    if(_loc){ payload.lat=_loc.lat; payload.lon=_loc.lon; payload.accuracy=_loc.acc; payload.gps_client_ts=_loc.ts; }
+    else{
+        var reason=((document.getElementById('scReason')||{}).value||'').trim();
+        if(reason.length<3){ if(errEl) errEl.textContent='⚠ Location is required — allow location and tap Retry, or say why there is no GPS fix.'; return; }
+        payload.gps_missing_reason=reason;
+    }
+    if(btn){ btn.disabled=true; btn.textContent='⏳ Completing…'; }
+    apiPost('scheduling_complete',payload).then(function(d){
+        if(d.status==='success'){ var o=document.getElementById('schCompleteOverlay'); if(o)o.remove(); window.location.reload(); }
+        else{ if(errEl) errEl.textContent='⚠ '+(d.message||'Failed'); if(btn){ btn.disabled=false; btn.textContent='✅ Mark as Completed'; } }
+    }).catch(function(){ if(errEl) errEl.textContent='⚠ Network error'; if(btn){ btn.disabled=false; btn.textContent='✅ Mark as Completed'; } });
+};
+}
 window.schOpenReschedule=function(jId){
     var overlay=document.createElement('div');
     overlay.id='schRescheduleOverlay';

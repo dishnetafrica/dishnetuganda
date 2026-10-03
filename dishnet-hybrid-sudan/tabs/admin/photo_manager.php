@@ -17,6 +17,7 @@ $dirs = [
     'uploads/expense_receipts' => ['label'=>'Expense Receipts',   'icon'=>'🧾', 'color'=>'#0369a1'],
     'uploads/expenses'         => ['label'=>'Expense Photos',     'icon'=>'📸', 'color'=>'#0891b2'],
     'uploads/install_photos'   => ['label'=>'Install Photos',     'icon'=>'🔧', 'color'=>'#065f46'],
+    'uploads/job_photos'       => ['label'=>'Job Photos',         'icon'=>'📷', 'color'=>'#1d4ed8'],   // 5.18.66, My Jobs (Uganda)
 ];
 
 $totals = [];
@@ -38,7 +39,7 @@ $grandMb    = array_sum(array_column($totals, 'mb'));
 ?>
 <style>
 .pm-wrap   { max-width:1400px; }
-.pm-stats  { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:20px; }
+.pm-stats  { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:20px; }
 .pm-stat   { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 12px; text-align:center; position:relative; overflow:hidden; }
 .pm-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
 .pm-toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
@@ -55,6 +56,7 @@ $grandMb    = array_sum(array_column($totals, 'mb'));
 .pm-badge.kyc     { background:#ede9fe; color:#6d28d9; }
 .pm-badge.expense { background:#e0f2fe; color:#0369a1; }
 .pm-badge.install { background:#dcfce7; color:#15803d; }
+.pm-badge.job     { background:#dbeafe; color:#1d4ed8; }
 .pm-name   { font-size:11px; font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pm-meta   { font-size:10px; color:#94a3b8; margin-top:2px; }
 .pm-empty  { grid-column:1/-1; text-align:center; padding:60px 20px; color:#94a3b8; }
@@ -92,7 +94,7 @@ $grandMb    = array_sum(array_column($totals, 'mb'));
 <div class="pm-stats">
 <?php foreach ($totals as $rel => $t): ?>
     <div class="pm-stat" style="cursor:pointer;" onclick="pmSetFilter('<?=
-        str_contains($rel,'kyc') ? 'kyc' : (str_contains($rel,'install') ? 'install' : 'expense') ?>');">
+        str_contains($rel,'kyc') ? 'kyc' : (str_contains($rel,'install') ? 'install' : (str_contains($rel,'job_photos') ? 'job' : 'expense')) ?>');">
         <div style="position:absolute;top:0;left:0;right:0;height:3px;background:<?= $t['color'] ?>;"></div>
         <div style="font-size:22px;margin-bottom:4px;"><?= $t['icon'] ?></div>
         <div style="font-size:22px;font-weight:900;color:#1e293b;line-height:1;"><?= $t['count'] ?></div>
@@ -110,6 +112,7 @@ $grandMb    = array_sum(array_column($totals, 'mb'));
         <button class="pm-chip"    data-type="kyc"     onclick="pmSetFilter('kyc')">🪪 KYC</button>
         <button class="pm-chip"    data-type="expense" onclick="pmSetFilter('expense')">🧾 Expenses</button>
         <button class="pm-chip"    data-type="install" onclick="pmSetFilter('install')">🔧 Install</button>
+        <button class="pm-chip"    data-type="job"     onclick="pmSetFilter('job')">📷 Jobs</button>
     </div>
     <button class="pm-btn ghost" onclick="pmLoad()" style="flex-shrink:0;">↺ Refresh</button>
 </div>

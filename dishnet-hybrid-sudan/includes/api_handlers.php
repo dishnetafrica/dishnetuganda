@@ -111,6 +111,7 @@
     // ═══════════════════════════════════════════════════════════════
     require __DIR__ . '/api/api_retailer.php';
     require __DIR__ . '/api/api_scheduling.php';
+    require __DIR__ . '/api/api_job_photos.php';   // 5.18.66: site photos on a job (Uganda only; reuses the scheduling gate above)
     require __DIR__ . '/api/api_splynx.php';
     require __DIR__ . '/api/api_crm_misc.php';
     require __DIR__ . '/api/api_lte.php';

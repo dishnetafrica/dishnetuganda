@@ -3302,3 +3302,73 @@ passes); `test_api_csrf_guard.php` **51/0**.
 **4. Scope / deployment. NONE in scope.** CORS narrowing (step 4), PD-5, PD-2, P4e, portal/flag changes, OTP
 wiring/sending, staging and deployment all remain separate, explicitly-approved steps. The manifest version is
 unchanged (release/versioning is the operator's step). `docs/54 §10` is the as-built record.
+
+## 03 Oct — 5.18.66: site photos on a job and the technician's location at completion (Uganda only) — BUILT, NOT deployed
+
+On the operator's "ok go ahead", after the question *can a technician attach kit / cable / router photos, stored
+compressed at good quality, and can we get the location where the task was finished?* The investigation found the
+pieces half-present and none of them live for a Uganda technician: the job page's Complete form sent notes only; the
+server kept the first 200 characters of each photo; GPS was accepted but never sent, validated or shown; the live map's
+tables lose their keys on read. Built inside **My Jobs** (the installable staff app), gated by `StaffJobsGate` like every
+5.18.5x change: **South Sudan keeps 5.18.65 byte for byte** (proved below). **Development and test only; not deployed;
+nothing new is written to uCRM; Domain B untouched.**
+
+**1. Files.**
+- `migrations/084_job_photos.sql` — **new**: `job_photos` (job id, fixed label, uploader, their verified uCRM link and the
+  job's assignee at the time, server-chosen path, mime, bytes, size, sha256) and `job_completion_gps` (one row per job:
+  lat/lon/accuracy from the browser, or `source = 'missing'` with the technician's reason). Real tables, deliberately —
+  not id-keyed JSON lists (`SqliteStore` `$FLAT_TABLES`).
+- `lib/JobPhotos.php` — **new**. Four labels (`kit · cable · model · other`), never free text, so a label can never
+  become a path (the `install_photos` flaw); `getimagesize()` decides what a file is; GD re-encodes upright to ≤ 1600 px
+  on the long edge, JPEG 82 (a 3000×2000 shot stores at 1600×1067); files under `$dataDir/uploads/job_photos/<job>/`
+  (RULE 15), served only from the row and only from under that folder (`realpath` containment). `validateGps()` takes a
+  fix (range-checked, `0,0` refused, seven decimals) or a 3–200-character reason — one or the other is required.
+- `includes/api/api_job_photos.php` — **new**, loaded after `api_scheduling.php` and reusing its gate, caller and
+  `$sjMayAct` (J6): `job_photo_upload` (multipart), `job_photos`, `job_photo_delete` (taker, leader or admin; never while
+  the job is closed; ≤ 12 per job, ≤ 8 MB each). Off Uganda the three actions do not exist (404 "Unknown API action").
+- `includes/api/api_scheduling.php` — `scheduling_job_detail` carries `photos`, `completion` and `photo_rules` on Uganda;
+  `scheduling_complete` on Uganda refuses, **before anything is stored or sent**, an installation (title words:
+  install / fiber / fibre / starlink / ftth / lte activation — the invoice-queue rule) missing kit, cable or router
+  (config `job_photos_required`, default on), and any completion without a location or a reason; stores the location.
+  **The legacy base64 `photos[]` path is untouched** (still truncated, still South Sudan's).
+- `tabs/support/scheduling.php` (job page) — a **Photos** card (camera capture, resized on the phone to ≤ 1600 px / 0.82
+  before upload, thumbnails, remove) between Tasks and Actions; `window.schOpenCompleteFormImpl` — the hook the
+  notes-only form already checked — swaps in the completion form: required-photo status, live GPS with Retry, a reason
+  box when there is no fix, notes; a **Completed from** card with a Maps link on closed jobs. All behind `UG_PHOTOS`.
+- `includes/routes.php` — `?page=job_photo&id=N`: taker, assignee-at-the-time (verified link), leader, admin, accountant;
+  400 for a non-numeric id; the `kyc_photo` path rule and the Photo Manager API gain `uploads/job_photos`.
+- `tabs/admin/photo_manager.php` — a *Job Photos* tile and *📷 Jobs* filter. `includes/api_handlers.php` — one `require`.
+- Tests: `tests/test_job_photos.php` (**new**); `tests/test_job_access.php` §7 and `tests/fixtures/staff_jobs_scenario.php`
+  now complete the Uganda job the way a technician must (photos + a location — a *reason*, so every message stays
+  5.18.51's); `tests/fixtures/staff_jobs_sandbox.php` gains `upload()` (multipart); the nine manifest-version pins
+  (`test_dist_isolation`, the five `test_distributor_*`, the three `test_partner_*`) read 5.18.66, as every release
+  moves them. Nothing else in `tests/` changed.
+
+**2. What was deliberately NOT built.** No uCRM write of the location (a job comment was tried and removed: the day test
+guarantees a completion sends uCRM exactly 5.18.51's writes — a toggle later if wanted); no push of photos to uCRM
+documents (J11 stays open); no change to the South Sudan `install_photos` flow (its free-text `photo_type` path risk is
+recorded for its own fix); no live-map work (its `$FLAT_TABLES` loss is recorded, not built on); the `job_completions`
+200-character truncation left as is on the legacy path.
+
+**3. A contract change, on Uganda only.** `scheduling_complete` now answers **422** to a caller that sends neither a fix
+nor a reason, or completes an installation without its three photos. The job page always sends one or the other. Any
+native caller outside this repository (the Android wrapper's own endpoints are unmeasured) would get the 422 with the
+reason in words — nothing half-done.
+
+**4. Tests.** `test_job_photos.php` **72/0**: migration; the re-encode (1600×1067, sha256 of what is on disk, no path in
+any answer); nine refusals that change no row, file or uCRM request (unknown label, path-shaped label, a text file
+called photo.jpg, no file, another engineer, an unverified link, a sales account, no job, a job uCRM lacks); leader and
+admin uploads, a PNG stored as JPEG; completion refused for a missing router photo with uCRM untouched, refused for a
+fix out of range / non-numeric / 0,0 / no reason / a two-letter reason, then accepted — stored to seven decimals, uCRM
+receiving exactly the status and the note; the detail; a non-installation completed with a reason; the viewer route
+(taker / leader / admin 200, another engineer 403, `abc` 400, missing 404, trailing path 400); delete by taker not by
+another engineer; a closed job refuses both; **South Sudan control** (actions 404, detail without photos, completion
+asks nothing new, no file written); **three weakened copies each caught** (no access check on upload, no required-photo
+check, no reason required). Also green after the change: `test_job_access` 83/0, `test_job_notifications_day` **50/0
+including the byte-for-byte 5.18.51 baseline comparison on Uganda and South Sudan**, `test_staff_jobs_south_sudan` 51/0,
+`test_job_notifier` 130/0, `test_migration_integrity` 28/0, `test_preauth_allowlist` 105/0, `test_api_csrf_guard` 51/0,
+`test_staff_jobs_gate` 41/0. The job page's `<script>` block parses under Node. PHP 7.4 syntax throughout.
+
+**5. Deployment. NONE.** The manifest reads 5.18.66; building and installing the ZIP (`build-zip.sh`) is the operator's
+step. First use on the server: migration 084 applies at boot; the data directory gains `uploads/job_photos/`, which the
+Google Drive backup already covers (`data/uploads`).
