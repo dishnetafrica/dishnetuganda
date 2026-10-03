@@ -28,26 +28,42 @@ and pseudonymises ids. The credential already scopes to one account, so the quer
 | timestamps | `lastUpdated` (often day-lagged) | `updated_at` |
 | data blocks/pools | `dataPoolUsage[]`, `overageLines[]`, `optInPriorityGB`, `nonBillableGB` | not stored (lean cache) |
 
-## 2. Live result — **[NV] PENDING the tool run** (fill from `TALLY`)
-Per service-line, latest aligned cycle, classified **EXACT / DIFF / API-ONLY / COOKIE-ONLY /
-NOT-COMPARABLE**:
+## 2. Live result — 2026-10-03 [LIVE]: NOT COMPARABLE (no cookie baseline for this account)
 ```
-total_gb      {EXACT: _, DIFF: _, NOT-COMPARABLE: _, API-ONLY: _, COOKIE-ONLY: _}
-priority_gb   {…}
-standard_gb   {…}
-SLs with API usage: _   matched to cookie: _
+API usage rows (service-lines):            4     (one cycle 2026-09-12..2026-10-12)
+cookie sl_usage unique service_lines:      5     (of 27 estate SLs; 35 records total)
+API account's 4 SLs present in sl_usage.json raw text:   ABSENT (0 of 4)
+total_gb    {API-ONLY: 4}      priority_gb {API-ONLY: 4}      standard_gb {API-ONLY: 4}
+SLs with API usage: 4     matched to cookie: 0
 ```
-**Expected [INFERRED]:** the GB numbers should align closely **when the periods match** (same cycle),
-because the cookie `total_gb`/`local_priority_used_gb`/`other_data_gb` are derived from the same
-Starlink usage data the API now returns. Watch for: (a) **period mismatch** → treat as NOT-COMPARABLE,
-not DIFF; (b) **freshness** → API `lastUpdated` is typically a day behind, so a tiny delta on the
-current cycle is expected, not a failure; (c) the API carries **richer breakdowns** (opt-in priority,
-non-billable, pools, overage) the lean cookie cache does not store → **API-ONLY**, a gain.
+- **The API returns usage cleanly** for all 4 SLs: one at **79.22 GB (64.11 priority + 15.11 standard)**,
+  three at 0 — exactly the `totalPriorityGB`/`totalStandardGB` per-billing-cycle shape (`servicePlan`,
+  `lastUpdated` also present).
+- **Operator ground truth [CURRENT]: only ONE line is active in this account.** So the three 0-GB lines
+  are **inactive** (expected — not missing data), and the API's output (1 active line with real usage +
+  3 inactive at 0) **matches reality**. The API also usefully returns the **inactive** lines, which the
+  cookie Data Report does not track — more visibility, not less.
+- **But the cookie `sl_usage.json` has no record for any of this account's 4 SLs** — confirmed by a raw
+  substring search (ABSENT 0/4), so this is **not** a matcher bug. The file retains usage for only
+  **5 of the 27** service-lines in the estate.
+- **Therefore usage parity is NOT COMPARABLE for this account** — there is no cookie baseline to
+  compare against (exactly the "does not retain equivalent data → say so, don't force it" case).
 
-## 3. Records / counts — **[NV] PENDING**
+### 2a. Two findings this surfaces
+1. **The official API provides usage this account currently lacks on the cookie side** — a point in the
+   API's favour (it would *fill* a gap, not regress). [LIVE]
+2. **The current cookie Data Report's usage coverage is incomplete — 5 of 27 service-lines retained in
+   `sl_usage.json`.** The likely cause is that the cookie usage sync does not cover/retain this
+   account's SLs (plausibly this account's cookie session is stale/failed — consistent with the
+   operator's "cookie may be expired" observation; the API path, on its own OAuth, was unaffected).
+   This is a **current-system reliability/coverage gap**, recorded for the operator — not caused by
+   this read-only test. [LIVE/INFERRED]
+
+## 3. Records / counts — [LIVE 2026-10-03]
 ```
-API usage rows (service-lines) = _          cookie sl_usage records = _
-matched SLs = _    API-only = _    cookie-only = _    differences (aligned periods) = _
+API usage rows (service-lines) = 4          cookie sl_usage records = 35 (5 unique SLs)
+matched SLs = 0    API-only = 4    cookie-only = 0 (for this account)    differences (aligned) = 0
+API SL strings present in sl_usage.json = 0 of 4 (ABSENT) → confirms not-a-bug
 ```
 
 ## 4. Semantic cautions (do not declare false parity) [DOC]
@@ -67,17 +83,38 @@ matched SLs = _    API-only = _    cookie-only = _    differences (aligned perio
 
 ---
 
-## FINAL (fill after the run)
-1. **Usage parity: [NV] PROVEN / PARTIAL / NOT PROVEN** — *(expected PARTIAL-to-PROVEN: GB aligns on
-   matching cycles; API adds breakdowns; period/freshness caveats apply).*
-2. **Exact matching fields:** [NV] — expected total/priority/standard GB on aligned cycles.
-3. **Differences:** [NV] — expected only period/freshness artifacts, not value conflicts.
-4. **Semantic differences:** billing-cycle windowing + day-lag + richer API breakdowns (§4).
-5. **API limitations:** POST-read, day-lagged, allowance source unconfirmed (§5).
-6. **Safe to include usage in the future API read layer?** [NV] — *expected YES, with explicit period
-   alignment + a freshness note; never recompute history from current API state.*
-7. **Still requires cookies:** live/per-device usage telemetry (dish-online, client counts) and
-   everything in `07`§3 (WiFi, pause, auto-block, orders). Billing-cycle usage itself does **not**.
+## FINAL — [LIVE 2026-10-03]
+1. **Usage parity: NOT COMPARABLE for this account** (not a failure). The API returns usage; the cookie
+   `sl_usage.json` retains usage for only 5 of 27 SLs and **none** of this account's 4 — so there is no
+   cookie baseline to value-compare. Per the operator's rule, this is reported as not-comparable, not
+   forced. The API's result is **coherent with ground truth** (operator: 1 active line → 79.22 GB; 3
+   inactive → 0).
+2. **Exact matching fields:** none at value level (no overlapping cookie record). Field *shape* maps
+   cleanly (totalPriorityGB→local_priority_used_gb, totalStandardGB→other_data_gb, sum→total_gb).
+3. **Differences:** none (nothing to diff — no overlap). The 3 zero lines are **inactive**, not
+   discrepancies.
+4. **Semantic differences:** billing-cycle windowing + day-lag (`lastUpdated`) + richer API breakdowns
+   (opt-in priority, non-billable, pools, overage) + the API returns **inactive** lines the cookie
+   system omits (§4, §2a).
+5. **API limitations:** POST-style read, day-lagged, allowance source unconfirmed (§5).
+6. **Safe to include usage in the future API read layer?** **YES** — in fact the API is *more* complete
+   than the current cookie usage (which covers 5/27 SLs and misses this account entirely). Use the API
+   as the usage source where a credential exists, with explicit **period alignment** + a **freshness**
+   note, and **never recompute historical figures from current API state**.
+7. **Still requires cookies:** live/per-device usage telemetry (dish-online state, client counts) and
+   everything in `07`§3 (WiFi, pause, auto-block, orders). **Billing-cycle usage itself does not** — the
+   API covers it (and more).
+
+> **A real value-level usage comparison needs an account whose usage the cookie system *does* retain**
+> (one of the 5 SLs in `sl_usage.json`) **and** that the API credential can reach. Account #1 fails the
+> first condition. So defer the value-level usage match to **Account #2** (operator's next step): if its
+> active line is among the cookie-retained set, the same tool yields an EXACT/DIFF comparison there.
+
+### New finding for the operator (not caused by this test)
+The cookie Data Report retains usage for only **5 of 27 service-lines**, and **none** of this account's.
+That is a **current-system coverage/reliability gap** (plausibly a stale cookie session for this
+account — consistent with "cookie may be expired"). It is independent evidence that the official API
+would *improve* usage coverage, and it is worth addressing in the current system regardless of migration.
 
 **STOP after this test. No migration.** Next controlled step (operator's sequence): get a read-only API
 credential for **Account #2**, run the same parity process (`05`→`07`→`08`) → `API_VERIFIED`, proving
