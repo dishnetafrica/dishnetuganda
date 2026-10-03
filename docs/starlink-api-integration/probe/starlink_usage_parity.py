@@ -74,7 +74,8 @@ def pz(kind, v):
 def _do(method, url, headers=None, data=None):
     global CALLS
     if method == "POST":
-        if url != TOKEN_ENDPOINT and url != BASE + USAGE_PATH:
+        _u = url.split("?", 1)[0]  # compare path only; the usage query carries ?page=&limit=
+        if _u != TOKEN_ENDPOINT and _u != BASE + USAGE_PATH:
             raise RuntimeError("SAFETY: POST only to token endpoint or the usage query")
     elif method != "GET":
         raise RuntimeError("SAFETY: method not allowed")
