@@ -19,8 +19,7 @@ whitespace separators are accepted; a line with only a KIT or only an SL also wo
 
 USAGE (on a host with egress + the credential):
   cat > pairs.txt <<'EOF'
-  KIT4M02613123JJ4=SL-DF-16461990-63170-9
-  ... (your lines) ...
+  KITXXXXXXXXXXX=SL-DF-XXXXXXXX-XXXXX-X   # your real KIT=SL pairs, one per line
   EOF
   export SL_CLIENT_ID='...'; read -rs SL_CLIENT_SECRET && export SL_CLIENT_SECRET
   export SL_PROBE_CONFIRM=yes

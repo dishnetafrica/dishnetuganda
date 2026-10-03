@@ -69,7 +69,7 @@ proves the deterministic key. (The 8 kit=SL pairs you supplied are the ideal inp
 this account, the NOT_FOUND ones are other accounts — `05`§7.) **[NV → run the lookup]**
 
 ## 5. Other-account mapping possibilities [CURRENT + INFERRED]
-For the other ~3 accounts, Data Report/Finance **already stores** their `starlink_account_number`,
+For the other **4 accounts** (estate is 5 total — live cookie sync 2026-10-03), Data Report/Finance **already stores** their `starlink_account_number`,
 `service_line`, and `kit_number` (from the cookie era). So each is **identity-mappable today** — the
 API would return the identical keys *if a credential for that account existed*. The missing element is
 **authorised access per account**, not identifiers. **Do not use old cookies to probe Starlink during
@@ -99,9 +99,57 @@ store these exact keys. The §Appendix extraction confirms it with real counts.
 > changed just for testing.** If it is possible, one parent credential could read the whole estate via
 > `/managed/accounts/*`; if not, **Option D (per-account credentials)** is the path.
 
+## 7a. Option B (managed hierarchy) — what it requires, and the catch [LIVE + DOC + NV]
+Operator direction: pursue B (one parent credential reading all accounts via `/managed/accounts/*`).
+Precise findings before investing in it:
+
+- **[LIVE]** `/managed/accounts/tree` responds for this account (`rootAccountNumber`, `tree`) and
+  `/managed/accounts` = **0 children**. The account can be a *root*; nothing is under it.
+- **[CURRENT] The 5 accounts are already co-accessible to ONE portal login.** The cookie system
+  reaches each account by **switching the `account_number` in a single session** (BM's login). So at
+  the portal/identity level the 5 accounts are already associated with one user. This **raises the
+  prior** that Option B is feasible (the accounts already sit under one human identity) — but it does
+  **not** prove it: the *service-account* credential we tested is scoped to one account and its
+  `/managed/accounts` is empty, so a service credential at the org/parent level is a separate thing
+  Starlink must confirm (question 1 below, now sharper: "our portal login already switches across all
+  5 — can a single service-account/API credential be issued at that same level?").
+- **[DOC] The catch — create vs link.** In V2 the only managed *write* is **`POST /managed/accounts`
+  = create a _new_ child account**. There is **no endpoint to link an _existing_ independent account**
+  under a parent. DishNet's other accounts already exist, so placing them under one parent is an
+  **account migration**, not an API toggle.
+- **[INFERRED] Therefore Option B for existing accounts is almost certainly a Starlink back-office /
+  support operation**, with **billing & ownership implications** (invoicing, account ownership) that
+  touch Finance — not a self-service API call.
+- **[NV] Linkability cannot be proven read-only.** The only API test would be a managed *write*
+  (forbidden here). The answer must come from **Starlink support**, not another probe. **Do not change
+  account structure to test.**
+
+**Questions to put to Starlink (to resolve Option B):**
+1. Is our account (`ACC-…`, the live-tested one) eligible to be a **parent / managed (MSP / reseller /
+   organization)** account?
+2. Can our **existing, separately-created** Starlink accounts be **linked or migrated as children**
+   under one parent — so a single service-account credential on the parent reads them via
+   `/managed/accounts/*` — or does the managed model only cover **newly-created** child accounts
+   (`POST /managed/accounts`)?
+3. If existing accounts can be linked: is it **self-service** (API/portal) or does it require
+   **Starlink support**? What are the exact steps and prerequisites?
+4. What are the **billing / ownership / invoice implications** of moving existing accounts under a
+   parent? (Must not disrupt current invoicing — Finance depends on it.)
+5. Which **FeatureAccess permissions** must the parent service-account credential hold to read child
+   accounts' service-lines, terminals, **usage**, and **billing/invoices**
+   (`ManagedAccountInformation`, `ManagedAccountBillingInformation`, …)?
+6. Does a parent credential's read of child data include **billing/invoices and usage**, or only
+   inventory (service-lines/terminals)?
+
+**Decision posture:** pursue B via Starlink (above); keep **Option D (per-account read-only
+credentials)** as the fallback that already works today with zero structural/billing risk. Choose B
+only once Starlink confirms existing-account linkability and the billing impact is reviewed.
+
 ## 8. One-account vs multi-account findings [LIVE]
-**One-account, confirmed.** The estate (~4 accounts) is **not** reachable from the single live
-credential. Coverage = per-account credentials (D) or a populated managed hierarchy (B).
+**One-account, confirmed.** The estate (**5 accounts / 27 service-lines / 9 kits** — live cookie sync
+2026-10-03) is **not** reachable from the single live credential (which sees 1 / 4 / 1). The live kit
+lookup confirmed it: of 8 known SLs, 1 FOUND in this account, 7 DENIED (403). Coverage = per-account
+credentials (D, works today) or a populated managed hierarchy (B, Starlink-gated — see §7a).
 
 ## 9. Proposed Starlink account registry (design only — NOT implemented)
 A small registry that lets Data Report pull per account. **Reference, don't store, secrets.**
@@ -175,10 +223,11 @@ credential stays fully on cookies. **Nothing is removed until its replacement is
 ## FINAL ANSWER
 
 ```
-CURRENT STARLINK ACCOUNTS:     ~4   (Data Report / prior audit; confirm via Appendix extraction)
-OFFICIAL API ACCOUNTS:         1    (this credential; LIVE)
-DIRECTLY MAPPABLE:             all accounts carrying account_number+service_line+kit_number locally
-                               (expected: all — the STRONG keys are stored; confirm counts via Appendix)
+CURRENT STARLINK ACCOUNTS:     5    (LIVE cookie sync 2026-10-03: 5 accounts / 27 SLs / 9 kits)
+OFFICIAL API ACCOUNTS:         1    (this credential; LIVE — 1 acct / 4 SLs / 1 kit)
+DIRECTLY MAPPABLE:             all 5 — account_number+service_line+kit_number are stored locally for
+                               every account (the STRONG keys); per-account kit/SL counts via Appendix
+CONFIRMED LIVE (kit lookup):   of 8 known SLs, 1 FOUND in the API account, 7 DENIED (403 = other accts)
 PROBABLY MAPPABLE:             only records missing starlink_account_number (expected: few/none)
 NOT MAPPABLE:                  expected 0 (confirm via Appendix)
 CURRENT ACCOUNT MATCH:         accountNumber / serviceLineNumber / kitSerialNumber / dishSerialNumber

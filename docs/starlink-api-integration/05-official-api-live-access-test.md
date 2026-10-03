@@ -22,9 +22,18 @@ write/mutation made against any system.
 - The **managed-accounts** hierarchy is reachable (`/managed/accounts/tree` → `rootAccountNumber`,
   `tree`) but has **0 child accounts**, and the managed queries return the **same** 4 service-lines as
   the direct ones — so nothing beyond this one account is visible.
-- The existing Data Report tracks ~**4 accounts / 16 service-lines / 2 kits** (prior audit `docs/39`),
-  so **this credential covers only part of the estate.** *Single-account access observed;
-  organization-wide access not proven.*
+- The real estate (from the **live cookie sync, 2026-10-03**) is **5 accounts / 27 service-lines /
+  9 kits** — larger than the stale prior audit's ~4/16/2. So **this credential covers only ~1/5 of
+  the estate.** *Single-account access observed; organization-wide access not proven.*
+- **Live cross-check (kit lookup, 2026-10-03):** of 8 known KIT=SL pairs, **1 service-line FOUND**
+  (this account) and **7 DENIED (HTTP 403)** — the API refuses service-lines owned by other accounts.
+  Real-data confirmation of single-account scope. (Kit-by-`searchString` did not resolve — Starlink's
+  `searchString` does not match kit serials; the SL lookup is the reliable per-account signal.)
+- **How cookies cover all 5 today (`CURRENT`):** one portal login switches the `account_number` in the
+  session to reach each account (data-report rewrites the `starlink.com.account_number=` cookie
+  segment). So all 5 accounts are already **co-accessible to one human login** — which sharpens the
+  Option B question (`06`§7a).
+- *(Real account/SL/kit identifiers are deliberately kept out of this public repo; counts only.)*
 - **Permissions are broader than the screenshot implied:** `/account` and `/billing/*` returned **OK**
   despite "Account information"/"Financial" appearing unticked (`§2`). Live evidence overrides the
   screenshot.
@@ -95,11 +104,11 @@ across the estate, so the other kit(s) live in other accounts this credential ca
 `06` mapping shows the plugins already store `kitSerialNumber`↔`accountNumber` for all of them.
 
 ## 8. Data Report comparison [LIVE + CURRENT]
-| | This API credential | Data Report (prior audit) |
+| | This API credential | Data Report (live cookie sync 2026-10-03) |
 |---|---|---|
-| accounts | **1** | ~4 |
-| service-lines | **4** | ~16 |
-| kits | **1** | ~2 |
+| accounts | **1** | **5** |
+| service-lines | **4** | **27** |
+| kits | **1** | **9** |
 → **Partial coverage.** The field *shapes* match exactly (accountNumber / serviceLineNumber /
 kitSerialNumber / dishSerialNumber / addressReferenceId are the same identifiers Data Report stores —
 `06`§2), so for the account it can see, the mapping is **deterministic**. The gap is **access**, not
@@ -113,12 +122,12 @@ subject to a credential existing for each account).
 
 ## 10. Discrepancies [LIVE]
 ```
-current records (DR, prior audit): ~4 accounts / ~16 SLs / ~2 kits
-official API (this credential):      1 account  /   4 SLs  /  1 kit
-matched (this account):              pending value-level check (06 / kit-lookup)
-API-only:                            none observed
-current-only:                        ~3 accounts / ~12 SLs / ~1 kit (in other accounts, unreachable
-                                     by this credential)
+current records (DR, live cookie sync): 5 accounts / 27 SLs / 9 kits
+official API (this credential):          1 account  /  4 SLs  / 1 kit
+matched (this account):                  kit lookup: 1 of 8 known SLs FOUND in this account; 7 DENIED
+API-only:                                none observed
+current-only:                            4 accounts / 23 SLs / 8 kits (in other accounts, 403 to this
+                                         credential — confirmed live by the kit lookup)
 ```
 No record modified. A mismatch is a finding to investigate, never an auto-correction; **historical
 finance is never recomputed from current API state** (`21`§H).
@@ -177,7 +186,7 @@ outage; no finance record ever rewritten; secret rotation/revocation independent
    single-account (1 acct / 4 SLs / 1 kit; 0 managed children). The estate needs per-account
    credentials or a managed hierarchy (`06`).
 5. **DATA REPORT COVERAGE** — read/billing half = Partial-or-better *per account*; device plane +
-   orders = No. This credential covers ~1 of ~4 accounts.
+   orders = No. This credential covers 1 of 5 accounts (4 of 27 SLs, 1 of 9 kits — live cookie sync).
 6. **FINANCE IMPACT** — none until the data-report source transition is proven; finance stays a file
    consumer; uCRM/accounting authoritative; no historical recompute.
 7. **RECOMMENDED NEXT STEP** — run `probe/starlink_kit_lookup.py` for the known kits to confirm the
