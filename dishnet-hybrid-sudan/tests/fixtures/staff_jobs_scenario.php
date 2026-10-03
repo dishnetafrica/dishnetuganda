@@ -97,6 +97,9 @@ final class SjScenario
     }
 
     /** The accounts, identical on both trees. The technician's uCRM link is verified; 5.18.49 reads its id alone. */
+    /** A real 32×32 JPEG (947 bytes), for the three site photos the Uganda day takes before completing (5.18.66). */
+    public const JPEG_B64 = '/9j/4AAQSkZJRgABAQEAYABgAAD//gA7Q1JFQVRPUjogZ2QtanBlZyB2MS4wICh1c2luZyBJSkcgSlBFRyB2ODApLCBxdWFsaXR5ID0gNjAK/9sAQwANCQoLCggNCwoLDg4NDxMgFRMSEhMnHB4XIC4pMTAuKS0sMzpKPjM2RjcsLUBXQUZMTlJTUjI+WmFaUGBKUVJP/9sAQwEODg4TERMmFRUmTzUtNU9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09P/8AAEQgAIAAgAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8AzadFFJPII4Y3kduiopJP4CiGJ55khiXc8jBVGcZJ4FelaTpcGlWvkwjc7cySEcuf8PQV69asqS8zzKVJ1H5Hm89vPbOEuIZImIyFdSpx681HXqV/ZQahatb3KbkbkEdVPqPevNdQtHsL6a1kOTG2M+o6g/iMGlQrqrp1HVounr0I7aZra5inQAtE4cA9Mg5r06wvYNQtVuLZ9yNwQeqn0PvXltWLK/u7CQyWk7xE9QOh+oPB60V6HtVpuFGr7N67Hp1xPFawPPcOEjQZZj2rzTVbz+0NTnugu0SN8oxj5QMDPvgCi+1O+1DH2u4eQL0XgL35wOM8nmqlLD4f2er3HWre00Wx/9k=';
+
     public static function staff(SjSandbox $s): void
     {
         $link = function (int $id, string $email): array {
@@ -137,7 +140,17 @@ final class SjScenario
         $a['accept']     = $s->api('tech', 'POST', 'scheduling_job_update', ['job_id' => 901, 'status' => 'open', 'notify_accept' => 1]);
         $a['tick1']      = $s->api('tech', 'POST', 'scheduling_task_update', ['task_id' => 7001, 'job_id' => 901, 'done' => true]);
         $a['tick2']      = $s->api('tech', 'POST', 'scheduling_task_update', ['task_id' => 7002, 'job_id' => 901, 'done' => true]);
-        $a['complete']   = $s->api('tech', 'POST', 'scheduling_complete', ['job_id' => 901, 'comment' => 'Sandbox done']);
+        if (($cfg['tenant_profile'] ?? '') === 'uganda') {
+            // 5.18.66: on Uganda an installation is completed with its kit, cable and router photos and the technician's
+            // location — here the reason there is no fix, so every message stays 5.18.51's byte for byte and uCRM
+            // receives the same writes (tests/test_job_photos.php proves the fix itself). South Sudan's day is unchanged.
+            foreach (['kit', 'cable', 'model'] as $label) {
+                $a['photo_' . $label] = $s->upload('tech', 'job_photo_upload', ['job_id' => '901', 'label' => $label], 'photo', base64_decode(self::JPEG_B64), 'photo.jpg');
+            }
+            $a['complete'] = $s->api('tech', 'POST', 'scheduling_complete', ['job_id' => 901, 'comment' => 'Sandbox done', 'gps_missing_reason' => 'Sandbox: no GPS fix']);
+        } else {
+            $a['complete'] = $s->api('tech', 'POST', 'scheduling_complete', ['job_id' => 901, 'comment' => 'Sandbox done']);
+        }
 
         // The sandbox's own addresses — its ports are chosen per run — are the same place on both trees.
         $here = function (string $x) use ($s): string {

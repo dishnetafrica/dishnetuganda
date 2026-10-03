@@ -59,7 +59,7 @@ if ($page === 'kyc_photo') {
     $isPrivileged = !empty($retailer['is_admin']) || in_array($retailer['role'] ?? '', $allowedRoles, true);
     $f = trim($_GET['f'] ?? '');
     $f = str_replace(['..', chr(92), chr(0)], '', $f);
-    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
+    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
         http_response_code(400); exit('Invalid path');
     }
     // KYC photos: privileged only. Expense photos: privileged or own upload (exp-{rid}-*.ext)
@@ -82,6 +82,36 @@ if ($page === 'kyc_photo') {
     header('Content-Length: ' . filesize($full));
     header('Cache-Control: private, max-age=3600');
     readfile($full);
+    exit;
+}
+// ── Job photo (5.18.66, Uganda): one stored site photo, by its row id ────────
+// URL: public.php?page=job_photo&id=<job_photos.id>. Who may see it: the person who took it, the job's assignee at
+// the time (their verified uCRM link), a support leader, an admin, an accountant. The path comes from the ROW, never
+// from the URL, and must lie under uploads/job_photos in the data directory (JobPhotos::path). Rows: lib/JobPhotos.php.
+if ($page === 'job_photo') {
+    $retailer = $auth->requireLogin();
+    $jpId = (string)($_GET['id'] ?? '');
+    if (!preg_match('/^\d{1,10}$/', $jpId)) { http_response_code(400); exit('Invalid id'); }
+    require_once dirname(__DIR__) . '/lib/JobPhotos.php';
+    require_once dirname(__DIR__) . '/lib/StaffDirectory.php';
+    $jpRow = JobPhotos::find($store->getPdo(), (int)$jpId);
+    if (!$jpRow) { http_response_code(404); exit('Not found'); }
+    // The account as stored now, for its verified link (the session copy may predate the link).
+    $jpMe   = $store->findOne('retailers.json', 'id', (int)($retailer['id'] ?? 0));
+    $jpMe   = is_array($jpMe) ? $jpMe : (array)$retailer;
+    $jpPriv = !empty($jpMe['is_admin']) || in_array($jpMe['role'] ?? '', ['admin', 'accountant', 'support_leader', 'field_accountant'], true);
+    $jpMine = (int)($jpMe['id'] ?? 0) > 0 && (int)($jpMe['id'] ?? 0) === (int)$jpRow['retailer_id'];
+    $jpLink = StaffDirectory::linkedUcrmUser($jpMe);
+    $jpAssg = $jpLink > 0 && (int)($jpRow['assignee_id'] ?? 0) === $jpLink;
+    if (!$jpPriv && !$jpMine && !$jpAssg) { http_response_code(403); exit('Access denied'); }
+    $jpFull = JobPhotos::path($dataDir, $jpRow);
+    if ($jpFull === null) { http_response_code(404); exit('Not found'); }
+    header('Content-Type: ' . ((string)$jpRow['mime'] !== '' ? (string)$jpRow['mime'] : 'image/jpeg'));
+    header('Content-Disposition: inline; filename="' . basename($jpFull) . '"');
+    header('Content-Length: ' . filesize($jpFull));
+    header('Cache-Control: private, max-age=3600');
+    header('X-Content-Type-Options: nosniff');
+    readfile($jpFull);
     exit;
 }
 // ── Photo Manager API ─────────────────────────────────────────────────────────
@@ -151,6 +181,18 @@ if ($page === 'photo_manager') {
                 $tid = basename($tdir);
                 foreach (glob($tdir . '/*.{jpg,png,jpeg}', GLOB_BRACE) ?: [] as $file) {
                     $addPhoto('uploads/install_photos/' . $tid . '/' . basename($file), 'install', 'Ticket #' . $tid . ' · ' . basename($file));
+                }
+            }
+        }
+    }
+    if ($type === 'all' || $type === 'job') {
+        // 5.18.66: site photos on uCRM jobs (lib/JobPhotos.php), one folder per job id
+        $jobDir = $dataDir . '/uploads/job_photos';
+        if (is_dir($jobDir)) {
+            foreach (glob($jobDir . '/*', GLOB_ONLYDIR) ?: [] as $jdir) {
+                $jid = basename($jdir);
+                foreach (glob($jdir . '/*.{jpg,png,webp,jpeg}', GLOB_BRACE) ?: [] as $file) {
+                    $addPhoto('uploads/job_photos/' . $jid . '/' . basename($file), 'job', 'Job #' . $jid . ' · ' . basename($file));
                 }
             }
         }

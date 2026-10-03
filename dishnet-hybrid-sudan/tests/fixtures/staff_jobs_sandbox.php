@@ -168,6 +168,26 @@ final class SjSandbox
             ['Content-Type: application/json', 'Authorization: Bearer ' . $this->tok[$who]]);
     }
 
+    /**
+     * The staff API as a signed-in account, multipart/form-data: ordinary fields beside one file, as the job page
+     * uploads a photo (5.18.66). Answers in api()'s shape.
+     */
+    public function upload(string $who, string $action, array $fields, string $fileField, string $bytes, string $fileName, string $mime = 'image/jpeg'): array
+    {
+        $tmp = $this->sb . '/up_' . bin2hex(random_bytes(4));
+        file_put_contents($tmp, $bytes);
+        $fields[$fileField] = new \CURLFile($tmp, $mime, $fileName);
+        $ch = curl_init("{$this->base}?page=api&action={$action}");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 90, CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_PROXY => '', CURLOPT_NOPROXY => '*', CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $this->tok[$who]], CURLOPT_POSTFIELDS => $fields]);
+        $r = curl_exec($ch);
+        $c = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        @unlink($tmp);
+        return [$r === false ? 0 : $c, (string)$r, json_decode((string)$r, true), ''];
+    }
+
     /** uCRM's webhook, as uCRM sends it. */
     public function fire(string $changeType, string $entity, int $id, string $uuid): array
     {

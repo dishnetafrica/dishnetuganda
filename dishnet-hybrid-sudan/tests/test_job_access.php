@@ -340,7 +340,8 @@ echo "\n7. A job is completed by its assignee\n";
 $before = $snap($s);
 $r = $s->api('other', 'POST', 'scheduling_complete', ['job_id' => 905, 'comment' => 'Sandbox note']);
 is_($r[0] === 403 && $msg($r) === NOT_YOURS && $snap($s) === $before, 'another engineer: 403, nothing stored, uCRM not written', $r[0] . ' ' . $msg($r));
-$r = $s->api('tech', 'POST', 'scheduling_complete', ['job_id' => 905, 'comment' => 'Sandbox note']);
+// 5.18.66: on Uganda a completion carries where the technician was (a fix, or a reason there is none) — test_job_photos.php.
+$r = $s->api('tech', 'POST', 'scheduling_complete', ['job_id' => 905, 'comment' => 'Sandbox note', 'lat' => 0.3476, 'lon' => 32.5825, 'accuracy' => 12]);
 $closed = array_values(array_filter($s->crmReqs('PATCH', '#^/scheduling/jobs/905$#'), function ($q) { return (int)($q['body']['status'] ?? -1) === 2; }));
 $stored = array_map(function ($row) { return json_decode((string)($row['data'] ?? '{}'), true); }, $s->q('SELECT * FROM [job_completions]'));
 is_($r[0] === 200 && !empty($r[2]['data']['completed']) && count($closed) === 1 && in_array(905, array_map(function ($x) { return (int)($x['job_id'] ?? 0); }, $stored), true),
