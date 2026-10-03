@@ -44,11 +44,11 @@ official equivalent** (see `01` §D and `40`).
 |---|---|---|
 | `00-README.md` | this index | ✅ |
 | `01-official-api-v2-catalogue.md` | **#4** verified official-API V2 endpoint/field catalogue | ✅ written (from the supplied spec) |
-| `10-baseline-data-report.md` | **#1a** baseline inventory — data-report | ⏳ in progress (exhaustive source inventory running) |
-| `11-baseline-finance.md` | **#1b** baseline inventory — finance | ⛔ blocked: finance plugin **source not yet attached** |
-| `20-mapping-data-report.md` | **#2** exhaustive function→API mapping — data-report (10-column table) | ⏳ follows `10` |
-| `21-mapping-finance.md` | **#3** exhaustive function→API mapping — finance | ⛔ blocked on `11` |
-| `30-shared-architecture.md` | **#5** cross-plugin shared-architecture recommendation | ⏳ follows `10`/`11` |
+| `10-baseline-data-report.md` | **#1a** baseline inventory — data-report | ✅ written (from real source) |
+| `11-baseline-finance.md` | **#1b** baseline inventory — finance | ⏳ in progress (source attached v7.3.9; inventory running) |
+| `20-mapping-data-report.md` | **#2** exhaustive function→API mapping — data-report (10-column table) | ✅ written |
+| `21-mapping-finance.md` | **#3** exhaustive function→API mapping — finance | ⏳ follows `11` |
+| `30-shared-architecture.md` | **#5** cross-plugin shared-architecture recommendation | ✅ written |
 | `40-gaps-and-questions.md` | **#6** missing-capabilities + unresolved-questions list | ⏳ accumulates across the set |
 | `50-regression-matrix.md` | **#7** regression test matrix | ⏳ follows the mappings |
 | `60-migration-plan.md` | **#8** phased implementation + rollback plan | ⏳ last (needs all above) |
@@ -68,8 +68,9 @@ missing API fields · recommended approach · tests + regression risks.
   **[D]** (documented) vs **[V]** (verified in JSON) in `01`.
 - **data-report:** real source — `dishnetafrica/datareport` @ `012810d6` (== the deployed
   v2.8.80 plugin), cloned read-only to `/home/user/datareport`.
-- **finance:** **not yet available in this session** — repo name still needed from the operator.
-  Until then `11`/`21` cannot be written from primary source.
+- **finance:** real source attached by the operator as `dishnet-starlink-finance` **v7.3.9** (ZIP),
+  extracted read-only. Confirmed by grep: it makes **no direct Starlink call** — all Starlink-origin
+  data arrives by reading data-report's sibling files. Deep inventory running for `11`/`21`.
 - **Prior in-repo audit:** `dishnet-hybrid-sudan/docs/39-PROVIDER-SIDE-AUDIT.md` — an earlier
   read-only provider-side audit of *both* plugins; used for cross-checking, not as a substitute
   for reading finance's own source.
