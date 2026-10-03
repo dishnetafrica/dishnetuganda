@@ -1,0 +1,20 @@
+--- a/public.php
++++ b/public.php
+@@ -1207,7 +1207,7 @@
+ 
+ // ── Master Date Range Filter ──────────────────────────────────────────────
+ // Persists in session so it survives tab switches
+-session_start();
++if (session_status() === PHP_SESSION_NONE && !headers_sent()) session_start();
+ 
+ // ══════════════════════════════════════════════════════════════════════════════
+ // SECURITY LAYER — PIN Gate + Role-Based Access Control
+@@ -3250,7 +3250,7 @@
+                 );
+             }
+             // Fallback to UCRM email
+-            if (!$sent && $apiUrl && $appKey) {
++            if (!$sent && ($apiUrl ?? '') && ($appKey ?? '')) {
+                 $sent = sendUcrmEmail($apiUrl, $appKey, $toEmail, $subject, $body, $emailErr);
+             }
+             
