@@ -1,0 +1,137 @@
+commit bb8e991a7f256934ffc5ca0ad0ca0447a78cc2a0
+Author: Claude <noreply@anthropic.com>
+Date:   Sat Oct 3 08:20:04 2026 +0000
+
+    Panel: cookie-first, official-API-shadow fallback for usage (ADDITIVE, FLAG-OFF)
+    
+    When the flag is on, the dashboard fills usage from the official-API shadow
+    (data/api_shadow/) ONLY for kits that have NO cookie usage — cookie stays primary,
+    so "what works with cookie keeps working with cookie; where cookie has nothing, the
+    official API provides it," and the customer sees data instead of "no usage yet".
+    
+    - Two helpers after drLoad(): drOfficialApiUsageRows() (shapes shadow usage.json into
+      cookie sl_usage records, joined to kit_number via shadow service_lines.json) and
+      drMergeShadowUsage() (appends shadow rows only for kit_numbers absent from cookie).
+    - Wired at the three usage pools: the two client-portal builds ($drAllUsage) and the
+      fleet-dashboard build ($allUsage -> $usageIdx). One line each.
+    - Flag: env DR_OFFICIAL_API_VIEW=yes OR file data/api_shadow/VIEW_ENABLED. Default OFF
+      => drMergeShadowUsage returns its input unchanged => byte-identical behaviour.
+    - php -l clean; logic smoke-tested (flag off = unchanged; flag on = cookie kits kept,
+      gap kits filled from shadow with correct field mapping).
+    
+    Known limitation: daily_blue/daily_white are empty for shadow rows (the adapter stores
+    cycle totals, not daily arrays yet) -> the per-day trend chart is empty for shadow-only
+    kits; the hero total + priority/standard split + history total all populate. Daily is a
+    small follow-up. Not deployed.
+    
+    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_01NLLxemD2KphmijUXwa8jRp
+
+diff --git a/public.php b/public.php
+index 65ed7c2..28e7459 100644
+--- a/public.php
++++ b/public.php
+@@ -65,6 +65,76 @@ function drLoad(string $path): array {
+     return json_decode(file_get_contents($path), true) ?? [];
+ }
+ 
++// ── Official Starlink API shadow fallback (ADDITIVE, FLAG-OFF) ──────────────────
++// Cookie stays primary. When the flag is on AND a kit has NO cookie usage, fill the
++// gap from the parallel official-API shadow (data/api_shadow/) so the kit shows real
++// data instead of "no usage yet". Default OFF => byte-identical behaviour.
++// Enable per-install: `touch data/api_shadow/VIEW_ENABLED` (or env DR_OFFICIAL_API_VIEW=yes).
++function drOfficialApiViewOn(string $pluginDir): bool {
++    return getenv('DR_OFFICIAL_API_VIEW') === 'yes'
++        || is_file($pluginDir . '/data/api_shadow/VIEW_ENABLED');
++}
++function drShadowAxis(string $iso): string {
++    if ($iso === '') return '';
++    $ts = strtotime($iso);
++    return $ts === false ? '' : date('M j', $ts);
++}
++// Official-API usage rows shaped like cookie sl_usage records, or [] when flag off /
++// no shadow present. Joined to kit_number via the shadow service_lines.json.
++function drOfficialApiUsageRows(string $pluginDir): array {
++    if (!drOfficialApiViewOn($pluginDir)) return [];
++    $dir   = $pluginDir . '/data/api_shadow';
++    $usage = drLoad($dir . '/usage.json');
++    if (!$usage) return [];
++    $slToKit = [];
++    foreach (drLoad($dir . '/service_lines.json') as $r) {
++        $sl = $r['service_line'] ?? ''; $kn = $r['kit_number'] ?? '';
++        if ($sl !== '' && $kn) $slToKit[$sl] = $kn;
++    }
++    $rows = [];
++    foreach ($usage as $u) {
++        $sl = $u['service_line'] ?? '';
++        $kn = $slToKit[$sl] ?? '';
++        if ($kn === '') continue; // need a kit_number to join into the plugin's views
++        $start = (string)($u['cycle_start'] ?? '');
++        $end   = (string)($u['cycle_end'] ?? '');
++        $rows[] = [
++            'kit_number'               => $kn,
++            'service_line'             => $sl,
++            'account_number'           => $u['account_number'] ?? '',
++            'cycle_key'                => substr($start, 0, 7),              // YYYY-MM (sortable)
++            'cycle_label'              => trim(drShadowAxis($start) . ' – ' . drShadowAxis($end), ' –'),
++            'total_gb'                 => (float)($u['total_gb'] ?? 0),
++            'local_priority_used_gb'   => (float)($u['priority_gb'] ?? 0),
++            'other_data_gb'            => (float)($u['standard_gb'] ?? 0),
++            'local_priority_allowance' => '',
++            'other_data_allowance'     => '',
++            'axis_left'                => drShadowAxis($start),
++            'axis_right'               => drShadowAxis($end),
++            'daily_blue'               => [],   // daily arrays not stored in the shadow yet
++            'daily_white'              => [],
++            'updated_at'               => $u['last_updated'] ?? '',
++            'source'                   => 'official_api',
++        ];
++    }
++    return $rows;
++}
++// Cookie-first merge: append shadow rows ONLY for kit_numbers with no cookie usage.
++function drMergeShadowUsage(array $cookieRows, string $pluginDir): array {
++    $shadow = drOfficialApiUsageRows($pluginDir);
++    if (!$shadow) return $cookieRows;
++    $haveCookie = [];
++    foreach ($cookieRows as $r) {
++        $kn = $r['kit_number'] ?? '';
++        if ($kn !== '') $haveCookie[$kn] = true;
++    }
++    foreach ($shadow as $r) {
++        $kn = $r['kit_number'] ?? '';
++        if ($kn !== '' && empty($haveCookie[$kn])) $cookieRows[] = $r;
++    }
++    return $cookieRows;
++}
++
+ function drSave(string $path, array $data): void {
+     file_put_contents($path, json_encode(array_values($data), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+ }
+@@ -670,7 +740,7 @@ if ($token) {
+                 $mk = ($u['kit_number'] ?? '') . ':' . ($u['cycle_key'] ?? '');
+                 if ($mk !== ':') $drUsageMap[$mk] = $u;
+             }
+-            $drAllUsage = array_values($drUsageMap);
++            $drAllUsage = drMergeShadowUsage(array_values($drUsageMap), $pluginDir);
+ 
+             // Match kits by CRM client ID — the JWT's sub claim is authoritative
+             $drClientKits = [];
+@@ -1259,7 +1329,7 @@ if (isset($_COOKIE['PHPSESSID']) || isset($_COOKIE['nms-session']) || $drInterna
+                 $mk = ($u['kit_number'] ?? '') . ':' . ($u['cycle_key'] ?? '');
+                 if ($mk !== ':') $drUsageMap[$mk] = $u;
+             }
+-            $drAllUsage   = array_values($drUsageMap);
++            $drAllUsage   = drMergeShadowUsage(array_values($drUsageMap), $pluginDir);
+ 
+             $drMatchKitsByCrmId = function(string $cid) use ($drKits): array {
+                 if ($cid === '') return [];
+@@ -3515,7 +3585,7 @@ foreach ($_ownUsage as $_u) {
+     $k = ($_u['service_line'] ?? $_u['kit_number'] ?? '') . ':' . ($_u['cycle_key'] ?? '');
+     if ($k !== ':') $_merged[$k] = $_u;
+ }
+-$allUsage = array_values($_merged);
++$allUsage = drMergeShadowUsage(array_values($_merged), $pluginDir);
+ unset($_financeUsage, $_ownUsage, $_merged, $_u);
+ 
+ // ── SL cache: kit_number → {service_line, account_number} ────────────────────
