@@ -35,6 +35,15 @@ depends on the auth method (it keeps reading `sl_invoice_lines.json` / `dr_kit_r
 > `data/api_shadow/` only; it is inert unless `DR_OFFICIAL_API_SYNC=yes` + env credentials, touches no
 > existing file or the cookie path, and is **not deployed** (the operator installs it when ready).
 > This realizes the parallel source without changing anything the plugin already produces.
+>
+> **Verified on the server 2026-10-03 (via the PHP-streams fallback; host php lacks ext-curl):** the
+> adapter ran and wrote `data/api_shadow/` for the credentialled account — **4 service-lines, 1
+> user-terminal, 8 addresses, 5 invoices, 8 usage rows** (4 SLs × 2 billing cycles). Usage is coherent
+> with ground truth: the one **active** line shows **79.22 GB (64.11 priority + 15.11 standard)** for the
+> current cycle; the three inactive lines show 0. No existing file was read or written; the cookie path
+> and current Data Report output are unchanged. (Three small PHP fixes were needed first — POST-guard
+> query-string, empty-object body encoding, and a param type hint — all caught and fixed; a local
+> full-flow smoke test now guards the path.)
 
 ## 1. Method [CURRENT]
 `probe/starlink_api_vs_cookie.py` (read-only) runs on the server where both the API and the local data
